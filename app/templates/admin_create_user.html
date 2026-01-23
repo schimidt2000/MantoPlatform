@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>Criar Usuário</title>
+</head>
+<body>
+  <h1>Criar usuário</h1>
+
+  {% if msg %}<p style="color:green;">{{ msg }}</p>{% endif %}
+  {% if error %}<p style="color:red;">{{ error }}</p>{% endif %}
+
+  <form method="post">
+    <label>Nome</label><br>
+    <input name="name" required><br><br>
+
+    <label>Email (login)</label><br>
+    <input type="email" name="email" required><br><br>
+
+    <label>Senha de primeiro uso</label><br>
+    <input type="password" name="temp_password" required><br><br>
+
+    <button type="submit">Criar</button>
+  </form>
+
+  <p><a href="/rh/dashboard">Voltar</a></p>
+</body>
+</html>

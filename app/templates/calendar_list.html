@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>Agenda</title>
+</head>
+<body>
+  <h1>Agenda ({{ ym }})</h1>
+
+  <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px;">
+    <a href="/agenda?ym={{ prev_ym }}">◀ Mês anterior</a>
+    <a href="/agenda?ym={{ next_ym }}">Próximo mês ▶</a>
+
+    <form method="get" action="/agenda" style="margin-left:24px;">
+      <label>Ir para:</label>
+      <input type="month" name="ym" value="{{ ym }}" />
+      <button type="submit">Abrir</button>
+    </form>
+
+    <a style="margin-left:auto;" href="/google/connect">Conectar/Reconectar Google</a>
+  </div>
+
+  <hr>
+
+  {% if events|length == 0 %}
+    <p>Sem eventos nesse mês.</p>
+  {% else %}
+    <ul>
+      {% for e in events %}
+        <li style="margin-bottom:10px;">
+          <strong>{{ e.summary or "(Sem título)" }}</strong><br>
+          {% if e.start.dateTime %}
+            Início: {{ e.start.dateTime }}<br>
+          {% else %}
+            Dia: {{ e.start.date }} (dia inteiro)<br>
+          {% endif %}
+          {% if e.location %}Local: {{ e.location }}<br>{% endif %}
+          ID Google: <code>{{ e.id }}</code>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</body>
+</html>

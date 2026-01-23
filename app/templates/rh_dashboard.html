@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>RH - Dashboard</title>
+</head>
+<body>
+  <h1>RH - Dashboard</h1>
+  <p>Você está logado.</p>
+
+  <hr>
+
+  {% if can_manage_users %}
+    <button>Gerenciar Usuários</button>
+  {% endif %}
+
+  <button>Ver Colaboradores</button>
+
+</body>
+</html>

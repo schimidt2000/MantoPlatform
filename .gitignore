@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtualenv
+.venv/
+venv/
+
+# Flask instance (segredos, tokens, configs locais)
+instance/
+
+# Banco local
+*.db
+
+# Credenciais
+*.json
+!requirements*.json
+!package*.json
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
