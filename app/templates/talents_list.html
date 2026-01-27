@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Talentos</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+    .card { border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden; background: #fff; }
+    .card img { width: 100%; height: 260px; object-fit: cover; display: block; background: #f2f2f2; }
+    .card-body { padding: 10px 12px 14px; }
+    .name { font-weight: 700; margin-bottom: 6px; }
+    .meta { color: #6b6b6b; font-size: 13px; line-height: 1.4; }
+    .list-item { margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Banco de Talentos</h1>
+  {% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <ul>
+      {% for msg in messages %}
+        <li>{{ msg }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+
+  <div class="actions">
+    <a href="/talents?status=active">Ativos</a>
+    <a href="/talents?status=pending">Pendentes</a>
+    <a
+        href="{{ url_for('talents.add_talent') }}"
+        target="_blank"
+        rel="noopener noreferrer"
+    >
+        Adicionar talento
+    </a>
+    <form method="post" action="/talents/import" style="margin:0;">
+      <button type="submit">Importar novas respostas</button>
+    </form>
+  </div>
+
+  <hr>
+
+  {% if status == "active" %}
+    <form method="get" action="/talents" style="margin-bottom:16px;">
+      <input type="hidden" name="status" value="active">
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px;">
+        <div>
+          <div><strong>Idiomas</strong></div>
+          {% for opt in language_options %}
+            <label style="display:block;">
+              <input type="checkbox" name="language" value="{{ opt }}" {% if opt in request.args.getlist('language') %}checked{% endif %}>
+              {{ opt }}
+            </label>
+          {% endfor %}
+        </div>
+
+        <div>
+          <div><strong>Raca</strong></div>
+          {% for opt in race_options %}
+            <label style="display:block;">
+              <input type="checkbox" name="race" value="{{ opt }}" {% if opt in request.args.getlist('race') %}checked{% endif %}>
+              {{ opt }}
+            </label>
+          {% endfor %}
+        </div>
+
+        <div>
+          <div><strong>Altura (cm)</strong></div>
+          <label>
+            <input type="radio" name="height_op" value="gt" {% if request.args.get('height_op') == 'gt' %}checked{% endif %}>
+            maior ou igual
+          </label>
+          <label style="margin-left:8px;">
+            <input type="radio" name="height_op" value="lt" {% if request.args.get('height_op') == 'lt' %}checked{% endif %}>
+            menor ou igual
+          </label>
+          <div style="margin-top:6px;">
+            <input type="text" name="height_value" value="{{ request.args.get('height_value','') }}" style="width:80px;">
+          </div>
+        </div>
+
+        <div>
+          <div><strong>Top</strong></div>
+          {% for opt in size_options %}
+            <label style="display:block;">
+              <input type="checkbox" name="top" value="{{ opt }}" {% if opt in request.args.getlist('top') %}checked{% endif %}>
+              {{ opt }}
+            </label>
+          {% endfor %}
+        </div>
+
+        <div>
+          <div><strong>Bottom</strong></div>
+          {% for opt in size_options %}
+            <label style="display:block;">
+              <input type="checkbox" name="bottom" value="{{ opt }}" {% if opt in request.args.getlist('bottom') %}checked{% endif %}>
+              {{ opt }}
+            </label>
+          {% endfor %}
+        </div>
+
+        <div>
+          <div><strong>Tamanho do Pe</strong></div>
+          {% for opt in shoe_options %}
+            <label style="display:block;">
+              <input type="checkbox" name="shoe" value="{{ opt }}" {% if opt in request.args.getlist('shoe') %}checked{% endif %}>
+              {{ opt }}
+            </label>
+          {% endfor %}
+        </div>
+
+        <div>
+          <div><strong>Passaporte e visto</strong></div>
+          {% for val, label in passport_options %}
+            <label style="display:block;">
+              <input type="checkbox" name="passport" value="{{ val }}" {% if val in request.args.getlist('passport') %}checked{% endif %}>
+              {{ label }}
+            </label>
+          {% endfor %}
+        </div>
+
+        <div>
+          <div><strong>Habilidades</strong></div>
+          {% for opt in tag_options %}
+            <label style="display:block;">
+              <input type="checkbox" name="tag" value="{{ opt }}" {% if opt in request.args.getlist('tag') %}checked{% endif %}>
+              {{ opt }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+      <button type="submit">Filtrar</button>
+      <a href="/talents?status=active" style="margin-left:8px;">Limpar</a>
+    </form>
+
+    <div class="grid">
+      {% for p in people %}
+        <div class="card">
+          {% if p.photo_face_path %}
+            <a href="{{ url_for('talents.talent_detail', talent_id=p.id) }}">
+              <img src="{{ p.photo_face_path }}" alt="Foto de {{ p.full_name }}">
+            </a>
+          {% else %}
+            <a href="{{ url_for('talents.talent_detail', talent_id=p.id) }}">
+              <img src="" alt="Sem foto">
+            </a>
+          {% endif %}
+          <div class="card-body">
+            <div class="name">
+              <a href="{{ url_for('talents.talent_detail', talent_id=p.id) }}">{{ p.full_name }}</a>
+            </div>
+            <div class="meta">
+              {% if p.height_cm %}Altura: {{ p.height_cm }} cm{% endif %}
+              {% if p.clothing_size_top %} | Top: {{ p.clothing_size_top }}{% endif %}
+              {% if p.clothing_size_bottom %} | Bottom: {{ p.clothing_size_bottom }}{% endif %}
+              {% if p.shoe_size %} | Pe: {{ p.shoe_size }}{% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    {% for p in people %}
+      <div class="list-item">
+        <strong>{{ p.full_name }}</strong>
+        {% if p.tags %} - <small>{{ p.tags }}</small>{% endif %}
+        <form method="post" action="/talents/{{ p.id }}/approve" style="display:inline;">
+          <button type="submit">Aprovar</button>
+        </form>
+      </div>
+    {% endfor %}
+  {% endif %}
+</body>
+</html>

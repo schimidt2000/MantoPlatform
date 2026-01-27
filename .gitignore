@@ -3,24 +3,21 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.log
 
-# Virtualenv
+# Virtual env
 .venv/
 venv/
 
-# Flask instance (segredos, tokens, configs locais)
+# Flask instance / SQLite
 instance/
-
-# Banco local
 *.db
 
-# Credenciais
-*.json
-!requirements*.json
-!package*.json
+# OAuth / secrets (ajuste os nomes conforme os seus arquivos)
+token.json
+credentials.json
+client_secret*.json
+*.env
 
 # VS Code
 .vscode/
-
-# Logs
-*.log

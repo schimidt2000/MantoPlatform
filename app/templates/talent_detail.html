@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>{{ person.full_name }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    .photos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .photos img {
+      width: 100%;
+      height: 320px;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid #e5e5e5;
+      background: #f2f2f2;
+    }
+    @media (max-width: 600px) {
+      .photos { grid-template-columns: 1fr; }
+      .photos img { height: 260px; }
+    }
+    .info { margin-top: 20px; }
+    .row { margin-bottom: 8px; }
+    .label { color: #6b6b6b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .value { font-size: 15px; }
+  </style>
+</head>
+<body>
+  <p><a href="/talents?status=active">Voltar para ativos</a></p>
+
+  <h1>{{ person.full_name }}</h1>
+  {% if person.artistic_name %}<p><strong>Nome Artistico:</strong> {{ person.artistic_name }}</p>{% endif %}
+
+  <div class="photos">
+    {% if person.photo_face_path %}
+      <img src="{{ person.photo_face_path }}" alt="Foto de rosto de {{ person.full_name }}">
+    {% endif %}
+    {% if person.photo_full_path %}
+      <img src="{{ person.photo_full_path }}" alt="Foto de corpo inteiro de {{ person.full_name }}">
+    {% endif %}
+  </div>
+
+  <div class="info">
+    <div class="row"><div class="label">Telefone</div><div class="value">{{ person.phone or "" }}</div></div>
+    <div class="row"><div class="label">Email</div><div class="value">{{ person.email_contact or "" }}</div></div>
+    <div class="row"><div class="label">Data de Nascimento</div><div class="value">{{ person.birth_date or "" }}</div></div>
+    <div class="row"><div class="label">CPF</div><div class="value">{{ person.cpf or "" }}</div></div>
+    <div class="row"><div class="label">RG</div><div class="value">{{ person.rg or "" }}</div></div>
+    <div class="row"><div class="label">Chave PIX</div><div class="value">{{ person.pix_key or "" }}</div></div>
+    <div class="row"><div class="label">Chave PIX Secundaria</div><div class="value">{{ person.pix_key_secondary or "" }}</div></div>
+    <div class="row"><div class="label">Idiomas</div><div class="value">{{ person.languages or "" }}</div></div>
+    <div class="row"><div class="label">Raca</div><div class="value">{{ person.race or "" }}</div></div>
+    <div class="row"><div class="label">Altura (cm)</div><div class="value">{{ person.height_cm or "" }}</div></div>
+    <div class="row"><div class="label">Tamanho Top</div><div class="value">{{ person.clothing_size_top or "" }}</div></div>
+    <div class="row"><div class="label">Tamanho Bottom</div><div class="value">{{ person.clothing_size_bottom or "" }}</div></div>
+    <div class="row"><div class="label">Tamanho do Pe</div><div class="value">{{ person.shoe_size or "" }}</div></div>
+    <div class="row"><div class="label">Passaporte/Visto</div><div class="value">{{ person.passport_visa_text or "" }}</div></div>
+    <div class="row"><div class="label">Habilidades</div><div class="value">{{ person.skills or "" }}</div></div>
+
+    <div class="row"><div class="label">Modelo do Carro</div><div class="value">{{ person.car_model or "" }}</div></div>
+    <div class="row"><div class="label">Marca do Carro</div><div class="value">{{ person.car_brand or "" }}</div></div>
+    <div class="row"><div class="label">Ano do Carro</div><div class="value">{{ person.car_year or "" }}</div></div>
+    <div class="row"><div class="label">Placa do Carro</div><div class="value">{{ person.car_plate or "" }}</div></div>
+
+    <div class="row"><div class="label">CNH (arquivo)</div><div class="value">{{ person.cnh_file_path or "" }}</div></div>
+    <div class="row"><div class="label">CNH (vencimento)</div><div class="value">{{ person.cnh_expiration or "" }}</div></div>
+  </div>
+</body>
+</html>

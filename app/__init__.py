@@ -22,15 +22,14 @@ def create_app():
     from .rh.routes import rh_bp
     from .admin.routes import admin_bp
     from .calendar.routes import calendar_bp
+    from .talents.routes import talents_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
     app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(calendar_bp)
-    
-    
-    
-
+    app.register_blueprint(talents_bp)
+    print(app.url_map)
     @app.route("/")
     def home():
         return "Manto Platform - OK"
