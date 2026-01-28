@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Calculadora de Transporte</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root{
+      --bg:#f7f7fb;
+      --card:#fff;
+      --text:#111;
+      --muted:#6b7280;
+      --primary:#4b6ef5;
+      --primary-pressed:#3658e8;
+      --ring:rgba(75,110,245,.35);
+      --soft:#f1f4ff;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg:#0f1115; --card:#141821; --text:#f5f7ff; --muted:#a8b1c7;
+        --soft:#101935; --ring:rgba(104,140,255,.45);
+      }
+      input, select, button { border-color:#2a2f3a !important; }
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; padding:16px;
+      background:var(--bg); color:var(--text);
+      font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    }
+    .card{
+      max-width:720px; margin:0 auto; background:var(--card); border-radius:18px;
+      box-shadow:0 10px 30px rgba(0,0,0,.08); padding:20px;
+    }
+    header{display:flex; align-items:center; justify-content:center; margin-bottom:12px}
+    h1{font-size:clamp(18px,2.8vw,24px); margin:0; text-align:center}
+    p.help{margin:6px 0 0; text-align:center; color:var(--muted); font-size:14px}
+    .mode-switch{
+      display:flex; gap:8px; margin:16px 0 8px; background:var(--soft);
+      border-radius:12px; padding:6px; width:100%;
+    }
+    .seg{flex:1; position:relative;}
+    .seg input{ position:absolute; inset:0; opacity:0; }
+    .seg span{
+      display:block; text-align:center; padding:12px 10px; border-radius:10px;
+      font-weight:700; letter-spacing:.4px; user-select:none; cursor:pointer;
+    }
+    .seg input:checked + span{
+      background:var(--card);
+      box-shadow:0 1px 0 rgba(0,0,0,.04), 0 0 0 3px var(--ring) inset;
+    }
+    form{margin-top:10px}
+    label{display:block; margin:10px 0 6px; font-weight:600}
+    input, select, button{
+      width:100%; padding:12px 14px; border:1px solid #e5e7eb; background:transparent;
+      border-radius:12px; font-size:16px; color:var(--text); outline:none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    input:focus, select:focus{ box-shadow:0 0 0 3px var(--ring); border-color:transparent }
+    select{appearance:none; background-image: linear-gradient(45deg, transparent 50%, currentcolor 50%),
+                                     linear-gradient(135deg, currentcolor 50%, transparent 50%);
+           background-position: calc(100% - 18px) 58%, calc(100% - 12px) 58%;
+           background-size:6px 6px, 6px 6px; background-repeat:no-repeat;}
+    .row-3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+    .row-2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    @media (max-width:640px){
+      .row-3, .row-2{ grid-template-columns:1fr; }
+    }
+    .checkline{
+      display:flex; align-items:center; gap:10px; margin-top:12px;
+      background:var(--soft); padding:10px 12px; border-radius:12px; font-weight:600;
+    }
+    .checkline input{width:auto}
+    .actions{
+      position:sticky; bottom:12px; z-index:5; margin-top:16px;
+      background:transparent; padding-top:4px;
+    }
+    button{
+      background:var(--primary); color:#fff; border:0; cursor:pointer; font-weight:700;
+      padding:14px 16px; border-radius:14px; box-shadow:0 6px 14px rgba(75,110,245,.25);
+    }
+    button:active{ transform:translateY(1px); background:var(--primary-pressed) }
+    .result{
+      margin-top:18px; padding:14px; border-radius:14px; background:var(--soft); font-size:15px;
+    }
+    .result h3{margin:0 0 10px; font-size:16px}
+    .kv{display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center}
+    .kv div{padding:6px 0}
+    .calc{
+      margin-top:12px; padding:10px 12px; border-radius:10px; background:rgba(0,0,0,.05);
+      font-family:ui-monospace,Menlo,Consolas,monospace;
+    }
+    @media (prefers-color-scheme: dark){
+      .calc{background:#0d1326}
+    }
+    input[type=number]{appearance:textfield}
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <header>
+      <h1>Calculadora de Transporte</h1>
+    </header>
+    <p class="help">Preencha os campos abaixo e toque em <b>Calcular</b>.</p>
+
+    <form method="post" novalidate>
+      <div class="mode-switch" role="tablist" aria-label="Modo de transporte">
+        <label class="seg" role="tab" aria-selected="{{ 'true' if form.modo == 'van' else 'false' }}">
+          <input type="radio" name="modo" value="van" {{ 'checked' if form.modo == 'van' else '' }}>
+          <span>VAN</span>
+        </label>
+        <label class="seg" role="tab" aria-selected="{{ 'true' if form.modo == 'carro' else 'false' }}">
+          <input type="radio" name="modo" value="carro" {{ 'checked' if form.modo == 'carro' else '' }}>
+          <span>CARRO</span>
+        </label>
+      </div>
+
+      {% if form.modo == 'carro' %}
+      <div class="row-3">
+        <div>
+          <label for="num_carros">Qtd. Carros</label>
+          <input id="num_carros" type="number" inputmode="numeric" name="num_carros" min="0" max="999" step="1" required value="{{ form.num_carros }}">
+        </div>
+        <div>
+          <label for="num_colaboradores">Qtd. Colaboradores</label>
+          <input id="num_colaboradores" type="number" inputmode="numeric" name="num_colaboradores" min="0" max="999" step="1" required value="{{ form.num_colaboradores }}">
+        </div>
+        <div>
+          <label for="km_ida">Km de IDA</label>
+          <input id="km_ida" type="number" inputmode="decimal" name="km_ida" min="0" max="99999" step="0.1" required value="{{ form.km_ida }}">
+        </div>
+      </div>
+      {% else %}
+      <div class="row-3">
+        <div>
+          <label for="num_colaboradores">Qtd. Colaboradores</label>
+          <input id="num_colaboradores" type="number" inputmode="numeric" name="num_colaboradores" min="0" max="999" step="1" required value="{{ form.num_colaboradores }}">
+        </div>
+        <div>
+          <label for="km_ida">Km de IDA</label>
+          <input id="km_ida" type="number" inputmode="decimal" name="km_ida" min="0" max="99999" step="0.1" required value="{{ form.km_ida }}">
+        </div>
+        <div>
+          <label for="carretinha">Carretinha</label>
+          <select id="carretinha" name="carretinha" required>
+            <option value="" disabled {{ 'selected' if not form.carretinha }}>Selecione</option>
+            <option value="1" {{ 'selected' if form.carretinha == '1' }}>Sem Carretinha</option>
+            <option value="2" {{ 'selected' if form.carretinha == '2' }}>Com Carretinha</option>
+          </select>
+        </div>
+      </div>
+      {% endif %}
+
+      <label class="checkline" for="show">
+        <input type="checkbox" id="show" name="show" value="1" {{ 'checked' if form.show == '1' else '' }}>
+        E show?
+      </label>
+
+      <div class="actions">
+        <button type="submit">Calcular</button>
+      </div>
+
+      {% if resultado %}
+      <div class="result" role="status" aria-live="polite">
+        <h3>Resultado</h3>
+        <div class="kv">
+          <div><strong>Valor transporte</strong></div><div>R$ {{ resumo.valor_transporte }}</div>
+          <div><strong>Adicional fora de SP</strong></div><div>R$ {{ resumo.adicional_fora }}</div>
+          {% if resumo.adicional_show and resumo.adicional_show != '0,00' %}
+            <div><strong>Adicional de show</strong></div><div>R$ {{ resumo.adicional_show }}</div>
+          {% endif %}
+          <div><strong>Valor Final</strong></div><div><strong>R$ {{ resultado }}</strong></div>
+        </div>
+
+        <div class="calc">
+          <strong>Explicacao:</strong>
+          {% for linha in resumo.calculo_linhas %}
+            <div>{{ linha }}</div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+
+  <script>
+    document.querySelectorAll('input[name="modo"]').forEach(r => {
+      r.addEventListener('change', () => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('modo', r.value);
+        window.location.replace(url.toString());
+      });
+    });
+    {% if resultado %}
+      setTimeout(()=> {
+        document.querySelector('.result')?.scrollIntoView({behavior:'smooth', block:'start'});
+      }, 50);
+    {% endif %}
+  </script>
+</body>
+</html>

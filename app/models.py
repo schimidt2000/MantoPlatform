@@ -126,6 +126,35 @@ class Talent(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class CalendarEvent(db.Model):
+    __tablename__ = "calendar_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    google_event_id = db.Column(db.String(128), unique=True, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    location = db.Column(db.String(200), nullable=True)
+    start_at = db.Column(db.DateTime, nullable=True)
+    end_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    roles = db.relationship("EventRole", backref="event", lazy=True, cascade="all, delete-orphan")
+
+
+class EventRole(db.Model):
+    __tablename__ = "event_roles"
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    character_name = db.Column(db.String(120), nullable=False)
+    talent_id = db.Column(db.Integer, db.ForeignKey("talents.id"), nullable=True)
+    cache_value = db.Column(db.Integer, nullable=True)
+    assigned_at = db.Column(db.DateTime, nullable=True)
+
+    talent = db.relationship("Talent", lazy=True)
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))

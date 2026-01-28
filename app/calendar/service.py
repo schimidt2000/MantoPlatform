@@ -99,3 +99,40 @@ def fetch_events_for_month(calendar_id: str, year: int, month: int) -> list[dict
     ).execute()  # parâmetros são os oficiais para listar ordenado por início :contentReference[oaicite:8]{index=8}
 
     return resp.get("items", [])
+
+
+def fetch_events_for_range(calendar_id: str, start: datetime, end: datetime) -> list[dict]:
+    creds = load_credentials()
+    if not creds:
+        raise RuntimeError("Google nao conectado. Acesse /google/connect primeiro.")
+
+    service = build("calendar", "v3", credentials=creds)
+
+    resp = service.events().list(
+        calendarId=calendar_id,
+        timeMin=start.isoformat(),
+        timeMax=end.isoformat(),
+        singleEvents=True,
+        orderBy="startTime",
+        showDeleted=False,
+        maxResults=2500,
+    ).execute()
+
+    return resp.get("items", [])
+
+
+def parse_event_datetime(item: dict) -> tuple[datetime | None, datetime | None]:
+    start = item.get("start", {})
+    end = item.get("end", {})
+    start_dt = start.get("dateTime") or start.get("date")
+    end_dt = end.get("dateTime") or end.get("date")
+
+    def _parse(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        # date only => midnight in local TZ
+        if len(value) == 10:
+            return datetime.fromisoformat(value).replace(tzinfo=TZ)
+        return datetime.fromisoformat(value)
+
+    return _parse(start_dt), _parse(end_dt)

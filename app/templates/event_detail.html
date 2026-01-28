@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ event.title }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    .meta { color: #6b6b6b; }
+    .roles { margin-top: 18px; }
+    .role {
+      padding: 12px;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 120px 80px;
+      gap: 10px;
+      align-items: center;
+    }
+    .role strong { font-size: 15px; }
+    @media (max-width: 720px) {
+      .role { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <p><a href="/agenda">Voltar para agenda</a></p>
+
+  <h1>{{ event.title }}</h1>
+  <div class="meta">
+    {% if event.location %}<div>Local: {{ event.location }}</div>{% endif %}
+    {% if event.start_at %}<div>Inicio: {{ event.start_at.strftime("%d/%m/%Y %H:%M") }}</div>{% endif %}
+    {% if event.end_at %}<div>Fim: {{ event.end_at.strftime("%d/%m/%Y %H:%M") }}</div>{% endif %}
+  </div>
+
+  {% if event.description %}
+    <p style="margin-top:12px;">{{ event.description }}</p>
+  {% endif %}
+
+  <div class="roles">
+    <h2>Personagens</h2>
+    {% for r in event.roles %}
+      <form method="post" class="role">
+        <input type="hidden" name="role_id" value="{{ r.id }}">
+        <div>
+          <strong>{{ r.character_name }}</strong>
+          {% if r.talent %}<div class="meta">{{ r.talent.full_name }}</div>{% endif %}
+        </div>
+        <div>
+          <select name="talent_id">
+            <option value="">-- selecione --</option>
+            {% for t in talents %}
+              <option value="{{ t.id }}" {% if r.talent_id == t.id %}selected{% endif %}>{{ t.full_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <input type="text" name="cache_value" placeholder="cache" value="{{ r.cache_value or '' }}" style="width:100%;">
+        </div>
+        <div>
+          <button type="submit">Salvar</button>
+        </div>
+      </form>
+    {% endfor %}
+  </div>
+</body>
+</html>

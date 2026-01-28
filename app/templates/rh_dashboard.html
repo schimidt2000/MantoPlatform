@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8" />
@@ -6,13 +6,17 @@
 </head>
 <body>
   <h1>RH - Dashboard</h1>
-  <p>Você está logado.</p>
+  <p>Voce esta logado.</p>
 
   <hr>
 
   {% if can_manage_users %}
-    <button>Gerenciar Usuários</button>
+    <button>Gerenciar Usuarios</button>
   {% endif %}
+
+  <div style="margin:16px 0;">
+    <a href="/tools/calculadora-transporte">Calculadora de Transporte</a>
+  </div>
 
   <button>Ver Colaboradores</button>
 

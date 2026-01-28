@@ -28,7 +28,11 @@
     <ul>
       {% for e in events %}
         <li style="margin-bottom:10px;">
-          <strong>{{ e.summary or "(Sem título)" }}</strong><br>
+          <strong>{{ e.summary or "(Sem titulo)" }}</strong>
+          {% if e.id in event_map %}
+            - <a href="{{ url_for('calendar.event_detail', event_id=event_map[e.id]) }}">abrir</a>
+          {% endif %}
+          <br>
           {% if e.start.dateTime %}
             Início: {{ e.start.dateTime }}<br>
           {% else %}
