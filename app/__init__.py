@@ -1,10 +1,11 @@
-from flask import Flask, render_template, request
+import os
+from flask import Flask, render_template, request, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import and_, not_, func
 from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta, date
-import calendar as cal
 from .config import Config  # se seu config.py está na raiz
 
 db = SQLAlchemy()
@@ -15,6 +16,12 @@ login_manager.login_view = "auth.login"
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.config.setdefault("UPLOAD_FOLDER", "instance/uploads")
+    app.config.setdefault("UPLOAD_CONTRACTS", "instance/uploads/contracts")
+    app.config.setdefault("UPLOAD_PAYMENTS", "instance/uploads/payments")
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    os.makedirs(app.config["UPLOAD_CONTRACTS"], exist_ok=True)
+    os.makedirs(app.config["UPLOAD_PAYMENTS"], exist_ok=True)
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -38,87 +45,31 @@ def create_app():
     @app.route("/")
     @login_required
     def home():
-        from app.calendar.service import fetch_events_for_month, fetch_events_for_range, TZ, parse_event_datetime
-        from app.calendar.routes import CALENDAR_ID, sync_events
         from app.models import CalendarEvent, EventRole
 
-        now = datetime.now(tz=TZ)
-        event_map = {}
-        try:
-            items = fetch_events_for_month(CALENDAR_ID, now.year, now.month)
-            upcoming_raw = fetch_events_for_range(CALENDAR_ID, now, now + timedelta(days=7))
-            sync_events(items)
-            sync_events(upcoming_raw)
-        except RuntimeError:
-            items = []
-            upcoming_raw = []
-
-        days_with_events = set()
-        events_by_day = {}
-        for item in items:
-            start_dt, _ = parse_event_datetime(item)
-            if start_dt and start_dt.month == now.month:
-                day = start_dt.day
-                days_with_events.add(day)
-                events_by_day.setdefault(day, []).append(
-                    {
-                        "title": item.get("summary") or "Sem titulo",
-                        "when": start_dt.strftime("%H:%M") if start_dt.time() else "",
-                        "event_id": event_map.get(item.get("id")),
-                    }
-                )
-
-        # build month grid (weeks)
-        first_weekday, days_in_month = cal.monthrange(now.year, now.month)
-        # monthrange: Monday=0..Sunday=6, we want Sunday=0
-        first_weekday = (first_weekday + 1) % 7
-        weeks = []
-        week = []
-        for _ in range(first_weekday):
-            week.append(None)
-        for d in range(1, days_in_month + 1):
-            week.append(d)
-            if len(week) == 7:
-                weeks.append(week)
-                week = []
-        if week:
-            while len(week) < 7:
-                week.append(None)
-            weeks.append(week)
-
-        # map google id to event id
-        ids = [i.get("id") for i in items if i.get("id")]
-        ids += [i.get("id") for i in upcoming_raw if i.get("id")]
-        if ids:
-            for ev in CalendarEvent.query.filter(CalendarEvent.google_event_id.in_(ids)).all():
-                event_map[ev.google_event_id] = ev.id
-
-        upcoming = []
-        for item in upcoming_raw:
-            start_dt, _ = parse_event_datetime(item)
-            upcoming.append(
-                {
-                    "title": item.get("summary") or "Sem titulo",
-                    "when": start_dt.strftime("%d/%m %H:%M") if start_dt else "",
-                    "location": item.get("location") or "",
-                    "event_id": event_map.get(item.get("id")),
-                }
-            )
-
-        # todo list
+        # to-do list (somente eventos ja sincronizados pela agenda)
+        exclude_ensaios = not_(CalendarEvent.title.like("🟧 ENSAIO%"))
         pending_casting = (
             EventRole.query.filter(EventRole.talent_id.is_(None))
             .join(CalendarEvent)
+            .filter(exclude_ensaios)
             .order_by(CalendarEvent.start_at.asc())
             .all()
         )
 
+        total_casting = EventRole.query.join(CalendarEvent).filter(exclude_ensaios).count()
+        done_casting = total_casting - len(pending_casting)
+
+        # Figurino: por enquanto consideramos concluido quando o casting ja escolheu o talento
         pending_figurino = (
-            EventRole.query.join(CalendarEvent)
+            EventRole.query.filter(EventRole.talent_id.is_(None))
+            .join(CalendarEvent)
+            .filter(exclude_ensaios)
             .order_by(CalendarEvent.start_at.asc())
-            .limit(10)
             .all()
         )
+        total_figurino = total_casting
+        done_figurino = total_figurino - len(pending_figurino)
 
         role_view = request.args.get("role_view")
         if role_view and not any(r.name == "SUPERADMIN" for r in current_user.roles):
@@ -142,21 +93,82 @@ def create_app():
             show_casting = has_role("CASTING") or is_superadmin
             show_figurino = has_role("FIGURINO") or is_superadmin
 
+        perf_range = request.args.get("perf_range", "7")
+        perf_start = request.args.get("perf_start")
+        perf_end = request.args.get("perf_end")
+
+        start_dt = None
+        end_dt = None
+        if perf_range == "30":
+            end_dt = datetime.utcnow()
+            start_dt = end_dt - timedelta(days=30)
+        elif perf_range == "custom" and perf_start and perf_end:
+            try:
+                start_dt = datetime.fromisoformat(perf_start)
+                end_dt = datetime.fromisoformat(perf_end) + timedelta(days=1)
+            except ValueError:
+                start_dt = None
+                end_dt = None
+        else:
+            end_dt = datetime.utcnow()
+            start_dt = end_dt - timedelta(days=7)
+
+        perf_casting_total = 0
+        perf_casting_done = 0
+        perf_figurino_total = 0
+        perf_figurino_done = 0
+        perf_money = 0
+        if is_superadmin and start_dt and end_dt:
+            perf_filter = and_(CalendarEvent.start_at >= start_dt, CalendarEvent.start_at < end_dt, exclude_ensaios)
+            perf_casting_total = (
+                EventRole.query.join(CalendarEvent).filter(perf_filter).count()
+            )
+            perf_casting_done = (
+                EventRole.query.filter(EventRole.assigned_at.isnot(None))
+                .join(CalendarEvent)
+                .filter(perf_filter)
+                .count()
+            )
+            perf_figurino_total = perf_casting_total
+            perf_figurino_done = (
+                EventRole.query.filter(EventRole.figurino_done_at.isnot(None))
+                .join(CalendarEvent)
+                .filter(perf_filter)
+                .count()
+            )
+            perf_money = (
+                db.session.query(func.coalesce(func.sum(EventRole.cache_value), 0))
+                .join(CalendarEvent)
+                .filter(perf_filter, EventRole.assigned_at.isnot(None))
+                .scalar()
+            )
+
         return render_template(
             "home.html",
-            month_events=items,
-            days_with_events=sorted(days_with_events),
-            events_by_day=events_by_day,
-            month_weeks=weeks,
-            upcoming_events=upcoming,
             pending_casting=pending_casting,
             pending_figurino=pending_figurino,
             role_view=role_view,
             show_casting=show_casting,
             show_figurino=show_figurino,
             is_superadmin=is_superadmin,
-            month_label=now.strftime("%B %Y"),
+            total_casting=total_casting,
+            done_casting=done_casting,
+            total_figurino=total_figurino,
+            done_figurino=done_figurino,
+            perf_range=perf_range,
+            perf_start=perf_start,
+            perf_end=perf_end,
+            perf_casting_total=perf_casting_total,
+            perf_casting_done=perf_casting_done,
+            perf_figurino_total=perf_figurino_total,
+            perf_figurino_done=perf_figurino_done,
+            perf_money=perf_money,
         )
+
+    @app.route("/uploads/<path:filename>")
+    @login_required
+    def uploaded_file(filename: str):
+        return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
     @app.route("/figurinos")
     @login_required

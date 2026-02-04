@@ -1,0 +1,36 @@
+{% extends "admin_layout.html" %}
+{% block content %}
+  <h1>Identidade visual</h1>
+  <div class="card">
+    <form method="post" enctype="multipart/form-data">
+      <label>Logo da empresa</label>
+      <div class="muted">Tamanho recomendado: 400x120px, PNG ou SVG, fundo transparente.</div>
+      {% if settings.logo_path %}
+        <div style="margin:10px 0;">
+          <img src="{{ settings.logo_path }}" alt="Logo atual" style="max-height:80px;">
+        </div>
+      {% endif %}
+      <input type="file" name="logo" accept=".png,.jpg,.jpeg,.webp,.svg">
+
+      <label>Cores do site</label>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+        <div>
+          <div class="muted">Primária</div>
+          <input type="color" name="primary_color" value="{{ settings.primary_color or '#c69a2b' }}">
+        </div>
+        <div>
+          <div class="muted">Secundária</div>
+          <input type="color" name="secondary_color" value="{{ settings.secondary_color or '#5b2a7a' }}">
+        </div>
+        <div>
+          <div class="muted">Destaque</div>
+          <input type="color" name="accent_color" value="{{ settings.accent_color or '#ffffff' }}">
+        </div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <button class="btn btn-primary" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

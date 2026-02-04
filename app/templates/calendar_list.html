@@ -1,48 +1,170 @@
 <!doctype html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Agenda</title>
+  <style>
+    :root {
+      --bg: #f4f2f7;
+      --ink: #1f1f1f;
+      --muted: #6b6b6b;
+      --panel: #ffffff;
+      --line: #e5e5e5;
+      --accent: #3a63f3;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+    .menu a { margin-right: 12px; color: var(--ink); text-decoration: none; }
+    .menu a.active { color: var(--accent); }
+    .page { padding: 20px 24px 32px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+    }
+    .calendar {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+    }
+    .cal-head {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      padding: 6px 0;
+    }
+    .cal-cell {
+      min-height: 110px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .cal-cell.muted {
+      background: #f0eef4;
+      border-style: dashed;
+      color: #b1a4c2;
+    }
+    .cal-day { font-size: 11px; color: #7a6f88; }
+    .cal-event {
+      font-size: 11px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      background: #eef2ff;
+      color: #283b8a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-decoration: none;
+      display: block;
+    }
+    .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .btn { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; text-decoration: none; color: var(--ink); }
+    .btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .list li { margin-bottom: 10px; }
+  </style>
 </head>
 <body>
-  <h1>Agenda ({{ ym }})</h1>
+  <header>
+    <div>Agenda</div>
+    <nav class="menu">
+      <a href="/">Home</a>
+      <a href="/agenda" class="active">Agenda</a>
+    </nav>
+  </header>
 
-  <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px;">
-    <a href="/agenda?ym={{ prev_ym }}">◀ Mês anterior</a>
-    <a href="/agenda?ym={{ next_ym }}">Próximo mês ▶</a>
+  <main class="page">
+    <div class="controls">
+      <a class="btn" href="/agenda?ym={{ prev_ym }}&view={{ view }}">Mês anterior</a>
+      <a class="btn" href="/agenda?ym={{ next_ym }}&view={{ view }}">Próximo mês</a>
 
-    <form method="get" action="/agenda" style="margin-left:24px;">
-      <label>Ir para:</label>
-      <input type="month" name="ym" value="{{ ym }}" />
-      <button type="submit">Abrir</button>
-    </form>
+      <form method="get" action="/agenda">
+        <input type="month" name="ym" value="{{ ym }}">
+        <input type="hidden" name="view" value="{{ view }}">
+        <button class="btn" type="submit">Abrir</button>
+      </form>
 
-    <a style="margin-left:auto;" href="/google/connect">Conectar/Reconectar Google</a>
-  </div>
+      <div style="margin-left:auto;">
+        <a class="btn {% if view == 'calendar' %}active{% endif %}" href="/agenda?ym={{ ym }}&view=calendar">Agenda</a>
+        <a class="btn {% if view == 'list' %}active{% endif %}" href="/agenda?ym={{ ym }}&view=list">Lista</a>
+        <a class="btn" href="/google/connect">Conectar Google</a>
+      </div>
+    </div>
 
-  <hr>
+    <div class="panel">
+      {% if view == 'calendar' %}
+        <div class="calendar">
+          <div class="cal-head">Dom</div>
+          <div class="cal-head">Seg</div>
+          <div class="cal-head">Ter</div>
+          <div class="cal-head">Qua</div>
+          <div class="cal-head">Qui</div>
+          <div class="cal-head">Sex</div>
+          <div class="cal-head">Sáb</div>
 
-  {% if events|length == 0 %}
-    <p>Sem eventos nesse mês.</p>
-  {% else %}
-    <ul>
-      {% for e in events %}
-        <li style="margin-bottom:10px;">
-          <strong>{{ e.summary or "(Sem titulo)" }}</strong>
-          {% if e.id in event_map %}
-            - <a href="{{ url_for('calendar.event_detail', event_id=event_map[e.id]) }}">abrir</a>
-          {% endif %}
-          <br>
-          {% if e.start.dateTime %}
-            Início: {{ e.start.dateTime }}<br>
-          {% else %}
-            Dia: {{ e.start.date }} (dia inteiro)<br>
-          {% endif %}
-          {% if e.location %}Local: {{ e.location }}<br>{% endif %}
-          ID Google: <code>{{ e.id }}</code>
-        </li>
-      {% endfor %}
-    </ul>
-  {% endif %}
+          {% for week in month_weeks %}
+            {% for day in week %}
+              {% if day %}
+                <div class="cal-cell">
+                  <div class="cal-day">{{ day }}</div>
+                  {% for ev in events_by_day.get(day, []) %}
+                    {% if ev.event_id %}
+                      <a class="cal-event" href="{{ url_for('calendar.event_detail', event_id=ev.event_id) }}">{{ ev.when }} {{ ev.title }}</a>
+                    {% else %}
+                      <div class="cal-event">{{ ev.when }} {{ ev.title }}</div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="cal-cell muted"></div>
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+        </div>
+      {% else %}
+        {% if events|length == 0 %}
+          <p>Sem eventos nesse mês.</p>
+        {% else %}
+          <ul class="list">
+            {% for e in events %}
+              <li>
+                <strong>{{ e.summary or "(Sem título)" }}</strong>
+                {% if e.id in event_map %}
+                  - <a href="{{ url_for('calendar.event_detail', event_id=event_map[e.id]) }}">abrir</a>
+                {% endif %}
+                <br>
+                {% if e.start.dateTime %}
+                  Início: {{ e.start.dateTime }}<br>
+                {% else %}
+                  Dia: {{ e.start.date }} (dia inteiro)<br>
+                {% endif %}
+                {% if e.location %}Local: {{ e.location }}<br>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endif %}
+    </div>
+  </main>
 </body>
 </html>

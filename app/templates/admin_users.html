@@ -1,0 +1,42 @@
+{% extends "admin_layout.html" %}
+{% block content %}
+  <h1>Usuários</h1>
+  <div style="display:flex; gap:12px; flex-wrap:wrap; margin:12px 0;">
+    <a class="btn btn-primary" href="/admin/users/new">Novo usuário</a>
+    <a class="btn" href="/admin/settings">Identidade visual</a>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>Email</th>
+          <th>Ativo</th>
+          <th>Roles</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+          <tr>
+            <td>{{ u.id }}</td>
+            <td>{{ u.name }}</td>
+            <td>{{ u.email }}</td>
+            <td>{{ "sim" if u.is_active else "nao" }}</td>
+            <td class="muted">{{ u.roles | map(attribute='name') | join(', ') }}</td>
+            <td>
+              <a class="btn" href="{{ url_for('admin.edit_user', user_id=u.id) }}">Editar</a>
+              <form method="post" action="{{ url_for('admin.delete_user', user_id=u.id) }}" style="display:inline;">
+                <button class="btn btn-danger" type="submit">Excluir</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6">Sem usuários.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

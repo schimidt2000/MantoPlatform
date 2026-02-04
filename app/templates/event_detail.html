@@ -5,64 +5,326 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ event.title }}</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 24px; }
-    .meta { color: #6b6b6b; }
-    .roles { margin-top: 18px; }
+    :root {
+      --bg: #f4f2f7;
+      --ink: #1f1f1f;
+      --muted: #6b6b6b;
+      --panel: #ffffff;
+      --line: #e5e5e5;
+      --accent: #3a63f3;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; background: var(--bg); color: var(--ink); }
+    .page { padding: 20px 24px 32px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+      margin-bottom: 16px;
+    }
+    .meta { color: var(--muted); }
+    .roles { margin-top: 12px; }
     .role {
       padding: 12px;
-      border: 1px solid #e5e5e5;
-      border-radius: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
       margin-bottom: 10px;
       display: grid;
-      grid-template-columns: 1fr 1fr 120px 80px;
+      grid-template-columns: 1.6fr 1.2fr 110px 90px;
       gap: 10px;
       align-items: center;
+      background: #fff;
     }
     .role strong { font-size: 15px; }
-    @media (max-width: 720px) {
+    input, select, button {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 14px;
+    }
+    button { background: var(--accent); color: #fff; border-color: var(--accent); cursor: pointer; }
+    .btn-secondary { background: #fff; color: var(--ink); border-color: var(--line); }
+    .cache-input { width: 90px; }
+    .select-wrap { display: flex; gap: 8px; align-items: center; }
+    .select-wrap select { flex: 1; }
+    .mini { padding: 6px 8px; font-size: 12px; }
+    .legend { display: flex; gap: 10px; font-size: 12px; margin: 8px 0 0; }
+    .chip { padding: 2px 6px; border-radius: 6px; }
+    .chip-yellow { background: #fff1b8; }
+    .chip-red { background: #ffd5d5; }
+    option.conflict { background: #ffd5d5; }
+    option.same-day { background: #fff1b8; }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+    .modal-content {
+      width: min(1100px, 95vw);
+      height: 80vh;
+      background: #fff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .modal-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-body iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+    @media (max-width: 900px) {
       .role { grid-template-columns: 1fr; }
+      .cache-input { width: 100%; }
     }
   </style>
 </head>
 <body>
-  <p><a href="/agenda">Voltar para agenda</a></p>
+  <div class="page">
+    <div class="panel">
+      <p><a href="/agenda">Voltar para agenda</a></p>
+      <h1>{{ event.title }}</h1>
+      <div class="meta">
+        {% if event.location %}<div>Local: {{ event.location }}</div>{% endif %}
+        {% if event.start_at %}<div>Início: {{ event.start_at.strftime("%d/%m/%Y %H:%M") }}</div>{% endif %}
+        {% if event.end_at %}<div>Fim: {{ event.end_at.strftime("%d/%m/%Y %H:%M") }}</div>{% endif %}
+      </div>
+      {% if event.description %}
+        <p style="margin-top:12px;">{{ event.description }}</p>
+      {% endif %}
+    </div>
 
-  <h1>{{ event.title }}</h1>
-  <div class="meta">
-    {% if event.location %}<div>Local: {{ event.location }}</div>{% endif %}
-    {% if event.start_at %}<div>Inicio: {{ event.start_at.strftime("%d/%m/%Y %H:%M") }}</div>{% endif %}
-    {% if event.end_at %}<div>Fim: {{ event.end_at.strftime("%d/%m/%Y %H:%M") }}</div>{% endif %}
-  </div>
+  {% if show_casting %}
+    <div class="panel roles">
+      <h2>Casting</h2>
+      <div class="legend">
+        <span class="chip chip-yellow">Mesmo dia</span>
+        <span class="chip chip-red">Conflito de horário</span>
+      </div>
+      {% for r in event.roles %}
+        <form method="post" class="role">
+          <input type="hidden" name="action" value="assign_casting">
+          <input type="hidden" name="role_id" value="{{ r.id }}">
+          <div>
+            <strong>{{ r.character_name }}</strong>
+            {% if r.talent %}<div class="meta">{{ r.talent.full_name }}</div>{% endif %}
+          </div>
+          <div>
+            <div class="select-wrap">
+              <select name="talent_id" class="talent-select">
+              <option value="">-- selecione --</option>
+              {% for t in talents %}
+                {% set status = availability.get(t.id, {}).get('status') %}
+                {% set info = availability.get(t.id, {}).get('info') %}
+                <option
+                  value="{{ t.id }}"
+                  class="{% if status == 'conflict' %}conflict{% elif status == 'same_day' %}same-day{% endif %}"
+                  data-status="{{ status }}"
+                  title="{{ info }}"
+                  {% if r.talent_id == t.id %}selected{% endif %}
+                >
+                  {{ t.full_name }}
+                </option>
+              {% endfor %}
+              </select>
+              <button type="button" class="btn-secondary mini" onclick="openTalentModal()">Buscar</button>
+            </div>
+          </div>
+          <div>
+            <input class="cache-input" type="text" name="cache_value" placeholder="Cachê" value="{{ r.cache_value or '' }}" maxlength="4">
+          </div>
+          <div>
+            <button type="submit">Salvar</button>
+          </div>
+        </form>
+      {% endfor %}
 
-  {% if event.description %}
-    <p style="margin-top:12px;">{{ event.description }}</p>
-  {% endif %}
-
-  <div class="roles">
-    <h2>Personagens</h2>
-    {% for r in event.roles %}
-      <form method="post" class="role">
-        <input type="hidden" name="role_id" value="{{ r.id }}">
+      <button type="button" class="btn-secondary" onclick="document.getElementById('extra-form').style.display='grid'">
+        Adicionar pessoa
+      </button>
+      <form method="post" class="role" id="extra-form" style="display:none; margin-top:10px;">
+        <input type="hidden" name="action" value="add_role">
         <div>
-          <strong>{{ r.character_name }}</strong>
-          {% if r.talent %}<div class="meta">{{ r.talent.full_name }}</div>{% endif %}
+          <strong>Função</strong>
+          <div class="meta">Ex: Palhaço, DJ, Monitor</div>
         </div>
         <div>
-          <select name="talent_id">
-            <option value="">-- selecione --</option>
-            {% for t in talents %}
-              <option value="{{ t.id }}" {% if r.talent_id == t.id %}selected{% endif %}>{{ t.full_name }}</option>
-            {% endfor %}
-          </select>
+          <input type="text" name="character_name" placeholder="Função">
         </div>
         <div>
-          <input type="text" name="cache_value" placeholder="cache" value="{{ r.cache_value or '' }}" style="width:100%;">
+          <div class="select-wrap">
+            <select name="talent_id" class="talent-select">
+              <option value="">-- selecione --</option>
+              {% for t in talents %}
+                {% set status = availability.get(t.id, {}).get('status') %}
+                {% set info = availability.get(t.id, {}).get('info') %}
+                <option
+                  value="{{ t.id }}"
+                  class="{% if status == 'conflict' %}conflict{% elif status == 'same_day' %}same-day{% endif %}"
+                  data-status="{{ status }}"
+                  title="{{ info }}"
+                >
+                  {{ t.full_name }}
+                </option>
+              {% endfor %}
+            </select>
+            <button type="button" class="btn-secondary mini" onclick="openTalentModal()">Buscar</button>
+          </div>
         </div>
         <div>
-          <button type="submit">Salvar</button>
+          <input class="cache-input" type="text" name="cache_value" placeholder="Cachê" maxlength="4">
+          <button type="submit" style="margin-top:8px;">Salvar</button>
         </div>
       </form>
-    {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if show_figurino %}
+    <div class="panel roles">
+      <h2>Figurino</h2>
+      {% for r in event.roles %}
+        <form method="post" class="role">
+          <input type="hidden" name="action" value="figurino_done">
+          <input type="hidden" name="role_id" value="{{ r.id }}">
+          <div>
+            <strong>{{ r.character_name }}</strong>
+            {% if r.talent %}<div class="meta">{{ r.talent.full_name }}</div>{% endif %}
+          </div>
+          <div>
+            <div class="meta">Top: {{ r.talent.clothing_size_top if r.talent else '-' }}</div>
+            <div class="meta">Bottom: {{ r.talent.clothing_size_bottom if r.talent else '-' }}</div>
+            <div class="meta">Sapato: {{ r.talent.shoe_size if r.talent else '-' }}</div>
+          </div>
+          <div>
+            <button type="button" class="btn-secondary">Ver figurino</button>
+          </div>
+          <div>
+            <button type="submit">Marcar separado</button>
+          </div>
+        </form>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if show_comercial %}
+    <div class="panel roles">
+      <h2>Comercial</h2>
+      <form method="post" enctype="multipart/form-data" class="role">
+        <input type="hidden" name="action" value="add_contract">
+        <div>
+          <strong>Contrato assinado</strong>
+          <div class="meta">PDF/JPG/PNG até 10MB</div>
+        </div>
+        <div>
+          <input type="text" name="contract_amount" placeholder="Valor do contrato">
+        </div>
+        <div>
+          <input type="file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg">
+        </div>
+        <div>
+          <button type="submit">Enviar</button>
+        </div>
+      </form>
+
+      <form method="post" enctype="multipart/form-data" class="role">
+        <input type="hidden" name="action" value="add_payment">
+        <div>
+          <strong>Pagamento recebido</strong>
+          <div class="meta">Comprovante até 10MB</div>
+        </div>
+        <div>
+          <input type="text" name="payment_amount" placeholder="Valor recebido">
+        </div>
+        <div>
+          <input type="file" name="payment_file" accept=".pdf,.png,.jpg,.jpeg">
+        </div>
+        <div>
+          <button type="submit">Adicionar</button>
+        </div>
+      </form>
+
+      <div style="margin-top:10px;">
+        <div class="meta">Contratos</div>
+        {% for c in contracts %}
+          <div><a href="{{ c.file_path }}" target="_blank">Contrato</a> - {{ c.amount or 0 }} reais</div>
+        {% else %}
+          <div class="meta">Sem contratos.</div>
+        {% endfor %}
+      </div>
+      <div style="margin-top:10px;">
+        <div class="meta">Pagamentos</div>
+        {% for p in payments %}
+          <div><a href="{{ p.file_path }}" target="_blank">Comprovante</a> - {{ p.amount or 0 }} reais</div>
+        {% else %}
+          <div class="meta">Sem pagamentos.</div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+    <div class="panel roles">
+      <h2>Log de atividades</h2>
+      <details>
+        <summary>Mostrar log</summary>
+        <div style="margin-top:10px;">
+          {% for log in logs %}
+            <div style="margin-bottom:8px;">
+              <strong>{{ log.ts }}</strong>:
+              {{ log.actor_name }}{% if log.actor_role %} - {{ log.actor_role }}{% endif %} &gt;
+              {{ log.message }}
+            </div>
+          {% else %}
+            <div class="meta">Sem logs.</div>
+          {% endfor %}
+        </div>
+      </details>
+    </div>
   </div>
+
+  <div class="modal" id="talent-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <strong>Buscar no Banco de Talentos</strong>
+        <button type="button" class="btn-secondary mini" onclick="closeTalentModal()">Fechar</button>
+      </div>
+      <div class="modal-body">
+        <iframe src="/talents?status=active"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openTalentModal() {
+      document.getElementById('talent-modal').style.display = 'flex';
+    }
+    function closeTalentModal() {
+      document.getElementById('talent-modal').style.display = 'none';
+    }
+    document.querySelectorAll('.talent-select').forEach(sel => {
+      sel.addEventListener('change', (e) => {
+        const opt = e.target.selectedOptions[0];
+        if (opt && opt.dataset.status === 'conflict') {
+          const msg = opt.title || 'Conflito de horário. Deseja continuar?';
+          if (!confirm(msg)) {
+            e.target.value = '';
+          }
+        }
+      });
+    });
+  </script>
 </body>
 </html>

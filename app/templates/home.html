@@ -6,120 +6,43 @@
   <title>Manto Platform - Home</title>
   <style>
     :root {
-      --bg: #f6f0e7;
+      --bg: #f4f2f7;
       --ink: #1f1f1f;
       --muted: #6b6b6b;
       --panel: #ffffff;
-      --line: #e6dfd6;
-      --accent: #d79b3a;
-      --accent-2: #2f6f4f;
+      --line: #e5e5e5;
+      --accent: #3a63f3;
+      --ok: #2fb171;
+      --bad: #e45858;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Trebuchet MS", "Segoe UI", Tahoma, Arial, sans-serif;
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      background: var(--bg);
       color: var(--ink);
-      background:
-        radial-gradient(900px 420px at 10% -10%, #fff3d6 0%, rgba(255,243,214,0) 60%),
-        radial-gradient(700px 420px at 90% 0%, #dff1e5 0%, rgba(223,241,229,0) 60%),
-        var(--bg);
     }
     header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 18px 24px;
+      padding: 16px 24px;
       border-bottom: 1px solid var(--line);
-      background: rgba(255,255,255,0.7);
-      backdrop-filter: blur(6px);
+      background: #fff;
     }
-    .brand { font-weight: 800; letter-spacing: 0.4px; }
-    .menu {
-      display: flex;
-      gap: 16px;
-      font-size: 14px;
-    }
-    .menu a {
-      text-decoration: none;
-      color: var(--ink);
-      padding: 6px 10px;
-      border-radius: 999px;
-    }
-    .menu a.active {
-      background: var(--ink);
-      color: #fff;
-    }
-    .page {
-      padding: 20px 24px 32px;
-      display: grid;
-      grid-template-columns: 2.2fr 1fr;
-      gap: 18px;
-    }
+    .brand { font-weight: 700; letter-spacing: 0.04em; }
+    .menu { display: flex; gap: 16px; font-size: 14px; }
+    .menu a { text-decoration: none; color: var(--ink); }
+    .menu a.active { color: var(--accent); }
+    .page { padding: 20px 24px 32px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; }
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 16px;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.04);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.05);
     }
-    .panel h2 {
-      margin: 0 0 12px;
-      font-size: 16px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-    }
-    .calendar {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 6px;
-    }
-    .cal-head {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--muted);
-      padding: 6px 0;
-    }
-    .cal-cell {
-      min-height: 110px;
-      border-radius: 8px;
-      border: 1px solid #eee3d6;
-      background: #fffaf3;
-      padding: 6px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .cal-cell.muted {
-      background: #f6f0e7;
-      border-style: dashed;
-      color: #b1a293;
-    }
-    .cal-day {
-      font-size: 11px;
-      color: #8c7c6a;
-    }
-    .cal-event {
-      font-size: 11px;
-      padding: 4px 6px;
-      border-radius: 6px;
-      background: #efe5ff;
-      color: #4b2a73;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .events-list { margin-top: 12px; }
-    .event-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--line);
-    }
-    .event-row:last-child { border-bottom: 0; }
-    .event-title { font-weight: 600; }
-    .event-date { color: var(--muted); font-size: 13px; }
+    .panel h2 { margin: 0 0 12px; font-size: 16px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
     .todo-item {
       display: flex;
       gap: 10px;
@@ -131,14 +54,25 @@
       font-size: 11px;
       padding: 2px 8px;
       border-radius: 999px;
-      background: #eef7f1;
-      color: var(--accent-2);
+      background: #eef2ff;
+      color: var(--accent);
       height: fit-content;
     }
     .muted { color: var(--muted); }
-
+    .donuts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .donut {
+      display: grid;
+      place-items: center;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      margin: 10px auto 0;
+      background: conic-gradient(var(--ok) 0deg, var(--ok) var(--p), var(--bad) var(--p), var(--bad) 360deg);
+    }
+    .donut span { background: #fff; width: 90px; height: 90px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; }
     @media (max-width: 980px) {
       .page { grid-template-columns: 1fr; }
+      .donuts { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -153,7 +87,7 @@
       <a href="/figurinos">Banco de Figurinos</a>
     </nav>
     {% if is_superadmin %}
-      <div style="margin-left:16px; font-size:12px;">
+      <div style="font-size:12px;">
         Ver como:
         <a href="/?role_view=casting">Casting</a> |
         <a href="/?role_view=figurino">Figurino</a> |
@@ -164,79 +98,20 @@
   </header>
 
   <main class="page">
-    <section>
-      <div class="panel">
-        <h2>Agenda - {{ month_label }}</h2>
-        <div class="calendar">
-          <div class="cal-head">Dom</div>
-          <div class="cal-head">Seg</div>
-          <div class="cal-head">Ter</div>
-          <div class="cal-head">Qua</div>
-          <div class="cal-head">Qui</div>
-          <div class="cal-head">Sex</div>
-          <div class="cal-head">Sab</div>
-
-          {% for week in month_weeks %}
-            {% for day in week %}
-              {% if day %}
-                <div class="cal-cell">
-                  <div class="cal-day">{{ day }}</div>
-                  {% for ev in events_by_day.get(day, []) %}
-                    {% if ev.event_id %}
-                      <a class="cal-event" href="{{ url_for('calendar.event_detail', event_id=ev.event_id) }}">
-                        {{ ev.when }} {{ ev.title }}
-                      </a>
-                    {% else %}
-                      <div class="cal-event">{{ ev.when }} {{ ev.title }}</div>
-                    {% endif %}
-                  {% endfor %}
-                </div>
-              {% else %}
-                <div class="cal-cell muted"></div>
-              {% endif %}
-            {% endfor %}
-          {% endfor %}
-        </div>
-      </div>
-
-      <div class="panel" style="margin-top:16px;">
-        <h2>Proximos 7 dias</h2>
-        <div class="events-list">
-          {% for e in upcoming_events %}
-            <div class="event-row">
-              <div>
-                <div class="event-title">
-                  {% if e.event_id %}
-                    <a href="{{ url_for('calendar.event_detail', event_id=e.event_id) }}">{{ e.title }}</a>
-                  {% else %}
-                    {{ e.title }}
-                  {% endif %}
-                </div>
-                <div class="muted">{{ e.location }}</div>
-              </div>
-              <div class="event-date">{{ e.when }}</div>
-            </div>
-          {% else %}
-            <div class="muted">Sem eventos nos proximos 7 dias.</div>
-          {% endfor %}
-        </div>
-      </div>
-    </section>
-
-    <aside class="panel">
-      <h2>Central de Notificacoes</h2>
+    <section class="panel">
+      <h2>To-do list</h2>
       {% if show_casting %}
         {% for r in pending_casting %}
           <div class="todo-item">
             <input type="checkbox">
             <div>
-              <div><strong>Selecionar artista: {{ r.character_name }}</strong></div>
+              <div><strong>Selecionar elenco: {{ r.character_name }}</strong></div>
               <div class="muted">{{ r.event.title }}</div>
             </div>
             <span class="badge">Casting</span>
           </div>
         {% else %}
-          <div class="muted">Sem pendencias de casting.</div>
+          <div class="muted">Sem pendências de casting.</div>
         {% endfor %}
       {% endif %}
 
@@ -251,8 +126,54 @@
             <span class="badge">Figurino</span>
           </div>
         {% else %}
-          <div class="muted">Sem pendencias de figurino.</div>
+          <div class="muted">Sem pendências de figurino.</div>
         {% endfor %}
+      {% endif %}
+    </section>
+
+    <aside class="panel">
+      <h2>Indicadores</h2>
+      <div class="donuts">
+        {% set casting_pct = (done_casting * 100 / total_casting) if total_casting else 0 %}
+        {% set figurino_pct = (done_figurino * 100 / total_figurino) if total_figurino else 0 %}
+        {% if show_casting %}
+          <div>
+            <div class="muted">Casting</div>
+            <div class="donut" style="--p: {{ (casting_pct * 3.6)|round(0) }}deg;">
+              <span>{{ casting_pct|round(0) }}%</span>
+            </div>
+          </div>
+        {% endif %}
+        {% if show_figurino %}
+          <div>
+            <div class="muted">Figurino</div>
+            <div class="donut" style="--p: {{ (figurino_pct * 3.6)|round(0) }}deg;">
+              <span>{{ figurino_pct|round(0) }}%</span>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if is_superadmin %}
+        <div style="margin-top:16px;">
+          <h2>Performance</h2>
+          <form method="get" style="display:flex; gap:8px; flex-wrap:wrap;">
+            <select name="perf_range">
+              <option value="7" {% if perf_range == "7" %}selected{% endif %}>Últimos 7 dias</option>
+              <option value="30" {% if perf_range == "30" %}selected{% endif %}>Últimos 30 dias</option>
+              <option value="custom" {% if perf_range == "custom" %}selected{% endif %}>Período personalizado</option>
+            </select>
+            <input type="date" name="perf_start" value="{{ perf_start or '' }}">
+            <input type="date" name="perf_end" value="{{ perf_end or '' }}">
+            <button type="submit">Aplicar</button>
+          </form>
+          <div style="margin-top:12px;">
+            <div class="muted">Casting: {{ perf_casting_done }}/{{ perf_casting_total }}</div>
+            <div class="muted">Figurino: {{ perf_figurino_done }}/{{ perf_figurino_total }}</div>
+            <div class="muted">Roteirista: 0/0</div>
+            <div class="muted">Entrada: R$ {{ perf_money }}</div>
+          </div>
+        </div>
       {% endif %}
     </aside>
   </main>

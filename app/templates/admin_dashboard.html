@@ -1,0 +1,16 @@
+{% extends "admin_layout.html" %}
+{% block content %}
+  <h1>Painel do administrador</h1>
+  <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:16px;">
+    <div class="card">
+      <h3>Identidade visual</h3>
+      <p class="muted">Gerencie logo e cores do sistema.</p>
+      <a class="btn btn-primary" href="/admin/settings">Abrir configurações</a>
+    </div>
+    <div class="card">
+      <h3>Usuarios</h3>
+      <p class="muted">Liste, edite e resete senhas.</p>
+      <a class="btn" href="/admin/users">Gerenciar usuários</a>
+    </div>
+  </div>
+{% endblock %}

@@ -1,28 +1,34 @@
-<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8" />
-  <title>Criar Usuário</title>
-</head>
-<body>
+{% extends "admin_layout.html" %}
+{% block content %}
   <h1>Criar usuário</h1>
+  <div class="card">
+    {% if msg %}<p class="muted">{{ msg }}</p>{% endif %}
+    {% if error %}<p class="muted">{{ error }}</p>{% endif %}
+    <form method="post">
+      <label>Nome</label>
+      <input name="name" required>
 
-  {% if msg %}<p style="color:green;">{{ msg }}</p>{% endif %}
-  {% if error %}<p style="color:red;">{{ error }}</p>{% endif %}
+      <label>Email (login)</label>
+      <input type="email" name="email" required>
 
-  <form method="post">
-    <label>Nome</label><br>
-    <input name="name" required><br><br>
+      <label>Senha de primeiro uso</label>
+      <input type="password" name="temp_password" required>
 
-    <label>Email (login)</label><br>
-    <input type="email" name="email" required><br><br>
+      <label>Cargo (roles)</label>
+      <div class="card" style="margin:0; padding:10px;">
+        {% for r in roles %}
+          <label style="display:block; font-weight:400;">
+            <input type="checkbox" name="roles" value="{{ r.id }}">
+            {{ r.name }}
+          </label>
+        {% else %}
+          <div class="muted">Nenhuma role cadastrada.</div>
+        {% endfor %}
+      </div>
 
-    <label>Senha de primeiro uso</label><br>
-    <input type="password" name="temp_password" required><br><br>
-
-    <button type="submit">Criar</button>
-  </form>
-
-  <p><a href="/rh/dashboard">Voltar</a></p>
-</body>
-</html>
+      <div style="margin-top:12px;">
+        <button class="btn btn-primary" type="submit">Criar</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

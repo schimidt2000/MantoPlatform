@@ -32,16 +32,18 @@ def login():
     if user.must_change_password:
         return redirect(url_for("auth.change_password"))
 
-    # Se veio do navegador, redireciona pro RH
+    # Se veio do navegador, redireciona pra home
     if not request.is_json:
-        return redirect(url_for("rh.dashboard"))
+        return redirect(url_for("home"))
 
     return {"ok": True}
 
-@auth_bp.post("/logout")
+@auth_bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
     logout_user()
+    if not request.is_json:
+        return redirect(url_for("auth.login"))
     return {"ok": True}
 
 
@@ -63,4 +65,4 @@ def change_password():
     current_user.must_change_password = False
     db.session.commit()
 
-    return redirect(url_for("rh.dashboard"))
+    return redirect(url_for("home"))

@@ -151,8 +151,57 @@ class EventRole(db.Model):
     talent_id = db.Column(db.Integer, db.ForeignKey("talents.id"), nullable=True)
     cache_value = db.Column(db.Integer, nullable=True)
     assigned_at = db.Column(db.DateTime, nullable=True)
+    figurino_done_at = db.Column(db.DateTime, nullable=True)
 
     talent = db.relationship("Talent", lazy=True)
+
+
+class EventLog(db.Model):
+    __tablename__ = "event_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    actor_name = db.Column(db.String(120), nullable=False)
+    actor_role = db.Column(db.String(60), nullable=True)
+    message = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    event = db.relationship("CalendarEvent", lazy=True)
+
+
+class EventContract(db.Model):
+    __tablename__ = "event_contracts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    file_path = db.Column(db.String(300), nullable=False)
+    amount = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    event = db.relationship("CalendarEvent", lazy=True)
+
+
+class EventPayment(db.Model):
+    __tablename__ = "event_payments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    file_path = db.Column(db.String(300), nullable=False)
+    amount = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    event = db.relationship("CalendarEvent", lazy=True)
+
+
+class SiteSetting(db.Model):
+    __tablename__ = "site_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    logo_path = db.Column(db.String(300), nullable=True)
+    primary_color = db.Column(db.String(20), nullable=True)
+    secondary_color = db.Column(db.String(20), nullable=True)
+    accent_color = db.Column(db.String(20), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
 @login_manager.user_loader
