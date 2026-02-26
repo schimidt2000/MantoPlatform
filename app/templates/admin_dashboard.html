@@ -1,16 +1,22 @@
-{% extends "admin_layout.html" %}
+{% extends "base.html" %}
+{% block title %}Administração{% endblock %}
+{% block page_title %}Painel do Administrador{% endblock %}
+
 {% block content %}
-  <h1>Painel do administrador</h1>
-  <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:16px;">
-    <div class="card">
-      <h3>Identidade visual</h3>
-      <p class="muted">Gerencie logo e cores do sistema.</p>
+<div class="grid-2">
+  <div class="panel">
+    <h3>Identidade Visual</h3>
+    <p class="muted">Gerencie logo e cores do sistema.</p>
+    <div style="margin-top:16px;">
       <a class="btn btn-primary" href="/admin/settings">Abrir configurações</a>
     </div>
-    <div class="card">
-      <h3>Usuarios</h3>
-      <p class="muted">Liste, edite e resete senhas.</p>
-      <a class="btn" href="/admin/users">Gerenciar usuários</a>
+  </div>
+  <div class="panel">
+    <h3>Usuários</h3>
+    <p class="muted">Liste, edite e resete senhas.</p>
+    <div style="margin-top:16px;">
+      <a class="btn btn-secondary" href="/admin/users">Gerenciar usuários</a>
     </div>
   </div>
+</div>
 {% endblock %}

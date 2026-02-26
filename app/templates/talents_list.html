@@ -1,179 +1,470 @@
-<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8">
-  <title>Talentos</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 24px; }
-    .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
-    .card { border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden; background: #fff; }
-    .card img { width: 100%; height: 260px; object-fit: cover; display: block; background: #f2f2f2; }
-    .card-body { padding: 10px 12px 14px; }
-    .name { font-weight: 700; margin-bottom: 6px; }
-    .meta { color: #6b6b6b; font-size: 13px; line-height: 1.4; }
-    .list-item { margin-bottom: 10px; }
-  </style>
-</head>
-<body>
-  <h1>Banco de Talentos</h1>
-  {% with messages = get_flashed_messages() %}
-  {% if messages %}
-    <ul>
-      {% for msg in messages %}
-        <li>{{ msg }}</li>
-      {% endfor %}
-    </ul>
-  {% endif %}
-{% endwith %}
+{% extends "base.html" %}
 
+{% block title %}Banco de Talentos{% endblock %}
 
-  <div class="actions">
-    <a href="/talents?status=active">Ativos</a>
-    <a href="/talents?status=pending">Pendentes</a>
-    <a
-        href="{{ url_for('talents.add_talent') }}"
-        target="_blank"
-        rel="noopener noreferrer"
-    >
-        Adicionar talento
-    </a>
-    <form method="post" action="/talents/import" style="margin:0;">
-      <button type="submit">Importar novas respostas</button>
-    </form>
+{% block page_title %}Banco de Talentos{% endblock %}
+
+{% block page_actions %}
+  <a href="/talents/add" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+    + Adicionar Talento
+  </a>
+  <form method="post" action="/talents/import" style="margin:0;">
+    <button type="submit" class="btn btn-secondary">Importar respostas</button>
+  </form>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Filter Pills ─────────────────────────────────────────── */
+  .fp-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .fp {
+    position: relative;
+  }
+
+  .fp-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 1.5px solid var(--line);
+    border-radius: 20px;
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color .15s, background .15s;
+  }
+  .fp-btn:hover { border-color: var(--accent); }
+  .fp-btn.has-value {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-dark);
+  }
+  .fp-btn .fp-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .fp-btn .fp-arrow {
+    font-size: 9px;
+    opacity: .5;
+    transition: transform .15s;
+  }
+  .fp.open .fp-arrow { transform: rotate(180deg); opacity: 1; }
+
+  .fp-panel {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    min-width: 200px;
+    max-width: 360px;
+    max-height: 300px;
+    overflow-y: auto;
+    box-shadow: 0 8px 28px rgba(0,0,0,.13);
+    z-index: 300;
+  }
+  .fp.open .fp-panel { display: block; }
+
+  /* Shoe size grid - compact */
+  .shoe-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
+  .shoe-grid label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 4px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .1s, border-color .1s;
+    text-align: center;
+  }
+  .shoe-grid label:has(input:checked) {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent-dark);
+    font-weight: 600;
+  }
+  .shoe-grid input { display: none; }
+
+  /* Height inline */
+  .fp-height-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+  }
+  .fp-height-row select,
+  .fp-height-row input {
+    padding: 6px 8px;
+    font-size: 13px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+  }
+  .fp-height-row select { width: 52px; }
+  .fp-height-row input { width: 90px; }
+
+  /* Active filter chips */
+  .active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .active-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    background: var(--accent-soft);
+    border: 1px solid rgba(198,154,43,.25);
+    border-radius: 16px;
+    font-size: 12px;
+    color: var(--accent-dark);
+    font-weight: 500;
+  }
+  .active-chip a {
+    color: var(--accent-dark);
+    text-decoration: none;
+    font-weight: 700;
+    opacity: .6;
+  }
+  .active-chip a:hover { opacity: 1; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Status Tabs ────────────────────────────────────────────── #}
+<div class="flex-center gap-8 mb-16">
+  <a href="/talents?status=active"
+     class="btn {% if status == 'active' %}btn-primary{% else %}btn-ghost{% endif %}">
+    Ativos
+  </a>
+  <a href="/talents?status=pending"
+     class="btn {% if status == 'pending' %}btn-primary{% else %}btn-ghost{% endif %}">
+    Pendentes
+    {% if status == 'pending' and people %}
+      <span class="badge badge-gray" style="margin-left:6px;">{{ people|length }}</span>
+    {% endif %}
+  </a>
+</div>
+
+{% if status == "active" %}
+
+  {# ── Active filter chips (when filters applied) ─────────────── #}
+  {% set active_languages = request.args.getlist('language') %}
+  {% set active_races     = request.args.getlist('race') %}
+  {% set active_tops      = request.args.getlist('top') %}
+  {% set active_bottoms   = request.args.getlist('bottom') %}
+  {% set active_shoes     = request.args.getlist('shoe') %}
+  {% set active_passport  = request.args.getlist('passport') %}
+  {% set active_tag       = request.args.get('tag', '') %}
+  {% set active_height    = request.args.get('height_value', '') %}
+
+  {% set has_filters = active_languages or active_races or active_tops or active_bottoms or active_shoes or active_passport or active_tag or active_height %}
+
+  {% if has_filters %}
+  <div class="active-filters">
+    {% for v in active_languages %}<span class="active-chip">{{ v }} <a href="{{ request.url | replace('language=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
+    {% for v in active_races %}<span class="active-chip">{{ v }} <a href="{{ request.url | replace('race=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
+    {% for v in active_tops %}<span class="active-chip">Top {{ v }} <a href="{{ request.url | replace('top=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
+    {% for v in active_bottoms %}<span class="active-chip">Bottom {{ v }} <a href="{{ request.url | replace('bottom=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
+    {% for v in active_shoes %}<span class="active-chip">Cal. {{ v }} <a href="{{ request.url | replace('shoe=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
+    {% for v in active_passport %}<span class="active-chip">{{ v }} <a href="{{ request.url | replace('passport=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
+    {% if active_tag %}<span class="active-chip">Tag: {{ active_tag }}</span>{% endif %}
+    {% if active_height %}<span class="active-chip">Altura {{ request.args.get('height_op','gte') | replace('gte','≥') | replace('lte','≤') }} {{ active_height }} cm</span>{% endif %}
+    <a href="/talents?status=active" class="btn btn-ghost btn-sm" style="border-radius:16px;">Limpar tudo ×</a>
   </div>
+  {% endif %}
 
-  <hr>
+  {# ── Filter Pills Bar ──────────────────────────────────────── #}
+  <form id="filter-form" method="get" action="/talents">
+    <input type="hidden" name="status" value="active">
 
-  {% if status == "active" %}
-    <form method="get" action="/talents" style="margin-bottom:16px;">
-      <input type="hidden" name="status" value="active">
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px;">
-        <div>
-          <div><strong>Idiomas</strong></div>
+    <div class="fp-bar" id="fp-bar">
+
+      {# Idioma #}
+      {% if language_options %}
+      <div class="fp" id="fp-idioma">
+        <button type="button" class="fp-btn {% if active_languages %}has-value{% endif %}" onclick="fpToggle('fp-idioma')">
+          Idioma {% if active_languages %}<span class="fp-count">{{ active_languages|length }}</span>{% endif %} <span class="fp-arrow">▼</span>
+        </button>
+        <div class="fp-panel">
           {% for opt in language_options %}
-            <label style="display:block;">
-              <input type="checkbox" name="language" value="{{ opt }}" {% if opt in request.args.getlist('language') %}checked{% endif %}>
+            <label class="checkbox-row">
+              <input type="checkbox" name="language" value="{{ opt }}" {% if opt in active_languages %}checked{% endif %}>
               {{ opt }}
             </label>
           {% endfor %}
         </div>
+      </div>
+      {% endif %}
 
-        <div>
-          <div><strong>Raca</strong></div>
+      {# Raça #}
+      {% if race_options %}
+      <div class="fp" id="fp-raca">
+        <button type="button" class="fp-btn {% if active_races %}has-value{% endif %}" onclick="fpToggle('fp-raca')">
+          Raça {% if active_races %}<span class="fp-count">{{ active_races|length }}</span>{% endif %} <span class="fp-arrow">▼</span>
+        </button>
+        <div class="fp-panel">
           {% for opt in race_options %}
-            <label style="display:block;">
-              <input type="checkbox" name="race" value="{{ opt }}" {% if opt in request.args.getlist('race') %}checked{% endif %}>
+            <label class="checkbox-row">
+              <input type="checkbox" name="race" value="{{ opt }}" {% if opt in active_races %}checked{% endif %}>
               {{ opt }}
             </label>
           {% endfor %}
         </div>
+      </div>
+      {% endif %}
 
-        <div>
-          <div><strong>Altura (cm)</strong></div>
-          <label>
-            <input type="radio" name="height_op" value="gt" {% if request.args.get('height_op') == 'gt' %}checked{% endif %}>
-            maior ou igual
-          </label>
-          <label style="margin-left:8px;">
-            <input type="radio" name="height_op" value="lt" {% if request.args.get('height_op') == 'lt' %}checked{% endif %}>
-            menor ou igual
-          </label>
-          <div style="margin-top:6px;">
-            <input type="text" name="height_value" value="{{ request.args.get('height_value','') }}" style="width:80px;">
+      {# Tamanho (Top + Bottom juntos) #}
+      <div class="fp" id="fp-tamanho">
+        <button type="button" class="fp-btn {% if active_tops or active_bottoms %}has-value{% endif %}" onclick="fpToggle('fp-tamanho')">
+          Tamanho {% if active_tops or active_bottoms %}<span class="fp-count">{{ (active_tops|length) + (active_bottoms|length) }}</span>{% endif %} <span class="fp-arrow">▼</span>
+        </button>
+        <div class="fp-panel">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px;">Parte de cima</div>
+          <div class="flex-center gap-8" style="flex-wrap:wrap; margin-bottom:12px;">
+            {% for opt in size_options_top %}
+              <label class="checkbox-row">
+                <input type="checkbox" name="top" value="{{ opt }}" {% if opt in active_tops %}checked{% endif %}>
+                {{ opt }}
+              </label>
+            {% endfor %}
+          </div>
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px;">Parte de baixo</div>
+          <div class="flex-center gap-8" style="flex-wrap:wrap;">
+            {% for opt in size_options_bottom %}
+              <label class="checkbox-row">
+                <input type="checkbox" name="bottom" value="{{ opt }}" {% if opt in active_bottoms %}checked{% endif %}>
+                {{ opt }}
+              </label>
+            {% endfor %}
           </div>
         </div>
+      </div>
 
-        <div>
-          <div><strong>Top</strong></div>
-          {% for opt in size_options %}
-            <label style="display:block;">
-              <input type="checkbox" name="top" value="{{ opt }}" {% if opt in request.args.getlist('top') %}checked{% endif %}>
-              {{ opt }}
-            </label>
-          {% endfor %}
+      {# Calçado #}
+      <div class="fp" id="fp-calcado">
+        <button type="button" class="fp-btn {% if active_shoes %}has-value{% endif %}" onclick="fpToggle('fp-calcado')">
+          Calçado {% if active_shoes %}<span class="fp-count">{{ active_shoes|length }}</span>{% endif %} <span class="fp-arrow">▼</span>
+        </button>
+        <div class="fp-panel" style="min-width:240px;">
+          <div class="shoe-grid">
+            {% for opt in shoe_options %}
+              <label>
+                <input type="checkbox" name="shoe" value="{{ opt }}" {% if opt in active_shoes %}checked{% endif %}>
+                {{ opt }}
+              </label>
+            {% endfor %}
+          </div>
         </div>
+      </div>
 
-        <div>
-          <div><strong>Bottom</strong></div>
-          {% for opt in size_options %}
-            <label style="display:block;">
-              <input type="checkbox" name="bottom" value="{{ opt }}" {% if opt in request.args.getlist('bottom') %}checked{% endif %}>
-              {{ opt }}
-            </label>
-          {% endfor %}
+      {# Altura #}
+      <div class="fp" id="fp-altura">
+        <button type="button" class="fp-btn {% if active_height %}has-value{% endif %}" onclick="fpToggle('fp-altura')">
+          Altura {% if active_height %}<span class="fp-count">1</span>{% endif %} <span class="fp-arrow">▼</span>
+        </button>
+        <div class="fp-panel" style="min-width:220px;">
+          <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">Altura em centímetros</div>
+          <div class="fp-height-row">
+            <select name="height_op">
+              <option value="gte" {% if request.args.get('height_op','gte') == 'gte' %}selected{% endif %}>≥</option>
+              <option value="lte" {% if request.args.get('height_op') == 'lte' %}selected{% endif %}>≤</option>
+            </select>
+            <input type="number" name="height_value" placeholder="ex: 170" value="{{ active_height }}">
+            <span style="font-size:12px; color:var(--muted);">cm</span>
+          </div>
         </div>
+      </div>
 
-        <div>
-          <div><strong>Tamanho do Pe</strong></div>
-          {% for opt in shoe_options %}
-            <label style="display:block;">
-              <input type="checkbox" name="shoe" value="{{ opt }}" {% if opt in request.args.getlist('shoe') %}checked{% endif %}>
-              {{ opt }}
-            </label>
-          {% endfor %}
-        </div>
-
-        <div>
-          <div><strong>Passaporte e visto</strong></div>
-          {% for val, label in passport_options %}
-            <label style="display:block;">
-              <input type="checkbox" name="passport" value="{{ val }}" {% if val in request.args.getlist('passport') %}checked{% endif %}>
+      {# Passaporte / Visto #}
+      <div class="fp" id="fp-passaporte">
+        <button type="button" class="fp-btn {% if active_passport %}has-value{% endif %}" onclick="fpToggle('fp-passaporte')">
+          Passaporte {% if active_passport %}<span class="fp-count">{{ active_passport|length }}</span>{% endif %} <span class="fp-arrow">▼</span>
+        </button>
+        <div class="fp-panel">
+          {% for value, label in passport_options %}
+            <label class="checkbox-row">
+              <input type="checkbox" name="passport" value="{{ value }}" {% if value in active_passport %}checked{% endif %}>
               {{ label }}
             </label>
           {% endfor %}
         </div>
+      </div>
 
-        <div>
-          <div><strong>Habilidades</strong></div>
-          {% for opt in tag_options %}
-            <label style="display:block;">
-              <input type="checkbox" name="tag" value="{{ opt }}" {% if opt in request.args.getlist('tag') %}checked{% endif %}>
-              {{ opt }}
-            </label>
-          {% endfor %}
+      {# Tags #}
+      <div class="fp" id="fp-tags">
+        <button type="button" class="fp-btn {% if active_tag %}has-value{% endif %}" onclick="fpToggle('fp-tags')">
+          Tags {% if active_tag %}<span class="fp-count">1</span>{% endif %} <span class="fp-arrow">▼</span>
+        </button>
+        <div class="fp-panel" style="min-width:220px;">
+          <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">Habilidades, perfil, etc.</div>
+          <input type="text" name="tag" placeholder="ex: dança, dublê" value="{{ active_tag }}"
+            style="width:100%; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:13px;">
         </div>
       </div>
-      <button type="submit">Filtrar</button>
-      <a href="/talents?status=active" style="margin-left:8px;">Limpar</a>
-    </form>
 
-    <div class="grid">
+      {# Actions #}
+      <div style="margin-left:4px; display:flex; gap:8px;">
+        <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+        {% if has_filters %}
+        <a href="/talents?status=active" class="btn btn-ghost btn-sm">Limpar</a>
+        {% endif %}
+      </div>
+
+    </div>
+  </form>
+
+  {# ── Talent Grid ────────────────────────────────────────────── #}
+  {% if people %}
+    <div class="talent-grid">
       {% for p in people %}
-        <div class="card">
+        <a href="/talents/{{ p.id }}" class="talent-card">
           {% if p.photo_face_path %}
-            <a href="{{ url_for('talents.talent_detail', talent_id=p.id) }}">
-              <img src="{{ p.photo_face_path }}" alt="Foto de {{ p.full_name }}">
-            </a>
+            <img src="{{ p.photo_face_path }}" alt="Foto de {{ p.full_name }}">
           {% else %}
-            <a href="{{ url_for('talents.talent_detail', talent_id=p.id) }}">
-              <img src="" alt="Sem foto">
-            </a>
-          {% endif %}
-          <div class="card-body">
-            <div class="name">
-              <a href="{{ url_for('talents.talent_detail', talent_id=p.id) }}">{{ p.full_name }}</a>
+            <div style="width:100%; height:220px; background:#f0ede8; display:flex; align-items:center; justify-content:center;">
+              <span class="muted" style="font-size:40px;">&#128100;</span>
             </div>
-            <div class="meta">
-              {% if p.height_cm %}Altura: {{ p.height_cm }} cm{% endif %}
-              {% if p.clothing_size_top %} | Top: {{ p.clothing_size_top }}{% endif %}
-              {% if p.clothing_size_bottom %} | Bottom: {{ p.clothing_size_bottom }}{% endif %}
-              {% if p.shoe_size %} | Pe: {{ p.shoe_size }}{% endif %}
+          {% endif %}
+          <div class="talent-card-body">
+            <div class="talent-card-name">{{ p.full_name }}</div>
+            {% if p.artistic_name %}
+              <div class="talent-card-meta">{{ p.artistic_name }}</div>
+            {% endif %}
+            <div class="talent-card-meta">
+              {% if p.height_cm %}{{ p.height_cm }} cm{% endif %}
+              {% if p.clothing_size_top %} &middot; T {{ p.clothing_size_top }}{% endif %}
+              {% if p.clothing_size_bottom %} &middot; B {{ p.clothing_size_bottom }}{% endif %}
+              {% if p.shoe_size %} &middot; Cal {{ p.shoe_size }}{% endif %}
             </div>
           </div>
-        </div>
+        </a>
       {% endfor %}
     </div>
   {% else %}
-    {% for p in people %}
-      <div class="list-item">
-        <strong>{{ p.full_name }}</strong>
-        {% if p.tags %} - <small>{{ p.tags }}</small>{% endif %}
-        <form method="post" action="/talents/{{ p.id }}/approve" style="display:inline;">
-          <button type="submit">Aprovar</button>
-        </form>
-      </div>
-    {% endfor %}
+    <div class="panel" style="text-align:center; padding:48px 24px;">
+      <p class="muted">Nenhum talento encontrado com os filtros aplicados.</p>
+      {% if has_filters %}
+        <a href="/talents?status=active" class="btn btn-secondary" style="margin-top:12px;">Limpar filtros</a>
+      {% endif %}
+    </div>
   {% endif %}
-</body>
-</html>
+
+{% else %}
+
+  {# ── Pending: header com "Aprovar todos" ─────────────────────── #}
+  {% if people %}
+    <div class="flex-center gap-8 mb-16" style="justify-content:flex-end;">
+      <form method="post" action="/talents/approve-all" style="margin:0;"
+            onsubmit="return confirm('Aprovar todos os {{ people|length }} talentos pendentes?')">
+        <button type="submit" class="btn btn-primary">
+          Aprovar todos ({{ people|length }})
+        </button>
+      </form>
+    </div>
+  {% endif %}
+
+  {# ── Pending Table ──────────────────────────────────────────── #}
+  <div class="panel">
+    {% if people %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Email</th>
+              <th>Telefone</th>
+              <th>Habilidades</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in people %}
+              <tr>
+                <td>
+                  <a href="/talents/{{ p.id }}" class="strong">{{ p.full_name }}</a>
+                </td>
+                <td class="meta">{{ p.email_contact or "—" }}</td>
+                <td class="meta">{{ p.phone or "—" }}</td>
+                <td>
+                  {% if p.tags %}
+                    {% for tag in p.tags.split(',') %}
+                      <span class="badge badge-gray">{{ tag.strip() }}</span>
+                    {% endfor %}
+                  {% else %}
+                    <span class="muted">—</span>
+                  {% endif %}
+                </td>
+                <td style="white-space:nowrap;">
+                  <form method="post" action="/talents/{{ p.id }}/approve" style="margin:0;">
+                    <button type="submit" class="btn btn-primary btn-sm">Aprovar</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted" style="text-align:center; padding:24px 0;">Nenhum talento pendente.</p>
+    {% endif %}
+  </div>
+
+{% endif %}
+
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script>
+  function fpToggle(id) {
+    const el = document.getElementById(id);
+    const isOpen = el.classList.contains('open');
+    // fecha todos
+    document.querySelectorAll('.fp.open').forEach(d => d.classList.remove('open'));
+    if (!isOpen) el.classList.add('open');
+  }
+
+  // fecha ao clicar fora
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.fp')) {
+      document.querySelectorAll('.fp.open').forEach(d => d.classList.remove('open'));
+    }
+  });
+
+  // abre o painel do filtro ativo se houver filtros ativos
+  document.addEventListener('DOMContentLoaded', function() {
+    // nenhum painel aberto por padrão - só abre ao clicar
+  });
+</script>
+{% endblock %}

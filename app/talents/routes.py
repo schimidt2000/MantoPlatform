@@ -14,13 +14,12 @@ talents_bp = Blueprint("talents", __name__)
 # CONFIG (você vai preencher)
 GOOGLE_FORM_URL = "https://forms.gle/iaZWqNpvtG5FUU3E7"
 SPREADSHEET_ID = "1A_bXqUP21HR1RWS8AVBmj1oPgjhIWBaFfYxeqX17Ric"
-SHEET_NAME = "Respostas" 
+SHEET_NAME = "Respostas"
 SERVICE_ACCOUNT_JSON = os.path.abspath(os.path.join("instance", "credentials", "sheets_service_account.json"))
 
 @talents_bp.route("/talents/add")
 @login_required
 def add_talent():
-    # ÚNICA forma de adicionar: abre o Google Form
     return redirect(GOOGLE_FORM_URL)
 
 @talents_bp.route("/talents")
@@ -43,16 +42,20 @@ def list_talents():
         return [p.strip() for p in parts if p and p.strip()]
 
     if status == "active":
-        # filters
         languages = request.args.getlist("language")
         races = request.args.getlist("race")
         tops = request.args.getlist("top")
         bottoms = request.args.getlist("bottom")
         shoes = request.args.getlist("shoe")
         passport = request.args.getlist("passport")
-        tags = request.args.getlist("tag")
 
-        height_op = request.args.get("height_op")
+        # Tag: suporta múltiplos valores OU texto único com vírgulas
+        raw_tags = request.args.getlist("tag")
+        tags = []
+        for t in raw_tags:
+            tags.extend(split_values(t))
+
+        height_op = request.args.get("height_op", "gte")
         height_value = request.args.get("height_value")
 
         if languages:
@@ -74,9 +77,9 @@ def list_talents():
         if height_value:
             try:
                 height_num = int(height_value)
-                if height_op == "gt":
+                if height_op == "gte":
                     query = query.filter(Talent.height_cm >= height_num)
-                elif height_op == "lt":
+                elif height_op == "lte":
                     query = query.filter(Talent.height_cm <= height_num)
             except ValueError:
                 pass
@@ -112,7 +115,6 @@ def list_talents():
             if tag_filters:
                 query = query.filter(or_(*tag_filters))
 
-        # options for filters
         all_active = Talent.query.filter_by(status="active").all()
         language_options = sorted({p for t in all_active for p in split_values(t.languages or "")})
         race_options = sorted({t.race for t in all_active if t.race})
@@ -140,7 +142,8 @@ def list_talents():
         language_options=language_options,
         race_options=race_options,
         tag_options=tag_options,
-        size_options=size_options,
+        size_options_top=size_options,
+        size_options_bottom=size_options,
         shoe_options=shoe_options,
         passport_options=passport_options,
     )
@@ -148,8 +151,8 @@ def list_talents():
 @talents_bp.route("/talents/<int:talent_id>")
 @login_required
 def talent_detail(talent_id: int):
-    person = Talent.query.get_or_404(talent_id)
-    return render_template("talent_detail.html", person=person)
+    talent = Talent.query.get_or_404(talent_id)
+    return render_template("talent_detail.html", talent=talent)
 
 @talents_bp.route("/talents/import", methods=["POST"])
 @login_required
@@ -159,7 +162,6 @@ def import_talents():
         sheet_name=SHEET_NAME,
         credentials_path=SERVICE_ACCOUNT_JSON,
     )
-
     flash(f"Import finalizado: {result.get('imported', 0)} novos, {result.get('skipped', 0)} ignorados.")
     return redirect(url_for("talents.list_talents", status="pending"))
 
@@ -169,4 +171,12 @@ def approve_talent(talent_id: int):
     t = Talent.query.get_or_404(talent_id)
     t.status = "active"
     db.session.commit()
+    return redirect(url_for("talents.list_talents", status="pending"))
+
+@talents_bp.route("/talents/approve-all", methods=["POST"])
+@login_required
+def approve_all_talents():
+    count = Talent.query.filter_by(status="pending").update({"status": "active"})
+    db.session.commit()
+    flash(f"{count} talento(s) aprovado(s) com sucesso.")
     return redirect(url_for("talents.list_talents", status="active"))

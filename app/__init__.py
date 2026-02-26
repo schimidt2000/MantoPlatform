@@ -27,6 +27,11 @@ def create_app():
     migrate.init_app(app, db)
     login_manager.init_app(app)
 
+    @app.context_processor
+    def inject_settings():
+        from app.models import SiteSetting
+        return {"settings": SiteSetting.query.get(1)}
+
     # ✅ Importa blueprints AQUI (depois do db existir)
     from .auth.routes import auth_bp
     from .rh.routes import rh_bp
@@ -34,6 +39,7 @@ def create_app():
     from .calendar.routes import calendar_bp
     from .talents.routes import talents_bp
     from .tools.routes import tools_bp
+    from .financeiro.routes import financeiro_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
@@ -41,6 +47,7 @@ def create_app():
     app.register_blueprint(calendar_bp)
     app.register_blueprint(talents_bp)
     app.register_blueprint(tools_bp)
+    app.register_blueprint(financeiro_bp)
     print(app.url_map)
     @app.route("/")
     @login_required

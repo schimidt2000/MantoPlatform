@@ -1,181 +1,196 @@
-<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Manto Platform - Home</title>
-  <style>
-    :root {
-      --bg: #f4f2f7;
-      --ink: #1f1f1f;
-      --muted: #6b6b6b;
-      --panel: #ffffff;
-      --line: #e5e5e5;
-      --accent: #3a63f3;
-      --ok: #2fb171;
-      --bad: #e45858;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
-      background: var(--bg);
-      color: var(--ink);
-    }
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 24px;
-      border-bottom: 1px solid var(--line);
-      background: #fff;
-    }
-    .brand { font-weight: 700; letter-spacing: 0.04em; }
-    .menu { display: flex; gap: 16px; font-size: 14px; }
-    .menu a { text-decoration: none; color: var(--ink); }
-    .menu a.active { color: var(--accent); }
-    .page { padding: 20px 24px 32px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; }
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 16px;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.05);
-    }
-    .panel h2 { margin: 0 0 12px; font-size: 16px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-    .todo-item {
-      display: flex;
-      gap: 10px;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--line);
-    }
-    .todo-item:last-child { border-bottom: 0; }
-    .badge {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      background: #eef2ff;
-      color: var(--accent);
-      height: fit-content;
-    }
-    .muted { color: var(--muted); }
-    .donuts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .donut {
-      display: grid;
-      place-items: center;
-      width: 140px;
-      height: 140px;
-      border-radius: 50%;
-      margin: 10px auto 0;
-      background: conic-gradient(var(--ok) 0deg, var(--ok) var(--p), var(--bad) var(--p), var(--bad) 360deg);
-    }
-    .donut span { background: #fff; width: 90px; height: 90px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; }
-    @media (max-width: 980px) {
-      .page { grid-template-columns: 1fr; }
-      .donuts { grid-template-columns: 1fr; }
-    }
-  </style>
-</head>
-<body>
-  <header>
-    <div class="brand">Manto Platform</div>
-    <nav class="menu">
-      <a class="active" href="/">Home</a>
-      <a href="/agenda">Agenda</a>
-      <a href="/rh/dashboard">Ferramentas</a>
-      <a href="/talents?status=active">Banco de Talentos</a>
-      <a href="/figurinos">Banco de Figurinos</a>
-    </nav>
-    {% if is_superadmin %}
-      <div style="font-size:12px;">
-        Ver como:
-        <a href="/?role_view=casting">Casting</a> |
-        <a href="/?role_view=figurino">Figurino</a> |
-        <a href="/?role_view=todos">Todos</a> |
-        <a href="/">Meu perfil</a>
-      </div>
-    {% endif %}
-  </header>
+{% extends "base.html" %}
 
-  <main class="page">
-    <section class="panel">
-      <h2>To-do list</h2>
+{% block title %}Início{% endblock %}
+
+{% block page_title %}Início{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">Bom dia, {{ current_user.name }}</p>
+{% endblock %}
+
+{% block page_actions %}
+  {% if is_superadmin %}
+    <form method="get" class="flex-center gap-8">
+      <span class="muted" style="font-size:12px;">Ver como:</span>
+      <button type="submit" name="role_view" value="casting"
+        class="btn btn-sm {% if role_view == 'casting' %}btn-primary{% else %}btn-secondary{% endif %}">
+        Casting
+      </button>
+      <button type="submit" name="role_view" value="figurino"
+        class="btn btn-sm {% if role_view == 'figurino' %}btn-primary{% else %}btn-secondary{% endif %}">
+        Figurino
+      </button>
+      <button type="submit" name="role_view" value="todos"
+        class="btn btn-sm {% if role_view == 'todos' %}btn-primary{% else %}btn-secondary{% endif %}">
+        Todos
+      </button>
+      <button type="submit" name="role_view" value=""
+        class="btn btn-sm {% if not role_view %}btn-primary{% else %}btn-secondary{% endif %}">
+        Meu perfil
+      </button>
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="grid-2" style="align-items: start;">
+
+  {# ── LEFT: Tarefas pendentes ─────────────────────────────── #}
+  <div class="panel">
+    <h2>Tarefas pendentes</h2>
+
+    {% if not show_casting and not show_figurino %}
+      <p class="muted">Tudo em dia! ✓</p>
+    {% else %}
       {% if show_casting %}
-        {% for r in pending_casting %}
-          <div class="todo-item">
-            <input type="checkbox">
-            <div>
-              <div><strong>Selecionar elenco: {{ r.character_name }}</strong></div>
-              <div class="muted">{{ r.event.title }}</div>
+        {% if pending_casting %}
+          <div class="mb-16">
+            <div class="flex-between mb-16">
+              <span class="flex-center gap-8">
+                <span class="badge badge-gold">Casting</span>
+                <span class="meta">{{ done_casting }}/{{ total_casting }} concluídos</span>
+              </span>
             </div>
-            <span class="badge">Casting</span>
+            {% for r in pending_casting %}
+              <div class="flex-between gap-12" style="padding: 10px 0; border-bottom: 1px solid var(--line);">
+                <div>
+                  <div class="strong">{{ r.character_name }}</div>
+                  <div class="meta">
+                    <a href="/events/{{ r.event.id }}">{{ r.event.title }}</a>
+                    {% if r.event.start_at %}
+                      &mdash; {{ r.event.start_at.strftime("%d/%m/%Y") }}
+                    {% endif %}
+                  </div>
+                </div>
+                <a href="/events/{{ r.event.id }}" class="btn btn-sm btn-secondary">Abrir</a>
+              </div>
+            {% endfor %}
           </div>
         {% else %}
-          <div class="muted">Sem pendências de casting.</div>
-        {% endfor %}
+          <div class="flex-between mb-16">
+            <span class="flex-center gap-8">
+              <span class="badge badge-gold">Casting</span>
+              <span class="meta badge badge-green">Tudo em dia ✓</span>
+            </span>
+          </div>
+        {% endif %}
       {% endif %}
 
       {% if show_figurino %}
-        {% for r in pending_figurino %}
-          <div class="todo-item">
-            <input type="checkbox">
-            <div>
-              <div><strong>Separar figurino: {{ r.character_name }}</strong></div>
-              <div class="muted">{{ r.event.title }}</div>
+        <hr class="sep">
+        {% if pending_figurino %}
+          <div>
+            <div class="flex-between mb-16">
+              <span class="flex-center gap-8">
+                <span class="badge badge-gray">Figurino</span>
+                <span class="meta">{{ done_figurino }}/{{ total_figurino }} concluídos</span>
+              </span>
             </div>
-            <span class="badge">Figurino</span>
+            {% for r in pending_figurino %}
+              <div class="flex-between gap-12" style="padding: 10px 0; border-bottom: 1px solid var(--line);">
+                <div>
+                  <div class="strong">{{ r.character_name }}</div>
+                  <div class="meta">
+                    <a href="/events/{{ r.event.id }}">{{ r.event.title }}</a>
+                    {% if r.event.start_at %}
+                      &mdash; {{ r.event.start_at.strftime("%d/%m/%Y") }}
+                    {% endif %}
+                  </div>
+                </div>
+                <a href="/events/{{ r.event.id }}" class="btn btn-sm btn-secondary">Abrir</a>
+              </div>
+            {% endfor %}
           </div>
         {% else %}
-          <div class="muted">Sem pendências de figurino.</div>
-        {% endfor %}
+          <div class="flex-center gap-8">
+            <span class="badge badge-gray">Figurino</span>
+            <span class="badge badge-green">Tudo em dia ✓</span>
+          </div>
+        {% endif %}
       {% endif %}
-    </section>
+    {% endif %}
+  </div>
 
-    <aside class="panel">
+  {# ── RIGHT: Indicadores + Performance ────────────────────── #}
+  <div>
+
+    {# Donuts #}
+    <div class="panel">
       <h2>Indicadores</h2>
-      <div class="donuts">
-        {% set casting_pct = (done_casting * 100 / total_casting) if total_casting else 0 %}
-        {% set figurino_pct = (done_figurino * 100 / total_figurino) if total_figurino else 0 %}
-        {% if show_casting %}
-          <div>
-            <div class="muted">Casting</div>
-            <div class="donut" style="--p: {{ (casting_pct * 3.6)|round(0) }}deg;">
-              <span>{{ casting_pct|round(0) }}%</span>
-            </div>
-          </div>
-        {% endif %}
-        {% if show_figurino %}
-          <div>
-            <div class="muted">Figurino</div>
-            <div class="donut" style="--p: {{ (figurino_pct * 3.6)|round(0) }}deg;">
-              <span>{{ figurino_pct|round(0) }}%</span>
-            </div>
-          </div>
-        {% endif %}
-      </div>
+      <div class="flex-center gap-16" style="justify-content: center; flex-wrap: wrap;">
 
-      {% if is_superadmin %}
-        <div style="margin-top:16px;">
-          <h2>Performance</h2>
-          <form method="get" style="display:flex; gap:8px; flex-wrap:wrap;">
-            <select name="perf_range">
-              <option value="7" {% if perf_range == "7" %}selected{% endif %}>Últimos 7 dias</option>
-              <option value="30" {% if perf_range == "30" %}selected{% endif %}>Últimos 30 dias</option>
-              <option value="custom" {% if perf_range == "custom" %}selected{% endif %}>Período personalizado</option>
-            </select>
-            <input type="date" name="perf_start" value="{{ perf_start or '' }}">
-            <input type="date" name="perf_end" value="{{ perf_end or '' }}">
-            <button type="submit">Aplicar</button>
-          </form>
-          <div style="margin-top:12px;">
-            <div class="muted">Casting: {{ perf_casting_done }}/{{ perf_casting_total }}</div>
-            <div class="muted">Figurino: {{ perf_figurino_done }}/{{ perf_figurino_total }}</div>
-            <div class="muted">Roteirista: 0/0</div>
-            <div class="muted">Entrada: R$ {{ perf_money }}</div>
+        {% if show_casting %}
+          {% set pct_c = (done_casting / total_casting * 100) | round | int if total_casting > 0 else 0 %}
+          <div style="text-align: center;">
+            <div class="meta mb-16" style="margin-bottom: 8px;">Casting</div>
+            <div class="donut" style="--p: {{ (pct_c * 3.6) | round(1) }}deg;">
+              <div class="donut-inner">{{ pct_c }}%</div>
+            </div>
+            <div class="meta mt-8" style="margin-top: 8px;">{{ done_casting }}/{{ total_casting }}</div>
+          </div>
+        {% endif %}
+
+        {% if show_figurino %}
+          {% set pct_f = (done_figurino / total_figurino * 100) | round | int if total_figurino > 0 else 0 %}
+          <div style="text-align: center;">
+            <div class="meta" style="margin-bottom: 8px;">Figurino</div>
+            <div class="donut" style="--p: {{ (pct_f * 3.6) | round(1) }}deg;">
+              <div class="donut-inner">{{ pct_f }}%</div>
+            </div>
+            <div class="meta" style="margin-top: 8px;">{{ done_figurino }}/{{ total_figurino }}</div>
+          </div>
+        {% endif %}
+
+        {% if not show_casting and not show_figurino %}
+          <p class="muted">Sem indicadores para exibir.</p>
+        {% endif %}
+
+      </div>
+    </div>
+
+    {# Performance — apenas superadmin #}
+    {% if is_superadmin %}
+      <div class="panel">
+        <div class="flex-between mb-16">
+          <h2 style="margin-bottom: 0;">Performance</h2>
+        </div>
+
+        <form method="get" class="flex-center gap-8" style="flex-wrap: wrap; margin-bottom: 16px;">
+          {% if role_view %}
+            <input type="hidden" name="role_view" value="{{ role_view }}">
+          {% endif %}
+          <select name="perf_range" onchange="this.form.submit()" style="width: auto; min-width: 160px;">
+            <option value="7"      {% if perf_range == "7" %}selected{% endif %}>Últimos 7 dias</option>
+            <option value="30"     {% if perf_range == "30" %}selected{% endif %}>Últimos 30 dias</option>
+            <option value="custom" {% if perf_range == "custom" %}selected{% endif %}>Período personalizado</option>
+          </select>
+          {% if perf_range == "custom" %}
+            <input type="date" name="perf_start" value="{{ perf_start or '' }}" style="width: auto;">
+            <input type="date" name="perf_end"   value="{{ perf_end or '' }}"   style="width: auto;">
+            <button type="submit" class="btn btn-sm btn-primary">Aplicar</button>
+          {% endif %}
+        </form>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(2, 1fr);">
+          <div class="kpi">
+            <div class="kpi-label">Casting</div>
+            <div class="kpi-value">{{ perf_casting_done }}<span style="font-size:14px; font-weight:500; color:var(--muted);">/{{ perf_casting_total }}</span></div>
+            <div class="kpi-sub">roles preenchidos</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Figurino</div>
+            <div class="kpi-value">{{ perf_figurino_done }}<span style="font-size:14px; font-weight:500; color:var(--muted);">/{{ perf_figurino_total }}</span></div>
+            <div class="kpi-sub">separados</div>
+          </div>
+          <div class="kpi" style="grid-column: span 2;">
+            <div class="kpi-label">Entrada total</div>
+            <div class="kpi-value gold">R$&nbsp;{{ "{:,.0f}".format(perf_money) }}</div>
+            <div class="kpi-sub">soma dos cachês no período</div>
           </div>
         </div>
-      {% endif %}
-    </aside>
-  </main>
-</body>
-</html>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

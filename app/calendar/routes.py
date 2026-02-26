@@ -16,7 +16,7 @@ from .service import (
     parse_event_datetime,
 )
 from .. import db
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role
 
 calendar_bp = Blueprint("calendar", __name__)
 
@@ -251,6 +251,43 @@ def event_detail(event_id: int):
                     )
                     db.session.commit()
 
+        if action == "update_sale":
+            can_vendas = any(r.name.upper() in ("VENDAS", "FINANCEIRO", "SUPERADMIN") for r in current_user.roles)
+            if can_vendas:
+                sale_raw = request.form.get("sale_value", "").strip()
+                with_invoice = request.form.get("with_invoice") == "1"
+                try:
+                    event.sale_value = int(sale_raw) if sale_raw else None
+                except ValueError:
+                    event.sale_value = None
+                event.with_invoice = with_invoice
+
+                # VENDAS marca-se automaticamente como vendedor se não houver vendedor
+                if any(r.name.upper() == "VENDAS" for r in current_user.roles):
+                    if not event.seller_id:
+                        event.seller_id = current_user.id
+
+                # FINANCEIRO/SUPERADMIN pode alterar vendedor e taxa
+                if any(r.name.upper() in ("FINANCEIRO", "SUPERADMIN") for r in current_user.roles):
+                    seller_raw = request.form.get("seller_id", "").strip()
+                    event.seller_id = int(seller_raw) if seller_raw else None
+                    rate_raw = request.form.get("commission_rate", "").strip()
+                    try:
+                        event.commission_rate = float(rate_raw) if rate_raw else None
+                    except ValueError:
+                        event.commission_rate = None
+
+                db.session.add(
+                    EventLog(
+                        event_id=event.id,
+                        actor_name=current_user.name,
+                        actor_role="Vendas",
+                        message=f"Atualizou valor de venda para R$ {event.sale_value or 0}{'  (com nota)' if event.with_invoice else ''}",
+                        created_at=datetime.now(tz=tz_sp),
+                    )
+                )
+                db.session.commit()
+
         if action == "add_payment":
             amount_raw = request.form.get("payment_amount")
             file = request.files.get("payment_file")
@@ -323,9 +360,20 @@ def event_detail(event_id: int):
     def has_role(name: str) -> bool:
         return any(r.name.upper() == name.upper() for r in current_user.roles)
 
+    settings = SiteSetting.query.get(1)
+    default_commission = (settings.default_commission_rate if settings and settings.default_commission_rate is not None else 2.0)
+    event_rate = event.commission_rate if event.commission_rate is not None else default_commission
+    event_cost = sum(r.cache_value or 0 for r in event.roles if r.talent_id)
+    event_commission = round((event.sale_value or 0) * event_rate / 100, 2)
+    sellers = User.query.join(User.roles).filter(Role.name == "VENDAS").order_by(User.name.asc()).all()
+
+    show_vendas = has_role("VENDAS") or has_role("FINANCEIRO") or has_role("SUPERADMIN")
+    show_financeiro = has_role("FINANCEIRO") or has_role("SUPERADMIN")
+
     return render_template(
         "event_detail.html",
         event=event,
+        event_type=parse_event_type(event.title),
         talents=talents,
         logs=logs,
         contracts=contracts,
@@ -334,14 +382,36 @@ def event_detail(event_id: int):
         show_casting=has_role("CASTING") or has_role("SUPERADMIN"),
         show_figurino=has_role("FIGURINO") or has_role("SUPERADMIN"),
         show_comercial=has_role("COMERCIAL") or has_role("SUPERADMIN"),
+        show_vendas=show_vendas,
+        show_financeiro=show_financeiro,
+        sellers=sellers,
+        event_cost=event_cost,
+        event_commission=event_commission,
+        event_rate=event_rate,
+        default_commission=default_commission,
     )
+
+
+def strip_role_prefix(name: str) -> str:
+    """Remove prefixo (TIPO) do início do nome do personagem. Ex: '(R&I) HOMEM ARANHA' → 'HOMEM ARANHA'."""
+    return re.sub(r'^\s*\([^)]*\)\s*', '', name).strip()
+
+
+def parse_event_type(title: str) -> str:
+    """Extrai o tipo do evento do prefixo entre parênteses. Ex: '(R&I) HOMEM ARANHA + MARIO' → 'R&I'."""
+    if not title:
+        return ""
+    m = re.match(r'^\s*\(([^)]*)\)', title)
+    return m.group(1).strip() if m else ""
 
 
 def parse_characters(title: str) -> list[str]:
     if not title:
         return []
     parts = [p.strip() for p in re.split(r"\s*\+\s*", title) if p.strip()]
-    return parts
+    # Remove prefixo (TIPO) de cada personagem
+    cleaned = [strip_role_prefix(p) for p in parts]
+    return [p for p in cleaned if p]
 
 
 def sync_events(items: list[dict]) -> None:
@@ -392,12 +462,28 @@ def sync_events(items: list[dict]) -> None:
         characters = parse_characters(title)
         existing = {r.character_name: r for r in event.roles}
 
+        # Mapa normalizado: nome sem prefixo → (nome_atual, role)
+        # Permite renomear roles antigos que ainda têm o prefixo, preservando casting/figurino
+        existing_norm: dict[str, tuple[str, object]] = {}
+        for name, role in existing.items():
+            norm = strip_role_prefix(name)
+            existing_norm[norm] = (name, role)
+
+        # Apaga roles que não existem mais (mesmo após normalização)
         for name, role in list(existing.items()):
-            if name not in characters:
+            if strip_role_prefix(name) not in characters:
                 db.session.delete(role)
 
-        for name in characters:
-            if name not in existing:
-                db.session.add(EventRole(event_id=event.id, character_name=name))
+        # Cria novos ou renomeia roles com prefixo antigo
+        for char in characters:
+            if char in existing:
+                # já existe com o nome correto, nada a fazer
+                pass
+            elif char in existing_norm:
+                # existe mas com prefixo antigo → renomeia preservando assignment
+                _, role = existing_norm[char]
+                role.character_name = char
+            else:
+                db.session.add(EventRole(event_id=event.id, character_name=char))
 
     db.session.commit()

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Financeiro{% endblock %} — Manto</title>
+  <style>
+    :root {
+      --bg: #f4f2f7;
+      --ink: #1f1f1f;
+      --muted: #6b6b6b;
+      --panel: #ffffff;
+      --line: #e5e5e5;
+      --accent: #3a63f3;
+      --green: #1a7f3c;
+      --red: #c0392b;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; background: var(--bg); color: var(--ink); }
+    .topbar {
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      height: 52px;
+    }
+    .topbar a {
+      text-decoration: none;
+      color: var(--muted);
+      padding: 0 16px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      border-bottom: 3px solid transparent;
+    }
+    .topbar a:hover { color: var(--ink); }
+    .topbar a.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .topbar .brand { font-weight: 700; color: var(--ink); margin-right: 12px; font-size: 15px; }
+    .page { padding: 24px; max-width: 1200px; margin: 0 auto; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+      margin-bottom: 16px;
+    }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+    .kpi {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px 20px;
+    }
+    .kpi .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .kpi .value { font-size: 24px; font-weight: 700; }
+    .kpi .value.green { color: var(--green); }
+    .kpi .value.red { color: var(--red); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; padding: 10px 8px; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); }
+    td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    tr:last-child td { border-bottom: 0; }
+    tr:hover td { background: #fafafa; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
+    .badge-green { background: #d4edda; color: var(--green); }
+    .badge-gray { background: #f0f0f0; color: var(--muted); }
+    .badge-blue { background: #dce6ff; color: var(--accent); }
+    input, select, button { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 14px; }
+    button { background: var(--accent); color: #fff; border-color: var(--accent); cursor: pointer; }
+    .btn-secondary { background: #fff; color: var(--ink); border-color: var(--line); }
+    .muted { color: var(--muted); font-size: 13px; }
+    h1 { font-size: 20px; margin: 0 0 16px; }
+    h2 { font-size: 16px; margin: 0 0 14px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+    @media (max-width: 700px) {
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+      .topbar { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="brand">Manto</span>
+    <a href="/">Home</a>
+    <a href="/agenda">Agenda</a>
+    <a href="/financeiro/" class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+    <a href="/financeiro/funcionarios" class="{% if active == 'funcionarios' %}active{% endif %}">Funcionários</a>
+    <a href="/vendas/" class="{% if active == 'pipeline' %}active{% endif %}">Pipeline de Vendas</a>
+  </div>
+  <div class="page">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

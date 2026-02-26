@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Funcionários{% endblock %}
+
+{% block page_title %}Funcionários{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">Usuários ativos e seus salários vigentes</p>
+{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+  {% if users_data %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>E-mail</th>
+          <th>Roles</th>
+          <th>Salário atual</th>
+          <th>Tipo de pagamento</th>
+          <th>Desde</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for d in users_data %}
+        {% set u = d.user %}
+        {% set s = d.current_salary %}
+        <tr>
+          <td class="strong">{{ u.name }}</td>
+          <td class="meta">{{ u.email }}</td>
+          <td>
+            {% for r in u.roles %}
+              <span class="badge badge-blue">{{ r.name }}</span>
+            {% endfor %}
+          </td>
+          <td>
+            {% if s %}
+              <span class="strong">R$ {{ s.salary }}</span>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td class="meta">
+            {% if s %}
+              {% if s.payment_type == 'semanal' %}Semanal
+              {% elif s.payment_type == 'quinzenal' %}Dia 5 e 20
+              {% elif s.payment_type == 'comissao' %}Somente comissão
+              {% else %}{{ s.payment_type }}{% endif %}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td class="meta">{{ s.start_date.strftime("%d/%m/%Y") if s else '—' }}</td>
+          <td>
+            <a href="/financeiro/funcionarios/{{ u.id }}" class="btn btn-sm btn-secondary">Detalhes</a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="muted" style="text-align:center; padding:24px 0;">Nenhum usuário ativo.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

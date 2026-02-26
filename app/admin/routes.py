@@ -200,6 +200,11 @@ def admin_settings():
         settings.primary_color = request.form.get("primary_color", "") or settings.primary_color
         settings.secondary_color = request.form.get("secondary_color", "") or settings.secondary_color
         settings.accent_color = request.form.get("accent_color", "") or settings.accent_color
+        commission_raw = request.form.get("default_commission_rate", "").strip()
+        try:
+            settings.default_commission_rate = float(commission_raw) if commission_raw else settings.default_commission_rate
+        except ValueError:
+            pass
 
         file = request.files.get("logo")
         if file and file.filename:

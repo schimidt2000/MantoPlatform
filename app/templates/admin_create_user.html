@@ -1,23 +1,40 @@
-{% extends "admin_layout.html" %}
+{% extends "base.html" %}
+{% block title %}Criar Usuário{% endblock %}
+{% block page_title %}Criar Usuário{% endblock %}
+{% block page_actions %}
+  <a class="btn btn-ghost" href="/admin/users">← Voltar</a>
+{% endblock %}
+
 {% block content %}
-  <h1>Criar usuário</h1>
-  <div class="card">
-    {% if msg %}<p class="muted">{{ msg }}</p>{% endif %}
-    {% if error %}<p class="muted">{{ error }}</p>{% endif %}
-    <form method="post">
+<div class="panel" style="max-width:560px;">
+  {% if msg %}
+    <div class="alert alert-success mb-16">{{ msg }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert alert-error mb-16">{{ error }}</div>
+  {% endif %}
+
+  <form method="post">
+    <div class="form-group">
       <label>Nome</label>
       <input name="name" required>
+    </div>
 
+    <div class="form-group">
       <label>Email (login)</label>
       <input type="email" name="email" required>
+    </div>
 
+    <div class="form-group">
       <label>Senha de primeiro uso</label>
       <input type="password" name="temp_password" required>
+    </div>
 
+    <div class="form-group">
       <label>Cargo (roles)</label>
-      <div class="card" style="margin:0; padding:10px;">
+      <div class="panel" style="margin:0; padding:12px;">
         {% for r in roles %}
-          <label style="display:block; font-weight:400;">
+          <label class="checkbox-row">
             <input type="checkbox" name="roles" value="{{ r.id }}">
             {{ r.name }}
           </label>
@@ -25,10 +42,11 @@
           <div class="muted">Nenhuma role cadastrada.</div>
         {% endfor %}
       </div>
+    </div>
 
-      <div style="margin-top:12px;">
-        <button class="btn btn-primary" type="submit">Criar</button>
-      </div>
-    </form>
-  </div>
+    <div style="margin-top:16px;">
+      <button class="btn btn-primary" type="submit">Criar usuário</button>
+    </div>
+  </form>
+</div>
 {% endblock %}

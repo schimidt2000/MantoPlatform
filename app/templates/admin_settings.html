@@ -1,36 +1,59 @@
-{% extends "admin_layout.html" %}
+{% extends "base.html" %}
+{% block title %}Identidade Visual{% endblock %}
+{% block page_title %}Identidade Visual{% endblock %}
+{% block page_actions %}
+  <a class="btn btn-ghost" href="/admin/users">Usuários</a>
+{% endblock %}
+
 {% block content %}
-  <h1>Identidade visual</h1>
-  <div class="card">
-    <form method="post" enctype="multipart/form-data">
+<div class="panel" style="max-width:600px;">
+  <form method="post" enctype="multipart/form-data">
+
+    <div class="form-group">
       <label>Logo da empresa</label>
-      <div class="muted">Tamanho recomendado: 400x120px, PNG ou SVG, fundo transparente.</div>
+      <div class="muted" style="margin-bottom:8px;">Tamanho recomendado: 400x120px, PNG ou SVG, fundo transparente.</div>
       {% if settings.logo_path %}
-        <div style="margin:10px 0;">
-          <img src="{{ settings.logo_path }}" alt="Logo atual" style="max-height:80px;">
+        <div style="margin-bottom:10px;">
+          <img src="{{ settings.logo_path }}" alt="Logo atual" style="max-height:80px; border-radius:4px;">
         </div>
       {% endif %}
       <input type="file" name="logo" accept=".png,.jpg,.jpeg,.webp,.svg">
+    </div>
 
+    <hr class="sep">
+
+    <div class="form-group">
       <label>Cores do site</label>
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:8px;">
         <div>
-          <div class="muted">Primária</div>
+          <div class="muted" style="margin-bottom:6px;">Primária</div>
           <input type="color" name="primary_color" value="{{ settings.primary_color or '#c69a2b' }}">
         </div>
         <div>
-          <div class="muted">Secundária</div>
+          <div class="muted" style="margin-bottom:6px;">Secundária</div>
           <input type="color" name="secondary_color" value="{{ settings.secondary_color or '#5b2a7a' }}">
         </div>
         <div>
-          <div class="muted">Destaque</div>
+          <div class="muted" style="margin-bottom:6px;">Destaque</div>
           <input type="color" name="accent_color" value="{{ settings.accent_color or '#ffffff' }}">
         </div>
       </div>
+    </div>
 
-      <div style="margin-top:16px;">
-        <button class="btn btn-primary" type="submit">Salvar</button>
-      </div>
-    </form>
-  </div>
+    <hr class="sep">
+
+    <div class="form-group">
+      <label>Taxa de comissão padrão (%)</label>
+      <div class="muted" style="margin-bottom:8px;">Porcentagem paga ao vendedor sobre o valor de venda bruto. Pode ser sobrescrita por evento.</div>
+      <input type="number" step="0.1" min="0" max="100" name="default_commission_rate"
+        value="{{ settings.default_commission_rate or 2.0 }}"
+        style="width:140px;">
+    </div>
+
+    <div style="margin-top:20px;">
+      <button class="btn btn-primary" type="submit">Salvar configurações</button>
+    </div>
+
+  </form>
+</div>
 {% endblock %}

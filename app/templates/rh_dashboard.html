@@ -1,24 +1,31 @@
-﻿<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8" />
-  <title>RH - Dashboard</title>
-</head>
-<body>
-  <h1>RH - Dashboard</h1>
-  <p>Voce esta logado.</p>
+{% extends "base.html" %}
 
-  <hr>
+{% block title %}Recursos Humanos{% endblock %}
+
+{% block page_title %}Recursos Humanos{% endblock %}
+
+{% block content %}
+
+<div class="grid-2" style="max-width:640px;">
 
   {% if can_manage_users %}
-    <button>Gerenciar Usuarios</button>
+    <a href="/admin/users" class="card" style="text-decoration:none; color:inherit;">
+      <div class="card-body" style="padding:24px;">
+        <div style="font-size:32px; margin-bottom:12px;">&#128101;</div>
+        <div class="card-title">Gerenciar Usuários</div>
+        <p class="meta">Adicione, edite ou remova usuários do sistema.</p>
+      </div>
+    </a>
   {% endif %}
 
-  <div style="margin:16px 0;">
-    <a href="/tools/calculadora-transporte">Calculadora de Transporte</a>
-  </div>
+  <a href="/tools/calculadora-transporte" class="card" style="text-decoration:none; color:inherit;">
+    <div class="card-body" style="padding:24px;">
+      <div style="font-size:32px; margin-bottom:12px;">&#128663;</div>
+      <div class="card-title">Calculadora de Transporte</div>
+      <p class="meta">Calcule custos de van ou carro para eventos.</p>
+    </div>
+  </a>
 
-  <button>Ver Colaboradores</button>
+</div>
 
-</body>
-</html>
+{% endblock %}

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Financeiro{% endblock %}
+
+{% block page_title %}Dashboard Financeiro{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">Receitas, custos e comissões do período</p>
+{% endblock %}
+
+{% block content %}
+
+{# ── Filtro de período ────────────────────────────────────────── #}
+<div class="panel" style="margin-bottom:16px; padding:12px 20px;">
+  <form method="get" class="flex-center gap-8" style="flex-wrap:wrap;">
+    <span class="muted" style="font-size:13px;">Período:</span>
+    <select name="period" onchange="this.form.submit()" style="width:auto;">
+      <option value="7"     {% if period == '7'      %}selected{% endif %}>Últimos 7 dias</option>
+      <option value="30"    {% if period == '30'     %}selected{% endif %}>Últimos 30 dias</option>
+      <option value="custom"{% if period == 'custom' %}selected{% endif %}>Personalizado</option>
+    </select>
+    {% if period == 'custom' %}
+      <input type="date" name="start" value="{{ start_str }}" style="width:auto;">
+      <input type="date" name="end"   value="{{ end_str }}"   style="width:auto;">
+      <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+    {% endif %}
+  </form>
+</div>
+
+{# ── KPIs ─────────────────────────────────────────────────────── #}
+<div class="kpi-grid" style="margin-bottom:16px;">
+  <div class="kpi">
+    <div class="kpi-label">Receita total</div>
+    <div class="kpi-value gold">R$ {{ total_receita | int }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Custo total (cachês)</div>
+    <div class="kpi-value" style="color:var(--red);">R$ {{ total_custo | int }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Lucro líquido</div>
+    <div class="kpi-value {% if total_lucro >= 0 %}green{% else %}red{% endif %}">R$ {{ total_lucro | int }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Comissões a pagar (dia 5)</div>
+    <div class="kpi-value">R$ {{ "%.2f"|format(total_comissoes) }}</div>
+  </div>
+</div>
+
+{# ── Tabela de eventos ────────────────────────────────────────── #}
+<div class="panel">
+  <h2>Eventos no período</h2>
+  {% if events_data %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Evento</th>
+          <th>Data</th>
+          <th>Vendedor</th>
+          <th>Venda</th>
+          <th>Nota</th>
+          <th>Custo</th>
+          <th>Lucro</th>
+          <th>Comissão</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for d in events_data %}
+        {% set e = d.event %}
+        <tr>
+          <td><a href="/events/{{ e.id }}">{{ e.title }}</a></td>
+          <td class="meta">{{ e.start_at.strftime("%d/%m/%Y") if e.start_at else '—' }}</td>
+          <td class="meta">{{ e.seller.name if e.seller else '—' }}</td>
+          <td>
+            {% if e.sale_value %}
+              <span class="strong">R$ {{ e.sale_value }}</span>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if e.sale_value %}
+              {% if e.with_invoice %}
+                <span class="badge badge-green">Com nota</span>
+              {% else %}
+                <span class="badge badge-gray">Sem nota</span>
+              {% endif %}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td class="meta">R$ {{ d.custo }}</td>
+          <td class="strong" style="color:{% if d.lucro >= 0 %}var(--green){% else %}var(--red){% endif %};">
+            R$ {{ d.lucro }}
+          </td>
+          <td>
+            {% if e.sale_value %}
+              R$ {{ "%.2f"|format(d.comissao) }}
+              <div class="meta">{{ d.rate }}%</div>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="muted">Nenhum evento no período.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

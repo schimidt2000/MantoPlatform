@@ -48,6 +48,12 @@ class User(db.Model, UserMixin):
         backref=db.backref("users", lazy="dynamic"),
         lazy="joined",
     )
+    salary_histories = db.relationship(
+        "SalaryHistory",
+        backref=db.backref("user", lazy=True),
+        lazy="dynamic",
+        order_by="SalaryHistory.start_date.desc()",
+    )
 
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
@@ -139,7 +145,14 @@ class CalendarEvent(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    # financeiro
+    sale_value = db.Column(db.Integer, nullable=True)
+    with_invoice = db.Column(db.Boolean, default=False, nullable=False)
+    seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    commission_rate = db.Column(db.Float, nullable=True)  # null = usa SiteSetting.default_commission_rate
+
     roles = db.relationship("EventRole", backref="event", lazy=True, cascade="all, delete-orphan")
+    seller = db.relationship("User", lazy=True, foreign_keys=[seller_id])
 
 
 class EventRole(db.Model):
@@ -201,7 +214,21 @@ class SiteSetting(db.Model):
     primary_color = db.Column(db.String(20), nullable=True)
     secondary_color = db.Column(db.String(20), nullable=True)
     accent_color = db.Column(db.String(20), nullable=True)
+    default_commission_rate = db.Column(db.Float, nullable=True)  # % padrão de comissão (default 2.0)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class SalaryHistory(db.Model):
+    __tablename__ = "salary_history"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    salary = db.Column(db.Integer, nullable=False)       # valor em reais
+    payment_type = db.Column(db.String(20), nullable=False)  # "semanal" | "quinzenal" | "comissao"
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=True)          # null = vigente atualmente
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 @login_manager.user_loader

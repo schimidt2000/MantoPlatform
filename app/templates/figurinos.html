@@ -1,20 +1,19 @@
-<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Banco de Figurinos</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 24px; }
-    .panel { border: 1px solid #e5e5e5; border-radius: 10px; padding: 16px; }
-    .muted { color: #6b6b6b; }
-  </style>
-</head>
-<body>
-  <p><a href="/">Voltar para home</a></p>
-  <h1>Banco de Figurinos</h1>
-  <div class="panel">
-    <p class="muted">Em construção.</p>
-  </div>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}Banco de Figurinos{% endblock %}
+
+{% block page_title %}Banco de Figurinos{% endblock %}
+
+{% block content %}
+
+<div class="panel" style="text-align:center; padding:64px 32px;">
+  <div style="font-size:64px; margin-bottom:16px;">&#128248;</div>
+  <h2 style="font-size:20px; font-weight:700; color:var(--ink); margin-bottom:8px; text-transform:none; letter-spacing:0;">
+    Em construção
+  </h2>
+  <p class="muted" style="font-size:14px; max-width:380px; margin:0 auto;">
+    Esta seção estará disponível em breve.
+  </p>
+</div>
+
+{% endblock %}
