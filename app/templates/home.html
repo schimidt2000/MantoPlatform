@@ -8,29 +8,7 @@
   <p class="sub">Bom dia, {{ current_user.name }}</p>
 {% endblock %}
 
-{% block page_actions %}
-  {% if is_superadmin %}
-    <form method="get" class="flex-center gap-8">
-      <span class="muted" style="font-size:12px;">Ver como:</span>
-      <button type="submit" name="role_view" value="casting"
-        class="btn btn-sm {% if role_view == 'casting' %}btn-primary{% else %}btn-secondary{% endif %}">
-        Casting
-      </button>
-      <button type="submit" name="role_view" value="figurino"
-        class="btn btn-sm {% if role_view == 'figurino' %}btn-primary{% else %}btn-secondary{% endif %}">
-        Figurino
-      </button>
-      <button type="submit" name="role_view" value="todos"
-        class="btn btn-sm {% if role_view == 'todos' %}btn-primary{% else %}btn-secondary{% endif %}">
-        Todos
-      </button>
-      <button type="submit" name="role_view" value=""
-        class="btn btn-sm {% if not role_view %}btn-primary{% else %}btn-secondary{% endif %}">
-        Meu perfil
-      </button>
-    </form>
-  {% endif %}
-{% endblock %}
+{% block page_actions %}{% endblock %}
 
 {% block content %}
 <div class="grid-2" style="align-items: start;">
@@ -156,9 +134,6 @@
         </div>
 
         <form method="get" class="flex-center gap-8" style="flex-wrap: wrap; margin-bottom: 16px;">
-          {% if role_view %}
-            <input type="hidden" name="role_view" value="{{ role_view }}">
-          {% endif %}
           <select name="perf_range" onchange="this.form.submit()" style="width: auto; min-width: 160px;">
             <option value="7"      {% if perf_range == "7" %}selected{% endif %}>Últimos 7 dias</option>
             <option value="30"     {% if perf_range == "30" %}selected{% endif %}>Últimos 30 dias</option>

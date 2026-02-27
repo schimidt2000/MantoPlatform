@@ -46,7 +46,7 @@
     </div>
 
     {# Figurino — visível para FIGURINO e SUPERADMIN #}
-    {% if current_user.is_authenticated and (current_user.roles | selectattr('name', 'in', ['FIGURINO', 'SUPERADMIN']) | list) %}
+    {% if current_user.is_authenticated and eff_has_role('FIGURINO', 'SUPERADMIN') %}
     <div class="sidebar-section">
       <div class="sidebar-section-label">Produção</div>
       <a href="/figurinos" class="sidebar-item {% if '/figurinos' in request.path %}active{% endif %}">
@@ -59,10 +59,10 @@
     {% endif %}
 
     {# Financeiro / Vendas #}
-    {% if current_user.is_authenticated and (current_user.roles | selectattr('name', 'in', ['FINANCEIRO', 'VENDAS', 'SUPERADMIN']) | list) %}
+    {% if current_user.is_authenticated and eff_has_role('FINANCEIRO', 'VENDAS', 'SUPERADMIN') %}
     <div class="sidebar-section">
       <div class="sidebar-section-label">Financeiro</div>
-      {% if current_user.roles | selectattr('name', 'in', ['VENDAS', 'FINANCEIRO', 'SUPERADMIN']) | list %}
+      {% if eff_has_role('VENDAS', 'FINANCEIRO', 'SUPERADMIN') %}
       <a href="/vendas/" class="sidebar-item {% if '/vendas' in request.path %}active{% endif %}">
         <span class="icon">
           <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
@@ -70,7 +70,7 @@
         Pipeline de Vendas
       </a>
       {% endif %}
-      {% if current_user.roles | selectattr('name', 'in', ['FINANCEIRO', 'SUPERADMIN']) | list %}
+      {% if eff_has_role('FINANCEIRO', 'SUPERADMIN') %}
       <a href="/financeiro/" class="sidebar-item {% if '/financeiro' in request.path %}active{% endif %}">
         <span class="icon">
           <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/></svg>
@@ -98,8 +98,8 @@
       </a>
     </div>
 
-    {# Admin — somente SUPERADMIN #}
-    {% if current_user.is_authenticated and (current_user.roles | selectattr('name', 'equalto', 'SUPERADMIN') | list) %}
+    {# Admin — somente SUPERADMIN (desaparece durante impersonação) #}
+    {% if current_user.is_authenticated and eff_has_role('SUPERADMIN') %}
     <div class="sidebar-section">
       <div class="sidebar-section-label">Sistema</div>
       <a href="/admin/" class="sidebar-item {% if '/admin' in request.path %}active{% endif %}">
@@ -115,15 +115,46 @@
   {# Footer — usuário #}
   <div class="sidebar-footer">
     {% if current_user.is_authenticated %}
-    <div class="sidebar-user">
-      <div class="sidebar-avatar">{{ current_user.name[0].upper() }}</div>
+
+    {# Role switcher — somente SUPERADMIN real #}
+    {% if is_real_superadmin() %}
+    <div class="role-switcher">
+      <div class="role-switcher-label">Ver como:</div>
+      <div class="role-switcher-pills">
+        {% for rname in ['CASTING', 'FIGURINO', 'VENDAS', 'FINANCEIRO', 'RH', 'COMERCIAL'] %}
+        <form method="post" action="/impersonate/{{ rname }}">
+          <button type="submit" class="role-pill{% if view_as_role == rname %} active{% endif %}">{{ rname }}</button>
+        </form>
+        {% endfor %}
+        {% if view_as_role %}
+        <form method="post" action="/impersonate/reset">
+          <button type="submit" class="role-pill reset">Admin</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <a href="/auth/profile" class="sidebar-user {% if '/auth/profile' in request.path %}sidebar-user-active{% endif %}">
+      <div class="sidebar-avatar">
+        {% if current_user.profile_photo %}
+          <img src="/uploads/{{ current_user.profile_photo }}" alt=""
+               style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+        {% else %}
+          {{ current_user.name[0].upper() }}
+        {% endif %}
+      </div>
       <div>
         <div class="sidebar-username">{{ current_user.name }}</div>
         <div class="sidebar-role">
-          {% for r in current_user.roles %}{{ r.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+          {% if view_as_role %}
+            <span style="color:var(--sidebar-accent);">{{ view_as_role }}</span>
+          {% else %}
+            {% for r in current_user.roles %}{{ r.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+          {% endif %}
         </div>
       </div>
-    </div>
+    </a>
     <form method="post" action="/auth/logout">
       <button type="submit" class="sidebar-logout">
         <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd"/></svg>
@@ -147,6 +178,17 @@
       <span></span><span></span><span></span>
     </button>
   </div>
+
+  {# Impersonation banner #}
+  {% if view_as_role %}
+  <div class="impersonate-banner">
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0;"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+    Visualizando como <strong>{{ view_as_role }}</strong>
+    <form method="post" action="/impersonate/reset">
+      <button type="submit" class="impersonate-reset-btn">Sair da visualização</button>
+    </form>
+  </div>
+  {% endif %}
 
   {# Page header #}
   {% if self.page_title()|trim or self.page_actions()|trim %}

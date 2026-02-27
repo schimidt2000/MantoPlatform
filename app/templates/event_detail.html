@@ -79,24 +79,17 @@
           {% endif %}
         </div>
 
-        {# Talent select #}
-        <div class="flex-center gap-8">
-          <select name="talent_id" class="talent-select" style="flex: 1;">
-            <option value="">-- selecione --</option>
-            {% for t in talents %}
-              {% set avail = availability.get(t.id, {}) %}
-              {% set status = avail.get('status') %}
-              {% set info   = avail.get('info', '') %}
-              <option
-                value="{{ t.id }}"
-                class="{% if status == 'conflict' %}conflict{% elif status == 'same_day' %}same-day{% endif %}"
-                data-status="{{ status or '' }}"
-                title="{{ info }}"
-                {% if r.talent_id == t.id %}selected{% endif %}
-              >{{ t.full_name }}</option>
-            {% endfor %}
-          </select>
-          <button type="button" class="btn btn-sm btn-secondary" onclick="openTalentModal()">Buscar</button>
+        {# Talent autocomplete #}
+        <div class="ts-wrap">
+          <input type="hidden" name="talent_id" value="{{ r.talent_id or '' }}">
+          <div class="ts-box">
+            <input type="text" class="ts-input" placeholder="Buscar talento..."
+                   value="{{ r.talent.full_name if r.talent else '' }}"
+                   autocomplete="off" spellcheck="false">
+            <button type="button" class="ts-clear" tabindex="-1"
+                    style="{{ '' if r.talent else 'display:none;' }}">&times;</button>
+          </div>
+          <ul class="ts-dropdown" hidden></ul>
         </div>
 
         {# Cache value #}
@@ -131,22 +124,15 @@
           <div class="strong">Nova função</div>
           <input type="text" name="character_name" placeholder="Ex: Palhaço, DJ, Monitor" style="margin-top: 6px;">
         </div>
-        <div class="flex-center gap-8">
-          <select name="talent_id" class="talent-select" style="flex: 1;">
-            <option value="">-- selecione --</option>
-            {% for t in talents %}
-              {% set avail = availability.get(t.id, {}) %}
-              {% set status = avail.get('status') %}
-              {% set info   = avail.get('info', '') %}
-              <option
-                value="{{ t.id }}"
-                class="{% if status == 'conflict' %}conflict{% elif status == 'same_day' %}same-day{% endif %}"
-                data-status="{{ status or '' }}"
-                title="{{ info }}"
-              >{{ t.full_name }}</option>
-            {% endfor %}
-          </select>
-          <button type="button" class="btn btn-sm btn-secondary" onclick="openTalentModal()">Buscar</button>
+        {# Talent autocomplete #}
+        <div class="ts-wrap">
+          <input type="hidden" name="talent_id" value="">
+          <div class="ts-box">
+            <input type="text" class="ts-input" placeholder="Buscar talento..."
+                   autocomplete="off" spellcheck="false">
+            <button type="button" class="ts-clear" tabindex="-1" style="display:none;">&times;</button>
+          </div>
+          <ul class="ts-dropdown" hidden></ul>
         </div>
         <div>
           <input type="number" name="cache_value" placeholder="Cachê (R$)" min="0" step="1" style="width: 100%;">
@@ -421,61 +407,158 @@
 </div>
 
 
-{# ══════════════════════════════════════════════════════════════
-   TALENT SEARCH MODAL
-   ══════════════════════════════════════════════════════════════ #}
-<div class="modal-backdrop" id="talent-modal">
-  <div class="modal-box" style="width: min(1100px, 95vw); height: 80vh;">
-    <div class="modal-header">
-      <span>Buscar no Banco de Talentos</span>
-      <button type="button" class="btn btn-sm btn-secondary" onclick="closeTalentModal()">Fechar &times;</button>
-    </div>
-    <iframe src="/talents?status=active" style="width: 100%; height: 100%; border: 0;"></iframe>
-  </div>
-</div>
-
 {% endblock %}
 
 
 {% block extra_scripts %}
-<script>
-  function openTalentModal() {
-    document.getElementById('talent-modal').classList.add('open');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeTalentModal() {
-    document.getElementById('talent-modal').classList.remove('open');
-    document.body.style.overflow = '';
-  }
-
-  // Close modal when clicking outside the modal-box
-  document.getElementById('talent-modal').addEventListener('click', function(e) {
-    if (e.target === this) closeTalentModal();
-  });
-
-  // Conflict confirmation on talent select change
-  document.querySelectorAll('.talent-select').forEach(function(sel) {
-    sel.addEventListener('change', function(e) {
-      const opt = e.target.selectedOptions[0];
-      if (opt && opt.dataset.status === 'conflict') {
-        const msg = opt.title || 'Este talento tem um conflito de horário com outro evento. Deseja continuar mesmo assim?';
-        if (!confirm(msg)) {
-          e.target.value = '';
-        }
-      }
-    });
-  });
-</script>
-
 <style>
-  /* Option conflict coloring — inline-only approach as browsers restrict option CSS */
-  option.conflict  { background: #ffd5d5; }
-  option.same-day  { background: #fff1b8; }
+  /* ── Talent autocomplete ───────────────────────────────────── */
+  .ts-wrap { position: relative; }
+  .ts-box {
+    display: flex; align-items: center;
+    border: 1.5px solid var(--line);
+    border-radius: 8px; background: #fff; overflow: hidden;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .ts-box:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--ring, rgba(198,154,43,.15));
+  }
+  .ts-input {
+    flex: 1; border: none !important; outline: none !important;
+    box-shadow: none !important; padding: 8px 10px;
+    font-size: 14px; background: transparent; min-width: 0;
+  }
+  .ts-clear {
+    background: none; border: none; color: var(--muted);
+    padding: 0 10px; cursor: pointer; font-size: 18px; line-height: 1;
+    flex-shrink: 0;
+  }
+  .ts-clear:hover { color: var(--ink); }
+  .ts-dropdown {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: #fff; border: 1.5px solid var(--line);
+    border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.1);
+    z-index: 200; max-height: 220px; overflow-y: auto;
+    list-style: none; margin: 0; padding: 4px 0;
+  }
+  .ts-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; cursor: pointer; font-size: 14px;
+    transition: background .1s;
+  }
+  .ts-item:hover, .ts-item.ts-focused { background: var(--bg); }
+  .ts-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .ts-dot-free     { background: #2ecc71; }
+  .ts-dot-same_day { background: #f5c842; }
+  .ts-dot-conflict { background: #e45858; }
+  .ts-name { flex: 1; }
+  .ts-info { font-size: 11px; color: var(--muted); max-width: 160px;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ts-empty { padding: 10px 12px; color: var(--muted); font-size: 13px; }
 
-  /* Smooth details summary marker */
+  /* Log details marker */
   details summary::-webkit-details-marker { display: none; }
   details[open] summary span:first-child::before { content: "▾ "; }
   details:not([open]) summary span:first-child::before { content: "▸ "; }
 </style>
+
+<script>
+(function () {
+  /* ── Dados dos talentos (gerados pelo Jinja2) ─────────────── */
+  const TALENTS = [
+    {% for t in talents %}{% set avail = availability.get(t.id, {}) %}
+    { id: {{ t.id }}, name: {{ t.full_name | tojson }},
+      status: {{ (avail.get('status') or 'free') | tojson }},
+      info:   {{ (avail.get('info')   or ''    ) | tojson }} }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  /* ── Inicializa um componente .ts-wrap ────────────────────── */
+  function initSearch(wrap) {
+    const hidden   = wrap.querySelector('[name="talent_id"]');
+    const text     = wrap.querySelector('.ts-input');
+    const clearBtn = wrap.querySelector('.ts-clear');
+    const dropdown = wrap.querySelector('.ts-dropdown');
+    let focusIdx   = -1;
+
+    function filter(q) {
+      if (!q.trim()) return TALENTS.slice(0, 8);
+      const lq = q.toLowerCase();
+      return TALENTS.filter(t => t.name.toLowerCase().includes(lq)).slice(0, 8);
+    }
+
+    function render(results) {
+      dropdown.innerHTML = '';
+      focusIdx = -1;
+      if (!results.length) {
+        dropdown.innerHTML = '<li class="ts-empty">Nenhum talento encontrado.</li>';
+      } else {
+        results.forEach(function (t) {
+          const li = document.createElement('li');
+          li.className = 'ts-item';
+          const dotCls = 'ts-dot ts-dot-' + (t.status || 'free');
+          li.innerHTML =
+            '<span class="' + dotCls + '"></span>' +
+            '<span class="ts-name">' + t.name + '</span>' +
+            (t.info ? '<span class="ts-info" title="' + t.info + '">' + t.info + '</span>' : '');
+          li.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            pick(t);
+          });
+          dropdown.appendChild(li);
+        });
+      }
+      dropdown.hidden = false;
+    }
+
+    function pick(t) {
+      if (t.status === 'conflict') {
+        const msg = t.info || 'Este talento tem conflito de horário. Continuar mesmo assim?';
+        if (!confirm(msg)) return;
+      }
+      hidden.value    = t.id;
+      text.value      = t.name;
+      clearBtn.style.display = '';
+      dropdown.hidden = true;
+    }
+
+    function clear() {
+      hidden.value    = '';
+      text.value      = '';
+      clearBtn.style.display = 'none';
+      dropdown.hidden = true;
+    }
+
+    function moveFocus(dir) {
+      const items = dropdown.querySelectorAll('.ts-item');
+      if (!items.length) return;
+      items[focusIdx] && items[focusIdx].classList.remove('ts-focused');
+      focusIdx = Math.max(0, Math.min(focusIdx + dir, items.length - 1));
+      items[focusIdx].classList.add('ts-focused');
+      items[focusIdx].scrollIntoView({ block: 'nearest' });
+    }
+
+    text.addEventListener('input',  function () { render(filter(this.value)); });
+    text.addEventListener('focus',  function () { if (!hidden.value) render(filter(this.value)); });
+    text.addEventListener('blur',   function () { setTimeout(function () { dropdown.hidden = true; }, 160); });
+    clearBtn.addEventListener('click', clear);
+
+    text.addEventListener('keydown', function (e) {
+      if (dropdown.hidden) return;
+      if (e.key === 'ArrowDown')  { e.preventDefault(); moveFocus(+1); }
+      else if (e.key === 'ArrowUp')   { e.preventDefault(); moveFocus(-1); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        const focused = dropdown.querySelector('.ts-focused');
+        if (focused) focused.dispatchEvent(new MouseEvent('mousedown'));
+      } else if (e.key === 'Escape') { dropdown.hidden = true; }
+    });
+  }
+
+  document.querySelectorAll('.ts-wrap').forEach(initSearch);
+})();
+</script>
 {% endblock %}

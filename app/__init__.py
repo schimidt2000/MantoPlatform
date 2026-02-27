@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, send_from_directory
+from flask import Flask, render_template, request, send_from_directory, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_, not_, func
 from flask_migrate import Migrate
@@ -31,6 +31,36 @@ def create_app():
     def inject_settings():
         from app.models import SiteSetting
         return {"settings": SiteSetting.query.get(1)}
+
+    @app.context_processor
+    def inject_roles():
+        def is_real_superadmin() -> bool:
+            return current_user.is_authenticated and any(
+                r.name == "SUPERADMIN" for r in current_user.roles
+            )
+
+        def eff_has_role(*names) -> bool:
+            if not current_user.is_authenticated:
+                return False
+            impersonate = session.get("impersonate_role")
+            if impersonate and is_real_superadmin():
+                return any(n.upper() == impersonate.upper() for n in names)
+            return any(
+                r.name.upper() in [n.upper() for n in names]
+                for r in current_user.roles
+            )
+
+        view_as_role = (
+            session.get("impersonate_role")
+            if current_user.is_authenticated and is_real_superadmin()
+            else None
+        )
+
+        return dict(
+            eff_has_role=eff_has_role,
+            is_real_superadmin=is_real_superadmin,
+            view_as_role=view_as_role,
+        )
 
     # ✅ Importa blueprints AQUI (depois do db existir)
     from .auth.routes import auth_bp
@@ -78,27 +108,18 @@ def create_app():
         total_figurino = total_casting
         done_figurino = total_figurino - len(pending_figurino)
 
-        role_view = request.args.get("role_view")
-        if role_view and not any(r.name == "SUPERADMIN" for r in current_user.roles):
-            role_view = None
+        _is_real_superadmin = any(r.name == "SUPERADMIN" for r in current_user.roles)
+        _impersonate = session.get("impersonate_role") if _is_real_superadmin else None
 
         def has_role(name: str) -> bool:
+            if _impersonate:
+                return _impersonate.upper() == name.upper()
             return any(r.name.upper() == name.upper() for r in current_user.roles)
 
-        is_superadmin = has_role("SUPERADMIN")
+        is_superadmin = _is_real_superadmin and not _impersonate
 
-        if role_view == "casting":
-            show_casting = True
-            show_figurino = False
-        elif role_view == "figurino":
-            show_casting = False
-            show_figurino = True
-        elif role_view == "todos":
-            show_casting = True
-            show_figurino = True
-        else:
-            show_casting = has_role("CASTING") or is_superadmin
-            show_figurino = has_role("FIGURINO") or is_superadmin
+        show_casting = has_role("CASTING") or is_superadmin
+        show_figurino = has_role("FIGURINO") or is_superadmin
 
         perf_range = request.args.get("perf_range", "7")
         perf_start = request.args.get("perf_start")
@@ -154,7 +175,6 @@ def create_app():
             "home.html",
             pending_casting=pending_casting,
             pending_figurino=pending_figurino,
-            role_view=role_view,
             show_casting=show_casting,
             show_figurino=show_figurino,
             is_superadmin=is_superadmin,
@@ -181,5 +201,24 @@ def create_app():
     @login_required
     def figurinos():
         return render_template("figurinos.html")
+
+    # ── Impersonação de role (somente SUPERADMIN) ──────────────────
+    _IMPERSONABLE_ROLES = ["CASTING", "FIGURINO", "COMERCIAL", "RH", "FINANCEIRO", "VENDAS"]
+
+    @app.route("/impersonate/<role_name>", methods=["POST"])
+    @login_required
+    def impersonate_role(role_name: str):
+        if not any(r.name == "SUPERADMIN" for r in current_user.roles):
+            return "", 403
+        if role_name.upper() not in _IMPERSONABLE_ROLES:
+            return "", 400
+        session["impersonate_role"] = role_name.upper()
+        return redirect(request.referrer or "/")
+
+    @app.route("/impersonate/reset", methods=["POST"])
+    @login_required
+    def impersonate_reset():
+        session.pop("impersonate_role", None)
+        return redirect(request.referrer or "/")
 
     return app

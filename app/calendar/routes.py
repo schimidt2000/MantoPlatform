@@ -357,7 +357,12 @@ def event_detail(event_id: int):
                         break
             availability[t.id] = {"status": status, "info": info}
 
+    _is_real_superadmin = any(r.name == "SUPERADMIN" for r in current_user.roles)
+    _impersonate = session.get("impersonate_role") if _is_real_superadmin else None
+
     def has_role(name: str) -> bool:
+        if _impersonate:
+            return _impersonate.upper() == name.upper()
         return any(r.name.upper() == name.upper() for r in current_user.roles)
 
     settings = SiteSetting.query.get(1)

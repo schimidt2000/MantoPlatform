@@ -921,3 +921,106 @@ tbody tr:hover td { background: #faf9f6; }
 @media (min-width: 1400px) {
   :root { --sidebar-w: 240px; }
 }
+
+/* ── Role Switcher (sidebar footer) ──────────────────────────── */
+.role-switcher {
+  border-top: 1px solid rgba(255,255,255,0.07);
+  padding: 10px 0 8px;
+  margin-bottom: 6px;
+}
+.role-switcher-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+  margin-bottom: 6px;
+}
+.role-switcher-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.role-pill {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.6);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 7px;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+  line-height: 1.4;
+}
+.role-pill:hover {
+  background: rgba(198,154,43,0.15);
+  border-color: rgba(198,154,43,0.4);
+  color: var(--sidebar-accent);
+}
+.role-pill.active {
+  background: rgba(198,154,43,0.22);
+  border-color: var(--sidebar-accent);
+  color: var(--sidebar-accent);
+}
+.role-pill.reset {
+  background: rgba(192,57,43,0.12);
+  border-color: rgba(192,57,43,0.3);
+  color: rgba(255,120,100,0.9);
+}
+.role-pill.reset:hover {
+  background: rgba(192,57,43,0.22);
+  border-color: rgba(192,57,43,0.6);
+  color: #ff7060;
+}
+
+/* ── Impersonation Banner ─────────────────────────────────────── */
+.impersonate-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(198,154,43,0.12);
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent-dark);
+  font-size: 13px;
+  padding: 8px 32px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.impersonate-banner strong {
+  font-weight: 700;
+}
+.impersonate-reset-btn {
+  margin-left: auto;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.impersonate-reset-btn:hover {
+  background: var(--accent-dark);
+}
+
+/* ── Sidebar user as link ─────────────────────────────────── */
+a.sidebar-user {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  transition: background .15s;
+}
+a.sidebar-user:hover {
+  background: rgba(255,255,255,0.06);
+}
+a.sidebar-user.sidebar-user-active {
+  background: rgba(198,154,43,0.12);
+}
