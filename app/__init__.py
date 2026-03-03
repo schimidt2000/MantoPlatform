@@ -12,16 +12,24 @@ db = SQLAlchemy()
 migrate = Migrate()
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
+login_manager.login_message = None  # suprime mensagem automática de "faça login"
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
-    app.config.setdefault("UPLOAD_FOLDER", "instance/uploads")
-    app.config.setdefault("UPLOAD_CONTRACTS", "instance/uploads/contracts")
-    app.config.setdefault("UPLOAD_PAYMENTS", "instance/uploads/payments")
+
+    # Absolute paths for uploads (avoids CWD resolution issues)
+    _instance = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'instance'))
+    app.config.setdefault("UPLOAD_FOLDER",          os.path.join(_instance, "uploads"))
+    app.config.setdefault("UPLOAD_CONTRACTS",        os.path.join(_instance, "uploads", "contracts"))
+    app.config.setdefault("UPLOAD_PAYMENTS",         os.path.join(_instance, "uploads", "payments"))
+    app.config.setdefault("UPLOAD_FIGURINO_THUMBS",  os.path.join(_instance, "uploads", "figurino_thumbs"))
+    app.config.setdefault("UPLOAD_FIGURINO_PHOTOS",  os.path.join(_instance, "uploads", "figurino_photos"))
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_CONTRACTS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_PAYMENTS"], exist_ok=True)
+    os.makedirs(app.config["UPLOAD_FIGURINO_THUMBS"], exist_ok=True)
+    os.makedirs(app.config["UPLOAD_FIGURINO_PHOTOS"], exist_ok=True)
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -70,6 +78,7 @@ def create_app():
     from .talents.routes import talents_bp
     from .tools.routes import tools_bp
     from .financeiro.routes import financeiro_bp
+    from .figurino.routes import figurino_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
@@ -78,6 +87,7 @@ def create_app():
     app.register_blueprint(talents_bp)
     app.register_blueprint(tools_bp)
     app.register_blueprint(financeiro_bp)
+    app.register_blueprint(figurino_bp)
     print(app.url_map)
     @app.route("/")
     @login_required
@@ -196,11 +206,6 @@ def create_app():
     @login_required
     def uploaded_file(filename: str):
         return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
-
-    @app.route("/figurinos")
-    @login_required
-    def figurinos():
-        return render_template("figurinos.html")
 
     # ── Impersonação de role (somente SUPERADMIN) ──────────────────
     _IMPERSONABLE_ROLES = ["CASTING", "FIGURINO", "COMERCIAL", "RH", "FINANCEIRO", "VENDAS"]

@@ -1,19 +1,135 @@
 {% extends "base.html" %}
 
 {% block title %}Banco de Figurinos{% endblock %}
-
 {% block page_title %}Banco de Figurinos{% endblock %}
+
+{% block page_actions %}
+  <a href="/figurinos/new" class="btn btn-primary">+ Nova Ficha</a>
+{% endblock %}
 
 {% block content %}
 
-<div class="panel" style="text-align:center; padding:64px 32px;">
-  <div style="font-size:64px; margin-bottom:16px;">&#128248;</div>
-  <h2 style="font-size:20px; font-weight:700; color:var(--ink); margin-bottom:8px; text-transform:none; letter-spacing:0;">
-    Em construção
-  </h2>
-  <p class="muted" style="font-size:14px; max-width:380px; margin:0 auto;">
-    Esta seção estará disponível em breve.
+{# ── Personagens sem ficha ─────────────────────────────────── #}
+{% if chars_without_sheet %}
+<div class="panel" style="margin-bottom: 24px; border-left: 3px solid var(--red);">
+  <div class="flex-between mb-16">
+    <h2 style="margin-bottom: 0; color: var(--red);">
+      &#9888; Personagens sem ficha ({{ chars_without_sheet | length }})
+    </h2>
+  </div>
+  <p class="muted" style="margin-bottom: 12px; font-size: 13px;">
+    Estes personagens aparecem em eventos mas não possuem ficha de figurino cadastrada.
   </p>
+  <div class="flex-center gap-8" style="flex-wrap: wrap; margin-bottom: 12px;">
+    {% for char in chars_without_sheet %}
+      <span class="badge badge-red">{{ char }}</span>
+    {% endfor %}
+  </div>
+  <a href="/figurinos/new" class="btn btn-sm btn-primary">+ Criar ficha</a>
+</div>
+{% endif %}
+
+{# ── Catálogo de fichas ────────────────────────────────────── #}
+{% if sheets %}
+
+<div class="flex-between" style="margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+  <h2 style="margin-bottom: 0;">Catálogo ({{ sheets | length }} fichas)</h2>
+  <input type="text" id="figurino-search"
+         placeholder="Buscar por personagem..."
+         oninput="filterFigurinos(this.value)"
+         style="max-width: 260px;">
 </div>
 
+<div id="figurino-grid" class="grid-3" style="gap: 16px;">
+  {% for sheet in sheets %}
+  <div class="figurino-card-wrap" data-name="{{ sheet.character_name | lower }}">
+  <div class="panel" style="padding: 16px; display: flex; flex-direction: column; gap: 12px; height: 100%;">
+
+    {# Thumbnail #}
+    {% if sheet.photo_filename %}
+      <img src="/uploads/figurino_photos/{{ sheet.photo_filename }}"
+           alt="{{ sheet.character_name }}"
+           style="width: 100%; height: 160px; object-fit: cover;
+                  border-radius: var(--r-md); border: 1px solid var(--line);">
+    {% else %}
+      <div style="width: 100%; height: 160px; background: var(--bg);
+                  border-radius: var(--r-md); border: 1px solid var(--line);
+                  display: flex; align-items: center; justify-content: center; font-size: 40px;">
+        &#128248;
+      </div>
+    {% endif %}
+
+    {# Nome + meta #}
+    <div>
+      <div class="strong" style="font-size: 15px; margin-bottom: 4px;">
+        {{ sheet.character_name }}
+      </div>
+      <div class="flex-center gap-6" style="flex-wrap: wrap;">
+        {% if sheet.pieces_count > 0 %}
+          <span class="meta" style="font-size: 11px;">
+            {{ sheet.pieces_count }} peça{{ 's' if sheet.pieces_count != 1 else '' }}
+          </span>
+        {% endif %}
+        {% if sheet.updated_at %}
+          <span class="meta" style="font-size: 11px;">
+            Editado {{ sheet.updated_at.strftime("%d/%m/%Y") }}
+          </span>
+        {% else %}
+          <span class="meta" style="font-size: 11px;">
+            {{ sheet.created_at.strftime("%d/%m/%Y") }}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Ações #}
+    <div class="flex-center gap-8" style="margin-top: auto;">
+      <a href="/figurinos/{{ sheet.id }}/print" target="_blank"
+         class="btn btn-sm btn-primary" style="flex: 1; text-align: center;"
+         title="Visualizar / Imprimir">
+        &#128247; Imprimir
+      </a>
+      <a href="/figurinos/{{ sheet.id }}/edit"
+         class="btn btn-sm btn-secondary" title="Editar ficha">&#9998;</a>
+      <form method="post" action="/figurinos/{{ sheet.id }}/delete"
+            onsubmit="return confirm('Remover ficha de {{ sheet.character_name }} do catálogo?')">
+        <button type="submit" class="btn btn-sm btn-danger" title="Remover">&#10005;</button>
+      </form>
+    </div>
+
+  </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div id="no-results" style="display: none; text-align: center; padding: 40px; color: var(--muted);">
+  Nenhuma ficha encontrada para essa busca.
+</div>
+
+{% else %}
+<div class="panel" style="text-align: center; padding: 56px 32px;">
+  <div style="font-size: 56px; margin-bottom: 12px;">&#128248;</div>
+  <p class="muted" style="margin-bottom: 16px;">Nenhuma ficha cadastrada ainda.</p>
+  <a href="/figurinos/new" class="btn btn-primary">+ Criar primeira ficha</a>
+</div>
+{% endif %}
+
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script>
+function filterFigurinos(q) {
+  const query = q.toLowerCase().trim();
+  const cards = document.querySelectorAll('.figurino-card-wrap');
+  let visible = 0;
+  cards.forEach(function(card) {
+    const match = !query || card.dataset.name.includes(query);
+    card.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  const noResults = document.getElementById('no-results');
+  if (noResults) noResults.style.display = visible === 0 ? 'block' : 'none';
+}
+</script>
 {% endblock %}

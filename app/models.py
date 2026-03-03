@@ -157,6 +157,60 @@ class CalendarEvent(db.Model):
     seller = db.relationship("User", lazy=True, foreign_keys=[seller_id])
 
 
+class FigurinoSheet(db.Model):
+    __tablename__ = "figurino_sheets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    character_name = db.Column(db.String(200), nullable=False)
+    character_name_norm = db.Column(db.String(200), nullable=True)  # lowercase sem acentos
+
+    # Native fields (created inside the platform)
+    photo_filename = db.Column(db.String(300), nullable=True)
+    pieces = db.Column(db.Text, nullable=True)       # JSON: ["Blazer azul", "Calça preta"]
+    notes = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=True)
+
+    # Drive sync fields (kept for backward compat)
+    drive_file_id = db.Column(db.String(200), nullable=True, unique=True)
+    drive_url = db.Column(db.String(500), nullable=True)
+    thumbnail_url = db.Column(db.String(500), nullable=True)
+    last_synced_at = db.Column(db.DateTime, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    @property
+    def pieces_list(self):
+        """Returns list of dicts: [{"name": str, "qty": int}].
+        Handles both legacy string format and current dict format."""
+        import json as _json
+        if not self.pieces:
+            return []
+        try:
+            data = _json.loads(self.pieces)
+            result = []
+            for item in data:
+                if isinstance(item, str):
+                    result.append({"name": item, "qty": 1})
+                elif isinstance(item, dict):
+                    result.append({
+                        "name": item.get("name", ""),
+                        "qty": int(item.get("qty", 1) or 1),
+                    })
+            return result
+        except Exception:
+            return []
+
+    @property
+    def pieces_count(self):
+        return len(self.pieces_list)
+
+    @property
+    def photo_url(self):
+        if self.photo_filename:
+            return f"/uploads/figurino_photos/{self.photo_filename}"
+        return self.thumbnail_url  # Drive sync fallback
+
+
 class EventRole(db.Model):
     __tablename__ = "event_roles"
 
@@ -167,8 +221,10 @@ class EventRole(db.Model):
     cache_value = db.Column(db.Integer, nullable=True)
     assigned_at = db.Column(db.DateTime, nullable=True)
     figurino_done_at = db.Column(db.DateTime, nullable=True)
+    figurino_sheet_id = db.Column(db.Integer, db.ForeignKey("figurino_sheets.id"), nullable=True)
 
     talent = db.relationship("Talent", lazy=True)
+    figurino_sheet = db.relationship("FigurinoSheet", lazy=True)
 
 
 class EventLog(db.Model):

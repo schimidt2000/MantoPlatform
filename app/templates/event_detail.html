@@ -156,57 +156,112 @@
    ══════════════════════════════════════════════════════════════ #}
 {% if show_figurino %}
 <div class="panel">
-  <h2>Figurino</h2>
+  <div class="flex-between mb-16">
+    <h2 style="margin-bottom: 0;">Figurino</h2>
+    <div class="flex-center gap-8">
+      <a href="/figurinos/print-event/{{ event.id }}" target="_blank"
+         class="btn btn-sm btn-secondary" title="Imprimir todas as fichas deste evento">
+        &#128247; Imprimir fichas
+      </a>
+      <a href="/figurinos/new" class="btn btn-sm btn-secondary">+ Nova ficha</a>
+    </div>
+  </div>
 
   {% if event.roles %}
     {% for r in event.roles %}
-      <form method="post" action="/events/{{ event.id }}">
-        <input type="hidden" name="action" value="figurino_done">
-        <input type="hidden" name="role_id" value="{{ r.id }}">
-        <div class="role-row">
 
-          {# Character + talent #}
-          <div>
-            <div class="strong">{{ r.character_name }}</div>
-            {% if r.talent %}
-              <div class="meta">{{ r.talent.full_name }}</div>
-            {% else %}
-              <div class="meta muted" style="font-style: italic;">Sem talento atribuído</div>
-            {% endif %}
-          </div>
+    {# Resolve ficha: vinculada diretamente ou sugestão automática por nome #}
+    {% set sheet = r.figurino_sheet or suggested_sheets.get(r.id) %}
+    {% set is_suggested = not r.figurino_sheet and sheet %}
 
-          {# Sizes #}
-          <div class="meta">
-            <div>Top: <strong>{{ r.talent.clothing_size_top if r.talent and r.talent.clothing_size_top else "—" }}</strong></div>
-            <div>Bottom: <strong>{{ r.talent.clothing_size_bottom if r.talent and r.talent.clothing_size_bottom else "—" }}</strong></div>
-            <div>Sapato: <strong>{{ r.talent.shoe_size if r.talent and r.talent.shoe_size else "—" }}</strong></div>
-          </div>
+    <div style="border: 1px solid var(--line); border-radius: var(--r-md); padding: 16px; margin-bottom: 12px;">
+      <div class="role-row" style="grid-template-columns: 1fr 0.7fr 1.2fr 1fr; align-items: start;">
 
-          {# Status #}
-          <div>
+        {# Col 1: Personagem + talento #}
+        <div>
+          <div class="strong">{{ r.character_name }}</div>
+          {% if r.talent %}
+            <div class="meta">{{ r.talent.full_name }}</div>
+          {% else %}
+            <div class="meta muted" style="font-style: italic;">Sem talento atribuído</div>
+          {% endif %}
+        </div>
+
+        {# Col 2: Medidas #}
+        <div class="meta">
+          <div>Top: <strong>{{ r.talent.clothing_size_top if r.talent and r.talent.clothing_size_top else "—" }}</strong></div>
+          <div>Bottom: <strong>{{ r.talent.clothing_size_bottom if r.talent and r.talent.clothing_size_bottom else "—" }}</strong></div>
+          <div>Sapato: <strong>{{ r.talent.shoe_size if r.talent and r.talent.shoe_size else "—" }}</strong></div>
+        </div>
+
+        {# Col 3: Ficha de figurino #}
+        <div>
+          {% if sheet %}
+            <div style="margin-bottom: 8px;">
+              {% if is_suggested %}
+                <span class="meta" style="font-size: 11px; display: block; margin-bottom: 4px;">Sugestão automática:</span>
+              {% endif %}
+              <a href="/figurinos/{{ sheet.id }}/print" target="_blank"
+                 class="btn btn-sm {{ 'btn-secondary' if is_suggested else 'btn-primary' }}"
+                 style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                &#128247; {{ sheet.character_name }}
+              </a>
+              {% if is_suggested %}
+                <span class="badge badge-gray" style="margin-top: 4px; display: inline-block;">Sugerida</span>
+              {% else %}
+                <span class="badge badge-green" style="margin-top: 4px; display: inline-block;">Vinculada</span>
+              {% endif %}
+            </div>
+          {% else %}
+            <span class="badge badge-red" style="margin-bottom: 8px; display: inline-block;">Sem ficha</span>
+            <br>
+          {% endif %}
+
+          {# Vincular ou trocar ficha #}
+          {% if figurino_sheets %}
+            <form method="post" action="/events/{{ event.id }}"
+                  style="display: flex; gap: 6px; align-items: center; margin-top: 6px;">
+              <input type="hidden" name="action" value="link_figurino">
+              <input type="hidden" name="role_id" value="{{ r.id }}">
+              <select name="figurino_sheet_id" style="flex: 1; min-width: 0; font-size: 12px;">
+                <option value="">-- sem ficha --</option>
+                {% for s in figurino_sheets %}
+                  <option value="{{ s.id }}"
+                    {% if r.figurino_sheet_id == s.id %}selected{% endif %}>
+                    {{ s.character_name }}
+                  </option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-sm btn-secondary">&#8593;</button>
+            </form>
+          {% else %}
+            <a href="/figurinos/new" class="meta" style="font-size: 12px;">+ Criar ficha</a>
+          {% endif %}
+        </div>
+
+        {# Col 4: Status + separar #}
+        <div>
+          <form method="post" action="/events/{{ event.id }}">
+            <input type="hidden" name="action" value="figurino_done">
+            <input type="hidden" name="role_id" value="{{ r.id }}">
             {% if r.figurino_done_at %}
               <span class="badge badge-green">Separado</span>
-              <div class="meta" style="font-size: 11px; margin-top: 4px;">{{ r.figurino_done_at.strftime("%d/%m/%Y") }}</div>
+              <div class="meta" style="font-size: 11px; margin-top: 4px;">
+                {{ r.figurino_done_at.strftime("%d/%m/%Y") }}
+              </div>
+              <button type="submit" class="btn btn-sm btn-secondary"
+                      style="width: 100%; margin-top: 8px;" disabled>&#10003;</button>
             {% else %}
               <span class="badge badge-gray">Pendente</span>
+              <button type="submit" class="btn btn-sm btn-primary"
+                      style="width: 100%; margin-top: 8px;">Marcar separado</button>
             {% endif %}
-          </div>
-
-          {# Action #}
-          <div>
-            {% if r.figurino_done_at %}
-              <button type="submit" class="btn btn-sm btn-secondary" style="width: 100%;" disabled>
-                Separado ✓
-              </button>
-            {% else %}
-              <button type="submit" class="btn btn-sm btn-primary" style="width: 100%;">
-                Marcar separado
-              </button>
-            {% endif %}
-          </div>
-
+          </form>
         </div>
-      </form>
+
+      </div>
+    </div>
+
     {% endfor %}
   {% else %}
     <p class="muted">Nenhuma função cadastrada para este evento.</p>
