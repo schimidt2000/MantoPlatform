@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Início{% endblock %}
+
+{% block page_title %}Início{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">Bom dia, {{ current_user.name }}</p>
+{% endblock %}
+
+{% block page_actions %}{% endblock %}
+
+{% block content %}
+<div class="grid-2" style="align-items: start;">
+
+  {# ── LEFT: Tarefas pendentes ─────────────────────────────── #}
+  <div class="panel">
+    <h2>Tarefas pendentes</h2>
+
+    {% if not show_casting and not show_figurino and not show_ensaio %}
+      <p class="muted">Tudo em dia! ✓</p>
+    {% else %}
+      {% if show_casting %}
+        {% if pending_casting %}
+          <div class="mb-16">
+            <div class="flex-between mb-16">
+              <span class="flex-center gap-8">
+                <span class="badge badge-gold">Casting</span>
+                <span class="meta">{{ done_casting }}/{{ total_casting }} concluídos</span>
+              </span>
+            </div>
+            {% for r in pending_casting %}
+              {% set days_left = ((r.event.start_at.date() - today).days) if r.event.start_at else 999 %}
+              <div class="flex-between gap-12 task-row" style="padding: 10px 0; border-bottom: 1px solid var(--line);{% if days_left <= 2 %} background: rgba(228,88,88,0.06); margin: 0 -16px; padding: 10px 16px;{% elif days_left <= 7 %} background: rgba(245,200,66,0.06); margin: 0 -16px; padding: 10px 16px;{% endif %}">
+                <div>
+                  <div class="strong">
+                    {{ r.character_name }}
+                    {% if days_left <= 2 %}
+                      <span class="badge badge-red" style="font-size:10px; margin-left:6px;">URGENTE</span>
+                    {% elif days_left <= 7 %}
+                      <span class="badge badge-gold" style="font-size:10px; margin-left:6px;">{{ days_left }}d</span>
+                    {% endif %}
+                  </div>
+                  <div class="meta">
+                    <a href="/events/{{ r.event.id }}">{{ r.event.title }}</a>
+                    {% if r.event.start_at %}
+                      &mdash; {{ r.event.start_at.strftime("%d/%m/%Y") }}
+                    {% endif %}
+                  </div>
+                </div>
+                <a href="/events/{{ r.event.id }}" class="btn btn-sm btn-secondary">Abrir</a>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="flex-between mb-16">
+            <span class="flex-center gap-8">
+              <span class="badge badge-gold">Casting</span>
+              <span class="meta badge badge-green">Tudo em dia ✓</span>
+            </span>
+          </div>
+        {% endif %}
+      {% endif %}
+
+      {% if show_ensaio %}
+        <hr class="sep">
+        {% if pending_ensaio %}
+          <div>
+            <div class="flex-between mb-16">
+              <span class="flex-center gap-8">
+                <span class="badge" style="background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44;">Ensaio</span>
+                <span class="meta">{{ pending_ensaio | length }} evento(s) sem ensaio marcado</span>
+              </span>
+            </div>
+            {% for ev in pending_ensaio %}
+              {% set days_left = ((ev.start_at.date() - today).days) if ev.start_at else 999 %}
+              <div class="flex-between gap-12 task-row" style="padding: 10px 0; border-bottom: 1px solid var(--line);{% if days_left <= 7 %} background: rgba(228,88,88,0.06); margin: 0 -16px; padding: 10px 16px;{% elif days_left <= 14 %} background: rgba(245,200,66,0.06); margin: 0 -16px; padding: 10px 16px;{% endif %}">
+                <div>
+                  <div class="strong">
+                    {{ ev.title }}
+                    {% if days_left <= 7 %}
+                      <span class="badge badge-red" style="font-size:10px; margin-left:6px;">{{ days_left }}d</span>
+                    {% elif days_left <= 14 %}
+                      <span class="badge badge-gold" style="font-size:10px; margin-left:6px;">{{ days_left }}d</span>
+                    {% endif %}
+                  </div>
+                  <div class="meta">
+                    {% if ev.start_at %}{{ ev.start_at.strftime("%d/%m/%Y às %H:%M") }}{% endif %}
+                    {% if ev.location %} · {{ ev.location }}{% endif %}
+                  </div>
+                </div>
+                <a href="/events/{{ ev.id }}" class="btn btn-sm btn-secondary">Agendar ensaio</a>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="flex-center gap-8">
+            <span class="badge" style="background:var(--accent)22;color:var(--accent);">Ensaio</span>
+            <span class="badge badge-green">Todos agendados ✓</span>
+          </div>
+        {% endif %}
+      {% endif %}
+
+      {% if show_figurino %}
+        <hr class="sep">
+        {% if pending_figurino %}
+          <div>
+            <div class="flex-between mb-16">
+              <span class="flex-center gap-8">
+                <span class="badge badge-gray">Figurino</span>
+                <span class="meta">{{ done_figurino }}/{{ total_figurino }} concluídos</span>
+              </span>
+            </div>
+            {% for r in pending_figurino %}
+              {% set days_left = ((r.event.start_at.date() - today).days) if r.event.start_at else 999 %}
+              <div class="flex-between gap-12 task-row" style="padding: 10px 0; border-bottom: 1px solid var(--line);{% if days_left <= 2 %} background: rgba(228,88,88,0.06); margin: 0 -16px; padding: 10px 16px;{% elif days_left <= 7 %} background: rgba(245,200,66,0.06); margin: 0 -16px; padding: 10px 16px;{% endif %}">
+                <div>
+                  <div class="strong">
+                    {{ r.character_name }}
+                    {% if r.talent %}<span class="meta" style="font-weight:400;"> · {{ r.talent.full_name }}</span>{% endif %}
+                    {% if days_left <= 2 %}
+                      <span class="badge badge-red" style="font-size:10px; margin-left:6px;">URGENTE</span>
+                    {% elif days_left <= 7 %}
+                      <span class="badge badge-gold" style="font-size:10px; margin-left:6px;">{{ days_left }}d</span>
+                    {% endif %}
+                  </div>
+                  <div class="meta">
+                    <a href="/events/{{ r.event.id }}">{{ r.event.title }}</a>
+                    {% if r.event.start_at %}
+                      &mdash; {{ r.event.start_at.strftime("%d/%m/%Y") }}
+                    {% endif %}
+                  </div>
+                </div>
+                <a href="/events/{{ r.event.id }}" class="btn btn-sm btn-secondary">Abrir</a>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="flex-center gap-8">
+            <span class="badge badge-gray">Figurino</span>
+            <span class="badge badge-green">Tudo em dia ✓</span>
+          </div>
+        {% endif %}
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {# ── RIGHT: Indicadores + Performance ────────────────────── #}
+  <div>
+
+    {# Donuts #}
+    <div class="panel">
+      <h2>Indicadores</h2>
+      <div class="flex-center gap-16" style="justify-content: center; flex-wrap: wrap;">
+
+        {% if show_casting %}
+          {% set pct_c = (done_casting / total_casting * 100) | round | int if total_casting > 0 else 0 %}
+          <div style="text-align: center;">
+            <div class="meta mb-16" style="margin-bottom: 8px;">Casting</div>
+            <div class="donut" style="--p: {{ (pct_c * 3.6) | round(1) }}deg;">
+              <div class="donut-inner">{{ pct_c }}%</div>
+            </div>
+            <div class="meta mt-8" style="margin-top: 8px;">{{ done_casting }}/{{ total_casting }}</div>
+          </div>
+        {% endif %}
+
+        {% if show_figurino %}
+          {% set pct_f = (done_figurino / total_figurino * 100) | round | int if total_figurino > 0 else 0 %}
+          <div style="text-align: center;">
+            <div class="meta" style="margin-bottom: 8px;">Figurino</div>
+            <div class="donut" style="--p: {{ (pct_f * 3.6) | round(1) }}deg;">
+              <div class="donut-inner">{{ pct_f }}%</div>
+            </div>
+            <div class="meta" style="margin-top: 8px;">{{ done_figurino }}/{{ total_figurino }}</div>
+          </div>
+        {% endif %}
+
+        {% if not show_casting and not show_figurino %}
+          <p class="muted">Sem indicadores para exibir.</p>
+        {% endif %}
+
+      </div>
+    </div>
+
+    {# Performance — apenas superadmin #}
+    {% if is_superadmin %}
+      <div class="panel">
+        <div class="flex-between mb-16">
+          <h2 style="margin-bottom: 0;">Performance</h2>
+        </div>
+
+        <form method="get" class="flex-center gap-8" style="flex-wrap: wrap; margin-bottom: 16px;">
+          <select name="perf_range" onchange="this.form.submit()" style="width: auto; min-width: 160px;">
+            <option value="7"      {% if perf_range == "7" %}selected{% endif %}>Últimos 7 dias</option>
+            <option value="30"     {% if perf_range == "30" %}selected{% endif %}>Últimos 30 dias</option>
+            <option value="custom" {% if perf_range == "custom" %}selected{% endif %}>Período personalizado</option>
+          </select>
+          {% if perf_range == "custom" %}
+            <input type="date" name="perf_start" value="{{ perf_start or '' }}" style="width: auto;">
+            <input type="date" name="perf_end"   value="{{ perf_end or '' }}"   style="width: auto;">
+            <button type="submit" class="btn btn-sm btn-primary">Aplicar</button>
+          {% endif %}
+        </form>
+
+        <div class="kpi-grid" style="grid-template-columns: repeat(2, 1fr);">
+          <div class="kpi">
+            <div class="kpi-label">Casting</div>
+            <div class="kpi-value">{{ perf_casting_done }}<span style="font-size:14px; font-weight:500; color:var(--muted);">/{{ perf_casting_total }}</span></div>
+            <div class="kpi-sub">roles preenchidos</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Figurino</div>
+            <div class="kpi-value">{{ perf_figurino_done }}<span style="font-size:14px; font-weight:500; color:var(--muted);">/{{ perf_figurino_total }}</span></div>
+            <div class="kpi-sub">separados</div>
+          </div>
+          <div class="kpi" style="grid-column: span 2;">
+            <div class="kpi-label">Entrada total</div>
+            <div class="kpi-value gold">R$&nbsp;{{ "{:,.0f}".format(perf_money) }}</div>
+            <div class="kpi-sub">soma dos cachês no período</div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "Admin" }}</title>
+  <style>
+    :root {
+      --bg: #f7f7f9;
+      --ink: #1f1f1f;
+      --muted: #6b6b6b;
+      --panel: #ffffff;
+      --line: #e5e5e5;
+      --accent: #3a63f3;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand img { height: 36px; }
+    .brand span { font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    nav a {
+      color: var(--ink);
+      text-decoration: none;
+      margin-right: 12px;
+      font-size: 14px;
+    }
+    nav a.active { color: var(--accent); }
+    .page {
+      padding: 20px 24px 32px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .muted { color: var(--muted); }
+    .btn {
+      display: inline-block;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      text-decoration: none;
+      background: transparent;
+    }
+    .btn-primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-danger {
+      border-color: #a43a3a;
+      color: #f1c2c2;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+    }
+    label { display: block; margin: 10px 0 6px; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; }
+    @media (max-width: 900px) {
+      header { flex-direction: column; align-items: flex-start; }
+    }
+    @media (max-width: 720px) {
+      table, thead, tbody, th, td, tr { display: block; }
+      th { display: none; }
+      td { border: 0; padding: 6px 0; }
+      tr { border-bottom: 1px solid var(--line); padding: 10px 0; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      {% if settings and settings.logo_path %}
+        <img src="{{ settings.logo_path }}" alt="Logo">
+      {% endif %}
+      <span>Manto Admin</span>
+    </div>
+    <nav>
+      <a href="/admin" class="{% if active == 'home' %}active{% endif %}">Painel</a>
+      <a href="/admin/users" class="{% if active == 'users' %}active{% endif %}">Usuários</a>
+      <a href="/admin/settings" class="{% if active == 'settings' %}active{% endif %}">Identidade</a>
+      <a href="/" class="{% if active == 'site' %}active{% endif %}">Site</a>
+      <form method="post" action="/auth/logout" style="display:inline;">
+        <button class="btn" type="submit">Sair</button>
+      </form>
+    </nav>
+  </header>
+
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

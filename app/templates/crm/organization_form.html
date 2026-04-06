@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar organização' if org.id else 'Nova organização' }}{% endblock %}
+{% block page_title %}{{ 'Editar organização' if org.id else 'Nova organização' }}{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width:480px;">
+  <form method="post">
+    <div class="form-group">
+      <label>Nome *</label>
+      <input type="text" name="name" value="{{ org.name or '' }}" required style="width:100%;">
+    </div>
+    <div class="grid-2" style="gap:12px;">
+      <div class="form-group">
+        <label>CNPJ</label>
+        <input type="text" name="cnpj" value="{{ org.cnpj or '' }}" style="width:100%;">
+      </div>
+      <div class="form-group">
+        <label>Telefone</label>
+        <input type="text" name="phone" value="{{ org.phone or '' }}" style="width:100%;">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>E-mail</label>
+      <input type="email" name="email" value="{{ org.email or '' }}" style="width:100%;">
+    </div>
+    <div class="form-group">
+      <label>Observações</label>
+      <textarea name="notes" rows="3" style="width:100%;">{{ org.notes or '' }}</textarea>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button type="submit" class="btn btn-primary">Salvar</button>
+      <a href="{{ url_for('crm.organizations') }}" class="btn btn-ghost">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

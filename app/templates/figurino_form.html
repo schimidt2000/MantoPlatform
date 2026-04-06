@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_actions %}
+  <a href="/figurinos" class="btn btn-secondary">&larr; Voltar ao catálogo</a>
+{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 680px;">
+  <form method="post" enctype="multipart/form-data" id="figurino-form">
+
+    {# ── Nome do personagem ──────────────────────────────────── #}
+    <div class="form-group">
+      <label for="character_name">
+        Nome do personagem <span style="color: var(--red);">*</span>
+      </label>
+      <input type="text" id="character_name" name="character_name"
+             value="{{ sheet.character_name if sheet else '' }}"
+             placeholder="Ex: Palhaço, Fada, Cantor, DJ" required autofocus>
+    </div>
+
+    {# ── Foto do figurino ────────────────────────────────────── #}
+    <div class="form-group">
+      <label>Foto do figurino</label>
+      {% if sheet and sheet.photo_url %}
+        <div style="margin-bottom: 12px;">
+          <img src="{{ sheet.photo_url }}"
+               style="max-width: 100%; max-height: 200px; object-fit: cover;
+                      border-radius: var(--r-md); border: 1px solid var(--line);
+                      display: block;">
+          <div class="meta" style="margin-top: 6px;">Para substituir, selecione uma nova foto abaixo.</div>
+        </div>
+      {% endif %}
+      <input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp" style="display: block; width: 100%;">
+      <div class="meta" style="margin-top: 4px;">JPG, PNG ou WebP. Recomendado: foto do traje completo.</div>
+    </div>
+
+    {# ── Peças do figurino ───────────────────────────────────── #}
+    <div class="form-group">
+      <label>Peças do figurino</label>
+      <div class="meta" style="margin-bottom: 10px;">
+        Cada peça vira um item da checklist de retirada/devolução.
+      </div>
+
+      {# Header row #}
+      <div class="flex-center gap-6" style="margin-bottom: 4px; padding: 0 38px 0 0;">
+        <div style="width: 56px; font-size: 11px; font-weight: 600; color: var(--muted); text-align: center;">Qtd</div>
+        <div style="flex: 1; font-size: 11px; font-weight: 600; color: var(--muted);">Descrição da peça</div>
+      </div>
+
+      <div id="pieces-list" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
+        {% for piece in pieces %}
+          <div class="flex-center gap-6 piece-row">
+            <input type="number" name="piece_qtys[]"
+                   value="{{ piece.qty if piece is mapping else 1 }}"
+                   min="1" max="99" style="width: 56px; text-align: center;">
+            <input type="text" name="piece_names[]"
+                   value="{{ piece.name if piece is mapping else piece }}"
+                   placeholder="Ex: Blazer azul, Calça preta, Sapato Oxford..."
+                   style="flex: 1; min-width: 0;">
+            <button type="button" class="btn btn-sm btn-danger"
+                    onclick="removePiece(this)"
+                    style="flex-shrink: 0; width: 32px; padding: 0;">&times;</button>
+          </div>
+        {% endfor %}
+      </div>
+
+      <button type="button" class="btn btn-sm btn-secondary" onclick="addPiece()">
+        + Adicionar peça
+      </button>
+    </div>
+
+    {# ── Observações ─────────────────────────────────────────── #}
+    <div class="form-group">
+      <label for="notes">Observações</label>
+      <textarea id="notes" name="notes" rows="3"
+                placeholder="Instruções especiais, cuidados com as peças, etc.">{{ sheet.notes or '' }}</textarea>
+    </div>
+
+    {# ── Ações ───────────────────────────────────────────────── #}
+    <div class="flex-center gap-12" style="margin-top: 8px; flex-wrap: wrap;">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Salvar alterações' if sheet else 'Criar ficha' }}
+      </button>
+      {% if sheet %}
+        <a href="/figurinos/{{ sheet.id }}/print" target="_blank" class="btn btn-secondary">
+          &#128247; Pré-visualizar impressão
+        </a>
+      {% endif %}
+      <a href="/figurinos" class="btn btn-secondary">Cancelar</a>
+    </div>
+
+  </form>
+
+  {% if sheet %}
+  <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--line);">
+    <form method="post" action="/figurinos/{{ sheet.id }}/delete"
+          onsubmit="return confirm('Remover ficha de {{ sheet.character_name }} do catálogo? Esta ação não pode ser desfeita.')">
+      <button type="submit" class="btn btn-danger btn-sm">Excluir ficha</button>
+    </form>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script>
+const piecesList = document.getElementById('pieces-list');
+
+function addPiece(name, qty) {
+  const row = document.createElement('div');
+  row.className = 'flex-center gap-6 piece-row';
+  row.innerHTML =
+    '<input type="number" name="piece_qtys[]" value="' + (qty || 1) + '" ' +
+    'min="1" max="99" style="width: 56px; text-align: center;">' +
+    '<input type="text" name="piece_names[]" value="' + (name || '') + '" ' +
+    'placeholder="Ex: Blazer azul, Calça preta..." style="flex: 1; min-width: 0;">' +
+    '<button type="button" class="btn btn-sm btn-danger" ' +
+    'onclick="removePiece(this)" style="flex-shrink: 0; width: 32px; padding: 0;">&times;</button>';
+  piecesList.appendChild(row);
+  row.querySelector('input[type="text"]').focus();
+}
+
+function removePiece(btn) {
+  const rows = piecesList.querySelectorAll('.piece-row');
+  if (rows.length > 1) {
+    btn.closest('.piece-row').remove();
+  } else {
+    btn.closest('.piece-row').querySelector('input[type="number"]').value = 1;
+    btn.closest('.piece-row').querySelector('input[type="text"]').value = '';
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,1433 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.title }}{% endblock %}
+
+{% block page_title %}{{ event.title }}{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+    {% if event_type %}
+      {% set type_labels = {
+        'R&I':    ('Receptivo & Interativo', 'badge-blue'),
+        'RI':     ('Receptivo & Interativo', 'badge-blue'),
+        'SHOW':   ('Show', 'badge-gold'),
+        'CORP':   ('Corporativo', 'badge-gray'),
+        'SOCIAL': ('Evento Social', 'badge-green'),
+      } %}
+      {% set type_info = type_labels.get(event_type, (event_type, 'badge-gray')) %}
+      <span class="badge {{ type_info[1] }}">{{ type_info[0] }}</span>
+    {% endif %}
+    <span>
+      {% if event.start_at %}{{ event.start_at.strftime("%d/%m/%Y %H:%M") }}{% endif %}
+      {% if event.start_at and event.end_at %} &mdash; {% endif %}
+      {% if event.end_at %}{{ event.end_at.strftime("%H:%M") }}{% endif %}
+      {% if event.location %}
+        <span class="muted">&nbsp;&bull;&nbsp;{{ event.location }}</span>
+      {% endif %}
+    </span>
+  </p>
+{% endblock %}
+
+{% block page_actions %}
+  {% if event.google_event_id and eff_has_role('CASTING', 'SUPERADMIN') %}
+    <form method="post" action="/events/{{ event.id }}/sync" style="display:inline;">
+      <button type="submit" class="btn btn-ghost btn-sm" title="Sincronizar dados do Google Calendar">
+        🔄 Sincronizar
+      </button>
+    </form>
+  {% endif %}
+  {% if eff_has_role('CASTING', 'COMERCIAL', 'SUPERADMIN') %}
+    <button type="button" class="btn btn-ghost btn-sm"
+            onclick="document.getElementById('export-elenco-modal').style.display='flex'">
+      📋 Exportar elenco
+    </button>
+  {% endif %}
+  <a href="/agenda" class="btn btn-secondary">
+    &larr; Voltar para Agenda
+  </a>
+{% endblock %}
+
+{% block content %}
+
+{# ── Event description (if present) ──────────────────────────── #}
+{% if event.description %}
+  <div class="panel" style="margin-bottom: 16px;">
+    <p class="meta">{{ event.description }}</p>
+  </div>
+{% endif %}
+
+{# ── Banner de ensaio(s) marcados — visível para todos ────────── #}
+{% if event.ensaios and event.event_type != 'ENSAIO' %}
+<div style="
+  background: rgba(84,69,150,.08); border: 1.5px solid var(--accent);
+  border-radius: var(--r-md); padding: 14px 18px; margin-bottom: 16px;
+  display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap;">
+  <span style="font-size:20px; line-height:1.2;">🎶</span>
+  <div>
+    <div style="font-weight:700; font-size:14px; margin-bottom:4px;">
+      Ensaio{% if event.ensaios|length > 1 %}s{% endif %} marcado{% if event.ensaios|length > 1 %}s{% endif %}
+    </div>
+    {% for e in event.ensaios | sort(attribute='start_at') %}
+      <div style="font-size:13px; color:var(--text);">
+        📅 {{ e.start_at.strftime("%d/%m/%Y") if e.start_at else '—' }}
+        &nbsp;🕐 {{ e.start_at.strftime("%H:%M") if e.start_at else '—' }}
+        {% if e.end_at %} &mdash; {{ e.end_at.strftime("%H:%M") }}{% endif %}
+        {% if e.description %}<span class="muted"> &bull; {{ e.description }}</span>{% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% elif event.needs_rehearsal and event.event_type != 'ENSAIO' %}
+<div style="
+  background: rgba(239,68,68,.06); border: 1.5px solid var(--red, #ef4444);
+  border-radius: var(--r-md); padding: 14px 18px; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 12px;">
+  <span style="font-size:18px;">⚠️</span>
+  <div style="font-size:13px; font-weight:600; color:var(--red, #ef4444);">
+    Ensaio ainda não marcado — aguardando agendamento pela equipe ENSAIO
+  </div>
+</div>
+{% endif %}
+
+{# ── Marcar Ensaio ────────────────────────────────────────────── #}
+{% if show_ensaio and event.event_type != 'ENSAIO' %}
+{# Elenco visível para equipe de ensaio — read-only #}
+{% set cast_roles = event.roles | selectattr('role_type', 'ne', 'extra') | list %}
+{% if cast_roles %}
+<div class="panel" style="margin-bottom:16px;">
+  <h2 style="margin-bottom:12px;">Elenco do evento</h2>
+  <div style="display:flex; flex-wrap:wrap; gap:8px;">
+    {% for r in cast_roles %}
+      <div style="background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-md); padding:8px 14px; min-width:180px;">
+        <div style="font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:2px;">{{ r.character_name }}</div>
+        {% if r.talent %}
+          <div style="font-weight:600; font-size:13px;">{{ r.talent.full_name }}</div>
+        {% else %}
+          <div style="font-size:13px; color:var(--muted); font-style:italic;">Sem talento</div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<details class="panel" style="margin-bottom:16px;">
+  <summary style="padding:12px 20px; cursor:pointer; font-weight:600; user-select:none;">
+    &#128197; Marcar Ensaio
+  </summary>
+  <div style="padding:0 20px 16px;">
+    <form method="post" action="/events/{{ event.id }}/create-ensaio"
+          style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; margin-top:12px;">
+      <div>
+        <label class="form-label">Data</label>
+        <input type="date" name="ensaio_date" required class="form-control" style="width:150px;">
+      </div>
+      <div>
+        <label class="form-label">Início</label>
+        <input type="time" name="ensaio_start" required class="form-control" style="width:110px;">
+      </div>
+      <div>
+        <label class="form-label">Fim</label>
+        <input type="time" name="ensaio_end" required class="form-control" style="width:110px;">
+      </div>
+      <div style="flex:1; min-width:180px;">
+        <label class="form-label">Descrição (opcional)</label>
+        <input type="text" name="ensaio_desc" class="form-control"
+               placeholder="ex: Ensaio geral com figurino">
+      </div>
+      <button type="submit" class="btn btn-primary">Criar na Agenda</button>
+    </form>
+    <p class="muted" style="font-size:12px; margin-top:8px;">
+      Título gerado: <strong>&#x1F7E7; ENSAIO &mdash; {{ event.title }}</strong>
+    </p>
+  </div>
+</details>
+{% endif %}
+
+{# ══════════════════════════════════════════════════════════════
+   1. CASTING
+   ══════════════════════════════════════════════════════════════ #}
+{% if show_casting %}
+<div class="panel">
+  <div class="flex-between mb-16">
+    <h2 style="margin-bottom: 0;">Casting</h2>
+    <div class="flex-center gap-8">
+      <span class="badge badge-gray" title="Mesmo dia — outro evento">
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#f5c842; margin-right:4px;"></span>Mesmo dia
+      </span>
+      <span class="badge badge-red" title="Conflito de horário">
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#e45858; margin-right:4px;"></span>Conflito
+      </span>
+    </div>
+  </div>
+
+  {% for r in event.roles if r.role_type != 'extra' %}
+    {# Status do card: sem talento = vermelho, confirmado = verde, aguardando = amarelo #}
+    {% if not r.talent_id %}
+      {% set _card = "role-card-uncast" %}
+    {% elif r.invite_status == 'accepted' %}
+      {% set _card = "role-card-confirmed" %}
+    {% else %}
+      {% set _card = "role-card-pending" %}
+    {% endif %}
+
+    <div class="role-card {{ _card }}">
+      <form method="post" action="/events/{{ event.id }}">
+        <input type="hidden" name="action" value="assign_casting">
+        <input type="hidden" name="role_id" value="{{ r.id }}">
+        <div class="role-row">
+
+          <div>
+            <div class="strong">{{ r.character_name }}</div>
+            {% if r.talent %}
+              <div class="meta">{{ r.talent.full_name }}</div>
+            {% else %}
+              <div class="meta muted" style="font-style: italic;">Sem talento</div>
+            {% endif %}
+            {% if r.assigned_at %}
+              <div class="meta" style="font-size: 11px;">Atribuído em {{ r.assigned_at.strftime("%d/%m/%Y") }}</div>
+            {% endif %}
+          </div>
+
+          <div class="ts-wrap">
+            <input type="hidden" name="talent_id" value="{{ r.talent_id or '' }}">
+            <div class="ts-box">
+              <input type="text" class="ts-input" placeholder="Buscar talento..."
+                     value="{{ r.talent.full_name if r.talent else '' }}"
+                     autocomplete="off" spellcheck="false">
+              <button type="button" class="ts-clear" tabindex="-1"
+                      style="{{ '' if r.talent else 'display:none;' }}">&times;</button>
+            </div>
+            <ul class="ts-dropdown" hidden></ul>
+          </div>
+
+          <div>
+            <input type="number" name="cache_value" placeholder="Cachê (R$)"
+              value="{{ r.cache_value or '' }}" min="0" step="1" style="width: 100%;">
+          </div>
+
+          {% if event.location and event.travel_distance_km %}
+          <div>
+            {% set _km = event.travel_distance_km %}
+            {% if r.character_name == 'Coordenador' %}
+              {% set _sugestao = ((_km * 2 * 1.9) | int) %}
+            {% else %}
+              {% set _sugestao = ((_km * 2 / 3) | int) %}
+            {% endif %}
+            <input type="number" name="travel_cache" placeholder="Adicional viagem"
+              value="{{ r.travel_cache or '' }}" min="0" step="1" style="width: 100%;"
+              title="Adicional fora de SP — sugestão: R$ {{ _sugestao }}">
+            {% if not r.travel_cache %}
+              <div style="font-size:10px; color:var(--muted); margin-top:2px;">
+                sugestão: R$ {{ _sugestao }}
+              </div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          <div>
+            <button type="submit" class="btn btn-sm btn-primary" style="width: 100%;">Salvar</button>
+          </div>
+
+        </div>
+      </form>
+
+      {# Badges inferiores #}
+      <div style="margin-top: 6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        {% if r.talent_id %}
+          {% set _ps = r.payment_status or 'nao_pago' %}
+          <span class="pay-status-badge pay-status-{{ _ps }}">
+            {% if _ps == 'pago' %}Pago{% elif _ps == 'no_banco' %}No banco{% else %}Não pago{% endif %}
+          </span>
+        {% endif %}
+
+        {% if r.talent_id and r.talent %}
+          {% if r.invite_status == 'accepted' %}
+            <span class="invite-badge invite-accepted">✓ Presença confirmada</span>
+          {% elif r.invite_status == 'pending' %}
+            <span class="invite-badge invite-pending">⏳ Aguardando</span>
+          {% endif %}
+          {% if r.invite_status != 'accepted' %}
+            <form method="post" action="/events/{{ event.id }}" style="margin:0;">
+              <input type="hidden" name="action" value="send_invite">
+              <input type="hidden" name="role_id" value="{{ r.id }}">
+              <button type="submit" class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">
+                {{ "Reenviar" if r.invite_status == 'pending' else "Convidar" }}
+              </button>
+            </form>
+          {% endif %}
+          {% if r.talent.phone_digits %}
+            <a href="#"
+               onclick="openWA(
+                 '{{ r.talent.phone_digits }}',
+                 '{{ r.talent.full_name.split()[0] }}',
+                 {{ r.cache_value | tojson }},
+                 '{{ r.character_name | replace("'", "\\'") }}'
+               ); return false;"
+               class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</a>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+
+  {# Add character role #}
+  <div class="mt-16">
+    <button type="button" class="btn btn-sm btn-secondary" id="btn-add-role"
+      onclick="document.getElementById('add-role-form').hidden = false; this.hidden = true;">
+      + Adicionar personagem
+    </button>
+  </div>
+
+  <div id="add-role-form" hidden style="margin-top: 12px;">
+    <div style="background: var(--surface-2, #f7f6f3); border-radius: var(--r-md); padding: 14px;">
+      <form method="post" action="/events/{{ event.id }}">
+        <input type="hidden" name="action" value="add_role">
+        <input type="hidden" name="role_type" value="character">
+        <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+          <div style="flex:1; min-width:160px;">
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Personagem</label>
+            <input type="text" name="character_name" placeholder="Ex: Palhaço, DJ, Monitor" style="width:100%;">
+          </div>
+          <div class="ts-wrap" style="flex:1.5; min-width:200px;">
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Talento</label>
+            <input type="hidden" name="talent_id" value="">
+            <div class="ts-box">
+              <input type="text" class="ts-input" placeholder="Buscar talento..." autocomplete="off" spellcheck="false">
+              <button type="button" class="ts-clear" tabindex="-1" style="display:none;">&times;</button>
+            </div>
+            <ul class="ts-dropdown" hidden></ul>
+          </div>
+          <div style="width:110px;">
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Cachê (R$)</label>
+            <input type="number" name="cache_value" placeholder="0" min="0" step="1" style="width:100%;">
+          </div>
+          <div style="display:flex; gap:6px; padding-bottom:1px;">
+            <button type="submit" class="btn btn-sm btn-primary">Adicionar</button>
+            <button type="button" class="btn btn-sm btn-secondary"
+              onclick="document.getElementById('add-role-form').hidden = true; document.getElementById('btn-add-role').hidden = false;">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ── Equipe de Apoio ──────────────────────────────────────────────────────── #}
+{% if show_casting %}
+<div class="panel" style="margin-top: 16px;">
+  <h2 style="margin-bottom: 16px;">Equipe de Apoio</h2>
+
+  {% for r in event.roles if r.role_type == 'extra' %}
+    {% if not r.talent_id %}
+      {% set _card = "role-card-uncast" %}
+    {% else %}
+      {% set _card = "role-card-confirmed" %}
+    {% endif %}
+    <div class="role-card {{ _card }}">
+      <form method="post" action="/events/{{ event.id }}">
+        <input type="hidden" name="action" value="assign_casting">
+        <input type="hidden" name="role_id" value="{{ r.id }}">
+        <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+          <div style="min-width:120px;">
+            <div class="strong">{{ r.character_name }}</div>
+            {% if r.talent %}
+              <div class="meta">{{ r.talent.full_name }}</div>
+            {% else %}
+              <div class="meta muted" style="font-style:italic;">Sem pessoa</div>
+            {% endif %}
+          </div>
+          <div class="ts-wrap" style="flex:1; min-width:200px;">
+            <input type="hidden" name="talent_id" value="{{ r.talent_id or '' }}">
+            <div class="ts-box">
+              <input type="text" class="ts-input" placeholder="Buscar pessoa..."
+                     value="{{ r.talent.full_name if r.talent else '' }}"
+                     autocomplete="off" spellcheck="false">
+              <button type="button" class="ts-clear" tabindex="-1"
+                      style="{{ '' if r.talent else 'display:none;' }}">&times;</button>
+            </div>
+            <ul class="ts-dropdown" hidden></ul>
+          </div>
+          <div style="width:110px;">
+            <input type="number" name="cache_value" placeholder="Cachê (R$)"
+              value="{{ r.cache_value or '' }}" min="0" step="1" style="width:100%;">
+          </div>
+          <button type="submit" class="btn btn-sm btn-primary">Salvar</button>
+        </div>
+      </form>
+      {% if r.talent_id %}
+      <div style="margin-top:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        {% set _ps = r.payment_status or 'nao_pago' %}
+        <span class="pay-status-badge pay-status-{{ _ps }}">
+          {% if _ps == 'pago' %}Pago{% elif _ps == 'no_banco' %}No banco{% else %}Não pago{% endif %}
+        </span>
+        {% if r.talent %}
+          {% if r.invite_status == 'accepted' %}
+            <span class="invite-badge invite-accepted">✓ Presença confirmada</span>
+          {% elif r.invite_status == 'pending' %}
+            <span class="invite-badge invite-pending">⏳ Aguardando</span>
+          {% endif %}
+          {% if r.invite_status != 'accepted' %}
+            <form method="post" action="/events/{{ event.id }}" style="margin:0;">
+              <input type="hidden" name="action" value="send_invite">
+              <input type="hidden" name="role_id" value="{{ r.id }}">
+              <button type="submit" class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">
+                {{ "Reenviar" if r.invite_status == 'pending' else "Convidar" }}
+              </button>
+            </form>
+          {% endif %}
+          {% if r.talent.phone_digits %}
+            <a href="#"
+               onclick="openWA(
+                 '{{ r.talent.phone_digits }}',
+                 '{{ r.talent.full_name.split()[0] }}',
+                 {{ r.cache_value | tojson }},
+                 '{{ r.character_name | replace("'", "\\'") }}'
+               ); return false;"
+               class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</a>
+          {% endif %}
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  <div class="mt-16">
+    <button type="button" class="btn btn-sm btn-secondary" id="btn-add-extra"
+      onclick="document.getElementById('add-extra-form').hidden = false; this.hidden = true;">
+      + Adicionar pessoa
+    </button>
+  </div>
+
+  <div id="add-extra-form" hidden style="margin-top: 12px;">
+    <div style="background: var(--surface-2, #f7f6f3); border-radius: var(--r-md); padding: 14px;">
+      {# Pré-seleções rápidas #}
+      <div style="margin-bottom: 10px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:12px; color:var(--muted);">Rápido:</span>
+        <button type="button" class="btn btn-sm btn-ghost" onclick="setExtraRole('Coordenador')">Coordenador</button>
+        <button type="button" class="btn btn-sm btn-ghost" onclick="setExtraRole('Maquiador')">Maquiador</button>
+        <button type="button" class="btn btn-sm btn-ghost" onclick="setExtraRole('Transporte')">Transporte</button>
+        <button type="button" class="btn btn-sm btn-ghost" onclick="setExtraRole('Foto/Vídeo')">Foto/Vídeo</button>
+      </div>
+      <form method="post" action="/events/{{ event.id }}">
+        <input type="hidden" name="action" value="add_role">
+        <input type="hidden" name="role_type" value="extra">
+        <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+          <div style="flex:1; min-width:140px;">
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Função</label>
+            <input type="text" id="extra-role-name" name="character_name"
+                   placeholder="Ex: Coordenador, Maquiador..." style="width:100%;">
+          </div>
+          <div class="ts-wrap" style="flex:1.5; min-width:200px;">
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Pessoa</label>
+            <input type="hidden" name="talent_id" value="">
+            <div class="ts-box">
+              <input type="text" class="ts-input" placeholder="Buscar pessoa..." autocomplete="off" spellcheck="false">
+              <button type="button" class="ts-clear" tabindex="-1" style="display:none;">&times;</button>
+            </div>
+            <ul class="ts-dropdown" hidden></ul>
+          </div>
+          <div style="width:110px;">
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Cachê (R$)</label>
+            <input type="number" name="cache_value" placeholder="0" min="0" step="1" style="width:100%;">
+          </div>
+          <div style="display:flex; gap:6px; padding-bottom:1px;">
+            <button type="submit" class="btn btn-sm btn-primary">Adicionar</button>
+            <button type="button" class="btn btn-sm btn-secondary"
+              onclick="document.getElementById('add-extra-form').hidden = true; document.getElementById('btn-add-extra').hidden = false;">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+
+
+{# ══════════════════════════════════════════════════════════════
+   2. FIGURINO
+   ══════════════════════════════════════════════════════════════ #}
+{% if show_figurino %}
+<div class="panel">
+  <div class="flex-between mb-16">
+    <h2 style="margin-bottom: 0;">Figurino</h2>
+    <div class="flex-center gap-8">
+      <a href="/figurinos/print-event/{{ event.id }}" target="_blank"
+         class="btn btn-sm btn-secondary" title="Imprimir todas as fichas deste evento">
+        &#128247; Imprimir fichas
+      </a>
+      <a href="/figurinos/new" class="btn btn-sm btn-secondary">+ Nova ficha</a>
+    </div>
+  </div>
+
+  {% if event.roles %}
+    {% for r in event.roles %}
+
+    {# Resolve ficha: vinculada diretamente ou sugestão automática por nome #}
+    {% set sheet = r.figurino_sheet or suggested_sheets.get(r.id) %}
+    {% set is_suggested = not r.figurino_sheet and sheet %}
+
+    {# Cor do card: separado = verde, pendente = vermelho #}
+    {% if r.figurino_done_at %}
+      {% set _fig_card = "role-card-confirmed" %}
+    {% else %}
+      {% set _fig_card = "role-card-uncast" %}
+    {% endif %}
+
+    <div class="role-card {{ _fig_card }}" style="padding: 16px; margin-bottom: 12px;">
+      <div class="role-row" style="grid-template-columns: 1fr 0.7fr 1.2fr 1fr; align-items: start;">
+
+        {# Col 1: Personagem + talento #}
+        <div>
+          <div class="strong">{{ r.character_name }}</div>
+          {% if r.talent %}
+            <div class="meta">{{ r.talent.full_name }}</div>
+          {% else %}
+            <div class="meta muted" style="font-style: italic;">Sem talento atribuído</div>
+          {% endif %}
+        </div>
+
+        {# Col 2: Medidas #}
+        <div class="meta">
+          <div>Top: <strong>{{ r.talent.clothing_size_top if r.talent and r.talent.clothing_size_top else "—" }}</strong></div>
+          <div>Bottom: <strong>{{ r.talent.clothing_size_bottom if r.talent and r.talent.clothing_size_bottom else "—" }}</strong></div>
+          <div>Sapato: <strong>{{ r.talent.shoe_size if r.talent and r.talent.shoe_size else "—" }}</strong></div>
+        </div>
+
+        {# Col 3: Ficha de figurino #}
+        <div>
+          {% if sheet %}
+            <div style="margin-bottom: 8px;">
+              {% if is_suggested %}
+                <span class="meta" style="font-size: 11px; display: block; margin-bottom: 4px;">Sugestão automática:</span>
+              {% endif %}
+              <a href="/figurinos/{{ sheet.id }}/print" target="_blank"
+                 class="btn btn-sm {{ 'btn-secondary' if is_suggested else 'btn-primary' }}"
+                 style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                &#128247; {{ sheet.character_name }}
+              </a>
+              {% if is_suggested %}
+                <span class="badge badge-gray" style="margin-top: 4px; display: inline-block;">Sugerida</span>
+              {% else %}
+                <span class="badge badge-green" style="margin-top: 4px; display: inline-block;">Vinculada</span>
+              {% endif %}
+            </div>
+          {% else %}
+            <span class="badge badge-red" style="margin-bottom: 8px; display: inline-block;">Sem ficha</span>
+            <br>
+          {% endif %}
+
+          {# Vincular ou trocar ficha #}
+          {% if figurino_sheets %}
+            <form method="post" action="/events/{{ event.id }}"
+                  style="display: flex; gap: 6px; align-items: center; margin-top: 6px;">
+              <input type="hidden" name="action" value="link_figurino">
+              <input type="hidden" name="role_id" value="{{ r.id }}">
+              <select name="figurino_sheet_id" style="flex: 1; min-width: 0; font-size: 12px;">
+                <option value="">-- sem ficha --</option>
+                {% for s in figurino_sheets %}
+                  <option value="{{ s.id }}"
+                    {% if r.figurino_sheet_id == s.id %}selected{% endif %}>
+                    {{ s.character_name }}
+                  </option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-sm btn-secondary">&#8593;</button>
+            </form>
+          {% else %}
+            <a href="/figurinos/new" class="meta" style="font-size: 12px;">+ Criar ficha</a>
+          {% endif %}
+        </div>
+
+        {# Col 4: Status + separar #}
+        <div>
+          <form method="post" action="/events/{{ event.id }}">
+            <input type="hidden" name="action" value="figurino_done">
+            <input type="hidden" name="role_id" value="{{ r.id }}">
+            {% if r.figurino_done_at %}
+              <span class="badge badge-green">Separado</span>
+              <div class="meta" style="font-size: 11px; margin-top: 4px;">
+                {{ r.figurino_done_at.strftime("%d/%m/%Y") }}
+              </div>
+              <button type="submit" class="btn btn-sm btn-secondary"
+                      style="width: 100%; margin-top: 8px;" disabled>&#10003;</button>
+            {% else %}
+              <span class="badge badge-gray">Pendente</span>
+              <button type="submit" class="btn btn-sm btn-primary"
+                      style="width: 100%; margin-top: 8px;">Marcar separado</button>
+            {% endif %}
+          </form>
+        </div>
+
+      </div>
+    </div>
+
+    {% endfor %}
+  {% else %}
+    <p class="muted">Nenhuma função cadastrada para este evento.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+
+{# ══════════════════════════════════════════════════════════════
+   2b. LOGÍSTICA (maquiagem + saída)
+   ══════════════════════════════════════════════════════════════ #}
+{% if show_casting and (has_makeup_role or event.location) %}
+<div class="panel" id="panel-logistica">
+  <div class="flex-between" style="margin-bottom:16px;">
+    <h2 style="margin:0;">Logística</h2>
+  </div>
+
+  <form method="post" action="/events/{{ event.id }}">
+    <input type="hidden" name="action" value="save_logistics">
+    <div class="grid-2" style="gap:24px; align-items:start;">
+
+      {# ── Maquiagem ──────────────────────────────────────────── #}
+      {% if has_makeup_role %}
+      <div>
+        <div class="panel-title" style="margin-bottom:10px;">
+          💄 Maquiagem
+          <span class="badge badge-gray" style="margin-left:6px; font-weight:400;">Maquiador(a) no casting</span>
+        </div>
+        <div class="form-group">
+          <label>Horário da maquiagem</label>
+          <input type="time" name="makeup_time"
+                 value="{{ event.makeup_time or '' }}"
+                 style="width:140px;">
+        </div>
+        <div class="form-group">
+          <label>Local da maquiagem</label>
+          <div class="flex-center gap-8" style="flex-wrap:wrap; margin-top:4px;">
+            <label class="radio-option" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="radio" name="makeup_location" value="manto"
+                     {% if event.makeup_location == 'manto' or not event.makeup_location %}checked{% endif %}>
+              Manto Produções
+            </label>
+            <label class="radio-option" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="radio" name="makeup_location" value="local"
+                     {% if event.makeup_location == 'local' %}checked{% endif %}>
+              Local do evento
+            </label>
+            <label class="radio-option" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="radio" name="makeup_location" value="outro"
+                     {% if event.makeup_location and event.makeup_location not in ['manto','local'] %}checked{% endif %}>
+              Outro
+            </label>
+          </div>
+          <input type="text" name="makeup_location_custom" id="makeup-location-custom"
+                 placeholder="Endereço do local alternativo"
+                 value="{{ event.makeup_location if event.makeup_location and event.makeup_location not in ['manto','local'] else '' }}"
+                 style="width:100%; margin-top:8px; {% if not event.makeup_location or event.makeup_location in ['manto','local'] %}display:none;{% endif %}">
+        </div>
+      </div>
+      {% else %}
+      <div></div>
+      {% endif %}
+
+      {# ── Saída / Viagem ─────────────────────────────────────── #}
+      {% if event.location %}
+      <div>
+        <div class="panel-title" style="margin-bottom:10px;">
+          🚗 Horário de saída
+          {% if event.travel_time_minutes %}
+            <span class="badge badge-gray" style="margin-left:6px; font-weight:400;">
+              ~{{ (event.travel_time_minutes // 60) }}h{{ '%02d' % (event.travel_time_minutes % 60) }} de viagem
+            </span>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          <label>Horário de saída da Manto</label>
+          <input type="time" name="departure_time" id="departure-time"
+                 value="{{ event.departure_time or '' }}"
+                 style="width:140px;">
+        </div>
+
+        {# Card de estimativa #}
+        <div id="travel-card" style="
+          background: var(--accent-soft);
+          border: 1px solid var(--ring);
+          border-radius: var(--r-md);
+          padding: 12px 14px;
+          margin-bottom: 12px;
+          font-size: 13px;
+        ">
+          {% if event.travel_time_minutes %}
+            <div id="travel-result">
+              <div style="font-weight:600; margin-bottom:4px;">
+                Google Maps: {{ (event.travel_time_minutes // 60) }}h{{ '%02d' % (event.travel_time_minutes % 60) }} de viagem
+              </div>
+              <div class="muted">
+                Para chegar 1h antes:
+                {% if event.start_at %}
+                  {% set margin = settings.departure_margin_minutes or 60 %}
+                  {% set sug_minutes = event.start_at.hour * 60 + event.start_at.minute - (margin + event.travel_time_minutes) %}
+                  {% set sug_h = (sug_minutes // 60) % 24 %}
+                  {% set sug_m = sug_minutes % 60 %}
+                  sair às <strong>{{ '%02d' % sug_h }}:{{ '%02d' % sug_m }}</strong>
+                {% endif %}
+              </div>
+            </div>
+          {% else %}
+            <div id="travel-result" class="muted">Clique em "Estimar" para calcular o tempo de viagem.</div>
+          {% endif %}
+          <div id="travel-loading" style="display:none;" class="muted">Consultando Google Maps…</div>
+          <div id="travel-error" style="display:none; color:var(--red);"></div>
+        </div>
+
+        <div class="flex-center gap-8" style="flex-wrap:wrap;">
+          <button type="button" class="btn btn-sm btn-secondary" onclick="estimateTravel()">
+            🗺 Estimar via Google Maps
+          </button>
+          {% if event.location %}
+          <a href="https://www.google.com/maps/dir/{{ settings.manto_address or 'R. Olga Camelini, 147 - São João Climaco, São Paulo - SP' | urlencode }}/{{ event.location | urlencode }}"
+             target="_blank" class="btn btn-sm btn-ghost">
+            Abrir no Maps ↗
+          </a>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div>
+        <div class="panel-title" style="margin-bottom:8px;">🚗 Horário de saída</div>
+        <div class="muted" style="font-size:13px;">Evento sem endereço — adicione o local no Google Calendar para ativar o cálculo de rota.</div>
+      </div>
+      {% endif %}
+
+    </div>{# /grid-2 #}
+
+    <div style="margin-top:16px; border-top:1px solid var(--line); padding-top:16px; display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
+      {% if eff_has_role('ENSAIO', 'SUPERADMIN') %}
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px;">
+          <input type="checkbox" name="needs_rehearsal" value="1"
+                 {% if event.needs_rehearsal %}checked{% endif %}>
+          Precisa de ensaio
+        </label>
+      {% endif %}
+      <button type="submit" class="btn btn-sm btn-primary">Salvar logística</button>
+    </div>
+  </form>
+</div>
+
+<script>
+function estimateTravel() {
+  const resultEl  = document.getElementById('travel-result');
+  const loadingEl = document.getElementById('travel-loading');
+  const errorEl   = document.getElementById('travel-error');
+  resultEl.style.display  = 'none';
+  loadingEl.style.display = 'block';
+  errorEl.style.display   = 'none';
+
+  fetch('/events/{{ event.id }}/travel-estimate')
+    .then(r => r.json())
+    .then(data => {
+      loadingEl.style.display = 'none';
+      if (data.error) {
+        errorEl.textContent    = data.error;
+        errorEl.style.display  = 'block';
+        return;
+      }
+      if (data.no_key) {
+        resultEl.innerHTML = `<div class="muted">API key não configurada. <a href="${data.maps_url}" target="_blank">Abrir no Google Maps ↗</a></div>`;
+      } else {
+        let html = `<div style="font-weight:600; margin-bottom:4px;">Google Maps: ${data.duration_text} (${data.distance_text})</div>`;
+        if (data.suggested_departure) {
+          html += `<div class="muted">Para chegar 1h antes: sair às <strong>${data.suggested_departure}</strong></div>`;
+          // preenche o campo automaticamente
+          const dtInput = document.getElementById('departure-time');
+          if (dtInput && !dtInput.value) dtInput.value = data.suggested_departure;
+        }
+        resultEl.innerHTML = html;
+      }
+      resultEl.style.display = 'block';
+    })
+    .catch(() => {
+      loadingEl.style.display = 'none';
+      errorEl.textContent     = 'Erro de rede ao consultar Google Maps.';
+      errorEl.style.display   = 'block';
+    });
+}
+
+// toggle "Outro" input no local de maquiagem
+document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    const custom = document.getElementById('makeup-location-custom');
+    if (custom) custom.style.display = radio.value === 'outro' ? 'block' : 'none';
+  });
+});
+</script>
+{% endif %}
+
+
+{# ══════════════════════════════════════════════════════════════
+   2c. MATERIAIS DE ENSAIO
+   ══════════════════════════════════════════════════════════════ #}
+{% if eff_has_role('ENSAIO', 'SUPERADMIN') or (eff_has_role('CASTING') and event.needs_rehearsal) %}
+<div class="panel" id="panel-ensaio-materiais">
+  <div class="flex-between" style="margin-bottom:16px;">
+    <h2 style="margin:0;">Materiais de Ensaio</h2>
+    {% if event.ensaio_materials %}
+      <span class="badge badge-gray">{{ event.ensaio_materials | length }} item(ns)</span>
+    {% endif %}
+  </div>
+
+  {# Lista de materiais existentes #}
+  {% if event.ensaio_materials %}
+    <div style="margin-bottom:20px;">
+      {% for mat in event.ensaio_materials %}
+        <div class="flex-between gap-8" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
+          <div class="flex-center gap-8">
+            {% if mat.material_type == 'file' %}
+              <span style="font-size:18px;">📄</span>
+            {% else %}
+              <span style="font-size:18px;">🔗</span>
+            {% endif %}
+            <div>
+              <div class="strong" style="font-size:13px;">{{ mat.label or mat.file_path or mat.url }}</div>
+              {% if mat.material_type == 'file' %}
+                <a href="/uploads/{{ mat.file_path }}" target="_blank" class="meta" style="font-size:12px;">Baixar arquivo ↗</a>
+              {% else %}
+                <a href="{{ mat.url }}" target="_blank" class="meta" style="font-size:12px;">{{ mat.url }}</a>
+              {% endif %}
+              {% if mat.user %}<span class="meta" style="font-size:11px;"> · {{ mat.user.name }}</span>{% endif %}
+            </div>
+          </div>
+          {% if eff_has_role('ENSAIO', 'SUPERADMIN') %}
+            <form method="post" action="/events/{{ event.id }}/ensaio/material/{{ mat.id }}/delete"
+                  onsubmit="return confirm('Remover este material?')">
+              <button type="submit" class="btn btn-sm btn-ghost" style="color:var(--red); padding:4px 8px;">✕</button>
+            </form>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted" style="margin-bottom:16px;">Nenhum material adicionado ainda.</p>
+  {% endif %}
+
+  {% if eff_has_role('ENSAIO', 'SUPERADMIN') %}
+    <div class="grid-2" style="gap:20px; align-items:start;">
+
+      {# Upload de arquivo #}
+      <div>
+        <div class="panel-title" style="margin-bottom:10px;">📤 Enviar arquivo</div>
+        <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}/ensaio/upload">
+          <div class="form-group">
+            <label>Arquivo <span class="label-hint">TXT / PDF / DOC / DOCX, máx. 10 MB</span></label>
+            <input type="file" name="material_file" accept=".txt,.pdf,.doc,.docx" required>
+          </div>
+          <div class="form-group">
+            <label>Descrição (opcional)</label>
+            <input type="text" name="label" placeholder="Ex: Texto do personagem João">
+          </div>
+          <button type="submit" class="btn btn-sm btn-primary">Enviar arquivo</button>
+        </form>
+      </div>
+
+      {# Adicionar link #}
+      <div>
+        <div class="panel-title" style="margin-bottom:10px;">🔗 Adicionar link</div>
+        <form method="post" action="/events/{{ event.id }}/ensaio/link">
+          <div class="form-group">
+            <label>URL (Google Drive, YouTube, etc.)</label>
+            <input type="url" name="link_url" placeholder="https://drive.google.com/..." required>
+          </div>
+          <div class="form-group">
+            <label>Descrição (opcional)</label>
+            <input type="text" name="link_label" placeholder="Ex: Referências visuais">
+          </div>
+          <button type="submit" class="btn btn-sm btn-primary">Adicionar link</button>
+        </form>
+      </div>
+
+    </div>
+  {% endif %}
+</div>
+{% endif %}
+
+
+{# ══════════════════════════════════════════════════════════════
+   3. COMERCIAL
+   ══════════════════════════════════════════════════════════════ #}
+{% if show_comercial %}
+<div class="panel">
+  <h2>Comercial</h2>
+
+  <div class="grid-2" style="gap: 20px;">
+
+    {# Upload contrato #}
+    <div>
+      <div class="panel-title">Contrato assinado</div>
+      <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}">
+        <input type="hidden" name="action" value="add_contract">
+        <div class="form-group">
+          <label for="contract_amount">Valor do contrato</label>
+          <input type="number" id="contract_amount" name="contract_amount" placeholder="0,00" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label for="contract_file">Arquivo <span class="label-hint">PDF / JPG / PNG, máx. 10 MB</span></label>
+          <input type="file" id="contract_file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg">
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">Enviar contrato</button>
+      </form>
+
+      <hr class="sep">
+      <div class="strong" style="font-size: 13px; margin-bottom: 8px;">Contratos enviados</div>
+      {% if contracts %}
+        {% for c in contracts %}
+          <div class="flex-between gap-8" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
+            <a href="{{ c.file_path }}" target="_blank" class="btn btn-sm btn-secondary">
+              Ver contrato
+            </a>
+            <span class="meta">R$ {{ "{:,.2f}".format(c.amount or 0) }}</span>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted small">Nenhum contrato enviado.</p>
+      {% endif %}
+    </div>
+
+    {# Upload pagamento #}
+    <div>
+      <div class="panel-title">Pagamento recebido</div>
+      <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}">
+        <input type="hidden" name="action" value="add_payment">
+        <div class="form-group">
+          <label for="payment_amount">Valor recebido</label>
+          <input type="number" id="payment_amount" name="payment_amount" placeholder="0,00" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label for="payment_file">Comprovante <span class="label-hint">PDF / JPG / PNG, máx. 10 MB</span></label>
+          <input type="file" id="payment_file" name="payment_file" accept=".pdf,.png,.jpg,.jpeg">
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">Adicionar pagamento</button>
+      </form>
+
+      <hr class="sep">
+      <div class="strong" style="font-size: 13px; margin-bottom: 8px;">Pagamentos recebidos</div>
+      {% if payments %}
+        {% for p in payments %}
+          <div class="flex-between gap-8" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
+            <a href="{{ p.file_path }}" target="_blank" class="btn btn-sm btn-secondary">
+              Ver comprovante
+            </a>
+            <span class="meta">R$ {{ "{:,.2f}".format(p.amount or 0) }}</span>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted small">Nenhum pagamento registrado.</p>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+{% endif %}
+
+
+{# ══════════════════════════════════════════════════════════════
+   4. DADOS DE VENDA
+   ══════════════════════════════════════════════════════════════ #}
+{% if show_vendas %}
+<div class="panel">
+  <h2>Dados de Venda</h2>
+
+  <form method="post" action="/events/{{ event.id }}">
+    <input type="hidden" name="action" value="update_sale">
+
+    <div class="form-grid-2" style="margin-bottom: 16px;">
+      <div class="form-group">
+        <label for="sale_value">Valor de venda (R$)</label>
+        <input type="number" id="sale_value" name="sale_value"
+          value="{{ event.sale_value or '' }}" placeholder="0" min="0" step="0.01">
+      </div>
+      <div class="form-group" style="display: flex; align-items: flex-end; padding-bottom: 2px;">
+        <label class="checkbox-row" for="invoice_cb">
+          <input type="checkbox" id="invoice_cb" name="with_invoice" value="1"
+            {% if event.with_invoice %}checked{% endif %}>
+          Com nota fiscal
+        </label>
+      </div>
+    </div>
+
+    {% if show_financeiro %}
+      <hr class="sep">
+      <div class="form-grid-2" style="margin-bottom: 16px;">
+        <div class="form-group">
+          <label for="seller_id">Vendedor responsável</label>
+          <select id="seller_id" name="seller_id">
+            <option value="">-- nenhum --</option>
+            {% for s in sellers %}
+              <option value="{{ s.id }}" {% if event.seller_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="commission_rate">
+            Taxa de comissão (%)
+            <span class="label-hint">Padrão: {{ default_commission }}%</span>
+          </label>
+          <input type="number" id="commission_rate" name="commission_rate"
+            step="0.1" min="0" max="100"
+            value="{{ event.commission_rate or '' }}"
+            placeholder="{{ default_commission }}">
+        </div>
+      </div>
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary">Salvar dados de venda</button>
+  </form>
+
+  {# Financial summary box #}
+  <hr class="sep">
+  <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 0;">
+    <div class="kpi">
+      <div class="kpi-label">Venda</div>
+      <div class="kpi-value">R$&nbsp;{{ "{:,.0f}".format(event.sale_value or 0) }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Custo (cachês)</div>
+      <div class="kpi-value">R$&nbsp;{{ "{:,.0f}".format(event_cost or 0) }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Comissão ({{ event_rate }}%)</div>
+      <div class="kpi-value">R$&nbsp;{{ "%.2f" | format(event_commission or 0) }}</div>
+      {% if event.seller %}
+        <div class="kpi-sub">{{ event.seller.name }}</div>
+      {% endif %}
+    </div>
+    <div class="kpi">
+      {% set lucro = (event.sale_value or 0) - (event_cost or 0) %}
+      <div class="kpi-label">Lucro líquido</div>
+      <div class="kpi-value {% if lucro >= 0 %}green{% else %}red{% endif %}">
+        R$&nbsp;{{ "{:,.0f}".format(lucro) }}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+
+{# ══════════════════════════════════════════════════════════════
+   5. LOG DE ATIVIDADES
+   ══════════════════════════════════════════════════════════════ #}
+<div class="panel">
+  <details>
+    <summary style="cursor: pointer; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); list-style: none; display: flex; align-items: center; gap: 8px;">
+      <span>Log de atividades</span>
+      <span class="badge badge-gray">{{ logs | length }}</span>
+    </summary>
+    <div class="mt-16">
+      {% if logs %}
+        {% for entry in logs %}
+          <div class="log-item">
+            <div class="log-ts">{{ entry.ts }}</div>
+            <div class="log-msg">
+              <span class="log-actor">{{ entry.actor_name }}</span>
+              {% if entry.actor_role %}
+                <span class="muted">&mdash; {{ entry.actor_role }}</span>
+              {% endif %}
+              &rsaquo; {{ entry.message }}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted small">Nenhuma atividade registrada.</p>
+      {% endif %}
+    </div>
+  </details>
+</div>
+
+{# ── Ensaios vinculados ───────────────────────────────────────── #}
+{% if event.ensaios %}
+<div class="panel" style="margin-top:24px;">
+  <div class="panel-title">Ensaios vinculados</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Horário</th>
+        <th>Descrição</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in event.ensaios | sort(attribute='start_at') %}
+      <tr>
+        <td>{{ e.start_at.strftime("%d/%m/%Y") if e.start_at else '—' }}</td>
+        <td class="meta">
+          {{ e.start_at.strftime("%H:%M") if e.start_at else '—' }}
+          {% if e.end_at %}&mdash;{{ e.end_at.strftime("%H:%M") }}{% endif %}
+        </td>
+        <td class="muted">{{ e.description or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+
+{% endblock %}
+
+
+{% block extra_scripts %}
+<style>
+  /* ── Talent autocomplete ───────────────────────────────────── */
+  .ts-wrap { position: relative; }
+  .ts-box {
+    display: flex; align-items: center;
+    border: 1.5px solid var(--line);
+    border-radius: 8px; background: #fff; overflow: hidden;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .ts-box:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--ring, rgba(84,69,150,.15));
+  }
+  .ts-input {
+    flex: 1; border: none !important; outline: none !important;
+    box-shadow: none !important; padding: 8px 10px;
+    font-size: 14px; background: transparent; min-width: 0;
+  }
+  .ts-clear {
+    background: none; border: none; color: var(--muted);
+    padding: 0 10px; cursor: pointer; font-size: 18px; line-height: 1;
+    flex-shrink: 0;
+  }
+  .ts-clear:hover { color: var(--ink); }
+  .ts-dropdown {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: #fff; border: 1.5px solid var(--line);
+    border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.1);
+    z-index: 200; max-height: 220px; overflow-y: auto;
+    list-style: none; margin: 0; padding: 4px 0;
+  }
+  .ts-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; cursor: pointer; font-size: 14px;
+    transition: background .1s;
+  }
+  .ts-item:hover, .ts-item.ts-focused { background: var(--bg); }
+  .ts-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .ts-dot-free     { background: #2ecc71; }
+  .ts-dot-same_day { background: #f5c842; }
+  .ts-dot-conflict { background: #e45858; }
+  .ts-name { flex: 1; }
+  .ts-info { font-size: 11px; color: var(--muted); max-width: 160px;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ts-empty { padding: 10px 12px; color: var(--muted); font-size: 13px; }
+
+  /* ── Payment status badge (read-only) ──────────────────────── */
+  .pay-status-badge {
+    display: inline-block; font-size: 11px; padding: 2px 8px;
+    border-radius: 20px; border: 1.5px solid; font-weight: 600;
+  }
+  .pay-status-nao_pago { background: #f2f2f2; border-color: #bbb;    color: #666; }
+  .pay-status-pago     { background: #e8f5e9; border-color: #2e7d32; color: #1b5e20; }
+  .pay-status-no_banco { background: #e3f2fd; border-color: #1565c0; color: #0d47a1; }
+
+  /* Log details marker */
+  details summary::-webkit-details-marker { display: none; }
+  details[open] summary span:first-child::before { content: "▾ "; }
+  details:not([open]) summary span:first-child::before { content: "▸ "; }
+
+  /* Role cards com status de cor */
+  .role-card { border-radius: var(--r-md); padding: 12px 14px; margin-bottom: 10px; border: 1.5px solid; }
+  .role-card-uncast    { background: rgba(228,88,88,.06);  border-color: rgba(228,88,88,.35); }
+  .role-card-pending   { background: rgba(245,200,66,.08); border-color: rgba(245,200,66,.5); }
+  .role-card-confirmed { background: rgba(46,125,50,.06);  border-color: rgba(46,125,50,.35); }
+
+  /* Invite status badges */
+  .invite-badge {
+    display: inline-block; font-size: 11px; padding: 2px 8px;
+    border-radius: 20px; border: 1.5px solid; font-weight: 600;
+  }
+  .invite-pending  { background: rgba(245,200,66,.15); border-color: #d4a017; color: #b8860b; }
+  .invite-accepted { background: #e8f5e9; border-color: #2e7d32; color: #1b5e20; }
+</style>
+
+<script>
+(function () {
+  /* ── Dados dos talentos (gerados pelo Jinja2) ─────────────── */
+  const TALENTS = [
+    {% for t in talents %}{% set avail = availability.get(t.id, {}) %}
+    { id: {{ t.id }}, name: {{ t.full_name | tojson }},
+      status: {{ (avail.get('status') or 'free') | tojson }},
+      info:   {{ (avail.get('info')   or ''    ) | tojson }} }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  /* ── Inicializa um componente .ts-wrap ────────────────────── */
+  function initSearch(wrap) {
+    const hidden   = wrap.querySelector('[name="talent_id"]');
+    const text     = wrap.querySelector('.ts-input');
+    const clearBtn = wrap.querySelector('.ts-clear');
+    const dropdown = wrap.querySelector('.ts-dropdown');
+    let focusIdx   = -1;
+
+    function filter(q) {
+      if (!q.trim()) return TALENTS.slice(0, 8);
+      const lq = q.toLowerCase();
+      return TALENTS.filter(t => t.name.toLowerCase().includes(lq)).slice(0, 8);
+    }
+
+    function render(results) {
+      dropdown.innerHTML = '';
+      focusIdx = -1;
+      if (!results.length) {
+        dropdown.innerHTML = '<li class="ts-empty">Nenhum talento encontrado.</li>';
+      } else {
+        results.forEach(function (t) {
+          const li = document.createElement('li');
+          li.className = 'ts-item';
+          const dotCls = 'ts-dot ts-dot-' + (t.status || 'free');
+          li.innerHTML =
+            '<span class="' + dotCls + '"></span>' +
+            '<span class="ts-name">' + t.name + '</span>' +
+            (t.info ? '<span class="ts-info" title="' + t.info + '">' + t.info + '</span>' : '');
+          li.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            pick(t);
+          });
+          dropdown.appendChild(li);
+        });
+      }
+      dropdown.hidden = false;
+    }
+
+    function pick(t) {
+      if (t.status === 'conflict') {
+        const msg = t.info || 'Este talento tem conflito de horário. Continuar mesmo assim?';
+        if (!confirm(msg)) return;
+      }
+      hidden.value    = t.id;
+      text.value      = t.name;
+      clearBtn.style.display = '';
+      dropdown.hidden = true;
+    }
+
+    function clear() {
+      hidden.value    = '';
+      text.value      = '';
+      clearBtn.style.display = 'none';
+      dropdown.hidden = true;
+      const form = wrap.closest('form');
+      if (form) {
+        const cacheInput = form.querySelector('[name="cache_value"]');
+        if (cacheInput) cacheInput.value = '';
+      }
+    }
+
+    function moveFocus(dir) {
+      const items = dropdown.querySelectorAll('.ts-item');
+      if (!items.length) return;
+      items[focusIdx] && items[focusIdx].classList.remove('ts-focused');
+      focusIdx = Math.max(0, Math.min(focusIdx + dir, items.length - 1));
+      items[focusIdx].classList.add('ts-focused');
+      items[focusIdx].scrollIntoView({ block: 'nearest' });
+    }
+
+    text.addEventListener('input',  function () { render(filter(this.value)); });
+    text.addEventListener('focus',  function () { if (!hidden.value) render(filter(this.value)); });
+    text.addEventListener('blur',   function () { setTimeout(function () { dropdown.hidden = true; }, 160); });
+    clearBtn.addEventListener('click', clear);
+
+    text.addEventListener('keydown', function (e) {
+      if (dropdown.hidden) return;
+      if (e.key === 'ArrowDown')  { e.preventDefault(); moveFocus(+1); }
+      else if (e.key === 'ArrowUp')   { e.preventDefault(); moveFocus(-1); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        const focused = dropdown.querySelector('.ts-focused');
+        if (focused) focused.dispatchEvent(new MouseEvent('mousedown'));
+      } else if (e.key === 'Escape') { dropdown.hidden = true; }
+    });
+  }
+
+  document.querySelectorAll('.ts-wrap').forEach(initSearch);
+})();
+
+function setExtraRole(name) {
+  const input = document.getElementById('extra-role-name');
+  if (input) { input.value = name; input.focus(); }
+}
+
+// ── WhatsApp invite ────────────────────────────────────────────
+const _evTitle     = {{ event.title | tojson }};
+const _evDate      = {{ (event.start_at.strftime("%d/%m/%Y") if event.start_at else "") | tojson }};
+const _evTimeStart = {{ (event.start_at.strftime("%H:%M") if event.start_at else "") | tojson }};
+const _evTimeEnd   = {{ (event.end_at.strftime("%H:%M") if event.end_at else "") | tojson }};
+const _evLocation  = {{ (event.location or "") | tojson }};
+const _makeupTime  = {{ (event.makeup_time or "") | tojson }};
+{% set makeup_loc_label = "" %}
+{% if event.makeup_location == 'manto' %}{% set makeup_loc_label = "Manto Producoes" %}
+{% elif event.makeup_location == 'local' %}{% set makeup_loc_label = "Local do evento" %}
+{% elif event.makeup_location %}{% set makeup_loc_label = event.makeup_location %}{% endif %}
+const _makeupLoc   = {{ makeup_loc_label | tojson }};
+{% if event.ensaios %}
+  {% set first_ensaio = event.ensaios | sort(attribute='start_at') | first %}
+const _ensaioDate  = {{ (first_ensaio.start_at.strftime("%d/%m/%Y") if first_ensaio.start_at else "") | tojson }};
+const _ensaioStart = {{ (first_ensaio.start_at.strftime("%H:%M") if first_ensaio.start_at else "") | tojson }};
+const _ensaioEnd   = {{ (first_ensaio.end_at.strftime("%H:%M") if first_ensaio.end_at else "") | tojson }};
+{% else %}
+const _ensaioDate = "", _ensaioStart = "", _ensaioEnd = "";
+{% endif %}
+const _ensaioMaterials = [
+  {% for mat in event.ensaio_materials %}
+    { type: {{ mat.material_type | tojson }}, label: {{ (mat.label or "") | tojson }}, url: {{ (mat.url or "") | tojson }} }{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+
+// emoji via codepoints — evita corrupção de encoding em Windows
+const E = (...cp) => String.fromCodePoint(...cp);
+const em = {
+  festa:    E(0x1F389),  // 🎉
+  evento:   E(0x1F3AA),  // 🎪
+  pessoa:   E(0x1F3AD),  // 🎭
+  data:     E(0x1F4C5),  // 📅
+  relogio:  E(0x1F550),  // 🕐
+  local:    E(0x1F4CD),  // 📍
+  dinheiro: E(0x1F4B0),  // 💰
+  makeup:   E(0x1F484),  // 💄
+  musica:   E(0x1F3B6),  // 🎶
+  doc:      E(0x1F4C4),  // 📄
+  link:     E(0x1F517),  // 🔗
+  ok:       E(0x2705),   // ✅
+};
+
+function openWA(phone, firstName, cache, character) {
+  let msg = `Ola, ${firstName}! Voce tem um convite da Manto Producoes. ${em.festa}\n\n`;
+  msg += `${em.evento} *${_evTitle}*\n`;
+  msg += `${em.pessoa} Personagem: *${character}*\n`;
+  if (_evDate)      msg += `${em.data} ${_evDate}\n`;
+  if (_evTimeStart) msg += `${em.relogio} ${_evTimeStart}${_evTimeEnd ? ' - ' + _evTimeEnd : ''}\n`;
+  if (_evLocation)  msg += `${em.local} ${_evLocation}\n`;
+  if (cache)        msg += `${em.dinheiro} Cache: R$ ${cache}\n`;
+
+  if (_makeupTime) {
+    msg += `\n${em.makeup} *Maquiagem*\n`;
+    msg += `${em.relogio} Horario: ${_makeupTime}\n`;
+    if (_makeupLoc) msg += `${em.local} Local: ${_makeupLoc}\n`;
+  }
+
+  if (_ensaioDate) {
+    msg += `\n${em.musica} *Ensaio*\n`;
+    msg += `${em.data} ${_ensaioDate}\n`;
+    if (_ensaioStart) msg += `${em.relogio} ${_ensaioStart}${_ensaioEnd ? ' - ' + _ensaioEnd : ''}\n`;
+    if (_ensaioMaterials.length > 0) {
+      msg += `\nMateriais disponíveis no portal:\n`;
+      _ensaioMaterials.forEach(m => {
+        const icon = m.type === 'link' ? em.link : em.doc;
+        msg += `${icon} ${m.label || m.url}\n`;
+      });
+    }
+  }
+
+  msg += `\nAcesse o portal Manto para confirmar sua presenca. ${em.ok}`;
+  window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+</script>
+
+{# ── Modal exportar elenco ──────────────────────────────────── #}
+{% if eff_has_role('CASTING', 'COMERCIAL', 'SUPERADMIN') %}
+{% set cast_assigned = event.roles | selectattr('talent_id') | list %}
+<div id="export-elenco-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6);
+     z-index:9999; align-items:center; justify-content:center; padding:16px;">
+  <div style="background:#fff; border-radius:var(--r-lg); padding:28px;
+              max-width:520px; width:100%; box-shadow:0 8px 32px rgba(0,0,0,.35); max-height:90vh; overflow-y:auto;">
+    <div class="flex-between" style="margin-bottom:16px;">
+      <h2 style="margin:0;">Exportar elenco</h2>
+      <button onclick="document.getElementById('export-elenco-modal').style.display='none'"
+              style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">×</button>
+    </div>
+    {% if cast_assigned %}
+    <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+      {{ cast_assigned | length }} pessoa(s) escalada(s). Selecione os campos:
+    </p>
+    <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:20px;">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="ee-personagem" checked> Personagem
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="ee-nome" checked> Nome completo
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="ee-birth"> Data de nascimento
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="ee-cpf"> CPF
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="ee-rg"> RG
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="ee-doc"> Link documento
+      </label>
+    </div>
+    <textarea id="ee-text" readonly rows="8"
+              style="width:100%; font-size:12px; font-family:monospace;
+                     border:1px solid var(--line); border-radius:var(--r-sm);
+                     padding:10px; resize:vertical; background:var(--surface-2);"
+              placeholder="Clique em Gerar…"></textarea>
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button onclick="generateElenco()" class="btn btn-primary btn-sm">Gerar texto</button>
+      <button onclick="copyElenco()" class="btn btn-ghost btn-sm">📋 Copiar</button>
+    </div>
+    {% else %}
+    <p class="muted">Nenhum talento escalado ainda.</p>
+    {% endif %}
+  </div>
+</div>
+<script>
+const _ELENCO = [
+  {% for r in cast_assigned %}
+  {
+    personagem: {{ r.character_name | tojson }},
+    nome:       {{ (r.talent.full_name if r.talent else '') | tojson }},
+    birth:      {{ (r.talent.birth_date.strftime('%d/%m/%Y') if r.talent and r.talent.birth_date else '') | tojson }},
+    cpf:        {{ (r.talent.cpf or '') | tojson }},
+    rg:         {{ (r.talent.rg or '') | tojson }},
+    doc:        {{ (r.talent.doc_photo_path or '') | tojson }},
+  },
+  {% endfor %}
+];
+function generateElenco() {
+  const wPersonagem = document.getElementById('ee-personagem').checked;
+  const wNome       = document.getElementById('ee-nome').checked;
+  const wBirth      = document.getElementById('ee-birth').checked;
+  const wCpf        = document.getElementById('ee-cpf').checked;
+  const wRg         = document.getElementById('ee-rg').checked;
+  const wDoc        = document.getElementById('ee-doc').checked;
+  const lines = _ELENCO.map(r => {
+    const parts = [];
+    if (wPersonagem && r.personagem) parts.push(r.personagem);
+    if (wNome && r.nome)             parts.push(r.nome);
+    if (wBirth && r.birth)           parts.push('Nasc: ' + r.birth);
+    if (wCpf && r.cpf)               parts.push('CPF: ' + r.cpf);
+    if (wRg && r.rg)                 parts.push('RG: ' + r.rg);
+    if (wDoc && r.doc)               parts.push('Doc: ' + window.location.origin + r.doc);
+    return parts.join(' | ');
+  }).filter(l => l);
+  document.getElementById('ee-text').value = lines.join('\n\n');
+}
+function copyElenco() {
+  const ta = document.getElementById('ee-text');
+  if (!ta.value) generateElenco();
+  navigator.clipboard.writeText(ta.value).then(() => {
+    const btn = event.target;
+    btn.textContent = '✓ Copiado!';
+    setTimeout(() => btn.textContent = '📋 Copiar', 2000);
+  });
+}
+</script>
+{% endif %}
+
+{% endblock %}

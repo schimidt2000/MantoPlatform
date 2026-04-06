@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Novo Evento{% endblock %}
+{% block page_title %}Novo Evento{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">Crie um evento e envie para a agenda automaticamente</p>
+{% endblock %}
+
+{% block page_actions %}
+  <a href="/agenda" class="btn btn-secondary">&larr; Cancelar</a>
+{% endblock %}
+
+{% block content %}
+
+{% if errors %}
+<div class="alert alert-error" style="margin-bottom:16px;">
+  {% for e in errors %}<div>{{ e }}</div>{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" action="/events/new" enctype="multipart/form-data">
+
+{# ══════════════════════════════════════════════════
+   1. DADOS GERAIS
+══════════════════════════════════════════════════ #}
+<div class="panel" style="margin-bottom:16px;">
+  <div class="panel-title">Dados do Evento</div>
+
+  <div class="form-group">
+    <label>Título do show <span style="color:var(--red);">*</span></label>
+    <input type="text" name="title" required autofocus
+           placeholder="Ex: Festa de Aniversário João, Evento Corporativo XYZ"
+           style="max-width:500px;">
+  </div>
+
+  <div class="form-group">
+    <label>Tipo</label>
+    <select name="event_type" style="width:auto;">
+      <option value="">— Selecionar —</option>
+      <option value="SHOW">Show</option>
+      <option value="CORP">Corporativo</option>
+      <option value="R&I">Receptivo &amp; Interativo</option>
+      <option value="SOCIAL">Evento Social</option>
+    </select>
+  </div>
+
+  <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Data <span style="color:var(--red);">*</span></label>
+      <input type="date" name="event_date" required style="width:160px;">
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Início</label>
+      <input type="time" name="event_start" style="width:110px;">
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Fim</label>
+      <input type="time" name="event_end" style="width:110px;">
+    </div>
+  </div>
+
+  <div class="form-group" style="margin-top:16px;">
+    <label>Local</label>
+    <input type="text" name="location" placeholder="Ex: Espaço XYZ, São Paulo – SP"
+           style="max-width:500px;">
+  </div>
+
+  <div class="form-group">
+    <label>Descrição</label>
+    <textarea name="description" rows="3" placeholder="Informações adicionais sobre o evento"
+              style="max-width:500px;"></textarea>
+  </div>
+
+  <div class="form-group">
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+      <input type="checkbox" name="needs_rehearsal" value="1">
+      <span>Precisa de ensaio</span>
+    </label>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════
+   2. PERSONAGENS
+══════════════════════════════════════════════════ #}
+<div class="panel" style="margin-bottom:16px;">
+  <div class="panel-title">Personagens</div>
+  <p class="muted" style="font-size:13px; margin-bottom:12px;">
+    Adicione os personagens do evento e, se disponível, associe o figurino correspondente.
+  </p>
+
+  <div id="chars-list">
+    {# Linha inicial vazia #}
+    <div class="char-row flex-center gap-8" style="margin-bottom:8px; flex-wrap:wrap;">
+      <input type="text" name="character_names[]" placeholder="Nome do personagem"
+             style="flex:1; min-width:160px;">
+      <select name="figurino_sheet_ids[]" style="flex:1; min-width:180px; max-width:280px;">
+        <option value="">— Sem figurino —</option>
+        {% for s in figurino_sheets %}
+          <option value="{{ s.id }}">{{ s.character_name }}</option>
+        {% endfor %}
+      </select>
+      <button type="button" class="btn btn-sm btn-danger char-remove"
+              style="width:32px; padding:0; flex-shrink:0;">&times;</button>
+    </div>
+  </div>
+
+  <button type="button" class="btn btn-sm btn-secondary" id="btn-add-char"
+          style="margin-top:4px;">+ Adicionar personagem</button>
+</div>
+
+{# ══════════════════════════════════════════════════
+   3. DADOS DE VENDA
+══════════════════════════════════════════════════ #}
+<div class="panel" style="margin-bottom:16px;">
+  <div class="panel-title">Dados de Venda</div>
+
+  <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Valor (R$)</label>
+      <input type="number" name="sale_value" min="0" placeholder="0"
+             style="width:140px;">
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Vendedor responsável</label>
+      <select name="seller_id" style="width:auto;">
+        <option value="">— Selecionar —</option>
+        {% for u in sellers %}
+          <option value="{{ u.id }}">{{ u.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" name="with_invoice" value="1">
+        <span>Com nota fiscal</span>
+      </label>
+    </div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════
+   4. CONTRATO (opcional)
+══════════════════════════════════════════════════ #}
+<div class="panel" style="margin-bottom:24px;">
+  <div class="panel-title">Contrato <span class="muted" style="font-weight:400;">(opcional)</span></div>
+
+  <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Arquivo do contrato</label>
+      <input type="file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg">
+      <div class="form-hint">PDF, PNG ou JPG — máx. 10 MB</div>
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Valor do contrato (R$)</label>
+      <input type="number" name="contract_amount" min="0" placeholder="0"
+             style="width:140px;">
+    </div>
+  </div>
+</div>
+
+{# ── Botões ──────────────────────────────────────── #}
+<div style="display:flex; gap:12px;">
+  <button type="submit" class="btn btn-primary">Criar Evento</button>
+  <a href="/agenda" class="btn btn-secondary">Cancelar</a>
+</div>
+
+</form>
+{% endblock %}
+
+
+{% block extra_scripts %}
+<script>
+(function () {
+  // Opções de figurinos pré-renderizadas para clonar
+  const sheetOptions = `<option value="">— Sem figurino —</option>` +
+    `{% for s in figurino_sheets %}<option value="{{ s.id }}">{{ s.character_name }}</option>{% endfor %}`;
+
+  function addCharRow() {
+    const list = document.getElementById('chars-list');
+    const row = document.createElement('div');
+    row.className = 'char-row flex-center gap-8';
+    row.style.cssText = 'margin-bottom:8px; flex-wrap:wrap;';
+    row.innerHTML =
+      `<input type="text" name="character_names[]" placeholder="Nome do personagem"
+              style="flex:1; min-width:160px;">` +
+      `<select name="figurino_sheet_ids[]" style="flex:1; min-width:180px; max-width:280px;">${sheetOptions}</select>` +
+      `<button type="button" class="btn btn-sm btn-danger char-remove"
+               style="width:32px; padding:0; flex-shrink:0;">&times;</button>`;
+    list.appendChild(row);
+    row.querySelector('input').focus();
+  }
+
+  function removeCharRow(btn) {
+    const rows = document.querySelectorAll('.char-row');
+    if (rows.length > 1) {
+      btn.closest('.char-row').remove();
+    } else {
+      btn.closest('.char-row').querySelector('input').value = '';
+      btn.closest('.char-row').querySelector('select').value = '';
+    }
+  }
+
+  document.getElementById('btn-add-char').addEventListener('click', addCharRow);
+  document.getElementById('chars-list').addEventListener('click', function (e) {
+    if (e.target.classList.contains('char-remove')) removeCharRow(e.target);
+  });
+})();
+</script>
+{% endblock %}

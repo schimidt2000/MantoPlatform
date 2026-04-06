@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+
+    @page { size: A4 portrait; margin: 12mm 14mm; }
+
+    @media print {
+      .no-print { display: none !important; }
+      .sheet-page {
+        page-break-after: always;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        min-height: auto !important;
+      }
+      .sheet-page:last-child { page-break-after: auto; }
+      body { background: white !important; }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f0f0f0;
+      margin: 0;
+      padding: 0;
+      font-size: 12px;
+      color: #000;
+    }
+
+    /* ── Screen top bar ──────────────────────────────────────── */
+    .no-print {
+      background: #fff;
+      border-bottom: 1px solid #e8e6e1;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    /* ── A4 page ─────────────────────────────────────────────── */
+    .sheet-page {
+      background: #fff;
+      width: 210mm;
+      min-height: 297mm;
+      margin: 24px auto;
+      padding: 14mm 16mm;
+      box-shadow: 0 2px 20px rgba(0,0,0,.12);
+      display: flex;
+      flex-direction: column;
+    }
+
+    @media screen and (max-width: 750px) {
+      .sheet-page { width: 100%; margin: 8px 0; padding: 16px; min-height: auto; }
+    }
+
+    /* ── Top section: photo + info ───────────────────────────── */
+    .sheet-top {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      border: 1px solid #999;
+      margin-bottom: 14px;
+    }
+
+    .photo-cell {
+      border-right: 1px solid #999;
+    }
+
+    .sheet-photo {
+      width: 190px;
+      height: 240px;
+      object-fit: contain;
+      object-position: center top;
+      display: block;
+    }
+
+    .sheet-photo-placeholder {
+      width: 190px;
+      height: 240px;
+      background: #f5f5f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      color: #ccc;
+    }
+
+    .info-cell {
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .char-name {
+      font-size: 26px;
+      font-weight: 900;
+      text-transform: uppercase;
+      text-align: center;
+      letter-spacing: 0.02em;
+      margin-bottom: 14px;
+      line-height: 1.15;
+    }
+
+    /* ── Form fields ─────────────────────────────────────────── */
+    .form-row {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      margin-bottom: 9px;
+      font-size: 12px;
+    }
+
+    .form-row-label { white-space: nowrap; }
+
+    .blank {
+      display: inline-block;
+      border-bottom: 1px solid #000;
+      min-width: 40px;
+    }
+
+    .blank-flex { flex: 1; }
+    .blank-date { min-width: 72px; }
+    .blank-time { min-width: 44px; }
+
+    .form-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+      margin-bottom: 9px;
+    }
+
+    /* ── Instructions ────────────────────────────────────────── */
+    .instructions {
+      margin-top: 8px;
+      font-size: 11px;
+      line-height: 1.7;
+      border-top: 1px solid #ddd;
+      padding-top: 8px;
+    }
+
+    .instructions .legend {
+      display: flex;
+      gap: 4px;
+      align-items: baseline;
+    }
+
+    .c-red { color: #c0392b; font-weight: bold; }
+
+    /* ── Checklist table ─────────────────────────────────────── */
+    .checklist-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .checklist-table colgroup col.cb   { width: 28px; }
+    .checklist-table colgroup col.qty  { width: 36px; }
+
+    .checklist-table thead th {
+      border: 1px solid #999;
+      padding: 0 4px;
+      height: 32px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 11px;
+      background: #f5f5f5;
+    }
+
+    .checklist-table thead th.item-th {
+      text-align: left;
+      padding-left: 10px;
+    }
+
+    .checklist-table tbody td {
+      border: 1px solid #999;
+      padding: 5px 4px;
+      text-align: center;
+      height: 26px;
+    }
+
+    .checklist-table tbody td.item-td {
+      text-align: left;
+      padding-left: 10px;
+    }
+
+    .checklist-table tbody tr.empty-row td {
+      height: 24px;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────── */
+    .sheet-footer {
+      display: flex;
+      justify-content: space-between;
+      margin-top: auto;
+      padding-top: 32px;
+    }
+
+    .sig-block {
+      min-width: 200px;
+      text-align: center;
+    }
+
+    .sig-line {
+      border-top: 1.5px solid #000;
+      padding-top: 5px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* ── No-sheet placeholder ────────────────────────────────── */
+    .no-sheet {
+      padding: 32px;
+      text-align: center;
+      border: 2px dashed #ccc;
+      border-radius: 6px;
+      color: #888;
+    }
+
+  </style>
+</head>
+<body>
+
+{# ── Top bar (screen only) ──────────────────────────────────── #}
+<div class="no-print">
+  <button onclick="window.print()" class="btn btn-primary">
+    &#128247; Imprimir
+  </button>
+  {% if event %}
+    <a href="/events/{{ event.id }}" class="btn btn-secondary">&larr; Voltar ao evento</a>
+    <span class="muted" style="font-size: 12px;">
+      {{ items | length }} ficha(s) &bull; {{ event.title }}
+    </span>
+  {% else %}
+    <a href="/figurinos" class="btn btn-secondary">&larr; Voltar ao catálogo</a>
+  {% endif %}
+</div>
+
+
+{# ── One A4 page per item ───────────────────────────────────── #}
+{% for item in items %}
+{% set sheet  = item.sheet %}
+{% set pieces = item.pieces %}
+{% set role   = item.role %}
+{% set talent = item.talent %}
+
+<div class="sheet-page">
+
+  {% if not sheet %}
+  {# No sheet assigned #}
+  <div class="no-sheet" style="margin-top: 40px;">
+    <div style="font-size: 28px; margin-bottom: 8px;">&#9888;</div>
+    <div style="font-size: 14px; font-weight: 700;">
+      {{ role.character_name if role else '—' }}
+    </div>
+    <div style="margin-top: 6px;">Sem ficha de figurino cadastrada para este personagem.</div>
+  </div>
+
+  {% else %}
+
+  {# ── Top: photo + info ──────────────────────────────────── #}
+  <div class="sheet-top">
+
+    {# Photo #}
+    <div class="photo-cell">
+      {% if sheet.photo_url %}
+        <img src="{{ sheet.photo_url }}"
+             class="sheet-photo" alt="{{ sheet.character_name }}">
+      {% else %}
+        <div class="sheet-photo-placeholder">&#128248;</div>
+      {% endif %}
+    </div>
+
+    {# Info #}
+    <div class="info-cell">
+
+      <div class="char-name">{{ sheet.character_name }}</div>
+
+      {# Coordenador #}
+      <div class="form-row">
+        <span class="form-row-label">Coordenador:</span>
+        <span class="blank blank-flex">&nbsp;</span>
+      </div>
+
+      {# Datas e horários #}
+      <div class="form-2col">
+        <div class="form-row" style="margin-bottom: 0;">
+          <span class="form-row-label">Data de Retirada:</span>
+          <span class="blank blank-date">&nbsp;</span>
+        </div>
+        <div class="form-row" style="margin-bottom: 0;">
+          <span class="form-row-label">Horário de Retirada:</span>
+          <span class="blank blank-time">&nbsp;</span>
+        </div>
+      </div>
+      <div class="form-2col" style="margin-top: 6px;">
+        <div class="form-row" style="margin-bottom: 0;">
+          <span class="form-row-label">Data de Devolução:</span>
+          <span class="blank blank-date">&nbsp;</span>
+        </div>
+        <div class="form-row" style="margin-bottom: 0;">
+          <span class="form-row-label">Horário de Devolução</span>
+          <span class="blank blank-time">&nbsp;</span>
+        </div>
+      </div>
+
+      {# Talento (se atribuído) #}
+      {% if talent %}
+      <div class="form-row" style="margin-top: 6px;">
+        <span class="form-row-label">Talento:</span>
+        <span style="font-weight: 700;">{{ talent.full_name }}</span>
+        {% if talent.clothing_size_top or talent.clothing_size_bottom or talent.shoe_size %}
+          <span class="form-row-label" style="margin-left: 8px; color: #555; font-size: 11px;">
+            (Top: {{ talent.clothing_size_top or '—' }}
+            &bull; Bottom: {{ talent.clothing_size_bottom or '—' }}
+            &bull; Sapato: {{ talent.shoe_size or '—' }})
+          </span>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# Instructions #}
+      <div class="instructions">
+        Durante as conferências assinale com:<br>
+        &#10003; item presente &nbsp;&nbsp; &#10005; item ausente<br>
+        <span class="c-red">M</span> - Montagem &nbsp;/&nbsp;
+        <span class="c-red">R</span> - Retirada &nbsp;/&nbsp;
+        <span class="c-red">D</span> - Devolução
+      </div>
+
+    </div>
+  </div>
+
+  {# ── Checklist table ────────────────────────────────────── #}
+  <table class="checklist-table">
+    <colgroup>
+      <col class="cb">  {# M #}
+      <col class="cb">  {# R #}
+      <col class="cb">  {# D #}
+      <col class="qty"> {# Qtd #}
+      <col>             {# Item #}
+    </colgroup>
+    <thead>
+      <tr>
+        <th>M</th>
+        <th>R</th>
+        <th>D</th>
+        <th>Qtd</th>
+        <th class="item-th">Item</th>
+      </tr>
+    </thead>
+    <tbody>
+
+      {# Filled rows #}
+      {% for piece in pieces %}
+      <tr>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td style="font-weight: 600;">{{ '%02d' % piece.qty }}</td>
+        <td class="item-td">{{ piece.name }}</td>
+      </tr>
+      {% endfor %}
+
+      {# 5 empty rows for manual additions #}
+      {% for i in range(5) %}
+      <tr class="empty-row">
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+      {% endfor %}
+
+    </tbody>
+  </table>
+
+  {# ── Footer ─────────────────────────────────────────────── #}
+  <div class="sheet-footer">
+    <div class="sig-block">
+      <div class="sig-line">Figurino Manto Produções</div>
+    </div>
+    <div class="sig-block">
+      <div class="sig-line">Coordenador</div>
+    </div>
+  </div>
+
+  {% endif %}
+</div>
+{% endfor %}
+
+</body>
+</html>

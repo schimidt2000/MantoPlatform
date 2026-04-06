@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meu Portal — Manto</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .portal-wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+    .portal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+    .portal-header-name { font-size: 20px; font-weight: 700; }
+    .portal-header-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .invite-card {
+      border: 2px solid var(--accent);
+      border-radius: var(--r-lg);
+      padding: 20px;
+      margin-bottom: 16px;
+      background: rgba(84,69,150,0.04);
+    }
+    .invite-card-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+    .invite-card-role { color: var(--accent-dark); font-weight: 600; font-size: 15px; margin-bottom: 12px; }
+    .invite-detail { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+    .invite-detail-row { display: flex; gap: 8px; font-size: 13px; }
+    .invite-detail-label { color: var(--muted); min-width: 80px; }
+    .invite-actions { display: flex; gap: 10px; }
+    .event-row { display: flex; justify-content: space-between; align-items: flex-start;
+                 padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .event-row:last-child { border-bottom: none; }
+    .event-row-title { font-weight: 600; font-size: 14px; }
+    .event-row-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .days-badge { font-size: 11px; font-weight: 700; padding: 3px 8px;
+                  border-radius: 20px; white-space: nowrap; }
+    .days-urgent { background: var(--red-soft); color: var(--red); }
+    .days-soon   { background: rgba(245,200,66,0.15); color: #b8860b; }
+    .days-ok     { background: var(--green-soft); color: var(--green); }
+  </style>
+</head>
+<body>
+<div class="portal-wrap">
+
+  {# Header #}
+  <div class="portal-header">
+    <div>
+      <div class="portal-header-name">Olá, {{ talent.full_name.split()[0] }} 👋</div>
+      <div class="portal-header-sub">Portal do Artista · Manto Produções</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <a href="/portal/profile" class="btn btn-sm btn-secondary">Meu perfil</a>
+      <form method="post" action="/portal/logout" style="margin:0;">
+        <button type="submit" class="btn btn-sm btn-ghost">Sair</button>
+      </form>
+    </div>
+  </div>
+
+  {# Flash messages #}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ 'success' if cat == 'success' else 'info' }} mb-16">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  {# ── Convites pendentes ─────────────────────────────────── #}
+  {% if pending_invites %}
+  <div style="margin-bottom: 32px;">
+    <h2 style="margin-bottom: 16px;">
+      Convites pendentes
+      <span class="badge badge-gold" style="margin-left:8px;">{{ pending_invites | length }}</span>
+    </h2>
+
+    {% for r in pending_invites %}
+      {% set ev = r.event %}
+      {% set days = ((ev.start_at.date() - today).days) if ev.start_at else 999 %}
+
+      <div class="invite-card">
+        <div class="invite-card-title">{{ ev.title }}</div>
+        <div class="invite-card-role">{{ r.character_name }}</div>
+
+        <div class="invite-detail">
+          {% if ev.start_at %}
+          <div class="invite-detail-row">
+            <span class="invite-detail-label">📅 Data</span>
+            <span>{{ ev.start_at.strftime("%d/%m/%Y") }}</span>
+          </div>
+          <div class="invite-detail-row">
+            <span class="invite-detail-label">🕐 Horário</span>
+            <span>{{ ev.start_at.strftime("%H:%M") }}{% if ev.end_at %} – {{ ev.end_at.strftime("%H:%M") }}{% endif %}</span>
+          </div>
+          {% endif %}
+          {% if ev.location %}
+          <div class="invite-detail-row">
+            <span class="invite-detail-label">📍 Local</span>
+            <span>{{ ev.location }}</span>
+          </div>
+          {% endif %}
+          {% if r.cache_value %}
+          <div class="invite-detail-row">
+            <span class="invite-detail-label">💰 Cachê</span>
+            <span style="font-weight:600; color: var(--accent-dark);">R$ {{ "{:,.0f}".format(r.cache_value) }}</span>
+          </div>
+          {% endif %}
+          {% for ensaio in ev.ensaios | sort(attribute='start_at') %}
+          <div class="invite-detail-row" style="margin-top:4px; padding-top:8px; border-top:1px solid var(--line);">
+            <span class="invite-detail-label">🎭 Ensaio</span>
+            <span>
+              {{ ensaio.start_at.strftime("%d/%m/%Y %H:%M") if ensaio.start_at else "—" }}
+              {% if ensaio.location %} · {{ ensaio.location }}{% endif %}
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="invite-actions" style="display:flex; gap:10px;">
+          <form method="post" action="/portal/invites/{{ r.id }}/accept" style="margin:0; flex:1;">
+            <button type="submit" class="btn btn-primary btn-sm" style="width:100%; justify-content:center;">✓ Confirmar presença</button>
+          </form>
+          <form method="post" action="/portal/invites/{{ r.id }}/reject"
+                onsubmit="return confirm('Tem certeza que deseja recusar este convite?')"
+                style="margin:0; flex:1;">
+            <button type="submit" class="btn btn-secondary btn-sm" style="width:100%; justify-content:center;">✗ Recusar</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ── Próximos eventos ───────────────────────────────────── #}
+  <div class="panel" style="margin-bottom: 24px;">
+    <h2 style="margin-bottom:16px;">Próximos eventos</h2>
+    {% if upcoming %}
+      {% for r in upcoming %}
+        {% set ev = r.event %}
+        {% set days = ((ev.start_at.date() - today).days) if ev.start_at else 999 %}
+        <div class="event-row" style="flex-direction:column; align-items:stretch;">
+
+          {# Banner de alteração #}
+          {% if r.event_changed_at %}
+          <div style="background:#fffbea; border:1px solid #f0d060; border-radius:8px;
+                      padding:10px 14px; margin-bottom:10px; display:flex;
+                      align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <span style="font-size:13px; color:#7a5800;">
+              ⚠️ <strong>Este evento foi atualizado.</strong>
+              Verifique as novas informações abaixo.
+            </span>
+            <form method="post" action="/portal/roles/{{ r.id }}/ack-change" style="margin:0;">
+              <button type="submit" class="btn btn-sm btn-secondary" style="font-size:12px;">
+                Ciente ✓
+              </button>
+            </form>
+          </div>
+          {% endif %}
+
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+              <div class="event-row-title">{{ r.character_name }} — {{ ev.title }}</div>
+              <div class="event-row-meta">
+                {% if ev.start_at %}{{ ev.start_at.strftime("%d/%m/%Y %H:%M") }}{% endif %}
+                {% if ev.end_at %} – {{ ev.end_at.strftime("%H:%M") }}{% endif %}
+                {% if ev.location %} · {{ ev.location }}{% endif %}
+              </div>
+              {% if r.cache_value %}
+                <div class="event-row-meta" style="color: var(--accent-dark); font-weight:600;">
+                  R$ {{ "{:,.0f}".format(r.cache_value) }}
+                </div>
+              {% endif %}
+            </div>
+            <div>
+              {% if days <= 2 %}
+                <span class="days-badge days-urgent">HOJE/AMANHÃ</span>
+              {% elif days <= 7 %}
+                <span class="days-badge days-soon">{{ days }}d</span>
+              {% else %}
+                <span class="days-badge days-ok">{{ days }}d</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="muted">Nenhum evento confirmado no futuro.</p>
+    {% endif %}
+  </div>
+
+  {# ── Histórico recente ──────────────────────────────────── #}
+  {% if history %}
+  <div class="panel">
+    <h2 style="margin-bottom:16px;">Histórico recente</h2>
+    {% for r in history %}
+      {% set ev = r.event %}
+      <div class="event-row">
+        <div>
+          <div class="event-row-title">{{ r.character_name }}</div>
+          <div class="event-row-meta">{{ ev.title }}{% if ev.start_at %} · {{ ev.start_at.strftime("%d/%m/%Y") }}{% endif %}</div>
+        </div>
+        {% if r.cache_value %}
+          <span style="font-weight:600; font-size:13px; color:var(--accent-dark);">
+            R$ {{ "{:,.0f}".format(r.cache_value) }}
+          </span>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+</body>
+</html>

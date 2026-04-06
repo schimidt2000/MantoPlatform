@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Calculadora de Transporte{% endblock %}
+
+{% block page_title %}Calculadora de Transporte{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">Calcule o custo de transporte para eventos</p>
+{% endblock %}
+
+{% block content %}
+
+<div style="max-width:640px;">
+  <div class="panel">
+
+    {# ── Mode switcher ───────────────────────────────────────── #}
+    <div class="mode-switch">
+      <button type="button" class="mode-btn {% if not result or result.mode == 'van' %}active{% endif %}"
+              id="btn-van" onclick="switchMode('van')">
+        Van
+      </button>
+      <button type="button" class="mode-btn {% if result and result.mode == 'carro' %}active{% endif %}"
+              id="btn-carro" onclick="switchMode('carro')">
+        Carro
+      </button>
+    </div>
+
+    {# ── VAN form ────────────────────────────────────────────── #}
+    <form method="post" id="form-van"
+          {% if result and result.mode == 'carro' %}style="display:none;"{% endif %}>
+      <input type="hidden" name="mode" value="van">
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="van-colaboradores">Qtd. Colaboradores</label>
+          <input type="number" id="van-colaboradores" name="num_colaboradores" min="0" step="1"
+                 placeholder="ex: 8"
+                 value="{{ result.num_colaboradores if result and result.mode == 'van' else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="van-km">Km (ida)</label>
+          <input type="number" id="van-km" name="km" min="0" step="0.1"
+                 placeholder="ex: 45.5"
+                 value="{{ result.km if result and result.mode == 'van' else '' }}">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="checkbox-row">
+          <input type="checkbox" name="carretinha" value="1"
+                 {% if result and result.mode == 'van' and result.carretinha %}checked{% endif %}>
+          Carretinha
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label class="checkbox-row">
+          <input type="checkbox" name="show" value="1"
+                 {% if result and result.mode == 'van' and result.show %}checked{% endif %}>
+          Show / performance
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;">Calcular</button>
+    </form>
+
+    {# ── CARRO form ──────────────────────────────────────────── #}
+    <form method="post" id="form-carro"
+          {% if not result or result.mode != 'carro' %}style="display:none;"{% endif %}>
+      <input type="hidden" name="mode" value="carro">
+
+      <div class="form-grid-3">
+        <div class="form-group">
+          <label for="carro-num-carros">Qtd. Carros</label>
+          <input type="number" id="carro-num-carros" name="num_carros" min="0" step="1"
+                 placeholder="ex: 2"
+                 value="{{ result.num_carros if result and result.mode == 'carro' else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="carro-colaboradores">Qtd. Colaboradores</label>
+          <input type="number" id="carro-colaboradores" name="num_colaboradores" min="0" step="1"
+                 placeholder="ex: 4"
+                 value="{{ result.num_colaboradores if result and result.mode == 'carro' else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="carro-km">Km (ida)</label>
+          <input type="number" id="carro-km" name="km" min="0" step="0.1"
+                 placeholder="ex: 30"
+                 value="{{ result.km if result and result.mode == 'carro' else '' }}">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="checkbox-row">
+          <input type="checkbox" name="show" value="1"
+                 {% if result and result.mode == 'carro' and result.show %}checked{% endif %}>
+          Show / performance
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;">Calcular</button>
+    </form>
+
+    {# ── Result box ──────────────────────────────────────────── #}
+    {% if result %}
+      <div class="result-box mt-16">
+        <div class="muted" style="font-size:11px; text-transform:uppercase; letter-spacing:0.1em; color:rgba(255,255,255,0.45);">
+          Total
+        </div>
+        <div class="result-total">R$ {{ result.total }}</div>
+
+        {% if result.breakdown %}
+          <div style="margin-top:12px;">
+            {% for line in result.breakdown %}
+              <div class="result-line">{{ line }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  function switchMode(mode) {
+    const vanForm   = document.getElementById('form-van');
+    const carroForm = document.getElementById('form-carro');
+    const btnVan    = document.getElementById('btn-van');
+    const btnCarro  = document.getElementById('btn-carro');
+
+    if (mode === 'van') {
+      vanForm.style.display   = '';
+      carroForm.style.display = 'none';
+      btnVan.classList.add('active');
+      btnCarro.classList.remove('active');
+    } else {
+      vanForm.style.display   = 'none';
+      carroForm.style.display = '';
+      btnVan.classList.remove('active');
+      btnCarro.classList.add('active');
+    }
+  }
+</script>
+{% endblock %}

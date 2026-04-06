@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block title %}{{ deal.title }}{% endblock %}
+{% block page_title %}{{ deal.title }}{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">
+    {% if deal.stage %}
+      <span class="badge" style="background:{{ deal.stage.color }}22; color:{{ deal.stage.color }}; border:1px solid {{ deal.stage.color }}44;">
+        {{ deal.stage.name }}
+      </span>
+    {% endif %}
+    {% if deal.organization %} · 🏢 {{ deal.organization.name }}{% endif %}
+    {% if deal.contact %} · 👤 {{ deal.contact.name }}{% endif %}
+  </p>
+{% endblock %}
+
+{% block page_actions %}
+  <a href="{{ url_for('crm.pipeline') }}" class="btn btn-ghost">← Pipeline</a>
+  <a href="{{ url_for('crm.deal_contract', deal_id=deal.id) }}" class="btn btn-secondary">
+    {% if deal.contract_signed_at %}✅ Contrato{% elif deal.contract_sent_at %}📋 Contrato enviado{% else %}📋 Contrato{% endif %}
+  </a>
+  <form method="post" onsubmit="return confirm('Remover este lead?')">
+    <input type="hidden" name="action" value="delete">
+    <button type="submit" class="btn btn-ghost" style="color:var(--red);">Excluir</button>
+  </form>
+{% endblock %}
+
+{% block content %}
+<div style="display:grid; grid-template-columns:1fr 340px; gap:20px; align-items:start;">
+
+{# ══ COLUNA PRINCIPAL ══════════════════════════════════════════ #}
+<div style="display:flex; flex-direction:column; gap:16px;">
+
+  {# ── Info do lead ──────────────────────────────────────────── #}
+  <div class="panel">
+    <h2 style="margin-bottom:16px;">Dados do lead</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="update_deal">
+      <div class="grid-2" style="gap:16px;">
+        <div class="form-group">
+          <label>Título</label>
+          <input type="text" name="title" value="{{ deal.title }}" style="width:100%;" required>
+        </div>
+        <div class="form-group">
+          <label>Etapa</label>
+          <select name="stage_id" style="width:100%;">
+            {% for s in stages %}
+              <option value="{{ s.id }}" {% if deal.stage_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Origem</label>
+          <select name="source" style="width:100%;">
+            <option value="">— selecione —</option>
+            {% for val, label in sources %}
+              <option value="{{ val }}" {% if deal.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Valor (R$)</label>
+          <input type="number" name="value" value="{{ deal.value or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Vendedor</label>
+          <select name="assigned_to" style="width:100%;">
+            {% for s in sellers %}
+              <option value="{{ s.id }}" {% if deal.assigned_to == s.id %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Organização</label>
+          <select name="organization_id" style="width:100%;">
+            <option value="">— nenhuma —</option>
+            {% for org in organizations %}
+              <option value="{{ org.id }}" {% if deal.organization_id == org.id %}selected{% endif %}>{{ org.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Contato</label>
+          <select name="contact_id" style="width:100%;">
+            <option value="">— nenhum —</option>
+            {% for c in contacts %}
+              <option value="{{ c.id }}" {% if deal.contact_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Motivo da perda</label>
+          <input type="text" name="lost_reason" value="{{ deal.lost_reason or '' }}"
+                 placeholder="Preço, data, concorrente..." style="width:100%;">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-sm btn-primary">Salvar</button>
+    </form>
+  </div>
+
+  {# ── Precontrato ───────────────────────────────────────────── #}
+  <div class="panel">
+    <h2 style="margin-bottom:4px;">Dados do precontrato</h2>
+    <p class="muted" style="font-size:13px; margin-bottom:16px;">Preencha conforme negociação avança — esses dados geram o contrato.</p>
+    <form method="post">
+      <input type="hidden" name="action" value="update_precontrato">
+
+      <div class="panel-title" style="margin-bottom:10px;">Contratante</div>
+      <div class="grid-2" style="gap:12px; margin-bottom:16px;">
+        <div class="form-group">
+          <label>Nome completo</label>
+          <input type="text" name="contractor_name" value="{{ deal.contractor_name or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>CPF</label>
+          <input type="text" name="contractor_cpf" value="{{ deal.contractor_cpf or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>E-mail</label>
+          <input type="email" name="contractor_email" value="{{ deal.contractor_email or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>WhatsApp</label>
+          <input type="text" name="contractor_whatsapp" value="{{ deal.contractor_whatsapp or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Endereço completo</label>
+          <input type="text" name="contractor_address" value="{{ deal.contractor_address or '' }}" style="width:100%;">
+        </div>
+      </div>
+
+      <div class="panel-title" style="margin-bottom:10px;">Aniversariante</div>
+      <div class="grid-2" style="gap:12px; margin-bottom:16px;">
+        <div class="form-group">
+          <label>Nome</label>
+          <input type="text" name="birthday_person" value="{{ deal.birthday_person or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Idade que vai completar</label>
+          <input type="text" name="birthday_age" value="{{ deal.birthday_age or '' }}" style="width:100%;">
+        </div>
+      </div>
+
+      <div class="panel-title" style="margin-bottom:10px;">Serviço</div>
+      <div class="grid-2" style="gap:12px; margin-bottom:16px;">
+        <div class="form-group">
+          <label>Tipo de contratação</label>
+          <select name="service_type" style="width:100%;">
+            <option value="">— selecione —</option>
+            {% for opt in ['Receptivo e Interativo','Receptivo, Interativo e Show','Social'] %}
+              <option value="{{ opt }}" {% if deal.service_type == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Quantidade de personagens</label>
+          <input type="text" name="character_count" value="{{ deal.character_count or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Quais personagens?</label>
+          <input type="text" name="characters" value="{{ deal.characters or '' }}" style="width:100%;" placeholder="Ex: Cinderela, Ariel, Mickey">
+        </div>
+        <div class="form-group">
+          <label>Tema do evento</label>
+          <input type="text" name="event_theme" value="{{ deal.event_theme or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Data do evento</label>
+          <input type="datetime-local" name="event_date"
+                 value="{{ deal.event_date.strftime('%Y-%m-%dT%H:%M') if deal.event_date else '' }}"
+                 style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Período de contratação</label>
+          <input type="text" name="service_period" value="{{ deal.service_period or '' }}"
+                 placeholder="Ex: 2h" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Valor (R$)</label>
+          <input type="number" name="value" value="{{ deal.value or '' }}" style="width:100%;">
+        </div>
+      </div>
+
+      <div class="panel-title" style="margin-bottom:10px;">Local do evento</div>
+      <div class="grid-2" style="gap:12px; margin-bottom:16px;">
+        <div class="form-group">
+          <label>Tipo de espaço</label>
+          <select name="venue_type" style="width:100%;">
+            <option value="">— selecione —</option>
+            {% for opt in ['Residência','Buffet','Salão de Festas','Outro'] %}
+              <option value="{{ opt }}" {% if deal.venue_type == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>CEP</label>
+          <input type="text" name="venue_cep" value="{{ deal.venue_cep or '' }}" style="width:100%;" maxlength="9">
+        </div>
+        <div class="form-group">
+          <label>Logradouro</label>
+          <input type="text" name="venue_street" value="{{ deal.venue_street or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Número</label>
+          <input type="text" name="venue_number" value="{{ deal.venue_number or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Complemento</label>
+          <input type="text" name="venue_complement" value="{{ deal.venue_complement or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Bairro</label>
+          <input type="text" name="venue_neighborhood" value="{{ deal.venue_neighborhood or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Cidade</label>
+          <input type="text" name="venue_city" value="{{ deal.venue_city or '' }}" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Estado</label>
+          <input type="text" name="venue_state" value="{{ deal.venue_state or '' }}" style="width:100%;">
+        </div>
+      </div>
+
+      <div class="panel-title" style="margin-bottom:10px;">Pagamento</div>
+      <div class="grid-2" style="gap:12px; margin-bottom:16px;">
+        <div class="form-group">
+          <label>Forma de pagamento</label>
+          <select name="payment_method" style="width:100%;">
+            <option value="">— selecione —</option>
+            {% for opt in ['À vista','Em 2x no PIX','Cartão de Crédito','Outros'] %}
+              <option value="{{ opt }}" {% if deal.payment_method == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Detalhes do pagamento</label>
+          <input type="text" name="payment_notes" value="{{ deal.payment_notes or '' }}" style="width:100%;">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Observações contratuais</label>
+        <textarea name="contractual_notes" rows="3" style="width:100%;">{{ deal.contractual_notes or '' }}</textarea>
+      </div>
+
+      <button type="submit" class="btn btn-sm btn-primary">Salvar precontrato</button>
+    </form>
+  </div>
+
+</div>{# /coluna principal #}
+
+{# ══ SIDEBAR ═══════════════════════════════════════════════════ #}
+<div style="display:flex; flex-direction:column; gap:16px;">
+
+  {# KPIs rápidos #}
+  <div class="panel">
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      {% if deal.value %}
+      <div>
+        <div class="muted" style="font-size:11px; text-transform:uppercase; letter-spacing:.06em;">Valor</div>
+        <div style="font-size:22px; font-weight:800; color:var(--green);">R$ {{ deal.value | int }}</div>
+      </div>
+      {% endif %}
+      {% if deal.event_date %}
+      <div>
+        <div class="muted" style="font-size:11px; text-transform:uppercase; letter-spacing:.06em;">Data do evento</div>
+        <div style="font-weight:700;">{{ deal.event_date.strftime('%d/%m/%Y às %H:%M') }}</div>
+      </div>
+      {% endif %}
+      {% if deal.contractor_whatsapp %}
+      <div>
+        <a href="https://wa.me/55{{ deal.contractor_whatsapp | replace('(','') | replace(')','') | replace(' ','') | replace('-','') }}"
+           target="_blank" class="btn btn-sm btn-secondary" style="width:100%; text-align:center;">
+          💬 WhatsApp do lead
+        </a>
+      </div>
+      {% endif %}
+      <div style="font-size:11px; color:var(--muted);">
+        Criado em {{ deal.created_at.strftime('%d/%m/%Y') }}
+        {% if deal.closed_at %} · Fechado em {{ deal.closed_at.strftime('%d/%m/%Y') }}{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# Lembretes #}
+  <div class="panel">
+    <div class="flex-between" style="margin-bottom:12px;">
+      <h3 style="margin:0; font-size:14px;">⏰ Lembretes</h3>
+    </div>
+
+    {% set pending = reminders | selectattr('done_at', 'none') | list %}
+    {% if pending %}
+      {% for r in pending %}
+      <div style="background:var(--bg); border-radius:var(--r-md); padding:8px 10px; margin-bottom:6px; border-left:3px solid var(--accent);">
+        <div style="font-size:13px; font-weight:600;">{{ r.message }}</div>
+        <div class="muted" style="font-size:11px;">{{ r.due_at.strftime('%d/%m/%Y %H:%M') }}</div>
+        <form method="post" style="margin-top:4px;">
+          <input type="hidden" name="action" value="done_reminder">
+          <input type="hidden" name="reminder_id" value="{{ r.id }}">
+          <button type="submit" class="btn btn-sm btn-ghost" style="font-size:11px; padding:2px 8px;">✓ Feito</button>
+        </form>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="muted" style="font-size:12px;">Nenhum lembrete pendente.</p>
+    {% endif %}
+
+    <form method="post" style="margin-top:10px; border-top:1px solid var(--line); padding-top:10px;">
+      <input type="hidden" name="action" value="add_reminder">
+      <div class="form-group">
+        <input type="text" name="reminder_message" placeholder="Mensagem do lembrete" style="width:100%;" required>
+      </div>
+      <div class="form-group">
+        <input type="datetime-local" name="reminder_due" style="width:100%;" required>
+      </div>
+      <button type="submit" class="btn btn-sm btn-secondary" style="width:100%;">+ Adicionar lembrete</button>
+    </form>
+  </div>
+
+  {# Atividades / notas #}
+  <div class="panel">
+    <h3 style="margin-bottom:12px; font-size:14px;">📋 Histórico</h3>
+
+    <form method="post" style="margin-bottom:12px;">
+      <input type="hidden" name="action" value="add_note">
+      <div class="form-group">
+        <select name="note_type" style="width:100%; margin-bottom:6px; font-size:12px;">
+          {% for val, label in note_types %}
+            <option value="{{ val }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+        <textarea name="content" rows="3" placeholder="Registre uma atividade, ligação, mensagem..." style="width:100%;" required></textarea>
+      </div>
+      <button type="submit" class="btn btn-sm btn-primary" style="width:100%;">Registrar</button>
+    </form>
+
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      {% for note in notes %}
+      <div style="background:var(--bg); border-radius:var(--r-md); padding:8px 10px; border-left:3px solid
+        {% if note.note_type == 'call' %}#2563eb
+        {% elif note.note_type == 'whatsapp' %}#1a7f3c
+        {% elif note.note_type == 'email' %}#7c3aed
+        {% elif note.note_type == 'internal' %}var(--accent)
+        {% else %}var(--line){% endif %};">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+          <span class="muted" style="font-size:10px; text-transform:uppercase; letter-spacing:.06em;">
+            {% if note.note_type == 'call' %}📞 Ligação
+            {% elif note.note_type == 'whatsapp' %}💬 WhatsApp
+            {% elif note.note_type == 'email' %}✉️ E-mail
+            {% elif note.note_type == 'internal' %}🔒 Interno
+            {% else %}📝 Anotação{% endif %}
+          </span>
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="action" value="delete_note">
+            <input type="hidden" name="note_id" value="{{ note.id }}">
+            <button type="submit" class="btn btn-ghost" style="padding:0 4px; font-size:11px; color:var(--muted);">✕</button>
+          </form>
+        </div>
+        <div style="font-size:13px; white-space:pre-wrap;">{{ note.content }}</div>
+        <div class="muted" style="font-size:10px; margin-top:4px;">
+          {{ note.author.name if note.author else '—' }} · {{ note.created_at.strftime('%d/%m %H:%M') }}
+        </div>
+      </div>
+      {% else %}
+        <p class="muted" style="font-size:12px;">Nenhuma atividade registrada ainda.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>{# /sidebar #}
+</div>{# /grid #}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<style>
+@media (max-width: 900px) {
+  div[style*="grid-template-columns:1fr 340px"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+</style>
+<script>
+// Auto-preenche campos de endereço pelo CEP
+document.querySelector('[name="venue_cep"]')?.addEventListener('blur', function() {
+  const cep = this.value.replace(/\D/g, '');
+  if (cep.length !== 8) return;
+  fetch(`https://viacep.com.br/ws/${cep}/json/`)
+    .then(r => r.json())
+    .then(d => {
+      if (d.erro) return;
+      document.querySelector('[name="venue_street"]').value       = d.logradouro || '';
+      document.querySelector('[name="venue_neighborhood"]').value = d.bairro || '';
+      document.querySelector('[name="venue_city"]').value         = d.localidade || '';
+      document.querySelector('[name="venue_state"]').value        = d.uf || '';
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}{{ user.name }} — Funcionário{% endblock %}
+
+{% block page_title %}{{ user.name }}{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">
+    {{ user.email }} &nbsp;&bull;&nbsp;
+    {% for r in user.roles %}<span class="badge badge-blue">{{ r.name }}</span> {% endfor %}
+  </p>
+{% endblock %}
+
+{% block page_actions %}
+  <a href="/financeiro/funcionarios" class="btn btn-secondary">&larr; Funcionários</a>
+{% endblock %}
+
+{% block content %}
+
+{% if errors %}
+  <div class="alert alert-error" style="margin-bottom:16px;">
+    {% for e in errors %}<div>{{ e }}</div>{% endfor %}
+  </div>
+{% endif %}
+
+{# ── Novo registro salarial ───────────────────────────────────── #}
+<div class="panel">
+  <h2>Registrar novo salário / atualização</h2>
+  <p class="muted" style="margin-top:-4px; margin-bottom:16px; font-size:13px;">
+    Ao adicionar um novo registro, o salário atual será encerrado automaticamente.
+  </p>
+  <form method="post">
+    <div class="grid-2" style="gap:12px; margin-bottom:12px;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Salário (R$)</label>
+        <input type="number" name="salary" placeholder="Ex: 3500" required>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Tipo de pagamento</label>
+        <select name="payment_type" required>
+          <option value="">-- selecione --</option>
+          <option value="semanal">Semanal</option>
+          <option value="quinzenal">Dia 5 e 20</option>
+          <option value="comissao">Somente comissão</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Início da vigência</label>
+        <input type="date" name="start_date" required>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Observações <span class="muted" style="font-weight:400;">(opcional)</span></label>
+        <input type="text" name="notes" placeholder="Ex: promoção, reajuste anual…">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Salvar registro</button>
+  </form>
+</div>
+
+{# ── Histórico salarial ───────────────────────────────────────── #}
+<div class="panel">
+  <h2>Histórico salarial</h2>
+  {% if history %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Salário</th>
+          <th>Tipo</th>
+          <th>Início</th>
+          <th>Fim</th>
+          <th>Obs.</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for h in history %}
+        <tr>
+          <td class="strong">R$ {{ h.salary }}</td>
+          <td class="meta">
+            {% if h.payment_type == 'semanal' %}Semanal
+            {% elif h.payment_type == 'quinzenal' %}Dia 5 e 20
+            {% elif h.payment_type == 'comissao' %}Somente comissão
+            {% else %}{{ h.payment_type }}{% endif %}
+          </td>
+          <td class="meta">{{ h.start_date.strftime("%d/%m/%Y") }}</td>
+          <td>
+            {% if h.end_date %}
+              <span class="meta">{{ h.end_date.strftime("%d/%m/%Y") }}</span>
+            {% else %}
+              <span class="badge badge-green">Vigente</span>
+            {% endif %}
+          </td>
+          <td class="muted">{{ h.notes or '' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="muted" style="text-align:center; padding:16px 0;">Nenhum registro salarial ainda.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

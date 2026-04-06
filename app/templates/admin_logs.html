@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Logs de Auditoria{% endblock %}
+{% block page_title %}Logs de Auditoria{% endblock %}
+{% block page_subtitle %}<p class="sub">Registro completo de ações do sistema</p>{% endblock %}
+
+{% block page_actions %}
+  <a href="/admin/" class="btn btn-secondary">&larr; Admin</a>
+{% endblock %}
+
+{% block content %}
+
+{# ── Filtros ──────────────────────────────────────────────────── #}
+<form method="get" class="panel" style="max-width:700px;">
+  <div class="flex-center gap-12" style="flex-wrap:wrap;">
+    <div class="form-group" style="margin:0; min-width:160px;">
+      <label>Tipo</label>
+      <select name="entity_type" onchange="this.form.submit()">
+        <option value="">Todos</option>
+        {% for et in entity_types %}
+          <option value="{{ et }}" {% if entity_type == et %}selected{% endif %}>{{ et }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0; min-width:180px;">
+      <label>Funcionário</label>
+      <input type="text" name="actor" value="{{ actor }}" placeholder="Nome...">
+    </div>
+    <div style="align-self:flex-end;">
+      <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+      {% if entity_type or actor %}
+        <a href="/admin/logs" class="btn btn-secondary btn-sm">Limpar</a>
+      {% endif %}
+    </div>
+  </div>
+</form>
+
+{# ── Tabela ───────────────────────────────────────────────────── #}
+<div class="panel">
+  {% if logs.items %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Data/Hora</th>
+          <th>Funcionário</th>
+          <th>Role</th>
+          <th>Ação</th>
+          <th>Tipo</th>
+          <th>Objeto</th>
+          <th>Detalhe</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs.items %}
+        <tr>
+          <td class="meta" style="white-space:nowrap;">
+            {{ log.created_at.strftime("%d/%m/%Y %H:%M") }}
+          </td>
+          <td>{{ log.actor_name }}</td>
+          <td class="meta">{{ log.actor_role or "—" }}</td>
+          <td>
+            {% if log.action == "create" %}<span class="badge badge-green">criar</span>
+            {% elif log.action == "edit" %}<span class="badge badge-gold">editar</span>
+            {% elif log.action == "delete" %}<span class="badge badge-red">excluir</span>
+            {% elif log.action == "approve" %}<span class="badge badge-green">aprovar</span>
+            {% elif log.action == "payment" %}<span class="badge badge-blue">pagamento</span>
+            {% elif log.action == "reset_password" %}<span class="badge badge-gold">senha</span>
+            {% else %}<span class="badge badge-gray">{{ log.action }}</span>
+            {% endif %}
+          </td>
+          <td class="meta">{{ log.entity_type or "—" }}</td>
+          <td>{{ log.entity_name or "—" }}</td>
+          <td class="meta">{{ log.detail or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# Paginação #}
+  {% if logs.pages > 1 %}
+  <div class="flex-center gap-8 mt-16" style="justify-content:center;">
+    {% if logs.has_prev %}
+      <a href="?page={{ logs.prev_num }}&entity_type={{ entity_type }}&actor={{ actor }}" class="btn btn-sm btn-secondary">&larr;</a>
+    {% endif %}
+    <span class="meta">Página {{ logs.page }} de {{ logs.pages }}</span>
+    {% if logs.has_next %}
+      <a href="?page={{ logs.next_num }}&entity_type={{ entity_type }}&actor={{ actor }}" class="btn btn-sm btn-secondary">&rarr;</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% else %}
+    <p class="muted">Nenhum log encontrado.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

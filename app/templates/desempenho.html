@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Painel de Desempenho{% endblock %}
+{% block page_title %}Painel de Desempenho{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">Produtividade da equipe por área</p>
+{% endblock %}
+
+{% block page_actions %}
+  <form method="get" action="/admin/desempenho" style="display:flex; align-items:center; gap:8px;">
+    <input type="month" name="month" value="{{ ym }}"
+           onchange="this.form.submit()" class="form-control" style="width:160px;">
+  </form>
+{% endblock %}
+
+{% block content %}
+
+{# ── KPIs ──────────────────────────────────────────────────── #}
+<div class="grid-4" style="margin-bottom:24px;">
+  <div class="panel" style="text-align:center; padding:20px 12px;">
+    <div style="font-size:28px; font-weight:700; color:var(--gold);">{{ total_vendas }}</div>
+    <div class="muted" style="font-size:12px; margin-top:4px;">Eventos vendidos</div>
+  </div>
+  <div class="panel" style="text-align:center; padding:20px 12px;">
+    <div style="font-size:28px; font-weight:700; color:var(--gold);">
+      R$ {{ "{:,.0f}".format(total_valor).replace(",", ".") }}
+    </div>
+    <div class="muted" style="font-size:12px; margin-top:4px;">Volume de vendas</div>
+  </div>
+  <div class="panel" style="text-align:center; padding:20px 12px;">
+    <div style="font-size:28px; font-weight:700; color:var(--gold);">{{ total_casting }}</div>
+    <div class="muted" style="font-size:12px; margin-top:4px;">Artistas alocados</div>
+  </div>
+  <div class="panel" style="text-align:center; padding:20px 12px;">
+    <div style="font-size:28px; font-weight:700; color:var(--gold);">{{ total_figurino }}</div>
+    <div class="muted" style="font-size:12px; margin-top:4px;">Figurinos separados</div>
+  </div>
+</div>
+
+{# ── Três colunas ──────────────────────────────────────────── #}
+<div class="grid-3" style="gap:16px; align-items:start;">
+
+  {# ── VENDAS ────────────────────────────────────────────── #}
+  <div class="panel">
+    <div class="panel-title">Vendas</div>
+    {% if vendas_stats %}
+    <table>
+      <thead>
+        <tr>
+          <th>Vendedor</th>
+          <th style="text-align:right;">Eventos</th>
+          <th style="text-align:right;">Valor (R$)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for nome, info in vendas_stats %}
+        <tr>
+          <td>{{ nome }}</td>
+          <td style="text-align:right;">{{ info.count }}</td>
+          <td style="text-align:right;">{{ "{:,.0f}".format(info.total).replace(",", ".") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted" style="padding:12px 0; font-size:13px;">Nenhuma venda registrada neste período.</p>
+    {% endif %}
+  </div>
+
+  {# ── CASTING ───────────────────────────────────────────── #}
+  <div class="panel">
+    <div class="panel-title">Casting</div>
+    {% if casting_stats %}
+    <table>
+      <thead>
+        <tr>
+          <th>Responsável</th>
+          <th style="text-align:right;">Alocações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for nome, count in casting_stats %}
+        <tr>
+          <td>{{ nome }}</td>
+          <td style="text-align:right;">{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted" style="padding:12px 0; font-size:13px;">Nenhuma alocação registrada neste período.</p>
+    {% endif %}
+  </div>
+
+  {# ── FIGURINO ──────────────────────────────────────────── #}
+  <div class="panel">
+    <div class="panel-title">Figurino</div>
+    {% if figurino_stats %}
+    <table>
+      <thead>
+        <tr>
+          <th>Responsável</th>
+          <th style="text-align:right;">Figurinos</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for nome, count in figurino_stats %}
+        <tr>
+          <td>{{ nome }}</td>
+          <td style="text-align:right;">{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted" style="padding:12px 0; font-size:13px;">Nenhum figurino separado neste período.</p>
+    {% endif %}
+  </div>
+
+</div>
+
+{% endblock %}

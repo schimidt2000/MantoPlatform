@@ -1,28 +1,52 @@
-<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8" />
-  <title>Criar Usuário</title>
-</head>
-<body>
-  <h1>Criar usuário</h1>
+{% extends "base.html" %}
+{% block title %}Criar Usuário{% endblock %}
+{% block page_title %}Criar Usuário{% endblock %}
+{% block page_actions %}
+  <a class="btn btn-ghost" href="/admin/users">← Voltar</a>
+{% endblock %}
 
-  {% if msg %}<p style="color:green;">{{ msg }}</p>{% endif %}
-  {% if error %}<p style="color:red;">{{ error }}</p>{% endif %}
+{% block content %}
+<div class="panel" style="max-width:560px;">
+  {% if msg %}
+    <div class="alert alert-success mb-16">{{ msg }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert alert-error mb-16">{{ error }}</div>
+  {% endif %}
 
   <form method="post">
-    <label>Nome</label><br>
-    <input name="name" required><br><br>
+    <div class="form-group">
+      <label>Nome</label>
+      <input name="name" required>
+    </div>
 
-    <label>Email (login)</label><br>
-    <input type="email" name="email" required><br><br>
+    <div class="form-group">
+      <label>Email (login)</label>
+      <input type="email" name="email" required>
+    </div>
 
-    <label>Senha de primeiro uso</label><br>
-    <input type="password" name="temp_password" required><br><br>
+    <div class="form-group">
+      <label>Senha de primeiro uso</label>
+      <input type="password" name="temp_password" required>
+    </div>
 
-    <button type="submit">Criar</button>
+    <div class="form-group">
+      <label>Cargo (roles)</label>
+      <div class="panel" style="margin:0; padding:12px;">
+        {% for r in roles %}
+          <label class="checkbox-row">
+            <input type="checkbox" name="roles" value="{{ r.id }}">
+            {{ r.name }}
+          </label>
+        {% else %}
+          <div class="muted">Nenhuma role cadastrada.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <button class="btn btn-primary" type="submit">Criar usuário</button>
+    </div>
   </form>
-
-  <p><a href="/rh/dashboard">Voltar</a></p>
-</body>
-</html>
+</div>
+{% endblock %}

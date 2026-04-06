@@ -1,44 +1,223 @@
-<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8" />
-  <title>Agenda</title>
-</head>
-<body>
-  <h1>Agenda ({{ ym }})</h1>
+{% extends "base.html" %}
 
-  <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px;">
-    <a href="/agenda?ym={{ prev_ym }}">◀ Mês anterior</a>
-    <a href="/agenda?ym={{ next_ym }}">Próximo mês ▶</a>
+{% block title %}Agenda{% endblock %}
 
-    <form method="get" action="/agenda" style="margin-left:24px;">
-      <label>Ir para:</label>
-      <input type="month" name="ym" value="{{ ym }}" />
-      <button type="submit">Abrir</button>
-    </form>
+{% block page_title %}Agenda{% endblock %}
 
-    <a style="margin-left:auto;" href="/google/connect">Conectar/Reconectar Google</a>
+{% block page_subtitle %}{% endblock %}
+
+{% block page_actions %}
+  {# View toggle #}
+  <a href="/agenda?ym={{ ym }}&view=calendar"
+     class="btn btn-sm {% if view == 'calendar' %}btn-primary{% else %}btn-secondary{% endif %}">
+    Calendário
+  </a>
+  <a href="/agenda?ym={{ ym }}&view=list"
+     class="btn btn-sm {% if view == 'list' %}btn-primary{% else %}btn-secondary{% endif %}">
+    Lista
+  </a>
+  <a href="/google/connect" class="btn btn-sm btn-secondary">
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0;">
+      <path d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z"/>
+    </svg>
+    Google
+  </a>
+{% endblock %}
+
+{% block content %}
+{% set month_names = {
+  "01": "Janeiro", "02": "Fevereiro", "03": "Março",     "04": "Abril",
+  "05": "Maio",    "06": "Junho",     "07": "Julho",     "08": "Agosto",
+  "09": "Setembro","10": "Outubro",   "11": "Novembro",  "12": "Dezembro"
+} %}
+{% set ym_parts = ym.split("-") %}
+{% set month_label = month_names.get(ym_parts[1], ym_parts[1]) %}
+{% set year_label  = ym_parts[0] %}
+{% set is_current  = (ym == today.strftime('%Y-%m')) %}
+
+{# ── Loading overlay ──────────────────────────────────────────── #}
+<div id="cal-loading" style="
+  display:none; position:fixed; inset:0; z-index:999;
+  background:rgba(255,255,255,0.6); backdrop-filter:blur(2px);
+  align-items:center; justify-content:center; flex-direction:column; gap:12px;
+">
+  <div style="
+    width:40px; height:40px; border:3px solid var(--line);
+    border-top-color:var(--accent); border-radius:50%;
+    animation: spin 0.8s linear infinite;
+  "></div>
+  <span style="font-size:13px; color:var(--muted);">Sincronizando com o Google Calendar…</span>
+</div>
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+
+{# ── Month navigation ─────────────────────────────────────────── #}
+<div class="panel" style="margin-bottom:16px; padding:16px 24px;">
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+
+    {# Seta anterior #}
+    <a href="/agenda?ym={{ prev_ym }}&view={{ view }}"
+       onclick="showLoading()"
+       style="display:flex; align-items:center; justify-content:center;
+              width:52px; height:52px; border-radius:50%;
+              background:var(--surface-2); border:2px solid var(--line);
+              color:var(--text); font-size:22px; font-weight:700;
+              text-decoration:none; flex-shrink:0; transition:all .15s;"
+       onmouseover="this.style.background='var(--accent)';this.style.borderColor='var(--accent)';this.style.color='#fff'"
+       onmouseout="this.style.background='var(--surface-2)';this.style.borderColor='var(--line)';this.style.color='var(--text)'">
+      ‹
+    </a>
+
+    {# Mês em destaque #}
+    <div style="text-align:center; flex:1;">
+      <div style="display:flex; align-items:baseline; justify-content:center; gap:8px; flex-wrap:wrap;">
+        <span style="font-size:26px; font-weight:800; letter-spacing:-0.5px; color:var(--text);">
+          {{ month_label }}
+        </span>
+        <span style="font-size:16px; font-weight:400; color:var(--muted);">
+          {{ year_label }}
+        </span>
+        {% if is_current %}
+          <span style="
+            background:var(--accent); color:#fff;
+            font-size:10px; font-weight:700; text-transform:uppercase;
+            letter-spacing:.06em; padding:2px 7px; border-radius:99px;
+            align-self:center;">Hoje</span>
+        {% endif %}
+      </div>
+
+      {# Jump para outro mês — link discreto #}
+      <div style="margin-top:6px;">
+        <button onclick="document.getElementById('month-picker-wrap').style.display='flex'"
+                style="background:none; border:none; cursor:pointer; font-size:12px; color:var(--muted); padding:0;">
+          Ir para outro mês ↓
+        </button>
+        <div id="month-picker-wrap" style="display:none; justify-content:center; gap:6px; margin-top:6px;">
+          <form method="get" action="/agenda" style="display:flex; gap:6px; align-items:center;">
+            <input type="hidden" name="view" value="{{ view }}">
+            <input type="month" name="ym" value="{{ ym }}"
+                   style="padding:4px 8px; font-size:12px; border:1px solid var(--line); border-radius:var(--r-sm);"
+                   onchange="showLoading(); this.form.submit()">
+          </form>
+        </div>
+      </div>
+    </div>
+
+    {# Seta próximo #}
+    <a href="/agenda?ym={{ next_ym }}&view={{ view }}"
+       onclick="showLoading()"
+       style="display:flex; align-items:center; justify-content:center;
+              width:52px; height:52px; border-radius:50%;
+              background:var(--surface-2); border:2px solid var(--line);
+              color:var(--text); font-size:22px; font-weight:700;
+              text-decoration:none; flex-shrink:0; transition:all .15s;"
+       onmouseover="this.style.background='var(--accent)';this.style.borderColor='var(--accent)';this.style.color='#fff'"
+       onmouseout="this.style.background='var(--surface-2)';this.style.borderColor='var(--line)';this.style.color='var(--text)'">
+      ›
+    </a>
+
+  </div>
+</div>
+
+<script>
+function showLoading() {
+  const el = document.getElementById('cal-loading');
+  el.style.display = 'flex';
+}
+</script>
+
+{# ── Calendar view ─────────────────────────────────────────────── #}
+{% if view == 'calendar' %}
+  <div class="panel" style="padding:0; overflow:hidden;">
+    <div class="calendar-grid">
+      <div class="cal-head">Dom</div>
+      <div class="cal-head">Seg</div>
+      <div class="cal-head">Ter</div>
+      <div class="cal-head">Qua</div>
+      <div class="cal-head">Qui</div>
+      <div class="cal-head">Sex</div>
+      <div class="cal-head">Sáb</div>
+
+      {% for week in month_weeks %}
+        {% for day in week %}
+          {% if day %}
+            {% set is_today = (day == today.day and ym == today.strftime('%Y-%m')) %}
+            {% set day_events = events_by_day.get(day, []) %}
+            <div class="cal-cell{% if is_today %} today{% endif %}">
+              <div class="cal-day">{{ day }}</div>
+              {% for ev in day_events[:3] %}
+                {% if ev.event_id %}
+                  <a class="cal-event" href="/events/{{ ev.event_id }}" title="{{ ev.title }}">
+                    {% if ev.when %}<span class="ev-time">{{ ev.when }}</span>{% endif %}{{ ev.title }}
+                  </a>
+                {% else %}
+                  <div class="cal-event no-link" title="{{ ev.title }}">
+                    {% if ev.when %}<span class="ev-time">{{ ev.when }}</span>{% endif %}{{ ev.title }}
+                  </div>
+                {% endif %}
+              {% endfor %}
+              {% if day_events | length > 3 %}
+                <span class="cal-more">+{{ day_events | length - 3 }} mais</span>
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="cal-cell other-month"></div>
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+    </div>
   </div>
 
-  <hr>
+{# ── List view ─────────────────────────────────────────────────── #}
+{% else %}
+  <div class="panel">
+    <h2>Eventos do mês</h2>
+    {% if events | length == 0 %}
+      <p class="muted">Nenhum evento encontrado para este mês.</p>
+    {% else %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Evento</th>
+              <th>Data / Hora</th>
+              <th>Local</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in events %}
+              <tr>
+                <td>
+                  {% if e.id in event_map %}
+                    <a href="/events/{{ event_map[e.id] }}" class="strong" style="text-decoration:none; color:inherit;">{{ e.summary or "(Sem título)" }}</a>
+                  {% else %}
+                    <span class="strong">{{ e.summary or "(Sem título)" }}</span>
+                  {% endif %}
+                </td>
+                <td class="meta">
+                  {% if e.start.dateTime %}
+                    {{ e.start.dateTime | replace("T", " ") | truncate(16, True, "") }}
+                  {% elif e.start.date %}
+                    {{ e.start.date }} <span class="badge badge-gray">Dia inteiro</span>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td class="meta">{{ e.location if e.location else "—" }}</td>
+                <td>
+                  {% if e.id in event_map %}
+                    <a href="/events/{{ event_map[e.id] }}" class="btn btn-sm btn-secondary">Abrir</a>
+                  {% else %}
+                    <span class="muted small">Não mapeado</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+{% endif %}
 
-  {% if events|length == 0 %}
-    <p>Sem eventos nesse mês.</p>
-  {% else %}
-    <ul>
-      {% for e in events %}
-        <li style="margin-bottom:10px;">
-          <strong>{{ e.summary or "(Sem título)" }}</strong><br>
-          {% if e.start.dateTime %}
-            Início: {{ e.start.dateTime }}<br>
-          {% else %}
-            Dia: {{ e.start.date }} (dia inteiro)<br>
-          {% endif %}
-          {% if e.location %}Local: {{ e.location }}<br>{% endif %}
-          ID Google: <code>{{ e.id }}</code>
-        </li>
-      {% endfor %}
-    </ul>
-  {% endif %}
-</body>
-</html>
+{% endblock %}

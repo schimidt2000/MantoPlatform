@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+{% block title %}Painel Financeiro{% endblock %}
+{% block page_title %}Painel Financeiro{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">Demonstração de resultado e indicadores de performance</p>
+{% endblock %}
+
+{% block content %}
+
+{# ── Filtro de período ──────────────────────────────────────────────────────── #}
+<form method="get" class="period-bar">
+  <div class="period-pills">
+    <a href="?period=7"  class="period-pill {% if period=='7'  %}active{% endif %}">7 dias</a>
+    <a href="?period=30" class="period-pill {% if period=='30' %}active{% endif %}">30 dias</a>
+  </div>
+  <div class="period-custom">
+    <input type="date" name="start" value="{{ start_str }}" class="form-control form-control-sm">
+    <span>–</span>
+    <input type="date" name="end"   value="{{ end_str }}"   class="form-control form-control-sm">
+    <input type="hidden" name="period" value="custom">
+    <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+  </div>
+</form>
+
+{# ══ 1. DRG — DEMONSTRAÇÃO DE RESULTADO GERENCIAL ══════════════════════════ #}
+<div class="fin-section-title">📊 Demonstração de Resultado</div>
+<div class="drg-grid">
+
+  <div class="drg-row drg-header">
+    <span>Receita Bruta</span>
+    <span class="drg-value text-green">R$ {{ "{:,.0f}".format(receita_bruta).replace(",", ".") }}</span>
+  </div>
+  <div class="drg-row drg-sub">
+    <span>(–) Custo dos Serviços <small>(cachês dos talentos)</small></span>
+    <span class="drg-value text-red">– R$ {{ "{:,.0f}".format(cpv).replace(",", ".") }}</span>
+  </div>
+  <div class="drg-row drg-result">
+    <span>= Lucro Bruto</span>
+    <span class="drg-value {% if lucro_bruto >= 0 %}text-green{% else %}text-red{% endif %}">
+      R$ {{ "{:,.0f}".format(lucro_bruto).replace(",", ".") }}
+      <small class="drg-pct">{{ margem_bruta }}%</small>
+    </span>
+  </div>
+  <div class="drg-row drg-sub">
+    <span>(–) Comissões de vendas</span>
+    <span class="drg-value text-red">– R$ {{ "{:,.0f}".format(total_comissoes).replace(",", ".") }}</span>
+  </div>
+  <div class="drg-row drg-sub">
+    <span>(–) Despesas com pessoal <small>(salários — pro-rata do período)</small></span>
+    <span class="drg-value text-red">– R$ {{ "{:,.0f}".format(custo_pessoal).replace(",", ".") }}</span>
+  </div>
+  <div class="drg-row drg-result drg-ebitda">
+    <span>
+      = EBITDA / Resultado Operacional
+      <small class="drg-hint">Receita – Cachês – Comissões – Pessoal</small>
+    </span>
+    <span class="drg-value {% if ebitda >= 0 %}text-green{% else %}text-red{% endif %}">
+      R$ {{ "{:,.0f}".format(ebitda).replace(",", ".") }}
+      <small class="drg-pct">{{ margem_ebitda }}%</small>
+    </span>
+  </div>
+
+</div>
+
+{# ══ 2. KPI CARDS ═══════════════════════════════════════════════════════════ #}
+<div class="fin-section-title">📈 Indicadores de Performance</div>
+<div class="kpi-grid-4">
+
+  <div class="kpi-card">
+    <div class="kpi-label">Ticket Médio</div>
+    <div class="kpi-value">R$ {{ "{:,.0f}".format(ticket_medio).replace(",", ".") }}</div>
+    <div class="kpi-sub">por evento com venda registrada</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-label">Custo de Talento / Receita</div>
+    <div class="kpi-value {% if ratio_custo_talento > 60 %}text-red{% elif ratio_custo_talento > 45 %}text-amber{% else %}text-green{% endif %}">
+      {{ ratio_custo_talento }}%
+    </div>
+    <div class="kpi-sub">cachê total ÷ receita bruta</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-label">Margem Bruta</div>
+    <div class="kpi-value {% if margem_bruta >= 40 %}text-green{% elif margem_bruta >= 20 %}text-amber{% else %}text-red{% endif %}">
+      {{ margem_bruta }}%
+    </div>
+    <div class="kpi-sub">lucro bruto ÷ receita</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-label">Margem Operacional (EBITDA)</div>
+    <div class="kpi-value {% if margem_ebitda >= 20 %}text-green{% elif margem_ebitda >= 5 %}text-amber{% else %}text-red{% endif %}">
+      {{ margem_ebitda }}%
+    </div>
+    <div class="kpi-sub">após pessoal e comissões</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-label">Taxa de Conversão (CRM)</div>
+    <div class="kpi-value">{{ taxa_conversao }}%</div>
+    <div class="kpi-sub">{{ n_won }} ganhos · {{ n_lost }} perdidos</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-label">Pipeline Ativo</div>
+    <div class="kpi-value">R$ {{ "{:,.0f}".format(pipeline_value).replace(",", ".") }}</div>
+    <div class="kpi-sub">potencial em negociação no CRM</div>
+  </div>
+
+  <div class="kpi-card {% if pagamentos_pendentes > 0 %}kpi-card-warn{% endif %}">
+    <div class="kpi-label">A Pagar — Talentos</div>
+    <div class="kpi-value {% if pagamentos_pendentes > 0 %}text-red{% else %}text-green{% endif %}">
+      R$ {{ "{:,.0f}".format(pagamentos_pendentes).replace(",", ".") }}
+    </div>
+    <div class="kpi-sub">cachês não pagos no período</div>
+  </div>
+
+  {% if tempo_medio_fechamento is not none %}
+  <div class="kpi-card">
+    <div class="kpi-label">Ciclo de Venda Médio</div>
+    <div class="kpi-value">{{ tempo_medio_fechamento | int }} dias</div>
+    <div class="kpi-sub">do lead à venda ganha</div>
+  </div>
+  {% endif %}
+
+</div>
+
+{# ══ 3. TENDÊNCIA MENSAL ════════════════════════════════════════════════════ #}
+<div class="fin-section-title">📅 Tendência — Últimos 6 Meses</div>
+<div class="table-wrap">
+  <table class="fin-table">
+    <thead>
+      <tr>
+        <th>Mês</th>
+        <th class="text-right">Receita</th>
+        <th class="text-right">Custo Talentos</th>
+        <th class="text-right">Lucro Bruto</th>
+        <th class="text-right">Margem</th>
+        <th class="text-right">Eventos</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in monthly_trend %}
+      {% set m_margem = ((m.lucro / m.receita * 100) | round(1)) if m.receita else 0 %}
+      <tr>
+        <td><strong>{{ m.label }}</strong></td>
+        <td class="text-right">R$ {{ "{:,.0f}".format(m.receita).replace(",", ".") }}</td>
+        <td class="text-right text-red">R$ {{ "{:,.0f}".format(m.custo).replace(",", ".") }}</td>
+        <td class="text-right {% if m.lucro >= 0 %}text-green{% else %}text-red{% endif %}">
+          R$ {{ "{:,.0f}".format(m.lucro).replace(",", ".") }}
+        </td>
+        <td class="text-right">
+          <span class="badge-pct {% if m_margem >= 40 %}pct-green{% elif m_margem >= 20 %}pct-amber{% else %}pct-red{% endif %}">
+            {{ m_margem }}%
+          </span>
+        </td>
+        <td class="text-right">{{ m.n_eventos }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ══ 4. RECEITA POR TIPO + TOP VENDEDORES + TOP CLIENTES ════════════════════ #}
+<div class="fin-cols-3">
+
+  <div>
+    <div class="fin-section-title">🎭 Receita por Tipo de Evento</div>
+    {% if receita_por_tipo %}
+    <div class="bar-list">
+      {% set max_val = receita_por_tipo.values() | max %}
+      {% for tipo, val in receita_por_tipo.items() %}
+      <div class="bar-item">
+        <div class="bar-label">{{ tipo }}</div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:{{ (val / max_val * 100) | int }}%"></div>
+        </div>
+        <div class="bar-val">R$ {{ "{:,.0f}".format(val).replace(",", ".") }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+      <p class="muted">Sem dados no período.</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <div class="fin-section-title">🏆 Top Vendedores</div>
+    {% if top_sellers %}
+    <div class="rank-list">
+      {% for s in top_sellers %}
+      <div class="rank-item">
+        <span class="rank-name">{{ s.user.name.split()[0] }}</span>
+        <span class="rank-vals">
+          <span class="text-green">R$ {{ "{:,.0f}".format(s.receita).replace(",", ".") }}</span>
+          <span class="muted text-sm">lucro: R$ {{ "{:,.0f}".format(s.lucro).replace(",", ".") }}</span>
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+      <p class="muted">Sem eventos com vendedor no período.</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <div class="fin-section-title">🏢 Maiores Clientes (LTV)</div>
+    {% if top_orgs %}
+    <div class="rank-list">
+      {% for o in top_orgs %}
+      <div class="rank-item">
+        <span class="rank-name">{{ o.org.name }}</span>
+        <span class="text-green rank-vals">R$ {{ "{:,.0f}".format(o.ltv).replace(",", ".") }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+      <p class="muted">Vincule organizações aos deals ganhos no CRM.</p>
+    {% endif %}
+  </div>
+
+</div>
+
+{# ══ 5. TABELA DE EVENTOS ════════════════════════════════════════════════════ #}
+<div class="fin-section-title">📋 Eventos no Período</div>
+{% if events_data %}
+<div class="table-wrap">
+  <table class="fin-table">
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Evento</th>
+        <th>Tipo</th>
+        <th class="text-right">Receita</th>
+        <th class="text-right">Custo</th>
+        <th class="text-right">Lucro</th>
+        <th class="text-right">Margem</th>
+        <th class="text-right">Comissão</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in events_data %}
+      {% set ev = row.event %}
+      {% set margem = ((row.lucro / ev.sale_value * 100) | round(1)) if ev.sale_value else 0 %}
+      <tr>
+        <td class="text-nowrap">{{ ev.start_at.strftime('%d/%m/%Y') if ev.start_at else '—' }}</td>
+        <td><a href="{{ url_for('calendar.event_detail', event_id=ev.id) }}">{{ ev.title }}</a></td>
+        <td><span class="badge-type">{{ ev.event_type or '—' }}</span></td>
+        <td class="text-right">
+          {% if ev.sale_value %}R$ {{ "{:,.0f}".format(ev.sale_value).replace(",", ".") }}
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td class="text-right text-red">R$ {{ "{:,.0f}".format(row.custo).replace(",", ".") }}</td>
+        <td class="text-right {% if row.lucro >= 0 %}text-green{% else %}text-red{% endif %}">
+          R$ {{ "{:,.0f}".format(row.lucro).replace(",", ".") }}
+        </td>
+        <td class="text-right">
+          {% if ev.sale_value %}
+          <span class="badge-pct {% if margem >= 40 %}pct-green{% elif margem >= 20 %}pct-amber{% else %}pct-red{% endif %}">{{ margem }}%</span>
+          {% else %}—{% endif %}
+        </td>
+        <td class="text-right muted">R$ {{ "{:,.0f}".format(row.comissao).replace(",", ".") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="empty-state">Nenhum evento no período selecionado.</div>
+{% endif %}
+
+<style>
+.period-bar { display:flex; align-items:center; gap:16px; margin-bottom:28px; flex-wrap:wrap; }
+.period-pills { display:flex; gap:6px; }
+.period-pill { padding:5px 14px; border-radius:20px; font-size:13px; border:1px solid var(--border);
+               color:var(--muted); text-decoration:none; }
+.period-pill.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.period-custom { display:flex; align-items:center; gap:8px; }
+.form-control-sm { padding:4px 8px; font-size:13px; height:32px; }
+.btn-sm { padding:5px 12px; font-size:13px; }
+
+.fin-section-title { font-size:13px; font-weight:700; color:var(--muted); margin:28px 0 10px;
+                     text-transform:uppercase; letter-spacing:.6px; }
+
+.drg-grid { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+            overflow:hidden; }
+.drg-row { display:flex; justify-content:space-between; align-items:center;
+           padding:11px 20px; border-bottom:1px solid var(--border); font-size:14px; }
+.drg-row:last-child { border-bottom:none; }
+.drg-sub { background:var(--bg); color:var(--muted); font-size:13px; }
+.drg-header { font-weight:700; font-size:15px; }
+.drg-result { font-weight:700; }
+.drg-ebitda { font-size:15px; padding:14px 20px; }
+.drg-value { font-weight:700; font-variant-numeric:tabular-nums; }
+.drg-pct { font-size:11px; font-weight:400; margin-left:6px; color:var(--muted); }
+.drg-hint { font-size:11px; font-weight:400; color:var(--muted); display:block; margin-top:2px; }
+
+.kpi-grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+@media(max-width:900px){ .kpi-grid-4 { grid-template-columns:repeat(2,1fr); } }
+.kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
+.kpi-card-warn { border-color:#f59e0b55; background:#fffbeb; }
+.kpi-label { font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase;
+             letter-spacing:.5px; margin-bottom:4px; }
+.kpi-value { font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; margin-bottom:2px; }
+.kpi-sub { font-size:11px; color:var(--muted); }
+
+.table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:auto; }
+.fin-table { width:100%; border-collapse:collapse; font-size:13px; }
+.fin-table th { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
+                color:var(--muted); border-bottom:2px solid var(--border); padding:8px 12px; }
+.fin-table td { padding:9px 12px; border-bottom:1px solid var(--border); }
+.fin-table tr:last-child td { border-bottom:none; }
+.fin-table tr:hover td { background:var(--bg); }
+.text-right { text-align:right; }
+.text-nowrap { white-space:nowrap; }
+.text-sm { font-size:11px; }
+
+.badge-type { font-size:11px; padding:2px 8px; border-radius:10px;
+              background:var(--accent)22; color:var(--accent); font-weight:600; }
+.badge-pct { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; display:inline-block; }
+.pct-green { background:#16a34a22; color:#16a34a; }
+.pct-amber { background:#f59e0b22; color:#b45309; }
+.pct-red   { background:#dc262622; color:#dc2626; }
+
+.text-green { color:#16a34a; }
+.text-red   { color:#dc2626; }
+.text-amber { color:#b45309; }
+
+.fin-cols-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; }
+@media(max-width:800px){ .fin-cols-3 { grid-template-columns:1fr; } }
+
+.bar-list { display:flex; flex-direction:column; gap:10px; }
+.bar-item { display:flex; align-items:center; gap:8px; font-size:12px; }
+.bar-label { width:60px; color:var(--muted); flex-shrink:0; text-align:right; font-size:11px; }
+.bar-track { flex:1; background:var(--border); border-radius:4px; height:7px; }
+.bar-fill { height:100%; background:var(--accent); border-radius:4px; min-width:2px; }
+.bar-val { width:100px; text-align:right; font-variant-numeric:tabular-nums; font-size:12px; }
+
+.rank-list { display:flex; flex-direction:column; gap:6px; }
+.rank-item { display:flex; justify-content:space-between; align-items:center; font-size:13px;
+             padding:7px 0; border-bottom:1px solid var(--border); }
+.rank-item:last-child { border-bottom:none; }
+.rank-name { font-weight:600; }
+.rank-vals { display:flex; flex-direction:column; align-items:flex-end; gap:1px; }
+</style>
+{% endblock %}

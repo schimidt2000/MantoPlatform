@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Organizações{% endblock %}
+{% block page_title %}Organizações{% endblock %}
+{% block page_actions %}
+  <a href="{{ url_for('crm.edit_organization') }}" class="btn btn-primary">+ Nova organização</a>
+  <a href="{{ url_for('crm.pipeline') }}" class="btn btn-ghost">← Pipeline</a>
+{% endblock %}
+
+{% block content %}
+<div class="panel" style="margin-bottom:12px; padding:10px 16px;">
+  <form method="get" class="flex-center gap-8">
+    <input type="text" name="q" value="{{ q }}" placeholder="Buscar organização..." style="flex:1; max-width:320px;">
+    <button class="btn btn-sm btn-secondary">Buscar</button>
+  </form>
+</div>
+
+<div class="panel" style="padding:0; overflow-x:auto;">
+  {% if organizations %}
+  <table>
+    <thead><tr>
+      <th>Nome</th><th>CNPJ</th><th>Telefone</th><th>Leads</th><th>Fechados</th><th>Volume total</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for org in organizations %}
+      <tr>
+        <td><strong>{{ org.name }}</strong></td>
+        <td class="meta">{{ org.cnpj or '—' }}</td>
+        <td class="meta">{{ org.phone or '—' }}</td>
+        <td>{{ org.total_deals }}</td>
+        <td>{{ org.won_deals }}</td>
+        <td>{% if org.total_value %}R$ {{ org.total_value | int }}{% else %}—{% endif %}</td>
+        <td>
+          <a href="{{ url_for('crm.edit_organization', org_id=org.id) }}" class="btn btn-sm btn-ghost">Editar</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="padding:40px; text-align:center;" class="muted">Nenhuma organização encontrada.</div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Usuários{% endblock %}
+{% block page_title %}Usuários{% endblock %}
+{% block page_actions %}
+  <a class="btn btn-primary" href="/admin/users/new">+ Novo usuário</a>
+  <a class="btn btn-ghost" href="/admin/settings">Identidade visual</a>
+{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>Email</th>
+          <th>Ativo</th>
+          <th>Roles</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+          <tr>
+            <td class="muted">{{ u.id }}</td>
+            <td class="strong">{{ u.name }}</td>
+            <td>{{ u.email }}</td>
+            <td>
+              {% if u.is_active %}
+                <span class="badge badge-green">sim</span>
+              {% else %}
+                <span class="badge badge-gray">não</span>
+              {% endif %}
+            </td>
+            <td class="muted">{{ u.roles | map(attribute='name') | join(', ') }}</td>
+            <td>
+              <div class="flex-center gap-8">
+                <a class="btn btn-sm btn-secondary" href="{{ url_for('admin.edit_user', user_id=u.id) }}">Editar</a>
+                <form method="post" action="{{ url_for('admin.delete_user', user_id=u.id) }}" style="display:inline;">
+                  <button class="btn btn-sm btn-danger" type="submit">Excluir</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="muted">Sem usuários cadastrados.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

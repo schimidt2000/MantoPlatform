@@ -1,68 +1,341 @@
-<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8">
-  <title>{{ person.full_name }}</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 24px; }
-    .photos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-    .photos img {
-      width: 100%;
-      height: 320px;
-      object-fit: contain;
-      border-radius: 8px;
-      border: 1px solid #e5e5e5;
-      background: #f2f2f2;
-    }
-    @media (max-width: 600px) {
-      .photos { grid-template-columns: 1fr; }
-      .photos img { height: 260px; }
-    }
-    .info { margin-top: 20px; }
-    .row { margin-bottom: 8px; }
-    .label { color: #6b6b6b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
-    .value { font-size: 15px; }
-  </style>
-</head>
-<body>
-  <p><a href="/talents?status=active">Voltar para ativos</a></p>
+{% extends "base.html" %}
 
-  <h1>{{ person.full_name }}</h1>
-  {% if person.artistic_name %}<p><strong>Nome Artistico:</strong> {{ person.artistic_name }}</p>{% endif %}
+{% block title %}{{ talent.full_name }}{% endblock %}
 
-  <div class="photos">
-    {% if person.photo_face_path %}
-      <img src="{{ person.photo_face_path }}" alt="Foto de rosto de {{ person.full_name }}">
-    {% endif %}
-    {% if person.photo_full_path %}
-      <img src="{{ person.photo_full_path }}" alt="Foto de corpo inteiro de {{ person.full_name }}">
+{% block page_title %}{{ talent.full_name }}{% endblock %}
+
+{% block page_subtitle %}
+  {% if talent.artistic_name %}
+    <p class="sub">{{ talent.artistic_name }}</p>
+  {% endif %}
+{% endblock %}
+
+{% block page_actions %}
+  <a href="/talents?status=active" class="btn btn-secondary">&larr; Talentos Ativos</a>
+  {% if eff_has_role("CASTING", "SUPERADMIN") %}
+    <a href="/talents/{{ talent.id }}/edit" class="btn btn-primary">Editar</a>
+    <form method="post" action="/talents/{{ talent.id }}/reset-password" style="margin:0;"
+          onsubmit="return confirm('Resetar senha de {{ talent.full_name }}? Uma senha temporária será gerada.')">
+      <button type="submit" class="btn btn-ghost">Resetar senha portal</button>
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+<div class="grid-2" style="align-items:start;">
+
+  {# ── Left column: photo ─────────────────────────────────────── #}
+  <div>
+    {% if talent.photo_face_path %}
+      <div style="border-radius:var(--r-lg); overflow:hidden; border:1px solid var(--line);
+                  aspect-ratio:3/4; max-height:520px; background:#f0ede8;">
+        <img src="{{ talent.photo_face_path }}" alt="Foto de {{ talent.full_name }}"
+             style="width:100%; height:100%; object-fit:cover; object-position:top center; display:block;">
+      </div>
+    {% else %}
+      <div class="panel flex-center" style="aspect-ratio:3/4; max-height:520px;
+           justify-content:center; flex-direction:column; gap:12px;">
+        <span style="font-size:64px;">&#128100;</span>
+        <span class="muted">Sem foto de rosto</span>
+      </div>
     {% endif %}
   </div>
 
-  <div class="info">
-    <div class="row"><div class="label">Telefone</div><div class="value">{{ person.phone or "" }}</div></div>
-    <div class="row"><div class="label">Email</div><div class="value">{{ person.email_contact or "" }}</div></div>
-    <div class="row"><div class="label">Data de Nascimento</div><div class="value">{{ person.birth_date or "" }}</div></div>
-    <div class="row"><div class="label">CPF</div><div class="value">{{ person.cpf or "" }}</div></div>
-    <div class="row"><div class="label">RG</div><div class="value">{{ person.rg or "" }}</div></div>
-    <div class="row"><div class="label">Chave PIX</div><div class="value">{{ person.pix_key or "" }}</div></div>
-    <div class="row"><div class="label">Chave PIX Secundaria</div><div class="value">{{ person.pix_key_secondary or "" }}</div></div>
-    <div class="row"><div class="label">Idiomas</div><div class="value">{{ person.languages or "" }}</div></div>
-    <div class="row"><div class="label">Raca</div><div class="value">{{ person.race or "" }}</div></div>
-    <div class="row"><div class="label">Altura (cm)</div><div class="value">{{ person.height_cm or "" }}</div></div>
-    <div class="row"><div class="label">Tamanho Top</div><div class="value">{{ person.clothing_size_top or "" }}</div></div>
-    <div class="row"><div class="label">Tamanho Bottom</div><div class="value">{{ person.clothing_size_bottom or "" }}</div></div>
-    <div class="row"><div class="label">Tamanho do Pe</div><div class="value">{{ person.shoe_size or "" }}</div></div>
-    <div class="row"><div class="label">Passaporte/Visto</div><div class="value">{{ person.passport_visa_text or "" }}</div></div>
-    <div class="row"><div class="label">Habilidades</div><div class="value">{{ person.skills or "" }}</div></div>
+  {# ── Right column: info sections ────────────────────────────── #}
+  <div>
 
-    <div class="row"><div class="label">Modelo do Carro</div><div class="value">{{ person.car_model or "" }}</div></div>
-    <div class="row"><div class="label">Marca do Carro</div><div class="value">{{ person.car_brand or "" }}</div></div>
-    <div class="row"><div class="label">Ano do Carro</div><div class="value">{{ person.car_year or "" }}</div></div>
-    <div class="row"><div class="label">Placa do Carro</div><div class="value">{{ person.car_plate or "" }}</div></div>
+    {# Contato #}
+    <div class="panel">
+      <h2>Contato</h2>
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Telefone</label>
+          <p>{{ talent.phone or "—" }}</p>
+        </div>
+        <div class="form-group">
+          <label>E-mail</label>
+          <p>
+            {% if talent.email_contact %}
+              <a href="mailto:{{ talent.email_contact }}">{{ talent.email_contact }}</a>
+            {% else %}—{% endif %}
+          </p>
+        </div>
+        <div class="form-group">
+          <label>Data de Nascimento</label>
+          <p>{{ talent.birth_date.strftime("%d/%m/%Y") if talent.birth_date else "—" }}</p>
+        </div>
+        <div class="form-group">
+          <label>Gênero</label>
+          <p>{{ talent.gender or "—" }}</p>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Onde conheceu a Manto?</label>
+          <p>{{ talent.how_found_us or "—" }}</p>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Já trabalhou antes?</label>
+          <p>
+            {% if talent.worked_before is none %}—
+            {% elif talent.worked_before %}<span class="badge badge-green">Sim</span>
+            {% else %}<span class="badge badge-gray">Não</span>
+            {% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
 
-    <div class="row"><div class="label">CNH (arquivo)</div><div class="value">{{ person.cnh_file_path or "" }}</div></div>
-    <div class="row"><div class="label">CNH (vencimento)</div><div class="value">{{ person.cnh_expiration or "" }}</div></div>
+    <hr class="sep">
+
+    {# Documentos #}
+    <div class="panel">
+      <h2>Documentos</h2>
+      <div class="grid-2">
+        <div class="form-group">
+          <label>CPF</label>
+          <p>{{ talent.cpf or "—" }}</p>
+        </div>
+        <div class="form-group">
+          <label>RG</label>
+          <p>{{ talent.rg or "—" }}</p>
+        </div>
+        <div class="form-group">
+          <label>Chave PIX</label>
+          <p>{{ talent.pix_key or "—" }}{% if talent.pix_key_type %} <span class="meta">({{ talent.pix_key_type }})</span>{% endif %}</p>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Chave PIX Secundária</label>
+          <p>{{ talent.pix_key_secondary or "—" }}</p>
+        </div>
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    {# Aparência #}
+    <div class="panel">
+      <h2>Aparência</h2>
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Altura</label>
+          <p>{% if talent.height_cm %}{{ talent.height_cm }} cm{% else %}—{% endif %}</p>
+        </div>
+        <div class="form-group">
+          <label>Raça / Etnia</label>
+          <p>{{ talent.race or "—" }}</p>
+        </div>
+        <div class="form-group">
+          <label>Tamanho Top</label>
+          <p>{{ talent.clothing_size_top or "—" }}</p>
+        </div>
+        <div class="form-group">
+          <label>Tamanho Bottom</label>
+          <p>{{ talent.clothing_size_bottom or "—" }}</p>
+        </div>
+        <div class="form-group">
+          <label>Calçado</label>
+          <p>{{ talent.shoe_size or "—" }}</p>
+        </div>
+        <div class="form-group">
+          <label>Idiomas</label>
+          <p>{{ talent.languages or "—" }}</p>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Passaporte / Visto</label>
+        {% if talent.has_visa %}
+          <span class="badge badge-green">Com passaporte/visto</span>
+        {% else %}
+          <span class="badge badge-gray">Sem passaporte/visto</span>
+        {% endif %}
+        {% if talent.passport_visa_text %}
+          <p class="meta mt-4">{{ talent.passport_visa_text }}</p>
+        {% endif %}
+      </div>
+
+      {% if talent.skills %}
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Habilidades</label>
+          <div class="flex-center gap-8" style="flex-wrap:wrap; margin-top:4px;">
+            {% for skill in talent.skills.split(',') %}
+              <span class="badge badge-gold">{{ skill.strip() }}</span>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+    </div>
+
+    {# Veículo — show only if any car field present #}
+    {% if talent.car_brand or talent.car_model or talent.car_year or talent.car_plate or talent.cnh_expiration %}
+      <hr class="sep">
+      <div class="panel">
+        <h2>Veículo</h2>
+        <div class="grid-2">
+          {% if talent.car_brand %}
+            <div class="form-group">
+              <label>Marca</label>
+              <p>{{ talent.car_brand }}</p>
+            </div>
+          {% endif %}
+          {% if talent.car_model %}
+            <div class="form-group">
+              <label>Modelo</label>
+              <p>{{ talent.car_model }}</p>
+            </div>
+          {% endif %}
+          {% if talent.car_year %}
+            <div class="form-group">
+              <label>Ano</label>
+              <p>{{ talent.car_year }}</p>
+            </div>
+          {% endif %}
+          {% if talent.car_plate %}
+            <div class="form-group">
+              <label>Placa</label>
+              <p>{{ talent.car_plate }}</p>
+            </div>
+          {% endif %}
+          {% if talent.cnh_expiration %}
+            <div class="form-group">
+              <label>Vencimento CNH</label>
+              <p>{{ talent.cnh_expiration.strftime("%d/%m/%Y") if talent.cnh_expiration else "—" }}</p>
+            </div>
+          {% endif %}
+          {% if talent.cnh_file_path %}
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Arquivo CNH</label>
+              <p><a href="{{ talent.cnh_file_path }}" target="_blank" class="btn btn-sm btn-secondary">Ver CNH</a></p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+
   </div>
-</body>
-</html>
+</div>
+
+{# ── Full-body photo ─────────────────────────────────────────── #}
+{% if talent.photo_full_path %}
+  <hr class="sep">
+  <div class="panel">
+    <h2>Foto Corpo Inteiro</h2>
+    <img src="{{ talent.photo_full_path }}" alt="Corpo inteiro de {{ talent.full_name }}"
+         style="max-height:600px; object-fit:contain; border-radius:var(--r-md); border:1px solid var(--line);">
+  </div>
+{% endif %}
+
+
+{# ── Foto do documento ───────────────────────────────────────── #}
+{% if talent.doc_photo_path %}
+  <hr class="sep">
+  <div class="panel">
+    <h2>Documento (CPF / RG / CNH)</h2>
+    <img src="{{ talent.doc_photo_path }}" alt="Documento de {{ talent.full_name }}"
+         style="max-height:400px; object-fit:contain; border-radius:var(--r-md); border:1px solid var(--line);">
+  </div>
+{% endif %}
+
+{# ── Histórico de eventos ────────────────────────────────────── #}
+<hr class="sep">
+<div class="panel">
+
+  <div class="flex-between mb-16" style="flex-wrap:wrap; gap:12px;">
+    <h2 style="margin-bottom:0;">Histórico de eventos</h2>
+
+    {# Filtro de período #}
+    <form method="get" class="flex-center gap-8" style="flex-wrap:wrap;">
+      <input type="date" name="date_from" value="{{ date_from }}"
+             style="width:auto;" placeholder="De">
+      <input type="date" name="date_to"   value="{{ date_to }}"
+             style="width:auto;" placeholder="Até">
+      <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+      {% if date_from or date_to %}
+        <a href="/talents/{{ talent.id }}" class="btn btn-sm btn-secondary">Limpar</a>
+      {% endif %}
+    </form>
+  </div>
+
+  {# KPIs #}
+  <div class="kpi-grid" style="margin-bottom:20px;">
+    <div class="kpi">
+      <div class="kpi-label">Eventos</div>
+      <div class="kpi-value">{{ total_events }}</div>
+      <div class="kpi-sub">realizados</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Personagens</div>
+      <div class="kpi-value">{{ characters_done | length }}</div>
+      <div class="kpi-sub">diferentes</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total faturado</div>
+      <div class="kpi-value gold">R$&nbsp;{{ "{:,.0f}".format(total_earned) }}</div>
+      <div class="kpi-sub">soma dos cachês</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Último evento</div>
+      {% if history %}
+        <div class="kpi-value" style="font-size:18px;">
+          {{ history[0].event.start_at.strftime("%d/%m/%y") if history[0].event.start_at else "—" }}
+        </div>
+        <div class="kpi-sub">{{ history[0].character_name }}</div>
+      {% else %}
+        <div class="kpi-value" style="font-size:18px;">—</div>
+        <div class="kpi-sub">sem registros</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Personagens já feitos (chips) #}
+  {% if characters_done %}
+  <div style="margin-bottom:20px;">
+    <div class="meta" style="margin-bottom:8px; font-weight:600;">Personagens realizados</div>
+    <div class="flex-center gap-8" style="flex-wrap:wrap;">
+      {% for c in characters_done %}
+        <span class="badge badge-gold">{{ c }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# Tabela de histórico #}
+  {% if history %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Evento</th>
+          <th>Personagem</th>
+          <th style="text-align:right;">Cachê</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in history %}
+        <tr>
+          <td class="meta" style="white-space:nowrap;">
+            {{ r.event.start_at.strftime("%d/%m/%Y") if r.event.start_at else "—" }}
+          </td>
+          <td>{{ r.event.title }}</td>
+          <td><span class="badge badge-gray">{{ r.character_name }}</span></td>
+          <td style="text-align:right; font-weight:600;">
+            {% if r.cache_value %}R$&nbsp;{{ "{:,.0f}".format(r.cache_value) }}{% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td>
+            <a href="/events/{{ r.event_id }}" class="btn btn-sm btn-secondary">Ver evento</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Nenhum evento encontrado{% if date_from or date_to %} no período selecionado{% endif %}.</p>
+  {% endif %}
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Pipeline de Vendas{% endblock %}
+
+{% block page_title %}Pipeline de Vendas{% endblock %}
+
+{% block content %}
+
+{# ── Resumo da comissão do usuário logado ─────────────────────── #}
+{% set meus_eventos = events_data | selectattr("event.seller_id", "equalto", current_user.id) | list %}
+{% if meus_eventos %}
+  {% set minha_comissao = meus_eventos | sum(attribute='comissao') %}
+  <div class="panel" style="background:var(--accent-soft); border-color:rgba(84,69,150,.25); margin-bottom:16px;">
+    <div class="flex-center gap-16">
+      <div>
+        <div class="meta" style="color:var(--accent-dark); font-size:12px; margin-bottom:2px;">Minha comissão (mês)</div>
+        <div style="font-size:24px; font-weight:700; color:var(--accent-dark);">R$ {{ "%.2f"|format(minha_comissao) }}</div>
+      </div>
+      <div class="muted" style="font-size:13px; color:var(--accent-dark);">
+        Paga no dia 5 do próximo mês &nbsp;&bull;&nbsp; {{ meus_eventos | length }} evento(s)
+      </div>
+    </div>
+  </div>
+{% endif %}
+
+{# ── Tabela de eventos ────────────────────────────────────────── #}
+<div class="panel">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Evento</th>
+          <th>Data</th>
+          <th>Status</th>
+          <th>Vendedor</th>
+          <th>Valor de venda</th>
+          <th>Comissão</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for d in events_data %}
+        {% set e = d.event %}
+        <tr>
+          <td class="strong">{{ e.title }}</td>
+          <td class="meta">{{ e.start_at.strftime("%d/%m/%Y") if e.start_at else '—' }}</td>
+          <td>
+            {% if e.sale_value %}
+              <span class="badge badge-green">Preenchido</span>
+            {% else %}
+              <span class="badge badge-gray">Pendente</span>
+            {% endif %}
+          </td>
+          <td class="meta">
+            {% if e.seller %}
+              {{ e.seller.name }}
+            {% elif is_financeiro %}
+              <span class="muted">—</span>
+            {% else %}
+              <span class="muted">Ninguém</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if e.sale_value %}
+              <span class="strong">R$ {{ e.sale_value }}</span>
+              {% if e.with_invoice %}<span class="badge badge-green" style="margin-left:4px;">NF</span>{% endif %}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if e.sale_value %}
+              R$ {{ "%.2f"|format(d.comissao) }}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="/events/{{ e.id }}" class="btn btn-sm btn-secondary">Preencher &rarr;</a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

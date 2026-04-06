@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}Editar — {{ talent.full_name }}{% endblock %}
+{% block page_title %}Editar talento{% endblock %}
+{% block page_subtitle %}<p class="sub">{{ talent.full_name }}</p>{% endblock %}
+{% block page_actions %}
+  <a href="/talents/{{ talent.id }}" class="btn btn-secondary">&larr; Voltar</a>
+{% endblock %}
+
+{% block content %}
+<form method="post">
+
+  {# ── Dados básicos ─────────────────────────────────────────── #}
+  <div class="panel">
+    <h2>Dados básicos</h2>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Nome completo *</label>
+        <input type="text" name="full_name" value="{{ talent.full_name }}" required>
+      </div>
+      <div class="form-group">
+        <label>Nome artístico</label>
+        <input type="text" name="artistic_name" value="{{ talent.artistic_name or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Telefone</label>
+        <input type="text" name="phone" value="{{ talent.phone or '' }}">
+      </div>
+      <div class="form-group">
+        <label>E-mail</label>
+        <input type="email" name="email_contact" value="{{ talent.email_contact or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Data de nascimento</label>
+        <input type="date" name="birth_date"
+               value="{{ talent.birth_date.strftime('%Y-%m-%d') if talent.birth_date else '' }}">
+      </div>
+      <div class="form-group">
+        <label>Gênero</label>
+        <input type="text" name="gender" value="{{ talent.gender or '' }}" placeholder="Ex: Masculino, Feminino">
+      </div>
+      <div class="form-group">
+        <label>Raça / Etnia</label>
+        <input type="text" name="race" value="{{ talent.race or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Idiomas</label>
+        <input type="text" name="languages" value="{{ talent.languages or '' }}"
+               placeholder="Ex: Inglês, Espanhol">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Habilidades</label>
+      <input type="text" name="skills" value="{{ talent.skills or '' }}"
+             placeholder="Ex: Canto, Dança, Malabarismo">
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Tags (para filtros)</label>
+      <input type="text" name="tags" value="{{ talent.tags or '' }}"
+             placeholder="Ex: talento,coordenador,cantor">
+    </div>
+  </div>
+
+  {# ── Aparência ─────────────────────────────────────────────── #}
+  <div class="panel">
+    <h2>Aparência</h2>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Altura (cm)</label>
+        <input type="number" name="height_cm" value="{{ talent.height_cm or '' }}"
+               placeholder="Ex: 175" min="100" max="250">
+      </div>
+      <div class="form-group">
+        <label>Roupa Superior</label>
+        <select name="clothing_size_top">
+          <option value="">—</option>
+          {% for s in ["XP","P","M","G","GG","XGG"] %}
+            <option value="{{ s }}" {% if talent.clothing_size_top == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Roupa Inferior</label>
+        <select name="clothing_size_bottom">
+          <option value="">—</option>
+          {% for s in ["XP","P","M","G","GG","XGG"] %}
+            <option value="{{ s }}" {% if talent.clothing_size_bottom == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Calçado</label>
+        <input type="text" name="shoe_size" value="{{ talent.shoe_size or '' }}" placeholder="Ex: 38">
+      </div>
+    </div>
+  </div>
+
+  {# ── Documentos / PIX ──────────────────────────────────────── #}
+  <div class="panel">
+    <h2>Documentos e PIX</h2>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>RG</label>
+        <input type="text" name="rg" value="{{ talent.rg or '' }}">
+      </div>
+      <div class="form-group">
+        <label>CPF <span class="muted">(não editável)</span></label>
+        <input type="text" value="{{ talent.cpf }}" disabled>
+      </div>
+      <div class="form-group">
+        <label>Chave PIX</label>
+        <input type="text" name="pix_key" value="{{ talent.pix_key or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Tipo da chave PIX</label>
+        <input type="text" name="pix_key_type" value="{{ talent.pix_key_type or '' }}"
+               placeholder="Ex: CPF, e-mail, celular">
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Chave PIX secundária</label>
+        <input type="text" name="pix_key_secondary" value="{{ talent.pix_key_secondary or '' }}">
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:16px;">
+      <label>Passaporte / Visto</label>
+      <input type="text" name="passport_visa_text" value="{{ talent.passport_visa_text or '' }}">
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="checkbox-row">
+        <input type="checkbox" name="has_visa" value="1" {% if talent.has_visa %}checked{% endif %}>
+        Possui passaporte e visto americano
+      </label>
+    </div>
+  </div>
+
+  {# ── Veículo / CNH ─────────────────────────────────────────── #}
+  <div class="panel">
+    <h2>Veículo e CNH</h2>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Marca</label>
+        <input type="text" name="car_brand" value="{{ talent.car_brand or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Modelo</label>
+        <input type="text" name="car_model" value="{{ talent.car_model or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Ano</label>
+        <input type="text" name="car_year" value="{{ talent.car_year or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Placa</label>
+        <input type="text" name="car_plate" value="{{ talent.car_plate or '' }}">
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Vencimento CNH</label>
+        <input type="date" name="cnh_expiration"
+               value="{{ talent.cnh_expiration.strftime('%Y-%m-%d') if talent.cnh_expiration else '' }}">
+      </div>
+    </div>
+  </div>
+
+  {# ── Outros ────────────────────────────────────────────────── #}
+  <div class="panel">
+    <h2>Outros</h2>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Onde conheceu a Manto?</label>
+        <input type="text" name="how_found_us" value="{{ talent.how_found_us or '' }}">
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Já trabalhou com a Manto?</label>
+        <select name="worked_before">
+          <option value="" {% if talent.worked_before is none %}selected{% endif %}>—</option>
+          <option value="1" {% if talent.worked_before == true %}selected{% endif %}>Sim</option>
+          <option value="0" {% if talent.worked_before == false %}selected{% endif %}>Não</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:12px; margin-top:8px;">
+    <button type="submit" class="btn btn-primary">Salvar alterações</button>
+    <a href="/talents/{{ talent.id }}" class="btn btn-secondary">Cancelar</a>
+  </div>
+
+</form>
+
+{# ── Fotos ──────────────────────────────────────────────────── #}
+<div class="panel" style="margin-top:24px;">
+  <h2 style="margin-bottom:16px;">Fotos</h2>
+  <div class="grid-2" style="gap:24px;">
+
+    <div>
+      <div class="panel-title" style="margin-bottom:10px;">Foto de rosto</div>
+      {% if talent.photo_face_path %}
+        <img src="{{ talent.photo_face_path }}" alt="Rosto"
+             style="width:100%; max-height:260px; object-fit:cover; object-position:top;
+                    border-radius:var(--r-md); border:1px solid var(--line); margin-bottom:10px;">
+      {% else %}
+        <div style="height:120px; display:flex; align-items:center; justify-content:center;
+                    background:var(--surface-2); border-radius:var(--r-md); border:1px solid var(--line);
+                    color:var(--muted); font-size:13px; margin-bottom:10px;">Sem foto</div>
+      {% endif %}
+      <form method="post" enctype="multipart/form-data" action="/talents/{{ talent.id }}/upload-photo">
+        <input type="hidden" name="photo_type" value="face">
+        <input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp" required style="font-size:12px; margin-bottom:8px; display:block;">
+        <button type="submit" class="btn btn-sm btn-primary">Salvar foto de rosto</button>
+      </form>
+    </div>
+
+    <div>
+      <div class="panel-title" style="margin-bottom:10px;">Foto de corpo inteiro</div>
+      {% if talent.photo_full_path %}
+        <img src="{{ talent.photo_full_path }}" alt="Corpo"
+             style="width:100%; max-height:260px; object-fit:cover; object-position:top;
+                    border-radius:var(--r-md); border:1px solid var(--line); margin-bottom:10px;">
+      {% else %}
+        <div style="height:120px; display:flex; align-items:center; justify-content:center;
+                    background:var(--surface-2); border-radius:var(--r-md); border:1px solid var(--line);
+                    color:var(--muted); font-size:13px; margin-bottom:10px;">Sem foto</div>
+      {% endif %}
+      <form method="post" enctype="multipart/form-data" action="/talents/{{ talent.id }}/upload-photo">
+        <input type="hidden" name="photo_type" value="full">
+        <input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp" required style="font-size:12px; margin-bottom:8px; display:block;">
+        <button type="submit" class="btn btn-sm btn-primary">Salvar foto de corpo</button>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Manto{% endblock %} — Manto</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+{# ── SIDEBAR ────────────────────────────────────────────────── #}
+<aside class="sidebar" id="sidebar">
+
+  {# Brand #}
+  <div class="sidebar-brand">
+    {% if settings and settings.logo_path %}
+      <img src="{{ settings.logo_path }}" alt="Logo">
+    {% else %}
+      <div class="sidebar-brand-name">Manto</div>
+      <div class="sidebar-brand-sub">Plataforma</div>
+    {% endif %}
+  </div>
+
+  {# Navigation #}
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <a href="/" class="sidebar-item {% if request.path == '/' %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h4a1 1 0 001-1v-3h2v3a1 1 0 001 1h4a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
+        </span>
+        Home
+      </a>
+      <a href="/agenda" class="sidebar-item {% if request.path == '/agenda' or ('/events/' in request.path and '/events/new' not in request.path) %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+        </span>
+        Agenda
+      </a>
+      {% if current_user.is_authenticated and eff_has_role('COMERCIAL', 'SUPERADMIN') %}
+      <a href="/events/new" class="sidebar-item {% if request.path == '/events/new' %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+        </span>
+        Novo Evento
+      </a>
+      {% endif %}
+      <a href="/talents" class="sidebar-item {% if '/talents' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>
+        </span>
+        Banco de Talentos
+      </a>
+    </div>
+
+    {# CRM — visível para COMERCIAL e SUPERADMIN #}
+    {% if current_user.is_authenticated and eff_has_role('COMERCIAL', 'SUPERADMIN') %}
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">CRM</div>
+      <a href="/crm/" class="sidebar-item {% if '/crm/' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+        </span>
+        Pipeline
+      </a>
+      <a href="/crm/organizations" class="sidebar-item {% if '/crm/organizations' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clip-rule="evenodd"/></svg>
+        </span>
+        Organizações
+      </a>
+      <a href="/crm/metrics" class="sidebar-item {% if '/crm/metrics' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z"/><path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z"/></svg>
+        </span>
+        Métricas
+      </a>
+    </div>
+    {% endif %}
+
+    {# Figurino — visível para FIGURINO e SUPERADMIN #}
+    {% if current_user.is_authenticated and eff_has_role('FIGURINO', 'SUPERADMIN') %}
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Produção</div>
+      <a href="/figurinos" class="sidebar-item {% if '/figurinos' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 5.323V3a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+        </span>
+        Figurinos
+      </a>
+    </div>
+    {% endif %}
+
+    {# Financeiro / Vendas #}
+    {% if current_user.is_authenticated and eff_has_role('FINANCEIRO', 'COMERCIAL', 'SUPERADMIN') %}
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Financeiro</div>
+      {% if eff_has_role('COMERCIAL', 'FINANCEIRO', 'SUPERADMIN') %}
+      <a href="/vendas/" class="sidebar-item {% if '/vendas' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+        </span>
+        Pipeline de Vendas
+      </a>
+      {% endif %}
+      {% if eff_has_role('FINANCEIRO', 'SUPERADMIN') %}
+      <a href="/financeiro/" class="sidebar-item {% if request.path == '/financeiro/' %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/></svg>
+        </span>
+        Painel Financeiro
+      </a>
+      <a href="/financeiro/funcionarios" class="sidebar-item {% if '/financeiro/funcionarios' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/></svg>
+        </span>
+        Funcionários
+      </a>
+      <a href="/financeiro/pagamentos" class="sidebar-item {% if '/financeiro/pagamentos' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 4a3 3 0 00-3 3v6a3 3 0 003 3h10a3 3 0 003-3V7a3 3 0 00-3-3H5zm-1 9v-1h5v2H5a1 1 0 01-1-1zm7 1h4a1 1 0 001-1v-1h-5v2zm0-4h5V8h-5v2zM9 8H4v2h5V8z" clip-rule="evenodd"/></svg>
+        </span>
+        Pagamentos
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# Ferramentas #}
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Ferramentas</div>
+      <a href="/tools/calculadora-transporte" class="sidebar-item {% if '/tools' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/><path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1v-1h3.5a1 1 0 00.8-.4l1.5-2a1 1 0 00.2-.6V8a1 1 0 00-1-1H11V4a1 1 0 00-1-1H3z"/></svg>
+        </span>
+        Calc. Transporte
+      </a>
+    </div>
+
+    {# Admin — somente SUPERADMIN (desaparece durante impersonação) #}
+    {% if current_user.is_authenticated and eff_has_role('SUPERADMIN') %}
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Sistema</div>
+      <a href="/admin/" class="sidebar-item {% if request.path.startswith('/admin') and 'desempenho' not in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+        </span>
+        Administração
+      </a>
+      <a href="/admin/desempenho" class="sidebar-item {% if 'desempenho' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+        </span>
+        Desempenho
+      </a>
+      <a href="/admin/logs" class="sidebar-item {% if '/admin/logs' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h8a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h4a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
+        </span>
+        Logs
+      </a>
+    </div>
+    {% endif %}
+  </nav>
+
+  {# Footer — usuário #}
+  <div class="sidebar-footer">
+    {% if current_user.is_authenticated %}
+
+    {# Role switcher — somente SUPERADMIN real #}
+    {% if is_real_superadmin() %}
+    <div class="role-switcher">
+      <div class="role-switcher-label">Ver como:</div>
+      <div class="role-switcher-pills">
+        {% for rname in ['CASTING', 'FIGURINO', 'COMERCIAL', 'FINANCEIRO', 'ENSAIO'] %}
+        <form method="post" action="/impersonate/{{ rname }}">
+          <button type="submit" class="role-pill{% if view_as_role == rname %} active{% endif %}">{{ rname }}</button>
+        </form>
+        {% endfor %}
+        {% if view_as_role %}
+        <form method="post" action="/impersonate/reset">
+          <button type="submit" class="role-pill reset">Admin</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <a href="/auth/profile" class="sidebar-user {% if '/auth/profile' in request.path %}sidebar-user-active{% endif %}">
+      <div class="sidebar-avatar">
+        {% if current_user.profile_photo %}
+          <img src="/uploads/{{ current_user.profile_photo }}" alt=""
+               style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+        {% else %}
+          {{ current_user.name[0].upper() }}
+        {% endif %}
+      </div>
+      <div>
+        <div class="sidebar-username">{{ current_user.name }}</div>
+        <div class="sidebar-role">
+          {% if view_as_role %}
+            <span style="color:var(--sidebar-accent);">{{ view_as_role }}</span>
+          {% else %}
+            {% for r in current_user.roles %}{{ r.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+          {% endif %}
+        </div>
+      </div>
+    </a>
+    <form method="post" action="/auth/logout">
+      <button type="submit" class="sidebar-logout">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd"/></svg>
+        Sair
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</aside>
+
+{# ── OVERLAY (mobile) ──────────────────────────────────────── #}
+<div class="sidebar-overlay" id="overlay" onclick="closeSidebar()"></div>
+
+{# ── MAIN ──────────────────────────────────────────────────── #}
+<main class="main">
+
+  {# Mobile topbar #}
+  <div class="topbar-mobile">
+    <span class="brand-name">Manto</span>
+    <button class="hamburger" onclick="openSidebar()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+
+  {# Impersonation banner #}
+  {% if view_as_role %}
+  <div class="impersonate-banner">
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0;"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+    Visualizando como <strong>{{ view_as_role }}</strong>
+    <form method="post" action="/impersonate/reset">
+      <button type="submit" class="impersonate-reset-btn">Sair da visualização</button>
+    </form>
+  </div>
+  {% endif %}
+
+  {# Page header #}
+  {% if self.page_title()|trim or self.page_actions()|trim %}
+  <div class="page-header">
+    <div>
+      <h1>{% block page_title %}{% endblock %}</h1>
+      {% block page_subtitle %}{% endblock %}
+    </div>
+    <div class="page-actions">
+      {% block page_actions %}{% endblock %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# Flash messages #}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div style="padding: 0 32px; margin-top: 16px;">
+      {% for category, msg in messages %}
+        <div class="alert alert-{{ 'success' if category == 'success' else 'error' }}">{{ msg }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+
+  {# Content #}
+  <div class="content">
+    {% block content %}{% endblock %}
+  </div>
+
+</main>
+
+{% block extra_scripts %}{% endblock %}
+
+<script>
+  function openSidebar() {
+    document.getElementById('sidebar').classList.add('open');
+    document.getElementById('overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('overlay').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+</script>
+</body>
+</html>

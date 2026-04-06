@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Primeiro acesso — Manto</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-name">Manto</div>
+      <div class="auth-logo-tag">Primeiro acesso</div>
+    </div>
+
+    {% if error %}
+      <div class="alert alert-error mb-16">{{ error }}</div>
+    {% endif %}
+
+    {% if step == "1" %}
+      {# ── Passo 1: confirmar CPF ─────────────────────────── #}
+      <p class="muted" style="margin-bottom:20px; font-size:13px;">
+        Digite seu CPF para criar sua senha de acesso ao portal.
+      </p>
+      <form method="post">
+        <input type="hidden" name="step" value="1">
+        <div class="form-group">
+          <label for="cpf">CPF</label>
+          <input type="text" id="cpf" name="cpf" placeholder="000.000.000-00"
+                 inputmode="numeric" required autofocus>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg"
+                style="width:100%; margin-top:8px; justify-content:center;">
+          Continuar
+        </button>
+      </form>
+
+    {% else %}
+      {# ── Passo 2: criar senha ───────────────────────────── #}
+      <p class="muted" style="margin-bottom:20px; font-size:13px;">
+        CPF confirmado. Crie sua senha de acesso.
+      </p>
+      <form method="post">
+        <input type="hidden" name="step" value="2">
+        <input type="hidden" name="cpf" value="{{ cpf }}">
+        <div class="form-group">
+          <label>Nova senha</label>
+          <input type="password" name="new_password" id="new_password"
+                 placeholder="Mínimo 8 caracteres" required autofocus
+                 oninput="checkStrength(this.value)">
+        </div>
+
+        {# Indicador de força #}
+        <div style="margin: -8px 0 16px; display:flex; gap:4px;" id="strength-bars">
+          <div class="strength-bar" id="sb1"></div>
+          <div class="strength-bar" id="sb2"></div>
+          <div class="strength-bar" id="sb3"></div>
+          <div class="strength-bar" id="sb4"></div>
+          <div class="strength-bar" id="sb5"></div>
+        </div>
+        <ul class="pw-rules" id="pw-rules">
+          <li id="r-len">8 caracteres</li>
+          <li id="r-upper">1 maiúscula (A–Z)</li>
+          <li id="r-lower">1 minúscula (a–z)</li>
+          <li id="r-digit">1 número (0–9)</li>
+          <li id="r-sym">1 símbolo (!@#$%...)</li>
+        </ul>
+
+        <div class="form-group" style="margin-top:8px;">
+          <label>Confirmar senha</label>
+          <input type="password" name="confirm_password" placeholder="Repita a senha" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg"
+                style="width:100%; margin-top:8px; justify-content:center;">
+          Criar senha
+        </button>
+      </form>
+    {% endif %}
+
+    <p style="margin-top:20px; text-align:center;">
+      <a href="/portal/login" class="muted" style="font-size:12px;">← Voltar para o login</a>
+    </p>
+  </div>
+</div>
+
+<style>
+  .strength-bar {
+    flex: 1; height: 4px; border-radius: 2px;
+    background: var(--line); transition: background .2s;
+  }
+  .strength-bar.active-1 { background: #e45858; }
+  .strength-bar.active-2 { background: #f5a623; }
+  .strength-bar.active-3 { background: #f5c842; }
+  .strength-bar.active-4 { background: #6abf69; }
+  .strength-bar.active-5 { background: #2e7d32; }
+  .pw-rules { list-style: none; margin: 0 0 8px; padding: 0; font-size: 12px; color: var(--muted); }
+  .pw-rules li { padding: 2px 0; }
+  .pw-rules li::before { content: "✗ "; color: #e45858; }
+  .pw-rules li.ok::before { content: "✓ "; color: #2e7d32; }
+  .pw-rules li.ok { color: #2e7d32; }
+</style>
+
+<script>
+function checkStrength(pw) {
+  const rules = {
+    'r-len':   pw.length >= 8,
+    'r-upper': /[A-Z]/.test(pw),
+    'r-lower': /[a-z]/.test(pw),
+    'r-digit': /\d/.test(pw),
+    'r-sym':   /[^A-Za-z0-9]/.test(pw),
+  };
+  let score = Object.values(rules).filter(Boolean).length;
+  for (const [id, ok] of Object.entries(rules)) {
+    document.getElementById(id).classList.toggle('ok', ok);
+  }
+  const bars = document.querySelectorAll('.strength-bar');
+  bars.forEach((b, i) => {
+    b.className = 'strength-bar';
+    if (i < score) b.classList.add('active-' + score);
+  });
+}
+</script>
+</body>
+</html>
