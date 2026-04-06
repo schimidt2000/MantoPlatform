@@ -34,3 +34,4 @@ migrate_figurinos.py
 reset_beta.py
 setup_skills.sh
 explicacao
+clean_events.py
