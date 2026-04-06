@@ -40,28 +40,27 @@
          style="max-width: 260px;">
 </div>
 
-<div id="figurino-grid" class="grid-3" style="gap: 16px;">
+<div id="figurino-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;">
   {% for sheet in sheets %}
   <div class="figurino-card-wrap" data-name="{{ sheet.character_name | lower }}">
-  <div class="panel" style="padding: 16px; display: flex; flex-direction: column; gap: 12px; height: 100%;">
+  <div class="panel" style="padding: 10px; display: flex; flex-direction: column; gap: 8px; height: 100%;">
 
     {# Thumbnail #}
-    {% if sheet.photo_filename %}
-      <img src="/uploads/figurino_photos/{{ sheet.photo_filename }}"
-           alt="{{ sheet.character_name }}"
-           style="width: 100%; height: 160px; object-fit: cover;
-                  border-radius: var(--r-md); border: 1px solid var(--line);">
-    {% else %}
-      <div style="width: 100%; height: 160px; background: var(--bg);
-                  border-radius: var(--r-md); border: 1px solid var(--line);
-                  display: flex; align-items: center; justify-content: center; font-size: 40px;">
-        &#128248;
-      </div>
-    {% endif %}
+    <div style="width: 100%; height: 120px; background: #fff;
+                border-radius: var(--r-md); border: 1px solid var(--line);
+                display: flex; align-items: center; justify-content: center; overflow: hidden;">
+      {% if sheet.photo_url %}
+        <img src="{{ sheet.photo_url }}"
+             alt="{{ sheet.character_name }}"
+             style="max-width: 100%; max-height: 100%; object-fit: contain;">
+      {% else %}
+        <span style="font-size: 40px;">&#128248;</span>
+      {% endif %}
+    </div>
 
     {# Nome + meta #}
     <div>
-      <div class="strong" style="font-size: 15px; margin-bottom: 4px;">
+      <div class="strong" style="font-size: 13px; margin-bottom: 2px;">
         {{ sheet.character_name }}
       </div>
       <div class="flex-center gap-6" style="flex-wrap: wrap;">
@@ -91,10 +90,6 @@
       </a>
       <a href="/figurinos/{{ sheet.id }}/edit"
          class="btn btn-sm btn-secondary" title="Editar ficha">&#9998;</a>
-      <form method="post" action="/figurinos/{{ sheet.id }}/delete"
-            onsubmit="return confirm('Remover ficha de {{ sheet.character_name }} do catálogo?')">
-        <button type="submit" class="btn btn-sm btn-danger" title="Remover">&#10005;</button>
-      </form>
     </div>
 
   </div>

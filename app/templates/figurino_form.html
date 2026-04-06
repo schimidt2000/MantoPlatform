@@ -24,9 +24,9 @@
     {# ── Foto do figurino ────────────────────────────────────── #}
     <div class="form-group">
       <label>Foto do figurino</label>
-      {% if sheet and sheet.photo_filename %}
+      {% if sheet and sheet.photo_url %}
         <div style="margin-bottom: 12px;">
-          <img src="/uploads/figurino_photos/{{ sheet.photo_filename }}"
+          <img src="{{ sheet.photo_url }}"
                style="max-width: 100%; max-height: 200px; object-fit: cover;
                       border-radius: var(--r-md); border: 1px solid var(--line);
                       display: block;">
@@ -93,6 +93,16 @@
     </div>
 
   </form>
+
+  {% if sheet %}
+  <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--line);">
+    <form method="post" action="/figurinos/{{ sheet.id }}/delete"
+          onsubmit="return confirm('Remover ficha de {{ sheet.character_name }} do catálogo? Esta ação não pode ser desfeita.')">
+      <button type="submit" class="btn btn-danger btn-sm">Excluir ficha</button>
+    </form>
+  </div>
+  {% endif %}
+
 </div>
 {% endblock %}
 

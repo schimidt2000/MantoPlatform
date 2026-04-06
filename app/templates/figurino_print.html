@@ -272,8 +272,8 @@
 
     {# Photo #}
     <div class="photo-cell">
-      {% if sheet.photo_filename %}
-        <img src="/uploads/figurino_photos/{{ sheet.photo_filename }}"
+      {% if sheet.photo_url %}
+        <img src="{{ sheet.photo_url }}"
              class="sheet-photo" alt="{{ sheet.character_name }}">
       {% else %}
         <div class="sheet-photo-placeholder">&#128248;</div>

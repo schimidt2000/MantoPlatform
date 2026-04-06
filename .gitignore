@@ -24,3 +24,12 @@ client_secret*.json
 
 # Claude Code
 .claude/
+
+# Scripts de uso único / debug
+debug_birth.py
+backfill_birth_dates.py
+fix_figurino_photos.py
+migrate_figurinos.py
+reset_beta.py
+setup_skills.sh
+explicacao

@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}Contrato — {{ deal.title }}{% endblock %}
+{% block page_title %}Contrato{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">
+    <a href="{{ url_for('crm.deal_detail', deal_id=deal.id) }}">{{ deal.title }}</a>
+    {% if deal.stage %}
+      · <span class="badge" style="background:{{ deal.stage.color }}22;color:{{ deal.stage.color }};border:1px solid {{ deal.stage.color }}44;">{{ deal.stage.name }}</span>
+    {% endif %}
+  </p>
+{% endblock %}
+
+{% block page_actions %}
+  <a href="{{ url_for('crm.deal_detail', deal_id=deal.id) }}" class="btn btn-ghost">← Voltar ao lead</a>
+{% endblock %}
+
+{% block content %}
+<div class="contract-layout">
+
+  {# ── STATUS STRIP ──────────────────────────────────────────────────────── #}
+  <div class="contract-status-strip">
+    <div class="cstep {% if deal.contract_sent_at %}done{% else %}pending{% endif %}">
+      <span class="cstep-icon">{% if deal.contract_sent_at %}✅{% else %}⏳{% endif %}</span>
+      <span class="cstep-label">Contrato enviado</span>
+      {% if deal.contract_sent_at %}<span class="cstep-date">{{ deal.contract_sent_at.strftime('%d/%m %H:%M') }}</span>{% endif %}
+    </div>
+    <div class="cstep-arrow">→</div>
+    <div class="cstep {% if deal.contract_signed_at %}done{% else %}pending{% endif %}">
+      <span class="cstep-icon">{% if deal.contract_signed_at %}✅{% else %}⏳{% endif %}</span>
+      <span class="cstep-label">Contrato assinado</span>
+      {% if deal.contract_signed_at %}<span class="cstep-date">{{ deal.contract_signed_at.strftime('%d/%m %H:%M') }}</span>{% endif %}
+    </div>
+    <div class="cstep-arrow">→</div>
+    <div class="cstep {% if deal.payment_proof_path %}done{% else %}pending{% endif %}">
+      <span class="cstep-icon">{% if deal.payment_proof_path %}✅{% else %}⏳{% endif %}</span>
+      <span class="cstep-label">Comprovante</span>
+      {% if deal.payment_proof_at %}<span class="cstep-date">{{ deal.payment_proof_at.strftime('%d/%m %H:%M') }}</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="contract-cols">
+
+    {# ── LEFT: ENVIO DO CONTRATO ──────────────────────────────────────────── #}
+    <div class="contract-card">
+      <h3 class="card-section-title">1. Abrir e Enviar Contrato</h3>
+
+      <div class="contract-type-badge">
+        <span class="badge badge-lg" style="background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44;">
+          {{ contract_label }}
+        </span>
+        {% if deal.service_type %}<span class="muted-small"> · {{ deal.service_type }}</span>{% endif %}
+      </div>
+
+      <p class="contract-instructions">
+        Tipo sugerido com base no evento. Confirme ou troque antes de abrir o formulário.
+      </p>
+
+      {# Seletor de tipo — sempre visível #}
+      <div class="type-selector">
+        {% for key, label in CONTRACT_LABELS.items() %}
+          <a href="{{ url_for('crm.deal_contract', deal_id=deal.id) }}?type={{ key }}"
+             class="type-btn {% if contract_type == key %}type-btn-active{% endif %}">
+            {{ label }}
+          </a>
+        {% endfor %}
+      </div>
+
+      <div class="divider-sm"></div>
+
+      <a href="{{ contract_link }}" target="_blank" class="btn btn-primary btn-block">
+        Abrir formulário ClickSign →
+      </a>
+    </div>
+
+    {# ── RIGHT: CHAVE DO ENVELOPE ──────────────────────────────────────────── #}
+    <div class="contract-card">
+      <h3 class="card-section-title">2. Registrar Chave do Envelope</h3>
+
+      <p class="contract-instructions">
+        Após enviar o contrato, copie o link completo da página do ClickSign e cole aqui.
+        O sistema extrai o código automaticamente.
+      </p>
+
+      <form method="post">
+        <div class="form-group">
+          <label class="form-label">Link do contrato (ClickSign)</label>
+          <input type="text" name="envelope_key"
+                 value="{{ deal.clicksign_envelope_key or '' }}"
+                 placeholder="https://app.clicksign.com/accounts/.../signatures"
+                 class="form-control font-mono">
+          <div class="form-hint">Cole o link completo — o código será extraído automaticamente.</div>
+        </div>
+        <button type="submit" class="btn btn-primary">Salvar</button>
+        {% if deal.clicksign_envelope_key %}
+          <span class="text-success ml-2">✓ Registrado: <code>{{ deal.clicksign_envelope_key }}</code></span>
+        {% endif %}
+      </form>
+
+      {% if deal.contract_signed_at %}
+        <div class="alert alert-success mt-3">
+          ✅ Contrato assinado em {{ deal.contract_signed_at.strftime('%d/%m/%Y às %H:%M') }}
+        </div>
+      {% endif %}
+
+      {# Simulação em dev #}
+      {% if not deal.contract_signed_at %}
+        <details class="collapse-sm mt-3">
+          <summary class="muted-small">🧪 Ferramentas de desenvolvimento</summary>
+          <div class="collapse-body">
+            <form method="post" action="{{ url_for('crm.simulate_signed', deal_id=deal.id) }}">
+              <button type="submit" class="btn btn-ghost btn-sm">Simular assinatura</button>
+            </form>
+          </div>
+        </details>
+      {% endif %}
+    </div>
+
+  </div>{# /.contract-cols #}
+
+  {# ── COMPROVANTE DE PAGAMENTO ──────────────────────────────────────────── #}
+  <div class="contract-card contract-card-full">
+    <h3 class="card-section-title">3. Comprovante de Pagamento</h3>
+
+    {% if deal.payment_proof_path %}
+      <div class="proof-done">
+        <span class="text-success">✅ Comprovante enviado em {{ deal.payment_proof_at.strftime('%d/%m/%Y às %H:%M') if deal.payment_proof_at else '—' }}</span>
+        &nbsp;·&nbsp;
+        <a href="/uploads/{{ deal.payment_proof_path }}" target="_blank" class="btn btn-ghost btn-sm">Ver arquivo</a>
+      </div>
+      <div class="divider-sm"></div>
+      <p class="muted-small">Para substituir, envie um novo arquivo:</p>
+    {% else %}
+      <p class="contract-instructions">
+        Após o pagamento do cliente, envie o comprovante aqui para concluir o processo comercial.
+      </p>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data"
+          action="{{ url_for('crm.upload_payment_proof', deal_id=deal.id) }}">
+      <div class="form-group">
+        <label class="form-label">Arquivo (PDF, JPG ou PNG — máx. 10 MB)</label>
+        <input type="file" name="proof_file" accept=".pdf,.jpg,.jpeg,.png" class="form-control">
+      </div>
+      <button type="submit" class="btn btn-primary">Enviar comprovante</button>
+    </form>
+  </div>
+
+</div>{# /.contract-layout #}
+
+<style>
+.contract-layout { max-width: 900px; }
+
+.contract-status-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+}
+.cstep { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; text-align: center; }
+.cstep-icon { font-size: 20px; }
+.cstep-label { font-size: 13px; font-weight: 600; color: var(--ink); }
+.cstep-date { font-size: 11px; color: var(--muted); }
+.cstep.pending .cstep-label { color: var(--muted); font-weight: 400; }
+.cstep-arrow { font-size: 18px; color: var(--muted); flex-shrink: 0; }
+
+.contract-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+@media (max-width: 640px) { .contract-cols { grid-template-columns: 1fr; } }
+
+.contract-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+.contract-card-full { width: 100%; }
+
+.contract-type-badge { margin-bottom: 12px; }
+.badge-lg { font-size: 14px; padding: 4px 12px; border-radius: 20px; }
+.muted-small { font-size: 12px; color: var(--muted); }
+
+.contract-instructions { font-size: 14px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+
+.btn-block { display: block; text-align: center; width: 100%; }
+
+.type-selector { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.type-btn {
+  padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
+  border: 1px solid var(--border); color: var(--muted); text-decoration: none;
+  transition: all .15s;
+}
+.type-btn:hover { border-color: var(--accent); color: var(--accent); }
+.type-btn-active {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+
+.divider-sm { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+.font-mono { font-family: monospace; font-size: 13px; }
+.form-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+.proof-done { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+
+.alert { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-top: 12px; }
+.alert-success { background: #16a34a11; border: 1px solid #16a34a44; color: #16a34a; }
+
+.text-success { color: #16a34a; font-weight: 600; }
+.ml-2 { margin-left: 8px; }
+.mt-3 { margin-top: 12px; }
+</style>
+{% endblock %}

@@ -1,17 +1,15 @@
 import json
 import os
-import uuid
 from datetime import datetime
 
-from flask import Blueprint, render_template, redirect, url_for, request, flash, jsonify
+from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required
 
 from app.models import FigurinoSheet, EventRole
+from app.storage import save_file, delete_file
 from .. import db
 
 figurino_bp = Blueprint("figurino", __name__)
-
-PHOTO_DIR = os.path.abspath(os.path.join("instance", "uploads", "figurino_photos"))
 
 _ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -72,23 +70,23 @@ def new_sheet():
         pieces = _parse_pieces(request.form)
         notes = request.form.get("notes", "").strip()
 
-        photo_filename = None
+        photo_url = None
         photo_file = request.files.get("photo")
         if photo_file and photo_file.filename:
             ext = os.path.splitext(photo_file.filename)[1].lower()
             if ext in _ALLOWED_PHOTO_EXTENSIONS:
-                photo_filename = f"{uuid.uuid4().hex}{ext}"
-                os.makedirs(PHOTO_DIR, exist_ok=True)
-                photo_file.save(os.path.join(PHOTO_DIR, photo_filename))
+                photo_url = save_file(photo_file, "figurino_photos")
 
         sheet = FigurinoSheet(
             character_name=character_name,
             character_name_norm=normalize_name(character_name),
-            photo_filename=photo_filename,
+            photo_filename=photo_url,
             pieces=json.dumps(pieces, ensure_ascii=False) if pieces else None,
             notes=notes or None,
         )
         db.session.add(sheet)
+        from app.utils import audit
+        audit("create", "figurino", None, character_name, "Ficha de figurino criada")
         db.session.commit()
         flash(f'Ficha de "{character_name}" criada com sucesso!')
         return redirect(url_for("figurino.figurinos"))
@@ -122,20 +120,16 @@ def edit_sheet(sheet_id: int):
         if photo_file and photo_file.filename:
             ext = os.path.splitext(photo_file.filename)[1].lower()
             if ext in _ALLOWED_PHOTO_EXTENSIONS:
-                if sheet.photo_filename:
-                    old_path = os.path.join(PHOTO_DIR, sheet.photo_filename)
-                    if os.path.exists(old_path):
-                        os.remove(old_path)
-                new_filename = f"{uuid.uuid4().hex}{ext}"
-                os.makedirs(PHOTO_DIR, exist_ok=True)
-                photo_file.save(os.path.join(PHOTO_DIR, new_filename))
-                sheet.photo_filename = new_filename
+                delete_file(sheet.photo_filename)
+                sheet.photo_filename = save_file(photo_file, "figurino_photos")
 
         sheet.character_name = character_name
         sheet.character_name_norm = normalize_name(character_name)
         sheet.pieces = json.dumps(pieces, ensure_ascii=False) if pieces else None
         sheet.notes = notes or None
         sheet.updated_at = datetime.utcnow()
+        from app.utils import audit
+        audit("edit", "figurino", sheet.id, character_name, "Ficha de figurino editada")
         db.session.commit()
         flash(f'Ficha de "{character_name}" atualizada!')
         return redirect(url_for("figurino.figurinos"))
@@ -191,14 +185,11 @@ def print_event_figurinos(event_id: int):
 def delete_sheet(sheet_id: int):
     sheet = FigurinoSheet.query.get_or_404(sheet_id)
 
-    if sheet.photo_filename:
-        photo_path = os.path.join(PHOTO_DIR, sheet.photo_filename)
-        if os.path.exists(photo_path):
-            os.remove(photo_path)
+    delete_file(sheet.photo_filename)
 
-    EventRole.query.filter_by(figurino_sheet_id=sheet_id).update(
-        {"figurino_sheet_id": None}
-    )
+    from app.utils import audit
+    audit("delete", "figurino", sheet.id, sheet.character_name, "Ficha de figurino removida")
+    EventRole.query.filter_by(figurino_sheet_id=sheet_id).update({"figurino_sheet_id": None})
     db.session.delete(sheet)
     db.session.commit()
     flash("Ficha removida do catálogo.")

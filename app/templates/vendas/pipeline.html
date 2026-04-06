@@ -10,7 +10,7 @@
 {% set meus_eventos = events_data | selectattr("event.seller_id", "equalto", current_user.id) | list %}
 {% if meus_eventos %}
   {% set minha_comissao = meus_eventos | sum(attribute='comissao') %}
-  <div class="panel" style="background:var(--accent-soft); border-color:rgba(198,154,43,.25); margin-bottom:16px;">
+  <div class="panel" style="background:var(--accent-soft); border-color:rgba(84,69,150,.25); margin-bottom:16px;">
     <div class="flex-center gap-16">
       <div>
         <div class="meta" style="color:var(--accent-dark); font-size:12px; margin-bottom:2px;">Minha comissão (mês)</div>

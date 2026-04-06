@@ -44,50 +44,40 @@ def calcular_carro(num_carros: int, num_colab: int, km_ida: float, show: bool):
 @tools_bp.route("/tools/calculadora-transporte", methods=["GET", "POST"])
 @login_required
 def calculadora_transporte():
-    modo_get = (request.args.get("modo") or "van").lower()
-    form = {
-        "modo": modo_get,
-        "num_colaboradores": "",
-        "num_carros": "",
-        "km_ida": "",
-        "carretinha": "",
-        "show": "",
-    }
-
-    resultado = None
-    resumo = None
+    result = None
     if request.method == "POST":
-        form.update(request.form.to_dict())
+        f = request.form
         try:
-            km_ida = float(form["km_ida"])
-            show = form.get("show") == "1"
-            if form["modo"] == "van":
-                vt, afsp, ashow, total, calc = calcular_van(
-                    int(form["num_colaboradores"]),
-                    km_ida,
-                    form["carretinha"],
-                    show,
-                )
+            mode = (f.get("mode") or "van").lower()
+            km_ida = float(f.get("km") or 0)
+            show = f.get("show") == "1"
+            num_colab = int(f.get("num_colaboradores") or 0)
+
+            if mode == "van":
+                carretinha = f.get("carretinha", "")
+                vt, afsp, ashow, total, calc = calcular_van(num_colab, km_ida, carretinha, show)
             else:
-                vt, afsp, ashow, total, calc = calcular_carro(
-                    int(form["num_carros"]),
-                    int(form["num_colaboradores"]),
-                    km_ida,
-                    show,
-                )
-            resultado = br_money(total)
-            resumo = {
-                "valor_transporte": br_money(vt),
-                "adicional_fora": br_money(afsp),
-                "adicional_show": br_money(ashow),
-                "calculo_linhas": calc,
+                num_carros = int(f.get("num_carros") or 0)
+                vt, afsp, ashow, total, calc = calcular_carro(num_carros, num_colab, km_ida, show)
+
+            breakdown = []
+            breakdown.append(f"Transporte: R$ {br_money(vt)}")
+            breakdown.append(f"Adicional fora SP: R$ {br_money(afsp)}")
+            if ashow:
+                breakdown.append(f"Adicional show: R$ {br_money(ashow)}")
+            breakdown += calc
+
+            result = {
+                "mode": mode,
+                "total": br_money(total),
+                "breakdown": breakdown,
+                "num_colaboradores": f.get("num_colaboradores", ""),
+                "num_carros": f.get("num_carros", ""),
+                "km": f.get("km", ""),
+                "carretinha": f.get("carretinha") == "1",
+                "show": show,
             }
         except Exception as exc:
-            resultado = f"Erro: {exc}"
+            result = {"mode": f.get("mode", "van"), "total": f"Erro: {exc}", "breakdown": []}
 
-    return render_template(
-        "tools/transport_calculator.html",
-        form=form,
-        resultado=resultado,
-        resumo=resumo,
-    )
+    return render_template("tools/transport_calculator.html", result=result)

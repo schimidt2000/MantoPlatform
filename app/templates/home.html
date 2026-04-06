@@ -17,7 +17,7 @@
   <div class="panel">
     <h2>Tarefas pendentes</h2>
 
-    {% if not show_casting and not show_figurino %}
+    {% if not show_casting and not show_figurino and not show_ensaio %}
       <p class="muted">Tudo em dia! ✓</p>
     {% else %}
       {% if show_casting %}
@@ -30,9 +30,17 @@
               </span>
             </div>
             {% for r in pending_casting %}
-              <div class="flex-between gap-12" style="padding: 10px 0; border-bottom: 1px solid var(--line);">
+              {% set days_left = ((r.event.start_at.date() - today).days) if r.event.start_at else 999 %}
+              <div class="flex-between gap-12 task-row" style="padding: 10px 0; border-bottom: 1px solid var(--line);{% if days_left <= 2 %} background: rgba(228,88,88,0.06); margin: 0 -16px; padding: 10px 16px;{% elif days_left <= 7 %} background: rgba(245,200,66,0.06); margin: 0 -16px; padding: 10px 16px;{% endif %}">
                 <div>
-                  <div class="strong">{{ r.character_name }}</div>
+                  <div class="strong">
+                    {{ r.character_name }}
+                    {% if days_left <= 2 %}
+                      <span class="badge badge-red" style="font-size:10px; margin-left:6px;">URGENTE</span>
+                    {% elif days_left <= 7 %}
+                      <span class="badge badge-gold" style="font-size:10px; margin-left:6px;">{{ days_left }}d</span>
+                    {% endif %}
+                  </div>
                   <div class="meta">
                     <a href="/events/{{ r.event.id }}">{{ r.event.title }}</a>
                     {% if r.event.start_at %}
@@ -54,6 +62,45 @@
         {% endif %}
       {% endif %}
 
+      {% if show_ensaio %}
+        <hr class="sep">
+        {% if pending_ensaio %}
+          <div>
+            <div class="flex-between mb-16">
+              <span class="flex-center gap-8">
+                <span class="badge" style="background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44;">Ensaio</span>
+                <span class="meta">{{ pending_ensaio | length }} evento(s) sem ensaio marcado</span>
+              </span>
+            </div>
+            {% for ev in pending_ensaio %}
+              {% set days_left = ((ev.start_at.date() - today).days) if ev.start_at else 999 %}
+              <div class="flex-between gap-12 task-row" style="padding: 10px 0; border-bottom: 1px solid var(--line);{% if days_left <= 7 %} background: rgba(228,88,88,0.06); margin: 0 -16px; padding: 10px 16px;{% elif days_left <= 14 %} background: rgba(245,200,66,0.06); margin: 0 -16px; padding: 10px 16px;{% endif %}">
+                <div>
+                  <div class="strong">
+                    {{ ev.title }}
+                    {% if days_left <= 7 %}
+                      <span class="badge badge-red" style="font-size:10px; margin-left:6px;">{{ days_left }}d</span>
+                    {% elif days_left <= 14 %}
+                      <span class="badge badge-gold" style="font-size:10px; margin-left:6px;">{{ days_left }}d</span>
+                    {% endif %}
+                  </div>
+                  <div class="meta">
+                    {% if ev.start_at %}{{ ev.start_at.strftime("%d/%m/%Y às %H:%M") }}{% endif %}
+                    {% if ev.location %} · {{ ev.location }}{% endif %}
+                  </div>
+                </div>
+                <a href="/events/{{ ev.id }}" class="btn btn-sm btn-secondary">Agendar ensaio</a>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="flex-center gap-8">
+            <span class="badge" style="background:var(--accent)22;color:var(--accent);">Ensaio</span>
+            <span class="badge badge-green">Todos agendados ✓</span>
+          </div>
+        {% endif %}
+      {% endif %}
+
       {% if show_figurino %}
         <hr class="sep">
         {% if pending_figurino %}
@@ -65,9 +112,18 @@
               </span>
             </div>
             {% for r in pending_figurino %}
-              <div class="flex-between gap-12" style="padding: 10px 0; border-bottom: 1px solid var(--line);">
+              {% set days_left = ((r.event.start_at.date() - today).days) if r.event.start_at else 999 %}
+              <div class="flex-between gap-12 task-row" style="padding: 10px 0; border-bottom: 1px solid var(--line);{% if days_left <= 2 %} background: rgba(228,88,88,0.06); margin: 0 -16px; padding: 10px 16px;{% elif days_left <= 7 %} background: rgba(245,200,66,0.06); margin: 0 -16px; padding: 10px 16px;{% endif %}">
                 <div>
-                  <div class="strong">{{ r.character_name }}</div>
+                  <div class="strong">
+                    {{ r.character_name }}
+                    {% if r.talent %}<span class="meta" style="font-weight:400;"> · {{ r.talent.full_name }}</span>{% endif %}
+                    {% if days_left <= 2 %}
+                      <span class="badge badge-red" style="font-size:10px; margin-left:6px;">URGENTE</span>
+                    {% elif days_left <= 7 %}
+                      <span class="badge badge-gold" style="font-size:10px; margin-left:6px;">{{ days_left }}d</span>
+                    {% endif %}
+                  </div>
                   <div class="meta">
                     <a href="/events/{{ r.event.id }}">{{ r.event.title }}</a>
                     {% if r.event.start_at %}

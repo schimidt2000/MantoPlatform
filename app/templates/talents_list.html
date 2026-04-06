@@ -143,7 +143,7 @@
     gap: 4px;
     padding: 3px 10px;
     background: var(--accent-soft);
-    border: 1px solid rgba(198,154,43,.25);
+    border: 1px solid rgba(84,69,150,.25);
     border-radius: 16px;
     font-size: 12px;
     color: var(--accent-dark);
@@ -167,13 +167,6 @@
      class="btn {% if status == 'active' %}btn-primary{% else %}btn-ghost{% endif %}">
     Ativos
   </a>
-  <a href="/talents?status=pending"
-     class="btn {% if status == 'pending' %}btn-primary{% else %}btn-ghost{% endif %}">
-    Pendentes
-    {% if status == 'pending' and people %}
-      <span class="badge badge-gray" style="margin-left:6px;">{{ people|length }}</span>
-    {% endif %}
-  </a>
 </div>
 
 {% if status == "active" %}
@@ -187,11 +180,13 @@
   {% set active_passport  = request.args.getlist('passport') %}
   {% set active_tag       = request.args.get('tag', '') %}
   {% set active_height    = request.args.get('height_value', '') %}
+  {% set active_character = request.args.get('character', '') %}
 
-  {% set has_filters = active_languages or active_races or active_tops or active_bottoms or active_shoes or active_passport or active_tag or active_height %}
+  {% set has_filters = active_languages or active_races or active_tops or active_bottoms or active_shoes or active_passport or active_tag or active_height or active_character %}
 
   {% if has_filters %}
   <div class="active-filters">
+    {% if active_character %}<span class="active-chip">&#127914; Personagem: <strong>{{ active_character }}</strong> <a href="{{ request.url | replace('character=' + active_character, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endif %}
     {% for v in active_languages %}<span class="active-chip">{{ v }} <a href="{{ request.url | replace('language=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
     {% for v in active_races %}<span class="active-chip">{{ v }} <a href="{{ request.url | replace('race=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
     {% for v in active_tops %}<span class="active-chip">Top {{ v }} <a href="{{ request.url | replace('top=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
@@ -207,8 +202,37 @@
   {# ── Filter Pills Bar ──────────────────────────────────────── #}
   <form id="filter-form" method="get" action="/talents">
     <input type="hidden" name="status" value="active">
+    <input type="hidden" name="filtrou" value="1">
+
+  {# ── Filtro: já trabalhou com a Manto ─────────────────────── #}
+  <div style="margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600;">
+      <input type="checkbox" name="ja_trabalhou" value="1"
+             {% if ja_trabalhou == '1' %}checked{% endif %}>
+      Já trabalhou com a Manto
+    </label>
+    <span class="badge badge-gray" style="font-size:11px;">{{ pagination.total }} pessoa(s)</span>
+  </div>
 
     <div class="fp-bar" id="fp-bar">
+
+      {# Personagem (busca histórica) #}
+      <div class="fp" id="fp-personagem">
+        <button type="button" class="fp-btn {% if active_character %}has-value{% endif %}" onclick="fpToggle('fp-personagem')">
+          &#127914; Personagem {% if active_character %}<span class="fp-count">1</span>{% endif %} <span class="fp-arrow">▼</span>
+        </button>
+        <div class="fp-panel" style="min-width:260px;">
+          <div style="font-size:12px; color:var(--muted); margin-bottom:8px; line-height:1.4;">
+            Busca artistas pelo personagem que já interpretaram em eventos anteriores.
+          </div>
+          <input type="text" name="character" id="char-input"
+                 placeholder="ex: Thor, Homem-Aranha, Mario…"
+                 value="{{ active_character }}"
+                 style="width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:13px;"
+                 autofocus>
+          <div id="char-suggestions" style="margin-top:6px;"></div>
+        </div>
+      </div>
 
       {# Idioma #}
       {% if language_options %}
@@ -367,6 +391,15 @@
               {% if p.clothing_size_bottom %} &middot; B {{ p.clothing_size_bottom }}{% endif %}
               {% if p.shoe_size %} &middot; Cal {{ p.shoe_size }}{% endif %}
             </div>
+            {% if character_matches.get(p.id) %}
+              <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;">
+                {% for char, count in character_matches[p.id].items() %}
+                  <span style="background:var(--accent-soft); color:var(--accent-dark); border:1px solid rgba(84,69,150,.3); border-radius:10px; font-size:10px; font-weight:600; padding:2px 7px;">
+                    {{ char }}{% if count > 1 %} ×{{ count }}{% endif %}
+                  </span>
+                {% endfor %}
+              </div>
+            {% endif %}
           </div>
         </a>
       {% endfor %}
@@ -380,65 +413,33 @@
     </div>
   {% endif %}
 
-{% else %}
+  {# ── Paginação ────────────────────────────────────────────────── #}
+  {% if pagination and pagination.pages > 1 %}
+    <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-top:24px; flex-wrap:wrap;">
+      {% if pagination.has_prev %}
+        <a href="{{ request.url | replace('page=' + pagination.page|string, '') | replace('&&','&') | replace('?&','?') }}&page={{ pagination.prev_num }}"
+           class="btn btn-secondary" style="padding:6px 14px;">← Anterior</a>
+      {% endif %}
 
-  {# ── Pending: header com "Aprovar todos" ─────────────────────── #}
-  {% if people %}
-    <div class="flex-center gap-8 mb-16" style="justify-content:flex-end;">
-      <form method="post" action="/talents/approve-all" style="margin:0;"
-            onsubmit="return confirm('Aprovar todos os {{ people|length }} talentos pendentes?')">
-        <button type="submit" class="btn btn-primary">
-          Aprovar todos ({{ people|length }})
-        </button>
-      </form>
+      {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+        {% if p %}
+          {% if p == pagination.page %}
+            <span class="btn btn-primary" style="padding:6px 12px; cursor:default;">{{ p }}</span>
+          {% else %}
+            <a href="{{ request.url | replace('page=' + pagination.page|string, '') | replace('&&','&') | replace('?&','?') }}&page={{ p }}"
+               class="btn btn-secondary" style="padding:6px 12px;">{{ p }}</a>
+          {% endif %}
+        {% else %}
+          <span class="muted">…</span>
+        {% endif %}
+      {% endfor %}
+
+      {% if pagination.has_next %}
+        <a href="{{ request.url | replace('page=' + pagination.page|string, '') | replace('&&','&') | replace('?&','?') }}&page={{ pagination.next_num }}"
+           class="btn btn-secondary" style="padding:6px 14px;">Próxima →</a>
+      {% endif %}
     </div>
   {% endif %}
-
-  {# ── Pending Table ──────────────────────────────────────────── #}
-  <div class="panel">
-    {% if people %}
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>Email</th>
-              <th>Telefone</th>
-              <th>Habilidades</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for p in people %}
-              <tr>
-                <td>
-                  <a href="/talents/{{ p.id }}" class="strong">{{ p.full_name }}</a>
-                </td>
-                <td class="meta">{{ p.email_contact or "—" }}</td>
-                <td class="meta">{{ p.phone or "—" }}</td>
-                <td>
-                  {% if p.tags %}
-                    {% for tag in p.tags.split(',') %}
-                      <span class="badge badge-gray">{{ tag.strip() }}</span>
-                    {% endfor %}
-                  {% else %}
-                    <span class="muted">—</span>
-                  {% endif %}
-                </td>
-                <td style="white-space:nowrap;">
-                  <form method="post" action="/talents/{{ p.id }}/approve" style="margin:0;">
-                    <button type="submit" class="btn btn-primary btn-sm">Aprovar</button>
-                  </form>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <p class="muted" style="text-align:center; padding:24px 0;">Nenhum talento pendente.</p>
-    {% endif %}
-  </div>
 
 {% endif %}
 
@@ -450,21 +451,54 @@
   function fpToggle(id) {
     const el = document.getElementById(id);
     const isOpen = el.classList.contains('open');
-    // fecha todos
     document.querySelectorAll('.fp.open').forEach(d => d.classList.remove('open'));
-    if (!isOpen) el.classList.add('open');
+    if (!isOpen) {
+      el.classList.add('open');
+      if (id === 'fp-personagem') {
+        setTimeout(function() { document.getElementById('char-input').focus(); }, 60);
+      }
+    }
   }
 
-  // fecha ao clicar fora
   document.addEventListener('click', function(e) {
     if (!e.target.closest('.fp')) {
       document.querySelectorAll('.fp.open').forEach(d => d.classList.remove('open'));
     }
   });
 
-  // abre o painel do filtro ativo se houver filtros ativos
-  document.addEventListener('DOMContentLoaded', function() {
-    // nenhum painel aberto por padrão - só abre ao clicar
-  });
+  /* ── Sugestões de personagens ─────────────────────────────── */
+  const ALL_CHARACTERS = [
+    {% set seen = namespace(chars=[]) %}
+    {% for tid, chars in character_matches.items() %}{% for c in chars %}{% if c not in seen.chars %}{% set seen.chars = seen.chars + [c] %}{% endif %}{% endfor %}{% endfor %}
+    /* populated via server-side known characters would require an extra query;
+       instead we fetch suggestions live from the route */
+  ];
+
+  const charInput = document.getElementById('char-input');
+  const charSugg  = document.getElementById('char-suggestions');
+
+  if (charInput) {
+    let debounce;
+    charInput.addEventListener('input', function () {
+      clearTimeout(debounce);
+      const q = this.value.trim();
+      if (!q) { charSugg.innerHTML = ''; return; }
+      debounce = setTimeout(function () {
+        fetch('/talents/character-suggestions?q=' + encodeURIComponent(q))
+          .then(r => r.json())
+          .then(function (data) {
+            if (!data.length) { charSugg.innerHTML = ''; return; }
+            charSugg.innerHTML = data.map(function (c) {
+              return '<button type="button" onclick="document.getElementById(\'char-input\').value=\'' +
+                c.name.replace(/'/g, "\\'") + '\'; document.getElementById(\'filter-form\').submit();" ' +
+                'style="display:block; width:100%; text-align:left; background:none; border:none; ' +
+                'padding:6px 8px; border-radius:6px; font-size:13px; cursor:pointer; color:var(--ink);" ' +
+                'onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'none\'">' +
+                c.name + ' <span style="color:var(--muted); font-size:11px;">(' + c.count + 'x)</span></button>';
+            }).join('');
+          });
+      }, 220);
+    });
+  }
 </script>
 {% endblock %}

@@ -35,7 +35,13 @@ def parse_date(value: Any) -> Optional[date]:
             return None
     if isinstance(value, str):
         raw = value.strip()
-        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
+        # Serial numérico que chegou como string (ex: "36531")
+        if raw.lstrip("-").isdigit():
+            try:
+                return date(1899, 12, 30) + timedelta(days=int(raw))
+            except Exception:
+                pass
+        for fmt in ("%m/%d/%Y", "%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
             try:
                 return datetime.strptime(raw, fmt).date()
             except ValueError:
@@ -160,7 +166,13 @@ def import_new_talents_from_sheet(
         artistic_name = first_present(row, header_map, ["Nome Artistico"])
         phone = first_present(row, header_map, ["Telefone com DDD", "Telefone"])
         email = first_present(row, header_map, ["E-mail", "Email"])
-        birth_date_raw = first_present(row, header_map, ["Data de Nascimento"])
+        birth_date_raw = first_present(row, header_map, [
+            "Data de Nascimento",
+            "Data de nascimento",
+            "Nascimento",
+            "Data Nascimento",
+            "date of birth",
+        ])
 
         cpf = only_digits(first_present(row, header_map, ["CPF", "CPF (Cadastro de Pessoas Fisicas)"]))
         rg = first_present(row, header_map, ["RG", "RG (Registro Geral)"])
@@ -200,14 +212,36 @@ def import_new_talents_from_sheet(
         cnh_exp_raw = first_present(row, header_map, ["Data de vencimento da CNH"])
         cnh_file = first_present(row, header_map, ["Foto ou arquivo da CNH aberta"])
 
+        # campos extras
+        gender = first_present(row, header_map, ["Genero", "Gênero"])
+        doc_photo = drive_direct_url(
+            first_present(row, header_map, ["Foto do seu documento (CPF, RG ou CNH)", "Foto do seu documento"])
+        )
+        pix_key_type = first_present(row, header_map, ["Tipo de chave pix", "Tipo de chave PIX"])
+        worked_before_raw = first_present(row, header_map, ["Ja trabalhou com a Manto?", "Já trabalhou com a Manto?"])
+        worked_before = normalize_header(worked_before_raw) in ("sim", "yes", "true", "1", "x") if worked_before_raw else None
+        how_found_us = first_present(row, header_map, ["Onde conheceu a Manto?", "Onde conheceu a manto"])
+
         # Regras minimas
         if not full_name or len(cpf) < 11:
             skipped += 1
             continue
 
-        # CPF unico
+        # CPF unico — atualiza campos vazios se já existe
         exists = Talent.query.filter_by(cpf=cpf).first()
         if exists:
+            changed = False
+            if not exists.birth_date and parse_date(birth_date_raw):
+                exists.birth_date = parse_date(birth_date_raw)
+                changed = True
+            if not exists.rg and rg:
+                exists.rg = rg
+                changed = True
+            if exists.worked_before is None and worked_before is not None:
+                exists.worked_before = worked_before
+                changed = True
+            if changed:
+                db.session.commit()
             skipped += 1
             continue
 
@@ -248,7 +282,12 @@ def import_new_talents_from_sheet(
             cnh_expiration=parse_date(cnh_exp_raw),
             cnh_file_path=cnh_file or None,
             has_visa=has_visa,
-            status="pending",
+            gender=gender or None,
+            doc_photo_path=doc_photo or None,
+            pix_key_type=pix_key_type or None,
+            worked_before=worked_before,
+            how_found_us=how_found_us or None,
+            status="active",
             source="google_form",
             source_row=current_sheet_row,
         )

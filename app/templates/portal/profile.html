@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meu Perfil — Manto</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .portal-wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+    .portal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+    .portal-header-name { font-size: 20px; font-weight: 700; }
+    .portal-header-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase;
+                     letter-spacing: 0.06em; color: var(--muted); margin: 24px 0 12px; }
+    .photo-preview { width: 100px; height: 100px; border-radius: 50%;
+                     object-fit: cover; border: 2px solid var(--line); display: block; }
+    .photo-placeholder { width: 100px; height: 100px; border-radius: 50%;
+                          background: var(--surface-2); border: 2px solid var(--line);
+                          display: flex; align-items: center; justify-content: center;
+                          font-size: 40px; }
+  </style>
+</head>
+<body>
+<div class="portal-wrap">
+
+  {# Header #}
+  <div class="portal-header">
+    <div>
+      <div class="portal-header-name">Meu Perfil</div>
+      <div class="portal-header-sub">Portal do Artista · Manto Produções</div>
+    </div>
+    <a href="/portal/" class="btn btn-sm btn-secondary">&larr; Voltar</a>
+  </div>
+
+  {# Flash messages #}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ 'success' if cat == 'success' else 'info' }} mb-16">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="post" enctype="multipart/form-data">
+
+    {# ── Fotos ─────────────────────────────────────────────────── #}
+    <div class="section-title">Fotos</div>
+    <div class="panel" style="margin-bottom: 16px;">
+      <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-end;">
+        <div style="text-align: center;">
+          {% if talent.photo_face_path %}
+            {% if talent.photo_face_path.startswith('http') %}
+              <img src="{{ talent.photo_face_path }}" alt="Foto de rosto" class="photo-preview">
+            {% else %}
+              <img src="/portal/photo/{{ talent.photo_face_path | replace('/uploads/', '') }}"
+                   alt="Foto de rosto" class="photo-preview">
+            {% endif %}
+          {% else %}
+            <div class="photo-placeholder">🙂</div>
+          {% endif %}
+          <div style="font-size: 12px; color: var(--muted); margin: 6px 0 4px;">Rosto</div>
+          <input type="file" name="photo_face" accept="image/*" style="font-size: 12px; max-width: 110px;">
+        </div>
+        <div style="text-align: center;">
+          {% if talent.photo_full_path %}
+            {% if talent.photo_full_path.startswith('http') %}
+              <img src="{{ talent.photo_full_path }}" alt="Foto corpo inteiro" class="photo-preview">
+            {% else %}
+              <img src="/portal/photo/{{ talent.photo_full_path | replace('/uploads/', '') }}"
+                   alt="Foto corpo inteiro" class="photo-preview">
+            {% endif %}
+          {% else %}
+            <div class="photo-placeholder">🧍</div>
+          {% endif %}
+          <div style="font-size: 12px; color: var(--muted); margin: 6px 0 4px;">Corpo inteiro</div>
+          <input type="file" name="photo_full" accept="image/*" style="font-size: 12px; max-width: 110px;">
+        </div>
+      </div>
+    </div>
+
+    {# ── Dados básicos ──────────────────────────────────────────── #}
+    <div class="section-title">Dados Básicos</div>
+    <div class="panel" style="margin-bottom: 16px;">
+      <div class="form-group">
+        <label>Nome completo</label>
+        <input type="text" name="full_name" value="{{ talent.full_name }}" required>
+      </div>
+      <div class="form-group">
+        <label>Nome artístico</label>
+        <input type="text" name="artistic_name" value="{{ talent.artistic_name or '' }}" placeholder="Como gosta de ser chamado(a)">
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>Telefone / WhatsApp</label>
+          <input type="tel" name="phone" value="{{ talent.phone or '' }}" placeholder="(11) 99999-9999">
+        </div>
+        <div class="form-group">
+          <label>E-mail</label>
+          <input type="email" name="email_contact" value="{{ talent.email_contact or '' }}" placeholder="seu@email.com">
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>Data de nascimento</label>
+          <input type="date" name="birth_date"
+                 value="{{ talent.birth_date.strftime('%Y-%m-%d') if talent.birth_date else '' }}">
+        </div>
+        <div class="form-group">
+          <label>Gênero</label>
+          <select name="gender">
+            <option value="">—</option>
+            {% for g in ['Masculino','Feminino','Não-binário','Outro','Prefiro não dizer'] %}
+              <option value="{{ g }}" {{ 'selected' if talent.gender == g }}>{{ g }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>Raça / Etnia</label>
+          <input type="text" name="race" value="{{ talent.race or '' }}" placeholder="Ex: Branca, Parda, Preta...">
+        </div>
+        <div class="form-group">
+          <label>Idiomas</label>
+          <input type="text" name="languages" value="{{ talent.languages or '' }}" placeholder="Ex: Português, Inglês">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Habilidades / Skills</label>
+        <input type="text" name="skills" value="{{ talent.skills or '' }}" placeholder="Ex: Dança, Canto, Teatro...">
+      </div>
+    </div>
+
+    {# ── Medidas ────────────────────────────────────────────────── #}
+    <div class="section-title">Medidas (Figurino)</div>
+    <div class="panel" style="margin-bottom: 16px;">
+      <div class="grid-medidas" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+        <div class="form-group">
+          <label>Altura (cm)</label>
+          <input type="number" name="height_cm" value="{{ talent.height_cm or '' }}" placeholder="170">
+        </div>
+        <div class="form-group">
+          <label>Cima</label>
+          <input type="text" name="clothing_size_top" value="{{ talent.clothing_size_top or '' }}" placeholder="M">
+        </div>
+        <div class="form-group">
+          <label>Baixo</label>
+          <input type="text" name="clothing_size_bottom" value="{{ talent.clothing_size_bottom or '' }}" placeholder="40">
+        </div>
+        <div class="form-group">
+          <label>Sapato</label>
+          <input type="text" name="shoe_size" value="{{ talent.shoe_size or '' }}" placeholder="39">
+        </div>
+      </div>
+    </div>
+
+    {# ── PIX / Pagamento ─────────────────────────────────────────── #}
+    <div class="section-title">Dados de Pagamento (PIX)</div>
+    <div class="panel" style="margin-bottom: 16px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>Tipo de chave PIX</label>
+          <select name="pix_key_type">
+            <option value="">—</option>
+            {% for t in ['CPF','CNPJ','Telefone','E-mail','Chave aleatória'] %}
+              <option value="{{ t }}" {{ 'selected' if talent.pix_key_type == t }}>{{ t }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Chave PIX principal</label>
+          <input type="text" name="pix_key" value="{{ talent.pix_key or '' }}" placeholder="Chave PIX">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Chave PIX secundária (opcional)</label>
+        <input type="text" name="pix_key_secondary" value="{{ talent.pix_key_secondary or '' }}" placeholder="Chave alternativa">
+      </div>
+    </div>
+
+    {# ── Documentos ─────────────────────────────────────────────── #}
+    <div class="section-title">Documentos</div>
+    <div class="panel" style="margin-bottom: 16px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group">
+          <label>RG</label>
+          <input type="text" name="rg" value="{{ talent.rg or '' }}" placeholder="00.000.000-0">
+        </div>
+        <div class="form-group">
+          <label>Vencimento da CNH</label>
+          <input type="date" name="cnh_expiration"
+                 value="{{ talent.cnh_expiration.strftime('%Y-%m-%d') if talent.cnh_expiration else '' }}">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Passaporte / Visto (texto livre)</label>
+        <input type="text" name="passport_visa_text" value="{{ talent.passport_visa_text or '' }}"
+               placeholder="Ex: Possui passaporte e visto americano válido até 2026">
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" name="has_visa" value="1" {{ 'checked' if talent.has_visa }}>
+          Possuo visto americano válido
+        </label>
+      </div>
+    </div>
+
+    {# ── Veículo ─────────────────────────────────────────────────── #}
+    <div class="section-title">Veículo (opcional)</div>
+    <div class="panel" style="margin-bottom: 16px;">
+      <div class="grid-medidas" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+        <div class="form-group">
+          <label>Marca</label>
+          <input type="text" name="car_brand" value="{{ talent.car_brand or '' }}" placeholder="Toyota">
+        </div>
+        <div class="form-group">
+          <label>Modelo</label>
+          <input type="text" name="car_model" value="{{ talent.car_model or '' }}" placeholder="Corolla">
+        </div>
+        <div class="form-group">
+          <label>Ano</label>
+          <input type="text" name="car_year" value="{{ talent.car_year or '' }}" placeholder="2020">
+        </div>
+        <div class="form-group">
+          <label>Placa</label>
+          <input type="text" name="car_plate" value="{{ talent.car_plate or '' }}" placeholder="ABC-1234">
+        </div>
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-lg"
+            style="width: 100%; justify-content: center; margin-top: 8px;">
+      Salvar alterações
+    </button>
+
+  </form>
+
+  {# ── Fotos de atuação e links ─────────────────────────────── #}
+  <div class="card" style="margin-top: 24px;">
+    <h2 style="margin-bottom: 16px;">📸 Fotos de atuação & links</h2>
+
+    {# Lista existente #}
+    {% set photos = talent.media_items | selectattr('media_type', 'eq', 'photo') | list %}
+    {% set links  = talent.media_items | selectattr('media_type', 'eq', 'link')  | list %}
+
+    {% if photos %}
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+      {% for m in photos %}
+      <div style="position:relative; width:100px;">
+        <img src="{{ m.file_path }}" alt="{{ m.label or 'foto' }}"
+             style="width:100px; height:100px; object-fit:cover; border-radius:8px; border:1px solid #e0e0e0;">
+        {% if m.label %}<div style="font-size:10px; text-align:center; margin-top:4px; color:#666;">{{ m.label }}</div>{% endif %}
+        <form method="post" action="/portal/media/{{ m.id }}/delete"
+              onsubmit="return confirm('Remover esta foto?')"
+              style="position:absolute; top:4px; right:4px;">
+          <button type="submit"
+                  style="background:rgba(0,0,0,.5);border:none;border-radius:50%;width:20px;height:20px;
+                         color:#fff;font-size:12px;cursor:pointer;line-height:1;padding:0;">×</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if photos|length < 3 %}
+    <form method="post" enctype="multipart/form-data" action="/portal/media/upload-photo"
+          style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:16px;">
+      <div class="form-group" style="flex:1; min-width:160px; margin-bottom:0;">
+        <label>Adicionar foto ({{ photos|length }}/3)</label>
+        <input type="file" name="photo" accept="image/*" required style="font-size:12px;">
+      </div>
+      <div class="form-group" style="flex:1; min-width:120px; margin-bottom:0;">
+        <label>Legenda (opcional)</label>
+        <input type="text" name="label" placeholder="Ex: Teatro 2024">
+      </div>
+      <button type="submit" class="btn btn-secondary btn-sm">Adicionar foto</button>
+    </form>
+    {% endif %}
+
+    {# Links #}
+    {% if links %}
+    <div style="margin-bottom:12px;">
+      {% for m in links %}
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #f0f0f0;">
+        <span style="font-size:18px;">🔗</span>
+        <div style="flex:1;">
+          <a href="{{ m.url }}" target="_blank" style="font-size:13px; font-weight:600;">{{ m.label }}</a>
+          <div style="font-size:11px; color:#888; word-break:break-all;">{{ m.url }}</div>
+        </div>
+        <form method="post" action="/portal/media/{{ m.id }}/delete"
+              onsubmit="return confirm('Remover este link?')" style="margin:0;">
+          <button type="submit" style="background:none;border:none;cursor:pointer;color:#e45858;font-size:18px;">×</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/portal/media/add-link"
+          style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+      <div class="form-group" style="flex:2; min-width:200px; margin-bottom:0;">
+        <label>Link (YouTube, Instagram, Drive...)</label>
+        <input type="url" name="url" placeholder="https://" required>
+      </div>
+      <div class="form-group" style="flex:1; min-width:120px; margin-bottom:0;">
+        <label>Descrição (opcional)</label>
+        <input type="text" name="label" placeholder="Ex: Vídeo peça 2023">
+      </div>
+      <button type="submit" class="btn btn-secondary btn-sm">Adicionar link</button>
+    </form>
+  </div>
+
+</div>
+</body>
+</html>

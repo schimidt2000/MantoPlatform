@@ -8,15 +8,64 @@ from flask_login import login_required, current_user
 from datetime import datetime, timedelta, date
 from .config import Config  # se seu config.py está na raiz
 
+from .email_service import mail
+
 db = SQLAlchemy()
 migrate = Migrate()
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 login_manager.login_message = None  # suprime mensagem automática de "faça login"
 
+def _start_talent_sync(app):
+    """Inicia thread de background que importa novos talentos da planilha a cada 5 minutos."""
+    import threading
+    import os as _os
+
+    # Evita duplicar a thread no modo debug (Werkzeug spawna 2 processos)
+    if _os.environ.get("WERKZEUG_RUN_MAIN") == "false":
+        return
+
+    credentials_path = _os.path.abspath(
+        _os.path.join("instance", "credentials", "sheets_service_account.json")
+    )
+    if not _os.path.exists(credentials_path):
+        return  # sem credenciais, não inicia
+
+    SPREADSHEET_ID = "1A_bXqUP21HR1RWS8AVBmj1oPgjhIWBaFfYxeqX17Ric"
+    SHEET_NAME     = "Respostas"
+    INTERVAL       = 5 * 60  # segundos
+
+    def _sync_loop():
+        import time
+        # Aguarda o app estar pronto antes da primeira execução
+        time.sleep(10)
+        while True:
+            try:
+                from app.talents.importer import import_new_talents_from_sheet
+                with app.app_context():
+                    result = import_new_talents_from_sheet(
+                        spreadsheet_id=SPREADSHEET_ID,
+                        sheet_name=SHEET_NAME,
+                        credentials_path=credentials_path,
+                    )
+                    if result.get("imported", 0) > 0:
+                        app.logger.info(
+                            f"[talent-sync] {result['imported']} novo(s) talento(s) importado(s)"
+                        )
+            except Exception as exc:
+                app.logger.warning(f"[talent-sync] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_sync_loop, daemon=True, name="talent-sync")
+    t.start()
+    app.logger.info("[talent-sync] thread iniciada (intervalo: 5 min)")
+
+
 def create_app():
+    from urllib.parse import quote as _url_quote
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.jinja_env.filters['urlencode'] = _url_quote
 
     # Absolute paths for uploads (avoids CWD resolution issues)
     _instance = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'instance'))
@@ -34,6 +83,7 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+    mail.init_app(app)
 
     @app.context_processor
     def inject_settings():
@@ -79,6 +129,8 @@ def create_app():
     from .tools.routes import tools_bp
     from .financeiro.routes import financeiro_bp
     from .figurino.routes import figurino_bp
+    from .talent_portal.routes import portal_bp
+    from .crm.routes import crm_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
@@ -88,34 +140,64 @@ def create_app():
     app.register_blueprint(tools_bp)
     app.register_blueprint(financeiro_bp)
     app.register_blueprint(figurino_bp)
-    print(app.url_map)
+    app.register_blueprint(portal_bp)
+    app.register_blueprint(crm_bp)
+
+    @app.errorhandler(404)
+    def not_found(e):
+        return render_template("404.html"), 404
+
+    @app.errorhandler(500)
+    def internal_error(e):
+        app.logger.error(f"500 error: {e}")
+        return render_template("500.html"), 500
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return render_template("404.html"), 403
+
     @app.route("/")
     @login_required
     def home():
         from app.models import CalendarEvent, EventRole
 
-        # to-do list (somente eventos ja sincronizados pela agenda)
+        # to-do list — filtra a partir do release_date (ou hoje se não configurado)
+        from app.models import SiteSetting
+        _settings = SiteSetting.query.get(1)
+        _release = _settings.release_date if _settings and _settings.release_date else date.today()
+        task_cutoff = datetime(_release.year, _release.month, _release.day)
+
         exclude_ensaios = not_(CalendarEvent.title.like("🟧 ENSAIO%"))
+        future_events = CalendarEvent.start_at >= task_cutoff
+
         pending_casting = (
             EventRole.query.filter(EventRole.talent_id.is_(None))
             .join(CalendarEvent)
-            .filter(exclude_ensaios)
+            .filter(exclude_ensaios, future_events)
             .order_by(CalendarEvent.start_at.asc())
             .all()
         )
 
-        total_casting = EventRole.query.join(CalendarEvent).filter(exclude_ensaios).count()
+        total_casting = EventRole.query.join(CalendarEvent).filter(exclude_ensaios, future_events).count()
         done_casting = total_casting - len(pending_casting)
 
-        # Figurino: por enquanto consideramos concluido quando o casting ja escolheu o talento
+        # Figurino: roles COM talento atribuído mas SEM figurino confirmado
         pending_figurino = (
-            EventRole.query.filter(EventRole.talent_id.is_(None))
+            EventRole.query.filter(
+                EventRole.talent_id.isnot(None),
+                EventRole.figurino_done_at.is_(None),
+            )
             .join(CalendarEvent)
-            .filter(exclude_ensaios)
+            .filter(exclude_ensaios, future_events)
             .order_by(CalendarEvent.start_at.asc())
             .all()
         )
-        total_figurino = total_casting
+        total_figurino = (
+            EventRole.query.filter(EventRole.talent_id.isnot(None))
+            .join(CalendarEvent)
+            .filter(exclude_ensaios, future_events)
+            .count()
+        )
         done_figurino = total_figurino - len(pending_figurino)
 
         _is_real_superadmin = any(r.name == "SUPERADMIN" for r in current_user.roles)
@@ -130,6 +212,21 @@ def create_app():
 
         show_casting = has_role("CASTING") or is_superadmin
         show_figurino = has_role("FIGURINO") or is_superadmin
+        show_ensaio = has_role("ENSAIO") or is_superadmin
+
+        # Ensaio: eventos que precisam de ensaio mas ainda não têm nenhum agendado
+        pending_ensaio = []
+        if show_ensaio:
+            future_shows = (
+                CalendarEvent.query
+                .filter(
+                    CalendarEvent.needs_rehearsal == True,
+                    CalendarEvent.start_at >= datetime.utcnow(),
+                )
+                .order_by(CalendarEvent.start_at.asc())
+                .all()
+            )
+            pending_ensaio = [e for e in future_shows if not e.ensaios]
 
         perf_range = request.args.get("perf_range", "7")
         perf_start = request.args.get("perf_start")
@@ -183,10 +280,13 @@ def create_app():
 
         return render_template(
             "home.html",
+            today=date.today(),
             pending_casting=pending_casting,
             pending_figurino=pending_figurino,
+            pending_ensaio=pending_ensaio,
             show_casting=show_casting,
             show_figurino=show_figurino,
+            show_ensaio=show_ensaio,
             is_superadmin=is_superadmin,
             total_casting=total_casting,
             done_casting=done_casting,
@@ -202,13 +302,16 @@ def create_app():
             perf_money=perf_money,
         )
 
+    # ── Auto-import de talentos da planilha ────────────────────────
+    _start_talent_sync(app)
+
     @app.route("/uploads/<path:filename>")
     @login_required
     def uploaded_file(filename: str):
         return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
     # ── Impersonação de role (somente SUPERADMIN) ──────────────────
-    _IMPERSONABLE_ROLES = ["CASTING", "FIGURINO", "COMERCIAL", "RH", "FINANCEIRO", "VENDAS"]
+    _IMPERSONABLE_ROLES = ["CASTING", "FIGURINO", "COMERCIAL", "RH", "FINANCEIRO", "ENSAIO"]
 
     @app.route("/impersonate/<role_name>", methods=["POST"])
     @login_required

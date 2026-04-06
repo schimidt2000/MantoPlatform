@@ -12,6 +12,13 @@
 
 {% block page_actions %}
   <a href="/talents?status=active" class="btn btn-secondary">&larr; Talentos Ativos</a>
+  {% if eff_has_role("CASTING", "SUPERADMIN") %}
+    <a href="/talents/{{ talent.id }}/edit" class="btn btn-primary">Editar</a>
+    <form method="post" action="/talents/{{ talent.id }}/reset-password" style="margin:0;"
+          onsubmit="return confirm('Resetar senha de {{ talent.full_name }}? Uma senha temporária será gerada.')">
+      <button type="submit" class="btn btn-ghost">Resetar senha portal</button>
+    </form>
+  {% endif %}
 {% endblock %}
 
 {% block content %}
@@ -21,11 +28,15 @@
   {# ── Left column: photo ─────────────────────────────────────── #}
   <div>
     {% if talent.photo_face_path %}
-      <img src="{{ talent.photo_face_path }}" alt="Foto de {{ talent.full_name }}"
-           style="width:100%; border-radius:var(--r-lg); object-fit:cover; max-height:480px; border:1px solid var(--line);">
+      <div style="border-radius:var(--r-lg); overflow:hidden; border:1px solid var(--line);
+                  aspect-ratio:3/4; max-height:520px; background:#f0ede8;">
+        <img src="{{ talent.photo_face_path }}" alt="Foto de {{ talent.full_name }}"
+             style="width:100%; height:100%; object-fit:cover; object-position:top center; display:block;">
+      </div>
     {% else %}
-      <div class="panel flex-center flex-center" style="height:360px; justify-content:center; flex-direction:column; gap:12px;">
-        <span style="font-size:72px;">&#128100;</span>
+      <div class="panel flex-center" style="aspect-ratio:3/4; max-height:520px;
+           justify-content:center; flex-direction:column; gap:12px;">
+        <span style="font-size:64px;">&#128100;</span>
         <span class="muted">Sem foto de rosto</span>
       </div>
     {% endif %}
@@ -37,19 +48,40 @@
     {# Contato #}
     <div class="panel">
       <h2>Contato</h2>
-      <div class="form-group">
-        <label>Telefone</label>
-        <p>{{ talent.phone or "—" }}</p>
-      </div>
-      <div class="form-group" style="margin-bottom:0;">
-        <label>E-mail</label>
-        <p>
-          {% if talent.email_contact %}
-            <a href="mailto:{{ talent.email_contact }}">{{ talent.email_contact }}</a>
-          {% else %}
-            —
-          {% endif %}
-        </p>
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Telefone</label>
+          <p>{{ talent.phone or "—" }}</p>
+        </div>
+        <div class="form-group">
+          <label>E-mail</label>
+          <p>
+            {% if talent.email_contact %}
+              <a href="mailto:{{ talent.email_contact }}">{{ talent.email_contact }}</a>
+            {% else %}—{% endif %}
+          </p>
+        </div>
+        <div class="form-group">
+          <label>Data de Nascimento</label>
+          <p>{{ talent.birth_date.strftime("%d/%m/%Y") if talent.birth_date else "—" }}</p>
+        </div>
+        <div class="form-group">
+          <label>Gênero</label>
+          <p>{{ talent.gender or "—" }}</p>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Onde conheceu a Manto?</label>
+          <p>{{ talent.how_found_us or "—" }}</p>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Já trabalhou antes?</label>
+          <p>
+            {% if talent.worked_before is none %}—
+            {% elif talent.worked_before %}<span class="badge badge-green">Sim</span>
+            {% else %}<span class="badge badge-gray">Não</span>
+            {% endif %}
+          </p>
+        </div>
       </div>
     </div>
 
@@ -69,7 +101,7 @@
         </div>
         <div class="form-group">
           <label>Chave PIX</label>
-          <p>{{ talent.pix_key or "—" }}</p>
+          <p>{{ talent.pix_key or "—" }}{% if talent.pix_key_type %} <span class="meta">({{ talent.pix_key_type }})</span>{% endif %}</p>
         </div>
         <div class="form-group" style="margin-bottom:0;">
           <label>Chave PIX Secundária</label>
@@ -133,16 +165,6 @@
         </div>
       {% endif %}
 
-      {% if talent.tags %}
-        <div class="form-group" style="margin-bottom:0; margin-top:12px;">
-          <label>Tags</label>
-          <div class="flex-center gap-8" style="flex-wrap:wrap; margin-top:4px;">
-            {% for tag in talent.tags.split(',') %}
-              <span class="badge badge-blue">{{ tag.strip() }}</span>
-            {% endfor %}
-          </div>
-        </div>
-      {% endif %}
     </div>
 
     {# Veículo — show only if any car field present #}
@@ -176,9 +198,15 @@
             </div>
           {% endif %}
           {% if talent.cnh_expiration %}
-            <div class="form-group" style="margin-bottom:0;">
+            <div class="form-group">
               <label>Vencimento CNH</label>
-              <p>{{ talent.cnh_expiration }}</p>
+              <p>{{ talent.cnh_expiration.strftime("%d/%m/%Y") if talent.cnh_expiration else "—" }}</p>
+            </div>
+          {% endif %}
+          {% if talent.cnh_file_path %}
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Arquivo CNH</label>
+              <p><a href="{{ talent.cnh_file_path }}" target="_blank" class="btn btn-sm btn-secondary">Ver CNH</a></p>
             </div>
           {% endif %}
         </div>
@@ -197,5 +225,117 @@
          style="max-height:600px; object-fit:contain; border-radius:var(--r-md); border:1px solid var(--line);">
   </div>
 {% endif %}
+
+
+{# ── Foto do documento ───────────────────────────────────────── #}
+{% if talent.doc_photo_path %}
+  <hr class="sep">
+  <div class="panel">
+    <h2>Documento (CPF / RG / CNH)</h2>
+    <img src="{{ talent.doc_photo_path }}" alt="Documento de {{ talent.full_name }}"
+         style="max-height:400px; object-fit:contain; border-radius:var(--r-md); border:1px solid var(--line);">
+  </div>
+{% endif %}
+
+{# ── Histórico de eventos ────────────────────────────────────── #}
+<hr class="sep">
+<div class="panel">
+
+  <div class="flex-between mb-16" style="flex-wrap:wrap; gap:12px;">
+    <h2 style="margin-bottom:0;">Histórico de eventos</h2>
+
+    {# Filtro de período #}
+    <form method="get" class="flex-center gap-8" style="flex-wrap:wrap;">
+      <input type="date" name="date_from" value="{{ date_from }}"
+             style="width:auto;" placeholder="De">
+      <input type="date" name="date_to"   value="{{ date_to }}"
+             style="width:auto;" placeholder="Até">
+      <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+      {% if date_from or date_to %}
+        <a href="/talents/{{ talent.id }}" class="btn btn-sm btn-secondary">Limpar</a>
+      {% endif %}
+    </form>
+  </div>
+
+  {# KPIs #}
+  <div class="kpi-grid" style="margin-bottom:20px;">
+    <div class="kpi">
+      <div class="kpi-label">Eventos</div>
+      <div class="kpi-value">{{ total_events }}</div>
+      <div class="kpi-sub">realizados</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Personagens</div>
+      <div class="kpi-value">{{ characters_done | length }}</div>
+      <div class="kpi-sub">diferentes</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total faturado</div>
+      <div class="kpi-value gold">R$&nbsp;{{ "{:,.0f}".format(total_earned) }}</div>
+      <div class="kpi-sub">soma dos cachês</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Último evento</div>
+      {% if history %}
+        <div class="kpi-value" style="font-size:18px;">
+          {{ history[0].event.start_at.strftime("%d/%m/%y") if history[0].event.start_at else "—" }}
+        </div>
+        <div class="kpi-sub">{{ history[0].character_name }}</div>
+      {% else %}
+        <div class="kpi-value" style="font-size:18px;">—</div>
+        <div class="kpi-sub">sem registros</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Personagens já feitos (chips) #}
+  {% if characters_done %}
+  <div style="margin-bottom:20px;">
+    <div class="meta" style="margin-bottom:8px; font-weight:600;">Personagens realizados</div>
+    <div class="flex-center gap-8" style="flex-wrap:wrap;">
+      {% for c in characters_done %}
+        <span class="badge badge-gold">{{ c }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# Tabela de histórico #}
+  {% if history %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Evento</th>
+          <th>Personagem</th>
+          <th style="text-align:right;">Cachê</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in history %}
+        <tr>
+          <td class="meta" style="white-space:nowrap;">
+            {{ r.event.start_at.strftime("%d/%m/%Y") if r.event.start_at else "—" }}
+          </td>
+          <td>{{ r.event.title }}</td>
+          <td><span class="badge badge-gray">{{ r.character_name }}</span></td>
+          <td style="text-align:right; font-weight:600;">
+            {% if r.cache_value %}R$&nbsp;{{ "{:,.0f}".format(r.cache_value) }}{% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td>
+            <a href="/events/{{ r.event_id }}" class="btn btn-sm btn-secondary">Ver evento</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Nenhum evento encontrado{% if date_from or date_to %} no período selecionado{% endif %}.</p>
+  {% endif %}
+
+</div>
 
 {% endblock %}
