@@ -2,6 +2,7 @@ import csv
 import io
 from collections import defaultdict
 from datetime import datetime, date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 
 from flask import Blueprint, render_template, request, redirect, url_for, abort, make_response
@@ -10,10 +11,11 @@ from sqlalchemy import func
 
 from app import db
 from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, SalaryHistory, CRMDeal, CRMStage
+from app.constants import RoleName
 
 financeiro_bp = Blueprint("financeiro", __name__)
 
-DEFAULT_COMMISSION = 2.0
+DEFAULT_COMMISSION = Decimal("2")
 
 
 def _has_role(*names):
@@ -24,7 +26,7 @@ def _has_role(*names):
 def require_financeiro(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not _has_role("FINANCEIRO", "SUPERADMIN"):
+        if not _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN):
             abort(403)
         return fn(*args, **kwargs)
     return wrapper
@@ -33,29 +35,32 @@ def require_financeiro(fn):
 def require_vendas(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not _has_role("COMERCIAL", "FINANCEIRO", "SUPERADMIN"):
+        if not _has_role(RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN):
             abort(403)
         return fn(*args, **kwargs)
     return wrapper
 
 
-def _get_commission_rate(event, settings):
+def _get_commission_rate(event, settings) -> Decimal:
+    """Returns commission rate as Decimal (never float)."""
     if event.commission_rate is not None:
-        return event.commission_rate
+        return Decimal(str(event.commission_rate))
     if settings and settings.default_commission_rate is not None:
-        return settings.default_commission_rate
+        return Decimal(str(settings.default_commission_rate))
     return DEFAULT_COMMISSION
 
 
-def _event_cost(event):
+def _event_cost(event) -> int:
     return sum(r.cache_value or 0 for r in event.roles if r.talent_id)
 
 
-def _event_commission(event, settings):
+def _event_commission(event, settings) -> Decimal:
     if not event.sale_value:
-        return 0.0
+        return Decimal("0")
     rate = _get_commission_rate(event, settings)
-    return round(event.sale_value * rate / 100, 2)
+    return (Decimal(event.sale_value) * rate / Decimal("100")).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
 
 
 # ─── FINANCEIRO ROUTES ──────────────────────────────────────────────────────
@@ -125,29 +130,41 @@ def dashboard():
 
     # Lucro Bruto = Receita - CPV
     lucro_bruto = receita_bruta - cpv
-    margem_bruta = round(lucro_bruto / receita_bruta * 100, 1) if receita_bruta else 0
+    margem_bruta = (
+        (Decimal(lucro_bruto) / Decimal(receita_bruta) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        if receita_bruta else Decimal("0")
+    )
 
     # Comissões de vendas
-    total_comissoes = sum(_event_commission(e, settings) for e in events)
+    total_comissoes = sum((_event_commission(e, settings) for e in events), Decimal("0"))
 
     # Despesas com pessoal (salários fixos vigentes — estimativa pro-rata)
     period_days = (end_date - start_date).days + 1
     current_salaries = SalaryHistory.query.filter_by(end_date=None).all()
     # Custo mensal → diário → pro-rata do período
-    custo_pessoal = round(
-        sum(s.salary for s in current_salaries) / 30 * period_days, 0
-    )
+    custo_pessoal = (
+        Decimal(sum(s.salary for s in current_salaries)) / Decimal("30") * Decimal(period_days)
+    ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
     # EBITDA / Resultado Operacional = Lucro Bruto - Comissões - Pessoal
-    ebitda = lucro_bruto - total_comissoes - custo_pessoal
-    margem_ebitda = round(ebitda / receita_bruta * 100, 1) if receita_bruta else 0
+    ebitda = Decimal(lucro_bruto) - total_comissoes - custo_pessoal
+    margem_ebitda = (
+        (ebitda / Decimal(receita_bruta) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        if receita_bruta else Decimal("0")
+    )
 
     # ── Indicadores Comerciais ────────────────────────────────────────────────
     eventos_com_venda = [e for e in events if e.sale_value]
-    ticket_medio = round(receita_bruta / len(eventos_com_venda), 0) if eventos_com_venda else 0
+    ticket_medio = (
+        (Decimal(receita_bruta) / Decimal(len(eventos_com_venda))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        if eventos_com_venda else Decimal("0")
+    )
 
     # Custo de talento como % da receita
-    ratio_custo_talento = round(cpv / receita_bruta * 100, 1) if receita_bruta else 0
+    ratio_custo_talento = (
+        (Decimal(cpv) / Decimal(receita_bruta) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        if receita_bruta else Decimal("0")
+    )
 
     # Receita por tipo de evento
     receita_por_tipo = defaultdict(int)
@@ -175,12 +192,18 @@ def dashboard():
     deals_open = [d for d in all_deals if d.stage and not d.stage.is_won and not d.stage.is_lost]
 
     n_won, n_lost = len(deals_won), len(deals_lost)
-    taxa_conversao = round(n_won / (n_won + n_lost) * 100, 1) if (n_won + n_lost) else 0
+    taxa_conversao = (
+        (Decimal(n_won) / Decimal(n_won + n_lost) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        if (n_won + n_lost) else Decimal("0")
+    )
     pipeline_value = sum(d.value or 0 for d in deals_open)
 
     # Tempo médio de fechamento (dias entre criação e fechamento dos deals ganhos)
     tempos = [(d.closed_at - d.created_at).days for d in deals_won if d.closed_at and d.created_at]
-    tempo_medio_fechamento = round(sum(tempos) / len(tempos), 0) if tempos else None
+    tempo_medio_fechamento = (
+        (Decimal(sum(tempos)) / Decimal(len(tempos))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        if tempos else None
+    )
 
     # LTV por organização (top 5)
     org_ltv = defaultdict(int)
@@ -468,7 +491,7 @@ def export_pagamentos():
 @require_vendas
 def pipeline():
     settings = SiteSetting.query.get(1)
-    is_financeiro = _has_role("FINANCEIRO", "SUPERADMIN")
+    is_financeiro = _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN)
 
     events = (
         CalendarEvent.query

@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 
 from app import db
 from app.models import User, SiteSetting, Role, EventLog, CalendarEvent, AuditLog
+from app.constants import RoleName
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -16,7 +17,7 @@ admin_bp = Blueprint("admin", __name__)
 def require_superadmin(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not any(r.name == "SUPERADMIN" for r in current_user.roles):
+        if not any(r.name == RoleName.SUPERADMIN for r in current_user.roles):
             return {"ok": False, "error": "Acesso apenas para SuperAdmin"}, 403
         return fn(*args, **kwargs)
     return wrapper

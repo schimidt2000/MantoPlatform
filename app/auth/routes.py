@@ -4,10 +4,12 @@ from flask_login import login_user, logout_user, login_required
 from werkzeug.utils import secure_filename
 from ..models import User, db
 from flask_login import current_user
+from app import limiter
 
 auth_bp = Blueprint("auth", __name__)
 
 @auth_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     # GET: mostra a página
     if request.method == "GET":
@@ -29,6 +31,7 @@ def login():
             return render_template("login.html", error="Email ou senha inválidos")
         return {"ok": False, "error": "Credenciais inválidas"}, 401
 
+    session.clear()
     login_user(user)
 
     if user.must_change_password:

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone, timedelta, date
+from decimal import Decimal, ROUND_HALF_UP
 import calendar as cal
 import os
 import re
@@ -19,6 +20,7 @@ from .service import (
     insert_event,
 )
 from .. import db
+from app.constants import RoleName
 from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email
 
@@ -26,8 +28,9 @@ calendar_bp = Blueprint("calendar", __name__)
 
 CALENDAR_ID = "eventos@mantoproducoes.com.br"
 TZ = ZoneInfo("America/Sao_Paulo")
-_CAN_ENSAIO  = {"ENSAIO", "CASTING", "SUPERADMIN"}
-_CAN_CREATE  = {"COMERCIAL", "SUPERADMIN"}
+_CAN_ENSAIO      = {RoleName.ENSAIO, RoleName.CASTING, RoleName.SUPERADMIN}
+_CAN_CREATE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
+_CAN_EDIT_EVENT  = {RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.RH, RoleName.SUPERADMIN}
 
 
 @calendar_bp.route("/google/connect")
@@ -146,6 +149,293 @@ def agenda():
     )
 
 
+# ─── Event Detail — action handlers ──────────────────────────────────────────
+
+def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    role_id      = request.form.get("role_id")
+    talent_id    = request.form.get("talent_id")
+    cache_value  = request.form.get("cache_value")
+    travel_cache = request.form.get("travel_cache")
+    role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
+    if not role:
+        return
+    old_talent_id = role.talent_id
+    role.talent_id = int(talent_id) if talent_id else None
+    try:
+        role.cache_value = int(cache_value) if cache_value else None
+    except ValueError:
+        role.cache_value = None
+    try:
+        role.travel_cache = int(travel_cache) if travel_cache else None
+    except ValueError:
+        role.travel_cache = None
+    role.assigned_at = datetime.now(tz=tz_sp) if role.talent_id else None
+    if role.talent_id != old_talent_id:
+        role.figurino_done_at = None
+        role.invite_status = None
+    if role.talent_id:
+        role.payment_status = "nao_pago"
+    if old_talent_id and old_talent_id != role.talent_id:
+        old_talent = Talent.query.get(old_talent_id)
+        if old_talent:
+            send_removal_email(old_talent, event, role.character_name)
+    db.session.commit()
+    if role.talent_id and role.talent_id != old_talent_id:
+        role.invite_status = "pending"
+        db.session.add(EventLog(
+            event_id=event.id,
+            actor_name=current_user.name,
+            actor_role="Casting",
+            message=f"Adicionou {role.talent.full_name} como {role.character_name} com um cachê de {role.cache_value or 0} reais",
+            created_at=datetime.now(tz=tz_sp),
+        ))
+        db.session.commit()
+        send_invite_email(role)
+    elif role.talent_id:
+        db.session.add(EventLog(
+            event_id=event.id,
+            actor_name=current_user.name,
+            actor_role="Casting",
+            message=f"Atualizou cachê de {role.talent.full_name} como {role.character_name} para {role.cache_value or 0} reais",
+            created_at=datetime.now(tz=tz_sp),
+        ))
+        db.session.commit()
+
+
+def _handle_add_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    character_name = request.form.get("character_name", "").strip()
+    talent_id      = request.form.get("talent_id")
+    cache_value    = request.form.get("cache_value")
+    role_type      = request.form.get("role_type", "character")
+    if not character_name:
+        return
+    role = EventRole(event_id=event.id, character_name=character_name, role_type=role_type)
+    if talent_id:
+        role.talent_id = int(talent_id)
+        role.assigned_at = datetime.now(tz=tz_sp)
+    try:
+        role.cache_value = int(cache_value) if cache_value else None
+    except ValueError:
+        role.cache_value = None
+    db.session.add(role)
+    db.session.flush()
+    talent_name = role.talent.full_name if role.talent else None
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Casting",
+        message=(
+            f"Adicionou {talent_name} como {role.character_name} com um cachê de {role.cache_value or 0} reais"
+            if talent_name
+            else f"Adicionou função: {character_name}"
+        ),
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+
+
+def _handle_figurino_done(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    role_id = request.form.get("role_id")
+    role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
+    if not role:
+        return
+    role.figurino_done_at = datetime.now(tz=tz_sp)
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Figurino",
+        message=f"Separou figurino de {role.character_name}",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+
+
+def _handle_add_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    amount_raw = request.form.get("contract_amount")
+    file = request.files.get("contract_file")
+    if not file or not file.filename:
+        return
+    file.stream.seek(0, 2)
+    size = file.stream.tell()
+    file.stream.seek(0)
+    if size > 10 * 1024 * 1024:
+        return
+    name = secure_filename(file.filename)
+    save_path = os.path.join(current_app.config["UPLOAD_CONTRACTS"], name)
+    file.save(save_path)
+    try:
+        amount = int(amount_raw) if amount_raw else None
+    except ValueError:
+        amount = None
+    db.session.add(EventContract(
+        event_id=event.id,
+        file_path=f"/uploads/contracts/{name}",
+        amount=amount,
+    ))
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Comercial",
+        message="Adicionou contrato assinado",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+
+
+def _handle_update_sale(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    can_vendas = any(r.name.upper() in (RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN) for r in current_user.roles)
+    if not can_vendas:
+        return
+    sale_raw     = request.form.get("sale_value", "").strip()
+    with_invoice = request.form.get("with_invoice") == "1"
+    try:
+        event.sale_value = int(sale_raw) if sale_raw else None
+    except ValueError:
+        event.sale_value = None
+    event.with_invoice = with_invoice
+    if any(r.name.upper() == RoleName.COMERCIAL for r in current_user.roles):
+        if not event.seller_id:
+            event.seller_id = current_user.id
+    if any(r.name.upper() in (RoleName.FINANCEIRO, RoleName.SUPERADMIN) for r in current_user.roles):
+        seller_raw = request.form.get("seller_id", "").strip()
+        event.seller_id = int(seller_raw) if seller_raw else None
+        rate_raw = request.form.get("commission_rate", "").strip()
+        try:
+            event.commission_rate = float(Decimal(rate_raw)) if rate_raw else None
+        except ValueError:
+            event.commission_rate = None
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Vendas",
+        message=f"Atualizou valor de venda para R$ {event.sale_value or 0}{'  (com nota)' if event.with_invoice else ''}",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+
+
+def _handle_link_figurino(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    role_id  = request.form.get("role_id")
+    sheet_id = request.form.get("figurino_sheet_id")
+    role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
+    if not role:
+        return
+    role.figurino_sheet_id = int(sheet_id) if sheet_id else None
+    if role.figurino_sheet_id:
+        sheet = FigurinoSheet.query.get(role.figurino_sheet_id)
+        db.session.add(EventLog(
+            event_id=event.id,
+            actor_name=current_user.name,
+            actor_role="Figurino",
+            message=f"Vinculou ficha '{sheet.character_name if sheet else sheet_id}' ao personagem {role.character_name}",
+            created_at=datetime.now(tz=tz_sp),
+        ))
+    else:
+        db.session.add(EventLog(
+            event_id=event.id,
+            actor_name=current_user.name,
+            actor_role="Figurino",
+            message=f"Removeu ficha de figurino do personagem {role.character_name}",
+            created_at=datetime.now(tz=tz_sp),
+        ))
+    db.session.commit()
+
+
+def _handle_set_payment_status(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    role_id = request.form.get("role_id")
+    status  = request.form.get("payment_status")
+    _VALID  = {"nao_pago", "pago", "no_banco", "fora_do_banco"}
+    role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
+    if role and status in _VALID:
+        role.payment_status = status
+        db.session.commit()
+
+
+def _handle_add_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    amount_raw = request.form.get("payment_amount")
+    file = request.files.get("payment_file")
+    if not file or not file.filename:
+        return
+    file.stream.seek(0, 2)
+    size = file.stream.tell()
+    file.stream.seek(0)
+    if size > 10 * 1024 * 1024:
+        return
+    name = secure_filename(file.filename)
+    save_path = os.path.join(current_app.config["UPLOAD_PAYMENTS"], name)
+    file.save(save_path)
+    try:
+        amount = int(amount_raw) if amount_raw else None
+    except ValueError:
+        amount = None
+    db.session.add(EventPayment(
+        event_id=event.id,
+        file_path=f"/uploads/payments/{name}",
+        amount=amount,
+    ))
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Comercial",
+        message=f"Adicionou pagamento recebido de {amount or 0} reais",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+
+
+def _handle_send_invite(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    role_id = request.form.get("role_id")
+    role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
+    if not role or not role.talent_id:
+        return
+    role.invite_status = "pending"
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Casting",
+        message=f"Enviou convite para {role.talent.full_name} ({role.character_name})",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+    email_sent = send_invite_email(role)
+    msg = f"Convite marcado como enviado para {role.talent.full_name}."
+    if email_sent:
+        msg += " Email enviado."
+    elif role.talent.email_contact:
+        msg += " (falha no envio do email)"
+    flash(msg, "success")
+
+
+def _handle_save_logistics(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    old_needs_rehearsal   = event.needs_rehearsal
+    event.makeup_time     = request.form.get("makeup_time", "").strip() or None
+    loc = request.form.get("makeup_location", "").strip()
+    if loc == "outro":
+        loc = request.form.get("makeup_location_custom", "").strip()
+    event.makeup_location = loc or None
+    event.departure_time  = request.form.get("departure_time", "").strip() or None
+    event.needs_rehearsal = bool(request.form.get("needs_rehearsal"))
+    db.session.commit()
+    if event.needs_rehearsal and not old_needs_rehearsal:
+        ensaio_users = User.query.join(User.roles).filter(Role.name == RoleName.ENSAIO).all()
+        send_ensaio_alert_email(event, ensaio_users)
+    flash("Logística salva.", "success")
+
+
+_EVENT_ACTIONS = {
+    "assign_casting":     _handle_assign_casting,
+    "add_role":           _handle_add_role,
+    "figurino_done":      _handle_figurino_done,
+    "add_contract":       _handle_add_contract,
+    "update_sale":        _handle_update_sale,
+    "link_figurino":      _handle_link_figurino,
+    "set_payment_status": _handle_set_payment_status,
+    "add_payment":        _handle_add_payment,
+    "send_invite":        _handle_send_invite,
+    "save_logistics":     _handle_save_logistics,
+}
+
+
 @calendar_bp.route("/events/<int:event_id>", methods=["GET", "POST"])
 @login_required
 def event_detail(event_id: int):
@@ -168,290 +458,12 @@ def event_detail(event_id: int):
         )
 
     if request.method == "POST":
+        if not any(r.name.upper() in _CAN_EDIT_EVENT for r in current_user.roles):
+            abort(403)
         action = request.form.get("action")
-
-        if action == "assign_casting":
-            role_id = request.form.get("role_id")
-            talent_id = request.form.get("talent_id")
-            cache_value = request.form.get("cache_value")
-            role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
-            travel_cache = request.form.get("travel_cache")
-            if role:
-                old_talent_id = role.talent_id
-                role.talent_id = int(talent_id) if talent_id else None
-                try:
-                    role.cache_value = int(cache_value) if cache_value else None
-                except ValueError:
-                    role.cache_value = None
-                try:
-                    role.travel_cache = int(travel_cache) if travel_cache else None
-                except ValueError:
-                    role.travel_cache = None
-                role.assigned_at = datetime.now(tz=tz_sp) if role.talent_id else None
-                # Se o talento foi trocado, zera o figurino (task volta para o figurino)
-                if role.talent_id != old_talent_id:
-                    role.figurino_done_at = None
-                    role.invite_status = None  # limpa convite ao trocar talento
-                if role.talent_id:
-                    role.payment_status = "nao_pago"
-                # Notifica talento removido/trocado antes de commitar o novo
-                if old_talent_id and old_talent_id != role.talent_id:
-                    old_talent = Talent.query.get(old_talent_id)
-                    if old_talent:
-                        send_removal_email(old_talent, event, role.character_name)
-                db.session.commit()
-                if role.talent_id and role.talent_id != old_talent_id:
-                    # Auto-convidar pelo portal ao salvar um novo talento
-                    role.invite_status = "pending"
-                    db.session.add(
-                        EventLog(
-                            event_id=event.id,
-                            actor_name=current_user.name,
-                            actor_role="Casting",
-                            message=f"Adicionou {role.talent.full_name} como {role.character_name} com um cachê de {role.cache_value or 0} reais",
-                            created_at=datetime.now(tz=tz_sp),
-                        )
-                    )
-                    db.session.commit()
-                    send_invite_email(role)
-                elif role.talent_id:
-                    db.session.add(
-                        EventLog(
-                            event_id=event.id,
-                            actor_name=current_user.name,
-                            actor_role="Casting",
-                            message=f"Atualizou cachê de {role.talent.full_name} como {role.character_name} para {role.cache_value or 0} reais",
-                            created_at=datetime.now(tz=tz_sp),
-                        )
-                    )
-                    db.session.commit()
-
-        if action == "add_role":
-            character_name = request.form.get("character_name", "").strip()
-            talent_id = request.form.get("talent_id")
-            cache_value = request.form.get("cache_value")
-            role_type = request.form.get("role_type", "character")
-            if character_name:
-                role = EventRole(event_id=event.id, character_name=character_name, role_type=role_type)
-                if talent_id:
-                    role.talent_id = int(talent_id)
-                    role.assigned_at = datetime.now(tz=tz_sp)
-                try:
-                    role.cache_value = int(cache_value) if cache_value else None
-                except ValueError:
-                    role.cache_value = None
-                db.session.add(role)
-                db.session.flush()  # garante que relacionamentos lazy sejam acessíveis
-                talent_name = role.talent.full_name if role.talent else None
-                db.session.add(
-                    EventLog(
-                        event_id=event.id,
-                        actor_name=current_user.name,
-                        actor_role="Casting",
-                        message=(
-                            f"Adicionou {talent_name} como {role.character_name} com um cachê de {role.cache_value or 0} reais"
-                            if talent_name
-                            else f"Adicionou função: {character_name}"
-                        ),
-                        created_at=datetime.now(tz=tz_sp),
-                    )
-                )
-                db.session.commit()
-
-        if action == "figurino_done":
-            role_id = request.form.get("role_id")
-            role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
-            if role:
-                role.figurino_done_at = datetime.now(tz=tz_sp)
-                db.session.add(
-                    EventLog(
-                        event_id=event.id,
-                        actor_name=current_user.name,
-                        actor_role="Figurino",
-                        message=f"Separou figurino de {role.character_name}",
-                        created_at=datetime.now(tz=tz_sp),
-                    )
-                )
-                db.session.commit()
-
-        if action == "add_contract":
-            amount_raw = request.form.get("contract_amount")
-            file = request.files.get("contract_file")
-            if file and file.filename:
-                file.stream.seek(0, 2)
-                size = file.stream.tell()
-                file.stream.seek(0)
-                if size <= 10 * 1024 * 1024:
-                    name = secure_filename(file.filename)
-                    save_path = os.path.join(current_app.config["UPLOAD_CONTRACTS"], name)
-                    file.save(save_path)
-                    try:
-                        amount = int(amount_raw) if amount_raw else None
-                    except ValueError:
-                        amount = None
-                    db.session.add(
-                        EventContract(
-                            event_id=event.id,
-                            file_path=f"/uploads/contracts/{name}",
-                            amount=amount,
-                        )
-                    )
-                    db.session.add(
-                        EventLog(
-                            event_id=event.id,
-                            actor_name=current_user.name,
-                            actor_role="Comercial",
-                            message="Adicionou contrato assinado",
-                            created_at=datetime.now(tz=tz_sp),
-                        )
-                    )
-                    db.session.commit()
-
-        if action == "update_sale":
-            can_vendas = any(r.name.upper() in ("COMERCIAL", "FINANCEIRO", "SUPERADMIN") for r in current_user.roles)
-            if can_vendas:
-                sale_raw = request.form.get("sale_value", "").strip()
-                with_invoice = request.form.get("with_invoice") == "1"
-                try:
-                    event.sale_value = int(sale_raw) if sale_raw else None
-                except ValueError:
-                    event.sale_value = None
-                event.with_invoice = with_invoice
-
-                # COMERCIAL marca-se automaticamente como vendedor se não houver vendedor
-                if any(r.name.upper() == "COMERCIAL" for r in current_user.roles):
-                    if not event.seller_id:
-                        event.seller_id = current_user.id
-
-                # FINANCEIRO/SUPERADMIN pode alterar vendedor e taxa
-                if any(r.name.upper() in ("FINANCEIRO", "SUPERADMIN") for r in current_user.roles):
-                    seller_raw = request.form.get("seller_id", "").strip()
-                    event.seller_id = int(seller_raw) if seller_raw else None
-                    rate_raw = request.form.get("commission_rate", "").strip()
-                    try:
-                        event.commission_rate = float(rate_raw) if rate_raw else None
-                    except ValueError:
-                        event.commission_rate = None
-
-                db.session.add(
-                    EventLog(
-                        event_id=event.id,
-                        actor_name=current_user.name,
-                        actor_role="Vendas",
-                        message=f"Atualizou valor de venda para R$ {event.sale_value or 0}{'  (com nota)' if event.with_invoice else ''}",
-                        created_at=datetime.now(tz=tz_sp),
-                    )
-                )
-                db.session.commit()
-
-        if action == "link_figurino":
-            role_id = request.form.get("role_id")
-            sheet_id = request.form.get("figurino_sheet_id")
-            role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
-            if role:
-                role.figurino_sheet_id = int(sheet_id) if sheet_id else None
-                if role.figurino_sheet_id:
-                    sheet = FigurinoSheet.query.get(role.figurino_sheet_id)
-                    db.session.add(EventLog(
-                        event_id=event.id,
-                        actor_name=current_user.name,
-                        actor_role="Figurino",
-                        message=f"Vinculou ficha '{sheet.character_name if sheet else sheet_id}' ao personagem {role.character_name}",
-                        created_at=datetime.now(tz=tz_sp),
-                    ))
-                else:
-                    db.session.add(EventLog(
-                        event_id=event.id,
-                        actor_name=current_user.name,
-                        actor_role="Figurino",
-                        message=f"Removeu ficha de figurino do personagem {role.character_name}",
-                        created_at=datetime.now(tz=tz_sp),
-                    ))
-                db.session.commit()
-
-        if action == "set_payment_status":
-            role_id = request.form.get("role_id")
-            status = request.form.get("payment_status")
-            _VALID_STATUS = {"nao_pago", "pago", "no_banco", "fora_do_banco"}
-            role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
-            if role and status in _VALID_STATUS:
-                role.payment_status = status
-                db.session.commit()
-
-        if action == "add_payment":
-            amount_raw = request.form.get("payment_amount")
-            file = request.files.get("payment_file")
-            if file and file.filename:
-                file.stream.seek(0, 2)
-                size = file.stream.tell()
-                file.stream.seek(0)
-                if size <= 10 * 1024 * 1024:
-                    name = secure_filename(file.filename)
-                    save_path = os.path.join(current_app.config["UPLOAD_PAYMENTS"], name)
-                    file.save(save_path)
-                    try:
-                        amount = int(amount_raw) if amount_raw else None
-                    except ValueError:
-                        amount = None
-                    db.session.add(
-                        EventPayment(
-                            event_id=event.id,
-                            file_path=f"/uploads/payments/{name}",
-                            amount=amount,
-                        )
-                    )
-                    db.session.add(
-                        EventLog(
-                            event_id=event.id,
-                            actor_name=current_user.name,
-                            actor_role="Comercial",
-                            message=f"Adicionou pagamento recebido de {amount or 0} reais",
-                            created_at=datetime.now(tz=tz_sp),
-                        )
-                    )
-                    db.session.commit()
-
-        if action == "send_invite":
-            role_id = request.form.get("role_id")
-            role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
-            if role and role.talent_id:
-                role.invite_status = "pending"
-                db.session.add(EventLog(
-                    event_id=event.id,
-                    actor_name=current_user.name,
-                    actor_role="Casting",
-                    message=f"Enviou convite para {role.talent.full_name} ({role.character_name})",
-                    created_at=datetime.now(tz=tz_sp),
-                ))
-                db.session.commit()
-                email_sent = send_invite_email(role)
-                msg = f"Convite marcado como enviado para {role.talent.full_name}."
-                if email_sent:
-                    msg += " Email enviado."
-                elif role.talent.email_contact:
-                    msg += " (falha no envio do email)"
-                flash(msg, "success")
-
-        if action == "save_logistics":
-            old_needs_rehearsal = event.needs_rehearsal
-            event.makeup_time     = request.form.get("makeup_time", "").strip() or None
-            loc = request.form.get("makeup_location", "").strip()
-            if loc == "outro":
-                loc = request.form.get("makeup_location_custom", "").strip()
-            event.makeup_location = loc or None
-            event.departure_time  = request.form.get("departure_time", "").strip() or None
-            event.needs_rehearsal = bool(request.form.get("needs_rehearsal"))
-            db.session.commit()
-            # Notifica ENSAIO quando needs_rehearsal é marcado pela primeira vez
-            if event.needs_rehearsal and not old_needs_rehearsal:
-                ensaio_users = (
-                    User.query.join(User.roles)
-                    .filter(Role.name == "ENSAIO")
-                    .all()
-                )
-                send_ensaio_alert_email(event, ensaio_users)
-            flash("Logística salva.", "success")
-
+        handler = _EVENT_ACTIONS.get(action)
+        if handler:
+            handler(event, tz_sp)
         return redirect(url_for("calendar.event_detail", event_id=event.id))
 
     talents = Talent.query.filter_by(status="active").order_by(Talent.full_name.asc()).all()
@@ -516,7 +528,7 @@ def event_detail(event_id: int):
                         break
             availability[t.id] = {"status": status, "info": info}
 
-    _is_real_superadmin = any(r.name == "SUPERADMIN" for r in current_user.roles)
+    _is_real_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
     _impersonate = session.get("impersonate_role") if _is_real_superadmin else None
 
     def has_role(name: str) -> bool:
@@ -525,15 +537,19 @@ def event_detail(event_id: int):
         return any(r.name.upper() == name.upper() for r in current_user.roles)
 
     settings = SiteSetting.query.get(1)
-    default_commission = (settings.default_commission_rate if settings and settings.default_commission_rate is not None else 2.0)
-    event_rate = event.commission_rate if event.commission_rate is not None else default_commission
+    default_commission = Decimal(str(
+        settings.default_commission_rate if settings and settings.default_commission_rate is not None else 2
+    ))
+    event_rate = Decimal(str(event.commission_rate)) if event.commission_rate is not None else default_commission
     event_cost = sum(r.cache_value or 0 for r in event.roles if r.talent_id)
-    event_commission = round((event.sale_value or 0) * event_rate / 100, 2)
-    sellers = User.query.join(User.roles).filter(Role.name == "COMERCIAL").order_by(User.name.asc()).all()
+    event_commission = (
+        Decimal(event.sale_value or 0) * event_rate / Decimal("100")
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    sellers = User.query.join(User.roles).filter(Role.name == RoleName.COMERCIAL).order_by(User.name.asc()).all()
 
-    show_comercial = has_role("COMERCIAL") or has_role("FINANCEIRO") or has_role("SUPERADMIN")
-    show_financeiro = has_role("FINANCEIRO") or has_role("SUPERADMIN")
-    show_ensaio = has_role("ENSAIO") or has_role("CASTING") or has_role("SUPERADMIN")
+    show_comercial = has_role(RoleName.COMERCIAL) or has_role(RoleName.FINANCEIRO) or has_role(RoleName.SUPERADMIN)
+    show_financeiro = has_role(RoleName.FINANCEIRO) or has_role(RoleName.SUPERADMIN)
+    show_ensaio = has_role(RoleName.ENSAIO) or has_role(RoleName.CASTING) or has_role(RoleName.SUPERADMIN)
 
     has_makeup_role = any(
         r.character_name and "maquiador" in r.character_name.lower()
@@ -549,8 +565,8 @@ def event_detail(event_id: int):
         contracts=contracts,
         payments=payments,
         availability=availability,
-        show_casting=has_role("CASTING") or has_role("SUPERADMIN"),
-        show_figurino=has_role("FIGURINO") or has_role("SUPERADMIN"),
+        show_casting=has_role(RoleName.CASTING) or has_role(RoleName.SUPERADMIN),
+        show_figurino=has_role(RoleName.FIGURINO) or has_role(RoleName.SUPERADMIN),
         show_comercial=show_comercial,
         show_vendas=show_comercial,
         show_financeiro=show_financeiro,
@@ -652,7 +668,7 @@ def _notify_ensaio_team(event: CalendarEvent) -> None:
     """Envia alerta à equipe ENSAIO quando evento precisa de ensaio."""
     ensaio_users = (
         User.query.join(User.roles)
-        .filter(Role.name == "ENSAIO")
+        .filter(Role.name == RoleName.ENSAIO)
         .all()
     )
     send_ensaio_alert_email(event, ensaio_users)
@@ -959,7 +975,7 @@ def create_event():
         abort(403)
 
     figurino_sheets = FigurinoSheet.query.order_by(FigurinoSheet.character_name.asc()).all()
-    sellers = User.query.join(User.roles).filter(Role.name == "COMERCIAL").order_by(User.name.asc()).all()
+    sellers = User.query.join(User.roles).filter(Role.name == RoleName.COMERCIAL).order_by(User.name.asc()).all()
 
     if request.method == "GET":
         return render_template("event_create.html", figurino_sheets=figurino_sheets, sellers=sellers, errors=[])
@@ -1080,7 +1096,7 @@ def create_event():
 
 # ─── MATERIAIS DE ENSAIO ──────────────────────────────────────────────────────
 
-_CAN_ENSAIO_MATERIAL = {"ENSAIO", "CASTING", "SUPERADMIN"}
+_CAN_ENSAIO_MATERIAL = {RoleName.ENSAIO, RoleName.CASTING, RoleName.SUPERADMIN}
 
 def _can_ensaio(user) -> bool:
     return any(r.name.upper() in _CAN_ENSAIO_MATERIAL for r in user.roles)

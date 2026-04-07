@@ -5,8 +5,11 @@ from sqlalchemy import and_, not_, func
 from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_login import login_required, current_user
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from datetime import datetime, timedelta, date
 from .config import Config  # se seu config.py está na raiz
+from .constants import RoleName
 
 from .email_service import mail
 
@@ -15,6 +18,7 @@ migrate = Migrate()
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 login_manager.login_message = None  # suprime mensagem automática de "faça login"
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 def _start_talent_sync(app):
     """Inicia thread de background que importa novos talentos da planilha a cada 5 minutos."""
@@ -31,9 +35,13 @@ def _start_talent_sync(app):
     if not _os.path.exists(credentials_path):
         return  # sem credenciais, não inicia
 
-    SPREADSHEET_ID = "1A_bXqUP21HR1RWS8AVBmj1oPgjhIWBaFfYxeqX17Ric"
-    SHEET_NAME     = "Respostas"
+    SPREADSHEET_ID = app.config.get("TALENTS_SPREADSHEET_ID", "")
+    SHEET_NAME     = app.config.get("TALENTS_SHEET_NAME", "Respostas")
     INTERVAL       = 5 * 60  # segundos
+
+    if not SPREADSHEET_ID:
+        app.logger.warning("[talent-sync] TALENTS_SPREADSHEET_ID não configurado — sync desativado")
+        return
 
     def _sync_loop():
         import time
@@ -84,6 +92,7 @@ def create_app():
     migrate.init_app(app, db)
     login_manager.init_app(app)
     mail.init_app(app)
+    limiter.init_app(app)
 
     @app.context_processor
     def inject_settings():
@@ -94,7 +103,7 @@ def create_app():
     def inject_roles():
         def is_real_superadmin() -> bool:
             return current_user.is_authenticated and any(
-                r.name == "SUPERADMIN" for r in current_user.roles
+                r.name == RoleName.SUPERADMIN for r in current_user.roles
             )
 
         def eff_has_role(*names) -> bool:
@@ -200,7 +209,7 @@ def create_app():
         )
         done_figurino = total_figurino - len(pending_figurino)
 
-        _is_real_superadmin = any(r.name == "SUPERADMIN" for r in current_user.roles)
+        _is_real_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
         _impersonate = session.get("impersonate_role") if _is_real_superadmin else None
 
         def has_role(name: str) -> bool:
@@ -210,9 +219,9 @@ def create_app():
 
         is_superadmin = _is_real_superadmin and not _impersonate
 
-        show_casting = has_role("CASTING") or is_superadmin
-        show_figurino = has_role("FIGURINO") or is_superadmin
-        show_ensaio = has_role("ENSAIO") or is_superadmin
+        show_casting = has_role(RoleName.CASTING) or is_superadmin
+        show_figurino = has_role(RoleName.FIGURINO) or is_superadmin
+        show_ensaio = has_role(RoleName.ENSAIO) or is_superadmin
 
         # Ensaio: eventos que precisam de ensaio mas ainda não têm nenhum agendado
         pending_ensaio = []
@@ -311,12 +320,15 @@ def create_app():
         return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
     # ── Impersonação de role (somente SUPERADMIN) ──────────────────
-    _IMPERSONABLE_ROLES = ["CASTING", "FIGURINO", "COMERCIAL", "RH", "FINANCEIRO", "ENSAIO"]
+    _IMPERSONABLE_ROLES = [
+        RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL,
+        RoleName.RH, RoleName.FINANCEIRO, RoleName.ENSAIO,
+    ]
 
     @app.route("/impersonate/<role_name>", methods=["POST"])
     @login_required
     def impersonate_role(role_name: str):
-        if not any(r.name == "SUPERADMIN" for r in current_user.roles):
+        if not any(r.name == RoleName.SUPERADMIN for r in current_user.roles):
             return "", 403
         if role_name.upper() not in _IMPERSONABLE_ROLES:
             return "", 400

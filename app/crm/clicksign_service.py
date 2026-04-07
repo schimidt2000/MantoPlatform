@@ -87,9 +87,13 @@ def get_envelope(token: str, sandbox: bool, envelope_key: str) -> Optional[dict]
 
 
 def verify_webhook_hmac(secret: str, raw_body: bytes, hmac_header: str) -> bool:
-    """Verifica assinatura HMAC SHA256 do webhook ClickSign."""
+    """Verifica assinatura HMAC SHA256 do webhook ClickSign.
+
+    Retorna False se o secret não estiver configurado — rejeita o request
+    em vez de aceitar tudo, evitando bypass em produção.
+    """
     if not secret:
-        return True  # sem secret configurado, aceita tudo (dev)
+        return False
     computed = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(computed, hmac_header or "")
 

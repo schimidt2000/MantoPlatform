@@ -11,7 +11,7 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
-from app import db
+from app import db, limiter
 from app.models import Talent, EventRole, CalendarEvent, TalentMedia
 from app.talents.importer import parse_date
 from app.email_service import send_password_reset_email
@@ -55,6 +55,7 @@ def portal_login_required(fn):
 # ── Login / Logout ─────────────────────────────────────────────
 
 @portal_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     if session.get("talent_id"):
         return redirect(url_for("portal.home"))
@@ -69,6 +70,7 @@ def login():
         if not talent or not talent.check_password(password):
             error = "CPF ou senha incorretos."
         else:
+            session.clear()
             session["talent_id"] = talent.id
             session.permanent = True
             if talent.must_change_password:
@@ -407,6 +409,7 @@ def ack_event_change(role_id: int):
 # ── Esqueci a senha ────────────────────────────────────────────
 
 @portal_bp.route("/forgot-password", methods=["GET", "POST"])
+@limiter.limit("5 per minute", methods=["POST"])
 def forgot_password():
     if session.get("talent_id"):
         return redirect(url_for("portal.home"))
@@ -438,6 +441,7 @@ def forgot_password():
 # ── Redefinir senha via token ──────────────────────────────────
 
 @portal_bp.route("/reset-password/<token>", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
 def reset_password(token: str):
     if session.get("talent_id"):
         return redirect(url_for("portal.home"))

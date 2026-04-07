@@ -31,6 +31,13 @@ class Config:
     # Google OAuth — URL de callback para produção
     GOOGLE_OAUTH_REDIRECT_URI = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "")
 
+    # Google Sheets — importação de talentos via formulário
+    TALENTS_SPREADSHEET_ID = os.getenv("TALENTS_SPREADSHEET_ID", "")
+    TALENTS_SHEET_NAME     = os.getenv("TALENTS_SHEET_NAME", "Respostas")
+
+    # Google Drive — pasta de figurinos para sync
+    FIGURINO_DRIVE_FOLDER_ID = os.getenv("FIGURINO_DRIVE_FOLDER_ID", "")
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
