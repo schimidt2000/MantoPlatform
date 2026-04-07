@@ -9,6 +9,7 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
 from app import db
+from app.constants import RoleName
 from app.models import (
     CRMDeal, CRMStage, CRMOrganization, CRMContact, CRMNote, CRMReminder,
     User, Role, SiteSetting, CalendarEvent,
@@ -38,7 +39,7 @@ NOTE_TYPES = [
 
 
 def _require_crm():
-    allowed = {"SUPERADMIN", "COMERCIAL", "VENDAS"}
+    allowed = {RoleName.SUPERADMIN, RoleName.COMERCIAL, RoleName.VENDAS}
     if not any(r.name in allowed for r in current_user.roles):
         abort(403)
 
@@ -46,7 +47,7 @@ def _require_crm():
 def _sellers():
     return (
         User.query.join(User.roles)
-        .filter(Role.name.in_(["COMERCIAL", "VENDAS", "SUPERADMIN"]))
+        .filter(Role.name.in_([RoleName.COMERCIAL, RoleName.VENDAS, RoleName.SUPERADMIN]))
         .order_by(User.name)
         .all()
     )

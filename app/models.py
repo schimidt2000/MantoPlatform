@@ -3,6 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import re as _re
 from . import db, login_manager
 from datetime import datetime, date
+from .constants import RoleName
 
 user_roles = db.Table(
     "user_roles",
@@ -66,7 +67,7 @@ class User(db.Model, UserMixin):
 
     def has_permission(self, code: str) -> bool:
         # SUPERADMIN pode tudo
-        if any(r.name == "SUPERADMIN" for r in self.roles):
+        if any(r.name == RoleName.SUPERADMIN for r in self.roles):
             return True
 
         # Caso contrário, verifica permissões normais
@@ -79,6 +80,9 @@ class User(db.Model, UserMixin):
 
 class Talent(db.Model):
     __tablename__ = "talents"
+    __table_args__ = (
+        db.Index("ix_talents_status", "status"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -168,6 +172,10 @@ class Talent(db.Model):
 
 class CalendarEvent(db.Model):
     __tablename__ = "calendar_events"
+    __table_args__ = (
+        db.Index("ix_calendar_events_start_at",  "start_at"),
+        db.Index("ix_calendar_events_seller_id", "seller_id"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     google_event_id = db.Column(db.String(128), unique=True, nullable=False)
@@ -276,6 +284,10 @@ class FigurinoSheet(db.Model):
 
 class EventRole(db.Model):
     __tablename__ = "event_roles"
+    __table_args__ = (
+        db.Index("ix_event_roles_event_id",  "event_id"),
+        db.Index("ix_event_roles_talent_id", "talent_id"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
@@ -300,6 +312,9 @@ class EventRole(db.Model):
 
 class EventLog(db.Model):
     __tablename__ = "event_logs"
+    __table_args__ = (
+        db.Index("ix_event_logs_event_id", "event_id"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
@@ -314,6 +329,10 @@ class EventLog(db.Model):
 class AuditLog(db.Model):
     """Log geral de ações do sistema (não vinculadas a um evento específico)."""
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        db.Index("ix_audit_logs_entity",     "entity_type", "entity_id"),
+        db.Index("ix_audit_logs_created_at", "created_at"),
+    )
 
     id          = db.Column(db.Integer, primary_key=True)
     actor_name  = db.Column(db.String(120), nullable=False)
@@ -328,6 +347,9 @@ class AuditLog(db.Model):
 
 class EventContract(db.Model):
     __tablename__ = "event_contracts"
+    __table_args__ = (
+        db.Index("ix_event_contracts_event_id", "event_id"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
@@ -340,6 +362,9 @@ class EventContract(db.Model):
 
 class EventPayment(db.Model):
     __tablename__ = "event_payments"
+    __table_args__ = (
+        db.Index("ix_event_payments_event_id", "event_id"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
@@ -353,6 +378,9 @@ class EventPayment(db.Model):
 class TalentMedia(db.Model):
     """Foto de atuação ou link de apresentação do talento (até 3 fotos + links ilimitados)."""
     __tablename__ = "talent_media"
+    __table_args__ = (
+        db.Index("ix_talent_media_talent_id", "talent_id"),
+    )
 
     id           = db.Column(db.Integer, primary_key=True)
     talent_id    = db.Column(db.Integer, db.ForeignKey("talents.id"), nullable=False)
@@ -368,6 +396,9 @@ class TalentMedia(db.Model):
 class EnsaioMaterial(db.Model):
     """Arquivo ou link de referência para ensaio de um evento."""
     __tablename__ = "ensaio_materials"
+    __table_args__ = (
+        db.Index("ix_ensaio_materials_event_id", "event_id"),
+    )
 
     id            = db.Column(db.Integer, primary_key=True)
     event_id      = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
@@ -408,6 +439,9 @@ class SiteSetting(db.Model):
 
 class SalaryHistory(db.Model):
     __tablename__ = "salary_history"
+    __table_args__ = (
+        db.Index("ix_salary_history_user_id", "user_id"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
@@ -500,6 +534,10 @@ class CRMContact(db.Model):
 class CRMDeal(db.Model):
     """Negócio / lead — cada festa ou contratação."""
     __tablename__ = "crm_deals"
+    __table_args__ = (
+        db.Index("ix_crm_deals_stage_id",    "stage_id"),
+        db.Index("ix_crm_deals_assigned_to", "assigned_to"),
+    )
 
     id              = db.Column(db.Integer, primary_key=True)
     title           = db.Column(db.String(200), nullable=False)
@@ -571,6 +609,9 @@ class CRMDeal(db.Model):
 class CRMNote(db.Model):
     """Anotação / atividade registrada em um negócio."""
     __tablename__ = "crm_notes"
+    __table_args__ = (
+        db.Index("ix_crm_notes_deal_id", "deal_id"),
+    )
 
     id         = db.Column(db.Integer, primary_key=True)
     deal_id    = db.Column(db.Integer, db.ForeignKey("crm_deals.id"), nullable=False)
@@ -586,6 +627,9 @@ class CRMNote(db.Model):
 class CRMReminder(db.Model):
     """Lembrete / follow-up agendado."""
     __tablename__ = "crm_reminders"
+    __table_args__ = (
+        db.Index("ix_crm_reminders_deal_id", "deal_id"),
+    )
 
     id         = db.Column(db.Integer, primary_key=True)
     deal_id    = db.Column(db.Integer, db.ForeignKey("crm_deals.id"), nullable=False)

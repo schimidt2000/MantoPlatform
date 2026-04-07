@@ -3,11 +3,11 @@ import os
 import re
 import unicodedata
 
+from flask import current_app
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google.oauth2 import service_account
 
-FOLDER_ID = "1XV_e6SprlXujo5Lav4lxAjvsVHhPSR-8"
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 # Google Docs mimetypes that can be exported as PDF
@@ -34,11 +34,14 @@ def get_drive_service(credentials_path: str):
 
 
 def list_figurino_files(credentials_path: str) -> list:
+    folder_id = current_app.config.get("FIGURINO_DRIVE_FOLDER_ID", "")
+    if not folder_id:
+        return []
     service = get_drive_service(credentials_path)
     results = (
         service.files()
         .list(
-            q=f"'{FOLDER_ID}' in parents and trashed=false",
+            q=f"'{folder_id}' in parents and trashed=false",
             fields="files(id, name, webViewLink, mimeType)",
             pageSize=200,
         )

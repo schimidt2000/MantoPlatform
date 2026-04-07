@@ -8,11 +8,12 @@ from sqlalchemy import or_, and_, not_
 
 from app.models import Talent, EventRole, CalendarEvent
 from .. import db
+from app.constants import RoleName
 from .importer import import_new_talents_from_sheet
 
 
 def _can_edit_talent():
-    return any(r.name in ("SUPERADMIN", "CASTING") for r in current_user.roles)
+    return any(r.name in (RoleName.SUPERADMIN, RoleName.CASTING) for r in current_user.roles)
 
 talents_bp = Blueprint("talents", __name__)
 
