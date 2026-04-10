@@ -434,6 +434,8 @@ class SiteSetting(db.Model):
     release_date = db.Column(db.Date, nullable=True)
     # Token OAuth do Google Calendar — persistido no banco para sobreviver a redeploys
     google_token = db.Column(db.Text, nullable=True)
+    # Pricing config for the quote calculator (JSON)
+    pricing_config = db.Column(db.Text, nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
@@ -640,3 +642,25 @@ class CRMReminder(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     owner = db.relationship("User", lazy=True)
+
+
+class OrcamentoHistory(db.Model):
+    """Histórico de orçamentos gerados, persistido por usuário."""
+    __tablename__ = "orcamento_history"
+    __table_args__ = (
+        db.Index("ix_orcamento_history_user_id", "user_id"),
+    )
+
+    id             = db.Column(db.Integer, primary_key=True)
+    user_id        = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    client_name    = db.Column(db.String(200), nullable=True)
+    event_location = db.Column(db.String(300), nullable=True)
+    event_date     = db.Column(db.String(20), nullable=True)   # ISO date string
+    total_1h       = db.Column(db.Numeric(10, 2), nullable=True)
+    total_2h       = db.Column(db.Numeric(10, 2), nullable=True)
+    total_4h       = db.Column(db.Numeric(10, 2), nullable=True)
+    has_show       = db.Column(db.Boolean, default=False, nullable=False)
+    form_snapshot  = db.Column(db.Text, nullable=True)  # JSON com todo o estado do form
+
+    user = db.relationship("User", lazy=True)

@@ -30,7 +30,7 @@ CALENDAR_ID = "eventos@mantoproducoes.com.br"
 TZ = ZoneInfo("America/Sao_Paulo")
 _CAN_ENSAIO      = {RoleName.ENSAIO, RoleName.CASTING, RoleName.SUPERADMIN}
 _CAN_CREATE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
-_CAN_EDIT_EVENT  = {RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.RH, RoleName.SUPERADMIN}
+_CAN_EDIT_EVENT  = {RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN}
 
 
 @calendar_bp.route("/google/connect")

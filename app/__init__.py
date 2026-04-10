@@ -140,6 +140,7 @@ def create_app():
     from .figurino.routes import figurino_bp
     from .talent_portal.routes import portal_bp
     from .crm.routes import crm_bp
+    from .orcamento.routes import orcamento_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
@@ -151,6 +152,7 @@ def create_app():
     app.register_blueprint(figurino_bp)
     app.register_blueprint(portal_bp)
     app.register_blueprint(crm_bp)
+    app.register_blueprint(orcamento_bp)
 
     @app.errorhandler(404)
     def not_found(e):
@@ -322,7 +324,7 @@ def create_app():
     # ── Impersonação de role (somente SUPERADMIN) ──────────────────
     _IMPERSONABLE_ROLES = [
         RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL,
-        RoleName.RH, RoleName.FINANCEIRO, RoleName.ENSAIO,
+        RoleName.FINANCEIRO, RoleName.ENSAIO,
     ]
 
     @app.route("/impersonate/<role_name>", methods=["POST"])
@@ -340,5 +342,9 @@ def create_app():
     def impersonate_reset():
         session.pop("impersonate_role", None)
         return redirect(request.referrer or "/")
+
+    @app.route("/health")
+    def health():
+        return "ok", 200
 
     return app

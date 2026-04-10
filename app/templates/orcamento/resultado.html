@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Orçamento Gerado{% endblock %}
+{% block page_title %}Orçamento Gerado{% endblock %}
+
+{% block page_actions %}
+  <a href="{{ url_for('orcamento.index') }}" class="btn btn-secondary">Novo Orçamento</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:700px;">
+
+  {# Mensagem WhatsApp #}
+  <div class="panel" style="margin-bottom:16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <span style="font-weight:700;">Mensagem para WhatsApp</span>
+      <button id="btn-copy" class="btn btn-primary btn-sm" onclick="copyQuote()">Copiar Mensagem</button>
+    </div>
+    <pre id="quote-text" style="
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      padding: 16px;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--ink);
+    ">{{ quote.message }}</pre>
+  </div>
+
+  {# Detalhamento transporte #}
+  {% if quote.fora_sp and quote.transport_breakdown %}
+  <div class="panel" style="margin-bottom:16px;border:1px solid #fbbf24;background:#fffbeb;">
+    <div style="font-weight:700;color:#92400e;margin-bottom:14px;">Detalhamento do Transporte</div>
+    <div class="kpi-grid" style="--cols:3;">
+      <div class="kpi">
+        <div class="kpi-label">Veículo</div>
+        <div class="kpi-value">{{ fmt_brl(quote.transport_breakdown.transporte) }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Adicional Fora SP</div>
+        <div class="kpi-value">{{ fmt_brl(quote.transport_breakdown.adicional_fora_sp) }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Adicional Show</div>
+        <div class="kpi-value">{{ fmt_brl(quote.transport_breakdown.adicional_show) }}</div>
+      </div>
+    </div>
+    <div style="border-top:1px solid #fde68a;margin-top:12px;padding-top:12px;text-align:center;font-weight:700;color:#92400e;">
+      Total transporte: {{ fmt_brl(quote.transport_breakdown.total) }}
+    </div>
+  </div>
+  {% endif %}
+
+  {# Resumo #}
+  <div class="panel">
+    <div style="font-weight:700;margin-bottom:14px;">Resumo de Valores</div>
+    <div class="kpi-grid" style="--cols:3;">
+      <div class="kpi" style="border:1px solid var(--line);border-radius:var(--r-md);padding:16px;">
+        <div class="kpi-label">1 hora</div>
+        <div class="kpi-value gold">{{ fmt_brl(quote.total_1h) }}</div>
+      </div>
+      <div class="kpi" style="border:1px solid var(--line);border-radius:var(--r-md);padding:16px;">
+        <div class="kpi-label">2 horas</div>
+        <div class="kpi-value gold">{{ fmt_brl(quote.total_2h) }}</div>
+      </div>
+      <div class="kpi" style="border:1px solid var(--line);border-radius:var(--r-md);padding:16px;">
+        <div class="kpi-label">4 horas</div>
+        <div class="kpi-value gold">{{ fmt_brl(quote.total_4h) }}</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function copyQuote() {
+  const text = document.getElementById('quote-text').innerText;
+  const btn  = document.getElementById('btn-copy');
+  navigator.clipboard.writeText(text)
+    .then(() => {
+      btn.textContent = 'Copiado!';
+      btn.classList.add('btn-secondary');
+      btn.classList.remove('btn-primary');
+      setTimeout(() => {
+        btn.textContent = 'Copiar Mensagem';
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-primary');
+      }, 2000);
+    })
+    .catch(() => {
+      const r = document.createRange();
+      r.selectNodeContents(document.getElementById('quote-text'));
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(r);
+      alert('Selecione e copie manualmente (Ctrl+C).');
+    });
+}
+</script>
+{% endblock %}

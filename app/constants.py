@@ -14,5 +14,3 @@ class RoleName:
     COMERCIAL  = "COMERCIAL"
     FINANCEIRO = "FINANCEIRO"
     ENSAIO     = "ENSAIO"
-    RH         = "RH"
-    VENDAS     = "VENDAS"

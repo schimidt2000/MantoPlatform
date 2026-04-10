@@ -20,40 +20,43 @@ def main():
     with app.app_context():
         # Permissões base
         p_user_manage = get_or_create_perm("user.manage")
-        p_rh_view = get_or_create_perm("rh.view")
 
-        # Roles base
+        # Remover roles obsoletas do banco
+        for obsolete in ("ADMIN", "RH", "VENDAS"):
+            role = Role.query.filter_by(name=obsolete).first()
+            if role:
+                db.session.delete(role)
+        db.session.flush()
+
+        # Roles do sistema
         superadmin = get_or_create_role("SUPERADMIN")
-        rh = get_or_create_role("RH")
+        get_or_create_role("CASTING")
+        get_or_create_role("FIGURINO")
+        get_or_create_role("COMERCIAL")
+        get_or_create_role("FINANCEIRO")
+        get_or_create_role("ENSAIO")
 
-        # SUPERADMIN pode tudo (mas ainda adicionamos a perm p/ consistência)
         if p_user_manage not in superadmin.permissions:
             superadmin.permissions.append(p_user_manage)
 
-        if p_rh_view not in rh.permissions:
-            rh.permissions.append(p_rh_view)
+        TARGET_EMAIL = "joao@mantoproducoes.com.br"
 
-        # Seu usuário SUPERADMIN (ajuste nome/email se quiser)
-        email = "admin@manto.local"
-        user = User.query.filter_by(email=email).first()
-
-        if not user:
-            user = User(email=email, name="SuperAdmin", is_active=True, must_change_password=False)
-            user.set_password("admin123")
+        # Só cria superadmin na primeira execução (banco vazio)
+        if User.query.count() == 0:
+            user = User(
+                email=TARGET_EMAIL,
+                name="João Pedro Schimidt Mantovani",
+                is_active=True,
+                must_change_password=False,
+            )
+            user.set_password("$ch!m1dT@9")
+            user.roles = [superadmin]
             db.session.add(user)
-
-        # Garantir que SÓ você tem SUPERADMIN
-        # 1) Remove SUPERADMIN de qualquer outro usuário
-        all_users = User.query.all()
-        for u in all_users:
-            u.roles = [r for r in u.roles if r.name != "SUPERADMIN"]
-
-        # 2) Adiciona SUPERADMIN somente ao seu user
-        if superadmin not in user.roles:
-            user.roles.append(superadmin)
+            print(f"Seed OK: usuário inicial criado ({TARGET_EMAIL})")
+        else:
+            print("Seed OK: usuários já existem, nenhuma alteração.")
 
         db.session.commit()
-        print("Seed OK: SUPERADMIN garantido apenas para", email)
 
 if __name__ == "__main__":
     main()
