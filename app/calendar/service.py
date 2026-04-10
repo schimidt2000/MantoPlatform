@@ -23,11 +23,28 @@ def get_token_path() -> str:
     return _instance_path("google_token.json")
 
 def build_flow(redirect_uri: str) -> Flow:
-    return Flow.from_client_secrets_file(
-        get_client_secrets_path(),
-        scopes=SCOPES,
-        redirect_uri=redirect_uri,
-    )
+    secrets_path = get_client_secrets_path()
+    if os.path.exists(secrets_path):
+        return Flow.from_client_secrets_file(secrets_path, scopes=SCOPES, redirect_uri=redirect_uri)
+
+    # Fallback: variáveis de ambiente (produção / Railway)
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        raise RuntimeError(
+            "Credenciais Google OAuth não encontradas. "
+            "Defina GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no ambiente."
+        )
+    client_config = {
+        "web": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [redirect_uri],
+        }
+    }
+    return Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=redirect_uri)
 
 def get_authorization_url(redirect_uri: str) -> tuple[str, str]:
     flow = build_flow(redirect_uri)

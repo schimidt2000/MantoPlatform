@@ -33,10 +33,18 @@ _CAN_CREATE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
 _CAN_EDIT_EVENT  = {RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN}
 
 
+def _oauth_redirect_uri() -> str:
+    """Retorna o redirect_uri do OAuth — usa env var em produção para garantir HTTPS correto."""
+    override = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "")
+    if override:
+        return override
+    return url_for("calendar.google_callback", _external=True)
+
+
 @calendar_bp.route("/google/connect")
 @login_required
 def google_connect():
-    redirect_uri = url_for("calendar.google_callback", _external=True)
+    redirect_uri = _oauth_redirect_uri()
     auth_url, state = get_authorization_url(redirect_uri)
     session["google_oauth_state"] = state
     return redirect(auth_url)
@@ -46,7 +54,7 @@ def google_connect():
 @login_required
 def google_callback():
     state = session.get("google_oauth_state")
-    redirect_uri = url_for("calendar.google_callback", _external=True)
+    redirect_uri = _oauth_redirect_uri()
 
     flow = build_flow(redirect_uri)
     flow.fetch_token(authorization_response=request.url)
