@@ -78,7 +78,7 @@ def agenda():
         sync_events(items)
     except RuntimeError:
         items = []
-        flash("Google Calendar não conectado. Acesse Admin → Configurações para conectar.", "warning")
+        flash("Google Calendar não conectado. Use o botão 'Google' acima para conectar.", "warning")
 
     ids = [i.get("id") for i in items if i.get("id")]
     event_map = {}
