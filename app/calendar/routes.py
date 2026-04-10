@@ -73,8 +73,12 @@ def agenda():
         month = now.month
         ym = f"{year:04d}-{month:02d}"
 
-    items = fetch_events_for_month(CALENDAR_ID, year, month)
-    sync_events(items)
+    try:
+        items = fetch_events_for_month(CALENDAR_ID, year, month)
+        sync_events(items)
+    except RuntimeError:
+        items = []
+        flash("Google Calendar não conectado. Acesse Admin → Configurações para conectar.", "warning")
 
     ids = [i.get("id") for i in items if i.get("id")]
     event_map = {}
