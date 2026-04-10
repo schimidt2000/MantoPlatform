@@ -58,8 +58,8 @@ def change_password():
     if request.method == "GET":
         return render_template("change_password.html")
 
-    p1 = request.form.get("password1", "")
-    p2 = request.form.get("password2", "")
+    p1 = request.form.get("password", "")
+    p2 = request.form.get("confirm", "")
 
     if not p1 or len(p1) < 6:
         return render_template("change_password.html", error="Senha deve ter pelo menos 6 caracteres.")
