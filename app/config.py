@@ -1,9 +1,17 @@
 import os
 
 
+def _db_url() -> str:
+    url = os.getenv("DATABASE_URL", "sqlite:///manto.db")
+    # Railway fornece postgres:// mas SQLAlchemy 2.x exige postgresql://
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url
+
+
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///manto.db")
+    SQLALCHEMY_DATABASE_URI = _db_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Email — Gmail Workspace via App Password
