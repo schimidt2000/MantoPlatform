@@ -31,6 +31,9 @@ class Config:
     # Google OAuth — URL de callback para produção
     GOOGLE_OAUTH_REDIRECT_URI = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "")
 
+    # Google Maps — distância para calculadora de orçamento (opcional)
+    GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+
     # Google Sheets — importação de talentos via formulário
     TALENTS_SPREADSHEET_ID = os.getenv("TALENTS_SPREADSHEET_ID", "")
     TALENTS_SHEET_NAME     = os.getenv("TALENTS_SHEET_NAME", "Respostas")

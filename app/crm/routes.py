@@ -39,7 +39,7 @@ NOTE_TYPES = [
 
 
 def _require_crm():
-    allowed = {RoleName.SUPERADMIN, RoleName.COMERCIAL, RoleName.VENDAS}
+    allowed = {RoleName.SUPERADMIN, RoleName.COMERCIAL}
     if not any(r.name in allowed for r in current_user.roles):
         abort(403)
 
@@ -47,7 +47,7 @@ def _require_crm():
 def _sellers():
     return (
         User.query.join(User.roles)
-        .filter(Role.name.in_([RoleName.COMERCIAL, RoleName.VENDAS, RoleName.SUPERADMIN]))
+        .filter(Role.name.in_([RoleName.COMERCIAL, RoleName.SUPERADMIN]))
         .order_by(User.name)
         .all()
     )

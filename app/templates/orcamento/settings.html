@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Config. de Preços{% endblock %}
+{% block page_title %}Configurações de Preços{% endblock %}
+{% block page_subtitle %}<p class="sub">Valores de cachê, markup e transporte usados na calculadora de orçamento</p>{% endblock %}
+
+{% block page_actions %}
+  <a href="{{ url_for('orcamento.index') }}" class="btn btn-secondary">Voltar à calculadora</a>
+{% endblock %}
+
+{% block content %}
+<form method="POST" style="max-width:900px;">
+
+  {# ── MARKUP ────────────────────────────────────────────────────── #}
+  <div class="panel" style="margin-bottom:20px;">
+    <div class="panel-title">Markup (Coeficiente de Venda)</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Modelo</th><th style="text-align:center;">1h (Flash)</th><th style="text-align:center;">2h (Pocket)</th><th style="text-align:center;">4h (Full)</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Receptivo / Interativo</strong></td>
+            {% for i in range(3) %}
+            <td style="text-align:center;">
+              <input type="number" step="0.01" style="width:80px;text-align:center;"
+                     name="markup_receptivo_{{ i }}" value="{{ s.markup.receptivo[i] }}">
+            </td>
+            {% endfor %}
+          </tr>
+          <tr>
+            <td><strong>Show</strong></td>
+            {% for i in range(3) %}
+            <td style="text-align:center;">
+              <input type="number" step="0.01" style="width:80px;text-align:center;"
+                     name="markup_show_{{ i }}" value="{{ s.markup.show[i] }}">
+            </td>
+            {% endfor %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── ATORES ────────────────────────────────────────────────────── #}
+  <div class="panel" style="margin-bottom:20px;">
+    <div class="panel-title">Cachê — Atores</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Tipo</th><th>Show</th><th>Maquiagem</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr>
+        </thead>
+        <tbody>
+          {% set ator_labels = {
+            'cara_limpa|false|false': ('Cara Limpa', 'Não', 'Não'),
+            'cara_limpa|false|true':  ('Cara Limpa', 'Não', 'Sim'),
+            'cara_limpa|true|false':  ('Cara Limpa', 'Sim', 'Não'),
+            'cara_limpa|true|true':   ('Cara Limpa', 'Sim', 'Sim'),
+            'boneco|false|false':     ('Boneco', 'Não', '—'),
+            'boneco|true|false':      ('Boneco', 'Sim', '—'),
+          } %}
+          {% for key, prices in s.ator.items() %}
+          {% set safe = key.replace('|','_') %}
+          {% set labels = ator_labels.get(key, (key, '', '')) %}
+          <tr>
+            <td>{{ labels[0] }}</td><td>{{ labels[1] }}</td><td>{{ labels[2] }}</td>
+            {% for i in range(3) %}
+            <td style="text-align:center;">
+              <input type="number" step="1" style="width:80px;text-align:center;"
+                     name="ator_{{ safe }}_{{ i }}" value="{{ prices[i] }}">
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── CANTOR ────────────────────────────────────────────────────── #}
+  <div class="panel" style="margin-bottom:20px;">
+    <div class="panel-title">Cachê — Cantor <span style="font-weight:400;font-size:13px;color:var(--muted);">(sempre com show)</span></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Maquiagem</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Sem maquiagem</td>
+            {% for i in range(3) %}
+            <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="cantor_false_{{ i }}" value="{{ s.cantor['false'][i] }}"></td>
+            {% endfor %}
+          </tr>
+          <tr>
+            <td>Com maquiagem</td>
+            {% for i in range(3) %}
+            <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="cantor_true_{{ i }}" value="{{ s.cantor['true'][i] }}"></td>
+            {% endfor %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── TÉCNICO DE SOM ────────────────────────────────────────────── #}
+  <div class="panel" style="margin-bottom:20px;">
+    <div class="panel-title">Cachê — Técnico de Som</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr></thead>
+        <tbody>
+          <tr>
+            {% for i in range(3) %}
+            <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="tecnico_som_{{ i }}" value="{{ s.tecnico_som[i] }}"></td>
+            {% endfor %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── COORDENADOR ───────────────────────────────────────────────── #}
+  <div class="panel" style="margin-bottom:20px;">
+    <div class="panel-title">Cachê — Coordenador <span style="font-weight:400;font-size:13px;color:var(--muted);">(por pessoa)</span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tipo</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Sem show</td>
+            {% for i in range(3) %}
+            <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="coordenador_false_{{ i }}" value="{{ s.coordenador['false'][i] }}"></td>
+            {% endfor %}
+          </tr>
+          <tr>
+            <td>Com show</td>
+            {% for i in range(3) %}
+            <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="coordenador_true_{{ i }}" value="{{ s.coordenador['true'][i] }}"></td>
+            {% endfor %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── ESPECIAIS ─────────────────────────────────────────────────── #}
+  <div class="panel" style="margin-bottom:20px;">
+    <div class="panel-title">Cachê — Especiais</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Personagem</th><th>Show</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr></thead>
+        <tbody>
+          {% for nome, val in s.especiais.items() %}
+          {% set safe = nome.replace(' ','_').replace('-','_') %}
+          {% if val is mapping %}
+            {% for show_key, prices in val.items() %}
+            <tr>
+              <td>{{ nome }}</td>
+              <td>{{ 'Sim' if show_key == 'true' else 'Não' }}</td>
+              {% for i in range(3) %}
+              <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="especial_{{ safe }}_{{ show_key }}_{{ i }}" value="{{ prices[i] }}"></td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td>{{ nome }}</td>
+              <td style="color:var(--muted);">—</td>
+              {% for i in range(3) %}
+              <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="especial_{{ safe }}_{{ i }}" value="{{ val[i] }}"></td>
+              {% endfor %}
+            </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── MAQUIADOR ─────────────────────────────────────────────────── #}
+  <div class="panel" style="margin-bottom:20px;">
+    <div class="panel-title">Cachê — Maquiador</div>
+    <div class="form-grid-4">
+      {% set maq_labels = {
+        'make_1': '1ª make',
+        'make_2_adicional': '2ª make (adicional)',
+        'make_extra_adicional': '3ª+ make (por adicional)',
+        'make_especial': 'Make especial (pintura/prótese)',
+      } %}
+      {% for key, val in s.maquiador.items() %}
+      <div class="form-group">
+        <label>{{ maq_labels.get(key, key) }}</label>
+        <input type="number" step="1" name="maquiador_{{ key }}" value="{{ val }}">
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ── BRINDE ────────────────────────────────────────────────────── #}
+  <div class="panel" style="margin-bottom:20px;">
+    <div class="panel-title">Brinde — Show</div>
+    <div class="form-grid-4">
+      <div class="form-group">
+        <label>Custo do brinde (R$) — incluso no cachê antes do markup</label>
+        <input type="number" step="1" name="brinde_show" value="{{ s.get('brinde_show', 100) }}">
+      </div>
+    </div>
+  </div>
+
+  {# ── TRANSPORTE ────────────────────────────────────────────────── #}
+  <div class="panel" style="margin-bottom:20px;">
+    <div class="panel-title">Coeficientes de Transporte</div>
+    <div class="form-grid-3">
+      {% set transp_labels = {
+        'van_com_carretinha':  'Van c/ carretinha (R$/km)',
+        'van_sem_carretinha':  'Van s/ carretinha (R$/km)',
+        'carro_por_km':        'Carro (R$/km por carro)',
+        'afsp_divisor':        'Adicional Fora SP — divisor',
+        'ashow_divisor':       'Adicional Show — divisor',
+        'ashow_min_km':        'Adicional Show — km mínimo (total)',
+      } %}
+      {% for key, val in s.transporte.items() %}
+      <div class="form-group">
+        <label>{{ transp_labels.get(key, key) }}</label>
+        <input type="number" step="0.1" name="transporte_{{ key }}" value="{{ val }}">
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;padding-bottom:32px;">
+    <button type="submit" class="btn btn-primary">Salvar Configurações</button>
+    <a href="{{ url_for('orcamento.index') }}" class="btn btn-secondary">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

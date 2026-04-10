@@ -1,5 +1,5 @@
 import os
-from flask import Blueprint, request, render_template, redirect, url_for, current_app, flash
+from flask import Blueprint, request, render_template, redirect, url_for, current_app, flash, session
 from flask_login import login_user, logout_user, login_required
 from werkzeug.utils import secure_filename
 from ..models import User, db

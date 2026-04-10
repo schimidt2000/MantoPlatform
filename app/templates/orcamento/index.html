@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block title %}Calculadora de Orçamento{% endblock %}
+{% block page_title %}Calculadora de Orçamento{% endblock %}
+{% block page_subtitle %}<p class="sub">Monte o orçamento e gere a mensagem para WhatsApp</p>{% endblock %}
+
+{% block page_actions %}
+  <button type="button" class="btn btn-secondary btn-sm" onclick="clearAll()">Limpar tudo</button>
+{% endblock %}
+
+{% block extra_head %}
+<script>
+  window.ESPECIAIS_LIST     = {{ especiais_list | tojson }};
+  window.ESPECIAIS_COM_SHOW = {{ especiais_com_show | tojson }};
+  window.SETTINGS           = {{ settings_json | safe }};
+</script>
+<style>
+  .orc-grid {
+    display: grid;
+    grid-template-columns: minmax(0,5fr) minmax(0,7fr);
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .orc-grid { grid-template-columns: 1fr; }
+  }
+  .performer-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    margin-bottom: 8px;
+    background: var(--surface);
+  }
+  .performer-row select,
+  .performer-row input[type="text"] {
+    font-size: 13px;
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: #fff;
+    color: var(--ink);
+    height: 30px;
+  }
+  .performer-row input[type="text"] { min-width: 130px; max-width: 180px; }
+  .performer-row select { max-width: 140px; }
+  .performer-row label.chk {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .auto-service-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: var(--r-sm);
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .auto-service-row.tecnico { background: var(--blue-soft); color: var(--blue); border: 1px solid #bfdbfe; }
+  .auto-service-row.maquiador { background: var(--red-soft); color: var(--red); border: 1px solid #fca5a5; }
+  .transport-panel {
+    display: none;
+    margin-top: 12px;
+    padding: 14px;
+    border: 1px solid #fbbf24;
+    border-radius: var(--r-md);
+    background: #fffbeb;
+  }
+  .transport-panel .form-group label { color: #92400e; }
+  .radio-row { display: flex; gap: 20px; margin: 4px 0; }
+  .radio-row label { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
+  .totals-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 16px 20px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-sm);
+    margin-top: 12px;
+  }
+  .total-item { text-align: center; }
+  .total-item .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .total-item .val { font-size: 18px; font-weight: 700; color: var(--accent-dark); }
+  .coord-qty-ctrl { display: flex; align-items: center; gap: 10px; }
+  .qty-btn {
+    width: 28px; height: 28px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .qty-btn:hover { background: var(--surface-2); }
+  .add-performer-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .debug-section { margin-top: 20px; }
+  .debug-toggle { background: none; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 6px 12px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .debug-toggle:hover { background: var(--surface-2); }
+  .debug-panel { display: none; margin-top: 10px; }
+  .section-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .history-badge { display: inline-block; background: var(--accent); color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; margin-left: 6px; }
+  .history-entry { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); margin-bottom: 8px; background: #fff; }
+  .history-entry-info { flex: 1; min-width: 0; }
+  .history-entry-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history-entry-sub { font-size: 12px; color: var(--muted); }
+  .history-entry-vals { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .warn-label { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; color: #92400e; cursor: pointer; }
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="POST" id="quote-form">
+  <input type="hidden" id="performers_json" name="performers_json" value="[]">
+  <input type="hidden" id="coordenador_qty"  name="coordenador_qty"  value="1">
+
+  <div class="orc-grid">
+
+    {# ── Coluna esquerda ───────────────────────────────────────── #}
+    <div>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-title">Dados do Evento</div>
+
+        <div class="form-group">
+          <label>Cliente</label>
+          <input type="text" name="client_name" required placeholder="Nome do cliente">
+        </div>
+
+        <div class="form-group">
+          <label>Endereço do evento</label>
+          <input type="text" name="event_location" id="event_location" required placeholder="Rua, número, bairro, cidade...">
+        </div>
+
+        <div class="form-group" style="margin-bottom:6px;">
+          <label class="warn-label">
+            <input type="checkbox" name="fora_sp" id="fora_sp" onchange="toggleForaSP(this.checked)">
+            Evento fora de São Paulo
+          </label>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label>Data</label>
+            <input type="date" name="event_date" required>
+          </div>
+          <div class="form-group">
+            <label>Horário</label>
+            <input type="time" name="event_time" required>
+          </div>
+        </div>
+
+        {# Transporte #}
+        <div class="transport-panel" id="transport-section">
+          <div class="section-label" style="color:#92400e;">Transporte — Fora de SP</div>
+
+          <div class="form-group">
+            <label style="color:#92400e;">Km de ida</label>
+            <div style="display:flex;gap:8px;">
+              <input type="number" name="km_ida" id="km_ida" min="0" step="1" value="0" placeholder="0" style="width:100px;">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-distancia" onclick="fetchDistancia()">Calcular</button>
+            </div>
+            <span class="label-hint">Calculado da Manto até o local (arredondado para cima)</span>
+          </div>
+
+          <div class="form-group">
+            <label style="color:#92400e;">Tipo de veículo</label>
+            <div class="radio-row">
+              <label><input type="radio" name="transporte_tipo" id="t-van" value="van" checked onchange="setTransportTipo('van')"> Van</label>
+              <label><input type="radio" name="transporte_tipo" id="t-carro" value="carro" onchange="setTransportTipo('carro')"> Carro(s)</label>
+            </div>
+          </div>
+
+          <div id="van-options">
+            <div class="form-group" style="margin-bottom:6px;">
+              <label class="checkbox-row">
+                <input type="checkbox" name="carretinha" id="carretinha"> Com carretinha
+                <span class="label-hint">(R$5,50/km · sem: R$6,30/km)</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="carro-options" style="display:none;">
+            <div class="form-group">
+              <label style="color:#92400e;">Número de carros</label>
+              <input type="number" name="num_carros" id="num_carros" min="1" value="1" style="width:80px;">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label style="color:#92400e;">Colaboradores no evento <span class="label-hint">(calculado automaticamente)</span></label>
+            <input type="number" name="num_colaboradores" id="num_colaboradores" min="1" value="1" style="width:80px;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Coluna direita — Equipe ───────────────────────────────── #}
+    <div>
+      <div class="panel">
+        <div class="panel-title">Equipe</div>
+
+        {# Coordenador #}
+        <div style="display:flex;align-items:center;gap:12px;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line);">
+          <span class="badge badge-gold">Coordenador</span>
+          <span style="font-size:12px;color:var(--muted);">sempre obrigatório</span>
+          <div class="coord-qty-ctrl" style="margin-left:auto;">
+            <button type="button" class="qty-btn" id="coord-qty-down">−</button>
+            <span id="coord-qty" style="font-weight:700;font-size:18px;">1</span>
+            <button type="button" class="qty-btn" id="coord-qty-up">+</button>
+          </div>
+        </div>
+
+        {# Botões adicionar #}
+        <div class="add-performer-btns">
+          <span style="font-size:12px;color:var(--muted);align-self:center;">Adicionar:</span>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addPerformer('ator')">+ Ator</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addPerformer('cantor')">+ Cantor</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addPerformer('especial')">+ Especial</button>
+        </div>
+
+        {# Lista dinâmica #}
+        <div id="performers-list"></div>
+
+        {# Serviços automáticos #}
+        <div id="auto-tecnico" class="auto-service-row tecnico" style="display:none;">
+          Técnico de Som
+          <span style="font-size:12px;font-weight:400;margin-left:auto;opacity:.7;">adicionado automaticamente</span>
+        </div>
+        <div id="auto-maquiador" class="auto-service-row maquiador" style="display:none;">
+          Maquiador — <span id="maquiador-detail" style="font-weight:400;margin-left:4px;"></span>
+        </div>
+      </div>
+
+      {# Totais + submit #}
+      <div class="totals-bar">
+        <div style="display:flex;gap:24px;">
+          <div class="total-item"><div class="lbl">1 hora</div><div class="val" id="total-1h">R$ 0,00</div></div>
+          <div class="total-item"><div class="lbl">2 horas</div><div class="val" id="total-2h">R$ 0,00</div></div>
+          <div class="total-item"><div class="lbl">4 horas</div><div class="val" id="total-4h">R$ 0,00</div></div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg">Gerar Orçamento</button>
+      </div>
+
+      {# Memória de cálculo #}
+      <div class="debug-section">
+        <button type="button" class="debug-toggle" onclick="toggleDebug()">Ver memória de cálculo</button>
+        <div class="debug-panel" id="debug-panel">
+          <div class="table-wrap" style="margin-top:10px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Profissional</th>
+                  <th style="text-align:right;">Cachê 1h</th>
+                  <th style="text-align:right;">Cachê 2h</th>
+                  <th style="text-align:right;">Cachê 4h</th>
+                </tr>
+              </thead>
+              <tbody id="debug-tbody"></tbody>
+              <tfoot id="debug-tfoot"></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# Histórico #}
+  <div style="margin-top:20px;">
+    <button type="button" class="debug-toggle" onclick="toggleHistory()">
+      Histórico de Orçamentos <span class="history-badge" id="history-count">0</span>
+    </button>
+    <div class="debug-panel" id="history-panel">
+      <div style="margin-top:10px;">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+          <button type="button" class="btn btn-danger btn-sm" onclick="clearHistory()">Limpar histórico</button>
+        </div>
+        <div id="history-list"></div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/orcamento.js') }}"></script>
+<script>
+function toggleDebug() {
+  const p = document.getElementById('debug-panel');
+  p.style.display = p.style.display === 'none' || !p.style.display ? 'block' : 'none';
+}
+function toggleHistory() {
+  const p = document.getElementById('history-panel');
+  p.style.display = p.style.display === 'none' || !p.style.display ? 'block' : 'none';
+}
+</script>
+{% endblock %}

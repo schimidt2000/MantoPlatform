@@ -15,6 +15,8 @@ google-api-python-client==2.188.0
 python-docx==1.1.2
 Pillow==12.1.1
 
+googlemaps==4.10.0
+
 # Production
 gunicorn==23.0.0
 psycopg2-binary==2.9.10
