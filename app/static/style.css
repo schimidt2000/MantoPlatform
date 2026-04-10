@@ -444,6 +444,31 @@ textarea {
 }
 input[type="color"] { padding: 4px 6px; height: 40px; cursor: pointer; }
 input[type="file"] { padding: 7px 12px; }
+
+/* ── Botão olhinho (mostrar/ocultar senha) ────────────────────── */
+.pw-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.pw-wrap input[type="password"],
+.pw-wrap input[type="text"] {
+  padding-right: 40px;
+}
+.pw-eye {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  transition: color 0.15s;
+}
+.pw-eye:hover { color: var(--ink); }
+
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);
