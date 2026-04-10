@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Pipeline de Vendas{% endblock %}
+{% block page_title %}Pipeline de Vendas{% endblock %}
+{% block page_subtitle %}<p class="sub">Eventos com dados de venda, custo e comissão</p>{% endblock %}
+
+{% block content %}
+
+{% macro brl(v) %}R$ {{ "%.2f"|format(v or 0)|replace(".", ",")|replace(",", ".", 1) }}{% endmacro %}
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Evento</th>
+        <th>Local</th>
+        <th style="text-align:right;">Venda</th>
+        <th style="text-align:right;">Custo</th>
+        {% if is_financeiro %}<th style="text-align:right;">Lucro</th>{% endif %}
+        <th style="text-align:right;">Comissão</th>
+        <th>NF</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in events_data %}
+      {% set e = d.event %}
+      {% set venda = e.sale_value or 0 %}
+      {% set custo = d.custo or 0 %}
+      {% set lucro = venda - custo %}
+      <tr>
+        <td style="white-space:nowrap;">
+          {{ e.start_at.strftime("%d/%m/%Y") if e.start_at else "—" }}
+        </td>
+        <td>{{ e.title }}</td>
+        <td>{{ e.location or "—" }}</td>
+        <td style="text-align:right;">
+          {% if venda %}{{ brl(venda) }}{% else %}<span style="color:var(--muted);">—</span>{% endif %}
+        </td>
+        <td style="text-align:right;">
+          {% if custo %}{{ brl(custo) }}{% else %}<span style="color:var(--muted);">—</span>{% endif %}
+        </td>
+        {% if is_financeiro %}
+        <td style="text-align:right;{% if lucro < 0 %}color:#e74c3c;{% elif lucro > 0 %}color:#27ae60;{% endif %}">
+          {% if venda %}{{ brl(lucro) }}{% else %}<span style="color:var(--muted);">—</span>{% endif %}
+        </td>
+        {% endif %}
+        <td style="text-align:right;">
+          {% if d.comissao %}{{ brl(d.comissao) }}{% else %}<span style="color:var(--muted);">—</span>{% endif %}
+        </td>
+        <td>{% if e.with_invoice %}✓{% endif %}</td>
+        <td>
+          <a href="{{ url_for('calendar.event_detail', event_id=e.id) }}" class="btn btn-ghost btn-sm">Ver</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="{% if is_financeiro %}9{% else %}8{% endif %}" style="text-align:center;color:var(--muted);padding:40px 0;">
+          Nenhum evento encontrado.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
