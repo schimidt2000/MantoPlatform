@@ -38,6 +38,7 @@ DEFAULTS: dict = {
         "Boneco Grande Especial": {"false": [400, 450, 500], "true": [400, 450, 500]},
         "Sósia":                  {"none": [350, 400, 450], "show": [450, 500, 550], "cantor": [500, 550, 600]},
         "Bailarino":              [400, 450, 500],
+        "DJ":                     [200, 300, 400],
     },
     "especiais_regras": {
         "Boneco Grande Especial": {
@@ -67,6 +68,9 @@ ESPECIAIS_COM_SHOW: set = {"Homem-Aranha", "Boneco Grande Especial", "Sósia"}
 
 # Especiais que têm checkbox de cantor (implica show)
 ESPECIAIS_COM_CANTOR: set = {"Sósia"}
+
+# Especiais que sempre ativam técnico de som (sem checkbox — comportamento fixo)
+ESPECIAIS_SEMPRE_SHOW: set = {"DJ"}
 
 
 def _migrate(data: dict) -> dict:

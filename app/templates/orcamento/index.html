@@ -9,10 +9,11 @@
 
 {% block extra_head %}
 <script>
-  window.ESPECIAIS_LIST      = {{ especiais_list | tojson }};
-  window.ESPECIAIS_COM_SHOW  = {{ especiais_com_show | tojson }};
-  window.ESPECIAIS_COM_CANTOR = {{ especiais_com_cantor | tojson }};
-  window.SETTINGS            = {{ settings_json | safe }};
+  window.ESPECIAIS_LIST        = {{ especiais_list | tojson }};
+  window.ESPECIAIS_COM_SHOW    = {{ especiais_com_show | tojson }};
+  window.ESPECIAIS_COM_CANTOR  = {{ especiais_com_cantor | tojson }};
+  window.ESPECIAIS_SEMPRE_SHOW = {{ especiais_sempre_show | tojson }};
+  window.SETTINGS              = {{ settings_json | safe }};
 </script>
 <style>
   .orc-grid {

@@ -25,9 +25,10 @@ const fmt = (v) => BRL.format(v);
 // ── Lógica de negócio ─────────────────────────────────────────────────────────
 function eventFlags() {
   let show = false, makeup = false, makesReg = 0, makesEsp = 0;
+  const sempShow = new Set(window.ESPECIAIS_SEMPRE_SHOW || []);
   for (const p of performers) {
     if ((p.type === 'ator' && p.show) ||
-        (p.type === 'especial' && (p.show || p.cantor)) ||
+        (p.type === 'especial' && (p.show || p.cantor || sempShow.has(p.personagem))) ||
         p.type === 'cantor' /* legado */)
       show = true;
     if ((p.type === 'ator' || p.type === 'cantor' || p.type === 'especial') && p.makeup) {
@@ -301,7 +302,8 @@ function updateDebugPanel() {
       label  = (p.nome || 'Cantor') + ` <span style="color:var(--muted)">(cantor${p.makeup ? ', make' : ''})</span>`;
     } else if (p.type === 'especial') {
       const ep = cfg.especiais[p.personagem];
-      const comCantor = new Set(window.ESPECIAIS_COM_CANTOR || []);
+      const comCantor  = new Set(window.ESPECIAIS_COM_CANTOR  || []);
+      const sempShowD  = new Set(window.ESPECIAIS_SEMPRE_SHOW || []);
       if (!ep) { prices = [0, 0, 0]; }
       else if (Array.isArray(ep)) { prices = ep; }
       else if (comCantor.has(p.personagem) && p.cantor) { prices = ep['cantor'] || [0, 0, 0]; }
@@ -310,6 +312,7 @@ function updateDebugPanel() {
       const parts = [p.personagem];
       if (p.cantor) parts.push('cantor');
       else if (p.show) parts.push('show');
+      else if (sempShowD.has(p.personagem)) parts.push('técnico incluso');
       label = (p.nome || p.personagem) + ` <span style="color:var(--muted)">(${parts.join(', ')})</span>`;
     } else {
       prices = [0, 0, 0]; label = p.nome || '?';
@@ -472,14 +475,18 @@ function buildCard(p, i) {
       <label class="chk"><input type="checkbox" ${p.makeup?'checked':''} onchange="setMakeup(${i},this.checked)"> Maquiagem</label>
       ${makeupSel}`;
   } else if (p.type === 'especial') {
-    const especiais   = window.ESPECIAIS_LIST || [];
-    const comShowSet  = new Set(window.ESPECIAIS_COM_SHOW || []);
+    const especiais    = window.ESPECIAIS_LIST || [];
+    const comShowSet   = new Set(window.ESPECIAIS_COM_SHOW || []);
     const comCantorSet = new Set(window.ESPECIAIS_COM_CANTOR || []);
+    const sempShowSet  = new Set(window.ESPECIAIS_SEMPRE_SHOW || []);
+    const isSempShow   = sempShowSet.has(p.personagem);
     const opts = especiais.map(e => `<option value="${e}" ${p.personagem===e?'selected':''}>${e}</option>`).join('');
-    const showCheck = comShowSet.has(p.personagem)
+    const showCheck = (!isSempShow && comShowSet.has(p.personagem))
       ? `<label class="chk"><input type="checkbox" ${p.show?'checked':''} onchange="setProp(${i},'show',this.checked)"> Show</label>` : '';
     const cantorCheck = comCantorSet.has(p.personagem)
       ? `<label class="chk"><input type="checkbox" ${p.cantor?'checked':''} onchange="setProp(${i},'cantor',this.checked)"> Cantor</label>` : '';
+    const sempNote = isSempShow
+      ? `<span style="font-size:11px;color:var(--blue);white-space:nowrap;">🎧 técnico de som incluso</span>` : '';
     const makeupSelEsp = p.makeup ? `<select onchange="setProp(${i},'makeup_tipo',this.value)"><option value="comum" ${p.makeup_tipo!=='especial'?'selected':''}>Comum</option><option value="especial" ${p.makeup_tipo==='especial'?'selected':''}>Especial</option></select>` : '';
     controls = `
       <span class="badge badge-blue">Especial</span>
@@ -487,6 +494,7 @@ function buildCard(p, i) {
       <select onchange="setPersonagem(${i},this.value)">${opts}</select>
       ${showCheck}
       ${cantorCheck}
+      ${sempNote}
       <label class="chk"><input type="checkbox" ${p.makeup?'checked':''} onchange="setMakeup(${i},this.checked)"> Maquiagem</label>
       ${makeupSelEsp}`;
   }

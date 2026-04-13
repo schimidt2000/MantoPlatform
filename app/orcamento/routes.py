@@ -72,6 +72,7 @@ def index():
         especiais_list=list(s["especiais"].keys()),
         especiais_com_show=list(_cfg.ESPECIAIS_COM_SHOW),
         especiais_com_cantor=list(_cfg.ESPECIAIS_COM_CANTOR),
+        especiais_sempre_show=list(_cfg.ESPECIAIS_SEMPRE_SHOW),
         settings_json=json.dumps(s),
     )
 
@@ -124,9 +125,10 @@ def _process_quote():
         cantor_flag = bool(p.get("cantor", False))
 
         # show é ativado pelo ator (qualquer subtipo com show marcado),
-        # pelo especial com show ou cantor, ou pelo tipo legado "cantor"
+        # pelo especial com show/cantor, especiais que sempre têm show (DJ), ou tipo legado "cantor"
+        personagem_esp = p.get("personagem", "") if ptype == "especial" else ""
         if ptype == "cantor" or (ptype == "ator" and show) or \
-           (ptype == "especial" and (show or cantor_flag)):
+           (ptype == "especial" and (show or cantor_flag or personagem_esp in _cfg.ESPECIAIS_SEMPRE_SHOW)):
             event_has_show = True
         if makeup and ptype in ("ator", "cantor", "especial"):
             event_has_makeup = True
