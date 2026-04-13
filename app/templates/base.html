@@ -273,7 +273,7 @@
     {% if messages %}
     <div style="padding: 0 32px; margin-top: 16px;">
       {% for category, msg in messages %}
-        <div class="alert alert-{{ 'success' if category == 'success' else 'error' }}">{{ msg }}</div>
+        <div class="alert alert-{{ category if category in ('success', 'error', 'info', 'warning', 'gold') else 'error' }}">{{ msg }}</div>
       {% endfor %}
     </div>
     {% endif %}

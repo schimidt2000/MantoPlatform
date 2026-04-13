@@ -714,6 +714,7 @@ tbody tr:hover td { background: #faf9f6; }
 .alert-success { background: var(--green-soft); color: var(--green); border: 1px solid #b7dfca; }
 .alert-info    { background: var(--blue-soft); color: var(--blue); border: 1px solid #bfdbfe; }
 .alert-gold    { background: var(--accent-soft); color: var(--accent-dark); border: 1px solid rgba(84,69,150,0.30); }
+.alert-warning { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
 
 /* ── 16. UTILITIES ───────────────────────────────────────────── */
 .muted   { color: var(--muted); }

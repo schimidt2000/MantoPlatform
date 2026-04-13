@@ -380,6 +380,8 @@ def import_talents():
             credentials_path=SERVICE_ACCOUNT_JSON,
         )
         flash(f"Import finalizado: {result.get('imported', 0)} novos, {result.get('skipped', 0)} ignorados.")
+        for item in result.get("skipped_details", []):
+            flash(f"Ignorado (linha {item['linha']}): {item['nome']} — {item['motivo']}", "warning")
     except FileNotFoundError:
         flash("Credenciais do Google Sheets não encontradas. Configure a variável de ambiente GOOGLE_SHEETS_CREDENTIALS.", "error")
     except Exception as e:

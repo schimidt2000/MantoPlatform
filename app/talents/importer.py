@@ -153,10 +153,11 @@ def import_new_talents_from_sheet(
 
     rows = data_resp.get("values") or []
     if not rows:
-        return {"imported": 0, "skipped": 0, "new_last_row": state.last_row}
+        return {"imported": 0, "skipped": 0, "skipped_details": [], "new_last_row": state.last_row}
 
     imported = 0
     skipped = 0
+    skipped_details: list = []
 
     # 3) Importar
     for offset, row in enumerate(rows):
@@ -224,6 +225,8 @@ def import_new_talents_from_sheet(
 
         # Regras minimas
         if not full_name or len(cpf) < 11:
+            motivo = "nome ausente" if not full_name else f"CPF inválido ({cpf or 'vazio'})"
+            skipped_details.append({"linha": current_sheet_row, "nome": full_name or "(sem nome)", "motivo": motivo})
             skipped += 1
             continue
 
@@ -242,6 +245,7 @@ def import_new_talents_from_sheet(
                 changed = True
             if changed:
                 db.session.commit()
+            skipped_details.append({"linha": current_sheet_row, "nome": full_name, "motivo": f"CPF já cadastrado ({cpf})"})
             skipped += 1
             continue
 
@@ -299,4 +303,4 @@ def import_new_talents_from_sheet(
     state.last_row = start_row + len(rows) - 1
     db.session.commit()
 
-    return {"imported": imported, "skipped": skipped, "new_last_row": state.last_row}
+    return {"imported": imported, "skipped": skipped, "skipped_details": skipped_details, "new_last_row": state.last_row}
