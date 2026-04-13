@@ -371,7 +371,8 @@ def api_historico_delete(entry_id: int):
 def api_distancia():
     from app.models import SiteSetting
     setting = SiteSetting.query.get(1)
-    api_key = setting.google_maps_api_key if setting else ""
+    import os
+    api_key = (setting.google_maps_api_key if setting else "") or os.getenv("GOOGLE_MAPS_API_KEY", "")
     if not api_key:
         return jsonify({"error": "Google Maps não configurado. Configure a API Key em Admin → Configurações."}), 503
 

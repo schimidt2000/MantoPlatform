@@ -839,7 +839,8 @@ def _fetch_travel_data(event: CalendarEvent, settings) -> dict:
 
     origin = (settings.manto_address if settings and settings.manto_address
               else "R. Olga Camelini, 147 - São João Climaco, São Paulo - SP")
-    api_key = settings.google_maps_api_key if settings else None
+    import os
+    api_key = (settings.google_maps_api_key if settings else None) or os.getenv("GOOGLE_MAPS_API_KEY")
     if not api_key:
         return {}
 
@@ -883,7 +884,8 @@ def travel_estimate(event_id: int):
 
     origin = (settings.manto_address if settings and settings.manto_address
               else "R. Olga Camelini, 147 - São João Climaco, São Paulo - SP")
-    api_key = settings.google_maps_api_key if settings else None
+    import os
+    api_key = (settings.google_maps_api_key if settings else None) or os.getenv("GOOGLE_MAPS_API_KEY")
 
     if not api_key:
         maps_url = (
