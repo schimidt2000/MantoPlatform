@@ -16,6 +16,7 @@ let acrescimo      = 0;
 let acrescimoTipo  = 'valor'; // 'valor' | 'percent'
 let showSosiaCustom = false;
 let notaFiscal     = false;
+let modoEntradas   = false;
 
 // ── Formatação ────────────────────────────────────────────────────────────────
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -564,6 +565,18 @@ function setNotaFiscal(checked) {
   update();
 }
 
+function setModoEntradas(checked) {
+  modoEntradas = checked;
+  const lbls = modoEntradas
+    ? ['1 entrada', '2 entradas', '4 entradas']
+    : ['1 hora',    '2 horas',    '4 horas'];
+  ['1h', '2h', '4h'].forEach((id, i) => {
+    const el = document.getElementById(`lbl-${id}`);
+    if (el) el.textContent = lbls[i];
+  });
+  update();
+}
+
 // ── Transporte ────────────────────────────────────────────────────────────────
 function toggleForaSP(checked) {
   forasp = checked;
@@ -654,6 +667,11 @@ function _applySnapshot(snap) {
   showSosiaCustom = snap.show_sosia_tipo === 'customizado';
   document.getElementById('sosia-predefinido').checked  = !showSosiaCustom;
   document.getElementById('sosia-customizado').checked  = showSosiaCustom;
+
+  modoEntradas = snap.modo_duracao === 'entradas';
+  document.getElementById('modo-horas').checked    = !modoEntradas;
+  document.getElementById('modo-entradas').checked = modoEntradas;
+  setModoEntradas(modoEntradas);
 
   const isPercent = acrescimoTipo === 'percent';
   document.getElementById('acrescimo_valor').value            = acrescimo || 0;

@@ -109,6 +109,7 @@ def _process_quote():
     acrescimo_tipo   = request.form.get("acrescimo_tipo", "valor")
     show_sosia_tipo  = request.form.get("show_sosia_tipo", "predefinido")
     nota_fiscal      = "nota_fiscal" in request.form
+    modo_duracao     = request.form.get("modo_duracao", "horas")
 
     event_has_show   = False
     event_has_makeup = False
@@ -273,10 +274,19 @@ def _process_quote():
         lines.append(f"  • *VALOR TOTAL: {_fmt_brl(total)}*")
         return "\n".join(lines)
 
+    if modo_duracao == "entradas":
+        dur_labels = [
+            "🎭 *1 entrada de 30 minutos*",
+            "🎭 *2 entradas de 30 minutos (2h)*",
+            "🎭 *4 entradas de 30 minutos (4h)*",
+        ]
+    else:
+        dur_labels = ["🕐 *1 hora*", "🕑 *2 horas*", "🕓 *4 horas*"]
+
     investimento = "\n\n".join([
-        _dur_block("🕐 *1 hora*", totals[0]),
-        _dur_block("🕑 *2 horas*", totals[1]),
-        _dur_block("🕓 *4 horas*", totals[2]),
+        _dur_block(dur_labels[0], totals[0]),
+        _dur_block(dur_labels[1], totals[1]),
+        _dur_block(dur_labels[2], totals[2]),
     ])
 
     pix_vista = (
@@ -338,6 +348,7 @@ def _process_quote():
         "acrescimo_tipo":   acrescimo_tipo,
         "show_sosia_tipo":  show_sosia_tipo,
         "nota_fiscal":      nota_fiscal,
+        "modo_duracao":     modo_duracao,
     }
     entry = OrcamentoHistory(
         user_id        = current_user.id,
