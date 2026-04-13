@@ -192,6 +192,8 @@ def _process_quote():
         for i in range(3):
             totals[i] = round(totals[i] + brinde, 2)
 
+    transport_total = 0.0  # acumulador para split apresentação / logística na mensagem
+
     # Transporte especial pós-markup — uma vez por tipo (e.g. Boneco Grande Especial)
     _seen_transport: set = set()
     for p in performers:
@@ -202,6 +204,7 @@ def _process_quote():
                 if transport_esp:
                     for i in range(3):
                         totals[i] = round(totals[i] + transport_esp, 2)
+                    transport_total += transport_esp
                     _seen_transport.add(personagem)
 
     transport_breakdown = None
@@ -220,6 +223,7 @@ def _process_quote():
         transport_breakdown = tb
         for i in range(3):
             totals[i] = round(totals[i] + tb["total"], 2)
+        transport_total += tb["total"]
 
     if acrescimo_valor > 0:
         if acrescimo_tipo == "percent":
@@ -241,22 +245,52 @@ def _process_quote():
     client_name    = request.form.get("client_name", "").strip()
     event_location = request.form.get("event_location", "").strip()
 
-    team_text = "\n".join(f"\u2022 {line}" for line in team_lines)
+    tipo_evento = "Show com Som" if event_has_show else "Interação / Receptivo"
+    saudacao    = f"Olá, *{client_name}*!" if client_name else "Olá!"
+    team_text   = "\n".join(f"• {line}" for line in team_lines)
+
+    def _dur_block(label: str, total: float) -> str:
+        lines = [label]
+        if transport_total > 0:
+            apres = round(total - transport_total, 2)
+            lines.append(f"  • Valor da Apresentação: {_fmt_brl(apres)}")
+            lines.append(f"  • Logística e Transporte: {_fmt_brl(transport_total)}")
+        lines.append(f"  • *VALOR TOTAL: {_fmt_brl(total)}*")
+        return "\n".join(lines)
+
+    investimento = "\n\n".join([
+        _dur_block("🕐 *1 hora*", totals[0]),
+        _dur_block("🕑 *2 horas*", totals[1]),
+        _dur_block("🕓 *4 horas*", totals[2]),
+    ])
+
+    pix_vista = (
+        f"  • 1h: *{_fmt_brl(round(totals[0] * 0.95, 2))}*\n"
+        f"  • 2h: *{_fmt_brl(round(totals[1] * 0.95, 2))}*\n"
+        f"  • 4h: *{_fmt_brl(round(totals[2] * 0.95, 2))}*"
+    )
+
     message = (
-        f"Olá! Segue o orçamento da Manto para o seu evento 🎉\n\n"
-        f"*Cliente:* {client_name}\n"
-        f"*Local:* {event_location}\n"
-        f"*Data:* {fmt_date}\n"
-        f"*Horário:* {fmt_time}\n\n"
-        f"*Personagens:*\n"
+        f"{saudacao} ✨ É um prazer preparar a proposta para o seu evento.\n\n"
+        f"Estamos prontos para levar toda a magia da Manto Produções para o seu dia especial! "
+        f"Confira os detalhes abaixo:\n\n"
+        f"📍 *DETALHES DO EVENTO*\n"
+        f"• Data: {fmt_date}\n"
+        f"• Local: {event_location}\n"
+        f"• Horário: {fmt_time}\n"
+        f"• Modalidade: {tipo_evento}\n\n"
+        f"🎭 *PERSONAGENS E EXPERIÊNCIA*\n"
         f"{team_text}\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"💰 *INVESTIMENTO*\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🕐 *1 hora:* {_fmt_brl(totals[0])}\n"
-        f"🕑 *2 horas:* {_fmt_brl(totals[1])}\n"
-        f"🕓 *4 horas:* {_fmt_brl(totals[2])}\n\n"
-        f"Qualquer dúvida, estou à disposição! 😊"
+        f"💰 *INVESTIMENTO*\n\n"
+        f"{investimento}\n\n"
+        f"💳 *FORMAS DE PAGAMENTO*\n\n"
+        f"1️⃣ *À Vista (PIX):*\n"
+        f"{pix_vista}\n"
+        f"_(desconto especial de 5% aplicado)_\n\n"
+        f"2️⃣ *Reserva Programada (PIX):* 50% no ato do contrato + 50% até 2 dias antes do evento.\n\n"
+        f"3️⃣ *Cartão de Crédito:* Parcelamento disponível (taxas da operadora repassadas ao cliente).\n\n"
+        f"✨ Podemos seguir com a reserva da sua data? "
+        f"Aguardamos sua confirmação para enviarmos o link do contrato digital."
     )
 
     session["orcamento_quote"] = {
