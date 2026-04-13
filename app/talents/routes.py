@@ -373,10 +373,15 @@ def reset_talent_password(talent_id: int):
 @talents_bp.route("/talents/import", methods=["POST"])
 @login_required
 def import_talents():
-    result = import_new_talents_from_sheet(
-        spreadsheet_id=SPREADSHEET_ID,
-        sheet_name=SHEET_NAME,
-        credentials_path=SERVICE_ACCOUNT_JSON,
-    )
-    flash(f"Import finalizado: {result.get('imported', 0)} novos, {result.get('skipped', 0)} ignorados.")
+    try:
+        result = import_new_talents_from_sheet(
+            spreadsheet_id=SPREADSHEET_ID,
+            sheet_name=SHEET_NAME,
+            credentials_path=SERVICE_ACCOUNT_JSON,
+        )
+        flash(f"Import finalizado: {result.get('imported', 0)} novos, {result.get('skipped', 0)} ignorados.")
+    except FileNotFoundError:
+        flash("Credenciais do Google Sheets não encontradas. Configure a variável de ambiente GOOGLE_SHEETS_CREDENTIALS.", "error")
+    except Exception as e:
+        flash(f"Erro ao importar: {e}", "error")
     return redirect(url_for("talents.list_talents", status="active"))
