@@ -168,18 +168,6 @@ def _process_quote():
     for i in range(3):
         cache_totals[i] += coord_prices[i]
 
-    # Transporte especial pré-markup — uma vez por tipo, independente da quantidade
-    _seen_transport: set = set()
-    for p in performers:
-        if p.get("type") == "especial":
-            personagem = p.get("personagem", "")
-            if personagem not in _seen_transport:
-                transport_esp = _regras.get(personagem, {}).get("transporte_especial", 0)
-                if transport_esp:
-                    for i in range(3):
-                        cache_totals[i] += transport_esp
-                    _seen_transport.add(personagem)
-
     brinde = 0.0
     if event_has_show:
         tecnico = get_tecnico_prices()
@@ -203,6 +191,18 @@ def _process_quote():
     if brinde:
         for i in range(3):
             totals[i] = round(totals[i] + brinde, 2)
+
+    # Transporte especial pós-markup — uma vez por tipo (e.g. Boneco Grande Especial)
+    _seen_transport: set = set()
+    for p in performers:
+        if p.get("type") == "especial":
+            personagem = p.get("personagem", "")
+            if personagem not in _seen_transport:
+                transport_esp = _regras.get(personagem, {}).get("transporte_especial", 0)
+                if transport_esp:
+                    for i in range(3):
+                        totals[i] = round(totals[i] + transport_esp, 2)
+                    _seen_transport.add(personagem)
 
     transport_breakdown = None
     if fora_sp:

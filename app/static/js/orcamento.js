@@ -124,19 +124,6 @@ function calcTotals() {
     for (let i = 0; i < 3; i++) cache[i] += notAdd;
   }
 
-  // Transporte especial pré-markup — uma vez por tipo, independente da quantidade
-  const regras = cfg.especiais_regras || {};
-  const seenTransport = new Set();
-  for (const p of performers) {
-    if (p.type === 'especial' && !seenTransport.has(p.personagem)) {
-      const t = (regras[p.personagem] || {}).transporte_especial || 0;
-      if (t) {
-        for (let i = 0; i < 3; i++) cache[i] += t;
-        seenTransport.add(p.personagem);
-      }
-    }
-  }
-
   // Técnico de Som
   if (show) {
     for (let i = 0; i < 3; i++) cache[i] += cfg.tecnico_som[i];
@@ -156,6 +143,19 @@ function calcTotals() {
   if (show) {
     const brinde = cfg.brinde_show ?? 100;
     for (let i = 0; i < 3; i++) t[i] += brinde;
+  }
+
+  // Transporte especial pós-markup — uma vez por tipo
+  const regras = cfg.especiais_regras || {};
+  const seenTransport = new Set();
+  for (const p of performers) {
+    if (p.type === 'especial' && !seenTransport.has(p.personagem)) {
+      const tEsp = (regras[p.personagem] || {}).transporte_especial || 0;
+      if (tEsp) {
+        for (let i = 0; i < 3; i++) t[i] += tEsp;
+        seenTransport.add(p.personagem);
+      }
+    }
   }
 
   // Transporte (pós-markup)
@@ -293,20 +293,6 @@ function updateDebugPanel() {
     for (let i = 0; i < 3; i++) cache[i] += notAdd;
   }
 
-  // Transporte especial pré-markup — uma vez por tipo
-  const dbgRegras = cfg.especiais_regras || {};
-  const dbgSeenTransport = new Set();
-  for (const p of performers) {
-    if (p.type === 'especial' && !dbgSeenTransport.has(p.personagem)) {
-      const tEsp = (dbgRegras[p.personagem] || {}).transporte_especial || 0;
-      if (tEsp) {
-        rows.push({ label: `Transporte Especial — ${p.personagem} <span style="color:var(--muted)">(pré-markup, único)</span>`, prices: [tEsp, tEsp, tEsp] });
-        for (let i = 0; i < 3; i++) cache[i] += tEsp;
-        dbgSeenTransport.add(p.personagem);
-      }
-    }
-  }
-
   if (show) {
     const tecnico = cfg.tecnico_som;
     rows.push({ label: 'Técnico de Som <span style="color:var(--muted)">(automático)</span>', prices: [...tecnico] });
@@ -339,6 +325,20 @@ function updateDebugPanel() {
     const brinde = cfg.brinde_show ?? 100;
     html += `<tr><td>Brinde aniversariante <span style="color:var(--muted)">(pós-markup)</span></td><td style="text-align:right;" colspan="3">${fmt(brinde)}</td></tr>`;
     for (let i = 0; i < 3; i++) running[i] += brinde;
+  }
+
+  // Transporte especial pós-markup — uma vez por tipo
+  const dbgRegras = cfg.especiais_regras || {};
+  const dbgSeenTransport = new Set();
+  for (const p of performers) {
+    if (p.type === 'especial' && !dbgSeenTransport.has(p.personagem)) {
+      const tEsp = (dbgRegras[p.personagem] || {}).transporte_especial || 0;
+      if (tEsp) {
+        html += `<tr><td>Transporte Especial — ${p.personagem} <span style="color:var(--muted)">(pós-markup, único)</span></td><td style="text-align:right;" colspan="3">${fmt(tEsp)}</td></tr>`;
+        for (let i = 0; i < 3; i++) running[i] += tEsp;
+        dbgSeenTransport.add(p.personagem);
+      }
+    }
   }
 
   const tb = transportBreakdown();
