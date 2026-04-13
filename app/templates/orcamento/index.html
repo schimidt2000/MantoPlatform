@@ -176,21 +176,21 @@
           <div class="form-group">
             <label style="color:#92400e;">Tipo de veículo</label>
             <div class="radio-row">
-              <label><input type="radio" name="transporte_tipo" id="t-van" value="van" checked onchange="setTransportTipo('van')"> Van</label>
-              <label><input type="radio" name="transporte_tipo" id="t-carro" value="carro" onchange="setTransportTipo('carro')"> Carro(s)</label>
+              <label><input type="radio" name="transporte_tipo" id="t-van" value="van" onchange="setTransportTipo('van')"> Van</label>
+              <label><input type="radio" name="transporte_tipo" id="t-carro" value="carro" checked onchange="setTransportTipo('carro')"> Carro(s)</label>
             </div>
           </div>
 
-          <div id="van-options">
+          <div id="van-options" style="display:none;">
             <div class="form-group" style="margin-bottom:6px;">
               <label class="checkbox-row">
                 <input type="checkbox" name="carretinha" id="carretinha"> Com carretinha
-                <span class="label-hint">(R$5,50/km · sem: R$6,30/km)</span>
+                <span class="label-hint" id="carretinha-rate">R$6,30/km</span>
               </label>
             </div>
           </div>
 
-          <div id="carro-options" style="display:none;">
+          <div id="carro-options">
             <div class="form-group">
               <label style="color:#92400e;">Número de carros</label>
               <input type="number" name="num_carros" id="num_carros" min="1" value="1" style="width:80px;">

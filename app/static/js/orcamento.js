@@ -8,7 +8,7 @@ let performers    = [];
 let coordQty      = 1;
 let forasp        = false;
 let kmIda         = 0;
-let transportTipo = 'van';
+let transportTipo = 'carro';
 let comCarretinha = false;
 let numCarros     = 1;
 let colabOverride  = null;  // null = auto
@@ -686,6 +686,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('carretinha')?.addEventListener('change', function () {
     comCarretinha = this.checked;
+    const t = S().transporte;
+    const rateEl = document.getElementById('carretinha-rate');
+    if (rateEl) {
+      const rate = comCarretinha ? t.van_com_carretinha : t.van_sem_carretinha;
+      rateEl.textContent = `R$${rate.toFixed(2).replace('.', ',')}/km`;
+    }
     update();
   });
 
@@ -707,7 +713,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const carretinhaEl = document.getElementById('carretinha');
   if (carretinhaEl) comCarretinha = carretinhaEl.checked;
 
-  if (document.getElementById('t-carro')?.checked) {
+  // Sincronizar estado inicial de van/carro com o que estiver checked no HTML
+  if (document.getElementById('t-van')?.checked) {
+    transportTipo = 'van';
+    document.getElementById('van-options').style.display   = '';
+    document.getElementById('carro-options').style.display = 'none';
+  } else {
     transportTipo = 'carro';
     document.getElementById('van-options').style.display   = 'none';
     document.getElementById('carro-options').style.display = '';
