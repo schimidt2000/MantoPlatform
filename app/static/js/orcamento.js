@@ -17,6 +17,7 @@ let acrescimoTipo  = 'valor'; // 'valor' | 'percent'
 let showSosiaCustom = false;
 let notaFiscal     = false;
 let modoEntradas   = false;
+let prevOnlyDJ     = false;
 
 // ── Formatação ────────────────────────────────────────────────────────────────
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -54,7 +55,12 @@ function isNoturno() {
   return parseInt(el.value.split(':')[0], 10) >= 19;
 }
 
+function isOnlyDJ() {
+  return performers.length > 0 && performers.every(p => p.type === 'especial' && p.personagem === 'DJ');
+}
+
 function minCoord() {
+  if (isOnlyDJ()) return 0;
   const regras = S().especiais_regras || {};
   let min = 1;
   for (const p of performers) {
@@ -202,13 +208,23 @@ function calcTotals() {
 
 // ── UI ────────────────────────────────────────────────────────────────────────
 function update() {
-  // Enforce min coordinators (e.g. Boneco Grande Especial requires ≥ 2)
-  const minC = minCoord();
-  if (coordQty < minC) {
+  const minC   = minCoord();
+  const onlyDJ = isOnlyDJ();
+
+  // Transição → DJ-only: zera coordenador automaticamente
+  if (onlyDJ && !prevOnlyDJ) {
+    coordQty = 0;
+  } else if (!onlyDJ && prevOnlyDJ && coordQty === 0) {
+    // Saiu de DJ-only com coordenador zerado: restaura o mínimo
+    coordQty = Math.max(1, minC);
+  } else if (coordQty < minC) {
     coordQty = minC;
-    document.getElementById('coord-qty').textContent = coordQty;
-    document.getElementById('coordenador_qty').value  = coordQty;
   }
+  prevOnlyDJ = onlyDJ;
+
+  document.getElementById('coord-qty').textContent = coordQty;
+  document.getElementById('coordenador_qty').value  = coordQty;
+
   renderPerformers();
   updateAutoServices();
   updateTotals();
@@ -225,6 +241,15 @@ function updateTotals() {
 
 function updateAutoServices() {
   const { show, makeup, makesReg, makesEsp } = eventFlags();
+
+  // Label do coordenador
+  const coordLbl = document.getElementById('coord-obrig-label');
+  if (coordLbl) {
+    const onlyDJ = isOnlyDJ();
+    coordLbl.textContent = onlyDJ ? 'opcional para DJ' : 'sempre obrigatório';
+    coordLbl.style.color = onlyDJ ? 'var(--blue)' : 'var(--muted)';
+  }
+
   document.getElementById('auto-tecnico').style.display = show ? '' : 'none';
 
   const hasBGE   = performers.some(p => p.type === 'especial' && p.personagem === 'Boneco Grande Especial');
@@ -626,7 +651,7 @@ function clearAll() {
   if (!confirm('Limpar todos os campos?')) return;
   performers = []; coordQty = 1; forasp = false; kmIda = 0;
   transportTipo = 'van'; comCarretinha = false; numCarros = 1; colabOverride = null;
-  acrescimo = 0; acrescimoTipo = 'valor'; showSosiaCustom = false;
+  acrescimo = 0; acrescimoTipo = 'valor'; showSosiaCustom = false; prevOnlyDJ = false;
   document.getElementById('quote-form').reset();
   document.getElementById('coord-qty').textContent  = '1';
   document.getElementById('coordenador_qty').value  = '1';

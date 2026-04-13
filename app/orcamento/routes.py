@@ -95,7 +95,11 @@ def _process_quote():
     except (json.JSONDecodeError, TypeError):
         performers = []
 
-    coordenador_qty  = max(1, int(request.form.get("coordenador_qty", 1) or 1))
+    _coord_raw = int(request.form.get("coordenador_qty", 1) or 0)
+    _dj_only   = (len(performers) > 0 and
+                  all(p.get("type") == "especial" and p.get("personagem") == "DJ"
+                      for p in performers))
+    coordenador_qty = max(0 if _dj_only else 1, _coord_raw)
 
     # Enforce min coordinators for especiais with rules (e.g. Boneco Grande Especial)
     _regras = _cfg.load().get("especiais_regras", {})
