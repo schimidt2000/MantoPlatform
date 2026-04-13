@@ -25,7 +25,9 @@ const fmt = (v) => BRL.format(v);
 function eventFlags() {
   let show = false, makeup = false, makesReg = 0, makesEsp = 0;
   for (const p of performers) {
-    if (p.type === 'cantor' || (p.show && (p.type === 'ator' || p.type === 'especial')))
+    if ((p.type === 'ator' && p.show) ||
+        (p.type === 'especial' && (p.show || p.cantor)) ||
+        p.type === 'cantor' /* legado */)
       show = true;
     if ((p.type === 'ator' || p.type === 'cantor' || p.type === 'especial') && p.makeup) {
       makeup = true;
@@ -96,13 +98,27 @@ function calcTotals() {
   for (const p of performers) {
     let prices;
     if (p.type === 'ator') {
-      const key = `${p.subtipo}|${p.show}|${p.makeup}`;
-      prices = cfg.ator[key] || [0, 0, 0];
+      if (p.subtipo === 'cantor') {
+        const c = cfg.cantor;
+        prices = c.base.map((v, i) =>
+          v + (p.show ? c.show_extra[i] : 0) + (p.makeup ? c.make_extra[i] : 0)
+        );
+      } else {
+        const key = `${p.subtipo}|${p.show}|${p.makeup}`;
+        prices = cfg.ator[key] || [0, 0, 0];
+      }
     } else if (p.type === 'cantor') {
-      prices = cfg.cantor[String(p.makeup)] || [0, 0, 0];
+      // legado: cantor era tipo separado, sempre com show
+      const c = cfg.cantor;
+      prices = c.base.map((v, i) => v + c.show_extra[i] + (p.makeup ? c.make_extra[i] : 0));
     } else if (p.type === 'especial') {
       const ep = cfg.especiais[p.personagem];
-      prices = !ep ? [0, 0, 0] : Array.isArray(ep) ? ep : (ep[String(p.show)] || [0, 0, 0]);
+      const comCantor = new Set(window.ESPECIAIS_COM_CANTOR || []);
+      if (!ep) { prices = [0, 0, 0]; }
+      else if (Array.isArray(ep)) { prices = ep; }
+      else if (comCantor.has(p.personagem) && p.cantor) { prices = ep['cantor'] || [0, 0, 0]; }
+      else if (p.show) { prices = ep['show'] || ep['true'] || [0, 0, 0]; }
+      else { prices = ep['none'] || ep['false'] || [0, 0, 0]; }
     } else {
       prices = [0, 0, 0];
     }
@@ -260,19 +276,40 @@ function updateDebugPanel() {
   for (const p of performers) {
     let prices, label;
     if (p.type === 'ator') {
-      const key = `${p.subtipo}|${p.show}|${p.makeup}`;
-      prices = cfg.ator[key] || [0, 0, 0];
-      const parts = [p.subtipo === 'boneco' ? 'Boneco' : 'Cara Limpa'];
-      if (p.show)   parts.push('show');
-      if (p.makeup) parts.push(`make ${p.makeup_tipo}`);
-      label = (p.nome || 'Ator') + ` <span style="color:var(--muted)">(${parts.join(', ')})</span>`;
+      if (p.subtipo === 'cantor') {
+        const c = cfg.cantor;
+        prices = c.base.map((v, i) =>
+          v + (p.show ? c.show_extra[i] : 0) + (p.makeup ? c.make_extra[i] : 0)
+        );
+        const parts = ['Cantor'];
+        if (p.show)   parts.push('com show');
+        if (p.makeup) parts.push('maquiagem');
+        label = (p.nome || 'Cantor') + ` <span style="color:var(--muted)">(${parts.join(', ')})</span>`;
+      } else {
+        const key = `${p.subtipo}|${p.show}|${p.makeup}`;
+        prices = cfg.ator[key] || [0, 0, 0];
+        const parts = [p.subtipo === 'boneco' ? 'Boneco' : 'Cara Limpa'];
+        if (p.show)   parts.push('show');
+        if (p.makeup) parts.push(`make ${p.makeup_tipo}`);
+        label = (p.nome || 'Ator') + ` <span style="color:var(--muted)">(${parts.join(', ')})</span>`;
+      }
     } else if (p.type === 'cantor') {
-      prices = cfg.cantor[String(p.makeup)] || [0, 0, 0];
+      // legado
+      const c = cfg.cantor;
+      prices = c.base.map((v, i) => v + c.show_extra[i] + (p.makeup ? c.make_extra[i] : 0));
       label  = (p.nome || 'Cantor') + ` <span style="color:var(--muted)">(cantor${p.makeup ? ', make' : ''})</span>`;
     } else if (p.type === 'especial') {
       const ep = cfg.especiais[p.personagem];
-      prices   = !ep ? [0, 0, 0] : Array.isArray(ep) ? ep : (ep[String(p.show)] || [0, 0, 0]);
-      label    = (p.nome || p.personagem) + ` <span style="color:var(--muted)">(${p.personagem}${p.show ? ', show' : ''})</span>`;
+      const comCantor = new Set(window.ESPECIAIS_COM_CANTOR || []);
+      if (!ep) { prices = [0, 0, 0]; }
+      else if (Array.isArray(ep)) { prices = ep; }
+      else if (comCantor.has(p.personagem) && p.cantor) { prices = ep['cantor'] || [0, 0, 0]; }
+      else if (p.show) { prices = ep['show'] || ep['true'] || [0, 0, 0]; }
+      else { prices = ep['none'] || ep['false'] || [0, 0, 0]; }
+      const parts = [p.personagem];
+      if (p.cantor) parts.push('cantor');
+      else if (p.show) parts.push('show');
+      label = (p.nome || p.personagem) + ` <span style="color:var(--muted)">(${parts.join(', ')})</span>`;
     } else {
       prices = [0, 0, 0]; label = p.nome || '?';
     }
@@ -407,18 +444,25 @@ function buildCard(p, i) {
 
   let controls = '';
   if (p.type === 'ator') {
+    const isCantor = p.subtipo === 'cantor';
     const makeupSel = p.makeup ? `<select onchange="setProp(${i},'makeup_tipo',this.value)"><option value="comum" ${p.makeup_tipo!=='especial'?'selected':''}>Comum</option><option value="especial" ${p.makeup_tipo==='especial'?'selected':''}>Especial</option></select>` : '';
+    const showLbl = isCantor ? 'Show <span style="color:var(--muted);font-size:11px;">(+R$100)</span>' : 'Show';
+    const makeLbl = isCantor ? 'Maquiagem <span style="color:var(--muted);font-size:11px;">(+R$20)</span>' : 'Maquiagem';
+    const fantasia = (!isCantor && p.subtipo !== 'boneco') ? '' :
+      isCantor ? '' : '';  // boneco e cara_limpa: show significa fantasiado vs receptivo
     controls = `
-      <span class="badge badge-gold">Ator</span>
+      <span class="badge badge-gold">${isCantor ? 'Cantor' : 'Ator'}</span>
       ${nomeInput}
-      <select onchange="setProp(${i},'subtipo',this.value)">
-        <option value="cara_limpa" ${p.subtipo!=='boneco'?'selected':''}>Cara Limpa</option>
-        <option value="boneco" ${p.subtipo==='boneco'?'selected':''}>Boneco</option>
+      <select onchange="setSubtipo(${i},this.value)">
+        <option value="cara_limpa" ${p.subtipo==='cara_limpa'?'selected':''}>Cara Limpa</option>
+        <option value="boneco"     ${p.subtipo==='boneco'?'selected':''}>Boneco</option>
+        <option value="cantor"     ${p.subtipo==='cantor'?'selected':''}>Cantor</option>
       </select>
-      <label class="chk"><input type="checkbox" ${p.show?'checked':''} onchange="setProp(${i},'show',this.checked)"> Show</label>
-      <label class="chk"><input type="checkbox" ${p.makeup?'checked':''} onchange="setMakeup(${i},this.checked)"> Maquiagem</label>
+      <label class="chk"><input type="checkbox" ${p.show?'checked':''} onchange="setProp(${i},'show',this.checked)"> ${showLbl}</label>
+      ${!isCantor && p.subtipo==='boneco' ? '' : `<label class="chk"><input type="checkbox" ${p.makeup?'checked':''} onchange="setMakeup(${i},this.checked)"> ${makeLbl}</label>`}
       ${makeupSel}`;
   } else if (p.type === 'cantor') {
+    // Legado — cantor era tipo separado
     const makeupSel = p.makeup ? `<select onchange="setProp(${i},'makeup_tipo',this.value)"><option value="comum" ${p.makeup_tipo!=='especial'?'selected':''}>Comum</option><option value="especial" ${p.makeup_tipo==='especial'?'selected':''}>Especial</option></select>` : '';
     controls = `
       <span class="badge badge-green">Cantor</span>
@@ -427,17 +471,21 @@ function buildCard(p, i) {
       <label class="chk"><input type="checkbox" ${p.makeup?'checked':''} onchange="setMakeup(${i},this.checked)"> Maquiagem</label>
       ${makeupSel}`;
   } else if (p.type === 'especial') {
-    const especiais  = window.ESPECIAIS_LIST || [];
-    const comShowSet = new Set(window.ESPECIAIS_COM_SHOW || []);
+    const especiais   = window.ESPECIAIS_LIST || [];
+    const comShowSet  = new Set(window.ESPECIAIS_COM_SHOW || []);
+    const comCantorSet = new Set(window.ESPECIAIS_COM_CANTOR || []);
     const opts = especiais.map(e => `<option value="${e}" ${p.personagem===e?'selected':''}>${e}</option>`).join('');
     const showCheck = comShowSet.has(p.personagem)
       ? `<label class="chk"><input type="checkbox" ${p.show?'checked':''} onchange="setProp(${i},'show',this.checked)"> Show</label>` : '';
+    const cantorCheck = comCantorSet.has(p.personagem)
+      ? `<label class="chk"><input type="checkbox" ${p.cantor?'checked':''} onchange="setProp(${i},'cantor',this.checked)"> Cantor</label>` : '';
     const makeupSelEsp = p.makeup ? `<select onchange="setProp(${i},'makeup_tipo',this.value)"><option value="comum" ${p.makeup_tipo!=='especial'?'selected':''}>Comum</option><option value="especial" ${p.makeup_tipo==='especial'?'selected':''}>Especial</option></select>` : '';
     controls = `
       <span class="badge badge-blue">Especial</span>
       ${nomeInput}
       <select onchange="setPersonagem(${i},this.value)">${opts}</select>
       ${showCheck}
+      ${cantorCheck}
       <label class="chk"><input type="checkbox" ${p.makeup?'checked':''} onchange="setMakeup(${i},this.checked)"> Maquiagem</label>
       ${makeupSelEsp}`;
   }
@@ -453,9 +501,15 @@ function buildCard(p, i) {
 function addPerformer(type) {
   const p = { type, show: false, makeup: false, makeup_tipo: 'comum', nome: '' };
   if (type === 'ator')     { p.subtipo = 'cara_limpa'; }
-  if (type === 'cantor')   { p.show = true; }
-  if (type === 'especial') { p.personagem = (window.ESPECIAIS_LIST || ['Homem-Aranha'])[0]; }
+  if (type === 'especial') { p.personagem = (window.ESPECIAIS_LIST || ['Homem-Aranha'])[0]; p.cantor = false; }
   performers.push(p);
+  update();
+}
+
+function setSubtipo(i, value) {
+  performers[i].subtipo = value;
+  // boneco não tem maquiagem; ao mudar para boneco, limpa
+  if (value === 'boneco') performers[i].makeup = false;
   update();
 }
 
@@ -469,19 +523,15 @@ function setMakeup(i, checked) {
   update();
 }
 
-// Tipos que são sempre "com show" — show pré-marcado ao selecionar
-const SEMPRE_SHOW = new Set(['Sósia com Show', 'Sósia Cantor']);
-
 // Tipos de sósia — disparam a pergunta predefinido/customizado
-const SOSIA_TYPES = new Set(['Sósia', 'Sósia com Show', 'Sósia Cantor']);
+const SOSIA_TYPES = new Set(['Sósia']);
 
 function setPersonagem(i, value) {
   performers[i].personagem = value;
+  performers[i].cantor = false;
   const comShow = new Set(window.ESPECIAIS_COM_SHOW || []);
   if (!comShow.has(value)) {
     performers[i].show = false;
-  } else if (SEMPRE_SHOW.has(value)) {
-    performers[i].show = true;
   }
   update();
 }

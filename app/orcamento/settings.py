@@ -20,8 +20,9 @@ DEFAULTS: dict = {
         "boneco|true|false":      [300, 350, 400],
     },
     "cantor": {
-        "false": [350, 400, 450],
-        "true":  [370, 420, 470],
+        "base":       [250, 300, 350],
+        "show_extra": [100, 100, 100],
+        "make_extra": [20,  20,  20],
     },
     "tecnico_som": [750, 800, 850],
     "coordenador": {
@@ -35,9 +36,7 @@ DEFAULTS: dict = {
         "Malabar":                [350, 400, 450],
         "Pirofagista":            [450, 500, 550],
         "Boneco Grande Especial": {"false": [400, 450, 500], "true": [400, 450, 500]},
-        "Sósia":                  [350, 400, 450],
-        "Sósia com Show":         {"false": [450, 500, 550], "true": [450, 500, 550]},
-        "Sósia Cantor":           {"false": [500, 550, 600], "true": [500, 550, 600]},
+        "Sósia":                  {"none": [350, 400, 450], "show": [450, 500, 550], "cantor": [500, 550, 600]},
         "Bailarino":              [400, 450, 500],
     },
     "especiais_regras": {
@@ -64,7 +63,10 @@ DEFAULTS: dict = {
 }
 
 # Especiais que têm checkbox de show (técnico de som é adicionado se marcado)
-ESPECIAIS_COM_SHOW: set = {"Homem-Aranha", "Boneco Grande Especial", "Sósia com Show", "Sósia Cantor"}
+ESPECIAIS_COM_SHOW: set = {"Homem-Aranha", "Boneco Grande Especial", "Sósia"}
+
+# Especiais que têm checkbox de cantor (implica show)
+ESPECIAIS_COM_CANTOR: set = {"Sósia"}
 
 
 def _migrate(data: dict) -> dict:
@@ -77,6 +79,39 @@ def _migrate(data: dict) -> dict:
         especiais["Boneco Grande Especial"] = (
             old if isinstance(old, dict) else {"false": old, "true": old}
         )
+
+    # Remover antigas variantes de Sósia (agora unificadas em "Sósia")
+    for old_key in ("Sósia com Show", "Sósia Cantor"):
+        especiais.pop(old_key, None)
+
+    # Converter Sósia de lista/dict antigo para novo formato {none/show/cantor}
+    if "Sósia" in especiais:
+        sosia = especiais["Sósia"]
+        if isinstance(sosia, list):
+            especiais["Sósia"] = {
+                "none":   sosia,
+                "show":   [sosia[i] + 100 for i in range(3)],
+                "cantor": [sosia[i] + 150 for i in range(3)],
+            }
+        elif isinstance(sosia, dict) and "false" in sosia:
+            base = sosia.get("false", [350, 400, 450])
+            especiais["Sósia"] = {
+                "none":   base,
+                "show":   [base[i] + 100 for i in range(3)],
+                "cantor": [base[i] + 150 for i in range(3)],
+            }
+
+    # Converter cantor de {false/true} para {base/show_extra/make_extra}
+    if "cantor" in data and isinstance(data["cantor"], dict):
+        c = data["cantor"]
+        if "false" in c and "true" in c:
+            base = c["false"]
+            make_extra = [c["true"][i] - c["false"][i] for i in range(3)]
+            data["cantor"] = {
+                "base":       base,
+                "show_extra": [100, 100, 100],
+                "make_extra": make_extra,
+            }
 
     # Adicionar especiais novos que ainda não existem na config salva
     for nome, val in DEFAULTS["especiais"].items():

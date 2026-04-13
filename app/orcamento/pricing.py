@@ -16,10 +16,16 @@ def get_ator_prices(subtipo: str, show: bool, makeup: bool) -> tuple:
     return tuple(p)
 
 
-def get_cantor_prices(makeup: bool) -> tuple:
-    """Return (1h, 2h, 4h) cache prices for a singer."""
-    p = _cfg.load()["cantor"][str(makeup).lower()]
-    return tuple(p)
+def get_cantor_prices(show: bool, makeup: bool) -> tuple:
+    """Return (1h, 2h, 4h) cache prices for a singer (ator subtype)."""
+    c = _cfg.load()["cantor"]
+    base       = c["base"]
+    show_extra = c["show_extra"]
+    make_extra = c["make_extra"]
+    return tuple(
+        base[i] + (show_extra[i] if show else 0) + (make_extra[i] if makeup else 0)
+        for i in range(3)
+    )
 
 
 def get_tecnico_prices() -> tuple:
@@ -33,11 +39,15 @@ def get_coordenador_prices(show: bool, qty: int) -> tuple:
     return (p[0] * qty, p[1] * qty, p[2] * qty)
 
 
-def get_especial_prices(personagem: str, show: bool) -> tuple:
+def get_especial_prices(personagem: str, show: bool, cantor: bool = False) -> tuple:
     """Return (1h, 2h, 4h) cache prices for a special character."""
     p = _cfg.load()["especiais"].get(personagem, [0, 0, 0])
     if isinstance(p, dict):
-        return tuple(p.get(str(show).lower(), [0, 0, 0]))
+        if personagem in _cfg.ESPECIAIS_COM_CANTOR and cantor:
+            return tuple(p.get("cantor", [0, 0, 0]))
+        if show:
+            return tuple(p.get("show", p.get("true", [0, 0, 0])))
+        return tuple(p.get("none", p.get("false", [0, 0, 0])))
     return tuple(p)
 
 

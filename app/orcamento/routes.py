@@ -71,6 +71,7 @@ def index():
         "orcamento/index.html",
         especiais_list=list(s["especiais"].keys()),
         especiais_com_show=list(_cfg.ESPECIAIS_COM_SHOW),
+        especiais_com_cantor=list(_cfg.ESPECIAIS_COM_CANTOR),
         settings_json=json.dumps(s),
     )
 
@@ -115,12 +116,16 @@ def _process_quote():
     num_makes_especial = 0
 
     for p in performers:
-        ptype  = p.get("type", "")
-        show   = bool(p.get("show", False))
-        makeup = bool(p.get("makeup", False))
+        ptype      = p.get("type", "")
+        show       = bool(p.get("show", False))
+        makeup     = bool(p.get("makeup", False))
         makeup_tipo = p.get("makeup_tipo", "comum")
+        cantor_flag = bool(p.get("cantor", False))
 
-        if ptype == "cantor" or (ptype in ("ator", "especial") and show):
+        # show é ativado pelo ator (qualquer subtipo com show marcado),
+        # pelo especial com show ou cantor, ou pelo tipo legado "cantor"
+        if ptype == "cantor" or (ptype == "ator" and show) or \
+           (ptype == "especial" and (show or cantor_flag)):
             event_has_show = True
         if makeup and ptype in ("ator", "cantor", "especial"):
             event_has_makeup = True
@@ -141,14 +146,20 @@ def _process_quote():
 
         if ptype == "ator":
             subtipo = p.get("subtipo", "cara_limpa")
-            prices  = get_ator_prices(subtipo, show, makeup)
-            label   = nome or ("Boneco" if subtipo == "boneco" else "Ator")
+            if subtipo == "cantor":
+                prices = get_cantor_prices(show, makeup)
+                label  = nome or "Cantor"
+            else:
+                prices = get_ator_prices(subtipo, show, makeup)
+                label  = nome or ("Boneco" if subtipo == "boneco" else "Ator")
         elif ptype == "cantor":
-            prices = get_cantor_prices(makeup)
+            # Suporte legado para histórico antigo (cantor era tipo separado)
+            prices = get_cantor_prices(show=True, makeup=makeup)
             label  = nome or "Cantor"
         elif ptype == "especial":
-            personagem = p.get("personagem", "")
-            prices = get_especial_prices(personagem, show)
+            personagem  = p.get("personagem", "")
+            cantor_flag = bool(p.get("cantor", False))
+            prices = get_especial_prices(personagem, show, cantor_flag)
             label  = nome or personagem
         else:
             prices = (0, 0, 0)
