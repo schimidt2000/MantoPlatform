@@ -15,6 +15,7 @@ let colabOverride  = null;  // null = auto
 let acrescimo      = 0;
 let acrescimoTipo  = 'valor'; // 'valor' | 'percent'
 let showSosiaCustom = false;
+let notaFiscal     = false;
 
 // ── Formatação ────────────────────────────────────────────────────────────────
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -168,6 +169,13 @@ function calcTotals() {
       t[i] = acrescimoTipo === 'percent'
         ? Math.round(t[i] * (1 + acrescimo / 100) * 100) / 100
         : Math.round((t[i] + acrescimo) * 100) / 100;
+    }
+  }
+
+  // Nota Fiscal (÷ 0,84)
+  if (notaFiscal) {
+    for (let i = 0; i < 3; i++) {
+      t[i] = Math.round((t[i] / 0.84) * 100) / 100;
     }
   }
 
@@ -498,6 +506,11 @@ function setAcrescimoTipo(tipo) {
 
 function setAcrescimo(val) {
   acrescimo = parseFloat(val) || 0;
+  update();
+}
+
+function setNotaFiscal(checked) {
+  notaFiscal = checked;
   update();
 }
 

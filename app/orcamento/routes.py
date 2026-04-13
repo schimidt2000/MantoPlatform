@@ -107,6 +107,7 @@ def _process_quote():
     acrescimo_valor  = float(request.form.get("acrescimo_valor", 0) or 0)
     acrescimo_tipo   = request.form.get("acrescimo_tipo", "valor")
     show_sosia_tipo  = request.form.get("show_sosia_tipo", "predefinido")
+    nota_fiscal      = "nota_fiscal" in request.form
 
     event_has_show   = False
     event_has_makeup = False
@@ -231,6 +232,9 @@ def _process_quote():
         else:
             totals = [round(t + acrescimo_valor, 2) for t in totals]
 
+    if nota_fiscal:
+        totals = [round(t / 0.84, 2) for t in totals]
+
     raw_date = request.form.get("event_date", "")
     raw_time = request.form.get("event_time", "")
     try:
@@ -270,6 +274,8 @@ def _process_quote():
         f"  • 4h: *{_fmt_brl(round(totals[2] * 0.95, 2))}*"
     )
 
+    nf_header = "\n🧾 _Valores com Nota Fiscal inclusa_" if nota_fiscal else ""
+
     message = (
         f"{saudacao} ✨ É um prazer preparar a proposta para o seu evento.\n\n"
         f"Estamos prontos para levar toda a magia da Manto Produções para o seu dia especial! "
@@ -281,7 +287,7 @@ def _process_quote():
         f"• Modalidade: {tipo_evento}\n\n"
         f"🎭 *PERSONAGENS E EXPERIÊNCIA*\n"
         f"{team_text}\n\n"
-        f"💰 *INVESTIMENTO*\n\n"
+        f"💰 *INVESTIMENTO*{nf_header}\n\n"
         f"{investimento}\n\n"
         f"💳 *FORMAS DE PAGAMENTO*\n\n"
         f"1️⃣ *À Vista (PIX):*\n"
@@ -320,6 +326,7 @@ def _process_quote():
         "acrescimo_valor":  str(acrescimo_valor),
         "acrescimo_tipo":   acrescimo_tipo,
         "show_sosia_tipo":  show_sosia_tipo,
+        "nota_fiscal":      nota_fiscal,
     }
     entry = OrcamentoHistory(
         user_id        = current_user.id,
