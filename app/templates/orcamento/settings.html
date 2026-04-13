@@ -79,23 +79,29 @@
 
   {# ── CANTOR ────────────────────────────────────────────────────── #}
   <div class="panel" style="margin-bottom:20px;">
-    <div class="panel-title">Cachê — Cantor <span style="font-weight:400;font-size:13px;color:var(--muted);">(sempre com show)</span></div>
+    <div class="panel-title">Cachê — Cantor <span style="font-weight:400;font-size:13px;color:var(--muted);">(subtipo de ator)</span></div>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Maquiagem</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr>
+          <tr><th>Componente</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr>
         </thead>
         <tbody>
           <tr>
-            <td>Sem maquiagem</td>
+            <td>Base (sem show, sem maquiagem)</td>
             {% for i in range(3) %}
-            <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="cantor_false_{{ i }}" value="{{ s.cantor['false'][i] }}"></td>
+            <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="cantor_base_{{ i }}" value="{{ s.cantor['base'][i] }}"></td>
             {% endfor %}
           </tr>
           <tr>
-            <td>Com maquiagem</td>
+            <td>Adicional por show</td>
             {% for i in range(3) %}
-            <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="cantor_true_{{ i }}" value="{{ s.cantor['true'][i] }}"></td>
+            <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="cantor_show_extra_{{ i }}" value="{{ s.cantor['show_extra'][i] }}"></td>
+            {% endfor %}
+          </tr>
+          <tr>
+            <td>Adicional por maquiagem</td>
+            {% for i in range(3) %}
+            <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="cantor_make_extra_{{ i }}" value="{{ s.cantor['make_extra'][i] }}"></td>
             {% endfor %}
           </tr>
         </tbody>
@@ -151,13 +157,14 @@
       <table>
         <thead><tr><th>Personagem</th><th>Show</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr></thead>
         <tbody>
+          {% set show_key_labels = {'true': 'Com show', 'false': 'Sem show', 'none': 'Sem show/cantor', 'show': 'Com show', 'cantor': 'Com cantor'} %}
           {% for nome, val in s.especiais.items() %}
           {% set safe = nome.replace(' ','_').replace('-','_') %}
           {% if val is mapping %}
             {% for show_key, prices in val.items() %}
             <tr>
               <td>{{ nome }}</td>
-              <td>{{ 'Sim' if show_key == 'true' else 'Não' }}</td>
+              <td>{{ show_key_labels.get(show_key, show_key) }}</td>
               {% for i in range(3) %}
               <td style="text-align:center;"><input type="number" step="1" style="width:80px;text-align:center;" name="especial_{{ safe }}_{{ show_key }}_{{ i }}" value="{{ prices[i] }}"></td>
               {% endfor %}
