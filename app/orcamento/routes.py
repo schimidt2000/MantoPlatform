@@ -75,14 +75,38 @@ def index():
     )
 
 
+_ADICIONAL_NOTURNO = 50.0  # R$ por artista/coordenador, aplicado pré-markup
+
+
+def _is_noturno(raw_time: str) -> bool:
+    """Retorna True se o horário do evento for a partir das 19h."""
+    try:
+        from datetime import datetime as _dt
+        return _dt.strptime(raw_time, "%H:%M").hour >= 19
+    except ValueError:
+        return False
+
+
 def _process_quote():
     try:
         performers = json.loads(request.form.get("performers_json", "[]"))
     except (json.JSONDecodeError, TypeError):
         performers = []
 
-    coordenador_qty = max(1, int(request.form.get("coordenador_qty", 1) or 1))
-    fora_sp = "fora_sp" in request.form
+    coordenador_qty  = max(1, int(request.form.get("coordenador_qty", 1) or 1))
+
+    # Enforce min coordinators for especiais with rules (e.g. Boneco Grande Especial)
+    _regras = _cfg.load().get("especiais_regras", {})
+    for _p in performers:
+        if _p.get("type") == "especial":
+            _min = _regras.get(_p.get("personagem", ""), {}).get("min_coordenadores", 1)
+            coordenador_qty = max(coordenador_qty, _min)
+
+    fora_sp          = "fora_sp" in request.form
+    noturno          = _is_noturno(request.form.get("event_time", ""))
+    acrescimo_valor  = float(request.form.get("acrescimo_valor", 0) or 0)
+    acrescimo_tipo   = request.form.get("acrescimo_tipo", "valor")
+    show_sosia_tipo  = request.form.get("show_sosia_tipo", "predefinido")
 
     event_has_show   = False
     event_has_makeup = False
@@ -134,26 +158,51 @@ def _process_quote():
         for i in range(3):
             cache_totals[i] += prices[i]
 
+    # Show customizado: +R$50 por artista (não conta coord, técnico nem maquiador)
+    if show_sosia_tipo == "customizado" and performers:
+        custom_add = len(performers) * 50
+        for i in range(3):
+            cache_totals[i] += custom_add
+
     coord_prices = get_coordenador_prices(event_has_show, coordenador_qty)
     for i in range(3):
         cache_totals[i] += coord_prices[i]
 
+    # Transporte especial pré-markup — uma vez por tipo, independente da quantidade
+    _seen_transport: set = set()
+    for p in performers:
+        if p.get("type") == "especial":
+            personagem = p.get("personagem", "")
+            if personagem not in _seen_transport:
+                transport_esp = _regras.get(personagem, {}).get("transporte_especial", 0)
+                if transport_esp:
+                    for i in range(3):
+                        cache_totals[i] += transport_esp
+                    _seen_transport.add(personagem)
+
+    brinde = 0.0
     if event_has_show:
         tecnico = get_tecnico_prices()
         for i in range(3):
             cache_totals[i] += tecnico[i]
         num_going += 1
-        brinde = _cfg.load().get("brinde_show", 100)
-        for i in range(3):
-            cache_totals[i] += brinde
+        brinde = float(_cfg.load().get("brinde_show", 100))
 
     if event_has_makeup:
         maquiador_cost = calcular_maquiador(num_makes_regular, num_makes_especial)
         for i in range(3):
             cache_totals[i] += maquiador_cost
-        num_going += 1
+
+    if noturno:
+        adicional_noturno = (len(performers) + coordenador_qty) * _ADICIONAL_NOTURNO
+        for i in range(3):
+            cache_totals[i] = round(cache_totals[i] + adicional_noturno, 2)
 
     totals = aplicar_markup(cache_totals, event_has_show)
+
+    if brinde:
+        for i in range(3):
+            totals[i] = round(totals[i] + brinde, 2)
 
     transport_breakdown = None
     if fora_sp:
@@ -171,6 +220,12 @@ def _process_quote():
         transport_breakdown = tb
         for i in range(3):
             totals[i] = round(totals[i] + tb["total"], 2)
+
+    if acrescimo_valor > 0:
+        if acrescimo_tipo == "percent":
+            totals = [round(t * (1 + acrescimo_valor / 100), 2) for t in totals]
+        else:
+            totals = [round(t + acrescimo_valor, 2) for t in totals]
 
     raw_date = request.form.get("event_date", "")
     raw_time = request.form.get("event_time", "")
@@ -228,6 +283,9 @@ def _process_quote():
         "event_time":       raw_time,
         "client_name":      client_name,
         "event_location":   event_location,
+        "acrescimo_valor":  str(acrescimo_valor),
+        "acrescimo_tipo":   acrescimo_tipo,
+        "show_sosia_tipo":  show_sosia_tipo,
     }
     entry = OrcamentoHistory(
         user_id        = current_user.id,

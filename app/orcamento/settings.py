@@ -29,12 +29,22 @@ DEFAULTS: dict = {
         "true":  [300, 350, 400],
     },
     "especiais": {
-        "Homem-Aranha": {"false": [250, 300, 350], "true": [400, 450, 500]},
-        "Perna de Pau":  [400, 450, 500],
-        "Monociclo":     [400, 450, 500],
-        "Malabar":       [350, 400, 450],
-        "Pirofagista":   [450, 500, 550],
-        "Transformer":   [400, 450, 500],
+        "Homem-Aranha":           {"false": [250, 300, 350], "true": [400, 450, 500]},
+        "Perna de Pau":           [400, 450, 500],
+        "Monociclo":              [400, 450, 500],
+        "Malabar":                [350, 400, 450],
+        "Pirofagista":            [450, 500, 550],
+        "Boneco Grande Especial": {"false": [400, 450, 500], "true": [400, 450, 500]},
+        "Sósia":                  [350, 400, 450],
+        "Sósia com Show":         {"false": [450, 500, 550], "true": [450, 500, 550]},
+        "Sósia Cantor":           {"false": [500, 550, 600], "true": [500, 550, 600]},
+        "Bailarino":              [400, 450, 500],
+    },
+    "especiais_regras": {
+        "Boneco Grande Especial": {
+            "transporte_especial": 1000,
+            "min_coordenadores":   2,
+        },
     },
     "brinde_show": 100,
     "maquiador": {
@@ -53,8 +63,31 @@ DEFAULTS: dict = {
     },
 }
 
-# Especiais que têm variante show/receptivo
-ESPECIAIS_COM_SHOW: set = {"Homem-Aranha"}
+# Especiais que têm checkbox de show (técnico de som é adicionado se marcado)
+ESPECIAIS_COM_SHOW: set = {"Homem-Aranha", "Boneco Grande Especial", "Sósia com Show", "Sósia Cantor"}
+
+
+def _migrate(data: dict) -> dict:
+    """Aplica migrações na config salva no banco sem alterar o banco."""
+    especiais = data.setdefault("especiais", {})
+
+    # Renomear Transformer → Boneco Grande Especial
+    if "Transformer" in especiais and "Boneco Grande Especial" not in especiais:
+        old = especiais.pop("Transformer")
+        especiais["Boneco Grande Especial"] = (
+            old if isinstance(old, dict) else {"false": old, "true": old}
+        )
+
+    # Adicionar especiais novos que ainda não existem na config salva
+    for nome, val in DEFAULTS["especiais"].items():
+        if nome not in especiais:
+            especiais[nome] = copy.deepcopy(val)
+
+    # Adicionar especiais_regras se ausente
+    if "especiais_regras" not in data:
+        data["especiais_regras"] = copy.deepcopy(DEFAULTS["especiais_regras"])
+
+    return data
 
 
 def load() -> dict:
@@ -63,7 +96,7 @@ def load() -> dict:
         from app.models import SiteSetting
         setting = SiteSetting.query.get(1)
         if setting and setting.pricing_config:
-            return json.loads(setting.pricing_config)
+            return _migrate(json.loads(setting.pricing_config))
     except Exception:
         pass
     return copy.deepcopy(DEFAULTS)

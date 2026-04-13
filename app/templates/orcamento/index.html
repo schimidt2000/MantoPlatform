@@ -200,6 +200,9 @@
           <div class="form-group">
             <label style="color:#92400e;">Colaboradores no evento <span class="label-hint">(calculado automaticamente)</span></label>
             <input type="number" name="num_colaboradores" id="num_colaboradores" min="1" value="1" style="width:80px;">
+            <span id="colab-makeup-warn" style="display:none; font-size:12px; color:#92400e; margin-top:4px;">
+              ⚠ Calculado sem maquiador — adicione manualmente se necessário
+            </span>
           </div>
         </div>
       </div>
@@ -237,8 +240,39 @@
           Técnico de Som
           <span style="font-size:12px;font-weight:400;margin-left:auto;opacity:.7;">adicionado automaticamente</span>
         </div>
+        <div id="sosia-show-panel" style="display:none; padding:10px 14px; margin-bottom:8px; background:#f0f9ff; border:1px solid #7dd3fc; border-radius:var(--r-sm); font-size:13px;">
+          <div style="font-weight:600; color:#0369a1; margin-bottom:8px;">Sósia — Tipo de Show</div>
+          <div style="display:flex; gap:20px; flex-wrap:wrap;">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="radio" name="show_sosia_tipo" id="sosia-predefinido" value="predefinido" checked onchange="setSosiaShowTipo('predefinido')">
+              Show pré-definido <span style="color:var(--muted); font-size:12px;">(sem custo adicional)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="radio" name="show_sosia_tipo" id="sosia-customizado" value="customizado" onchange="setSosiaShowTipo('customizado')">
+              Show customizado <span style="color:var(--muted); font-size:12px;">(+R$50 por artista)</span>
+            </label>
+          </div>
+        </div>
+        <div id="bge-warning" class="auto-service-row" style="display:none; background:#fffbeb; color:#92400e; border:1px solid #fbbf24;">
+          ⚠ Boneco Grande Especial: mínimo 2 coordenadores + R$1.000 de transporte especial adicionados ao cachê
+        </div>
         <div id="auto-maquiador" class="auto-service-row maquiador" style="display:none;">
           Maquiador — <span id="maquiador-detail" style="font-weight:400;margin-left:4px;"></span>
+        </div>
+      </div>
+
+      {# Acréscimo #}
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 14px; margin-top:12px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md);">
+        <span style="font-size:13px; font-weight:600; color:var(--ink); white-space:nowrap;">Acréscimo</span>
+        <label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer; white-space:nowrap;">
+          <input type="radio" name="acrescimo_tipo" id="acrescimo-valor-radio" value="valor" checked onchange="setAcrescimoTipo('valor')"> Valor fixo
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer; white-space:nowrap;">
+          <input type="radio" name="acrescimo_tipo" id="acrescimo-percent-radio" value="percent" onchange="setAcrescimoTipo('percent')"> Porcentagem
+        </label>
+        <div style="display:flex; align-items:center; gap:6px; margin-left:auto;">
+          <span id="acrescimo-unit" style="font-size:13px; color:var(--muted); font-weight:600; min-width:20px;">R$</span>
+          <input type="number" name="acrescimo_valor" id="acrescimo_valor" min="0" step="0.01" value="0" style="width:100px;" oninput="setAcrescimo(this.value)">
         </div>
       </div>
 

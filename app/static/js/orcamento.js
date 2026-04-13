@@ -11,7 +11,10 @@ let kmIda         = 0;
 let transportTipo = 'van';
 let comCarretinha = false;
 let numCarros     = 1;
-let colabOverride = null; // null = auto
+let colabOverride  = null;  // null = auto
+let acrescimo      = 0;
+let acrescimoTipo  = 'valor'; // 'valor' | 'percent'
+let showSosiaCustom = false;
 
 // ── Formatação ────────────────────────────────────────────────────────────────
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -40,9 +43,26 @@ function maquiadorCost(reg, esp) {
   return t;
 }
 
+function isNoturno() {
+  const el = document.querySelector('[name=event_time]');
+  if (!el || !el.value) return false;
+  return parseInt(el.value.split(':')[0], 10) >= 19;
+}
+
+function minCoord() {
+  const regras = S().especiais_regras || {};
+  let min = 1;
+  for (const p of performers) {
+    if (p.type === 'especial') {
+      min = Math.max(min, (regras[p.personagem] || {}).min_coordenadores || 1);
+    }
+  }
+  return min;
+}
+
 function autoColab() {
-  const { show, makeup } = eventFlags();
-  return coordQty + performers.length + (show ? 1 : 0) + (makeup ? 1 : 0);
+  const { show } = eventFlags();
+  return coordQty + performers.length + (show ? 1 : 0);
 }
 
 function transportBreakdown() {
@@ -92,11 +112,34 @@ function calcTotals() {
   const cp = cfg.coordenador[String(show)] || [0, 0, 0];
   for (let i = 0; i < 3; i++) cache[i] += cp[i] * coordQty;
 
-  // Técnico de Som + Brinde aniversariante
+  // Show customizado: +R$50 por artista (não inclui coord, técnico, maquiador)
+  if (showSosiaCustom && performers.length > 0) {
+    const customAdd = performers.length * 50;
+    for (let i = 0; i < 3; i++) cache[i] += customAdd;
+  }
+
+  // Adicional noturno (+R$50 por artista e coordenador se >= 19h; exceto técnico e maquiador)
+  if (isNoturno()) {
+    const notAdd = (performers.length + coordQty) * 50;
+    for (let i = 0; i < 3; i++) cache[i] += notAdd;
+  }
+
+  // Transporte especial pré-markup — uma vez por tipo, independente da quantidade
+  const regras = cfg.especiais_regras || {};
+  const seenTransport = new Set();
+  for (const p of performers) {
+    if (p.type === 'especial' && !seenTransport.has(p.personagem)) {
+      const t = (regras[p.personagem] || {}).transporte_especial || 0;
+      if (t) {
+        for (let i = 0; i < 3; i++) cache[i] += t;
+        seenTransport.add(p.personagem);
+      }
+    }
+  }
+
+  // Técnico de Som
   if (show) {
     for (let i = 0; i < 3; i++) cache[i] += cfg.tecnico_som[i];
-    const brinde = cfg.brinde_show ?? 100;
-    for (let i = 0; i < 3; i++) cache[i] += brinde;
   }
 
   // Maquiador
@@ -109,15 +152,37 @@ function calcTotals() {
   const markup = cfg.markup[show ? 'show' : 'receptivo'];
   const t = cache.map((v, i) => v * markup[i]);
 
-  // Transporte (após markup)
+  // Brinde (pós-markup)
+  if (show) {
+    const brinde = cfg.brinde_show ?? 100;
+    for (let i = 0; i < 3; i++) t[i] += brinde;
+  }
+
+  // Transporte (pós-markup)
   const tc = transportCost();
   for (let i = 0; i < 3; i++) t[i] += tc;
+
+  // Acréscimo
+  if (acrescimo > 0) {
+    for (let i = 0; i < 3; i++) {
+      t[i] = acrescimoTipo === 'percent'
+        ? Math.round(t[i] * (1 + acrescimo / 100) * 100) / 100
+        : Math.round((t[i] + acrescimo) * 100) / 100;
+    }
+  }
 
   return t;
 }
 
 // ── UI ────────────────────────────────────────────────────────────────────────
 function update() {
+  // Enforce min coordinators (e.g. Boneco Grande Especial requires ≥ 2)
+  const minC = minCoord();
+  if (coordQty < minC) {
+    coordQty = minC;
+    document.getElementById('coord-qty').textContent = coordQty;
+    document.getElementById('coordenador_qty').value  = coordQty;
+  }
   renderPerformers();
   updateAutoServices();
   updateTotals();
@@ -135,6 +200,22 @@ function updateTotals() {
 function updateAutoServices() {
   const { show, makeup, makesReg, makesEsp } = eventFlags();
   document.getElementById('auto-tecnico').style.display = show ? '' : 'none';
+
+  const hasBGE   = performers.some(p => p.type === 'especial' && p.personagem === 'Boneco Grande Especial');
+  const bgeWarn  = document.getElementById('bge-warning');
+  if (bgeWarn) bgeWarn.style.display = hasBGE ? '' : 'none';
+
+  const hasSosia = performers.some(p => p.type === 'especial' && SOSIA_TYPES.has(p.personagem));
+  const sosiaPanel = document.getElementById('sosia-show-panel');
+  if (sosiaPanel) {
+    sosiaPanel.style.display = hasSosia ? '' : 'none';
+    if (!hasSosia && showSosiaCustom) {
+      showSosiaCustom = false;
+      const el = document.getElementById('sosia-predefinido');
+      if (el) el.checked = true;
+    }
+  }
+
   const maqDiv = document.getElementById('auto-maquiador');
   if (makeup) {
     const total = makesReg + makesEsp;
@@ -147,6 +228,9 @@ function updateAutoServices() {
 }
 
 function syncColabField() {
+  const { makeup } = eventFlags();
+  const warn = document.getElementById('colab-makeup-warn');
+  if (warn) warn.style.display = makeup ? '' : 'none';
   if (colabOverride !== null) return;
   const input = document.getElementById('num_colaboradores');
   if (input) input.value = autoColab();
@@ -194,13 +278,39 @@ function updateDebugPanel() {
   rows.push({ label: `Coordenador(es) (${coordQty}) <span style="color:var(--muted)">${show ? 'com show' : 'sem show'}</span>`, prices: coordPrices });
   for (let i = 0; i < 3; i++) cache[i] += coordPrices[i];
 
+  // Show customizado
+  if (showSosiaCustom && performers.length > 0) {
+    const customAdd = performers.length * 50;
+    rows.push({ label: `Show Customizado <span style="color:var(--muted)">(${performers.length} artista${performers.length !== 1 ? 's' : ''} × R$50)</span>`, prices: [customAdd, customAdd, customAdd] });
+    for (let i = 0; i < 3; i++) cache[i] += customAdd;
+  }
+
+  // Adicional noturno
+  if (isNoturno()) {
+    const notCount = performers.length + coordQty;
+    const notAdd = notCount * 50;
+    rows.push({ label: `Adicional Noturno <span style="color:var(--muted)">(≥ 19h · ${notCount} pessoa${notCount !== 1 ? 's' : ''} × R$50)</span>`, prices: [notAdd, notAdd, notAdd] });
+    for (let i = 0; i < 3; i++) cache[i] += notAdd;
+  }
+
+  // Transporte especial pré-markup — uma vez por tipo
+  const dbgRegras = cfg.especiais_regras || {};
+  const dbgSeenTransport = new Set();
+  for (const p of performers) {
+    if (p.type === 'especial' && !dbgSeenTransport.has(p.personagem)) {
+      const tEsp = (dbgRegras[p.personagem] || {}).transporte_especial || 0;
+      if (tEsp) {
+        rows.push({ label: `Transporte Especial — ${p.personagem} <span style="color:var(--muted)">(pré-markup, único)</span>`, prices: [tEsp, tEsp, tEsp] });
+        for (let i = 0; i < 3; i++) cache[i] += tEsp;
+        dbgSeenTransport.add(p.personagem);
+      }
+    }
+  }
+
   if (show) {
     const tecnico = cfg.tecnico_som;
     rows.push({ label: 'Técnico de Som <span style="color:var(--muted)">(automático)</span>', prices: [...tecnico] });
     for (let i = 0; i < 3; i++) cache[i] += tecnico[i];
-    const brinde = cfg.brinde_show ?? 100;
-    rows.push({ label: 'Brinde aniversariante <span style="color:var(--muted)">(show)</span>', prices: [brinde, brinde, brinde] });
-    for (let i = 0; i < 3; i++) cache[i] += brinde;
   }
 
   if (makeup) {
@@ -223,6 +333,14 @@ function updateDebugPanel() {
       ${r.prices.map(v => `<td style="text-align:right;${r.bold ? 'font-weight:600;' : ''}">${fmt(v)}</td>`).join('')}
     </tr>`).join('');
 
+  const running = [...afterMarkup];
+
+  if (show) {
+    const brinde = cfg.brinde_show ?? 100;
+    html += `<tr><td>Brinde aniversariante <span style="color:var(--muted)">(pós-markup)</span></td><td style="text-align:right;" colspan="3">${fmt(brinde)}</td></tr>`;
+    for (let i = 0; i < 3; i++) running[i] += brinde;
+  }
+
   const tb = transportBreakdown();
   if (tb) {
     const veiculoLabel = transportTipo === 'van'
@@ -234,13 +352,24 @@ function updateDebugPanel() {
       <tr><td style="padding-left:16px;">Adicional Fora SP <span style="color:var(--muted)">(${tb.colab} colab × ${tb.kmT}km ÷ 3)</span></td><td style="text-align:right;" colspan="3">${fmt(tb.afsp)}</td></tr>
       <tr><td style="padding-left:16px;">Adicional Show <span style="color:var(--muted)">${tb.ashow > 0 ? `(${tb.kmT}km ÷ 6)` : '(km ≤ 500 ou sem show)'}</span></td><td style="text-align:right;" colspan="3">${fmt(tb.ashow)}</td></tr>
       <tr style="background:#fffbeb;"><td style="font-weight:600;padding-left:16px;">Total Transporte</td><td style="text-align:right;font-weight:600;" colspan="3">${fmt(tb.total)}</td></tr>`;
+    for (let i = 0; i < 3; i++) running[i] += tb.total;
   }
 
-  const final = tb ? afterMarkup.map(v => v + tb.total) : afterMarkup;
+  if (acrescimo > 0) {
+    if (acrescimoTipo === 'percent') {
+      const addVals = running.map(v => Math.round(v * acrescimo / 100 * 100) / 100);
+      html += `<tr style="background:#f0fdf4;"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(${acrescimo}%)</span></td>${addVals.map(v => `<td style="text-align:right;font-weight:600;">${fmt(v)}</td>`).join('')}</tr>`;
+      for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + addVals[i]) * 100) / 100;
+    } else {
+      html += `<tr style="background:#f0fdf4;"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(valor fixo)</span></td><td style="text-align:right;font-weight:600;" colspan="3">${fmt(acrescimo)}</td></tr>`;
+      for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + acrescimo) * 100) / 100;
+    }
+  }
+
   html += `
     <tr style="background:var(--green-soft);">
       <td><strong>TOTAL FINAL AO CLIENTE</strong></td>
-      ${final.map(v => `<td style="text-align:right;font-weight:700;">${fmt(v)}</td>`).join('')}
+      ${running.map(v => `<td style="text-align:right;font-weight:700;">${fmt(v)}</td>`).join('')}
     </tr>`;
 
   tbody.innerHTML = html;
@@ -248,7 +377,8 @@ function updateDebugPanel() {
     <tr style="background:var(--surface);color:var(--muted);">
       <td colspan="4" style="font-size:12px;font-style:italic;">
         Markup (${modeloLabel}): 1h × ${markup[0]} · 2h × ${markup[1]} · 4h × ${markup[2]}
-        ${tb ? ` · Transporte ${fmt(tb.total)} adicionado após markup` : ''}
+        ${tb ? ` · Transporte ${fmt(tb.total)} pós-markup` : ''}
+        ${acrescimo > 0 ? ` · Acréscimo ${acrescimoTipo === 'percent' ? acrescimo + '%' : fmt(acrescimo)} pós-tudo` : ''}
       </td>
     </tr>`;
 }
@@ -331,16 +461,43 @@ function setMakeup(i, checked) {
   update();
 }
 
+// Tipos que são sempre "com show" — show pré-marcado ao selecionar
+const SEMPRE_SHOW = new Set(['Sósia com Show', 'Sósia Cantor']);
+
+// Tipos de sósia — disparam a pergunta predefinido/customizado
+const SOSIA_TYPES = new Set(['Sósia', 'Sósia com Show', 'Sósia Cantor']);
+
 function setPersonagem(i, value) {
   performers[i].personagem = value;
-  if (!(new Set(window.ESPECIAIS_COM_SHOW || [])).has(value)) performers[i].show = false;
+  const comShow = new Set(window.ESPECIAIS_COM_SHOW || []);
+  if (!comShow.has(value)) {
+    performers[i].show = false;
+  } else if (SEMPRE_SHOW.has(value)) {
+    performers[i].show = true;
+  }
   update();
 }
 
 function changeCoord(delta) {
-  coordQty = Math.max(1, coordQty + delta);
+  coordQty = Math.max(minCoord(), coordQty + delta);
   document.getElementById('coord-qty').textContent = coordQty;
   document.getElementById('coordenador_qty').value  = coordQty;
+  update();
+}
+
+function setSosiaShowTipo(tipo) {
+  showSosiaCustom = tipo === 'customizado';
+  update();
+}
+
+function setAcrescimoTipo(tipo) {
+  acrescimoTipo = tipo;
+  document.getElementById('acrescimo-unit').textContent = tipo === 'percent' ? '%' : 'R$';
+  update();
+}
+
+function setAcrescimo(val) {
+  acrescimo = parseFloat(val) || 0;
   update();
 }
 
@@ -385,12 +542,14 @@ function clearAll() {
   if (!confirm('Limpar todos os campos?')) return;
   performers = []; coordQty = 1; forasp = false; kmIda = 0;
   transportTipo = 'van'; comCarretinha = false; numCarros = 1; colabOverride = null;
+  acrescimo = 0; acrescimoTipo = 'valor'; showSosiaCustom = false;
   document.getElementById('quote-form').reset();
   document.getElementById('coord-qty').textContent  = '1';
   document.getElementById('coordenador_qty').value  = '1';
   document.getElementById('transport-section').style.display = 'none';
   document.getElementById('van-options').style.display   = '';
   document.getElementById('carro-options').style.display = 'none';
+  document.getElementById('acrescimo-unit').textContent = 'R$';
   update();
 }
 
@@ -405,6 +564,8 @@ function _applySnapshot(snap) {
   comCarretinha = !!snap.carretinha;
   numCarros     = parseInt(snap.num_carros) || 1;
   colabOverride = snap.num_colaboradores ? parseInt(snap.num_colaboradores) : null;
+  acrescimo     = parseFloat(snap.acrescimo_valor) || 0;
+  acrescimoTipo = snap.acrescimo_tipo || 'valor';
 
   document.querySelector('[name=client_name]').value    = snap.client_name    || '';
   document.querySelector('[name=event_location]').value = snap.event_location || '';
@@ -426,6 +587,16 @@ function _applySnapshot(snap) {
   document.getElementById('van-options').style.display   = isVan  ? '' : 'none';
   document.getElementById('carro-options').style.display = !isVan ? '' : 'none';
   if (colabOverride !== null) document.getElementById('num_colaboradores').value = colabOverride;
+
+  showSosiaCustom = snap.show_sosia_tipo === 'customizado';
+  document.getElementById('sosia-predefinido').checked  = !showSosiaCustom;
+  document.getElementById('sosia-customizado').checked  = showSosiaCustom;
+
+  const isPercent = acrescimoTipo === 'percent';
+  document.getElementById('acrescimo_valor').value            = acrescimo || 0;
+  document.getElementById('acrescimo-valor-radio').checked    = !isPercent;
+  document.getElementById('acrescimo-percent-radio').checked  = isPercent;
+  document.getElementById('acrescimo-unit').textContent       = isPercent ? '%' : 'R$';
 
   update();
   document.getElementById('history-panel').style.display = 'none';
@@ -499,6 +670,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('coord-qty-down').addEventListener('click', () => changeCoord(-1));
   document.getElementById('coord-qty-up').addEventListener('click',   () => changeCoord(1));
+
+  document.querySelector('[name=event_time]')?.addEventListener('change', update);
 
   document.getElementById('km_ida')?.addEventListener('input', function () {
     kmIda = parseFloat(this.value) || 0;
