@@ -181,6 +181,41 @@ def print_event_figurinos(event_id: int):
 
 # ── Delete ─────────────────────────────────────────────────────
 
+@figurino_bp.route("/figurinos/<int:sheet_id>/rotate-photo", methods=["POST"])
+@login_required
+def rotate_photo(sheet_id: int):
+    sheet = FigurinoSheet.query.get_or_404(sheet_id)
+
+    if not sheet.photo_filename:
+        flash("Sem foto para girar.")
+        return redirect(url_for("figurino.edit_sheet", sheet_id=sheet_id))
+
+    photo_url = sheet.photo_filename
+    if not photo_url.startswith("/uploads/"):
+        flash("Formato de foto não suportado para rotação.")
+        return redirect(url_for("figurino.edit_sheet", sheet_id=sheet_id))
+
+    rel_path = photo_url[len("/uploads/"):]
+    abs_path = os.path.join(current_app.config["UPLOAD_FOLDER"], rel_path)
+
+    direction = request.form.get("direction", "cw")  # cw | ccw
+
+    try:
+        from PIL import Image
+        img = Image.open(abs_path)
+        degrees = -90 if direction == "cw" else 90
+        img = img.rotate(degrees, expand=True)
+        if img.mode in ("RGBA", "LA", "P"):
+            img = img.convert("RGB")
+        img.save(abs_path, format="JPEG", quality=92, subsampling=0)
+        sheet.updated_at = datetime.utcnow()
+        db.session.commit()
+    except Exception as e:
+        flash(f"Erro ao girar foto: {e}")
+
+    return redirect(url_for("figurino.edit_sheet", sheet_id=sheet_id))
+
+
 @figurino_bp.route("/figurinos/<int:sheet_id>/delete", methods=["POST"])
 @login_required
 def delete_sheet(sheet_id: int):

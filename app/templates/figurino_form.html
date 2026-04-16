@@ -26,11 +26,21 @@
       <label>Foto do figurino</label>
       {% if sheet and sheet.photo_url %}
         <div style="margin-bottom: 12px;">
-          <img src="{{ sheet.photo_url }}"
+          <img src="{{ sheet.photo_url }}?t={{ (sheet.updated_at.timestamp()|int) if sheet.updated_at else 0 }}"
                style="max-width: 100%; max-height: 200px; object-fit: cover;
                       border-radius: var(--r-md); border: 1px solid var(--line);
                       display: block;">
-          <div class="meta" style="margin-top: 6px;">Para substituir, selecione uma nova foto abaixo.</div>
+          <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+            <form method="post" action="/figurinos/{{ sheet.id }}/rotate-photo" style="margin:0;">
+              <input type="hidden" name="direction" value="ccw">
+              <button type="submit" class="btn btn-sm btn-secondary" title="Girar 90° para esquerda">&#8634; Esquerda</button>
+            </form>
+            <form method="post" action="/figurinos/{{ sheet.id }}/rotate-photo" style="margin:0;">
+              <input type="hidden" name="direction" value="cw">
+              <button type="submit" class="btn btn-sm btn-secondary" title="Girar 90° para direita">&#8635; Direita</button>
+            </form>
+            <span class="meta">Para substituir, selecione uma nova foto abaixo.</span>
+          </div>
         </div>
       {% endif %}
       <input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp" style="display: block; width: 100%;">
