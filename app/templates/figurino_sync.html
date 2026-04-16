@@ -115,7 +115,8 @@ function startSync() {
       document.getElementById('count-updated').textContent = data.updated;
       document.getElementById('count-error').textContent   = data.error;
       appendLog('done', '═══ Sync concluído — ' + data.created + ' criados | ' +
-                        data.updated + ' atualizados | ' + data.error + ' erros ═══');
+                        data.updated + ' atualizados | ' + data.skipped + ' ignorados | ' +
+                        data.error + ' erros ═══');
       status.textContent = 'Sync concluído.';
       prog.textContent   = '';
       btn.disabled       = false;

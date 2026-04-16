@@ -435,7 +435,7 @@ def sync_drive_stream():
             else:
                 yield sse({"type": "info", "msg": f"{total} Google Docs encontrado(s). Importando..."})
 
-            counts = {"created": 0, "updated": 0, "error": 0}
+            counts = {"created": 0, "updated": 0, "skipped": 0, "error": 0}
 
             for idx, file_info in enumerate(supported, 1):
                 file_id   = file_info["id"]
@@ -443,6 +443,11 @@ def sync_drive_stream():
                 mime_type = file_info.get("mimeType", GDOC_MIME)
 
                 yield sse({"type": "progress", "idx": idx, "total": total, "name": file_name})
+
+                # Se já existe ficha com este drive_file_id, pula sem baixar o arquivo
+                if FigurinoSheet.query.filter_by(drive_file_id=file_id).first():
+                    counts["skipped"] += 1
+                    continue
 
                 try:
                     buf = _io.BytesIO()
@@ -464,14 +469,9 @@ def sync_drive_stream():
                     char_norm = _sync_normalize(char_name)
                     photo_url, photo_err = _sync_save_photo(doc, file_id)
 
-                    sheet = FigurinoSheet.query.filter_by(drive_file_id=file_id).first()
-                    if not sheet:
-                        candidate = FigurinoSheet.query.filter_by(character_name_norm=char_norm).first()
-                        # Só reutiliza a ficha se ela ainda não tem outro drive_file_id
-                        # (ficha nativa sem ID, ou mesmo arquivo). Se já pertence a outro
-                        # arquivo do Drive, cria uma ficha nova para não perder o ID.
-                        if candidate and (not candidate.drive_file_id or candidate.drive_file_id == file_id):
-                            sheet = candidate
+                    # Fallback por nome: só reutiliza ficha nativa (sem drive_file_id)
+                    candidate = FigurinoSheet.query.filter_by(character_name_norm=char_norm).first()
+                    sheet = candidate if (candidate and not candidate.drive_file_id) else None
 
                     action = "updated" if sheet else "created"
                     if not sheet:
