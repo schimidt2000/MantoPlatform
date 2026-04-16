@@ -26,19 +26,16 @@
       <label>Foto do figurino</label>
       {% if sheet and sheet.photo_url %}
         <div style="margin-bottom: 12px;">
-          <img src="{{ sheet.photo_url }}?t={{ (sheet.updated_at.timestamp()|int) if sheet.updated_at else 0 }}"
+          <img id="figurino-photo"
+               src="{{ sheet.photo_url }}?t={{ (sheet.updated_at.timestamp()|int) if sheet.updated_at else 0 }}"
                style="max-width: 100%; max-height: 200px; object-fit: cover;
                       border-radius: var(--r-md); border: 1px solid var(--line);
                       display: block;">
           <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
-            <form method="post" action="/figurinos/{{ sheet.id }}/rotate-photo" style="margin:0;">
-              <input type="hidden" name="direction" value="ccw">
-              <button type="submit" class="btn btn-sm btn-secondary" title="Girar 90° para esquerda">&#8634; Esquerda</button>
-            </form>
-            <form method="post" action="/figurinos/{{ sheet.id }}/rotate-photo" style="margin:0;">
-              <input type="hidden" name="direction" value="cw">
-              <button type="submit" class="btn btn-sm btn-secondary" title="Girar 90° para direita">&#8635; Direita</button>
-            </form>
+            <button type="button" class="btn btn-sm btn-secondary" title="Girar 90° para esquerda"
+                    onclick="rotatePhoto('ccw')">&#8634; Esquerda</button>
+            <button type="button" class="btn btn-sm btn-secondary" title="Girar 90° para direita"
+                    onclick="rotatePhoto('cw')">&#8635; Direita</button>
             <span class="meta">Para substituir, selecione uma nova foto abaixo.</span>
           </div>
         </div>
@@ -119,6 +116,32 @@
 
 {% block extra_scripts %}
 <script>
+{% if sheet and sheet.photo_url %}
+function rotatePhoto(direction) {
+  var btns = document.querySelectorAll('[onclick^="rotatePhoto"]');
+  btns.forEach(function(b) { b.disabled = true; b.textContent = '...'; });
+
+  fetch('/figurinos/{{ sheet.id }}/rotate-photo', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'direction=' + direction
+  }).then(function() {
+    var img = document.getElementById('figurino-photo');
+    var base = img.src.split('?')[0];
+    img.src = base + '?t=' + Date.now();
+    img.onload = function() {
+      btns.forEach(function(b) {
+        b.disabled = false;
+        b.textContent = b.title.includes('esquerda') ? '↺ Esquerda' : '↻ Direita';
+      });
+    };
+  }).catch(function() {
+    btns.forEach(function(b) { b.disabled = false; });
+    alert('Erro ao girar foto.');
+  });
+}
+{% endif %}
+
 const piecesList = document.getElementById('pieces-list');
 
 function addPiece(name, qty) {
