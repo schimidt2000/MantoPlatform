@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Sync Figurinos — Drive{% endblock %}
+{% block page_title %}Importar Fichas do Google Drive{% endblock %}
+{% block page_subtitle %}<p class="sub">Importa Google Docs da pasta de figurinos para o catálogo da plataforma</p>{% endblock %}
+
+{% block page_actions %}
+  <a href="{{ url_for('figurino.figurinos') }}" class="btn btn-secondary">Voltar</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 760px;">
+
+  <div class="panel" style="margin-bottom: 20px;">
+    <div class="panel-title">Status</div>
+    <div id="status-bar" style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">
+      Aguardando início...
+    </div>
+
+    <div style="display: flex; gap: 24px; margin-bottom: 20px;">
+      <div style="text-align: center;">
+        <div id="count-created" style="font-size: 28px; font-weight: 700; color: var(--green, #22c55e);">—</div>
+        <div style="font-size: 12px; color: var(--muted);">Criados</div>
+      </div>
+      <div style="text-align: center;">
+        <div id="count-updated" style="font-size: 28px; font-weight: 700; color: var(--blue, #3b82f6);">—</div>
+        <div style="font-size: 12px; color: var(--muted);">Atualizados</div>
+      </div>
+      <div style="text-align: center;">
+        <div id="count-error" style="font-size: 28px; font-weight: 700; color: var(--red);">—</div>
+        <div style="font-size: 12px; color: var(--muted);">Erros</div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button id="btn-start" class="btn btn-primary" onclick="startSync()">
+        &#9654; Iniciar Sync
+      </button>
+      <span id="progress-label" style="font-size: 13px; color: var(--muted);"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Log</div>
+    <div id="log"
+         style="font-family: monospace; font-size: 12px; line-height: 1.6;
+                max-height: 480px; overflow-y: auto;
+                background: var(--bg-deep, #f4f4f4); border-radius: var(--r-md);
+                padding: 12px; color: var(--text);">
+      <span style="color: var(--muted);">O log aparecerá aqui...</span>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<style>
+  .log-info    { color: var(--muted); }
+  .log-created { color: var(--green, #22c55e); }
+  .log-updated { color: var(--blue, #3b82f6); }
+  .log-error   { color: var(--red); }
+  .log-done    { color: var(--text); font-weight: 700; margin-top: 8px; }
+</style>
+<script>
+var evtSource = null;
+
+function startSync() {
+  var btn    = document.getElementById('btn-start');
+  var log    = document.getElementById('log');
+  var status = document.getElementById('status-bar');
+  var prog   = document.getElementById('progress-label');
+
+  btn.disabled    = true;
+  btn.textContent = 'Sincronizando...';
+  log.innerHTML   = '';
+  status.textContent = 'Iniciando...';
+  prog.textContent   = '';
+  document.getElementById('count-created').textContent = '0';
+  document.getElementById('count-updated').textContent = '0';
+  document.getElementById('count-error').textContent   = '0';
+
+  evtSource = new EventSource('/figurinos/sync-drive/stream');
+
+  evtSource.onmessage = function(e) {
+    var data = JSON.parse(e.data);
+
+    if (data.type === 'info') {
+      appendLog('info', data.msg);
+      status.textContent = data.msg;
+
+    } else if (data.type === 'progress') {
+      prog.textContent = '[' + data.idx + '/' + data.total + '] ' + data.name;
+
+    } else if (data.type === 'result') {
+      if (data.status === 'created') {
+        appendLog('created', '✅ ' + data.name + ' — ' + data.pieces + ' peça(s)  [criado]');
+        increment('count-created');
+      } else if (data.status === 'updated') {
+        appendLog('updated', '🔄 ' + data.name + ' — ' + data.pieces + ' peça(s)  [atualizado]');
+        increment('count-updated');
+      } else {
+        appendLog('error', '❌ ' + data.name + ': ' + (data.msg || 'erro'));
+        increment('count-error');
+      }
+
+    } else if (data.type === 'done') {
+      document.getElementById('count-created').textContent = data.created;
+      document.getElementById('count-updated').textContent = data.updated;
+      document.getElementById('count-error').textContent   = data.error;
+      appendLog('done', '═══ Sync concluído — ' + data.created + ' criados | ' +
+                        data.updated + ' atualizados | ' + data.error + ' erros ═══');
+      status.textContent = 'Sync concluído.';
+      prog.textContent   = '';
+      btn.disabled       = false;
+      btn.textContent    = '↺ Rodar novamente';
+      evtSource.close();
+
+    } else if (data.type === 'error') {
+      appendLog('error', '❌ ' + data.msg);
+      status.textContent = 'Erro: ' + data.msg;
+      btn.disabled       = false;
+      btn.textContent    = 'Tentar novamente';
+      evtSource.close();
+    }
+  };
+
+  evtSource.onerror = function() {
+    appendLog('error', '⚠ Conexão interrompida.');
+    status.textContent = 'Conexão perdida.';
+    btn.disabled       = false;
+    btn.textContent    = 'Tentar novamente';
+    evtSource.close();
+  };
+}
+
+function appendLog(cls, msg) {
+  var log  = document.getElementById('log');
+  var line = document.createElement('div');
+  line.className = 'log-line log-' + cls;
+  line.textContent = msg;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function increment(id) {
+  var el = document.getElementById(id);
+  var n  = parseInt(el.textContent, 10) || 0;
+  el.textContent = n + 1;
+}
+</script>
+{% endblock %}

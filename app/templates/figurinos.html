@@ -4,6 +4,9 @@
 {% block page_title %}Banco de Figurinos{% endblock %}
 
 {% block page_actions %}
+  {% if is_real_superadmin() %}
+    <a href="{{ url_for('figurino.sync_drive_page') }}" class="btn btn-secondary">&#8635; Sync Drive</a>
+  {% endif %}
   <a href="/figurinos/new" class="btn btn-primary">+ Nova Ficha</a>
 {% endblock %}
 
