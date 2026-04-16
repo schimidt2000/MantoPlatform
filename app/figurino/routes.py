@@ -496,6 +496,21 @@ def sync_drive_stream():
                     yield sse({"type": "result", "status": "error",
                                "name": file_name, "msg": str(e)})
 
+            # Diagnóstico: quais arquivos do Drive ainda não têm ficha?
+            drive_ids = {f["id"] for f in supported}
+            imported_ids = {
+                s.drive_file_id
+                for s in FigurinoSheet.query.filter(
+                    FigurinoSheet.drive_file_id.in_(list(drive_ids))
+                ).all()
+            }
+            missing_ids = drive_ids - imported_ids
+            if missing_ids:
+                missing_names = [
+                    f["name"] for f in supported if f["id"] in missing_ids
+                ]
+                yield sse({"type": "missing", "files": missing_names})
+
             yield sse({"type": "done", **counts})
 
         except Exception as e:

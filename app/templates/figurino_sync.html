@@ -104,6 +104,12 @@ function startSync() {
         increment('count-error');
       }
 
+    } else if (data.type === 'missing') {
+      appendLog('error', '⚠ Arquivos do Drive SEM ficha no banco (' + data.files.length + '):');
+      data.files.forEach(function(name) {
+        appendLog('error', '   • ' + name);
+      });
+
     } else if (data.type === 'done') {
       document.getElementById('count-created').textContent = data.created;
       document.getElementById('count-updated').textContent = data.updated;
