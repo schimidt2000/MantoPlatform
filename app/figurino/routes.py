@@ -466,7 +466,12 @@ def sync_drive_stream():
 
                     sheet = FigurinoSheet.query.filter_by(drive_file_id=file_id).first()
                     if not sheet:
-                        sheet = FigurinoSheet.query.filter_by(character_name_norm=char_norm).first()
+                        candidate = FigurinoSheet.query.filter_by(character_name_norm=char_norm).first()
+                        # Só reutiliza a ficha se ela ainda não tem outro drive_file_id
+                        # (ficha nativa sem ID, ou mesmo arquivo). Se já pertence a outro
+                        # arquivo do Drive, cria uma ficha nova para não perder o ID.
+                        if candidate and (not candidate.drive_file_id or candidate.drive_file_id == file_id):
+                            sheet = candidate
 
                     action = "updated" if sheet else "created"
                     if not sheet:
