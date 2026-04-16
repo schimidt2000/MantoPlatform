@@ -252,34 +252,71 @@ def _sync_extract_name(doc) -> str:
     skip = ["coordenador", "data de", "horário", "durante",
             "item presente", "item ausente", "montagem", "retirada",
             "devolução", "manto produções"]
-    for para in doc.paragraphs:
+
+    def _is_name_para(para) -> str | None:
         text = para.text.strip()
         if not text or any(p in text.lower() for p in skip):
-            continue
+            return None
         if (text == text.upper() and len(text) > 3) or any(
             run.bold for run in para.runs if run.text.strip()
         ):
             return text.title()
+        return None
+
+    # 1. Parágrafos de nível raiz
+    for para in doc.paragraphs:
+        name = _is_name_para(para)
+        if name:
+            return name
+
+    # 2. Células das primeiras 3 linhas de cada tabela (nome pode estar em header table)
+    for table in doc.tables:
+        for row in table.rows[:3]:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    name = _is_name_para(para)
+                    if name:
+                        return name
     return ""
 
 
 def _sync_extract_pieces(doc) -> list:
+    """Encontra a tabela de peças (M/R/D/Qtd/Item = 5 colunas) e extrai os itens."""
     import re as _re
-    if not doc.tables:
-        return []
-    pieces = []
-    for row_idx, row in enumerate(doc.tables[0].rows):
-        if row_idx == 0:
+
+    def _try_table(table) -> list:
+        pieces = []
+        for row_idx, row in enumerate(table.rows):
+            if row_idx == 0:
+                continue  # pula cabeçalho
+            cells = [c.text.strip() for c in row.cells]
+            if len(cells) < 5 or not cells[4]:
+                continue
+            try:
+                qty = int(_re.sub(r"\D", "", cells[3])) if cells[3] else 1
+            except ValueError:
+                qty = 1
+            pieces.append({"name": cells[4], "qty": qty})
+        return pieces
+
+    for table in doc.tables:
+        # Tabela de peças tem pelo menos 5 colunas e cabeçalho com "Item"
+        if not table.rows:
             continue
-        cells = [c.text.strip() for c in row.cells]
-        if len(cells) < 5 or not cells[4]:
-            continue
-        try:
-            qty = int(_re.sub(r"\D", "", cells[3])) if cells[3] else 1
-        except ValueError:
-            qty = 1
-        pieces.append({"name": cells[4], "qty": qty})
-    return pieces
+        header_cells = [c.text.strip().upper() for c in table.rows[0].cells]
+        if len(header_cells) >= 5 and any("ITEM" in h for h in header_cells):
+            pieces = _try_table(table)
+            if pieces:
+                return pieces
+
+    # Fallback: tenta todas as tabelas com ≥5 colunas
+    for table in doc.tables:
+        if table.rows and len(table.rows[0].cells) >= 5:
+            pieces = _try_table(table)
+            if pieces:
+                return pieces
+
+    return []
 
 
 def _sync_save_photo(doc, file_id: str) -> tuple[str | None, str | None]:
