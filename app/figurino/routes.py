@@ -427,8 +427,13 @@ def sync_drive_stream():
                     break
 
             supported = [f for f in files if f.get("mimeType") in (GDOC_MIME, DOCX_MIME)]
+            skipped_fmt = len(files) - len(supported)
             total = len(supported)
-            yield sse({"type": "info", "msg": f"{total} arquivo(s) encontrado(s). Importando..."})
+            if skipped_fmt:
+                skipped_names = [f["name"] for f in files if f.get("mimeType") not in (GDOC_MIME, DOCX_MIME)]
+                yield sse({"type": "info", "msg": f"{len(files)} itens na pasta — {total} Google Docs/DOCX para importar, {skipped_fmt} ignorado(s) por formato: {', '.join(skipped_names)}"})
+            else:
+                yield sse({"type": "info", "msg": f"{total} Google Docs encontrado(s). Importando..."})
 
             counts = {"created": 0, "updated": 0, "error": 0}
 
