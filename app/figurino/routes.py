@@ -247,10 +247,16 @@ def _sync_extract_pieces(doc) -> list:
     return pieces
 
 
-def _sync_save_photo(doc, file_id: str) -> str | None:
+def _sync_save_photo(doc, file_id: str) -> tuple[str | None, str | None]:
+    """Extrai a primeira imagem do doc e salva localmente.
+
+    Returns:
+        (url, error_msg) — url é None se não encontrou foto ou falhou;
+        error_msg é None em caso de sucesso.
+    """
     import io as _io
     if current_app.config.get("USE_S3"):
-        return None
+        return None, None
     upload_folder = current_app.config["UPLOAD_FOLDER"]
     fname = f"drive_{file_id}.jpg"
     save_dir = os.path.join(upload_folder, "figurino_photos")
@@ -259,20 +265,25 @@ def _sync_save_photo(doc, file_id: str) -> str | None:
         for rel in doc.part.rels.values():
             if "image" not in rel.reltype:
                 continue
+            if getattr(rel, "is_external", False):
+                continue  # imagem linkada externamente, sem blob
             img_data = rel.target_part.blob
             os.makedirs(save_dir, exist_ok=True)
             try:
                 from PIL import Image, ImageOps
                 img = Image.open(_io.BytesIO(img_data))
                 img = ImageOps.exif_transpose(img)
+                # JPEG não suporta alpha — converte RGBA/LA/P para RGB
+                if img.mode in ("RGBA", "LA", "P"):
+                    img = img.convert("RGB")
                 img.save(save_path, format="JPEG", quality=92, subsampling=0)
             except ImportError:
                 with open(save_path, "wb") as f:
                     f.write(img_data)
-            return f"/uploads/figurino_photos/{fname}"
-    except Exception:
-        pass
-    return None
+            return f"/uploads/figurino_photos/{fname}", None
+    except Exception as e:
+        return None, str(e)
+    return None, None  # nenhuma imagem no doc
 
 
 @figurino_bp.route("/figurinos/sync-drive")
@@ -374,7 +385,7 @@ def sync_drive_stream():
                     ).strip()
                     pieces    = _sync_extract_pieces(doc)
                     char_norm = _sync_normalize(char_name)
-                    photo_url = _sync_save_photo(doc, file_id)
+                    photo_url, photo_err = _sync_save_photo(doc, file_id)
 
                     sheet = FigurinoSheet.query.filter_by(drive_file_id=file_id).first()
                     if not sheet:
@@ -398,7 +409,9 @@ def sync_drive_stream():
 
                     counts[action] += 1
                     yield sse({"type": "result", "status": action,
-                               "name": char_name, "pieces": len(pieces)})
+                               "name": char_name, "pieces": len(pieces),
+                               "photo": bool(photo_url),
+                               "photo_err": photo_err})
 
                 except Exception as e:
                     counts["error"] += 1

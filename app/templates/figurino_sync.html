@@ -92,11 +92,12 @@ function startSync() {
       prog.textContent = '[' + data.idx + '/' + data.total + '] ' + data.name;
 
     } else if (data.type === 'result') {
+      var photoTag = data.photo ? ' 📷' : (data.photo_err ? ' ⚠foto:' + data.photo_err : ' —foto');
       if (data.status === 'created') {
-        appendLog('created', '✅ ' + data.name + ' — ' + data.pieces + ' peça(s)  [criado]');
+        appendLog('created', '✅ ' + data.name + ' — ' + data.pieces + ' peça(s)' + photoTag + '  [criado]');
         increment('count-created');
       } else if (data.status === 'updated') {
-        appendLog('updated', '🔄 ' + data.name + ' — ' + data.pieces + ' peça(s)  [atualizado]');
+        appendLog('updated', '🔄 ' + data.name + ' — ' + data.pieces + ' peça(s)' + photoTag + '  [atualizado]');
         increment('count-updated');
       } else {
         appendLog('error', '❌ ' + data.name + ': ' + (data.msg || 'erro'));
