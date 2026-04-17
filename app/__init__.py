@@ -82,11 +82,13 @@ def create_app():
     app.config.setdefault("UPLOAD_PAYMENTS",         os.path.join(_instance, "uploads", "payments"))
     app.config.setdefault("UPLOAD_FIGURINO_THUMBS",  os.path.join(_instance, "uploads", "figurino_thumbs"))
     app.config.setdefault("UPLOAD_FIGURINO_PHOTOS",  os.path.join(_instance, "uploads", "figurino_photos"))
+    app.config.setdefault("UPLOAD_EVENT_OBS",         os.path.join(_instance, "uploads", "event_obs"))
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_CONTRACTS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_PAYMENTS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_FIGURINO_THUMBS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_FIGURINO_PHOTOS"], exist_ok=True)
+    os.makedirs(app.config["UPLOAD_EVENT_OBS"], exist_ok=True)
 
     db.init_app(app)
     migrate.init_app(app, db)

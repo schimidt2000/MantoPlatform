@@ -765,6 +765,7 @@ function renderHistory() {
               <div style="font-size:11px;color:var(--muted);margin-top:2px;">${e.created_at}</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:4px;">
+              <a href="/events/new?orcamento_id=${e.id}" class="btn btn-primary btn-sm" style="white-space:nowrap;">Criar evento</a>
               <button class="btn btn-secondary btn-sm" onclick="restoreFromHistory(${e.id})">Reabrir</button>
               <button class="btn btn-danger btn-sm" onclick="deleteFromHistory(${e.id})">✕</button>
             </div>

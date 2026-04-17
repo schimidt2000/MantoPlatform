@@ -4,11 +4,67 @@
 {% block page_title %}Novo Evento{% endblock %}
 
 {% block page_subtitle %}
-  <p class="sub">Crie um evento e envie para a agenda automaticamente</p>
+  <p class="sub">
+    {% if prefill.orcamento_id %}
+      Criando evento a partir do orçamento de <strong>{{ prefill.client_name or 'cliente' }}</strong>
+    {% else %}
+      Crie um evento e envie para a agenda automaticamente
+    {% endif %}
+  </p>
 {% endblock %}
 
 {% block page_actions %}
   <a href="/agenda" class="btn btn-secondary">&larr; Cancelar</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .ec-panel { margin-bottom: 20px; }
+  .ec-section { font-size: 11px; font-weight: 700; text-transform: uppercase;
+                letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; }
+  .char-row, .pay-row, .obs-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: var(--r-sm); margin-bottom: 8px;
+    background: var(--surface);
+  }
+  .char-row-main { display: flex; flex: 1; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .char-flags    { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; margin-top: 6px; }
+  .char-flags label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .dur-card {
+    flex: 1; border: 2px solid var(--line); border-radius: var(--r-md);
+    padding: 14px 12px; cursor: pointer; text-align: center;
+    transition: border-color .15s, background .15s;
+  }
+  .dur-card.selected { border-color: var(--accent); background: var(--accent-soft, #f0f4ff); }
+  .dur-card .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .dur-card .val { font-size: 20px; font-weight: 700; color: var(--accent-dark); margin-top: 4px; }
+  .pay-method-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .pay-method-btn {
+    padding: 8px 16px; border: 2px solid var(--line); border-radius: var(--r-md);
+    background: #fff; cursor: pointer; font-size: 13px; font-weight: 600;
+    transition: border-color .15s, background .15s;
+  }
+  .pay-method-btn.active { border-color: var(--accent); background: var(--accent-soft, #f0f4ff); color: var(--accent-dark); }
+  .pay-extra-panel { display: none; margin-bottom: 16px; }
+  .pay-extra-panel.visible { display: block; }
+  .obs-type-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .obs-tab {
+    padding: 5px 12px; border: 1px solid var(--line); border-radius: var(--r-sm);
+    background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
+  }
+  .obs-tab.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .val-breakdown { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+  .val-item { display: flex; flex-direction: column; gap: 4px; }
+  .val-item label { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .val-item .prefix { position: relative; }
+  .val-item .prefix span {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    font-size: 13px; color: var(--muted); pointer-events: none;
+  }
+  .val-item .prefix input { padding-left: 28px; }
+  .extra-row-label { color: var(--muted); }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -19,149 +75,302 @@
 </div>
 {% endif %}
 
-<form method="post" action="/events/new" enctype="multipart/form-data">
+<form method="post" action="/events/new" enctype="multipart/form-data" id="event-form">
+
+  {# Dados do orçamento passados via hidden para o POST #}
+  {% if prefill.orcamento_id %}
+    <input type="hidden" name="orcamento_history_id" value="{{ prefill.orcamento_id }}">
+    <input type="hidden" name="orc_caches_json" id="orc-caches-json" value="{{ prefill.caches_json | e }}">
+  {% endif %}
 
 {# ══════════════════════════════════════════════════
-   1. DADOS GERAIS
+   1. DADOS DO EVENTO
 ══════════════════════════════════════════════════ #}
-<div class="panel" style="margin-bottom:16px;">
+<div class="panel ec-panel">
   <div class="panel-title">Dados do Evento</div>
 
-  <div class="form-group">
-    <label>Título do show <span style="color:var(--red);">*</span></label>
-    <input type="text" name="title" required autofocus
-           placeholder="Ex: Festa de Aniversário João, Evento Corporativo XYZ"
-           style="max-width:500px;">
-  </div>
-
-  <div class="form-group">
-    <label>Tipo</label>
-    <select name="event_type" style="width:auto;">
-      <option value="">— Selecionar —</option>
-      <option value="SHOW">Show</option>
-      <option value="CORP">Corporativo</option>
-      <option value="R&I">Receptivo &amp; Interativo</option>
-      <option value="SOCIAL">Evento Social</option>
-    </select>
-  </div>
-
-  <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
-    <div class="form-group" style="margin-bottom:0;">
+  <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; margin-bottom:16px;">
+    <div class="form-group" style="margin:0;">
       <label>Data <span style="color:var(--red);">*</span></label>
-      <input type="date" name="event_date" required style="width:160px;">
+      <input type="date" name="event_date" required style="width:160px;"
+             value="{{ prefill.date or '' }}">
     </div>
-    <div class="form-group" style="margin-bottom:0;">
-      <label>Início</label>
-      <input type="time" name="event_start" style="width:110px;">
+    <div class="form-group" style="margin:0;">
+      <label>Início <span style="color:var(--red);">*</span></label>
+      <input type="time" name="event_start" id="event-start" style="width:110px;"
+             value="{{ prefill.start_time or '' }}">
     </div>
-    <div class="form-group" style="margin-bottom:0;">
+    <div class="form-group" style="margin:0;">
       <label>Fim</label>
       <input type="time" name="event_end" style="width:110px;">
     </div>
-  </div>
-
-  <div class="form-group" style="margin-top:16px;">
-    <label>Local</label>
-    <input type="text" name="location" placeholder="Ex: Espaço XYZ, São Paulo – SP"
-           style="max-width:500px;">
-  </div>
-
-  <div class="form-group">
-    <label>Descrição</label>
-    <textarea name="description" rows="3" placeholder="Informações adicionais sobre o evento"
-              style="max-width:500px;"></textarea>
+    <div class="form-group" style="margin:0;">
+      <label>Tipo</label>
+      <select name="event_type" id="event-type" style="width:auto;" onchange="onTypeChange()">
+        <option value="">— Selecionar —</option>
+        <option value="SHOW">SHOW — Show com som</option>
+        <option value="CORP">CORP — Corporativo</option>
+        <option value="R&I">R&amp;I — Receptivo e Interativo</option>
+      </select>
+    </div>
   </div>
 
   <div class="form-group">
-    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-      <input type="checkbox" name="needs_rehearsal" value="1">
-      <span>Precisa de ensaio</span>
+    <label>Local do evento</label>
+    <input type="text" name="location" placeholder="Rua, número, bairro, cidade…"
+           value="{{ prefill.location or '' }}" style="max-width:520px;">
+  </div>
+
+  <div class="form-group" style="margin-bottom:0;">
+    <label>Precisa de ensaio?</label>
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:400;">
+      <input type="checkbox" name="needs_rehearsal" value="1" id="needs-rehearsal">
+      <span>Sim, adicionar ensaio ao evento</span>
     </label>
+    <div class="meta">Eventos SHOW sempre geram ensaio automaticamente.</div>
   </div>
 </div>
 
 {# ══════════════════════════════════════════════════
-   2. PERSONAGENS
+   2. PERSONAGENS E EQUIPE
 ══════════════════════════════════════════════════ #}
-<div class="panel" style="margin-bottom:16px;">
-  <div class="panel-title">Personagens</div>
-  <p class="muted" style="font-size:13px; margin-bottom:12px;">
-    Adicione os personagens do evento e, se disponível, associe o figurino correspondente.
+<div class="panel ec-panel">
+  <div class="panel-title">Personagens e Equipe</div>
+  <p class="muted" style="font-size:13px; margin-bottom:14px;">
+    O nome do evento é gerado automaticamente a partir dos personagens. Edite se necessário.
   </p>
 
+  {# Lista dinâmica #}
   <div id="chars-list">
-    {# Linha inicial vazia #}
-    <div class="char-row flex-center gap-8" style="margin-bottom:8px; flex-wrap:wrap;">
-      <input type="text" name="character_names[]" placeholder="Nome do personagem"
-             style="flex:1; min-width:160px;">
-      <select name="figurino_sheet_ids[]" style="flex:1; min-width:180px; max-width:280px;">
-        <option value="">— Sem figurino —</option>
-        {% for s in figurino_sheets %}
-          <option value="{{ s.id }}">{{ s.character_name }}</option>
-        {% endfor %}
-      </select>
-      <button type="button" class="btn btn-sm btn-danger char-remove"
-              style="width:32px; padding:0; flex-shrink:0;">&times;</button>
-    </div>
+    {% if prefill.caches_json %}
+      {# Pré-preenchido do orçamento via JS após DOMContentLoaded #}
+    {% else %}
+      <div class="char-row" data-idx="0">
+        <div style="flex:1;">
+          <div class="char-row-main">
+            <input type="text" name="character_names[]" placeholder="Nome do personagem"
+                   style="flex:1; min-width:150px;" oninput="autoTitle()">
+            <select name="figurino_sheet_ids[]" style="flex:1; min-width:180px; max-width:280px;">
+              <option value="">— Figurino —</option>
+              {% for s in figurino_sheets %}
+                <option value="{{ s.id }}">{{ s.character_name }}</option>
+              {% endfor %}
+            </select>
+            <input type="number" name="char_cache[]" placeholder="Cachê R$"
+                   style="width:110px;" min="0" step="1">
+          </div>
+          <div class="char-flags">
+            <label><input type="checkbox" name="char_needs_makeup[]" value="1"> Maquiagem</label>
+            <label><input type="checkbox" name="char_is_singer[]"    value="1"> Cantor(a)</label>
+            <input type="hidden" name="char_needs_makeup[]" value="">
+            <input type="hidden" name="char_is_singer[]"   value="">
+          </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-danger char-remove"
+                style="width:32px; padding:0; flex-shrink:0; margin-top:2px;">&times;</button>
+      </div>
+    {% endif %}
   </div>
 
   <button type="button" class="btn btn-sm btn-secondary" id="btn-add-char"
-          style="margin-top:4px;">+ Adicionar personagem</button>
+          style="margin-top:4px;">+ Adicionar personagem / equipe</button>
+
+  {# Título do evento #}
+  <div class="form-group" style="margin-top:20px;">
+    <label>Título do evento <span style="color:var(--red);">*</span></label>
+    <input type="text" name="title" id="event-title" required
+           placeholder="Gerado automaticamente pelos personagens"
+           style="max-width:520px;">
+    <div class="meta">Formato padrão: <code>(TIPO) PERSONAGEM 1 + PERSONAGEM 2</code></div>
+  </div>
 </div>
 
 {# ══════════════════════════════════════════════════
-   3. DADOS DE VENDA
+   3. VALORES FINANCEIROS
 ══════════════════════════════════════════════════ #}
-<div class="panel" style="margin-bottom:16px;">
-  <div class="panel-title">Dados de Venda</div>
+<div class="panel ec-panel">
+  <div class="panel-title">Valores</div>
+
+  {% if prefill.orcamento_id %}
+  {# Seletor de duração quando vem do orçamento #}
+  <div class="ec-section">Duração do evento — selecione para definir o valor de venda</div>
+  <div id="duracao-selector" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px;">
+    <div class="dur-card selected" data-dur="1"
+         data-total="{{ prefill.total_1h }}"
+         data-transport="{{ prefill.transport_value }}"
+         onclick="selectDuracao(this)">
+      <div class="lbl">1 hora</div>
+      <div class="val" id="dur-val-1h">{{ "R$ {:,.2f}".format(prefill.total_1h).replace(",","X").replace(".",",").replace("X",".") }}</div>
+    </div>
+    <div class="dur-card" data-dur="2"
+         data-total="{{ prefill.total_2h }}"
+         data-transport="{{ prefill.transport_value }}"
+         onclick="selectDuracao(this)">
+      <div class="lbl">2 horas</div>
+      <div class="val">{{ "R$ {:,.2f}".format(prefill.total_2h).replace(",","X").replace(".",",").replace("X",".") }}</div>
+    </div>
+    <div class="dur-card" data-dur="4"
+         data-total="{{ prefill.total_4h }}"
+         data-transport="{{ prefill.transport_value }}"
+         onclick="selectDuracao(this)">
+      <div class="lbl">4 horas</div>
+      <div class="val">{{ "R$ {:,.2f}".format(prefill.total_4h).replace(",","X").replace(".",",").replace("X",".") }}</div>
+    </div>
+  </div>
+  <input type="hidden" name="duracao" id="duracao-hidden" value="1">
+  {% endif %}
+
+  <div class="val-breakdown">
+    <div class="val-item">
+      <label>Valor de venda (R$) <span style="color:var(--red);">*</span></label>
+      <div class="prefix"><span>R$</span>
+        <input type="number" name="sale_value" id="sale-value" min="0" step="1"
+               placeholder="0" style="width:150px;"
+               {% if prefill.orcamento_id %}value="{{ prefill.total_1h | int }}"{% endif %}>
+      </div>
+      <div class="meta">Valor total cobrado do cliente</div>
+    </div>
+
+    <div class="val-item">
+      <label>Transporte (R$)</label>
+      <div class="prefix"><span>R$</span>
+        <input type="number" name="transport_value" id="transport-value" min="0" step="1"
+               placeholder="0" style="width:130px;"
+               value="{{ prefill.transport_value or '' }}">
+      </div>
+      <div class="meta">Separado para cálculo de comissão</div>
+    </div>
+
+    <div class="val-item">
+      <label>Acréscimo (R$)</label>
+      <div class="prefix"><span>R$</span>
+        <input type="number" name="acrescimo_value" min="0" step="1"
+               placeholder="0" style="width:110px;"
+               value="{{ prefill.acrescimo_value or '' }}">
+      </div>
+    </div>
+
+    <div class="val-item" style="justify-content:flex-end; padding-bottom:4px;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600;">
+        <input type="checkbox" name="with_invoice" value="1"
+               {% if prefill.with_invoice %}checked{% endif %}>
+        Com nota fiscal
+      </label>
+    </div>
+  </div>
+
+  <div class="form-group" style="margin-top:20px; margin-bottom:0;">
+    <label>Vendedor responsável</label>
+    <select name="seller_id" style="width:auto;">
+      <option value="">— Selecionar —</option>
+      {% for u in sellers %}
+        <option value="{{ u.id }}"
+          {% if current_user.id == u.id %}selected{% endif %}>
+          {{ u.name }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════
+   4. FORMA DE PAGAMENTO
+══════════════════════════════════════════════════ #}
+<div class="panel ec-panel">
+  <div class="panel-title">Forma de Pagamento</div>
+  <input type="hidden" name="payment_method" id="pay-method-hidden" value="">
+
+  <div class="pay-method-btns">
+    <button type="button" class="pay-method-btn" data-method="avista"       onclick="setPayMethod('avista')">       À vista (PIX)</button>
+    <button type="button" class="pay-method-btn" data-method="pix_parcelado" onclick="setPayMethod('pix_parcelado')">Dividido no PIX</button>
+    <button type="button" class="pay-method-btn" data-method="faturado"     onclick="setPayMethod('faturado')">     Faturado</button>
+    <button type="button" class="pay-method-btn" data-method="cartao"       onclick="setPayMethod('cartao')">       Cartão de Crédito</button>
+  </div>
+
+  {# Parcelas — pix_parcelado #}
+  <div id="pay-extra-pix_parcelado" class="pay-extra-panel">
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Quantas parcelas?</label>
+      <input type="number" name="payment_installments" min="2" max="12"
+             value="2" style="width:80px;">
+    </div>
+  </div>
+
+  {# Data de vencimento — faturado #}
+  <div id="pay-extra-faturado" class="pay-extra-panel">
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Data de pagamento</label>
+      <input type="date" name="payment_due_date" style="width:160px;">
+    </div>
+  </div>
+
+  {# Comprovantes de pagamento #}
+  <div style="margin-top:16px;">
+    <div class="ec-section">Comprovantes de pagamento</div>
+    <div id="payment-proofs-list">
+      <div class="pay-row" style="align-items:center;">
+        <input type="file" name="payment_files[]"
+               accept=".pdf,.jpg,.jpeg,.png" style="flex:1;">
+        <input type="number" name="payment_amounts[]" placeholder="Valor R$"
+               min="0" step="1" style="width:120px;">
+        <button type="button" class="btn btn-sm btn-danger pay-remove"
+                style="width:32px; padding:0;">&times;</button>
+      </div>
+    </div>
+    <button type="button" class="btn btn-sm btn-secondary" id="btn-add-payment"
+            style="margin-top:6px;">+ Adicionar comprovante</button>
+    <div class="meta" style="margin-top:4px;">PDF, JPG ou PNG — máx. 20 MB por arquivo</div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════
+   5. CONTRATO
+══════════════════════════════════════════════════ #}
+<div class="panel ec-panel">
+  <div class="panel-title">Contrato <span class="muted" style="font-weight:400;">(opcional)</span></div>
 
   <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
-    <div class="form-group" style="margin-bottom:0;">
-      <label>Valor (R$)</label>
-      <input type="number" name="sale_value" min="0" placeholder="0"
-             style="width:140px;">
+    <div class="form-group" style="margin:0;">
+      <label>Arquivo do contrato</label>
+      <input type="file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg">
+      <div class="meta">PDF, PNG ou JPG — máx. 20 MB</div>
     </div>
-    <div class="form-group" style="margin-bottom:0;">
-      <label>Vendedor responsável</label>
-      <select name="seller_id" style="width:auto;">
-        <option value="">— Selecionar —</option>
-        {% for u in sellers %}
-          <option value="{{ u.id }}">{{ u.name }}</option>
-        {% endfor %}
-      </select>
+    <div class="form-group" style="margin:0;">
+      <label>Valor no contrato (R$)</label>
+      <input type="number" name="contract_amount" min="0" placeholder="0" style="width:140px;">
     </div>
-    <div class="form-group" style="margin-bottom:0;">
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-        <input type="checkbox" name="with_invoice" value="1">
-        <span>Com nota fiscal</span>
+    <div class="form-group" style="margin:0; padding-bottom:4px;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600;">
+        <input type="checkbox" name="contract_signed" value="1">
+        Contrato já assinado
       </label>
     </div>
   </div>
 </div>
 
 {# ══════════════════════════════════════════════════
-   4. CONTRATO (opcional)
+   6. OBSERVAÇÕES
 ══════════════════════════════════════════════════ #}
-<div class="panel" style="margin-bottom:24px;">
-  <div class="panel-title">Contrato <span class="muted" style="font-weight:400;">(opcional)</span></div>
+<div class="panel ec-panel">
+  <div class="panel-title">Observações</div>
+  <p class="muted" style="font-size:13px; margin-bottom:14px;">
+    Registre informações da cliente: fotos do local, referências, pedidos especiais, links.
+  </p>
 
-  <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
-    <div class="form-group" style="margin-bottom:0;">
-      <label>Arquivo do contrato</label>
-      <input type="file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg">
-      <div class="form-hint">PDF, PNG ou JPG — máx. 10 MB</div>
-    </div>
-    <div class="form-group" style="margin-bottom:0;">
-      <label>Valor do contrato (R$)</label>
-      <input type="number" name="contract_amount" min="0" placeholder="0"
-             style="width:140px;">
-    </div>
+  <div id="obs-list"></div>
+
+  <div class="obs-type-tabs" style="margin-top:4px;">
+    <button type="button" class="obs-tab" onclick="addObs('text')">+ Texto</button>
+    <button type="button" class="obs-tab" onclick="addObs('image')">+ Foto</button>
+    <button type="button" class="obs-tab" onclick="addObs('link')">+ Link</button>
   </div>
 </div>
 
-{# ── Botões ──────────────────────────────────────── #}
-<div style="display:flex; gap:12px;">
-  <button type="submit" class="btn btn-primary">Criar Evento</button>
+{# ══════════════════════════════════════════════════
+   AÇÕES
+══════════════════════════════════════════════════ #}
+<div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:40px;">
+  <button type="submit" class="btn btn-primary btn-lg">&#128197; Adicionar à Agenda</button>
   <a href="/agenda" class="btn btn-secondary">Cancelar</a>
 </div>
 
@@ -171,40 +380,215 @@
 
 {% block extra_scripts %}
 <script>
-(function () {
-  // Opções de figurinos pré-renderizadas para clonar
-  const sheetOptions = `<option value="">— Sem figurino —</option>` +
-    `{% for s in figurino_sheets %}<option value="{{ s.id }}">{{ s.character_name }}</option>{% endfor %}`;
-
-  function addCharRow() {
-    const list = document.getElementById('chars-list');
-    const row = document.createElement('div');
-    row.className = 'char-row flex-center gap-8';
-    row.style.cssText = 'margin-bottom:8px; flex-wrap:wrap;';
-    row.innerHTML =
-      `<input type="text" name="character_names[]" placeholder="Nome do personagem"
-              style="flex:1; min-width:160px;">` +
-      `<select name="figurino_sheet_ids[]" style="flex:1; min-width:180px; max-width:280px;">${sheetOptions}</select>` +
-      `<button type="button" class="btn btn-sm btn-danger char-remove"
-               style="width:32px; padding:0; flex-shrink:0;">&times;</button>`;
-    list.appendChild(row);
-    row.querySelector('input').focus();
-  }
-
-  function removeCharRow(btn) {
-    const rows = document.querySelectorAll('.char-row');
-    if (rows.length > 1) {
-      btn.closest('.char-row').remove();
-    } else {
-      btn.closest('.char-row').querySelector('input').value = '';
-      btn.closest('.char-row').querySelector('select').value = '';
-    }
-  }
-
-  document.getElementById('btn-add-char').addEventListener('click', addCharRow);
-  document.getElementById('chars-list').addEventListener('click', function (e) {
-    if (e.target.classList.contains('char-remove')) removeCharRow(e.target);
-  });
+// ── Dados do orçamento ───────────────────────────────────────────────────────
+const ORC_CACHES = (function() {
+  const el = document.getElementById('orc-caches-json');
+  if (!el) return [];
+  try { return JSON.parse(el.value); } catch(e) { return []; }
 })();
+
+const FIGURINO_OPTIONS = `<option value="">— Figurino —</option>` +
+  `{% for s in figurino_sheets %}<option value="{{ s.id }}">{{ s.character_name }}</option>{% endfor %}`;
+
+// ── Auto-title ───────────────────────────────────────────────────────────────
+var titleEdited = false;
+
+function autoTitle() {
+  if (titleEdited) return;
+  const names = [...document.querySelectorAll('#chars-list input[name="character_names[]"]')]
+    .map(i => i.value.trim()).filter(Boolean);
+  const type  = document.getElementById('event-type')?.value || '';
+  const base  = names.join(' + ').toUpperCase();
+  const prefix = type ? `(${type}) ` : '';
+  document.getElementById('event-title').value = prefix + base;
+}
+
+document.getElementById('event-title').addEventListener('input', function() {
+  titleEdited = this.value.trim() !== '';
+});
+
+function onTypeChange() { autoTitle(); }
+
+// ── Personagens ──────────────────────────────────────────────────────────────
+function buildCharRow(idx, label, cacheVal, makeup, singer, roleType, sheetId) {
+  const row = document.createElement('div');
+  row.className = 'char-row';
+  row.dataset.idx = idx;
+
+  const isExtra = roleType === 'extra';
+  const bgColor = isExtra ? 'background:var(--surface-2,#f7f7fa);' : '';
+
+  row.style.cssText = bgColor;
+  row.innerHTML = `
+    <div style="flex:1;">
+      <div class="char-row-main">
+        <input type="text" name="character_names[]"
+               value="${escHtml(label)}"
+               placeholder="${isExtra ? 'Equipe' : 'Personagem'}"
+               style="flex:1; min-width:150px;" oninput="autoTitle()">
+        <select name="figurino_sheet_ids[]"
+                style="flex:1; min-width:180px; max-width:280px;${isExtra?' display:none;':''}">
+          ${FIGURINO_OPTIONS}
+        </select>
+        <input type="number" name="char_cache[]"
+               value="${cacheVal !== undefined ? cacheVal : ''}"
+               placeholder="Cachê R$" style="width:110px;" min="0" step="1">
+      </div>
+      <div class="char-flags">
+        <label>
+          <input type="checkbox" name="char_needs_makeup[]" value="1"${makeup ? ' checked' : ''}>
+          Maquiagem
+        </label>
+        <label>
+          <input type="checkbox" name="char_is_singer[]" value="1"${singer ? ' checked' : ''}>
+          Cantor(a)
+        </label>
+        ${isExtra ? '<span class="meta extra-row-label">Equipe</span>' : ''}
+      </div>
+    </div>
+    <button type="button" class="btn btn-sm btn-danger char-remove"
+            style="width:32px; padding:0; flex-shrink:0; margin-top:2px;">&times;</button>`;
+
+  // set figurino select value after append
+  if (sheetId && !isExtra) {
+    const sel = row.querySelector('select[name="figurino_sheet_ids[]"]');
+    if (sel) sel.value = sheetId;
+  }
+  return row;
+}
+
+function addCharRow(label, cacheVal, makeup, singer, roleType, sheetId) {
+  const list = document.getElementById('chars-list');
+  const idx  = list.querySelectorAll('.char-row').length;
+  const row  = buildCharRow(idx, label || '', cacheVal, makeup, singer, roleType || 'character', sheetId);
+  list.appendChild(row);
+  if (!label) row.querySelector('input[type="text"]').focus();
+  autoTitle();
+}
+
+document.getElementById('btn-add-char').addEventListener('click', () => addCharRow());
+
+document.getElementById('chars-list').addEventListener('click', function(e) {
+  if (e.target.classList.contains('char-remove')) {
+    const rows = this.querySelectorAll('.char-row');
+    if (rows.length > 1) {
+      e.target.closest('.char-row').remove();
+    } else {
+      const row = e.target.closest('.char-row');
+      row.querySelector('input[type="text"]').value = '';
+      row.querySelector('input[name="char_cache[]"]').value = '';
+    }
+    autoTitle();
+  }
+});
+
+// ── Pré-fill do orçamento ────────────────────────────────────────────────────
+(function() {
+  if (ORC_CACHES.length === 0) return;
+  const list = document.getElementById('chars-list');
+  list.innerHTML = '';
+  ORC_CACHES.forEach(function(c, i) {
+    const key = ['cache_1h','cache_2h','cache_4h'][0]; // começa com 1h
+    const row = buildCharRow(i, c.label, c[key], c.needs_makeup, c.is_singer, c.role_type, null);
+    list.appendChild(row);
+  });
+  autoTitle();
+})();
+
+// ── Seletor de duração (orçamento) ───────────────────────────────────────────
+function selectDuracao(card) {
+  document.querySelectorAll('.dur-card').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+  const dur    = card.dataset.dur;
+  const total  = parseFloat(card.dataset.total) || 0;
+  document.getElementById('duracao-hidden').value = dur;
+  document.getElementById('sale-value').value     = Math.round(total);
+
+  // atualizar caches dos personagens
+  const idx = {'1':0,'2':1,'4':2}[dur] || 0;
+  const key = ['cache_1h','cache_2h','cache_4h'][idx];
+  const cacheInputs = document.querySelectorAll('#chars-list input[name="char_cache[]"]');
+  cacheInputs.forEach(function(inp, i) {
+    if (i < ORC_CACHES.length) {
+      inp.value = ORC_CACHES[i][key] || '';
+    }
+  });
+}
+
+// ── Método de pagamento ───────────────────────────────────────────────────────
+function setPayMethod(method) {
+  document.querySelectorAll('.pay-method-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.pay-method-btn[data-method="${method}"]`).classList.add('active');
+  document.getElementById('pay-method-hidden').value = method;
+  ['pix_parcelado','faturado'].forEach(m => {
+    const el = document.getElementById(`pay-extra-${m}`);
+    if (el) el.classList.toggle('visible', m === method);
+  });
+}
+
+// ── Comprovantes dinâmicos ────────────────────────────────────────────────────
+document.getElementById('btn-add-payment').addEventListener('click', function() {
+  const list = document.getElementById('payment-proofs-list');
+  const row  = document.createElement('div');
+  row.className = 'pay-row';
+  row.style.alignItems = 'center';
+  row.innerHTML = `
+    <input type="file" name="payment_files[]" accept=".pdf,.jpg,.jpeg,.png" style="flex:1;">
+    <input type="number" name="payment_amounts[]" placeholder="Valor R$" min="0" step="1" style="width:120px;">
+    <button type="button" class="btn btn-sm btn-danger pay-remove" style="width:32px;padding:0;">&times;</button>`;
+  list.appendChild(row);
+});
+
+document.getElementById('payment-proofs-list').addEventListener('click', function(e) {
+  if (e.target.classList.contains('pay-remove')) {
+    const rows = this.querySelectorAll('.pay-row');
+    if (rows.length > 1) e.target.closest('.pay-row').remove();
+  }
+});
+
+// ── Observações dinâmicas ─────────────────────────────────────────────────────
+var obsCount = 0;
+function addObs(type) {
+  const list = document.getElementById('obs-list');
+  const row  = document.createElement('div');
+  row.className = 'obs-row';
+  row.style.flexDirection = 'column';
+
+  const icons = { text: '📝', image: '🖼️', link: '🔗' };
+  const labels = { text: 'Texto', image: 'Foto', link: 'Link' };
+
+  let inner = `<input type="hidden" name="obs_type[]" value="${type}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:12px;font-weight:700;color:var(--muted);">${icons[type]} ${labels[type]}</span>
+      <button type="button" class="btn btn-sm btn-danger obs-remove" style="width:28px;height:28px;padding:0;">&times;</button>
+    </div>`;
+
+  if (type === 'text') {
+    inner += `<textarea name="obs_content[]" rows="3" placeholder="Escreva a observação…" style="width:100%;"></textarea>`;
+  } else if (type === 'link') {
+    inner += `<input type="url" name="obs_content[]" placeholder="https://…" style="width:100%;">`;
+  } else if (type === 'image') {
+    inner += `<input type="file" name="obs_image[]" accept=".jpg,.jpeg,.png,.webp">
+              <input type="hidden" name="obs_content[]" value="">`;
+  }
+  inner += `<input type="text" name="obs_label[]" placeholder="Descrição (opcional)" style="width:100%;margin-top:6px;">`;
+
+  row.innerHTML = inner;
+  list.appendChild(row);
+
+  row.querySelector('.obs-remove').addEventListener('click', () => row.remove());
+}
+
+// ── Tipo SHOW auto-marca ensaio ────────────────────────────────────────────
+document.getElementById('event-type').addEventListener('change', function() {
+  const cb = document.getElementById('needs-rehearsal');
+  if (this.value === 'SHOW') { cb.checked = true; cb.disabled = true; }
+  else { cb.disabled = false; }
+});
+
+// ── Utilitários ──────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 </script>
 {% endblock %}

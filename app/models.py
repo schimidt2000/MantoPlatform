@@ -207,7 +207,18 @@ class CalendarEvent(db.Model):
     travel_time_minutes  = db.Column(db.Integer, nullable=True)   # cache da estimativa Google Maps
     travel_distance_km   = db.Column(db.Float,   nullable=True)   # km de ida (rota mais curta)
 
+    # pagamento
+    payment_method       = db.Column(db.String(30), nullable=True)   # 'avista'|'pix_parcelado'|'faturado'|'cartao'
+    payment_installments = db.Column(db.Integer, nullable=True)       # parcelas (pix_parcelado)
+    payment_due_date     = db.Column(db.Date, nullable=True)          # data de vencimento (faturado)
+    transport_value      = db.Column(db.Integer, nullable=True)       # valor transporte separado (R$ inteiro)
+    acrescimo_value      = db.Column(db.Integer, nullable=True)       # acréscimo separado (R$ inteiro)
+    orcamento_history_id = db.Column(db.Integer, db.ForeignKey("orcamento_history.id"), nullable=True)
+
     roles = db.relationship("EventRole", backref="event", lazy=True, cascade="all, delete-orphan")
+    observations = db.relationship("EventObservation", backref="event", lazy=True,
+                                   cascade="all, delete-orphan",
+                                   order_by="EventObservation.created_at")
     seller = db.relationship("User", lazy=True, foreign_keys=[seller_id])
     parent = db.relationship(
         "CalendarEvent",
@@ -306,6 +317,9 @@ class EventRole(db.Model):
     event_changed_at = db.Column(db.DateTime, nullable=True)
     # set when event date/location changes after talent accepted; cleared when talent clicks "Ciente"
 
+    needs_makeup  = db.Column(db.Boolean, nullable=True)  # pré-preenchido do orçamento
+    is_singer     = db.Column(db.Boolean, nullable=True)  # pré-preenchido do orçamento
+
     talent = db.relationship("Talent", lazy=True)
     figurino_sheet = db.relationship("FigurinoSheet", lazy=True)
 
@@ -357,6 +371,8 @@ class EventContract(db.Model):
     amount = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    is_signed = db.Column(db.Boolean, default=False, nullable=False)
+
     event = db.relationship("CalendarEvent", lazy=True)
 
 
@@ -373,6 +389,22 @@ class EventPayment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     event = db.relationship("CalendarEvent", lazy=True)
+
+
+class EventObservation(db.Model):
+    """Observação do evento — texto, link ou imagem enviada pela vendedora."""
+    __tablename__ = "event_observations"
+    __table_args__ = (
+        db.Index("ix_event_observations_event_id", "event_id"),
+    )
+
+    id           = db.Column(db.Integer, primary_key=True)
+    event_id     = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    obs_type     = db.Column(db.String(10), nullable=False)   # 'text' | 'link' | 'image'
+    content      = db.Column(db.Text, nullable=True)          # texto ou URL
+    file_path    = db.Column(db.String(500), nullable=True)   # relativo a UPLOAD_FOLDER
+    label        = db.Column(db.String(200), nullable=True)   # descrição opcional
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class TalentMedia(db.Model):
