@@ -309,6 +309,7 @@ function syncColabField() {
 function updateDebugPanel() {
   const tbody = document.getElementById('debug-tbody');
   const tfoot = document.getElementById('debug-tfoot');
+  const thead = document.getElementById('debug-thead');
   if (!tbody || !tfoot) return;
 
   const { show, makeup, makesReg, makesEsp } = eventFlags();
@@ -316,6 +317,55 @@ function updateDebugPanel() {
   const markup = cfg.markup[show ? 'show' : 'receptivo'];
   const markupLabels = markup.map(v => `${v}×`);
   const modeloLabel  = show ? 'Show' : 'Receptivo / Interativo';
+
+  // Adicional de transporte por pessoa (apenas a parcela afsp = km×2 ÷ divisor)
+  const tCfg = cfg.transporte;
+  const perPersonTransport = (forasp && kmIda > 0)
+    ? Math.round(kmIda * 2 / tCfg.afsp_divisor * 100) / 100
+    : 0;
+  const hasTransport = perPersonTransport > 0;
+
+  // Coluna extra para duração personalizada
+  const showCustomCol = duracaoCustom > 0 && ![1, 2, 4].includes(duracaoCustom);
+  const totalCols = 3 + (showCustomCol ? 1 : 0); // 1h, 2h, 4h [, Nh]
+
+  // Atualiza cabeçalho dinamicamente
+  if (thead) {
+    const tn = hasTransport
+      ? ` <span style="font-size:10px;font-weight:400;color:#92400e;" title="Inclui ${fmt(perPersonTransport)} de adicional fora SP por pessoa">(+transp.)</span>`
+      : '';
+    thead.innerHTML = `<tr>
+      <th>Profissional</th>
+      <th style="text-align:right;">Cachê 1h${tn}</th>
+      <th style="text-align:right;">Cachê 2h${tn}</th>
+      <th style="text-align:right;">Cachê 4h${tn}</th>
+      ${showCustomCol ? `<th style="text-align:right;background:var(--surface-2);">Cachê ${duracaoCustom}h${tn}</th>` : ''}
+    </tr>`;
+  }
+
+  // Helper: renderiza células de preço + coluna Nh
+  // transportMult: undefined = sem transporte por pessoa (linhas de resumo),
+  //               número = multiplicador (1 por pessoa individual, coordQty para o grupo)
+  function renderCells(basePrices, transportMult, bold, hlGreen) {
+    const bst = bold ? 'font-weight:600;' : '';
+    const hasTr = transportMult !== undefined && hasTransport;
+    const displayed = basePrices.map(v =>
+      hasTr ? Math.round((v + perPersonTransport * transportMult) * 100) / 100 : v
+    );
+    let cells = displayed.map(v =>
+      `<td style="text-align:right;${bst}${hlGreen ? 'font-weight:700;' : ''}">${fmt(v)}</td>`
+    ).join('');
+    if (showCustomCol) {
+      if (transportMult !== undefined && !bold) {
+        const nV = Math.round((basePrices[2] / 4 * duracaoCustom + (hasTr ? perPersonTransport * transportMult : 0)) * 100) / 100;
+        cells += `<td style="text-align:right;${bst};background:var(--surface-2);">${fmt(nV)}</td>`;
+      } else {
+        cells += `<td></td>`;
+      }
+    }
+    return cells;
+  }
+
   const rows  = [];
   const cache = [0, 0, 0];
 
@@ -340,7 +390,6 @@ function updateDebugPanel() {
         label = (p.nome || 'Ator') + ` <span style="color:var(--muted)">(${parts.join(', ')})</span>`;
       }
     } else if (p.type === 'cantor') {
-      // legado
       const c = cfg.cantor;
       prices = c.base.map((v, i) => v + c.show_extra[i] + (p.makeup ? c.make_extra[i] : 0));
       label  = (p.nome || 'Cantor') + ` <span style="color:var(--muted)">(cantor${p.makeup ? ', make' : ''})</span>`;
@@ -361,14 +410,18 @@ function updateDebugPanel() {
     } else {
       prices = [0, 0, 0]; label = p.nome || '?';
     }
-    rows.push({ label, prices });
+    rows.push({ label, prices, transportMult: 1 });
     for (let i = 0; i < 3; i++) cache[i] += prices[i];
   }
 
-  // Coordenador
+  // Coordenador (grupo)
   const cp = cfg.coordenador[String(show)] || [0, 0, 0];
   const coordPrices = cp.map(v => v * coordQty);
-  rows.push({ label: `Coordenador(es) (${coordQty}) <span style="color:var(--muted)">${show ? 'com show' : 'sem show'}</span>`, prices: coordPrices });
+  rows.push({
+    label: `Coordenador(es) (${coordQty}) <span style="color:var(--muted)">${show ? 'com show' : 'sem show'}</span>`,
+    prices: coordPrices,
+    transportMult: coordQty,
+  });
   for (let i = 0; i < 3; i++) cache[i] += coordPrices[i];
 
   // Show customizado
@@ -388,13 +441,13 @@ function updateDebugPanel() {
 
   if (show) {
     const tecnico = cfg.tecnico_som;
-    rows.push({ label: 'Técnico de Som <span style="color:var(--muted)">(automático)</span>', prices: [...tecnico] });
+    rows.push({ label: 'Técnico de Som <span style="color:var(--muted)">(automático)</span>', prices: [...tecnico], transportMult: 1 });
     for (let i = 0; i < 3; i++) cache[i] += tecnico[i];
   }
 
   if (makeup) {
     const mc = maquiadorCost(makesReg, makesEsp);
-    rows.push({ label: `Maquiador <span style="color:var(--muted)">(${makesReg} regular + ${makesEsp} especial)</span>`, prices: [mc, mc, mc] });
+    rows.push({ label: `Maquiador <span style="color:var(--muted)">(${makesReg} regular + ${makesEsp} especial)</span>`, prices: [mc, mc, mc], transportMult: 1 });
     for (let i = 0; i < 3; i++) cache[i] += mc;
   }
 
@@ -403,31 +456,31 @@ function updateDebugPanel() {
   const afterMarkup = cache.map((v, i) => v * markup[i]);
   rows.push({
     label: `<strong>× Markup</strong> <span style="color:var(--muted)">${modeloLabel} — ${markupLabels.join(' / ')}</span>`,
-    prices: afterMarkup, bold: true, hl: 'warning'
+    prices: afterMarkup, bold: true, hl: 'warning',
   });
 
   let html = rows.map(r => `
     <tr style="${r.hl === 'warning' ? 'background:#fffbeb;' : ''}">
       <td>${r.label}</td>
-      ${r.prices.map(v => `<td style="text-align:right;${r.bold ? 'font-weight:600;' : ''}">${fmt(v)}</td>`).join('')}
+      ${renderCells(r.prices, r.transportMult, r.bold, false)}
     </tr>`).join('');
 
   const running = [...afterMarkup];
 
   if (show) {
     const brinde = cfg.brinde_show ?? 100;
-    html += `<tr><td>Brinde aniversariante <span style="color:var(--muted)">(pós-markup)</span></td><td style="text-align:right;" colspan="3">${fmt(brinde)}</td></tr>`;
+    html += `<tr><td>Brinde aniversariante <span style="color:var(--muted)">(pós-markup)</span></td><td style="text-align:right;" colspan="${totalCols}">${fmt(brinde)}</td></tr>`;
     for (let i = 0; i < 3; i++) running[i] += brinde;
   }
 
-  // Transporte especial pós-markup — uma vez por tipo
+  // Transporte especial pós-markup
   const dbgRegras = cfg.especiais_regras || {};
   const dbgSeenTransport = new Set();
   for (const p of performers) {
     if (p.type === 'especial' && !dbgSeenTransport.has(p.personagem)) {
       const tEsp = (dbgRegras[p.personagem] || {}).transporte_especial || 0;
       if (tEsp) {
-        html += `<tr><td>Transporte Especial — ${p.personagem} <span style="color:var(--muted)">(pós-markup, único)</span></td><td style="text-align:right;" colspan="3">${fmt(tEsp)}</td></tr>`;
+        html += `<tr><td>Transporte Especial — ${p.personagem} <span style="color:var(--muted)">(pós-markup, único)</span></td><td style="text-align:right;" colspan="${totalCols}">${fmt(tEsp)}</td></tr>`;
         for (let i = 0; i < 3; i++) running[i] += tEsp;
         dbgSeenTransport.add(p.personagem);
       }
@@ -440,38 +493,44 @@ function updateDebugPanel() {
       ? `Van ${comCarretinha ? 'c/ carretinha' : 's/ carretinha'} · R$${tb.tarifa}/km · ${tb.kmT}km`
       : `${numCarros} carro(s) · R$1,90/km × ${numCarros} · ${tb.kmT}km`;
     html += `
-      <tr style="background:#fffbeb;"><td colspan="4" style="font-weight:600;font-size:12px;">Transporte — Fora de SP</td></tr>
-      <tr><td style="padding-left:16px;">Veículo <span style="color:var(--muted)">(${veiculoLabel})</span></td><td style="text-align:right;" colspan="3">${fmt(tb.vt)}</td></tr>
-      <tr><td style="padding-left:16px;">Adicional Fora SP <span style="color:var(--muted)">(${tb.colab} colab × ${tb.kmT}km ÷ 3)</span></td><td style="text-align:right;" colspan="3">${fmt(tb.afsp)}</td></tr>
-      <tr><td style="padding-left:16px;">Adicional Show <span style="color:var(--muted)">${tb.ashow > 0 ? `(${tb.kmT}km ÷ 6)` : '(km ≤ 500 ou sem show)'}</span></td><td style="text-align:right;" colspan="3">${fmt(tb.ashow)}</td></tr>
-      <tr style="background:#fffbeb;"><td style="font-weight:600;padding-left:16px;">Total Transporte</td><td style="text-align:right;font-weight:600;" colspan="3">${fmt(tb.total)}</td></tr>`;
+      <tr style="background:#fffbeb;"><td colspan="${totalCols + 1}" style="font-weight:600;font-size:12px;">Transporte — Fora de SP</td></tr>
+      <tr><td style="padding-left:16px;">Veículo <span style="color:var(--muted)">(${veiculoLabel})</span></td><td style="text-align:right;" colspan="${totalCols}">${fmt(tb.vt)}</td></tr>
+      <tr><td style="padding-left:16px;">Adicional Fora SP <span style="color:var(--muted)">(${tb.colab} colab × ${tb.kmT}km ÷ ${tCfg.afsp_divisor} = ${fmt(perPersonTransport)}/pessoa)</span></td><td style="text-align:right;" colspan="${totalCols}">${fmt(tb.afsp)}</td></tr>
+      <tr><td style="padding-left:16px;">Adicional Show <span style="color:var(--muted)">${tb.ashow > 0 ? `(${tb.kmT}km ÷ 6)` : '(km ≤ 500 ou sem show)'}</span></td><td style="text-align:right;" colspan="${totalCols}">${fmt(tb.ashow)}</td></tr>
+      <tr style="background:#fffbeb;"><td style="font-weight:600;padding-left:16px;">Total Transporte</td><td style="text-align:right;font-weight:600;" colspan="${totalCols}">${fmt(tb.total)}</td></tr>`;
     for (let i = 0; i < 3; i++) running[i] += tb.total;
   }
 
   if (acrescimo > 0) {
     if (acrescimoTipo === 'percent') {
       const addVals = running.map(v => Math.round(v * acrescimo / 100 * 100) / 100);
-      html += `<tr style="background:#f0fdf4;"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(${acrescimo}%)</span></td>${addVals.map(v => `<td style="text-align:right;font-weight:600;">${fmt(v)}</td>`).join('')}</tr>`;
+      html += `<tr style="background:#f0fdf4;"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(${acrescimo}%)</span></td>${addVals.map(v => `<td style="text-align:right;font-weight:600;">${fmt(v)}</td>`).join('')}${showCustomCol ? '<td></td>' : ''}</tr>`;
       for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + addVals[i]) * 100) / 100;
     } else {
-      html += `<tr style="background:#f0fdf4;"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(valor fixo)</span></td><td style="text-align:right;font-weight:600;" colspan="3">${fmt(acrescimo)}</td></tr>`;
+      html += `<tr style="background:#f0fdf4;"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(valor fixo)</span></td><td style="text-align:right;font-weight:600;" colspan="${totalCols}">${fmt(acrescimo)}</td></tr>`;
       for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + acrescimo) * 100) / 100;
     }
   }
 
+  // Total ao cliente — Nh = mesma fórmula do servidor (totals[2] / 4 * N)
+  const clientNhCell = showCustomCol
+    ? `<td style="text-align:right;font-weight:700;background:var(--surface-2);">${fmt(Math.round(running[2] / 4 * duracaoCustom * 100) / 100)}</td>`
+    : '';
   html += `
     <tr style="background:var(--green-soft);">
       <td><strong>TOTAL FINAL AO CLIENTE</strong></td>
       ${running.map(v => `<td style="text-align:right;font-weight:700;">${fmt(v)}</td>`).join('')}
+      ${clientNhCell}
     </tr>`;
 
   tbody.innerHTML = html;
   tfoot.innerHTML = `
     <tr style="background:var(--surface);color:var(--muted);">
-      <td colspan="4" style="font-size:12px;font-style:italic;">
+      <td colspan="${totalCols + 1}" style="font-size:12px;font-style:italic;">
         Markup (${modeloLabel}): 1h × ${markup[0]} · 2h × ${markup[1]} · 4h × ${markup[2]}
-        ${tb ? ` · Transporte ${fmt(tb.total)} pós-markup` : ''}
+        ${tb ? ` · Transporte total ${fmt(tb.total)} (por pessoa: ${fmt(perPersonTransport)})` : ''}
         ${acrescimo > 0 ? ` · Acréscimo ${acrescimoTipo === 'percent' ? acrescimo + '%' : fmt(acrescimo)} pós-tudo` : ''}
+        ${showCustomCol && hasTransport ? ` · Cachê Nh inclui ${fmt(perPersonTransport)} de transporte/pessoa` : ''}
       </td>
     </tr>`;
 }
