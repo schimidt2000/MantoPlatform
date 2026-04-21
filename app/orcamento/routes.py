@@ -70,8 +70,8 @@ def index():
     return render_template(
         "orcamento/index.html",
         especiais_list=list(s["especiais"].keys()),
-        especiais_com_show=list(_cfg.ESPECIAIS_COM_SHOW),
-        especiais_com_cantor=list(_cfg.ESPECIAIS_COM_CANTOR),
+        especiais_com_show=list(_cfg.especiais_com_show()),
+        especiais_com_cantor=list(_cfg.especiais_com_cantor()),
         especiais_sempre_show=list(_cfg.ESPECIAIS_SEMPRE_SHOW),
         settings_json=json.dumps(s),
     )
@@ -115,6 +115,7 @@ def _process_quote():
     show_sosia_tipo  = request.form.get("show_sosia_tipo", "predefinido")
     nota_fiscal      = "nota_fiscal" in request.form
     modo_duracao     = request.form.get("modo_duracao", "horas")
+    duracao_custom   = int(request.form.get("duracao_custom", 0) or 0)
 
     event_has_show   = False
     event_has_makeup = False
@@ -253,6 +254,11 @@ def _process_quote():
     if nota_fiscal:
         totals = [round(t / 0.84, 2) for t in totals]
 
+    # Duração personalizada: interpola a partir do preço de 4h
+    total_custom = None
+    if duracao_custom > 0 and duracao_custom not in (1, 2, 4):
+        total_custom = round(totals[2] / 4 * duracao_custom, 2)
+
     raw_date = request.form.get("event_date", "")
     raw_time = request.form.get("event_time", "")
     try:
@@ -295,11 +301,21 @@ def _process_quote():
         _dur_block(dur_labels[2], totals[2]),
     ])
 
+    if total_custom:
+        if modo_duracao == "entradas":
+            entradas_custom = duracao_custom * 2
+            custom_label = f"🎭 *{entradas_custom} entradas de 30 min ({duracao_custom}h)*"
+        else:
+            custom_label = f"🕐 *{duracao_custom} horas*"
+        investimento += f"\n\n{_dur_block(custom_label, total_custom)}"
+
     pix_vista = (
         f"  • 1h: *{_fmt_brl(round(totals[0] * 0.95, 2))}*\n"
         f"  • 2h: *{_fmt_brl(round(totals[1] * 0.95, 2))}*\n"
         f"  • 4h: *{_fmt_brl(round(totals[2] * 0.95, 2))}*"
     )
+    if total_custom:
+        pix_vista += f"\n  • {duracao_custom}h: *{_fmt_brl(round(total_custom * 0.95, 2))}*"
 
     nf_header = "\n🧾 _Valores com Nota Fiscal inclusa_" if nota_fiscal else ""
 
@@ -333,6 +349,8 @@ def _process_quote():
         "total_1h":            totals[0],
         "total_2h":            totals[1],
         "total_4h":            totals[2],
+        "total_custom":        total_custom,
+        "duracao_custom":      duracao_custom,
     }
 
     # Salvar no histórico persistente
@@ -355,6 +373,7 @@ def _process_quote():
         "show_sosia_tipo":  show_sosia_tipo,
         "nota_fiscal":      nota_fiscal,
         "modo_duracao":     modo_duracao,
+        "duracao_custom":   str(duracao_custom),
     }
     entry = OrcamentoHistory(
         user_id        = current_user.id,
@@ -534,4 +553,46 @@ def pricing_settings():
         return redirect(url_for("orcamento.pricing_settings"))
 
     s = _cfg.load()
-    return render_template("orcamento/settings.html", s=s)
+    return render_template(
+        "orcamento/settings.html",
+        s=s,
+        default_especiais=set(_cfg.DEFAULTS["especiais"].keys()),
+    )
+
+
+@orcamento_bp.route("/settings/add-especial", methods=["POST"])
+@login_required
+@_require_superadmin
+def add_especial():
+    data  = request.get_json(silent=True) or {}
+    nome  = (data.get("nome") or "").strip()
+    prices = data.get("prices")
+    if not nome or prices is None:
+        return jsonify({"error": "Dados inválidos"}), 400
+    s = _cfg.load()
+    if nome in s["especiais"]:
+        return jsonify({"error": f"'{nome}' já existe"}), 400
+    s["especiais"][nome] = prices
+    excluidos = s.setdefault("especiais_excluidos", [])
+    if nome in excluidos:
+        excluidos.remove(nome)
+    _cfg.save(s)
+    return jsonify({"ok": True})
+
+
+@orcamento_bp.route("/settings/delete-especial", methods=["POST"])
+@login_required
+@_require_superadmin
+def delete_especial():
+    data = request.get_json(silent=True) or {}
+    nome = (data.get("nome") or "").strip()
+    if not nome:
+        return jsonify({"error": "Nome inválido"}), 400
+    s = _cfg.load()
+    if nome in s["especiais"]:
+        del s["especiais"][nome]
+    excluidos = s.setdefault("especiais_excluidos", [])
+    if nome not in excluidos:
+        excluidos.append(nome)
+    _cfg.save(s)
+    return jsonify({"ok": True})

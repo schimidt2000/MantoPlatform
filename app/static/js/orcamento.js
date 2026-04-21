@@ -18,6 +18,7 @@ let showSosiaCustom = false;
 let notaFiscal     = false;
 let modoEntradas   = false;
 let prevOnlyDJ     = false;
+let duracaoCustom  = 0;
 
 // ── Formatação ────────────────────────────────────────────────────────────────
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -237,6 +238,24 @@ function updateTotals() {
   document.getElementById('total-1h').textContent = fmt(t1);
   document.getElementById('total-2h').textContent = fmt(t2);
   document.getElementById('total-4h').textContent = fmt(t4);
+
+  const customWrap = document.getElementById('total-custom-wrap');
+  if (customWrap && duracaoCustom > 0 && ![1, 2, 4].includes(duracaoCustom)) {
+    const tCustom = Math.round(t4 / 4 * duracaoCustom * 100) / 100;
+    document.getElementById('total-custom').textContent = fmt(tCustom);
+    const lblEl = document.getElementById('lbl-custom');
+    if (lblEl) lblEl.textContent = modoEntradas
+      ? `${duracaoCustom * 2} entradas`
+      : `${duracaoCustom} horas`;
+    customWrap.style.display = '';
+  } else if (customWrap) {
+    customWrap.style.display = 'none';
+  }
+}
+
+function setDuracaoCustom(val) {
+  duracaoCustom = (isNaN(val) || val < 0) ? 0 : val;
+  updateTotals();
 }
 
 function updateAutoServices() {
@@ -652,7 +671,10 @@ function clearAll() {
   performers = []; coordQty = 1; forasp = false; kmIda = 0;
   transportTipo = 'van'; comCarretinha = false; numCarros = 1; colabOverride = null;
   acrescimo = 0; acrescimoTipo = 'valor'; showSosiaCustom = false; prevOnlyDJ = false;
+  duracaoCustom = 0;
   document.getElementById('quote-form').reset();
+  const dcEl = document.getElementById('duracao_custom');
+  if (dcEl) dcEl.value = '';
   document.getElementById('coord-qty').textContent  = '1';
   document.getElementById('coordenador_qty').value  = '1';
   document.getElementById('transport-section').style.display = 'none';
@@ -705,6 +727,10 @@ function _applySnapshot(snap) {
   document.getElementById('modo-horas').checked    = !modoEntradas;
   document.getElementById('modo-entradas').checked = modoEntradas;
   setModoEntradas(modoEntradas);
+
+  duracaoCustom = parseInt(snap.duracao_custom) || 0;
+  const dcEl = document.getElementById('duracao_custom');
+  if (dcEl) dcEl.value = duracaoCustom || '';
 
   const isPercent = acrescimoTipo === 'percent';
   document.getElementById('acrescimo_valor').value            = acrescimo || 0;
