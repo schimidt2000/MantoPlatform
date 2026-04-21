@@ -256,6 +256,7 @@ function updateTotals() {
 function setDuracaoCustom(val) {
   duracaoCustom = (isNaN(val) || val < 0) ? 0 : val;
   updateTotals();
+  updateDebugPanel();
 }
 
 function updateAutoServices() {
