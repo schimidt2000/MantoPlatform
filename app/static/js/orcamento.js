@@ -357,8 +357,15 @@ function updateDebugPanel() {
       `<td style="text-align:right;${bst}${hlGreen ? 'font-weight:700;' : ''}">${fmt(v)}</td>`
     ).join('');
     if (showCustomCol) {
-      if (transportMult !== undefined && !bold) {
-        const nV = Math.round((basePrices[2] / 4 * duracaoCustom + (hasTr ? perPersonTransport * transportMult : 0)) * 100) / 100;
+      if (!bold) {
+        let nV;
+        if (transportMult !== undefined) {
+          // linhas por pessoa: escala horas + transporte individual
+          nV = Math.round((basePrices[2] / 4 * duracaoCustom + (hasTr ? perPersonTransport * transportMult : 0)) * 100) / 100;
+        } else {
+          // linhas de custo fixo (noturno, show customizado): mesmo valor independente de horas
+          nV = basePrices[2];
+        }
         cells += `<td style="text-align:right;${bst};background:var(--surface-2);">${fmt(nV)}</td>`;
       } else {
         cells += `<td></td>`;
