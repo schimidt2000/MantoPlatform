@@ -173,10 +173,20 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         return
     old_talent_id = role.talent_id
     role.talent_id = int(talent_id) if talent_id else None
+
+    _is_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
     try:
-        role.cache_value = int(cache_value) if cache_value else None
+        new_cache = int(cache_value) if cache_value else None
     except ValueError:
-        role.cache_value = None
+        new_cache = None
+
+    # Aplicar teto de cache: casting não pode ultrapassar o cap do orçamento
+    if new_cache is not None and role.cache_cap is not None and new_cache > role.cache_cap:
+        if not _is_superadmin:
+            new_cache = role.cache_cap   # força o limite silenciosamente (JS já avisa)
+        # superadmin pode ultrapassar — apenas registra no log depois
+
+    role.cache_value = new_cache
     try:
         role.travel_cache = int(travel_cache) if travel_cache else None
     except ValueError:
@@ -194,21 +204,27 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     db.session.commit()
     if role.talent_id and role.talent_id != old_talent_id:
         role.invite_status = "pending"
+        _cap_note = ""
+        if role.cache_cap and role.cache_value and role.cache_value > role.cache_cap:
+            _cap_note = f" (acima do cap de {role.cache_cap}R$ — autorizado pelo admin)"
         db.session.add(EventLog(
             event_id=event.id,
             actor_name=current_user.name,
             actor_role="Casting",
-            message=f"Adicionou {role.talent.full_name} como {role.character_name} com um cachê de {role.cache_value or 0} reais",
+            message=f"Adicionou {role.talent.full_name} como {role.character_name} com cachê de {role.cache_value or 0}R${_cap_note}",
             created_at=datetime.now(tz=tz_sp),
         ))
         db.session.commit()
         send_invite_email(role)
     elif role.talent_id:
+        _cap_note = ""
+        if role.cache_cap and role.cache_value and role.cache_value > role.cache_cap:
+            _cap_note = f" (acima do cap de {role.cache_cap}R$ — autorizado pelo admin)"
         db.session.add(EventLog(
             event_id=event.id,
             actor_name=current_user.name,
             actor_role="Casting",
-            message=f"Atualizou cachê de {role.talent.full_name} como {role.character_name} para {role.cache_value or 0} reais",
+            message=f"Atualizou cachê de {role.talent.full_name} como {role.character_name} para {role.cache_value or 0}R${_cap_note}",
             created_at=datetime.now(tz=tz_sp),
         ))
         db.session.commit()
@@ -999,6 +1015,23 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
         for p in performers
     )
 
+    # Adicional noturno (+R$50 por performer/coord se horário >= 19h)
+    event_time_str = (snapshot.get("event_time") or "").strip()
+    noturno_add = 0
+    try:
+        if event_time_str and int(event_time_str.split(":")[0]) >= 19:
+            noturno_add = 50
+    except (ValueError, IndexError):
+        pass
+
+    # Adicional fora SP (parcela afsp = km×2 ÷ divisor, por pessoa)
+    transport_add: float = 0.0
+    if snapshot.get("fora_sp"):
+        km_ida = float(snapshot.get("km_ida") or 0)
+        if km_ida > 0:
+            afsp_divisor = float(_orc_cfg.load().get("transporte", {}).get("afsp_divisor", 3.0))
+            transport_add = round(km_ida * 2 / afsp_divisor, 2)
+
     result = []
     num_makes_regular  = 0
     num_makes_especial = 0
@@ -1043,9 +1076,9 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
 
         result.append({
             "label":       label,
-            "cache_1h":    int(prices[0]),
-            "cache_2h":    int(prices[1]),
-            "cache_4h":    int(prices[2]),
+            "cache_1h":    round(int(prices[0]) + noturno_add + transport_add),
+            "cache_2h":    round(int(prices[1]) + noturno_add + transport_add),
+            "cache_4h":    round(int(prices[2]) + noturno_add + transport_add),
             "needs_makeup": makeup,
             "is_singer":    is_singer,
             "role_type":   "character",
@@ -1057,15 +1090,15 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
     for _ in range(coordenador_qty):
         result.append({
             "label":       "Coordenador",
-            "cache_1h":    int(per_coord[0]),
-            "cache_2h":    int(per_coord[1]),
-            "cache_4h":    int(per_coord[2]),
+            "cache_1h":    round(int(per_coord[0]) + noturno_add + transport_add),
+            "cache_2h":    round(int(per_coord[1]) + noturno_add + transport_add),
+            "cache_4h":    round(int(per_coord[2]) + noturno_add + transport_add),
             "needs_makeup": False,
             "is_singer":    False,
             "role_type":   "extra",
         })
 
-    # Técnico de som (se houver show)
+    # Técnico de som (se houver show) — apenas regra do >500km afeta o técnico, não os adicionais por pessoa
     if has_show:
         tp = get_tecnico_prices()
         result.append({
@@ -1155,6 +1188,14 @@ def create_event():
 
                 caches = _compute_performer_caches(snap)
 
+                duracao_custom = int(snap.get("duracao_custom", 0) or 0)
+                total_4h_val   = float(entry.total_4h or 0)
+                total_custom   = (
+                    round(total_4h_val / 4 * duracao_custom, 2)
+                    if duracao_custom > 0 and duracao_custom not in (1, 2, 4)
+                    else None
+                )
+
                 prefill = {
                     "orcamento_id":   entry.id,
                     "date":           snap.get("event_date", ""),
@@ -1164,6 +1205,8 @@ def create_event():
                     "total_1h":       float(entry.total_1h or 0),
                     "total_2h":       float(entry.total_2h or 0),
                     "total_4h":       float(entry.total_4h or 0),
+                    "total_custom":   total_custom,
+                    "duracao_custom": duracao_custom if total_custom else None,
                     "has_show":       entry.has_show,
                     "transport_value": transport_val,
                     "acrescimo_value": acrescimo_val,
@@ -1237,7 +1280,9 @@ def create_event():
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
                                sellers=sellers, errors=errors, prefill={})
 
-    gc_title = f"({event_type}) {title}" if event_type else title
+    # Remove prefixo (TIPO) que o JS já inseriu no título para não duplicar
+    clean_title = re.sub(r'^\s*\([^)]*\)\s*', '', title).strip() if title else title
+    gc_title = f"({event_type}) {clean_title}" if event_type else title
     try:
         created = insert_event(CALENDAR_ID, gc_title, st, et, description=description)
     except RuntimeError as exc:
@@ -1250,6 +1295,18 @@ def create_event():
             return int(round(v))
         except (ValueError, AttributeError):
             return None
+
+    # ── Nota fiscal file (opcional) ──────────────────────────────────────────
+    invoice_filename = None
+    invoice_file = request.files.get("invoice_file")
+    if invoice_file and invoice_file.filename:
+        _inv_size = invoice_file.stream.seek(0, 2)
+        invoice_file.stream.seek(0)
+        if _inv_size <= 20 * 1024 * 1024:
+            invoice_filename = secure_filename(invoice_file.filename)
+            invoice_file.save(
+                os.path.join(current_app.config["UPLOAD_INVOICES"], invoice_filename)
+            )
 
     event = CalendarEvent(
         google_event_id      = created["id"],
@@ -1265,6 +1322,7 @@ def create_event():
         transport_value      = _parse_int(transport_value_raw),
         acrescimo_value      = _parse_int(acrescimo_value_raw),
         with_invoice         = with_invoice,
+        invoice_file         = invoice_filename,
         seller_id            = int(seller_id_raw) if seller_id_raw.isdigit() else None,
         payment_method       = payment_method,
         payment_installments = int(payment_inst_raw) if payment_inst_raw.isdigit() else None,
@@ -1311,11 +1369,14 @@ def create_event():
 
         role_type = orc_caches[i].get("role_type", "character") if i < len(orc_caches) else "character"
 
+        # cache_cap guarda o teto definido pelo orçamento (imutável para casting)
+        from_orc = bool(orc_caches) and cache_val is not None
         db.session.add(EventRole(
             event_id         = event.id,
             character_name   = char,
             figurino_sheet_id= sheet_id,
             cache_value      = cache_val,
+            cache_cap        = cache_val if from_orc else None,
             role_type        = role_type,
             needs_makeup     = makeup or None,
             is_singer        = singer or None,

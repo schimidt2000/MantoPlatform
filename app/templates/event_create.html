@@ -216,6 +216,16 @@
       <div class="lbl">4 horas</div>
       <div class="val">{{ "R$ {:,.2f}".format(prefill.total_4h).replace(",","X").replace(".",",").replace("X",".") }}</div>
     </div>
+    {% if prefill.total_custom %}
+    <div class="dur-card" data-dur="{{ prefill.duracao_custom }}"
+         data-total="{{ prefill.total_custom }}"
+         data-transport="{{ prefill.transport_value }}"
+         data-is-custom="1"
+         onclick="selectDuracao(this)">
+      <div class="lbl">{{ prefill.duracao_custom }} horas</div>
+      <div class="val">{{ "R$ {:,.2f}".format(prefill.total_custom).replace(",","X").replace(".",",").replace("X",".") }}</div>
+    </div>
+    {% endif %}
   </div>
   <input type="hidden" name="duracao" id="duracao-hidden" value="1">
   {% endif %}
@@ -228,7 +238,32 @@
                placeholder="0" style="width:150px;"
                {% if prefill.orcamento_id %}value="{{ prefill.total_1h | int }}"{% endif %}>
       </div>
-      <div class="meta">Valor total cobrado do cliente</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+        <button type="button" class="btn btn-secondary btn-sm"
+                onclick="toggleDiscount()" id="btn-desconto">% Desconto</button>
+        <span id="desconto-preview" style="display:none;font-size:13px;color:var(--muted);"></span>
+      </div>
+      {# Painel de desconto inline #}
+      <div id="desconto-panel" style="display:none;margin-top:10px;padding:14px;background:var(--surface-2);border-radius:var(--r-md);border:1px solid var(--line);max-width:340px;">
+        <div style="font-weight:600;margin-bottom:10px;font-size:13px;">Calcular desconto</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <div class="prefix" style="width:auto;"><span>%</span>
+            <input type="number" id="desc-pct" min="0" max="100" step="0.5"
+                   placeholder="0" style="width:80px;" oninput="calcDesconto('pct')">
+          </div>
+          <span style="color:var(--muted);font-size:13px;">ou</span>
+          <div class="prefix" style="width:auto;"><span>R$</span>
+            <input type="number" id="desc-val" min="0" step="1"
+                   placeholder="0" style="width:100px;" oninput="calcDesconto('val')">
+          </div>
+        </div>
+        <div id="desc-result" style="margin-top:10px;font-size:13px;color:var(--muted);"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="applyDesconto()">Aplicar</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleDiscount()">Cancelar</button>
+        </div>
+      </div>
+      <div class="meta" style="margin-top:4px;">Valor total cobrado do cliente</div>
     </div>
 
     <div class="val-item">
@@ -249,13 +284,25 @@
                value="{{ prefill.acrescimo_value or '' }}">
       </div>
     </div>
+  </div>
 
-    <div class="val-item" style="justify-content:flex-end; padding-bottom:4px;">
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600;">
-        <input type="checkbox" name="with_invoice" value="1"
-               {% if prefill.with_invoice %}checked{% endif %}>
-        Com nota fiscal
-      </label>
+  {# ── Nota Fiscal ─────────────────────────────────────────────────────── #}
+  <div style="margin-top:20px;">
+    <div style="font-weight:600;font-size:13px;margin-bottom:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;">Nota Fiscal</div>
+    <input type="hidden" name="with_invoice" id="with-invoice-hidden" value="">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <button type="button" id="btn-nf" onclick="toggleNF()"
+              style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:var(--r-md);border:2px solid var(--line);background:var(--surface);cursor:pointer;font-size:14px;font-weight:600;transition:all .15s;">
+        <span id="nf-icon">◻</span> Precisa de nota fiscal
+      </button>
+      <span id="nf-badge" style="display:none;" class="badge badge-amber">NF solicitada</span>
+    </div>
+    <div id="nf-upload-area" style="display:none;margin-top:12px;padding:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r-md);max-width:420px;">
+      <div style="font-size:13px;color:#92400e;margin-bottom:8px;">Anexar arquivo da nota fiscal (opcional — pode ser enviado depois)</div>
+      <input type="file" name="invoice_file" id="invoice-file-input"
+             accept=".pdf,.xml,.png,.jpg,.jpeg"
+             style="font-size:13px;">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">PDF, XML ou imagem • máx. 20 MB</div>
     </div>
   </div>
 
@@ -395,8 +442,10 @@ var titleEdited = false;
 
 function autoTitle() {
   if (titleEdited) return;
-  const names = [...document.querySelectorAll('#chars-list input[name="character_names[]"]')]
-    .map(i => i.value.trim()).filter(Boolean);
+  const names = [...document.querySelectorAll('#chars-list .char-row')]
+    .filter(r => (r.dataset.roleType || 'character') === 'character')
+    .map(r => (r.querySelector('input[name="character_names[]"]')?.value || '').trim())
+    .filter(Boolean);
   const type  = document.getElementById('event-type')?.value || '';
   const base  = names.join(' + ').toUpperCase();
   const prefix = type ? `(${type}) ` : '';
@@ -413,7 +462,8 @@ function onTypeChange() { autoTitle(); }
 function buildCharRow(idx, label, cacheVal, makeup, singer, roleType, sheetId) {
   const row = document.createElement('div');
   row.className = 'char-row';
-  row.dataset.idx = idx;
+  row.dataset.idx      = idx;
+  row.dataset.roleType = roleType || 'character';
 
   const isExtra = roleType === 'extra';
   const bgColor = isExtra ? 'background:var(--surface-2,#f7f7fa);' : '';
@@ -499,17 +549,23 @@ document.getElementById('chars-list').addEventListener('click', function(e) {
 function selectDuracao(card) {
   document.querySelectorAll('.dur-card').forEach(c => c.classList.remove('selected'));
   card.classList.add('selected');
-  const dur    = card.dataset.dur;
-  const total  = parseFloat(card.dataset.total) || 0;
+  const dur      = card.dataset.dur;
+  const total    = parseFloat(card.dataset.total) || 0;
+  const isCustom = card.dataset.isCustom === '1';
   document.getElementById('duracao-hidden').value = dur;
   document.getElementById('sale-value').value     = Math.round(total);
 
   // atualizar caches dos personagens
-  const idx = {'1':0,'2':1,'4':2}[dur] || 0;
-  const key = ['cache_1h','cache_2h','cache_4h'][idx];
   const cacheInputs = document.querySelectorAll('#chars-list input[name="char_cache[]"]');
   cacheInputs.forEach(function(inp, i) {
-    if (i < ORC_CACHES.length) {
+    if (i >= ORC_CACHES.length) return;
+    if (isCustom) {
+      // cache_4h / 4 * N, arredondado para inteiro
+      const base4h = parseFloat(ORC_CACHES[i].cache_4h) || 0;
+      inp.value = Math.round(base4h / 4 * parseInt(dur));
+    } else {
+      const idx = {'1':0,'2':1,'4':2}[dur] || 0;
+      const key = ['cache_1h','cache_2h','cache_4h'][idx];
       inp.value = ORC_CACHES[i][key] || '';
     }
   });
@@ -585,6 +641,86 @@ document.getElementById('event-type').addEventListener('change', function() {
   if (this.value === 'SHOW') { cb.checked = true; cb.disabled = true; }
   else { cb.disabled = false; }
 });
+
+// ── Desconto ─────────────────────────────────────────────────────────────────
+var _descontoOpen = false;
+var _descontoVal  = 0;
+
+function toggleDiscount() {
+  _descontoOpen = !_descontoOpen;
+  document.getElementById('desconto-panel').style.display = _descontoOpen ? '' : 'none';
+  if (_descontoOpen) {
+    document.getElementById('desc-pct').value = '';
+    document.getElementById('desc-val').value = '';
+    document.getElementById('desc-result').textContent = '';
+  }
+}
+
+function calcDesconto(src) {
+  const saleEl = document.getElementById('sale-value');
+  const base   = parseFloat(saleEl.value) || 0;
+  const pctEl  = document.getElementById('desc-pct');
+  const valEl  = document.getElementById('desc-val');
+  const resEl  = document.getElementById('desc-result');
+  if (!base) { resEl.textContent = 'Informe o valor de venda primeiro.'; return; }
+  if (src === 'pct') {
+    const pct = parseFloat(pctEl.value) || 0;
+    _descontoVal = Math.round(base * pct / 100);
+    valEl.value  = _descontoVal;
+  } else {
+    _descontoVal = parseFloat(valEl.value) || 0;
+    pctEl.value  = base > 0 ? (_descontoVal / base * 100).toFixed(1) : '0';
+  }
+  const novo = base - _descontoVal;
+  resEl.innerHTML = `Desconto: <strong>R$ ${_descontoVal.toLocaleString('pt-BR')}</strong> &rarr; Novo valor: <strong>R$ ${novo.toLocaleString('pt-BR')}</strong>`;
+}
+
+function applyDesconto() {
+  const saleEl = document.getElementById('sale-value');
+  const base   = parseFloat(saleEl.value) || 0;
+  if (!_descontoVal || !base) return;
+  saleEl.value = Math.round(base - _descontoVal);
+  const prev = document.getElementById('desconto-preview');
+  prev.textContent = `Desconto de R$ ${_descontoVal.toLocaleString('pt-BR')} aplicado`;
+  prev.style.display = '';
+  _descontoVal = 0;
+  toggleDiscount();
+}
+
+// ── Nota Fiscal ───────────────────────────────────────────────────────────────
+var _nfOn = {{ 'true' if prefill.with_invoice else 'false' }};
+
+function _renderNF() {
+  const btn    = document.getElementById('btn-nf');
+  const badge  = document.getElementById('nf-badge');
+  const area   = document.getElementById('nf-upload-area');
+  const hidden = document.getElementById('with-invoice-hidden');
+  if (_nfOn) {
+    btn.style.borderColor   = '#f59e0b';
+    btn.style.background    = '#fffbeb';
+    btn.style.color         = '#92400e';
+    document.getElementById('nf-icon').textContent = '✓';
+    badge.style.display  = '';
+    area.style.display   = '';
+    hidden.value         = '1';
+  } else {
+    btn.style.borderColor   = 'var(--line)';
+    btn.style.background    = 'var(--surface)';
+    btn.style.color         = '';
+    document.getElementById('nf-icon').textContent = '◻';
+    badge.style.display  = 'none';
+    area.style.display   = 'none';
+    hidden.value         = '';
+    document.getElementById('invoice-file-input').value = '';
+  }
+}
+
+function toggleNF() {
+  _nfOn = !_nfOn;
+  _renderNF();
+}
+
+_renderNF();
 
 // ── Utilitários ──────────────────────────────────────────────────────────────
 function escHtml(s) {

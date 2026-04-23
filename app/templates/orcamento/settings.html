@@ -262,7 +262,7 @@
     <div class="panel-title">Brinde — Show</div>
     <div class="form-grid-4">
       <div class="form-group">
-        <label>Custo do brinde (R$) — incluso no cachê antes do markup</label>
+        <label>Custo do brinde (R$) — adicionado ao total depois do markup</label>
         <input type="number" step="1" name="brinde_show" value="{{ s.get('brinde_show', 100) }}">
       </div>
     </div>
@@ -276,9 +276,9 @@
         'van_com_carretinha':  'Van c/ carretinha (R$/km)',
         'van_sem_carretinha':  'Van s/ carretinha (R$/km)',
         'carro_por_km':        'Carro (R$/km por carro)',
-        'afsp_divisor':        'Adicional Fora SP — divisor',
-        'ashow_divisor':       'Adicional Show — divisor',
-        'ashow_min_km':        'Adicional Show — km mínimo (total)',
+        'afsp_divisor':        'Rateio de deslocamento por performer (÷ colaboradores × km)',
+        'ashow_divisor':       'Taxa de logística show longa distância (÷ km total)',
+        'ashow_min_km':        'Distância mínima para taxa de logística show (km total)',
       } %}
       {% for key, val in s.transporte.items() %}
       <div class="form-group">

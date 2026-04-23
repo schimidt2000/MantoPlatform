@@ -404,6 +404,93 @@ def resultado():
     return render_template("orcamento/resultado.html", quote=quote, fmt_brl=_fmt_brl)
 
 
+# ── Histórico (página) ───────────────────────────────────────────────────────
+
+@orcamento_bp.route("/historico")
+@login_required
+@_require_vendas
+def historico():
+    from app.models import OrcamentoHistory, User, Role
+    from sqlalchemy import or_
+
+    is_sa = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
+
+    q          = request.args.get("q", "").strip()
+    date_from  = request.args.get("date_from", "").strip()
+    date_to    = request.args.get("date_to", "").strip()
+    ev_from    = request.args.get("ev_date_from", "").strip()
+    ev_to      = request.args.get("ev_date_to", "").strip()
+    min_val    = request.args.get("min_val", "").strip()
+    max_val    = request.args.get("max_val", "").strip()
+    user_id_f  = request.args.get("user_id", "").strip()
+    show_f     = request.args.get("has_show", "").strip()
+
+    query = OrcamentoHistory.query
+    if not is_sa:
+        query = query.filter_by(user_id=current_user.id)
+    elif user_id_f and user_id_f.isdigit():
+        query = query.filter_by(user_id=int(user_id_f))
+
+    if q:
+        query = query.filter(
+            or_(
+                OrcamentoHistory.client_name.ilike(f"%{q}%"),
+                OrcamentoHistory.event_location.ilike(f"%{q}%"),
+            )
+        )
+
+    if date_from:
+        try:
+            query = query.filter(OrcamentoHistory.created_at >= datetime.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            from datetime import timedelta
+            query = query.filter(OrcamentoHistory.created_at < datetime.fromisoformat(date_to) + timedelta(days=1))
+        except ValueError:
+            pass
+
+    if ev_from:
+        query = query.filter(OrcamentoHistory.event_date >= ev_from)
+    if ev_to:
+        query = query.filter(OrcamentoHistory.event_date <= ev_to)
+
+    if min_val:
+        try:
+            query = query.filter(OrcamentoHistory.total_4h >= float(min_val))
+        except ValueError:
+            pass
+    if max_val:
+        try:
+            query = query.filter(OrcamentoHistory.total_4h <= float(max_val))
+        except ValueError:
+            pass
+
+    if show_f in ("1", "0"):
+        query = query.filter(OrcamentoHistory.has_show == (show_f == "1"))
+
+    entries = query.order_by(OrcamentoHistory.created_at.desc()).limit(300).all()
+
+    users = []
+    if is_sa:
+        users = (
+            User.query
+            .join(User.roles)
+            .filter(Role.name.in_([RoleName.COMERCIAL, RoleName.SUPERADMIN]))
+            .order_by(User.name.asc())
+            .all()
+        )
+
+    return render_template(
+        "orcamento/historico.html",
+        entries=entries,
+        is_superadmin=is_sa,
+        users=users,
+        fmt_brl=_fmt_brl,
+    )
+
+
 # ── Histórico API ────────────────────────────────────────────────────────────
 
 @orcamento_bp.route("/api/historico")

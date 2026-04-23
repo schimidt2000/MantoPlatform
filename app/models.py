@@ -214,6 +214,7 @@ class CalendarEvent(db.Model):
     transport_value      = db.Column(db.Integer, nullable=True)       # valor transporte separado (R$ inteiro)
     acrescimo_value      = db.Column(db.Integer, nullable=True)       # acréscimo separado (R$ inteiro)
     orcamento_history_id = db.Column(db.Integer, db.ForeignKey("orcamento_history.id"), nullable=True)
+    invoice_file         = db.Column(db.String(255), nullable=True)   # filename em uploads/invoices/
 
     roles = db.relationship("EventRole", backref="event", lazy=True, cascade="all, delete-orphan")
     observations = db.relationship("EventObservation", backref="event", lazy=True,
@@ -307,6 +308,7 @@ class EventRole(db.Model):
     # role_type: 'character' (personagens do evento) | 'extra' (transporte, maquiador, etc.)
     talent_id = db.Column(db.Integer, db.ForeignKey("talents.id"), nullable=True)
     cache_value = db.Column(db.Integer, nullable=True)
+    cache_cap   = db.Column(db.Integer, nullable=True)   # valor máximo pré-calculado (do orçamento)
     travel_cache = db.Column(db.Integer, nullable=True)  # adicional fora de SP
     assigned_at = db.Column(db.DateTime, nullable=True)
     figurino_done_at = db.Column(db.DateTime, nullable=True)

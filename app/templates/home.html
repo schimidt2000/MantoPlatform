@@ -143,6 +143,32 @@
         {% endif %}
       {% endif %}
     {% endif %}
+
+    {# Nota fiscal — só superadmin #}
+    {% if is_superadmin and pending_invoice %}
+      <hr class="sep">
+      <div>
+        <div class="flex-between mb-16">
+          <span class="flex-center gap-8">
+            <span class="badge badge-amber">🧾 Nota Fiscal</span>
+            <span class="meta">{{ pending_invoice|length }} pendente{{ 's' if pending_invoice|length > 1 else '' }}</span>
+          </span>
+        </div>
+        {% for ev in pending_invoice %}
+          {% set days_left = ((ev.start_at.date() - today).days) if ev.start_at else 999 %}
+          <div class="flex-between gap-12 task-row" style="padding:10px 0;border-bottom:1px solid var(--line);{% if days_left <= 7 %} background:rgba(245,158,11,0.06);margin:0 -16px;padding:10px 16px;{% endif %}">
+            <div>
+              <div class="strong">{{ ev.title }}</div>
+              <div class="meta">
+                {% if ev.start_at %}{{ ev.start_at.strftime("%d/%m/%Y") }}{% endif %}
+                {% if days_left <= 7 %}<span style="color:#d97706;margin-left:6px;">• {{ days_left }}d</span>{% endif %}
+              </div>
+            </div>
+            <a href="/events/{{ ev.id }}" class="btn btn-sm btn-secondary">Abrir</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
   </div>
 
   {# ── RIGHT: Indicadores + Performance ────────────────────── #}

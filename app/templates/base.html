@@ -129,18 +129,18 @@
     {# Ferramentas #}
     <div class="sidebar-section">
       <div class="sidebar-section-label">Ferramentas</div>
-      <a href="/tools/calculadora-transporte" class="sidebar-item {% if '/tools' in request.path %}active{% endif %}">
-        <span class="icon">
-          <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/><path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1v-1h3.5a1 1 0 00.8-.4l1.5-2a1 1 0 00.2-.6V8a1 1 0 00-1-1H11V4a1 1 0 00-1-1H3z"/></svg>
-        </span>
-        Calc. Transporte
-      </a>
       {% if current_user.is_authenticated and eff_has_role('COMERCIAL', 'SUPERADMIN') %}
-      <a href="/orcamento/" class="sidebar-item {% if '/orcamento' in request.path %}active{% endif %}">
+      <a href="/orcamento/" class="sidebar-item {% if request.path == '/orcamento/' or (request.path.startswith('/orcamento') and 'historico' not in request.path and 'settings' not in request.path) %}active{% endif %}">
         <span class="icon">
           <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/></svg>
         </span>
         Calc. Orçamento
+      </a>
+      <a href="/orcamento/historico" class="sidebar-item {% if 'historico' in request.path %}active{% endif %}">
+        <span class="icon">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h7a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
+        </span>
+        Orçamentos
       </a>
       {% endif %}
     </div>

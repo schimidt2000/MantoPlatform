@@ -187,6 +187,28 @@
             {% if r.assigned_at %}
               <div class="meta" style="font-size: 11px;">Atribuído em {{ r.assigned_at.strftime("%d/%m/%Y") }}</div>
             {% endif %}
+            {# Cachê e adicional — visíveis no lado esquerdo #}
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+              {% if r.cache_cap %}
+                <span style="font-size:11px;font-weight:600;background:#eff6ff;color:#1d4ed8;padding:2px 8px;border-radius:99px;border:1px solid #bfdbfe;">
+                  Cachê: R$ {{ r.cache_cap }}
+                </span>
+              {% elif r.cache_value %}
+                <span style="font-size:11px;font-weight:600;background:var(--surface-2);color:var(--muted);padding:2px 8px;border-radius:99px;">
+                  Cachê: R$ {{ r.cache_value }}
+                </span>
+              {% endif %}
+              {% if r.travel_cache %}
+                <span style="font-size:11px;background:#f0fdf4;color:#166534;padding:2px 8px;border-radius:99px;border:1px solid #bbf7d0;">
+                  + R$ {{ r.travel_cache }} viagem
+                </span>
+              {% elif event.travel_distance_km %}
+                {% set _km_left = event.travel_distance_km %}
+                <span style="font-size:11px;background:#fffbeb;color:#92400e;padding:2px 8px;border-radius:99px;border:1px solid #fde68a;">
+                  Viagem: R$ {{ (_km_left * 2 / 3) | int }} sugerido
+                </span>
+              {% endif %}
+            </div>
           </div>
 
           <div class="ts-wrap">
@@ -203,7 +225,13 @@
 
           <div>
             <input type="number" name="cache_value" placeholder="Cachê (R$)"
-              value="{{ r.cache_value or '' }}" min="0" step="1" style="width: 100%;">
+              value="{{ r.cache_value or '' }}" min="0" step="1" style="width: 100%;"
+              class="cache-input"
+              data-cap="{{ r.cache_cap or '' }}"
+              data-is-superadmin="{{ 'true' if is_real_superadmin else 'false' }}">
+            {% if r.cache_cap %}
+              <div class="cache-cap-msg" style="display:none;font-size:10px;margin-top:2px;"></div>
+            {% endif %}
           </div>
 
           {% if event.location and event.travel_distance_km %}
@@ -215,13 +243,12 @@
               {% set _sugestao = ((_km * 2 / 3) | int) %}
             {% endif %}
             <input type="number" name="travel_cache" placeholder="Adicional viagem"
-              value="{{ r.travel_cache or '' }}" min="0" step="1" style="width: 100%;"
+              value="{{ r.travel_cache if r.travel_cache else _sugestao }}"
+              min="0" step="1" style="width: 100%;"
               title="Adicional fora de SP — sugestão: R$ {{ _sugestao }}">
-            {% if not r.travel_cache %}
-              <div style="font-size:10px; color:var(--muted); margin-top:2px;">
-                sugestão: R$ {{ _sugestao }}
-              </div>
-            {% endif %}
+            <div style="font-size:10px; color:var(--muted); margin-top:2px;">
+              sugestão: R$ {{ _sugestao }}
+            </div>
           </div>
           {% endif %}
 
@@ -1431,3 +1458,46 @@ function copyElenco() {
 {% endif %}
 
 {% endblock %}
+
+<script>
+// ── Validação de teto de cachê (cache_cap) ────────────────────────────────────
+document.querySelectorAll('input.cache-input[data-cap]').forEach(function(inp) {
+  const cap  = parseInt(inp.dataset.cap);
+  const isSA = inp.dataset.isSuperadmin === 'true';
+  const msgEl = inp.parentElement.querySelector('.cache-cap-msg');
+  if (!cap) return;
+
+  function check() {
+    const val = parseInt(inp.value) || 0;
+    if (val <= cap) {
+      inp.style.borderColor = '';
+      if (msgEl) msgEl.style.display = 'none';
+      return true;
+    }
+    if (isSA) {
+      inp.style.borderColor = '#f59e0b';
+      if (msgEl) {
+        msgEl.style.display = '';
+        msgEl.style.color   = '#92400e';
+        msgEl.textContent   = '⚠ Acima do calculado (R$ ' + cap + '). Autorizado para admin.';
+      }
+      return true;
+    } else {
+      inp.style.borderColor = '#ef4444';
+      if (msgEl) {
+        msgEl.style.display = '';
+        msgEl.style.color   = '#b91c1c';
+        msgEl.textContent   = '⛔ Valor máximo: R$ ' + cap + '. Entre em contato com o administrador.';
+      }
+      inp.value = cap;
+      return false;
+    }
+  }
+
+  inp.addEventListener('input',  check);
+  inp.addEventListener('change', check);
+  inp.closest('form')?.addEventListener('submit', function(e) {
+    if (!check()) e.preventDefault();
+  });
+});
+</script>
