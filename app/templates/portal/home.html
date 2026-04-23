@@ -21,10 +21,24 @@
     .invite-card-role { color: var(--accent-dark); font-weight: 600; font-size: 15px; margin-bottom: 12px; }
     .invite-detail { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
     .invite-detail-row { display: flex; gap: 8px; font-size: 13px; }
-    .invite-detail-label { color: var(--muted); min-width: 80px; }
+    .invite-detail-label { color: var(--muted); min-width: 90px; flex-shrink: 0; }
     .invite-actions { display: flex; gap: 10px; }
-    .event-row { display: flex; justify-content: space-between; align-items: flex-start;
-                 padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .event-card {
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .event-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+    .event-card-title { font-weight: 600; font-size: 14px; }
+    .event-card-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .event-card-logistics { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
+                             display: flex; flex-direction: column; gap: 4px; }
+    .event-card-logistics span { font-size: 12px; color: var(--muted); }
+    .event-card-footer { display: flex; justify-content: space-between; align-items: center;
+                         margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+    .event-row { display: flex; justify-content: space-between; align-items: center;
+                 padding: 10px 0; border-bottom: 1px solid var(--line); gap: 12px; }
     .event-row:last-child { border-bottom: none; }
     .event-row-title { font-weight: 600; font-size: 14px; }
     .event-row-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
@@ -33,6 +47,17 @@
     .days-urgent { background: var(--red-soft); color: var(--red); }
     .days-soon   { background: rgba(245,200,66,0.15); color: #b8860b; }
     .days-ok     { background: var(--green-soft); color: var(--green); }
+    .pay-badge   { font-size: 11px; font-weight: 700; padding: 3px 8px;
+                   border-radius: 99px; white-space: nowrap; }
+    .pay-pago    { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    .pay-banco   { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    .pay-pendente { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+    .fin-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+    .fin-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+                padding: 14px 16px; }
+    .fin-card-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
+                      letter-spacing: .04em; color: var(--muted); margin-bottom: 4px; }
+    .fin-card-value { font-size: 18px; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -69,8 +94,6 @@
 
     {% for r in pending_invites %}
       {% set ev = r.event %}
-      {% set days = ((ev.start_at.date() - today).days) if ev.start_at else 999 %}
-
       <div class="invite-card">
         <div class="invite-card-title">{{ ev.title }}</div>
         <div class="invite-card-role">{{ r.character_name }}</div>
@@ -92,10 +115,32 @@
             <span>{{ ev.location }}</span>
           </div>
           {% endif %}
+          {% if ev.departure_time %}
+          <div class="invite-detail-row">
+            <span class="invite-detail-label">🚗 Saída</span>
+            <span>{{ ev.departure_time }}</span>
+          </div>
+          {% endif %}
+          {% if ev.makeup_time %}
+          <div class="invite-detail-row">
+            <span class="invite-detail-label">💄 Maquiagem</span>
+            <span>
+              {{ ev.makeup_time }}
+              {% if ev.makeup_location %}
+                · {% if ev.makeup_location == 'manto' %}Sede Manto
+                {% elif ev.makeup_location == 'local' %}No local do evento
+                {% else %}{{ ev.makeup_location }}{% endif %}
+              {% endif %}
+            </span>
+          </div>
+          {% endif %}
           {% if r.cache_value %}
           <div class="invite-detail-row">
             <span class="invite-detail-label">💰 Cachê</span>
-            <span style="font-weight:600; color: var(--accent-dark);">R$ {{ "{:,.0f}".format(r.cache_value) }}</span>
+            <span style="font-weight:600; color: var(--accent-dark);">
+              R$ {{ "{:,.0f}".format(r.cache_value) }}
+              {% if r.travel_cache %}+ R$ {{ "{:,.0f}".format(r.travel_cache) }} transporte{% endif %}
+            </span>
           </div>
           {% endif %}
           {% for ensaio in ev.ensaios | sort(attribute='start_at') %}
@@ -125,13 +170,13 @@
   {% endif %}
 
   {# ── Próximos eventos ───────────────────────────────────── #}
-  <div class="panel" style="margin-bottom: 24px;">
-    <h2 style="margin-bottom:16px;">Próximos eventos</h2>
+  <div style="margin-bottom: 24px;">
+    <h2 style="margin-bottom: 16px;">Próximos eventos</h2>
     {% if upcoming %}
       {% for r in upcoming %}
         {% set ev = r.event %}
         {% set days = ((ev.start_at.date() - today).days) if ev.start_at else 999 %}
-        <div class="event-row" style="flex-direction:column; align-items:stretch;">
+        <div class="event-card">
 
           {# Banner de alteração #}
           {% if r.event_changed_at %}
@@ -139,34 +184,28 @@
                       padding:10px 14px; margin-bottom:10px; display:flex;
                       align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
             <span style="font-size:13px; color:#7a5800;">
-              ⚠️ <strong>Este evento foi atualizado.</strong>
-              Verifique as novas informações abaixo.
+              ⚠️ <strong>Este evento foi atualizado.</strong> Verifique as informações abaixo.
             </span>
             <form method="post" action="/portal/roles/{{ r.id }}/ack-change" style="margin:0;">
-              <button type="submit" class="btn btn-sm btn-secondary" style="font-size:12px;">
-                Ciente ✓
-              </button>
+              <button type="submit" class="btn btn-sm btn-secondary" style="font-size:12px;">Ciente ✓</button>
             </form>
           </div>
           {% endif %}
 
-          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div class="event-card-header">
             <div>
-              <div class="event-row-title">{{ r.character_name }} — {{ ev.title }}</div>
-              <div class="event-row-meta">
+              <div class="event-card-title">{{ r.character_name }} — {{ ev.title }}</div>
+              <div class="event-card-meta">
                 {% if ev.start_at %}{{ ev.start_at.strftime("%d/%m/%Y %H:%M") }}{% endif %}
                 {% if ev.end_at %} – {{ ev.end_at.strftime("%H:%M") }}{% endif %}
                 {% if ev.location %} · {{ ev.location }}{% endif %}
               </div>
-              {% if r.cache_value %}
-                <div class="event-row-meta" style="color: var(--accent-dark); font-weight:600;">
-                  R$ {{ "{:,.0f}".format(r.cache_value) }}
-                </div>
-              {% endif %}
             </div>
             <div>
-              {% if days <= 2 %}
-                <span class="days-badge days-urgent">HOJE/AMANHÃ</span>
+              {% if days <= 0 %}
+                <span class="days-badge days-urgent">HOJE</span>
+              {% elif days == 1 %}
+                <span class="days-badge days-urgent">AMANHÃ</span>
               {% elif days <= 7 %}
                 <span class="days-badge days-soon">{{ days }}d</span>
               {% else %}
@@ -174,31 +213,111 @@
               {% endif %}
             </div>
           </div>
+
+          {# Logística #}
+          {% if ev.departure_time or ev.makeup_time %}
+          <div class="event-card-logistics">
+            {% if ev.departure_time %}
+            <span>🚗 Saída: <strong>{{ ev.departure_time }}</strong></span>
+            {% endif %}
+            {% if ev.makeup_time %}
+            <span>💄 Maquiagem: <strong>{{ ev.makeup_time }}</strong>
+              {% if ev.makeup_location %}
+                · {% if ev.makeup_location == 'manto' %}Sede Manto
+                {% elif ev.makeup_location == 'local' %}no local
+                {% else %}{{ ev.makeup_location }}{% endif %}
+              {% endif %}
+            </span>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          {# Cachê + status #}
+          {% if r.cache_value %}
+          <div class="event-card-footer">
+            <span style="font-weight:600; font-size:13px; color:var(--accent-dark);">
+              💰 R$ {{ "{:,.0f}".format(r.cache_value) }}
+              {% if r.travel_cache %}
+                <span style="font-size:12px; font-weight:400; color:var(--muted);">
+                  + R$ {{ "{:,.0f}".format(r.travel_cache) }} transp.
+                </span>
+              {% endif %}
+            </span>
+            {% if r.payment_status == 'pago' %}
+              <span class="pay-badge pay-pago">✓ Pago</span>
+            {% elif r.payment_status == 'no_banco' %}
+              <span class="pay-badge pay-banco">No banco</span>
+            {% else %}
+              <span class="pay-badge pay-pendente">Pendente</span>
+            {% endif %}
+          </div>
+          {% endif %}
+
         </div>
       {% endfor %}
     {% else %}
-      <p class="muted">Nenhum evento confirmado no futuro.</p>
+      <div class="panel">
+        <p class="muted">Nenhum evento confirmado no futuro.</p>
+      </div>
     {% endif %}
   </div>
+
+  {# ── Financeiro resumido ────────────────────────────────── #}
+  {% if total_pago or total_pendente %}
+  <div style="margin-bottom: 24px;">
+    <h2 style="margin-bottom: 16px;">Financeiro</h2>
+    <div class="fin-summary">
+      <div class="fin-card">
+        <div class="fin-card-label">Recebido</div>
+        <div class="fin-card-value" style="color: var(--green);">R$ {{ "{:,.0f}".format(total_pago) }}</div>
+      </div>
+      <div class="fin-card">
+        <div class="fin-card-label">Pendente</div>
+        <div class="fin-card-value" style="color: #92400e;">R$ {{ "{:,.0f}".format(total_pendente) }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   {# ── Histórico recente ──────────────────────────────────── #}
   {% if history %}
   <div class="panel">
-    <h2 style="margin-bottom:16px;">Histórico recente</h2>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <h2 style="margin:0;">Histórico recente</h2>
+      {% if history_total > 10 %}
+      <a href="/portal/historico" class="btn btn-sm btn-secondary" style="font-size:12px;">
+        Ver todos ({{ history_total }}) →
+      </a>
+      {% endif %}
+    </div>
     {% for r in history %}
       {% set ev = r.event %}
       <div class="event-row">
-        <div>
-          <div class="event-row-title">{{ r.character_name }}</div>
+        <div style="flex:1; min-width:0;">
+          <div class="event-row-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.character_name }}</div>
           <div class="event-row-meta">{{ ev.title }}{% if ev.start_at %} · {{ ev.start_at.strftime("%d/%m/%Y") }}{% endif %}</div>
         </div>
-        {% if r.cache_value %}
-          <span style="font-weight:600; font-size:13px; color:var(--accent-dark);">
-            R$ {{ "{:,.0f}".format(r.cache_value) }}
-          </span>
-        {% endif %}
+        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          {% if r.cache_value %}
+            <span style="font-weight:600; font-size:13px; color:var(--accent-dark);">
+              R$ {{ "{:,.0f}".format((r.cache_value or 0) + (r.travel_cache or 0)) }}
+            </span>
+          {% endif %}
+          {% if r.payment_status == 'pago' %}
+            <span class="pay-badge pay-pago">Pago</span>
+          {% elif r.payment_status == 'no_banco' %}
+            <span class="pay-badge pay-banco">No banco</span>
+          {% else %}
+            <span class="pay-badge pay-pendente">Pendente</span>
+          {% endif %}
+        </div>
       </div>
     {% endfor %}
+    {% if history_total > 10 %}
+    <div style="text-align:center; padding:12px 0 4px;">
+      <a href="/portal/historico" style="font-size:13px; color:var(--accent);">Ver histórico completo →</a>
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 

@@ -211,7 +211,7 @@ def home():
         .all()
     )
 
-    # Histórico de eventos passados confirmados
+    # Histórico de eventos passados confirmados (home: últimos 10)
     history = (
         EventRole.query
         .filter_by(talent_id=talent.id, invite_status="accepted")
@@ -222,12 +222,27 @@ def home():
         .all()
     )
 
+    # Resumo financeiro — todos os passados
+    all_past = (
+        EventRole.query
+        .filter_by(talent_id=talent.id, invite_status="accepted")
+        .join(CalendarEvent)
+        .filter(CalendarEvent.start_at < datetime.utcnow())
+        .all()
+    )
+    total_pago    = sum((r.cache_value or 0) + (r.travel_cache or 0) for r in all_past if r.payment_status == "pago")
+    total_pendente = sum((r.cache_value or 0) + (r.travel_cache or 0) for r in all_past if r.payment_status != "pago")
+    history_total = len(all_past)
+
     return render_template(
         "portal/home.html",
         talent=talent,
         pending_invites=pending_invites,
         upcoming=upcoming,
         history=history,
+        history_total=history_total,
+        total_pago=total_pago,
+        total_pendente=total_pendente,
         today=today,
     )
 
@@ -404,6 +419,36 @@ def ack_event_change(role_id: int):
     role.event_changed_at = None
     db.session.commit()
     return redirect(url_for("portal.home"))
+
+
+# ── Histórico completo ─────────────────────────────────────────
+
+@portal_bp.route("/historico")
+@portal_login_required
+def historico():
+    talent = _current_talent()
+
+    all_past = (
+        EventRole.query
+        .filter_by(talent_id=talent.id, invite_status="accepted")
+        .join(CalendarEvent)
+        .filter(CalendarEvent.start_at < datetime.utcnow())
+        .order_by(CalendarEvent.start_at.desc())
+        .all()
+    )
+
+    total_pago     = sum((r.cache_value or 0) + (r.travel_cache or 0) for r in all_past if r.payment_status == "pago")
+    total_pendente = sum((r.cache_value or 0) + (r.travel_cache or 0) for r in all_past if r.payment_status != "pago")
+    total_geral    = total_pago + total_pendente
+
+    return render_template(
+        "portal/historico.html",
+        talent=talent,
+        roles=all_past,
+        total_pago=total_pago,
+        total_pendente=total_pendente,
+        total_geral=total_geral,
+    )
 
 
 # ── Esqueci a senha ────────────────────────────────────────────

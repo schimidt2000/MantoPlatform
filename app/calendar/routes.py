@@ -435,15 +435,37 @@ def _handle_send_invite(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 def _handle_save_logistics(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    old_needs_rehearsal   = event.needs_rehearsal
-    event.makeup_time     = request.form.get("makeup_time", "").strip() or None
+    old_needs_rehearsal  = event.needs_rehearsal
+    old_departure        = event.departure_time
+    old_makeup_time      = event.makeup_time
+    old_makeup_location  = event.makeup_location
+
+    event.makeup_time    = request.form.get("makeup_time", "").strip() or None
     loc = request.form.get("makeup_location", "").strip()
     if loc == "outro":
         loc = request.form.get("makeup_location_custom", "").strip()
     event.makeup_location = loc or None
     event.departure_time  = request.form.get("departure_time", "").strip() or None
     event.needs_rehearsal = bool(request.form.get("needs_rehearsal"))
+
+    logistics_changes = []
+    if event.departure_time != old_departure and old_departure is not None:
+        logistics_changes.append(
+            f"Horário de saída: {old_departure} → {event.departure_time or 'não definido'}"
+        )
+    if event.makeup_time != old_makeup_time and old_makeup_time is not None:
+        logistics_changes.append(
+            f"Horário de maquiagem: {old_makeup_time} → {event.makeup_time or 'não definido'}"
+        )
+    if event.makeup_location != old_makeup_location and old_makeup_location is not None:
+        logistics_changes.append(
+            f"Local de maquiagem: {old_makeup_location} → {event.makeup_location or 'não definido'}"
+        )
+    if logistics_changes:
+        _notify_accepted_roles(event, logistics_changes)
+
     db.session.commit()
+
     if event.needs_rehearsal and not old_needs_rehearsal:
         ensaio_users = User.query.join(User.roles).filter(Role.name == RoleName.ENSAIO).all()
         send_ensaio_alert_email(event, ensaio_users)

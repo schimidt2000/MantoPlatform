@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Histórico — Manto</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .portal-wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+    .portal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+    .portal-header-name { font-size: 20px; font-weight: 700; }
+    .portal-header-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .fin-summary { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+    @media (max-width: 480px) { .fin-summary { grid-template-columns: 1fr 1fr; } }
+    .fin-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+                padding: 14px 16px; }
+    .fin-card-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
+                      letter-spacing: .04em; color: var(--muted); margin-bottom: 4px; }
+    .fin-card-value { font-size: 20px; font-weight: 700; }
+    .event-row { display: flex; justify-content: space-between; align-items: center;
+                 padding: 12px 0; border-bottom: 1px solid var(--line); gap: 12px; }
+    .event-row:last-child { border-bottom: none; }
+    .event-row-title { font-weight: 600; font-size: 14px; }
+    .event-row-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .pay-badge   { font-size: 11px; font-weight: 700; padding: 3px 8px;
+                   border-radius: 99px; white-space: nowrap; }
+    .pay-pago    { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    .pay-banco   { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    .pay-pendente { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+  </style>
+</head>
+<body>
+<div class="portal-wrap">
+
+  <div class="portal-header">
+    <div>
+      <div class="portal-header-name">Histórico completo</div>
+      <div class="portal-header-sub">{{ talent.full_name.split()[0] }} · Manto Produções</div>
+    </div>
+    <a href="/portal/" class="btn btn-sm btn-secondary">← Voltar</a>
+  </div>
+
+  {# ── Resumo financeiro ───────────────────────────────────── #}
+  <div class="fin-summary">
+    <div class="fin-card">
+      <div class="fin-card-label">Total realizado</div>
+      <div class="fin-card-value">R$ {{ "{:,.0f}".format(total_geral) }}</div>
+    </div>
+    <div class="fin-card">
+      <div class="fin-card-label">Recebido</div>
+      <div class="fin-card-value" style="color: var(--green);">R$ {{ "{:,.0f}".format(total_pago) }}</div>
+    </div>
+    <div class="fin-card">
+      <div class="fin-card-label">Pendente</div>
+      <div class="fin-card-value" style="color: #92400e;">R$ {{ "{:,.0f}".format(total_pendente) }}</div>
+    </div>
+  </div>
+
+  {# ── Lista de eventos ─────────────────────────────────────── #}
+  {% if roles %}
+  <div class="panel" style="padding: 0; overflow: hidden;">
+    <div style="padding: 16px 20px; border-bottom: 1px solid var(--line); font-weight: 700;">
+      {{ roles | length }} evento{{ 's' if roles | length != 1 }}
+    </div>
+    <div style="padding: 0 20px;">
+    {% for r in roles %}
+      {% set ev = r.event %}
+      <div class="event-row">
+        <div style="flex:1; min-width:0;">
+          <div class="event-row-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            {{ r.character_name }}
+          </div>
+          <div class="event-row-meta">
+            {{ ev.title }}
+            {% if ev.start_at %} · {{ ev.start_at.strftime("%d/%m/%Y") }}{% endif %}
+            {% if ev.location %} · {{ ev.location }}{% endif %}
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0;">
+          {% set total_val = (r.cache_value or 0) + (r.travel_cache or 0) %}
+          {% if total_val %}
+            <span style="font-weight:600; font-size:13px; color:var(--accent-dark);">
+              R$ {{ "{:,.0f}".format(total_val) }}
+            </span>
+          {% endif %}
+          {% if r.payment_status == 'pago' %}
+            <span class="pay-badge pay-pago">Pago</span>
+          {% elif r.payment_status == 'no_banco' %}
+            <span class="pay-badge pay-banco">No banco</span>
+          {% else %}
+            <span class="pay-badge pay-pendente">Pendente</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div style="text-align:center; padding: 60px 0; color: var(--muted);">
+    <p style="font-size:16px; font-weight:600;">Nenhum evento realizado ainda.</p>
+  </div>
+  {% endif %}
+
+</div>
+</body>
+</html>
