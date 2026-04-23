@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}Histórico de Orçamentos{% endblock %}
+{% block page_title %}Histórico de Orçamentos{% endblock %}
+
+{% block page_actions %}
+  <a href="{{ url_for('orcamento.index') }}" class="btn btn-primary btn-sm">+ Novo Orçamento</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .filter-panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    align-items: end;
+  }
+  .filter-group label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .filter-group input,
+  .filter-group select {
+    width: 100%;
+  }
+  .orc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .orc-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+    padding: 8px 12px;
+    border-bottom: 2px solid var(--line);
+  }
+  .orc-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+  }
+  .orc-table tr:last-child td { border-bottom: none; }
+  .orc-table tr:hover td { background: var(--surface-2); }
+  .badge-show { background:#f0fdf4;color:#166534;border:1px solid #bbf7d0; }
+  .badge-rec  { background:#f1f5f9;color:#475569;border:1px solid #e2e8f0; }
+  .val-cell { font-weight: 600; color: var(--ink); white-space: nowrap; }
+  .empty-state {
+    text-align: center;
+    padding: 60px 0;
+    color: var(--muted);
+  }
+  .active-filters {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .active-filter-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; padding: 3px 10px;
+    background: var(--accent-soft, #f0f4ff);
+    color: var(--accent-dark);
+    border-radius: 99px;
+    border: 1px solid var(--accent, #6366f1);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Filtros ────────────────────────────────────────────────────────────── #}
+<form method="get" action="{{ url_for('orcamento.historico') }}">
+<div class="filter-panel">
+  <div style="font-weight:700;margin-bottom:14px;font-size:13px;">Filtros</div>
+  <div class="filter-grid">
+
+    <div class="filter-group" style="grid-column: span 2;">
+      <label>Cliente / Local</label>
+      <input type="text" name="q" value="{{ request.args.get('q','') }}"
+             placeholder="Buscar por nome ou local...">
+    </div>
+
+    {% if is_superadmin %}
+    <div class="filter-group">
+      <label>Quem fez</label>
+      <select name="user_id">
+        <option value="">Todos</option>
+        {% for u in users %}
+          <option value="{{ u.id }}" {{ 'selected' if request.args.get('user_id')==u.id|string }}>
+            {{ u.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="filter-group">
+      <label>Gerado — de</label>
+      <input type="date" name="date_from" value="{{ request.args.get('date_from','') }}">
+    </div>
+    <div class="filter-group">
+      <label>Gerado — até</label>
+      <input type="date" name="date_to" value="{{ request.args.get('date_to','') }}">
+    </div>
+
+    <div class="filter-group">
+      <label>Evento — de</label>
+      <input type="date" name="ev_date_from" value="{{ request.args.get('ev_date_from','') }}">
+    </div>
+    <div class="filter-group">
+      <label>Evento — até</label>
+      <input type="date" name="ev_date_to" value="{{ request.args.get('ev_date_to','') }}">
+    </div>
+
+    <div class="filter-group">
+      <label>Valor 4h — mín (R$)</label>
+      <input type="number" name="min_val" min="0" step="100"
+             value="{{ request.args.get('min_val','') }}" placeholder="0">
+    </div>
+    <div class="filter-group">
+      <label>Valor 4h — máx (R$)</label>
+      <input type="number" name="max_val" min="0" step="100"
+             value="{{ request.args.get('max_val','') }}" placeholder="—">
+    </div>
+
+    <div class="filter-group">
+      <label>Tipo</label>
+      <select name="has_show">
+        <option value="">Todos</option>
+        <option value="1" {{ 'selected' if request.args.get('has_show')=='1' }}>Show</option>
+        <option value="0" {{ 'selected' if request.args.get('has_show')=='0' }}>Receptivo</option>
+      </select>
+    </div>
+
+    <div class="filter-group" style="display:flex;gap:8px;align-items:flex-end;">
+      <button type="submit" class="btn btn-primary btn-sm" style="flex:1;">Filtrar</button>
+      <a href="{{ url_for('orcamento.historico') }}" class="btn btn-secondary btn-sm">Limpar</a>
+    </div>
+
+  </div>
+</div>
+</form>
+
+{# ── Tags de filtros ativos ─────────────────────────────────────────────── #}
+{% set active = [] %}
+{% if request.args.get('q') %}{% set _ = active.append('Cliente: ' ~ request.args.get('q')) %}{% endif %}
+{% if request.args.get('date_from') %}{% set _ = active.append('Gerado a partir de ' ~ request.args.get('date_from')) %}{% endif %}
+{% if request.args.get('date_to') %}{% set _ = active.append('Gerado até ' ~ request.args.get('date_to')) %}{% endif %}
+{% if request.args.get('ev_date_from') %}{% set _ = active.append('Evento a partir de ' ~ request.args.get('ev_date_from')) %}{% endif %}
+{% if request.args.get('ev_date_to') %}{% set _ = active.append('Evento até ' ~ request.args.get('ev_date_to')) %}{% endif %}
+{% if request.args.get('min_val') %}{% set _ = active.append('Valor ≥ R$ ' ~ request.args.get('min_val')) %}{% endif %}
+{% if request.args.get('max_val') %}{% set _ = active.append('Valor ≤ R$ ' ~ request.args.get('max_val')) %}{% endif %}
+{% if request.args.get('has_show') == '1' %}{% set _ = active.append('Tipo: Show') %}{% endif %}
+{% if request.args.get('has_show') == '0' %}{% set _ = active.append('Tipo: Receptivo') %}{% endif %}
+{% if is_superadmin and request.args.get('user_id') %}
+  {% for u in users %}{% if u.id|string == request.args.get('user_id') %}{% set _ = active.append('Vendedor: ' ~ u.name) %}{% endif %}{% endfor %}
+{% endif %}
+
+{% if active %}
+<div class="active-filters">
+  {% for tag in active %}
+    <span class="active-filter-tag">{{ tag }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Tabela ─────────────────────────────────────────────────────────────── #}
+<div class="panel" style="padding:0;overflow:hidden;">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line);">
+    <span style="font-weight:700;">{{ entries|length }} orçamento{{ 's' if entries|length != 1 }}</span>
+  </div>
+
+  {% if entries %}
+  <div style="overflow-x:auto;">
+  <table class="orc-table">
+    <thead>
+      <tr>
+        <th>Data</th>
+        {% if is_superadmin %}<th>Vendedor</th>{% endif %}
+        <th>Cliente</th>
+        <th>Local</th>
+        <th>Evento</th>
+        <th>Tipo</th>
+        <th style="text-align:right;">1h</th>
+        <th style="text-align:right;">2h</th>
+        <th style="text-align:right;">4h</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for e in entries %}
+      <tr>
+        <td style="white-space:nowrap;color:var(--muted);font-size:12px;">
+          {{ e.created_at.strftime("%d/%m/%Y") }}<br>
+          <span style="font-size:11px;">{{ e.created_at.strftime("%H:%M") }}</span>
+        </td>
+        {% if is_superadmin %}
+        <td style="font-size:13px;">{{ e.user.name if e.user else '—' }}</td>
+        {% endif %}
+        <td style="font-weight:600;">{{ e.client_name or '—' }}</td>
+        <td style="color:var(--muted);font-size:13px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          {{ e.event_location or '—' }}
+        </td>
+        <td style="white-space:nowrap;font-size:13px;">
+          {% if e.event_date %}
+            {{ e.event_date | replace('-', '/') }}
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if e.has_show %}
+            <span class="badge badge-show" style="font-size:11px;padding:2px 8px;border-radius:99px;">Show</span>
+          {% else %}
+            <span class="badge badge-rec" style="font-size:11px;padding:2px 8px;border-radius:99px;">Receptivo</span>
+          {% endif %}
+        </td>
+        <td class="val-cell" style="text-align:right;">{{ fmt_brl(e.total_1h or 0) }}</td>
+        <td class="val-cell" style="text-align:right;">{{ fmt_brl(e.total_2h or 0) }}</td>
+        <td class="val-cell" style="text-align:right;">{{ fmt_brl(e.total_4h or 0) }}</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+            <a href="{{ url_for('orcamento.index') }}?restore={{ e.id }}"
+               class="btn btn-sm btn-secondary" style="font-size:12px;">Reabrir</a>
+            <a href="{{ url_for('calendar.create_event') }}?orcamento_id={{ e.id }}"
+               class="btn btn-sm btn-primary" style="font-size:12px;">Criar evento</a>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% else %}
+  <div class="empty-state">
+    <p style="font-size:18px;font-weight:600;margin-bottom:8px;">Nenhum orçamento encontrado</p>
+    <p>Tente ajustar os filtros ou <a href="{{ url_for('orcamento.index') }}">gere um novo orçamento</a>.</p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

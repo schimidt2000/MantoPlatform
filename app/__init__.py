@@ -80,13 +80,17 @@ def create_app():
     app.config.setdefault("UPLOAD_FOLDER",          os.path.join(_instance, "uploads"))
     app.config.setdefault("UPLOAD_CONTRACTS",        os.path.join(_instance, "uploads", "contracts"))
     app.config.setdefault("UPLOAD_PAYMENTS",         os.path.join(_instance, "uploads", "payments"))
+    app.config.setdefault("UPLOAD_INVOICES",         os.path.join(_instance, "uploads", "invoices"))
     app.config.setdefault("UPLOAD_FIGURINO_THUMBS",  os.path.join(_instance, "uploads", "figurino_thumbs"))
     app.config.setdefault("UPLOAD_FIGURINO_PHOTOS",  os.path.join(_instance, "uploads", "figurino_photos"))
+    app.config.setdefault("UPLOAD_EVENT_OBS",         os.path.join(_instance, "uploads", "event_obs"))
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_CONTRACTS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_PAYMENTS"], exist_ok=True)
+    os.makedirs(app.config["UPLOAD_INVOICES"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_FIGURINO_THUMBS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_FIGURINO_PHOTOS"], exist_ok=True)
+    os.makedirs(app.config["UPLOAD_EVENT_OBS"], exist_ok=True)
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -135,7 +139,6 @@ def create_app():
     from .admin.routes import admin_bp
     from .calendar.routes import calendar_bp
     from .talents.routes import talents_bp
-    from .tools.routes import tools_bp
     from .financeiro.routes import financeiro_bp
     from .figurino.routes import figurino_bp
     from .talent_portal.routes import portal_bp
@@ -147,7 +150,6 @@ def create_app():
     app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(calendar_bp)
     app.register_blueprint(talents_bp)
-    app.register_blueprint(tools_bp)
     app.register_blueprint(financeiro_bp)
     app.register_blueprint(figurino_bp)
     app.register_blueprint(portal_bp)
@@ -289,12 +291,27 @@ def create_app():
                 .scalar()
             )
 
+        # Nota fiscal pendente: eventos com NF solicitada mas sem arquivo anexado
+        pending_invoice = []
+        if is_superadmin:
+            pending_invoice = (
+                CalendarEvent.query
+                .filter(
+                    CalendarEvent.with_invoice == True,
+                    CalendarEvent.invoice_file.is_(None),
+                    CalendarEvent.start_at >= task_cutoff,
+                )
+                .order_by(CalendarEvent.start_at.asc())
+                .all()
+            )
+
         return render_template(
             "home.html",
             today=date.today(),
             pending_casting=pending_casting,
             pending_figurino=pending_figurino,
             pending_ensaio=pending_ensaio,
+            pending_invoice=pending_invoice,
             show_casting=show_casting,
             show_figurino=show_figurino,
             show_ensaio=show_ensaio,

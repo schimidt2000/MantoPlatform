@@ -117,9 +117,10 @@ def _migrate(data: dict) -> dict:
                 "make_extra": make_extra,
             }
 
-    # Adicionar especiais novos que ainda não existem na config salva
+    # Adicionar especiais novos que ainda não existem — respeita exclusões explícitas pelo usuário
+    excluidos = set(data.get("especiais_excluidos", []))
     for nome, val in DEFAULTS["especiais"].items():
-        if nome not in especiais:
+        if nome not in especiais and nome not in excluidos:
             especiais[nome] = copy.deepcopy(val)
 
     # Adicionar especiais_regras se ausente
@@ -156,3 +157,18 @@ def save(data: dict) -> None:
 def especiais_list() -> list:
     """Return list of special character names."""
     return list(load()["especiais"].keys())
+
+
+def especiais_com_show() -> set:
+    """Return set of especial names that have show variants (derived from config)."""
+    especiais = load()["especiais"]
+    return {
+        nome for nome, val in especiais.items()
+        if isinstance(val, dict) and any(k in val for k in ("true", "false", "show", "none"))
+    }
+
+
+def especiais_com_cantor() -> set:
+    """Return set of especial names that have cantor variants (derived from config)."""
+    especiais = load()["especiais"]
+    return {nome for nome, val in especiais.items() if isinstance(val, dict) and "cantor" in val}

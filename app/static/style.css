@@ -541,6 +541,7 @@ tbody tr:hover td { background: #faf9f6; }
 .badge-green  { background: var(--green-soft); color: var(--green); }
 .badge-red    { background: var(--red-soft); color: var(--red); }
 .badge-gray   { background: #f0ede8; color: var(--muted); }
+.badge-amber  { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
 .badge-blue   { background: var(--blue-soft); color: var(--blue); }
 
 /* ── 12. KPI CARDS ───────────────────────────────────────────── */

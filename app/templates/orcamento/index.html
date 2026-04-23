@@ -286,6 +286,15 @@
         <span style="font-size:12px; color:#166534; margin-left:4px;">÷ 0,84 — valores ajustados para NF</span>
       </div>
 
+      {# Duração extra #}
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 14px; margin-top:8px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md);">
+        <span style="font-weight:600; color:var(--ink); white-space:nowrap;">Duração extra</span>
+        <span style="font-size:12px; color:var(--muted);">Para horários além de 1h/2h/4h:</span>
+        <input type="number" name="duracao_custom" id="duracao_custom" min="1" max="24" step="1" placeholder="—" style="width:60px;" oninput="setDuracaoCustom(parseInt(this.value)||0)">
+        <span style="font-size:13px; color:var(--muted);">horas</span>
+        <span style="font-size:11px; color:var(--muted);">(preço = 4h ÷ 4 × N, markup 4h)</span>
+      </div>
+
       {# Formato de duração #}
       <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:10px 14px; margin-top:8px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); font-size:13px;">
         <span style="font-weight:600; color:var(--ink);">Formato do orçamento</span>
@@ -301,10 +310,14 @@
 
       {# Totais + submit #}
       <div class="totals-bar">
-        <div style="display:flex;gap:24px;">
+        <div style="display:flex;gap:24px;flex-wrap:wrap;">
           <div class="total-item"><div class="lbl" id="lbl-1h">1 hora</div><div class="val" id="total-1h">R$ 0,00</div></div>
           <div class="total-item"><div class="lbl" id="lbl-2h">2 horas</div><div class="val" id="total-2h">R$ 0,00</div></div>
           <div class="total-item"><div class="lbl" id="lbl-4h">4 horas</div><div class="val" id="total-4h">R$ 0,00</div></div>
+          <div class="total-item" id="total-custom-wrap" style="display:none;">
+            <div class="lbl" id="lbl-custom">N horas</div>
+            <div class="val" id="total-custom">R$ 0,00</div>
+          </div>
         </div>
         <button type="submit" class="btn btn-primary btn-lg">Gerar Orçamento</button>
       </div>
@@ -315,7 +328,7 @@
         <div class="debug-panel" id="debug-panel">
           <div class="table-wrap" style="margin-top:10px;">
             <table>
-              <thead>
+              <thead id="debug-thead">
                 <tr>
                   <th>Profissional</th>
                   <th style="text-align:right;">Cachê 1h</th>

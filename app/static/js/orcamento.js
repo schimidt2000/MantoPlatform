@@ -18,6 +18,7 @@ let showSosiaCustom = false;
 let notaFiscal     = false;
 let modoEntradas   = false;
 let prevOnlyDJ     = false;
+let duracaoCustom  = 0;
 
 // ── Formatação ────────────────────────────────────────────────────────────────
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -237,6 +238,25 @@ function updateTotals() {
   document.getElementById('total-1h').textContent = fmt(t1);
   document.getElementById('total-2h').textContent = fmt(t2);
   document.getElementById('total-4h').textContent = fmt(t4);
+
+  const customWrap = document.getElementById('total-custom-wrap');
+  if (customWrap && duracaoCustom > 0 && ![1, 2, 4].includes(duracaoCustom)) {
+    const tCustom = Math.round(t4 / 4 * duracaoCustom * 100) / 100;
+    document.getElementById('total-custom').textContent = fmt(tCustom);
+    const lblEl = document.getElementById('lbl-custom');
+    if (lblEl) lblEl.textContent = modoEntradas
+      ? `${duracaoCustom * 2} entradas`
+      : `${duracaoCustom} horas`;
+    customWrap.style.display = '';
+  } else if (customWrap) {
+    customWrap.style.display = 'none';
+  }
+}
+
+function setDuracaoCustom(val) {
+  duracaoCustom = (isNaN(val) || val < 0) ? 0 : val;
+  updateTotals();
+  updateDebugPanel();
 }
 
 function updateAutoServices() {
@@ -290,6 +310,7 @@ function syncColabField() {
 function updateDebugPanel() {
   const tbody = document.getElementById('debug-tbody');
   const tfoot = document.getElementById('debug-tfoot');
+  const thead = document.getElementById('debug-thead');
   if (!tbody || !tfoot) return;
 
   const { show, makeup, makesReg, makesEsp } = eventFlags();
@@ -297,8 +318,62 @@ function updateDebugPanel() {
   const markup = cfg.markup[show ? 'show' : 'receptivo'];
   const markupLabels = markup.map(v => `${v}×`);
   const modeloLabel  = show ? 'Show' : 'Receptivo / Interativo';
+
+  const tCfg = cfg.transporte;
+  const tb   = transportBreakdown();
+  const perPersonTransport = (tb && kmIda > 0)
+    ? Math.round(kmIda * 2 / tCfg.afsp_divisor * 100) / 100
+    : 0;
+
+  const showCustomCol = duracaoCustom > 0 && ![1, 2, 4].includes(duracaoCustom);
+  const totalCols = 3 + (showCustomCol ? 1 : 0);
+
+  if (thead) {
+    thead.innerHTML = `<tr>
+      <th>Profissional</th>
+      <th style="text-align:right;">Cachê 1h</th>
+      <th style="text-align:right;">Cachê 2h</th>
+      <th style="text-align:right;">Cachê 4h</th>
+      ${showCustomCol ? `<th style="text-align:right;background:var(--surface-2);">Cachê ${duracaoCustom}h</th>` : ''}
+    </tr>`;
+  }
+
+  // Nh para itens escaláveis: 4h ÷ 4 × N
+  const nhScale = (p4) => Math.round(p4 / 4 * duracaoCustom * 100) / 100;
+
+  // renderCells: nhValue explícito tem precedência; flat=true usa p4; flat=false escala
+  function renderCells(basePrices, bold, hlGreen, flat, nhValue) {
+    const bst = bold ? 'font-weight:600;' : '';
+    let cells = basePrices.map(v =>
+      `<td style="text-align:right;${bst}${hlGreen ? 'font-weight:700;' : ''}">${fmt(v)}</td>`
+    ).join('');
+    if (showCustomCol) {
+      let nV;
+      if (nhValue !== undefined) { nV = nhValue; }
+      else if (flat)             { nV = basePrices[2]; }
+      else                       { nV = nhScale(basePrices[2]); }
+      cells += `<td style="text-align:right;${bst};background:var(--surface-2);">${fmt(nV)}</td>`;
+    }
+    return cells;
+  }
+
+  // Gera cells iguais para todas as colunas (itens pós-markup de valor fixo)
+  function flatCols(value, style = '') {
+    const td = (bg) => `<td style="text-align:right;${style}${bg}">${fmt(value)}</td>`;
+    return td('') + td('') + td('') + (showCustomCol ? td('background:var(--surface-2);') : '');
+  }
+
+  // Gera cells com valor específico por coluna + Nh
+  function perCols(vals, nhVal, bold = false) {
+    const bst = bold ? 'font-weight:700;' : '';
+    let cells = vals.map(v => `<td style="text-align:right;${bst}">${fmt(v)}</td>`).join('');
+    if (showCustomCol) cells += `<td style="text-align:right;${bst}background:var(--surface-2);">${fmt(nhVal)}</td>`;
+    return cells;
+  }
+
   const rows  = [];
   const cache = [0, 0, 0];
+  let cacheNh = 0;
 
   for (const p of performers) {
     let prices, label;
@@ -321,7 +396,6 @@ function updateDebugPanel() {
         label = (p.nome || 'Ator') + ` <span style="color:var(--muted)">(${parts.join(', ')})</span>`;
       }
     } else if (p.type === 'cantor') {
-      // legado
       const c = cfg.cantor;
       prices = c.base.map((v, i) => v + c.show_extra[i] + (p.makeup ? c.make_extra[i] : 0));
       label  = (p.nome || 'Cantor') + ` <span style="color:var(--muted)">(cantor${p.makeup ? ', make' : ''})</span>`;
@@ -342,117 +416,173 @@ function updateDebugPanel() {
     } else {
       prices = [0, 0, 0]; label = p.nome || '?';
     }
-    rows.push({ label, prices });
+    rows.push({ label, prices, flat: false });
     for (let i = 0; i < 3; i++) cache[i] += prices[i];
+    cacheNh += nhScale(prices[2]);
   }
 
-  // Coordenador
   const cp = cfg.coordenador[String(show)] || [0, 0, 0];
   const coordPrices = cp.map(v => v * coordQty);
-  rows.push({ label: `Coordenador(es) (${coordQty}) <span style="color:var(--muted)">${show ? 'com show' : 'sem show'}</span>`, prices: coordPrices });
+  rows.push({
+    label: `Coordenador(es) (${coordQty}) <span style="color:var(--muted)">${show ? 'com show' : 'sem show'}</span>`,
+    prices: coordPrices, flat: false,
+  });
   for (let i = 0; i < 3; i++) cache[i] += coordPrices[i];
+  cacheNh += nhScale(coordPrices[2]);
 
-  // Show customizado
   if (showSosiaCustom && performers.length > 0) {
     const customAdd = performers.length * 50;
-    rows.push({ label: `Show Customizado <span style="color:var(--muted)">(${performers.length} artista${performers.length !== 1 ? 's' : ''} × R$50)</span>`, prices: [customAdd, customAdd, customAdd] });
+    rows.push({ label: `Show Customizado <span style="color:var(--muted)">(${performers.length} artista${performers.length !== 1 ? 's' : ''} × R$50)</span>`, prices: [customAdd, customAdd, customAdd], flat: true });
     for (let i = 0; i < 3; i++) cache[i] += customAdd;
+    cacheNh += customAdd;
   }
 
-  // Adicional noturno
   if (isNoturno()) {
     const notCount = performers.length + coordQty;
     const notAdd = notCount * 50;
-    rows.push({ label: `Adicional Noturno <span style="color:var(--muted)">(≥ 19h · ${notCount} pessoa${notCount !== 1 ? 's' : ''} × R$50)</span>`, prices: [notAdd, notAdd, notAdd] });
+    rows.push({ label: `Adicional Noturno <span style="color:var(--muted)">(≥ 19h · ${notCount} pessoa${notCount !== 1 ? 's' : ''} × R$50)</span>`, prices: [notAdd, notAdd, notAdd], flat: true });
     for (let i = 0; i < 3; i++) cache[i] += notAdd;
+    cacheNh += notAdd;
+  }
+
+  // Adicional Transporte — informativo pré-markup (azul, NÃO entra em cache[] nem em cacheNh)
+  if (tb) {
+    rows.push({
+      label: `Adicional Transporte (fora SP) <span style="color:var(--muted)">(${tb.colab} pessoas × ${fmt(perPersonTransport)}/pessoa)</span>`,
+      prices: [tb.afsp, tb.afsp, tb.afsp],
+      flat: true,
+      hl: 'transport',
+    });
   }
 
   if (show) {
     const tecnico = cfg.tecnico_som;
-    rows.push({ label: 'Técnico de Som <span style="color:var(--muted)">(automático)</span>', prices: [...tecnico] });
+    rows.push({ label: 'Técnico de Som <span style="color:var(--muted)">(automático)</span>', prices: [...tecnico], flat: false });
     for (let i = 0; i < 3; i++) cache[i] += tecnico[i];
+    cacheNh += nhScale(tecnico[2]);
   }
 
   if (makeup) {
     const mc = maquiadorCost(makesReg, makesEsp);
-    rows.push({ label: `Maquiador <span style="color:var(--muted)">(${makesReg} regular + ${makesEsp} especial)</span>`, prices: [mc, mc, mc] });
+    rows.push({ label: `Maquiador <span style="color:var(--muted)">(${makesReg} regular + ${makesEsp} especial)</span>`, prices: [mc, mc, mc], flat: true });
     for (let i = 0; i < 3; i++) cache[i] += mc;
+    cacheNh += mc;
   }
 
-  rows.push({ label: '<strong>Subtotal Cachê</strong>', prices: [...cache], bold: true });
+  // Paleta de cores por categoria
+  const C_PRE  = '#fffef5'; // pré-markup: creme (entra no cache, afetado pelo markup)
+  const C_INFO = '#eff6ff'; // informativo: azul (transporte fora SP, não entra no cache)
+  const C_SBTL = '#f1f5f9'; // subtotal: cinza neutro
+  const C_MKP  = '#fffbeb'; // markup: âmbar
+  const C_POST = '#faf5ff'; // pós-markup: lilás (adicionais após markup)
+  const C_TOT  = 'var(--green-soft)'; // total final: verde
 
-  const afterMarkup = cache.map((v, i) => v * markup[i]);
+  const subtotalNh = showCustomCol ? Math.round(cacheNh * 100) / 100 : undefined;
+  rows.push({ label: '<strong>Subtotal Cachê</strong>', prices: [...cache], bold: true, nhValue: subtotalNh, hl: 'subtotal' });
+
+  const afterMarkup  = cache.map((v, i) => v * markup[i]);
+  const afterMarkupNh = showCustomCol ? Math.round(cacheNh * markup[2] * 100) / 100 : undefined;
   rows.push({
     label: `<strong>× Markup</strong> <span style="color:var(--muted)">${modeloLabel} — ${markupLabels.join(' / ')}</span>`,
-    prices: afterMarkup, bold: true, hl: 'warning'
+    prices: afterMarkup, bold: true, hl: 'warning', nhValue: afterMarkupNh,
   });
 
-  let html = rows.map(r => `
-    <tr style="${r.hl === 'warning' ? 'background:#fffbeb;' : ''}">
+  // Legenda de cores
+  const legend = `<tr><td colspan="${totalCols + 1}" style="padding:4px 0 10px;">
+    <span style="display:inline-flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--muted);">
+      <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:${C_PRE};border:1px solid #e5e7eb;border-radius:2px;margin-top:1px;"></span>Afetado pelo markup</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:${C_MKP};border:1px solid #fde68a;border-radius:2px;margin-top:1px;"></span>Markup</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:${C_POST};border:1px solid #ddd6fe;border-radius:2px;margin-top:1px;"></span>Pós-markup</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:${C_INFO};border:1px solid #bfdbfe;border-radius:2px;margin-top:1px;"></span>Informativo (não entra no cache)</span>
+    </span>
+  </td></tr>`;
+
+  let html = legend + rows.map(r => {
+    const bg =
+      r.hl === 'warning'   ? C_MKP  :
+      r.hl === 'transport' ? C_INFO  :
+      r.hl === 'subtotal'  ? C_SBTL  :
+      C_PRE;
+    return `<tr style="background:${bg};">
       <td>${r.label}</td>
-      ${r.prices.map(v => `<td style="text-align:right;${r.bold ? 'font-weight:600;' : ''}">${fmt(v)}</td>`).join('')}
-    </tr>`).join('');
+      ${renderCells(r.prices, r.bold, false, r.flat, r.nhValue)}
+    </tr>`;
+  }).join('');
 
   const running = [...afterMarkup];
+  let runningNh = afterMarkupNh || 0;
 
   if (show) {
     const brinde = cfg.brinde_show ?? 100;
-    html += `<tr><td>Brinde aniversariante <span style="color:var(--muted)">(pós-markup)</span></td><td style="text-align:right;" colspan="3">${fmt(brinde)}</td></tr>`;
+    html += `<tr style="background:${C_POST};"><td>Brinde aniversariante <span style="color:var(--muted)">(pós-markup)</span></td>${flatCols(brinde)}</tr>`;
     for (let i = 0; i < 3; i++) running[i] += brinde;
+    runningNh += brinde;
   }
 
-  // Transporte especial pós-markup — uma vez por tipo
   const dbgRegras = cfg.especiais_regras || {};
   const dbgSeenTransport = new Set();
   for (const p of performers) {
     if (p.type === 'especial' && !dbgSeenTransport.has(p.personagem)) {
       const tEsp = (dbgRegras[p.personagem] || {}).transporte_especial || 0;
       if (tEsp) {
-        html += `<tr><td>Transporte Especial — ${p.personagem} <span style="color:var(--muted)">(pós-markup, único)</span></td><td style="text-align:right;" colspan="3">${fmt(tEsp)}</td></tr>`;
+        html += `<tr style="background:${C_POST};"><td>Transporte Especial — ${p.personagem} <span style="color:var(--muted)">(pós-markup, único)</span></td>${flatCols(tEsp)}</tr>`;
         for (let i = 0; i < 3; i++) running[i] += tEsp;
+        runningNh += tEsp;
         dbgSeenTransport.add(p.personagem);
       }
     }
   }
 
-  const tb = transportBreakdown();
   if (tb) {
     const veiculoLabel = transportTipo === 'van'
       ? `Van ${comCarretinha ? 'c/ carretinha' : 's/ carretinha'} · R$${tb.tarifa}/km · ${tb.kmT}km`
       : `${numCarros} carro(s) · R$1,90/km × ${numCarros} · ${tb.kmT}km`;
     html += `
-      <tr style="background:#fffbeb;"><td colspan="4" style="font-weight:600;font-size:12px;">Transporte — Fora de SP</td></tr>
-      <tr><td style="padding-left:16px;">Veículo <span style="color:var(--muted)">(${veiculoLabel})</span></td><td style="text-align:right;" colspan="3">${fmt(tb.vt)}</td></tr>
-      <tr><td style="padding-left:16px;">Adicional Fora SP <span style="color:var(--muted)">(${tb.colab} colab × ${tb.kmT}km ÷ 3)</span></td><td style="text-align:right;" colspan="3">${fmt(tb.afsp)}</td></tr>
-      <tr><td style="padding-left:16px;">Adicional Show <span style="color:var(--muted)">${tb.ashow > 0 ? `(${tb.kmT}km ÷ 6)` : '(km ≤ 500 ou sem show)'}</span></td><td style="text-align:right;" colspan="3">${fmt(tb.ashow)}</td></tr>
-      <tr style="background:#fffbeb;"><td style="font-weight:600;padding-left:16px;">Total Transporte</td><td style="text-align:right;font-weight:600;" colspan="3">${fmt(tb.total)}</td></tr>`;
+      <tr style="background:${C_POST};"><td colspan="${totalCols + 1}" style="font-weight:600;font-size:12px;">Transporte — Fora de SP</td></tr>
+      <tr style="background:${C_POST};"><td style="padding-left:16px;">Veículo <span style="color:var(--muted)">(${veiculoLabel})</span></td>${flatCols(tb.vt)}</tr>
+      <tr style="background:${C_POST};"><td style="padding-left:16px;">Adicional Fora SP <span style="color:var(--muted)">(${tb.colab} pessoas × ${fmt(perPersonTransport)}/pessoa)</span></td>${flatCols(tb.afsp)}</tr>
+      <tr style="background:${C_POST};"><td style="padding-left:16px;">Adicional Show <span style="color:var(--muted)">${tb.ashow > 0 ? `(${tb.kmT}km ÷ 6)` : '(km ≤ 500 ou sem show)'}</span></td>${flatCols(tb.ashow)}</tr>
+      <tr style="background:${C_POST};"><td style="font-weight:600;padding-left:16px;">Total Transporte</td>${flatCols(tb.total, 'font-weight:600;')}</tr>`;
     for (let i = 0; i < 3; i++) running[i] += tb.total;
+    runningNh += tb.total;
   }
 
   if (acrescimo > 0) {
     if (acrescimoTipo === 'percent') {
       const addVals = running.map(v => Math.round(v * acrescimo / 100 * 100) / 100);
-      html += `<tr style="background:#f0fdf4;"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(${acrescimo}%)</span></td>${addVals.map(v => `<td style="text-align:right;font-weight:600;">${fmt(v)}</td>`).join('')}</tr>`;
+      const addNh   = Math.round(runningNh * acrescimo / 100 * 100) / 100;
+      html += `<tr style="background:${C_POST};"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(${acrescimo}%)</span></td>${perCols(addVals, addNh, true)}</tr>`;
       for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + addVals[i]) * 100) / 100;
+      runningNh = Math.round((runningNh + addNh) * 100) / 100;
     } else {
-      html += `<tr style="background:#f0fdf4;"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(valor fixo)</span></td><td style="text-align:right;font-weight:600;" colspan="3">${fmt(acrescimo)}</td></tr>`;
+      html += `<tr style="background:${C_POST};"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(valor fixo)</span></td>${flatCols(acrescimo, 'font-weight:600;')}</tr>`;
       for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + acrescimo) * 100) / 100;
+      runningNh = Math.round((runningNh + acrescimo) * 100) / 100;
     }
   }
 
+  if (notaFiscal) {
+    const nfAdd   = running.map(v => Math.round((v / 0.84 - v) * 100) / 100);
+    const nfAddNh = Math.round((runningNh / 0.84 - runningNh) * 100) / 100;
+    html += `<tr style="background:${C_POST};"><td><strong>+ Nota Fiscal</strong> <span style="color:var(--muted)">(÷ 0,84)</span></td>${perCols(nfAdd, nfAddNh, true)}</tr>`;
+    for (let i = 0; i < 3; i++) running[i] = Math.round(running[i] / 0.84 * 100) / 100;
+    runningNh = Math.round(runningNh / 0.84 * 100) / 100;
+  }
+
   html += `
-    <tr style="background:var(--green-soft);">
+    <tr style="background:${C_TOT};">
       <td><strong>TOTAL FINAL AO CLIENTE</strong></td>
-      ${running.map(v => `<td style="text-align:right;font-weight:700;">${fmt(v)}</td>`).join('')}
+      ${perCols(running, runningNh, true)}
     </tr>`;
 
   tbody.innerHTML = html;
   tfoot.innerHTML = `
     <tr style="background:var(--surface);color:var(--muted);">
-      <td colspan="4" style="font-size:12px;font-style:italic;">
+      <td colspan="${totalCols + 1}" style="font-size:12px;font-style:italic;">
         Markup (${modeloLabel}): 1h × ${markup[0]} · 2h × ${markup[1]} · 4h × ${markup[2]}
-        ${tb ? ` · Transporte ${fmt(tb.total)} pós-markup` : ''}
-        ${acrescimo > 0 ? ` · Acréscimo ${acrescimoTipo === 'percent' ? acrescimo + '%' : fmt(acrescimo)} pós-tudo` : ''}
+        ${tb ? ` · Transporte total ${fmt(tb.total)}` : ''}
+        ${acrescimo > 0 ? ` · Acréscimo ${acrescimoTipo === 'percent' ? acrescimo + '%' : fmt(acrescimo)}` : ''}
+        ${notaFiscal ? ' · Nota Fiscal (÷ 0,84)' : ''}
       </td>
     </tr>`;
 }
@@ -652,7 +782,10 @@ function clearAll() {
   performers = []; coordQty = 1; forasp = false; kmIda = 0;
   transportTipo = 'van'; comCarretinha = false; numCarros = 1; colabOverride = null;
   acrescimo = 0; acrescimoTipo = 'valor'; showSosiaCustom = false; prevOnlyDJ = false;
+  duracaoCustom = 0;
   document.getElementById('quote-form').reset();
+  const dcEl = document.getElementById('duracao_custom');
+  if (dcEl) dcEl.value = '';
   document.getElementById('coord-qty').textContent  = '1';
   document.getElementById('coordenador_qty').value  = '1';
   document.getElementById('transport-section').style.display = 'none';
@@ -705,6 +838,14 @@ function _applySnapshot(snap) {
   document.getElementById('modo-horas').checked    = !modoEntradas;
   document.getElementById('modo-entradas').checked = modoEntradas;
   setModoEntradas(modoEntradas);
+
+  duracaoCustom = parseInt(snap.duracao_custom) || 0;
+  const dcEl = document.getElementById('duracao_custom');
+  if (dcEl) dcEl.value = duracaoCustom || '';
+
+  notaFiscal = !!snap.nota_fiscal;
+  const nfEl = document.getElementById('nota_fiscal');
+  if (nfEl) nfEl.checked = notaFiscal;
 
   const isPercent = acrescimoTipo === 'percent';
   document.getElementById('acrescimo_valor').value            = acrescimo || 0;
@@ -765,8 +906,9 @@ function renderHistory() {
               <div style="font-size:11px;color:var(--muted);margin-top:2px;">${e.created_at}</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:4px;">
-              <button class="btn btn-secondary btn-sm" onclick="restoreFromHistory(${e.id})">Reabrir</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteFromHistory(${e.id})">✕</button>
+              <a href="/events/new?orcamento_id=${e.id}" class="btn btn-primary btn-sm" style="white-space:nowrap;">Criar evento</a>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="restoreFromHistory(${e.id})">Reabrir</button>
+              <button type="button" class="btn btn-danger btn-sm" onclick="deleteFromHistory(${e.id})">✕</button>
             </div>
           </div>`;
       }).join('');
@@ -847,6 +989,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isNaN(v)) colabOverride = Math.max(1, v);
   }
 
+  // Sincroniza campos que o browser pode restaurar após Back/refresh
+  const nfEl = document.getElementById('nota_fiscal');
+  if (nfEl) notaFiscal = nfEl.checked;
+
+  const dcInit = document.getElementById('duracao_custom');
+  if (dcInit?.value) duracaoCustom = parseInt(dcInit.value) || 0;
+
   update();
   renderHistory();
+
+  // Reabrir a partir do histórico (link da página /orcamento/historico)
+  const restoreId = new URLSearchParams(window.location.search).get('restore');
+  if (restoreId) {
+    window.history.replaceState({}, '', '/orcamento/');
+    restoreFromHistory(parseInt(restoreId));
+  }
 });
