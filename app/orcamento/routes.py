@@ -190,16 +190,8 @@ def _process_quote():
 
     brinde = 0.0
     if event_has_show:
-        tecnico = get_tecnico_prices()
-        for i in range(3):
-            cache_totals[i] += tecnico[i]
         num_going += 1
         brinde = float(_cfg.load().get("brinde_show", 100))
-
-    if event_has_makeup:
-        maquiador_cost = calcular_maquiador(num_makes_regular, num_makes_especial)
-        for i in range(3):
-            cache_totals[i] += maquiador_cost
 
     totals = aplicar_markup(cache_totals, event_has_show)
 
@@ -211,6 +203,18 @@ def _process_quote():
         adicional_noturno = (len(performers) + coordenador_qty) * _ADICIONAL_NOTURNO
         for i in range(3):
             totals[i] = round(totals[i] + adicional_noturno, 2)
+
+    _MARKUP_SERVICE = 1.5
+    if event_has_show:
+        tecnico = get_tecnico_prices()
+        for i in range(3):
+            totals[i] = round(totals[i] + round(tecnico[i] * _MARKUP_SERVICE, 2), 2)
+
+    if event_has_makeup:
+        maquiador_cost = calcular_maquiador(num_makes_regular, num_makes_especial)
+        maq_with_markup = round(maquiador_cost * _MARKUP_SERVICE, 2)
+        for i in range(3):
+            totals[i] = round(totals[i] + maq_with_markup, 2)
 
     transport_total = 0.0  # acumulador para split apresentação / logística na mensagem
 

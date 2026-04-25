@@ -144,17 +144,6 @@ function calcTotals() {
     for (let i = 0; i < 3; i++) cache[i] += customAdd;
   }
 
-  // Técnico de Som
-  if (show) {
-    for (let i = 0; i < 3; i++) cache[i] += cfg.tecnico_som[i];
-  }
-
-  // Maquiador
-  if (makeup) {
-    const mc = maquiadorCost(makesReg, makesEsp);
-    for (let i = 0; i < 3; i++) cache[i] += mc;
-  }
-
   // Markup
   const markup = cfg.markup[show ? 'show' : 'receptivo'];
   const t = cache.map((v, i) => v * markup[i]);
@@ -165,10 +154,21 @@ function calcTotals() {
     for (let i = 0; i < 3; i++) t[i] += brinde;
   }
 
-  // Adicional noturno (pós-markup: +R$50 por artista e coordenador se >= 19h)
+  // Adicional noturno (pós-markup)
   if (isNoturno()) {
     const notAdd = (performers.length + coordQty) * 50;
     for (let i = 0; i < 3; i++) t[i] += notAdd;
+  }
+
+  // Técnico de Som (pós-markup, 1.5×)
+  if (show) {
+    for (let i = 0; i < 3; i++) t[i] += Math.round(cfg.tecnico_som[i] * 1.5 * 100) / 100;
+  }
+
+  // Maquiador (pós-markup, 1.5×)
+  if (makeup) {
+    const mc = maquiadorCost(makesReg, makesEsp);
+    for (let i = 0; i < 3; i++) t[i] += Math.round(mc * 1.5 * 100) / 100;
   }
 
   // Transporte especial pós-markup — uma vez por tipo
@@ -447,20 +447,6 @@ function updateDebugPanel() {
     });
   }
 
-  if (show) {
-    const tecnico = cfg.tecnico_som;
-    rows.push({ label: 'Técnico de Som <span style="color:var(--muted)">(automático)</span>', prices: [...tecnico], flat: false });
-    for (let i = 0; i < 3; i++) cache[i] += tecnico[i];
-    cacheNh += nhScale(tecnico[2]);
-  }
-
-  if (makeup) {
-    const mc = maquiadorCost(makesReg, makesEsp);
-    rows.push({ label: `Maquiador <span style="color:var(--muted)">(${makesReg} regular + ${makesEsp} especial)</span>`, prices: [mc, mc, mc], flat: true });
-    for (let i = 0; i < 3; i++) cache[i] += mc;
-    cacheNh += mc;
-  }
-
   // Paleta de cores por categoria
   const C_PRE  = '#fffef5'; // pré-markup: creme (entra no cache, afetado pelo markup)
   const C_INFO = '#eff6ff'; // informativo: azul (transporte fora SP, não entra no cache)
@@ -517,6 +503,23 @@ function updateDebugPanel() {
     html += `<tr style="background:${C_POST};"><td>Adicional Noturno <span style="color:var(--muted)">(≥ 19h · ${notCount} pessoa${notCount !== 1 ? 's' : ''} × R$50)</span></td>${flatCols(notAdd)}</tr>`;
     for (let i = 0; i < 3; i++) running[i] += notAdd;
     runningNh += notAdd;
+  }
+
+  if (show) {
+    const tecVals = cfg.tecnico_som.map(v => Math.round(v * 1.5 * 100) / 100);
+    const tecNh = showCustomCol ? Math.round(cfg.tecnico_som[2] / 4 * duracaoCustom * 1.5 * 100) / 100 : 0;
+    html += `<tr style="background:${C_POST};"><td>Técnico de Som <span style="color:var(--muted)">(pós-markup · 1,5×)</span></td>${perCols(tecVals, tecNh)}</tr>`;
+    for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + tecVals[i]) * 100) / 100;
+    if (showCustomCol) runningNh = Math.round((runningNh + tecNh) * 100) / 100;
+  }
+
+  if (makeup) {
+    const mc = maquiadorCost(makesReg, makesEsp);
+    const mcMkp = Math.round(mc * 1.5 * 100) / 100;
+    const totalMakes = makesReg + makesEsp;
+    html += `<tr style="background:${C_POST};"><td>Maquiador <span style="color:var(--muted)">(${totalMakes} make${totalMakes !== 1 ? 's' : ''} · pós-markup · 1,5×)</span></td>${flatCols(mcMkp)}</tr>`;
+    for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + mcMkp) * 100) / 100;
+    if (showCustomCol) runningNh = Math.round((runningNh + mcMkp) * 100) / 100;
   }
 
   const dbgRegras = cfg.especiais_regras || {};
