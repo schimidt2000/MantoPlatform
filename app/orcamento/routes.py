@@ -201,16 +201,16 @@ def _process_quote():
         for i in range(3):
             cache_totals[i] += maquiador_cost
 
-    if noturno:
-        adicional_noturno = (len(performers) + coordenador_qty) * _ADICIONAL_NOTURNO
-        for i in range(3):
-            cache_totals[i] = round(cache_totals[i] + adicional_noturno, 2)
-
     totals = aplicar_markup(cache_totals, event_has_show)
 
     if brinde:
         for i in range(3):
             totals[i] = round(totals[i] + brinde, 2)
+
+    if noturno:
+        adicional_noturno = (len(performers) + coordenador_qty) * _ADICIONAL_NOTURNO
+        for i in range(3):
+            totals[i] = round(totals[i] + adicional_noturno, 2)
 
     transport_total = 0.0  # acumulador para split apresentação / logística na mensagem
 
@@ -523,7 +523,11 @@ def api_historico():
 @_require_vendas
 def api_historico_detail(entry_id: int):
     from app.models import OrcamentoHistory
-    entry = OrcamentoHistory.query.filter_by(id=entry_id, user_id=current_user.id).first_or_404()
+    is_sa = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
+    if is_sa:
+        entry = OrcamentoHistory.query.get_or_404(entry_id)
+    else:
+        entry = OrcamentoHistory.query.filter_by(id=entry_id, user_id=current_user.id).first_or_404()
     return jsonify(json.loads(entry.form_snapshot or "{}"))
 
 

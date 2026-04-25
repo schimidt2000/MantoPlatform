@@ -144,12 +144,6 @@ function calcTotals() {
     for (let i = 0; i < 3; i++) cache[i] += customAdd;
   }
 
-  // Adicional noturno (+R$50 por artista e coordenador se >= 19h; exceto técnico e maquiador)
-  if (isNoturno()) {
-    const notAdd = (performers.length + coordQty) * 50;
-    for (let i = 0; i < 3; i++) cache[i] += notAdd;
-  }
-
   // Técnico de Som
   if (show) {
     for (let i = 0; i < 3; i++) cache[i] += cfg.tecnico_som[i];
@@ -169,6 +163,12 @@ function calcTotals() {
   if (show) {
     const brinde = cfg.brinde_show ?? 100;
     for (let i = 0; i < 3; i++) t[i] += brinde;
+  }
+
+  // Adicional noturno (pós-markup: +R$50 por artista e coordenador se >= 19h)
+  if (isNoturno()) {
+    const notAdd = (performers.length + coordQty) * 50;
+    for (let i = 0; i < 3; i++) t[i] += notAdd;
   }
 
   // Transporte especial pós-markup — uma vez por tipo
@@ -437,14 +437,6 @@ function updateDebugPanel() {
     cacheNh += customAdd;
   }
 
-  if (isNoturno()) {
-    const notCount = performers.length + coordQty;
-    const notAdd = notCount * 50;
-    rows.push({ label: `Adicional Noturno <span style="color:var(--muted)">(≥ 19h · ${notCount} pessoa${notCount !== 1 ? 's' : ''} × R$50)</span>`, prices: [notAdd, notAdd, notAdd], flat: true });
-    for (let i = 0; i < 3; i++) cache[i] += notAdd;
-    cacheNh += notAdd;
-  }
-
   // Adicional Transporte — informativo pré-markup (azul, NÃO entra em cache[] nem em cacheNh)
   if (tb) {
     rows.push({
@@ -517,6 +509,14 @@ function updateDebugPanel() {
     html += `<tr style="background:${C_POST};"><td>Brinde aniversariante <span style="color:var(--muted)">(pós-markup)</span></td>${flatCols(brinde)}</tr>`;
     for (let i = 0; i < 3; i++) running[i] += brinde;
     runningNh += brinde;
+  }
+
+  if (isNoturno()) {
+    const notCount = performers.length + coordQty;
+    const notAdd = notCount * 50;
+    html += `<tr style="background:${C_POST};"><td>Adicional Noturno <span style="color:var(--muted)">(≥ 19h · ${notCount} pessoa${notCount !== 1 ? 's' : ''} × R$50)</span></td>${flatCols(notAdd)}</tr>`;
+    for (let i = 0; i < 3; i++) running[i] += notAdd;
+    runningNh += notAdd;
   }
 
   const dbgRegras = cfg.especiais_regras || {};
