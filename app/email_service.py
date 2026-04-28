@@ -249,7 +249,7 @@ def send_portal_announcement_email(talent) -> bool:
         _greeting(first_name)
         + _paragraph(
             "A <strong>Manto Produções</strong> lançou o seu portal exclusivo — um espaço pensado para você "
-            "acompanhar tudo sobre o seu trabalho conosco, de forma simples e direto pelo celular."
+            "acompanhar tudo sobre o seu trabalho conosco de qualquer lugar, pelo celular, computador ou tablet."
         )
         + f'<div style="margin:20px 0;">{bullets}</div>'
         + _paragraph(
@@ -272,7 +272,7 @@ def send_portal_announcement_email(talent) -> bool:
         subject="Conheça o seu portal exclusivo — Manto Produções",
         html=_html_wrap(
             content,
-            preheader="Acompanhe eventos, cachês e pagamentos direto pelo seu celular.",
+            preheader="Acompanhe eventos, cachês e pagamentos de qualquer lugar com internet.",
         ),
     )
 
