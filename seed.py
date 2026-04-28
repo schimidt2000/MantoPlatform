@@ -56,6 +56,17 @@ def main():
         else:
             print("Seed OK: usuários já existem, nenhuma alteração.")
 
+        # Garante que SiteSetting existe com email ativado
+        from app.models import SiteSetting
+        settings = SiteSetting.query.get(1)
+        if not settings:
+            settings = SiteSetting(id=1, email_notifications_enabled=True)
+            db.session.add(settings)
+            print("Seed OK: SiteSetting criado com email ativado.")
+        else:
+            settings.email_notifications_enabled = True
+            print("Seed OK: email_notifications_enabled = True.")
+
         db.session.commit()
 
 if __name__ == "__main__":

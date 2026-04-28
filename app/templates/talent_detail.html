@@ -14,10 +14,6 @@
   <a href="/talents?status=active" class="btn btn-secondary">&larr; Talentos Ativos</a>
   {% if eff_has_role("CASTING", "SUPERADMIN") %}
     <a href="/talents/{{ talent.id }}/edit" class="btn btn-primary">Editar</a>
-    <form method="post" action="/talents/{{ talent.id }}/reset-password" style="margin:0;"
-          onsubmit="return confirm('Resetar senha de {{ talent.full_name }}? Uma senha temporária será gerada.')">
-      <button type="submit" class="btn btn-ghost">Resetar senha portal</button>
-    </form>
   {% endif %}
 {% endblock %}
 

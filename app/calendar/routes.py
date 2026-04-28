@@ -171,7 +171,11 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
     if not role:
         return
-    old_talent_id = role.talent_id
+    old_talent_id     = role.talent_id
+    old_cache_value   = role.cache_value
+    old_travel_cache  = role.travel_cache
+    old_invite_status = role.invite_status
+
     role.talent_id = int(talent_id) if talent_id else None
 
     _is_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
@@ -188,16 +192,18 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
     role.cache_value = new_cache
     try:
-        role.travel_cache = int(travel_cache) if travel_cache else None
+        new_travel = int(travel_cache) if travel_cache else None
     except ValueError:
-        role.travel_cache = None
+        new_travel = None
+    role.travel_cache = new_travel
     role.assigned_at = datetime.now(tz=tz_sp) if role.talent_id else None
     if role.talent_id != old_talent_id:
         role.figurino_done_at = None
         role.invite_status = None
     if role.talent_id:
         role.payment_status = "nao_pago"
-    if old_talent_id and old_talent_id != role.talent_id:
+    # Envia remoção apenas se o talento não tinha recusado voluntariamente
+    if old_talent_id and old_talent_id != role.talent_id and old_invite_status != "rejected":
         old_talent = Talent.query.get(old_talent_id)
         if old_talent:
             send_removal_email(old_talent, event, role.character_name)
@@ -228,6 +234,22 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             created_at=datetime.now(tz=tz_sp),
         ))
         db.session.commit()
+        # Notifica talento confirmado se o cachê mudou
+        if old_invite_status == "accepted":
+            cache_changes = []
+            if new_cache != old_cache_value:
+                old_fmt = f"R$ {old_cache_value:,.0f}" if old_cache_value else "não definido"
+                new_fmt = f"R$ {new_cache:,.0f}" if new_cache else "não definido"
+                cache_changes.append(f"Cachê: {old_fmt} → {new_fmt}")
+            if new_travel != old_travel_cache:
+                old_fmt = f"R$ {old_travel_cache:,.0f}" if old_travel_cache else "não definido"
+                new_fmt = f"R$ {new_travel:,.0f}" if new_travel else "não definido"
+                cache_changes.append(f"Adicional de transporte: {old_fmt} → {new_fmt}")
+            if cache_changes:
+                now_sp = datetime.now(tz=tz_sp)
+                role.event_changed_at = now_sp
+                db.session.commit()
+                send_event_changed_email(role, cache_changes)
 
 
 def _handle_add_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
@@ -998,7 +1020,7 @@ def create_ensaio(event_id: int):
 
     title = f"🟧 ENSAIO — {event.title}"
     try:
-        created = insert_event(CALENDAR_ID, title, st, et, description=desc)
+        created = insert_event(CALENDAR_ID, title, st, et, description=desc, location=event.location or "")
         ensaio_ev = CalendarEvent(
             google_event_id=created["id"],
             title=title,
@@ -1306,7 +1328,7 @@ def create_event():
     clean_title = re.sub(r'^\s*\([^)]*\)\s*', '', title).strip() if title else title
     gc_title = f"({event_type}) {clean_title}" if event_type else title
     try:
-        created = insert_event(CALENDAR_ID, gc_title, st, et, description=description)
+        created = insert_event(CALENDAR_ID, gc_title, st, et, description=description, location=location)
     except RuntimeError as exc:
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
                                sellers=sellers, errors=[str(exc)], prefill={})

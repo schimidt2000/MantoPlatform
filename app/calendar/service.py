@@ -210,6 +210,7 @@ def insert_event(
     start_dt: datetime,
     end_dt: datetime,
     description: str = "",
+    location: str = "",
 ) -> dict:
     """Cria um evento no Google Calendar. Retorna o dict do evento criado (inclui 'id')."""
     creds = load_credentials()
@@ -222,4 +223,6 @@ def insert_event(
         "start": {"dateTime": start_dt.isoformat(), "timeZone": "America/Sao_Paulo"},
         "end":   {"dateTime": end_dt.isoformat(),   "timeZone": "America/Sao_Paulo"},
     }
+    if location:
+        body["location"] = location
     return service.events().insert(calendarId=calendar_id, body=body).execute()

@@ -54,7 +54,7 @@
     background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
   }
   .obs-tab.active { background: var(--ink); color: #fff; border-color: var(--ink); }
-  .val-breakdown { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+  .val-breakdown { display: flex; gap: 20px 24px; flex-wrap: wrap; align-items: flex-start; }
   .val-item { display: flex; flex-direction: column; gap: 4px; }
   .val-item label { font-size: 12px; color: var(--muted); font-weight: 600; }
   .val-item .prefix { position: relative; }
@@ -64,6 +64,34 @@
   }
   .val-item .prefix input { padding-left: 28px; }
   .extra-row-label { color: var(--muted); }
+
+  /* ── Figurino autocomplete ───────────────────────────────── */
+  .fig-slot   { flex: 1; min-width: 180px; max-width: 280px; display: flex; }
+  .fig-widget { width: 100%; position: relative; }
+  .fig-search { width: 100%; box-sizing: border-box; }
+  .fig-dropdown {
+    display: none; position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 400;
+    background: #fff; border: 1px solid var(--line); border-radius: var(--r-md);
+    box-shadow: 0 6px 20px rgba(0,0,0,.13); max-height: 280px; overflow-y: auto;
+  }
+  .fig-option {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; cursor: pointer; font-size: 13px;
+    border-bottom: 1px solid var(--line);
+  }
+  .fig-option:last-child { border-bottom: none; }
+  .fig-option:hover { background: var(--surface, #f7f7fa); }
+  .fig-thumb {
+    width: 64px; height: 64px; object-fit: contain; flex-shrink: 0;
+    border-radius: var(--r-sm); border: 1px solid var(--line);
+    background: #fff;
+  }
+  .fig-thumb-none {
+    width: 64px; height: 64px; flex-shrink: 0; display: flex;
+    align-items: center; justify-content: center; font-size: 24px;
+    background: var(--surface, #f7f7fa); border: 1px solid var(--line);
+    border-radius: var(--r-sm); color: var(--muted);
+  }
 </style>
 {% endblock %}
 
@@ -140,37 +168,8 @@
     O nome do evento é gerado automaticamente a partir dos personagens. Edite se necessário.
   </p>
 
-  {# Lista dinâmica #}
-  <div id="chars-list">
-    {% if prefill.caches_json %}
-      {# Pré-preenchido do orçamento via JS após DOMContentLoaded #}
-    {% else %}
-      <div class="char-row" data-idx="0">
-        <div style="flex:1;">
-          <div class="char-row-main">
-            <input type="text" name="character_names[]" placeholder="Nome do personagem"
-                   style="flex:1; min-width:150px;" oninput="autoTitle()">
-            <select name="figurino_sheet_ids[]" style="flex:1; min-width:180px; max-width:280px;">
-              <option value="">— Figurino —</option>
-              {% for s in figurino_sheets %}
-                <option value="{{ s.id }}">{{ s.character_name }}</option>
-              {% endfor %}
-            </select>
-            <input type="number" name="char_cache[]" placeholder="Cachê R$"
-                   style="width:110px;" min="0" step="1">
-          </div>
-          <div class="char-flags">
-            <label><input type="checkbox" name="char_needs_makeup[]" value="1"> Maquiagem</label>
-            <label><input type="checkbox" name="char_is_singer[]"    value="1"> Cantor(a)</label>
-            <input type="hidden" name="char_needs_makeup[]" value="">
-            <input type="hidden" name="char_is_singer[]"   value="">
-          </div>
-        </div>
-        <button type="button" class="btn btn-sm btn-danger char-remove"
-                style="width:32px; padding:0; flex-shrink:0; margin-top:2px;">&times;</button>
-      </div>
-    {% endif %}
-  </div>
+  {# Lista dinâmica — preenchida pelo JS #}
+  <div id="chars-list"></div>
 
   <button type="button" class="btn btn-sm btn-secondary" id="btn-add-char"
           style="margin-top:4px;">+ Adicionar personagem / equipe</button>
@@ -427,15 +426,79 @@
 
 {% block extra_scripts %}
 <script>
+// ── Figurino data ────────────────────────────────────────────────────────────
+const FIGURINO_DATA = [
+  { id: '', name: '— Nenhum —', photo: null },
+  {% for s in figurino_sheets -%}
+  { id: {{ s.id }}, name: {{ s.character_name | tojson }}, photo: {{ s.photo_url | tojson }} },
+  {% endfor %}
+];
+
+function makeFigurinoWidget(selectedId) {
+  const wrap = document.createElement('div');
+  wrap.className = 'fig-widget';
+
+  const hiddenInput = document.createElement('input');
+  hiddenInput.type = 'hidden';
+  hiddenInput.name = 'figurino_sheet_ids[]';
+  hiddenInput.value = '';
+
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.className = 'fig-search';
+  searchInput.placeholder = '🔍 Buscar figurino…';
+  searchInput.autocomplete = 'off';
+
+  const dropdown = document.createElement('div');
+  dropdown.className = 'fig-dropdown';
+
+  wrap.appendChild(hiddenInput);
+  wrap.appendChild(searchInput);
+  wrap.appendChild(dropdown);
+
+  function render(filter) {
+    const q = (filter || '').toLowerCase().trim();
+    const items = FIGURINO_DATA.filter(f => !q || f.name.toLowerCase().includes(q));
+    if (!items.length) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = items.map(f => {
+      const thumb = f.photo
+        ? `<img src="${escHtml(f.photo)}" class="fig-thumb" loading="lazy">`
+        : `<div class="fig-thumb-none">👗</div>`;
+      return `<div class="fig-option" data-id="${escHtml(String(f.id))}" data-name="${escHtml(f.name)}">${thumb}<span>${escHtml(f.name)}</span></div>`;
+    }).join('');
+    dropdown.querySelectorAll('.fig-option').forEach(opt => {
+      opt.addEventListener('mousedown', e => {
+        e.preventDefault();
+        doSelect(opt.dataset.id, opt.dataset.name);
+      });
+    });
+    dropdown.style.display = 'block';
+  }
+
+  function doSelect(id, name) {
+    hiddenInput.value = id;
+    searchInput.value = name === '— Nenhum —' ? '' : name;
+    dropdown.style.display = 'none';
+  }
+
+  searchInput.addEventListener('focus', () => render(searchInput.value));
+  searchInput.addEventListener('input', () => render(searchInput.value));
+  searchInput.addEventListener('blur',  () => setTimeout(() => { dropdown.style.display = 'none'; }, 200));
+
+  if (selectedId) {
+    const found = FIGURINO_DATA.find(f => String(f.id) === String(selectedId));
+    if (found) doSelect(found.id, found.name);
+  }
+
+  return wrap;
+}
+
 // ── Dados do orçamento ───────────────────────────────────────────────────────
 const ORC_CACHES = (function() {
   const el = document.getElementById('orc-caches-json');
   if (!el) return [];
   try { return JSON.parse(el.value); } catch(e) { return []; }
 })();
-
-const FIGURINO_OPTIONS = `<option value="">— Figurino —</option>` +
-  `{% for s in figurino_sheets %}<option value="{{ s.id }}">{{ s.character_name }}</option>{% endfor %}`;
 
 // ── Auto-title ───────────────────────────────────────────────────────────────
 var titleEdited = false;
@@ -466,9 +529,8 @@ function buildCharRow(idx, label, cacheVal, makeup, singer, roleType, sheetId) {
   row.dataset.roleType = roleType || 'character';
 
   const isExtra = roleType === 'extra';
-  const bgColor = isExtra ? 'background:var(--surface-2,#f7f7fa);' : '';
+  if (isExtra) row.style.cssText = 'background:var(--surface-2,#f7f7fa);';
 
-  row.style.cssText = bgColor;
   row.innerHTML = `
     <div style="flex:1;">
       <div class="char-row-main">
@@ -476,10 +538,7 @@ function buildCharRow(idx, label, cacheVal, makeup, singer, roleType, sheetId) {
                value="${escHtml(label)}"
                placeholder="${isExtra ? 'Equipe' : 'Personagem'}"
                style="flex:1; min-width:150px;" oninput="autoTitle()">
-        <select name="figurino_sheet_ids[]"
-                style="flex:1; min-width:180px; max-width:280px;${isExtra?' display:none;':''}">
-          ${FIGURINO_OPTIONS}
-        </select>
+        <div class="fig-slot"${isExtra ? ' style="display:none;"' : ''}></div>
         <input type="number" name="char_cache[]"
                value="${cacheVal !== undefined ? cacheVal : ''}"
                placeholder="Cachê R$" style="width:110px;" min="0" step="1">
@@ -499,10 +558,8 @@ function buildCharRow(idx, label, cacheVal, makeup, singer, roleType, sheetId) {
     <button type="button" class="btn btn-sm btn-danger char-remove"
             style="width:32px; padding:0; flex-shrink:0; margin-top:2px;">&times;</button>`;
 
-  // set figurino select value after append
-  if (sheetId && !isExtra) {
-    const sel = row.querySelector('select[name="figurino_sheet_ids[]"]');
-    if (sel) sel.value = sheetId;
+  if (!isExtra) {
+    row.querySelector('.fig-slot').appendChild(makeFigurinoWidget(sheetId));
   }
   return row;
 }
@@ -532,16 +589,16 @@ document.getElementById('chars-list').addEventListener('click', function(e) {
   }
 });
 
-// ── Pré-fill do orçamento ────────────────────────────────────────────────────
+// ── Inicialização: primeira linha ou pré-fill do orçamento ───────────────────
 (function() {
-  if (ORC_CACHES.length === 0) return;
   const list = document.getElementById('chars-list');
-  list.innerHTML = '';
-  ORC_CACHES.forEach(function(c, i) {
-    const key = ['cache_1h','cache_2h','cache_4h'][0]; // começa com 1h
-    const row = buildCharRow(i, c.label, c[key], c.needs_makeup, c.is_singer, c.role_type, null);
-    list.appendChild(row);
-  });
+  if (ORC_CACHES.length > 0) {
+    ORC_CACHES.forEach(function(c, i) {
+      list.appendChild(buildCharRow(i, c.label, c['cache_1h'], c.needs_makeup, c.is_singer, c.role_type, null));
+    });
+  } else {
+    list.appendChild(buildCharRow(0, '', undefined, false, false, 'character', null));
+  }
   autoTitle();
 })();
 

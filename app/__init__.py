@@ -133,6 +133,15 @@ def create_app():
             view_as_role=view_as_role,
         )
 
+    PORTAL_HOSTS = {"portal.mantoproducoes.com.br"}
+
+    @app.before_request
+    def portal_domain_routing():
+        host = request.host.split(":")[0]
+        if host in PORTAL_HOSTS:
+            if not request.path.startswith(("/portal", "/static", "/uploads")):
+                return redirect("/portal/")
+
     # ✅ Importa blueprints AQUI (depois do db existir)
     from .auth.routes import auth_bp
     from .rh.routes import rh_bp
@@ -191,14 +200,29 @@ def create_app():
             .all()
         )
 
-        total_casting = EventRole.query.join(CalendarEvent).filter(exclude_ensaios, future_events).count()
-        done_casting = total_casting - len(pending_casting)
+        rejected_invites = (
+            EventRole.query.filter(EventRole.invite_status == "rejected")
+            .join(CalendarEvent)
+            .filter(exclude_ensaios, future_events)
+            .order_by(CalendarEvent.start_at.asc())
+            .all()
+        )
 
-        # Figurino: roles COM talento atribuído mas SEM figurino confirmado
+        total_casting = EventRole.query.join(CalendarEvent).filter(exclude_ensaios, future_events).count()
+        done_casting = (
+            EventRole.query
+            .filter(EventRole.talent_id.isnot(None), EventRole.invite_status != "rejected")
+            .join(CalendarEvent)
+            .filter(exclude_ensaios, future_events)
+            .count()
+        )
+
+        # Figurino: roles COM talento atribuído, SEM figurino, excluindo rejeitados
         pending_figurino = (
             EventRole.query.filter(
                 EventRole.talent_id.isnot(None),
                 EventRole.figurino_done_at.is_(None),
+                EventRole.invite_status != "rejected",
             )
             .join(CalendarEvent)
             .filter(exclude_ensaios, future_events)
@@ -206,7 +230,10 @@ def create_app():
             .all()
         )
         total_figurino = (
-            EventRole.query.filter(EventRole.talent_id.isnot(None))
+            EventRole.query.filter(
+                EventRole.talent_id.isnot(None),
+                EventRole.invite_status != "rejected",
+            )
             .join(CalendarEvent)
             .filter(exclude_ensaios, future_events)
             .count()
@@ -309,6 +336,7 @@ def create_app():
             "home.html",
             today=date.today(),
             pending_casting=pending_casting,
+            rejected_invites=rejected_invites,
             pending_figurino=pending_figurino,
             pending_ensaio=pending_ensaio,
             pending_invoice=pending_invoice,

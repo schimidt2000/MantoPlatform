@@ -125,41 +125,35 @@ def first_access():
     if session.get("talent_id"):
         return redirect(url_for("portal.home"))
 
-    step = request.form.get("step", "1")
+    sent = False
     error = None
-    talent = None
+    email_hint = None
 
     if request.method == "POST":
+        import secrets as _sec, string as _str
+        from app.email_service import send_welcome_email as _send_welcome
+
         cpf = "".join(c for c in request.form.get("cpf", "") if c.isdigit())
         talent = Talent.query.filter_by(cpf=cpf).first()
 
-        if step == "1":
-            if not talent:
-                error = "CPF não encontrado. Verifique se você está cadastrado."
-            elif talent.password_hash:
-                error = "Este CPF já possui senha. Use a tela de login ou fale com o casting para resetar."
-            else:
-                # CPF válido sem senha → avança para criação de senha
-                return render_template("portal/first_access.html", step="2", cpf=cpf, error=None)
+        if not talent:
+            error = "CPF não encontrado. Verifique se você está cadastrado ou fale com nossa equipe."
+        elif talent.password_hash:
+            error = "Este CPF já possui senha. Use a opção 'Esqueci minha senha' abaixo para recuperar o acesso."
+        elif not talent.email_contact:
+            error = "Seu email não está cadastrado. Entre em contato com nossa equipe de casting."
+        else:
+            alphabet = _str.ascii_letters + _str.digits
+            temp_pw = "".join(_sec.choice(alphabet) for _ in range(10))
+            talent.set_password(temp_pw)
+            talent.must_change_password = True
+            db.session.commit()
+            _send_welcome(talent, temp_pw)
+            parts = talent.email_contact.split("@")
+            email_hint = (parts[0][:2] + "***@" + parts[1]) if len(parts) == 2 else "***"
+            sent = True
 
-        elif step == "2":
-            if not talent:
-                error = "CPF inválido."
-            else:
-                new_pw = request.form.get("new_password", "")
-                confirm = request.form.get("confirm_password", "")
-                error = _validate_new_password(new_pw)
-                if not error and new_pw != confirm:
-                    error = "As senhas não coincidem."
-                if not error:
-                    talent.set_password(new_pw)
-                    talent.must_change_password = False
-                    db.session.commit()
-                    flash("Senha criada com sucesso! Faça login.", "success")
-                    return redirect(url_for("portal.login"))
-                return render_template("portal/first_access.html", step="2", cpf=cpf, error=error)
-
-    return render_template("portal/first_access.html", step="1", cpf="", error=error)
+    return render_template("portal/first_access.html", sent=sent, error=error, email_hint=email_hint)
 
 
 # ── Trocar senha (primeiro acesso) ────────────────────────────
@@ -267,13 +261,10 @@ def accept_invite(role_id: int):
 def reject_invite(role_id: int):
     talent = _current_talent()
     role = EventRole.query.filter_by(id=role_id, talent_id=talent.id).first_or_404()
-    # Volta para fila do casting
-    role.talent_id = None
-    role.invite_status = None
-    role.assigned_at = None
-    role.figurino_done_at = None
+    # Mantém talent_id para o casting saber quem recusou; status marca a rejeição
+    role.invite_status = "rejected"
     db.session.commit()
-    flash("Convite recusado. O casting será notificado.", "info")
+    flash("Convite recusado. Nossa equipe de casting foi notificada.", "info")
     return redirect(url_for("portal.home"))
 
 
@@ -463,18 +454,21 @@ def forgot_password():
     error = None
 
     if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        talent = Talent.query.filter(
-            db.func.lower(Talent.email_contact) == email
-        ).first()
+        cpf_raw = request.form.get("cpf", "")
+        email   = request.form.get("email", "").strip().lower()
+        cpf     = "".join(c for c in cpf_raw if c.isdigit())
 
-        # Sempre mostra "enviado" para não revelar quais emails existem
-        if talent and talent.password_hash:
+        talent = Talent.query.filter_by(cpf=cpf).first()
+        if (
+            talent
+            and talent.password_hash
+            and talent.email_contact
+            and talent.email_contact.strip().lower() == email
+        ):
             token = secrets.token_urlsafe(32)
             talent.password_reset_token = token
             talent.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
             db.session.commit()
-
             reset_url = url_for("portal.reset_password", token=token, _external=True)
             send_password_reset_email(talent, reset_url)
 

@@ -302,6 +302,42 @@ def audit_logs():
     )
 
 
+# ─── ANÚNCIO DO PORTAL ───────────────────────────────────────────────────────
+
+@admin_bp.route("/portal-announcement", methods=["GET", "POST"])
+@login_required
+@require_superadmin
+def portal_announcement():
+    from app.models import Talent
+    from app.email_service import send_portal_announcement_email
+
+    talents_with_email    = Talent.query.filter(Talent.email_contact.isnot(None), Talent.email_contact != "").all()
+    talents_without_email = Talent.query.filter(
+        (Talent.email_contact.is_(None)) | (Talent.email_contact == "")
+    ).count()
+
+    if request.method == "POST":
+        sent = 0
+        failed = 0
+        for talent in talents_with_email:
+            if send_portal_announcement_email(talent):
+                sent += 1
+            else:
+                failed += 1
+        flash(
+            f"Anúncio enviado: {sent} email(s) entregue(s)"
+            + (f", {failed} falha(s)." if failed else "."),
+            "success" if not failed else "info",
+        )
+        return redirect(url_for("admin.portal_announcement"))
+
+    return render_template(
+        "admin_portal_announcement.html",
+        total=len(talents_with_email),
+        without_email=talents_without_email,
+    )
+
+
 # ─── PAINEL DE DESEMPENHO ─────────────────────────────────────────────────────
 
 @admin_bp.route("/desempenho")

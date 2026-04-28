@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Anúncio do Portal{% endblock %}
+{% block page_title %}Anúncio do Portal{% endblock %}
+{% block page_subtitle %}<p class="sub">Envio em massa para o banco de talentos</p>{% endblock %}
+{% block page_actions %}
+  <a href="/admin/settings" class="btn btn-ghost btn-sm">← Configurações</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px;">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ 'success' if cat == 'success' else 'info' }} mb-16">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="panel" style="margin-bottom: 20px;">
+    <h2 style="margin-bottom: 16px;">Preview do email</h2>
+    <div style="font-size: 13px; color: var(--muted); margin-bottom: 20px; display: flex; flex-direction: column; gap: 6px;">
+      <div><strong>Assunto:</strong> Conheça o seu portal exclusivo — Manto Produções</div>
+      <div><strong>Preview:</strong> Acompanhe eventos, cachês e pagamentos direto pelo seu celular.</div>
+    </div>
+    <div style="border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; font-size: 13px;">
+      <div style="background: #2d1f6e; padding: 20px; text-align: center;">
+        <div style="font-size: 22px; font-weight: 900; color: #fff; letter-spacing: -1px;">Manto</div>
+        <div style="font-size: 10px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: .15em; margin-top: 3px;">Produções</div>
+      </div>
+      <div style="padding: 24px; background: #fff; color: #333; line-height: 1.7;">
+        <p style="font-size: 17px; font-weight: 700; margin: 0 0 12px;">Olá, <em>{primeiro nome}</em>!</p>
+        <p style="margin: 0 0 16px;">A <strong>Manto Produções</strong> lançou o seu portal exclusivo — um espaço pensado para você acompanhar tudo sobre o seu trabalho conosco, de forma simples e direto pelo celular.</p>
+        <div style="margin: 16px 0; display: flex; flex-direction: column; gap: 10px;">
+          <div><span style="font-size: 16px;">📅</span> <strong>Seus próximos eventos</strong> — Veja datas, horários, locais e instruções.</div>
+          <div><span style="font-size: 16px;">💰</span> <strong>Cachê e pagamentos</strong> — Acompanhe o valor e se já foi processado.</div>
+          <div><span style="font-size: 16px;">✅</span> <strong>Confirme sua presença</strong> — Receba e responda convites pelo portal.</div>
+          <div><span style="font-size: 16px;">📋</span> <strong>Histórico completo</strong> — Todos os eventos que você realizou conosco.</div>
+        </div>
+        <p style="margin: 0 0 16px;">O acesso é feito com o seu <strong>CPF</strong> e uma senha que você mesmo cria no primeiro acesso. É rápido e seguro.</p>
+        <div style="text-align: center; margin: 20px 0;">
+          <span style="display: inline-block; background: #2d1f6e; color: #fff; padding: 11px 28px; border-radius: 8px; font-weight: 700;">Acessar o portal agora →</span>
+        </div>
+        <p style="margin: 0 0 12px; font-size: 12px; color: #888;">Ou copie: portal.mantoproducoes.com.br</p>
+        <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 12px 14px; font-size: 12px; color: #0c4a6e;">
+          Em caso de dúvidas para acessar, responda este email ou fale com nossa equipe — vamos te ajudar.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-bottom: 16px;">Envio</h2>
+    <div style="display: flex; gap: 24px; margin-bottom: 24px; flex-wrap: wrap;">
+      <div>
+        <div style="font-size: 28px; font-weight: 800; color: var(--accent);">{{ total }}</div>
+        <div style="font-size: 13px; color: var(--muted);">talentos com email</div>
+      </div>
+      <div>
+        <div style="font-size: 28px; font-weight: 800; color: var(--muted);">{{ without_email }}</div>
+        <div style="font-size: 13px; color: var(--muted);">sem email cadastrado (serão ignorados)</div>
+      </div>
+    </div>
+
+    {% if total == 0 %}
+      <p class="muted">Nenhum talento com email cadastrado encontrado.</p>
+    {% else %}
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 20px;">
+        O email acima será enviado para <strong>{{ total }} pessoa{{ 's' if total != 1 }}</strong>.
+        Esta ação não pode ser desfeita.
+      </p>
+      <form method="post"
+            onsubmit="return confirm('Confirmar envio para {{ total }} talento{{ 's' if total != 1 }}?\n\nEsta ação não pode ser desfeita.')">
+        <button type="submit" class="btn btn-primary">
+          Enviar para {{ total }} talento{{ 's' if total != 1 }} →
+        </button>
+      </form>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

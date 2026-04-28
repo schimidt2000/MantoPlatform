@@ -463,7 +463,7 @@ class SiteSetting(db.Model):
     clicksign_token   = db.Column(db.String(100), nullable=True)
     clicksign_sandbox = db.Column(db.Boolean, default=False, nullable=False)
     # Notificações por email (desligar durante testes)
-    email_notifications_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    email_notifications_enabled = db.Column(db.Boolean, default=True, nullable=False)
     # Data de início do sistema (eventos anteriores são ignorados nas tasks)
     release_date = db.Column(db.Date, nullable=True)
     # Token OAuth do Google Calendar — persistido no banco para sobreviver a redeploys

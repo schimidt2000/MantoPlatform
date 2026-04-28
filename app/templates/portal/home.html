@@ -146,12 +146,41 @@
           {% for ensaio in ev.ensaios | sort(attribute='start_at') %}
           <div class="invite-detail-row" style="margin-top:4px; padding-top:8px; border-top:1px solid var(--line);">
             <span class="invite-detail-label">🎭 Ensaio</span>
-            <span>
-              {{ ensaio.start_at.strftime("%d/%m/%Y %H:%M") if ensaio.start_at else "—" }}
-              {% if ensaio.location %} · {{ ensaio.location }}{% endif %}
-            </span>
+            <div style="display:flex; flex-direction:column; gap:3px;">
+              <span>{{ ensaio.start_at.strftime("%d/%m/%Y %H:%M") if ensaio.start_at else "—" }}{% if ensaio.location %} · {{ ensaio.location }}{% endif %}</span>
+              {% if ensaio.description %}
+              <span style="font-size:11px; color:var(--muted);">{{ ensaio.description }}</span>
+              {% endif %}
+              {% for mat in ensaio.ensaio_materials %}
+                {% if mat.material_type == 'link' and mat.url %}
+                <a href="{{ mat.url }}" target="_blank" rel="noopener" style="font-size:11px; color:var(--accent);">🔗 {{ mat.label or mat.url }}</a>
+                {% elif mat.material_type == 'file' %}
+                <span style="font-size:11px; color:var(--muted);">📎 {{ mat.label or "Arquivo" }}</span>
+                {% endif %}
+              {% endfor %}
+            </div>
           </div>
           {% endfor %}
+
+          {# Observações da produção #}
+          {% set inv_obs = ev.observations | selectattr('obs_type', 'ne', 'image') | list %}
+          {% if ev.description or inv_obs %}
+          <div class="invite-detail-row" style="margin-top:4px; padding-top:8px; border-top:1px solid var(--line);">
+            <span class="invite-detail-label">📋 Instruções</span>
+            <div style="display:flex; flex-direction:column; gap:3px;">
+              {% if ev.description %}
+              <span style="font-size:12px; color:var(--muted);">{{ ev.description }}</span>
+              {% endif %}
+              {% for obs in inv_obs %}
+                {% if obs.obs_type == 'text' %}
+                <span style="font-size:12px; color:var(--muted);">{{ obs.content }}</span>
+                {% elif obs.obs_type == 'link' %}
+                <a href="{{ obs.content }}" target="_blank" rel="noopener" style="font-size:12px; color:var(--accent);">🔗 {{ obs.label or obs.content }}</a>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
         </div>
 
         <div class="invite-actions" style="display:flex; gap:10px;">
@@ -229,6 +258,50 @@
               {% endif %}
             </span>
             {% endif %}
+          </div>
+          {% endif %}
+
+          {# Ensaios #}
+          {% set ev_ensaios = ev.ensaios | sort(attribute='start_at') %}
+          {% if ev_ensaios %}
+          <div class="event-card-logistics" style="margin-top:8px; padding-top:8px; border-top:1px solid var(--line);">
+            {% for ensaio in ev_ensaios %}
+            <div>
+              <span>🎭 Ensaio:
+                <strong>{{ ensaio.start_at.strftime("%d/%m/%Y %H:%M") if ensaio.start_at else "—" }}</strong>
+                {% if ensaio.location %} · {{ ensaio.location }}{% endif %}
+              </span>
+              {% if ensaio.description %}
+              <div style="font-size:11px; color:var(--muted); margin-top:2px; margin-left:16px;">{{ ensaio.description }}</div>
+              {% endif %}
+              {% for mat in ensaio.ensaio_materials %}
+                {% if mat.material_type == 'link' and mat.url %}
+                <div style="margin-top:2px; margin-left:16px;">
+                  <a href="{{ mat.url }}" target="_blank" rel="noopener" style="font-size:11px; color:var(--accent);">🔗 {{ mat.label or mat.url }}</a>
+                </div>
+                {% elif mat.material_type == 'file' %}
+                <div style="margin-top:2px; margin-left:16px; font-size:11px; color:var(--muted);">📎 {{ mat.label or "Arquivo" }}</div>
+                {% endif %}
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {# Observações e instruções da produção #}
+          {% set obs_list = ev.observations | selectattr('obs_type', 'ne', 'image') | list %}
+          {% if ev.description or obs_list %}
+          <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:4px;">
+            {% if ev.description %}
+            <span style="font-size:12px; color:var(--muted);">{{ ev.description }}</span>
+            {% endif %}
+            {% for obs in obs_list %}
+              {% if obs.obs_type == 'text' %}
+              <span style="font-size:12px; color:var(--muted);">{{ obs.content }}</span>
+              {% elif obs.obs_type == 'link' %}
+              <a href="{{ obs.content }}" target="_blank" rel="noopener" style="font-size:12px; color:var(--accent);">🔗 {{ obs.label or obs.content }}</a>
+              {% endif %}
+            {% endfor %}
           </div>
           {% endif %}
 
