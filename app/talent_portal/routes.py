@@ -442,6 +442,56 @@ def historico():
     )
 
 
+# ── Visualizador de figurinos do evento ────────────────────────
+
+@portal_bp.route("/events/<int:event_id>/figurino")
+@portal_login_required
+def event_figurino(event_id: int):
+    talent = _current_talent()
+
+    # Garante que o talento tem uma vaga neste evento (pendente ou aceita)
+    role = EventRole.query.filter(
+        EventRole.event_id == event_id,
+        EventRole.talent_id == talent.id,
+        EventRole.invite_status.in_(["accepted", "pending"]),
+    ).first_or_404()
+
+    event = role.event
+
+    from app.models import FigurinoSheet
+    from app.figurino.drive_service import normalize_name
+
+    seen_ids: set[int] = set()
+    sheet_items: list[tuple] = []
+
+    for r in event.roles:
+        sheet = r.figurino_sheet
+        if not sheet:
+            norm = normalize_name(r.character_name)
+            sheet = FigurinoSheet.query.filter_by(character_name_norm=norm).first()
+
+        if not sheet or sheet.id in seen_ids:
+            continue
+        seen_ids.add(sheet.id)
+
+        # Converte URL de upload para rota do portal (evita checar Flask-Login)
+        photo_url = None
+        if sheet.photo_filename:
+            if sheet.photo_filename.startswith("/uploads/"):
+                photo_url = "/portal/photo/" + sheet.photo_filename[9:]
+            else:
+                photo_url = sheet.photo_filename
+
+        sheet_items.append((sheet, photo_url))
+
+    return render_template(
+        "portal/figurino_viewer.html",
+        event=event,
+        sheet_items=sheet_items,
+        talent=talent,
+    )
+
+
 # ── Esqueci a senha ────────────────────────────────────────────
 
 @portal_bp.route("/forgot-password", methods=["GET", "POST"])

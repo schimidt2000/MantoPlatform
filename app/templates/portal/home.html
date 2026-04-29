@@ -193,6 +193,11 @@
             <button type="submit" class="btn btn-secondary btn-sm" style="width:100%; justify-content:center;">✗ Recusar</button>
           </form>
         </div>
+        <div style="margin-top:10px;">
+          <a href="/portal/events/{{ ev.id }}/figurino" class="btn btn-sm btn-secondary" style="width:100%; justify-content:center;">
+            🎭 Ver ficha de figurino
+          </a>
+        </div>
       </div>
     {% endfor %}
   </div>
@@ -325,6 +330,14 @@
             {% endif %}
           </div>
           {% endif %}
+
+          {# Link para ficha de figurino #}
+          <div style="margin-top:10px;">
+            <a href="/portal/events/{{ ev.id }}/figurino" class="btn btn-sm btn-secondary"
+               style="width:100%; justify-content:center;">
+              🎭 Ver ficha de figurino
+            </a>
+          </div>
 
         </div>
       {% endfor %}
