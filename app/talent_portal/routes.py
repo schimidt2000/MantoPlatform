@@ -20,6 +20,21 @@ portal_bp = Blueprint("portal", __name__, url_prefix="/portal")
 
 _ALLOWED_PHOTO = {".jpg", ".jpeg", ".png", ".webp"}
 
+_PW_RULES = [
+    (_re_mod.compile(r'.{8,}'),        "Mínimo 8 caracteres"),
+    (_re_mod.compile(r'[A-Z]'),        "Pelo menos uma letra maiúscula"),
+    (_re_mod.compile(r'[a-z]'),        "Pelo menos uma letra minúscula"),
+    (_re_mod.compile(r'[0-9]'),        "Pelo menos um número"),
+    (_re_mod.compile(r'[^A-Za-z0-9]'), "Pelo menos um símbolo (!@#$%...)"),
+]
+
+
+def _validate_password_strength(pw: str) -> str | None:
+    for pattern, msg in _PW_RULES:
+        if not pattern.search(pw):
+            return msg
+    return None
+
 
 # ── Servir uploads de fotos do portal (sem Flask-Login) ────────
 
@@ -173,11 +188,10 @@ def change_password():
     if request.method == "POST":
         new_pw = request.form.get("new_password", "")
         confirm = request.form.get("confirm_password", "")
-        if len(new_pw) < 6:
-            error = "A senha deve ter pelo menos 6 caracteres."
-        elif new_pw != confirm:
-            error = "As senhas não coincidem."
-        else:
+        error = _validate_password_strength(new_pw) or (
+            "As senhas não coincidem." if new_pw != confirm else None
+        )
+        if not error:
             talent.set_password(new_pw)
             talent.must_change_password = False
             db.session.commit()
