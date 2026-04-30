@@ -6,6 +6,7 @@ Configure as variáveis MAIL_PASSWORD (App Password) e PORTAL_URL no .env.
 from __future__ import annotations
 
 import logging
+import threading
 from zoneinfo import ZoneInfo
 
 from flask import current_app
@@ -15,6 +16,20 @@ log = logging.getLogger(__name__)
 mail = Mail()
 
 _TZ = ZoneInfo("America/Sao_Paulo")
+
+
+def send_async(fn, *args) -> None:
+    """Dispara fn(*args) em background thread com app context. Não bloqueia o request."""
+    app = current_app._get_current_object()
+
+    def _run():
+        with app.app_context():
+            try:
+                fn(*args)
+            except Exception:
+                log.exception("Erro ao enviar email em background: %s", fn.__name__)
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _sender():

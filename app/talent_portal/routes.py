@@ -14,7 +14,7 @@ from werkzeug.utils import secure_filename
 from app import db, limiter
 from app.models import Talent, EventRole, CalendarEvent, TalentMedia
 from app.talents.importer import parse_date
-from app.email_service import send_password_reset_email
+from app.email_service import send_password_reset_email, send_async
 
 portal_bp = Blueprint("portal", __name__, url_prefix="/portal")
 
@@ -148,7 +148,7 @@ def first_access():
             talent.set_password(temp_pw)
             talent.must_change_password = True
             db.session.commit()
-            _send_welcome(talent, temp_pw)
+            send_async(_send_welcome, talent, temp_pw)
             parts = talent.email_contact.split("@")
             email_hint = (parts[0][:2] + "***@" + parts[1]) if len(parts) == 2 else "***"
             sent = True
@@ -520,7 +520,7 @@ def forgot_password():
             talent.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
             db.session.commit()
             reset_url = url_for("portal.reset_password", token=token, _external=True)
-            send_password_reset_email(talent, reset_url)
+            send_async(send_password_reset_email, talent, reset_url)
 
         sent = True
 

@@ -22,7 +22,7 @@ from .service import (
 from .. import db
 from app.constants import RoleName
 from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory
-from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email
+from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
 
@@ -206,7 +206,7 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     if old_talent_id and old_talent_id != role.talent_id and old_invite_status != "rejected":
         old_talent = Talent.query.get(old_talent_id)
         if old_talent:
-            send_removal_email(old_talent, event, role.character_name)
+            send_async(send_removal_email, old_talent, event, role.character_name)
     db.session.commit()
     if role.talent_id and role.talent_id != old_talent_id:
         role.invite_status = "pending"
@@ -221,7 +221,7 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             created_at=datetime.now(tz=tz_sp),
         ))
         db.session.commit()
-        send_invite_email(role)
+        send_async(send_invite_email, role)
     elif role.talent_id:
         _cap_note = ""
         if role.cache_cap and role.cache_value and role.cache_value > role.cache_cap:
@@ -249,7 +249,7 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
                 now_sp = datetime.now(tz=tz_sp)
                 role.event_changed_at = now_sp
                 db.session.commit()
-                send_event_changed_email(role, cache_changes)
+                send_async(send_event_changed_email, role, cache_changes)
 
 
 def _handle_add_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
@@ -490,7 +490,7 @@ def _handle_save_logistics(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
     if event.needs_rehearsal and not old_needs_rehearsal:
         ensaio_users = User.query.join(User.roles).filter(Role.name == RoleName.ENSAIO).all()
-        send_ensaio_alert_email(event, ensaio_users)
+        send_async(send_ensaio_alert_email, event, ensaio_users)
     flash("Logística salva.", "success")
 
 
@@ -733,7 +733,7 @@ def _notify_accepted_roles(event: CalendarEvent, changes: list[str]) -> None:
     for role in event.roles:
         if role.invite_status == "accepted":
             role.event_changed_at = now
-            send_event_changed_email(role, changes)
+            send_async(send_event_changed_email, role, changes)
 
 
 def _notify_ensaio_team(event: CalendarEvent) -> None:
@@ -743,7 +743,7 @@ def _notify_ensaio_team(event: CalendarEvent) -> None:
         .filter(Role.name == RoleName.ENSAIO)
         .all()
     )
-    send_ensaio_alert_email(event, ensaio_users)
+    send_async(send_ensaio_alert_email, event, ensaio_users)
 
 
 def sync_events(items: list[dict]) -> None:
