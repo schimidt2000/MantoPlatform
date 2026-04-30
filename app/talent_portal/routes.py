@@ -145,12 +145,19 @@ def first_access():
         else:
             alphabet = _str.ascii_letters + _str.digits
             temp_pw = "".join(_sec.choice(alphabet) for _ in range(10))
+            # Lê atributos antes do commit
+            talent_email = talent.email_contact
+            talent_name  = talent.artistic_name or talent.full_name
+            talent_cpf   = talent.cpf
+            parts = talent_email.split("@")
+            email_hint = (parts[0][:2] + "***@" + parts[1]) if len(parts) == 2 else "***"
             talent.set_password(temp_pw)
             talent.must_change_password = True
             db.session.commit()
-            send_async(_send_welcome, talent, temp_pw)
-            parts = talent.email_contact.split("@")
-            email_hint = (parts[0][:2] + "***@" + parts[1]) if len(parts) == 2 else "***"
+            from types import SimpleNamespace
+            _t = SimpleNamespace(email_contact=talent_email, artistic_name=None,
+                                 full_name=talent_name, cpf=talent_cpf)
+            send_async(_send_welcome, _t, temp_pw)
             sent = True
 
     return render_template("portal/first_access.html", sent=sent, error=error, email_hint=email_hint)
@@ -508,19 +515,30 @@ def forgot_password():
         email   = request.form.get("email", "").strip().lower()
         cpf     = "".join(c for c in cpf_raw if c.isdigit())
 
-        talent = Talent.query.filter_by(cpf=cpf).first()
-        if (
-            talent
-            and talent.password_hash
-            and talent.email_contact
-            and talent.email_contact.strip().lower() == email
-        ):
-            token = secrets.token_urlsafe(32)
-            talent.password_reset_token = token
-            talent.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
-            db.session.commit()
-            reset_url = url_for("portal.reset_password", token=token, _external=True)
-            send_async(send_password_reset_email, talent, reset_url)
+        try:
+            talent = Talent.query.filter_by(cpf=cpf).first()
+            if (
+                talent
+                and talent.password_hash
+                and talent.email_contact
+                and talent.email_contact.strip().lower() == email
+            ):
+                token = secrets.token_urlsafe(32)
+                # Lê atributos antes do commit (evita DetachedInstanceError no thread)
+                talent_email = talent.email_contact
+                talent_name  = talent.artistic_name or talent.full_name
+                talent.password_reset_token = token
+                talent.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
+                db.session.commit()
+                reset_url = url_for("portal.reset_password", token=token, _external=True)
+                from types import SimpleNamespace
+                _t = SimpleNamespace(email_contact=talent_email,
+                                     artistic_name=None, full_name=talent_name)
+                send_async(send_password_reset_email, _t, reset_url)
+        except Exception:
+            import logging as _log
+            _log.getLogger(__name__).exception("Erro em forgot_password POST")
+            db.session.rollback()
 
         sent = True
 
