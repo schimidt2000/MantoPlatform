@@ -8,9 +8,33 @@
   <a href="/talents/add" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
     + Adicionar Talento
   </a>
-  <form method="post" action="/talents/import" style="margin:0;">
-    <button type="submit" class="btn btn-secondary">Importar respostas</button>
-  </form>
+  <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
+    <form method="post" action="/talents/import" style="margin:0;" id="import-form">
+      <button type="submit" class="btn btn-secondary" id="import-btn"
+              onclick="this.disabled=true; this.textContent='Importando…'; this.form.submit();">
+        ↻ Importar respostas
+      </button>
+    </form>
+    {% if import_state and import_state.last_checked_at %}
+      {% set mins = ((now - import_state.last_checked_at).total_seconds() // 60) | int %}
+      <span style="font-size:11px; color:var(--muted); white-space:nowrap;">
+        {% if mins == 0 %}
+          Sincronizado agora mesmo
+        {% elif mins == 1 %}
+          Sincronizado há 1 min
+        {% elif mins < 60 %}
+          Sincronizado há {{ mins }} min
+        {% else %}
+          Sincronizado há {{ (mins // 60) | int }}h
+        {% endif %}
+        {% if import_state.last_import_count > 0 %}
+          · <span style="color:var(--accent); font-weight:600;">{{ import_state.last_import_count }} novo(s)</span>
+        {% endif %}
+      </span>
+    {% else %}
+      <span style="font-size:11px; color:var(--muted);">Nunca sincronizado</span>
+    {% endif %}
+  </div>
 {% endblock %}
 
 {% block extra_head %}

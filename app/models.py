@@ -501,6 +501,8 @@ class ImportState(db.Model):
     key = db.Column(db.String(60), unique=True, nullable=False)  # ex: "talents_form"
     last_row = db.Column(db.Integer, default=1, nullable=False)  # começa 1 (header)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_checked_at = db.Column(db.DateTime, nullable=True)
+    last_import_count = db.Column(db.Integer, default=0, nullable=False)
 
 
 # ══════════════════════════════════════════════════════════════════

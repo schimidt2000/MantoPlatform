@@ -6,7 +6,7 @@ from flask import Blueprint, redirect, url_for, render_template, request, flash,
 from flask_login import login_required, current_user
 from sqlalchemy import or_, and_, not_
 
-from app.models import Talent, EventRole, CalendarEvent
+from app.models import Talent, EventRole, CalendarEvent, ImportState
 from .. import db
 from app.constants import RoleName
 from .importer import import_new_talents_from_sheet
@@ -17,11 +17,16 @@ def _can_edit_talent():
 
 talents_bp = Blueprint("talents", __name__)
 
-# CONFIG (você vai preencher)
 GOOGLE_FORM_URL = "https://forms.gle/iaZWqNpvtG5FUU3E7"
-SPREADSHEET_ID = "1A_bXqUP21HR1RWS8AVBmj1oPgjhIWBaFfYxeqX17Ric"
-SHEET_NAME = "Respostas"
 SERVICE_ACCOUNT_JSON = os.path.abspath(os.path.join("instance", "credentials", "sheets_service_account.json"))
+
+
+def _get_sheet_config():
+    from flask import current_app
+    return (
+        current_app.config.get("TALENTS_SPREADSHEET_ID", "1A_bXqUP21HR1RWS8AVBmj1oPgjhIWBaFfYxeqX17Ric"),
+        current_app.config.get("TALENTS_SHEET_NAME", "Respostas"),
+    )
 
 @talents_bp.route("/talents/add")
 @login_required
@@ -172,6 +177,8 @@ def list_talents():
         page=page, per_page=PAGE_SIZE, error_out=False
     )
     people = pagination.items
+    from datetime import datetime as _now_dt
+    import_state = ImportState.query.filter_by(key="talents_form").first()
     return render_template(
         "talents_list.html",
         people=people,
@@ -187,6 +194,8 @@ def list_talents():
         passport_options=passport_options,
         character=character,
         character_matches=character_matches,
+        import_state=import_state,
+        now=_now_dt.utcnow(),
     )
 
 @talents_bp.route("/talents/<int:talent_id>")
@@ -373,17 +382,26 @@ def reset_talent_password(talent_id: int):
 @talents_bp.route("/talents/import", methods=["POST"])
 @login_required
 def import_talents():
+    from datetime import datetime as _dt
+    spreadsheet_id, sheet_name = _get_sheet_config()
     try:
         result = import_new_talents_from_sheet(
-            spreadsheet_id=SPREADSHEET_ID,
-            sheet_name=SHEET_NAME,
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=sheet_name,
             credentials_path=SERVICE_ACCOUNT_JSON,
         )
-        flash(f"Import finalizado: {result.get('imported', 0)} novos, {result.get('skipped', 0)} ignorados.")
+        imported = result.get("imported", 0)
+        # Atualiza registro de sync manual
+        state = ImportState.query.filter_by(key="talents_form").first()
+        if state:
+            state.last_checked_at = _dt.utcnow()
+            state.last_import_count = imported
+            db.session.commit()
+        flash(f"Import finalizado: {imported} novo(s), {result.get('skipped', 0)} ignorado(s).")
         for item in result.get("skipped_details", []):
             flash(f"Ignorado (linha {item['linha']}): {item['nome']} — {item['motivo']}", "warning")
     except FileNotFoundError:
-        flash("Credenciais do Google Sheets não encontradas. Configure a variável de ambiente GOOGLE_SHEETS_CREDENTIALS.", "error")
+        flash("Credenciais do Google Sheets não encontradas.", "error")
     except Exception as e:
         flash(f"Erro ao importar: {e}", "error")
     return redirect(url_for("talents.list_talents", status="active"))

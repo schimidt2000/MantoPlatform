@@ -43,8 +43,9 @@ class Config:
     GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
     # Google Sheets — importação de talentos via formulário
-    TALENTS_SPREADSHEET_ID = os.getenv("TALENTS_SPREADSHEET_ID", "")
+    TALENTS_SPREADSHEET_ID = os.getenv("TALENTS_SPREADSHEET_ID", "1A_bXqUP21HR1RWS8AVBmj1oPgjhIWBaFfYxeqX17Ric")
     TALENTS_SHEET_NAME     = os.getenv("TALENTS_SHEET_NAME", "Respostas")
+    TALENTS_SYNC_INTERVAL  = int(os.getenv("TALENTS_SYNC_INTERVAL", "900"))  # segundos (padrão: 15 min)
 
     # Google Drive — pasta de figurinos para sync
     FIGURINO_DRIVE_FOLDER_ID = os.getenv("FIGURINO_DRIVE_FOLDER_ID", "")

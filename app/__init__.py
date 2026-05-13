@@ -21,23 +21,27 @@ login_manager.login_message = None  # suprime mensagem automática de "faça log
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 def _start_talent_sync(app):
-    """Inicia thread de background que importa novos talentos da planilha a cada 5 minutos."""
+    """Inicia thread de background que importa novos talentos da planilha periodicamente."""
     import threading
     import os as _os
 
-    # Evita duplicar a thread no modo debug (Werkzeug spawna 2 processos)
-    if _os.environ.get("WERKZEUG_RUN_MAIN") == "false":
+    # Em modo debug o Werkzeug roda 2 processos: o reloader (pai) e o worker (filho).
+    # WERKZEUG_RUN_MAIN="true" só existe no filho. Iniciamos a thread apenas lá.
+    # Em produção (gunicorn) a variável nunca é definida, então passa direto.
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
         return
 
     credentials_path = _os.path.abspath(
         _os.path.join("instance", "credentials", "sheets_service_account.json")
     )
     if not _os.path.exists(credentials_path):
-        return  # sem credenciais, não inicia
+        app.logger.info("[talent-sync] credenciais não encontradas — sync desativado")
+        return
 
     SPREADSHEET_ID = app.config.get("TALENTS_SPREADSHEET_ID", "")
     SHEET_NAME     = app.config.get("TALENTS_SHEET_NAME", "Respostas")
-    INTERVAL       = 5 * 60  # segundos
+    INTERVAL       = app.config.get("TALENTS_SYNC_INTERVAL", 900)
 
     if not SPREADSHEET_ID:
         app.logger.warning("[talent-sync] TALENTS_SPREADSHEET_ID não configurado — sync desativado")
@@ -45,8 +49,8 @@ def _start_talent_sync(app):
 
     def _sync_loop():
         import time
-        # Aguarda o app estar pronto antes da primeira execução
-        time.sleep(10)
+        from datetime import datetime as _dt
+        time.sleep(15)  # aguarda o app estar pronto
         while True:
             try:
                 from app.talents.importer import import_new_talents_from_sheet
@@ -56,17 +60,25 @@ def _start_talent_sync(app):
                         sheet_name=SHEET_NAME,
                         credentials_path=credentials_path,
                     )
-                    if result.get("imported", 0) > 0:
-                        app.logger.info(
-                            f"[talent-sync] {result['imported']} novo(s) talento(s) importado(s)"
-                        )
+                    imported = result.get("imported", 0)
+                    # Registra o resultado no banco para exibir na UI
+                    from app.models import ImportState
+                    state = ImportState.query.filter_by(key="talents_form").first()
+                    if state:
+                        state.last_checked_at = _dt.utcnow()
+                        state.last_import_count = imported
+                        db.session.commit()
+                    if imported > 0:
+                        app.logger.info(f"[talent-sync] {imported} novo(s) talento(s) importado(s)")
+                    else:
+                        app.logger.debug("[talent-sync] nenhum talento novo")
             except Exception as exc:
                 app.logger.warning(f"[talent-sync] erro: {exc}")
             time.sleep(INTERVAL)
 
     t = threading.Thread(target=_sync_loop, daemon=True, name="talent-sync")
     t.start()
-    app.logger.info("[talent-sync] thread iniciada (intervalo: 5 min)")
+    app.logger.info(f"[talent-sync] thread iniciada (intervalo: {INTERVAL}s)")
 
 
 def create_app():
