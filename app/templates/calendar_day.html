@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}{{ day.strftime('%d/%m/%Y') }} — Agenda{% endblock %}
+{% block page_title %}
+  {{ day.strftime('%d de') }}
+  {{ ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'][day.month - 1] }}
+  {{ day.strftime('%Y') }}
+{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">
+    {{ ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'][day.weekday()] }}
+    &mdash; {{ events | length }} evento{{ 's' if events | length != 1 else '' }}
+  </p>
+{% endblock %}
+
+{% block page_actions %}
+  <a href="/agenda?ym={{ ym }}" class="btn btn-secondary">← Voltar ao mês</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .day-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .day-nav a {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px;
+    border: 1px solid var(--line); border-radius: 50%;
+    font-size: 16px; text-decoration: none; color: var(--text);
+    transition: background .12s, border-color .12s;
+  }
+  .day-nav a:hover { background: var(--surface); border-color: var(--accent); }
+  .day-nav .day-label {
+    font-size: 13px; color: var(--muted); padding: 0 4px;
+  }
+
+  .event-card {
+    display: flex;
+    gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: flex-start;
+  }
+  .event-card:last-child { border-bottom: none; }
+
+  .event-indicator {
+    width: 4px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    align-self: stretch;
+    min-height: 48px;
+    background: var(--accent);
+  }
+  .event-indicator.ensaio { background: #0d9488; }
+
+  .event-time {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
+    min-width: 96px;
+    padding-top: 2px;
+  }
+
+  .event-info { flex: 1; min-width: 0; }
+  .event-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.35;
+    margin-bottom: 4px;
+    word-break: break-word;
+  }
+  .event-title a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .event-title a:hover { color: var(--accent); }
+
+  .event-location {
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .event-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 99px;
+    margin-bottom: 4px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .badge-type-show    { background: #ede9fe; color: #5b21b6; }
+  .badge-type-ensaio  { background: #ccfbf1; color: #0f766e; }
+  .badge-type-ri      { background: #fef9c3; color: #854d0e; }
+  .badge-type-corp    { background: #dbeafe; color: #1e40af; }
+  .badge-type-other   { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="day-nav">
+  <a href="/agenda/day/{{ prev_day }}" title="Dia anterior">‹</a>
+  <span class="day-label">dia anterior</span>
+  <span style="flex:1;"></span>
+  <span class="day-label">próximo dia</span>
+  <a href="/agenda/day/{{ next_day }}" title="Próximo dia">›</a>
+</div>
+
+<div class="panel">
+  {% if events %}
+    {% for ev in events %}
+      {% set is_ensaio = 'ensaio' in ev.title.lower() %}
+      {% set etype = (ev.event_type or '').upper() %}
+      <div class="event-card">
+
+        <div class="event-indicator{% if is_ensaio %} ensaio{% endif %}"></div>
+
+        <div class="event-time">
+          {% if ev.start_at %}{{ ev.start_at.strftime('%H:%M') }}{% endif %}
+          {% if ev.end_at %}<br><span style="font-weight:400;">até {{ ev.end_at.strftime('%H:%M') }}</span>{% endif %}
+        </div>
+
+        <div class="event-info">
+          {% if etype == 'ENSAIO' %}
+            <span class="event-badge badge-type-ensaio">Ensaio</span>
+          {% elif etype == 'SHOW' %}
+            <span class="event-badge badge-type-show">Show</span>
+          {% elif etype in ('R&I', 'RI') %}
+            <span class="event-badge badge-type-ri">R&amp;I</span>
+          {% elif etype == 'CORP' %}
+            <span class="event-badge badge-type-corp">Corporativo</span>
+          {% elif etype %}
+            <span class="event-badge badge-type-other">{{ etype }}</span>
+          {% endif %}
+
+          <div class="event-title">
+            <a href="/events/{{ ev.id }}">{{ ev.title }}</a>
+          </div>
+
+          {% if ev.location %}
+            <div class="event-location">
+              <span>📍</span>
+              <span>{{ ev.location }}</span>
+            </div>
+          {% endif %}
+        </div>
+
+        <a href="/events/{{ ev.id }}" class="btn btn-sm btn-secondary" style="flex-shrink:0;">
+          Abrir
+        </a>
+
+      </div>
+    {% endfor %}
+  {% else %}
+    <div style="text-align:center; padding: 48px 0;">
+      <div style="font-size: 32px; margin-bottom: 12px;">📅</div>
+      <p class="muted">Nenhum evento neste dia.</p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

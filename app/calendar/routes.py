@@ -102,11 +102,13 @@ def agenda():
             when = start_dt.strftime("%H:%M") if start_dt else ""
             if end_dt and end_dt.strftime("%H:%M") != "00:00":
                 when += f"–{end_dt.strftime('%H:%M')}"
+            title = item.get("summary") or "Sem título"
             events_by_day.setdefault(day, []).append(
                 {
-                    "title": item.get("summary") or "Sem título",
+                    "title": title,
                     "when": when,
                     "event_id": event_map.get(item.get("id")),
+                    "is_ensaio": "ensaio" in title.lower(),
                 }
             )
 
@@ -158,6 +160,38 @@ def agenda():
         month_weeks=weeks,
         events_by_day=events_by_day,
         today=now.date(),
+    )
+
+
+@calendar_bp.route("/agenda/day/<date_str>")
+@login_required
+def agenda_day(date_str: str):
+    try:
+        day_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return redirect(url_for("calendar.agenda"))
+
+    day_start = datetime(day_date.year, day_date.month, day_date.day)
+    day_end   = day_start + timedelta(days=1)
+
+    events = (
+        CalendarEvent.query
+        .filter(CalendarEvent.start_at >= day_start, CalendarEvent.start_at < day_end)
+        .order_by(CalendarEvent.start_at)
+        .all()
+    )
+
+    prev_day = (day_date - timedelta(days=1)).isoformat()
+    next_day = (day_date + timedelta(days=1)).isoformat()
+    ym       = day_date.strftime("%Y-%m")
+
+    return render_template(
+        "calendar_day.html",
+        day=day_date,
+        events=events,
+        ym=ym,
+        prev_day=prev_day,
+        next_day=next_day,
     )
 
 

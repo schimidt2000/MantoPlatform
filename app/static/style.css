@@ -689,6 +689,12 @@ tbody tr:hover td { background: #faf9f6; }
   background: var(--line);
   color: var(--muted);
 }
+.cal-event.ensaio {
+  background: #0d9488;
+}
+.cal-event.ensaio:hover {
+  color: #fff;
+}
 .cal-event .ev-time {
   font-size: 9.5px;
   font-weight: 600;
