@@ -84,6 +84,37 @@
     {% endfor %}
   {% endwith %}
 
+  {# ── Banner de avaliação pendente ───────────────────────── #}
+  {% if events_to_rate %}
+  <div style="background: linear-gradient(135deg, #7c3aed, #4f46e5); border-radius: var(--r-lg);
+              padding: 20px; margin-bottom: 28px; color: #fff;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+      <span style="font-size:28px; line-height:1;">⭐</span>
+      <div>
+        <div style="font-weight:700; font-size:16px;">Avalie seu último evento</div>
+        <div style="font-size:13px; opacity:.85;">
+          {{ events_to_rate | length }} evento{{ 's' if events_to_rate | length > 1 else '' }} aguardando sua avaliação
+        </div>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      {% for r in events_to_rate %}
+      {% set ev = r.event %}
+      <a href="/portal/events/{{ ev.id }}/rate"
+         style="display:flex; align-items:center; justify-content:space-between;
+                background:rgba(255,255,255,.15); border-radius: var(--r-md);
+                padding:10px 14px; color:#fff; text-decoration:none;">
+        <div>
+          <div style="font-weight:600; font-size:14px;">{{ ev.title }}</div>
+          <div style="font-size:12px; opacity:.8;">{{ ev.start_at.strftime('%d/%m/%Y') if ev.start_at }}</div>
+        </div>
+        <span style="font-size:20px;">→</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   {# ── Convites pendentes ─────────────────────────────────── #}
   {% if pending_invites %}
   <div style="margin-bottom: 32px;">

@@ -12,7 +12,7 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 from app import db, limiter
-from app.models import Talent, EventRole, CalendarEvent, TalentMedia
+from app.models import Talent, EventRole, CalendarEvent, TalentMedia, EventRating, EventSubRating
 from app.talents.importer import parse_date
 from app.email_service import send_password_reset_email, send_async
 
@@ -226,6 +226,22 @@ def home():
         .all()
     )
 
+    # Eventos para avaliar: concluídos nos últimos 7 dias, sem avaliação ainda
+    _rating_window = datetime.utcnow() - timedelta(days=7)
+    _rated_event_ids = {r.event_id for r in EventRating.query.filter_by(talent_id=talent.id).all()}
+    events_to_rate = (
+        EventRole.query
+        .filter_by(talent_id=talent.id, invite_status="accepted")
+        .join(CalendarEvent)
+        .filter(
+            CalendarEvent.start_at < datetime.utcnow(),
+            CalendarEvent.start_at >= _rating_window,
+        )
+        .order_by(CalendarEvent.start_at.desc())
+        .all()
+    )
+    events_to_rate = [r for r in events_to_rate if r.event_id not in _rated_event_ids]
+
     # Histórico de eventos passados confirmados (home: últimos 10)
     history = (
         EventRole.query
@@ -259,6 +275,7 @@ def home():
         total_pago=total_pago,
         total_pendente=total_pendente,
         today=today,
+        events_to_rate=events_to_rate,
     )
 
 
@@ -511,6 +528,172 @@ def event_figurino(event_id: int):
         sheet_items=sheet_items,
         talent=talent,
     )
+
+
+# ── Avaliação de eventos ───────────────────────────────────────
+
+_SHOW_KEYWORDS = ("SHOW", "APRESENTAÇÃO", "APRESENTACAO", "ESPETÁCULO", "ESPETACULO")
+
+
+def _is_show_event(event: CalendarEvent) -> bool:
+    title_upper = (event.title or "").upper()
+    return any(kw in title_upper for kw in _SHOW_KEYWORDS)
+
+
+def _build_rating_context(talent: Talent, event: CalendarEvent) -> dict:
+    """Monta as listas de pessoas para avaliação individual."""
+    artists, coordinators, makeup = [], [], []
+    for role in event.roles:
+        if not role.talent_id or role.talent_id == talent.id or not role.talent:
+            continue
+        if role.role_type == "character":
+            artists.append(role)
+        elif role.role_type == "extra":
+            name_lower = (role.character_name or "").lower()
+            if "coordenador" in name_lower or "coord" in name_lower:
+                coordinators.append(role)
+            elif "maquiador" in name_lower or "maquiagem" in name_lower or "make" in name_lower:
+                makeup.append(role)
+    return {
+        "artists": artists,
+        "coordinators": coordinators,
+        "makeup": makeup,
+        "is_show": _is_show_event(event),
+    }
+
+
+@portal_bp.route("/events/<int:event_id>/rate", methods=["GET"])
+@portal_login_required
+def rate_event(event_id: int):
+    talent = _current_talent()
+    role = EventRole.query.filter(
+        EventRole.event_id == event_id,
+        EventRole.talent_id == talent.id,
+        EventRole.invite_status == "accepted",
+    ).first_or_404()
+    event = role.event
+
+    existing = EventRating.query.filter_by(event_id=event_id, talent_id=talent.id).first()
+    ctx = _build_rating_context(talent, event)
+
+    return render_template(
+        "portal/rate.html",
+        talent=talent,
+        event=event,
+        existing_rating=existing,
+        **ctx,
+    )
+
+
+@portal_bp.route("/events/<int:event_id>/rate", methods=["POST"])
+@portal_login_required
+def submit_rating(event_id: int):
+    talent = _current_talent()
+    role = EventRole.query.filter(
+        EventRole.event_id == event_id,
+        EventRole.talent_id == talent.id,
+        EventRole.invite_status == "accepted",
+    ).first_or_404()
+
+    score_raw = request.form.get("score", "")
+    comment = request.form.get("comment", "").strip() or None
+    try:
+        score = int(score_raw)
+        if not (1 <= score <= 5):
+            raise ValueError
+    except ValueError:
+        flash("Por favor, selecione uma nota de 1 a 5 estrelas.", "error")
+        return redirect(url_for("portal.rate_event", event_id=event_id))
+
+    if score < 4 and not comment:
+        flash("Para notas abaixo de 4 estrelas, é necessário deixar um comentário explicando o que aconteceu.", "error")
+        return redirect(url_for("portal.rate_event", event_id=event_id))
+
+    existing = EventRating.query.filter_by(event_id=event_id, talent_id=talent.id).first()
+    if existing:
+        existing.score = score
+        existing.comment = comment
+    else:
+        rating = EventRating(event_id=event_id, talent_id=talent.id, score=score, comment=comment)
+        db.session.add(rating)
+
+    db.session.commit()
+
+    if request.form.get("skip_detail"):
+        flash("Obrigado pela avaliação!", "success")
+        return redirect(url_for("portal.home"))
+
+    return redirect(url_for("portal.rate_event_detail", event_id=event_id))
+
+
+@portal_bp.route("/events/<int:event_id>/rate/detail", methods=["GET", "POST"])
+@portal_login_required
+def rate_event_detail(event_id: int):
+    talent = _current_talent()
+    rating = EventRating.query.filter_by(event_id=event_id, talent_id=talent.id).first_or_404()
+    event = rating.event
+    ctx = _build_rating_context(talent, event)
+
+    if request.method == "GET":
+        return render_template(
+            "portal/rate_detail.html",
+            talent=talent,
+            event=event,
+            rating=rating,
+            **ctx,
+        )
+
+    # POST — salva sub-avaliações
+    # Remove sub-ratings anteriores para re-envio limpo
+    EventSubRating.query.filter_by(rating_id=rating.id).delete()
+
+    categories = ["som", "figurino"]
+    if ctx["is_show"]:
+        categories.append("texto")
+
+    for cat in categories:
+        score_raw = request.form.get(f"sub_{cat}_score", "")
+        comment = request.form.get(f"sub_{cat}_comment", "").strip() or None
+        if score_raw:
+            try:
+                score = int(score_raw)
+                if 1 <= score <= 5:
+                    db.session.add(EventSubRating(
+                        rating_id=rating.id,
+                        category=cat,
+                        score=score,
+                        comment=comment,
+                    ))
+            except ValueError:
+                pass
+
+    person_categories = [
+        ("artista", ctx["artists"]),
+        ("coordenacao", ctx["coordinators"]),
+        ("maquiagem", ctx["makeup"]),
+    ]
+    for cat, roles in person_categories:
+        for role in roles:
+            score_raw = request.form.get(f"sub_{cat}_{role.talent_id}_score", "")
+            comment = request.form.get(f"sub_{cat}_{role.talent_id}_comment", "").strip() or None
+            if score_raw:
+                try:
+                    score = int(score_raw)
+                    if 1 <= score <= 5:
+                        db.session.add(EventSubRating(
+                            rating_id=rating.id,
+                            category=cat,
+                            subject_talent_id=role.talent_id,
+                            score=score,
+                            comment=comment,
+                        ))
+                except ValueError:
+                    pass
+
+    rating.detail_submitted_at = datetime.utcnow()
+    db.session.commit()
+    flash("Obrigado! Sua avaliação completa foi enviada.", "success")
+    return redirect(url_for("portal.home"))
 
 
 # ── Esqueci a senha ────────────────────────────────────────────

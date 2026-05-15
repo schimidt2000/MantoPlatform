@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Avaliação Detalhada — Manto</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .portal-wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px 80px; }
+    .rate-label { font-size: 12px; font-weight: 700; text-transform: uppercase;
+                  letter-spacing: .05em; color: var(--muted); margin-bottom: 10px; }
+    .cat-card {
+      border: 1px solid var(--line); border-radius: var(--r-md);
+      padding: 16px; margin-bottom: 16px; background: var(--surface);
+    }
+    .cat-card-title { font-weight: 700; font-size: 15px; margin-bottom: 12px; }
+    .person-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 0; border-top: 1px solid var(--line);
+    }
+    .person-row:first-child { border-top: none; padding-top: 0; }
+    .person-avatar {
+      width: 48px; height: 48px; border-radius: 50%;
+      object-fit: cover; flex-shrink: 0; background: var(--line);
+    }
+    .person-avatar-placeholder {
+      width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700; color: #fff;
+    }
+    .person-info { flex: 1; min-width: 0; }
+    .person-name { font-size: 14px; font-weight: 600; margin-bottom: 2px;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .person-role { font-size: 12px; color: var(--muted); }
+    /* Mini star group */
+    .mini-stars { display: flex; gap: 2px; flex-direction: row-reverse; }
+    .mini-stars input[type=radio] { display: none; }
+    .mini-stars label {
+      font-size: 26px; cursor: pointer; color: #d1d5db; line-height: 1;
+      transition: color .12s;
+    }
+    .mini-stars label:hover,
+    .mini-stars label:hover ~ label,
+    .mini-stars input:checked ~ label { color: #f59e0b; }
+    .comment-box {
+      width: 100%; min-height: 64px; padding: 8px 10px; margin-top: 8px;
+      border: 1px solid var(--line); border-radius: var(--r-md);
+      font-size: 13px; font-family: inherit; resize: vertical;
+      box-sizing: border-box; background: #fff;
+    }
+    .comment-box:focus { outline: none; border-color: var(--accent); }
+    .btn-submit {
+      display: block; width: 100%; padding: 14px;
+      background: var(--accent); color: #fff; border: none;
+      border-radius: var(--r-md); font-size: 15px; font-weight: 700;
+      cursor: pointer; text-align: center; margin-top: 24px;
+    }
+    .skip-link { display: block; text-align: center; margin-top: 12px;
+                 font-size: 13px; color: var(--muted); cursor: pointer; }
+  </style>
+</head>
+<body>
+<div class="portal-wrap">
+
+  <div style="margin-bottom: 20px;">
+    <a href="/portal/events/{{ event.id }}/rate" style="font-size:13px; color:var(--muted); text-decoration:none;">
+      ← Voltar para nota geral
+    </a>
+  </div>
+
+  <div style="margin-bottom: 28px;">
+    <div style="font-size: 13px; color: var(--muted); margin-bottom: 4px;">Avaliação detalhada</div>
+    <div style="font-size: 20px; font-weight: 700;">{{ event.title }}</div>
+    <div style="font-size: 13px; color: var(--muted);">
+      Você deu {{ rating.score }} estrela{{ 's' if rating.score > 1 }} para este evento.
+    </div>
+  </div>
+
+  <p style="font-size:14px; color:var(--muted); margin-bottom:24px;">
+    Agora você pode avaliar aspectos específicos. Tudo é opcional — só avalie o que quiser.
+  </p>
+
+  <form method="POST" action="/portal/events/{{ event.id }}/rate/detail">
+
+    {# ── Categorias gerais ── #}
+    <div class="cat-card">
+      <div class="cat-card-title">🎵 Som</div>
+      {% call macros.mini_star_field('som') %}{% endcall %}
+      {% include 'portal/_mini_star.html' with context ignore missing %}
+      <div class="rate-label" style="margin:0 0 8px;">Nota</div>
+      <div class="mini-stars">
+        {% for v in [5,4,3,2,1] %}
+        <input type="radio" name="sub_som_score" id="som{{ v }}" value="{{ v }}">
+        <label for="som{{ v }}">★</label>
+        {% endfor %}
+      </div>
+      <textarea class="comment-box" name="sub_som_comment" placeholder="Comentário opcional..."></textarea>
+    </div>
+
+    <div class="cat-card">
+      <div class="cat-card-title">👗 Figurino</div>
+      <div class="rate-label" style="margin:0 0 8px;">Nota</div>
+      <div class="mini-stars">
+        {% for v in [5,4,3,2,1] %}
+        <input type="radio" name="sub_figurino_score" id="fig{{ v }}" value="{{ v }}">
+        <label for="fig{{ v }}">★</label>
+        {% endfor %}
+      </div>
+      <textarea class="comment-box" name="sub_figurino_comment" placeholder="Comentário opcional..."></textarea>
+    </div>
+
+    {% if is_show %}
+    <div class="cat-card">
+      <div class="cat-card-title">📝 Texto do Show</div>
+      <div class="rate-label" style="margin:0 0 8px;">Nota</div>
+      <div class="mini-stars">
+        {% for v in [5,4,3,2,1] %}
+        <input type="radio" name="sub_texto_score" id="txt{{ v }}" value="{{ v }}">
+        <label for="txt{{ v }}">★</label>
+        {% endfor %}
+      </div>
+      <textarea class="comment-box" name="sub_texto_comment" placeholder="Comentário opcional..."></textarea>
+    </div>
+    {% endif %}
+
+    {# ── Colegas artistas ── #}
+    {% if artists %}
+    <div class="cat-card">
+      <div class="cat-card-title">🎭 Colegas Artistas</div>
+      {% for role in artists %}
+      {% set t = role.talent %}
+      <div class="person-row">
+        {% if t.photo_face_path %}
+        <img class="person-avatar"
+             src="{{ t.photo_face_path if t.photo_face_path.startswith('http') else '/portal/photo/' + t.photo_face_path.lstrip('/uploads/').lstrip('uploads/') }}"
+             alt="{{ t.artistic_name or t.full_name }}"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="person-avatar-placeholder" style="display:none;">
+          {{ (t.artistic_name or t.full_name)[0].upper() }}
+        </div>
+        {% else %}
+        <div class="person-avatar-placeholder">
+          {{ (t.artistic_name or t.full_name)[0].upper() }}
+        </div>
+        {% endif %}
+        <div class="person-info">
+          <div class="person-name">{{ t.artistic_name or t.full_name }}</div>
+          <div class="person-role">{{ role.character_name }}</div>
+          <div class="mini-stars" style="margin-top:6px;">
+            {% for v in [5,4,3,2,1] %}
+            <input type="radio" name="sub_artista_{{ t.id }}_score" id="art{{ t.id }}_{{ v }}" value="{{ v }}">
+            <label for="art{{ t.id }}_{{ v }}">★</label>
+            {% endfor %}
+          </div>
+          <textarea class="comment-box" name="sub_artista_{{ t.id }}_comment"
+                    placeholder="Comentário opcional..." style="min-height:50px;"></textarea>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Coordenadores ── #}
+    {% if coordinators %}
+    <div class="cat-card">
+      <div class="cat-card-title">🧑‍💼 Coordenação</div>
+      {% for role in coordinators %}
+      {% set t = role.talent %}
+      <div class="person-row">
+        {% if t.photo_face_path %}
+        <img class="person-avatar"
+             src="{{ t.photo_face_path if t.photo_face_path.startswith('http') else '/portal/photo/' + t.photo_face_path.lstrip('/uploads/').lstrip('uploads/') }}"
+             alt="{{ t.artistic_name or t.full_name }}"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="person-avatar-placeholder" style="display:none;">
+          {{ (t.artistic_name or t.full_name)[0].upper() }}
+        </div>
+        {% else %}
+        <div class="person-avatar-placeholder">
+          {{ (t.artistic_name or t.full_name)[0].upper() }}
+        </div>
+        {% endif %}
+        <div class="person-info">
+          <div class="person-name">{{ t.artistic_name or t.full_name }}</div>
+          <div class="person-role">Coordenador(a)</div>
+          <div class="mini-stars" style="margin-top:6px;">
+            {% for v in [5,4,3,2,1] %}
+            <input type="radio" name="sub_coordenacao_{{ t.id }}_score" id="coord{{ t.id }}_{{ v }}" value="{{ v }}">
+            <label for="coord{{ t.id }}_{{ v }}">★</label>
+            {% endfor %}
+          </div>
+          <textarea class="comment-box" name="sub_coordenacao_{{ t.id }}_comment"
+                    placeholder="Comentário opcional..." style="min-height:50px;"></textarea>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Maquiagem ── #}
+    {% if makeup %}
+    <div class="cat-card">
+      <div class="cat-card-title">💄 Maquiagem</div>
+      {% for role in makeup %}
+      {% set t = role.talent %}
+      <div class="person-row">
+        {% if t.photo_face_path %}
+        <img class="person-avatar"
+             src="{{ t.photo_face_path if t.photo_face_path.startswith('http') else '/portal/photo/' + t.photo_face_path.lstrip('/uploads/').lstrip('uploads/') }}"
+             alt="{{ t.artistic_name or t.full_name }}"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="person-avatar-placeholder" style="display:none;">
+          {{ (t.artistic_name or t.full_name)[0].upper() }}
+        </div>
+        {% else %}
+        <div class="person-avatar-placeholder">
+          {{ (t.artistic_name or t.full_name)[0].upper() }}
+        </div>
+        {% endif %}
+        <div class="person-info">
+          <div class="person-name">{{ t.artistic_name or t.full_name }}</div>
+          <div class="person-role">Maquiador(a)</div>
+          <div class="mini-stars" style="margin-top:6px;">
+            {% for v in [5,4,3,2,1] %}
+            <input type="radio" name="sub_maquiagem_{{ t.id }}_score" id="make{{ t.id }}_{{ v }}" value="{{ v }}">
+            <label for="make{{ t.id }}_{{ v }}">★</label>
+            {% endfor %}
+          </div>
+          <textarea class="comment-box" name="sub_maquiagem_{{ t.id }}_comment"
+                    placeholder="Comentário opcional..." style="min-height:50px;"></textarea>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <button type="submit" class="btn-submit">Enviar avaliação completa ✓</button>
+    <a href="/portal/" class="skip-link">Pular — já enviei o suficiente</a>
+
+  </form>
+</div>
+</body>
+</html>

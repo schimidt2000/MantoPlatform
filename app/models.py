@@ -701,3 +701,51 @@ class OrcamentoHistory(db.Model):
     form_snapshot  = db.Column(db.Text, nullable=True)  # JSON com todo o estado do form
 
     user = db.relationship("User", lazy=True)
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Avaliações de eventos (via portal do artista)
+# ══════════════════════════════════════════════════════════════════
+
+class EventRating(db.Model):
+    """Avaliação geral de um evento, submetida pelo talento via portal."""
+    __tablename__ = "event_ratings"
+    __table_args__ = (
+        db.UniqueConstraint("event_id", "talent_id", name="uq_event_rating"),
+        db.Index("ix_event_ratings_event_id",  "event_id"),
+        db.Index("ix_event_ratings_talent_id", "talent_id"),
+    )
+
+    id                  = db.Column(db.Integer, primary_key=True)
+    event_id            = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    talent_id           = db.Column(db.Integer, db.ForeignKey("talents.id"), nullable=False)
+    score               = db.Column(db.Integer, nullable=False)   # 1–5
+    comment             = db.Column(db.Text, nullable=True)
+    submitted_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    detail_submitted_at = db.Column(db.DateTime, nullable=True)   # quando etapa 2 foi enviada
+
+    event       = db.relationship("CalendarEvent", lazy=True)
+    talent      = db.relationship("Talent", foreign_keys=[talent_id], lazy=True)
+    sub_ratings = db.relationship(
+        "EventSubRating", backref="rating", lazy=True, cascade="all, delete-orphan"
+    )
+
+
+class EventSubRating(db.Model):
+    """Sub-avaliação por categoria dentro de um EventRating."""
+    __tablename__ = "event_sub_ratings"
+    __table_args__ = (
+        db.Index("ix_event_sub_ratings_rating_id", "rating_id"),
+        db.Index("ix_event_sub_ratings_subject",   "subject_talent_id"),
+    )
+
+    id                = db.Column(db.Integer, primary_key=True)
+    rating_id         = db.Column(db.Integer, db.ForeignKey("event_ratings.id"), nullable=False)
+    category          = db.Column(db.String(20), nullable=False)
+    # category: 'som' | 'figurino' | 'texto' | 'coordenacao' | 'maquiagem' | 'artista'
+    subject_talent_id = db.Column(db.Integer, db.ForeignKey("talents.id"), nullable=True)
+    # null para categorias gerais (som, figurino, texto); preenchido para avaliações de pessoa
+    score             = db.Column(db.Integer, nullable=False)    # 1–5
+    comment           = db.Column(db.Text, nullable=True)
+
+    subject_talent = db.relationship("Talent", foreign_keys=[subject_talent_id], lazy=True)

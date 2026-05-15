@@ -22,7 +22,7 @@ from .service import (
 )
 from .. import db
 from app.constants import RoleName
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -663,6 +663,13 @@ def event_detail(event_id: int):
         for r in event.roles
     )
 
+    event_ratings = (
+        EventRating.query
+        .filter_by(event_id=event.id)
+        .order_by(EventRating.submitted_at.desc())
+        .all()
+    )
+
     return render_template(
         "event_detail.html",
         event=event,
@@ -687,6 +694,7 @@ def event_detail(event_id: int):
         suggested_sheets=suggested_sheets,
         settings=settings,
         has_makeup_role=has_makeup_role,
+        event_ratings=event_ratings,
     )
 
 

@@ -6,7 +6,7 @@ from flask import Blueprint, redirect, url_for, render_template, request, flash,
 from flask_login import login_required, current_user
 from sqlalchemy import or_, and_, not_
 
-from app.models import Talent, EventRole, CalendarEvent, ImportState
+from app.models import Talent, EventRole, CalendarEvent, ImportState, EventRating, EventSubRating
 from .. import db
 from app.constants import RoleName
 from .importer import import_new_talents_from_sheet
@@ -226,6 +226,22 @@ def talent_detail(talent_id: int):
     total_earned    = sum(r.cache_value or 0 for r in history)
     characters_done = sorted({r.character_name for r in history})
 
+    # Notas: avaliações recebidas POR este talento (como sujeito de sub-avaliação)
+    received_sub_ratings = (
+        EventSubRating.query
+        .filter_by(subject_talent_id=talent.id)
+        .join(EventRating, EventSubRating.rating_id == EventRating.id)
+        .order_by(EventRating.submitted_at.desc())
+        .all()
+    )
+    # Avaliações gerais feitas por este talento (como avaliador)
+    given_ratings = (
+        EventRating.query
+        .filter_by(talent_id=talent.id)
+        .order_by(EventRating.submitted_at.desc())
+        .all()
+    )
+
     return render_template(
         "talent_detail.html",
         talent=talent,
@@ -236,6 +252,8 @@ def talent_detail(talent_id: int):
         date_from=date_from_str,
         date_to=date_to_str,
         can_edit=_can_edit_talent(),
+        received_sub_ratings=received_sub_ratings,
+        given_ratings=given_ratings,
     )
 
 @talents_bp.route("/talents/<int:talent_id>/edit", methods=["GET", "POST"])

@@ -1098,6 +1098,62 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 </div>
 {% endif %}
 
+{# ── Avaliações do evento (internas) ─────────────────────────── #}
+{% if event_ratings and (eff_has_role("SUPERADMIN", "CASTING", "FINANCEIRO")) %}
+<div class="panel" style="margin-top:24px;">
+  <div class="panel-title">⭐ Avaliações dos Artistas</div>
+
+  {% set _avg = (event_ratings | map(attribute='score') | list | sum) / event_ratings | length %}
+  <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--line);">
+    <div style="text-align:center;">
+      <div style="font-size:36px; font-weight:800; color:#f59e0b;">{{ "%.1f"|format(_avg) }}</div>
+      <div style="font-size:12px; color:var(--muted);">média geral</div>
+    </div>
+    <div>
+      <div style="font-size:14px; color:#f59e0b; letter-spacing:2px; font-size:20px;">
+        {% for i in range(_avg | round | int) %}★{% endfor %}{% for i in range(5 - (_avg | round | int)) %}☆{% endfor %}
+      </div>
+      <div style="font-size:13px; color:var(--muted);">{{ event_ratings | length }} avaliação{{ 'ões' if event_ratings | length > 1 else '' }}</div>
+    </div>
+  </div>
+
+  {% for rating in event_ratings %}
+  {% set t = rating.talent %}
+  <div style="padding:14px 0; border-bottom:1px solid var(--line);">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+      <span style="font-weight:600; font-size:14px;">{{ t.artistic_name or t.full_name if t else '—' }}</span>
+      <span style="color:#f59e0b; font-size:15px;">
+        {% for i in range(rating.score) %}★{% endfor %}{% for i in range(5 - rating.score) %}☆{% endfor %}
+      </span>
+      <span class="meta">{{ rating.submitted_at.strftime('%d/%m/%Y') }}</span>
+    </div>
+    {% if rating.comment %}
+    <p style="font-size:13px; color:var(--muted); margin:0 0 8px; padding-left:4px;">{{ rating.comment }}</p>
+    {% endif %}
+    {% if rating.sub_ratings %}
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+      {% set _cat_labels = {'som':'🎵 Som','figurino':'👗 Figurino','texto':'📝 Texto','coordenacao':'🧑‍💼 Coord.','maquiagem':'💄 Make','artista':'🎭 Artista'} %}
+      {% for sr in rating.sub_ratings %}
+      <div style="background:var(--surface); border:1px solid var(--line); border-radius:var(--r-sm);
+                  padding:4px 10px; font-size:12px;">
+        <span style="color:var(--muted);">{{ _cat_labels.get(sr.category, sr.category) }}
+          {% if sr.subject_talent %} · {{ sr.subject_talent.artistic_name or sr.subject_talent.full_name }}{% endif %}
+        </span>
+        <span style="color:#f59e0b; margin-left:4px;">
+          {% for i in range(sr.score) %}★{% endfor %}
+        </span>
+        {% if sr.comment %}
+        <span style="color:var(--muted);"> · {{ sr.comment }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 
 {% endblock %}
 

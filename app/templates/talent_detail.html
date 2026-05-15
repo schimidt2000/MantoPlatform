@@ -359,6 +359,69 @@
   <p class="muted">Nenhum evento encontrado{% if date_from or date_to %} no período selecionado{% endif %}.</p>
   {% endif %}
 
+  {# ── Notas (avaliações recebidas) ─────────────────────────── #}
+  {% if received_sub_ratings or given_ratings %}
+  <div class="panel" style="margin-top:24px;">
+    <h2 style="margin-bottom:16px;">⭐ Notas</h2>
+
+    {% if received_sub_ratings %}
+    <div style="margin-bottom:20px;">
+      <div class="meta" style="font-weight:600; margin-bottom:12px;">
+        Avaliações recebidas pelos colegas
+      </div>
+      {% set _cat_labels = {'som':'Som','figurino':'Figurino','texto':'Texto do Show',
+                             'coordenacao':'Coordenação','maquiagem':'Maquiagem','artista':'Artista'} %}
+      {% for sr in received_sub_ratings %}
+      <div style="display:flex; align-items:flex-start; gap:12px; padding:10px 0;
+                  border-bottom:1px solid var(--line);">
+        <div style="min-width:120px;">
+          <span class="badge badge-gray">{{ _cat_labels.get(sr.category, sr.category) }}</span>
+        </div>
+        <div>
+          <span style="font-size:15px; color:#f59e0b;">
+            {% for i in range(sr.score) %}★{% endfor %}{% for i in range(5 - sr.score) %}☆{% endfor %}
+          </span>
+          {% if sr.comment %}
+          <p style="font-size:13px; color:var(--muted); margin:4px 0 0;">{{ sr.comment }}</p>
+          {% endif %}
+          <p class="meta" style="margin-top:4px;">
+            {{ sr.rating.event.title if sr.rating and sr.rating.event else "—" }} ·
+            {{ sr.rating.submitted_at.strftime('%d/%m/%Y') if sr.rating }}
+          </p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if given_ratings %}
+    <div>
+      <div class="meta" style="font-weight:600; margin-bottom:12px;">
+        Avaliações gerais feitas por {{ talent.artistic_name or talent.full_name.split()[0] }}
+      </div>
+      {% for gr in given_ratings %}
+      <div style="display:flex; align-items:flex-start; gap:12px; padding:10px 0;
+                  border-bottom:1px solid var(--line);">
+        <div>
+          <span style="font-size:15px; color:#f59e0b;">
+            {% for i in range(gr.score) %}★{% endfor %}{% for i in range(5 - gr.score) %}☆{% endfor %}
+          </span>
+          <div style="font-size:13px; font-weight:600; margin-top:2px;">
+            {{ gr.event.title if gr.event else "—" }}
+          </div>
+          {% if gr.comment %}
+          <p style="font-size:13px; color:var(--muted); margin:4px 0 0;">{{ gr.comment }}</p>
+          {% endif %}
+          <p class="meta" style="margin-top:4px;">{{ gr.submitted_at.strftime('%d/%m/%Y') }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  </div>
+  {% endif %}
+
 </div>
 
 {% endblock %}
