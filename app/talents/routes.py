@@ -39,8 +39,14 @@ def list_talents():
     status = request.args.get("status", "active")
     # filtrou=1 indica que o form foi submetido; sem ele é visita fresca (default ativo)
     filtrou = request.args.get("filtrou", "0") == "1"
+    q = request.args.get("q", "").strip()
     ja_trabalhou = request.args.get("ja_trabalhou", "0" if filtrou else ("1" if status == "active" else "0"))
     query = Talent.query.filter_by(status=status)
+    if q:
+        query = query.filter(or_(
+            Talent.full_name.ilike(f"%{q}%"),
+            Talent.artistic_name.ilike(f"%{q}%"),
+        ))
     if ja_trabalhou == "1":
         query = query.filter(Talent.worked_before.is_(True))
 
@@ -103,26 +109,8 @@ def list_talents():
 
         if passport:
             passport_filters = []
-            if "visa" in passport:
-                passport_filters.append(Talent.has_visa.is_(True))
-            if "passaporte" in passport:
-                passport_filters.append(
-                    and_(
-                        or_(Talent.has_visa.is_(False), Talent.has_visa.is_(None)),
-                        or_(
-                            Talent.passport_visa_text.ilike("%passap%"),
-                            Talent.passport_visa_text.ilike("%passport%"),
-                        ),
-                    )
-                )
-            if "nenhum" in passport:
-                passport_filters.append(
-                    and_(
-                        or_(Talent.has_visa.is_(False), Talent.has_visa.is_(None)),
-                        not_(Talent.passport_visa_text.ilike("%passap%")),
-                        not_(Talent.passport_visa_text.ilike("%passport%")),
-                    )
-                )
+            for pv in passport:
+                passport_filters.append(Talent.passport_status == pv)
             if passport_filters:
                 query = query.filter(or_(*passport_filters))
 
@@ -157,9 +145,9 @@ def list_talents():
         size_options = ["XGG", "GG", "G", "M", "P", "XP"]
         shoe_options = [str(n) for n in range(33, 48)]
         passport_options = [
-            ("visa", "com visto e passaporte"),
-            ("passaporte", "com passaporte sem visto"),
-            ("nenhum", "sem nenhum dos dois"),
+            ("visa",     "passaporte + visto americano"),
+            ("passport", "passaporte sem visto"),
+            ("none",     "sem passaporte"),
         ]
     else:
         language_options = []
@@ -192,6 +180,7 @@ def list_talents():
         size_options_bottom=size_options,
         shoe_options=shoe_options,
         passport_options=passport_options,
+        q=q,
         character=character,
         character_matches=character_matches,
         import_state=import_state,
@@ -271,8 +260,9 @@ def edit_talent(talent_id: int):
         talent.pix_key_secondary    = f.get("pix_key_secondary", "").strip() or None
         talent.pix_key_type         = f.get("pix_key_type", "").strip() or None
         talent.rg                   = f.get("rg", "").strip() or None
-        talent.passport_visa_text   = f.get("passport_visa_text", "").strip() or None
-        talent.has_visa             = f.get("has_visa") == "1"
+        ps = f.get("passport_status", "").strip()
+        talent.passport_status      = ps if ps in ("visa", "passport", "none") else None
+        talent.has_visa             = talent.passport_status == "visa"  # manter sincronizado
         talent.how_found_us         = f.get("how_found_us", "").strip() or None
         talent.worked_before        = f.get("worked_before") == "1" if f.get("worked_before") != "" else None
         talent.car_brand            = f.get("car_brand", "").strip() or None

@@ -13,15 +13,63 @@ Para Cloudflare R2, defina também:
   AWS_ACCESS_KEY_ID     = R2 Access Key ID
   AWS_SECRET_ACCESS_KEY = R2 Secret Access Key
 """
+import io
 import os
+import shutil
 import uuid as _uuid
 from typing import BinaryIO
 
 from flask import current_app
 
+# Extensões que passam por compressão automática (GIF excluído — pode ser animado)
+_COMPRESS_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+_MAX_PX = 1200   # lado máximo em pixels
+_QUALITY = 85    # qualidade JPEG (0-100)
+
+
+def _compress_image(file_obj: BinaryIO, ext: str) -> tuple[io.BytesIO, str] | None:
+    """Redimensiona e comprime imagem. Retorna (BytesIO, extensão) ou None se não for imagem."""
+    if ext not in _COMPRESS_EXTS:
+        return None
+
+    try:
+        from PIL import Image, ImageOps
+
+        file_obj.seek(0)
+        img = Image.open(file_obj)
+
+        # Corrige orientação EXIF (fotos de celular chegam rotacionadas)
+        img = ImageOps.exif_transpose(img)
+
+        # Redimensiona mantendo proporção
+        if max(img.width, img.height) > _MAX_PX:
+            img.thumbnail((_MAX_PX, _MAX_PX), Image.LANCZOS)
+
+        # PNG com transparência real → mantém PNG comprimido
+        if img.mode == "RGBA":
+            alpha = img.getchannel("A")
+            if alpha.getextrema()[0] < 255:
+                out = io.BytesIO()
+                img.save(out, format="PNG", optimize=True)
+                out.seek(0)
+                return out, ".png"
+
+        # Tudo o mais → JPEG
+        if img.mode not in ("RGB",):
+            img = img.convert("RGB")
+
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=_QUALITY, optimize=True)
+        out.seek(0)
+        return out, ".jpg"
+
+    except Exception:
+        # Se falhar por qualquer motivo, salva o arquivo original sem compressão
+        return None
+
 
 def save_file(file_obj: BinaryIO, subfolder: str, filename: str | None = None) -> str:
-    """Salva um arquivo e retorna a URL acessível.
+    """Salva um arquivo (com compressão automática para imagens) e retorna a URL acessível.
 
     Args:
         file_obj:  Objeto de arquivo do Flask (werkzeug.FileStorage).
@@ -31,13 +79,25 @@ def save_file(file_obj: BinaryIO, subfolder: str, filename: str | None = None) -
     Returns:
         URL completa para acessar o arquivo.
     """
-    ext = os.path.splitext(file_obj.filename)[1].lower() if file_obj.filename else ""
-    if not filename:
-        filename = f"{_uuid.uuid4().hex}{ext}"
+    raw_name = getattr(file_obj, "filename", None) or ""
+    ext = os.path.splitext(raw_name)[1].lower()
+
+    compressed = _compress_image(file_obj, ext)
+    if compressed is not None:
+        actual, new_ext = compressed
+        if filename:
+            filename = os.path.splitext(filename)[0] + new_ext
+        else:
+            filename = f"{_uuid.uuid4().hex}{new_ext}"
+    else:
+        actual = file_obj
+        actual.seek(0)
+        if not filename:
+            filename = f"{_uuid.uuid4().hex}{ext}"
 
     if current_app.config.get("USE_S3"):
-        return _save_to_object_storage(file_obj, subfolder, filename)
-    return _save_local(file_obj, subfolder, filename)
+        return _save_to_object_storage(actual, subfolder, filename)
+    return _save_local(actual, subfolder, filename)
 
 
 def delete_file(url_or_path: str | None) -> None:
@@ -56,7 +116,8 @@ def _save_local(file_obj: BinaryIO, subfolder: str, filename: str) -> str:
     upload_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], subfolder)
     os.makedirs(upload_dir, exist_ok=True)
     file_obj.seek(0)
-    file_obj.save(os.path.join(upload_dir, filename))
+    with open(os.path.join(upload_dir, filename), "wb") as f:
+        shutil.copyfileobj(file_obj, f)
     return f"/uploads/{subfolder}/{filename}"
 
 

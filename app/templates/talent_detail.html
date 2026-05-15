@@ -27,7 +27,8 @@
       <div style="border-radius:var(--r-lg); overflow:hidden; border:1px solid var(--line);
                   aspect-ratio:3/4; max-height:520px; background:#f0ede8;">
         <img src="{{ talent.photo_face_path }}" alt="Foto de {{ talent.full_name }}"
-             style="width:100%; height:100%; object-fit:cover; object-position:top center; display:block;">
+             style="width:100%; height:100%; object-fit:cover; object-position:top center; display:block;"
+             onerror="this.parentElement.innerHTML='<div style=\'display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:13px;\'>Foto não disponível</div>';">
       </div>
     {% else %}
       <div class="panel flex-center" style="aspect-ratio:3/4; max-height:520px;
@@ -140,13 +141,16 @@
 
       <div class="form-group">
         <label>Passaporte / Visto</label>
-        {% if talent.has_visa %}
-          <span class="badge badge-green">Com passaporte/visto</span>
+        {% if talent.passport_status == 'visa' %}
+          <span class="badge badge-green">Passaporte + Visto EUA</span>
+        {% elif talent.passport_status == 'passport' %}
+          <span class="badge badge-blue">Só Passaporte</span>
+        {% elif talent.passport_status == 'none' %}
+          <span class="badge badge-gray">Sem passaporte</span>
+        {% elif talent.has_visa %}
+          <span class="badge badge-green">Passaporte + Visto EUA</span>
         {% else %}
-          <span class="badge badge-gray">Sem passaporte/visto</span>
-        {% endif %}
-        {% if talent.passport_visa_text %}
-          <p class="meta mt-4">{{ talent.passport_visa_text }}</p>
+          <span class="badge badge-gray">Não informado</span>
         {% endif %}
       </div>
 
@@ -218,18 +222,41 @@
   <div class="panel">
     <h2>Foto Corpo Inteiro</h2>
     <img src="{{ talent.photo_full_path }}" alt="Corpo inteiro de {{ talent.full_name }}"
-         style="max-height:600px; object-fit:contain; border-radius:var(--r-md); border:1px solid var(--line);">
+         style="max-height:600px; object-fit:contain; border-radius:var(--r-md); border:1px solid var(--line);"
+         onerror="this.style.display='none'; document.getElementById('fullbody-photo-error').style.display='block';">
+    <div id="fullbody-photo-error" style="display:none; padding:16px; background:var(--surface); border-radius:var(--r-md); border:1px solid var(--line);">
+      <p class="muted" style="margin-bottom:8px;">Imagem não pôde ser carregada.</p>
+      <a href="{{ talent.photo_full_path }}" target="_blank" rel="noopener" class="btn btn-sm btn-secondary">Abrir link original</a>
+    </div>
   </div>
 {% endif %}
 
 
-{# ── Foto do documento ───────────────────────────────────────── #}
+{# ── Documento (PDF) ─────────────────────────────────────────── #}
 {% if talent.doc_photo_path %}
+  {% set _doc = talent.doc_photo_path %}
+  {# Extrai FILE_ID para montar URL de preview, compatível com URLs antigas (lh3) e novas (drive) #}
+  {% if '/file/d/' in _doc %}
+    {% set _file_id = _doc.split('/file/d/')[1].split('/')[0] %}
+  {% elif '/d/' in _doc %}
+    {% set _file_id = _doc.split('/d/')[1].split('?')[0] %}
+  {% else %}
+    {% set _file_id = '' %}
+  {% endif %}
+  {% set _preview_url = 'https://drive.google.com/file/d/' + _file_id + '/preview' if _file_id else _doc %}
+  {% set _view_url = 'https://drive.google.com/file/d/' + _file_id + '/view' if _file_id else _doc %}
+
   <hr class="sep">
   <div class="panel">
-    <h2>Documento (CPF / RG / CNH)</h2>
-    <img src="{{ talent.doc_photo_path }}" alt="Documento de {{ talent.full_name }}"
-         style="max-height:400px; object-fit:contain; border-radius:var(--r-md); border:1px solid var(--line);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h2 style="margin:0;">Documento (CPF / RG / CNH)</h2>
+      <a href="{{ _view_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-secondary">Abrir PDF</a>
+    </div>
+    <iframe src="{{ _preview_url }}"
+            width="100%" height="480"
+            style="border:1px solid var(--line); border-radius:var(--r-md);"
+            allow="autoplay">
+    </iframe>
   </div>
 {% endif %}
 

@@ -8,6 +8,7 @@
   <a href="/talents/add" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
     + Adicionar Talento
   </a>
+  {% if eff_has_role('CASTING', 'SUPERADMIN') %}
   <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
     <form method="post" action="/talents/import" style="margin:0;" id="import-form">
       <button type="submit" class="btn btn-secondary" id="import-btn"
@@ -35,6 +36,7 @@
       <span style="font-size:11px; color:var(--muted);">Nunca sincronizado</span>
     {% endif %}
   </div>
+  {% endif %}
 {% endblock %}
 
 {% block extra_head %}
@@ -202,22 +204,25 @@
   {% set active_bottoms   = request.args.getlist('bottom') %}
   {% set active_shoes     = request.args.getlist('shoe') %}
   {% set active_passport  = request.args.getlist('passport') %}
-  {% set active_tag       = request.args.get('tag', '') %}
+  {% set active_tags      = request.args.getlist('tag') %}
   {% set active_height    = request.args.get('height_value', '') %}
   {% set active_character = request.args.get('character', '') %}
 
-  {% set has_filters = active_languages or active_races or active_tops or active_bottoms or active_shoes or active_passport or active_tag or active_height or active_character %}
+  {% set active_q = request.args.get('q', '') %}
+  {% set has_filters = active_q or active_languages or active_races or active_tops or active_bottoms or active_shoes or active_passport or active_tags or active_height or active_character %}
 
   {% if has_filters %}
   <div class="active-filters">
+    {% if active_q %}<span class="active-chip">Nome: "{{ active_q }}" <a href="{{ request.url | replace('q=' + active_q, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endif %}
     {% if active_character %}<span class="active-chip">&#127914; Personagem: <strong>{{ active_character }}</strong> <a href="{{ request.url | replace('character=' + active_character, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endif %}
     {% for v in active_languages %}<span class="active-chip">{{ v }} <a href="{{ request.url | replace('language=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
     {% for v in active_races %}<span class="active-chip">{{ v }} <a href="{{ request.url | replace('race=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
     {% for v in active_tops %}<span class="active-chip">Top {{ v }} <a href="{{ request.url | replace('top=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
     {% for v in active_bottoms %}<span class="active-chip">Bottom {{ v }} <a href="{{ request.url | replace('bottom=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
     {% for v in active_shoes %}<span class="active-chip">Cal. {{ v }} <a href="{{ request.url | replace('shoe=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
-    {% for v in active_passport %}<span class="active-chip">{{ v }} <a href="{{ request.url | replace('passport=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
-    {% if active_tag %}<span class="active-chip">Tag: {{ active_tag }}</span>{% endif %}
+    {% set passport_labels = {'visa': 'Passaporte + Visto EUA', 'passport': 'Só Passaporte', 'none': 'Sem passaporte'} %}
+    {% for v in active_passport %}<span class="active-chip">{{ passport_labels.get(v, v) }} <a href="{{ request.url | replace('passport=' + v, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endfor %}
+    {% for v in active_tags %}<span class="active-chip">Tag: {{ v }} <a href="#" onclick="removeTag('{{ v }}'); return false;">×</a></span>{% endfor %}
     {% if active_height %}<span class="active-chip">Altura {{ request.args.get('height_op','gte') | replace('gte','≥') | replace('lte','≤') }} {{ active_height }} cm</span>{% endif %}
     <a href="/talents?status=active" class="btn btn-ghost btn-sm" style="border-radius:16px;">Limpar tudo ×</a>
   </div>
@@ -227,6 +232,24 @@
   <form id="filter-form" method="get" action="/talents">
     <input type="hidden" name="status" value="active">
     <input type="hidden" name="filtrou" value="1">
+
+  {# ── Busca por nome ──────────────────────────────────────── #}
+  <div style="position:relative; margin-bottom:14px;">
+    <svg style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none;"
+         width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+      <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+    </svg>
+    <input type="text" name="q" id="name-search"
+           placeholder="Buscar por nome ou nome artístico…"
+           value="{{ q }}"
+           autocomplete="off"
+           oninput="debounceSubmit()"
+           style="width:100%; padding:10px 14px 10px 38px; border:1.5px solid var(--line);
+                  border-radius:12px; font-size:14px; box-sizing:border-box;
+                  transition:border-color .15s; background:var(--panel);"
+           onfocus="this.style.borderColor='var(--accent)'"
+           onblur="this.style.borderColor='var(--line)'">
+  </div>
 
   {# ── Filtro: já trabalhou com a Manto ─────────────────────── #}
   <div style="margin-bottom:12px; display:flex; align-items:center; gap:8px;">
@@ -369,15 +392,25 @@
         </div>
       </div>
 
-      {# Tags #}
+      {# Tags — busca + multi-select #}
       <div class="fp" id="fp-tags">
-        <button type="button" class="fp-btn {% if active_tag %}has-value{% endif %}" onclick="fpToggle('fp-tags')">
-          Tags {% if active_tag %}<span class="fp-count">1</span>{% endif %} <span class="fp-arrow">▼</span>
+        <button type="button" class="fp-btn {% if active_tags %}has-value{% endif %}" onclick="fpToggle('fp-tags')">
+          Tags {% if active_tags %}<span class="fp-count">{{ active_tags|length }}</span>{% endif %} <span class="fp-arrow">▼</span>
         </button>
-        <div class="fp-panel" style="min-width:220px;">
-          <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">Habilidades, perfil, etc.</div>
-          <input type="text" name="tag" placeholder="ex: dança, dublê" value="{{ active_tag }}"
-            style="width:100%; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:13px;">
+        <div class="fp-panel" style="min-width:240px;">
+          <input type="text" id="tag-search" placeholder="Buscar tag…" autocomplete="off"
+            oninput="filterTags(this.value)"
+            style="width:100%; padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:13px; margin-bottom:8px; box-sizing:border-box;">
+          <div id="tag-list" style="max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;">
+            {% for tag in tag_options %}
+              <label class="checkbox-row tag-item" data-tag="{{ tag }}">
+                <input type="checkbox" name="tag" value="{{ tag }}" {% if tag in active_tags %}checked{% endif %}>
+                {{ tag }}
+              </label>
+            {% else %}
+              <span style="font-size:12px; color:var(--muted);">Nenhuma tag cadastrada.</span>
+            {% endfor %}
+          </div>
         </div>
       </div>
 
@@ -439,9 +472,16 @@
 
   {# ── Paginação ────────────────────────────────────────────────── #}
   {% if pagination and pagination.pages > 1 %}
+    {# Reconstrói query string sem o param 'page' para evitar talents&page=2 #}
+    {% set _qs_parts = [] %}
+    {% for k, v in request.args.items(multi=True) %}
+      {% if k != 'page' %}{% set _ = _qs_parts.append(k + '=' + v) %}{% endif %}
+    {% endfor %}
+    {% set _page_base = '/talents?' + (_qs_parts | join('&') + '&' if _qs_parts else '') %}
+
     <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-top:24px; flex-wrap:wrap;">
       {% if pagination.has_prev %}
-        <a href="{{ request.url | replace('page=' + pagination.page|string, '') | replace('&&','&') | replace('?&','?') }}&page={{ pagination.prev_num }}"
+        <a href="{{ _page_base }}page={{ pagination.prev_num }}"
            class="btn btn-secondary" style="padding:6px 14px;">← Anterior</a>
       {% endif %}
 
@@ -450,7 +490,7 @@
           {% if p == pagination.page %}
             <span class="btn btn-primary" style="padding:6px 12px; cursor:default;">{{ p }}</span>
           {% else %}
-            <a href="{{ request.url | replace('page=' + pagination.page|string, '') | replace('&&','&') | replace('?&','?') }}&page={{ p }}"
+            <a href="{{ _page_base }}page={{ p }}"
                class="btn btn-secondary" style="padding:6px 12px;">{{ p }}</a>
           {% endif %}
         {% else %}
@@ -459,7 +499,7 @@
       {% endfor %}
 
       {% if pagination.has_next %}
-        <a href="{{ request.url | replace('page=' + pagination.page|string, '') | replace('&&','&') | replace('?&','?') }}&page={{ pagination.next_num }}"
+        <a href="{{ _page_base }}page={{ pagination.next_num }}"
            class="btn btn-secondary" style="padding:6px 14px;">Próxima →</a>
       {% endif %}
     </div>
@@ -481,7 +521,34 @@
       if (id === 'fp-personagem') {
         setTimeout(function() { document.getElementById('char-input').focus(); }, 60);
       }
+      if (id === 'fp-tags') {
+        setTimeout(function() { document.getElementById('tag-search').focus(); }, 60);
+      }
     }
+  }
+
+  let _searchTimer = null;
+  function debounceSubmit() {
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(function() {
+      document.getElementById('filter-form').submit();
+    }, 350);
+  }
+
+  function filterTags(q) {
+    const norm = q.toLowerCase().trim();
+    document.querySelectorAll('.tag-item').forEach(function(el) {
+      const tag = el.dataset.tag.toLowerCase();
+      el.style.display = (!norm || tag.includes(norm)) ? '' : 'none';
+    });
+  }
+
+  function removeTag(tag) {
+    const url = new URL(window.location.href);
+    const tags = url.searchParams.getAll('tag').filter(function(t) { return t !== tag; });
+    url.searchParams.delete('tag');
+    tags.forEach(function(t) { url.searchParams.append('tag', t); });
+    window.location.href = url.toString();
   }
 
   document.addEventListener('click', function(e) {

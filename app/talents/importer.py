@@ -62,6 +62,7 @@ def normalize_tags(raw: str) -> str:
 
 
 def drive_direct_url(raw_url: str) -> str:
+    """Converte URL do Drive em link de imagem CDN (para fotos)."""
     if not raw_url:
         return ""
     url = raw_url.strip()
@@ -72,6 +73,20 @@ def drive_direct_url(raw_url: str) -> str:
         return url
     file_id = match.group(1)
     return f"https://lh3.googleusercontent.com/d/{file_id}"
+
+
+def drive_doc_url(raw_url: str) -> str:
+    """Converte URL do Drive em link de visualização (para PDFs e documentos)."""
+    if not raw_url:
+        return ""
+    url = raw_url.strip()
+    match = re.search(r"/d/([A-Za-z0-9_-]+)", url)
+    if not match:
+        match = re.search(r"[?&]id=([A-Za-z0-9_-]+)", url)
+    if not match:
+        return url
+    file_id = match.group(1)
+    return f"https://drive.google.com/file/d/{file_id}/view"
 
 
 def first_present(row: list, header_map: Dict[str, int], candidates: Iterable[str]) -> str:
@@ -91,6 +106,30 @@ def first_present(row: list, header_map: Dict[str, int], candidates: Iterable[st
                 val = row[idx]
                 return "" if val is None else str(val).strip()
     return ""
+
+
+def _parse_passport_status(raw: str) -> Optional[str]:
+    """Converte resposta do formulário em 'visa', 'passport', 'none' ou None.
+
+    Opções do Google Form:
+      "Apenas Passaporte"       → 'passport'
+      "Possuo Passaporte e Visto" → 'visa'
+      "Não"                     → 'none'
+    """
+    if not raw or not raw.strip():
+        return None
+    norm = normalize_header(raw)
+    # Ordem importa: checar visto/visa ANTES de passaporte (evita falso positivo em "Passaporte e Visto")
+    if any(k in norm for k in ("visto", "visa", "e visto", "possuo passaporte")):
+        return "visa"
+    if any(k in norm for k in ("apenas passaporte", "so passaporte", "passaporte", "passport")):
+        return "passport"
+    if any(k in norm for k in ("nao", "nenhum", "sem", "no")):
+        return "none"
+    # Fallback para formato antigo "Sim/Não"
+    if norm in ("sim", "yes", "true", "1", "x"):
+        return "visa"
+    return None
 
 
 def import_new_talents_from_sheet(
@@ -195,8 +234,8 @@ def import_new_talents_from_sheet(
         race = first_present(row, header_map, ["Raca"])
 
         passport_visa_text = first_present(row, header_map, ["Possui Passaporte e visto americano?"])
-        passport_visa_norm = normalize_header(passport_visa_text)
-        has_visa = passport_visa_norm in ("sim", "yes", "true", "1", "x")
+        passport_status = _parse_passport_status(passport_visa_text)
+        has_visa = passport_status == "visa"  # backward compat
 
         photo_face = drive_direct_url(
             first_present(row, header_map, ["Foto do Rosto (Close-up)", "Foto do Rosto"])
@@ -215,7 +254,7 @@ def import_new_talents_from_sheet(
 
         # campos extras
         gender = first_present(row, header_map, ["Genero", "Gênero"])
-        doc_photo = drive_direct_url(
+        doc_photo = drive_doc_url(
             first_present(row, header_map, ["Foto do seu documento (CPF, RG ou CNH)", "Foto do seu documento"])
         )
         pix_key_type = first_present(row, header_map, ["Tipo de chave pix", "Tipo de chave PIX"])
@@ -276,6 +315,7 @@ def import_new_talents_from_sheet(
             languages=languages or None,
             skills=skills or None,
             tags=normalize_tags(skills),
+            passport_status=passport_status,
             passport_visa_text=passport_visa_text or None,
             photo_face_path=photo_face or None,
             photo_full_path=photo_body or None,

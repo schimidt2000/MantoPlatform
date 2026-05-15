@@ -112,9 +112,10 @@ class Talent(db.Model):
     clothing_size_bottom = db.Column(db.String(20), nullable=True)
     shoe_size = db.Column(db.String(10), nullable=True)
 
-    # visto/passaporte (como texto, porque no form vem "Possui Passaporte e visto americano?")
-    passport_visa_text = db.Column(db.String(120), nullable=True)
-    has_visa = db.Column(db.Boolean, nullable=True)
+    # passaporte/visto: 'visa' = passaporte+visto EUA | 'passport' = só passaporte | 'none' = nenhum | None = não informado
+    passport_status = db.Column(db.String(20), nullable=True)
+    passport_visa_text = db.Column(db.String(120), nullable=True)  # resposta bruta do formulário (mantido para histórico)
+    has_visa = db.Column(db.Boolean, nullable=True)  # deprecated — usar passport_status
 
     # sensíveis (depois controlamos por permissão)
     rg = db.Column(db.String(30), nullable=True)

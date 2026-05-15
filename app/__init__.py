@@ -373,6 +373,10 @@ def create_app():
     # ── Auto-import de talentos da planilha ────────────────────────
     _start_talent_sync(app)
 
+    # ── Comandos CLI de manutenção ─────────────────────────────────
+    from app.cli import register_commands
+    register_commands(app)
+
     @app.route("/uploads/<path:filename>")
     @login_required
     def uploaded_file(filename: str):

@@ -122,15 +122,30 @@
       </div>
     </div>
 
-    <div class="form-group" style="margin-top:16px;">
+    <div class="form-group" style="margin-top:16px; margin-bottom:0;">
       <label>Passaporte / Visto</label>
-      <input type="text" name="passport_visa_text" value="{{ talent.passport_visa_text or '' }}">
-    </div>
-    <div class="form-group" style="margin-bottom:0;">
-      <label class="checkbox-row">
-        <input type="checkbox" name="has_visa" value="1" {% if talent.has_visa %}checked{% endif %}>
-        Possui passaporte e visto americano
-      </label>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
+        <label class="checkbox-row">
+          <input type="radio" name="passport_status" value="visa"
+                 {% if talent.passport_status == 'visa' %}checked{% endif %}>
+          Tem passaporte e visto americano
+        </label>
+        <label class="checkbox-row">
+          <input type="radio" name="passport_status" value="passport"
+                 {% if talent.passport_status == 'passport' %}checked{% endif %}>
+          Tem passaporte, mas não tem visto americano
+        </label>
+        <label class="checkbox-row">
+          <input type="radio" name="passport_status" value="none"
+                 {% if talent.passport_status == 'none' %}checked{% endif %}>
+          Não tem passaporte nem visto
+        </label>
+        <label class="checkbox-row" style="color:var(--muted);">
+          <input type="radio" name="passport_status" value=""
+                 {% if not talent.passport_status %}checked{% endif %}>
+          Não informado
+        </label>
+      </div>
     </div>
   </div>
 
