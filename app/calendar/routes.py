@@ -569,9 +569,10 @@ def event_detail(event_id: int):
             abort(403)
         action = request.form.get("action")
         handler = _EVENT_ACTIONS.get(action)
+        eid = event.id  # capture before commit+thread expire the ORM object
         if handler:
             handler(event, tz_sp)
-        return redirect(url_for("calendar.event_detail", event_id=event.id))
+        return redirect(url_for("calendar.event_detail", event_id=eid))
 
     talents = Talent.query.filter_by(status="active").order_by(Talent.full_name.asc()).all()
     contracts = EventContract.query.filter_by(event_id=event.id).order_by(EventContract.created_at.desc()).all()
