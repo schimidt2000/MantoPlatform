@@ -226,3 +226,25 @@ def insert_event(
     if location:
         body["location"] = location
     return service.events().insert(calendarId=calendar_id, body=body).execute()
+
+
+def update_event(
+    calendar_id: str,
+    google_event_id: str,
+    title: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    description: str = "",
+) -> dict:
+    """Atualiza um evento existente no Google Calendar via patch."""
+    creds = load_credentials()
+    if not creds:
+        raise RuntimeError("Google não conectado. Acesse /google/connect primeiro.")
+    service = build("calendar", "v3", credentials=creds)
+    body = {
+        "summary": title,
+        "description": description,
+        "start": {"dateTime": start_dt.isoformat(), "timeZone": "America/Sao_Paulo"},
+        "end":   {"dateTime": end_dt.isoformat(),   "timeZone": "America/Sao_Paulo"},
+    }
+    return service.events().patch(calendarId=calendar_id, eventId=google_event_id, body=body).execute()

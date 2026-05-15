@@ -129,15 +129,24 @@
         <div class="sector-header-left">
           <span class="badge" style="background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44;">Ensaio</span>
           {% if pending_ensaio %}
-            <span class="meta">{{ pending_ensaio|length }} evento{{ 's' if pending_ensaio|length != 1 else '' }} sem ensaio</span>
-          {% else %}
-            <span class="badge badge-green" style="font-size:11px;">Todos agendados ✓</span>
+            <span class="badge badge-red" style="font-size:11px;">{{ pending_ensaio|length }} sem ensaio</span>
+          {% endif %}
+          {% if scheduled_ensaio %}
+            <span class="badge badge-green" style="font-size:11px;">{{ scheduled_ensaio|length }} agendado{{ 's' if scheduled_ensaio|length != 1 else '' }}</span>
+          {% endif %}
+          {% if not pending_ensaio and not scheduled_ensaio %}
+            <span class="meta">Nenhum show futuro com ensaio</span>
           {% endif %}
         </div>
         <span class="sector-chevron" id="chv-ensaio">▼</span>
       </div>
       <div class="sector-body" id="sb-ensaio">
+
+        {# — Pendentes: shows sem ensaio marcado — #}
         {% if pending_ensaio %}
+          <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.07em;padding:14px 0 6px;">
+            Falta agendar ensaio
+          </div>
           {% for ev in pending_ensaio %}
             {% set days_left = ((ev.start_at.date() - today).days) if ev.start_at else 999 %}
             <div class="flex-between gap-12 task-row" style="padding:10px 0;border-bottom:1px solid var(--line);{% if days_left <= 7 %}background:rgba(228,88,88,0.06);margin:0 -18px;padding:10px 18px;{% elif days_left <= 14 %}background:rgba(245,200,66,0.06);margin:0 -18px;padding:10px 18px;{% endif %}">
@@ -152,10 +161,87 @@
               <a href="/events/{{ ev.id }}" class="btn btn-sm btn-secondary">Agendar</a>
             </div>
           {% endfor %}
-          <div style="height:8px;"></div>
-        {% else %}
-          <p class="muted" style="padding:12px 0;">Nenhum ensaio pendente.</p>
+          <div style="height:6px;"></div>
         {% endif %}
+
+        {# — Agendados: shows COM ensaio(s) marcado(s) — #}
+        {% if scheduled_ensaio %}
+          <div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.07em;padding:14px 0 6px;">
+            Ensaios agendados
+          </div>
+          {% for ev in scheduled_ensaio %}
+            <div style="margin-bottom:14px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="font-weight:700;font-size:14px;">{{ ev.title }}</span>
+                <span class="meta">· show {{ ev.start_at.strftime("%d/%m/%Y") if ev.start_at else "—" }}</span>
+                <a href="/events/{{ ev.id }}" class="btn btn-sm btn-secondary" style="margin-left:auto;">Ver show</a>
+              </div>
+              {% for ens in ev.ensaios|sort(attribute='start_at') %}
+                <div style="border:1px solid var(--line);border-radius:var(--r-md);background:#f8fffe;margin-bottom:6px;overflow:hidden;">
+                  {# Linha resumo do ensaio #}
+                  <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;">
+                    <span style="font-size:18px;">🟧</span>
+                    <div style="flex:1;min-width:0;">
+                      <div style="font-weight:600;font-size:13px;">
+                        {% if ens.start_at %}{{ ens.start_at.strftime("%d/%m/%Y") }}
+                        · {{ ens.start_at.strftime("%H:%M") }}{% if ens.end_at %} – {{ ens.end_at.strftime("%H:%M") }}{% endif %}
+                        {% else %}Data não definida{% endif %}
+                      </div>
+                      {% if ens.description %}
+                        <div class="meta" style="margin-top:2px;">{{ ens.description }}</div>
+                      {% endif %}
+                    </div>
+                    <button type="button"
+                            class="btn btn-sm btn-secondary"
+                            onclick="toggleEnsaioEdit('ee-{{ ens.id }}')">
+                      Editar
+                    </button>
+                  </div>
+                  {# Formulário de edição inline — oculto por padrão #}
+                  <div id="ee-{{ ens.id }}" style="display:none;padding:12px 14px 14px;background:#fff;border-top:1px solid var(--line);">
+                    <form method="POST" action="/events/{{ ens.id }}/edit-ensaio">
+                      <input type="hidden" name="redirect_to" value="home">
+                      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                        <div class="form-group" style="margin-bottom:0;">
+                          <label style="font-size:12px;">Data</label>
+                          <input type="date" name="ensaio_date"
+                                 value="{{ ens.start_at.strftime('%Y-%m-%d') if ens.start_at else '' }}"
+                                 required style="width:140px;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                          <label style="font-size:12px;">Início</label>
+                          <input type="time" name="ensaio_start"
+                                 value="{{ ens.start_at.strftime('%H:%M') if ens.start_at else '' }}"
+                                 required style="width:100px;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                          <label style="font-size:12px;">Fim</label>
+                          <input type="time" name="ensaio_end"
+                                 value="{{ ens.end_at.strftime('%H:%M') if ens.end_at else '' }}"
+                                 required style="width:100px;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;flex:1;min-width:160px;">
+                          <label style="font-size:12px;">Observação</label>
+                          <input type="text" name="ensaio_desc"
+                                 value="{{ ens.description or '' }}"
+                                 placeholder="(opcional)" style="width:100%;">
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-primary">Salvar</button>
+                        <button type="button" class="btn btn-sm btn-secondary"
+                                onclick="toggleEnsaioEdit('ee-{{ ens.id }}')">Cancelar</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        {% if not pending_ensaio and not scheduled_ensaio %}
+          <p class="muted" style="padding:12px 0;">Nenhum show futuro com ensaio cadastrado.</p>
+        {% endif %}
+        <div style="height:4px;"></div>
       </div>
     </div>
     {% endif %}
@@ -304,6 +390,12 @@
 
 {% block extra_scripts %}
 <script>
+function toggleEnsaioEdit(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
 function toggleSector(id) {
   const body = document.getElementById('sb-' + id);
   const chv  = document.getElementById('chv-' + id);

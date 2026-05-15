@@ -18,6 +18,7 @@ from .service import (
     fetch_single_event,
     parse_event_datetime,
     insert_event,
+    update_event,
 )
 from .. import db
 from app.constants import RoleName
@@ -1072,6 +1073,70 @@ def create_ensaio(event_id: int):
         flash(str(exc), "error")
 
     return redirect(url_for("calendar.event_detail", event_id=event_id))
+
+
+@calendar_bp.route("/events/<int:ensaio_id>/edit-ensaio", methods=["POST"])
+@login_required
+def edit_ensaio(ensaio_id: int):
+    """Edita data/hora/descrição de um evento de ensaio já criado."""
+    ensaio = CalendarEvent.query.get_or_404(ensaio_id)
+
+    if not any(r.name.upper() in _CAN_ENSAIO for r in current_user.roles):
+        abort(403)
+
+    if ensaio.event_type != "ENSAIO":
+        abort(400)
+
+    date_str  = request.form.get("ensaio_date", "").strip()
+    start_str = request.form.get("ensaio_start", "").strip()
+    end_str   = request.form.get("ensaio_end", "").strip()
+    desc      = request.form.get("ensaio_desc", "").strip()
+    redirect_to = request.form.get("redirect_to", "home")
+
+    errors = []
+    d = None
+    try:
+        d = date.fromisoformat(date_str)
+    except ValueError:
+        errors.append("Data inválida.")
+
+    st = et = None
+    if d:
+        try:
+            st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time()).replace(tzinfo=TZ)
+            et = datetime.combine(d, datetime.strptime(end_str,   "%H:%M").time()).replace(tzinfo=TZ)
+        except ValueError:
+            errors.append("Horário inválido (use HH:MM).")
+
+    if st and et and et <= st:
+        errors.append("Horário de fim deve ser após o início.")
+
+    if errors:
+        flash(" ".join(errors), "error")
+    else:
+        ensaio.start_at = st
+        ensaio.end_at   = et
+        ensaio.description = desc or None
+        db.session.commit()
+
+        if ensaio.google_event_id:
+            try:
+                update_event(
+                    CALENDAR_ID,
+                    ensaio.google_event_id,
+                    ensaio.title,
+                    st,
+                    et,
+                    description=desc,
+                )
+            except RuntimeError as exc:
+                flash(f"Salvo no banco, mas erro ao atualizar Google Calendar: {exc}", "warning")
+
+        flash("Ensaio atualizado com sucesso!", "success")
+
+    if redirect_to == "event" and ensaio.parent_event_id:
+        return redirect(url_for("calendar.event_detail", event_id=ensaio.parent_event_id))
+    return redirect(url_for("home"))
 
 
 # ─── CRIAR EVENTO (COMERCIAL) ─────────────────────────────────────────────────

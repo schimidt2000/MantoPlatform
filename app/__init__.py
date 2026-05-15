@@ -266,8 +266,9 @@ def create_app():
         show_figurino = has_role(RoleName.FIGURINO) or is_superadmin
         show_ensaio = has_role(RoleName.ENSAIO) or is_superadmin
 
-        # Ensaio: eventos que precisam de ensaio mas ainda não têm nenhum agendado
-        pending_ensaio = []
+        # Ensaio: separa pendentes (sem ensaio) de agendados (com ensaio)
+        pending_ensaio   = []
+        scheduled_ensaio = []
         if show_ensaio:
             future_shows = (
                 CalendarEvent.query
@@ -278,7 +279,8 @@ def create_app():
                 .order_by(CalendarEvent.start_at.asc())
                 .all()
             )
-            pending_ensaio = [e for e in future_shows if not e.ensaios]
+            pending_ensaio   = [e for e in future_shows if not e.ensaios]
+            scheduled_ensaio = [e for e in future_shows if e.ensaios]
 
         perf_range = request.args.get("perf_range", "7")
         perf_start = request.args.get("perf_start")
@@ -351,6 +353,7 @@ def create_app():
             rejected_invites=rejected_invites,
             pending_figurino=pending_figurino,
             pending_ensaio=pending_ensaio,
+            scheduled_ensaio=scheduled_ensaio,
             pending_invoice=pending_invoice,
             show_casting=show_casting,
             show_figurino=show_figurino,
