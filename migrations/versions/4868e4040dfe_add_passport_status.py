@@ -21,8 +21,8 @@ def upgrade():
         batch_op.add_column(sa.Column('passport_status', sa.String(length=20), nullable=True))
 
     # Migra dados existentes: has_visa=True → 'visa', has_visa=False → 'none'
-    op.execute("UPDATE talents SET passport_status = 'visa' WHERE has_visa = 1")
-    op.execute("UPDATE talents SET passport_status = 'none' WHERE has_visa = 0")
+    op.execute("UPDATE talents SET passport_status = 'visa' WHERE has_visa = true")
+    op.execute("UPDATE talents SET passport_status = 'none' WHERE has_visa = false OR has_visa IS NULL")
 
 
 def downgrade():
