@@ -168,7 +168,19 @@ def _process_quote():
             personagem  = p.get("personagem", "")
             cantor_flag = bool(p.get("cantor", False))
             prices = get_especial_prices(personagem, show, cantor_flag)
-            label  = nome or personagem
+            if personagem == "Boneco Grande Especial":
+                bge_sub  = p.get("bge_subtipo", "")
+                bge_nome = p.get("bge_outro_nome", "").strip()
+                if bge_sub == "dinossauro":
+                    label = "BGE Dinossauro"
+                elif bge_sub == "transformers":
+                    label = "BGE Transformers"
+                elif bge_sub == "outro" and bge_nome:
+                    label = f"BGE {bge_nome}"
+                else:
+                    label = nome or personagem
+            else:
+                label = nome or personagem
         else:
             prices = (0, 0, 0)
             label  = nome or "Profissional"
@@ -230,6 +242,15 @@ def _process_quote():
                         totals[i] = round(totals[i] + transport_esp, 2)
                     transport_total += transport_esp
                     _seen_transport.add(personagem)
+
+    # BGE: acréscimo por sub-tipo (por unidade, pós-markup)
+    for p in performers:
+        if p.get("type") == "especial" and p.get("personagem") == "Boneco Grande Especial":
+            bge_sub = p.get("bge_subtipo", "")
+            bge_extra = 130 if bge_sub == "dinossauro" else 70 if bge_sub == "transformers" else 0
+            if bge_extra:
+                for i in range(3):
+                    totals[i] = round(totals[i] + bge_extra, 2)
 
     transport_breakdown = None
     if fora_sp:

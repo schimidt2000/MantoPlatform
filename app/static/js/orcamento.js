@@ -184,6 +184,18 @@ function calcTotals() {
     }
   }
 
+  // BGE: acréscimo por sub-tipo (por unidade, pós-markup)
+  for (const p of performers) {
+    if (p.type === 'especial' && p.personagem === 'Boneco Grande Especial') {
+      const bgeExtra = p.bge_subtipo === 'dinossauro'   ? 130
+                     : p.bge_subtipo === 'transformers' ? 70
+                     : 0;
+      if (bgeExtra > 0) {
+        for (let i = 0; i < 3; i++) t[i] = Math.round((t[i] + bgeExtra) * 100) / 100;
+      }
+    }
+  }
+
   // Transporte (pós-markup)
   const tc = transportCost();
   for (let i = 0; i < 3; i++) t[i] += tc;
@@ -536,6 +548,21 @@ function updateDebugPanel() {
     }
   }
 
+  // BGE: acréscimo por sub-tipo (por unidade, pós-markup)
+  for (const p of performers) {
+    if (p.type === 'especial' && p.personagem === 'Boneco Grande Especial') {
+      const bgeExtra = p.bge_subtipo === 'dinossauro'   ? 130
+                     : p.bge_subtipo === 'transformers' ? 70
+                     : 0;
+      if (bgeExtra > 0) {
+        const bgeNomeDbg = p.bge_subtipo === 'dinossauro' ? 'Dinossauro' : 'Transformers';
+        html += `<tr style="background:${C_POST};"><td>BGE ${bgeNomeDbg} <span style="color:var(--muted)">(acréscimo pós-markup)</span></td>${flatCols(bgeExtra)}</tr>`;
+        for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + bgeExtra) * 100) / 100;
+        runningNh = Math.round((runningNh + bgeExtra) * 100) / 100;
+      }
+    }
+  }
+
   if (tb) {
     const veiculoLabel = transportTipo === 'van'
       ? `Van ${comCarretinha ? 'c/ carretinha' : 's/ carretinha'} · R$${tb.tarifa}/km · ${tb.kmT}km`
@@ -638,6 +665,7 @@ function buildCard(p, i) {
     const comCantorSet = new Set(window.ESPECIAIS_COM_CANTOR || []);
     const sempShowSet  = new Set(window.ESPECIAIS_SEMPRE_SHOW || []);
     const isSempShow   = sempShowSet.has(p.personagem);
+    const isBGE        = p.personagem === 'Boneco Grande Especial';
     const opts = especiais.map(e => `<option value="${e}" ${p.personagem===e?'selected':''}>${e}</option>`).join('');
     const showCheck = (!isSempShow && comShowSet.has(p.personagem))
       ? `<label class="chk"><input type="checkbox" ${p.show?'checked':''} onchange="setProp(${i},'show',this.checked)"> Show</label>` : '';
@@ -646,13 +674,27 @@ function buildCard(p, i) {
     const sempNote = isSempShow
       ? `<span style="font-size:11px;color:var(--blue);white-space:nowrap;">🎧 técnico de som incluso</span>` : '';
     const makeupSelEsp = p.makeup ? `<select onchange="setProp(${i},'makeup_tipo',this.value)"><option value="comum" ${p.makeup_tipo!=='especial'?'selected':''}>Comum</option><option value="especial" ${p.makeup_tipo==='especial'?'selected':''}>Especial</option></select>` : '';
+
+    // Sub-tipo exclusivo para BGE
+    const sub = p.bge_subtipo || 'dinossauro';
+    const bgeOutroInput = sub === 'outro'
+      ? `<input type="text" placeholder="Nome do BGE" value="${(p.bge_outro_nome||'').replace(/"/g,'&quot;')}" onchange="setProp(${i},'bge_outro_nome',this.value)" style="min-width:120px;max-width:180px;">`
+      : '';
+    const bgeControls = isBGE ? `
+      <select onchange="setBgeSubtipo(${i},this.value)" style="max-width:175px;">
+        <option value="dinossauro"   ${sub==='dinossauro'?'selected':''}>Dinossauro (+R$130)</option>
+        <option value="transformers" ${sub==='transformers'?'selected':''}>Transformers (+R$70)</option>
+        <option value="outro"        ${sub==='outro'?'selected':''}>Outro</option>
+      </select>${bgeOutroInput}` : '';
+
     controls = `
       <span class="badge badge-blue">Especial</span>
-      ${nomeInput}
+      ${isBGE ? '' : nomeInput}
       <select onchange="setPersonagem(${i},this.value)">${opts}</select>
       ${showCheck}
       ${cantorCheck}
       ${sempNote}
+      ${bgeControls}
       <label class="chk"><input type="checkbox" ${p.makeup?'checked':''} onchange="setMakeup(${i},this.checked)"> Maquiagem</label>
       ${makeupSelEsp}`;
   }
@@ -668,7 +710,14 @@ function buildCard(p, i) {
 function addPerformer(type) {
   const p = { type, show: false, makeup: false, makeup_tipo: 'comum', nome: '' };
   if (type === 'ator')     { p.subtipo = 'cara_limpa'; }
-  if (type === 'especial') { p.personagem = (window.ESPECIAIS_LIST || ['Homem-Aranha'])[0]; p.cantor = false; }
+  if (type === 'especial') {
+    p.personagem = (window.ESPECIAIS_LIST || ['Homem-Aranha'])[0];
+    p.cantor = false;
+    if (p.personagem === 'Boneco Grande Especial') {
+      p.bge_subtipo = 'dinossauro';
+      p.bge_outro_nome = '';
+    }
+  }
   performers.push(p);
   update();
 }
@@ -700,6 +749,16 @@ function setPersonagem(i, value) {
   if (!comShow.has(value)) {
     performers[i].show = false;
   }
+  if (value === 'Boneco Grande Especial') {
+    if (!performers[i].bge_subtipo) performers[i].bge_subtipo = 'dinossauro';
+    if (!performers[i].bge_outro_nome) performers[i].bge_outro_nome = '';
+  }
+  update();
+}
+
+function setBgeSubtipo(i, value) {
+  performers[i].bge_subtipo = value;
+  if (value !== 'outro') performers[i].bge_outro_nome = '';
   update();
 }
 
@@ -923,7 +982,51 @@ function renderHistory() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('quote-form').addEventListener('submit', () => {
+  const _REQUIRED_FIELDS = [
+    { name: 'client_name',    msg: 'Nome do cliente é obrigatório' },
+    { name: 'event_location', msg: 'Endereço do evento é obrigatório' },
+    { name: 'event_date',     msg: 'Data do evento é obrigatória' },
+    { name: 'event_time',     msg: 'Horário do evento é obrigatório' },
+  ];
+
+  // Limpa erro ao corrigir o campo
+  _REQUIRED_FIELDS.forEach(({ name }) => {
+    const el = document.querySelector(`[name="${name}"]`);
+    if (!el) return;
+    const clear = function () {
+      el.classList.remove('orc-input-error');
+      const next = el.nextSibling;
+      if (next && next.classList && next.classList.contains('orc-field-error')) next.remove();
+    };
+    el.addEventListener('input', clear);
+    el.addEventListener('change', clear);
+  });
+
+  document.getElementById('quote-form').addEventListener('submit', function (e) {
+    // Limpa erros anteriores
+    document.querySelectorAll('.orc-field-error').forEach(el => el.remove());
+    document.querySelectorAll('.orc-input-error').forEach(el => el.classList.remove('orc-input-error'));
+
+    const erros = [];
+    for (const { name, msg } of _REQUIRED_FIELDS) {
+      const el = document.querySelector(`[name="${name}"]`);
+      if (!el || !el.value.trim()) {
+        el && el.classList.add('orc-input-error');
+        const span = document.createElement('span');
+        span.className = 'orc-field-error';
+        span.textContent = msg;
+        el && el.after(span);
+        if (el) erros.push(el);
+      }
+    }
+
+    if (erros.length > 0) {
+      e.preventDefault();
+      erros[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      erros[0].focus();
+      return;
+    }
+
     document.getElementById('performers_json').value = JSON.stringify(performers);
   });
 
