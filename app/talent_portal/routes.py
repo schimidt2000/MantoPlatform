@@ -647,9 +647,9 @@ def rate_event_detail(event_id: int):
     # Remove sub-ratings anteriores para re-envio limpo
     EventSubRating.query.filter_by(rating_id=rating.id).delete()
 
-    categories = ["som", "figurino"]
+    categories = ["figurino"]
     if ctx["is_show"]:
-        categories.append("texto")
+        categories.extend(["som", "texto"])
 
     for cat in categories:
         score_raw = request.form.get(f"sub_{cat}_score", "")

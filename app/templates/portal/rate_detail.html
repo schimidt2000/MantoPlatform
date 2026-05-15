@@ -83,21 +83,7 @@
 
   <form method="POST" action="/portal/events/{{ event.id }}/rate/detail">
 
-    {# ── Categorias gerais ── #}
-    <div class="cat-card">
-      <div class="cat-card-title">🎵 Som</div>
-      {% call macros.mini_star_field('som') %}{% endcall %}
-      {% include 'portal/_mini_star.html' with context ignore missing %}
-      <div class="rate-label" style="margin:0 0 8px;">Nota</div>
-      <div class="mini-stars">
-        {% for v in [5,4,3,2,1] %}
-        <input type="radio" name="sub_som_score" id="som{{ v }}" value="{{ v }}">
-        <label for="som{{ v }}">★</label>
-        {% endfor %}
-      </div>
-      <textarea class="comment-box" name="sub_som_comment" placeholder="Comentário opcional..."></textarea>
-    </div>
-
+    {# ── Figurino (sempre) ── #}
     <div class="cat-card">
       <div class="cat-card-title">👗 Figurino</div>
       <div class="rate-label" style="margin:0 0 8px;">Nota</div>
@@ -110,7 +96,20 @@
       <textarea class="comment-box" name="sub_figurino_comment" placeholder="Comentário opcional..."></textarea>
     </div>
 
+    {# ── Som e Texto do Show (apenas em shows) ── #}
     {% if is_show %}
+    <div class="cat-card">
+      <div class="cat-card-title">🎵 Som</div>
+      <div class="rate-label" style="margin:0 0 8px;">Nota</div>
+      <div class="mini-stars">
+        {% for v in [5,4,3,2,1] %}
+        <input type="radio" name="sub_som_score" id="som{{ v }}" value="{{ v }}">
+        <label for="som{{ v }}">★</label>
+        {% endfor %}
+      </div>
+      <textarea class="comment-box" name="sub_som_comment" placeholder="Comentário opcional..."></textarea>
+    </div>
+
     <div class="cat-card">
       <div class="cat-card-title">📝 Texto do Show</div>
       <div class="rate-label" style="margin:0 0 8px;">Nota</div>
