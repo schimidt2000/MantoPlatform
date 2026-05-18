@@ -321,6 +321,29 @@ def _handle_add_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     db.session.commit()
 
 
+def _handle_delete_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    can_casting = any(r.name.upper() in (RoleName.CASTING, RoleName.SUPERADMIN) for r in current_user.roles)
+    if not can_casting:
+        return
+    role_id = request.form.get("role_id")
+    role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
+    if not role:
+        return
+    _is_superadmin = any(r.name.upper() == RoleName.SUPERADMIN for r in current_user.roles)
+    if role.invite_status == "accepted" and not _is_superadmin:
+        return
+    name = role.character_name
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Casting",
+        message=f"Removeu vaga: {name}",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.delete(role)
+    db.session.commit()
+
+
 def _handle_figurino_done(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     role_id = request.form.get("role_id")
     role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
@@ -562,6 +585,7 @@ def _handle_save_logistics(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 _EVENT_ACTIONS = {
     "assign_casting":     _handle_assign_casting,
     "add_role":           _handle_add_role,
+    "delete_role":        _handle_delete_role,
     "figurino_done":      _handle_figurino_done,
     "add_contract":       _handle_add_contract,
     "update_comercial":   _handle_update_comercial,

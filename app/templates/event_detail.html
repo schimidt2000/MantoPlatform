@@ -304,6 +304,14 @@
                class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</a>
           {% endif %}
         {% endif %}
+
+        <form method="post" action="/events/{{ event.id }}" style="margin:0; margin-left:auto;"
+              onsubmit="return confirm('Remover a vaga {{ r.character_name }}?{% if r.invite_status == "accepted" %} Atenção: a presença já foi confirmada.{% endif %}')">
+          <input type="hidden" name="action" value="delete_role">
+          <input type="hidden" name="role_id" value="{{ r.id }}">
+          <button type="submit" class="btn btn-sm btn-ghost"
+                  style="font-size:11px; padding:2px 8px; color:var(--red,#ef4444);">Remover vaga</button>
+        </form>
       </div>
     </div>
   {% endfor %}
@@ -426,8 +434,18 @@
                class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</a>
           {% endif %}
         {% endif %}
+
       </div>
       {% endif %}
+      <div style="text-align:right; margin-top:4px;">
+        <form method="post" action="/events/{{ event.id }}" style="display:inline;"
+              onsubmit="return confirm('Remover {{ r.character_name }} da equipe de apoio?')">
+          <input type="hidden" name="action" value="delete_role">
+          <input type="hidden" name="role_id" value="{{ r.id }}">
+          <button type="submit" class="btn btn-sm btn-ghost"
+                  style="font-size:11px; padding:2px 8px; color:var(--red,#ef4444);">Remover</button>
+        </form>
+      </div>
     </div>
   {% endfor %}
 
