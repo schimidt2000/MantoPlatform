@@ -194,25 +194,6 @@
           </div>
           {% endfor %}
 
-          {# Observações da produção #}
-          {% set inv_obs = ev.observations | selectattr('obs_type', 'ne', 'image') | list %}
-          {% if ev.description or inv_obs %}
-          <div class="invite-detail-row" style="margin-top:4px; padding-top:8px; border-top:1px solid var(--line);">
-            <span class="invite-detail-label">📋 Instruções</span>
-            <div style="display:flex; flex-direction:column; gap:3px;">
-              {% if ev.description %}
-              <span style="font-size:12px; color:var(--muted);">{{ ev.description }}</span>
-              {% endif %}
-              {% for obs in inv_obs %}
-                {% if obs.obs_type == 'text' %}
-                <span style="font-size:12px; color:var(--muted);">{{ obs.content }}</span>
-                {% elif obs.obs_type == 'link' %}
-                <a href="{{ obs.content }}" target="_blank" rel="noopener" style="font-size:12px; color:var(--accent);">🔗 {{ obs.label or obs.content }}</a>
-                {% endif %}
-              {% endfor %}
-            </div>
-          </div>
-          {% endif %}
         </div>
 
         <div class="invite-actions" style="display:flex; gap:10px;">
@@ -247,13 +228,19 @@
           {# Banner de alteração #}
           {% if r.event_changed_at %}
           <div style="background:#fffbea; border:1px solid #f0d060; border-radius:8px;
-                      padding:10px 14px; margin-bottom:10px; display:flex;
-                      align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-            <span style="font-size:13px; color:#7a5800;">
-              ⚠️ <strong>Este evento foi atualizado.</strong> Verifique as informações abaixo.
-            </span>
+                      padding:12px 14px; margin-bottom:10px;">
+            <div style="font-size:13px; font-weight:700; color:#7a5800; margin-bottom:6px;">
+              ⚠️ Este evento foi atualizado
+            </div>
+            {% if r.change_description %}
+            <ul style="margin:0 0 10px 16px; padding:0; font-size:13px; color:#7a5800;">
+              {% for line in r.change_description.split('\n') %}
+                {% if line.strip() %}<li>{{ line.strip() }}</li>{% endif %}
+              {% endfor %}
+            </ul>
+            {% endif %}
             <form method="post" action="/portal/roles/{{ r.id }}/ack-change" style="margin:0;">
-              <button type="submit" class="btn btn-sm btn-secondary" style="font-size:12px;">Ciente ✓</button>
+              <button type="submit" class="btn btn-sm btn-secondary" style="font-size:12px; width:100%;">Estou ciente ✓</button>
             </form>
           </div>
           {% endif %}
@@ -321,23 +308,6 @@
                 {% endif %}
               {% endfor %}
             </div>
-            {% endfor %}
-          </div>
-          {% endif %}
-
-          {# Observações e instruções da produção #}
-          {% set obs_list = ev.observations | selectattr('obs_type', 'ne', 'image') | list %}
-          {% if ev.description or obs_list %}
-          <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:4px;">
-            {% if ev.description %}
-            <span style="font-size:12px; color:var(--muted);">{{ ev.description }}</span>
-            {% endif %}
-            {% for obs in obs_list %}
-              {% if obs.obs_type == 'text' %}
-              <span style="font-size:12px; color:var(--muted);">{{ obs.content }}</span>
-              {% elif obs.obs_type == 'link' %}
-              <a href="{{ obs.content }}" target="_blank" rel="noopener" style="font-size:12px; color:var(--accent);">🔗 {{ obs.label or obs.content }}</a>
-              {% endif %}
             {% endfor %}
           </div>
           {% endif %}

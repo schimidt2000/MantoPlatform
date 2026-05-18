@@ -284,6 +284,7 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             if cache_changes:
                 now_sp = datetime.now(tz=tz_sp)
                 role.event_changed_at = now_sp
+                role.change_description = "\n".join(cache_changes)
                 db.session.commit()
                 send_async(send_event_changed_email, role, cache_changes)
 
@@ -775,9 +776,11 @@ def _detect_changes(event: CalendarEvent, new_start, new_end, new_location) -> l
 def _notify_accepted_roles(event: CalendarEvent, changes: list[str]) -> None:
     """Marca roles aceitos como alterados e envia emails."""
     now = datetime.now(tz=ZoneInfo("America/Sao_Paulo"))
+    description = "\n".join(changes)
     for role in event.roles:
         if role.invite_status == "accepted":
             role.event_changed_at = now
+            role.change_description = description
             send_async(send_event_changed_email, role, changes)
 
 

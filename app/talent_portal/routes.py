@@ -455,6 +455,7 @@ def ack_event_change(role_id: int):
     talent = _current_talent()
     role = EventRole.query.filter_by(id=role_id, talent_id=talent.id).first_or_404()
     role.event_changed_at = None
+    role.change_description = None
     db.session.commit()
     return redirect(url_for("portal.home"))
 

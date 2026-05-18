@@ -318,8 +318,9 @@ class EventRole(db.Model):
     payment_status = db.Column(db.String(20), nullable=False, default="nao_pago", server_default="nao_pago")
     invite_status = db.Column(db.String(20), nullable=True)
     # invite_status: None (não enviado) | 'pending' (enviado) | 'accepted' | 'rejected'
-    event_changed_at = db.Column(db.DateTime, nullable=True)
-    # set when event date/location changes after talent accepted; cleared when talent clicks "Ciente"
+    event_changed_at    = db.Column(db.DateTime, nullable=True)
+    change_description  = db.Column(db.Text, nullable=True)
+    # event_changed_at/change_description: set when event changes after acceptance; cleared on "Ciente"
 
     needs_makeup  = db.Column(db.Boolean, nullable=True)  # pré-preenchido do orçamento
     is_singer     = db.Column(db.Boolean, nullable=True)  # pré-preenchido do orçamento
