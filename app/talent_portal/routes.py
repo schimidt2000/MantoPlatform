@@ -61,6 +61,8 @@ def portal_login_required(fn):
         if not session.get("talent_id"):
             return redirect(url_for("portal.login"))
         talent = _current_talent()
+        if talent and talent.must_change_password:
+            return redirect(url_for("portal.change_password"))
         if talent and not talent.terms_accepted_at:
             return redirect(url_for("portal.terms"))
         return fn(*args, **kwargs)
@@ -102,6 +104,8 @@ def terms():
     if not session.get("talent_id"):
         return redirect(url_for("portal.login"))
     talent = _current_talent()
+    if talent and talent.must_change_password:
+        return redirect(url_for("portal.change_password"))
     if talent and talent.terms_accepted_at:
         return redirect(url_for("portal.home"))
     if request.method == "POST" and talent:
@@ -181,9 +185,12 @@ def first_access():
 # ── Trocar senha (primeiro acesso) ────────────────────────────
 
 @portal_bp.route("/change-password", methods=["GET", "POST"])
-@portal_login_required
 def change_password():
+    if not session.get("talent_id"):
+        return redirect(url_for("portal.login"))
     talent = _current_talent()
+    if not talent or not talent.must_change_password:
+        return redirect(url_for("portal.home"))
     error = None
     if request.method == "POST":
         new_pw = request.form.get("new_password", "")
@@ -195,6 +202,8 @@ def change_password():
             talent.set_password(new_pw)
             talent.must_change_password = False
             db.session.commit()
+            if not talent.terms_accepted_at:
+                return redirect(url_for("portal.terms"))
             return redirect(url_for("portal.home"))
     return render_template("portal/change_password.html", talent=talent, error=error)
 
