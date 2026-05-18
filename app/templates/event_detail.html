@@ -202,10 +202,14 @@
                 <span style="font-size:11px;background:#f0fdf4;color:#166534;padding:2px 8px;border-radius:99px;border:1px solid #bbf7d0;">
                   + R$ {{ r.travel_cache }} viagem
                 </span>
-              {% elif event.travel_distance_km %}
+              {% elif event.is_outside_sp and event.travel_distance_km %}
                 {% set _km_left = event.travel_distance_km %}
                 <span style="font-size:11px;background:#fffbeb;color:#92400e;padding:2px 8px;border-radius:99px;border:1px solid #fde68a;">
                   Viagem: R$ {{ (_km_left * 2 / 3) | int }} sugerido
+                </span>
+              {% elif event.is_outside_sp %}
+                <span style="font-size:11px;background:#fffbeb;color:#92400e;padding:2px 8px;border-radius:99px;border:1px solid #fde68a;">
+                  Viagem fora de SP
                 </span>
               {% endif %}
             </div>
@@ -234,21 +238,27 @@
             {% endif %}
           </div>
 
-          {% if event.location and event.travel_distance_km %}
+          {% if event.is_outside_sp %}
           <div>
-            {% set _km = event.travel_distance_km %}
-            {% if r.character_name == 'Coordenador' %}
-              {% set _sugestao = ((_km * 2 * 1.9) | int) %}
+            {% if event.travel_distance_km %}
+              {% set _km = event.travel_distance_km %}
+              {% if r.character_name == 'Coordenador' %}
+                {% set _sugestao = ((_km * 2 * 1.9) | int) %}
+              {% else %}
+                {% set _sugestao = ((_km * 2 / 3) | int) %}
+              {% endif %}
+              <input type="number" name="travel_cache" placeholder="Adicional viagem"
+                value="{{ r.travel_cache if r.travel_cache else _sugestao }}"
+                min="0" step="1" style="width: 100%;"
+                title="Adicional fora de SP — sugestão: R$ {{ _sugestao }}">
+              <div style="font-size:10px; color:var(--muted); margin-top:2px;">
+                sugestão: R$ {{ _sugestao }}
+              </div>
             {% else %}
-              {% set _sugestao = ((_km * 2 / 3) | int) %}
+              <input type="number" name="travel_cache" placeholder="Adicional viagem (fora de SP)"
+                value="{{ r.travel_cache or '' }}"
+                min="0" step="1" style="width: 100%;">
             {% endif %}
-            <input type="number" name="travel_cache" placeholder="Adicional viagem"
-              value="{{ r.travel_cache if r.travel_cache else _sugestao }}"
-              min="0" step="1" style="width: 100%;"
-              title="Adicional fora de SP — sugestão: R$ {{ _sugestao }}">
-            <div style="font-size:10px; color:var(--muted); margin-top:2px;">
-              sugestão: R$ {{ _sugestao }}
-            </div>
           </div>
           {% endif %}
 

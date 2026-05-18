@@ -4,6 +4,7 @@ import calendar as cal
 import os
 import re
 import urllib.parse
+import urllib.request
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, redirect, request, session, url_for, render_template, current_app, abort, flash
@@ -837,8 +838,10 @@ def sync_events(items: list[dict]) -> None:
                 _ensure_coordinator(event.id)
             if gc_needs_rehearsal:
                 _notify_ensaio_team(event)
-            # Auto-estimar distância se fora da cidade de SP
-            if location and _is_outside_sp(location):
+            # Determina se é fora de SP via CEP (ViaCEP) ou string
+            event.is_outside_sp = _lookup_sp_status(location)
+            # Auto-estima distância via Google Maps se fora de SP
+            if event.is_outside_sp:
                 settings = SiteSetting.query.get(1)
                 _fetch_travel_data(event, settings)
         else:
@@ -858,12 +861,15 @@ def sync_events(items: list[dict]) -> None:
                 event.needs_rehearsal = True
                 _notify_ensaio_team(event)
 
-            # Re-estima se o endereço mudou ou ainda não tem distância, e é fora de SP
+            # Reavalia se é fora de SP quando o endereço mudou
             location_changed = (location or "").strip() != (old_location or "").strip()
-            if location and _is_outside_sp(location) and (location_changed or not event.travel_distance_km):
+            if location_changed or event.is_outside_sp is None:
+                event.is_outside_sp = _lookup_sp_status(location)
+
+            if event.is_outside_sp and (location_changed or not event.travel_distance_km):
                 settings = SiteSetting.query.get(1)
                 _fetch_travel_data(event, settings)
-            elif not location or not _is_outside_sp(location):
+            elif not event.is_outside_sp:
                 event.travel_distance_km = None
 
             # Notifica talentos confirmados sobre mudanças
@@ -917,12 +923,48 @@ def sync_events(items: list[dict]) -> None:
 
 _SP_CITY_TERMS = ("sao paulo", "são paulo")
 
+_CEP_RE = re.compile(r'\b(\d{5})-?(\d{3})\b')
+
+
+def _lookup_sp_status(location: str) -> bool | None:
+    """Determina se o endereço é fora da cidade de São Paulo.
+
+    Tenta lookup via ViaCEP se encontrar um CEP no endereço.
+    Fallback: checagem por string.
+    Retorna True=fora de SP | False=dentro de SP | None=desconhecido.
+    """
+    if not location:
+        return None
+
+    m = _CEP_RE.search(location)
+    if m:
+        cep = m.group(1) + m.group(2)
+        import json as _json
+        try:
+            url = f"https://viacep.com.br/ws/{cep}/json/"
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                data = _json.loads(resp.read())
+            if "erro" not in data:
+                city = data.get("localidade", "").strip().lower()
+                uf   = data.get("uf", "").strip().upper()
+                is_sp = city in ("são paulo", "sao paulo") and uf == "SP"
+                return not is_sp
+        except Exception:
+            pass  # fall through to string check
+
+    # Fallback: se "São Paulo" está explicitamente no endereço, é dentro da cidade
+    loc_lower = location.lower()
+    if any(term in loc_lower for term in _SP_CITY_TERMS):
+        return False
+    # Sem CEP e sem "São Paulo" no endereço: desconhecido
+    return None
+
 
 def _is_outside_sp(location: str) -> bool:
-    """Retorna True se o endereço não pertence à cidade de São Paulo.
+    """Retorna True se o endereço não pertence à cidade de São Paulo (checagem rápida por string).
 
-    Checa apenas termos específicos da cidade para evitar falsos positivos
-    com outras cidades do estado (ex: Campinas - SP).
+    Usado internamente quando só precisamos de bool (ex: decidir se chama Google Maps).
+    Para persistir em banco, use _lookup_sp_status.
     """
     if not location:
         return False
@@ -1484,8 +1526,9 @@ def create_event():
     db.session.add(event)
     db.session.flush()
 
-    # Auto-estimar distância se fora de SP
-    if location and _is_outside_sp(location):
+    # Determina se é fora de SP e auto-estima distância
+    event.is_outside_sp = _lookup_sp_status(location)
+    if event.is_outside_sp:
         settings = SiteSetting.query.get(1)
         _fetch_travel_data(event, settings)
 

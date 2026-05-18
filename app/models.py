@@ -207,6 +207,7 @@ class CalendarEvent(db.Model):
     departure_time = db.Column(db.String(5), nullable=True)    # "HH:MM"
     travel_time_minutes  = db.Column(db.Integer, nullable=True)   # cache da estimativa Google Maps
     travel_distance_km   = db.Column(db.Float,   nullable=True)   # km de ida (rota mais curta)
+    is_outside_sp        = db.Column(db.Boolean, nullable=True)   # True=fora de SP | False=dentro | None=desconhecido
 
     # pagamento
     payment_method       = db.Column(db.String(30), nullable=True)   # 'avista'|'pix_parcelado'|'faturado'|'cartao'
