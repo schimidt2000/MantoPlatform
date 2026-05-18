@@ -522,7 +522,7 @@ document.getElementById('event-title').addEventListener('input', function() {
 function onTypeChange() { autoTitle(); }
 
 // ── Personagens ──────────────────────────────────────────────────────────────
-function buildCharRow(idx, label, cacheVal, makeup, singer, roleType, sheetId) {
+function buildCharRow(idx, label, makeup, singer, roleType, sheetId) {
   const row = document.createElement('div');
   row.className = 'char-row';
   row.dataset.idx      = idx;
@@ -539,9 +539,6 @@ function buildCharRow(idx, label, cacheVal, makeup, singer, roleType, sheetId) {
                placeholder="${isExtra ? 'Equipe' : 'Personagem'}"
                style="flex:1; min-width:150px;" oninput="autoTitle()">
         <div class="fig-slot"${isExtra ? ' style="display:none;"' : ''}></div>
-        <input type="number" name="char_cache[]"
-               value="${cacheVal !== undefined ? cacheVal : ''}"
-               placeholder="Cachê R$" style="width:110px;" min="0" step="1">
       </div>
       <div class="char-flags">
         <label>
@@ -564,10 +561,10 @@ function buildCharRow(idx, label, cacheVal, makeup, singer, roleType, sheetId) {
   return row;
 }
 
-function addCharRow(label, cacheVal, makeup, singer, roleType, sheetId) {
+function addCharRow(label, makeup, singer, roleType, sheetId) {
   const list = document.getElementById('chars-list');
   const idx  = list.querySelectorAll('.char-row').length;
-  const row  = buildCharRow(idx, label || '', cacheVal, makeup, singer, roleType || 'character', sheetId);
+  const row  = buildCharRow(idx, label || '', makeup, singer, roleType || 'character', sheetId);
   list.appendChild(row);
   if (!label) row.querySelector('input[type="text"]').focus();
   autoTitle();
@@ -583,7 +580,6 @@ document.getElementById('chars-list').addEventListener('click', function(e) {
     } else {
       const row = e.target.closest('.char-row');
       row.querySelector('input[type="text"]').value = '';
-      row.querySelector('input[name="char_cache[]"]').value = '';
     }
     autoTitle();
   }
@@ -594,10 +590,10 @@ document.getElementById('chars-list').addEventListener('click', function(e) {
   const list = document.getElementById('chars-list');
   if (ORC_CACHES.length > 0) {
     ORC_CACHES.forEach(function(c, i) {
-      list.appendChild(buildCharRow(i, c.label, c['cache_1h'], c.needs_makeup, c.is_singer, c.role_type, null));
+      list.appendChild(buildCharRow(i, c.label, c.needs_makeup, c.is_singer, c.role_type, null));
     });
   } else {
-    list.appendChild(buildCharRow(0, '', undefined, false, false, 'character', null));
+    list.appendChild(buildCharRow(0, '', false, false, 'character', null));
   }
   autoTitle();
 })();
@@ -612,20 +608,6 @@ function selectDuracao(card) {
   document.getElementById('duracao-hidden').value = dur;
   document.getElementById('sale-value').value     = Math.round(total);
 
-  // atualizar caches dos personagens
-  const cacheInputs = document.querySelectorAll('#chars-list input[name="char_cache[]"]');
-  cacheInputs.forEach(function(inp, i) {
-    if (i >= ORC_CACHES.length) return;
-    if (isCustom) {
-      // cache_4h / 4 * N, arredondado para inteiro
-      const base4h = parseFloat(ORC_CACHES[i].cache_4h) || 0;
-      inp.value = Math.round(base4h / 4 * parseInt(dur));
-    } else {
-      const idx = {'1':0,'2':1,'4':2}[dur] || 0;
-      const key = ['cache_1h','cache_2h','cache_4h'][idx];
-      inp.value = ORC_CACHES[i][key] || '';
-    }
-  });
 }
 
 // ── Método de pagamento ───────────────────────────────────────────────────────

@@ -369,17 +369,44 @@ def _handle_add_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     db.session.commit()
 
 
-def _handle_update_sale(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     can_vendas = any(r.name.upper() in (RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN) for r in current_user.roles)
     if not can_vendas:
         return
-    sale_raw     = request.form.get("sale_value", "").strip()
-    with_invoice = request.form.get("with_invoice") == "1"
-    try:
-        event.sale_value = int(sale_raw) if sale_raw else None
-    except ValueError:
-        event.sale_value = None
-    event.with_invoice = with_invoice
+
+    def _pi(v: str) -> int | None:
+        try:
+            return int(v.strip()) if v and v.strip() else None
+        except ValueError:
+            return None
+
+    event.sale_value      = _pi(request.form.get("sale_value", ""))
+    event.transport_value = _pi(request.form.get("transport_value", ""))
+    event.acrescimo_value = _pi(request.form.get("acrescimo_value", ""))
+    event.with_invoice    = request.form.get("with_invoice") == "1"
+
+    inv_file = request.files.get("invoice_file")
+    if inv_file and inv_file.filename:
+        inv_file.stream.seek(0, 2)
+        inv_size = inv_file.stream.tell()
+        inv_file.stream.seek(0)
+        if inv_size <= 10 * 1024 * 1024:
+            fname = secure_filename(inv_file.filename)
+            inv_file.save(os.path.join(current_app.config["UPLOAD_INVOICES"], fname))
+            event.invoice_file = f"/uploads/invoices/{fname}"
+
+    _VALID_METHODS = {"avista", "pix_parcelado", "faturado", "cartao"}
+    pay_method = request.form.get("payment_method", "").strip()
+    event.payment_method = pay_method if pay_method in _VALID_METHODS else None
+    if pay_method == "pix_parcelado":
+        event.payment_installments = _pi(request.form.get("payment_installments", ""))
+    if pay_method == "faturado":
+        due_raw = request.form.get("payment_due_date", "").strip()
+        try:
+            event.payment_due_date = date.fromisoformat(due_raw) if due_raw else None
+        except ValueError:
+            event.payment_due_date = None
+
     if any(r.name.upper() == RoleName.COMERCIAL for r in current_user.roles):
         if not event.seller_id:
             event.seller_id = current_user.id
@@ -391,11 +418,12 @@ def _handle_update_sale(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             event.commission_rate = float(Decimal(rate_raw)) if rate_raw else None
         except ValueError:
             event.commission_rate = None
+
     db.session.add(EventLog(
         event_id=event.id,
         actor_name=current_user.name,
-        actor_role="Vendas",
-        message=f"Atualizou valor de venda para R$ {event.sale_value or 0}{'  (com nota)' if event.with_invoice else ''}",
+        actor_role="Comercial",
+        message=f"Atualizou dados comerciais: venda R$ {event.sale_value or 0}{'  (com NF)' if event.with_invoice else ''}",
         created_at=datetime.now(tz=tz_sp),
     ))
     db.session.commit()
@@ -536,7 +564,8 @@ _EVENT_ACTIONS = {
     "add_role":           _handle_add_role,
     "figurino_done":      _handle_figurino_done,
     "add_contract":       _handle_add_contract,
-    "update_sale":        _handle_update_sale,
+    "update_comercial":   _handle_update_comercial,
+    "update_sale":        _handle_update_comercial,
     "link_figurino":      _handle_link_figurino,
     "set_payment_status": _handle_set_payment_status,
     "add_payment":        _handle_add_payment,

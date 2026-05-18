@@ -896,131 +896,108 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 <div class="panel">
   <h2>Comercial</h2>
 
-  <div class="grid-2" style="gap: 20px;">
+  {# ── Dados da venda ─────────────────────────────────────────── #}
+  <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}">
+    <input type="hidden" name="action" value="update_comercial">
 
-    {# Upload contrato #}
-    <div>
-      <div class="panel-title">Contrato assinado</div>
-      <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}">
-        <input type="hidden" name="action" value="add_contract">
-        <div class="form-group">
-          <label for="contract_amount">Valor do contrato</label>
-          <input type="number" id="contract_amount" name="contract_amount" placeholder="0,00" min="0" step="0.01">
+    <div class="panel-title" style="margin-bottom: 12px;">Dados da venda</div>
+    <div style="display: flex; flex-wrap: wrap; gap: 16px 24px; margin-bottom: 16px; align-items: flex-start;">
+      <div class="com-val-item">
+        <label>Valor de venda (R$)</label>
+        <div class="com-prefix"><span>R$</span>
+          <input type="number" name="sale_value" min="0" step="1" placeholder="0"
+                 style="width: 140px;" value="{{ event.sale_value or '' }}">
         </div>
-        <div class="form-group">
-          <label for="contract_file">Arquivo <span class="label-hint">PDF / JPG / PNG, máx. 10 MB</span></label>
-          <input type="file" id="contract_file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg">
-        </div>
-        <button type="submit" class="btn btn-sm btn-primary">Enviar contrato</button>
-      </form>
-
-      <hr class="sep">
-      <div class="strong" style="font-size: 13px; margin-bottom: 8px;">Contratos enviados</div>
-      {% if contracts %}
-        {% for c in contracts %}
-          <div class="flex-between gap-8" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
-            <a href="{{ c.file_path }}" target="_blank" class="btn btn-sm btn-secondary">
-              Ver contrato
-            </a>
-            <span class="meta">R$ {{ "{:,.2f}".format(c.amount or 0) }}</span>
-          </div>
-        {% endfor %}
-      {% else %}
-        <p class="muted small">Nenhum contrato enviado.</p>
-      {% endif %}
-    </div>
-
-    {# Upload pagamento #}
-    <div>
-      <div class="panel-title">Pagamento recebido</div>
-      <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}">
-        <input type="hidden" name="action" value="add_payment">
-        <div class="form-group">
-          <label for="payment_amount">Valor recebido</label>
-          <input type="number" id="payment_amount" name="payment_amount" placeholder="0,00" min="0" step="0.01">
-        </div>
-        <div class="form-group">
-          <label for="payment_file">Comprovante <span class="label-hint">PDF / JPG / PNG, máx. 10 MB</span></label>
-          <input type="file" id="payment_file" name="payment_file" accept=".pdf,.png,.jpg,.jpeg">
-        </div>
-        <button type="submit" class="btn btn-sm btn-primary">Adicionar pagamento</button>
-      </form>
-
-      <hr class="sep">
-      <div class="strong" style="font-size: 13px; margin-bottom: 8px;">Pagamentos recebidos</div>
-      {% if payments %}
-        {% for p in payments %}
-          <div class="flex-between gap-8" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
-            <a href="{{ p.file_path }}" target="_blank" class="btn btn-sm btn-secondary">
-              Ver comprovante
-            </a>
-            <span class="meta">R$ {{ "{:,.2f}".format(p.amount or 0) }}</span>
-          </div>
-        {% endfor %}
-      {% else %}
-        <p class="muted small">Nenhum pagamento registrado.</p>
-      {% endif %}
-    </div>
-
-  </div>
-</div>
-{% endif %}
-
-
-{# ══════════════════════════════════════════════════════════════
-   4. DADOS DE VENDA
-   ══════════════════════════════════════════════════════════════ #}
-{% if show_vendas %}
-<div class="panel">
-  <h2>Dados de Venda</h2>
-
-  <form method="post" action="/events/{{ event.id }}">
-    <input type="hidden" name="action" value="update_sale">
-
-    <div class="form-grid-2" style="margin-bottom: 16px;">
-      <div class="form-group">
-        <label for="sale_value">Valor de venda (R$)</label>
-        <input type="number" id="sale_value" name="sale_value"
-          value="{{ event.sale_value or '' }}" placeholder="0" min="0" step="0.01">
       </div>
-      <div class="form-group" style="display: flex; align-items: flex-end; padding-bottom: 2px;">
-        <label class="checkbox-row" for="invoice_cb">
-          <input type="checkbox" id="invoice_cb" name="with_invoice" value="1"
-            {% if event.with_invoice %}checked{% endif %}>
-          Com nota fiscal
-        </label>
+      <div class="com-val-item">
+        <label>Transporte (R$)</label>
+        <div class="com-prefix"><span>R$</span>
+          <input type="number" name="transport_value" min="0" step="1" placeholder="0"
+                 style="width: 120px;" value="{{ event.transport_value or '' }}">
+        </div>
+      </div>
+      <div class="com-val-item">
+        <label>Acréscimo (R$)</label>
+        <div class="com-prefix"><span>R$</span>
+          <input type="number" name="acrescimo_value" min="0" step="1" placeholder="0"
+                 style="width: 110px;" value="{{ event.acrescimo_value or '' }}">
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 16px;">
+      <label class="checkbox-row" style="font-weight: 600;">
+        <input type="checkbox" name="with_invoice" value="1" id="nf-cb-detail"
+               {% if event.with_invoice %}checked{% endif %}
+               onchange="document.getElementById('nf-file-area').style.display=this.checked?'block':'none'">
+        Nota fiscal solicitada
+      </label>
+      <div id="nf-file-area" style="margin-top: 8px;{% if not event.with_invoice %} display: none;{% endif %}">
+        {% if event.invoice_file %}
+          <div style="margin-bottom: 6px;">
+            <a href="{{ event.invoice_file }}" target="_blank" class="btn btn-sm btn-secondary">Ver NF atual</a>
+          </div>
+        {% endif %}
+        <input type="file" name="invoice_file" accept=".pdf,.xml,.png,.jpg,.jpeg">
+        <div class="meta">PDF, XML ou imagem · máx. 10 MB</div>
+      </div>
+    </div>
+
+    <div class="panel-title" style="margin-bottom: 10px;">Forma de pagamento</div>
+    <input type="hidden" name="payment_method" id="pay-detail-method" value="{{ event.payment_method or '' }}">
+    <div class="com-pay-btns" style="margin-bottom: 12px;">
+      <button type="button" class="com-pay-btn{% if event.payment_method == 'avista' %} active{% endif %}"
+              data-method="avista" onclick="setDetailPayMethod('avista')">À vista (PIX)</button>
+      <button type="button" class="com-pay-btn{% if event.payment_method == 'pix_parcelado' %} active{% endif %}"
+              data-method="pix_parcelado" onclick="setDetailPayMethod('pix_parcelado')">Dividido no PIX</button>
+      <button type="button" class="com-pay-btn{% if event.payment_method == 'faturado' %} active{% endif %}"
+              data-method="faturado" onclick="setDetailPayMethod('faturado')">Faturado</button>
+      <button type="button" class="com-pay-btn{% if event.payment_method == 'cartao' %} active{% endif %}"
+              data-method="cartao" onclick="setDetailPayMethod('cartao')">Cartão de Crédito</button>
+    </div>
+    <div id="detail-extra-pix_parcelado"
+         style="margin-bottom: 12px;{% if event.payment_method != 'pix_parcelado' %} display: none;{% endif %}">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label>Quantas parcelas?</label>
+        <input type="number" name="payment_installments" min="2" max="12" style="width: 80px;"
+               value="{{ event.payment_installments or 2 }}">
+      </div>
+    </div>
+    <div id="detail-extra-faturado"
+         style="margin-bottom: 12px;{% if event.payment_method != 'faturado' %} display: none;{% endif %}">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label>Data de pagamento</label>
+        <input type="date" name="payment_due_date" style="width: 160px;"
+               value="{{ event.payment_due_date.strftime('%Y-%m-%d') if event.payment_due_date else '' }}">
       </div>
     </div>
 
     {% if show_financeiro %}
-      <hr class="sep">
-      <div class="form-grid-2" style="margin-bottom: 16px;">
-        <div class="form-group">
-          <label for="seller_id">Vendedor responsável</label>
-          <select id="seller_id" name="seller_id">
-            <option value="">-- nenhum --</option>
-            {% for s in sellers %}
-              <option value="{{ s.id }}" {% if event.seller_id == s.id %}selected{% endif %}>{{ s.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="commission_rate">
-            Taxa de comissão (%)
-            <span class="label-hint">Padrão: {{ default_commission }}%</span>
-          </label>
-          <input type="number" id="commission_rate" name="commission_rate"
-            step="0.1" min="0" max="100"
-            value="{{ event.commission_rate or '' }}"
-            placeholder="{{ default_commission }}">
-        </div>
+    <hr class="sep">
+    <div class="form-grid-2" style="margin-bottom: 16px;">
+      <div class="form-group">
+        <label>Vendedor responsável</label>
+        <select name="seller_id">
+          <option value="">-- nenhum --</option>
+          {% for s in sellers %}
+            <option value="{{ s.id }}" {% if event.seller_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+          {% endfor %}
+        </select>
       </div>
+      <div class="form-group">
+        <label>Taxa de comissão (%)
+          <span class="label-hint">Padrão: {{ default_commission }}%</span>
+        </label>
+        <input type="number" name="commission_rate" step="0.1" min="0" max="100"
+               value="{{ event.commission_rate or '' }}" placeholder="{{ default_commission }}">
+      </div>
+    </div>
     {% endif %}
 
-    <button type="submit" class="btn btn-primary">Salvar dados de venda</button>
+    <button type="submit" class="btn btn-primary">Salvar dados comerciais</button>
   </form>
 
-  {# Financial summary box #}
+  {% if show_financeiro %}
   <hr class="sep">
   <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 0;">
     <div class="kpi">
@@ -1045,6 +1022,72 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
         R$&nbsp;{{ "{:,.0f}".format(lucro) }}
       </div>
     </div>
+  </div>
+  {% endif %}
+
+  <hr class="sep">
+
+  {# ── Contratos e Comprovantes ─────────────────────────────────── #}
+  <div class="grid-2" style="gap: 20px;">
+
+    <div>
+      <div class="panel-title" style="margin-bottom: 10px;">Contrato assinado</div>
+      <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}">
+        <input type="hidden" name="action" value="add_contract">
+        <div class="form-group">
+          <label>Valor do contrato (R$)</label>
+          <input type="number" name="contract_amount" placeholder="0" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Arquivo <span class="label-hint">PDF / JPG / PNG · máx. 10 MB</span></label>
+          <input type="file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg">
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">Enviar contrato</button>
+      </form>
+
+      <hr class="sep">
+      <div class="strong" style="font-size: 13px; margin-bottom: 8px;">Contratos enviados</div>
+      {% if contracts %}
+        {% for c in contracts %}
+          <div class="flex-between gap-8" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
+            <a href="{{ c.file_path }}" target="_blank" class="btn btn-sm btn-secondary">Ver contrato</a>
+            <span class="meta">R$ {{ "{:,.2f}".format(c.amount or 0) }}</span>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted small">Nenhum contrato enviado.</p>
+      {% endif %}
+    </div>
+
+    <div>
+      <div class="panel-title" style="margin-bottom: 10px;">Comprovante de pagamento</div>
+      <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}">
+        <input type="hidden" name="action" value="add_payment">
+        <div class="form-group">
+          <label>Valor recebido (R$)</label>
+          <input type="number" name="payment_amount" placeholder="0" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Comprovante <span class="label-hint">PDF / JPG / PNG · máx. 10 MB</span></label>
+          <input type="file" name="payment_file" accept=".pdf,.png,.jpg,.jpeg">
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">Adicionar pagamento</button>
+      </form>
+
+      <hr class="sep">
+      <div class="strong" style="font-size: 13px; margin-bottom: 8px;">Pagamentos recebidos</div>
+      {% if payments %}
+        {% for p in payments %}
+          <div class="flex-between gap-8" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
+            <a href="{{ p.file_path }}" target="_blank" class="btn btn-sm btn-secondary">Ver comprovante</a>
+            <span class="meta">R$ {{ "{:,.2f}".format(p.amount or 0) }}</span>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted small">Nenhum pagamento registrado.</p>
+      {% endif %}
+    </div>
+
   </div>
 </div>
 {% endif %}
@@ -1170,6 +1213,15 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 
 {% block extra_scripts %}
 <style>
+  /* ── Comercial section ─────────────────────────────────────── */
+  .com-val-item { display: flex; flex-direction: column; gap: 4px; }
+  .com-val-item label { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .com-prefix { position: relative; }
+  .com-prefix span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 13px; pointer-events: none; }
+  .com-prefix input { padding-left: 28px; }
+  .com-pay-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .com-pay-btn { padding: 8px 16px; border: 2px solid var(--line); border-radius: var(--r-md); background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; transition: border-color .15s, background .15s; }
+  .com-pay-btn.active { border-color: var(--accent); background: var(--accent-soft, #f0f4ff); color: var(--accent-dark); }
   /* ── Talent autocomplete ───────────────────────────────────── */
   .ts-wrap { position: relative; }
   .ts-box {
@@ -1350,6 +1402,18 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 function setExtraRole(name) {
   const input = document.getElementById('extra-role-name');
   if (input) { input.value = name; input.focus(); }
+}
+
+// ── Forma de pagamento (comercial) ──────────────────────────────
+function setDetailPayMethod(method) {
+  document.getElementById('pay-detail-method').value = method;
+  document.querySelectorAll('.com-pay-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.method === method);
+  });
+  ['pix_parcelado', 'faturado'].forEach(m => {
+    const el = document.getElementById('detail-extra-' + m);
+    if (el) el.style.display = m === method ? '' : 'none';
+  });
 }
 
 // ── WhatsApp invite ────────────────────────────────────────────

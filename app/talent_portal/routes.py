@@ -512,7 +512,7 @@ def event_figurino(event_id: int):
     seen_ids: set[int] = set()
     sheet_items: list[tuple] = []
 
-    for r in event.roles:
+    for r in [r for r in event.roles if r.talent_id == talent.id]:
         sheet = r.figurino_sheet
         if not sheet:
             norm = normalize_name(r.character_name)
