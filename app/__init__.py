@@ -177,18 +177,32 @@ def create_app():
     app.register_blueprint(crm_bp)
     app.register_blueprint(orcamento_bp)
 
+    def _wa_link(code: int) -> str:
+        from zoneinfo import ZoneInfo
+        import urllib.parse
+        now = datetime.now(tz=ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M")
+        url = request.url
+        msg = (
+            f"🚨 *Erro na Manto Platform*\n"
+            f"• Código: {code}\n"
+            f"• Página: {url}\n"
+            f"• Horário: {now} (SP)"
+        )
+        number = os.getenv("SUPPORT_WHATSAPP", "")
+        return f"https://wa.me/{number}?text={urllib.parse.quote(msg)}" if number else ""
+
     @app.errorhandler(404)
     def not_found(e):
-        return render_template("404.html"), 404
+        return render_template("404.html", wa_link=_wa_link(404)), 404
 
     @app.errorhandler(500)
     def internal_error(e):
         app.logger.error(f"500 error: {e}")
-        return render_template("500.html"), 500
+        return render_template("500.html", wa_link=_wa_link(500)), 500
 
     @app.errorhandler(403)
     def forbidden(e):
-        return render_template("404.html"), 403
+        return render_template("404.html", wa_link=_wa_link(403)), 403
 
     @app.route("/")
     @login_required
