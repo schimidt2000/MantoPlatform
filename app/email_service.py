@@ -19,13 +19,39 @@ _TZ = ZoneInfo("America/Sao_Paulo")
 
 
 def send_async(fn, *args) -> None:
-    """Dispara fn(*args) em background thread com app context. Não bloqueia o request."""
+    """Dispara fn(*args) em background thread com app context. Não bloqueia o request.
+
+    Objetos SQLAlchemy são convertidos em (classe, pk) antes da thread iniciar e
+    recarregados com sessão limpa dentro da thread, evitando acesso concorrente
+    à sessão da thread principal (erro InvalidRequestError em gthread workers).
+    """
+    from sqlalchemy import inspect as sa_inspect
+    from app import db
+
     app = current_app._get_current_object()
+
+    def _pack(arg):
+        if isinstance(arg, db.Model):
+            identity = sa_inspect(arg).identity  # tuple de PKs — não expira após commit
+            return ("orm", type(arg), identity)
+        if isinstance(arg, list):
+            return ("list", [_pack(item) for item in arg])
+        return ("val", arg)
+
+    def _unpack(packed):
+        if packed[0] == "orm":
+            _, cls, pk = packed
+            return cls.query.get(pk[0] if len(pk) == 1 else pk)
+        if packed[0] == "list":
+            return [_unpack(item) for item in packed[1]]
+        return packed[1]  # "val"
+
+    packed = [_pack(a) for a in args]
 
     def _run():
         with app.app_context():
             try:
-                fn(*args)
+                fn(*[_unpack(p) for p in packed])
             except Exception:
                 log.exception("Erro ao enviar email em background: %s", fn.__name__)
 
