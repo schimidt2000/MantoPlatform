@@ -806,6 +806,10 @@ function setModoEntradas(checked) {
 function toggleForaSP(checked) {
   forasp = checked;
   document.getElementById('transport-section').style.display = checked ? 'block' : 'none';
+  if (checked) {
+    const endereco = document.getElementById('event_location').value.trim();
+    if (endereco) fetchDistancia();
+  }
   update();
 }
 
@@ -829,7 +833,11 @@ function fetchDistancia() {
       if (data.error) { alert('Erro: ' + data.error); }
       else {
         kmIda = data.km_ida;
-        document.getElementById('km_ida').value = kmIda;
+        const kmEl = document.getElementById('km_ida');
+        kmEl.value = kmIda;
+        kmEl.classList.remove('orc-input-error');
+        const errSpan = kmEl.nextSibling;
+        if (errSpan && errSpan.classList && errSpan.classList.contains('orc-field-error')) errSpan.remove();
         colabOverride = null;
         update();
       }
@@ -1027,6 +1035,19 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // Bloqueia se fora de SP mas distância não calculada
+    if (forasp && kmIda <= 0) {
+      e.preventDefault();
+      const kmEl = document.getElementById('km_ida');
+      kmEl.classList.add('orc-input-error');
+      const errSpan = document.createElement('span');
+      errSpan.className = 'orc-field-error';
+      errSpan.textContent = 'Calcule a distância antes de gerar o orçamento.';
+      kmEl.after(errSpan);
+      document.getElementById('transport-section').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
     document.getElementById('performers_json').value = JSON.stringify(performers);
   });
 
@@ -1034,6 +1055,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('coord-qty-up').addEventListener('click',   () => changeCoord(1));
 
   document.querySelector('[name=event_time]')?.addEventListener('change', update);
+
+  // Se fora de SP, recalcula automaticamente ao sair do campo de endereço
+  document.getElementById('event_location')?.addEventListener('blur', function () {
+    if (forasp && this.value.trim()) {
+      kmIda = 0;
+      document.getElementById('km_ida').value = 0;
+      fetchDistancia();
+    }
+  });
 
   document.getElementById('km_ida')?.addEventListener('input', function () {
     kmIda = parseFloat(this.value) || 0;
