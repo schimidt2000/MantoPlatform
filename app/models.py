@@ -190,7 +190,7 @@ class CalendarEvent(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # financeiro
-    sale_value = db.Column(db.Integer, nullable=True)
+    sale_value = db.Column(db.Numeric(12, 2), nullable=True)
     with_invoice = db.Column(db.Boolean, default=False, nullable=False)
     seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     commission_rate = db.Column(db.Float, nullable=True)  # null = usa SiteSetting.default_commission_rate
@@ -213,8 +213,8 @@ class CalendarEvent(db.Model):
     payment_method       = db.Column(db.String(30), nullable=True)   # 'avista'|'pix_parcelado'|'faturado'|'cartao'
     payment_installments = db.Column(db.Integer, nullable=True)       # parcelas (pix_parcelado)
     payment_due_date     = db.Column(db.Date, nullable=True)          # data de vencimento (faturado)
-    transport_value      = db.Column(db.Integer, nullable=True)       # valor transporte separado (R$ inteiro)
-    acrescimo_value      = db.Column(db.Integer, nullable=True)       # acréscimo separado (R$ inteiro)
+    transport_value      = db.Column(db.Numeric(12, 2), nullable=True)  # valor transporte separado (R$)
+    acrescimo_value      = db.Column(db.Numeric(12, 2), nullable=True)  # acréscimo separado (R$)
     orcamento_history_id = db.Column(db.Integer, db.ForeignKey("orcamento_history.id"), nullable=True)
     invoice_file         = db.Column(db.String(255), nullable=True)   # filename em uploads/invoices/
 

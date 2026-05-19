@@ -400,15 +400,18 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     if not can_vendas:
         return
 
-    def _pi(v: str) -> int | None:
+    def _pf(v: str) -> Decimal | None:
+        """Parseia número em formato BR: '1.500,50' → Decimal('1500.50')"""
+        if not v or not v.strip():
+            return None
         try:
-            return int(v.strip()) if v and v.strip() else None
-        except ValueError:
+            return Decimal(v.strip().replace('.', '').replace(',', '.'))
+        except Exception:
             return None
 
-    event.sale_value      = _pi(request.form.get("sale_value", ""))
-    event.transport_value = _pi(request.form.get("transport_value", ""))
-    event.acrescimo_value = _pi(request.form.get("acrescimo_value", ""))
+    event.sale_value      = _pf(request.form.get("sale_value", ""))
+    event.transport_value = _pf(request.form.get("transport_value", ""))
+    event.acrescimo_value = _pf(request.form.get("acrescimo_value", ""))
     event.with_invoice    = request.form.get("with_invoice") == "1"
 
     inv_file = request.files.get("invoice_file")
@@ -1556,6 +1559,15 @@ def create_event():
         except (ValueError, AttributeError):
             return None
 
+    def _parse_decimal(raw: str) -> Decimal | None:
+        """Parseia número em formato BR: '1.500,50' → Decimal('1500.50')"""
+        if not raw or not raw.strip():
+            return None
+        try:
+            return Decimal(raw.strip().replace('.', '').replace(',', '.'))
+        except Exception:
+            return None
+
     # ── Nota fiscal file (opcional) ──────────────────────────────────────────
     invoice_filename = None
     invoice_file = request.files.get("invoice_file")
@@ -1578,9 +1590,9 @@ def create_event():
         event_type           = event_type or None,
         needs_rehearsal      = needs_rehearsal,
         source               = "platform",
-        sale_value           = _parse_int(sale_value_raw),
-        transport_value      = _parse_int(transport_value_raw),
-        acrescimo_value      = _parse_int(acrescimo_value_raw),
+        sale_value           = _parse_decimal(sale_value_raw),
+        transport_value      = _parse_decimal(transport_value_raw),
+        acrescimo_value      = _parse_decimal(acrescimo_value_raw),
         with_invoice         = with_invoice,
         invoice_file         = invoice_filename,
         seller_id            = int(seller_id_raw) if seller_id_raw.isdigit() else None,

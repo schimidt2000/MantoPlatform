@@ -233,9 +233,9 @@
     <div class="val-item">
       <label>Valor de venda (R$) <span style="color:var(--red);">*</span></label>
       <div class="prefix"><span>R$</span>
-        <input type="number" name="sale_value" id="sale-value" min="0" step="1"
-               placeholder="0" style="width:150px;"
-               {% if prefill.orcamento_id %}value="{{ prefill.total_1h | int }}"{% endif %}>
+        <input type="text" inputmode="decimal" name="sale_value" id="sale-value" class="brl-input"
+               placeholder="0,00" style="width:150px;"
+               {% if prefill.orcamento_id %}value="{{ prefill.total_1h | brl }}"{% endif %}>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
         <button type="button" class="btn btn-secondary btn-sm"
@@ -268,9 +268,9 @@
     <div class="val-item">
       <label>Transporte (R$)</label>
       <div class="prefix"><span>R$</span>
-        <input type="number" name="transport_value" id="transport-value" min="0" step="1"
-               placeholder="0" style="width:130px;"
-               value="{{ prefill.transport_value or '' }}">
+        <input type="text" inputmode="decimal" name="transport_value" id="transport-value" class="brl-input"
+               placeholder="0,00" style="width:130px;"
+               value="{{ prefill.transport_value | brl if prefill.transport_value else '' }}">
       </div>
       <div class="meta">Separado para cálculo de comissão</div>
     </div>
@@ -278,9 +278,9 @@
     <div class="val-item">
       <label>Acréscimo (R$)</label>
       <div class="prefix"><span>R$</span>
-        <input type="number" name="acrescimo_value" min="0" step="1"
-               placeholder="0" style="width:110px;"
-               value="{{ prefill.acrescimo_value or '' }}">
+        <input type="text" inputmode="decimal" name="acrescimo_value" class="brl-input"
+               placeholder="0,00" style="width:110px;"
+               value="{{ prefill.acrescimo_value | brl if prefill.acrescimo_value else '' }}">
       </div>
     </div>
   </div>
@@ -598,6 +598,34 @@ document.getElementById('chars-list').addEventListener('click', function(e) {
   autoTitle();
 })();
 
+// ── Helpers BRL (. milhar, , decimal) ────────────────────────────────────────
+function parseBRL(str) {
+  if (!str) return 0;
+  return parseFloat((str + '').replace(/\./g, '').replace(',', '.')) || 0;
+}
+function formatBRL(num) {
+  if (isNaN(num)) return '';
+  return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function applyBRLMask(el) {
+  let raw = el.value.replace(/[^\d,]/g, '');
+  let parts = raw.split(',');
+  let intStr = parts[0].replace(/^0+(?=\d)/, '') || '';
+  let decStr = parts.length > 1 ? parts.slice(1).join('').slice(0, 2) : null;
+  intStr = intStr.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  el.value = decStr !== null ? intStr + ',' + decStr : intStr;
+}
+document.querySelectorAll('.brl-input').forEach(function(el) {
+  el.addEventListener('input', function() { applyBRLMask(this); });
+  el.addEventListener('keydown', function(e) {
+    if ([8,9,13,27,46,37,38,39,40].indexOf(e.keyCode) !== -1) return;
+    if ((e.ctrlKey || e.metaKey) && [65,67,86,88].indexOf(e.keyCode) !== -1) return;
+    if (e.key >= '0' && e.key <= '9') return;
+    if (e.key === ',') return;
+    e.preventDefault();
+  });
+});
+
 // ── Seletor de duração (orçamento) ───────────────────────────────────────────
 function selectDuracao(card) {
   document.querySelectorAll('.dur-card').forEach(c => c.classList.remove('selected'));
@@ -606,7 +634,7 @@ function selectDuracao(card) {
   const total    = parseFloat(card.dataset.total) || 0;
   const isCustom = card.dataset.isCustom === '1';
   document.getElementById('duracao-hidden').value = dur;
-  document.getElementById('sale-value').value     = Math.round(total);
+  document.getElementById('sale-value').value     = formatBRL(total);
 
 }
 
@@ -697,30 +725,30 @@ function toggleDiscount() {
 
 function calcDesconto(src) {
   const saleEl = document.getElementById('sale-value');
-  const base   = parseFloat(saleEl.value) || 0;
+  const base   = parseBRL(saleEl.value);
   const pctEl  = document.getElementById('desc-pct');
   const valEl  = document.getElementById('desc-val');
   const resEl  = document.getElementById('desc-result');
   if (!base) { resEl.textContent = 'Informe o valor de venda primeiro.'; return; }
   if (src === 'pct') {
     const pct = parseFloat(pctEl.value) || 0;
-    _descontoVal = Math.round(base * pct / 100);
-    valEl.value  = _descontoVal;
+    _descontoVal = Math.round(base * pct / 100 * 100) / 100;
+    valEl.value  = formatBRL(_descontoVal);
   } else {
-    _descontoVal = parseFloat(valEl.value) || 0;
+    _descontoVal = parseBRL(valEl.value);
     pctEl.value  = base > 0 ? (_descontoVal / base * 100).toFixed(1) : '0';
   }
   const novo = base - _descontoVal;
-  resEl.innerHTML = `Desconto: <strong>R$ ${_descontoVal.toLocaleString('pt-BR')}</strong> &rarr; Novo valor: <strong>R$ ${novo.toLocaleString('pt-BR')}</strong>`;
+  resEl.innerHTML = `Desconto: <strong>R$ ${formatBRL(_descontoVal)}</strong> &rarr; Novo valor: <strong>R$ ${formatBRL(novo)}</strong>`;
 }
 
 function applyDesconto() {
   const saleEl = document.getElementById('sale-value');
-  const base   = parseFloat(saleEl.value) || 0;
+  const base   = parseBRL(saleEl.value);
   if (!_descontoVal || !base) return;
-  saleEl.value = Math.round(base - _descontoVal);
+  saleEl.value = formatBRL(base - _descontoVal);
   const prev = document.getElementById('desconto-preview');
-  prev.textContent = `Desconto de R$ ${_descontoVal.toLocaleString('pt-BR')} aplicado`;
+  prev.textContent = `Desconto de R$ ${formatBRL(_descontoVal)} aplicado`;
   prev.style.display = '';
   _descontoVal = 0;
   toggleDiscount();

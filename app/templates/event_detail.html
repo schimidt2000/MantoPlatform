@@ -923,22 +923,22 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       <div class="com-val-item">
         <label>Valor de venda (R$)</label>
         <div class="com-prefix"><span>R$</span>
-          <input type="number" name="sale_value" min="0" step="1" placeholder="0"
-                 style="width: 140px;" value="{{ event.sale_value or '' }}">
+          <input type="text" inputmode="decimal" name="sale_value" class="brl-input" placeholder="0,00"
+                 style="width: 140px;" value="{{ event.sale_value | brl if event.sale_value is not none else '' }}">
         </div>
       </div>
       <div class="com-val-item">
         <label>Transporte (R$)</label>
         <div class="com-prefix"><span>R$</span>
-          <input type="number" name="transport_value" min="0" step="1" placeholder="0"
-                 style="width: 120px;" value="{{ event.transport_value or '' }}">
+          <input type="text" inputmode="decimal" name="transport_value" class="brl-input" placeholder="0,00"
+                 style="width: 120px;" value="{{ event.transport_value | brl if event.transport_value is not none else '' }}">
         </div>
       </div>
       <div class="com-val-item">
         <label>Acréscimo (R$)</label>
         <div class="com-prefix"><span>R$</span>
-          <input type="number" name="acrescimo_value" min="0" step="1" placeholder="0"
-                 style="width: 110px;" value="{{ event.acrescimo_value or '' }}">
+          <input type="text" inputmode="decimal" name="acrescimo_value" class="brl-input" placeholder="0,00"
+                 style="width: 110px;" value="{{ event.acrescimo_value | brl if event.acrescimo_value is not none else '' }}">
         </div>
       </div>
     </div>
@@ -1020,24 +1020,24 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
   <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 0;">
     <div class="kpi">
       <div class="kpi-label">Venda</div>
-      <div class="kpi-value">R$&nbsp;{{ "{:,.0f}".format(event.sale_value or 0) }}</div>
+      <div class="kpi-value">R$&nbsp;{{ (event.sale_value or 0) | brl }}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Custo (cachês)</div>
-      <div class="kpi-value">R$&nbsp;{{ "{:,.0f}".format(event_cost or 0) }}</div>
+      <div class="kpi-value">R$&nbsp;{{ (event_cost or 0) | brl }}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Comissão ({{ event_rate }}%)</div>
-      <div class="kpi-value">R$&nbsp;{{ "%.2f" | format(event_commission or 0) }}</div>
+      <div class="kpi-value">R$&nbsp;{{ (event_commission or 0) | brl }}</div>
       {% if event.seller %}
         <div class="kpi-sub">{{ event.seller.name }}</div>
       {% endif %}
     </div>
     <div class="kpi">
-      {% set lucro = (event.sale_value or 0) - (event_cost or 0) %}
+      {% set lucro = (event.sale_value or 0) | float - (event_cost or 0) | float %}
       <div class="kpi-label">Lucro líquido</div>
       <div class="kpi-value {% if lucro >= 0 %}green{% else %}red{% endif %}">
-        R$&nbsp;{{ "{:,.0f}".format(lucro) }}
+        R$&nbsp;{{ lucro | brl }}
       </div>
     </div>
   </div>
@@ -1421,6 +1421,28 @@ function setExtraRole(name) {
   const input = document.getElementById('extra-role-name');
   if (input) { input.value = name; input.focus(); }
 }
+
+// ── Máscara BRL (. milhar, , decimal) ──────────────────────────
+(function() {
+  function applyBRLMask(el) {
+    let raw = el.value.replace(/[^\d,]/g, '');
+    let parts = raw.split(',');
+    let intStr = parts[0].replace(/^0+(?=\d)/, '') || '';
+    let decStr = parts.length > 1 ? parts.slice(1).join('').slice(0, 2) : null;
+    intStr = intStr.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    el.value = decStr !== null ? intStr + ',' + decStr : intStr;
+  }
+  document.querySelectorAll('.brl-input').forEach(function(el) {
+    el.addEventListener('input', function() { applyBRLMask(this); });
+    el.addEventListener('keydown', function(e) {
+      if ([8,9,13,27,46,37,38,39,40].indexOf(e.keyCode) !== -1) return;
+      if ((e.ctrlKey || e.metaKey) && [65,67,86,88].indexOf(e.keyCode) !== -1) return;
+      if (e.key >= '0' && e.key <= '9') return;
+      if (e.key === ',') return;
+      e.preventDefault();
+    });
+  });
+})();
 
 // ── Forma de pagamento (comercial) ──────────────────────────────
 function setDetailPayMethod(method) {
