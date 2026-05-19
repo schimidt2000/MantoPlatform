@@ -827,14 +827,21 @@ def _detect_changes(event: CalendarEvent, new_start, new_end, new_location) -> l
 
 
 def _notify_accepted_roles(event: CalendarEvent, changes: list[str]) -> None:
-    """Marca roles aceitos como alterados e envia emails."""
+    """Marca roles aceitos como alterados e envia emails.
+
+    O email só é enviado uma vez por rodada de mudanças — enquanto o talento não
+    clicar 'Estou ciente' (que zera event_changed_at), notificações adicionais
+    atualizam a descrição silenciosamente, sem novo email.
+    """
     now = datetime.now(tz=ZoneInfo("America/Sao_Paulo"))
     description = "\n".join(changes)
     for role in event.roles:
         if role.invite_status == "accepted":
+            already_pending = role.event_changed_at is not None
             role.event_changed_at = now
             role.change_description = description
-            send_async(send_event_changed_email, role, changes)
+            if not already_pending:
+                send_async(send_event_changed_email, role, changes)
 
 
 def _notify_ensaio_team(event: CalendarEvent) -> None:
