@@ -243,12 +243,13 @@ def create_app():
             .count()
         )
 
-        # Figurino: roles COM talento atribuído, SEM figurino, excluindo rejeitados
+        # Figurino: roles COM talento atribuído, SEM figurino, excluindo rejeitados e equipe técnica
         pending_figurino = (
             EventRole.query.filter(
                 EventRole.talent_id.isnot(None),
                 EventRole.figurino_done_at.is_(None),
                 EventRole.invite_status != "rejected",
+                EventRole.role_type != "extra",
             )
             .join(CalendarEvent)
             .filter(exclude_ensaios, future_events)
@@ -259,6 +260,7 @@ def create_app():
             EventRole.query.filter(
                 EventRole.talent_id.isnot(None),
                 EventRole.invite_status != "rejected",
+                EventRole.role_type != "extra",
             )
             .join(CalendarEvent)
             .filter(exclude_ensaios, future_events)

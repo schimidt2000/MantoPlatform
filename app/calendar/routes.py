@@ -300,6 +300,7 @@ def _handle_add_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     if talent_id:
         role.talent_id = int(talent_id)
         role.assigned_at = datetime.now(tz=tz_sp)
+        role.invite_status = "pending"
     try:
         role.cache_value = int(cache_value) if cache_value else None
     except ValueError:
@@ -319,6 +320,8 @@ def _handle_add_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         created_at=datetime.now(tz=tz_sp),
     ))
     db.session.commit()
+    if role.talent_id:
+        send_async(send_invite_email, role)
 
 
 def _handle_delete_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
