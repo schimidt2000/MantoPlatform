@@ -20,6 +20,7 @@ from .service import (
     parse_event_datetime,
     insert_event,
     update_event,
+    delete_event,
 )
 from .. import db
 from app.constants import RoleName
@@ -1146,10 +1147,18 @@ def create_ensaio(event_id: int):
     if not any(r.name.upper() in _CAN_ENSAIO for r in current_user.roles):
         abort(403)
 
-    date_str  = request.form.get("ensaio_date", "").strip()
-    start_str = request.form.get("ensaio_start", "").strip()
-    end_str   = request.form.get("ensaio_end", "").strip()
-    desc      = request.form.get("ensaio_desc", "").strip()
+    date_str      = request.form.get("ensaio_date", "").strip()
+    start_str     = request.form.get("ensaio_start", "").strip()
+    end_str       = request.form.get("ensaio_end", "").strip()
+    desc          = request.form.get("ensaio_desc", "").strip()
+    location_type = request.form.get("ensaio_location_type", "manto")
+    custom_loc    = request.form.get("ensaio_location", "").strip()
+
+    if location_type == "outro" and custom_loc:
+        ensaio_loc = custom_loc
+    else:
+        _s = SiteSetting.query.get(1)
+        ensaio_loc = (_s.manto_address or "") if _s else ""
 
     errors = []
     d = None
@@ -1175,12 +1184,12 @@ def create_ensaio(event_id: int):
 
     title = f"🟧 ENSAIO — {event.title}"
     try:
-        created = insert_event(CALENDAR_ID, title, st, et, description=desc, location=event.location or "")
+        created = insert_event(CALENDAR_ID, title, st, et, description=desc, location=ensaio_loc)
         ensaio_ev = CalendarEvent(
             google_event_id=created["id"],
             title=title,
             description=desc or None,
-            location=event.location,
+            location=ensaio_loc or None,
             start_at=st,
             end_at=et,
             event_type="ENSAIO",
@@ -1207,10 +1216,11 @@ def edit_ensaio(ensaio_id: int):
     if ensaio.event_type != "ENSAIO":
         abort(400)
 
-    date_str  = request.form.get("ensaio_date", "").strip()
-    start_str = request.form.get("ensaio_start", "").strip()
-    end_str   = request.form.get("ensaio_end", "").strip()
-    desc      = request.form.get("ensaio_desc", "").strip()
+    date_str    = request.form.get("ensaio_date", "").strip()
+    start_str   = request.form.get("ensaio_start", "").strip()
+    end_str     = request.form.get("ensaio_end", "").strip()
+    desc        = request.form.get("ensaio_desc", "").strip()
+    new_loc     = request.form.get("ensaio_location", "").strip()
     redirect_to = request.form.get("redirect_to", "home")
 
     errors = []
@@ -1234,9 +1244,11 @@ def edit_ensaio(ensaio_id: int):
     if errors:
         flash(" ".join(errors), "error")
     else:
-        ensaio.start_at = st
-        ensaio.end_at   = et
+        ensaio.start_at    = st
+        ensaio.end_at      = et
         ensaio.description = desc or None
+        if new_loc:
+            ensaio.location = new_loc
         db.session.commit()
 
         if ensaio.google_event_id:
@@ -1248,6 +1260,7 @@ def edit_ensaio(ensaio_id: int):
                     st,
                     et,
                     description=desc,
+                    location=ensaio.location or "",
                 )
             except RuntimeError as exc:
                 flash(f"Salvo no banco, mas erro ao atualizar Google Calendar: {exc}", "warning")
@@ -1256,6 +1269,35 @@ def edit_ensaio(ensaio_id: int):
 
     if redirect_to == "event" and ensaio.parent_event_id:
         return redirect(url_for("calendar.event_detail", event_id=ensaio.parent_event_id))
+    return redirect(url_for("home"))
+
+
+@calendar_bp.route("/events/<int:ensaio_id>/delete-ensaio", methods=["POST"])
+@login_required
+def delete_ensaio(ensaio_id: int):
+    """Cancela (exclui) um ensaio sem afetar o evento pai."""
+    ensaio = CalendarEvent.query.get_or_404(ensaio_id)
+
+    if ensaio.event_type != "ENSAIO":
+        abort(400)
+
+    if not any(r.name.upper() in _CAN_ENSAIO for r in current_user.roles):
+        abort(403)
+
+    parent_id = ensaio.parent_event_id
+
+    if ensaio.google_event_id:
+        try:
+            delete_event(CALENDAR_ID, ensaio.google_event_id)
+        except RuntimeError as exc:
+            flash(f"Salvo no banco, mas erro ao remover do Google Calendar: {exc}", "warning")
+
+    db.session.delete(ensaio)
+    db.session.commit()
+
+    flash("Ensaio cancelado com sucesso.", "success")
+    if parent_id:
+        return redirect(url_for("calendar.event_detail", event_id=parent_id))
     return redirect(url_for("home"))
 
 

@@ -235,6 +235,7 @@ def update_event(
     start_dt: datetime,
     end_dt: datetime,
     description: str = "",
+    location: str = "",
 ) -> dict:
     """Atualiza um evento existente no Google Calendar via patch."""
     creds = load_credentials()
@@ -247,4 +248,15 @@ def update_event(
         "start": {"dateTime": start_dt.isoformat(), "timeZone": "America/Sao_Paulo"},
         "end":   {"dateTime": end_dt.isoformat(),   "timeZone": "America/Sao_Paulo"},
     }
+    if location:
+        body["location"] = location
     return service.events().patch(calendarId=calendar_id, eventId=google_event_id, body=body).execute()
+
+
+def delete_event(calendar_id: str, google_event_id: str) -> None:
+    """Remove um evento do Google Calendar."""
+    creds = load_credentials()
+    if not creds:
+        raise RuntimeError("Google não conectado. Acesse /google/connect primeiro.")
+    service = build("calendar", "v3", credentials=creds)
+    service.events().delete(calendarId=calendar_id, eventId=google_event_id).execute()

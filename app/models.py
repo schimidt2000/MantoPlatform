@@ -226,7 +226,7 @@ class CalendarEvent(db.Model):
     parent = db.relationship(
         "CalendarEvent",
         remote_side="CalendarEvent.id",
-        backref=db.backref("ensaios", lazy=True),
+        backref=db.backref("ensaios", lazy=True, cascade="all, delete-orphan"),
         foreign_keys=[parent_event_id],
     )
     ensaio_materials = db.relationship(
