@@ -527,12 +527,22 @@
     }
   }
 
+  // Após reload do form, o browser refoca o input e seleciona todo o texto.
+  // setSelectionRange desloca o cursor pro fim e desfaz a seleção.
+  window.addEventListener('load', function () {
+    const ns = document.getElementById('name-search');
+    if (ns && ns.value) {
+      ns.focus();
+      ns.setSelectionRange(ns.value.length, ns.value.length);
+    }
+  });
+
   let _searchTimer = null;
   function debounceSubmit() {
     clearTimeout(_searchTimer);
     _searchTimer = setTimeout(function() {
       document.getElementById('filter-form').submit();
-    }, 350);
+    }, 500);
   }
 
   function filterTags(q) {

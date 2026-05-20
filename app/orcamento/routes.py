@@ -451,9 +451,7 @@ def historico():
     show_f     = request.args.get("has_show", "").strip()
 
     query = OrcamentoHistory.query
-    if not is_sa:
-        query = query.filter_by(user_id=current_user.id)
-    elif user_id_f and user_id_f.isdigit():
+    if user_id_f and user_id_f.isdigit():
         query = query.filter_by(user_id=int(user_id_f))
 
     if q:
@@ -548,11 +546,7 @@ def api_historico():
 @_require_vendas
 def api_historico_detail(entry_id: int):
     from app.models import OrcamentoHistory
-    is_sa = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
-    if is_sa:
-        entry = OrcamentoHistory.query.get_or_404(entry_id)
-    else:
-        entry = OrcamentoHistory.query.filter_by(id=entry_id, user_id=current_user.id).first_or_404()
+    entry = OrcamentoHistory.query.get_or_404(entry_id)
     return jsonify(json.loads(entry.form_snapshot or "{}"))
 
 
@@ -561,7 +555,11 @@ def api_historico_detail(entry_id: int):
 @_require_vendas
 def api_historico_delete(entry_id: int):
     from app.models import OrcamentoHistory
-    entry = OrcamentoHistory.query.filter_by(id=entry_id, user_id=current_user.id).first_or_404()
+    is_sa = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
+    if is_sa:
+        entry = OrcamentoHistory.query.get_or_404(entry_id)
+    else:
+        entry = OrcamentoHistory.query.filter_by(id=entry_id, user_id=current_user.id).first_or_404()
     db.session.delete(entry)
     db.session.commit()
     return jsonify({"ok": True})
