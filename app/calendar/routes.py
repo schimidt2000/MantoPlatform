@@ -36,7 +36,7 @@ _CAN_ENSAIO      = {RoleName.ENSAIO, RoleName.CASTING, RoleName.SUPERADMIN}
 _CAN_CREATE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
 _CAN_EDIT_EVENT  = {RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN}
 
-_SYNC_TTL_SECONDS = 300  # 5 min por mês — pula chamada ao Google se sincronizado recentemente
+_SYNC_TTL_SECONDS = 900  # 15 min — cron job sincroniza a cada 10 min, este é o fallback
 
 
 def _is_month_fresh(ym: str) -> bool:
