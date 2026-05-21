@@ -56,6 +56,31 @@
   </div>
 {% endif %}
 
+{# ── Observações — visíveis para todos ───────────────────────── #}
+{% if event.observations %}
+  <div class="panel" style="margin-bottom: 16px;">
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:12px;">Observações</div>
+    {% for obs in event.observations %}
+      <div style="{% if not loop.last %}padding-bottom:10px; margin-bottom:10px; border-bottom:1px solid var(--line);{% endif %}">
+        {% if obs.label %}
+          <div style="font-size:11.5px; font-weight:600; color:var(--muted); margin-bottom:3px;">{{ obs.label }}</div>
+        {% endif %}
+        {% if obs.obs_type == 'text' %}
+          <p style="margin:0; font-size:13.5px; white-space:pre-line;">{{ obs.content }}</p>
+        {% elif obs.obs_type == 'link' %}
+          <a href="{{ obs.content }}" target="_blank" rel="noopener"
+             style="font-size:13.5px; color:var(--accent); word-break:break-all;">{{ obs.label or obs.content }}</a>
+        {% elif obs.obs_type == 'image' %}
+          <a href="{{ obs.file_path }}" target="_blank">
+            <img src="{{ obs.file_path }}" alt="{{ obs.label or 'Imagem' }}"
+                 style="max-width:100%; max-height:280px; border-radius:var(--r-md); border:1px solid var(--line);">
+          </a>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
 {# ── Banner de ensaio(s) marcados — visível para todos ────────── #}
 {% if event.ensaios and event.event_type != 'ENSAIO' %}
 <div style="
@@ -1097,7 +1122,14 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       {% if contracts %}
         {% for c in contracts %}
           <div class="flex-between gap-8" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
-            <a href="{{ c.file_path }}" target="_blank" class="btn btn-sm btn-secondary">Ver contrato</a>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <a href="{{ c.file_path }}" target="_blank" class="btn btn-sm btn-secondary">Ver contrato</a>
+              {% if c.is_signed %}
+                <span class="badge badge-green" style="font-size:11px;">✓ Assinado</span>
+              {% else %}
+                <span class="badge badge-gray" style="font-size:11px;">Pendente</span>
+              {% endif %}
+            </div>
             <span class="meta">R$ {{ "{:,.2f}".format(c.amount or 0) }}</span>
           </div>
         {% endfor %}
