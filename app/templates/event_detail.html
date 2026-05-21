@@ -549,8 +549,8 @@
     </div>
   </div>
 
-  {% if event.roles %}
-    {% for r in event.roles %}
+  {% if event.roles | selectattr('role_type', 'ne', 'extra') | list %}
+    {% for r in event.roles if r.role_type != 'extra' %}
 
     {# Resolve ficha: vinculada diretamente ou sugestão automática por nome #}
     {% set sheet = r.figurino_sheet or suggested_sheets.get(r.id) %}
