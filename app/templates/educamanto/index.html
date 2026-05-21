@@ -334,7 +334,7 @@
           <small>Uma apresentação/dia</small>
         </div>
         <input type="number" id="d1" class="edu-session-num"
-               min="0" value="0" oninput="calcular()">
+               min="0" value="0">
       </div>
 
       <div class="edu-session-block">
@@ -344,7 +344,7 @@
           <small>Duas apresentações/dia</small>
         </div>
         <input type="number" id="d2" class="edu-session-num"
-               min="0" value="0" oninput="calcular()">
+               min="0" value="0">
       </div>
     </div>
 
@@ -409,18 +409,14 @@
     </div>
 
     {# Summary strip #}
-    <div class="edu-summary-row">
+    <div class="edu-summary-row" style="grid-template-columns: 1fr 1fr;">
       <div class="edu-summary-item">
-        <div class="lbl">Custo base</div>
+        <div class="lbl">Custo Base</div>
         <div class="val" id="sum-custo">—</div>
       </div>
       <div class="edu-summary-item">
-        <div class="lbl">Desconto</div>
-        <div class="val" id="sum-desconto">—</div>
-      </div>
-      <div class="edu-summary-item">
-        <div class="lbl">Imposto (NF)</div>
-        <div class="val" id="sum-imposto">—</div>
+        <div class="lbl">Comissão Vendedor</div>
+        <div class="val" id="sum-comissao">—</div>
       </div>
     </div>
 
@@ -449,6 +445,7 @@
   const all  = window.PACKAGES_DATA || [];
   const pkgId = window.ACTIVE_PKG_ID;
   let pkg = all.find(p => p.id === pkgId) || all[0];
+  const COMMISSION_RATE = {{ (settings.default_commission_rate or 2.0) | float }} / 100;
 
   /* ── Helpers ───────────────────────────────────────────── */
   function brl(v) {
@@ -562,9 +559,9 @@
     document.getElementById('val-com-nota').textContent = brl(valorFinalComNota);
 
     /* Update summary */
+    const comissao = valorFinalSemNota * COMMISSION_RATE;
     document.getElementById('sum-custo').textContent    = brl(rawCost);
-    document.getElementById('sum-desconto').textContent = descontoAplicado ? '−' + brl(desconto) : 'Nenhum';
-    document.getElementById('sum-imposto').textContent  = brl(imposto);
+    document.getElementById('sum-comissao').textContent = brl(comissao);
 
     /* Update detail table */
     updateDetailTable(itemRows, total, rawCost, valorBase, valorFinalSemNota, descontoAplicado, d1, d2);
@@ -573,7 +570,7 @@
 
   function setEmpty() {
     ['val-sem-nota','val-com-nota'].forEach(id => document.getElementById(id).textContent = '—');
-    ['sum-custo','sum-desconto','sum-imposto'].forEach(id => document.getElementById(id).textContent = '—');
+    ['sum-custo','sum-comissao'].forEach(id => document.getElementById(id).textContent = '—');
     document.getElementById('detail-head').innerHTML = '';
     document.getElementById('detail-body').innerHTML = '';
     document.getElementById('detail-foot').innerHTML = '';
@@ -652,6 +649,8 @@
   /* ── Init ──────────────────────────────────────────────── */
   loadConfig();
   calcular();
+  document.getElementById('d1').addEventListener('input', calcular);
+  document.getElementById('d2').addEventListener('input', calcular);
 })();
 </script>
 {% endblock %}
