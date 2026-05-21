@@ -173,6 +173,7 @@ def create_app():
     from .talent_portal.routes import portal_bp
     from .crm.routes import crm_bp
     from .orcamento.routes import orcamento_bp
+    from .educamanto.routes import educamanto_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
@@ -184,6 +185,7 @@ def create_app():
     app.register_blueprint(portal_bp)
     app.register_blueprint(crm_bp)
     app.register_blueprint(orcamento_bp)
+    app.register_blueprint(educamanto_bp)
 
     def _wa_link(code: int) -> str:
         from zoneinfo import ZoneInfo

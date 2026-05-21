@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if package else 'Novo' }} Pacote — EducaManto{% endblock %}
+{% block page_title %}{{ 'Editar' if package else 'Novo' }} Pacote EducaManto{% endblock %}
+{% block page_subtitle %}<p class="sub">Defina a matriz de custos e margens do pacote</p>{% endblock %}
+
+{% block extra_head %}
+<style>
+  .pkg-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 760px) { .pkg-form-grid { grid-template-columns: 1fr; } }
+
+  .pkg-panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 22px 20px;
+  }
+  .pkg-panel h3 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .margin-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* Items table editor */
+  .items-table-wrap { overflow-x: auto; margin-top: 4px; }
+  .items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    min-width: 680px;
+  }
+  .items-table th {
+    padding: 7px 10px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+    background: var(--surface);
+    border-bottom: 2px solid var(--line);
+    text-align: left;
+  }
+  .items-table th.right { text-align: right; }
+  .items-table td { padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .items-table tr:last-child td { border-bottom: none; }
+  .items-table input[type="text"],
+  .items-table input[type="number"] {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    font-size: 12.5px;
+    background: #fff;
+    color: var(--ink);
+  }
+  .items-table input[type="text"]   { min-width: 140px; }
+  .items-table input[type="number"] { min-width: 65px; text-align: right; }
+  .items-table input:focus { outline: 2px solid var(--ring); border-color: var(--accent); }
+  .items-table .btn-remove {
+    background: none;
+    border: none;
+    color: var(--red);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: var(--r-sm);
+  }
+  .items-table .btn-remove:hover { background: var(--red-soft); }
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="post" id="pkg-form">
+<div class="pkg-form-grid">
+
+  {# ── Left: Name + Margins ───────────────────────────────── #}
+  <div style="display:flex; flex-direction:column; gap:20px;">
+
+    <div class="pkg-panel">
+      <h3>Identificação</h3>
+      <div class="form-group">
+        <label class="form-label">Nome do pacote</label>
+        <input type="text" name="name" class="form-control"
+               value="{{ package.name if package else '' }}"
+               placeholder="Ex: Uma Aventura Animal" required>
+      </div>
+    </div>
+
+    <div class="pkg-panel">
+      <h3>Margens por cenário</h3>
+      <div class="margin-grid">
+        <div class="form-group">
+          <label class="form-label">Margem 1 sessão (1 dia)</label>
+          <input type="number" name="margin_1s" class="form-control" step="0.01" min="1"
+                 value="{{ package.margin_1s if package else '1.41' }}" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Margem 2 sessões (1 dia)</label>
+          <input type="number" name="margin_2s" class="form-control" step="0.01" min="1"
+                 value="{{ package.margin_2s if package else '1.70' }}" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Margem 1 sessão (multi)</label>
+          <input type="number" name="margin_1s_days" class="form-control" step="0.01" min="1"
+                 value="{{ package.margin_1s_days if package else '1.50' }}" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Margem 2 sessões (multi)</label>
+          <input type="number" name="margin_2s_days" class="form-control" step="0.01" min="1"
+                 value="{{ package.margin_2s_days if package else '1.80' }}" required>
+        </div>
+      </div>
+    </div>
+
+    <div class="pkg-panel">
+      <h3>Regra de desconto</h3>
+      <div class="margin-grid">
+        <div class="form-group">
+          <label class="form-label">Dias mínimos para desconto</label>
+          <input type="number" name="discount_days" class="form-control" min="1"
+                 value="{{ package.discount_days if package else '2' }}" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Percentual de desconto (%)</label>
+          <input type="number" name="discount_pct" class="form-control" step="0.1" min="0" max="100"
+                 value="{{ (package.discount_pct * 100) | round(1) if package else '5' }}" required>
+        </div>
+      </div>
+      <p class="muted" style="font-size:11.5px; margin-top:6px;">
+        Desconto aplicado quando total de dias &gt; dias mínimos.
+      </p>
+    </div>
+
+    <div style="display:flex; gap:10px;">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Salvar alterações' if package else 'Criar pacote' }}
+      </button>
+      <a href="/educamanto/{% if package %}?pkg={{ package.id }}{% endif %}"
+         class="btn btn-ghost">Cancelar</a>
+      {% if package %}
+      <form method="post" action="/educamanto/packages/{{ package.id }}/delete"
+            style="margin-left:auto;"
+            onsubmit="return confirm('Excluir o pacote \'{{ package.name }}\'? Esta ação não pode ser desfeita.')">
+        <button type="submit" class="btn btn-ghost" style="color:var(--red);">
+          Excluir pacote
+        </button>
+      </form>
+      {% endif %}
+    </div>
+
+  </div>
+
+  {# ── Right: Cost matrix ─────────────────────────────────── #}
+  <div class="pkg-panel">
+    <h3 style="margin-bottom:4px;">Matriz de custos</h3>
+    <p class="muted" style="font-size:11.5px; margin-bottom:12px;">
+      Custo <strong>por unidade</strong> do item. A quantidade multiplica o custo.
+    </p>
+
+    <div class="items-table-wrap">
+      <table class="items-table" id="items-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Qtd</th>
+            <th>1S</th>
+            <th>2S</th>
+            <th>1S/dia</th>
+            <th>2S/dia</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="items-body">
+          {% if package and package.items %}
+            {% for item in package.items %}
+            <tr>
+              <td><input type="text"   name="item_name[]"         value="{{ item.name }}" placeholder="Nome do item" required></td>
+              <td><input type="number" name="item_qty[]"          value="{{ item.qty }}"  min="1"></td>
+              <td><input type="number" name="item_cost_1s[]"      value="{{ item.cost_1s|int if item.cost_1s == item.cost_1s|int else item.cost_1s }}"      min="0" step="any"></td>
+              <td><input type="number" name="item_cost_2s[]"      value="{{ item.cost_2s|int if item.cost_2s == item.cost_2s|int else item.cost_2s }}"      min="0" step="any"></td>
+              <td><input type="number" name="item_cost_1s_days[]" value="{{ item.cost_1s_days|int if item.cost_1s_days == item.cost_1s_days|int else item.cost_1s_days }}" min="0" step="any"></td>
+              <td><input type="number" name="item_cost_2s_days[]" value="{{ item.cost_2s_days|int if item.cost_2s_days == item.cost_2s_days|int else item.cost_2s_days }}" min="0" step="any"></td>
+              <td><button type="button" class="btn-remove" onclick="removeRow(this)" title="Remover">×</button></td>
+            </tr>
+            {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <button type="button" class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="addRow()">
+      + Adicionar item
+    </button>
+  </div>
+
+</div>
+</form>
+
+<script>
+function addRow(name, qty, c1s, c2s, c1sd, c2sd) {
+  const tbody = document.getElementById('items-body');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text"   name="item_name[]"         value="${name||''}" placeholder="Nome do item" required></td>
+    <td><input type="number" name="item_qty[]"          value="${qty||1}"  min="1"></td>
+    <td><input type="number" name="item_cost_1s[]"      value="${c1s||0}"  min="0" step="any"></td>
+    <td><input type="number" name="item_cost_2s[]"      value="${c2s||0}"  min="0" step="any"></td>
+    <td><input type="number" name="item_cost_1s_days[]" value="${c1sd||0}" min="0" step="any"></td>
+    <td><input type="number" name="item_cost_2s_days[]" value="${c2sd||0}" min="0" step="any"></td>
+    <td><button type="button" class="btn-remove" onclick="removeRow(this)" title="Remover">×</button></td>
+  `;
+  tbody.appendChild(tr);
+  tr.querySelector('input[type="text"]').focus();
+}
+
+function removeRow(btn) {
+  btn.closest('tr').remove();
+}
+
+// Ensure at least one row on new form
+window.addEventListener('DOMContentLoaded', function () {
+  const tbody = document.getElementById('items-body');
+  if (!tbody.children.length) addRow();
+});
+</script>
+{% endblock %}

@@ -497,6 +497,72 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
+# ══════════════════════════════════════════════════════════════════
+#  EducaManto — Motor de Orçamentos por Pacote
+# ══════════════════════════════════════════════════════════════════
+
+class EducaMantoPackage(db.Model):
+    """Pacote de precificação (ex: Uma Aventura Animal)."""
+    __tablename__ = "educamanto_packages"
+
+    id              = db.Column(db.Integer, primary_key=True)
+    name            = db.Column(db.String(200), nullable=False)
+    margin_1s       = db.Column(db.Float, nullable=False, default=1.41)
+    margin_2s       = db.Column(db.Float, nullable=False, default=1.70)
+    margin_1s_days  = db.Column(db.Float, nullable=False, default=1.50)
+    margin_2s_days  = db.Column(db.Float, nullable=False, default=1.80)
+    discount_days   = db.Column(db.Integer, nullable=False, default=2)
+    discount_pct    = db.Column(db.Float, nullable=False, default=0.05)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    items = db.relationship(
+        "EducaMantoItem",
+        backref="package",
+        cascade="all, delete-orphan",
+        lazy=True,
+        order_by="EducaMantoItem.sort_order",
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "margin_1s": self.margin_1s,
+            "margin_2s": self.margin_2s,
+            "margin_1s_days": self.margin_1s_days,
+            "margin_2s_days": self.margin_2s_days,
+            "discount_days": self.discount_days,
+            "discount_pct": self.discount_pct,
+            "items": [item.to_dict() for item in self.items],
+        }
+
+
+class EducaMantoItem(db.Model):
+    """Linha de custo dentro de um pacote EducaManto."""
+    __tablename__ = "educamanto_items"
+
+    id           = db.Column(db.Integer, primary_key=True)
+    package_id   = db.Column(db.Integer, db.ForeignKey("educamanto_packages.id"), nullable=False)
+    name         = db.Column(db.String(200), nullable=False)
+    qty          = db.Column(db.Integer, nullable=False, default=1)
+    cost_1s      = db.Column(db.Float, nullable=False, default=0)
+    cost_2s      = db.Column(db.Float, nullable=False, default=0)
+    cost_1s_days = db.Column(db.Float, nullable=False, default=0)
+    cost_2s_days = db.Column(db.Float, nullable=False, default=0)
+    sort_order   = db.Column(db.Integer, nullable=False, default=0)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "qty": self.qty,
+            "cost_1s": self.cost_1s,
+            "cost_2s": self.cost_2s,
+            "cost_1s_days": self.cost_1s_days,
+            "cost_2s_days": self.cost_2s_days,
+        }
+
+
 class ImportState(db.Model):
     __tablename__ = "import_state"
 
