@@ -569,7 +569,7 @@
     document.getElementById('val-com-nota').textContent = brl(valorFinalComNota);
 
     /* Update summary */
-    const lucro    = valorFinalSemNotaExato - rawCost;
+    const lucro    = valorFinalSemNota - rawCost;
     const comissao = lucro * pkg.commission_rate;
     document.getElementById('sum-custo').textContent    = brl(rawCost);
     document.getElementById('sum-comissao').textContent = brl(comissao);
