@@ -473,6 +473,8 @@ class SiteSetting(db.Model):
     google_token = db.Column(db.Text, nullable=True)
     # Pricing config for the quote calculator (JSON)
     pricing_config = db.Column(db.Text, nullable=True)
+    # TTL cache: {ym: iso_datetime} — last successful sync per month
+    calendar_sync_cache = db.Column(db.Text, nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 

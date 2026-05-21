@@ -1,6 +1,7 @@
 from datetime import datetime, timezone, timedelta, date
 from decimal import Decimal, ROUND_HALF_UP
 import calendar as cal
+import json
 import os
 import re
 import urllib.parse
@@ -34,6 +35,97 @@ TZ = ZoneInfo("America/Sao_Paulo")
 _CAN_ENSAIO      = {RoleName.ENSAIO, RoleName.CASTING, RoleName.SUPERADMIN}
 _CAN_CREATE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
 _CAN_EDIT_EVENT  = {RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN}
+
+_SYNC_TTL_SECONDS = 300  # 5 min por mês — pula chamada ao Google se sincronizado recentemente
+
+
+def _is_month_fresh(ym: str) -> bool:
+    settings = SiteSetting.query.get(1)
+    if not settings or not settings.calendar_sync_cache:
+        return False
+    cache = json.loads(settings.calendar_sync_cache)
+    ts_str = cache.get(ym)
+    if not ts_str:
+        return False
+    age = (datetime.utcnow() - datetime.fromisoformat(ts_str)).total_seconds()
+    return age < _SYNC_TTL_SECONDS
+
+
+def _mark_month_synced(ym: str) -> None:
+    settings = SiteSetting.query.get(1)
+    if not settings:
+        return
+    cache = json.loads(settings.calendar_sync_cache) if settings.calendar_sync_cache else {}
+    cache[ym] = datetime.utcnow().isoformat()
+    if len(cache) > 24:
+        for k in sorted(cache.keys())[:-24]:
+            del cache[k]
+    settings.calendar_sync_cache = json.dumps(cache)
+    db.session.commit()
+
+
+def _build_events_from_db(
+    year: int, month: int, month_start: date, month_end: date
+) -> tuple[dict, dict, list]:
+    """Constrói event_map, events_by_day e list_items a partir do banco (sem chamar Google)."""
+    month_start_dt = datetime(year, month, 1)
+    if month == 12:
+        month_end_dt = datetime(year + 1, 1, 1)
+    else:
+        month_end_dt = datetime(year, month + 1, 1)
+
+    db_events = (
+        CalendarEvent.query
+        .filter(
+            CalendarEvent.start_at < month_end_dt,
+            db.or_(
+                CalendarEvent.end_at >= month_start_dt,
+                db.and_(CalendarEvent.end_at.is_(None), CalendarEvent.start_at >= month_start_dt),
+            ),
+        )
+        .order_by(CalendarEvent.start_at)
+        .all()
+    )
+
+    event_map = {ev.google_event_id: ev.id for ev in db_events}
+    events_by_day: dict[int, list] = {}
+
+    for ev in db_events:
+        if not ev.start_at:
+            continue
+        ev_start = ev.start_at.date()
+        ev_end = ev.end_at.date() if ev.end_at else ev_start
+        is_ensaio = ev.event_type == "ENSAIO" or "ensaio" in ev.title.lower()
+        cur = max(ev_start, month_start)
+        stop = min(ev_end, month_end)
+        while cur <= stop:
+            is_start_day = (cur == ev_start)
+            if is_start_day:
+                when = ev.start_at.strftime("%H:%M") if (ev.start_at.hour or ev.start_at.minute) else ""
+                if ev.end_at and (ev.end_at.hour or ev.end_at.minute) and ev_end > ev_start:
+                    when += f"–{ev.end_at.strftime('%d/%m %H:%M')}"
+                elif ev.end_at and ev.end_at.strftime("%H:%M") != "00:00":
+                    when += f"–{ev.end_at.strftime('%H:%M')}"
+            else:
+                when = "↪"
+            events_by_day.setdefault(cur.day, []).append({
+                "title": ev.title,
+                "when": when,
+                "event_id": ev.id,
+                "is_ensaio": is_ensaio,
+            })
+            cur += timedelta(days=1)
+
+    list_items = [
+        {
+            "id": ev.google_event_id,
+            "summary": ev.title,
+            "start": {"dateTime": ev.start_at.strftime("%Y-%m-%dT%H:%M:%S")} if ev.start_at else {},
+            "location": ev.location or "",
+        }
+        for ev in db_events
+    ]
+    return event_map, events_by_day, list_items
 
 
 def _oauth_redirect_uri() -> str:
@@ -73,6 +165,7 @@ def google_callback():
 def agenda():
     ym = request.args.get("ym", "").strip()
     view = request.args.get("view", "calendar").strip()
+    force_sync = request.args.get("force_sync") == "1"
     now = datetime.now()
 
     if ym:
@@ -84,61 +177,67 @@ def agenda():
         month = now.month
         ym = f"{year:04d}-{month:02d}"
 
-    try:
-        items = fetch_events_for_month(CALENDAR_ID, year, month)
-        sync_events(items)
-    except RuntimeError:
-        items = []
-        flash("Google Calendar não conectado. Use o botão 'Google' acima para conectar.", "warning")
-
-    ids = [i.get("id") for i in items if i.get("id")]
-    event_map = {}
-    if ids:
-        for ev in CalendarEvent.query.filter(CalendarEvent.google_event_id.in_(ids)).all():
-            event_map[ev.google_event_id] = ev.id
-
     first_weekday, days_in_month = cal.monthrange(year, month)
     month_start = date(year, month, 1)
     month_end   = date(year, month, days_in_month)
 
-    events_by_day: dict[int, list] = {}
-    for item in items:
-        start_dt, end_dt = parse_event_datetime(item)
-        if not start_dt:
-            continue
+    if not force_sync and _is_month_fresh(ym):
+        # Fast path: serve direto do banco, sem chamada ao Google
+        event_map, events_by_day, items = _build_events_from_db(year, month, month_start, month_end)
+    else:
+        # Slow path: busca no Google Calendar e sincroniza
+        try:
+            items = fetch_events_for_month(CALENDAR_ID, year, month)
+            sync_events(items)
+            _mark_month_synced(ym)
+        except RuntimeError:
+            items = []
+            flash("Google Calendar não conectado. Use o botão 'Google' acima para conectar.", "warning")
 
-        title    = item.get("summary") or "Sem título"
-        event_id = event_map.get(item.get("id"))
-        is_ensaio = "ensaio" in title.lower()
+        ids = [i.get("id") for i in items if i.get("id")]
+        event_map = {}
+        if ids:
+            for ev in CalendarEvent.query.filter(CalendarEvent.google_event_id.in_(ids)).all():
+                event_map[ev.google_event_id] = ev.id
 
-        # All-day events: Google Calendar end date is exclusive (day after last day)
-        is_all_day = bool(item.get("start", {}).get("date") and not item.get("start", {}).get("dateTime"))
-        ev_start = start_dt.date()
-        if end_dt:
-            ev_end = end_dt.date() - timedelta(days=1) if is_all_day else end_dt.date()
-        else:
-            ev_end = ev_start
+        events_by_day: dict[int, list] = {}
+        for item in items:
+            start_dt, end_dt = parse_event_datetime(item)
+            if not start_dt:
+                continue
 
-        # Add the event to every day it spans within this month
-        cur = max(ev_start, month_start)
-        stop = min(ev_end, month_end)
-        while cur <= stop:
-            is_start = (cur == ev_start)
-            if is_start:
-                when = start_dt.strftime("%H:%M") if (start_dt.hour or start_dt.minute) else ""
-                if end_dt and (end_dt.hour or end_dt.minute) and ev_end > ev_start:
-                    when += f"–{end_dt.strftime('%d/%m %H:%M')}"
-                elif end_dt and end_dt.strftime("%H:%M") != "00:00":
-                    when += f"–{end_dt.strftime('%H:%M')}"
+            title    = item.get("summary") or "Sem título"
+            event_id = event_map.get(item.get("id"))
+            is_ensaio = "ensaio" in title.lower()
+
+            # All-day events: Google Calendar end date is exclusive (day after last day)
+            is_all_day = bool(item.get("start", {}).get("date") and not item.get("start", {}).get("dateTime"))
+            ev_start = start_dt.date()
+            if end_dt:
+                ev_end = end_dt.date() - timedelta(days=1) if is_all_day else end_dt.date()
             else:
-                when = "↪"
-            events_by_day.setdefault(cur.day, []).append({
-                "title":    title,
-                "when":     when,
-                "event_id": event_id,
-                "is_ensaio": is_ensaio,
-            })
-            cur += timedelta(days=1)
+                ev_end = ev_start
+
+            cur = max(ev_start, month_start)
+            stop = min(ev_end, month_end)
+            while cur <= stop:
+                is_start = (cur == ev_start)
+                if is_start:
+                    when = start_dt.strftime("%H:%M") if (start_dt.hour or start_dt.minute) else ""
+                    if end_dt and (end_dt.hour or end_dt.minute) and ev_end > ev_start:
+                        when += f"–{end_dt.strftime('%d/%m %H:%M')}"
+                    elif end_dt and end_dt.strftime("%H:%M") != "00:00":
+                        when += f"–{end_dt.strftime('%H:%M')}"
+                else:
+                    when = "↪"
+                events_by_day.setdefault(cur.day, []).append({
+                    "title":    title,
+                    "when":     when,
+                    "event_id": event_id,
+                    "is_ensaio": is_ensaio,
+                })
+                cur += timedelta(days=1)
+
     first_weekday = (first_weekday + 1) % 7
     weeks = []
     week = []
