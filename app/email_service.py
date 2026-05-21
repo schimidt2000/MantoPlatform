@@ -165,7 +165,7 @@ def send_invite_email(role) -> bool:
     event = role.event
     first_name = (talent.artistic_name or talent.full_name or "").split()[0]
     start_str = (
-        event.start_at.astimezone(_TZ).strftime("%d/%m/%Y às %H:%M")
+        event.start_at.strftime("%d/%m/%Y às %H:%M")
         if event.start_at else "a confirmar"
     )
     portal_url = _portal_url()
@@ -204,7 +204,7 @@ def send_removal_email(talent, event, character_name: str) -> bool:
 
     first_name = (talent.artistic_name or talent.full_name or "").split()[0]
     start_str = (
-        event.start_at.astimezone(_TZ).strftime("%d/%m/%Y")
+        event.start_at.strftime("%d/%m/%Y")
         if event.start_at else "a confirmar"
     )
 
@@ -240,7 +240,7 @@ def send_event_changed_email(role, changes: list[str]) -> bool:
     event = role.event
     first_name = (talent.artistic_name or talent.full_name or "").split()[0]
     start_str = (
-        event.start_at.astimezone(_TZ).strftime("%d/%m/%Y às %H:%M")
+        event.start_at.strftime("%d/%m/%Y às %H:%M")
         if event.start_at else "a confirmar"
     )
     portal_url = _portal_url()
@@ -326,7 +326,7 @@ def send_ensaio_alert_email(event, users: list) -> int:
         return 0
 
     start_str = (
-        event.start_at.astimezone(_TZ).strftime("%d/%m/%Y às %H:%M")
+        event.start_at.strftime("%d/%m/%Y às %H:%M")
         if event.start_at else "a confirmar"
     )
     portal_url = _portal_url()
