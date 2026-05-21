@@ -56,30 +56,98 @@
   </div>
 {% endif %}
 
-{# ── Observações — visíveis para todos ───────────────────────── #}
-{% if event.observations %}
-  <div class="panel" style="margin-bottom: 16px;">
-    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:12px;">Observações</div>
+{# ── Observações — sempre visíveis, editáveis ────────────────── #}
+<div class="panel" style="margin-bottom:16px;">
+  <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:12px;">Observações</div>
+
+  {# Observações existentes #}
+  {% if event.observations %}
     {% for obs in event.observations %}
-      <div style="{% if not loop.last %}padding-bottom:10px; margin-bottom:10px; border-bottom:1px solid var(--line);{% endif %}">
-        {% if obs.label %}
-          <div style="font-size:11.5px; font-weight:600; color:var(--muted); margin-bottom:3px;">{{ obs.label }}</div>
-        {% endif %}
-        {% if obs.obs_type == 'text' %}
-          <p style="margin:0; font-size:13.5px; white-space:pre-line;">{{ obs.content }}</p>
-        {% elif obs.obs_type == 'link' %}
-          <a href="{{ obs.content }}" target="_blank" rel="noopener"
-             style="font-size:13.5px; color:var(--accent); word-break:break-all;">{{ obs.label or obs.content }}</a>
-        {% elif obs.obs_type == 'image' %}
-          <a href="{{ obs.file_path }}" target="_blank">
-            <img src="{{ obs.file_path }}" alt="{{ obs.label or 'Imagem' }}"
-                 style="max-width:100%; max-height:280px; border-radius:var(--r-md); border:1px solid var(--line);">
-          </a>
-        {% endif %}
+      <div style="display:flex; align-items:flex-start; gap:10px; {% if not loop.last %}padding-bottom:10px; margin-bottom:10px; border-bottom:1px solid var(--line);{% endif %}">
+        <div style="flex:1;">
+          {% if obs.label %}
+            <div style="font-size:11.5px; font-weight:600; color:var(--muted); margin-bottom:3px;">{{ obs.label }}</div>
+          {% endif %}
+          {% if obs.obs_type == 'text' %}
+            <p style="margin:0; font-size:13.5px; white-space:pre-line;">{{ obs.content }}</p>
+          {% elif obs.obs_type == 'link' %}
+            <a href="{{ obs.content }}" target="_blank" rel="noopener"
+               style="font-size:13.5px; color:var(--accent); word-break:break-all;">{{ obs.label or obs.content }}</a>
+          {% elif obs.obs_type == 'image' %}
+            <a href="{{ obs.file_path }}" target="_blank">
+              <img src="{{ obs.file_path }}" alt="{{ obs.label or 'Imagem' }}"
+                   style="max-width:100%; max-height:280px; border-radius:var(--r-md); border:1px solid var(--line);">
+            </a>
+          {% endif %}
+        </div>
+        <form method="post" action="/events/{{ event.id }}/observations/{{ obs.id }}/delete"
+              onsubmit="return confirm('Remover esta observação?')" style="flex-shrink:0;">
+          <button type="submit" title="Remover"
+                  style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:15px; padding:2px 4px; border-radius:var(--r-sm);"
+                  onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">✕</button>
+        </form>
       </div>
     {% endfor %}
-  </div>
-{% endif %}
+    <div style="margin-top:12px; border-top:1px solid var(--line); padding-top:12px;"></div>
+  {% else %}
+    <p class="muted small" style="margin-bottom:12px;">Nenhuma observação ainda.</p>
+  {% endif %}
+
+  {# Form para adicionar novas observações #}
+  <form method="post" enctype="multipart/form-data"
+        action="/events/{{ event.id }}/observations/add" id="obs-detail-form">
+    <div id="obs-detail-list"></div>
+    <div style="display:flex; gap:8px; margin-top:4px; flex-wrap:wrap;">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="addDetailObs('text')">+ Texto</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="addDetailObs('image')">+ Foto</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="addDetailObs('link')">+ Link</button>
+    </div>
+    <div id="obs-detail-submit" style="display:none; margin-top:10px;">
+      <button type="submit" class="btn btn-primary btn-sm">Salvar observações</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  const icons  = { text: '📝', image: '🖼️', link: '🔗' };
+  const labels = { text: 'Texto', image: 'Foto', link: 'Link' };
+
+  window.addDetailObs = function (type) {
+    const list = document.getElementById('obs-detail-list');
+    const row  = document.createElement('div');
+    row.className = 'obs-row';
+    row.style.cssText = 'background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-md); padding:12px; margin-bottom:8px;';
+
+    let inner = `<input type="hidden" name="obs_type[]" value="${type}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:12px;font-weight:700;color:var(--muted);">${icons[type]} ${labels[type]}</span>
+        <button type="button" onclick="this.closest('.obs-row').remove(); toggleDetailSubmit();"
+                style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px;">✕</button>
+      </div>`;
+
+    if (type === 'text') {
+      inner += `<textarea name="obs_content[]" rows="3" placeholder="Escreva a observação…" style="width:100%;"></textarea>`;
+    } else if (type === 'link') {
+      inner += `<input type="url" name="obs_content[]" placeholder="https://…" style="width:100%;">`;
+    } else if (type === 'image') {
+      inner += `<input type="file" name="obs_image[]" accept=".jpg,.jpeg,.png,.webp">
+                <input type="hidden" name="obs_content[]" value="">`;
+    }
+    inner += `<input type="text" name="obs_label[]" placeholder="Descrição (opcional)" style="width:100%;margin-top:6px;">`;
+
+    row.innerHTML = inner;
+    list.appendChild(row);
+    toggleDetailSubmit();
+  };
+
+  window.toggleDetailSubmit = function () {
+    const list = document.getElementById('obs-detail-list');
+    document.getElementById('obs-detail-submit').style.display =
+      list.children.length ? 'block' : 'none';
+  };
+})();
+</script>
 
 {# ── Banner de ensaio(s) marcados — visível para todos ────────── #}
 {% if event.ensaios and event.event_type != 'ENSAIO' %}

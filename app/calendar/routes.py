@@ -2004,3 +2004,56 @@ def sync_single_event(event_id: int):
     db.session.commit()
     flash("Evento sincronizado com sucesso.", "success")
     return redirect(url_for("calendar.event_detail", event_id=event_id))
+
+
+@calendar_bp.route("/events/<int:event_id>/observations/add", methods=["POST"])
+@login_required
+def add_observation(event_id: int):
+    """Adiciona observações a um evento existente."""
+    event = CalendarEvent.query.get_or_404(event_id)
+
+    obs_types    = request.form.getlist("obs_type[]")
+    obs_contents = request.form.getlist("obs_content[]")
+    obs_labels   = request.form.getlist("obs_label[]")
+    obs_images   = request.files.getlist("obs_image[]")
+    img_idx = 0
+    added = 0
+    for j, otype in enumerate(obs_types):
+        content   = obs_contents[j].strip() if j < len(obs_contents) else ""
+        label     = obs_labels[j].strip()   if j < len(obs_labels)   else ""
+        file_path = None
+        if otype == "image":
+            if img_idx < len(obs_images):
+                file_path = _save_file_upload(
+                    obs_images[img_idx],
+                    current_app.config["UPLOAD_EVENT_OBS"],
+                    "event_obs",
+                )
+                img_idx += 1
+            if not file_path:
+                continue
+        elif otype in ("text", "link") and not content:
+            continue
+        db.session.add(EventObservation(
+            event_id  = event.id,
+            obs_type  = otype,
+            content   = content or None,
+            file_path = file_path,
+            label     = label or None,
+        ))
+        added += 1
+
+    if added:
+        db.session.commit()
+        flash(f"{added} observação(ões) adicionada(s).", "success")
+    return redirect(url_for("calendar.event_detail", event_id=event_id))
+
+
+@calendar_bp.route("/events/<int:event_id>/observations/<int:obs_id>/delete", methods=["POST"])
+@login_required
+def delete_observation(event_id: int, obs_id: int):
+    """Remove uma observação de um evento."""
+    obs = EventObservation.query.filter_by(id=obs_id, event_id=event_id).first_or_404()
+    db.session.delete(obs)
+    db.session.commit()
+    return redirect(url_for("calendar.event_detail", event_id=event_id))
