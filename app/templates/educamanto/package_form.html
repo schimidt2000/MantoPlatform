@@ -152,20 +152,17 @@
       </p>
     </div>
 
-    <div style="display:flex; gap:10px;">
+    <div style="display:flex; gap:10px; align-items:center;">
       <button type="submit" class="btn btn-primary">
         {{ 'Salvar alterações' if package else 'Criar pacote' }}
       </button>
       <a href="/educamanto/{% if package %}?pkg={{ package.id }}{% endif %}"
          class="btn btn-ghost">Cancelar</a>
       {% if package %}
-      <form method="post" action="/educamanto/packages/{{ package.id }}/delete"
-            style="margin-left:auto;"
-            onsubmit="return confirm('Excluir o pacote \'{{ package.name }}\'? Esta ação não pode ser desfeita.')">
-        <button type="submit" class="btn btn-ghost" style="color:var(--red);">
-          Excluir pacote
-        </button>
-      </form>
+      <button type="button" class="btn btn-ghost" style="margin-left:auto; color:var(--red);"
+              onclick="if(confirm('Excluir o pacote \'{{ package.name }}\'? Esta ação não pode ser desfeita.')) document.getElementById('delete-pkg-form').submit();">
+        Excluir pacote
+      </button>
       {% endif %}
     </div>
 
@@ -216,6 +213,11 @@
 
 </div>
 </form>
+
+{% if package %}
+<form id="delete-pkg-form" method="post"
+      action="/educamanto/packages/{{ package.id }}/delete" style="display:none;"></form>
+{% endif %}
 
 <script>
 function addRow(name, qty, c1s, c2s, c1sd, c2sd) {
