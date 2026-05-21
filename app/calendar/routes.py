@@ -813,16 +813,16 @@ def _detect_changes(event: CalendarEvent, new_start, new_end, new_location) -> l
     old_start = _dt_naive(event.start_at)
     chk_start = _dt_naive(new_start)
     if old_start != chk_start and old_start is not None:
-        old_str = event.start_at.astimezone(tz_sp).strftime("%d/%m/%Y %H:%M") if event.start_at else "—"
-        new_str = new_start.astimezone(tz_sp).strftime("%d/%m/%Y %H:%M") if new_start else "—"
+        old_str = event.start_at.strftime("%d/%m/%Y %H:%M") if event.start_at else "—"
+        new_str = new_start.strftime("%d/%m/%Y %H:%M") if new_start else "—"
         changes.append(f"Data/hora: {old_str} → {new_str}")
 
     old_end = _dt_naive(event.end_at)
     chk_end = _dt_naive(new_end)
     if old_end != chk_end and old_end is not None and chk_start == old_start:
         # só reporta fim se o início não mudou (evita duplicar)
-        old_str = event.end_at.astimezone(tz_sp).strftime("%H:%M") if event.end_at else "—"
-        new_str = new_end.astimezone(tz_sp).strftime("%H:%M") if new_end else "—"
+        old_str = event.end_at.strftime("%H:%M") if event.end_at else "—"
+        new_str = new_end.strftime("%H:%M") if new_end else "—"
         changes.append(f"Horário de término: {old_str} → {new_str}")
 
     old_loc = (event.location or "").strip()
@@ -1170,8 +1170,8 @@ def create_ensaio(event_id: int):
     st = et = None
     if d:
         try:
-            st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time()).replace(tzinfo=TZ)
-            et = datetime.combine(d, datetime.strptime(end_str,   "%H:%M").time()).replace(tzinfo=TZ)
+            st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time())
+            et = datetime.combine(d, datetime.strptime(end_str,   "%H:%M").time())
         except ValueError:
             errors.append("Horário inválido (use HH:MM).")
 
@@ -1233,8 +1233,8 @@ def edit_ensaio(ensaio_id: int):
     st = et = None
     if d:
         try:
-            st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time()).replace(tzinfo=TZ)
-            et = datetime.combine(d, datetime.strptime(end_str,   "%H:%M").time()).replace(tzinfo=TZ)
+            st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time())
+            et = datetime.combine(d, datetime.strptime(end_str,   "%H:%M").time())
         except ValueError:
             errors.append("Horário inválido (use HH:MM).")
 
@@ -1573,8 +1573,8 @@ def create_event():
 
     if d and start_str and end_str:
         try:
-            st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time()).replace(tzinfo=TZ)
-            et = datetime.combine(d, datetime.strptime(end_str,   "%H:%M").time()).replace(tzinfo=TZ)
+            st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time())
+            et = datetime.combine(d, datetime.strptime(end_str,   "%H:%M").time())
         except ValueError:
             errors.append("Horário inválido (use HH:MM).")
 

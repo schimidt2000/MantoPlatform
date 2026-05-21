@@ -196,10 +196,16 @@ def parse_event_datetime(item: dict) -> tuple[datetime | None, datetime | None]:
     def _parse(value: str | None) -> datetime | None:
         if not value:
             return None
-        # date only => midnight in local TZ
+        # date only => naive midnight
         if len(value) == 10:
-            return datetime.fromisoformat(value).replace(tzinfo=TZ)
-        return datetime.fromisoformat(value)
+            return datetime.fromisoformat(value)
+        dt = datetime.fromisoformat(value)
+        # Convert timezone-aware to naive São Paulo time for consistent DB storage.
+        # PostgreSQL (TIMESTAMP WITHOUT TIME ZONE) converts aware datetimes to UTC,
+        # but templates display naive datetimes as-is — so we must store naive SP.
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(TZ).replace(tzinfo=None)
+        return dt
 
     return _parse(start_dt), _parse(end_dt)
 
