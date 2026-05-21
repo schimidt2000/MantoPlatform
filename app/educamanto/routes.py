@@ -101,6 +101,49 @@ def _parse_items_from_form() -> list[dict]:
     return items
 
 
+@educamanto_bp.route("/packages")
+@login_required
+@_require_use
+def packages_list():
+    _seed_default_package()
+    packages = EducaMantoPackage.query.order_by(EducaMantoPackage.id).all()
+    can_manage = bool({r.name.upper() for r in current_user.roles} & _CAN_MANAGE)
+    return render_template("educamanto/packages.html", packages=packages, can_manage=can_manage)
+
+
+@educamanto_bp.route("/packages/<int:pkg_id>/duplicate", methods=["POST"])
+@login_required
+@_require_manage
+def duplicate_package(pkg_id: int):
+    original = EducaMantoPackage.query.get_or_404(pkg_id)
+    copy = EducaMantoPackage(
+        name=f"Cópia de {original.name}",
+        margin_1s=original.margin_1s,
+        margin_2s=original.margin_2s,
+        margin_1s_days=original.margin_1s_days,
+        margin_2s_days=original.margin_2s_days,
+        discount_days=original.discount_days,
+        discount_pct=original.discount_pct,
+        commission_rate=original.commission_rate,
+    )
+    db.session.add(copy)
+    db.session.flush()
+    for item in original.items:
+        db.session.add(EducaMantoItem(
+            package_id=copy.id,
+            name=item.name,
+            qty=item.qty,
+            cost_1s=item.cost_1s,
+            cost_2s=item.cost_2s,
+            cost_1s_days=item.cost_1s_days,
+            cost_2s_days=item.cost_2s_days,
+            sort_order=item.sort_order,
+        ))
+    db.session.commit()
+    flash(f'Cópia de "{original.name}" criada. Edite o nome e os parâmetros abaixo.', "success")
+    return redirect(url_for("educamanto.edit_package", pkg_id=copy.id))
+
+
 @educamanto_bp.route("/")
 @login_required
 @_require_use

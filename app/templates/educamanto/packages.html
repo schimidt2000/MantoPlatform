@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Pacotes EducaManto{% endblock %}
+{% block page_title %}Pacotes EducaManto{% endblock %}
+{% block page_subtitle %}<p class="sub">Gerencie os pacotes musicais disponíveis para orçamento</p>{% endblock %}
+
+{% block page_actions %}
+  {% if can_manage %}
+    <a href="/educamanto/packages/create" class="btn btn-primary btn-sm">+ Novo pacote</a>
+  {% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .pkg-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+  .pkg-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow .15s, border-color .15s;
+  }
+  .pkg-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--accent);
+  }
+  .pkg-card-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .pkg-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .pkg-meta-item { }
+  .pkg-meta-item .lbl {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  .pkg-meta-item .val {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .pkg-items-count {
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+  }
+  .pkg-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+    margin-top: auto;
+  }
+  .pkg-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+    <div class="alert alert-{{ cat }}" style="margin-bottom:16px;">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+{% if not packages %}
+<div class="pkg-empty">
+  <p style="font-size:32px; margin-bottom:12px;">🎭</p>
+  <p style="font-weight:600; margin-bottom:6px;">Nenhum pacote cadastrado</p>
+  {% if can_manage %}
+    <a href="/educamanto/packages/create" class="btn btn-primary" style="margin-top:12px;">Criar primeiro pacote</a>
+  {% endif %}
+</div>
+{% else %}
+<div class="pkg-cards">
+  {% for pkg in packages %}
+  <div class="pkg-card">
+    <div class="pkg-card-name">{{ pkg.name }}</div>
+
+    <div class="pkg-meta">
+      <div class="pkg-meta-item">
+        <div class="lbl">Margem 1S</div>
+        <div class="val">{{ "%.2f"|format(pkg.margin_1s) }}x</div>
+      </div>
+      <div class="pkg-meta-item">
+        <div class="lbl">Margem 2S</div>
+        <div class="val">{{ "%.2f"|format(pkg.margin_2s) }}x</div>
+      </div>
+      <div class="pkg-meta-item">
+        <div class="lbl">Margem 1S/dia</div>
+        <div class="val">{{ "%.2f"|format(pkg.margin_1s_days) }}x</div>
+      </div>
+      <div class="pkg-meta-item">
+        <div class="lbl">Margem 2S/dia</div>
+        <div class="val">{{ "%.2f"|format(pkg.margin_2s_days) }}x</div>
+      </div>
+      <div class="pkg-meta-item">
+        <div class="lbl">Desconto</div>
+        <div class="val">{{ (pkg.discount_pct * 100)|int }}% após {{ pkg.discount_days }}d</div>
+      </div>
+      <div class="pkg-meta-item">
+        <div class="lbl">Comissão</div>
+        <div class="val">{{ (pkg.commission_rate * 100)|int }}% s/ lucro</div>
+      </div>
+    </div>
+
+    <div class="pkg-items-count">
+      {{ pkg.items|length }} item{{ 's' if pkg.items|length != 1 else '' }} na matriz de custos
+    </div>
+
+    <div class="pkg-actions">
+      <a href="/educamanto/?pkg={{ pkg.id }}" class="btn btn-primary btn-sm">Usar</a>
+      {% if can_manage %}
+        <a href="/educamanto/packages/{{ pkg.id }}/edit" class="btn btn-secondary btn-sm">Editar</a>
+        <form method="post" action="/educamanto/packages/{{ pkg.id }}/duplicate" style="margin:0;">
+          <button type="submit" class="btn btn-ghost btn-sm">Criar cópia</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}
