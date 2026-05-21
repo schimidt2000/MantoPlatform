@@ -958,7 +958,8 @@ def sync_events(items: list[dict]) -> None:
             continue
 
         characters = parse_characters(title)
-        existing = {r.character_name: r for r in event.roles}
+        # Only sync character roles — never touch extra roles (Coordenador, Maquiador, etc.)
+        existing = {r.character_name: r for r in event.roles if r.role_type != "extra"}
 
         # Mapa normalizado: nome sem prefixo → (nome_atual, role)
         # Permite renomear roles antigos que ainda têm o prefixo, preservando casting/figurino
