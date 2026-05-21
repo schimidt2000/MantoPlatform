@@ -1,0 +1,6 @@
+[phases.build]
+# sync_worker.py não deve rodar durante o build da imagem Docker
+cmds = []
+
+[start]
+cmd = "flask db upgrade && python seed.py && gunicorn run:app --workers 3 --worker-class gthread --threads 4 --bind 0.0.0.0:$PORT --timeout 120"
