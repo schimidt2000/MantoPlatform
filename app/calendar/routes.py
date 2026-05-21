@@ -97,25 +97,48 @@ def agenda():
         for ev in CalendarEvent.query.filter(CalendarEvent.google_event_id.in_(ids)).all():
             event_map[ev.google_event_id] = ev.id
 
-    events_by_day = {}
+    first_weekday, days_in_month = cal.monthrange(year, month)
+    month_start = date(year, month, 1)
+    month_end   = date(year, month, days_in_month)
+
+    events_by_day: dict[int, list] = {}
     for item in items:
         start_dt, end_dt = parse_event_datetime(item)
-        if start_dt and start_dt.month == month:
-            day = start_dt.day
-            when = start_dt.strftime("%H:%M") if start_dt else ""
-            if end_dt and end_dt.strftime("%H:%M") != "00:00":
-                when += f"–{end_dt.strftime('%H:%M')}"
-            title = item.get("summary") or "Sem título"
-            events_by_day.setdefault(day, []).append(
-                {
-                    "title": title,
-                    "when": when,
-                    "event_id": event_map.get(item.get("id")),
-                    "is_ensaio": "ensaio" in title.lower(),
-                }
-            )
+        if not start_dt:
+            continue
 
-    first_weekday, days_in_month = cal.monthrange(year, month)
+        title    = item.get("summary") or "Sem título"
+        event_id = event_map.get(item.get("id"))
+        is_ensaio = "ensaio" in title.lower()
+
+        # All-day events: Google Calendar end date is exclusive (day after last day)
+        is_all_day = bool(item.get("start", {}).get("date") and not item.get("start", {}).get("dateTime"))
+        ev_start = start_dt.date()
+        if end_dt:
+            ev_end = end_dt.date() - timedelta(days=1) if is_all_day else end_dt.date()
+        else:
+            ev_end = ev_start
+
+        # Add the event to every day it spans within this month
+        cur = max(ev_start, month_start)
+        stop = min(ev_end, month_end)
+        while cur <= stop:
+            is_start = (cur == ev_start)
+            if is_start:
+                when = start_dt.strftime("%H:%M") if (start_dt.hour or start_dt.minute) else ""
+                if end_dt and (end_dt.hour or end_dt.minute) and ev_end > ev_start:
+                    when += f"–{end_dt.strftime('%d/%m %H:%M')}"
+                elif end_dt and end_dt.strftime("%H:%M") != "00:00":
+                    when += f"–{end_dt.strftime('%H:%M')}"
+            else:
+                when = "↪"
+            events_by_day.setdefault(cur.day, []).append({
+                "title":    title,
+                "when":     when,
+                "event_id": event_id,
+                "is_ensaio": is_ensaio,
+            })
+            cur += timedelta(days=1)
     first_weekday = (first_weekday + 1) % 7
     weeks = []
     week = []
