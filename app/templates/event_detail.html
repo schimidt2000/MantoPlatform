@@ -76,7 +76,7 @@
         {% if e.description %}<span class="muted">&bull; {{ e.description }}</span>{% endif %}
         {% if show_ensaio %}
           <form method="post" action="/events/{{ e.id }}/delete-ensaio" style="margin:0;"
-                onsubmit="return confirm('Cancelar o ensaio de {{ e.start_at.strftime(\"%d/%m/%Y\") if e.start_at else \"?\" }}?')">
+                onsubmit="return confirm('Cancelar o ensaio de {{ e.start_at.strftime('%d/%m/%Y') if e.start_at else '?' }}?')">
             <button type="submit" class="btn btn-sm btn-ghost"
                     style="font-size:11px; padding:2px 8px; color:var(--red,#ef4444);">✕ Cancelar</button>
           </form>
@@ -1197,7 +1197,7 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
         {% if show_ensaio %}
         <td>
           <form method="post" action="/events/{{ e.id }}/delete-ensaio" style="margin:0;"
-                onsubmit="return confirm('Cancelar o ensaio de {{ e.start_at.strftime(\"%d/%m/%Y\") if e.start_at else \"?\" }}?')">
+                onsubmit="return confirm('Cancelar o ensaio de {{ e.start_at.strftime('%d/%m/%Y') if e.start_at else '?' }}?')">
             <button type="submit" class="btn btn-sm btn-ghost"
                     style="font-size:11px; padding:2px 8px; color:var(--red,#ef4444);">Cancelar</button>
           </form>
