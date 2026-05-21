@@ -546,12 +546,18 @@
     pill.textContent = scenario;
 
     const descontoAplicado = total > pkg.discount_days;
-    const valorFinalSemNota = descontoAplicado
+    const valorFinalSemNotaExato = descontoAplicado
       ? valorBase * (1 - pkg.discount_pct)
       : valorBase;
-    const valorFinalComNota = valorFinalSemNota / 0.84;
-    const desconto = valorBase - valorFinalSemNota;
-    const imposto  = valorFinalComNota - valorFinalSemNota;
+    const valorFinalComNotaExato = valorFinalSemNotaExato / 0.84;
+
+    // Arredonda para cima na casa das centenas (apenas exibição)
+    const ceil100 = v => Math.ceil(v / 100) * 100;
+    const valorFinalSemNota = ceil100(valorFinalSemNotaExato);
+    const valorFinalComNota = ceil100(valorFinalComNotaExato);
+
+    const desconto = valorBase - valorFinalSemNotaExato;
+    const imposto  = valorFinalComNotaExato - valorFinalSemNotaExato;
 
     discTag.classList.toggle('visible', descontoAplicado);
     if (descontoAplicado) {
@@ -563,7 +569,7 @@
     document.getElementById('val-com-nota').textContent = brl(valorFinalComNota);
 
     /* Update summary */
-    const lucro    = valorFinalSemNota - rawCost;
+    const lucro    = valorFinalSemNotaExato - rawCost;
     const comissao = lucro * pkg.commission_rate;
     document.getElementById('sum-custo').textContent    = brl(rawCost);
     document.getElementById('sum-comissao').textContent = brl(comissao);
