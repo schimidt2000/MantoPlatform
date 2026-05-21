@@ -64,6 +64,7 @@ def _seed_default_package() -> None:
         margin_1s=1.41, margin_2s=1.70,
         margin_1s_days=1.50, margin_2s_days=1.80,
         discount_days=2, discount_pct=0.05,
+        commission_rate=0.05,
     )
     db.session.add(pkg)
     db.session.flush()
@@ -131,6 +132,7 @@ def create_package():
             margin_2s_days=float(request.form["margin_2s_days"]),
             discount_days=int(request.form["discount_days"]),
             discount_pct=float(request.form["discount_pct"]) / 100,
+            commission_rate=float(request.form["commission_rate"]) / 100,
         )
         db.session.add(pkg)
         db.session.flush()
@@ -155,6 +157,7 @@ def edit_package(pkg_id: int):
         pkg.margin_2s_days = float(request.form["margin_2s_days"])
         pkg.discount_days = int(request.form["discount_days"])
         pkg.discount_pct = float(request.form["discount_pct"]) / 100
+        pkg.commission_rate = float(request.form["commission_rate"]) / 100
         for item in list(pkg.items):
             db.session.delete(item)
         db.session.flush()

@@ -511,9 +511,10 @@ class EducaMantoPackage(db.Model):
     margin_2s       = db.Column(db.Float, nullable=False, default=1.70)
     margin_1s_days  = db.Column(db.Float, nullable=False, default=1.50)
     margin_2s_days  = db.Column(db.Float, nullable=False, default=1.80)
-    discount_days   = db.Column(db.Integer, nullable=False, default=2)
-    discount_pct    = db.Column(db.Float, nullable=False, default=0.05)
-    created_at      = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    discount_days    = db.Column(db.Integer, nullable=False, default=2)
+    discount_pct     = db.Column(db.Float, nullable=False, default=0.05)
+    commission_rate  = db.Column(db.Float, nullable=False, default=0.05)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     items = db.relationship(
         "EducaMantoItem",
@@ -533,6 +534,7 @@ class EducaMantoPackage(db.Model):
             "margin_2s_days": self.margin_2s_days,
             "discount_days": self.discount_days,
             "discount_pct": self.discount_pct,
+            "commission_rate": self.commission_rate,
             "items": [item.to_dict() for item in self.items],
         }
 

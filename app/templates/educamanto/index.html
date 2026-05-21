@@ -388,6 +388,10 @@
         <span style="color:var(--muted);">% de desconto</span>
         <span id="cfg-dp" style="font-weight:600;"></span>
       </div>
+      <div style="display:flex; justify-content:space-between;">
+        <span style="color:var(--muted);">Comissão vendedor</span>
+        <span id="cfg-cr" style="font-weight:600;"></span>
+      </div>
     </div>
   </div>
 
@@ -445,7 +449,6 @@
   const all  = window.PACKAGES_DATA || [];
   const pkgId = window.ACTIVE_PKG_ID;
   let pkg = all.find(p => p.id === pkgId) || all[0];
-  const COMMISSION_RATE = {{ (settings.default_commission_rate or 2.0) | float }} / 100;
 
   /* ── Helpers ───────────────────────────────────────────── */
   function brl(v) {
@@ -464,6 +467,7 @@
     document.getElementById('cfg-m2sd').textContent = x(pkg.margin_2s_days);
     document.getElementById('cfg-dd').textContent   = pkg.discount_days + ' dias';
     document.getElementById('cfg-dp').textContent   = pct(pkg.discount_pct);
+    document.getElementById('cfg-cr').textContent   = pct(pkg.commission_rate);
   }
 
   /* ── Calculation engine ────────────────────────────────── */
@@ -559,7 +563,8 @@
     document.getElementById('val-com-nota').textContent = brl(valorFinalComNota);
 
     /* Update summary */
-    const comissao = valorFinalSemNota * COMMISSION_RATE;
+    const lucro    = valorFinalSemNota - rawCost;
+    const comissao = lucro * pkg.commission_rate;
     document.getElementById('sum-custo').textContent    = brl(rawCost);
     document.getElementById('sum-comissao').textContent = brl(comissao);
 
