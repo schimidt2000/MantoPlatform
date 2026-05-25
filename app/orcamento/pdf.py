@@ -9,9 +9,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.colors import HexColor
 from reportlab.pdfgen import canvas as rl_canvas
 
-_BLANK_PDF_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "..", "Orcamento_blank.pdf"
-)
+_BLANK_PDF_PATH = os.path.join(os.path.dirname(__file__), "Orcamento_blank.pdf")
 
 # Cores da identidade visual Manto
 _PURPLE = HexColor("#2d1f6e")
