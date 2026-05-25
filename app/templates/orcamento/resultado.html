@@ -4,6 +4,12 @@
 
 {% block page_actions %}
   <a href="{{ url_for('orcamento.index') }}" class="btn btn-secondary">Novo Orçamento</a>
+  <a href="{{ url_for('orcamento.download_pdf') }}" class="btn btn-ghost btn-sm" target="_blank">
+    Baixar PDF
+  </a>
+  <button type="button" class="btn btn-primary btn-sm" onclick="abrirModalEmail()">
+    Enviar por Email
+  </button>
 {% endblock %}
 
 {% block content %}
@@ -78,11 +84,100 @@
     </div>
   </div>
 
+{# ── Modal de envio por email ──────────────────────────────────────────── #}
+<div id="email-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+     z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:var(--bg); border-radius:var(--r-lg); padding:28px 32px;
+              width:100%; max-width:420px; box-shadow:0 20px 60px rgba(0,0,0,.25);">
+    <h3 style="margin:0 0 6px; font-size:17px;">Enviar orçamento por email</h3>
+    <p class="meta" style="margin:0 0 20px;">O PDF será enviado como anexo a partir de contato@mantoproducoes.com.br.</p>
+
+    <div class="form-group" style="margin-bottom:16px;">
+      <label for="email-dest" style="font-size:13px; font-weight:600;">Email do destinatário</label>
+      <input type="email" id="email-dest" placeholder="cliente@email.com"
+             style="width:100%; box-sizing:border-box; margin-top:4px;">
+    </div>
+
+    <div id="email-feedback" style="display:none; margin-bottom:12px; font-size:13px;
+         padding:10px 14px; border-radius:var(--r-md);"></div>
+
+    <div style="display:flex; gap:10px; justify-content:flex-end;">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fecharModalEmail()">Cancelar</button>
+      <button type="button" class="btn btn-primary btn-sm" id="btn-enviar-email" onclick="enviarEmail()">
+        Enviar
+      </button>
+    </div>
+  </div>
+</div>
+
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
+function abrirModalEmail() {
+  document.getElementById('email-modal').style.display = 'flex';
+  document.getElementById('email-dest').focus();
+  document.getElementById('email-feedback').style.display = 'none';
+}
+
+function fecharModalEmail() {
+  document.getElementById('email-modal').style.display = 'none';
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') fecharModalEmail();
+});
+
+function enviarEmail() {
+  const email = document.getElementById('email-dest').value.trim();
+  const fb    = document.getElementById('email-feedback');
+  const btn   = document.getElementById('btn-enviar-email');
+
+  if (!email || !email.includes('@')) {
+    fb.style.display = 'block';
+    fb.style.background = '#fff5f5';
+    fb.style.color = '#7f1d1d';
+    fb.textContent = 'Digite um email válido.';
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = 'Enviando…';
+  fb.style.display = 'none';
+
+  const form = new FormData();
+  form.append('email', email);
+
+  fetch('{{ url_for("orcamento.enviar_email") }}', { method: 'POST', body: form })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        fb.style.display    = 'block';
+        fb.style.background = '#f0fdf4';
+        fb.style.color      = '#166534';
+        fb.textContent      = data.msg || 'Email enviado com sucesso!';
+        btn.textContent     = 'Enviado!';
+        btn.disabled        = true;
+      } else {
+        fb.style.display    = 'block';
+        fb.style.background = '#fff5f5';
+        fb.style.color      = '#7f1d1d';
+        fb.textContent      = data.error || 'Erro ao enviar.';
+        btn.disabled        = false;
+        btn.textContent     = 'Tentar novamente';
+      }
+    })
+    .catch(() => {
+      fb.style.display    = 'block';
+      fb.style.background = '#fff5f5';
+      fb.style.color      = '#7f1d1d';
+      fb.textContent      = 'Erro de conexão. Tente novamente.';
+      btn.disabled        = false;
+      btn.textContent     = 'Tentar novamente';
+    });
+}
+
 function copyQuote() {
   const text = document.getElementById('quote-text').innerText;
   const btn  = document.getElementById('btn-copy');

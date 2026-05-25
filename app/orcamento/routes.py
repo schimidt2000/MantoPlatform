@@ -6,7 +6,7 @@ from functools import wraps
 
 from flask import (
     Blueprint, abort, flash, jsonify, redirect,
-    render_template, request, session, url_for,
+    render_template, request, Response, session, url_for,
 )
 from flask_login import current_user, login_required
 
@@ -376,6 +376,14 @@ def _process_quote():
         "total_4h":            totals[2],
         "total_custom":        total_custom,
         "duracao_custom":      duracao_custom,
+        # campos extras para geração de PDF
+        "client_name":         client_name,
+        "fmt_date":            fmt_date,
+        "fmt_time":            fmt_time,
+        "event_location":      event_location,
+        "team_lines":          team_lines,
+        "nota_fiscal":         nota_fiscal,
+        "modo_duracao":        modo_duracao,
     }
 
     # Salvar no histórico persistente
@@ -427,6 +435,59 @@ def resultado():
     if not quote:
         return redirect(url_for("orcamento.index"))
     return render_template("orcamento/resultado.html", quote=quote, fmt_brl=_fmt_brl)
+
+
+# ── Download PDF ──────────────────────────────────────────────────────────────
+
+@orcamento_bp.route("/pdf")
+@login_required
+@_require_vendas
+def download_pdf():
+    quote = session.get("orcamento_quote")
+    if not quote:
+        flash("Gere um orçamento primeiro.", "warning")
+        return redirect(url_for("orcamento.index"))
+
+    from .pdf import gerar_orcamento_pdf
+    pdf_bytes = gerar_orcamento_pdf(quote)
+
+    client = (quote.get("client_name") or "orcamento").replace(" ", "_")
+    filename = f"Orcamento_Manto_{client}.pdf"
+
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── Enviar orçamento por email ─────────────────────────────────────────────────
+
+@orcamento_bp.route("/enviar-email", methods=["POST"])
+@login_required
+@_require_vendas
+def enviar_email():
+    quote = session.get("orcamento_quote")
+    if not quote:
+        return jsonify({"error": "Orçamento não encontrado na sessão."}), 400
+
+    recipient = (request.form.get("email") or "").strip().lower()
+    if not recipient or "@" not in recipient:
+        return jsonify({"error": "E-mail inválido."}), 400
+
+    from .pdf import gerar_orcamento_pdf
+    from app.email_service import send_quote_email
+
+    pdf_bytes = gerar_orcamento_pdf(quote)
+    ok = send_quote_email(
+        to=recipient,
+        client_name=quote.get("client_name") or "",
+        pdf_bytes=pdf_bytes,
+    )
+
+    if ok:
+        return jsonify({"ok": True, "msg": f"Orçamento enviado para {recipient}."})
+    return jsonify({"error": "Falha ao enviar email. Verifique as configurações de email do sistema."}), 500
 
 
 # ── Histórico (página) ───────────────────────────────────────────────────────

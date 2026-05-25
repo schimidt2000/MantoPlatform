@@ -416,6 +416,71 @@ def send_welcome_email(talent, temp_password: str) -> bool:
     )
 
 
+# ── Email de orçamento para cliente ───────────────────────────────────────────
+
+def send_quote_email(to: str, client_name: str, pdf_bytes: bytes) -> bool:
+    """Envia orçamento em PDF para o email do cliente.
+
+    Args:
+        to:          Email do destinatário (cliente).
+        client_name: Nome do cliente (para personalizar a saudação).
+        pdf_bytes:   PDF gerado como bytes — será anexado ao email.
+
+    Returns:
+        True se enviado com sucesso, False caso contrário.
+    """
+    first_name = client_name.split()[0] if client_name else "prezado(a)"
+
+    content = (
+        _greeting(first_name)
+        + _paragraph(
+            "É um prazer apresentar nossa proposta para o seu evento! "
+            "Segue em anexo o orçamento preparado com carinho pela equipe da "
+            "<strong>Manto Produções</strong>."
+        )
+        + _paragraph(
+            "Caso tenha alguma dúvida ou queira ajustar algum detalhe, fique à vontade para responder "
+            "este email ou entrar em contato pelo WhatsApp — estamos aqui para tornar o seu evento especial."
+        )
+        + _alert_box(
+            "Proposta válida por <strong>7 dias</strong> a contar desta data.",
+            color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
+        )
+        + _paragraph(
+            '<strong>Manto Produções</strong><br>'
+            '📞 +55 (11) 97057-0577<br>'
+            '✉️ contato@mantoproducoes.com.br'
+        )
+    )
+
+    html = _html_wrap(content, preheader="Seu orçamento Manto Produções está pronto — confira em anexo.")
+
+    try:
+        from flask_mail import Message as _Message
+        plain = _strip_html(html)
+        msg = _Message(
+            subject="Proposta Comercial — Manto Produções",
+            sender=_sender(),
+            recipients=[to],
+            body=plain,
+            html=html,
+        )
+        msg.attach(
+            filename="Orcamento_Manto_Producoes.pdf",
+            content_type="application/pdf",
+            data=pdf_bytes,
+        )
+        if not _emails_enabled():
+            log.info("Email desativado nas configurações — pulando envio de orçamento para %s", to)
+            return False
+        mail.send(msg)
+        log.info("Orçamento enviado para %s", to)
+        return True
+    except Exception as exc:
+        log.error("Falha ao enviar orçamento para %s: %s", to, exc)
+        return False
+
+
 # ── Helper interno ─────────────────────────────────────────────────────────────
 
 def _emails_enabled() -> bool:
