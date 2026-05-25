@@ -25,7 +25,7 @@ from .service import (
 )
 from .. import db
 from app.constants import RoleName
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, CRMDeal
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -35,6 +35,7 @@ TZ = ZoneInfo("America/Sao_Paulo")
 _CAN_ENSAIO      = {RoleName.ENSAIO, RoleName.CASTING, RoleName.SUPERADMIN}
 _CAN_CREATE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
 _CAN_EDIT_EVENT  = {RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN}
+_CAN_DELETE      = {RoleName.SUPERADMIN, RoleName.COMERCIAL}
 
 _SYNC_TTL_SECONDS = 900  # 15 min — cron job sincroniza a cada 10 min, este é o fallback
 
@@ -128,6 +129,60 @@ def _build_events_from_db(
     return event_map, events_by_day, list_items
 
 
+def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
+    """Deleta um evento do banco removendo manualmente as tabelas sem cascade.
+
+    Cascades automáticos: EventRole, EventObservation, ensaios, EnsaioMaterial.
+    Sem cascade (deletados manualmente): EventLog, EventContract, EventPayment, EventRating.
+    CRMDeal.calendar_event_id é apenas nullificado (FK nullable).
+    """
+    CRMDeal.query.filter_by(calendar_event_id=event.id).update({"calendar_event_id": None})
+    EventLog.query.filter_by(event_id=event.id).delete()
+    EventContract.query.filter_by(event_id=event.id).delete()
+    EventPayment.query.filter_by(event_id=event.id).delete()
+    EventRating.query.filter_by(event_id=event.id).delete()
+    if also_from_google and event.google_event_id:
+        try:
+            delete_event(CALENDAR_ID, event.google_event_id)
+        except RuntimeError:
+            pass
+    db.session.delete(event)
+
+
+def _cleanup_stale_events(items: list[dict], year: int, month: int) -> int:
+    """Remove do banco eventos do mês que foram deletados do Google Calendar.
+
+    Só atua sobre eventos com source='google_calendar'. Eventos criados pela
+    plataforma nunca são removidos automaticamente pelo sync.
+    Retorna o número de eventos removidos.
+    """
+    live_ids = {item.get("id") for item in items if item.get("id")}
+    month_start_dt = datetime(year, month, 1)
+    month_end_dt = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+
+    stale = (
+        CalendarEvent.query
+        .filter(
+            CalendarEvent.source == "google_calendar",
+            CalendarEvent.google_event_id.isnot(None),
+            CalendarEvent.start_at >= month_start_dt,
+            CalendarEvent.start_at < month_end_dt,
+        )
+        .all()
+    )
+
+    deleted = 0
+    for ev in stale:
+        if ev.google_event_id not in live_ids:
+            _delete_event(ev)
+            deleted += 1
+
+    if deleted:
+        db.session.commit()
+
+    return deleted
+
+
 def _oauth_redirect_uri() -> str:
     """Retorna o redirect_uri do OAuth — usa env var em produção para garantir HTTPS correto."""
     override = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "")
@@ -189,6 +244,7 @@ def agenda():
         try:
             items = fetch_events_for_month(CALENDAR_ID, year, month)
             sync_events(items)
+            _cleanup_stale_events(items, year, month)
             _mark_month_synced(ym)
         except RuntimeError:
             items = []
@@ -2057,3 +2113,18 @@ def delete_observation(event_id: int, obs_id: int):
     db.session.delete(obs)
     db.session.commit()
     return redirect(url_for("calendar.event_detail", event_id=event_id))
+
+
+@calendar_bp.route("/events/<int:event_id>/delete", methods=["POST"])
+@login_required
+def delete_calendar_event(event_id: int):
+    """Exclui permanentemente um evento do banco (e opcionalmente do Google Calendar)."""
+    if not any(r.name.upper() in _CAN_DELETE for r in current_user.roles):
+        abort(403)
+    event = CalendarEvent.query.get_or_404(event_id)
+    also_google = request.form.get("also_google") == "1"
+    title = event.title
+    _delete_event(event, also_from_google=also_google)
+    db.session.commit()
+    flash(f'Evento "{title}" excluído com sucesso.', "success")
+    return redirect(url_for("calendar.agenda"))

@@ -27,7 +27,7 @@ app = create_app()
 
 with app.app_context():
     from app.models import CalendarEvent
-    from app.calendar.routes import sync_events, CALENDAR_ID, _mark_month_synced
+    from app.calendar.routes import sync_events, CALENDAR_ID, _mark_month_synced, _cleanup_stale_events
     from app.calendar.service import fetch_events_for_month
     from app import db
 
@@ -71,8 +71,10 @@ with app.app_context():
         try:
             items = fetch_events_for_month(CALENDAR_ID, m.year, m.month)
             sync_events(items)
+            removed = _cleanup_stale_events(items, m.year, m.month)
             _mark_month_synced(ym)
-            print(f"  ✓ {ym} — {len(items)} evento(s)", flush=True)
+            suffix = f" ({removed} removido(s))" if removed else ""
+            print(f"  ✓ {ym} — {len(items)} evento(s){suffix}", flush=True)
         except Exception as e:
             errors += 1
             print(f"  ✗ {ym} — {e}", file=sys.stderr, flush=True)
