@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Log da Agenda{% endblock %}
+{% block page_title %}Log da Agenda{% endblock %}
+{% block page_subtitle %}
+  <p class="sub">Histórico de sincronização e criação de eventos — visível apenas para SUPERADMIN</p>
+{% endblock %}
+{% block page_actions %}
+  <a href="/agenda" class="btn btn-secondary">&larr; Agenda</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .log-table th { text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase;
+                  letter-spacing: .07em; color: var(--muted); padding: 6px 10px;
+                  border-bottom: 2px solid var(--line); }
+  .log-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .log-table tr:last-child td { border-bottom: none; }
+  .log-table tr:hover td { background: var(--surface); }
+
+  .action-badge { display: inline-block; padding: 2px 8px; border-radius: 20px;
+                  font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .action-google_created   { background: #d4edda; color: #155724; }
+  .action-platform_created { background: #cce5ff; color: #004085; }
+  .action-google_updated   { background: #fff3cd; color: #856404; }
+  .action-auto_deleted     { background: #f8d7da; color: #721c24; }
+  .action-manual_deleted   { background: #d6d8d9; color: #383d41; }
+
+  .source-badge { display: inline-block; padding: 2px 8px; border-radius: 20px;
+                  font-size: 11px; font-weight: 700; }
+  .source-google_calendar { background: #d4edda; color: #155724; }
+  .source-platform        { background: #cce5ff; color: #004085; }
+
+  .events-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .events-table th { text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase;
+                     letter-spacing: .07em; color: var(--muted); padding: 6px 10px;
+                     border-bottom: 2px solid var(--line); }
+  .events-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .events-table tr:last-child td { border-bottom: none; }
+  .events-table tr:hover td { background: var(--surface); }
+  .mono { font-family: monospace; font-size: 11px; color: var(--muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Seção 1: Estado atual do banco ──────────────────────────────── #}
+<div class="panel" style="margin-bottom: 20px;">
+  <div class="panel-title">Eventos no banco ({{ all_events | length }})</div>
+  <p class="meta" style="margin-bottom: 14px;">
+    Estado atual — todos os eventos (sem ensaios), mais recentes primeiro.
+    <strong>source</strong> indica de onde veio: <em>google_calendar</em> = sincronizado do Google, <em>platform</em> = criado pelo sistema.
+  </p>
+
+  {% if all_events %}
+  <div style="overflow-x: auto;">
+  <table class="events-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Título</th>
+        <th>Data</th>
+        <th>Source</th>
+        <th>Google Event ID</th>
+        <th>Ação</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ev in all_events %}
+      <tr>
+        <td class="mono">{{ ev.id }}</td>
+        <td>
+          <a href="/events/{{ ev.id }}" style="color: var(--ink); font-weight: 600; text-decoration: none;">
+            {{ ev.title }}
+          </a>
+        </td>
+        <td style="white-space: nowrap;">
+          {{ ev.start_at.strftime("%d/%m/%Y %H:%M") if ev.start_at else "—" }}
+        </td>
+        <td>
+          <span class="source-badge source-{{ ev.source }}">{{ ev.source }}</span>
+        </td>
+        <td class="mono">{{ ev.google_event_id or "—" }}</td>
+        <td>
+          <a href="/events/{{ ev.id }}" class="btn btn-ghost btn-sm" style="font-size: 11px; padding: 2px 8px;">
+            Ver
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    <p class="muted">Nenhum evento no banco.</p>
+  {% endif %}
+</div>
+
+{# ── Seção 2: Log de sincronização ───────────────────────────────── #}
+<div class="panel">
+  <div class="panel-title">Log de Sincronização</div>
+  <p class="meta" style="margin-bottom: 14px;">
+    Últimas 300 entradas — criações, atualizações e exclusões registradas a partir de agora.
+    Entradas anteriores a esta versão não existem.
+  </p>
+
+  {% macro action_label(action) %}
+    {% if action == 'google_created' %}Criado (Google)
+    {% elif action == 'platform_created' %}Criado (Plataforma)
+    {% elif action == 'google_updated' %}Atualizado (Google)
+    {% elif action == 'auto_deleted' %}Excluído (auto-sync)
+    {% elif action == 'manual_deleted' %}Excluído (manual)
+    {% else %}{{ action }}
+    {% endif %}
+  {% endmacro %}
+
+  {% if logs %}
+  <div style="overflow-x: auto;">
+  <table class="log-table">
+    <thead>
+      <tr>
+        <th style="width: 140px;">Data/Hora</th>
+        <th style="width: 160px;">Ação</th>
+        <th>Evento</th>
+        <th>Detalhes</th>
+        <th style="width: 100px;">Por</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in logs %}
+      <tr>
+        <td class="mono">
+          {{ entry.created_at.strftime("%d/%m/%Y %H:%M") }}
+        </td>
+        <td>
+          <span class="action-badge action-{{ entry.action }}">
+            {{ action_label(entry.action) }}
+          </span>
+        </td>
+        <td>
+          {% if entry.event_id %}
+            <a href="/events/{{ entry.event_id }}" style="color: var(--ink); text-decoration: none; font-weight: 500;">
+              {{ entry.event_title or "—" }}
+            </a>
+          {% else %}
+            <span style="color: var(--muted);">{{ entry.event_title or "—" }}</span>
+          {% endif %}
+          {% if entry.google_event_id %}
+            <div class="mono" style="margin-top: 2px;">{{ entry.google_event_id }}</div>
+          {% endif %}
+        </td>
+        <td style="color: var(--muted); font-size: 12px;">
+          {{ entry.details or "—" }}
+        </td>
+        <td style="font-size: 12px;">{{ entry.actor or "Sistema" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    <p class="muted">Nenhuma entrada ainda. O log é preenchido a partir desta versão.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

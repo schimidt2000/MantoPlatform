@@ -821,3 +821,21 @@ class EventSubRating(db.Model):
     comment           = db.Column(db.Text, nullable=True)
 
     subject_talent = db.relationship("Talent", foreign_keys=[subject_talent_id], lazy=True)
+
+
+class SyncLog(db.Model):
+    """Log global de sincronização da agenda — persiste mesmo após exclusão do evento."""
+    __tablename__ = "sync_logs"
+    __table_args__ = (
+        db.Index("ix_sync_logs_created_at", "created_at"),
+    )
+
+    id              = db.Column(db.Integer, primary_key=True)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # action: 'google_created' | 'platform_created' | 'google_updated' | 'auto_deleted' | 'manual_deleted'
+    action          = db.Column(db.String(30), nullable=False)
+    event_title     = db.Column(db.String(300), nullable=True)
+    google_event_id = db.Column(db.String(200), nullable=True)
+    event_id        = db.Column(db.Integer, nullable=True)   # sem FK — evento pode ter sido deletado
+    details         = db.Column(db.Text, nullable=True)      # mudanças ou motivo
+    actor           = db.Column(db.String(120), nullable=True)  # "Sistema" ou nome do usuário

@@ -25,7 +25,7 @@ from .service import (
 )
 from .. import db
 from app.constants import RoleName
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, CRMDeal
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, CRMDeal, SyncLog
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -174,6 +174,7 @@ def _cleanup_stale_events(items: list[dict], year: int, month: int) -> int:
     deleted = 0
     for ev in stale:
         if ev.google_event_id not in live_ids:
+            _log_sync("auto_deleted", ev, details=f"Não encontrado no Google Calendar ({year}-{month:02d})")
             _delete_event(ev)
             deleted += 1
 
@@ -181,6 +182,23 @@ def _cleanup_stale_events(items: list[dict], year: int, month: int) -> int:
         db.session.commit()
 
     return deleted
+
+
+def _log_sync(
+    action: str,
+    event: CalendarEvent | None = None,
+    details: str | None = None,
+    actor: str | None = None,
+) -> None:
+    """Adiciona entrada ao SyncLog. Não faz commit — inclua no commit do caller."""
+    db.session.add(SyncLog(
+        action=action,
+        event_title=event.title if event else None,
+        google_event_id=event.google_event_id if event else None,
+        event_id=event.id if event else None,
+        details=details,
+        actor=actor or "Sistema",
+    ))
 
 
 def _oauth_redirect_uri() -> str:
@@ -1082,6 +1100,7 @@ def sync_events(items: list[dict]) -> None:
                     created_at=datetime.now(tz=ZoneInfo("America/Sao_Paulo")),
                 )
             )
+            _log_sync("google_created", event)
             if not title.startswith("🟧 ENSAIO"):
                 _ensure_coordinator(event.id)
             if gc_needs_rehearsal:
@@ -1123,6 +1142,7 @@ def sync_events(items: list[dict]) -> None:
             # Notifica talentos confirmados sobre mudanças
             if _changes:
                 _notify_accepted_roles(event, _changes)
+                _log_sync("google_updated", event, details="; ".join(_changes))
 
         # Eventos criados pela plataforma: atualiza metadados mas preserva roles
         if event.source == "platform":
@@ -1942,6 +1962,7 @@ def create_event():
         message    = "Evento criado pela plataforma",
         created_at = datetime.now(tz=TZ),
     ))
+    _log_sync("platform_created", event, actor=current_user.name)
     db.session.commit()
     if needs_rehearsal:
         _notify_ensaio_team(event)
@@ -2115,6 +2136,35 @@ def delete_observation(event_id: int, obs_id: int):
     return redirect(url_for("calendar.event_detail", event_id=event_id))
 
 
+@calendar_bp.route("/agenda/log")
+@login_required
+def agenda_log():
+    """Log global de sincronização — visível apenas para SUPERADMIN."""
+    if not any(r.name == RoleName.SUPERADMIN for r in current_user.roles):
+        abort(403)
+
+    tz_sp = ZoneInfo("America/Sao_Paulo")
+
+    # Últimas 300 entradas do log
+    logs = SyncLog.query.order_by(SyncLog.created_at.desc()).limit(300).all()
+
+    # Todos os eventos ativos no banco (para debug do estado atual)
+    all_events = (
+        CalendarEvent.query
+        .filter(CalendarEvent.event_type != "ENSAIO")
+        .order_by(CalendarEvent.start_at.desc())
+        .limit(200)
+        .all()
+    )
+
+    return render_template(
+        "agenda_log.html",
+        logs=logs,
+        all_events=all_events,
+        tz_sp=tz_sp,
+    )
+
+
 @calendar_bp.route("/events/<int:event_id>/delete", methods=["POST"])
 @login_required
 def delete_calendar_event(event_id: int):
@@ -2124,6 +2174,11 @@ def delete_calendar_event(event_id: int):
     event = CalendarEvent.query.get_or_404(event_id)
     also_google = request.form.get("also_google") == "1"
     title = event.title
+    _log_sync(
+        "manual_deleted", event,
+        details="Também removido do Google Calendar" if also_google else None,
+        actor=current_user.name,
+    )
     _delete_event(event, also_from_google=also_google)
     db.session.commit()
     flash(f'Evento "{title}" excluído com sucesso.', "success")
