@@ -293,12 +293,22 @@ def audit_logs():
         .all()
     )
 
+    # Seção "Eventos no banco" — estado atual da agenda
+    all_events = (
+        CalendarEvent.query
+        .filter(CalendarEvent.event_type != "ENSAIO")
+        .order_by(CalendarEvent.start_at.desc())
+        .limit(200)
+        .all()
+    )
+
     return render_template(
         "admin_logs.html",
         logs=logs,
         entity_type=entity_type,
         actor=actor,
         entity_types=[r[0] for r in entity_types],
+        all_events=all_events,
     )
 
 

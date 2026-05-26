@@ -25,7 +25,7 @@ from .service import (
 )
 from .. import db
 from app.constants import RoleName
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, CRMDeal, SyncLog
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, CRMDeal, AuditLog
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -189,15 +189,22 @@ def _log_sync(
     event: CalendarEvent | None = None,
     details: str | None = None,
     actor: str | None = None,
+    actor_role: str | None = None,
 ) -> None:
-    """Adiciona entrada ao SyncLog. Não faz commit — inclua no commit do caller."""
-    db.session.add(SyncLog(
+    """Registra ação da agenda no AuditLog. Não faz commit — inclua no commit do caller."""
+    detail_parts = []
+    if event and event.google_event_id:
+        detail_parts.append(f"gcal:{event.google_event_id}")
+    if details:
+        detail_parts.append(details)
+    db.session.add(AuditLog(
+        actor_name=actor or "Sistema",
+        actor_role=actor_role,
+        entity_type="agenda",
+        entity_id=event.id if event else None,
+        entity_name=event.title if event else None,
         action=action,
-        event_title=event.title if event else None,
-        google_event_id=event.google_event_id if event else None,
-        event_id=event.id if event else None,
-        details=details,
-        actor=actor or "Sistema",
+        detail=" | ".join(detail_parts) if detail_parts else None,
     ))
 
 
@@ -1962,7 +1969,8 @@ def create_event():
         message    = "Evento criado pela plataforma",
         created_at = datetime.now(tz=TZ),
     ))
-    _log_sync("platform_created", event, actor=current_user.name)
+    _log_sync("platform_created", event, actor=current_user.name,
+              actor_role=", ".join(r.name for r in current_user.roles))
     db.session.commit()
     if needs_rehearsal:
         _notify_ensaio_team(event)
@@ -2139,30 +2147,8 @@ def delete_observation(event_id: int, obs_id: int):
 @calendar_bp.route("/agenda/log")
 @login_required
 def agenda_log():
-    """Log global de sincronização — visível apenas para SUPERADMIN."""
-    if not any(r.name == RoleName.SUPERADMIN for r in current_user.roles):
-        abort(403)
-
-    tz_sp = ZoneInfo("America/Sao_Paulo")
-
-    # Últimas 300 entradas do log
-    logs = SyncLog.query.order_by(SyncLog.created_at.desc()).limit(300).all()
-
-    # Todos os eventos ativos no banco (para debug do estado atual)
-    all_events = (
-        CalendarEvent.query
-        .filter(CalendarEvent.event_type != "ENSAIO")
-        .order_by(CalendarEvent.start_at.desc())
-        .limit(200)
-        .all()
-    )
-
-    return render_template(
-        "agenda_log.html",
-        logs=logs,
-        all_events=all_events,
-        tz_sp=tz_sp,
-    )
+    """Redireciona para o log unificado filtrado por agenda."""
+    return redirect(url_for("admin.audit_logs", entity_type="agenda"))
 
 
 @calendar_bp.route("/events/<int:event_id>/delete", methods=["POST"])
@@ -2178,6 +2164,7 @@ def delete_calendar_event(event_id: int):
         "manual_deleted", event,
         details="Também removido do Google Calendar" if also_google else None,
         actor=current_user.name,
+        actor_role=", ".join(r.name for r in current_user.roles),
     )
     _delete_event(event, also_from_google=also_google)
     db.session.commit()
