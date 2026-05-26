@@ -211,6 +211,7 @@
   {% set active_q = request.args.get('q', '') %}
   {% set has_filters = active_q or active_languages or active_races or active_tops or active_bottoms or active_shoes or active_passport or active_tags or active_height or active_character %}
 
+  <div id="active-chips-container">
   {% if has_filters %}
   <div class="active-filters">
     {% if active_q %}<span class="active-chip">Nome: "{{ active_q }}" <a href="{{ request.url | replace('q=' + active_q, '') | replace('&&','&') | replace('?&','?') }}">×</a></span>{% endif %}
@@ -227,6 +228,7 @@
     <a href="/talents?status=active" class="btn btn-ghost btn-sm" style="border-radius:16px;">Limpar tudo ×</a>
   </div>
   {% endif %}
+  </div>
 
   {# ── Filter Pills Bar ──────────────────────────────────────── #}
   <form id="filter-form" method="get" action="/talents">
@@ -243,7 +245,6 @@
            placeholder="Buscar por nome ou nome artístico…"
            value="{{ q }}"
            autocomplete="off"
-           oninput="debounceSubmit()"
            style="width:100%; padding:10px 14px 10px 38px; border:1.5px solid var(--line);
                   border-radius:12px; font-size:14px; box-sizing:border-box;
                   transition:border-color .15s; background:var(--panel);"
@@ -258,7 +259,6 @@
              {% if ja_trabalhou == '1' %}checked{% endif %}>
       Já trabalhou com a Manto
     </label>
-    <span class="badge badge-gray" style="font-size:11px;">{{ pagination.total }} pessoa(s)</span>
   </div>
 
     <div class="fp-bar" id="fp-bar">
@@ -425,6 +425,13 @@
     </div>
   </form>
 
+  {# ── Results Container (updated via fetch) ───────────────────── #}
+  <div id="results-container">
+
+  <div style="margin-bottom:10px;">
+    <span class="badge badge-gray" style="font-size:11px;">{{ pagination.total }} pessoa(s)</span>
+  </div>
+
   {# ── Talent Grid ────────────────────────────────────────────── #}
   {% if people %}
     <div class="talent-grid">
@@ -505,6 +512,8 @@
     </div>
   {% endif %}
 
+  </div>{# /results-container #}
+
 {% endif %}
 
 {% endblock %}
@@ -525,24 +534,6 @@
         setTimeout(function() { document.getElementById('tag-search').focus(); }, 60);
       }
     }
-  }
-
-  // Após reload do form, o browser refoca o input e seleciona todo o texto.
-  // setSelectionRange desloca o cursor pro fim e desfaz a seleção.
-  window.addEventListener('load', function () {
-    const ns = document.getElementById('name-search');
-    if (ns && ns.value) {
-      ns.focus();
-      ns.setSelectionRange(ns.value.length, ns.value.length);
-    }
-  });
-
-  let _searchTimer = null;
-  function debounceSubmit() {
-    clearTimeout(_searchTimer);
-    _searchTimer = setTimeout(function() {
-      document.getElementById('filter-form').submit();
-    }, 500);
   }
 
   function filterTags(q) {
@@ -567,35 +558,100 @@
     }
   });
 
-  /* ── Sugestões de personagens ─────────────────────────────── */
-  const ALL_CHARACTERS = [
-    {% set seen = namespace(chars=[]) %}
-    {% for tid, chars in character_matches.items() %}{% for c in chars %}{% if c not in seen.chars %}{% set seen.chars = seen.chars + [c] %}{% endif %}{% endfor %}{% endfor %}
-    /* populated via server-side known characters would require an extra query;
-       instead we fetch suggestions live from the route */
-  ];
+  // ── Busca instantânea via fetch (sem reload de página) ──────────
+  let _updateTimer = null;
 
+  function debounceUpdate(ms) {
+    clearTimeout(_updateTimer);
+    _updateTimer = setTimeout(updateResults, ms || 400);
+  }
+
+  async function updateResults() {
+    const form = document.getElementById('filter-form');
+    if (!form) return;
+    const params = new URLSearchParams(new FormData(form));
+    const chipsEl   = document.getElementById('active-chips-container');
+    const resultsEl = document.getElementById('results-container');
+    if (resultsEl) resultsEl.style.opacity = '0.5';
+
+    try {
+      const resp = await fetch('/talents?' + params.toString());
+      if (!resp.ok) throw new Error('fetch error');
+      const html = await resp.text();
+      const doc  = new DOMParser().parseFromString(html, 'text/html');
+
+      const newChips = doc.getElementById('active-chips-container');
+      if (chipsEl && newChips) chipsEl.innerHTML = newChips.innerHTML;
+
+      const newResults = doc.getElementById('results-container');
+      if (resultsEl && newResults) {
+        resultsEl.innerHTML = newResults.innerHTML;
+        history.replaceState(null, '', '/talents?' + params.toString());
+      }
+    } catch(e) {
+      // em caso de erro, deixa a página como está
+    } finally {
+      if (resultsEl) resultsEl.style.opacity = '1';
+    }
+  }
+
+  // Texto: debounce 400ms
+  const nameSearch = document.getElementById('name-search');
+  if (nameSearch) {
+    nameSearch.addEventListener('input', function() { debounceUpdate(400); });
+    // Focar no fim do texto em carregamentos diretos (URL com ?q=...)
+    window.addEventListener('load', function() {
+      if (nameSearch.value) {
+        nameSearch.focus();
+        nameSearch.setSelectionRange(nameSearch.value.length, nameSearch.value.length);
+      }
+    });
+  }
+
+  // Checkboxes e selects: atualização imediata
+  const filterForm = document.getElementById('filter-form');
+  if (filterForm) {
+    filterForm.addEventListener('change', function(e) {
+      if (e.target === nameSearch) return;
+      if (e.target.name === 'height_value') return;
+      updateResults();
+    });
+
+    // Altura: debounce 600ms (input numérico)
+    const heightInput = filterForm.querySelector('[name="height_value"]');
+    if (heightInput) {
+      heightInput.addEventListener('input', function() { debounceUpdate(600); });
+    }
+
+    // Botão "Filtrar": usa fetch em vez de submit normal
+    filterForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      updateResults();
+    });
+  }
+
+  // ── Sugestões de personagem ──────────────────────────────────
   const charInput = document.getElementById('char-input');
   const charSugg  = document.getElementById('char-suggestions');
 
   if (charInput) {
-    let debounce;
-    charInput.addEventListener('input', function () {
-      clearTimeout(debounce);
+    let _charTimer;
+    charInput.addEventListener('input', function() {
+      clearTimeout(_charTimer);
       const q = this.value.trim();
       if (!q) { charSugg.innerHTML = ''; return; }
-      debounce = setTimeout(function () {
+      _charTimer = setTimeout(function() {
         fetch('/talents/character-suggestions?q=' + encodeURIComponent(q))
           .then(r => r.json())
-          .then(function (data) {
+          .then(function(data) {
             if (!data.length) { charSugg.innerHTML = ''; return; }
-            charSugg.innerHTML = data.map(function (c) {
+            charSugg.innerHTML = data.map(function(c) {
               return '<button type="button" onclick="document.getElementById(\'char-input\').value=\'' +
-                c.name.replace(/'/g, "\\'") + '\'; document.getElementById(\'filter-form\').submit();" ' +
-                'style="display:block; width:100%; text-align:left; background:none; border:none; ' +
-                'padding:6px 8px; border-radius:6px; font-size:13px; cursor:pointer; color:var(--ink);" ' +
+                c.name.replace(/'/g, "\\'") + '\'; charSugg.innerHTML=\'\'; updateResults();" ' +
+                'style="display:block;width:100%;text-align:left;background:none;border:none;' +
+                'padding:6px 8px;border-radius:6px;font-size:13px;cursor:pointer;color:var(--ink);" ' +
                 'onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'none\'">' +
-                c.name + ' <span style="color:var(--muted); font-size:11px;">(' + c.count + 'x)</span></button>';
+                c.name + ' <span style="color:var(--muted);font-size:11px;">(' + c.count + 'x)</span></button>';
             }).join('');
           });
       }, 220);
