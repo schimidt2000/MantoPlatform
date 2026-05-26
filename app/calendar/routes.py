@@ -439,10 +439,17 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     role.talent_id = int(talent_id) if talent_id else None
 
     _is_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
-    try:
-        new_cache = int(cache_value) if cache_value else None
-    except ValueError:
-        new_cache = None
+
+    def _parse_brl_dec(v: str):
+        """Parseia valor BRL: '1.500,50' → Decimal('1500.50')"""
+        if not v or not v.strip():
+            return None
+        try:
+            return Decimal(v.strip().replace('.', '').replace(',', '.'))
+        except Exception:
+            return None
+
+    new_cache = _parse_brl_dec(cache_value)
 
     # Aplicar teto de cache: casting não pode ultrapassar o cap do orçamento
     if new_cache is not None and role.cache_cap is not None and new_cache > role.cache_cap:
@@ -451,11 +458,7 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         # superadmin pode ultrapassar — apenas registra no log depois
 
     role.cache_value = new_cache
-    try:
-        new_travel = int(travel_cache) if travel_cache else None
-    except ValueError:
-        new_travel = None
-    role.travel_cache = new_travel
+    role.travel_cache = _parse_brl_dec(travel_cache)
     role.assigned_at = datetime.now(tz=tz_sp) if role.talent_id else None
     if role.talent_id != old_talent_id:
         role.figurino_done_at = None
@@ -1914,7 +1917,17 @@ def create_event():
             sheet_id = sheet_by_name.get(char.lower())
 
         # cache: preferência manual do form, depois caches do orçamento
-        cache_val = _parse_int(char_caches[i]) if i < len(char_caches) else None
+        def _parse_brl_or_int(v: str):
+            if not v or not v.strip():
+                return None
+            try:
+                return Decimal(v.strip().replace('.', '').replace(',', '.'))
+            except Exception:
+                try:
+                    return Decimal(v.strip())
+                except Exception:
+                    return None
+        cache_val = _parse_brl_or_int(char_caches[i]) if i < len(char_caches) else None
         makeup    = (char_makeups[i] == "1") if i < len(char_makeups) else False
         singer    = (char_singers[i] == "1") if i < len(char_singers) else False
 

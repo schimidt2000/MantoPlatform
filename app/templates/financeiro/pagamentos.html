@@ -33,71 +33,184 @@
 <div class="kpi-grid" style="margin-bottom:16px;">
   <div class="kpi">
     <div class="kpi-label">Total no período</div>
-    <div class="kpi-value">R$ {{ total_val | int }}</div>
+    <div class="kpi-value">R$ {{ total_val | brl }}</div>
   </div>
   <div class="kpi">
     <div class="kpi-label">Pagos</div>
-    <div class="kpi-value" style="color:var(--green);">R$ {{ total_pago | int }}</div>
+    <div class="kpi-value" style="color:var(--green);">R$ {{ total_pago | brl }}</div>
   </div>
   <div class="kpi">
     <div class="kpi-label">No banco</div>
-    <div class="kpi-value" style="color:#1565c0;">R$ {{ total_banco | int }}</div>
+    <div class="kpi-value" style="color:#1565c0;">R$ {{ total_banco | brl }}</div>
   </div>
   <div class="kpi">
     <div class="kpi-label">Pendentes</div>
-    <div class="kpi-value" style="color:var(--red);">R$ {{ total_pend | int }}</div>
+    <div class="kpi-value" style="color:var(--red);">R$ {{ total_pend | brl }}</div>
   </div>
 </div>
 
 {# ── Tabela ────────────────────────────────────────────────────── #}
-<div class="panel" style="padding:0; overflow-x:auto;">
+<div class="panel" style="padding:0; overflow-x:auto; padding-bottom:70px;">
   {% if roles %}
-  <table>
+
+  {# Barra de seleção em massa (fica invisível até selecionar algo) #}
+  <div id="bulk-bar" style="display:none; position:sticky; top:0; z-index:100;
+       background:#1e1b4b; color:#fff; padding:10px 16px; border-bottom:2px solid #4338ca;
+       display:none; flex-wrap:wrap; gap:8px; align-items:center;">
+    <span id="bulk-count" style="font-weight:700; font-size:13px;"></span>
+    <form id="bulk-form" method="post" action="/financeiro/pagamentos/bulk-action"
+          style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+      <input type="hidden" name="month" value="{{ month }}">
+      <input type="hidden" name="action" id="bulk-action-value" value="">
+      <div id="bulk-checkboxes-container" style="display:none;"></div>
+      <button type="button" onclick="bulkSubmit('pago')"
+              class="btn btn-sm" style="background:#16a34a;color:#fff;border:none;">✓ Marcar pago</button>
+      <button type="button" onclick="bulkSubmit('no_banco')"
+              class="btn btn-sm" style="background:#1565c0;color:#fff;border:none;">🏦 No banco</button>
+      <button type="button" onclick="bulkSubmit('nao_pago')"
+              class="btn btn-sm" style="background:#555;color:#fff;border:none;">↩ Não pago</button>
+      <button type="button" onclick="bulkSubmit('delete')"
+              class="btn btn-sm" style="background:#dc2626;color:#fff;border:none;">🗑 Excluir</button>
+      <button type="button" onclick="clearSelection()"
+              class="btn btn-sm btn-ghost" style="color:#ccc;">✕ Cancelar</button>
+    </form>
+  </div>
+
+  <table id="pagamentos-table">
     <thead>
       <tr>
+        <th style="width:32px; padding:8px 0 8px 12px;">
+          <input type="checkbox" id="select-all" title="Selecionar tudo">
+        </th>
         <th>Data</th>
         <th>Evento</th>
         <th>Função</th>
         <th>Nome</th>
         <th style="text-align:right;">Valor</th>
-        <th>Pix</th>
+        <th>PIX</th>
         <th style="width:140px;">Situação</th>
       </tr>
     </thead>
     <tbody>
-      {% set ns = namespace(last_event_id=None) %}
       {% for r in roles %}
-      <tr class="{% if r.payment_status == 'pago' %}row-pago{% elif r.payment_status == 'no_banco' %}row-banco{% endif %}">
-        <td class="meta">{{ r.event.start_at.strftime("%d/%m/%Y") if r.event.start_at else '—' }}</td>
-        <td>
-          <a href="/events/{{ r.event.id }}" style="font-weight:600; text-decoration:none; color:inherit;">
-            {{ r.event.title }}
-          </a>
+      {% set is_future = r.event.start_at and r.event.start_at.date() > today %}
+      {% set is_nao_pago = (r.payment_status or 'nao_pago') == 'nao_pago' %}
+      <tr class="{% if r.payment_status == 'pago' %}row-pago{% elif r.payment_status == 'no_banco' %}row-banco{% endif %}"
+          data-role-id="{{ r.id }}">
+
+        {# Checkbox #}
+        <td style="padding:8px 0 8px 12px;">
+          <input type="checkbox" class="row-check" value="{{ r.id }}">
         </td>
+
+        {# Data #}
+        <td class="meta" style="white-space:nowrap;">
+          {{ r.event.start_at.strftime("%d/%m/%Y") if r.event.start_at else '—' }}
+        </td>
+
+        {# Evento com botão copiar #}
+        <td>
+          {% set ev_copy = (r.event.start_at.strftime("%d/%m/%Y") if r.event.start_at else '') + ' - ' + r.event.title %}
+          <div style="display:flex; align-items:center; gap:6px;">
+            <a href="/events/{{ r.event.id }}" style="font-weight:600; text-decoration:none; color:inherit;">
+              {{ r.event.title }}
+            </a>
+            <button type="button" class="copy-btn" data-copy="{{ ev_copy }}"
+                    title="Copiar nome e data">
+              <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
+                <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/>
+              </svg>
+            </button>
+          </div>
+        </td>
+
+        {# Função #}
         <td class="meta">{{ r.character_name }}</td>
+
+        {# Nome #}
         <td>{{ r.talent.full_name if r.talent else '—' }}</td>
-        <td style="text-align:right; font-weight:600;">
-          {% if r.cache_value %}R$ {{ r.cache_value }}{% else %}<span class="muted">—</span>{% endif %}
+
+        {# Valor com botão copiar #}
+        <td style="text-align:right; font-weight:600; white-space:nowrap;">
+          {% if r.cache_value %}
+            <div style="display:flex; align-items:center; justify-content:flex-end; gap:4px;">
+              <span>R$ {{ r.cache_value | brl }}</span>
+              <button type="button" class="copy-btn"
+                      data-copy="{{ "%.2f"|format(r.cache_value|float)|replace(".", ",") }}"
+                      title="Copiar valor">
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
+                  <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/>
+                </svg>
+              </button>
+            </div>
+          {% else %}<span class="muted">—</span>{% endif %}
         </td>
-        <td class="meta" style="font-size:11px; word-break:break-all;">
-          {{ r.talent.pix_key if r.talent and r.talent.pix_key else '—' }}
+
+        {# PIX com tipo e botão copiar #}
+        <td style="font-size:11px; min-width:160px;">
+          {% if r.talent and r.talent.pix_key %}
+            {% set pix_clean = r.talent.pix_key | trim %}
+            <div style="display:flex; align-items:flex-start; gap:4px;">
+              <div>
+                <span style="word-break:break-all;">{{ pix_clean }}</span>
+                {% if r.talent.pix_key_type %}
+                  <span style="display:block; font-size:10px; color:var(--muted); font-weight:600; margin-top:1px;">
+                    {{ r.talent.pix_key_type }}
+                  </span>
+                {% endif %}
+              </div>
+              <button type="button" class="copy-btn" data-copy="{{ pix_clean }}"
+                      title="Copiar chave PIX" style="flex-shrink:0; margin-top:1px;">
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
+                  <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/>
+                </svg>
+              </button>
+            </div>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
         </td>
+
+        {# Situação #}
         <td>
-          <form method="post" action="/financeiro/pagamentos/set-status">
-            <input type="hidden" name="role_id" value="{{ r.id }}">
-            <input type="hidden" name="next" value="/financeiro/pagamentos?month={{ month }}">
-            <select name="payment_status" onchange="this.form.submit()"
-                    class="pay-status-select pay-status-{{ r.payment_status or 'nao_pago' }}">
-              <option value="nao_pago" {% if (r.payment_status or 'nao_pago') == 'nao_pago' %}selected{% endif %}>Não pago</option>
-              <option value="pago"    {% if r.payment_status == 'pago' %}selected{% endif %}>Pago</option>
-              <option value="no_banco"{% if r.payment_status == 'no_banco' %}selected{% endif %}>No banco</option>
-            </select>
-          </form>
+          {% if is_future and is_nao_pago %}
+            {# Evento futuro ainda não pago: mostrar badge "Futuro" mas permite alterar #}
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <span class="badge" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:11px;">
+                ⏳ Futuro
+              </span>
+              <form method="post" action="/financeiro/pagamentos/set-status" style="margin:0;">
+                <input type="hidden" name="role_id" value="{{ r.id }}">
+                <input type="hidden" name="next" value="/financeiro/pagamentos?month={{ month }}">
+                <select name="payment_status" onchange="this.form.submit()"
+                        class="pay-status-select pay-status-nao_pago" style="font-size:11px;">
+                  <option value="nao_pago" selected>Não pago</option>
+                  <option value="pago">Pago</option>
+                  <option value="no_banco">No banco</option>
+                </select>
+              </form>
+            </div>
+          {% else %}
+            <form method="post" action="/financeiro/pagamentos/set-status">
+              <input type="hidden" name="role_id" value="{{ r.id }}">
+              <input type="hidden" name="next" value="/financeiro/pagamentos?month={{ month }}">
+              <select name="payment_status" onchange="this.form.submit()"
+                      class="pay-status-select pay-status-{{ r.payment_status or 'nao_pago' }}">
+                <option value="nao_pago" {% if (r.payment_status or 'nao_pago') == 'nao_pago' %}selected{% endif %}>Não pago</option>
+                <option value="pago"    {% if r.payment_status == 'pago' %}selected{% endif %}>Pago</option>
+                <option value="no_banco"{% if r.payment_status == 'no_banco' %}selected{% endif %}>No banco</option>
+              </select>
+            </form>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+
   {% else %}
   <div style="padding:40px; text-align:center; color:var(--muted);">
     Nenhum pagamento encontrado para
@@ -127,5 +240,105 @@
   tr.row-banco:hover td { background: #e8f2ff; }
   tr.row-pago  td { background: #f8fff8; }
   tr.row-banco td { background: #f3f8ff; }
+  tr.row-selected td { background: #ede9fe !important; }
+
+  /* ── Copy button ─────────────────────────────────────────────── */
+  .copy-btn {
+    background: none; border: none; cursor: pointer; padding: 2px 4px;
+    color: var(--muted); border-radius: 4px; line-height: 1;
+    transition: color .15s, background .15s;
+  }
+  .copy-btn:hover { color: var(--accent); background: var(--surface-2); }
+  .copy-btn.copied { color: #16a34a; }
 </style>
+
+<script>
+// ── Seleção em massa ──────────────────────────────────────────────────────
+const selectAll = document.getElementById('select-all');
+const bulkBar   = document.getElementById('bulk-bar');
+const bulkCount = document.getElementById('bulk-count');
+const bulkForm  = document.getElementById('bulk-form');
+const checkboxContainer = document.getElementById('bulk-checkboxes-container');
+
+function getChecked() {
+  return Array.from(document.querySelectorAll('.row-check:checked'));
+}
+
+function updateBulkBar() {
+  const checked = getChecked();
+  if (checked.length > 0) {
+    bulkBar.style.display = 'flex';
+    bulkCount.textContent = checked.length + ' selecionado' + (checked.length > 1 ? 's' : '');
+    // Colorir linhas selecionadas
+    document.querySelectorAll('.row-check').forEach(function(cb) {
+      cb.closest('tr').classList.toggle('row-selected', cb.checked);
+    });
+  } else {
+    bulkBar.style.display = 'none';
+    document.querySelectorAll('tr.row-selected').forEach(function(r) {
+      r.classList.remove('row-selected');
+    });
+  }
+}
+
+function bulkSubmit(action) {
+  const checked = getChecked();
+  if (!checked.length) return;
+  if (action === 'delete' && !confirm('Excluir ' + checked.length + ' atribuição(ões)? Isso remove os talentos do evento.')) return;
+
+  document.getElementById('bulk-action-value').value = action;
+  // inject hidden role_id inputs into the form
+  checkboxContainer.innerHTML = '';
+  checked.forEach(function(cb) {
+    const h = document.createElement('input');
+    h.type = 'hidden'; h.name = 'role_ids'; h.value = cb.value;
+    checkboxContainer.appendChild(h);
+  });
+  bulkForm.submit();
+}
+
+function clearSelection() {
+  document.querySelectorAll('.row-check').forEach(function(cb) { cb.checked = false; });
+  if (selectAll) selectAll.checked = false;
+  updateBulkBar();
+}
+
+if (selectAll) {
+  selectAll.addEventListener('change', function() {
+    document.querySelectorAll('.row-check').forEach(function(cb) {
+      cb.checked = selectAll.checked;
+    });
+    updateBulkBar();
+  });
+}
+
+document.querySelectorAll('.row-check').forEach(function(cb) {
+  cb.addEventListener('change', updateBulkBar);
+});
+
+// ── Botões de copiar ──────────────────────────────────────────────────────
+document.querySelectorAll('.copy-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    const text = btn.dataset.copy || '';
+    navigator.clipboard.writeText(text.trim()).then(function() {
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+      btn.classList.add('copied');
+      setTimeout(function() {
+        btn.innerHTML = orig;
+        btn.classList.remove('copied');
+      }, 1500);
+    }).catch(function() {
+      // fallback para navegadores sem clipboard API
+      const ta = document.createElement('textarea');
+      ta.value = text.trim();
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      try { document.execCommand('copy'); } catch(e) {}
+      document.body.removeChild(ta);
+    });
+  });
+});
+</script>
 {% endblock %}

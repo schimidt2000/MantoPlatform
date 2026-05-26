@@ -476,6 +476,7 @@ def pagamentos():
         "financeiro/pagamentos.html",
         roles=roles,
         month=month,
+        today=today,
         status_labels=_STATUS_LABELS,
     )
 
@@ -497,6 +498,43 @@ def set_payment_status():
             audit("payment", "event_role", role.id, talent_name,
                   f"Pagamento: {old_status} → {status} | {role.character_name}")
             db.session.commit()
+    return redirect(next_url)
+
+
+@financeiro_bp.route("/financeiro/pagamentos/bulk-action", methods=["POST"])
+@login_required
+@require_financeiro
+def bulk_payment_action():
+    action  = request.form.get("action")
+    ids     = request.form.getlist("role_ids")
+    month   = request.form.get("month", date.today().strftime("%Y-%m"))
+    next_url = url_for("financeiro.pagamentos", month=month)
+
+    if not ids:
+        return redirect(next_url)
+
+    ids_int = [int(i) for i in ids if i.isdigit()]
+
+    if action == "delete":
+        for rid in ids_int:
+            role = EventRole.query.get(rid)
+            if role:
+                db.session.delete(role)
+        from app.utils import audit
+        audit("delete", "event_role", None, "bulk", f"Excluídas {len(ids_int)} atribuições via pagamentos")
+        db.session.commit()
+    elif action in _VALID_PAYMENT_STATUS:
+        for rid in ids_int:
+            role = EventRole.query.get(rid)
+            if role:
+                old = role.payment_status
+                role.payment_status = action
+                from app.utils import audit
+                talent_name = role.talent.full_name if role.talent else "—"
+                audit("payment", "event_role", role.id, talent_name,
+                      f"Pagamento bulk: {old} → {action} | {role.character_name}")
+        db.session.commit()
+
     return redirect(next_url)
 
 

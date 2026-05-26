@@ -322,16 +322,16 @@
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
               {% if r.cache_cap %}
                 <span style="font-size:11px;font-weight:600;background:#eff6ff;color:#1d4ed8;padding:2px 8px;border-radius:99px;border:1px solid #bfdbfe;">
-                  Cachê: R$ {{ r.cache_cap }}
+                  Cachê: R$ {{ r.cache_cap | brl }}
                 </span>
               {% elif r.cache_value %}
                 <span style="font-size:11px;font-weight:600;background:var(--surface-2);color:var(--muted);padding:2px 8px;border-radius:99px;">
-                  Cachê: R$ {{ r.cache_value }}
+                  Cachê: R$ {{ r.cache_value | brl }}
                 </span>
               {% endif %}
               {% if r.travel_cache %}
                 <span style="font-size:11px;background:#f0fdf4;color:#166534;padding:2px 8px;border-radius:99px;border:1px solid #bbf7d0;">
-                  + R$ {{ r.travel_cache }} viagem
+                  + R$ {{ r.travel_cache | brl }} viagem
                 </span>
               {% elif event.is_outside_sp and event.travel_distance_km %}
                 {% set _km_left = event.travel_distance_km %}
@@ -359,10 +359,10 @@
           </div>
 
           <div>
-            <input type="number" name="cache_value" placeholder="Cachê (R$)"
-              value="{{ r.cache_value or '' }}" min="0" step="1" style="width: 100%;"
-              class="cache-input"
-              data-cap="{{ r.cache_cap or '' }}"
+            <input type="text" inputmode="decimal" name="cache_value" placeholder="Cachê (R$)"
+              value="{{ r.cache_value | brl if r.cache_value else '' }}" style="width: 100%;"
+              class="brl-input cache-input"
+              data-cap="{{ r.cache_cap | float if r.cache_cap else '' }}"
               data-is-superadmin="{{ 'true' if is_real_superadmin else 'false' }}">
             {% if r.cache_cap %}
               <div class="cache-cap-msg" style="display:none;font-size:10px;margin-top:2px;"></div>
@@ -378,17 +378,17 @@
               {% else %}
                 {% set _sugestao = ((_km * 2 / 3) | int) %}
               {% endif %}
-              <input type="number" name="travel_cache" placeholder="Adicional viagem"
-                value="{{ r.travel_cache if r.travel_cache else _sugestao }}"
-                min="0" step="1" style="width: 100%;"
+              <input type="text" inputmode="decimal" name="travel_cache" placeholder="Adicional viagem"
+                value="{{ r.travel_cache | brl if r.travel_cache else _sugestao }}"
+                class="brl-input" style="width: 100%;"
                 title="Adicional fora de SP — sugestão: R$ {{ _sugestao }}">
               <div style="font-size:10px; color:var(--muted); margin-top:2px;">
                 sugestão: R$ {{ _sugestao }}
               </div>
             {% else %}
-              <input type="number" name="travel_cache" placeholder="Adicional viagem (fora de SP)"
-                value="{{ r.travel_cache or '' }}"
-                min="0" step="1" style="width: 100%;">
+              <input type="text" inputmode="decimal" name="travel_cache" placeholder="Adicional viagem (fora de SP)"
+                value="{{ r.travel_cache | brl if r.travel_cache else '' }}"
+                class="brl-input" style="width: 100%;">
             {% endif %}
           </div>
           {% endif %}
@@ -527,8 +527,9 @@
             <ul class="ts-dropdown" hidden></ul>
           </div>
           <div style="width:110px;">
-            <input type="number" name="cache_value" placeholder="Cachê (R$)"
-              value="{{ r.cache_value or '' }}" min="0" step="1" style="width:100%;">
+            <input type="text" inputmode="decimal" name="cache_value" placeholder="Cachê (R$)"
+              value="{{ r.cache_value | brl if r.cache_value else '' }}"
+              class="brl-input" style="width:100%;">
           </div>
           <button type="submit" class="btn btn-sm btn-primary">Salvar</button>
         </div>
@@ -1867,14 +1868,20 @@ function copyElenco() {
 
 <script>
 // ── Validação de teto de cachê (cache_cap) ────────────────────────────────────
+function parseBRL(v) {
+  return parseFloat((v || '0').replace(/\./g, '').replace(',', '.')) || 0;
+}
+function fmtBRL(n) {
+  return n.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
 document.querySelectorAll('input.cache-input[data-cap]').forEach(function(inp) {
-  const cap  = parseInt(inp.dataset.cap);
+  const cap  = parseFloat(inp.dataset.cap) || 0;
   const isSA = inp.dataset.isSuperadmin === 'true';
   const msgEl = inp.parentElement.querySelector('.cache-cap-msg');
   if (!cap) return;
 
   function check() {
-    const val = parseInt(inp.value) || 0;
+    const val = parseBRL(inp.value);
     if (val <= cap) {
       inp.style.borderColor = '';
       if (msgEl) msgEl.style.display = 'none';
@@ -1885,7 +1892,7 @@ document.querySelectorAll('input.cache-input[data-cap]').forEach(function(inp) {
       if (msgEl) {
         msgEl.style.display = '';
         msgEl.style.color   = '#92400e';
-        msgEl.textContent   = '⚠ Acima do calculado (R$ ' + cap + '). Autorizado para admin.';
+        msgEl.textContent   = '⚠ Acima do calculado (R$ ' + fmtBRL(cap) + '). Autorizado para admin.';
       }
       return true;
     } else {
@@ -1893,9 +1900,9 @@ document.querySelectorAll('input.cache-input[data-cap]').forEach(function(inp) {
       if (msgEl) {
         msgEl.style.display = '';
         msgEl.style.color   = '#b91c1c';
-        msgEl.textContent   = '⛔ Valor máximo: R$ ' + cap + '. Entre em contato com o administrador.';
+        msgEl.textContent   = '⛔ Valor máximo: R$ ' + fmtBRL(cap) + '. Entre em contato com o administrador.';
       }
-      inp.value = cap;
+      inp.value = fmtBRL(cap);
       return false;
     }
   }

@@ -311,9 +311,9 @@ class EventRole(db.Model):
     role_type = db.Column(db.String(20), nullable=False, default="character", server_default="character")
     # role_type: 'character' (personagens do evento) | 'extra' (transporte, maquiador, etc.)
     talent_id = db.Column(db.Integer, db.ForeignKey("talents.id"), nullable=True)
-    cache_value = db.Column(db.Integer, nullable=True)
-    cache_cap   = db.Column(db.Integer, nullable=True)   # valor máximo pré-calculado (do orçamento)
-    travel_cache = db.Column(db.Integer, nullable=True)  # adicional fora de SP
+    cache_value = db.Column(db.Numeric(10, 2), nullable=True)
+    cache_cap   = db.Column(db.Numeric(10, 2), nullable=True)   # valor máximo pré-calculado (do orçamento)
+    travel_cache = db.Column(db.Numeric(10, 2), nullable=True)  # adicional fora de SP
     assigned_at = db.Column(db.DateTime, nullable=True)
     figurino_done_at = db.Column(db.DateTime, nullable=True)
     figurino_sheet_id = db.Column(db.Integer, db.ForeignKey("figurino_sheets.id"), nullable=True)
