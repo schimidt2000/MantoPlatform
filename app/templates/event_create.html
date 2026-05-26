@@ -324,6 +324,13 @@
       {% endfor %}
     </select>
   </div>
+
+  <div class="form-group" style="margin-top:16px; margin-bottom:0;">
+    <label>Data da venda</label>
+    <input type="date" name="sale_date" style="width:auto;"
+           value="{{ today_str }}">
+    <p class="meta" style="margin-top:4px;">Data em que o contrato/venda foi fechado. Usada para calcular comissão do mês.</p>
+  </div>
 </div>
 
 {# ══════════════════════════════════════════════════

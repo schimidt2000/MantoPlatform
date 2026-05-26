@@ -11,9 +11,10 @@
   <table>
     <thead>
       <tr>
-        <th>Data</th>
+        <th>Data evento</th>
         <th>Evento</th>
         <th>Local</th>
+        <th>Data venda</th>
         <th style="text-align:right;">Venda</th>
         <th style="text-align:right;">Custo</th>
         {% if is_financeiro %}<th style="text-align:right;">Lucro</th>{% endif %}
@@ -34,6 +35,9 @@
         </td>
         <td>{{ e.title }}</td>
         <td>{{ e.location or "—" }}</td>
+        <td style="white-space:nowrap;" class="meta">
+          {{ e.sale_date.strftime("%d/%m/%Y") if e.sale_date else "—" }}
+        </td>
         <td style="text-align:right;">
           {% if venda %}{{ brl(venda) }}{% else %}<span style="color:var(--muted);">—</span>{% endif %}
         </td>
@@ -55,7 +59,7 @@
       </tr>
       {% else %}
       <tr>
-        <td colspan="{% if is_financeiro %}9{% else %}8{% endif %}" style="text-align:center;color:var(--muted);padding:40px 0;">
+        <td colspan="{% if is_financeiro %}10{% else %}9{% endif %}" style="text-align:center;color:var(--muted);padding:40px 0;">
           Nenhum evento encontrado.
         </td>
       </tr>

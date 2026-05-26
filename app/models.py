@@ -45,6 +45,7 @@ class User(db.Model, UserMixin):
     must_change_password = db.Column(db.Boolean, default=True)
     birth_date = db.Column(db.Date, nullable=True)
     profile_photo = db.Column(db.String(255), nullable=True)
+    receives_commission = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
 
     roles = db.relationship(
         "Role",
@@ -191,6 +192,7 @@ class CalendarEvent(db.Model):
 
     # financeiro
     sale_value = db.Column(db.Numeric(12, 2), nullable=True)
+    sale_date = db.Column(db.Date, nullable=True)  # data em que a venda foi fechada
     with_invoice = db.Column(db.Boolean, default=False, nullable=False)
     seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     commission_rate = db.Column(db.Float, nullable=True)  # null = usa SiteSetting.default_commission_rate
@@ -492,6 +494,46 @@ class SalaryHistory(db.Model):
     end_date = db.Column(db.Date, nullable=True)          # null = vigente atualmente
     notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class CommissionPayment(db.Model):
+    """Rastreamento individual de comissões de vendedores.
+
+    status:
+      a_pagar  — pendente de pagamento no próximo ciclo (dia 5)
+      pago     — marcado como pago pelo financeiro
+      cancelado — evento cancelado antes do pagamento; sem movimentação financeira
+
+    Para estorno (evento cancelado após pagamento), cria-se uma nova linha com
+    amount negativo e status='a_pagar', referenciando o registro original em original_id.
+    """
+    __tablename__ = "commission_payments"
+    __table_args__ = (
+        db.Index("ix_commission_payments_seller_id", "seller_id"),
+        db.Index("ix_commission_payments_event_id",  "event_id"),
+        db.Index("ix_commission_payments_status",    "status"),
+    )
+
+    id          = db.Column(db.Integer, primary_key=True)
+    event_id    = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
+    event_title = db.Column(db.String(200), nullable=False)  # cópia: persiste mesmo se evento for deletado
+    seller_id   = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    sale_date   = db.Column(db.Date, nullable=True)          # data da venda (herda do evento)
+    amount      = db.Column(db.Numeric(12, 2), nullable=False)  # positivo ou negativo (estorno)
+    status      = db.Column(db.String(20), nullable=False, default="a_pagar", server_default="a_pagar")
+    paid_at     = db.Column(db.Date, nullable=True)
+    notes       = db.Column(db.Text, nullable=True)
+    original_id = db.Column(db.Integer, db.ForeignKey("commission_payments.id"), nullable=True)
+    created_at  = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    seller   = db.relationship("User", foreign_keys=[seller_id], lazy=True)
+    event    = db.relationship(
+        "CalendarEvent",
+        foreign_keys=[event_id],
+        backref=db.backref("commission_payments", lazy=True),
+        lazy=True,
+    )
+    original = db.relationship("CommissionPayment", remote_side="CommissionPayment.id", lazy=True)
 
 
 @login_manager.user_loader

@@ -25,7 +25,7 @@ from .service import (
 )
 from .. import db
 from app.constants import RoleName
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, CRMDeal, AuditLog
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, CRMDeal, AuditLog, CommissionPayment
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -141,6 +141,26 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
     EventContract.query.filter_by(event_id=event.id).delete()
     EventPayment.query.filter_by(event_id=event.id).delete()
     EventRating.query.filter_by(event_id=event.id).delete()
+
+    # Comissões: se pendente, cancela; se paga, cria estorno
+    for cp in list(CommissionPayment.query.filter_by(event_id=event.id).all()):
+        if cp.status == "a_pagar":
+            cp.status = "cancelado"
+            cp.event_id = None  # desvincula antes do delete do evento
+        elif cp.status == "pago":
+            # cria estorno para descontar no próximo ciclo
+            db.session.add(CommissionPayment(
+                event_id=None,
+                event_title=cp.event_title,
+                seller_id=cp.seller_id,
+                sale_date=cp.sale_date,
+                amount=-cp.amount,
+                status="a_pagar",
+                original_id=cp.id,
+                notes=f"Estorno automático: evento cancelado",
+            ))
+            cp.event_id = None
+
     if also_from_google and event.google_event_id:
         try:
             delete_event(CALENDAR_ID, event.google_event_id)
@@ -617,6 +637,11 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     event.transport_value = _pf(request.form.get("transport_value", ""))
     event.acrescimo_value = _pf(request.form.get("acrescimo_value", ""))
     event.with_invoice    = request.form.get("with_invoice") == "1"
+    sale_date_raw = request.form.get("sale_date", "").strip()
+    try:
+        event.sale_date = date.fromisoformat(sale_date_raw) if sale_date_raw else event.sale_date
+    except ValueError:
+        pass
 
     inv_file = request.files.get("invoice_file")
     if inv_file and inv_file.filename:
@@ -659,6 +684,8 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         message=f"Atualizou dados comerciais: venda R$ {event.sale_value or 0}{'  (com NF)' if event.with_invoice else ''}",
         created_at=datetime.now(tz=tz_sp),
     ))
+    from app.financeiro.routes import _sync_commission_payment
+    _sync_commission_payment(event)
     db.session.commit()
 
 
@@ -1730,6 +1757,7 @@ def create_event():
             sellers=sellers,
             errors=[],
             prefill=prefill,
+            today_str=date.today().isoformat(),
         )
 
     # ── POST ────────────────────────────────────────────────────────────────
@@ -1746,6 +1774,11 @@ def create_event():
     acrescimo_value_raw = request.form.get("acrescimo_value", "").strip()
     with_invoice     = bool(request.form.get("with_invoice"))
     seller_id_raw    = request.form.get("seller_id", "").strip()
+    sale_date_raw    = request.form.get("sale_date", "").strip()
+    try:
+        sale_date_val = date.fromisoformat(sale_date_raw) if sale_date_raw else None
+    except ValueError:
+        sale_date_val = None
 
     # pagamento
     payment_method   = request.form.get("payment_method", "").strip() or None
@@ -1789,7 +1822,7 @@ def create_event():
 
     if errors:
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
-                               sellers=sellers, errors=errors, prefill={})
+                               sellers=sellers, errors=errors, prefill={}, today_str=date.today().isoformat())
 
     # Remove prefixo (TIPO) que o JS já inseriu no título para não duplicar
     clean_title = re.sub(r'^\s*\([^)]*\)\s*', '', title).strip() if title else title
@@ -1798,7 +1831,7 @@ def create_event():
         created = insert_event(CALENDAR_ID, gc_title, st, et, description=description, location=location)
     except RuntimeError as exc:
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
-                               sellers=sellers, errors=[str(exc)], prefill={})
+                               sellers=sellers, errors=[str(exc)], prefill={}, today_str=date.today().isoformat())
 
     def _parse_int(raw: str) -> int | None:
         try:
@@ -1839,6 +1872,7 @@ def create_event():
         needs_rehearsal      = needs_rehearsal,
         source               = "platform",
         sale_value           = _parse_decimal(sale_value_raw),
+        sale_date            = sale_date_val,
         transport_value      = _parse_decimal(transport_value_raw),
         acrescimo_value      = _parse_decimal(acrescimo_value_raw),
         with_invoice         = with_invoice,
@@ -1971,6 +2005,8 @@ def create_event():
     ))
     _log_sync("platform_created", event, actor=current_user.name,
               actor_role=", ".join(r.name for r in current_user.roles))
+    from app.financeiro.routes import _sync_commission_payment
+    _sync_commission_payment(event)
     db.session.commit()
     if needs_rehearsal:
         _notify_ensaio_team(event)

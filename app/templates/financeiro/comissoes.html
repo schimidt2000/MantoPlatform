@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Comissões de Vendas{% endblock %}
+{% block page_title %}Comissões de Vendas{% endblock %}
+{% block page_subtitle %}<p class="sub">Controle de comissões por ciclo mensal (pagamento no dia 5)</p>{% endblock %}
+
+{% block page_actions %}
+  <a href="{{ url_for('financeiro.dashboard') }}" class="btn btn-secondary">← Financeiro</a>
+{% endblock %}
+
+{% block content %}
+
+{# ── Filtro de mês ─────────────────────────────────────────────────────── #}
+<form method="get" style="margin-bottom:24px;">
+  <div class="flex-center gap-8" style="flex-wrap:wrap;">
+    <div class="form-group" style="margin:0;">
+      <label>Mês da venda</label>
+      <input type="month" name="month" value="{{ month }}" style="width:auto;">
+    </div>
+    <div style="align-self:flex-end;">
+      <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+    </div>
+  </div>
+</form>
+
+{# ── Estornos pendentes ────────────────────────────────────────────────── #}
+{% if estornos %}
+<div class="panel" style="border-left: 4px solid var(--red); margin-bottom:24px;">
+  <div class="panel-title" style="color:var(--red); margin-bottom:10px;">
+    ⚠ Estornos pendentes ({{ estornos | length }})
+  </div>
+  <p class="meta" style="margin-bottom:12px;">Comissões de eventos cancelados após pagamento — serão descontadas do próximo ciclo.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Vendedor</th>
+          <th>Evento (cancelado)</th>
+          <th>Data venda</th>
+          <th class="text-right">Valor</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cp in estornos %}
+        <tr>
+          <td>{{ cp.seller.name if cp.seller else "—" }}</td>
+          <td class="meta">{{ cp.event_title }}</td>
+          <td class="meta">{{ cp.sale_date.strftime("%d/%m/%Y") if cp.sale_date else "—" }}</td>
+          <td class="text-right" style="color:var(--red); font-weight:700;">
+            R$ {{ "%.2f"|format(cp.amount|float)|replace(".", ",")|replace(",",".",1) }}
+          </td>
+          <td>
+            <form method="post" action="{{ url_for('financeiro.set_commission_status') }}" style="display:inline;">
+              <input type="hidden" name="cp_id" value="{{ cp.id }}">
+              <input type="hidden" name="status" value="pago">
+              <input type="hidden" name="next" value="{{ request.url }}">
+              <button type="submit" class="btn btn-sm btn-ghost" style="font-size:11px;"
+                      onclick="return confirm('Marcar estorno como processado?')">
+                Marcar processado
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# ── Comissões do mês ──────────────────────────────────────────────────── #}
+<div class="panel">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+    <div>
+      <div class="panel-title">Comissões — {{ month }}</div>
+      <p class="meta" style="margin:0;">Filtrado por data da venda. Pagamento previsto: dia 5 do mês seguinte.</p>
+    </div>
+    {% set total_float = total_a_pagar | float %}
+    <div style="text-align:right;">
+      <div style="font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.5px;">Total a pagar</div>
+      <div style="font-size:22px; font-weight:800; font-variant-numeric:tabular-nums;
+                  color:{% if total_float >= 0 %}var(--green){% else %}var(--red){% endif %};">
+        R$ {{ "%.2f"|format(total_float)|replace(".", ",")|replace(",",".",1) }}
+      </div>
+    </div>
+  </div>
+
+  {% if entries %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Vendedor</th>
+          <th>Evento</th>
+          <th>Data venda</th>
+          <th class="text-right">Comissão</th>
+          <th>Status</th>
+          <th>Pago em</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cp in entries %}
+        <tr>
+          <td style="font-weight:600;">{{ cp.seller.name if cp.seller else "—" }}</td>
+          <td>
+            {% if cp.event_id %}
+              <a href="{{ url_for('calendar.event_detail', event_id=cp.event_id) }}"
+                 style="color:var(--ink); text-decoration:none;">{{ cp.event_title }}</a>
+            {% else %}
+              <span class="meta">{{ cp.event_title }}</span>
+            {% endif %}
+          </td>
+          <td class="meta" style="white-space:nowrap;">
+            {{ cp.sale_date.strftime("%d/%m/%Y") if cp.sale_date else "—" }}
+          </td>
+          <td class="text-right" style="font-weight:700; font-variant-numeric:tabular-nums;">
+            R$ {{ "%.2f"|format(cp.amount|float)|replace(".", ",")|replace(",",".",1) }}
+          </td>
+          <td>
+            {% if cp.status == "a_pagar" %}
+              <span class="badge badge-gold">A pagar</span>
+            {% elif cp.status == "pago" %}
+              <span class="badge badge-green">Pago</span>
+            {% else %}
+              <span class="badge badge-gray">{{ cp.status }}</span>
+            {% endif %}
+          </td>
+          <td class="meta" style="white-space:nowrap;">
+            {{ cp.paid_at.strftime("%d/%m/%Y") if cp.paid_at else "—" }}
+          </td>
+          <td>
+            {% if cp.status == "a_pagar" %}
+            <form method="post" action="{{ url_for('financeiro.set_commission_status') }}" style="display:inline;">
+              <input type="hidden" name="cp_id" value="{{ cp.id }}">
+              <input type="hidden" name="status" value="pago">
+              <input type="hidden" name="next" value="{{ request.url }}">
+              <button type="submit" class="btn btn-sm btn-primary" style="font-size:11px;">Marcar pago</button>
+            </form>
+            <form method="post" action="{{ url_for('financeiro.set_commission_status') }}" style="display:inline; margin-left:4px;">
+              <input type="hidden" name="cp_id" value="{{ cp.id }}">
+              <input type="hidden" name="status" value="cancelado">
+              <input type="hidden" name="next" value="{{ request.url }}">
+              <button type="submit" class="btn btn-sm btn-ghost" style="font-size:11px;"
+                      onclick="return confirm('Cancelar esta comissão?')">✕</button>
+            </form>
+            {% elif cp.status == "pago" %}
+            <form method="post" action="{{ url_for('financeiro.set_commission_status') }}" style="display:inline;">
+              <input type="hidden" name="cp_id" value="{{ cp.id }}">
+              <input type="hidden" name="status" value="a_pagar">
+              <input type="hidden" name="next" value="{{ request.url }}">
+              <button type="submit" class="btn btn-sm btn-ghost" style="font-size:11px;"
+                      onclick="return confirm('Reverter pagamento?')">Reverter</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="muted">Nenhuma comissão encontrada para {{ month }}.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

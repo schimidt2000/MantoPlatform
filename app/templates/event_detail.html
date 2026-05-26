@@ -1121,6 +1121,13 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       </div>
     </div>
 
+    <div class="form-group" style="margin-top:8px; margin-bottom:16px;">
+      <label>Data da venda</label>
+      <input type="date" name="sale_date" style="width:auto;"
+             value="{{ event.sale_date.strftime('%Y-%m-%d') if event.sale_date else '' }}">
+      <p class="meta" style="margin-top:4px;">Data em que o contrato/venda foi fechado.</p>
+    </div>
+
     {% if show_financeiro %}
     <hr class="sep">
     <div class="form-grid-2" style="margin-bottom: 16px;">

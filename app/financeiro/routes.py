@@ -10,7 +10,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from app import db
-from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, SalaryHistory, CRMDeal, CRMStage
+from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, SalaryHistory, CRMDeal, CRMStage, CommissionPayment
 from app.constants import RoleName
 
 financeiro_bp = Blueprint("financeiro", __name__)
@@ -57,10 +57,49 @@ def _event_cost(event) -> int:
 def _event_commission(event, settings) -> Decimal:
     if not event.sale_value:
         return Decimal("0")
+    if event.seller and not event.seller.receives_commission:
+        return Decimal("0")
     rate = _get_commission_rate(event, settings)
     return (Decimal(event.sale_value) * rate / Decimal("100")).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
+
+
+def _sync_commission_payment(event: CalendarEvent) -> None:
+    """Cria ou atualiza o CommissionPayment de um evento. Não faz commit."""
+    existing = CommissionPayment.query.filter_by(event_id=event.id).filter(
+        CommissionPayment.status != "cancelado"
+    ).first()
+
+    should_have = (
+        event.sale_value
+        and event.seller_id
+        and event.seller
+        and event.seller.receives_commission
+    )
+
+    if not should_have:
+        if existing and existing.status == "a_pagar":
+            existing.status = "cancelado"
+            existing.notes = (existing.notes or "") + " | Cancelado: sem comissão elegível"
+        return
+
+    amount = _event_commission(event, SiteSetting.query.get(1))
+    if existing:
+        if existing.status == "a_pagar":
+            existing.amount = amount
+            existing.sale_date = event.sale_date
+            existing.event_title = event.title
+        # Se já está pago, não alteramos o registro histórico
+    else:
+        db.session.add(CommissionPayment(
+            event_id=event.id,
+            event_title=event.title,
+            seller_id=event.seller_id,
+            sale_date=event.sale_date,
+            amount=amount,
+            status="a_pagar",
+        ))
 
 
 # ─── FINANCEIRO ROUTES ──────────────────────────────────────────────────────
@@ -116,7 +155,11 @@ def dashboard():
 
     events = (
         CalendarEvent.query
-        .filter(CalendarEvent.start_at >= start_dt, CalendarEvent.start_at <= end_dt)
+        .filter(
+            CalendarEvent.start_at >= start_dt,
+            CalendarEvent.start_at <= end_dt,
+            CalendarEvent.event_type != "ENSAIO",
+        )
         .order_by(CalendarEvent.start_at.desc())
         .all()
     )
@@ -237,6 +280,7 @@ def dashboard():
         evs = CalendarEvent.query.filter(
             CalendarEvent.start_at >= s_dt,
             CalendarEvent.start_at < e_dt,
+            CalendarEvent.event_type != "ENSAIO",
         ).all()
         rec = sum(e.sale_value or 0 for e in evs)
         cst = sum(_event_cost(e) for e in evs)
@@ -495,6 +539,7 @@ def pipeline():
 
     events = (
         CalendarEvent.query
+        .filter(CalendarEvent.event_type != "ENSAIO")
         .order_by(CalendarEvent.start_at.desc())
         .all()
     )
@@ -515,3 +560,96 @@ def pipeline():
         settings=settings,
         is_financeiro=is_financeiro,
     )
+
+
+# ─── COMISSÕES ROUTES ────────────────────────────────────────────────────────
+
+_COMMISSION_STATUS_LABELS = {
+    "a_pagar":  "A pagar",
+    "pago":     "Pago",
+    "cancelado": "Cancelado",
+}
+
+
+@financeiro_bp.route("/financeiro/comissoes")
+@login_required
+@require_financeiro
+def comissoes():
+    today = date.today()
+    month = request.args.get("month", today.strftime("%Y-%m"))
+    try:
+        year, mon = int(month[:4]), int(month[5:7])
+    except (ValueError, IndexError):
+        year, mon = today.year, today.month
+
+    start = date(year, mon, 1)
+    end = date(year + 1, 1, 1) if mon == 12 else date(year, mon + 1, 1)
+
+    # Comissões cujo sale_date cai no mês, ou sem sale_date mas criadas no mês
+    entries = (
+        CommissionPayment.query
+        .filter(
+            CommissionPayment.status.in_(["a_pagar", "pago"]),
+            db.or_(
+                db.and_(
+                    CommissionPayment.sale_date >= start,
+                    CommissionPayment.sale_date < end,
+                ),
+                db.and_(
+                    CommissionPayment.sale_date.is_(None),
+                    db.func.date(CommissionPayment.created_at) >= start,
+                    db.func.date(CommissionPayment.created_at) < end,
+                ),
+            ),
+        )
+        .order_by(CommissionPayment.sale_date.asc(), CommissionPayment.seller_id.asc())
+        .all()
+    )
+
+    # Estornos pendentes (gerados por cancelamentos de meses anteriores)
+    estornos = (
+        CommissionPayment.query
+        .filter(
+            CommissionPayment.status == "a_pagar",
+            CommissionPayment.amount < 0,
+        )
+        .order_by(CommissionPayment.created_at.asc())
+        .all()
+    )
+
+    total_a_pagar = sum(e.amount for e in entries if e.status == "a_pagar") + sum(e.amount for e in estornos)
+
+    # Vendedores elegíveis para seleção de mês
+    sellers = User.query.join(User.roles).filter(Role.name == RoleName.COMERCIAL).order_by(User.name).all()
+
+    return render_template(
+        "financeiro/comissoes.html",
+        entries=entries,
+        estornos=estornos,
+        total_a_pagar=total_a_pagar,
+        month=month,
+        sellers=sellers,
+        status_labels=_COMMISSION_STATUS_LABELS,
+    )
+
+
+@financeiro_bp.route("/financeiro/comissoes/set-status", methods=["POST"])
+@login_required
+@require_financeiro
+def set_commission_status():
+    cp_id  = request.form.get("cp_id")
+    status = request.form.get("status")
+    next_url = request.form.get("next", url_for("financeiro.comissoes"))
+    valid = {"a_pagar", "pago", "cancelado"}
+    if cp_id and status in valid:
+        cp = CommissionPayment.query.get(cp_id)
+        if cp:
+            old = cp.status
+            cp.status = status
+            if status == "pago":
+                cp.paid_at = date.today()
+            from app.utils import audit
+            audit("payment", "commission", cp.id, cp.seller.name if cp.seller else "—",
+                  f"Comissão: {old} → {status} | {cp.event_title}")
+            db.session.commit()
+    return redirect(next_url)
