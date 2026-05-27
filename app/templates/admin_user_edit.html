@@ -41,6 +41,21 @@
       </div>
 
       <div class="form-group">
+        <label>Chave PIX</label>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <input type="text" name="pix_key" value="{{ user.pix_key or '' }}"
+                 placeholder="CPF, e-mail, telefone ou chave aleatória"
+                 style="flex:1; min-width:200px;">
+          <select name="pix_key_type" style="width:160px;">
+            <option value="">— Tipo —</option>
+            {% for t in ['CPF', 'CNPJ', 'E-mail', 'Telefone', 'Aleatória'] %}
+              <option value="{{ t }}" {% if user.pix_key_type == t %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
         <label>Cargo (roles)</label>
         <div class="panel" style="margin:0; padding:12px;">
           {% for r in roles %}

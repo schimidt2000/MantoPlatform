@@ -46,6 +46,8 @@ class User(db.Model, UserMixin):
     birth_date = db.Column(db.Date, nullable=True)
     profile_photo = db.Column(db.String(255), nullable=True)
     receives_commission = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
+    pix_key = db.Column(db.String(120), nullable=True)
+    pix_key_type = db.Column(db.String(30), nullable=True)
 
     roles = db.relationship(
         "Role",
@@ -534,6 +536,36 @@ class CommissionPayment(db.Model):
         lazy=True,
     )
     original = db.relationship("CommissionPayment", remote_side="CommissionPayment.id", lazy=True)
+
+
+class SalaryPayment(db.Model):
+    """Registro gerado automaticamente de pagamento de salário.
+
+    Criado preguiçosamente ao carregar a planilha de pagamentos do mês.
+    payment_type herdado do SalaryHistory vigente:
+      semanal   → gerado para cada segunda-feira do mês
+      quinzenal → gerado para os dias 5 e 20 do mês
+    """
+    __tablename__ = "salary_payments"
+    __table_args__ = (
+        db.Index("ix_salary_payments_user_id",   "user_id"),
+        db.Index("ix_salary_payments_month_ref",  "month_ref"),
+        db.UniqueConstraint("user_id", "due_date", name="uq_salary_payment_user_due"),
+    )
+
+    id                = db.Column(db.Integer, primary_key=True)
+    user_id           = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    salary_history_id = db.Column(db.Integer, db.ForeignKey("salary_history.id"), nullable=True)
+    due_date          = db.Column(db.Date, nullable=False)
+    amount            = db.Column(db.Numeric(12, 2), nullable=False)
+    payment_status    = db.Column(db.String(20), nullable=False, default="nao_pago", server_default="nao_pago")
+    paid_at           = db.Column(db.Date, nullable=True)
+    notes             = db.Column(db.Text, nullable=True)
+    month_ref         = db.Column(db.String(7), nullable=False)  # YYYY-MM
+    created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    user           = db.relationship("User", backref=db.backref("salary_payments", lazy="dynamic"))
+    salary_history = db.relationship("SalaryHistory", lazy=True)
 
 
 @login_manager.user_loader

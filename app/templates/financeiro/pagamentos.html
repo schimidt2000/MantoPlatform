@@ -4,7 +4,7 @@
 {% block page_title %}Planilha de Pagamentos{% endblock %}
 
 {% block page_subtitle %}
-  <p class="sub">Cachês a pagar por evento — gerado automaticamente do casting</p>
+  <p class="sub">Cachês e salários a pagar — gerado automaticamente</p>
 {% endblock %}
 
 {% block page_actions %}
@@ -50,12 +50,12 @@
 
 {# ── Tabela ────────────────────────────────────────────────────── #}
 <div class="panel" style="padding:0; overflow-x:auto; padding-bottom:70px;">
-  {% if roles %}
+  {% if items %}
 
-  {# Barra de seleção em massa (fica invisível até selecionar algo) #}
+  {# Barra de seleção em massa #}
   <div id="bulk-bar" style="display:none; position:sticky; top:0; z-index:100;
        background:#1e1b4b; color:#fff; padding:10px 16px; border-bottom:2px solid #4338ca;
-       display:none; flex-wrap:wrap; gap:8px; align-items:center;">
+       flex-wrap:wrap; gap:8px; align-items:center;">
     <span id="bulk-count" style="font-weight:700; font-size:13px;"></span>
     <form id="bulk-form" method="post" action="/financeiro/pagamentos/bulk-action"
           style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
@@ -82,8 +82,8 @@
           <input type="checkbox" id="select-all" title="Selecionar tudo">
         </th>
         <th>Data</th>
-        <th>Evento</th>
-        <th>Função</th>
+        <th>Descrição</th>
+        <th>Função / Freq.</th>
         <th>Nome</th>
         <th style="text-align:right;">Valor</th>
         <th>PIX</th>
@@ -91,31 +91,40 @@
       </tr>
     </thead>
     <tbody>
-      {% for r in roles %}
-      {% set is_future = r.event.start_at and r.event.start_at.date() > today %}
-      {% set is_nao_pago = (r.payment_status or 'nao_pago') == 'nao_pago' %}
-      <tr class="{% if r.payment_status == 'pago' %}row-pago{% elif r.payment_status == 'no_banco' %}row-banco{% endif %}"
-          data-role-id="{{ r.id }}">
+      {% for item in items %}
+      {% set is_nao_pago = item.status == 'nao_pago' %}
+      <tr class="{% if item.status == 'pago' %}row-pago{% elif item.status == 'no_banco' %}row-banco{% endif %}
+                 {% if item.type == 'salary' %}row-salary{% endif %}"
+          data-item-type="{{ item.type }}" data-item-id="{{ item.id }}">
 
         {# Checkbox #}
         <td style="padding:8px 0 8px 12px;">
-          <input type="checkbox" class="row-check" value="{{ r.id }}">
+          <input type="checkbox" class="row-check"
+                 data-type="{{ item.type }}" data-id="{{ item.id }}">
         </td>
 
         {# Data #}
         <td class="meta" style="white-space:nowrap;">
-          {{ r.event.start_at.strftime("%d/%m/%Y") if r.event.start_at else '—' }}
+          {{ item.date.strftime("%d/%m/%Y") if item.date else '—' }}
         </td>
 
-        {# Evento com botão copiar #}
+        {# Descrição com badge tipo + botão copiar #}
         <td>
-          {% set ev_copy = (r.event.start_at.strftime("%d/%m/%Y") if r.event.start_at else '') + ' - ' + r.event.title %}
-          <div style="display:flex; align-items:center; gap:6px;">
-            <a href="/events/{{ r.event.id }}" style="font-weight:600; text-decoration:none; color:inherit;">
-              {{ r.event.title }}
-            </a>
-            <button type="button" class="copy-btn" data-copy="{{ ev_copy }}"
-                    title="Copiar nome e data">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            {% if item.type == 'salary' %}
+              <span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:10px;padding:1px 6px;">
+                Salário
+              </span>
+            {% endif %}
+            {% if item.event_id %}
+              <a href="/events/{{ item.event_id }}" style="font-weight:600; text-decoration:none; color:inherit;">
+                {{ item.event_title }}
+              </a>
+            {% else %}
+              <span style="font-weight:600;">{{ item.event_title }}</span>
+            {% endif %}
+            <button type="button" class="copy-btn" data-copy="{{ item.copy_label }}"
+                    title="Copiar descrição e data">
               <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
                 <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/>
@@ -124,19 +133,19 @@
           </div>
         </td>
 
-        {# Função #}
-        <td class="meta">{{ r.character_name }}</td>
+        {# Função / Frequência #}
+        <td class="meta">{{ item.sublabel }}</td>
 
         {# Nome #}
-        <td>{{ r.talent.full_name if r.talent else '—' }}</td>
+        <td>{{ item.person_name }}</td>
 
         {# Valor com botão copiar #}
         <td style="text-align:right; font-weight:600; white-space:nowrap;">
-          {% if r.cache_value %}
+          {% if item.amount %}
             <div style="display:flex; align-items:center; justify-content:flex-end; gap:4px;">
-              <span>R$ {{ r.cache_value | brl }}</span>
+              <span>R$ {{ item.amount | brl }}</span>
               <button type="button" class="copy-btn"
-                      data-copy="{{ "%.2f"|format(r.cache_value|float)|replace(".", ",") }}"
+                      data-copy="{{ "%.2f"|format(item.amount|float)|replace(".", ",") }}"
                       title="Copiar valor">
                 <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
@@ -149,18 +158,17 @@
 
         {# PIX com tipo e botão copiar #}
         <td style="font-size:11px; min-width:160px;">
-          {% if r.talent and r.talent.pix_key %}
-            {% set pix_clean = r.talent.pix_key | trim %}
+          {% if item.pix_key %}
             <div style="display:flex; align-items:flex-start; gap:4px;">
               <div>
-                <span style="word-break:break-all;">{{ pix_clean }}</span>
-                {% if r.talent.pix_key_type %}
+                <span style="word-break:break-all;">{{ item.pix_key }}</span>
+                {% if item.pix_key_type %}
                   <span style="display:block; font-size:10px; color:var(--muted); font-weight:600; margin-top:1px;">
-                    {{ r.talent.pix_key_type }}
+                    {{ item.pix_key_type }}
                   </span>
                 {% endif %}
               </div>
-              <button type="button" class="copy-btn" data-copy="{{ pix_clean }}"
+              <button type="button" class="copy-btn" data-copy="{{ item.pix_key }}"
                       title="Copiar chave PIX" style="flex-shrink:0; margin-top:1px;">
                 <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
@@ -175,14 +183,14 @@
 
         {# Situação #}
         <td>
-          {% if is_future and is_nao_pago %}
-            {# Evento futuro ainda não pago: mostrar badge "Futuro" mas permite alterar #}
+          {% if item.is_future and is_nao_pago %}
             <div style="display:flex; flex-direction:column; gap:4px;">
               <span class="badge" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:11px;">
                 ⏳ Futuro
               </span>
               <form method="post" action="/financeiro/pagamentos/set-status" style="margin:0;">
-                <input type="hidden" name="role_id" value="{{ r.id }}">
+                <input type="hidden" name="item_type" value="{{ item.type }}">
+                <input type="hidden" name="item_id" value="{{ item.id }}">
                 <input type="hidden" name="next" value="/financeiro/pagamentos?month={{ month }}">
                 <select name="payment_status" onchange="this.form.submit()"
                         class="pay-status-select pay-status-nao_pago" style="font-size:11px;">
@@ -194,13 +202,14 @@
             </div>
           {% else %}
             <form method="post" action="/financeiro/pagamentos/set-status">
-              <input type="hidden" name="role_id" value="{{ r.id }}">
+              <input type="hidden" name="item_type" value="{{ item.type }}">
+              <input type="hidden" name="item_id" value="{{ item.id }}">
               <input type="hidden" name="next" value="/financeiro/pagamentos?month={{ month }}">
               <select name="payment_status" onchange="this.form.submit()"
-                      class="pay-status-select pay-status-{{ r.payment_status or 'nao_pago' }}">
-                <option value="nao_pago" {% if (r.payment_status or 'nao_pago') == 'nao_pago' %}selected{% endif %}>Não pago</option>
-                <option value="pago"    {% if r.payment_status == 'pago' %}selected{% endif %}>Pago</option>
-                <option value="no_banco"{% if r.payment_status == 'no_banco' %}selected{% endif %}>No banco</option>
+                      class="pay-status-select pay-status-{{ item.status }}">
+                <option value="nao_pago" {% if item.status == 'nao_pago' %}selected{% endif %}>Não pago</option>
+                <option value="pago"     {% if item.status == 'pago' %}selected{% endif %}>Pago</option>
+                <option value="no_banco" {% if item.status == 'no_banco' %}selected{% endif %}>No banco</option>
               </select>
             </form>
           {% endif %}
@@ -212,9 +221,8 @@
 
   {% else %}
   <div style="padding:40px; text-align:center; color:var(--muted);">
-    Nenhum pagamento encontrado para
-    <strong>{{ month }}</strong>.
-    Verifique se há eventos com talentos atribuídos neste mês.
+    Nenhum pagamento encontrado para <strong>{{ month }}</strong>.
+    Verifique se há eventos com talentos atribuídos ou funcionários com salário ativo.
   </div>
   {% endif %}
 </div>
@@ -224,7 +232,6 @@
 
 {% block extra_scripts %}
 <style>
-  /* ── Status select ──────────────────────────────────────────── */
   .pay-status-select {
     font-size: 12px; padding: 3px 6px;
     border-radius: 6px; border: 1.5px solid; cursor: pointer;
@@ -234,14 +241,14 @@
   .pay-status-pago     { background:#e8f5e9; border-color:#2e7d32; color:#1b5e20; }
   .pay-status-no_banco { background:#e3f2fd; border-color:#1565c0; color:#0d47a1; }
 
-  /* ── Row tinting ────────────────────────────────────────────── */
   tr.row-pago:hover  td { background: #edf8ed; }
   tr.row-banco:hover td { background: #e8f2ff; }
   tr.row-pago  td { background: #f8fff8; }
   tr.row-banco td { background: #f3f8ff; }
+  tr.row-salary td { background: #fffbeb; }
+  tr.row-salary:hover td { background: #fef3c7; }
   tr.row-selected td { background: #ede9fe !important; }
 
-  /* ── Copy button ─────────────────────────────────────────────── */
   .copy-btn {
     background: none; border: none; cursor: pointer; padding: 2px 4px;
     color: var(--muted); border-radius: 4px; line-height: 1;
@@ -252,7 +259,6 @@
 </style>
 
 <script>
-// ── Seleção em massa ──────────────────────────────────────────────────────
 const selectAll = document.getElementById('select-all');
 const bulkBar   = document.getElementById('bulk-bar');
 const bulkCount = document.getElementById('bulk-count');
@@ -268,7 +274,6 @@ function updateBulkBar() {
   if (checked.length > 0) {
     bulkBar.style.display = 'flex';
     bulkCount.textContent = checked.length + ' selecionado' + (checked.length > 1 ? 's' : '');
-    // Colorir linhas selecionadas
     document.querySelectorAll('.row-check').forEach(function(cb) {
       cb.closest('tr').classList.toggle('row-selected', cb.checked);
     });
@@ -283,14 +288,17 @@ function updateBulkBar() {
 function bulkSubmit(action) {
   const checked = getChecked();
   if (!checked.length) return;
-  if (action === 'delete' && !confirm('Excluir ' + checked.length + ' atribuição(ões)? Isso remove os talentos do evento.')) return;
+  if (action === 'delete' && !confirm('Excluir ' + checked.length + ' item(ns)?')) return;
 
   document.getElementById('bulk-action-value').value = action;
-  // inject hidden role_id inputs into the form
   checkboxContainer.innerHTML = '';
   checked.forEach(function(cb) {
+    const type = cb.dataset.type;
+    const id   = cb.dataset.id;
     const h = document.createElement('input');
-    h.type = 'hidden'; h.name = 'role_ids'; h.value = cb.value;
+    h.type = 'hidden';
+    h.name = type === 'salary' ? 'salary_ids' : 'role_ids';
+    h.value = id;
     checkboxContainer.appendChild(h);
   });
   bulkForm.submit();
@@ -315,7 +323,7 @@ document.querySelectorAll('.row-check').forEach(function(cb) {
   cb.addEventListener('change', updateBulkBar);
 });
 
-// ── Botões de copiar ──────────────────────────────────────────────────────
+// Botões de copiar
 document.querySelectorAll('.copy-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
     const text = btn.dataset.copy || '';
@@ -328,7 +336,6 @@ document.querySelectorAll('.copy-btn').forEach(function(btn) {
         btn.classList.remove('copied');
       }, 1500);
     }).catch(function() {
-      // fallback para navegadores sem clipboard API
       const ta = document.createElement('textarea');
       ta.value = text.trim();
       ta.style.position = 'fixed'; ta.style.opacity = '0';

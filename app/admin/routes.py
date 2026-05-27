@@ -146,6 +146,8 @@ def edit_user(user_id: int):
         user.email = email
         user.is_active = is_active
         user.receives_commission = request.form.get("receives_commission") == "1"
+        user.pix_key = request.form.get("pix_key", "").strip() or None
+        user.pix_key_type = request.form.get("pix_key_type", "").strip() or None
         user.roles = Role.query.filter(Role.id.in_(role_ids)).all() if role_ids else []
         from app.utils import audit
         audit("edit", "user", user.id, user.name, f"Usuário editado: {user.email}")

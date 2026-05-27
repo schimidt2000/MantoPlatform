@@ -10,7 +10,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from app import db
-from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, SalaryHistory, CRMDeal, CRMStage, CommissionPayment
+from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, SalaryHistory, CRMDeal, CRMStage, CommissionPayment, SalaryPayment
 from app.constants import RoleName
 
 financeiro_bp = Blueprint("financeiro", __name__)
@@ -465,30 +465,142 @@ def _pagamentos_query(month_str: str):
     )
 
 
+def _mondays_in_month(year: int, month: int) -> list:
+    import calendar as cal_mod
+    _, last_day = cal_mod.monthrange(year, month)
+    return [date(year, month, d) for d in range(1, last_day + 1)
+            if date(year, month, d).weekday() == 0]
+
+
+def _ensure_salary_payments(year: int, month: int) -> None:
+    """Cria registros de SalaryPayment para o mês se ainda não existirem."""
+    import calendar as cal_mod
+    _, last_day = cal_mod.monthrange(year, month)
+    month_ref = f"{year:04d}-{month:02d}"
+    month_start = date(year, month, 1)
+    month_end = date(year, month, last_day)
+
+    active_histories = SalaryHistory.query.filter(
+        SalaryHistory.payment_type != "comissao",
+        SalaryHistory.start_date <= month_end,
+        db.or_(SalaryHistory.end_date.is_(None), SalaryHistory.end_date >= month_start),
+    ).all()
+
+    # Para cada usuário, pega o histórico mais recente vigente no mês
+    user_history: dict = {}
+    for h in active_histories:
+        if h.user_id not in user_history or h.start_date > user_history[h.user_id].start_date:
+            user_history[h.user_id] = h
+
+    for user_id, history in user_history.items():
+        if history.payment_type == "semanal":
+            due_dates = _mondays_in_month(year, month)
+        elif history.payment_type == "quinzenal":
+            due_dates = [d for d in [date(year, month, 5), date(year, month, 20)]
+                         if d.day <= last_day]
+        else:
+            continue
+
+        for due in due_dates:
+            exists = SalaryPayment.query.filter_by(
+                user_id=user_id, due_date=due
+            ).first()
+            if not exists:
+                db.session.add(SalaryPayment(
+                    user_id=user_id,
+                    salary_history_id=history.id,
+                    due_date=due,
+                    amount=Decimal(str(history.salary)),
+                    payment_status="nao_pago",
+                    month_ref=month_ref,
+                ))
+
+    db.session.commit()
+
+
+def _build_payment_items(roles, salary_payments, today: date) -> list:
+    """Combina cachês e salários em lista unificada ordenada por data."""
+    items = []
+    for r in roles:
+        ev_date = r.event.start_at.date() if r.event and r.event.start_at else date.min
+        pix = (r.talent.pix_key or "").strip() if r.talent else ""
+        pix_type = r.talent.pix_key_type if r.talent else ""
+        copy_label = (r.event.start_at.strftime("%d/%m/%Y") if r.event and r.event.start_at else "") \
+                     + " - " + (r.event.title if r.event else "")
+        items.append({
+            "type":       "cache",
+            "id":         r.id,
+            "date":       ev_date,
+            "event_title": r.event.title if r.event else "—",
+            "event_id":   r.event.id if r.event else None,
+            "copy_label": copy_label,
+            "sublabel":   r.character_name or "—",
+            "person_name": r.talent.full_name if r.talent else "—",
+            "amount":     r.cache_value,
+            "pix_key":    pix,
+            "pix_key_type": pix_type,
+            "status":     r.payment_status or "nao_pago",
+            "is_future":  ev_date > today,
+        })
+    for sp in salary_payments:
+        pix = (sp.user.pix_key or "").strip() if sp.user and sp.user.pix_key else ""
+        pix_type = sp.user.pix_key_type if sp.user else ""
+        freq = sp.salary_history.payment_type if sp.salary_history else "—"
+        copy_label = sp.due_date.strftime("%d/%m/%Y") + " - Salário " + (sp.user.name if sp.user else "")
+        items.append({
+            "type":        "salary",
+            "id":          sp.id,
+            "date":        sp.due_date,
+            "event_title": "Salário",
+            "event_id":    None,
+            "copy_label":  copy_label,
+            "sublabel":    freq,
+            "person_name": sp.user.name if sp.user else "—",
+            "amount":      sp.amount,
+            "pix_key":     pix,
+            "pix_key_type": pix_type,
+            "status":      sp.payment_status,
+            "is_future":   sp.due_date > today,
+        })
+    items.sort(key=lambda x: x["date"])
+    return items
+
+
 @financeiro_bp.route("/financeiro/pagamentos")
 @login_required
 @require_financeiro
 def pagamentos():
     today = date.today()
     month = request.args.get("month", today.strftime("%Y-%m"))
+    try:
+        year_i, month_i = int(month[:4]), int(month[5:7])
+    except (ValueError, IndexError):
+        year_i, month_i = today.year, today.month
+
+    _ensure_salary_payments(year_i, month_i)
+
     roles = _pagamentos_query(month)
+    salary_payments = SalaryPayment.query.filter_by(
+        month_ref=f"{year_i:04d}-{month_i:02d}"
+    ).order_by(SalaryPayment.due_date.asc()).all()
 
-    def _cv(r):
-        return Decimal(r.cache_value) if r.cache_value else Decimal("0")
+    items = _build_payment_items(roles, salary_payments, today)
 
-    total_val    = sum(_cv(r) for r in roles)
-    total_pago   = sum(_cv(r) for r in roles if r.payment_status == "pago")
-    total_banco  = sum(_cv(r) for r in roles if r.payment_status == "no_banco")
-    total_pend   = sum(_cv(r) for r in roles
-                       if r.payment_status == "nao_pago"
-                       and r.event and r.event.start_at.date() < today)
-    total_future = sum(_cv(r) for r in roles
-                       if r.payment_status == "nao_pago"
-                       and r.event and r.event.start_at.date() >= today)
+    def _amt(item):
+        v = item["amount"]
+        return Decimal(str(v)) if v else Decimal("0")
+
+    total_val    = sum(_amt(i) for i in items)
+    total_pago   = sum(_amt(i) for i in items if i["status"] == "pago")
+    total_banco  = sum(_amt(i) for i in items if i["status"] == "no_banco")
+    total_pend   = sum(_amt(i) for i in items
+                       if i["status"] == "nao_pago" and not i["is_future"])
+    total_future = sum(_amt(i) for i in items
+                       if i["status"] == "nao_pago" and i["is_future"])
 
     return render_template(
         "financeiro/pagamentos.html",
-        roles=roles,
+        items=items,
         month=month,
         today=today,
         status_labels=_STATUS_LABELS,
@@ -504,19 +616,35 @@ def pagamentos():
 @login_required
 @require_financeiro
 def set_payment_status():
-    role_id = request.form.get("role_id")
-    status  = request.form.get("payment_status")
-    next_url = request.form.get("next", url_for("financeiro.pagamentos"))
-    if role_id and status in _VALID_PAYMENT_STATUS:
-        role = EventRole.query.get(role_id)
+    item_type = request.form.get("item_type", "cache")
+    item_id   = request.form.get("item_id") or request.form.get("role_id")
+    status    = request.form.get("payment_status")
+    next_url  = request.form.get("next", url_for("financeiro.pagamentos"))
+
+    if not item_id or status not in _VALID_PAYMENT_STATUS:
+        return redirect(next_url)
+
+    from app.utils import audit
+    if item_type == "salary":
+        sp = SalaryPayment.query.get(int(item_id))
+        if sp:
+            old = sp.payment_status
+            sp.payment_status = status
+            if status == "pago":
+                sp.paid_at = date.today()
+            audit("payment", "salary_payment", sp.id, sp.user.name if sp.user else "—",
+                  f"Salário: {old} → {status}")
+            db.session.commit()
+    else:
+        role = EventRole.query.get(int(item_id))
         if role:
-            old_status = role.payment_status
+            old = role.payment_status
             role.payment_status = status
-            from app.utils import audit
             talent_name = role.talent.full_name if role.talent else "—"
             audit("payment", "event_role", role.id, talent_name,
-                  f"Pagamento: {old_status} → {status} | {role.character_name}")
+                  f"Pagamento: {old} → {status} | {role.character_name}")
             db.session.commit()
+
     return redirect(next_url)
 
 
@@ -524,34 +652,51 @@ def set_payment_status():
 @login_required
 @require_financeiro
 def bulk_payment_action():
-    action  = request.form.get("action")
-    ids     = request.form.getlist("role_ids")
-    month   = request.form.get("month", date.today().strftime("%Y-%m"))
-    next_url = url_for("financeiro.pagamentos", month=month)
+    action       = request.form.get("action")
+    role_ids     = request.form.getlist("role_ids")
+    salary_ids   = request.form.getlist("salary_ids")
+    month        = request.form.get("month", date.today().strftime("%Y-%m"))
+    next_url     = url_for("financeiro.pagamentos", month=month)
 
-    if not ids:
+    if not role_ids and not salary_ids:
         return redirect(next_url)
 
-    ids_int = [int(i) for i in ids if i.isdigit()]
+    from app.utils import audit
+
+    r_ids = [int(i) for i in role_ids if i.isdigit()]
+    s_ids = [int(i) for i in salary_ids if i.isdigit()]
 
     if action == "delete":
-        for rid in ids_int:
+        for rid in r_ids:
             role = EventRole.query.get(rid)
             if role:
                 db.session.delete(role)
-        from app.utils import audit
-        audit("delete", "event_role", None, "bulk", f"Excluídas {len(ids_int)} atribuições via pagamentos")
+        for sid in s_ids:
+            sp = SalaryPayment.query.get(sid)
+            if sp:
+                db.session.delete(sp)
+        audit("delete", "payment", None, "bulk",
+              f"Excluídos {len(r_ids)} cachês e {len(s_ids)} salários via pagamentos")
         db.session.commit()
     elif action in _VALID_PAYMENT_STATUS:
-        for rid in ids_int:
+        for rid in r_ids:
             role = EventRole.query.get(rid)
             if role:
                 old = role.payment_status
                 role.payment_status = action
-                from app.utils import audit
-                talent_name = role.talent.full_name if role.talent else "—"
-                audit("payment", "event_role", role.id, talent_name,
-                      f"Pagamento bulk: {old} → {action} | {role.character_name}")
+                audit("payment", "event_role", role.id,
+                      role.talent.full_name if role.talent else "—",
+                      f"Bulk: {old} → {action} | {role.character_name}")
+        for sid in s_ids:
+            sp = SalaryPayment.query.get(sid)
+            if sp:
+                old = sp.payment_status
+                sp.payment_status = action
+                if action == "pago":
+                    sp.paid_at = date.today()
+                audit("payment", "salary_payment", sp.id,
+                      sp.user.name if sp.user else "—",
+                      f"Bulk salário: {old} → {action}")
         db.session.commit()
 
     return redirect(next_url)
