@@ -1748,6 +1748,8 @@ document.querySelectorAll('.wa-copy-btn').forEach(function(btn) {
   });
 });
 
+</script>
+
 {# ── Modal exportar elenco ──────────────────────────────────── #}
 {% if eff_has_role('CASTING', 'COMERCIAL', 'SUPERADMIN') %}
 {% set cast_assigned = event.roles | selectattr('talent_id') | list %}
