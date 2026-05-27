@@ -425,12 +425,14 @@
             </form>
           {% endif %}
           {% if r.talent.phone_digits %}
-            <button type="button" class="btn btn-sm btn-ghost wa-btn"
+            <button type="button" class="btn btn-sm btn-ghost wa-copy-btn"
                style="font-size:11px; padding:3px 10px;"
                data-phone="{{ r.talent.phone_digits }}"
                data-name="{{ r.talent.full_name.split()[0] }}"
                data-cache="{{ r.cache_value | brl if r.cache_value else '' }}"
-               data-char="{{ r.character_name }}">📱 WhatsApp</button>
+               data-char="{{ r.character_name }}">📋 Copiar convite</button>
+            <a href="https://wa.me/55{{ r.talent.phone_digits }}" target="_blank"
+               class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</a>
           {% endif %}
         {% endif %}
 
@@ -554,12 +556,14 @@
             </form>
           {% endif %}
           {% if r.talent.phone_digits %}
-            <button type="button" class="btn btn-sm btn-ghost wa-btn"
+            <button type="button" class="btn btn-sm btn-ghost wa-copy-btn"
                style="font-size:11px; padding:3px 10px;"
                data-phone="{{ r.talent.phone_digits }}"
                data-name="{{ r.talent.full_name.split()[0] }}"
                data-cache="{{ r.cache_value | brl if r.cache_value else '' }}"
-               data-char="{{ r.character_name }}">📱 WhatsApp</button>
+               data-char="{{ r.character_name }}">📋 Copiar convite</button>
+            <a href="https://wa.me/55{{ r.talent.phone_digits }}" target="_blank"
+               class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</a>
           {% endif %}
         {% endif %}
 
@@ -1696,9 +1700,8 @@ const em = {
   ok:       E(0x2705),   // ✅
 };
 
-let _waPhone = '';
-
-function openWA(phone, firstName, cache, character) {
+// Monta a mensagem de convite para um talento
+function buildWAMsg(firstName, cache, character) {
   let msg = `Ola, ${firstName}! Voce tem um convite da Manto Producoes. ${em.festa}\n\n`;
   msg += `${em.evento} *${_evTitle}*\n`;
   msg += `${em.pessoa} Personagem: *${character}*\n`;
@@ -1727,73 +1730,23 @@ function openWA(phone, firstName, cache, character) {
   }
 
   msg += `\nAcesse o portal Manto para confirmar sua presença. ${em.ok}\nportal.mantoproducoes.com.br`;
-
-  // Exibe modal com a mensagem — cópia via innerText (igual ao orçamento)
-  _waPhone = phone;
-  document.getElementById('wa-msg-pre').textContent = msg;
-  document.getElementById('wa-msg-modal').style.display = 'flex';
+  return msg;
 }
 
-function copyWAMsg() {
-  const text = document.getElementById('wa-msg-pre').innerText;
-  const btn  = document.getElementById('wa-copy-btn');
-  navigator.clipboard.writeText(text)
-    .then(() => {
-      btn.textContent = 'Copiado!';
-      btn.classList.replace('btn-primary', 'btn-secondary');
-      setTimeout(() => {
-        btn.textContent = 'Copiar mensagem';
-        btn.classList.replace('btn-secondary', 'btn-primary');
-      }, 2000);
-    })
-    .catch(() => {
-      const r = document.createRange();
-      r.selectNodeContents(document.getElementById('wa-msg-pre'));
-      window.getSelection().removeAllRanges();
-      window.getSelection().addRange(r);
-      alert('Selecione e copie manualmente (Ctrl+C).');
-    });
-}
-
-function sendWAMsg() {
-  const text = document.getElementById('wa-msg-pre').innerText;
-  window.open('https://wa.me/55' + _waPhone + '?text=' + encodeURIComponent(text), '_blank');
-}
-
-// Botões WhatsApp — usa data-attributes (sem problemas de escaping de aspas no HTML)
-document.querySelectorAll('.wa-btn').forEach(function(btn) {
+// Botão "Copiar convite" — copia mensagem formatada para a área de transferência
+document.querySelectorAll('.wa-copy-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
-    openWA(btn.dataset.phone, btn.dataset.name, btn.dataset.cache || null, btn.dataset.char);
+    const msg = buildWAMsg(btn.dataset.name, btn.dataset.cache || null, btn.dataset.char);
+    navigator.clipboard.writeText(msg)
+      .then(function() {
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copiado!';
+        btn.style.color = 'var(--success, #16a34a)';
+        setTimeout(function() { btn.textContent = orig; btn.style.color = ''; }, 2000);
+      })
+      .catch(function() { alert('Não foi possível copiar. Tente novamente.'); });
   });
 });
-
-</script>
-
-{# ── Modal prévia mensagem WhatsApp ─────────────────────────── #}
-<div id="wa-msg-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6);
-     z-index:9998; align-items:center; justify-content:center; padding:16px;"
-     onclick="if(event.target===this) this.style.display='none'">
-  <div style="background:#fff; border-radius:var(--r-lg); padding:24px;
-              max-width:480px; width:100%; max-height:85vh; overflow-y:auto;
-              box-shadow:0 8px 32px rgba(0,0,0,.35);">
-    <div class="flex-between" style="margin-bottom:14px;">
-      <strong>Mensagem WhatsApp</strong>
-      <button onclick="document.getElementById('wa-msg-modal').style.display='none'"
-              style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);">×</button>
-    </div>
-    <pre id="wa-msg-pre" style="
-      background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md);
-      padding:14px; font-family:inherit; font-size:13px; line-height:1.6;
-      white-space:pre-wrap; word-break:break-word; margin-bottom:16px;
-      color:var(--text);"></pre>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button id="wa-copy-btn" onclick="copyWAMsg()" class="btn btn-primary btn-sm">Copiar mensagem</button>
-      <button onclick="sendWAMsg()" class="btn btn-secondary btn-sm">📱 Abrir WhatsApp</button>
-      <button onclick="document.getElementById('wa-msg-modal').style.display='none'"
-              class="btn btn-ghost btn-sm">Fechar</button>
-    </div>
-  </div>
-</div>
 
 {# ── Modal exportar elenco ──────────────────────────────────── #}
 {% if eff_has_role('CASTING', 'COMERCIAL', 'SUPERADMIN') %}
