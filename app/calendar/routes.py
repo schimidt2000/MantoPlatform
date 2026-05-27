@@ -172,8 +172,8 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
 def _cleanup_stale_events(items: list[dict], year: int, month: int) -> list[str]:
     """Remove do banco eventos do mês que foram deletados do Google Calendar.
 
-    Atua sobre eventos com source='google_calendar' OU source=NULL (legados).
-    Eventos com source='platform' e sem google_event_id nunca são tocados.
+    Atua sobre qualquer evento com google_event_id, independente do source.
+    Seguro: só é chamado quando fetch_events_for_month() respondeu com sucesso.
     Retorna lista de títulos dos eventos removidos.
     """
     live_ids = {item.get("id") for item in items if item.get("id")}
@@ -183,11 +183,10 @@ def _cleanup_stale_events(items: list[dict], year: int, month: int) -> list[str]
     stale = (
         CalendarEvent.query
         .filter(
-            # Inclui eventos com source NULL (legados pré-migration) e google_calendar
-            db.or_(
-                CalendarEvent.source == "google_calendar",
-                CalendarEvent.source.is_(None),
-            ),
+            # Qualquer evento com google_event_id que não existe mais no GCal é removido,
+            # independente do source (google_calendar, platform ou NULL).
+            # Seguro porque _cleanup_stale_events só é chamado quando o GCal respondeu
+            # com sucesso (fetch não lançou RuntimeError).
             CalendarEvent.google_event_id.isnot(None),
             CalendarEvent.start_at >= month_start_dt,
             CalendarEvent.start_at < month_end_dt,
@@ -2212,15 +2211,15 @@ def agenda_log():
 @calendar_bp.route("/events/<int:event_id>/delete", methods=["POST"])
 @login_required
 def delete_calendar_event(event_id: int):
-    """Exclui permanentemente um evento do banco (e opcionalmente do Google Calendar)."""
+    """Exclui permanentemente um evento do banco e do Google Calendar."""
     if not any(r.name.upper() in _CAN_DELETE for r in current_user.roles):
         abort(403)
     event = CalendarEvent.query.get_or_404(event_id)
-    also_google = request.form.get("also_google") == "1"
+    also_google = True  # sempre sincroniza com o GCal
     title = event.title
     _log_sync(
         "manual_deleted", event,
-        details="Também removido do Google Calendar" if also_google else None,
+        details="Removido do banco e do Google Calendar",
         actor=current_user.name,
         actor_role=", ".join(r.name for r in current_user.roles),
     )
