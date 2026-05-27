@@ -9,6 +9,7 @@ Lógica:
   - Descobre o mês mais distante com evento no banco (a partir de hoje)
   - Sincroniza todos os meses de hoje até esse mês + 2 meses de buffer
     (o buffer garante que novos eventos adicionados ao Google sejam capturados)
+  - Registra o resultado no AuditLog (visível em /admin/logs)
 """
 import sys
 import os
@@ -26,7 +27,7 @@ from app import create_app
 app = create_app()
 
 with app.app_context():
-    from app.models import CalendarEvent
+    from app.models import CalendarEvent, AuditLog
     from app.calendar.routes import sync_events, CALENDAR_ID, _mark_month_synced, _cleanup_stale_events
     from app.calendar.service import fetch_events_for_month
     from app import db
@@ -66,6 +67,7 @@ with app.app_context():
     )
 
     errors = 0
+    month_results = []
     for m in months:
         ym = f"{m.year:04d}-{m.month:02d}"
         try:
@@ -75,9 +77,32 @@ with app.app_context():
             _mark_month_synced(ym)
             suffix = f" ({removed} removido(s))" if removed else ""
             print(f"  ✓ {ym} — {len(items)} evento(s){suffix}", flush=True)
+            month_results.append(f"{ym}: {len(items)} eventos{suffix}")
         except Exception as e:
             errors += 1
             print(f"  ✗ {ym} — {e}", file=sys.stderr, flush=True)
+            month_results.append(f"{ym}: ERRO — {e}")
+
+    # Registra resultado no AuditLog para visibilidade em /admin/logs
+    status = "ok" if not errors else "erro"
+    detail = (
+        f"{len(months)} mês(es) sincronizado(s). {errors} erro(s). "
+        + " | ".join(month_results[:8])  # limita para não poluir o log
+        + (" [...]" if len(month_results) > 8 else "")
+    )
+    try:
+        db.session.add(AuditLog(
+            actor_name="sync_worker",
+            actor_role="Sistema",
+            entity_type="agenda",
+            entity_id=None,
+            entity_name=f"cron-{now.strftime('%Y-%m-%d %H:%M')}",
+            action=f"sync_{status}",
+            detail=detail,
+        ))
+        db.session.commit()
+    except Exception as log_exc:
+        print(f"  [warn] Não foi possível registrar no AuditLog: {log_exc}", file=sys.stderr, flush=True)
 
     print(f"[sync_worker] Concluído. {errors} erro(s).", flush=True)
     sys.exit(1 if errors else 0)

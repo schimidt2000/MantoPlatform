@@ -1,6 +1,6 @@
 import os
 from collections import defaultdict
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from functools import wraps
 
 from flask import Blueprint, render_template, request, redirect, url_for, current_app, flash
@@ -352,6 +352,86 @@ def portal_announcement():
 
 
 # ─── PAINEL DE DESEMPENHO ─────────────────────────────────────────────────────
+
+@admin_bp.route("/sync", methods=["GET", "POST"])
+@login_required
+@require_superadmin
+def sync_status():
+    """Painel de status do sync Google Calendar → banco."""
+    import json as _json
+    from datetime import date as _date
+    from app.models import SiteSetting, CalendarEvent
+
+    settings = SiteSetting.query.get(1)
+    raw_cache = _json.loads(settings.calendar_sync_cache) if settings and settings.calendar_sync_cache else {}
+
+    # Meses com eventos no banco (todos, inclusive passados)
+    all_events = CalendarEvent.query.with_entities(CalendarEvent.start_at).all()
+    months_in_db: set[str] = set()
+    for ev in all_events:
+        if ev.start_at:
+            months_in_db.add(f"{ev.start_at.year:04d}-{ev.start_at.month:02d}")
+
+    now = datetime.utcnow()
+    months_info = []
+    for ym in sorted(months_in_db, reverse=True):
+        ts_str = raw_cache.get(ym)
+        if ts_str:
+            age_min = int((now - datetime.fromisoformat(ts_str)).total_seconds() // 60)
+            fresh = age_min < 20
+        else:
+            age_min = None
+            fresh = False
+        y_int, m_int = int(ym[:4]), int(ym[5:7])
+        m_start = datetime(y_int, m_int, 1)
+        m_end = datetime(y_int + 1, 1, 1) if m_int == 12 else datetime(y_int, m_int + 1, 1)
+        count = CalendarEvent.query.filter(
+            CalendarEvent.start_at >= m_start,
+            CalendarEvent.start_at < m_end,
+        ).count()
+        months_info.append({"ym": ym, "age_min": age_min, "fresh": fresh, "count": count})
+
+    msg = None
+    error = None
+    cleanup_result = None
+    if request.method == "POST":
+        action = request.form.get("action", "")
+        if action == "cleanup_past":
+            # Importa só quando necessário para não poluir o namespace global
+            from app.calendar.routes import sync_events as _sync_events, _cleanup_stale_events, _mark_month_synced, CALENDAR_ID as _CAL_ID
+            from app.calendar.service import fetch_events_for_month as _fetch
+
+            today = _date.today()
+            past_months = [ym for ym in sorted(months_in_db) if ym < f"{today.year:04d}-{today.month:02d}"]
+            results = []
+            for ym in past_months:
+                y, m = int(ym[:4]), int(ym[5:7])
+                try:
+                    items = _fetch(_CAL_ID, y, m)
+                    _sync_events(items)
+                    removed = _cleanup_stale_events(items, y, m)
+                    _mark_month_synced(ym)
+                    results.append({"ym": ym, "removed": removed, "ok": True})
+                except Exception as exc:
+                    results.append({"ym": ym, "removed": 0, "ok": False, "err": str(exc)})
+            cleanup_result = results
+            total_removed = sum(r["removed"] for r in results)
+            errors_count = sum(1 for r in results if not r["ok"])
+            if errors_count:
+                error = f"Limpeza concluída com {errors_count} erro(s). {total_removed} evento(s) removido(s)."
+            else:
+                msg = f"Limpeza concluída: {total_removed} evento(s) fantasma(s) removido(s) em {len(past_months)} mês(es)."
+
+    return render_template(
+        "admin_sync.html",
+        months_info=months_info,
+        msg=msg,
+        error=error,
+        cleanup_result=cleanup_result,
+        active="sync",
+        title="Admin - Sync Agenda",
+    )
+
 
 @admin_bp.route("/desempenho")
 @login_required

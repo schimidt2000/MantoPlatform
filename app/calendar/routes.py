@@ -894,12 +894,17 @@ def event_detail(event_id: int):
     if event.start_at:
         event_start = _naive(event.start_at)
         event_end = _naive(event.end_at or (event.start_at + timedelta(hours=2)))
+        # Ignora conflitos com eventos de meses anteriores ao atual — evita "fantasmas"
+        # de eventos já deletados do Google Calendar que ainda existem no banco.
+        _today = date.today()
+        _conflict_cutoff = datetime(_today.year, _today.month, 1)
         for t in talents:
             conflicts = (
                 EventRole.query.join(CalendarEvent)
                 .filter(
                     EventRole.talent_id == t.id,
                     CalendarEvent.id != event.id,
+                    CalendarEvent.start_at >= _conflict_cutoff,
                 )
                 .all()
             )

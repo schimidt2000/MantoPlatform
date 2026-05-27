@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Sync Agenda{% endblock %}
+{% block page_title %}Status do Sync — Google Calendar{% endblock %}
+{% block page_actions %}
+  <a class="btn btn-ghost" href="/admin/">← Admin</a>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; flex-direction:column; gap:16px; max-width:860px;">
+
+  {% if msg %}
+    <div class="alert alert-success">{{ msg }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+  {% endif %}
+
+  {% if cleanup_result %}
+  <div class="panel">
+    <h3 style="margin-bottom:12px;">Resultado da limpeza</h3>
+    <table class="table" style="font-size:13px;">
+      <thead><tr><th>Mês</th><th>Fantasmas removidos</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for r in cleanup_result %}
+        <tr>
+          <td>{{ r.ym }}</td>
+          <td>{{ r.removed }}</td>
+          <td>
+            {% if r.ok %}
+              <span style="color:var(--success);">✓ OK</span>
+            {% else %}
+              <span style="color:var(--danger);">✗ {{ r.err }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="panel">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
+      <h3 style="margin:0;">Meses no banco</h3>
+      <form method="post">
+        <input type="hidden" name="action" value="cleanup_past">
+        <button class="btn btn-secondary" type="submit"
+                onclick="return confirm('Isso vai buscar todos os meses passados no Google Calendar e remover eventos que não existem mais. Pode demorar alguns segundos. Continuar?')">
+          Limpar fantasmas dos meses passados
+        </button>
+      </form>
+    </div>
+
+    <p class="muted" style="margin-bottom:12px; font-size:13px;">
+      "Fresco" = sincronizado há menos de 20 min. O cron roda a cada 10 min — se um mês está desatualizado há muito tempo, o cron pode estar falhando.
+    </p>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Mês</th>
+          <th>Eventos no banco</th>
+          <th>Último sync</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in months_info %}
+        <tr>
+          <td><strong>{{ m.ym }}</strong></td>
+          <td>{{ m.count }}</td>
+          <td>
+            {% if m.age_min is not none %}
+              {% if m.age_min < 60 %}
+                há {{ m.age_min }} min
+              {% elif m.age_min < 1440 %}
+                há {{ (m.age_min // 60) }}h{{ (m.age_min % 60) }}min
+              {% else %}
+                há {{ (m.age_min // 1440) }}d
+              {% endif %}
+            {% else %}
+              <span class="muted">Nunca</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if m.fresh %}
+              <span class="badge" style="background:var(--success);color:#fff;">Fresco</span>
+            {% elif m.age_min is not none %}
+              <span class="badge" style="background:var(--warning, #b45309);color:#fff;">Desatualizado</span>
+            {% else %}
+              <span class="badge" style="background:var(--muted-bg, #374151);color:var(--text);">Nunca sincronizado</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+          <tr><td colspan="4" class="muted">Nenhum evento no banco.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin-bottom:8px;">Como o sync funciona</h3>
+    <ul style="font-size:13px; color:var(--text-muted); margin:0; padding-left:20px; line-height:1.8;">
+      <li>O <strong>cron Railway</strong> (<code>remarkable-truth</code>) roda <code>python sync_worker.py</code> a cada 10 minutos.</li>
+      <li>Ele sincroniza do mês atual até o mês do último evento no banco + 2 meses de buffer.</li>
+      <li>Se o cron falhar (token OAuth expirado, timeout de rede), o mês fica "desatualizado" e o primeiro usuário que abrir aquela página da agenda aciona o sync lento.</li>
+      <li>O botão acima faz uma limpeza retroativa: busca cada mês passado no Google Calendar e remove do banco qualquer evento que não existe mais lá.</li>
+      <li><strong>Branch do Railway</strong>: correto usar o mesmo branch (<code>main</code>) que o app principal. Não mudar.</li>
+    </ul>
+  </div>
+
+</div>
+{% endblock %}
