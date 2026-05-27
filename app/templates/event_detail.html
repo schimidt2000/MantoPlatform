@@ -425,14 +425,12 @@
             </form>
           {% endif %}
           {% if r.talent.phone_digits %}
-            <button type="button"
-               onclick="openWA(
-                 {{ r.talent.phone_digits | tojson }},
-                 {{ r.talent.full_name.split()[0] | tojson }},
-                 {{ r.cache_value | tojson }},
-                 {{ r.character_name | tojson }}
-               );"
-               class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</button>
+            <button type="button" class="btn btn-sm btn-ghost wa-btn"
+               style="font-size:11px; padding:3px 10px;"
+               data-phone="{{ r.talent.phone_digits }}"
+               data-name="{{ r.talent.full_name.split()[0] }}"
+               data-cache="{{ r.cache_value | brl if r.cache_value else '' }}"
+               data-char="{{ r.character_name }}">📱 WhatsApp</button>
           {% endif %}
         {% endif %}
 
@@ -556,14 +554,12 @@
             </form>
           {% endif %}
           {% if r.talent.phone_digits %}
-            <button type="button"
-               onclick="openWA(
-                 {{ r.talent.phone_digits | tojson }},
-                 {{ r.talent.full_name.split()[0] | tojson }},
-                 {{ r.cache_value | tojson }},
-                 {{ r.character_name | tojson }}
-               );"
-               class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</button>
+            <button type="button" class="btn btn-sm btn-ghost wa-btn"
+               style="font-size:11px; padding:3px 10px;"
+               data-phone="{{ r.talent.phone_digits }}"
+               data-name="{{ r.talent.full_name.split()[0] }}"
+               data-cache="{{ r.cache_value | brl if r.cache_value else '' }}"
+               data-char="{{ r.character_name }}">📱 WhatsApp</button>
           {% endif %}
         {% endif %}
 
@@ -1763,6 +1759,13 @@ function sendWAMsg() {
   const text = document.getElementById('wa-msg-pre').innerText;
   window.open('https://wa.me/55' + _waPhone + '?text=' + encodeURIComponent(text), '_blank');
 }
+
+// Botões WhatsApp — usa data-attributes (sem problemas de escaping de aspas no HTML)
+document.querySelectorAll('.wa-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    openWA(btn.dataset.phone, btn.dataset.name, btn.dataset.cache || null, btn.dataset.char);
+  });
+});
 
 </script>
 
