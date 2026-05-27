@@ -425,14 +425,14 @@
             </form>
           {% endif %}
           {% if r.talent.phone_digits %}
-            <a href="#"
+            <button type="button"
                onclick="openWA(
-                 '{{ r.talent.phone_digits }}',
-                 '{{ r.talent.full_name.split()[0] }}',
+                 {{ r.talent.phone_digits | tojson }},
+                 {{ r.talent.full_name.split()[0] | tojson }},
                  {{ r.cache_value | tojson }},
-                 '{{ r.character_name | replace("'", "\\'") }}'
-               ); return false;"
-               class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</a>
+                 {{ r.character_name | tojson }}
+               );"
+               class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</button>
           {% endif %}
         {% endif %}
 
@@ -556,14 +556,14 @@
             </form>
           {% endif %}
           {% if r.talent.phone_digits %}
-            <a href="#"
+            <button type="button"
                onclick="openWA(
-                 '{{ r.talent.phone_digits }}',
-                 '{{ r.talent.full_name.split()[0] }}',
+                 {{ r.talent.phone_digits | tojson }},
+                 {{ r.talent.full_name.split()[0] | tojson }},
                  {{ r.cache_value | tojson }},
-                 '{{ r.character_name | replace("'", "\\'") }}'
-               ); return false;"
-               class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</a>
+                 {{ r.character_name | tojson }}
+               );"
+               class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</button>
           {% endif %}
         {% endif %}
 
@@ -1760,7 +1760,8 @@ function copyWAMsg() {
 }
 
 function sendWAMsg() {
-  window.open('https://wa.me/55' + _waPhone, '_blank');
+  const text = document.getElementById('wa-msg-pre').innerText;
+  window.open('https://wa.me/55' + _waPhone + '?text=' + encodeURIComponent(text), '_blank');
 }
 
 </script>
