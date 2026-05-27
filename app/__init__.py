@@ -299,7 +299,11 @@ def create_app():
             future_shows = (
                 CalendarEvent.query
                 .filter(
-                    CalendarEvent.needs_rehearsal == True,
+                    db.or_(
+                        CalendarEvent.needs_rehearsal == True,
+                        CalendarEvent.event_type == "SHOW",
+                    ),
+                    CalendarEvent.event_type != "ENSAIO",
                     CalendarEvent.start_at >= datetime.utcnow(),
                 )
                 .order_by(CalendarEvent.start_at.asc())
