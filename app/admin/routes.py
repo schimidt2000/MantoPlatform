@@ -401,26 +401,27 @@ def sync_status():
             from app.calendar.routes import sync_events as _sync_events, _cleanup_stale_events, _mark_month_synced, CALENDAR_ID as _CAL_ID
             from app.calendar.service import fetch_events_for_month as _fetch
 
-            today = _date.today()
-            past_months = [ym for ym in sorted(months_in_db) if ym < f"{today.year:04d}-{today.month:02d}"]
+            # Limpa TODOS os meses com eventos no banco — incluindo mês atual e futuros.
+            # Isso garante que eventos fantasma de qualquer mês sejam removidos.
+            all_months = sorted(months_in_db)
             results = []
-            for ym in past_months:
+            for ym in all_months:
                 y, m = int(ym[:4]), int(ym[5:7])
                 try:
                     items = _fetch(_CAL_ID, y, m)
                     _sync_events(items)
-                    removed = _cleanup_stale_events(items, y, m)
+                    removed_titles = _cleanup_stale_events(items, y, m)
                     _mark_month_synced(ym)
-                    results.append({"ym": ym, "removed": removed, "ok": True})
+                    results.append({"ym": ym, "removed": len(removed_titles), "titles": removed_titles, "ok": True})
                 except Exception as exc:
-                    results.append({"ym": ym, "removed": 0, "ok": False, "err": str(exc)})
+                    results.append({"ym": ym, "removed": 0, "titles": [], "ok": False, "err": str(exc)})
             cleanup_result = results
             total_removed = sum(r["removed"] for r in results)
             errors_count = sum(1 for r in results if not r["ok"])
             if errors_count:
-                error = f"Limpeza concluída com {errors_count} erro(s). {total_removed} evento(s) removido(s)."
+                error = f"Limpeza concluída com {errors_count} erro(s). {total_removed} evento(s) fantasma(s) removido(s)."
             else:
-                msg = f"Limpeza concluída: {total_removed} evento(s) fantasma(s) removido(s) em {len(past_months)} mês(es)."
+                msg = f"Limpeza concluída: {total_removed} evento(s) fantasma(s) removido(s) em {len(all_months)} mês(es)."
 
     return render_template(
         "admin_sync.html",

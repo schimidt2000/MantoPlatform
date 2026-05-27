@@ -73,8 +73,9 @@ with app.app_context():
         try:
             items = fetch_events_for_month(CALENDAR_ID, m.year, m.month)
             sync_events(items)
-            removed = _cleanup_stale_events(items, m.year, m.month)
+            removed_titles = _cleanup_stale_events(items, m.year, m.month)
             _mark_month_synced(ym)
+            removed = len(removed_titles)
             suffix = f" ({removed} removido(s))" if removed else ""
             print(f"  ✓ {ym} — {len(items)} evento(s){suffix}", flush=True)
             month_results.append(f"{ym}: {len(items)} eventos{suffix}")

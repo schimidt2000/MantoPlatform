@@ -169,12 +169,12 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
     db.session.delete(event)
 
 
-def _cleanup_stale_events(items: list[dict], year: int, month: int) -> int:
+def _cleanup_stale_events(items: list[dict], year: int, month: int) -> list[str]:
     """Remove do banco eventos do mês que foram deletados do Google Calendar.
 
-    Só atua sobre eventos com source='google_calendar'. Eventos criados pela
-    plataforma nunca são removidos automaticamente pelo sync.
-    Retorna o número de eventos removidos.
+    Atua sobre eventos com source='google_calendar' OU source=NULL (legados).
+    Eventos com source='platform' e sem google_event_id nunca são tocados.
+    Retorna lista de títulos dos eventos removidos.
     """
     live_ids = {item.get("id") for item in items if item.get("id")}
     month_start_dt = datetime(year, month, 1)
@@ -183,7 +183,11 @@ def _cleanup_stale_events(items: list[dict], year: int, month: int) -> int:
     stale = (
         CalendarEvent.query
         .filter(
-            CalendarEvent.source == "google_calendar",
+            # Inclui eventos com source NULL (legados pré-migration) e google_calendar
+            db.or_(
+                CalendarEvent.source == "google_calendar",
+                CalendarEvent.source.is_(None),
+            ),
             CalendarEvent.google_event_id.isnot(None),
             CalendarEvent.start_at >= month_start_dt,
             CalendarEvent.start_at < month_end_dt,
@@ -191,17 +195,17 @@ def _cleanup_stale_events(items: list[dict], year: int, month: int) -> int:
         .all()
     )
 
-    deleted = 0
+    removed_titles: list[str] = []
     for ev in stale:
         if ev.google_event_id not in live_ids:
             _log_sync("auto_deleted", ev, details=f"Não encontrado no Google Calendar ({year}-{month:02d})")
+            removed_titles.append(ev.title)
             _delete_event(ev)
-            deleted += 1
 
-    if deleted:
+    if removed_titles:
         db.session.commit()
 
-    return deleted
+    return removed_titles
 
 
 def _log_sync(

@@ -18,21 +18,34 @@
   {% if cleanup_result %}
   <div class="panel">
     <h3 style="margin-bottom:12px;">Resultado da limpeza</h3>
+    {% set total_removed = cleanup_result | selectattr('removed') | map(attribute='removed') | sum %}
+    {% if total_removed == 0 %}
+      <p class="muted">Nenhum evento fantasma encontrado. O banco está limpo.</p>
+    {% endif %}
     <table class="table" style="font-size:13px;">
-      <thead><tr><th>Mês</th><th>Fantasmas removidos</th><th>Status</th></tr></thead>
+      <thead><tr><th>Mês</th><th>Eventos removidos</th><th>Status</th></tr></thead>
       <tbody>
         {% for r in cleanup_result %}
-        <tr>
+        {% if r.removed or not r.ok %}
+        <tr style="vertical-align:top;">
           <td>{{ r.ym }}</td>
-          <td>{{ r.removed }}</td>
+          <td>
+            {{ r.removed }}
+            {% if r.titles %}
+              <ul style="margin:4px 0 0; padding-left:16px; color:var(--danger);">
+                {% for t in r.titles %}<li>{{ t }}</li>{% endfor %}
+              </ul>
+            {% endif %}
+          </td>
           <td>
             {% if r.ok %}
-              <span style="color:var(--success);">✓ OK</span>
+              <span style="color:var(--success);">✓ Limpo</span>
             {% else %}
               <span style="color:var(--danger);">✗ {{ r.err }}</span>
             {% endif %}
           </td>
         </tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
@@ -40,20 +53,21 @@
   {% endif %}
 
   <div class="panel">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
-      <h3 style="margin:0;">Meses no banco</h3>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+      <div>
+        <h3 style="margin:0 0 4px;">Meses no banco</h3>
+        <p class="muted" style="font-size:12px; margin:0;">
+          "Fresco" = sincronizado há menos de 20 min (cron roda a cada 10 min).
+        </p>
+      </div>
       <form method="post">
         <input type="hidden" name="action" value="cleanup_past">
-        <button class="btn btn-secondary" type="submit"
-                onclick="return confirm('Isso vai buscar todos os meses passados no Google Calendar e remover eventos que não existem mais. Pode demorar alguns segundos. Continuar?')">
-          Limpar fantasmas dos meses passados
+        <button class="btn btn-danger" type="submit"
+                onclick="return confirm('Isso vai buscar TODOS os meses no Google Calendar (passado, atual e futuro) e remover do banco qualquer evento que não existe mais lá — incluindo eventos fantasma com talentos atribuídos. Pode demorar alguns segundos. Continuar?')">
+          Limpar todos os eventos fantasma
         </button>
       </form>
     </div>
-
-    <p class="muted" style="margin-bottom:12px; font-size:13px;">
-      "Fresco" = sincronizado há menos de 20 min. O cron roda a cada 10 min — se um mês está desatualizado há muito tempo, o cron pode estar falhando.
-    </p>
 
     <table class="table">
       <thead>
@@ -86,7 +100,7 @@
             {% if m.fresh %}
               <span class="badge" style="background:var(--success);color:#fff;">Fresco</span>
             {% elif m.age_min is not none %}
-              <span class="badge" style="background:var(--warning, #b45309);color:#fff;">Desatualizado</span>
+              <span class="badge" style="background:#b45309;color:#fff;">Desatualizado</span>
             {% else %}
               <span class="badge" style="background:var(--muted-bg, #374151);color:var(--text);">Nunca sincronizado</span>
             {% endif %}
@@ -99,14 +113,26 @@
     </table>
   </div>
 
+  <div class="panel" style="border-left: 3px solid #b45309;">
+    <h3 style="margin-bottom:8px;">O que acontece com eventos fantasma?</h3>
+    <ul style="font-size:13px; margin:0; padding-left:20px; line-height:1.9;">
+      <li>Talentos atribuídos a eles continuam <strong>vendo o evento no portal</strong> (convite pendente ou confirmado).</li>
+      <li>Aparecem como <strong>conflito</strong> ao tentar adicionar o talento em outro evento.</li>
+      <li>Geram <strong>entradas na tela de pagamentos</strong> (cachê a pagar).</li>
+      <li>O botão acima remove tudo isso: deleta o evento do banco junto com os roles, logs de eventos e entradas de pagamento associados.</li>
+    </ul>
+    <p style="font-size:12px; margin-top:8px;" class="muted">
+      Após clicar, verifique o portal de um talento afetado para confirmar que o evento sumiu.
+    </p>
+  </div>
+
   <div class="panel">
-    <h3 style="margin-bottom:8px;">Como o sync funciona</h3>
+    <h3 style="margin-bottom:8px;">Arquitetura do sync</h3>
     <ul style="font-size:13px; color:var(--text-muted); margin:0; padding-left:20px; line-height:1.8;">
-      <li>O <strong>cron Railway</strong> (<code>remarkable-truth</code>) roda <code>python sync_worker.py</code> a cada 10 minutos.</li>
-      <li>Ele sincroniza do mês atual até o mês do último evento no banco + 2 meses de buffer.</li>
-      <li>Se o cron falhar (token OAuth expirado, timeout de rede), o mês fica "desatualizado" e o primeiro usuário que abrir aquela página da agenda aciona o sync lento.</li>
-      <li>O botão acima faz uma limpeza retroativa: busca cada mês passado no Google Calendar e remove do banco qualquer evento que não existe mais lá.</li>
-      <li><strong>Branch do Railway</strong>: correto usar o mesmo branch (<code>main</code>) que o app principal. Não mudar.</li>
+      <li>O cron Railway (<code>remarkable-truth</code>) roda <code>python sync_worker.py</code> a cada 10 min.</li>
+      <li>Sincroniza do mês atual até o mês do último evento + 2 meses de buffer.</li>
+      <li>Se o cron falhar (token OAuth expirado, timeout de rede), o resultado aparece em <a href="/admin/logs?entity_type=agenda">Logs (actor=sync_worker)</a>.</li>
+      <li><strong>Branch Railway</strong>: mesmo branch (<code>main</code>) é o correto. Não muda.</li>
     </ul>
   </div>
 
