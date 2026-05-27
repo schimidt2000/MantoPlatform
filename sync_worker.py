@@ -35,29 +35,37 @@ with app.app_context():
     now = datetime.now()
     current = date(now.year, now.month, 1)
 
-    # Evento mais distante no banco a partir deste mês
+    # Horizonte fixo: sempre sincroniza os próximos LOOKAHEAD_MONTHS a partir de hoje.
+    # Não depende do que já está no banco — garante que eventos futuros adicionados
+    # ao Google Calendar apareçam sem precisar visitar o mês manualmente.
+    LOOKAHEAD_MONTHS = 6
+
+    def _add_months(d: date, n: int) -> date:
+        month = d.month - 1 + n
+        return date(d.year + month // 12, month % 12 + 1, 1)
+
+    last = _add_months(current, LOOKAHEAD_MONTHS)
+
+    # Também inclui meses com eventos no banco além do horizonte fixo
+    # (protege eventos já existentes mais distantes)
     last_event = (
         CalendarEvent.query
         .filter(CalendarEvent.start_at >= datetime(now.year, now.month, 1))
         .order_by(CalendarEvent.start_at.desc())
         .first()
     )
-
     if last_event and last_event.start_at:
-        last = date(last_event.start_at.year, last_event.start_at.month, 1)
-    else:
-        last = current
-
-    # +2 meses de buffer para capturar eventos recém-adicionados além do último conhecido
-    for _ in range(2):
-        last = date(last.year + (last.month // 12), last.month % 12 + 1, 1)
+        last_in_db = date(last_event.start_at.year, last_event.start_at.month, 1)
+        last_in_db = _add_months(last_in_db, 1)  # +1 mês de buffer sobre o último conhecido
+        if last_in_db > last:
+            last = last_in_db
 
     # Constrói lista de meses a sincronizar
     months: list[date] = []
     m = current
     while m <= last:
         months.append(m)
-        m = date(m.year + (m.month // 12), m.month % 12 + 1, 1)
+        m = _add_months(m, 1)
 
     print(
         f"[sync_worker] {now.strftime('%Y-%m-%d %H:%M')} "
