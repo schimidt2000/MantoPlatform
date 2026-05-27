@@ -472,12 +472,31 @@ def pagamentos():
     today = date.today()
     month = request.args.get("month", today.strftime("%Y-%m"))
     roles = _pagamentos_query(month)
+
+    def _cv(r):
+        return Decimal(r.cache_value) if r.cache_value else Decimal("0")
+
+    total_val    = sum(_cv(r) for r in roles)
+    total_pago   = sum(_cv(r) for r in roles if r.payment_status == "pago")
+    total_banco  = sum(_cv(r) for r in roles if r.payment_status == "no_banco")
+    total_pend   = sum(_cv(r) for r in roles
+                       if r.payment_status == "nao_pago"
+                       and r.event and r.event.start_at.date() < today)
+    total_future = sum(_cv(r) for r in roles
+                       if r.payment_status == "nao_pago"
+                       and r.event and r.event.start_at.date() >= today)
+
     return render_template(
         "financeiro/pagamentos.html",
         roles=roles,
         month=month,
         today=today,
         status_labels=_STATUS_LABELS,
+        total_val=total_val,
+        total_pago=total_pago,
+        total_banco=total_banco,
+        total_pend=total_pend,
+        total_future=total_future,
     )
 
 

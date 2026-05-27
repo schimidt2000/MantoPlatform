@@ -25,11 +25,6 @@
 </div>
 
 {# ── KPIs ──────────────────────────────────────────────────────── #}
-{% set total_val   = roles | map(attribute='cache_value') | select | sum if roles else 0 %}
-{% set total_pago  = roles | selectattr('payment_status','eq','pago')    | map(attribute='cache_value') | select | sum %}
-{% set total_banco = roles | selectattr('payment_status','eq','no_banco') | map(attribute='cache_value') | select | sum %}
-{% set total_pend  = roles | selectattr('payment_status','eq','nao_pago') | map(attribute='cache_value') | select | sum %}
-
 <div class="kpi-grid" style="margin-bottom:16px;">
   <div class="kpi">
     <div class="kpi-label">Total no período</div>
@@ -46,6 +41,10 @@
   <div class="kpi">
     <div class="kpi-label">Pendentes</div>
     <div class="kpi-value" style="color:var(--red);">R$ {{ total_pend | brl }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Futuro</div>
+    <div class="kpi-value" style="color:#b45309;">R$ {{ total_future | brl }}</div>
   </div>
 </div>
 
