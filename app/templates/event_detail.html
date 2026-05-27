@@ -715,15 +715,13 @@
                   style="display: flex; gap: 6px; align-items: center; margin-top: 6px;">
               <input type="hidden" name="action" value="link_figurino">
               <input type="hidden" name="role_id" value="{{ r.id }}">
-              <select name="figurino_sheet_id" style="flex: 1; min-width: 0; font-size: 12px;">
-                <option value="">-- sem ficha --</option>
-                {% for s in figurino_sheets %}
-                  <option value="{{ s.id }}"
-                    {% if r.figurino_sheet_id == s.id %}selected{% endif %}>
-                    {{ s.character_name }}
-                  </option>
-                {% endfor %}
-              </select>
+              <div class="fig-widget" style="flex:1; min-width:0;"
+                   data-selected="{{ r.figurino_sheet_id or '' }}">
+                <input type="hidden" name="figurino_sheet_id" value="{{ r.figurino_sheet_id or '' }}">
+                <input type="text" class="fig-search" placeholder="🔍 Buscar figurino…"
+                       autocomplete="off" style="font-size:12px;">
+                <div class="fig-dropdown"></div>
+              </div>
               <button type="submit" class="btn btn-sm btn-secondary">&#8593;</button>
             </form>
           {% else %}
@@ -1494,6 +1492,31 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
   }
   .invite-pending  { background: rgba(245,200,66,.15); border-color: #d4a017; color: #b8860b; }
   .invite-accepted { background: #e8f5e9; border-color: #2e7d32; color: #1b5e20; }
+  /* ── Figurino autocomplete ─────────────────────────────────── */
+  .fig-widget { width: 100%; position: relative; }
+  .fig-search { width: 100%; box-sizing: border-box; }
+  .fig-dropdown {
+    display: none; position: absolute; top: calc(100% + 2px); left: 0; right: 0; z-index: 400;
+    background: #fff; border: 1px solid var(--line); border-radius: var(--r-md);
+    box-shadow: 0 6px 20px rgba(0,0,0,.13); max-height: 280px; overflow-y: auto;
+  }
+  .fig-option {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; cursor: pointer; font-size: 13px;
+    border-bottom: 1px solid var(--line);
+  }
+  .fig-option:last-child { border-bottom: none; }
+  .fig-option:hover { background: var(--surface, #f7f7fa); }
+  .fig-thumb {
+    width: 48px; height: 48px; object-fit: contain; flex-shrink: 0;
+    border-radius: var(--r-sm); border: 1px solid var(--line); background: #fff;
+  }
+  .fig-thumb-none {
+    width: 48px; height: 48px; flex-shrink: 0; display: flex;
+    align-items: center; justify-content: center; font-size: 20px;
+    background: var(--surface, #f7f7fa); border: 1px solid var(--line);
+    border-radius: var(--r-sm); color: var(--muted);
+  }
 </style>
 
 <script>
@@ -1861,6 +1884,66 @@ function copyElenco() {
     setTimeout(() => btn.textContent = '📋 Copiar', 2000);
   });
 }
+</script>
+{% endif %}
+
+{% if show_figurino and figurino_sheets %}
+<script>
+// ── Figurino autocomplete (mesma lógica de event_create.html) ────────────────
+const FIGURINO_DATA_DET = [
+  { id: '', name: '— Sem ficha —', photo: null },
+  {% for s in figurino_sheets -%}
+  { id: {{ s.id }}, name: {{ s.character_name | tojson }}, photo: {{ s.photo_url | tojson }} },
+  {%- endfor %}
+];
+
+function _escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.querySelectorAll('.fig-widget').forEach(function(wrap) {
+  const hiddenInput = wrap.querySelector('input[name="figurino_sheet_id"]');
+  const searchInput = wrap.querySelector('.fig-search');
+  const dropdown    = wrap.querySelector('.fig-dropdown');
+  const selectedId  = wrap.dataset.selected || '';
+
+  function render(filter) {
+    const q = (filter || '').toLowerCase().trim();
+    const matches = FIGURINO_DATA_DET.filter(function(f) {
+      return !q || f.name.toLowerCase().includes(q);
+    });
+    if (!matches.length) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = matches.map(function(f) {
+      const thumb = f.photo
+        ? '<img src="' + _escHtml(f.photo) + '" class="fig-thumb" loading="lazy">'
+        : '<div class="fig-thumb-none">👗</div>';
+      return '<div class="fig-option" data-id="' + _escHtml(String(f.id)) + '" data-name="' + _escHtml(f.name) + '">'
+           + thumb + '<span>' + _escHtml(f.name) + '</span></div>';
+    }).join('');
+    dropdown.querySelectorAll('.fig-option').forEach(function(opt) {
+      opt.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        doSelect(opt.dataset.id, opt.dataset.name);
+      });
+    });
+    dropdown.style.display = 'block';
+  }
+
+  function doSelect(id, name) {
+    hiddenInput.value = id;
+    searchInput.value = (name === '— Sem ficha —') ? '' : name;
+    dropdown.style.display = 'none';
+  }
+
+  searchInput.addEventListener('focus', function() { render(searchInput.value); });
+  searchInput.addEventListener('input', function() { render(searchInput.value); });
+  searchInput.addEventListener('blur',  function() { setTimeout(function() { dropdown.style.display = 'none'; }, 200); });
+
+  if (selectedId) {
+    var found = FIGURINO_DATA_DET.find(function(f) { return String(f.id) === String(selectedId); });
+    if (found) doSelect(found.id, found.name);
+  }
+});
 </script>
 {% endif %}
 
