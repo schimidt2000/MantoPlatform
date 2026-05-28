@@ -37,6 +37,9 @@ _CAN_CREATE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
 _CAN_EDIT_EVENT  = {RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN}
 _CAN_DELETE      = {RoleName.SUPERADMIN, RoleName.COMERCIAL}
 
+# Técnico de Som padrão para eventos SHOW (Nivaldo de Andrade — recebe o PIX)
+SOUND_TECH_TALENT_ID: int = 42
+
 _SYNC_TTL_SECONDS = 900  # 15 min — cron job sincroniza a cada 10 min, este é o fallback
 
 
@@ -825,19 +828,38 @@ def _handle_save_logistics(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     flash("Logística salva.", "success")
 
 
+def _handle_assign_tech_presence(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    """Permite à equipe de ensaio designar quem vai presencialmente como técnico de som.
+
+    Só atualiza o talent_id da role 'Técnico de Som (Presença)'. Não altera cache nem figurino.
+    """
+    talent_id = request.form.get("talent_id")
+    role = EventRole.query.filter_by(
+        event_id=event.id,
+        character_name="Técnico de Som (Presença)",
+        role_type="extra",
+    ).first()
+    if not role:
+        return
+    role.talent_id = int(talent_id) if talent_id else None
+    role.assigned_at = datetime.now(tz=tz_sp) if role.talent_id else None
+    db.session.commit()
+
+
 _EVENT_ACTIONS = {
-    "assign_casting":     _handle_assign_casting,
-    "add_role":           _handle_add_role,
-    "delete_role":        _handle_delete_role,
-    "figurino_done":      _handle_figurino_done,
-    "add_contract":       _handle_add_contract,
-    "update_comercial":   _handle_update_comercial,
-    "update_sale":        _handle_update_comercial,
-    "link_figurino":      _handle_link_figurino,
-    "set_payment_status": _handle_set_payment_status,
-    "add_payment":        _handle_add_payment,
-    "send_invite":        _handle_send_invite,
-    "save_logistics":     _handle_save_logistics,
+    "assign_casting":       _handle_assign_casting,
+    "assign_tech_presence": _handle_assign_tech_presence,
+    "add_role":             _handle_add_role,
+    "delete_role":          _handle_delete_role,
+    "figurino_done":        _handle_figurino_done,
+    "add_contract":         _handle_add_contract,
+    "update_comercial":     _handle_update_comercial,
+    "update_sale":          _handle_update_comercial,
+    "link_figurino":        _handle_link_figurino,
+    "set_payment_status":   _handle_set_payment_status,
+    "add_payment":          _handle_add_payment,
+    "send_invite":          _handle_send_invite,
+    "save_logistics":       _handle_save_logistics,
 }
 
 
@@ -863,9 +885,15 @@ def event_detail(event_id: int):
         )
 
     if request.method == "POST":
-        if not any(r.name.upper() in _CAN_EDIT_EVENT for r in current_user.roles):
-            abort(403)
         action = request.form.get("action")
+        _can_edit = any(r.name.upper() in _CAN_EDIT_EVENT for r in current_user.roles)
+        # Equipe de ensaio pode apenas designar o técnico de presença
+        _can_tech = (
+            action == "assign_tech_presence"
+            and any(r.name.upper() in _CAN_ENSAIO for r in current_user.roles)
+        )
+        if not _can_edit and not _can_tech:
+            abort(403)
         handler = _EVENT_ACTIONS.get(action)
         eid = event.id  # capture before commit+thread expire the ORM object
         if handler:
@@ -1046,6 +1074,39 @@ def _ensure_coordinator(event_id: int) -> None:
         ))
 
 
+def _ensure_sound_technician(event_id: int) -> None:
+    """Para eventos SHOW: garante role de PIX (Nivaldo) e role de presença (a designar pela equipe de ensaio).
+
+    - 'Técnico de Som': pré-atribuído ao Nivaldo (SOUND_TECH_TALENT_ID). Casting define o cache/valor.
+    - 'Técnico de Som (Presença)': vaga aberta. Equipe de ensaio designa quem vai ao evento de fato.
+      É essa pessoa que aparece no exportar elenco.
+    """
+    pix_exists = EventRole.query.filter_by(
+        event_id=event_id,
+        character_name="Técnico de Som",
+        role_type="extra",
+    ).first()
+    if not pix_exists:
+        db.session.add(EventRole(
+            event_id=event_id,
+            character_name="Técnico de Som",
+            role_type="extra",
+            talent_id=SOUND_TECH_TALENT_ID,
+        ))
+
+    presence_exists = EventRole.query.filter_by(
+        event_id=event_id,
+        character_name="Técnico de Som (Presença)",
+        role_type="extra",
+    ).first()
+    if not presence_exists:
+        db.session.add(EventRole(
+            event_id=event_id,
+            character_name="Técnico de Som (Presença)",
+            role_type="extra",
+        ))
+
+
 def _detect_changes(event: CalendarEvent, new_start, new_end, new_location) -> list[str]:
     """Retorna lista de strings descrevendo o que mudou (data/hora/local)."""
     changes = []
@@ -1148,6 +1209,8 @@ def sync_events(items: list[dict]) -> None:
             _log_sync("google_created", event)
             if not title.startswith("🟧 ENSAIO"):
                 _ensure_coordinator(event.id)
+                if event_type == "SHOW":
+                    _ensure_sound_technician(event.id)
             if gc_needs_rehearsal:
                 _notify_ensaio_team(event)
             # Determina se é fora de SP via CEP (ViaCEP) ou string
@@ -1188,6 +1251,10 @@ def sync_events(items: list[dict]) -> None:
             if _changes:
                 _notify_accepted_roles(event, _changes)
                 _log_sync("google_updated", event, details="; ".join(_changes))
+
+            # Garante técnico de som para eventos SHOW existentes (idempotente)
+            if event_type == "SHOW":
+                _ensure_sound_technician(event.id)
 
         # Eventos criados pela plataforma: atualiza metadados mas preserva roles
         if event.source == "platform":
@@ -1961,6 +2028,10 @@ def create_event():
     # Se não veio de orçamento, garante coordenador padrão
     if not orc_caches:
         _ensure_coordinator(event.id)
+
+    # Para eventos SHOW: garante técnico de som (PIX Nivaldo + vaga de presença)
+    if event_type == "SHOW":
+        _ensure_sound_technician(event.id)
 
     # ── Comprovantes de pagamento (múltiplos) ────────────────────────────────
     payment_files  = request.files.getlist("payment_files[]")

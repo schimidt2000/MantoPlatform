@@ -496,7 +496,7 @@
 <div class="panel" style="margin-top: 16px;">
   <h2 style="margin-bottom: 16px;">Equipe de Apoio</h2>
 
-  {% for r in event.roles if r.role_type == 'extra' %}
+  {% for r in event.roles if r.role_type == 'extra' and r.character_name != 'Técnico de Som (Presença)' %}
     {% if not r.talent_id %}
       {% set _card = "role-card-uncast" %}
     {% else %}
@@ -635,6 +635,56 @@
 {% endif %}
 {% endif %}
 
+
+{# ── Técnico de Som — Presença (apenas SHOW) ─────────────────────────────── #}
+{% if show_ensaio and event.event_type == 'SHOW' %}
+{% for r in event.roles if r.role_type == 'extra' and r.character_name == 'Técnico de Som (Presença)' %}
+<div class="panel" style="margin-top: 16px;">
+  <div style="margin-bottom:10px;">
+    <h2 style="margin-bottom:4px;">🎛️ Técnico de Som — Presença</h2>
+    <p style="font-size:13px; color:var(--muted); margin:0;">
+      Indique quem vai ao evento presencialmente. O PIX é enviado para o Técnico de Som cadastrado na equipe de apoio.
+    </p>
+  </div>
+
+  {% if not r.talent_id %}
+    {% set _tech_card = "role-card-uncast" %}
+  {% else %}
+    {% set _tech_card = "role-card-confirmed" %}
+  {% endif %}
+  <div class="role-card {{ _tech_card }}">
+    <form method="post" action="/events/{{ event.id }}">
+      <input type="hidden" name="action" value="assign_tech_presence">
+      <input type="hidden" name="role_id" value="{{ r.id }}">
+      <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+        <div style="min-width:120px;">
+          <div class="strong">Técnico (presença)</div>
+          {% if r.talent %}
+            <div class="meta">{{ r.talent.full_name }}</div>
+          {% else %}
+            <div class="meta muted" style="font-style:italic;">Não definido</div>
+          {% endif %}
+        </div>
+        <div class="ts-wrap" style="flex:1; min-width:200px;">
+          <input type="hidden" name="talent_id" value="{{ r.talent_id or '' }}">
+          <div class="ts-box">
+            <input type="text" class="ts-input" placeholder="Buscar pessoa..."
+                   value="{{ r.talent.full_name if r.talent else '' }}"
+                   autocomplete="off" spellcheck="false">
+            <button type="button" class="ts-clear" tabindex="-1"
+                    style="{{ '' if r.talent else 'display:none;' }}">&times;</button>
+          </div>
+          <ul class="ts-dropdown" hidden></ul>
+        </div>
+        <div style="padding-bottom:1px;">
+          <button type="submit" class="btn btn-sm btn-primary">Salvar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
 
 {# ══════════════════════════════════════════════════════════════
    2. FIGURINO
