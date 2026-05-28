@@ -15,6 +15,30 @@
     <div class="alert alert-error">{{ error }}</div>
   {% endif %}
 
+  {% if sync_result %}
+  <div class="panel">
+    <h3 style="margin-bottom:12px;">Resultado do sync</h3>
+    <table class="table" style="font-size:13px;">
+      <thead><tr><th>Mês</th><th>Eventos processados</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for r in sync_result %}
+        <tr>
+          <td>{{ r.ym }}</td>
+          <td>{{ r.count }}</td>
+          <td>
+            {% if r.ok %}
+              <span style="color:var(--success);">✓ OK</span>
+            {% else %}
+              <span style="color:var(--danger);">✗ {{ r.err }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   {% if cleanup_result %}
   <div class="panel">
     <h3 style="margin-bottom:12px;">Resultado da limpeza</h3>
@@ -60,13 +84,22 @@
           "Fresco" = sincronizado há menos de 20 min (cron roda a cada 10 min).
         </p>
       </div>
-      <form method="post">
-        <input type="hidden" name="action" value="cleanup_past">
-        <button class="btn btn-danger" type="submit"
-                onclick="return confirm('Isso vai buscar TODOS os meses no Google Calendar (passado, atual e futuro) e remover do banco qualquer evento que não existe mais lá — incluindo eventos fantasma com talentos atribuídos. Pode demorar alguns segundos. Continuar?')">
-          Limpar todos os eventos fantasma
-        </button>
-      </form>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <form method="post">
+          <input type="hidden" name="action" value="sync_now">
+          <button class="btn btn-primary" type="submit"
+                  onclick="return confirm('Isso vai sincronizar os 7 próximos meses com o Google Calendar — atualizando roles, técnico de som e demais dados. Pode demorar alguns segundos. Continuar?')">
+            ▶ Sincronizar Agora
+          </button>
+        </form>
+        <form method="post">
+          <input type="hidden" name="action" value="cleanup_past">
+          <button class="btn btn-danger" type="submit"
+                  onclick="return confirm('Isso vai buscar TODOS os meses no Google Calendar (passado, atual e futuro) e remover do banco qualquer evento que não existe mais lá — incluindo eventos fantasma com talentos atribuídos. Pode demorar alguns segundos. Continuar?')">
+            Limpar todos os eventos fantasma
+          </button>
+        </form>
+      </div>
     </div>
 
     <table class="table">

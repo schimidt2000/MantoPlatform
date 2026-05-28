@@ -394,9 +394,41 @@ def sync_status():
     msg = None
     error = None
     cleanup_result = None
+    sync_result = None
     if request.method == "POST":
         action = request.form.get("action", "")
-        if action == "cleanup_past":
+        if action == "sync_now":
+            from app.calendar.routes import sync_events as _sync_events, _mark_month_synced, CALENDAR_ID as _CAL_ID
+            from app.calendar.service import fetch_events_for_month as _fetch
+            from datetime import date as _date_cls
+
+            today = _date_cls.today()
+            future_months = []
+            for i in range(7):  # mês atual + 6 meses à frente
+                total_m = today.month - 1 + i
+                y = today.year + total_m // 12
+                m = total_m % 12 + 1
+                future_months.append((y, m, f"{y:04d}-{m:02d}"))
+
+            results = []
+            for y, m, ym in future_months:
+                try:
+                    items = _fetch(_CAL_ID, y, m)
+                    _sync_events(items)
+                    _mark_month_synced(ym)
+                    results.append({"ym": ym, "ok": True, "count": len(items)})
+                except Exception as exc:
+                    results.append({"ym": ym, "ok": False, "err": str(exc), "count": 0})
+
+            sync_result = results
+            errors_count = sum(1 for r in results if not r["ok"])
+            total_events = sum(r["count"] for r in results)
+            if errors_count:
+                error = f"Sync concluído com {errors_count} erro(s). Verifique o resultado abaixo."
+            else:
+                msg = f"Sync concluído: {len(results)} meses futuros sincronizados ({total_events} eventos processados)."
+
+        elif action == "cleanup_past":
             # Importa só quando necessário para não poluir o namespace global
             from app.calendar.routes import sync_events as _sync_events, _cleanup_stale_events, _mark_month_synced, CALENDAR_ID as _CAL_ID
             from app.calendar.service import fetch_events_for_month as _fetch
@@ -429,6 +461,7 @@ def sync_status():
         msg=msg,
         error=error,
         cleanup_result=cleanup_result,
+        sync_result=sync_result,
         active="sync",
         title="Admin - Sync Agenda",
     )
