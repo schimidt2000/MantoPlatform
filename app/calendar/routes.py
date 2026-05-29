@@ -40,21 +40,6 @@ _CAN_DELETE      = {RoleName.SUPERADMIN, RoleName.COMERCIAL}
 # Técnico de Som padrão para eventos SHOW (Nivaldo de Andrade — recebe o PIX)
 SOUND_TECH_TALENT_ID: int = 42
 
-_SYNC_TTL_SECONDS = 900  # 15 min — cron job sincroniza a cada 10 min, este é o fallback
-
-
-def _is_month_fresh(ym: str) -> bool:
-    settings = SiteSetting.query.get(1)
-    if not settings or not settings.calendar_sync_cache:
-        return False
-    cache = json.loads(settings.calendar_sync_cache)
-    ts_str = cache.get(ym)
-    if not ts_str:
-        return False
-    age = (datetime.utcnow() - datetime.fromisoformat(ts_str)).total_seconds()
-    return age < _SYNC_TTL_SECONDS
-
-
 def _mark_month_synced(ym: str) -> None:
     settings = SiteSetting.query.get(1)
     if not settings:
@@ -66,6 +51,22 @@ def _mark_month_synced(ym: str) -> None:
             del cache[k]
     settings.calendar_sync_cache = json.dumps(cache)
     db.session.commit()
+
+
+def _month_sync_age_minutes(ym: str) -> int | None:
+    """Minutos desde a última sincronização do mês, ou None se nunca sincronizado.
+
+    Lê a mesma fonte de `_mark_month_synced` (SiteSetting.calendar_sync_cache).
+    """
+    settings = SiteSetting.query.get(1)
+    if not settings or not settings.calendar_sync_cache:
+        return None
+    cache = json.loads(settings.calendar_sync_cache)
+    ts_str = cache.get(ym)
+    if not ts_str:
+        return None
+    age_seconds = (datetime.utcnow() - datetime.fromisoformat(ts_str)).total_seconds()
+    return int(age_seconds // 60)
 
 
 def _build_events_from_db(
@@ -287,63 +288,23 @@ def agenda():
     month_start = date(year, month, 1)
     month_end   = date(year, month, days_in_month)
 
-    if not force_sync and _is_month_fresh(ym):
-        # Fast path: serve direto do banco, sem chamada ao Google
-        event_map, events_by_day, items = _build_events_from_db(year, month, month_start, month_end)
-    else:
-        # Slow path: busca no Google Calendar e sincroniza
+    if force_sync:
+        # Sincronização ao vivo SÓ quando o usuário pede explicitamente ("Atualizar agora").
         try:
             items = fetch_events_for_month(CALENDAR_ID, year, month)
             sync_events(items)
             _cleanup_stale_events(items, year, month)
             _mark_month_synced(ym)
+            flash("Agenda atualizada.", "success")
         except RuntimeError:
-            items = []
             flash("Google Calendar não conectado. Use o botão 'Google' acima para conectar.", "warning")
+        # Redireciona para a URL sem force_sync: evita re-sincronizar em F5 e
+        # renderiza pelo caminho rápido (banco) já fresco.
+        return redirect(url_for("calendar.agenda", ym=ym, view=view))
 
-        ids = [i.get("id") for i in items if i.get("id")]
-        event_map = {}
-        if ids:
-            for ev in CalendarEvent.query.filter(CalendarEvent.google_event_id.in_(ids)).all():
-                event_map[ev.google_event_id] = ev.id
-
-        events_by_day: dict[int, list] = {}
-        for item in items:
-            start_dt, end_dt = parse_event_datetime(item)
-            if not start_dt:
-                continue
-
-            title    = item.get("summary") or "Sem título"
-            event_id = event_map.get(item.get("id"))
-            is_ensaio = "ensaio" in title.lower()
-
-            # All-day events: Google Calendar end date is exclusive (day after last day)
-            is_all_day = bool(item.get("start", {}).get("date") and not item.get("start", {}).get("dateTime"))
-            ev_start = start_dt.date()
-            if end_dt:
-                ev_end = end_dt.date() - timedelta(days=1) if is_all_day else end_dt.date()
-            else:
-                ev_end = ev_start
-
-            cur = max(ev_start, month_start)
-            stop = min(ev_end, month_end)
-            while cur <= stop:
-                is_start = (cur == ev_start)
-                if is_start:
-                    when = start_dt.strftime("%H:%M") if (start_dt.hour or start_dt.minute) else ""
-                    if end_dt and (end_dt.hour or end_dt.minute) and ev_end > ev_start:
-                        when += f"–{end_dt.strftime('%d/%m %H:%M')}"
-                    elif end_dt and end_dt.strftime("%H:%M") != "00:00":
-                        when += f"–{end_dt.strftime('%H:%M')}"
-                else:
-                    when = "↪"
-                events_by_day.setdefault(cur.day, []).append({
-                    "title":    title,
-                    "when":     when,
-                    "event_id": event_id,
-                    "is_ensaio": is_ensaio,
-                })
-                cur += timedelta(days=1)
+    # Caminho padrão: SEMPRE serve do banco — abertura instantânea, sem chamada de rede.
+    # O frescor é mantido pelo cron externo (sync_worker.py) + botão "Atualizar agora".
+    event_map, events_by_day, items = _build_events_from_db(year, month, month_start, month_end)
 
     first_weekday = (first_weekday + 1) % 7
     weeks = []
@@ -381,6 +342,8 @@ def agenda():
     else:
         list_events = items
 
+    sync_age_min = _month_sync_age_minutes(ym)
+
     return render_template(
         "calendar_list.html",
         ym=ym,
@@ -392,6 +355,7 @@ def agenda():
         month_weeks=weeks,
         events_by_day=events_by_day,
         today=now.date(),
+        sync_age_min=sync_age_min,
     )
 
 

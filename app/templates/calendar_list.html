@@ -19,7 +19,7 @@
   <a href="/agenda?ym={{ ym }}&view={{ view }}&force_sync=1"
      onclick="showLoading()"
      class="btn btn-sm btn-secondary" title="Buscar atualizações no Google Calendar agora">
-    ↻ Sincronizar
+    ↻ Atualizar agora
   </a>
   {% if eff_has_role('SUPERADMIN') %}
   <a href="/google/connect" class="btn btn-sm btn-secondary">
@@ -90,6 +90,28 @@
             letter-spacing:.06em; padding:2px 7px; border-radius:99px;
             align-self:center;">Hoje</span>
         {% endif %}
+      </div>
+
+      {# Indicador de frescor dos dados deste mês #}
+      {% if sync_age_min is none %}
+        {% set fresh_color = 'var(--muted)' %}
+      {% elif sync_age_min < 60 %}
+        {% set fresh_color = 'var(--success)' %}
+      {% elif sync_age_min < 1440 %}
+        {% set fresh_color = 'var(--muted)' %}
+      {% else %}
+        {% set fresh_color = 'var(--danger)' %}
+      {% endif %}
+      <div style="margin-top:6px;">
+        <span title="Os dados vêm do banco e são atualizados automaticamente em segundo plano. Use 'Atualizar agora' para forçar."
+              style="display:inline-flex; align-items:center; gap:5px; font-size:11px; color:{{ fresh_color }};">
+          <span style="width:7px; height:7px; border-radius:50%; background:{{ fresh_color }};"></span>
+          {% if sync_age_min is none %}nunca atualizado
+          {% elif sync_age_min < 1 %}atualizado agora
+          {% elif sync_age_min < 60 %}atualizado há {{ sync_age_min }} min
+          {% elif sync_age_min < 1440 %}atualizado há {{ sync_age_min // 60 }}h
+          {% else %}desatualizado há {{ sync_age_min // 1440 }}d{% endif %}
+        </span>
       </div>
 
       {# Jump para outro mês — link discreto #}
