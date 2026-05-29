@@ -1,0 +1,99 @@
+# Constituição da Plataforma Manto
+
+> Este documento define os princípios inegociáveis do projeto. Toda especificação
+> (`/speckit-specify`), todo plano (`/speckit-plan`) e toda implementação
+> (`/speckit-implement`) DEVEM respeitá-lo. Em caso de conflito, esta constituição
+> prevalece sobre conveniência ou pressa.
+
+## Princípios Fundamentais
+
+### I. Reutilizar antes de criar (NÃO-NEGOCIÁVEL)
+Antes de escrever qualquer código novo, é OBRIGATÓRIO verificar se já existe algo
+parecido no projeto. Lógica duplicada é a principal causa de bugs e de "saída do
+padrão" neste sistema.
+- Procure funções, rotas, templates e padrões equivalentes antes de implementar.
+- Se existir algo parecido mas imperfeito, estenda ou refatore — não crie uma
+  segunda versão paralela.
+- Um mesmo comportamento (ex.: botão de WhatsApp, cálculo de cachê, parsing de
+  evento) deve ter UMA fonte de verdade no código.
+
+### II. Padrões de código Python obrigatórios
+Todo código Python segue o mesmo padrão, sem exceções:
+- **Type hints** em todas as funções e métodos.
+- **Docstrings** (Google style) em classes e funções públicas.
+- **Nomes descritivos** — sem abreviações obscuras (`user_count`, não `uc`).
+- **Funções pequenas**: máximo ~30 linhas. Se passar, extraia funções.
+- **Aninhamento máximo de 3 níveis** de indentação.
+- **Constantes em UPPER_CASE** no topo do módulo ou em `config.py` — zero strings
+  mágicas espalhadas.
+- **Nunca** usar `except Exception` sem logar o erro.
+
+### III. Arquitetura em camadas
+A responsabilidade de cada camada é respeitada:
+- **Rotas/views não fazem regra de negócio** — apenas orquestram e chamam serviços.
+- Regra de negócio fica em funções/serviços testáveis, sem dependência de HTTP.
+- Acesso ao banco é isolado; o resto do código não espalha queries soltas.
+- Configuração é centralizada (`config.py` / variáveis de ambiente), nunca hardcoded.
+- Dependência só aponta para baixo: View → Serviço → Repositório → Modelo.
+
+### IV. Não quebrar o que funciona (NÃO-NEGOCIÁVEL)
+Estabilidade vale mais que velocidade.
+- Rode os testes relevantes ANTES de cada commit.
+- Mudanças em pequenos passos verificáveis; cada funcionalidade = um commit atômico.
+- Ao alterar um trecho compartilhado (ex.: sync de eventos, `models.py`), verifique
+  todos os pontos que dependem dele antes de declarar "pronto".
+- Se uma mudança toca a interface, confirme no app real que continua funcionando —
+  não confie só na leitura do código.
+
+### V. UI/UX consistente e em português
+Toda interface segue o padrão visual do sistema e fala com o usuário em pt-BR.
+- Cores SEMPRE via variáveis CSS — zero cores hardcoded no HTML.
+- Todo estado assíncrono tem feedback visual: loading, erro e sucesso.
+- Ações destrutivas (deletar, remover) exigem confirmação.
+- Mensagens de erro são amigáveis — nunca expor stack trace ao usuário final.
+- Espaçamentos em múltiplos de 4px; mesma paleta e mesmos componentes em telas novas.
+
+### VI. Planejar antes de codar
+Nenhuma mudança grande começa direto no código.
+- Fluxo: ENTENDER → ESPECIFICAR → PLANEJAR → IMPLEMENTAR → TESTAR → REVISAR.
+- Se um requisito não está claro, PERGUNTE antes de assumir.
+- Para features, use o fluxo spec-kit: `/speckit-specify` → `/speckit-plan` →
+  `/speckit-tasks` → `/speckit-implement`.
+
+## Stack e Restrições Técnicas
+
+- **Backend**: Python + Flask + SQLAlchemy. Entrada: `python run.py`.
+- **Banco**: SQLite em desenvolvimento; PostgreSQL/AWS RDS em produção. Migrations
+  via Alembic (Flask-Migrate) — toda mudança em `app/models.py` gera migration.
+- **Frontend**: Jinja2 + HTML/CSS/JS vanilla. Sem framework JS.
+- **Integrações**: Google Calendar (OAuth 2.0) e Google Sheets (service account).
+- **RBAC**: papéis SUPERADMIN, CASTING, FIGURINO, COMERCIAL, FINANCEIRO, VENDAS,
+  ENSAIO, RH. Toda rota nova respeita o controle de acesso por papel já existente.
+- **Comunicação com o usuário e textos de interface**: português (pt-BR).
+- **Segredos**: nunca commitar senhas, tokens ou chaves. Use variáveis de ambiente.
+
+## Portões de Qualidade (antes de "pronto")
+
+Uma tarefa só está concluída quando:
+- [ ] Os testes relevantes passam (`pytest tests/ -v`).
+- [ ] Sem erros de tipo nos arquivos tocados (`mypy app/`).
+- [ ] Código formatado e sem lint (`ruff format app/` e `ruff check app/`).
+- [ ] Funções/classes novas têm docstring e type hints.
+- [ ] Casos de erro tratados; nada de `except` silencioso.
+- [ ] Nenhum segredo hardcoded.
+- [ ] Migration criada se `models.py` mudou.
+- [ ] Comportamento conferido no app real quando há mudança de interface.
+
+## Governança
+
+- Esta constituição prevalece sobre qualquer outra prática ou atalho.
+- Toda complexidade adicional precisa ser justificada — na dúvida, escolha o caminho
+  mais simples (YAGNI).
+- Planos (`plan.md`) e tarefas (`tasks.md`) que violem um princípio devem ser
+  corrigidos antes da implementação, não depois.
+- Alterar esta constituição é uma decisão deliberada: registre o que mudou e o
+  porquê, e suba a versão abaixo.
+- Para orientação detalhada de runtime, o Claude também segue `CLAUDE.md` e os
+  arquivos em `.claude/skills/`.
+
+**Versão**: 1.0.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-05-29
