@@ -1,0 +1,3 @@
+# Dependências de desenvolvimento (NÃO instaladas em produção).
+# Instale com: pip install -r requirements-dev.txt
+ruff==0.15.15

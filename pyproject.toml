@@ -1,0 +1,18 @@
+# Configuração de ferramentas de qualidade da Plataforma Manto.
+# Por enquanto só o ruff (lint + format). pytest/mypy podem ser adicionados aqui depois.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# Não mexer em código gerado/externo
+extend-exclude = ["migrations", ".venv", "instance"]
+
+[tool.ruff.lint]
+# E/W = estilo (pycodestyle), F = bugs do pyflakes (imports/nomes), I = ordenar imports,
+# B = bugbear (pega bugs reais), UP = moderniza sintaxe.
+select = ["E", "F", "W", "I", "B", "UP"]
+# Linha longa fica a cargo do formatter; não polui o lint.
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
