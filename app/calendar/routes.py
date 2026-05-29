@@ -464,7 +464,8 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         # superadmin pode ultrapassar — apenas registra no log depois
 
     role.cache_value = new_cache
-    role.travel_cache = _parse_brl_dec(travel_cache)
+    new_travel = _parse_brl_dec(travel_cache)
+    role.travel_cache = new_travel
     role.assigned_at = datetime.now(tz=tz_sp) if role.talent_id else None
     if role.talent_id != old_talent_id:
         role.figurino_done_at = None
@@ -666,7 +667,8 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     pay_method = request.form.get("payment_method", "").strip()
     event.payment_method = pay_method if pay_method in _VALID_METHODS else None
     if pay_method == "pix_parcelado":
-        event.payment_installments = _pi(request.form.get("payment_installments", ""))
+        _inst_raw = request.form.get("payment_installments", "").strip()
+        event.payment_installments = int(_inst_raw) if _inst_raw.isdigit() else None
     if pay_method == "faturado":
         due_raw = request.form.get("payment_due_date", "").strip()
         try:
