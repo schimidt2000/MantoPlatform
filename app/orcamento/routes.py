@@ -320,11 +320,15 @@ def _process_quote():
     else:
         dur_labels = ["🕐 *1 hora*", "🕑 *2 horas*", "🕓 *4 horas*"]
 
-    investimento = "\n\n".join([
-        _dur_block(dur_labels[0], totals[0]),
-        _dur_block(dur_labels[1], totals[1]),
-        _dur_block(dur_labels[2], totals[2]),
-    ])
+    # Quais durações o vendedor escolheu incluir (padrão: todas; vazio → todas, evita orçamento vazio)
+    incluir = request.form.getlist("incluir_duracao")
+    if not incluir:
+        incluir = ["1h", "2h", "4h"]
+    show = [("1h" in incluir), ("2h" in incluir), ("4h" in incluir)]
+
+    investimento = "\n\n".join(
+        _dur_block(dur_labels[i], totals[i]) for i in range(3) if show[i]
+    )
 
     if total_custom:
         if modo_duracao == "entradas":
@@ -334,10 +338,10 @@ def _process_quote():
             custom_label = f"🕐 *{duracao_custom} horas*"
         investimento += f"\n\n{_dur_block(custom_label, total_custom)}"
 
-    pix_vista = (
-        f"  • 1h: *{_fmt_brl(round(totals[0] * 0.95, 2))}*\n"
-        f"  • 2h: *{_fmt_brl(round(totals[1] * 0.95, 2))}*\n"
-        f"  • 4h: *{_fmt_brl(round(totals[2] * 0.95, 2))}*"
+    _pix_durs = [("1h", totals[0]), ("2h", totals[1]), ("4h", totals[2])]
+    pix_vista = "\n".join(
+        f"  • {lbl}: *{_fmt_brl(round(tot * 0.95, 2))}*"
+        for i, (lbl, tot) in enumerate(_pix_durs) if show[i]
     )
     if total_custom:
         pix_vista += f"\n  • {duracao_custom}h: *{_fmt_brl(round(total_custom * 0.95, 2))}*"
@@ -376,6 +380,10 @@ def _process_quote():
         "total_4h":            totals[2],
         "total_custom":        total_custom,
         "duracao_custom":      duracao_custom,
+        # quais durações padrão entram no orçamento (mensagem/tela/PDF)
+        "show_1h":             show[0],
+        "show_2h":             show[1],
+        "show_4h":             show[2],
         # campos extras para geração de PDF
         "client_name":         client_name,
         "fmt_date":            fmt_date,

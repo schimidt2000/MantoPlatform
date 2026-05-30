@@ -140,8 +140,16 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
         float(quote.get("total_2h", 0) or 0),
         float(quote.get("total_4h", 0) or 0),
     ]
+    # Durações que o vendedor escolheu incluir (default True p/ orçamentos antigos)
+    show = [
+        quote.get("show_1h", True),
+        quote.get("show_2h", True),
+        quote.get("show_4h", True),
+    ]
 
     for i, total in enumerate(totals):
+        if not show[i]:
+            continue
         y = _price_row(c, y, _dur_label(i), _fmt_brl(total), highlight=(i == 2))
         y -= 2
 
@@ -164,13 +172,13 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
     # ── Formas de pagamento ────────────────────────────────────────────────
     y = _section_title(c, y, "Formas de Pagamento")
 
+    _pix_vista = [
+        f"1h {_fmt_brl(round(totals[0]*0.95,2))}" if show[0] else None,
+        f"2h {_fmt_brl(round(totals[1]*0.95,2))}" if show[1] else None,
+        f"4h {_fmt_brl(round(totals[2]*0.95,2))}" if show[2] else None,
+    ]
     pix_lines = [
-        ("PIX à vista (5% desc.):",
-         " | ".join([
-             f"1h {_fmt_brl(round(totals[0]*0.95,2))}",
-             f"2h {_fmt_brl(round(totals[1]*0.95,2))}",
-             f"4h {_fmt_brl(round(totals[2]*0.95,2))}",
-         ])),
+        ("PIX à vista (5% desc.):", " | ".join(p for p in _pix_vista if p)),
         ("Reserva programada:", "50% no ato + 50% até 2 dias antes"),
         ("Cartão de crédito:", "Parcelamento disponível (taxas repassadas)"),
     ]

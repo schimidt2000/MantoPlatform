@@ -325,6 +325,21 @@
         </label>
       </div>
 
+      {# Quais durações incluir no orçamento #}
+      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:10px 14px; margin-top:8px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); font-size:13px;">
+        <span style="font-weight:600; color:var(--ink);">Incluir no orçamento</span>
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+          <input type="checkbox" name="incluir_duracao" value="1h" checked> 1 hora
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+          <input type="checkbox" name="incluir_duracao" value="2h" checked> 2 horas
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+          <input type="checkbox" name="incluir_duracao" value="4h" checked> 4 horas
+        </label>
+        <span style="font-size:11px; color:var(--muted);">desmarque as que não quer no orçamento</span>
+      </div>
+
       {# Totais + submit #}
       <div class="totals-bar">
         <div style="display:flex;gap:24px;flex-wrap:wrap;">
