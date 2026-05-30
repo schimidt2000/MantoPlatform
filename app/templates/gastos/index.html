@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Gastos Extras{% endblock %}
+{% block page_title %}Gastos Extras{% endblock %}
+
+{% block content %}
+<div style="display:flex; flex-direction:column; gap:16px; max-width:1000px;">
+
+  {# ── Totais ─────────────────────────────────────────────────────── #}
+  <div class="kpi-grid" style="--cols:2;">
+    <div class="kpi" style="border:1px solid var(--line); border-radius:var(--r-md); padding:16px;">
+      <div class="kpi-label">Aprovados (entram no balanço)</div>
+      <div class="kpi-value" style="color:var(--success);">{{ fmt_brl(total_aprovado) }}</div>
+    </div>
+    <div class="kpi" style="border:1px solid var(--line); border-radius:var(--r-md); padding:16px;">
+      <div class="kpi-label">Pendentes (aguardando aprovação)</div>
+      <div class="kpi-value" style="color:var(--muted);">{{ fmt_brl(total_pendente) }}</div>
+    </div>
+  </div>
+
+  {# ── Novo gasto ─────────────────────────────────────────────────── #}
+  <div class="panel">
+    <h3 style="margin:0 0 12px;">Registrar novo gasto</h3>
+    <form method="post" action="{{ url_for('gastos.novo') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+        <div style="flex:2; min-width:200px;">
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Descrição *</label>
+          <input type="text" name="description" required placeholder="Ex.: Investimento em figurino do Homem-Aranha" style="width:100%;">
+        </div>
+        <div style="min-width:150px;">
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Categoria</label>
+          <select name="category" style="width:100%;">
+            {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          </select>
+        </div>
+        <div style="width:140px;">
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Valor (R$) *</label>
+          <input type="text" name="amount" inputmode="decimal" required placeholder="1.000,00" style="width:100%;">
+        </div>
+        <div style="width:150px;">
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Data do gasto</label>
+          <input type="date" name="expense_date" value="{{ today }}" style="width:100%;">
+        </div>
+      </div>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-top:12px;">
+        <div style="flex:2; min-width:200px;">
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">
+            Comprovante <span style="color:var(--muted); font-weight:400;">(recomendado)</span>
+          </label>
+          <input type="file" name="receipt" accept="image/*,application/pdf" style="width:100%;">
+        </div>
+        <div style="flex:2; min-width:200px;">
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Observações</label>
+          <input type="text" name="notes" placeholder="Opcional" style="width:100%;">
+        </div>
+        <div>
+          <button type="submit" class="btn btn-primary">Registrar gasto</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  {# ── Lista ──────────────────────────────────────────────────────── #}
+  <div class="panel">
+    <h3 style="margin:0 0 12px;">Histórico de gastos</h3>
+    {% if expenses %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th>
+            <th>Status</th><th>Autor</th><th>Comprovante</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in expenses %}
+          <tr>
+            <td class="meta" style="white-space:nowrap;">{{ e.expense_date.strftime('%d/%m/%Y') }}</td>
+            <td>
+              <span class="strong">{{ e.description }}</span>
+              {% if e.status == 'rejeitado' and e.notes %}
+                <div class="meta" style="color:var(--danger); font-size:11px;">Motivo: {{ e.notes }}</div>
+              {% elif e.notes %}
+                <div class="meta" style="font-size:11px;">{{ e.notes }}</div>
+              {% endif %}
+            </td>
+            <td class="meta">{{ e.category }}</td>
+            <td class="strong" style="white-space:nowrap;">{{ fmt_brl(e.amount) }}</td>
+            <td>
+              {% if e.status == 'aprovado' %}
+                <span class="badge" style="background:var(--success); color:#fff;">Aprovado</span>
+              {% elif e.status == 'rejeitado' %}
+                <span class="badge" style="background:var(--danger); color:#fff;">Rejeitado</span>
+              {% else %}
+                <span class="badge" style="background:var(--muted, #6b7280); color:#fff;">Pendente</span>
+              {% endif %}
+            </td>
+            <td class="meta">{{ e.created_by.name if e.created_by else '—' }}</td>
+            <td>
+              {% if e.receipt_url %}
+                <a href="{{ e.receipt_url }}" target="_blank" class="btn btn-sm btn-ghost">Ver</a>
+              {% else %}
+                <span class="muted small">—</span>
+              {% endif %}
+            </td>
+            <td style="white-space:nowrap; text-align:right;">
+              {% if is_superadmin and e.status == 'pendente' %}
+                <form method="post" action="{{ url_for('gastos.aprovar', expense_id=e.id) }}" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-sm btn-primary" style="font-size:11px; padding:3px 10px;">Aprovar</button>
+                </form>
+                <form method="post" action="{{ url_for('gastos.rejeitar', expense_id=e.id) }}" style="display:inline;"
+                      onsubmit="var m=prompt('Motivo da rejeição:'); if(m===null){return false;} this.motivo.value=m; return true;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="motivo">
+                  <button type="submit" class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px; color:var(--danger);">Rejeitar</button>
+                </form>
+              {% endif %}
+              {% if is_superadmin or (e.created_by_id == current_user.id and e.status == 'pendente') %}
+                <form method="post" action="{{ url_for('gastos.excluir', expense_id=e.id) }}" style="display:inline;"
+                      onsubmit="return confirm('Excluir este gasto?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 8px; color:var(--muted);">Excluir</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="muted">Nenhum gasto registrado ainda. Use o formulário acima para adicionar o primeiro.</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

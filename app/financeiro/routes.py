@@ -10,7 +10,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from app import db
-from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, SalaryHistory, CRMDeal, CRMStage, CommissionPayment, SalaryPayment
+from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, SalaryHistory, CRMDeal, CRMStage, CommissionPayment, SalaryPayment, SpecialExpense
 from app.constants import RoleName
 
 financeiro_bp = Blueprint("financeiro", __name__)
@@ -196,6 +196,17 @@ def dashboard():
         if receita_bruta else Decimal("0")
     )
 
+    # Gastos extras aprovados no período (pela data do gasto) — entram no balanço
+    gastos_extras = sum(
+        (Decimal(g.amount) for g in SpecialExpense.query.filter(
+            SpecialExpense.status == "aprovado",
+            SpecialExpense.expense_date >= start_date,
+            SpecialExpense.expense_date <= end_date,
+        ).all()),
+        Decimal("0"),
+    )
+    resultado_liquido = ebitda - gastos_extras
+
     # ── Indicadores Comerciais ────────────────────────────────────────────────
     eventos_com_venda = [e for e in events if e.sale_value]
     ticket_medio = (
@@ -317,6 +328,8 @@ def dashboard():
         custo_pessoal=custo_pessoal,
         ebitda=ebitda,
         margem_ebitda=margem_ebitda,
+        gastos_extras=gastos_extras,
+        resultado_liquido=resultado_liquido,
         # Comercial
         ticket_medio=ticket_medio,
         ratio_custo_talento=ratio_custo_talento,

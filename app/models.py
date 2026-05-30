@@ -568,6 +568,46 @@ class SalaryPayment(db.Model):
     salary_history = db.relationship("SalaryHistory", lazy=True)
 
 
+class SpecialExpense(db.Model):
+    """Gasto especial/extra da empresa (figurino, escritório, marketing, etc.).
+
+    Fluxo: qualquer colaborador registra (status 'pendente'); só impacta o balanço
+    financeiro quando um super admin aprova (status 'aprovado'). O impacto ocorre no
+    período/mês da `expense_date` (regime de competência).
+    """
+    __tablename__ = "special_expenses"
+    __table_args__ = (
+        db.Index("ix_special_expenses_status", "status"),
+        db.Index("ix_special_expenses_expense_date", "expense_date"),
+    )
+
+    CATEGORIES = ["Figurino", "Escritório", "Marketing", "Manutenção", "Outros"]
+    STATUSES = ["pendente", "aprovado", "rejeitado"]
+
+    id             = db.Column(db.Integer, primary_key=True)
+    description    = db.Column(db.String(200), nullable=False)
+    category       = db.Column(db.String(30), nullable=False, default="Outros")
+    amount         = db.Column(db.Numeric(10, 2), nullable=False)    # valor em R$
+    expense_date   = db.Column(db.Date, nullable=False)             # data do gasto (competência)
+    receipt_path   = db.Column(db.String(300), nullable=True)       # ex.: "expenses/arquivo.pdf"
+    status         = db.Column(db.String(20), nullable=False, default="pendente", server_default="pendente")
+    notes          = db.Column(db.Text, nullable=True)             # observações / motivo da rejeição
+    created_by_id  = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    approved_at    = db.Column(db.DateTime, nullable=True)
+
+    created_by  = db.relationship("User", foreign_keys=[created_by_id], lazy=True)
+    approved_by = db.relationship("User", foreign_keys=[approved_by_id], lazy=True)
+
+    @property
+    def receipt_url(self):
+        """URL para visualizar o comprovante, ou None se não houver."""
+        if not self.receipt_path:
+            return None
+        return f"/uploads/{self.receipt_path}"
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))

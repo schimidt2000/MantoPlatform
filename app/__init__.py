@@ -104,6 +104,7 @@ def create_app():
     app.config.setdefault("UPLOAD_FIGURINO_THUMBS",  os.path.join(_instance, "uploads", "figurino_thumbs"))
     app.config.setdefault("UPLOAD_FIGURINO_PHOTOS",  os.path.join(_instance, "uploads", "figurino_photos"))
     app.config.setdefault("UPLOAD_EVENT_OBS",         os.path.join(_instance, "uploads", "event_obs"))
+    app.config.setdefault("UPLOAD_EXPENSES",          os.path.join(_instance, "uploads", "expenses"))
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_CONTRACTS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_PAYMENTS"], exist_ok=True)
@@ -111,6 +112,7 @@ def create_app():
     os.makedirs(app.config["UPLOAD_FIGURINO_THUMBS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_FIGURINO_PHOTOS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_EVENT_OBS"], exist_ok=True)
+    os.makedirs(app.config["UPLOAD_EXPENSES"], exist_ok=True)
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -174,6 +176,7 @@ def create_app():
     from .crm.routes import crm_bp
     from .orcamento.routes import orcamento_bp
     from .educamanto.routes import educamanto_bp
+    from .gastos.routes import gastos_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
@@ -186,6 +189,7 @@ def create_app():
     app.register_blueprint(crm_bp)
     app.register_blueprint(orcamento_bp)
     app.register_blueprint(educamanto_bp)
+    app.register_blueprint(gastos_bp)
 
     def _wa_link(code: int) -> str:
         from zoneinfo import ZoneInfo
