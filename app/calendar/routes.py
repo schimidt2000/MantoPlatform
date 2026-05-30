@@ -2241,8 +2241,8 @@ def delete_observation(event_id: int, obs_id: int):
 @calendar_bp.route("/agenda/log")
 @login_required
 def agenda_log():
-    """Redireciona para o log unificado filtrado por agenda."""
-    return redirect(url_for("admin.audit_logs", entity_type="agenda"))
+    """Redireciona para a página unificada de Sincronização da Agenda (compatibilidade de links antigos)."""
+    return redirect(url_for("admin.sync_status"))
 
 
 @calendar_bp.route("/events/<int:event_id>/delete", methods=["POST"])

@@ -38,14 +38,6 @@
         </span>
         Agenda
       </a>
-      {% if current_user.is_authenticated and eff_has_role('SUPERADMIN') %}
-      <a href="/agenda/log" class="sidebar-item {% if request.path == '/agenda/log' %}active{% endif %}">
-        <span class="icon">
-          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h8a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
-        </span>
-        Log Agenda
-      </a>
-      {% endif %}
       {% if current_user.is_authenticated and eff_has_role('COMERCIAL', 'SUPERADMIN') %}
       <a href="/events/new" class="sidebar-item {% if request.path == '/events/new' %}active{% endif %}">
         <span class="icon">
@@ -204,7 +196,7 @@
         <span class="icon">
           <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
         </span>
-        Sync Agenda
+        Sincronização Agenda
       </a>
     </div>
     {% endif %}

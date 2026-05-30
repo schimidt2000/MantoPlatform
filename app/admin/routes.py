@@ -455,9 +455,19 @@ def sync_status():
             else:
                 msg = f"Limpeza concluída: {total_removed} evento(s) fantasma(s) removido(s) em {len(all_months)} mês(es)."
 
+    from app.models import AuditLog
+    agenda_logs = (
+        AuditLog.query
+        .filter(AuditLog.entity_type == "agenda")
+        .order_by(AuditLog.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
     return render_template(
         "admin_sync.html",
         months_info=months_info,
+        agenda_logs=agenda_logs,
         msg=msg,
         error=error,
         cleanup_result=cleanup_result,

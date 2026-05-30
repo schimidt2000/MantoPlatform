@@ -146,6 +146,32 @@
     </table>
   </div>
 
+  <div class="panel">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+      <h3 style="margin:0;">Log recente da agenda</h3>
+      <a href="/admin/logs?entity_type=agenda" class="btn btn-sm btn-secondary">Ver log completo →</a>
+    </div>
+    {% if agenda_logs %}
+    <table class="table" style="font-size:13px;">
+      <thead>
+        <tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Detalhe</th></tr>
+      </thead>
+      <tbody>
+        {% for log in agenda_logs %}
+        <tr style="vertical-align:top;">
+          <td style="white-space:nowrap;">{{ log.created_at.strftime('%d/%m %H:%M') }}</td>
+          <td>{{ log.actor_name }}</td>
+          <td>{{ log.action }}</td>
+          <td class="muted">{{ log.detail or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Nenhuma atividade registrada ainda.</p>
+    {% endif %}
+  </div>
+
   <div class="panel" style="border-left: 3px solid #b45309;">
     <h3 style="margin-bottom:8px;">O que acontece com eventos fantasma?</h3>
     <ul style="font-size:13px; margin:0; padding-left:20px; line-height:1.9;">
