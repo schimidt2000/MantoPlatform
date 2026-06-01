@@ -412,7 +412,44 @@
           {% if gr.comment %}
           <p style="font-size:13px; color:var(--muted); margin:4px 0 0;">{{ gr.comment }}</p>
           {% endif %}
-          <p class="meta" style="margin-top:4px;">{{ gr.submitted_at.strftime('%d/%m/%Y') }}</p>
+          <p class="meta" style="margin-top:4px;">
+            {{ gr.submitted_at.strftime('%d/%m/%Y') }}
+            {% if gr.edit_count and gr.edit_count > 0 %}
+              · <span style="font-style:italic;">editada{% if gr.edited_at %} em {{ gr.edited_at.strftime('%d/%m/%Y') }}{% endif %}</span>
+              <button type="button" onclick="document.getElementById('rh-{{ gr.id }}').style.display = (document.getElementById('rh-{{ gr.id }}').style.display === 'none' ? 'block' : 'none')"
+                      style="background:none; border:none; padding:0; cursor:pointer; color:var(--accent); font-size:12px;">
+                ver histórico ({{ gr.edit_count }})
+              </button>
+            {% endif %}
+          </p>
+
+          {% if gr.versions %}
+          <div id="rh-{{ gr.id }}" style="display:none; margin-top:8px; padding:10px 12px;
+                      background:var(--surface-2, #f7f6f3); border-radius:var(--r-md);">
+            <div class="meta" style="font-weight:600; margin-bottom:8px;">Histórico de edições</div>
+            {% for v in gr.versions %}
+              {% set vd = v.data %}
+              <div style="padding:8px 0; border-top:1px solid var(--line);">
+                <div style="font-size:12px; color:var(--muted);">
+                  Versão anterior · substituída em {{ v.replaced_at.strftime('%d/%m/%Y %H:%M') }}
+                </div>
+                <div style="font-size:13px; color:#f59e0b;">
+                  {% for i in range(vd.score or 0) %}★{% endfor %}{% for i in range(5 - (vd.score or 0)) %}☆{% endfor %}
+                </div>
+                {% if vd.comment %}
+                <p style="font-size:13px; color:var(--muted); margin:2px 0 0;">{{ vd.comment }}</p>
+                {% endif %}
+                {% if vd.subs %}
+                <ul style="margin:4px 0 0 16px; padding:0; font-size:12px; color:var(--muted);">
+                  {% for s in vd.subs %}
+                  <li>{{ s.category }}{% if s.subject_talent_id %} (pessoa #{{ s.subject_talent_id }}){% endif %}: {{ s.score }}★{% if s.comment %} — {{ s.comment }}{% endif %}</li>
+                  {% endfor %}
+                </ul>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          {% endif %}
         </div>
       </div>
       {% endfor %}

@@ -253,6 +253,57 @@ def _editable_rating_event_ids(talent) -> set[int]:
     return {r.event_id for r in rows if r.event_id}
 
 
+def _snapshot_rating(rating) -> dict:
+    """Fotografia do estado atual de uma avaliação (nota geral + comentário + sub-avaliações)."""
+    return {
+        "score": rating.score,
+        "comment": rating.comment,
+        "subs": sorted(
+            [
+                {
+                    "category": s.category,
+                    "subject_talent_id": s.subject_talent_id,
+                    "score": s.score,
+                    "comment": s.comment,
+                }
+                for s in rating.sub_ratings
+            ],
+            key=lambda d: (d["category"], d["subject_talent_id"] or 0),
+        ),
+    }
+
+
+def _maybe_record_rating_version(event_id: int, rating) -> None:
+    """Registra UMA versão anterior por sessão de edição, se o conteúdo mudou.
+
+    Usa um baseline (estado pré-edição) guardado na sessão no GET de `rate_event`. Como uma
+    edição ocorre em até 2 requests (nota geral + sub-avaliações), um flag de sessão garante que
+    só uma versão seja criada por sessão de edição. Não faz commit.
+    """
+    import json as _json
+    from app.models import EventRatingVersion
+
+    baseline = session.get(f"rating_baseline_{event_id}")
+    if baseline is None:
+        return  # não é uma edição iniciada pela tela (ex.: primeira avaliação)
+
+    current = _snapshot_rating(rating)
+    if current == baseline:
+        return  # ainda não mudou nada nesta etapa
+
+    if session.get(f"rating_versioned_{event_id}"):
+        return  # já registramos a versão desta sessão de edição
+
+    db.session.add(EventRatingVersion(
+        rating_id=rating.id,
+        snapshot=_json.dumps(baseline, ensure_ascii=False),
+        replaced_at=datetime.utcnow(),
+    ))
+    rating.edit_count = (rating.edit_count or 0) + 1
+    rating.edited_at = datetime.utcnow()
+    session[f"rating_versioned_{event_id}"] = True
+
+
 # ── Home ───────────────────────────────────────────────────────
 
 @portal_bp.route("/")
@@ -632,6 +683,14 @@ def rate_event(event_id: int):
     existing = EventRating.query.filter_by(event_id=event_id, talent_id=talent.id).first()
     ctx = _build_rating_context(talent, event)
 
+    # Início de uma sessão de edição: guarda o baseline (estado atual) e limpa o flag de versão.
+    if existing:
+        session[f"rating_baseline_{event_id}"] = _snapshot_rating(existing)
+        session.pop(f"rating_versioned_{event_id}", None)
+    else:
+        session.pop(f"rating_baseline_{event_id}", None)
+        session.pop(f"rating_versioned_{event_id}", None)
+
     return render_template(
         "portal/rate.html",
         talent=talent,
@@ -669,6 +728,7 @@ def submit_rating(event_id: int):
     if existing:
         existing.score = score
         existing.comment = comment
+        _maybe_record_rating_version(event_id, existing)
     else:
         rating = EventRating(event_id=event_id, talent_id=talent.id, score=score, comment=comment)
         db.session.add(rating)
@@ -676,6 +736,8 @@ def submit_rating(event_id: int):
     db.session.commit()
 
     if request.form.get("skip_detail"):
+        session.pop(f"rating_baseline_{event_id}", None)
+        session.pop(f"rating_versioned_{event_id}", None)
         flash("Obrigado pela avaliação!", "success")
         return redirect(url_for("portal.home"))
 
@@ -747,7 +809,14 @@ def rate_event_detail(event_id: int):
                     pass
 
     rating.detail_submitted_at = datetime.utcnow()
+    # Garante que rating.sub_ratings reflita o novo estado antes de comparar com o baseline.
+    db.session.flush()
+    db.session.refresh(rating)
+    _maybe_record_rating_version(event_id, rating)
     db.session.commit()
+    # Encerrou a sessão de edição deste evento — limpa o baseline/flag.
+    session.pop(f"rating_baseline_{event_id}", None)
+    session.pop(f"rating_versioned_{event_id}", None)
     flash("Obrigado! Sua avaliação completa foi enviada.", "success")
     return redirect(url_for("portal.home"))
 

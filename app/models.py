@@ -937,11 +937,17 @@ class EventRating(db.Model):
     comment             = db.Column(db.Text, nullable=True)
     submitted_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     detail_submitted_at = db.Column(db.DateTime, nullable=True)   # quando etapa 2 foi enviada
+    edited_at           = db.Column(db.DateTime, nullable=True)   # última edição após o envio
+    edit_count          = db.Column(db.Integer, nullable=False, default=0, server_default="0")
 
     event       = db.relationship("CalendarEvent", lazy=True)
     talent      = db.relationship("Talent", foreign_keys=[talent_id], lazy=True)
     sub_ratings = db.relationship(
         "EventSubRating", backref="rating", lazy=True, cascade="all, delete-orphan"
+    )
+    versions    = db.relationship(
+        "EventRatingVersion", backref="rating", lazy=True,
+        cascade="all, delete-orphan", order_by="EventRatingVersion.replaced_at.desc()",
     )
 
 
@@ -963,6 +969,32 @@ class EventSubRating(db.Model):
     comment           = db.Column(db.Text, nullable=True)
 
     subject_talent = db.relationship("Talent", foreign_keys=[subject_talent_id], lazy=True)
+
+
+class EventRatingVersion(db.Model):
+    """Versão anterior de uma avaliação, guardada quando ela é editada (substituída).
+
+    snapshot: JSON com {score, comment, subs:[{category, subject_talent_id, score, comment}]}
+    do estado que deixou de ser vigente.
+    """
+    __tablename__ = "event_rating_versions"
+    __table_args__ = (
+        db.Index("ix_event_rating_versions_rating_id", "rating_id"),
+    )
+
+    id          = db.Column(db.Integer, primary_key=True)
+    rating_id   = db.Column(db.Integer, db.ForeignKey("event_ratings.id"), nullable=False)
+    snapshot    = db.Column(db.Text, nullable=False)              # JSON
+    replaced_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    @property
+    def data(self) -> dict:
+        """Snapshot desserializado."""
+        import json as _json
+        try:
+            return _json.loads(self.snapshot)
+        except (ValueError, TypeError):
+            return {}
 
 
 class SyncLog(db.Model):
