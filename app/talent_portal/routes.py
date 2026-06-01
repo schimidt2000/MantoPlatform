@@ -209,6 +209,24 @@ def change_password():
     return render_template("portal/change_password.html", talent=talent, error=error)
 
 
+def _rateable_event_ids(talent) -> set[int]:
+    """IDs de eventos que o talento pode avaliar: terminados nos últimos 7 dias e ainda não avaliados.
+
+    Usa o término efetivo (end_at); se não houver, cai no start_at — mesma regra do destaque.
+    """
+    window = datetime.utcnow() - timedelta(days=7)
+    event_end = func.coalesce(CalendarEvent.end_at, CalendarEvent.start_at)
+    rated = {r.event_id for r in EventRating.query.filter_by(talent_id=talent.id).all()}
+    rows = (
+        EventRole.query
+        .filter_by(talent_id=talent.id, invite_status="accepted")
+        .join(CalendarEvent)
+        .filter(event_end < datetime.utcnow(), event_end >= window)
+        .all()
+    )
+    return {r.event_id for r in rows if r.event_id and r.event_id not in rated}
+
+
 # ── Home ───────────────────────────────────────────────────────
 
 @portal_bp.route("/")
@@ -237,22 +255,15 @@ def home():
     )
 
     # Eventos para avaliar: TERMINADOS nos últimos 7 dias, sem avaliação ainda.
-    # Usa o término efetivo (end_at); se o evento não tiver término definido, cai no start_at.
-    _rating_window = datetime.utcnow() - timedelta(days=7)
-    _rated_event_ids = {r.event_id for r in EventRating.query.filter_by(talent_id=talent.id).all()}
-    _event_end = func.coalesce(CalendarEvent.end_at, CalendarEvent.start_at)
+    rateable_event_ids = _rateable_event_ids(talent)
     events_to_rate = (
         EventRole.query
         .filter_by(talent_id=talent.id, invite_status="accepted")
         .join(CalendarEvent)
-        .filter(
-            _event_end < datetime.utcnow(),
-            _event_end >= _rating_window,
-        )
+        .filter(CalendarEvent.id.in_(rateable_event_ids) if rateable_event_ids else False)
         .order_by(CalendarEvent.start_at.desc())
         .all()
     )
-    events_to_rate = [r for r in events_to_rate if r.event_id not in _rated_event_ids]
 
     # Histórico de eventos passados confirmados (home: últimos 10)
     history = (
@@ -288,6 +299,7 @@ def home():
         total_pendente=total_pendente,
         today=today,
         events_to_rate=events_to_rate,
+        rateable_event_ids=rateable_event_ids,
     )
 
 
@@ -490,6 +502,7 @@ def historico():
         total_pago=total_pago,
         total_pendente=total_pendente,
         total_geral=total_geral,
+        rateable_event_ids=_rateable_event_ids(talent),
     )
 
 
