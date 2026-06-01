@@ -150,7 +150,7 @@
           {% if ev.departure_time %}
           <div class="invite-detail-row">
             <span class="invite-detail-label">🚗 Saída</span>
-            <span>{{ ev.departure_time }}</span>
+            <span>{{ ev.departure_time }} · {{ ev.departure_location or 'Manto Produções' }}</span>
           </div>
           {% endif %}
           {% if ev.makeup_time %}
@@ -271,7 +271,7 @@
           {% if ev.departure_time or ev.makeup_time %}
           <div class="event-card-logistics">
             {% if ev.departure_time %}
-            <span>🚗 Saída: <strong>{{ ev.departure_time }}</strong></span>
+            <span>🚗 Saída: <strong>{{ ev.departure_time }}</strong> · {{ ev.departure_location or 'Manto Produções' }}</span>
             {% endif %}
             {% if ev.makeup_time %}
             <span>💄 Maquiagem: <strong>{{ ev.makeup_time }}</strong>
