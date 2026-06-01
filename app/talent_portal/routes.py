@@ -10,6 +10,7 @@ from flask import (
     session, flash, current_app, send_from_directory, abort
 )
 from werkzeug.utils import secure_filename
+from sqlalchemy import func
 
 from app import db, limiter
 from app.models import Talent, EventRole, CalendarEvent, TalentMedia, EventRating, EventSubRating
@@ -235,16 +236,18 @@ def home():
         .all()
     )
 
-    # Eventos para avaliar: concluídos nos últimos 7 dias, sem avaliação ainda
+    # Eventos para avaliar: TERMINADOS nos últimos 7 dias, sem avaliação ainda.
+    # Usa o término efetivo (end_at); se o evento não tiver término definido, cai no start_at.
     _rating_window = datetime.utcnow() - timedelta(days=7)
     _rated_event_ids = {r.event_id for r in EventRating.query.filter_by(talent_id=talent.id).all()}
+    _event_end = func.coalesce(CalendarEvent.end_at, CalendarEvent.start_at)
     events_to_rate = (
         EventRole.query
         .filter_by(talent_id=talent.id, invite_status="accepted")
         .join(CalendarEvent)
         .filter(
-            CalendarEvent.start_at < datetime.utcnow(),
-            CalendarEvent.start_at >= _rating_window,
+            _event_end < datetime.utcnow(),
+            _event_end >= _rating_window,
         )
         .order_by(CalendarEvent.start_at.desc())
         .all()
