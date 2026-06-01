@@ -60,6 +60,16 @@
       <small class="drg-pct">{{ margem_ebitda }}%</small>
     </span>
   </div>
+  <div class="drg-row drg-sub">
+    <span>(–) Gastos Extras <small>(aprovados, pela data do gasto)</small></span>
+    <span class="drg-value text-red">– R$ {{ "{:,.0f}".format(gastos_extras).replace(",", ".") }}</span>
+  </div>
+  <div class="drg-row drg-result">
+    <span>= Resultado Líquido</span>
+    <span class="drg-value {% if resultado_liquido >= 0 %}text-green{% else %}text-red{% endif %}">
+      R$ {{ "{:,.0f}".format(resultado_liquido).replace(",", ".") }}
+    </span>
+  </div>
 
 </div>
 

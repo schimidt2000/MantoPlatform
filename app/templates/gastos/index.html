@@ -21,7 +21,6 @@
   <div class="panel">
     <h3 style="margin:0 0 12px;">Registrar novo gasto</h3>
     <form method="post" action="{{ url_for('gastos.novo') }}" enctype="multipart/form-data">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
         <div style="flex:2; min-width:200px;">
           <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Descrição *</label>
@@ -106,12 +105,10 @@
             <td style="white-space:nowrap; text-align:right;">
               {% if is_superadmin and e.status == 'pendente' %}
                 <form method="post" action="{{ url_for('gastos.aprovar', expense_id=e.id) }}" style="display:inline;">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="btn btn-sm btn-primary" style="font-size:11px; padding:3px 10px;">Aprovar</button>
                 </form>
                 <form method="post" action="{{ url_for('gastos.rejeitar', expense_id=e.id) }}" style="display:inline;"
                       onsubmit="var m=prompt('Motivo da rejeição:'); if(m===null){return false;} this.motivo.value=m; return true;">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <input type="hidden" name="motivo">
                   <button type="submit" class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px; color:var(--danger);">Rejeitar</button>
                 </form>
@@ -119,7 +116,6 @@
               {% if is_superadmin or (e.created_by_id == current_user.id and e.status == 'pendente') %}
                 <form method="post" action="{{ url_for('gastos.excluir', expense_id=e.id) }}" style="display:inline;"
                       onsubmit="return confirm('Excluir este gasto?');">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 8px; color:var(--muted);">Excluir</button>
                 </form>
               {% endif %}
