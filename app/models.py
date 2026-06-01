@@ -209,6 +209,7 @@ class CalendarEvent(db.Model):
     makeup_time = db.Column(db.String(5), nullable=True)       # "HH:MM"
     makeup_location = db.Column(db.String(200), nullable=True) # "manto" | "local" | endereço livre
     departure_time = db.Column(db.String(5), nullable=True)    # "HH:MM"
+    departure_location = db.Column(db.String(300), nullable=True)  # local de saída (padrão exibido: "Manto Produções")
     travel_time_minutes  = db.Column(db.Integer, nullable=True)   # cache da estimativa Google Maps
     travel_distance_km   = db.Column(db.Float,   nullable=True)   # km de ida (rota mais curta)
     is_outside_sp        = db.Column(db.Boolean, nullable=True)   # True=fora de SP | False=dentro | None=desconhecido

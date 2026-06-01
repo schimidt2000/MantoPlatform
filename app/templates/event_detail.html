@@ -877,11 +877,19 @@
           {% endif %}
         </div>
 
-        <div class="form-group">
-          <label>Horário de saída da Manto</label>
-          <input type="time" name="departure_time" id="departure-time"
-                 value="{{ event.departure_time or '' }}"
-                 style="width:140px;">
+        <div class="form-group" style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end;">
+          <div>
+            <label>Horário de saída</label>
+            <input type="time" name="departure_time" id="departure-time"
+                   value="{{ event.departure_time or '' }}"
+                   style="width:140px;">
+          </div>
+          <div style="flex:1; min-width:220px;">
+            <label>Local de saída</label>
+            <input type="text" name="departure_location"
+                   value="{{ event.departure_location or 'Manto Produções' }}"
+                   placeholder="Manto Produções" style="width:100%;">
+          </div>
         </div>
 
         {# Card de estimativa #}

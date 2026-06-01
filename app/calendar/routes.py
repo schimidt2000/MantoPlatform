@@ -759,6 +759,7 @@ def _handle_send_invite(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 def _handle_save_logistics(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     old_needs_rehearsal  = event.needs_rehearsal
     old_departure        = event.departure_time
+    old_departure_loc    = event.departure_location
     old_makeup_time      = event.makeup_time
     old_makeup_location  = event.makeup_location
 
@@ -768,12 +769,17 @@ def _handle_save_logistics(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         loc = request.form.get("makeup_location_custom", "").strip()
     event.makeup_location = loc or None
     event.departure_time  = request.form.get("departure_time", "").strip() or None
+    event.departure_location = request.form.get("departure_location", "").strip() or None
     event.needs_rehearsal = bool(request.form.get("needs_rehearsal"))
 
     logistics_changes = []
     if event.departure_time != old_departure and old_departure is not None:
         logistics_changes.append(
             f"Horário de saída: {old_departure} → {event.departure_time or 'não definido'}"
+        )
+    if event.departure_location != old_departure_loc and old_departure_loc is not None:
+        logistics_changes.append(
+            f"Local de saída: {old_departure_loc} → {event.departure_location or 'Manto Produções'}"
         )
     if event.makeup_time != old_makeup_time and old_makeup_time is not None:
         logistics_changes.append(

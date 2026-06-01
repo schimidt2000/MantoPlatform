@@ -175,6 +175,15 @@ def send_invite_email(role) -> bool:
     rows += _info_row("Data", start_str)
     if event.location:
         rows += _info_row("Local", event.location)
+    # Logística (só inclui o que estiver definido — sem linhas vazias)
+    if event.departure_time:
+        saida = f"{event.departure_time} — {event.departure_location or 'Manto Produções'}"
+        rows += _info_row("Saída", saida)
+    if event.makeup_time:
+        maq = event.makeup_time
+        if event.makeup_location:
+            maq += f" — {event.makeup_location}"
+        rows += _info_row("Maquiagem", maq)
     if role.cache_value:
         cache_str = f"R$ {role.cache_value:,.0f}"
         if role.travel_cache:
