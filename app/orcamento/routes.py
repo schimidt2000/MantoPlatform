@@ -58,6 +58,23 @@ def _fmt_brl(value: float) -> str:
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _parse_num(raw: str | None) -> float | None:
+    """Parse a numeric form field (aceita vírgula decimal). Retorna float ≥ 0 ou None."""
+    if raw is None:
+        return None
+    txt = str(raw).strip().replace(" ", "").replace("R$", "")
+    if not txt:
+        return None
+    # "1.234,56" → "1234.56"; "1234,56" → "1234.56"; "1234.56" mantém
+    if "," in txt:
+        txt = txt.replace(".", "").replace(",", ".")
+    try:
+        val = float(txt)
+    except ValueError:
+        return None
+    return val if val >= 0 else None
+
+
 # ── Quote form ────────────────────────────────────────────────────────────────
 
 @orcamento_bp.route("/", methods=["GET", "POST"])
@@ -200,6 +217,12 @@ def _process_quote():
     for i in range(3):
         cache_totals[i] += coord_prices[i]
 
+    # Cachê-base (pré-markup): base do orçamento personalizado por multiplicador.
+    cache_base = [round(v, 2) for v in cache_totals]
+    personalizado = "personalizado_ativo" in request.form
+    criterio_pers = request.form.get("personalizado_criterio", "valor_final")
+    cust_mult = [0.0, 0.0, 0.0]
+
     brinde = 0.0
     if event_has_show:
         num_going += 1
@@ -283,6 +306,33 @@ def _process_quote():
     total_custom = None
     if duracao_custom > 0 and duracao_custom not in (1, 2, 4):
         total_custom = round(totals[2] / 4 * duracao_custom, 2)
+
+    # ── Orçamento personalizado ────────────────────────────────────────────────
+    # Sobrescreve os totais: valor final digitado ou cachê-base × multiplicador.
+    # Nada é somado depois (transporte/NF/extras ficam fora — decisão do usuário).
+    if personalizado:
+        if criterio_pers == "multiplicador":
+            cust_mult = [
+                _parse_num(request.form.get(f"cust_mult_{d}")) or 0.0
+                for d in ("1h", "2h", "4h")
+            ]
+            totals = [round(cache_base[i] * cust_mult[i], 2) for i in range(3)]
+        else:
+            totals = [
+                _parse_num(request.form.get(f"cust_valor_{d}")) or 0.0
+                for d in ("1h", "2h", "4h")
+            ]
+        transport_breakdown = None
+        transport_total = 0.0
+        total_custom = None
+
+        # Fallback de validação (o cliente já bloqueia): se as durações incluídas
+        # ficarem todas zeradas, não gera orçamento vazio.
+        _incluir_chk = request.form.getlist("incluir_duracao") or ["1h", "2h", "4h"]
+        _idx = {"1h": 0, "2h": 1, "4h": 2}
+        if all(totals[_idx[d]] <= 0 for d in _incluir_chk if d in _idx):
+            flash("Informe valores válidos para o orçamento personalizado.", "warning")
+            return redirect(url_for("orcamento.index"))
 
     raw_date = request.form.get("event_date", "")
     raw_time = request.form.get("event_time", "")
@@ -392,6 +442,11 @@ def _process_quote():
         "team_lines":          team_lines,
         "nota_fiscal":         nota_fiscal,
         "modo_duracao":        modo_duracao,
+        # orçamento personalizado (transparência no resultado)
+        "personalizado":            personalizado,
+        "personalizado_criterio":   criterio_pers if personalizado else None,
+        "cache_base":               cache_base if personalizado else None,
+        "custom_mult":              cust_mult if personalizado else None,
     }
 
     # Salvar no histórico persistente
@@ -415,6 +470,15 @@ def _process_quote():
         "nota_fiscal":      nota_fiscal,
         "modo_duracao":     modo_duracao,
         "duracao_custom":   str(duracao_custom),
+        # orçamento personalizado (para reabrir do histórico)
+        "personalizado_ativo":     personalizado,
+        "personalizado_criterio":  criterio_pers,
+        "cust_mult_1h":   request.form.get("cust_mult_1h", ""),
+        "cust_mult_2h":   request.form.get("cust_mult_2h", ""),
+        "cust_mult_4h":   request.form.get("cust_mult_4h", ""),
+        "cust_valor_1h":  request.form.get("cust_valor_1h", ""),
+        "cust_valor_2h":  request.form.get("cust_valor_2h", ""),
+        "cust_valor_4h":  request.form.get("cust_valor_4h", ""),
     }
     entry = OrcamentoHistory(
         user_id        = current_user.id,

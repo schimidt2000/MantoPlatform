@@ -340,6 +340,63 @@
         <span style="font-size:11px; color:var(--muted);">desmarque as que não quer no orçamento</span>
       </div>
 
+      {# Orçamento personalizado #}
+      <div style="margin-top:8px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden;">
+        <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; font-size:13px; font-weight:600; color:var(--ink); cursor:pointer;">
+          <input type="checkbox" name="personalizado_ativo" id="personalizado_ativo" onchange="setPersonalizado(this.checked)">
+          Personalizar valores
+          <span style="font-size:11px; color:var(--muted); font-weight:400;">define o valor final do orçamento manualmente</span>
+        </label>
+
+        <div id="personalizado-panel" style="display:none; padding:0 14px 14px;">
+          <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:10px;">
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+              <input type="radio" name="personalizado_criterio" id="crit-valor" value="valor_final" checked onchange="setPersonalizadoCriterio('valor_final')">
+              Definir valor final
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+              <input type="radio" name="personalizado_criterio" id="crit-mult" value="multiplicador" onchange="setPersonalizadoCriterio('multiplicador')">
+              Mudar multiplicador
+            </label>
+          </div>
+
+          <div id="cache-base-readout" style="display:none; font-size:12px; color:var(--muted); margin-bottom:10px;">
+            Base (cachê): <span id="cb-1h">R$ 0,00</span> · <span id="cb-2h">R$ 0,00</span> · <span id="cb-4h">R$ 0,00</span>
+            <span style="font-size:11px;">(o multiplicador é aplicado sobre esta base)</span>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px;">
+            <div>
+              <div class="section-label">1 hora</div>
+              <div style="display:flex; align-items:center; gap:5px;">
+                <span class="pers-unit" style="font-size:13px; color:var(--muted); font-weight:600;">R$</span>
+                <input type="number" name="cust_valor_1h" id="cust_valor_1h" min="0" step="0.01" placeholder="0,00" style="width:100%;" oninput="setPersonalizadoVal('valor',0,this.value)">
+                <input type="number" name="cust_mult_1h" id="cust_mult_1h" min="0" step="0.01" placeholder="0" style="width:100%; display:none;" oninput="setPersonalizadoVal('mult',0,this.value)">
+              </div>
+            </div>
+            <div>
+              <div class="section-label">2 horas</div>
+              <div style="display:flex; align-items:center; gap:5px;">
+                <span class="pers-unit" style="font-size:13px; color:var(--muted); font-weight:600;">R$</span>
+                <input type="number" name="cust_valor_2h" id="cust_valor_2h" min="0" step="0.01" placeholder="0,00" style="width:100%;" oninput="setPersonalizadoVal('valor',1,this.value)">
+                <input type="number" name="cust_mult_2h" id="cust_mult_2h" min="0" step="0.01" placeholder="0" style="width:100%; display:none;" oninput="setPersonalizadoVal('mult',1,this.value)">
+              </div>
+            </div>
+            <div>
+              <div class="section-label">4 horas</div>
+              <div style="display:flex; align-items:center; gap:5px;">
+                <span class="pers-unit" style="font-size:13px; color:var(--muted); font-weight:600;">R$</span>
+                <input type="number" name="cust_valor_4h" id="cust_valor_4h" min="0" step="0.01" placeholder="0,00" style="width:100%;" oninput="setPersonalizadoVal('valor',2,this.value)">
+                <input type="number" name="cust_mult_4h" id="cust_mult_4h" min="0" step="0.01" placeholder="0" style="width:100%; display:none;" oninput="setPersonalizadoVal('mult',2,this.value)">
+              </div>
+            </div>
+          </div>
+          <div style="font-size:11px; color:var(--muted); margin-top:8px;">
+            No modo personalizado, transporte, Nota Fiscal e demais acréscimos não são somados — o valor definido é o total final.
+          </div>
+        </div>
+      </div>
+
       {# Totais + submit #}
       <div class="totals-bar">
         <div style="display:flex;gap:24px;flex-wrap:wrap;">

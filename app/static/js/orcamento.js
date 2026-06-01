@@ -19,6 +19,10 @@ let notaFiscal     = false;
 let modoEntradas   = false;
 let prevOnlyDJ     = false;
 let duracaoCustom  = 0;
+let personalizadoAtivo    = false;
+let personalizadoCriterio = 'valor_final'; // 'valor_final' | 'multiplicador'
+let custMult       = [0, 0, 0];
+let custValor      = [0, 0, 0];
 
 // ── Formatação ────────────────────────────────────────────────────────────────
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -99,8 +103,10 @@ function transportCost() {
   return tb ? tb.total : 0;
 }
 
-function calcTotals() {
-  const { show, makeup, makesReg, makesEsp } = eventFlags();
+// Cachê-base (pré-markup): artistas + coordenador + show customizado.
+// É a base do orçamento personalizado por multiplicador.
+function cacheBase() {
+  const { show } = eventFlags();
   const cfg   = S();
   const cache = [0, 0, 0];
 
@@ -142,6 +148,23 @@ function calcTotals() {
   if (showSosiaCustom && performers.length > 0) {
     const customAdd = performers.length * 50;
     for (let i = 0; i < 3; i++) cache[i] += customAdd;
+  }
+
+  return cache;
+}
+
+function calcTotals() {
+  const { show, makeup, makesReg, makesEsp } = eventFlags();
+  const cfg   = S();
+  const cache = cacheBase();
+
+  // Orçamento personalizado: total final = valor digitado ou base × multiplicador.
+  // Nada é somado depois (transporte/NF/extras ficam fora).
+  if (personalizadoAtivo) {
+    if (personalizadoCriterio === 'multiplicador') {
+      return [0, 1, 2].map(i => Math.round(cache[i] * (custMult[i] || 0) * 100) / 100);
+    }
+    return [0, 1, 2].map(i => Math.round((custValor[i] || 0) * 100) / 100);
   }
 
   // Markup
@@ -242,6 +265,7 @@ function update() {
   updateAutoServices();
   updateTotals();
   updateDebugPanel();
+  updateCacheBaseReadout();
   syncColabField();
 }
 
@@ -252,7 +276,7 @@ function updateTotals() {
   document.getElementById('total-4h').textContent = fmt(t4);
 
   const customWrap = document.getElementById('total-custom-wrap');
-  if (customWrap && duracaoCustom > 0 && ![1, 2, 4].includes(duracaoCustom)) {
+  if (customWrap && !personalizadoAtivo && duracaoCustom > 0 && ![1, 2, 4].includes(duracaoCustom)) {
     const tCustom = Math.round(t4 / 4 * duracaoCustom * 100) / 100;
     document.getElementById('total-custom').textContent = fmt(tCustom);
     const lblEl = document.getElementById('lbl-custom');
@@ -324,6 +348,35 @@ function updateDebugPanel() {
   const tfoot = document.getElementById('debug-tfoot');
   const thead = document.getElementById('debug-thead');
   if (!tbody || !tfoot) return;
+
+  // Modo personalizado: memória simplificada (sem markup/extras automáticos).
+  if (personalizadoAtivo) {
+    const base   = cacheBase();
+    const totals = calcTotals();
+    if (thead) {
+      thead.innerHTML = `<tr><th>Item</th>
+        <th style="text-align:right;">1h</th>
+        <th style="text-align:right;">2h</th>
+        <th style="text-align:right;">4h</th></tr>`;
+    }
+    let rows = `<tr style="background:#f1f5f9;"><td><strong>Subtotal Cachê (base)</strong></td>` +
+      base.map(v => `<td style="text-align:right;font-weight:600;">${fmt(v)}</td>`).join('') + `</tr>`;
+    if (personalizadoCriterio === 'multiplicador') {
+      rows += `<tr style="background:#fffbeb;"><td><strong>× Multiplicador</strong> <span style="color:var(--muted)">personalizado</span></td>` +
+        custMult.map(v => `<td style="text-align:right;">${(v || 0)}×</td>`).join('') + `</tr>`;
+    } else {
+      rows += `<tr style="background:#faf5ff;"><td><strong>Valor final</strong> <span style="color:var(--muted)">digitado</span></td>` +
+        custValor.map(v => `<td style="text-align:right;">${fmt(v || 0)}</td>`).join('') + `</tr>`;
+    }
+    rows += `<tr style="background:var(--green-soft);"><td><strong>TOTAL FINAL AO CLIENTE</strong> <span style="color:var(--muted)">(personalizado · sem extras)</span></td>` +
+      totals.map(v => `<td style="text-align:right;font-weight:700;">${fmt(v)}</td>`).join('') + `</tr>`;
+    tbody.innerHTML = rows;
+    tfoot.innerHTML = `<tr style="background:var(--surface);color:var(--muted);">
+      <td colspan="4" style="font-size:12px;font-style:italic;">
+        Orçamento personalizado — transporte, Nota Fiscal e acréscimos não são somados.
+      </td></tr>`;
+    return;
+  }
 
   const { show, makeup, makesReg, makesEsp } = eventFlags();
   const cfg    = S();
@@ -802,6 +855,62 @@ function setModoEntradas(checked) {
   update();
 }
 
+// ── Orçamento personalizado ────────────────────────────────────────────────────
+const _DURS = ['1h', '2h', '4h'];
+
+function setPersonalizado(checked) {
+  personalizadoAtivo = checked;
+  const panel = document.getElementById('personalizado-panel');
+  if (panel) panel.style.display = checked ? 'block' : 'none';
+  if (checked && personalizadoCriterio === 'multiplicador') prefillMultipliers();
+  update();
+}
+
+function setPersonalizadoCriterio(crit) {
+  personalizadoCriterio = crit;
+  const isMult = crit === 'multiplicador';
+  _DURS.forEach(dur => {
+    const elV = document.getElementById('cust_valor_' + dur);
+    const elM = document.getElementById('cust_mult_' + dur);
+    if (elV) elV.style.display = isMult ? 'none' : '';
+    if (elM) elM.style.display = isMult ? '' : 'none';
+  });
+  document.querySelectorAll('.pers-unit').forEach(el => { el.textContent = isMult ? '×' : 'R$'; });
+  const readout = document.getElementById('cache-base-readout');
+  if (readout) readout.style.display = isMult ? 'block' : 'none';
+  if (isMult) prefillMultipliers();
+  update();
+}
+
+function prefillMultipliers() {
+  // Pré-preenche os multiplicadores com o markup vigente, se ainda vazios.
+  const { show } = eventFlags();
+  const markup = S().markup[show ? 'show' : 'receptivo'];
+  _DURS.forEach((dur, i) => {
+    const el = document.getElementById('cust_mult_' + dur);
+    if (el && (!el.value || parseFloat(el.value) === 0)) {
+      el.value = markup[i];
+      custMult[i] = markup[i];
+    }
+  });
+}
+
+function setPersonalizadoVal(kind, idx, val) {
+  const num = parseFloat(val) || 0;
+  if (kind === 'mult') custMult[idx] = num;
+  else custValor[idx] = num;
+  updateTotals();
+}
+
+function updateCacheBaseReadout() {
+  if (!personalizadoAtivo || personalizadoCriterio !== 'multiplicador') return;
+  const base = cacheBase();
+  ['cb-1h', 'cb-2h', 'cb-4h'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = fmt(base[i]);
+  });
+}
+
 // ── Transporte ────────────────────────────────────────────────────────────────
 function toggleForaSP(checked) {
   forasp = checked;
@@ -853,7 +962,12 @@ function clearAll() {
   transportTipo = 'van'; comCarretinha = false; numCarros = 1; colabOverride = null;
   acrescimo = 0; acrescimoTipo = 'valor'; showSosiaCustom = false; prevOnlyDJ = false;
   duracaoCustom = 0;
+  personalizadoAtivo = false; personalizadoCriterio = 'valor_final';
+  custMult = [0, 0, 0]; custValor = [0, 0, 0];
   document.getElementById('quote-form').reset();
+  const persPanel = document.getElementById('personalizado-panel');
+  if (persPanel) persPanel.style.display = 'none';
+  document.querySelectorAll('.pers-unit').forEach(el => { el.textContent = 'R$'; });
   const dcEl = document.getElementById('duracao_custom');
   if (dcEl) dcEl.value = '';
   document.getElementById('coord-qty').textContent  = '1';
@@ -922,6 +1036,24 @@ function _applySnapshot(snap) {
   document.getElementById('acrescimo-valor-radio').checked    = !isPercent;
   document.getElementById('acrescimo-percent-radio').checked  = isPercent;
   document.getElementById('acrescimo-unit').textContent       = isPercent ? '%' : 'R$';
+
+  // Orçamento personalizado
+  personalizadoAtivo    = !!snap.personalizado_ativo;
+  personalizadoCriterio = snap.personalizado_criterio || 'valor_final';
+  custMult  = [parseFloat(snap.cust_mult_1h)  || 0, parseFloat(snap.cust_mult_2h)  || 0, parseFloat(snap.cust_mult_4h)  || 0];
+  custValor = [parseFloat(snap.cust_valor_1h) || 0, parseFloat(snap.cust_valor_2h) || 0, parseFloat(snap.cust_valor_4h) || 0];
+  const persChk = document.getElementById('personalizado_ativo');
+  if (persChk) persChk.checked = personalizadoAtivo;
+  document.getElementById('crit-valor').checked = personalizadoCriterio !== 'multiplicador';
+  document.getElementById('crit-mult').checked  = personalizadoCriterio === 'multiplicador';
+  _DURS.forEach((dur, i) => {
+    const elV = document.getElementById('cust_valor_' + dur);
+    const elM = document.getElementById('cust_mult_' + dur);
+    if (elV) elV.value = custValor[i] || '';
+    if (elM) elM.value = custMult[i] || '';
+  });
+  document.getElementById('personalizado-panel').style.display = personalizadoAtivo ? 'block' : 'none';
+  if (personalizadoAtivo) setPersonalizadoCriterio(personalizadoCriterio);
 
   update();
   document.getElementById('history-panel').style.display = 'none';
@@ -1036,7 +1168,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Bloqueia se fora de SP mas distância não calculada
-    if (forasp && kmIda <= 0) {
+    // (no modo personalizado o transporte não é somado, então não bloqueia)
+    if (!personalizadoAtivo && forasp && kmIda <= 0) {
       e.preventDefault();
       const kmEl = document.getElementById('km_ida');
       kmEl.classList.add('orc-input-error');
@@ -1046,6 +1179,31 @@ document.addEventListener('DOMContentLoaded', () => {
       kmEl.after(errSpan);
       document.getElementById('transport-section').scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
+    }
+
+    // Orçamento personalizado: cada duração incluída precisa de total > 0
+    if (personalizadoAtivo) {
+      const incl = Array.from(document.querySelectorAll('input[name="incluir_duracao"]:checked'))
+        .map(c => c.value);
+      const durs = incl.length ? incl : ['1h', '2h', '4h'];
+      const totals = calcTotals();
+      const idx = { '1h': 0, '2h': 1, '4h': 2 };
+      const bad = durs.filter(d => !(totals[idx[d]] > 0));
+      if (bad.length > 0) {
+        e.preventDefault();
+        const prefix = personalizadoCriterio === 'multiplicador' ? 'cust_mult_' : 'cust_valor_';
+        const el = document.getElementById(prefix + bad[0]);
+        if (el) {
+          el.classList.add('orc-input-error');
+          const span = document.createElement('span');
+          span.className = 'orc-field-error';
+          span.textContent = 'Informe um valor maior que zero.';
+          el.parentNode.appendChild(span);
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.focus();
+        }
+        return;
+      }
     }
 
     document.getElementById('performers_json').value = JSON.stringify(performers);
@@ -1131,6 +1289,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const dcInit = document.getElementById('duracao_custom');
   if (dcInit?.value) duracaoCustom = parseInt(dcInit.value) || 0;
+
+  // Orçamento personalizado (estado restaurado pelo browser)
+  const persEl = document.getElementById('personalizado_ativo');
+  if (persEl?.checked) {
+    personalizadoAtivo = true;
+    document.getElementById('personalizado-panel').style.display = 'block';
+    const critMult = document.getElementById('crit-mult');
+    personalizadoCriterio = critMult?.checked ? 'multiplicador' : 'valor_final';
+    _DURS.forEach((dur, i) => {
+      const elV = document.getElementById('cust_valor_' + dur);
+      const elM = document.getElementById('cust_mult_' + dur);
+      if (elV?.value) custValor[i] = parseFloat(elV.value) || 0;
+      if (elM?.value) custMult[i] = parseFloat(elM.value) || 0;
+    });
+    setPersonalizadoCriterio(personalizadoCriterio);
+  }
 
   update();
   renderHistory();
