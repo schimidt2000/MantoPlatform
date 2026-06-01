@@ -232,6 +232,27 @@ def _rateable_event_ids(talent) -> set[int]:
     return {r.event_id for r in rows if r.event_id and r.event_id not in rated}
 
 
+def _editable_rating_event_ids(talent) -> set[int]:
+    """IDs de eventos já avaliados pelo talento e terminados nos últimos 30 dias (janela de edição)."""
+    rated = _rated_event_ids(talent)
+    if not rated:
+        return set()
+    window = datetime.utcnow() - timedelta(days=30)
+    event_end = func.coalesce(CalendarEvent.end_at, CalendarEvent.start_at)
+    rows = (
+        EventRole.query
+        .filter_by(talent_id=talent.id, invite_status="accepted")
+        .join(CalendarEvent)
+        .filter(
+            CalendarEvent.id.in_(rated),
+            event_end < datetime.utcnow(),
+            event_end >= window,
+        )
+        .all()
+    )
+    return {r.event_id for r in rows if r.event_id}
+
+
 # ── Home ───────────────────────────────────────────────────────
 
 @portal_bp.route("/")
@@ -306,6 +327,7 @@ def home():
         events_to_rate=events_to_rate,
         rateable_event_ids=rateable_event_ids,
         rated_event_ids=_rated_event_ids(talent),
+        editable_rating_event_ids=_editable_rating_event_ids(talent),
     )
 
 
@@ -510,6 +532,7 @@ def historico():
         total_geral=total_geral,
         rateable_event_ids=_rateable_event_ids(talent),
         rated_event_ids=_rated_event_ids(talent),
+        editable_rating_event_ids=_editable_rating_event_ids(talent),
     )
 
 
