@@ -531,8 +531,8 @@ def _ensure_salary_payments(year: int, month: int) -> None:
     db.session.commit()
 
 
-def _build_payment_items(roles, salary_payments, today: date) -> list:
-    """Combina cachês e salários em lista unificada ordenada por data."""
+def _build_payment_items(roles, salary_payments, today: date, expenses=None) -> list:
+    """Combina cachês, salários e desembolsos de gastos aprovados em lista ordenada por data."""
     items = []
     for r in roles:
         ev_date = r.event.start_at.date() if r.event and r.event.start_at else date.min
@@ -575,6 +575,23 @@ def _build_payment_items(roles, salary_payments, today: date) -> list:
             "status":      sp.payment_status,
             "is_future":   sp.due_date > today,
         })
+    for g in (expenses or []):
+        copy_label = g.expense_date.strftime("%d/%m/%Y") + " - " + (g.description or "Gasto")
+        items.append({
+            "type":        "expense",
+            "id":          g.id,
+            "date":        g.expense_date,
+            "event_title": f"Gasto: {g.category}",
+            "event_id":    None,
+            "copy_label":  copy_label,
+            "sublabel":    g.description or "—",
+            "person_name": g.payee_name,
+            "amount":      g.amount,
+            "pix_key":     g.payee_pix,
+            "pix_key_type": "",
+            "status":      g.payment_status or "nao_pago",
+            "is_future":   g.expense_date > today,
+        })
     items.sort(key=lambda x: x["date"])
     return items
 
@@ -597,7 +614,17 @@ def pagamentos():
         month_ref=f"{year_i:04d}-{month_i:02d}"
     ).order_by(SalaryPayment.due_date.asc()).all()
 
-    items = _build_payment_items(roles, salary_payments, today)
+    # Desembolsos de gastos aprovados no mês (pela data do gasto), com destino definido
+    _m_start = date(year_i, month_i, 1)
+    _m_end = date(year_i + 1, 1, 1) if month_i == 12 else date(year_i, month_i + 1, 1)
+    expenses = SpecialExpense.query.filter(
+        SpecialExpense.status == "aprovado",
+        SpecialExpense.disbursement_type.isnot(None),
+        SpecialExpense.expense_date >= _m_start,
+        SpecialExpense.expense_date < _m_end,
+    ).order_by(SpecialExpense.expense_date.asc()).all()
+
+    items = _build_payment_items(roles, salary_payments, today, expenses)
 
     def _amt(item):
         v = item["amount"]
@@ -647,6 +674,14 @@ def set_payment_status():
                 sp.paid_at = date.today()
             audit("payment", "salary_payment", sp.id, sp.user.name if sp.user else "—",
                   f"Salário: {old} → {status}")
+            db.session.commit()
+    elif item_type == "expense":
+        exp = SpecialExpense.query.get(int(item_id))
+        if exp:
+            old = exp.payment_status
+            exp.payment_status = status
+            audit("payment", "special_expense", exp.id, exp.payee_name,
+                  f"Desembolso gasto: {old} → {status} | {exp.description}")
             db.session.commit()
     else:
         role = EventRole.query.get(int(item_id))

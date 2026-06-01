@@ -41,6 +41,35 @@
           <input type="date" name="expense_date" value="{{ today }}" style="width:100%;">
         </div>
       </div>
+      {# Desembolso: reembolso a funcionário ou pagamento a fornecedor #}
+      <div style="margin-top:12px; padding:12px; background:var(--surface-2, #f7f6f3); border-radius:var(--r-md);">
+        <label style="font-size:12px; font-weight:600; display:block; margin-bottom:6px;">Como será pago?</label>
+        <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:13px;">
+          <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+            <input type="radio" name="disbursement_type" value="reembolso" onchange="toggleDisb()"> Reembolso a funcionário
+          </label>
+          <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+            <input type="radio" name="disbursement_type" value="fornecedor" onchange="toggleDisb()"> Pagamento a fornecedor
+          </label>
+        </div>
+        <div id="disb-reembolso" style="display:none; margin-top:10px; max-width:320px;">
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Funcionário a reembolsar</label>
+          <select name="reimburse_user_id" style="width:100%;">
+            <option value="">— selecione —</option>
+            {% for u in funcionarios %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div id="disb-fornecedor" style="display:none; margin-top:10px; gap:12px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:200px; display:inline-block;">
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Nome do fornecedor</label>
+            <input type="text" name="supplier_name" placeholder="Ex.: Loja de Tecidos XYZ" style="width:100%;">
+          </div>
+          <div style="flex:1; min-width:200px; display:inline-block;">
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Chave PIX <span style="color:var(--muted); font-weight:400;">(opcional)</span></label>
+            <input type="text" name="supplier_pix" placeholder="CNPJ, e-mail, telefone…" style="width:100%;">
+          </div>
+        </div>
+      </div>
       <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-top:12px;">
         <div style="flex:2; min-width:200px;">
           <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">
@@ -68,7 +97,7 @@
         <thead>
           <tr>
             <th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th>
-            <th>Status</th><th>Autor</th><th>Comprovante</th><th></th>
+            <th>Status</th><th>Desembolso</th><th>Autor</th><th>Comprovante</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -92,6 +121,24 @@
                 <span class="badge" style="background:var(--danger); color:#fff;">Rejeitado</span>
               {% else %}
                 <span class="badge" style="background:var(--muted, #6b7280); color:#fff;">Pendente</span>
+              {% endif %}
+            </td>
+            <td class="meta">
+              {% if e.disbursement_type %}
+                <div>{{ e.payee_name }}
+                  <span class="muted" style="font-size:10px;">({{ 'reembolso' if e.disbursement_type == 'reembolso' else 'fornecedor' }})</span>
+                </div>
+                {% if e.status == 'aprovado' %}
+                  {% if e.payment_status == 'pago' %}
+                    <span class="badge" style="background:var(--success); color:#fff; font-size:10px;">Pago</span>
+                  {% elif e.payment_status == 'no_banco' %}
+                    <span class="badge" style="background:#b45309; color:#fff; font-size:10px;">No banco</span>
+                  {% else %}
+                    <span class="badge" style="background:var(--muted, #6b7280); color:#fff; font-size:10px;">A pagar</span>
+                  {% endif %}
+                {% endif %}
+              {% else %}
+                <span class="muted small">—</span>
               {% endif %}
             </td>
             <td class="meta">{{ e.created_by.name if e.created_by else '—' }}</td>
@@ -131,4 +178,13 @@
   </div>
 
 </div>
+
+<script>
+function toggleDisb() {
+  var tipo = document.querySelector('input[name="disbursement_type"]:checked');
+  var val = tipo ? tipo.value : '';
+  document.getElementById('disb-reembolso').style.display  = (val === 'reembolso')  ? 'block' : 'none';
+  document.getElementById('disb-fornecedor').style.display = (val === 'fornecedor') ? 'flex'  : 'none';
+}
+</script>
 {% endblock %}

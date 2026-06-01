@@ -583,6 +583,7 @@ class SpecialExpense(db.Model):
 
     CATEGORIES = ["Figurino", "Escritório", "Marketing", "Manutenção", "Outros"]
     STATUSES = ["pendente", "aprovado", "rejeitado"]
+    DISBURSEMENT_TYPES = ["reembolso", "fornecedor"]
 
     id             = db.Column(db.Integer, primary_key=True)
     description    = db.Column(db.String(200), nullable=False)
@@ -597,8 +598,16 @@ class SpecialExpense(db.Model):
     approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     approved_at    = db.Column(db.DateTime, nullable=True)
 
-    created_by  = db.relationship("User", foreign_keys=[created_by_id], lazy=True)
-    approved_by = db.relationship("User", foreign_keys=[approved_by_id], lazy=True)
+    # Desembolso: como o gasto será pago (entra na lista de pagamentos quando aprovado)
+    disbursement_type = db.Column(db.String(20), nullable=True)   # "reembolso" | "fornecedor"
+    reimburse_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)  # funcionário a reembolsar
+    supplier_name     = db.Column(db.String(200), nullable=True)  # nome do fornecedor
+    supplier_pix      = db.Column(db.String(120), nullable=True)  # chave PIX do fornecedor
+    payment_status    = db.Column(db.String(20), nullable=False, default="nao_pago", server_default="nao_pago")
+
+    created_by     = db.relationship("User", foreign_keys=[created_by_id], lazy=True)
+    approved_by    = db.relationship("User", foreign_keys=[approved_by_id], lazy=True)
+    reimburse_user = db.relationship("User", foreign_keys=[reimburse_user_id], lazy=True)
 
     @property
     def receipt_url(self):
@@ -606,6 +615,24 @@ class SpecialExpense(db.Model):
         if not self.receipt_path:
             return None
         return f"/uploads/{self.receipt_path}"
+
+    @property
+    def payee_name(self):
+        """Nome de quem recebe o desembolso (funcionário reembolsado ou fornecedor)."""
+        if self.disbursement_type == "reembolso":
+            return self.reimburse_user.name if self.reimburse_user else "—"
+        if self.disbursement_type == "fornecedor":
+            return self.supplier_name or "—"
+        return "—"
+
+    @property
+    def payee_pix(self):
+        """Chave PIX do destinatário do desembolso, ou ''."""
+        if self.disbursement_type == "reembolso":
+            return (self.reimburse_user.pix_key or "").strip() if self.reimburse_user else ""
+        if self.disbursement_type == "fornecedor":
+            return (self.supplier_pix or "").strip()
+        return ""
 
 
 @login_manager.user_loader

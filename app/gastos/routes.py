@@ -17,7 +17,7 @@ from werkzeug.utils import secure_filename
 
 from app import db
 from app.constants import RoleName
-from app.models import AuditLog, SpecialExpense
+from app.models import AuditLog, SpecialExpense, User
 
 gastos_bp = Blueprint("gastos", __name__, url_prefix="/gastos")
 
@@ -77,7 +77,9 @@ def _log(action: str, expense: SpecialExpense, detail: str = "") -> None:
 @gastos_bp.route("/")
 @login_required
 def index():
-    """Lista de gastos extras + totais. Aberta a qualquer colaborador autenticado."""
+    """Lista de gastos extras + totais. Restrita a super admin."""
+    if not _is_superadmin():
+        abort(403)
     expenses = (
         SpecialExpense.query
         .order_by(SpecialExpense.expense_date.desc(), SpecialExpense.id.desc())
@@ -85,12 +87,14 @@ def index():
     )
     total_pendente = sum((e.amount for e in expenses if e.status == "pendente"), Decimal("0"))
     total_aprovado = sum((e.amount for e in expenses if e.status == "aprovado"), Decimal("0"))
+    funcionarios = User.query.filter_by(is_active=True).order_by(User.name.asc()).all()
     return render_template(
         "gastos/index.html",
         expenses=expenses,
         total_pendente=total_pendente,
         total_aprovado=total_aprovado,
         categories=SpecialExpense.CATEGORIES,
+        funcionarios=funcionarios,
         is_superadmin=_is_superadmin(),
         today=date.today().isoformat(),
         fmt_brl=_fmt_brl,
@@ -100,7 +104,9 @@ def index():
 @gastos_bp.route("/novo", methods=["POST"])
 @login_required
 def novo():
-    """Registra um novo gasto (status 'pendente'). Qualquer colaborador autenticado."""
+    """Registra um novo gasto (status 'pendente'). Restrito a super admin."""
+    if not _is_superadmin():
+        abort(403)
     description = request.form.get("description", "").strip()
     category = request.form.get("category", "Outros").strip()
     amount = _parse_brl(request.form.get("amount", ""))
@@ -110,6 +116,26 @@ def novo():
     if not description or amount is None:
         flash("Informe uma descrição e um valor válido (ex.: 1.000,00).", "error")
         return redirect(url_for("gastos.index"))
+
+    # Desembolso: reembolso a funcionário ou pagamento a fornecedor
+    disbursement_type = request.form.get("disbursement_type", "").strip()
+    reimburse_user_id = None
+    supplier_name = None
+    supplier_pix = None
+    if disbursement_type == "reembolso":
+        raw_uid = request.form.get("reimburse_user_id", "").strip()
+        if not raw_uid.isdigit():
+            flash("Selecione o funcionário a ser reembolsado.", "error")
+            return redirect(url_for("gastos.index"))
+        reimburse_user_id = int(raw_uid)
+    elif disbursement_type == "fornecedor":
+        supplier_name = request.form.get("supplier_name", "").strip()
+        supplier_pix = request.form.get("supplier_pix", "").strip() or None
+        if not supplier_name:
+            flash("Informe o nome do fornecedor.", "error")
+            return redirect(url_for("gastos.index"))
+    else:
+        disbursement_type = None
 
     try:
         expense_date = date.fromisoformat(date_raw) if date_raw else date.today()
@@ -130,6 +156,10 @@ def novo():
         notes=notes or None,
         status="pendente",
         created_by_id=current_user.id,
+        disbursement_type=disbursement_type,
+        reimburse_user_id=reimburse_user_id,
+        supplier_name=supplier_name,
+        supplier_pix=supplier_pix,
     )
     db.session.add(expense)
     db.session.flush()
