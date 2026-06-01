@@ -93,6 +93,8 @@
           {% endif %}
           {% if ev.id in rateable_event_ids %}
             <a href="/portal/events/{{ ev.id }}/rate" class="btn btn-sm btn-secondary" style="font-size:12px;">⭐ Avaliar</a>
+          {% elif ev.id in rated_event_ids %}
+            <span class="pay-badge pay-pago">✓ Avaliado</span>
           {% endif %}
         </div>
       </div>

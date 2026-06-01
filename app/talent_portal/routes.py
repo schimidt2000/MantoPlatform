@@ -209,6 +209,11 @@ def change_password():
     return render_template("portal/change_password.html", talent=talent, error=error)
 
 
+def _rated_event_ids(talent) -> set[int]:
+    """IDs de eventos que o talento já avaliou (independe de janela de tempo)."""
+    return {r.event_id for r in EventRating.query.filter_by(talent_id=talent.id).all()}
+
+
 def _rateable_event_ids(talent) -> set[int]:
     """IDs de eventos que o talento pode avaliar: terminados nos últimos 7 dias e ainda não avaliados.
 
@@ -216,7 +221,7 @@ def _rateable_event_ids(talent) -> set[int]:
     """
     window = datetime.utcnow() - timedelta(days=7)
     event_end = func.coalesce(CalendarEvent.end_at, CalendarEvent.start_at)
-    rated = {r.event_id for r in EventRating.query.filter_by(talent_id=talent.id).all()}
+    rated = _rated_event_ids(talent)
     rows = (
         EventRole.query
         .filter_by(talent_id=talent.id, invite_status="accepted")
@@ -300,6 +305,7 @@ def home():
         today=today,
         events_to_rate=events_to_rate,
         rateable_event_ids=rateable_event_ids,
+        rated_event_ids=_rated_event_ids(talent),
     )
 
 
@@ -503,6 +509,7 @@ def historico():
         total_pendente=total_pendente,
         total_geral=total_geral,
         rateable_event_ids=_rateable_event_ids(talent),
+        rated_event_ids=_rated_event_ids(talent),
     )
 
 
