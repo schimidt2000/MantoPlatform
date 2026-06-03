@@ -77,16 +77,29 @@ def _log(action: str, expense: SpecialExpense, detail: str = "") -> None:
 @gastos_bp.route("/")
 @login_required
 def index():
-    """Lista de gastos extras + totais. Restrita a super admin."""
-    if not _is_superadmin():
-        abort(403)
+    """Página de gastos extras.
+
+    Qualquer usuário autenticado registra e vê os próprios gastos. O super admin vê
+    todos os gastos e o balanço (totais aprovados/pendentes); o usuário comum não vê
+    o balanço nem gastos de terceiros.
+    """
+    is_sa = _is_superadmin()
+    query = SpecialExpense.query
+    if not is_sa:
+        query = query.filter_by(created_by_id=current_user.id)
     expenses = (
-        SpecialExpense.query
+        query
         .order_by(SpecialExpense.expense_date.desc(), SpecialExpense.id.desc())
         .all()
     )
-    total_pendente = sum((e.amount for e in expenses if e.status == "pendente"), Decimal("0"))
-    total_aprovado = sum((e.amount for e in expenses if e.status == "aprovado"), Decimal("0"))
+
+    # Balanço só para super admin.
+    total_pendente = None
+    total_aprovado = None
+    if is_sa:
+        total_pendente = sum((e.amount for e in expenses if e.status == "pendente"), Decimal("0"))
+        total_aprovado = sum((e.amount for e in expenses if e.status == "aprovado"), Decimal("0"))
+
     funcionarios = User.query.filter_by(is_active=True).order_by(User.name.asc()).all()
     return render_template(
         "gastos/index.html",
@@ -95,7 +108,7 @@ def index():
         total_aprovado=total_aprovado,
         categories=SpecialExpense.CATEGORIES,
         funcionarios=funcionarios,
-        is_superadmin=_is_superadmin(),
+        is_superadmin=is_sa,
         today=date.today().isoformat(),
         fmt_brl=_fmt_brl,
     )
@@ -104,9 +117,7 @@ def index():
 @gastos_bp.route("/novo", methods=["POST"])
 @login_required
 def novo():
-    """Registra um novo gasto (status 'pendente'). Restrito a super admin."""
-    if not _is_superadmin():
-        abort(403)
+    """Registra um novo gasto (status 'pendente'). Aberto a qualquer usuário autenticado."""
     description = request.form.get("description", "").strip()
     category = request.form.get("category", "Outros").strip()
     amount = _parse_brl(request.form.get("amount", ""))
