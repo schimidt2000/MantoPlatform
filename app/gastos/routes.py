@@ -128,6 +128,12 @@ def novo():
         flash("Informe uma descrição e um valor válido (ex.: 1.000,00).", "error")
         return redirect(url_for("gastos.index"))
 
+    # Nota Fiscal obrigatória (foto ou PDF que mostre o valor dos produtos).
+    nota_fiscal_file = request.files.get("receipt")
+    if not nota_fiscal_file or not nota_fiscal_file.filename:
+        flash("Anexe a Nota Fiscal (foto ou PDF que mostre o valor dos produtos).", "error")
+        return redirect(url_for("gastos.index"))
+
     # Desembolso: reembolso a funcionário ou pagamento a fornecedor
     disbursement_type = request.form.get("disbursement_type", "").strip()
     reimburse_user_id = None
@@ -156,7 +162,10 @@ def novo():
     if category not in SpecialExpense.CATEGORIES:
         category = "Outros"
 
-    receipt_path = _save_receipt(request.files.get("receipt"))
+    receipt_path = _save_receipt(nota_fiscal_file)
+    if receipt_path is None:
+        flash("Não foi possível salvar a Nota Fiscal. Tente outro arquivo.", "error")
+        return redirect(url_for("gastos.index"))
 
     expense = SpecialExpense(
         description=description,
