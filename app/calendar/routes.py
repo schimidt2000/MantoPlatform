@@ -25,7 +25,7 @@ from .service import (
 )
 from .. import db
 from app.constants import RoleName
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, CRMDeal, AuditLog, CommissionPayment
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, CRMDeal, AuditLog, CommissionPayment, SpecialExpense
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -953,6 +953,14 @@ def event_detail(event_id: int):
     ))
     event_rate = Decimal(str(event.commission_rate)) if event.commission_rate is not None else default_commission
     event_cost = sum(r.cache_value or 0 for r in event.roles if r.talent_id)
+    # Gastos extras aprovados vinculados ao evento (entram como custo: lucro = venda − cachês − gastos)
+    event_expenses = (
+        SpecialExpense.query
+        .filter_by(event_id=event.id, status="aprovado")
+        .order_by(SpecialExpense.expense_date.desc(), SpecialExpense.id.desc())
+        .all()
+    )
+    event_expenses_total = sum((e.amount for e in event_expenses), Decimal("0"))
     event_commission = (
         Decimal(event.sale_value or 0) * event_rate / Decimal("100")
     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -991,6 +999,8 @@ def event_detail(event_id: int):
         show_ensaio=show_ensaio,
         sellers=sellers,
         event_cost=event_cost,
+        event_expenses=event_expenses,
+        event_expenses_total=event_expenses_total,
         event_commission=event_commission,
         event_rate=event_rate,
         default_commission=default_commission,

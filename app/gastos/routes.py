@@ -10,14 +10,15 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from flask import (
-    Blueprint, abort, current_app, flash, redirect, render_template, request, url_for,
+    Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for,
 )
 from flask_login import current_user, login_required
+from sqlalchemy import func
 from werkzeug.utils import secure_filename
 
 from app import db
 from app.constants import RoleName
-from app.models import AuditLog, SpecialExpense, User
+from app.models import AuditLog, CalendarEvent, SpecialExpense, User
 
 gastos_bp = Blueprint("gastos", __name__, url_prefix="/gastos")
 
@@ -59,6 +60,14 @@ def _save_receipt(file) -> str | None:
     os.makedirs(dest_dir, exist_ok=True)
     file.save(os.path.join(dest_dir, unique))
     return f"expenses/{unique}"
+
+
+def _resolve_event_id(raw: str | None) -> int | None:
+    """Converte um event_id de formulário em int válido (evento existe) ou None."""
+    if not raw or not str(raw).strip().isdigit():
+        return None
+    eid = int(raw)
+    return eid if CalendarEvent.query.get(eid) else None
 
 
 def _log(action: str, expense: SpecialExpense, detail: str = "") -> None:
@@ -167,6 +176,8 @@ def novo():
         flash("Não foi possível salvar a Nota Fiscal. Tente outro arquivo.", "error")
         return redirect(url_for("gastos.index"))
 
+    event_id = _resolve_event_id(request.form.get("event_id"))
+
     expense = SpecialExpense(
         description=description,
         category=category,
@@ -180,6 +191,7 @@ def novo():
         reimburse_user_id=reimburse_user_id,
         supplier_name=supplier_name,
         supplier_pix=supplier_pix,
+        event_id=event_id,
     )
     db.session.add(expense)
     db.session.flush()
@@ -237,4 +249,52 @@ def excluir(expense_id: int):
     db.session.delete(expense)
     db.session.commit()
     flash("Gasto excluído.", "success")
+    return redirect(url_for("gastos.index"))
+
+
+@gastos_bp.route("/api/eventos")
+@login_required
+def api_eventos():
+    """Lista eventos de uma data (YYYY-MM-DD) para vincular a um gasto: [{id, label}]."""
+    raw = request.args.get("date", "").strip()
+    try:
+        dia = date.fromisoformat(raw)
+    except ValueError:
+        return jsonify([])
+    eventos = (
+        CalendarEvent.query
+        .filter(func.date(CalendarEvent.start_at) == dia.isoformat())
+        .order_by(CalendarEvent.start_at.asc())
+        .all()
+    )
+    out = []
+    for e in eventos:
+        hora = e.start_at.strftime("%H:%M") if e.start_at else ""
+        label = f"{hora} · {e.title}" if hora else (e.title or f"Evento #{e.id}")
+        out.append({"id": e.id, "label": label})
+    return jsonify(out)
+
+
+@gastos_bp.route("/<int:expense_id>/vincular-evento", methods=["POST"])
+@login_required
+def vincular_evento(expense_id: int):
+    """Vincula/altera/remove o evento de um gasto existente. Apenas super admin."""
+    if not _is_superadmin():
+        abort(403)
+    expense = SpecialExpense.query.get_or_404(expense_id)
+    raw = request.form.get("event_id", "").strip()
+    if raw == "":
+        expense.event_id = None
+        detail = "Vínculo de evento removido"
+    else:
+        event_id = _resolve_event_id(raw)
+        if event_id is None:
+            flash("Evento inválido.", "error")
+            return redirect(url_for("gastos.index"))
+        expense.event_id = event_id
+        ev = CalendarEvent.query.get(event_id)
+        detail = f"Gasto vinculado ao evento: {ev.title if ev else event_id}"
+    _log("link_event", expense, detail)
+    db.session.commit()
+    flash("Vínculo de evento atualizado.", "success")
     return redirect(url_for("gastos.index"))
