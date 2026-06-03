@@ -606,9 +606,14 @@ class SpecialExpense(db.Model):
     supplier_pix      = db.Column(db.String(120), nullable=True)  # chave PIX do fornecedor
     payment_status    = db.Column(db.String(20), nullable=False, default="nao_pago", server_default="nao_pago")
 
+    # Vínculo opcional a um evento: gasto aprovado entra como custo do evento
+    # (lucro do evento = venda − cachês − gastos extras aprovados)
+    event_id          = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
+
     created_by     = db.relationship("User", foreign_keys=[created_by_id], lazy=True)
     approved_by    = db.relationship("User", foreign_keys=[approved_by_id], lazy=True)
     reimburse_user = db.relationship("User", foreign_keys=[reimburse_user_id], lazy=True)
+    event          = db.relationship("CalendarEvent", foreign_keys=[event_id], lazy=True)
 
     @property
     def receipt_url(self):
