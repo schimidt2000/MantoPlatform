@@ -75,9 +75,13 @@
       <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-top:12px;">
         <div style="flex:2; min-width:200px;">
           <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">
-            Comprovante <span style="color:var(--muted); font-weight:400;">(recomendado)</span>
+            Nota Fiscal <span style="color:var(--danger);">*</span>
           </label>
-          <input type="file" name="receipt" accept="image/*,application/pdf" style="width:100%;">
+          <input type="file" name="receipt" accept="image/*,application/pdf" required style="width:100%;">
+          <div class="meta" style="font-size:11px; margin-top:4px; line-height:1.4;">
+            Pode ser a nota escaneada ou uma foto da Nota Fiscal que mostre o valor dos produtos.
+            Comprovante/cupom fiscal não serve.
+          </div>
         </div>
         <div style="flex:2; min-width:200px;">
           <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Observações</label>
@@ -99,7 +103,7 @@
         <thead>
           <tr>
             <th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th>
-            <th>Status</th><th>Desembolso</th>{% if is_superadmin %}<th>Autor</th>{% endif %}<th>Comprovante</th><th></th>
+            <th>Status</th><th>Desembolso</th>{% if is_superadmin %}<th>Autor</th>{% endif %}<th>Nota Fiscal</th><th></th>
           </tr>
         </thead>
         <tbody>
