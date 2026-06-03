@@ -5,7 +5,8 @@
 {% block content %}
 <div style="display:flex; flex-direction:column; gap:16px; max-width:1000px;">
 
-  {# ── Totais ─────────────────────────────────────────────────────── #}
+  {# ── Totais (balanço) — só super admin ──────────────────────────── #}
+  {% if is_superadmin %}
   <div class="kpi-grid" style="--cols:2;">
     <div class="kpi" style="border:1px solid var(--line); border-radius:var(--r-md); padding:16px;">
       <div class="kpi-label">Aprovados (entram no balanço)</div>
@@ -16,6 +17,7 @@
       <div class="kpi-value" style="color:var(--muted);">{{ fmt_brl(total_pendente) }}</div>
     </div>
   </div>
+  {% endif %}
 
   {# ── Novo gasto ─────────────────────────────────────────────────── #}
   <div class="panel">
@@ -90,14 +92,14 @@
 
   {# ── Lista ──────────────────────────────────────────────────────── #}
   <div class="panel">
-    <h3 style="margin:0 0 12px;">Histórico de gastos</h3>
+    <h3 style="margin:0 0 12px;">{{ 'Histórico de gastos' if is_superadmin else 'Meus gastos' }}</h3>
     {% if expenses %}
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
             <th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th>
-            <th>Status</th><th>Desembolso</th><th>Autor</th><th>Comprovante</th><th></th>
+            <th>Status</th><th>Desembolso</th>{% if is_superadmin %}<th>Autor</th>{% endif %}<th>Comprovante</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -141,7 +143,7 @@
                 <span class="muted small">—</span>
               {% endif %}
             </td>
-            <td class="meta">{{ e.created_by.name if e.created_by else '—' }}</td>
+            {% if is_superadmin %}<td class="meta">{{ e.created_by.name if e.created_by else '—' }}</td>{% endif %}
             <td>
               {% if e.receipt_url %}
                 <a href="{{ e.receipt_url }}" target="_blank" class="btn btn-sm btn-ghost">Ver</a>
