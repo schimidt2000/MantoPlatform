@@ -173,7 +173,6 @@ def create_app():
     from .financeiro.routes import financeiro_bp
     from .figurino.routes import figurino_bp
     from .talent_portal.routes import portal_bp
-    from .crm.routes import crm_bp
     from .orcamento.routes import orcamento_bp
     from .educamanto.routes import educamanto_bp
     from .gastos.routes import gastos_bp
@@ -186,7 +185,6 @@ def create_app():
     app.register_blueprint(financeiro_bp)
     app.register_blueprint(figurino_bp)
     app.register_blueprint(portal_bp)
-    app.register_blueprint(crm_bp)
     app.register_blueprint(orcamento_bp)
     app.register_blueprint(educamanto_bp)
     app.register_blueprint(gastos_bp)

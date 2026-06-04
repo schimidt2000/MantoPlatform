@@ -10,7 +10,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import func
 
 from app import db
-from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, SalaryHistory, CRMDeal, CRMStage, CommissionPayment, SalaryPayment, SpecialExpense
+from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SpecialExpense
 from app.constants import RoleName
 
 financeiro_bp = Blueprint("financeiro", __name__)
@@ -239,38 +239,6 @@ def dashboard():
         if u:
             top_sellers.append({"user": u, "receita": rev, "lucro": seller_margin[sid]})
 
-    # ── CRM — Pipeline e Conversão ────────────────────────────────────────────
-    all_deals = CRMDeal.query.all()
-    deals_won  = [d for d in all_deals if d.stage and d.stage.is_won]
-    deals_lost = [d for d in all_deals if d.stage and d.stage.is_lost]
-    deals_open = [d for d in all_deals if d.stage and not d.stage.is_won and not d.stage.is_lost]
-
-    n_won, n_lost = len(deals_won), len(deals_lost)
-    taxa_conversao = (
-        (Decimal(n_won) / Decimal(n_won + n_lost) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-        if (n_won + n_lost) else Decimal("0")
-    )
-    pipeline_value = sum(d.value or 0 for d in deals_open)
-
-    # Tempo médio de fechamento (dias entre criação e fechamento dos deals ganhos)
-    tempos = [(d.closed_at - d.created_at).days for d in deals_won if d.closed_at and d.created_at]
-    tempo_medio_fechamento = (
-        (Decimal(sum(tempos)) / Decimal(len(tempos))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        if tempos else None
-    )
-
-    # LTV por organização (top 5)
-    org_ltv = defaultdict(int)
-    for d in deals_won:
-        if d.organization_id:
-            org_ltv[d.organization_id] += (d.value or 0)
-    top_orgs = []
-    for oid, ltv in sorted(org_ltv.items(), key=lambda x: -x[1])[:5]:
-        from app.models import CRMOrganization
-        org = CRMOrganization.query.get(oid)
-        if org:
-            top_orgs.append({"org": org, "ltv": ltv})
-
     # ── Caixa / A Receber ─────────────────────────────────────────────────────
     # Pagamentos pendentes a talentos no período
     roles_no_periodo = [r for e in events for r in e.roles if r.talent_id]
@@ -335,13 +303,6 @@ def dashboard():
         ratio_custo_talento=ratio_custo_talento,
         receita_por_tipo=receita_por_tipo,
         top_sellers=top_sellers,
-        # CRM
-        taxa_conversao=taxa_conversao,
-        pipeline_value=pipeline_value,
-        tempo_medio_fechamento=tempo_medio_fechamento,
-        top_orgs=top_orgs,
-        n_won=n_won,
-        n_lost=n_lost,
         # Caixa
         pagamentos_pendentes=pagamentos_pendentes,
         pagamentos_realizados=pagamentos_realizados,

@@ -237,11 +237,6 @@ def admin_settings():
         if maps_key:
             settings.google_maps_api_key = maps_key
 
-        # ClickSign
-        cs_token = request.form.get("clicksign_token", "").strip()
-        if cs_token:
-            settings.clicksign_token = cs_token
-        settings.clicksign_sandbox = request.form.get("clicksign_sandbox", "0") == "1"
         settings.email_notifications_enabled = request.form.get("email_notifications_enabled") == "1"
 
         # Data de início do sistema

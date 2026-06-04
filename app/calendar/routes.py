@@ -25,7 +25,7 @@ from .service import (
 )
 from .. import db
 from app.constants import RoleName
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, CRMDeal, AuditLog, CommissionPayment, SpecialExpense
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -138,9 +138,7 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
 
     Cascades automáticos: EventRole, EventObservation, ensaios, EnsaioMaterial.
     Sem cascade (deletados manualmente): EventLog, EventContract, EventPayment, EventRating.
-    CRMDeal.calendar_event_id é apenas nullificado (FK nullable).
     """
-    CRMDeal.query.filter_by(calendar_event_id=event.id).update({"calendar_event_id": None})
     EventLog.query.filter_by(event_id=event.id).delete()
     EventContract.query.filter_by(event_id=event.id).delete()
     EventPayment.query.filter_by(event_id=event.id).delete()
