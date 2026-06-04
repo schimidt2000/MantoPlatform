@@ -9,6 +9,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.colors import HexColor
 from reportlab.pdfgen import canvas as rl_canvas
 
+from app.money import format_brl
+
 _BLANK_PDF_PATH = os.path.join(os.path.dirname(__file__), "Orcamento_blank.pdf")
 
 # Cores da identidade visual Manto
@@ -31,7 +33,8 @@ _FONT_NORMAL = "Helvetica"
 
 
 def _fmt_brl(value: float) -> str:
-    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    """Formata moeda BR com prefixo R$ (fonte única)."""
+    return format_brl(value, prefix=True)
 
 
 def _section_title(c: rl_canvas.Canvas, y: float, text: str) -> float:

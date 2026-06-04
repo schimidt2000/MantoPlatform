@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from flask import (
     Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for,
@@ -19,6 +19,7 @@ from werkzeug.utils import secure_filename
 from app import db
 from app.constants import RoleName
 from app.models import AuditLog, CalendarEvent, SpecialExpense, User
+from app.money import format_brl, parse_brl
 
 gastos_bp = Blueprint("gastos", __name__, url_prefix="/gastos")
 
@@ -29,23 +30,14 @@ def _is_superadmin() -> bool:
 
 
 def _parse_brl(raw: str) -> Decimal | None:
-    """Converte '1.000,00' ou 'R$ 1.000,00' em Decimal('1000.00'). None se inválido/≤0."""
-    if not raw or not raw.strip():
-        return None
-    cleaned = raw.strip().replace("R$", "").replace(" ", "").replace(".", "").replace(",", ".")
-    try:
-        value = Decimal(cleaned).quantize(Decimal("0.01"))
-    except (InvalidOperation, ValueError):
-        return None
-    return value if value > 0 else None
+    """Valor do gasto: usa a fonte única e exige valor > 0 (None caso contrário)."""
+    value = parse_brl(raw)
+    return value if value is not None and value > 0 else None
 
 
 def _fmt_brl(value) -> str:
-    """Formata número/Decimal como moeda brasileira: R$ 1.000,00."""
-    v = Decimal(str(value or 0))
-    inteiro, _, dec = f"{v:.2f}".partition(".")
-    inteiro_fmt = f"{int(inteiro):,}".replace(",", ".")
-    return f"R$ {inteiro_fmt},{dec}"
+    """Formata número/Decimal como moeda brasileira: R$ 1.000,00 (fonte única)."""
+    return format_brl(value, prefix=True)
 
 
 def _save_receipt(file) -> str | None:

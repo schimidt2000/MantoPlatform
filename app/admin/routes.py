@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 from app import db
 from app.models import User, SiteSetting, Role, EventLog, CalendarEvent, AuditLog, SalaryHistory
 from app.constants import RoleName
+from app.money import parse_brl_int
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -205,8 +206,10 @@ def add_salary(user_id: int):
     start_str = request.form.get("start_date", "").strip()
     notes = request.form.get("notes", "").strip()
 
+    salary_value = parse_brl_int(salary_raw)
+
     errors = []
-    if not salary_raw or not salary_raw.isdigit():
+    if salary_value is None or salary_value <= 0:
         errors.append("Salário inválido.")
     if payment_type not in ("semanal", "quinzenal", "comissao"):
         errors.append("Tipo de pagamento inválido.")
@@ -226,14 +229,14 @@ def add_salary(user_id: int):
         current.end_date = start_date
     db.session.add(SalaryHistory(
         user_id=user.id,
-        salary=int(salary_raw),
+        salary=salary_value,
         payment_type=payment_type,
         start_date=start_date,
         notes=notes or None,
     ))
     from app.utils import audit
     audit("create", "salary", user.id, user.name,
-          f"Salário registrado: R${salary_raw} ({payment_type}) a partir de {start_date}")
+          f"Salário registrado: R${salary_value} ({payment_type}) a partir de {start_date}")
     db.session.commit()
     flash("Salário registrado.", "success")
     return redirect(url_for("admin.edit_user", user_id=user.id))

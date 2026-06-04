@@ -40,7 +40,7 @@
             <td class="muted">{{ u.roles | map(attribute='name') | join(', ') }}</td>
             <td class="muted">
               {% if row.salary %}
-                R$ {{ row.salary.salary }}
+                R$ {{ row.salary.salary | brl }}
                 <span class="meta" style="font-size:11px;">
                   ({% if row.salary.payment_type == 'semanal' %}semanal
                    {%- elif row.salary.payment_type == 'quinzenal' %}dia 5 e 20

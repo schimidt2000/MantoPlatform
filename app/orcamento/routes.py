@@ -12,6 +12,7 @@ from flask_login import current_user, login_required
 
 from app import db
 from app.constants import RoleName
+from app.money import format_brl
 from . import settings as _cfg
 from .pricing import (
     aplicar_markup,
@@ -55,7 +56,8 @@ def _require_superadmin(f):
 
 
 def _fmt_brl(value: float) -> str:
-    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    """Formata moeda BR com prefixo R$ (fonte única)."""
+    return format_brl(value, prefix=True)
 
 
 def _parse_num(raw: str | None) -> float | None:
@@ -127,7 +129,7 @@ def _process_quote():
 
     fora_sp          = "fora_sp" in request.form
     noturno          = _is_noturno(request.form.get("event_time", ""))
-    acrescimo_valor  = float(request.form.get("acrescimo_valor", 0) or 0)
+    acrescimo_valor  = _parse_num(request.form.get("acrescimo_valor")) or 0.0
     acrescimo_tipo   = request.form.get("acrescimo_tipo", "valor")
     show_sosia_tipo  = request.form.get("show_sosia_tipo", "predefinido")
     nota_fiscal      = "nota_fiscal" in request.form

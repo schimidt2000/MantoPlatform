@@ -1,11 +1,14 @@
 from flask import Blueprint, render_template, request
 from flask_login import login_required
 
+from app.money import format_brl
+
 tools_bp = Blueprint("tools", __name__)
 
 
 def br_money(value: float) -> str:
-    return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    """Formata número no padrão brasileiro, sem prefixo (fonte única)."""
+    return format_brl(value)
 
 
 def calcular_van(num_colab: int, km_ida: float, carretinha: str, show: bool):
