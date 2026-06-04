@@ -1113,8 +1113,9 @@ function renderHistory() {
               <div style="font-size:11px;color:var(--muted);margin-top:2px;">${e.created_at}</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:4px;">
+              <a href="/orcamento/historico/${e.id}/ver" class="btn btn-secondary btn-sm" style="white-space:nowrap;">Ver</a>
               <a href="/events/new?orcamento_id=${e.id}" class="btn btn-primary btn-sm" style="white-space:nowrap;">Criar evento</a>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="restoreFromHistory(${e.id})">Reabrir</button>
+              <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap;" onclick="restoreFromHistory(${e.id})" title="Carrega os dados e recalcula com os preços atuais (gera um novo)">Recalcular</button>
               <button type="button" class="btn btn-danger btn-sm" onclick="deleteFromHistory(${e.id})">✕</button>
             </div>
           </div>`;
