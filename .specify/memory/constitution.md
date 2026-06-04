@@ -71,6 +71,23 @@ Nenhuma mudança grande começa direto no código.
 - Para features, use o fluxo spec-kit: `/speckit-specify` → `/speckit-plan` →
   `/speckit-tasks` → `/speckit-implement`.
 
+### VII. Valores monetários sempre no padrão brasileiro (NÃO-NEGOCIÁVEL)
+Todo valor em dinheiro, em QUALQUER lugar do sistema, é formatado no padrão
+brasileiro: ponto como separador de milhar e vírgula como separador decimal, com
+duas casas decimais. Ex.: `R$ 4.000,00`, `R$ 1.234,56` — nunca `4000`, `4000.00`
+ou `4,000.00` (padrão americano é proibido).
+- **Na exibição**: nenhum valor monetário aparece "cru" (ex.: `4000`) nem no padrão
+  americano. Sempre milhar com `.`, decimal com `,` e duas casas.
+- **Na digitação**: todo campo de entrada de valor formata automaticamente enquanto
+  o usuário digita, para o padrão brasileiro (milhar com `.`, decimal com `,`). O
+  usuário não precisa digitar os separadores manualmente.
+- **Fonte única (NÃO-NEGOCIÁVEL)**: a formatação para exibição e o parsing/máscara
+  de digitação têm UMA implementação reutilizável (um filtro/format no backend e um
+  helper de máscara no frontend) — proibido reinventar formatação por tela.
+- **No backend o valor continua numérico**: a máscara é só de apresentação; o valor
+  enviado/persistido é convertido de volta para número (`,` decimal → ponto) antes
+  de salvar. Nunca persistir a string formatada.
+
 ## Stack e Restrições Técnicas
 
 - **Backend**: Python + Flask + SQLAlchemy. Entrada: `python run.py`.
@@ -107,9 +124,13 @@ Uma tarefa só está concluída quando:
 - Para orientação detalhada de runtime, o Claude também segue `CLAUDE.md` e os
   arquivos em `.claude/skills/`.
 
-**Versão**: 1.1.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-06-04
+**Versão**: 1.2.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-06-04
 
 > **Changelog**
+> - **1.2.0** (2026-06-04): Novo Princípio VII — todo valor monetário no padrão
+>   brasileiro (milhar com `.`, decimal com `,`, duas casas), tanto na exibição
+>   quanto na digitação (máscara automática), com fonte única de formatação e valor
+>   numérico preservado no backend.
 > - **1.1.0** (2026-06-04): Princípio V reforçado com regras concretas de feedback —
 >   prevenção de envio duplicado (botão desabilita + loading), proibição de limpar o
 >   formulário em erro, e feedback visível no campo ao bloquear envio.
