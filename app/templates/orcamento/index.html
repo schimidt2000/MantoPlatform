@@ -243,11 +243,19 @@
           </div>
         </div>
 
-        {# Botões adicionar #}
+        {# Adicionar — escolha o item no dropdown #}
         <div class="add-performer-btns">
           <span style="font-size:12px;color:var(--muted);align-self:center;">Adicionar:</span>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="addPerformer('ator')">+ Ator / Cantor</button>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="addPerformer('especial')">+ Especial</button>
+          <select class="btn btn-secondary btn-sm" id="add-ator-select" onchange="addFromDropdown('ator', this)">
+            <option value="">+ Ator / Cantor</option>
+            <option value="cara_limpa">Ator (cara limpa)</option>
+            <option value="boneco">Boneco</option>
+            <option value="cantor">Cantor</option>
+          </select>
+          <select class="btn btn-secondary btn-sm" id="add-especial-select" onchange="addFromDropdown('especial', this)">
+            <option value="">+ Especial</option>
+            {% for e in especiais_list %}<option value="{{ e }}">{{ e }}</option>{% endfor %}
+          </select>
         </div>
 
         {# Lista dinâmica #}

@@ -688,10 +688,6 @@ function buildCard(p, i) {
   if (p.type === 'ator') {
     const isCantor = p.subtipo === 'cantor';
     const makeupSel = p.makeup ? `<select onchange="setProp(${i},'makeup_tipo',this.value)"><option value="comum" ${p.makeup_tipo!=='especial'?'selected':''}>Comum</option><option value="especial" ${p.makeup_tipo==='especial'?'selected':''}>Especial</option></select>` : '';
-    const showLbl = isCantor ? 'Show <span style="color:var(--muted);font-size:11px;">(+R$100)</span>' : 'Show';
-    const makeLbl = isCantor ? 'Maquiagem <span style="color:var(--muted);font-size:11px;">(+R$20)</span>' : 'Maquiagem';
-    const fantasia = (!isCantor && p.subtipo !== 'boneco') ? '' :
-      isCantor ? '' : '';  // boneco e cara_limpa: show significa fantasiado vs receptivo
     controls = `
       <span class="badge badge-gold">${isCantor ? 'Cantor' : 'Ator'}</span>
       ${nomeInput}
@@ -700,8 +696,8 @@ function buildCard(p, i) {
         <option value="boneco"     ${p.subtipo==='boneco'?'selected':''}>Boneco</option>
         <option value="cantor"     ${p.subtipo==='cantor'?'selected':''}>Cantor</option>
       </select>
-      <label class="chk"><input type="checkbox" ${p.show?'checked':''} onchange="setProp(${i},'show',this.checked)"> ${showLbl}</label>
-      ${!isCantor && p.subtipo==='boneco' ? '' : `<label class="chk"><input type="checkbox" ${p.makeup?'checked':''} onchange="setMakeup(${i},this.checked)"> ${makeLbl}</label>`}
+      <label class="chk"><input type="checkbox" ${p.show?'checked':''} onchange="setProp(${i},'show',this.checked)"> Show</label>
+      ${!isCantor && p.subtipo==='boneco' ? '' : `<label class="chk"><input type="checkbox" ${p.makeup?'checked':''} onchange="setMakeup(${i},this.checked)"> Maquiagem</label>`}
       ${makeupSel}`;
   } else if (p.type === 'cantor') {
     // Legado — cantor era tipo separado
@@ -760,11 +756,12 @@ function buildCard(p, i) {
 }
 
 // ── Ações ─────────────────────────────────────────────────────────────────────
-function addPerformer(type) {
+// choice (opcional): subtipo do ator ('cara_limpa'|'boneco'|'cantor') ou nome do especial.
+function addPerformer(type, choice) {
   const p = { type, show: false, makeup: false, makeup_tipo: 'comum', nome: '' };
-  if (type === 'ator')     { p.subtipo = 'cara_limpa'; }
+  if (type === 'ator')     { p.subtipo = choice || 'cara_limpa'; }
   if (type === 'especial') {
-    p.personagem = (window.ESPECIAIS_LIST || ['Homem-Aranha'])[0];
+    p.personagem = choice || (window.ESPECIAIS_LIST || ['Homem-Aranha'])[0];
     p.cantor = false;
     if (p.personagem === 'Boneco Grande Especial') {
       p.bge_subtipo = 'dinossauro';
@@ -773,6 +770,14 @@ function addPerformer(type) {
   }
   performers.push(p);
   update();
+}
+
+// Adiciona a partir do dropdown e volta o select ao rótulo inicial.
+function addFromDropdown(type, sel) {
+  const choice = sel.value;
+  if (!choice) return;
+  addPerformer(type, choice);
+  sel.value = '';
 }
 
 function setSubtipo(i, value) {
