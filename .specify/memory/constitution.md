@@ -45,10 +45,21 @@ Estabilidade vale mais que velocidade.
 - Se uma mudança toca a interface, confirme no app real que continua funcionando —
   não confie só na leitura do código.
 
-### V. UI/UX consistente e em português
-Toda interface segue o padrão visual do sistema e fala com o usuário em pt-BR.
+### V. UI/UX consistente e com feedback (em português)
+Toda interface segue o padrão visual do sistema, fala com o usuário em pt-BR e
+**nunca deixa o usuário sem resposta**.
 - Cores SEMPRE via variáveis CSS — zero cores hardcoded no HTML.
-- Todo estado assíncrono tem feedback visual: loading, erro e sucesso.
+- Todo estado assíncrono tem feedback visual: **loading, erro e sucesso**.
+- **Prevenir envio duplicado (NÃO-NEGOCIÁVEL)**: todo botão que dispara uma ação
+  lenta (salvar, criar, enviar, sincronizar) DEVE se desabilitar e mostrar estado
+  de carregamento ao ser clicado, até a resposta chegar. Um clique a mais nunca
+  pode criar registro duplicado.
+- **Nunca limpar o que o usuário preencheu**: um erro de validação JAMAIS apaga os
+  dados já digitados. O formulário preserva os valores e aponta o(s) campo(s) com
+  problema.
+- **Falha de validação sempre tem feedback visível no campo**: ao bloquear um envio,
+  destaque/realce (ex.: borda vermelha + leve "shake") o(s) campo(s) faltante(s) e
+  leve o foco até ele. Bloquear em silêncio é proibido.
 - Ações destrutivas (deletar, remover) exigem confirmação.
 - Mensagens de erro são amigáveis — nunca expor stack trace ao usuário final.
 - Espaçamentos em múltiplos de 4px; mesma paleta e mesmos componentes em telas novas.
@@ -96,4 +107,9 @@ Uma tarefa só está concluída quando:
 - Para orientação detalhada de runtime, o Claude também segue `CLAUDE.md` e os
   arquivos em `.claude/skills/`.
 
-**Versão**: 1.0.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-05-29
+**Versão**: 1.1.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-06-04
+
+> **Changelog**
+> - **1.1.0** (2026-06-04): Princípio V reforçado com regras concretas de feedback —
+>   prevenção de envio duplicado (botão desabilita + loading), proibição de limpar o
+>   formulário em erro, e feedback visível no campo ao bloquear envio.
