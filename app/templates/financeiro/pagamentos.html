@@ -97,10 +97,12 @@
                  {% if item.type == 'salary' %}row-salary{% endif %}"
           data-item-type="{{ item.type }}" data-item-id="{{ item.id }}">
 
-        {# Checkbox #}
+        {# Checkbox (comissão é resumo agregado — fora do bulk) #}
         <td style="padding:8px 0 8px 12px;">
+          {% if item.type != 'commission' %}
           <input type="checkbox" class="row-check"
                  data-type="{{ item.type }}" data-id="{{ item.id }}">
+          {% endif %}
         </td>
 
         {# Data #}

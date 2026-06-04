@@ -7,7 +7,6 @@ from functools import wraps
 
 from flask import Blueprint, render_template, request, redirect, url_for, abort, make_response
 from flask_login import login_required, current_user
-from sqlalchemy import func
 
 from app import db
 from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SpecialExpense
@@ -492,6 +491,52 @@ def _build_payment_items(roles, salary_payments, today: date, expenses=None) -> 
     return items
 
 
+def _build_commission_items(period_start: date, period_end: date, due_date: date, today: date) -> list:
+    """Resumo de comissões por vendedor: eventos vendidos em [period_start, period_end).
+
+    Uma linha por vendedor (soma das comissões a_pagar/pago no período; estornos reduzem).
+    Datada em due_date (dia 5 do mês visualizado). id = "sellerId:YYYY-MM" (período de venda).
+    """
+    rows = (
+        CommissionPayment.query
+        .filter(
+            CommissionPayment.status.in_(["a_pagar", "pago"]),
+            CommissionPayment.sale_date >= period_start,
+            CommissionPayment.sale_date < period_end,
+        )
+        .all()
+    )
+    by_seller: dict[int, list] = defaultdict(list)
+    for r in rows:
+        by_seller[r.seller_id].append(r)
+
+    period_tag = f"{period_start.year:04d}-{period_start.month:02d}"
+    items = []
+    for seller_id, lst in by_seller.items():
+        total = sum((c.amount for c in lst), Decimal("0"))
+        if total == 0:
+            continue
+        seller = User.query.get(seller_id)
+        all_paid = all(c.status == "pago" for c in lst)
+        pix = (seller.pix_key or "").strip() if seller and seller.pix_key else ""
+        items.append({
+            "type":        "commission",
+            "id":          f"{seller_id}:{period_tag}",
+            "date":        due_date,
+            "event_title": f"Comissões {period_start.month:02d}/{period_start.year}",
+            "event_id":    None,
+            "copy_label":  due_date.strftime("%d/%m/%Y") + " - Comissão " + (seller.name if seller else ""),
+            "sublabel":    "Comissão",
+            "person_name": seller.name if seller else "—",
+            "amount":      total,
+            "pix_key":     pix,
+            "pix_key_type": seller.pix_key_type if seller else "",
+            "status":      "pago" if all_paid else "nao_pago",
+            "is_future":   due_date > today,
+        })
+    return items
+
+
 @financeiro_bp.route("/financeiro/pagamentos")
 @login_required
 @require_financeiro
@@ -521,6 +566,13 @@ def pagamentos():
     ).order_by(SpecialExpense.expense_date.asc()).all()
 
     items = _build_payment_items(roles, salary_payments, today, expenses)
+
+    # Comissões: soma por vendedor dos eventos vendidos no MÊS ANTERIOR, a pagar no dia 5 do mês visto.
+    prev_year, prev_month = (year_i - 1, 12) if month_i == 1 else (year_i, month_i - 1)
+    prev_start = date(prev_year, prev_month, 1)
+    prev_end = _m_start
+    items += _build_commission_items(prev_start, prev_end, date(year_i, month_i, 5), today)
+    items.sort(key=lambda x: x["date"])
 
     def _amt(item):
         v = item["amount"]
@@ -561,6 +613,31 @@ def set_payment_status():
         return redirect(next_url)
 
     from app.utils import audit
+    if item_type == "commission":
+        # item_id = "sellerId:YYYY-MM" (mês de venda). Marca as comissões do vendedor/período.
+        try:
+            seller_part, period_tag = str(item_id).split(":")
+            seller_id = int(seller_part)
+            py, pm = int(period_tag[:4]), int(period_tag[5:7])
+        except (ValueError, AttributeError):
+            return redirect(next_url)
+        p_start = date(py, pm, 1)
+        p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
+        target = "pago" if status == "pago" else "a_pagar"
+        rows = CommissionPayment.query.filter(
+            CommissionPayment.seller_id == seller_id,
+            CommissionPayment.sale_date >= p_start,
+            CommissionPayment.sale_date < p_end,
+            CommissionPayment.status.in_(["a_pagar", "pago"]),
+        ).all()
+        for c in rows:
+            c.status = target
+            c.paid_at = date.today() if target == "pago" else None
+        audit("payment", "commission", seller_id, "",
+              f"Comissões {period_tag}: → {target} ({len(rows)} itens)")
+        db.session.commit()
+        return redirect(next_url)
+
     if item_type == "salary":
         sp = SalaryPayment.query.get(int(item_id))
         if sp:
