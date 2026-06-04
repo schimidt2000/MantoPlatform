@@ -644,6 +644,8 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     if any(r.name.upper() in (RoleName.FINANCEIRO, RoleName.SUPERADMIN) for r in current_user.roles):
         seller_raw = request.form.get("seller_id", "").strip()
         event.seller_id = int(seller_raw) if seller_raw else None
+    # Taxa de comissão por evento: só o super admin altera (travada para os demais).
+    if any(r.name.upper() == RoleName.SUPERADMIN for r in current_user.roles):
         rate_raw = request.form.get("commission_rate", "").strip()
         try:
             event.commission_rate = float(Decimal(rate_raw)) if rate_raw else None
@@ -995,6 +997,7 @@ def event_detail(event_id: int):
         show_vendas=show_comercial,
         show_financeiro=show_financeiro,
         show_ensaio=show_ensaio,
+        is_superadmin=has_role(RoleName.SUPERADMIN),
         sellers=sellers,
         event_cost=event_cost,
         event_expenses=event_expenses,

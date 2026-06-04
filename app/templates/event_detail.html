@@ -1185,27 +1185,34 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       <p class="meta" style="margin-top:4px;">Data em que o contrato/venda foi fechado.</p>
     </div>
 
-    {% if show_financeiro %}
     <hr class="sep">
     <div class="form-grid-2" style="margin-bottom: 16px;">
       <div class="form-group">
         <label>Vendedor responsável</label>
+        {% if show_financeiro %}
         <select name="seller_id">
           <option value="">-- nenhum --</option>
           {% for s in sellers %}
             <option value="{{ s.id }}" {% if event.seller_id == s.id %}selected{% endif %}>{{ s.name }}</option>
           {% endfor %}
         </select>
+        {% else %}
+        <div style="padding:7px 0; font-weight:600;">{{ event.seller.name if event.seller else '— não definido —' }}</div>
+        {% endif %}
       </div>
       <div class="form-group">
         <label>Taxa de comissão (%)
           <span class="label-hint">Padrão: {{ default_commission }}%</span>
         </label>
+        {% if is_superadmin %}
         <input type="number" name="commission_rate" step="0.1" min="0" max="100"
                value="{{ event.commission_rate or '' }}" placeholder="{{ default_commission }}">
+        {% else %}
+        <div style="padding:7px 0; font-weight:600;">{{ event.commission_rate or default_commission }}%
+          <span class="label-hint">(travada — só super admin)</span></div>
+        {% endif %}
       </div>
     </div>
-    {% endif %}
 
     <button type="submit" class="btn btn-primary">Salvar dados comerciais</button>
   </form>
