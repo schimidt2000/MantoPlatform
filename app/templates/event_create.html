@@ -430,7 +430,7 @@
    AÇÕES
 ══════════════════════════════════════════════════ #}
 <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:40px;">
-  <button type="submit" class="btn btn-primary btn-lg">&#128197; Adicionar à Agenda</button>
+  <button type="submit" id="btn-submit-event" class="btn btn-primary btn-lg">&#128197; Adicionar à Agenda</button>
   <a href="/agenda" class="btn btn-secondary">Cancelar</a>
 </div>
 
@@ -807,5 +807,73 @@ _renderNF();
 function escHtml(s) {
   return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+// ── Feedback de envio: valida, evita duplicar, mostra carregamento ────────────
+(function () {
+  const form = document.getElementById('event-form');
+  const btn  = document.getElementById('btn-submit-event');
+  if (!form) return;
+  let submitting = false;
+
+  function markError(el) {
+    if (!el) return;
+    el.classList.add('field-error');
+    const clear = () => el.classList.remove('field-error');
+    el.addEventListener('input', clear, { once: true });
+    el.addEventListener('change', clear, { once: true });
+  }
+
+  form.addEventListener('submit', function (e) {
+    if (submitting) { e.preventDefault(); return; }
+
+    document.querySelectorAll('#event-form .field-error')
+      .forEach(el => el.classList.remove('field-error'));
+
+    const titleEl = document.getElementById('event-title');
+    const dateEl  = form.querySelector('[name="event_date"]');
+    const startEl = document.getElementById('event-start');
+    const endEl   = form.querySelector('[name="event_end"]');
+
+    const invalid = [];
+    if (titleEl && !titleEl.value.trim()) invalid.push(titleEl);
+    if (dateEl  && !dateEl.value.trim())  invalid.push(dateEl);
+    if (startEl && endEl && startEl.value && endEl.value && endEl.value <= startEl.value)
+      invalid.push(endEl);
+
+    if (invalid.length) {
+      e.preventDefault();
+      invalid.forEach(markError);
+      const first = invalid[0];
+      first.classList.remove('shake');
+      void first.offsetWidth;        // reinicia a animação
+      first.classList.add('shake');
+      first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      try { first.focus(); } catch (_) {}
+      return;
+    }
+
+    // Tudo certo: trava duplo envio e mostra carregamento
+    submitting = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.style.opacity = '0.7';
+      btn.style.cursor = 'wait';
+      btn.innerHTML = '&#9203; Adicionando…';
+    }
+  });
+})();
 </script>
+
+<style>
+  #event-form .field-error {
+    border-color: #dc2626 !important;
+    box-shadow: 0 0 0 3px rgba(220,38,38,.18) !important;
+  }
+  .shake { animation: mt-shake .3s ease; }
+  @keyframes mt-shake {
+    0%,100% { transform: translateX(0); }
+    25%     { transform: translateX(-5px); }
+    75%     { transform: translateX(5px); }
+  }
+</style>
 {% endblock %}
