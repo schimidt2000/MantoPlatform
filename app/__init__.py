@@ -87,13 +87,8 @@ def create_app():
     app.config.from_object(Config)
     app.jinja_env.filters['urlencode'] = _url_quote
 
-    def _brl_format(v) -> str:
-        """Formata número no padrão brasileiro: 1500.5 → '1.500,50'"""
-        if v is None:
-            return ''
-        return f"{float(v):,.2f}".replace(',', '§').replace('.', ',').replace('§', '.')
-
-    app.jinja_env.filters['brl'] = _brl_format
+    from app.money import format_brl
+    app.jinja_env.filters['brl'] = format_brl
 
     # Absolute paths for uploads (avoids CWD resolution issues)
     _instance = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'instance'))

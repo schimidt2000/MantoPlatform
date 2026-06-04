@@ -25,6 +25,7 @@ from .service import (
 )
 from .. import db
 from app.constants import RoleName
+from app.money import parse_brl, parse_brl_int
 from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
@@ -408,16 +409,7 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
     _is_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
 
-    def _parse_brl_dec(v: str):
-        """Parseia valor BRL: '1.500,50' → Decimal('1500.50')"""
-        if not v or not v.strip():
-            return None
-        try:
-            return Decimal(v.strip().replace('.', '').replace(',', '.'))
-        except Exception:
-            return None
-
-    new_cache = _parse_brl_dec(cache_value)
+    new_cache = parse_brl(cache_value)
 
     # Aplicar teto de cache: casting não pode ultrapassar o cap do orçamento
     if new_cache is not None and role.cache_cap is not None and new_cache > role.cache_cap:
@@ -426,7 +418,7 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         # superadmin pode ultrapassar — apenas registra no log depois
 
     role.cache_value = new_cache
-    new_travel = _parse_brl_dec(travel_cache)
+    new_travel = parse_brl(travel_cache)
     role.travel_cache = new_travel
     role.assigned_at = datetime.now(tz=tz_sp) if role.talent_id else None
     if role.talent_id != old_talent_id:
@@ -572,10 +564,7 @@ def _handle_add_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     name = secure_filename(file.filename)
     save_path = os.path.join(current_app.config["UPLOAD_CONTRACTS"], name)
     file.save(save_path)
-    try:
-        amount = int(amount_raw) if amount_raw else None
-    except ValueError:
-        amount = None
+    amount = parse_brl_int(amount_raw)
     db.session.add(EventContract(
         event_id=event.id,
         file_path=f"/uploads/contracts/{name}",
@@ -596,18 +585,9 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     if not can_vendas:
         return
 
-    def _pf(v: str) -> Decimal | None:
-        """Parseia número em formato BR: '1.500,50' → Decimal('1500.50')"""
-        if not v or not v.strip():
-            return None
-        try:
-            return Decimal(v.strip().replace('.', '').replace(',', '.'))
-        except Exception:
-            return None
-
-    event.sale_value      = _pf(request.form.get("sale_value", ""))
-    event.transport_value = _pf(request.form.get("transport_value", ""))
-    event.acrescimo_value = _pf(request.form.get("acrescimo_value", ""))
+    event.sale_value      = parse_brl(request.form.get("sale_value", ""))
+    event.transport_value = parse_brl(request.form.get("transport_value", ""))
+    event.acrescimo_value = parse_brl(request.form.get("acrescimo_value", ""))
     event.with_invoice    = request.form.get("with_invoice") == "1"
     sale_date_raw = request.form.get("sale_date", "").strip()
     try:
@@ -714,10 +694,7 @@ def _handle_add_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     name = secure_filename(file.filename)
     save_path = os.path.join(current_app.config["UPLOAD_PAYMENTS"], name)
     file.save(save_path)
-    try:
-        amount = int(amount_raw) if amount_raw else None
-    except ValueError:
-        amount = None
+    amount = parse_brl_int(amount_raw)
     db.session.add(EventPayment(
         event_id=event.id,
         file_path=f"/uploads/payments/{name}",
@@ -1906,22 +1883,6 @@ def create_event():
                                sellers=sellers, errors=[str(exc)], prefill={}, today_str=date.today().isoformat(),
                                old=request.form, old_chars=old_chars)
 
-    def _parse_int(raw: str) -> int | None:
-        try:
-            v = float(raw.replace(",", "."))
-            return int(round(v))
-        except (ValueError, AttributeError):
-            return None
-
-    def _parse_decimal(raw: str) -> Decimal | None:
-        """Parseia número em formato BR: '1.500,50' → Decimal('1500.50')"""
-        if not raw or not raw.strip():
-            return None
-        try:
-            return Decimal(raw.strip().replace('.', '').replace(',', '.'))
-        except Exception:
-            return None
-
     # ── Nota fiscal file (opcional) ──────────────────────────────────────────
     invoice_filename = None
     invoice_file = request.files.get("invoice_file")
@@ -1944,10 +1905,10 @@ def create_event():
         event_type           = event_type or None,
         needs_rehearsal      = needs_rehearsal,
         source               = "platform",
-        sale_value           = _parse_decimal(sale_value_raw),
+        sale_value           = parse_brl(sale_value_raw),
         sale_date            = sale_date_val,
-        transport_value      = _parse_decimal(transport_value_raw),
-        acrescimo_value      = _parse_decimal(acrescimo_value_raw),
+        transport_value      = parse_brl(transport_value_raw),
+        acrescimo_value      = parse_brl(acrescimo_value_raw),
         with_invoice         = with_invoice,
         invoice_file         = invoice_filename,
         seller_id            = int(seller_id_raw) if seller_id_raw.isdigit() else None,
@@ -1987,17 +1948,7 @@ def create_event():
             sheet_id = sheet_by_name.get(char.lower())
 
         # cache: preferência manual do form, depois caches do orçamento
-        def _parse_brl_or_int(v: str):
-            if not v or not v.strip():
-                return None
-            try:
-                return Decimal(v.strip().replace('.', '').replace(',', '.'))
-            except Exception:
-                try:
-                    return Decimal(v.strip())
-                except Exception:
-                    return None
-        cache_val = _parse_brl_or_int(char_caches[i]) if i < len(char_caches) else None
+        cache_val = parse_brl(char_caches[i]) if i < len(char_caches) else None
         makeup    = (char_makeups[i] == "1") if i < len(char_makeups) else False
         singer    = (char_singers[i] == "1") if i < len(char_singers) else False
 
@@ -2037,7 +1988,7 @@ def create_event():
             db.session.add(EventPayment(
                 event_id  = event.id,
                 file_path = fpath,
-                amount    = _parse_int(pa_raw),
+                amount    = parse_brl_int(pa_raw),
             ))
 
     # ── Contrato ─────────────────────────────────────────────────────────────
@@ -2049,7 +2000,7 @@ def create_event():
         db.session.add(EventContract(
             event_id  = event.id,
             file_path = fpath,
-            amount    = _parse_int(contract_amount),
+            amount    = parse_brl_int(contract_amount),
             is_signed = is_signed,
         ))
 
