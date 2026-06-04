@@ -421,10 +421,17 @@ def _process_quote():
         f"Aguardamos sua confirmação para enviarmos o link do contrato digital."
     )
 
+    # Multiplicador usado (congelado no orçamento): markup do modelo, ou o personalizado.
+    if personalizado:
+        markup_used = cust_mult if criterio_pers == "multiplicador" else None
+    else:
+        markup_used = _cfg.load()["markup"]["show" if event_has_show else "receptivo"]
+
     session["orcamento_quote"] = {
         "message":             message,
         "transport_breakdown": transport_breakdown,
         "fora_sp":             fora_sp,
+        "markup_used":         markup_used,
         "total_1h":            totals[0],
         "total_2h":            totals[1],
         "total_4h":            totals[2],
@@ -489,6 +496,7 @@ def _process_quote():
         total_2h       = totals[1],
         total_4h       = totals[2],
         has_show       = event_has_show,
+        result_snapshot = json.dumps(session["orcamento_quote"], ensure_ascii=False),
         form_snapshot  = json.dumps(snapshot, ensure_ascii=False),
     )
     db.session.add(entry)
@@ -507,6 +515,63 @@ def resultado():
     if not quote:
         return redirect(url_for("orcamento.index"))
     return render_template("orcamento/resultado.html", quote=quote, fmt_brl=_fmt_brl)
+
+
+# ── Ver orçamento congelado (do histórico) ──────────────────────────────────────
+
+def _legacy_quote(entry) -> dict:
+    """Monta um quote mínimo a partir dos totais salvos (orçamentos sem snapshot completo)."""
+    try:
+        fmt_date = datetime.strptime(entry.event_date, "%Y-%m-%d").strftime("%d/%m/%Y") if entry.event_date else ""
+    except ValueError:
+        fmt_date = entry.event_date or ""
+    return {
+        "message": (
+            "_(Mensagem original não registrada — orçamento anterior ao registro completo. "
+            "Os valores abaixo são os que foram cotados.)_"
+        ),
+        "transport_breakdown": None,
+        "fora_sp": False,
+        "markup_used": None,
+        "total_1h": float(entry.total_1h or 0),
+        "total_2h": float(entry.total_2h or 0),
+        "total_4h": float(entry.total_4h or 0),
+        "total_custom": None,
+        "duracao_custom": 0,
+        "show_1h": True, "show_2h": True, "show_4h": True,
+        "client_name": entry.client_name or "",
+        "fmt_date": fmt_date,
+        "fmt_time": "",
+        "event_location": entry.event_location or "",
+        "team_lines": [],
+        "nota_fiscal": False,
+        "modo_duracao": "horas",
+        "personalizado": False,
+        "personalizado_criterio": None,
+        "cache_base": None,
+        "custom_mult": None,
+    }
+
+
+@orcamento_bp.route("/historico/<int:entry_id>/ver")
+@login_required
+@_require_vendas
+def ver_historico(entry_id: int):
+    """Mostra o orçamento CONGELADO (snapshot do resultado), imune a mudanças de preço.
+
+    Carrega o snapshot salvo na sessão e reusa a tela de resultado (mensagem/PDF/email).
+    """
+    from app.models import OrcamentoHistory
+    entry = OrcamentoHistory.query.get_or_404(entry_id)
+    if entry.result_snapshot:
+        try:
+            quote = json.loads(entry.result_snapshot)
+        except (json.JSONDecodeError, TypeError):
+            quote = _legacy_quote(entry)
+    else:
+        quote = _legacy_quote(entry)
+    session["orcamento_quote"] = quote
+    return redirect(url_for("orcamento.resultado"))
 
 
 # ── Download PDF ──────────────────────────────────────────────────────────────

@@ -918,6 +918,9 @@ class OrcamentoHistory(db.Model):
     total_4h       = db.Column(db.Numeric(10, 2), nullable=True)
     has_show       = db.Column(db.Boolean, default=False, nullable=False)
     form_snapshot  = db.Column(db.Text, nullable=True)  # JSON com todo o estado do form
+    # Snapshot do RESULTADO (totais, multiplicadores, mensagem) — congela o orçamento:
+    # "Ver" mostra exatamente o que foi cotado, imune a mudanças de preço posteriores.
+    result_snapshot = db.Column(db.Text, nullable=True)  # JSON do quote gerado
 
     user = db.relationship("User", lazy=True)
 

@@ -227,10 +227,13 @@
         <td class="val-cell" style="text-align:right;">{{ fmt_brl(e.total_4h or 0) }}</td>
         <td style="text-align:right;white-space:nowrap;">
           <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
-            <a href="{{ url_for('orcamento.index') }}?restore={{ e.id }}"
-               class="btn btn-sm btn-secondary" style="font-size:12px;">Reabrir</a>
+            <a href="{{ url_for('orcamento.ver_historico', entry_id=e.id) }}"
+               class="btn btn-sm btn-secondary" style="font-size:12px;">Ver</a>
             <a href="{{ url_for('calendar.create_event') }}?orcamento_id={{ e.id }}"
                class="btn btn-sm btn-primary" style="font-size:12px;">Criar evento</a>
+            <a href="{{ url_for('orcamento.index') }}?restore={{ e.id }}"
+               class="btn btn-sm btn-ghost" style="font-size:12px;"
+               title="Carrega os dados e recalcula com os preços atuais (gera um novo)">Recalcular</a>
           </div>
         </td>
       </tr>
