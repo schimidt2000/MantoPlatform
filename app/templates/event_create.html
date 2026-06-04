@@ -121,24 +121,25 @@
     <div class="form-group" style="margin:0;">
       <label>Data <span style="color:var(--red);">*</span></label>
       <input type="date" name="event_date" required style="width:160px;"
-             value="{{ prefill.date or '' }}">
+             value="{{ old.get('event_date') or prefill.date or '' }}">
     </div>
     <div class="form-group" style="margin:0;">
       <label>Início <span style="color:var(--red);">*</span></label>
       <input type="time" name="event_start" id="event-start" style="width:110px;"
-             value="{{ prefill.start_time or '' }}">
+             value="{{ old.get('event_start') or prefill.start_time or '' }}">
     </div>
     <div class="form-group" style="margin:0;">
       <label>Fim</label>
-      <input type="time" name="event_end" style="width:110px;">
+      <input type="time" name="event_end" style="width:110px;" value="{{ old.get('event_end') or '' }}">
     </div>
     <div class="form-group" style="margin:0;">
       <label>Tipo</label>
+      {% set _t = old.get('event_type') or '' %}
       <select name="event_type" id="event-type" style="width:auto;" onchange="onTypeChange()">
         <option value="">— Selecionar —</option>
-        <option value="SHOW">SHOW — Show com som</option>
-        <option value="CORP">CORP — Corporativo</option>
-        <option value="R&I">R&amp;I — Receptivo e Interativo</option>
+        <option value="SHOW" {{ 'selected' if _t == 'SHOW' }}>SHOW — Show com som</option>
+        <option value="CORP" {{ 'selected' if _t == 'CORP' }}>CORP — Corporativo</option>
+        <option value="R&I" {{ 'selected' if _t == 'R&I' }}>R&amp;I — Receptivo e Interativo</option>
       </select>
     </div>
   </div>
@@ -146,20 +147,20 @@
   <div class="form-group">
     <label>Local do evento</label>
     <input type="text" name="location" placeholder="Rua, número, bairro, cidade…"
-           value="{{ prefill.location or '' }}" style="max-width:520px;">
+           value="{{ old.get('location') or prefill.location or '' }}" style="max-width:520px;">
   </div>
 
   <div class="form-group">
     <label>Descrição do evento</label>
     <textarea name="description" rows="4" style="max-width:520px; resize:vertical;"
-              placeholder="Colar aqui resposta whatsform"></textarea>
+              placeholder="Colar aqui resposta whatsform">{{ old.get('description') or '' }}</textarea>
     <div class="meta">Aparece na descrição do Google Agenda e na página do evento.</div>
   </div>
 
   <div class="form-group" style="margin-bottom:0;">
     <label>Precisa de ensaio?</label>
     <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:400;">
-      <input type="checkbox" name="needs_rehearsal" value="1" id="needs-rehearsal">
+      <input type="checkbox" name="needs_rehearsal" value="1" id="needs-rehearsal" {{ 'checked' if old.get('needs_rehearsal') }}>
       <span>Sim, adicionar ensaio ao evento</span>
     </label>
     <div class="meta">Eventos SHOW sempre geram ensaio automaticamente.</div>
@@ -186,7 +187,7 @@
     <label>Título do evento <span style="color:var(--red);">*</span></label>
     <input type="text" name="title" id="event-title" required
            placeholder="Gerado automaticamente pelos personagens"
-           style="max-width:520px;">
+           style="max-width:520px;" value="{{ old.get('title') or '' }}">
     <div class="meta">Formato padrão: <code>(TIPO) PERSONAGEM 1 + PERSONAGEM 2</code></div>
   </div>
 </div>
@@ -242,7 +243,7 @@
       <div class="prefix"><span>R$</span>
         <input type="text" inputmode="decimal" name="sale_value" id="sale-value" class="brl-input"
                placeholder="0,00" style="width:150px;"
-               {% if prefill.orcamento_id %}value="{{ prefill.total_1h | brl }}"{% endif %}>
+               value="{{ old.get('sale_value') or (prefill.total_1h | brl if prefill.orcamento_id else '') }}">
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
         <button type="button" class="btn btn-secondary btn-sm"
@@ -277,7 +278,7 @@
       <div class="prefix"><span>R$</span>
         <input type="text" inputmode="decimal" name="transport_value" id="transport-value" class="brl-input"
                placeholder="0,00" style="width:130px;"
-               value="{{ prefill.transport_value | brl if prefill.transport_value else '' }}">
+               value="{{ old.get('transport_value') or (prefill.transport_value | brl if prefill.transport_value else '') }}">
       </div>
       <div class="meta">Separado para cálculo de comissão</div>
     </div>
@@ -287,7 +288,7 @@
       <div class="prefix"><span>R$</span>
         <input type="text" inputmode="decimal" name="acrescimo_value" class="brl-input"
                placeholder="0,00" style="width:110px;"
-               value="{{ prefill.acrescimo_value | brl if prefill.acrescimo_value else '' }}">
+               value="{{ old.get('acrescimo_value') or (prefill.acrescimo_value | brl if prefill.acrescimo_value else '') }}">
       </div>
     </div>
   </div>
@@ -318,7 +319,7 @@
       <option value="">— Selecionar —</option>
       {% for u in sellers %}
         <option value="{{ u.id }}"
-          {% if current_user.id == u.id %}selected{% endif %}>
+          {% if (old.get('seller_id') and old.get('seller_id')|string == u.id|string) or (not old.get('seller_id') and current_user.id == u.id) %}selected{% endif %}>
           {{ u.name }}
         </option>
       {% endfor %}
@@ -328,7 +329,7 @@
   <div class="form-group" style="margin-top:16px; margin-bottom:0;">
     <label>Data da venda</label>
     <input type="date" name="sale_date" style="width:auto;"
-           value="{{ today_str }}">
+           value="{{ old.get('sale_date') or today_str }}">
     <p class="meta" style="margin-top:4px;">Data em que o contrato/venda foi fechado. Usada para calcular comissão do mês.</p>
   </div>
 </div>
@@ -338,7 +339,7 @@
 ══════════════════════════════════════════════════ #}
 <div class="panel ec-panel">
   <div class="panel-title">Forma de Pagamento</div>
-  <input type="hidden" name="payment_method" id="pay-method-hidden" value="">
+  <input type="hidden" name="payment_method" id="pay-method-hidden" value="{{ old.get('payment_method') or '' }}">
 
   <div class="pay-method-btns">
     <button type="button" class="pay-method-btn" data-method="avista"       onclick="setPayMethod('avista')">       À vista (PIX)</button>
@@ -352,7 +353,7 @@
     <div class="form-group" style="margin-bottom:0;">
       <label>Quantas parcelas?</label>
       <input type="number" name="payment_installments" min="2" max="12"
-             value="2" style="width:80px;">
+             value="{{ old.get('payment_installments') or '2' }}" style="width:80px;">
     </div>
   </div>
 
@@ -360,7 +361,7 @@
   <div id="pay-extra-faturado" class="pay-extra-panel">
     <div class="form-group" style="margin-bottom:0;">
       <label>Data de pagamento</label>
-      <input type="date" name="payment_due_date" style="width:160px;">
+      <input type="date" name="payment_due_date" style="width:160px;" value="{{ old.get('payment_due_date') or '' }}">
     </div>
   </div>
 
@@ -514,6 +515,9 @@ const ORC_CACHES = (function() {
   try { return JSON.parse(el.value); } catch(e) { return []; }
 })();
 
+// Personagens reenviados (quando o servidor re-renderiza por erro): repopular as linhas.
+const RESUBMIT_CHARS = {{ old_chars | tojson }};
+
 // ── Auto-title ───────────────────────────────────────────────────────────────
 var titleEdited = false;
 
@@ -602,7 +606,12 @@ document.getElementById('chars-list').addEventListener('click', function(e) {
 // ── Inicialização: primeira linha ou pré-fill do orçamento ───────────────────
 (function() {
   const list = document.getElementById('chars-list');
-  if (ORC_CACHES.length > 0) {
+  if (RESUBMIT_CHARS.length > 0) {
+    // Re-render por erro: restaura as linhas que o usuário já tinha preenchido.
+    RESUBMIT_CHARS.forEach(function(c, i) {
+      list.appendChild(buildCharRow(i, c.label, false, false, 'character', c.sheet_id || null));
+    });
+  } else if (ORC_CACHES.length > 0) {
     ORC_CACHES.forEach(function(c, i) {
       list.appendChild(buildCharRow(i, c.label, c.needs_makeup, c.is_singer, c.role_type, null));
     });
@@ -610,6 +619,12 @@ document.getElementById('chars-list').addEventListener('click', function(e) {
     list.appendChild(buildCharRow(0, '', false, false, 'character', null));
   }
   autoTitle();
+})();
+
+// Restaura o destaque da forma de pagamento se veio de um re-render por erro.
+(function() {
+  const pm = document.getElementById('pay-method-hidden');
+  if (pm && pm.value && typeof setPayMethod === 'function') setPayMethod(pm.value);
 })();
 
 // ── Helpers BRL (. milhar, , decimal) ────────────────────────────────────────
@@ -769,7 +784,7 @@ function applyDesconto() {
 }
 
 // ── Nota Fiscal ───────────────────────────────────────────────────────────────
-var _nfOn = {{ 'true' if prefill.with_invoice else 'false' }};
+var _nfOn = {{ 'true' if (old.get('with_invoice') or prefill.with_invoice) else 'false' }};
 
 function _renderNF() {
   const btn    = document.getElementById('btn-nf');
