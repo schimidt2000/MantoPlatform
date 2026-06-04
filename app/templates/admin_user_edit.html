@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Editar Usuário{% endblock %}
-{% block page_title %}Editar Usuário{% endblock %}
+{% block page_title %}{{ user.name }}{% endblock %}
+{% block page_subtitle %}
+  <p class="sub">
+    {{ user.email }}
+    {% for r in user.roles %}<span class="badge badge-blue">{{ r.name }}</span> {% endfor %}
+  </p>
+{% endblock %}
 {% block page_actions %}
   <a class="btn btn-ghost" href="/admin/users">← Voltar</a>
 {% endblock %}
@@ -8,12 +14,15 @@
 {% block content %}
 <div style="display:flex; flex-direction:column; gap:16px; max-width:600px;">
 
-  <div class="panel">
-    {% if error %}
-      <div class="alert alert-error mb-16">{{ error }}</div>
-    {% endif %}
+  {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+  {% endif %}
 
-    <form method="post">
+  {# ── Identidade e papéis — só Superadmin ──────────────────────── #}
+  {% if is_superadmin %}
+  <div class="panel">
+    <h3 style="margin-bottom:12px;">Identidade e papéis</h3>
+    <form method="post" action="{{ url_for('admin.edit_user', user_id=user.id) }}">
       <div class="grid-2">
         <div class="form-group">
           <label>Nome</label>
@@ -37,22 +46,7 @@
           <input type="checkbox" name="receives_commission" value="1" {% if user.receives_commission %}checked{% endif %}>
           Recebe comissão de vendas
         </label>
-        <p class="meta" style="margin-top:4px;">Desmarque para vendedores que não devem receber comissão (ex: sócios, diretores).</p>
-      </div>
-
-      <div class="form-group">
-        <label>Chave PIX</label>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <input type="text" name="pix_key" value="{{ user.pix_key or '' }}"
-                 placeholder="CPF, e-mail, telefone ou chave aleatória"
-                 style="flex:1; min-width:200px;">
-          <select name="pix_key_type" style="width:160px;">
-            <option value="">— Tipo —</option>
-            {% for t in ['CPF', 'CNPJ', 'E-mail', 'Telefone', 'Aleatória'] %}
-              <option value="{{ t }}" {% if user.pix_key_type == t %}selected{% endif %}>{{ t }}</option>
-            {% endfor %}
-          </select>
-        </div>
+        <p class="meta" style="margin-top:4px;">Desmarque para quem não deve receber comissão (ex: sócios, diretores).</p>
       </div>
 
       <div class="form-group">
@@ -60,12 +54,7 @@
         <div class="panel" style="margin:0; padding:12px;">
           {% for r in roles %}
             <label class="checkbox-row">
-              <input
-                type="checkbox"
-                name="roles"
-                value="{{ r.id }}"
-                {% if r in user.roles %}checked{% endif %}
-              >
+              <input type="checkbox" name="roles" value="{{ r.id }}" {% if r in user.roles %}checked{% endif %}>
               {{ r.name }}
             </label>
           {% else %}
@@ -79,7 +68,99 @@
       </div>
     </form>
   </div>
+  {% endif %}
 
+  {# ── Dados de pagamento: PIX — Superadmin ou Financeiro ───────── #}
+  <div class="panel">
+    <h3 style="margin-bottom:12px;">Chave PIX</h3>
+    <form method="post" action="{{ url_for('admin.update_pix', user_id=user.id) }}">
+      <div class="form-group" style="margin-bottom:0;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <input type="text" name="pix_key" value="{{ user.pix_key or '' }}"
+                 placeholder="CPF, e-mail, telefone ou chave aleatória"
+                 style="flex:1; min-width:200px;">
+          <select name="pix_key_type" style="width:160px;">
+            <option value="">— Tipo —</option>
+            {% for t in ['CPF', 'CNPJ', 'E-mail', 'Telefone', 'Aleatória'] %}
+              <option value="{{ t }}" {% if user.pix_key_type == t %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn btn-primary" type="submit">Salvar PIX</button>
+      </div>
+    </form>
+  </div>
+
+  {# ── Salário — Superadmin ou Financeiro ──────────────────────── #}
+  <div class="panel">
+    <h3 style="margin-bottom:4px;">Salário</h3>
+    <p class="meta" style="margin-bottom:14px; font-size:13px;">
+      Ao registrar um novo salário, o atual é encerrado automaticamente.
+    </p>
+    <form method="post" action="{{ url_for('admin.add_salary', user_id=user.id) }}">
+      <div class="grid-2" style="gap:12px; margin-bottom:12px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Salário (R$)</label>
+          <input type="number" name="salary" placeholder="Ex: 3500" required>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Tipo de pagamento</label>
+          <select name="payment_type" required>
+            <option value="">-- selecione --</option>
+            <option value="semanal">Semanal</option>
+            <option value="quinzenal">Dia 5 e 20</option>
+            <option value="comissao">Somente comissão</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Início da vigência</label>
+          <input type="date" name="start_date" required>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Observações <span class="muted" style="font-weight:400;">(opcional)</span></label>
+          <input type="text" name="notes" placeholder="Ex: promoção, reajuste anual…">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary">Salvar registro</button>
+    </form>
+
+    <h4 style="margin:18px 0 10px;">Histórico salarial</h4>
+    {% if history %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Salário</th><th>Tipo</th><th>Início</th><th>Fim</th><th>Obs.</th></tr>
+        </thead>
+        <tbody>
+        {% for h in history %}
+          <tr>
+            <td class="strong">R$ {{ h.salary }}</td>
+            <td class="meta">
+              {% if h.payment_type == 'semanal' %}Semanal
+              {% elif h.payment_type == 'quinzenal' %}Dia 5 e 20
+              {% elif h.payment_type == 'comissao' %}Somente comissão
+              {% else %}{{ h.payment_type }}{% endif %}
+            </td>
+            <td class="meta">{{ h.start_date.strftime("%d/%m/%Y") }}</td>
+            <td>
+              {% if h.end_date %}<span class="meta">{{ h.end_date.strftime("%d/%m/%Y") }}</span>
+              {% else %}<span class="badge badge-green">Vigente</span>{% endif %}
+            </td>
+            <td class="muted">{{ h.notes or '' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <p class="muted" style="text-align:center; padding:12px 0;">Nenhum registro salarial ainda.</p>
+    {% endif %}
+  </div>
+
+  {# ── Resetar senha — só Superadmin ────────────────────────────── #}
+  {% if is_superadmin %}
   <div class="panel">
     <h3 style="margin-bottom:12px;">Resetar senha</h3>
     <form method="post" action="{{ url_for('admin.reset_password', user_id=user.id) }}">
@@ -92,6 +173,7 @@
       </div>
     </form>
   </div>
+  {% endif %}
 
 </div>
 {% endblock %}

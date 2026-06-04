@@ -325,81 +325,16 @@ def dashboard():
 @login_required
 @require_financeiro
 def funcionarios():
-    settings = SiteSetting.query.get(1)
-    users = User.query.filter_by(is_active=True).order_by(User.name.asc()).all()
-
-    users_data = []
-    for u in users:
-        current = u.salary_histories.filter_by(end_date=None).order_by(SalaryHistory.start_date.desc()).first()
-        users_data.append({"user": u, "current_salary": current})
-
-    return render_template(
-        "financeiro/funcionarios.html",
-        users_data=users_data,
-        settings=settings,
-    )
+    # Unificado em Usuários (feature 022). Mantém o link antigo funcionando.
+    return redirect(url_for("admin.list_users"))
 
 
 @financeiro_bp.route("/financeiro/funcionarios/<int:user_id>", methods=["GET", "POST"])
 @login_required
 @require_financeiro
 def funcionario_detail(user_id: int):
-    settings = SiteSetting.query.get(1)
-    user = User.query.get_or_404(user_id)
-
-    if request.method == "POST":
-        salary_raw = request.form.get("salary", "").strip()
-        payment_type = request.form.get("payment_type", "").strip()
-        start_str = request.form.get("start_date", "").strip()
-        notes = request.form.get("notes", "").strip()
-
-        errors = []
-        if not salary_raw or not salary_raw.isdigit():
-            errors.append("Salário inválido.")
-        if payment_type not in ("semanal", "quinzenal", "comissao"):
-            errors.append("Tipo de pagamento inválido.")
-        try:
-            start_date = date.fromisoformat(start_str) if start_str else date.today()
-        except ValueError:
-            errors.append("Data de início inválida.")
-            start_date = date.today()
-
-        if not errors:
-            # encerra o salário vigente
-            current = user.salary_histories.filter_by(end_date=None).first()
-            if current:
-                current.end_date = start_date
-
-            db.session.add(SalaryHistory(
-                user_id=user.id,
-                salary=int(salary_raw),
-                payment_type=payment_type,
-                start_date=start_date,
-                notes=notes or None,
-            ))
-            from app.utils import audit
-            audit("create", "salary", user.id, user.name,
-                  f"Salário registrado: R${salary_raw} ({payment_type}) a partir de {start_date}")
-            db.session.commit()
-            return redirect(url_for("financeiro.funcionario_detail", user_id=user.id))
-
-        history = user.salary_histories.order_by(SalaryHistory.start_date.desc()).all()
-        return render_template(
-            "financeiro/funcionario_detail.html",
-            user=user,
-            history=history,
-            settings=settings,
-            errors=errors,
-        )
-
-    history = user.salary_histories.order_by(SalaryHistory.start_date.desc()).all()
-    return render_template(
-        "financeiro/funcionario_detail.html",
-        user=user,
-        history=history,
-        settings=settings,
-        errors=[],
-    )
+    # Unificado em Usuários (feature 022). Mantém o link antigo funcionando.
+    return redirect(url_for("admin.edit_user", user_id=user_id))
 
 
 # ─── PAGAMENTOS ROUTES ───────────────────────────────────────────────────────
