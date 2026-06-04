@@ -388,6 +388,14 @@ def _ensure_salary_payments(year: int, month: int) -> None:
     month_start = date(year, month, 1)
     month_end = date(year, month, last_day)
 
+    # Recompõe os lançamentos NÃO pagos do mês a partir do salário vigente:
+    # apaga os não pagos (serão recriados com o valor/frequência atuais) e preserva os
+    # já pagos / "no banco" (histórico real do que foi efetivamente pago).
+    SalaryPayment.query.filter(
+        SalaryPayment.month_ref == month_ref,
+        SalaryPayment.payment_status == "nao_pago",
+    ).delete(synchronize_session="fetch")
+
     active_histories = SalaryHistory.query.filter(
         SalaryHistory.payment_type != "comissao",
         SalaryHistory.start_date <= month_end,
