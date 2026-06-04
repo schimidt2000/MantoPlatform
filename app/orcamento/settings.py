@@ -5,6 +5,9 @@ Falls back to DEFAULTS when no configuration has been saved yet.
 """
 import copy
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 DEFAULTS: dict = {
     "markup": {
@@ -138,7 +141,7 @@ def load() -> dict:
         if setting and setting.pricing_config:
             return _migrate(json.loads(setting.pricing_config))
     except Exception:
-        pass
+        logger.exception("Falha ao carregar pricing_config; usando preços DEFAULTS")
     return copy.deepcopy(DEFAULTS)
 
 
