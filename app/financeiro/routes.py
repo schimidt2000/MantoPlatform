@@ -101,6 +101,31 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
         ))
 
 
+def _resync_pending_commissions() -> None:
+    """Reconcilia as comissões A PAGAR com o cálculo atual do evento (mesma base da aba comercial).
+
+    Evita divergência quando a taxa muda depois de a comissão ter sido registrada. Não altera
+    comissões já pagas (histórico) nem estornos (valores negativos).
+    """
+    pendentes = (
+        CommissionPayment.query
+        .filter(
+            CommissionPayment.status == "a_pagar",
+            CommissionPayment.event_id.isnot(None),
+            CommissionPayment.amount >= 0,
+        )
+        .all()
+    )
+    event_ids = {cp.event_id for cp in pendentes}
+    if not event_ids:
+        return
+    for eid in event_ids:
+        ev = CalendarEvent.query.get(eid)
+        if ev:
+            _sync_commission_payment(ev)
+    db.session.commit()
+
+
 # ─── FINANCEIRO ROUTES ──────────────────────────────────────────────────────
 
 def _month_range(year: int, month: int):
@@ -549,6 +574,7 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
 @login_required
 @require_financeiro
 def pagamentos():
+    _resync_pending_commissions()
     today = date.today()
     month = request.args.get("month", today.strftime("%Y-%m"))
     try:
@@ -806,6 +832,7 @@ _COMMISSION_STATUS_LABELS = {
 @login_required
 @require_financeiro
 def comissoes():
+    _resync_pending_commissions()
     today = date.today()
     month = request.args.get("month", today.strftime("%Y-%m"))
     try:
