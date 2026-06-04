@@ -3,22 +3,37 @@ from collections import defaultdict
 from datetime import datetime, date, timedelta
 from functools import wraps
 
-from flask import Blueprint, render_template, request, redirect, url_for, current_app, flash
+from flask import Blueprint, render_template, request, redirect, url_for, current_app, flash, abort
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
 from app import db
-from app.models import User, SiteSetting, Role, EventLog, CalendarEvent, AuditLog
+from app.models import User, SiteSetting, Role, EventLog, CalendarEvent, AuditLog, SalaryHistory
 from app.constants import RoleName
 
 admin_bp = Blueprint("admin", __name__)
 
 
+def _is_superadmin() -> bool:
+    return any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
+
+
 def require_superadmin(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not any(r.name == RoleName.SUPERADMIN for r in current_user.roles):
+        if not _is_superadmin():
             return {"ok": False, "error": "Acesso apenas para SuperAdmin"}, 403
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def require_users_access(fn):
+    """Acesso à seção de Usuários: SUPERADMIN (tudo) ou FINANCEIRO (PIX + salário)."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        roles = {r.name.upper() for r in current_user.roles}
+        if not ({RoleName.SUPERADMIN, RoleName.FINANCEIRO} & roles):
+            abort(403)
         return fn(*args, **kwargs)
     return wrapper
 
@@ -41,12 +56,17 @@ def admin_home():
 
 @admin_bp.route("/users", methods=["GET"])
 @login_required
-@require_superadmin
+@require_users_access
 def list_users():
     users = User.query.order_by(User.id.asc()).all()
+    salaries = {
+        s.user_id: s for s in SalaryHistory.query.filter_by(end_date=None).all()
+    }
+    users_data = [{"user": u, "salary": salaries.get(u.id)} for u in users]
     return render_template(
         "admin_users.html",
-        users=users,
+        users_data=users_data,
+        is_superadmin=_is_superadmin(),
         settings=get_settings(),
         active="users",
         title="Admin - Usuários",
@@ -112,56 +132,111 @@ def create_user():
 
 @admin_bp.route("/users/<int:user_id>/edit", methods=["GET", "POST"])
 @login_required
-@require_superadmin
+@require_users_access
 def edit_user(user_id: int):
+    """Página unificada do usuário. Identidade/papéis = superadmin; PIX/salário = também financeiro."""
     user = User.query.get_or_404(user_id)
+
+    def _render(error=None):
+        return render_template(
+            "admin_user_edit.html",
+            user=user,
+            error=error,
+            is_superadmin=_is_superadmin(),
+            history=user.salary_histories.order_by(SalaryHistory.start_date.desc()).all(),
+            settings=get_settings(),
+            active="users",
+            title="Admin - Editar Usuário",
+            roles=Role.query.order_by(Role.name.asc()).all(),
+        )
+
     if request.method == "POST":
+        # Edição de identidade/papéis é exclusiva do Superadmin (PIX e salário têm rotas próprias).
+        if not _is_superadmin():
+            abort(403)
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip().lower()
         is_active = request.form.get("is_active") == "1"
         role_ids = [int(r) for r in request.form.getlist("roles")]
 
         if not name or not email:
-            return render_template(
-                "admin_user_edit.html",
-                user=user,
-                error="Preencha tudo.",
-                settings=get_settings(),
-                active="users",
-                title="Admin - Editar Usuário",
-            )
-
+            return _render(error="Preencha tudo.")
         existing = User.query.filter(User.email == email, User.id != user.id).first()
         if existing:
-            return render_template(
-                "admin_user_edit.html",
-                user=user,
-                error="Esse email já existe.",
-                settings=get_settings(),
-                active="users",
-                title="Admin - Editar Usuário",
-            )
+            return _render(error="Esse email já existe.")
 
         user.name = name
         user.email = email
         user.is_active = is_active
         user.receives_commission = request.form.get("receives_commission") == "1"
-        user.pix_key = request.form.get("pix_key", "").strip() or None
-        user.pix_key_type = request.form.get("pix_key_type", "").strip() or None
         user.roles = Role.query.filter(Role.id.in_(role_ids)).all() if role_ids else []
         from app.utils import audit
         audit("edit", "user", user.id, user.name, f"Usuário editado: {user.email}")
         db.session.commit()
-        return redirect(url_for("admin.list_users"))
+        flash("Dados do usuário atualizados.", "success")
+        return redirect(url_for("admin.edit_user", user_id=user.id))
 
-    return render_template(
-        "admin_user_edit.html",
-        user=user,
-        settings=get_settings(),
-        active="users",
-        title="Admin - Editar Usuário",
-        roles=Role.query.order_by(Role.name.asc()).all(),
-    )
+    return _render()
+
+
+@admin_bp.route("/users/<int:user_id>/pix", methods=["POST"])
+@login_required
+@require_users_access
+def update_pix(user_id: int):
+    """Atualiza dados de pagamento (PIX). Superadmin ou Financeiro."""
+    user = User.query.get_or_404(user_id)
+    user.pix_key = request.form.get("pix_key", "").strip() or None
+    user.pix_key_type = request.form.get("pix_key_type", "").strip() or None
+    from app.utils import audit
+    audit("edit", "user", user.id, user.name, "PIX atualizado")
+    db.session.commit()
+    flash("Dados de PIX atualizados.", "success")
+    return redirect(url_for("admin.edit_user", user_id=user.id))
+
+
+@admin_bp.route("/users/<int:user_id>/salario", methods=["POST"])
+@login_required
+@require_users_access
+def add_salary(user_id: int):
+    """Registra novo salário (encerra o vigente). Superadmin ou Financeiro."""
+    user = User.query.get_or_404(user_id)
+    salary_raw = request.form.get("salary", "").strip()
+    payment_type = request.form.get("payment_type", "").strip()
+    start_str = request.form.get("start_date", "").strip()
+    notes = request.form.get("notes", "").strip()
+
+    errors = []
+    if not salary_raw or not salary_raw.isdigit():
+        errors.append("Salário inválido.")
+    if payment_type not in ("semanal", "quinzenal", "comissao"):
+        errors.append("Tipo de pagamento inválido.")
+    try:
+        start_date = date.fromisoformat(start_str) if start_str else date.today()
+    except ValueError:
+        errors.append("Data de início inválida.")
+        start_date = date.today()
+
+    if errors:
+        for e in errors:
+            flash(e, "error")
+        return redirect(url_for("admin.edit_user", user_id=user.id))
+
+    current = user.salary_histories.filter_by(end_date=None).first()
+    if current:
+        current.end_date = start_date
+    db.session.add(SalaryHistory(
+        user_id=user.id,
+        salary=int(salary_raw),
+        payment_type=payment_type,
+        start_date=start_date,
+        notes=notes or None,
+    ))
+    from app.utils import audit
+    audit("create", "salary", user.id, user.name,
+          f"Salário registrado: R${salary_raw} ({payment_type}) a partir de {start_date}")
+    db.session.commit()
+    flash("Salário registrado.", "success")
+    return redirect(url_for("admin.edit_user", user_id=user.id))
 
 
 @admin_bp.route("/users/<int:user_id>/reset-password", methods=["POST"])
