@@ -1818,6 +1818,8 @@ def create_event():
             errors=[],
             prefill=prefill,
             today_str=date.today().isoformat(),
+            old={},
+            old_chars=[],
         )
 
     # ── POST ────────────────────────────────────────────────────────────────
@@ -1857,6 +1859,14 @@ def create_event():
     char_singers = request.form.getlist("char_is_singer[]")      # '1' ou ''
     char_caches  = request.form.getlist("char_cache[]")          # valor em R$
 
+    # Personagens enviados, p/ repopular o form se o servidor re-renderizar por erro
+    # (apenas dados alinhados por linha: nome + figurino; anexos não são restauráveis).
+    old_chars = [
+        {"label": nm, "sheet_id": (sheet_ids[i] if i < len(sheet_ids) else "")}
+        for i, nm in enumerate(char_names)
+        if nm.strip()
+    ]
+
     errors = []
     if not title:
         errors.append("Título obrigatório.")
@@ -1882,7 +1892,8 @@ def create_event():
 
     if errors:
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
-                               sellers=sellers, errors=errors, prefill={}, today_str=date.today().isoformat())
+                               sellers=sellers, errors=errors, prefill={}, today_str=date.today().isoformat(),
+                               old=request.form, old_chars=old_chars)
 
     # Remove prefixo (TIPO) que o JS já inseriu no título para não duplicar
     clean_title = re.sub(r'^\s*\([^)]*\)\s*', '', title).strip() if title else title
@@ -1891,7 +1902,8 @@ def create_event():
         created = insert_event(CALENDAR_ID, gc_title, st, et, description=description, location=location)
     except RuntimeError as exc:
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
-                               sellers=sellers, errors=[str(exc)], prefill={}, today_str=date.today().isoformat())
+                               sellers=sellers, errors=[str(exc)], prefill={}, today_str=date.today().isoformat(),
+                               old=request.form, old_chars=old_chars)
 
     def _parse_int(raw: str) -> int | None:
         try:
