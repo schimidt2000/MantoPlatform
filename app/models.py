@@ -463,7 +463,7 @@ class SiteSetting(db.Model):
     primary_color = db.Column(db.String(20), nullable=True)
     secondary_color = db.Column(db.String(20), nullable=True)
     accent_color = db.Column(db.String(20), nullable=True)
-    default_commission_rate = db.Column(db.Float, nullable=True)  # % padrão de comissão (default 2.0)
+    default_commission_rate = db.Column(db.Float, nullable=True)  # % padrão de comissão (default 2.5)
     manto_address = db.Column(db.String(300), nullable=True)       # endereço base para cálculo de rota
     departure_margin_minutes = db.Column(db.Integer, nullable=True)  # margem de antecedência (default 60)
     google_maps_api_key = db.Column(db.String(100), nullable=True)   # API key para Distance Matrix

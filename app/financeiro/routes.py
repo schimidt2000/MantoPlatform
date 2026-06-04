@@ -15,7 +15,7 @@ from app.constants import RoleName
 
 financeiro_bp = Blueprint("financeiro", __name__)
 
-DEFAULT_COMMISSION = Decimal("2")
+DEFAULT_COMMISSION = Decimal("2.5")
 
 
 def _has_role(*names):
