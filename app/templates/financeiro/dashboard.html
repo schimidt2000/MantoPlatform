@@ -107,18 +107,6 @@
     <div class="kpi-sub">após pessoal e comissões</div>
   </div>
 
-  <div class="kpi-card">
-    <div class="kpi-label">Taxa de Conversão (CRM)</div>
-    <div class="kpi-value">{{ taxa_conversao }}%</div>
-    <div class="kpi-sub">{{ n_won }} ganhos · {{ n_lost }} perdidos</div>
-  </div>
-
-  <div class="kpi-card">
-    <div class="kpi-label">Pipeline Ativo</div>
-    <div class="kpi-value">R$ {{ "{:,.0f}".format(pipeline_value).replace(",", ".") }}</div>
-    <div class="kpi-sub">potencial em negociação no CRM</div>
-  </div>
-
   <div class="kpi-card {% if pagamentos_pendentes > 0 %}kpi-card-warn{% endif %}">
     <div class="kpi-label">A Pagar — Talentos</div>
     <div class="kpi-value {% if pagamentos_pendentes > 0 %}text-red{% else %}text-green{% endif %}">
@@ -127,13 +115,6 @@
     <div class="kpi-sub">cachês não pagos no período</div>
   </div>
 
-  {% if tempo_medio_fechamento is not none %}
-  <div class="kpi-card">
-    <div class="kpi-label">Ciclo de Venda Médio</div>
-    <div class="kpi-value">{{ tempo_medio_fechamento | int }} dias</div>
-    <div class="kpi-sub">do lead à venda ganha</div>
-  </div>
-  {% endif %}
 
 </div>
 
@@ -215,21 +196,6 @@
     {% endif %}
   </div>
 
-  <div>
-    <div class="fin-section-title">🏢 Maiores Clientes (LTV)</div>
-    {% if top_orgs %}
-    <div class="rank-list">
-      {% for o in top_orgs %}
-      <div class="rank-item">
-        <span class="rank-name">{{ o.org.name }}</span>
-        <span class="text-green rank-vals">R$ {{ "{:,.0f}".format(o.ltv).replace(",", ".") }}</span>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-      <p class="muted">Vincule organizações aos deals ganhos no CRM.</p>
-    {% endif %}
-  </div>
 
 </div>
 
