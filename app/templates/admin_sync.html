@@ -15,6 +15,22 @@
     <div class="alert alert-error">{{ error }}</div>
   {% endif %}
 
+  <div class="panel" style="display:flex; align-items:center; gap:10px; font-size:13px;">
+    <strong>Sincronização automática:</strong>
+    {% if auto_sync_at %}
+      {% if auto_sync_age_min is not none and auto_sync_age_min < 20 %}
+        <span style="color:var(--success);">● ativa</span>
+        <span class="muted">— última execução há {{ auto_sync_age_min }} min</span>
+      {% else %}
+        <span style="color:var(--danger);">● sem rodar recentemente</span>
+        <span class="muted">— última execução há
+          {{ auto_sync_age_min if auto_sync_age_min is not none else '?' }} min</span>
+      {% endif %}
+    {% else %}
+      <span class="muted">ainda não rodou (aguarde o primeiro ciclo após o deploy)</span>
+    {% endif %}
+  </div>
+
   {% if sync_result %}
   <div class="panel">
     <h3 style="margin-bottom:12px;">Resultado do sync</h3>

@@ -81,6 +81,49 @@ def _start_talent_sync(app):
     app.logger.info(f"[talent-sync] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _start_calendar_sync(app):
+    """Inicia thread de background que sincroniza a agenda com o Google Calendar.
+
+    Substitui a dependência de um serviço Cron externo: roda dentro do próprio app,
+    em intervalos regulares, com a mesma lógica do botão "Sincronizar agora".
+    Um claim atômico no banco garante execução única entre os workers do gunicorn.
+    """
+    import threading
+    import os as _os
+
+    # Mesma guarda de dev do talent-sync: em modo debug, só roda no processo filho.
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    INTERVAL = app.config.get("CALENDAR_SYNC_INTERVAL", 600)
+
+    def _sync_loop():
+        import time
+        time.sleep(15)  # aguarda o app estar pronto
+        from app.calendar.sync import run_calendar_sync, _claim_auto_sync
+        while True:
+            try:
+                with app.app_context():
+                    if _claim_auto_sync(INTERVAL):
+                        result = run_calendar_sync()
+                        if result["errors"]:
+                            app.logger.warning(
+                                f"[calendar-sync] ciclo com {result['errors']} erro(s)"
+                            )
+                        else:
+                            app.logger.debug(
+                                f"[calendar-sync] {result['months']} mês(es) sincronizado(s)"
+                            )
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[calendar-sync] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_sync_loop, daemon=True, name="calendar-sync")
+    t.start()
+    app.logger.info(f"[calendar-sync] thread iniciada (intervalo: {INTERVAL}s)")
+
+
 def create_app():
     from urllib.parse import quote as _url_quote
     app = Flask(__name__)
@@ -402,6 +445,9 @@ def create_app():
 
     # ── Auto-import de talentos da planilha ────────────────────────
     _start_talent_sync(app)
+
+    # ── Sincronização automática da agenda (cron interno) ──────────
+    _start_calendar_sync(app)
 
     # ── Comandos CLI de manutenção ─────────────────────────────────
     from app.cli import register_commands

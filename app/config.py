@@ -47,6 +47,9 @@ class Config:
     TALENTS_SHEET_NAME     = os.getenv("TALENTS_SHEET_NAME", "Respostas")
     TALENTS_SYNC_INTERVAL  = int(os.getenv("TALENTS_SYNC_INTERVAL", "900"))  # segundos (padrão: 15 min)
 
+    # Sincronização automática da agenda com o Google Calendar (cron interno)
+    CALENDAR_SYNC_INTERVAL = int(os.getenv("CALENDAR_SYNC_INTERVAL", "600"))  # segundos (padrão: 10 min)
+
     # Google Drive — pasta de figurinos para sync
     FIGURINO_DRIVE_FOLDER_ID = os.getenv("FIGURINO_DRIVE_FOLDER_ID", "")
 
