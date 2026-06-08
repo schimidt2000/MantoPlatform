@@ -1858,6 +1858,11 @@ def create_event():
     else:
         errors.append("Data obrigatória.")
 
+    # Início E fim são obrigatórios: sem ambos não dá para montar o evento no
+    # Google (evita criar com horário None e quebrar em insert_event).
+    if not start_str or not end_str:
+        errors.append("Informe o horário de início e de fim.")
+
     if d and start_str and end_str:
         try:
             st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time())

@@ -136,12 +136,13 @@
     </div>
     <div class="form-group" style="margin:0;">
       <label>Início <span style="color:var(--red);">*</span></label>
-      <input type="time" name="event_start" id="event-start" style="width:110px;"
+      <input type="time" name="event_start" id="event-start" required style="width:110px;"
              value="{{ old.get('event_start') or prefill.start_time or '' }}">
     </div>
     <div class="form-group" style="margin:0;">
-      <label>Fim</label>
-      <input type="time" name="event_end" style="width:110px;" value="{{ old.get('event_end') or '' }}">
+      <label>Fim <span style="color:var(--red);">*</span></label>
+      <input type="time" name="event_end" id="event-end" required style="width:110px;"
+             value="{{ old.get('event_end') or '' }}">
     </div>
     <div class="form-group" style="margin:0;">
       <label>Tipo</label>
@@ -849,6 +850,8 @@ function escHtml(s) {
     const invalid = [];
     if (titleEl && !titleEl.value.trim()) invalid.push(titleEl);
     if (dateEl  && !dateEl.value.trim())  invalid.push(dateEl);
+    if (startEl && !startEl.value) invalid.push(startEl);
+    if (endEl   && !endEl.value)   invalid.push(endEl);
     if (startEl && endEl && startEl.value && endEl.value && endEl.value <= startEl.value)
       invalid.push(endEl);
 
