@@ -537,6 +537,11 @@ def sync_status():
         .all()
     )
 
+    auto_sync_at = settings.calendar_auto_sync_at if settings else None
+    auto_sync_age_min = (
+        int((now - auto_sync_at).total_seconds() // 60) if auto_sync_at else None
+    )
+
     return render_template(
         "admin_sync.html",
         months_info=months_info,
@@ -545,6 +550,8 @@ def sync_status():
         error=error,
         cleanup_result=cleanup_result,
         sync_result=sync_result,
+        auto_sync_at=auto_sync_at,
+        auto_sync_age_min=auto_sync_age_min,
         active="sync",
         title="Admin - Sync Agenda",
     )

@@ -480,6 +480,9 @@ class SiteSetting(db.Model):
     pricing_config = db.Column(db.Text, nullable=True)
     # TTL cache: {ym: iso_datetime} — last successful sync per month
     calendar_sync_cache = db.Column(db.Text, nullable=True)
+    # Marcador da última sincronização automática da agenda (cron interno).
+    # Serve de "lock" de execução única entre workers e de visibilidade do último ciclo.
+    calendar_auto_sync_at = db.Column(db.DateTime, nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
