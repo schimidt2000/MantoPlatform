@@ -1878,9 +1878,18 @@ def create_event():
     gc_title = f"({event_type}) {clean_title}" if event_type else title
     try:
         created = insert_event(CALENDAR_ID, gc_title, st, et, description=description, location=location)
-    except RuntimeError as exc:
+    except Exception as exc:
+        # Qualquer falha do Google Agenda (desconectado, indisponível, erro da API) vira
+        # um aviso amigável — nunca uma tela de erro técnica. Registra o erro real no log.
+        current_app.logger.exception("Falha ao criar evento no Google Agenda")
+        if "não conectado" in str(exc).lower() or "google não" in str(exc).lower():
+            friendly = ("A Agenda do Google está desconectada. Reconecte em /google/connect e "
+                        "tente novamente. Se precisar, avise o suporte.")
+        else:
+            friendly = ("Não foi possível criar o evento na Agenda do Google agora. "
+                        "Verifique a conexão e tente novamente. Se persistir, avise o suporte.")
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
-                               sellers=sellers, errors=[str(exc)], prefill={}, today_str=date.today().isoformat(),
+                               sellers=sellers, errors=[friendly], prefill={}, today_str=date.today().isoformat(),
                                old=request.form, old_chars=old_chars)
 
     # ── Nota fiscal file (opcional) ──────────────────────────────────────────
