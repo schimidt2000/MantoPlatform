@@ -98,9 +98,20 @@
 {% block content %}
 
 {% if errors %}
-<div class="alert alert-error" style="margin-bottom:16px;">
+<div class="alert alert-error" id="form-errors" tabindex="-1" style="margin-bottom:16px;">
   {% for e in errors %}<div>{{ e }}</div>{% endfor %}
 </div>
+<script>
+  // Erro sempre visível: ao recarregar com falha, leva a tela até a mensagem.
+  (function () {
+    var box = document.getElementById('form-errors');
+    if (!box) return;
+    requestAnimationFrame(function () {
+      box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      try { box.focus({ preventScroll: true }); } catch (_) {}
+    });
+  })();
+</script>
 {% endif %}
 
 <form method="post" action="/events/new" enctype="multipart/form-data" id="event-form">
@@ -855,12 +866,39 @@ function escHtml(s) {
 
     // Tudo certo: trava duplo envio e mostra carregamento
     submitting = true;
+    const btnOriginalHtml = btn ? btn.innerHTML : '';
     if (btn) {
       btn.disabled = true;
       btn.style.opacity = '0.7';
       btn.style.cursor = 'wait';
       btn.innerHTML = '&#9203; Adicionando…';
     }
+
+    // Watchdog: se o envio não responder (ex.: servidor reiniciando / conexão caiu),
+    // recupera o botão e avisa, em vez de ficar travado em "Adicionando…".
+    const watchdog = setTimeout(function () {
+      submitting = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '';
+        btn.style.cursor = '';
+        btn.innerHTML = btnOriginalHtml;
+      }
+      let warn = document.getElementById('submit-timeout-warning');
+      if (!warn) {
+        warn = document.createElement('div');
+        warn.id = 'submit-timeout-warning';
+        warn.className = 'alert alert-error';
+        warn.style.marginTop = '12px';
+        btn.parentNode.insertBefore(warn, btn.nextSibling);
+      }
+      warn.textContent = 'A conexão demorou e o evento pode não ter sido criado. '
+        + 'Confira a agenda antes de tentar de novo, para não duplicar.';
+      warn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 15000);
+
+    // A navegação para a página do evento (sucesso) cancela o watchdog → sem aviso falso.
+    window.addEventListener('pagehide', function () { clearTimeout(watchdog); }, { once: true });
   });
 })();
 </script>
