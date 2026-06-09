@@ -1873,6 +1873,19 @@ def create_event():
     if st and et and et <= st:
         errors.append("Horário de fim deve ser após o início.")
 
+    # Valor de venda obrigatório (> 0) — coerente com o asterisco do campo.
+    if (parse_brl(sale_value_raw) or 0) <= 0:
+        errors.append("Informe o valor de venda.")
+
+    # Vendedor responsável obrigatório (define a comissão do mês).
+    if not seller_id_raw.isdigit():
+        errors.append("Selecione o vendedor responsável.")
+
+    # "Dividido no PIX" exige número de parcelas válido (2 a 12).
+    if payment_method == "pix_parcelado":
+        if not payment_inst_raw.isdigit() or not (2 <= int(payment_inst_raw) <= 12):
+            errors.append("Informe o número de parcelas (2 a 12).")
+
     if errors:
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
                                sellers=sellers, errors=errors, prefill={}, today_str=date.today().isoformat(),

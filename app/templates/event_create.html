@@ -326,7 +326,7 @@
   </div>
 
   <div class="form-group" style="margin-top:20px; margin-bottom:0;">
-    <label>Vendedor responsável</label>
+    <label>Vendedor responsável <span style="color:var(--red);">*</span></label>
     <select name="seller_id" style="width:auto;">
       <option value="">— Selecionar —</option>
       {% for u in sellers %}
@@ -842,10 +842,14 @@ function escHtml(s) {
     document.querySelectorAll('#event-form .field-error')
       .forEach(el => el.classList.remove('field-error'));
 
-    const titleEl = document.getElementById('event-title');
-    const dateEl  = form.querySelector('[name="event_date"]');
-    const startEl = document.getElementById('event-start');
-    const endEl   = form.querySelector('[name="event_end"]');
+    const titleEl  = document.getElementById('event-title');
+    const dateEl   = form.querySelector('[name="event_date"]');
+    const startEl  = document.getElementById('event-start');
+    const endEl    = form.querySelector('[name="event_end"]');
+    const saleEl   = document.getElementById('sale-value');
+    const sellerEl = form.querySelector('[name="seller_id"]');
+    const methodEl = document.getElementById('pay-method-hidden');
+    const instEl   = form.querySelector('[name="payment_installments"]');
 
     const invalid = [];
     if (titleEl && !titleEl.value.trim()) invalid.push(titleEl);
@@ -854,6 +858,15 @@ function escHtml(s) {
     if (endEl   && !endEl.value)   invalid.push(endEl);
     if (startEl && endEl && startEl.value && endEl.value && endEl.value <= startEl.value)
       invalid.push(endEl);
+    // Valor de venda obrigatório (> 0)
+    if (saleEl && (!saleEl.value.trim() || parseBRL(saleEl.value) <= 0)) invalid.push(saleEl);
+    // Vendedor responsável obrigatório
+    if (sellerEl && !sellerEl.value) invalid.push(sellerEl);
+    // Parcelas obrigatórias quando "Dividido no PIX"
+    if (methodEl && methodEl.value === 'pix_parcelado' && instEl) {
+      const n = parseInt(instEl.value, 10);
+      if (!instEl.value || isNaN(n) || n < 2 || n > 12) invalid.push(instEl);
+    }
 
     if (invalid.length) {
       e.preventDefault();
