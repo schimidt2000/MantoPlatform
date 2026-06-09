@@ -187,6 +187,99 @@ def list_talents():
         now=_now_dt.utcnow(),
     )
 
+
+# Ordem de exibição das categorias de sub-avaliação + rótulos pt-BR.
+_RATING_CATEGORIES = [
+    ("artista", "Artista"),
+    ("som", "Som"),
+    ("figurino", "Figurino"),
+    ("texto", "Texto"),
+    ("coordenacao", "Coordenação"),
+    ("maquiagem", "Maquiagem"),
+]
+
+
+@talents_bp.route("/talents/avaliacoes")
+@login_required
+def avaliacoes():
+    """Resumo das avaliações dos eventos — visão geral ou por evento."""
+    if not _can_edit_talent():
+        abort(403)
+
+    event_id_raw = request.args.get("event_id", "").strip()
+    event_id = int(event_id_raw) if event_id_raw.isdigit() else None
+
+    # Eventos com ao menos uma avaliação (para o seletor).
+    rated_event_rows = (
+        db.session.query(CalendarEvent.id, CalendarEvent.title, CalendarEvent.start_at)
+        .join(EventRating, EventRating.event_id == CalendarEvent.id)
+        .group_by(CalendarEvent.id, CalendarEvent.title, CalendarEvent.start_at)
+        .order_by(CalendarEvent.start_at.desc())
+        .all()
+    )
+    rated_events = [{"id": r.id, "title": r.title, "start_at": r.start_at} for r in rated_event_rows]
+
+    selected_event = None
+    ratings_q = EventRating.query
+    subs_q = EventSubRating.query.join(EventRating, EventSubRating.rating_id == EventRating.id)
+    if event_id:
+        selected_event = CalendarEvent.query.get(event_id)
+        ratings_q = ratings_q.filter(EventRating.event_id == event_id)
+        subs_q = subs_q.filter(EventRating.event_id == event_id)
+
+    ratings = ratings_q.order_by(EventRating.submitted_at.desc()).all()
+    subs = subs_q.all()
+
+    scores = [r.score for r in ratings if r.score]
+    total = len(ratings)
+    avg_overall = round(sum(scores) / len(scores), 1) if scores else 0.0
+    events_rated = len({r.event_id for r in ratings})
+    dist = {s: 0 for s in range(1, 6)}
+    for s in scores:
+        if 1 <= s <= 5:
+            dist[s] += 1
+    dist_max = max(dist.values()) if dist else 0
+
+    by_category = []
+    for key, label in _RATING_CATEGORIES:
+        cat_scores = [s.score for s in subs if s.category == key and s.score]
+        if cat_scores:
+            by_category.append({
+                "key": key,
+                "label": label,
+                "avg": round(sum(cat_scores) / len(cat_scores), 1),
+                "count": len(cat_scores),
+            })
+
+    comments = []
+    for r in ratings:
+        if r.comment and r.comment.strip():
+            comments.append({
+                "score": r.score,
+                "comment": r.comment.strip(),
+                "author": r.talent.full_name if r.talent else "—",
+                "event_title": r.event.title if r.event else "—",
+                "event_id": r.event_id,
+                "submitted_at": r.submitted_at,
+            })
+    if not event_id:
+        comments = comments[:30]   # geral: limita para não poluir
+
+    return render_template(
+        "talents/avaliacoes.html",
+        rated_events=rated_events,
+        selected_event=selected_event,
+        event_id=event_id,
+        total=total,
+        avg_overall=avg_overall,
+        events_rated=events_rated,
+        dist=dist,
+        dist_max=dist_max,
+        by_category=by_category,
+        comments=comments,
+    )
+
+
 @talents_bp.route("/talents/<int:talent_id>")
 @login_required
 def talent_detail(talent_id: int):
