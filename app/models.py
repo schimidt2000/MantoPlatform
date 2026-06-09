@@ -146,6 +146,10 @@ class Talent(db.Model):
     worked_before = db.Column(db.Boolean, nullable=True)
     how_found_us = db.Column(db.String(300), nullable=True)
 
+    # anotações internas + nível de alerta (uso interno; nunca exibir no portal do talento)
+    notes = db.Column(db.Text, nullable=True)
+    warning_level = db.Column(db.String(20), nullable=True)  # None/"" | leve | moderado | grave
+
     # portal do talento
     password_hash = db.Column(db.String(255), nullable=True)
     must_change_password = db.Column(db.Boolean, default=True, nullable=True)

@@ -41,6 +41,12 @@
 
 {% block extra_head %}
 <style>
+  /* Marca de alerta (warning) ao lado do nome no banco de talentos */
+  .warn-dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    flex-shrink: 0; box-shadow: 0 0 0 2px rgba(0,0,0,.06);
+  }
+
   /* ── Filter Pills ─────────────────────────────────────────── */
   .fp-bar {
     display: flex;
@@ -445,7 +451,16 @@
             </div>
           {% endif %}
           <div class="talent-card-body">
-            <div class="talent-card-name">{{ p.full_name }}</div>
+            <div class="talent-card-name" style="display:flex; align-items:center; gap:6px;">
+              <span>{{ p.full_name }}</span>
+              {% if p.warning_level == 'leve' %}
+                <span class="warn-dot" style="background:#f59e0b;" title="Alerta leve"></span>
+              {% elif p.warning_level == 'moderado' %}
+                <span class="warn-dot" style="background:#ea580c;" title="Alerta moderado"></span>
+              {% elif p.warning_level == 'grave' %}
+                <span class="warn-dot" style="background:#dc2626;" title="Alerta grave"></span>
+              {% endif %}
+            </div>
             {% if p.artistic_name %}
               <div class="talent-card-meta">{{ p.artistic_name }}</div>
             {% endif %}

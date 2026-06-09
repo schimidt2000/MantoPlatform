@@ -42,6 +42,50 @@
   {# ── Right column: info sections ────────────────────────────── #}
   <div>
 
+    {# Anotações internas + alerta (uso interno; nunca exibido no portal do talento) #}
+    {% set _wl = talent.warning_level %}
+    {% set _wmap = {'leve': ('Leve', '#f59e0b', '#fffbeb'),
+                    'moderado': ('Moderado', '#ea580c', '#fff7ed'),
+                    'grave': ('Grave', '#dc2626', '#fef2f2')} %}
+    <div class="panel">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Anotações internas</h2>
+        {% if _wl and _wl in _wmap %}
+          <span class="badge" style="background:{{ _wmap[_wl][2] }}; color:{{ _wmap[_wl][1] }};
+                border:1px solid {{ _wmap[_wl][1] }}; font-weight:700;">
+            ⚠ Alerta {{ _wmap[_wl][0] }}
+          </span>
+        {% endif %}
+      </div>
+      {% if can_edit %}
+        <form method="post" action="/talents/{{ talent.id }}/notes" style="margin-top:12px;">
+          <div class="form-group">
+            <label>Anotação</label>
+            <textarea name="notes" rows="5" style="width:100%; resize:vertical;"
+                      placeholder="Informações importantes sobre o talento (uso interno)">{{ talent.notes or '' }}</textarea>
+          </div>
+          <div class="form-group">
+            <label>Nível de alerta</label>
+            <select name="warning_level" style="width:auto;">
+              <option value=""         {% if not _wl %}selected{% endif %}>Nenhum</option>
+              <option value="leve"     {% if _wl == 'leve' %}selected{% endif %}>Leve</option>
+              <option value="moderado" {% if _wl == 'moderado' %}selected{% endif %}>Moderado</option>
+              <option value="grave"    {% if _wl == 'grave' %}selected{% endif %}>Grave</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">Salvar anotações</button>
+        </form>
+      {% else %}
+        <div style="margin-top:10px;">
+          {% if talent.notes %}
+            <p style="white-space:pre-wrap;">{{ talent.notes }}</p>
+          {% else %}
+            <p class="muted">Sem anotações.</p>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+
     {# Contato #}
     <div class="panel">
       <h2>Contato</h2>
