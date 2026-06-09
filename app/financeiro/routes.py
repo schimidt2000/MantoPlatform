@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime, date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, render_template, request, redirect, url_for, abort, make_response, jsonify
 from flask_login import login_required, current_user
@@ -13,6 +14,9 @@ from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, Salary
 from app.constants import RoleName
 
 financeiro_bp = Blueprint("financeiro", __name__)
+
+# Fuso padrão do sistema: tudo é exibido/comparado em horário de Brasília.
+TZ_SP = ZoneInfo("America/Sao_Paulo")
 
 DEFAULT_COMMISSION = Decimal("2.5")
 
@@ -459,11 +463,20 @@ def _ensure_salary_payments(year: int, month: int) -> None:
     db.session.commit()
 
 
-def _build_payment_items(roles, salary_payments, today: date, expenses=None) -> list:
-    """Combina cachês, salários e desembolsos de gastos aprovados em lista ordenada por data."""
+def _build_payment_items(roles, salary_payments, today: date, expenses=None, now_dt=None) -> list:
+    """Combina cachês, salários e desembolsos de gastos aprovados em lista ordenada por data.
+
+    ``now_dt``: "agora" em horário de Brasília (naïve), usado para classificar um cachê como
+    futuro enquanto o evento ainda não terminou (pelo horário de término).
+    """
+    if now_dt is None:
+        now_dt = datetime.now(TZ_SP).replace(tzinfo=None)
     items = []
     for r in roles:
         ev_date = r.event.start_at.date() if r.event and r.event.start_at else date.min
+        # Futuro = o evento ainda não terminou (horário de término; reserva: início).
+        ev_end = (r.event.end_at or r.event.start_at) if r.event else None
+        is_future_event = bool(ev_end and ev_end > now_dt)
         pix = (r.talent.pix_key or "").strip() if r.talent else ""
         pix_type = r.talent.pix_key_type if r.talent else ""
         copy_label = (r.event.start_at.strftime("%d/%m/%Y") if r.event and r.event.start_at else "") \
@@ -481,7 +494,7 @@ def _build_payment_items(roles, salary_payments, today: date, expenses=None) -> 
             "pix_key":    pix,
             "pix_key_type": pix_type,
             "status":     r.payment_status or "nao_pago",
-            "is_future":  ev_date > today,
+            "is_future":  is_future_event,
         })
     for sp in salary_payments:
         pix = (sp.user.pix_key or "").strip() if sp.user and sp.user.pix_key else ""
@@ -575,7 +588,9 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
 @require_financeiro
 def pagamentos():
     _resync_pending_commissions()
-    today = date.today()
+    # "Agora" e "hoje" sempre em horário de Brasília (eventos são guardados naïve em SP).
+    now_sp = datetime.now(TZ_SP).replace(tzinfo=None)
+    today = now_sp.date()
     month = request.args.get("month", today.strftime("%Y-%m"))
     try:
         year_i, month_i = int(month[:4]), int(month[5:7])
@@ -599,7 +614,7 @@ def pagamentos():
         SpecialExpense.expense_date < _m_end,
     ).order_by(SpecialExpense.expense_date.asc()).all()
 
-    items = _build_payment_items(roles, salary_payments, today, expenses)
+    items = _build_payment_items(roles, salary_payments, today, expenses, now_sp)
 
     # Comissões: soma por vendedor dos eventos vendidos no MÊS ANTERIOR, a pagar no dia 5 do mês visto.
     prev_year, prev_month = (year_i - 1, 12) if month_i == 1 else (year_i, month_i - 1)
