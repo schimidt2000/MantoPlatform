@@ -349,6 +349,26 @@ def talent_detail(talent_id: int):
         given_ratings=given_ratings,
     )
 
+_WARNING_LEVELS = {"", "leve", "moderado", "grave"}
+
+
+@talents_bp.route("/talents/<int:talent_id>/notes", methods=["POST"])
+@login_required
+def save_talent_notes(talent_id: int):
+    """Salva anotações internas e o nível de alerta do talento (uso interno)."""
+    if not _can_edit_talent():
+        abort(403)
+    talent = Talent.query.get_or_404(talent_id)
+    talent.notes = (request.form.get("notes", "") or "").strip() or None
+    level = (request.form.get("warning_level", "") or "").strip()
+    if level not in _WARNING_LEVELS:
+        level = ""
+    talent.warning_level = level or None
+    db.session.commit()
+    flash("Anotações salvas.", "success")
+    return redirect(url_for("talents.talent_detail", talent_id=talent.id))
+
+
 @talents_bp.route("/talents/<int:talent_id>/edit", methods=["GET", "POST"])
 @login_required
 def edit_talent(talent_id: int):
