@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 
-from flask import Blueprint, render_template, request, redirect, url_for, abort, make_response
+from flask import Blueprint, render_template, request, redirect, url_for, abort, make_response, jsonify
 from flask_login import login_required, current_user
 
 from app import db
@@ -643,8 +643,24 @@ def set_payment_status():
     status    = request.form.get("payment_status")
     next_url  = request.form.get("next", url_for("financeiro.pagamentos"))
 
-    if not item_id or status not in _VALID_PAYMENT_STATUS:
+    is_ajax = (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.form.get("ajax") == "1"
+    )
+
+    def _done(effective_status):
+        """Resposta de sucesso: JSON em tempo real (AJAX) ou redirect (reserva)."""
+        if is_ajax:
+            return jsonify({"ok": True, "status": effective_status})
         return redirect(next_url)
+
+    def _bad():
+        if is_ajax:
+            return jsonify({"ok": False}), 400
+        return redirect(next_url)
+
+    if not item_id or status not in _VALID_PAYMENT_STATUS:
+        return _bad()
 
     from app.utils import audit
     if item_type == "commission":
@@ -654,7 +670,7 @@ def set_payment_status():
             seller_id = int(seller_part)
             py, pm = int(period_tag[:4]), int(period_tag[5:7])
         except (ValueError, AttributeError):
-            return redirect(next_url)
+            return _bad()
         p_start = date(py, pm, 1)
         p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
         target = "pago" if status == "pago" else "a_pagar"
@@ -670,7 +686,8 @@ def set_payment_status():
         audit("payment", "commission", seller_id, "",
               f"Comissões {period_tag}: → {target} ({len(rows)} itens)")
         db.session.commit()
-        return redirect(next_url)
+        # Para a UI, comissão só tem "pago" ou "nao_pago".
+        return _done("pago" if target == "pago" else "nao_pago")
 
     if item_type == "salary":
         sp = SalaryPayment.query.get(int(item_id))
@@ -700,7 +717,7 @@ def set_payment_status():
                   f"Pagamento: {old} → {status} | {role.character_name}")
             db.session.commit()
 
-    return redirect(next_url)
+    return _done(status)
 
 
 @financeiro_bp.route("/financeiro/pagamentos/bulk-action", methods=["POST"])
