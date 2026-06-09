@@ -24,27 +24,27 @@
   </form>
 </div>
 
-{# ── KPIs ──────────────────────────────────────────────────────── #}
-<div class="kpi-grid" style="margin-bottom:16px;">
-  <div class="kpi">
+{# ── KPIs (clicáveis = filtro) ─────────────────────────────────── #}
+<div class="kpi-grid" id="kpi-cards" style="margin-bottom:16px;">
+  <div class="kpi kpi-filter" data-filter="all" role="button" tabindex="0" title="Mostrar todos">
     <div class="kpi-label">Total no período</div>
-    <div class="kpi-value">R$ {{ total_val | brl }}</div>
+    <div class="kpi-value" data-total="total_val">R$ {{ total_val | brl }}</div>
   </div>
-  <div class="kpi">
+  <div class="kpi kpi-filter" data-filter="pago" role="button" tabindex="0" title="Filtrar pagos">
     <div class="kpi-label">Pagos</div>
-    <div class="kpi-value" style="color:var(--green);">R$ {{ total_pago | brl }}</div>
+    <div class="kpi-value" style="color:var(--green);" data-total="total_pago">R$ {{ total_pago | brl }}</div>
   </div>
-  <div class="kpi">
+  <div class="kpi kpi-filter" data-filter="no_banco" role="button" tabindex="0" title="Filtrar no banco">
     <div class="kpi-label">No banco</div>
-    <div class="kpi-value" style="color:#1565c0;">R$ {{ total_banco | brl }}</div>
+    <div class="kpi-value" style="color:#1565c0;" data-total="total_banco">R$ {{ total_banco | brl }}</div>
   </div>
-  <div class="kpi">
+  <div class="kpi kpi-filter" data-filter="pendente" role="button" tabindex="0" title="Filtrar pendentes">
     <div class="kpi-label">Pendentes</div>
-    <div class="kpi-value" style="color:var(--red);">R$ {{ total_pend | brl }}</div>
+    <div class="kpi-value" style="color:var(--red);" data-total="total_pend">R$ {{ total_pend | brl }}</div>
   </div>
-  <div class="kpi">
+  <div class="kpi kpi-filter" data-filter="futuro" role="button" tabindex="0" title="Filtrar futuro">
     <div class="kpi-label">Futuro</div>
-    <div class="kpi-value" style="color:#b45309;">R$ {{ total_future | brl }}</div>
+    <div class="kpi-value" style="color:#b45309;" data-total="total_future">R$ {{ total_future | brl }}</div>
   </div>
 </div>
 
@@ -93,9 +93,12 @@
     <tbody>
       {% for item in items %}
       {% set is_nao_pago = item.status == 'nao_pago' %}
-      <tr class="{% if item.status == 'pago' %}row-pago{% elif item.status == 'no_banco' %}row-banco{% endif %}
+      <tr class="pay-row {% if item.status == 'pago' %}row-pago{% elif item.status == 'no_banco' %}row-banco{% endif %}
                  {% if item.type == 'salary' %}row-salary{% endif %}"
-          data-item-type="{{ item.type }}" data-item-id="{{ item.id }}">
+          data-item-type="{{ item.type }}" data-item-id="{{ item.id }}"
+          data-status="{{ item.status }}"
+          data-future="{{ '1' if item.is_future else '' }}"
+          data-amount="{{ (item.amount or 0) | float }}">
 
         {# Checkbox (comissão é resumo agregado — fora do bulk) #}
         <td style="padding:8px 0 8px 12px;">
@@ -194,7 +197,7 @@
                 <input type="hidden" name="item_type" value="{{ item.type }}">
                 <input type="hidden" name="item_id" value="{{ item.id }}">
                 <input type="hidden" name="next" value="/financeiro/pagamentos?month={{ month }}">
-                <select name="payment_status" onchange="this.form.submit()"
+                <select name="payment_status" onchange="onStatusChange(this)"
                         class="pay-status-select pay-status-nao_pago" style="font-size:11px;">
                   <option value="nao_pago" selected>Não pago</option>
                   <option value="pago">Pago</option>
@@ -207,7 +210,7 @@
               <input type="hidden" name="item_type" value="{{ item.type }}">
               <input type="hidden" name="item_id" value="{{ item.id }}">
               <input type="hidden" name="next" value="/financeiro/pagamentos?month={{ month }}">
-              <select name="payment_status" onchange="this.form.submit()"
+              <select name="payment_status" onchange="onStatusChange(this)"
                       class="pay-status-select pay-status-{{ item.status }}">
                 <option value="nao_pago" {% if item.status == 'nao_pago' %}selected{% endif %}>Não pago</option>
                 <option value="pago"     {% if item.status == 'pago' %}selected{% endif %}>Pago</option>
@@ -218,6 +221,11 @@
         </td>
       </tr>
       {% endfor %}
+      <tr id="empty-filter-row" style="display:none;">
+        <td colspan="8" style="padding:30px; text-align:center; color:var(--muted);">
+          Nenhum item nesta situação.
+        </td>
+      </tr>
     </tbody>
   </table>
 
@@ -258,6 +266,14 @@
   }
   .copy-btn:hover { color: var(--accent); background: var(--surface-2); }
   .copy-btn.copied { color: #16a34a; }
+
+  .kpi-filter { cursor: pointer; transition: box-shadow .15s, transform .05s, border-color .15s; user-select: none; }
+  .kpi-filter:hover { box-shadow: 0 2px 10px rgba(0,0,0,.10); }
+  .kpi-filter:active { transform: translateY(1px); }
+  .kpi-filter.kpi-active {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px var(--accent);
+  }
 </style>
 
 <script>
@@ -348,5 +364,113 @@ document.querySelectorAll('.copy-btn').forEach(function(btn) {
     });
   });
 });
+
+// ── Filtro por card + troca de situação em tempo real ──────────────────────────
+const FILTER_KEY = 'pagamentos_filtro';
+let currentFilter = localStorage.getItem(FILTER_KEY) || 'all';
+
+function fmtBRL(n) {
+  return 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function rowMatches(tr, f) {
+  const st = tr.dataset.status;
+  const fut = tr.dataset.future === '1';
+  switch (f) {
+    case 'pago':     return st === 'pago';
+    case 'no_banco': return st === 'no_banco';
+    case 'pendente': return st === 'nao_pago' && !fut;
+    case 'futuro':   return st === 'nao_pago' && fut;
+    default:         return true;   // 'all'
+  }
+}
+
+function applyFilter(f) {
+  currentFilter = f;
+  localStorage.setItem(FILTER_KEY, f);
+  let visible = 0;
+  document.querySelectorAll('tr.pay-row').forEach(function (tr) {
+    const show = rowMatches(tr, f);
+    tr.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  document.querySelectorAll('#kpi-cards .kpi-filter').forEach(function (c) {
+    c.classList.toggle('kpi-active', c.dataset.filter === f);
+  });
+  const empty = document.getElementById('empty-filter-row');
+  if (empty) empty.style.display = visible === 0 ? '' : 'none';
+}
+
+function recomputeTotals() {
+  const t = { total_val: 0, total_pago: 0, total_banco: 0, total_pend: 0, total_future: 0 };
+  document.querySelectorAll('tr.pay-row').forEach(function (tr) {
+    const amt = parseFloat(tr.dataset.amount) || 0;
+    const st = tr.dataset.status;
+    const fut = tr.dataset.future === '1';
+    t.total_val += amt;
+    if (st === 'pago') t.total_pago += amt;
+    else if (st === 'no_banco') t.total_banco += amt;
+    else if (st === 'nao_pago' && !fut) t.total_pend += amt;
+    else if (st === 'nao_pago' && fut) t.total_future += amt;
+  });
+  Object.keys(t).forEach(function (key) {
+    const el = document.querySelector('[data-total="' + key + '"]');
+    if (el) el.textContent = fmtBRL(t[key]);
+  });
+}
+
+function applyRowStatus(tr, select, status) {
+  tr.dataset.status = status;
+  tr.classList.remove('row-pago', 'row-banco');
+  if (status === 'pago') tr.classList.add('row-pago');
+  else if (status === 'no_banco') tr.classList.add('row-banco');
+  if (select) {
+    select.value = status;
+    select.className = 'pay-status-select pay-status-' + status;
+  }
+}
+
+function onStatusChange(select) {
+  const form = select.closest('form');
+  const tr   = select.closest('tr');
+  const prev = tr.dataset.status;
+  const fd   = new FormData(form);
+  fd.set('ajax', '1');
+  fd.set('payment_status', select.value);
+  select.disabled = true;
+  fetch(form.action, {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    body: fd,
+  })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+    .then(function (data) {
+      if (!data || !data.ok) return Promise.reject();
+      applyRowStatus(tr, select, data.status);
+      recomputeTotals();
+      applyFilter(currentFilter);   // mantém o filtro ativo
+    })
+    .catch(function () {
+      select.value = prev;          // reverte (sem mudança fantasma)
+      select.className = 'pay-status-select pay-status-' + prev;
+      alert('Não foi possível salvar a situação. Tente novamente.');
+    })
+    .finally(function () { select.disabled = false; });
+}
+
+// Cliques nos cards (toggle: clicar no ativo volta para "todos")
+document.querySelectorAll('#kpi-cards .kpi-filter').forEach(function (card) {
+  function trigger() {
+    const f = card.dataset.filter;
+    applyFilter((f === currentFilter && f !== 'all') ? 'all' : f);
+  }
+  card.addEventListener('click', trigger);
+  card.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); trigger(); }
+  });
+});
+
+// Reaplica o filtro salvo ao carregar (sobrevive a reload de mês / ações em massa)
+applyFilter(currentFilter);
 </script>
 {% endblock %}
