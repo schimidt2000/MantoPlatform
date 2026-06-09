@@ -1810,6 +1810,7 @@ def create_event():
     description  = request.form.get("description", "").strip()
     needs_rehearsal  = (event_type == "SHOW") or bool(request.form.get("needs_rehearsal"))
     sale_value_raw   = request.form.get("sale_value", "").strip()
+    sale_value_gross_raw = request.form.get("sale_value_gross", "").strip()
     transport_value_raw = request.form.get("transport_value", "").strip()
     acrescimo_value_raw = request.form.get("acrescimo_value", "").strip()
     with_invoice     = bool(request.form.get("with_invoice"))
@@ -1858,6 +1859,11 @@ def create_event():
     else:
         errors.append("Data obrigatória.")
 
+    # Início E fim são obrigatórios: sem ambos não dá para montar o evento no
+    # Google (evita criar com horário None e quebrar em insert_event).
+    if not start_str or not end_str:
+        errors.append("Informe o horário de início e de fim.")
+
     if d and start_str and end_str:
         try:
             st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time())
@@ -1867,6 +1873,23 @@ def create_event():
 
     if st and et and et <= st:
         errors.append("Horário de fim deve ser após o início.")
+
+    # Valor antes do desconto obrigatório (> 0) — base para relatório de desconto.
+    if (parse_brl(sale_value_gross_raw) or 0) <= 0:
+        errors.append("Informe o valor antes do desconto.")
+
+    # Valor de venda obrigatório (> 0) — coerente com o asterisco do campo.
+    if (parse_brl(sale_value_raw) or 0) <= 0:
+        errors.append("Informe o valor de venda.")
+
+    # Vendedor responsável obrigatório (define a comissão do mês).
+    if not seller_id_raw.isdigit():
+        errors.append("Selecione o vendedor responsável.")
+
+    # "Dividido no PIX" exige número de parcelas válido (2 a 12).
+    if payment_method == "pix_parcelado":
+        if not payment_inst_raw.isdigit() or not (2 <= int(payment_inst_raw) <= 12):
+            errors.append("Informe o número de parcelas (2 a 12).")
 
     if errors:
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
@@ -1915,6 +1938,7 @@ def create_event():
         needs_rehearsal      = needs_rehearsal,
         source               = "platform",
         sale_value           = parse_brl(sale_value_raw),
+        sale_value_gross     = parse_brl(sale_value_gross_raw),
         sale_date            = sale_date_val,
         transport_value      = parse_brl(transport_value_raw),
         acrescimo_value      = parse_brl(acrescimo_value_raw),
