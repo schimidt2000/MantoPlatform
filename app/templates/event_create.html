@@ -251,6 +251,16 @@
 
   <div class="val-breakdown">
     <div class="val-item">
+      <label>Valor antes do desconto (R$) <span style="color:var(--red);">*</span></label>
+      <div class="prefix"><span>R$</span>
+        <input type="text" inputmode="decimal" name="sale_value_gross" id="sale-value-gross" class="brl-input"
+               placeholder="0,00" style="width:150px;"
+               value="{{ old.get('sale_value_gross') or (prefill.total_1h | brl if prefill.orcamento_id else '') }}">
+      </div>
+      <div class="meta">Preço cheio, sem desconto</div>
+    </div>
+
+    <div class="val-item">
       <label>Valor de venda (R$) <span style="color:var(--red);">*</span></label>
       <div class="prefix"><span>R$</span>
         <input type="text" inputmode="decimal" name="sale_value" id="sale-value" class="brl-input"
@@ -407,10 +417,6 @@
       <label>Arquivo do contrato</label>
       <input type="file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg">
       <div class="meta">PDF, PNG ou JPG — máx. 20 MB</div>
-    </div>
-    <div class="form-group" style="margin:0;">
-      <label>Valor no contrato (R$)</label>
-      <input type="text" inputmode="decimal" name="contract_amount" class="brl-input" placeholder="0,00" style="width:140px;">
     </div>
     <div class="form-group" style="margin:0; padding-bottom:4px;">
       <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600;">
@@ -661,6 +667,8 @@ function selectDuracao(card) {
   const isCustom = card.dataset.isCustom === '1';
   document.getElementById('duracao-hidden').value = dur;
   document.getElementById('sale-value').value     = formatBRL(total);
+  const grossEl = document.getElementById('sale-value-gross');
+  if (grossEl) grossEl.value = formatBRL(total);   // preço cheio acompanha a duração
 
 }
 
@@ -847,6 +855,7 @@ function escHtml(s) {
     const startEl  = document.getElementById('event-start');
     const endEl    = form.querySelector('[name="event_end"]');
     const saleEl   = document.getElementById('sale-value');
+    const grossEl  = document.getElementById('sale-value-gross');
     const sellerEl = form.querySelector('[name="seller_id"]');
     const methodEl = document.getElementById('pay-method-hidden');
     const instEl   = form.querySelector('[name="payment_installments"]');
@@ -858,6 +867,8 @@ function escHtml(s) {
     if (endEl   && !endEl.value)   invalid.push(endEl);
     if (startEl && endEl && startEl.value && endEl.value && endEl.value <= startEl.value)
       invalid.push(endEl);
+    // Valor antes do desconto obrigatório (> 0)
+    if (grossEl && (!grossEl.value.trim() || parseBRL(grossEl.value) <= 0)) invalid.push(grossEl);
     // Valor de venda obrigatório (> 0)
     if (saleEl && (!saleEl.value.trim() || parseBRL(saleEl.value) <= 0)) invalid.push(saleEl);
     // Vendedor responsável obrigatório

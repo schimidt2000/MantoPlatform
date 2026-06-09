@@ -1810,6 +1810,7 @@ def create_event():
     description  = request.form.get("description", "").strip()
     needs_rehearsal  = (event_type == "SHOW") or bool(request.form.get("needs_rehearsal"))
     sale_value_raw   = request.form.get("sale_value", "").strip()
+    sale_value_gross_raw = request.form.get("sale_value_gross", "").strip()
     transport_value_raw = request.form.get("transport_value", "").strip()
     acrescimo_value_raw = request.form.get("acrescimo_value", "").strip()
     with_invoice     = bool(request.form.get("with_invoice"))
@@ -1873,6 +1874,10 @@ def create_event():
     if st and et and et <= st:
         errors.append("Horário de fim deve ser após o início.")
 
+    # Valor antes do desconto obrigatório (> 0) — base para relatório de desconto.
+    if (parse_brl(sale_value_gross_raw) or 0) <= 0:
+        errors.append("Informe o valor antes do desconto.")
+
     # Valor de venda obrigatório (> 0) — coerente com o asterisco do campo.
     if (parse_brl(sale_value_raw) or 0) <= 0:
         errors.append("Informe o valor de venda.")
@@ -1933,6 +1938,7 @@ def create_event():
         needs_rehearsal      = needs_rehearsal,
         source               = "platform",
         sale_value           = parse_brl(sale_value_raw),
+        sale_value_gross     = parse_brl(sale_value_gross_raw),
         sale_date            = sale_date_val,
         transport_value      = parse_brl(transport_value_raw),
         acrescimo_value      = parse_brl(acrescimo_value_raw),

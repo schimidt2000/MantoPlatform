@@ -194,6 +194,8 @@ class CalendarEvent(db.Model):
 
     # financeiro
     sale_value = db.Column(db.Numeric(12, 2), nullable=True)
+    # valor antes do desconto (preço cheio); desconto = sale_value_gross - sale_value
+    sale_value_gross = db.Column(db.Numeric(12, 2), nullable=True)
     sale_date = db.Column(db.Date, nullable=True)  # data em que a venda foi fechada
     with_invoice = db.Column(db.Boolean, default=False, nullable=False)
     seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
