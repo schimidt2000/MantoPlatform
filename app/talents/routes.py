@@ -197,79 +197,287 @@ _RATING_CATEGORIES = [
     ("coordenacao", "Coordenação"),
     ("maquiagem", "Maquiagem"),
 ]
+_RATING_CATEGORY_LABELS = dict(_RATING_CATEGORIES)
+
+# Atalhos de período (dias para trás) e rótulos exibidos no recorte.
+_PERIOD_PRESETS = {"30d": 30, "90d": 90, "365d": 365}
+_PERIOD_LABELS = {
+    "30d": "últimos 30 dias",
+    "90d": "últimos 3 meses",
+    "365d": "últimos 12 meses",
+}
+
+_MONTHS_PT = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+]
+_MONTHS_PT_ABBR = [
+    "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+    "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+]
+
+
+def _now_sp() -> datetime:
+    """Agora em horário de Brasília, naïve (mesma convenção dos eventos)."""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/Sao_Paulo")).replace(tzinfo=None)
+
+
+def _avg_score(values: list) -> float:
+    """Média arredondada a 1 casa; 0.0 para lista vazia."""
+    return round(sum(values) / len(values), 1) if values else 0.0
+
+
+def _parse_period(period: str, from_raw: str, to_raw: str) -> tuple:
+    """Resolve o filtro de período em (início, fim) — fim exclusivo; None = aberto.
+
+    Args:
+        period: "30d" | "90d" | "365d" | "custom" | "all".
+        from_raw: data ISO inicial (apenas period=custom).
+        to_raw: data ISO final (apenas period=custom).
+
+    Returns:
+        Tupla (start, end) de datetimes naïve (horário de Brasília) ou None.
+    """
+    if period in _PERIOD_PRESETS:
+        return _now_sp() - timedelta(days=_PERIOD_PRESETS[period]), None
+    if period == "custom":
+        start = end = None
+        try:
+            if from_raw:
+                start = datetime.fromisoformat(from_raw)
+        except ValueError:
+            pass
+        try:
+            if to_raw:
+                end = datetime.fromisoformat(to_raw) + timedelta(days=1)
+        except ValueError:
+            pass
+        return start, end
+    return None, None
 
 
 @talents_bp.route("/talents/avaliacoes")
 @login_required
 def avaliacoes():
-    """Resumo das avaliações dos eventos — visão geral ou por evento."""
+    """Resumo das avaliações — filtros combináveis de período, categoria e evento."""
     if not _can_edit_talent():
         abort(403)
 
     event_id_raw = request.args.get("event_id", "").strip()
     event_id = int(event_id_raw) if event_id_raw.isdigit() else None
 
-    # Eventos com ao menos uma avaliação (para o seletor).
-    rated_event_rows = (
-        db.session.query(CalendarEvent.id, CalendarEvent.title, CalendarEvent.start_at)
-        .join(EventRating, EventRating.event_id == CalendarEvent.id)
-        .group_by(CalendarEvent.id, CalendarEvent.title, CalendarEvent.start_at)
-        .order_by(CalendarEvent.start_at.desc())
-        .all()
-    )
-    rated_events = [{"id": r.id, "title": r.title, "start_at": r.start_at} for r in rated_event_rows]
+    cat = request.args.get("cat", "").strip().lower()
+    if cat not in _RATING_CATEGORY_LABELS:
+        cat = ""
 
-    selected_event = None
-    ratings_q = EventRating.query
-    subs_q = EventSubRating.query.join(EventRating, EventSubRating.rating_id == EventRating.id)
+    period = request.args.get("period", "all").strip().lower()
+    if period not in ("30d", "90d", "365d", "custom", "all"):
+        period = "all"
+    from_raw = request.args.get("from", "").strip()
+    to_raw = request.args.get("to", "").strip()
+
+    # Visão por evento: o evento já é o recorte — período não se aplica.
+    period_start, period_end = (None, None) if event_id else _parse_period(period, from_raw, to_raw)
+
+    selected_event = CalendarEvent.query.get(event_id) if event_id else None
+
+    # Avaliações do recorte (join no evento para filtrar por data do evento).
+    ratings_q = EventRating.query.join(CalendarEvent, EventRating.event_id == CalendarEvent.id)
     if event_id:
-        selected_event = CalendarEvent.query.get(event_id)
         ratings_q = ratings_q.filter(EventRating.event_id == event_id)
-        subs_q = subs_q.filter(EventRating.event_id == event_id)
-
+    if period_start:
+        ratings_q = ratings_q.filter(CalendarEvent.start_at >= period_start)
+    if period_end:
+        ratings_q = ratings_q.filter(CalendarEvent.start_at < period_end)
     ratings = ratings_q.order_by(EventRating.submitted_at.desc()).all()
-    subs = subs_q.all()
 
-    scores = [r.score for r in ratings if r.score]
-    total = len(ratings)
-    avg_overall = round(sum(scores) / len(scores), 1) if scores else 0.0
-    events_rated = len({r.event_id for r in ratings})
+    rating_ids = [r.id for r in ratings]
+    subs = (
+        EventSubRating.query.filter(EventSubRating.rating_id.in_(rating_ids)).all()
+        if rating_ids else []
+    )
+    rating_by_id = {r.id: r for r in ratings}
+
+    # ── Pontuações primárias do recorte (geral ou da categoria filtrada) ──
+    if cat:
+        cat_subs = [s for s in subs if s.category == cat and s.score]
+        primary = [
+            {"score": s.score, "rating": rating_by_id.get(s.rating_id)}
+            for s in cat_subs if rating_by_id.get(s.rating_id)
+        ]
+    else:
+        primary = [{"score": r.score, "rating": r} for r in ratings if r.score]
+
+    total = len(primary)
+    avg_overall = _avg_score([p["score"] for p in primary])
+    events_rated = len({p["rating"].event_id for p in primary})
+
     dist = {s: 0 for s in range(1, 6)}
-    for s in scores:
-        if 1 <= s <= 5:
-            dist[s] += 1
+    for p in primary:
+        if 1 <= p["score"] <= 5:
+            dist[p["score"]] += 1
     dist_max = max(dist.values()) if dist else 0
 
+    # ── Médias por categoria (apenas na visão sem filtro de categoria) ──
     by_category = []
-    for key, label in _RATING_CATEGORIES:
-        cat_scores = [s.score for s in subs if s.category == key and s.score]
-        if cat_scores:
-            by_category.append({
-                "key": key,
-                "label": label,
-                "avg": round(sum(cat_scores) / len(cat_scores), 1),
-                "count": len(cat_scores),
-            })
+    if not cat:
+        for key, label in _RATING_CATEGORIES:
+            cat_scores = [s.score for s in subs if s.category == key and s.score]
+            if cat_scores:
+                by_category.append({
+                    "key": key,
+                    "label": label,
+                    "avg": _avg_score(cat_scores),
+                    "count": len(cat_scores),
+                })
+
+    # ── Comentários unificados: gerais ("Geral") + por categoria ──
+    def _comment_item(score, text, rating, cat_key="", subject=None):
+        return {
+            "score": score,
+            "comment": text,
+            "author": rating.talent.full_name if rating.talent else "—",
+            "event_title": rating.event.title if rating.event else "—",
+            "event_id": rating.event_id,
+            "event_date": rating.event.start_at if rating.event else None,
+            "submitted_at": rating.submitted_at,
+            "cat_key": cat_key,
+            "cat_label": _RATING_CATEGORY_LABELS.get(cat_key, "Geral"),
+            "subject_name": subject.full_name if subject else None,
+        }
 
     comments = []
-    for r in ratings:
-        if r.comment and r.comment.strip():
-            comments.append({
-                "score": r.score,
-                "comment": r.comment.strip(),
-                "author": r.talent.full_name if r.talent else "—",
-                "event_title": r.event.title if r.event else "—",
-                "event_id": r.event_id,
-                "submitted_at": r.submitted_at,
-            })
+    if not cat:
+        for r in ratings:
+            if r.comment and r.comment.strip():
+                comments.append(_comment_item(r.score, r.comment.strip(), r))
+    for s in subs:
+        if cat and s.category != cat:
+            continue
+        r = rating_by_id.get(s.rating_id)
+        if r and s.comment and s.comment.strip():
+            comments.append(_comment_item(
+                s.score, s.comment.strip(), r,
+                cat_key=s.category, subject=s.subject_talent,
+            ))
+    comments.sort(key=lambda c: c["submitted_at"] or datetime.min, reverse=True)
     if not event_id:
         comments = comments[:30]   # geral: limita para não poluir
 
+    # ── Pontos de atenção: notas 1–2 do recorte (gerais + categorias) ──
+    attention = []
+    if not cat:
+        for r in ratings:
+            if r.score and r.score <= 2:
+                attention.append(_comment_item(r.score, (r.comment or "").strip(), r))
+    for s in subs:
+        if cat and s.category != cat:
+            continue
+        r = rating_by_id.get(s.rating_id)
+        if r and s.score and s.score <= 2:
+            attention.append(_comment_item(
+                s.score, (s.comment or "").strip(), r,
+                cat_key=s.category, subject=s.subject_talent,
+            ))
+    attention.sort(key=lambda c: c["submitted_at"] or datetime.min, reverse=True)
+    attention = attention[:10]
+
+    # ── Ranking de eventos e tendência mensal (apenas visão geral) ──
+    best_events, worst_events, trend = [], [], []
+    if not event_id:
+        per_event: dict = {}
+        per_month: dict = {}
+        for p in primary:
+            ev = p["rating"].event
+            if not ev:
+                continue
+            per_event.setdefault(ev.id, {"event": ev, "scores": []})["scores"].append(p["score"])
+            if ev.start_at:
+                key = (ev.start_at.year, ev.start_at.month)
+                per_month.setdefault(key, []).append(p["score"])
+
+        ranked = sorted(
+            (
+                {
+                    "id": data["event"].id,
+                    "title": data["event"].title,
+                    "start_at": data["event"].start_at,
+                    "avg": _avg_score(data["scores"]),
+                    "count": len(data["scores"]),
+                }
+                for data in per_event.values()
+            ),
+            key=lambda e: (-e["avg"], -(e["start_at"] or datetime.min).toordinal()),
+        )
+        best_events = ranked[:3]
+        if len(ranked) >= 2:
+            best_ids = {e["id"] for e in best_events}
+            worst_events = [e for e in reversed(ranked) if e["id"] not in best_ids][:3]
+
+        trend = [
+            {
+                "label": f"{_MONTHS_PT_ABBR[m - 1]}/{str(y)[2:]}",
+                "avg": _avg_score(scores),
+                "count": len(scores),
+            }
+            for (y, m), scores in sorted(per_month.items())
+        ]
+
+    # ── Seletor de eventos avaliados do período, agrupado por mês ──
+    rated_q = (
+        db.session.query(CalendarEvent.id, CalendarEvent.title, CalendarEvent.start_at)
+        .join(EventRating, EventRating.event_id == CalendarEvent.id)
+    )
+    if period_start:
+        rated_q = rated_q.filter(CalendarEvent.start_at >= period_start)
+    if period_end:
+        rated_q = rated_q.filter(CalendarEvent.start_at < period_end)
+    rated_rows = (
+        rated_q.group_by(CalendarEvent.id, CalendarEvent.title, CalendarEvent.start_at)
+        .order_by(CalendarEvent.start_at.desc())
+        .all()
+    )
+    if event_id and selected_event and event_id not in {r.id for r in rated_rows}:
+        rated_rows = [selected_event] + list(rated_rows)
+
+    event_groups = []
+    for row in rated_rows:
+        if row.start_at:
+            label = f"{_MONTHS_PT[row.start_at.month - 1]} de {row.start_at.year}"
+        else:
+            label = "Sem data"
+        if not event_groups or event_groups[-1]["label"] != label:
+            event_groups.append({"label": label, "events": []})
+        event_groups[-1]["events"].append(
+            {"id": row.id, "title": row.title, "start_at": row.start_at}
+        )
+
+    # Rótulo do recorte exibido nos KPIs.
+    recorte_parts = []
+    if cat:
+        recorte_parts.append(_RATING_CATEGORY_LABELS[cat])
+    if not event_id:
+        if period in _PERIOD_LABELS:
+            recorte_parts.append(_PERIOD_LABELS[period])
+        elif period == "custom" and (period_start or period_end):
+            ini = period_start.strftime("%d/%m/%Y") if period_start else "…"
+            fim = (period_end - timedelta(days=1)).strftime("%d/%m/%Y") if period_end else "…"
+            recorte_parts.append(f"{ini} – {fim}")
+
     return render_template(
         "talents/avaliacoes.html",
-        rated_events=rated_events,
+        event_groups=event_groups,
         selected_event=selected_event,
         event_id=event_id,
+        cat=cat,
+        cat_label=_RATING_CATEGORY_LABELS.get(cat, ""),
+        categories=_RATING_CATEGORIES,
+        period=period,
+        from_raw=from_raw,
+        to_raw=to_raw,
+        recorte_label=" · ".join(recorte_parts),
+        has_filters=bool(cat or event_id or period != "all"),
         total=total,
         avg_overall=avg_overall,
         events_rated=events_rated,
@@ -277,6 +485,10 @@ def avaliacoes():
         dist_max=dist_max,
         by_category=by_category,
         comments=comments,
+        attention=attention,
+        best_events=best_events,
+        worst_events=worst_events,
+        trend=trend,
     )
 
 
