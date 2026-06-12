@@ -894,9 +894,11 @@ _COMMISSION_STATUS_LABELS = {
 
 @financeiro_bp.route("/financeiro/comissoes")
 @login_required
-@require_financeiro
+@require_vendas
 def comissoes():
+    """Comissões: financeiro/superadmin gerenciam; comercial vê só as próprias (leitura)."""
     _resync_pending_commissions()
+    can_manage = _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN)
     today = date.today()
     month = request.args.get("month", today.strftime("%Y-%m"))
     try:
@@ -908,7 +910,7 @@ def comissoes():
     end = date(year + 1, 1, 1) if mon == 12 else date(year, mon + 1, 1)
 
     # Comissões cujo sale_date cai no mês, ou sem sale_date mas criadas no mês
-    entries = (
+    entries_q = (
         CommissionPayment.query
         .filter(
             CommissionPayment.status.in_(["a_pagar", "pago"]),
@@ -925,19 +927,24 @@ def comissoes():
             ),
         )
         .order_by(CommissionPayment.sale_date.asc(), CommissionPayment.seller_id.asc())
-        .all()
     )
 
     # Estornos pendentes (gerados por cancelamentos de meses anteriores)
-    estornos = (
+    estornos_q = (
         CommissionPayment.query
         .filter(
             CommissionPayment.status == "a_pagar",
             CommissionPayment.amount < 0,
         )
         .order_by(CommissionPayment.created_at.asc())
-        .all()
     )
+
+    if not can_manage:
+        entries_q = entries_q.filter(CommissionPayment.seller_id == current_user.id)
+        estornos_q = estornos_q.filter(CommissionPayment.seller_id == current_user.id)
+
+    entries = entries_q.all()
+    estornos = estornos_q.all()
 
     total_a_pagar = sum(e.amount for e in entries if e.status == "a_pagar") + sum(e.amount for e in estornos)
 
@@ -951,6 +958,7 @@ def comissoes():
         total_a_pagar=total_a_pagar,
         month=month,
         sellers=sellers,
+        can_manage=can_manage,
         status_labels=_COMMISSION_STATUS_LABELS,
     )
 
