@@ -209,6 +209,20 @@ def change_password():
     return render_template("portal/change_password.html", talent=talent, error=error)
 
 
+def _now_sp() -> datetime:
+    """Agora em horário de Brasília, naïve — mesma convenção dos horários de evento no banco."""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/Sao_Paulo")).replace(tzinfo=None)
+
+
+def _event_ended(event) -> bool:
+    """True se o evento já terminou (término efetivo: end_at, senão start_at) em Brasília."""
+    if not event:
+        return False
+    event_end = event.end_at or event.start_at
+    return bool(event_end and event_end < _now_sp())
+
+
 def _rated_event_ids(talent) -> set[int]:
     """IDs de eventos que o talento já avaliou (independe de janela de tempo)."""
     return {r.event_id for r in EventRating.query.filter_by(talent_id=talent.id).all()}
@@ -219,14 +233,15 @@ def _rateable_event_ids(talent) -> set[int]:
 
     Usa o término efetivo (end_at); se não houver, cai no start_at — mesma regra do destaque.
     """
-    window = datetime.utcnow() - timedelta(days=7)
+    now = _now_sp()
+    window = now - timedelta(days=7)
     event_end = func.coalesce(CalendarEvent.end_at, CalendarEvent.start_at)
     rated = _rated_event_ids(talent)
     rows = (
         EventRole.query
         .filter_by(talent_id=talent.id, invite_status="accepted")
         .join(CalendarEvent)
-        .filter(event_end < datetime.utcnow(), event_end >= window)
+        .filter(event_end < now, event_end >= window)
         .all()
     )
     return {r.event_id for r in rows if r.event_id and r.event_id not in rated}
@@ -237,7 +252,8 @@ def _editable_rating_event_ids(talent) -> set[int]:
     rated = _rated_event_ids(talent)
     if not rated:
         return set()
-    window = datetime.utcnow() - timedelta(days=30)
+    now = _now_sp()
+    window = now - timedelta(days=30)
     event_end = func.coalesce(CalendarEvent.end_at, CalendarEvent.start_at)
     rows = (
         EventRole.query
@@ -245,7 +261,7 @@ def _editable_rating_event_ids(talent) -> set[int]:
         .join(CalendarEvent)
         .filter(
             CalendarEvent.id.in_(rated),
-            event_end < datetime.utcnow(),
+            event_end < now,
             event_end >= window,
         )
         .all()
@@ -310,7 +326,8 @@ def _maybe_record_rating_version(event_id: int, rating) -> None:
 @portal_login_required
 def home():
     talent = _current_talent()
-    today = datetime.utcnow().date()
+    now = _now_sp()
+    today = now.date()
 
     # Convites pendentes (invite_status = 'pending')
     pending_invites = (
@@ -326,7 +343,7 @@ def home():
         EventRole.query
         .filter_by(talent_id=talent.id, invite_status="accepted")
         .join(CalendarEvent)
-        .filter(CalendarEvent.start_at >= datetime.utcnow())
+        .filter(CalendarEvent.start_at >= now)
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
@@ -347,7 +364,7 @@ def home():
         EventRole.query
         .filter_by(talent_id=talent.id, invite_status="accepted")
         .join(CalendarEvent)
-        .filter(CalendarEvent.start_at < datetime.utcnow())
+        .filter(CalendarEvent.start_at < now)
         .order_by(CalendarEvent.start_at.desc())
         .limit(10)
         .all()
@@ -358,7 +375,7 @@ def home():
         EventRole.query
         .filter_by(talent_id=talent.id, invite_status="accepted")
         .join(CalendarEvent)
-        .filter(CalendarEvent.start_at < datetime.utcnow())
+        .filter(CalendarEvent.start_at < now)
         .all()
     )
     total_pago    = sum((r.cache_value or 0) + (r.travel_cache or 0) for r in all_past if r.payment_status == "pago")
@@ -565,7 +582,7 @@ def historico():
         EventRole.query
         .filter_by(talent_id=talent.id, invite_status="accepted")
         .join(CalendarEvent)
-        .filter(CalendarEvent.start_at < datetime.utcnow())
+        .filter(CalendarEvent.start_at < _now_sp())
         .order_by(CalendarEvent.start_at.desc())
         .all()
     )
@@ -680,6 +697,10 @@ def rate_event(event_id: int):
     ).first_or_404()
     event = role.event
 
+    if not _event_ended(event):
+        flash("A avaliação abre depois que o evento terminar.", "error")
+        return redirect(url_for("portal.home"))
+
     existing = EventRating.query.filter_by(event_id=event_id, talent_id=talent.id).first()
     ctx = _build_rating_context(talent, event)
 
@@ -709,6 +730,10 @@ def submit_rating(event_id: int):
         EventRole.talent_id == talent.id,
         EventRole.invite_status == "accepted",
     ).first_or_404()
+
+    if not _event_ended(role.event):
+        flash("A avaliação abre depois que o evento terminar.", "error")
+        return redirect(url_for("portal.home"))
 
     score_raw = request.form.get("score", "")
     comment = request.form.get("comment", "").strip() or None
@@ -750,6 +775,11 @@ def rate_event_detail(event_id: int):
     talent = _current_talent()
     rating = EventRating.query.filter_by(event_id=event_id, talent_id=talent.id).first_or_404()
     event = rating.event
+
+    if not _event_ended(event):
+        flash("A avaliação abre depois que o evento terminar.", "error")
+        return redirect(url_for("portal.home"))
+
     ctx = _build_rating_context(talent, event)
 
     if request.method == "GET":
