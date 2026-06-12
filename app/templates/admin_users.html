@@ -4,7 +4,6 @@
 {% block page_actions %}
   {% if is_superadmin %}
   <a class="btn btn-primary" href="/admin/users/new">+ Novo usuário</a>
-  <a class="btn btn-ghost" href="/admin/settings">Identidade visual</a>
   {% endif %}
 {% endblock %}
 
@@ -28,8 +27,13 @@
           {% set u = row.user %}
           <tr>
             <td class="muted">{{ u.id }}</td>
-            <td class="strong">{{ u.name }}</td>
-            <td>{{ u.email }}</td>
+            <td class="strong">
+              {{ u.name }}
+              {% if not u.has_access %}
+                <span class="badge badge-gray" style="font-size:10px; margin-left:6px;">sem acesso</span>
+              {% endif %}
+            </td>
+            <td>{{ u.email or '—' }}</td>
             <td>
               {% if u.is_active %}
                 <span class="badge badge-green">sim</span>

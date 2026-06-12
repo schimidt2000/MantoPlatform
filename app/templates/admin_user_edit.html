@@ -3,7 +3,8 @@
 {% block page_title %}{{ user.name }}{% endblock %}
 {% block page_subtitle %}
   <p class="sub">
-    {{ user.email }}
+    {{ user.email or 'sem email' }}
+    {% if not user.has_access %}<span class="badge badge-gray">sem acesso ao sistema</span>{% endif %}
     {% for r in user.roles %}<span class="badge badge-blue">{{ r.name }}</span> {% endfor %}
   </p>
 {% endblock %}
@@ -21,7 +22,7 @@
   {# ── Identidade e papéis — só Superadmin ──────────────────────── #}
   {% if is_superadmin %}
   <div class="panel">
-    <h3 style="margin-bottom:12px;">Identidade e papéis</h3>
+    <h3 style="margin-bottom:12px;">Identidade{% if user.has_access %} e papéis{% endif %}</h3>
     <form method="post" action="{{ url_for('admin.edit_user', user_id=user.id) }}">
       <div class="grid-2">
         <div class="form-group">
@@ -29,8 +30,8 @@
           <input type="text" name="name" value="{{ user.name }}">
         </div>
         <div class="form-group">
-          <label>Email</label>
-          <input type="email" name="email" value="{{ user.email }}">
+          <label>Email{% if not user.has_access %} de contato <span class="muted" style="font-weight:400;">(opcional)</span>{% endif %}</label>
+          <input type="email" name="email" value="{{ user.email or '' }}">
         </div>
       </div>
 
@@ -49,6 +50,7 @@
         <p class="meta" style="margin-top:4px;">Desmarque para quem não deve receber comissão (ex: sócios, diretores).</p>
       </div>
 
+      {% if user.has_access %}
       <div class="form-group">
         <label>Cargo (roles)</label>
         <div class="panel" style="margin:0; padding:12px;">
@@ -62,12 +64,38 @@
           {% endfor %}
         </div>
       </div>
+      {% endif %}
 
       <div style="margin-top:16px;">
         <button class="btn btn-primary" type="submit">Salvar alterações</button>
       </div>
     </form>
   </div>
+
+  {% if not user.has_access %}
+  {# ── Conceder acesso — só Superadmin, pessoa sem acesso ───────── #}
+  <div class="panel">
+    <h3 style="margin-bottom:4px;">Conceder acesso ao sistema</h3>
+    <p class="meta" style="margin-bottom:14px;">
+      Define email de login e senha temporária. A pessoa será obrigada a trocar a senha no primeiro acesso.
+    </p>
+    <form method="post" action="{{ url_for('admin.grant_access', user_id=user.id) }}">
+      <div class="grid-2" style="gap:12px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Email (login)</label>
+          <input type="email" name="email" value="{{ user.email or '' }}" required>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Senha temporária</label>
+          <input type="text" name="temp_password" required>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn btn-secondary" type="submit">Conceder acesso</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
   {% endif %}
 
   {# ── Dados de pagamento: PIX — Superadmin ou Financeiro ───────── #}
@@ -159,8 +187,8 @@
     {% endif %}
   </div>
 
-  {# ── Resetar senha — só Superadmin ────────────────────────────── #}
-  {% if is_superadmin %}
+  {# ── Resetar senha — só Superadmin, usuário com acesso ────────── #}
+  {% if is_superadmin and user.has_access %}
   <div class="panel">
     <h3 style="margin-bottom:12px;">Resetar senha</h3>
     <form method="post" action="{{ url_for('admin.reset_password', user_id=user.id) }}">
