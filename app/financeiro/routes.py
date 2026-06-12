@@ -10,7 +10,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, abort,
 from flask_login import login_required, current_user
 
 from app import db
-from app.models import CalendarEvent, EventRole, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SpecialExpense
+from app.models import CalendarEvent, EventRole, EventPayment, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SpecialExpense
 from app.constants import RoleName
 
 financeiro_bp = Blueprint("financeiro", __name__)
@@ -248,6 +248,34 @@ def dashboard():
         if receita_bruta else Decimal("0")
     )
 
+    # Descontos concedidos no período (preço cheio − valor final, quando positivo)
+    _com_desconto = [
+        e for e in eventos_com_venda
+        if e.sale_value_gross and e.sale_value_gross > e.sale_value
+    ]
+    total_descontos = sum((e.sale_value_gross - e.sale_value) for e in _com_desconto)
+    _gross_descontados = sum(e.sale_value_gross for e in _com_desconto)
+    pct_desconto_medio = (
+        (Decimal(total_descontos) / Decimal(_gross_descontados) * 100)
+        .quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        if _gross_descontados else Decimal("0")
+    )
+
+    # A receber de clientes: venda − comprovantes anexados, por evento do período
+    _recebido_por_evento = dict(
+        db.session.query(
+            EventPayment.event_id,
+            db.func.coalesce(db.func.sum(EventPayment.amount), 0),
+        )
+        .filter(EventPayment.event_id.in_([e.id for e in eventos_com_venda] or [0]))
+        .group_by(EventPayment.event_id)
+        .all()
+    )
+    a_receber_clientes = sum(
+        max(float(e.sale_value) - float(_recebido_por_evento.get(e.id, 0)), 0)
+        for e in eventos_com_venda
+    )
+
     # Receita por tipo de evento
     receita_por_tipo = defaultdict(int)
     for e in eventos_com_venda:
@@ -329,6 +357,10 @@ def dashboard():
         # Comercial
         ticket_medio=ticket_medio,
         ratio_custo_talento=ratio_custo_talento,
+        total_descontos=total_descontos,
+        pct_desconto_medio=pct_desconto_medio,
+        eventos_com_desconto=len(_com_desconto),
+        a_receber_clientes=a_receber_clientes,
         receita_por_tipo=receita_por_tipo,
         top_sellers=top_sellers,
         # Caixa

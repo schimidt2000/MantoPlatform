@@ -552,23 +552,23 @@ def _handle_figurino_done(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 def _handle_add_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    amount_raw = request.form.get("contract_amount")
     file = request.files.get("contract_file")
     if not file or not file.filename:
+        flash("Selecione o arquivo do contrato para enviar.", "error")
         return
     file.stream.seek(0, 2)
     size = file.stream.tell()
     file.stream.seek(0)
     if size > 10 * 1024 * 1024:
+        flash("Arquivo do contrato acima de 10 MB — envie um arquivo menor.", "error")
         return
     name = secure_filename(file.filename)
     save_path = os.path.join(current_app.config["UPLOAD_CONTRACTS"], name)
     file.save(save_path)
-    amount = parse_brl_int(amount_raw)
     db.session.add(EventContract(
         event_id=event.id,
         file_path=f"/uploads/contracts/{name}",
-        amount=amount,
+        amount=None,
     ))
     db.session.add(EventLog(
         event_id=event.id,
@@ -578,6 +578,7 @@ def _handle_add_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         created_at=datetime.now(tz=tz_sp),
     ))
     db.session.commit()
+    flash("Contrato enviado.", "success")
 
 
 def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
@@ -585,8 +586,9 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     if not can_vendas:
         return
 
-    event.sale_value      = parse_brl(request.form.get("sale_value", ""))
-    event.transport_value = parse_brl(request.form.get("transport_value", ""))
+    event.sale_value       = parse_brl(request.form.get("sale_value", ""))
+    event.sale_value_gross = parse_brl(request.form.get("sale_value_gross", ""))
+    event.transport_value  = parse_brl(request.form.get("transport_value", ""))
     event.acrescimo_value = parse_brl(request.form.get("acrescimo_value", ""))
     event.with_invoice    = request.form.get("with_invoice") == "1"
     sale_date_raw = request.form.get("sale_date", "").strip()
@@ -605,18 +607,20 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             inv_file.save(os.path.join(current_app.config["UPLOAD_INVOICES"], fname))
             event.invoice_file = f"/uploads/invoices/{fname}"
 
-    _VALID_METHODS = {"avista", "pix_parcelado", "faturado", "cartao"}
+    _VALID_METHODS = {"avista", "pix_parcelado", "faturado", "cartao", "futuro"}
     pay_method = request.form.get("payment_method", "").strip()
     event.payment_method = pay_method if pay_method in _VALID_METHODS else None
     if pay_method == "pix_parcelado":
         _inst_raw = request.form.get("payment_installments", "").strip()
         event.payment_installments = int(_inst_raw) if _inst_raw.isdigit() else None
-    if pay_method == "faturado":
+    if pay_method in ("faturado", "futuro"):
         due_raw = request.form.get("payment_due_date", "").strip()
         try:
             event.payment_due_date = date.fromisoformat(due_raw) if due_raw else None
         except ValueError:
             event.payment_due_date = None
+        if pay_method == "futuro" and not event.payment_due_date:
+            flash("Pagamento futuro: informe a data combinada de pagamento.", "error")
 
     if any(r.name.upper() == RoleName.COMERCIAL for r in current_user.roles):
         if not event.seller_id:
@@ -682,19 +686,23 @@ def _handle_set_payment_status(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 def _handle_add_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    amount_raw = request.form.get("payment_amount")
+    amount = parse_brl_int(request.form.get("payment_amount"))
+    if not amount or amount <= 0:
+        flash("Informe o valor recebido para adicionar o pagamento.", "error")
+        return
     file = request.files.get("payment_file")
     if not file or not file.filename:
+        flash("Anexe o comprovante para adicionar o pagamento.", "error")
         return
     file.stream.seek(0, 2)
     size = file.stream.tell()
     file.stream.seek(0)
     if size > 10 * 1024 * 1024:
+        flash("Comprovante acima de 10 MB — envie um arquivo menor.", "error")
         return
     name = secure_filename(file.filename)
     save_path = os.path.join(current_app.config["UPLOAD_PAYMENTS"], name)
     file.save(save_path)
-    amount = parse_brl_int(amount_raw)
     db.session.add(EventPayment(
         event_id=event.id,
         file_path=f"/uploads/payments/{name}",
@@ -704,10 +712,104 @@ def _handle_add_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         event_id=event.id,
         actor_name=current_user.name,
         actor_role="Comercial",
-        message=f"Adicionou pagamento recebido de {amount or 0} reais",
+        message=f"Adicionou pagamento recebido de {amount} reais",
         created_at=datetime.now(tz=tz_sp),
     ))
     db.session.commit()
+    flash("Pagamento registrado.", "success")
+
+
+def _is_superadmin() -> bool:
+    return any(r.name.upper() == RoleName.SUPERADMIN for r in current_user.roles)
+
+
+def _handle_edit_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    if not _is_superadmin():
+        flash("Apenas o super admin pode editar comprovantes.", "error")
+        return
+    payment = EventPayment.query.filter_by(
+        id=request.form.get("payment_id"), event_id=event.id
+    ).first()
+    if not payment:
+        return
+    amount = parse_brl_int(request.form.get("payment_amount"))
+    if not amount or amount <= 0:
+        flash("Informe um valor válido para o comprovante.", "error")
+        return
+    old_amount = payment.amount or 0
+    payment.amount = amount
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Comercial",
+        message=f"Corrigiu valor de comprovante: R$ {old_amount} → R$ {amount}",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+    flash("Valor do comprovante atualizado.", "success")
+
+
+def _handle_delete_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    if not _is_superadmin():
+        flash("Apenas o super admin pode excluir comprovantes.", "error")
+        return
+    payment = EventPayment.query.filter_by(
+        id=request.form.get("payment_id"), event_id=event.id
+    ).first()
+    if not payment:
+        return
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Comercial",
+        message=f"Excluiu comprovante de R$ {payment.amount or 0}",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.delete(payment)
+    db.session.commit()
+    flash("Comprovante excluído.", "success")
+
+
+def _handle_delete_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    if not _is_superadmin():
+        flash("Apenas o super admin pode excluir contratos.", "error")
+        return
+    contract = EventContract.query.filter_by(
+        id=request.form.get("contract_id"), event_id=event.id
+    ).first()
+    if not contract:
+        return
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Comercial",
+        message="Excluiu contrato enviado",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.delete(contract)
+    db.session.commit()
+    flash("Contrato excluído.", "success")
+
+
+def _handle_toggle_contract_signed(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    if not _is_superadmin():
+        flash("Apenas o super admin pode alterar o status do contrato.", "error")
+        return
+    contract = EventContract.query.filter_by(
+        id=request.form.get("contract_id"), event_id=event.id
+    ).first()
+    if not contract:
+        return
+    contract.is_signed = not contract.is_signed
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Comercial",
+        message=f"Marcou contrato como {'assinado' if contract.is_signed else 'pendente'}",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+    flash("Status do contrato atualizado.", "success")
 
 
 def _handle_send_invite(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
@@ -807,6 +909,10 @@ _EVENT_ACTIONS = {
     "link_figurino":        _handle_link_figurino,
     "set_payment_status":   _handle_set_payment_status,
     "add_payment":          _handle_add_payment,
+    "edit_payment":         _handle_edit_payment,
+    "delete_payment":       _handle_delete_payment,
+    "delete_contract":      _handle_delete_contract,
+    "toggle_contract_signed": _handle_toggle_contract_signed,
     "send_invite":          _handle_send_invite,
     "save_logistics":       _handle_save_logistics,
 }
@@ -967,6 +1073,7 @@ def event_detail(event_id: int):
         logs=logs,
         contracts=contracts,
         payments=payments,
+        received_total=sum(p.amount or 0 for p in payments),
         availability=availability,
         show_casting=has_role(RoleName.CASTING) or has_role(RoleName.SUPERADMIN),
         show_figurino=has_role(RoleName.FIGURINO) or has_role(RoleName.SUPERADMIN),

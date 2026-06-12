@@ -402,6 +402,72 @@ def create_app():
                 .scalar()
             )
 
+        # ── Comercial: cobranças pendentes ──────────────────────────
+        # Política: à vista, ou 50% no ato + 50% até 2 dias antes do evento.
+        # 'futuro'/'faturado' têm data combinada própria (payment_due_date).
+        show_comercial = (
+            has_role(RoleName.COMERCIAL) or has_role(RoleName.FINANCEIRO) or is_superadmin
+        )
+        pending_payments = []
+        if show_comercial:
+            from zoneinfo import ZoneInfo
+
+            from app.models import EventPayment
+            today_sp = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+            sale_events = (
+                CalendarEvent.query
+                .filter(
+                    CalendarEvent.sale_value.isnot(None),
+                    CalendarEvent.sale_value > 0,
+                    CalendarEvent.start_at >= task_cutoff,
+                    exclude_ensaios,
+                )
+                .order_by(CalendarEvent.start_at.asc())
+                .all()
+            )
+            received_by_event = dict(
+                db.session.query(
+                    EventPayment.event_id,
+                    func.coalesce(func.sum(EventPayment.amount), 0),
+                )
+                .filter(EventPayment.event_id.in_([e.id for e in sale_events] or [0]))
+                .group_by(EventPayment.event_id)
+                .all()
+            )
+            for ev in sale_events:
+                sale = float(ev.sale_value)
+                received = float(received_by_event.get(ev.id, 0))
+                saldo = sale - received
+                if saldo <= 0:
+                    continue
+                due_date = None
+                if ev.payment_method in ("futuro", "faturado") and ev.payment_due_date:
+                    due_date = ev.payment_due_date
+                    severity = "urgent" if due_date <= today_sp else "info"
+                else:
+                    days_left = (ev.start_at.date() - today_sp).days if ev.start_at else None
+                    if days_left is not None and days_left <= 2:
+                        severity = "urgent"
+                    elif received < sale * 0.5:
+                        severity = "warn"
+                    else:
+                        continue  # ≥50% recebido e falta >2 dias: dentro da política
+                pending_payments.append({
+                    "event": ev,
+                    "sale": sale,
+                    "received": received,
+                    "saldo": saldo,
+                    "severity": severity,
+                    "due_date": due_date,
+                })
+            _SEVERITY_ORDER = {"urgent": 0, "warn": 1, "info": 2}
+            pending_payments.sort(
+                key=lambda p: (
+                    _SEVERITY_ORDER[p["severity"]],
+                    p["event"].start_at or datetime.max,
+                )
+            )
+
         # Nota fiscal pendente: eventos com NF solicitada mas sem arquivo anexado
         pending_invoice = []
         if is_superadmin:
@@ -425,6 +491,8 @@ def create_app():
             pending_ensaio=pending_ensaio,
             scheduled_ensaio=scheduled_ensaio,
             pending_invoice=pending_invoice,
+            show_comercial=show_comercial,
+            pending_payments=pending_payments,
             show_casting=show_casting,
             show_figurino=show_figurino,
             show_ensaio=show_ensaio,
