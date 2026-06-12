@@ -2027,7 +2027,10 @@ document.querySelectorAll('input.cache-input[data-cap]').forEach(function(inp) {
     }
   }
 
-  inp.addEventListener('input',  check);
+  // A máscara global (.brl-input, money-mask.js) reformata o valor a cada tecla e
+  // foi registrada DEPOIS deste handler. Adiamos a checagem para o próximo tick,
+  // assim ela lê o valor JÁ formatado e o aviso de teto aparece ao vivo.
+  inp.addEventListener('input',  function () { setTimeout(check, 0); });
   inp.addEventListener('change', check);
   inp.closest('form')?.addEventListener('submit', function(e) {
     if (!check()) e.preventDefault();
