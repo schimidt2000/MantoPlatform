@@ -1374,7 +1374,7 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       <div class="strong" style="font-size: 13px; margin-bottom: 8px;">Pagamentos recebidos</div>
 
       {% set _venda = event.sale_value | float if event.sale_value else 0 %}
-      {% set _saldo = _venda - (received_total or 0) %}
+      {% set _saldo = _venda - ((received_total or 0) | float) %}
       {% if _venda > 0 %}
         <div style="margin-bottom: 10px; padding: 10px 12px; border-radius: var(--r-md);
                     background: {{ '#f0fdf4' if _saldo <= 0 else '#fffbeb' }};
