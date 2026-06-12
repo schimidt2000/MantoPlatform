@@ -6,7 +6,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 from zoneinfo import ZoneInfo
 
-from flask import Blueprint, render_template, request, redirect, url_for, abort, make_response, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, abort, make_response, jsonify, flash
 from flask_login import login_required, current_user
 
 from app import db
@@ -767,42 +767,86 @@ def set_payment_status():
     return _done(status)
 
 
+def _bulk_set_commission_period(commission_id: str, action: str) -> bool:
+    """Aplica pago/nao_pago a um item agregado de comissão ("sellerId:YYYY-MM").
+
+    Mesmo efeito do controle individual da planilha. Retorna False se o id é inválido.
+    """
+    try:
+        seller_part, period_tag = str(commission_id).split(":")
+        seller_id = int(seller_part)
+        py, pm = int(period_tag[:4]), int(period_tag[5:7])
+    except (ValueError, AttributeError):
+        return False
+    p_start = date(py, pm, 1)
+    p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
+    target = "pago" if action == "pago" else "a_pagar"
+    rows = CommissionPayment.query.filter(
+        CommissionPayment.seller_id == seller_id,
+        CommissionPayment.sale_date >= p_start,
+        CommissionPayment.sale_date < p_end,
+        CommissionPayment.status.in_(["a_pagar", "pago"]),
+    ).all()
+    for c in rows:
+        c.status = target
+        c.paid_at = date.today() if target == "pago" else None
+    from app.utils import audit
+    audit("payment", "commission", seller_id, "",
+          f"Bulk comissões {period_tag}: → {target} ({len(rows)} itens)")
+    return True
+
+
 @financeiro_bp.route("/financeiro/pagamentos/bulk-action", methods=["POST"])
 @login_required
 @require_financeiro
 def bulk_payment_action():
-    action       = request.form.get("action")
-    role_ids     = request.form.getlist("role_ids")
-    salary_ids   = request.form.getlist("salary_ids")
-    month        = request.form.get("month", date.today().strftime("%Y-%m"))
-    next_url     = url_for("financeiro.pagamentos", month=month)
+    action         = request.form.get("action")
+    role_ids       = request.form.getlist("role_ids")
+    salary_ids     = request.form.getlist("salary_ids")
+    expense_ids    = request.form.getlist("expense_ids")
+    commission_ids = request.form.getlist("commission_ids")
+    month          = request.form.get("month", date.today().strftime("%Y-%m"))
+    next_url       = url_for("financeiro.pagamentos", month=month)
 
-    if not role_ids and not salary_ids:
+    if not role_ids and not salary_ids and not expense_ids and not commission_ids:
         return redirect(next_url)
 
     from app.utils import audit
 
     r_ids = [int(i) for i in role_ids if i.isdigit()]
     s_ids = [int(i) for i in salary_ids if i.isdigit()]
+    g_ids = [int(i) for i in expense_ids if i.isdigit()]
+
+    changed = 0
+    skipped: list[str] = []
 
     if action == "delete":
+        # Gastos e comissões pertencem aos seus módulos — não são excluídos por aqui.
         for rid in r_ids:
             role = EventRole.query.get(rid)
             if role:
                 db.session.delete(role)
+                changed += 1
         for sid in s_ids:
             sp = SalaryPayment.query.get(sid)
             if sp:
                 db.session.delete(sp)
+                changed += 1
+        if g_ids:
+            skipped.append(f"{len(g_ids)} gasto(s) — exclua pelo módulo de Gastos")
+        if commission_ids:
+            skipped.append(f"{len(commission_ids)} comissão(ões) — gerencie na tela de Comissões")
         audit("delete", "payment", None, "bulk",
               f"Excluídos {len(r_ids)} cachês e {len(s_ids)} salários via pagamentos")
         db.session.commit()
+        flash(f"{changed} item(ns) excluído(s).", "success")
     elif action in _VALID_PAYMENT_STATUS:
         for rid in r_ids:
             role = EventRole.query.get(rid)
             if role:
                 old = role.payment_status
                 role.payment_status = action
+                changed += 1
                 audit("payment", "event_role", role.id,
                       role.talent.full_name if role.talent else "—",
                       f"Bulk: {old} → {action} | {role.character_name}")
@@ -813,10 +857,30 @@ def bulk_payment_action():
                 sp.payment_status = action
                 if action == "pago":
                     sp.paid_at = date.today()
+                changed += 1
                 audit("payment", "salary_payment", sp.id,
                       sp.user.name if sp.user else "—",
                       f"Bulk salário: {old} → {action}")
+        for gid in g_ids:
+            exp = SpecialExpense.query.get(gid)
+            if exp:
+                old = exp.payment_status
+                exp.payment_status = action
+                changed += 1
+                audit("payment", "special_expense", exp.id, exp.payee_name,
+                      f"Bulk desembolso gasto: {old} → {action} | {exp.description}")
+        if commission_ids:
+            if action == "no_banco":
+                skipped.append(f"{len(commission_ids)} comissão(ões) — não têm estado 'no banco'")
+            else:
+                for cid in commission_ids:
+                    if _bulk_set_commission_period(cid, action):
+                        changed += 1
         db.session.commit()
+        flash(f"{changed} item(ns) atualizado(s).", "success")
+
+    for msg in skipped:
+        flash(f"Ignorado: {msg}.", "info")
 
     return redirect(next_url)
 
