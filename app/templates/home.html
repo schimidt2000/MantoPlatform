@@ -79,7 +79,7 @@
   <div>
     <h2 style="margin-bottom:14px;">Tarefas pendentes</h2>
 
-    {% if not show_casting and not show_figurino and not show_ensaio %}
+    {% if not show_casting and not show_figurino and not show_ensaio and not show_comercial %}
       <div class="panel"><p class="muted">Tudo em dia! ✓</p></div>
     {% endif %}
 
@@ -308,6 +308,56 @@
           </div>
         {% endfor %}
         <div style="height:8px;"></div>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── COMERCIAL: cobranças pendentes ── #}
+    {% if show_comercial %}
+    <div class="sector-panel" id="sp-comercial">
+      <div class="sector-header" onclick="toggleSector('comercial')">
+        <div class="sector-header-left">
+          <span class="badge badge-purple" style="background:#ede9fe;color:#5b21b6;">💰 Comercial</span>
+          {% if pending_payments %}
+            <span class="meta">{{ pending_payments|length }} cobrança{{ 's' if pending_payments|length != 1 else '' }} pendente{{ 's' if pending_payments|length != 1 else '' }}</span>
+          {% else %}
+            <span class="badge badge-green" style="font-size:11px;">Tudo recebido ✓</span>
+          {% endif %}
+        </div>
+        <span class="sector-chevron" id="chv-comercial">▼</span>
+      </div>
+      <div class="sector-body" id="sb-comercial">
+        {% if pending_payments %}
+          {% for p in pending_payments %}
+            {% set ev = p.event %}
+            <div class="flex-between gap-12 task-row" style="padding:10px 0;border-bottom:1px solid var(--line);{% if p.severity == 'urgent' %}background:rgba(228,88,88,0.06);margin:0 -18px;padding:10px 18px;{% elif p.severity == 'warn' %}background:rgba(245,200,66,0.06);margin:0 -18px;padding:10px 18px;{% endif %}">
+              <div>
+                <div class="strong">
+                  {{ ev.title }}
+                  {% if p.severity == 'urgent' %}
+                    <span class="badge badge-red" style="font-size:10px;margin-left:6px;">
+                      {{ 'VENCIDO' if p.due_date else 'URGENTE' }}
+                    </span>
+                  {% elif p.severity == 'warn' %}
+                    <span class="badge badge-gold" style="font-size:10px;margin-left:6px;">SINAL PENDENTE</span>
+                  {% endif %}
+                </div>
+                <div class="meta">
+                  {% if ev.start_at %}{{ ev.start_at.strftime("%d/%m/%Y") }} · {% endif %}
+                  Recebido R$ {{ p.received | brl }} de R$ {{ p.sale | brl }} —
+                  <span style="font-weight:700;color:#b91c1c;">falta R$ {{ p.saldo | brl }}</span>
+                  {% if p.due_date %}
+                    · combinado para {{ p.due_date.strftime("%d/%m/%Y") }}
+                  {% endif %}
+                </div>
+              </div>
+              <a href="/events/{{ ev.id }}" class="btn btn-sm btn-secondary">Abrir</a>
+            </div>
+          {% endfor %}
+          <div style="height:8px;"></div>
+        {% else %}
+          <p class="muted" style="padding:12px 0;">Nenhuma cobrança pendente.</p>
+        {% endif %}
       </div>
     </div>
     {% endif %}

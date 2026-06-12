@@ -1109,12 +1109,30 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
     <div class="panel-title" style="margin-bottom: 12px;">Dados da venda</div>
     <div style="display: flex; flex-wrap: wrap; gap: 16px 24px; margin-bottom: 16px; align-items: flex-start;">
       <div class="com-val-item">
-        <label>Valor de venda (R$)</label>
+        <label>Valor antes do desconto (R$)</label>
+        <div class="com-prefix"><span>R$</span>
+          <input type="text" inputmode="decimal" name="sale_value_gross" class="brl-input" placeholder="0,00"
+                 style="width: 140px;" value="{{ event.sale_value_gross | brl if event.sale_value_gross is not none else '' }}">
+        </div>
+      </div>
+      <div class="com-val-item">
+        <label>Valor de venda final (R$)</label>
         <div class="com-prefix"><span>R$</span>
           <input type="text" inputmode="decimal" name="sale_value" class="brl-input" placeholder="0,00"
                  style="width: 140px;" value="{{ event.sale_value | brl if event.sale_value is not none else '' }}">
         </div>
+        <p class="meta" style="margin:4px 0 0;">O que a cliente de fato pagou.</p>
       </div>
+      {% set _gross = event.sale_value_gross | float if event.sale_value_gross else 0 %}
+      {% set _final = event.sale_value | float if event.sale_value else 0 %}
+      {% if _gross > _final and _final > 0 %}
+      <div class="com-val-item">
+        <label>&nbsp;</label>
+        <span class="badge badge-gold" style="font-size:12px;">
+          Desconto: R$ {{ (_gross - _final) | brl }} ({{ ((_gross - _final) / _gross * 100) | round(1) }}%)
+        </span>
+      </div>
+      {% endif %}
       <div class="com-val-item">
         <label>Transporte (R$)</label>
         <div class="com-prefix"><span>R$</span>
@@ -1160,6 +1178,8 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
               data-method="faturado" onclick="setDetailPayMethod('faturado')">Faturado</button>
       <button type="button" class="com-pay-btn{% if event.payment_method == 'cartao' %} active{% endif %}"
               data-method="cartao" onclick="setDetailPayMethod('cartao')">Cartão de Crédito</button>
+      <button type="button" class="com-pay-btn{% if event.payment_method == 'futuro' %} active{% endif %}"
+              data-method="futuro" onclick="setDetailPayMethod('futuro')">Pagamento futuro</button>
     </div>
     <div id="detail-extra-pix_parcelado"
          style="margin-bottom: 12px;{% if event.payment_method != 'pix_parcelado' %} display: none;{% endif %}">
@@ -1170,11 +1190,15 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       </div>
     </div>
     <div id="detail-extra-faturado"
-         style="margin-bottom: 12px;{% if event.payment_method != 'faturado' %} display: none;{% endif %}">
+         style="margin-bottom: 12px;{% if event.payment_method not in ('faturado', 'futuro') %} display: none;{% endif %}">
       <div class="form-group" style="margin-bottom: 0;">
-        <label>Data de pagamento</label>
-        <input type="date" name="payment_due_date" style="width: 160px;"
+        <label id="due-date-label">{{ 'Data combinada de pagamento' if event.payment_method == 'futuro' else 'Data de pagamento' }}</label>
+        <input type="date" name="payment_due_date" id="pay-due-date" style="width: 160px;"
+               {% if event.payment_method == 'futuro' %}required{% endif %}
                value="{{ event.payment_due_date.strftime('%Y-%m-%d') if event.payment_due_date else '' }}">
+        <p class="meta" id="due-date-hint" style="margin-top:4px;{% if event.payment_method != 'futuro' %} display:none;{% endif %}">
+          Obrigatória — gera lembrete de cobrança na home do comercial.
+        </p>
       </div>
     </div>
 
@@ -1288,12 +1312,8 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}">
         <input type="hidden" name="action" value="add_contract">
         <div class="form-group">
-          <label>Valor do contrato (R$)</label>
-          <input type="text" inputmode="decimal" name="contract_amount" class="brl-input" placeholder="0,00">
-        </div>
-        <div class="form-group">
           <label>Arquivo <span class="label-hint">PDF / JPG / PNG · máx. 10 MB</span></label>
-          <input type="file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg">
+          <input type="file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg" required>
         </div>
         <button type="submit" class="btn btn-sm btn-primary">Enviar contrato</button>
       </form>
@@ -1311,7 +1331,23 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
                 <span class="badge badge-gray" style="font-size:11px;">Pendente</span>
               {% endif %}
             </div>
-            <span class="meta">R$ {{ (c.amount or 0) | brl }}</span>
+            {% if is_superadmin %}
+            <div style="display:flex; align-items:center; gap:6px;">
+              <form method="post" action="/events/{{ event.id }}" style="display:inline;">
+                <input type="hidden" name="action" value="toggle_contract_signed">
+                <input type="hidden" name="contract_id" value="{{ c.id }}">
+                <button type="submit" class="btn btn-sm btn-ghost">
+                  {{ 'Marcar pendente' if c.is_signed else 'Marcar assinado' }}
+                </button>
+              </form>
+              <form method="post" action="/events/{{ event.id }}" style="display:inline;"
+                    onsubmit="return confirm('Excluir este contrato? Essa ação não pode ser desfeita.');">
+                <input type="hidden" name="action" value="delete_contract">
+                <input type="hidden" name="contract_id" value="{{ c.id }}">
+                <button type="submit" class="btn btn-sm btn-ghost" style="color:#b91c1c;">Excluir</button>
+              </form>
+            </div>
+            {% endif %}
           </div>
         {% endfor %}
       {% else %}
@@ -1324,24 +1360,66 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}">
         <input type="hidden" name="action" value="add_payment">
         <div class="form-group">
-          <label>Valor recebido (R$)</label>
-          <input type="text" inputmode="decimal" name="payment_amount" class="brl-input" placeholder="0,00">
+          <label>Valor recebido (R$) <span class="label-hint">obrigatório</span></label>
+          <input type="text" inputmode="decimal" name="payment_amount" class="brl-input" placeholder="0,00" required>
         </div>
         <div class="form-group">
           <label>Comprovante <span class="label-hint">PDF / JPG / PNG · máx. 10 MB</span></label>
-          <input type="file" name="payment_file" accept=".pdf,.png,.jpg,.jpeg">
+          <input type="file" name="payment_file" accept=".pdf,.png,.jpg,.jpeg" required>
         </div>
         <button type="submit" class="btn btn-sm btn-primary">Adicionar pagamento</button>
       </form>
 
       <hr class="sep">
       <div class="strong" style="font-size: 13px; margin-bottom: 8px;">Pagamentos recebidos</div>
+
+      {% set _venda = event.sale_value | float if event.sale_value else 0 %}
+      {% set _saldo = _venda - (received_total or 0) %}
+      {% if _venda > 0 %}
+        <div style="margin-bottom: 10px; padding: 10px 12px; border-radius: var(--r-md);
+                    background: {{ '#f0fdf4' if _saldo <= 0 else '#fffbeb' }};
+                    border: 1px solid {{ '#86efac' if _saldo <= 0 else '#fcd34d' }};">
+          <span class="strong" style="font-size: 13px;">
+            Recebido R$ {{ (received_total or 0) | brl }} de R$ {{ _venda | brl }}
+          </span>
+          {% if _saldo <= 0 %}
+            <span class="badge badge-green" style="font-size:11px; margin-left:8px;">Quitado ✓</span>
+          {% else %}
+            <span class="badge badge-gold" style="font-size:11px; margin-left:8px;">Falta R$ {{ _saldo | brl }}</span>
+          {% endif %}
+        </div>
+      {% endif %}
+
       {% if payments %}
         {% for p in payments %}
           <div class="flex-between gap-8" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
             <a href="{{ p.file_path }}" target="_blank" class="btn btn-sm btn-secondary">Ver comprovante</a>
-            <span class="meta">R$ {{ (p.amount or 0) | brl }}</span>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span class="meta">R$ {{ (p.amount or 0) | brl }}</span>
+              {% if is_superadmin %}
+                <button type="button" class="btn btn-sm btn-ghost"
+                        onclick="var f=document.getElementById('edit-pay-{{ p.id }}'); f.style.display = f.style.display === 'none' ? 'flex' : 'none';">
+                  Editar
+                </button>
+                <form method="post" action="/events/{{ event.id }}" style="display:inline;"
+                      onsubmit="return confirm('Excluir este comprovante? Essa ação não pode ser desfeita.');">
+                  <input type="hidden" name="action" value="delete_payment">
+                  <input type="hidden" name="payment_id" value="{{ p.id }}">
+                  <button type="submit" class="btn btn-sm btn-ghost" style="color:#b91c1c;">Excluir</button>
+                </form>
+              {% endif %}
+            </div>
           </div>
+          {% if is_superadmin %}
+          <form method="post" action="/events/{{ event.id }}" id="edit-pay-{{ p.id }}"
+                style="display:none; align-items:center; gap:8px; padding: 6px 0 10px; border-bottom: 1px solid var(--line);">
+            <input type="hidden" name="action" value="edit_payment">
+            <input type="hidden" name="payment_id" value="{{ p.id }}">
+            <input type="text" inputmode="decimal" name="payment_amount" class="brl-input"
+                   style="width: 120px;" value="{{ (p.amount or 0) | brl }}" required>
+            <button type="submit" class="btn btn-sm btn-primary">Salvar valor</button>
+          </form>
+          {% endif %}
         {% endfor %}
       {% else %}
         <p class="muted small">Nenhum pagamento registrado.</p>
@@ -1731,10 +1809,16 @@ function setDetailPayMethod(method) {
   document.querySelectorAll('.com-pay-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.method === method);
   });
-  ['pix_parcelado', 'faturado'].forEach(m => {
-    const el = document.getElementById('detail-extra-' + m);
-    if (el) el.style.display = m === method ? '' : 'none';
-  });
+  const pixEl = document.getElementById('detail-extra-pix_parcelado');
+  if (pixEl) pixEl.style.display = method === 'pix_parcelado' ? '' : 'none';
+  const dueEl = document.getElementById('detail-extra-faturado');
+  if (dueEl) dueEl.style.display = (method === 'faturado' || method === 'futuro') ? '' : 'none';
+  const dueLabel = document.getElementById('due-date-label');
+  if (dueLabel) dueLabel.textContent = method === 'futuro' ? 'Data combinada de pagamento' : 'Data de pagamento';
+  const dueHint = document.getElementById('due-date-hint');
+  if (dueHint) dueHint.style.display = method === 'futuro' ? '' : 'none';
+  const dueInput = document.getElementById('pay-due-date');
+  if (dueInput) dueInput.required = method === 'futuro';
 }
 
 // ── WhatsApp invite ────────────────────────────────────────────

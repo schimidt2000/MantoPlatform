@@ -115,6 +115,27 @@
     <div class="kpi-sub">cachês não pagos no período</div>
   </div>
 
+  <div class="kpi-card {% if a_receber_clientes > 0 %}kpi-card-warn{% endif %}">
+    <div class="kpi-label">A Receber — Clientes</div>
+    <div class="kpi-value {% if a_receber_clientes > 0 %}text-red{% else %}text-green{% endif %}">
+      R$ {{ "{:,.0f}".format(a_receber_clientes).replace(",", ".") }}
+    </div>
+    <div class="kpi-sub">venda − comprovantes anexados</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-label">Descontos Concedidos</div>
+    <div class="kpi-value {% if total_descontos > 0 %}text-amber{% else %}text-green{% endif %}">
+      R$ {{ "{:,.0f}".format(total_descontos).replace(",", ".") }}
+    </div>
+    <div class="kpi-sub">
+      {% if eventos_com_desconto %}
+        {{ eventos_com_desconto }} evento{{ 's' if eventos_com_desconto != 1 else '' }} · {{ pct_desconto_medio }}% médio sobre o preço cheio
+      {% else %}
+        nenhum desconto no período
+      {% endif %}
+    </div>
+  </div>
 
 </div>
 
