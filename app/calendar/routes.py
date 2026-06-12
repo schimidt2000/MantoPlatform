@@ -686,7 +686,7 @@ def _handle_set_payment_status(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 def _handle_add_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    amount = parse_brl_int(request.form.get("payment_amount"))
+    amount = parse_brl(request.form.get("payment_amount"))
     if not amount or amount <= 0:
         flash("Informe o valor recebido para adicionar o pagamento.", "error")
         return
@@ -712,7 +712,7 @@ def _handle_add_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         event_id=event.id,
         actor_name=current_user.name,
         actor_role="Comercial",
-        message=f"Adicionou pagamento recebido de {amount} reais",
+        message=f"Adicionou pagamento recebido de R$ {amount}",
         created_at=datetime.now(tz=tz_sp),
     ))
     db.session.commit()
@@ -732,7 +732,7 @@ def _handle_edit_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     ).first()
     if not payment:
         return
-    amount = parse_brl_int(request.form.get("payment_amount"))
+    amount = parse_brl(request.form.get("payment_amount"))
     if not amount or amount <= 0:
         flash("Informe um valor válido para o comprovante.", "error")
         return
@@ -2128,7 +2128,7 @@ def create_event():
             db.session.add(EventPayment(
                 event_id  = event.id,
                 file_path = fpath,
-                amount    = parse_brl_int(pa_raw),
+                amount    = parse_brl(pa_raw),
             ))
 
     # ── Contrato ─────────────────────────────────────────────────────────────
