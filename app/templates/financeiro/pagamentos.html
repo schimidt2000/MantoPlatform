@@ -100,12 +100,10 @@
           data-future="{{ '1' if item.is_future else '' }}"
           data-amount="{{ (item.amount or 0) | float }}">
 
-        {# Checkbox (comissão é resumo agregado — fora do bulk) #}
+        {# Checkbox #}
         <td style="padding:8px 0 8px 12px;">
-          {% if item.type != 'commission' %}
           <input type="checkbox" class="row-check"
                  data-type="{{ item.type }}" data-id="{{ item.id }}">
-          {% endif %}
         </td>
 
         {# Data #}
@@ -303,6 +301,14 @@ function updateBulkBar() {
   }
 }
 
+// Cada tipo de item vai no campo certo — gasto/comissão nunca viram id de cachê.
+const BULK_FIELD_BY_TYPE = {
+  cache:      'role_ids',
+  salary:     'salary_ids',
+  expense:    'expense_ids',
+  commission: 'commission_ids',
+};
+
 function bulkSubmit(action) {
   const checked = getChecked();
   if (!checked.length) return;
@@ -311,12 +317,10 @@ function bulkSubmit(action) {
   document.getElementById('bulk-action-value').value = action;
   checkboxContainer.innerHTML = '';
   checked.forEach(function(cb) {
-    const type = cb.dataset.type;
-    const id   = cb.dataset.id;
     const h = document.createElement('input');
     h.type = 'hidden';
-    h.name = type === 'salary' ? 'salary_ids' : 'role_ids';
-    h.value = id;
+    h.name = BULK_FIELD_BY_TYPE[cb.dataset.type] || 'role_ids';
+    h.value = cb.dataset.id;
     checkboxContainer.appendChild(h);
   });
   bulkForm.submit();
@@ -328,10 +332,16 @@ function clearSelection() {
   updateBulkBar();
 }
 
+function isRowVisible(cb) {
+  const tr = cb.closest('tr');
+  return tr && tr.style.display !== 'none';
+}
+
 if (selectAll) {
+  // Seleciona apenas as linhas visíveis no filtro atual.
   selectAll.addEventListener('change', function() {
     document.querySelectorAll('.row-check').forEach(function(cb) {
-      cb.checked = selectAll.checked;
+      cb.checked = selectAll.checked && isRowVisible(cb);
     });
     updateBulkBar();
   });
@@ -393,10 +403,17 @@ function applyFilter(f) {
     const show = rowMatches(tr, f);
     tr.style.display = show ? '' : 'none';
     if (show) visible++;
+    // Linha escondida nunca fica selecionada — ação em massa só atinge o que está na tela.
+    if (!show) {
+      const cb = tr.querySelector('.row-check');
+      if (cb) cb.checked = false;
+    }
   });
   document.querySelectorAll('#kpi-cards .kpi-filter').forEach(function (c) {
     c.classList.toggle('kpi-active', c.dataset.filter === f);
   });
+  if (selectAll) selectAll.checked = false;
+  updateBulkBar();
   const empty = document.getElementById('empty-filter-row');
   if (empty) empty.style.display = visible === 0 ? '' : 'none';
 }
