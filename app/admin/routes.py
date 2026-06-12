@@ -74,61 +74,112 @@ def list_users():
     )
 
 
+def _parse_salary_form() -> tuple:
+    """Lê os campos de salário do form. Retorna (dados ou None, lista de erros).
+
+    Salário é opcional: se valor, tipo e data estiverem todos vazios, retorna (None, []).
+    """
+    salary_raw = request.form.get("salary", "").strip()
+    payment_type = request.form.get("payment_type", "").strip()
+    start_str = request.form.get("start_date", "").strip()
+    notes = request.form.get("notes", "").strip()
+    if not salary_raw and not payment_type:
+        return None, []
+
+    errors = []
+    salary_value = parse_brl_int(salary_raw)
+    if salary_value is None or salary_value <= 0:
+        errors.append("Salário inválido.")
+    if payment_type not in ("semanal", "quinzenal", "comissao"):
+        errors.append("Tipo de pagamento inválido.")
+    try:
+        start_date = date.fromisoformat(start_str) if start_str else date.today()
+    except ValueError:
+        errors.append("Data de início do salário inválida.")
+        start_date = date.today()
+    if errors:
+        return None, errors
+    return {
+        "salary": salary_value,
+        "payment_type": payment_type,
+        "start_date": start_date,
+        "notes": notes or None,
+    }, []
+
+
 @admin_bp.route("/users/new", methods=["GET", "POST"])
 @login_required
 @require_superadmin
 def create_user():
-    if request.method == "GET":
+    def _render(error=None):
         return render_template(
             "admin_create_user.html",
+            error=error,
+            form=request.form if request.method == "POST" else {},
             settings=get_settings(),
             active="users",
             title="Admin - Criar Usuário",
             roles=Role.query.order_by(Role.name.asc()).all(),
         )
 
+    if request.method == "GET":
+        return _render()
+
+    user_type = request.form.get("user_type", "access")
     name = request.form.get("name", "").strip()
     email = request.form.get("email", "").strip().lower()
     temp_password = request.form.get("temp_password", "")
 
-    if not name or not email or not temp_password:
-        return render_template(
-            "admin_create_user.html",
-            error="Preencha tudo.",
-            settings=get_settings(),
-            active="users",
-            title="Admin - Criar Usuario",
+    if not name:
+        return _render(error="Informe o nome.")
+
+    if user_type == "payment_only":
+        # Pessoa que só recebe pagamento — sem login. Email é contato opcional.
+        if email and User.query.filter_by(email=email).first():
+            return _render(error="Esse email já existe.")
+        user = User(
+            email=email or None,
+            name=name,
+            is_active=True,
+            has_access=False,
+            must_change_password=False,
         )
+    else:
+        if not email or not temp_password:
+            return _render(error="Para usuário com acesso, preencha email e senha.")
+        if User.query.filter_by(email=email).first():
+            return _render(error="Esse email já existe.")
+        user = User(email=email, name=name, is_active=True, must_change_password=True)
+        user.set_password(temp_password)
+        role_ids = [int(r) for r in request.form.getlist("roles")]
+        if role_ids:
+            user.roles = Role.query.filter(Role.id.in_(role_ids)).all()
 
-    if User.query.filter_by(email=email).first():
-        return render_template(
-            "admin_create_user.html",
-            error="Esse email já existe.",
-            settings=get_settings(),
-            active="users",
-            title="Admin - Criar Usuario",
-        )
+    # PIX (opcional, ambos os tipos)
+    user.pix_key = request.form.get("pix_key", "").strip() or None
+    user.pix_key_type = request.form.get("pix_key_type", "").strip() or None
 
-    user = User(email=email, name=name, is_active=True, must_change_password=True)
-    user.set_password(temp_password)
-    role_ids = [int(r) for r in request.form.getlist("roles")]
-    if role_ids:
-        user.roles = Role.query.filter(Role.id.in_(role_ids)).all()
+    # Salário (opcional, ambos os tipos)
+    salary_data, salary_errors = _parse_salary_form()
+    if salary_errors:
+        return _render(error=" ".join(salary_errors))
 
-    # (Importante) Não damos role nenhuma automaticamente.
     db.session.add(user)
+    db.session.flush()
+    if salary_data:
+        db.session.add(SalaryHistory(user_id=user.id, **salary_data))
+
     from app.utils import audit
-    audit("create", "user", None, user.name, f"Usuário criado: {user.email}")
+    kind = "sem acesso (só pagamento)" if user_type == "payment_only" else "com acesso"
+    audit("create", "user", user.id, user.name,
+          f"Usuário criado ({kind}): {user.email or user.name}")
     db.session.commit()
 
-    return render_template(
-        "admin_create_user.html",
-        msg="Usuário criado com sucesso!",
-        settings=get_settings(),
-        active="users",
-        title="Admin - Criar Usuario",
-        roles=Role.query.order_by(Role.name.asc()).all(),
-    )
+    if user_type == "payment_only":
+        flash("Pessoa cadastrada com sucesso (sem acesso ao sistema).", "success")
+    else:
+        flash("Usuário criado com sucesso!", "success")
+    return redirect(url_for("admin.list_users"))
 
 
 @admin_bp.route("/users/<int:user_id>/edit", methods=["GET", "POST"])
@@ -160,17 +211,21 @@ def edit_user(user_id: int):
         is_active = request.form.get("is_active") == "1"
         role_ids = [int(r) for r in request.form.getlist("roles")]
 
-        if not name or not email:
-            return _render(error="Preencha tudo.")
-        existing = User.query.filter(User.email == email, User.id != user.id).first()
-        if existing:
-            return _render(error="Esse email já existe.")
+        if not name:
+            return _render(error="Informe o nome.")
+        if user.has_access and not email:
+            return _render(error="Email é obrigatório para usuário com acesso.")
+        if email:
+            existing = User.query.filter(User.email == email, User.id != user.id).first()
+            if existing:
+                return _render(error="Esse email já existe.")
 
         user.name = name
-        user.email = email
+        user.email = email or None
         user.is_active = is_active
         user.receives_commission = request.form.get("receives_commission") == "1"
-        user.roles = Role.query.filter(Role.id.in_(role_ids)).all() if role_ids else []
+        if user.has_access:
+            user.roles = Role.query.filter(Role.id.in_(role_ids)).all() if role_ids else []
         from app.utils import audit
         audit("edit", "user", user.id, user.name, f"Usuário editado: {user.email}")
         db.session.commit()
@@ -242,6 +297,37 @@ def add_salary(user_id: int):
     return redirect(url_for("admin.edit_user", user_id=user.id))
 
 
+@admin_bp.route("/users/<int:user_id>/grant-access", methods=["POST"])
+@login_required
+@require_superadmin
+def grant_access(user_id: int):
+    """Concede acesso a uma pessoa cadastrada só para pagamento."""
+    user = User.query.get_or_404(user_id)
+    if user.has_access:
+        flash("Esse usuário já tem acesso ao sistema.", "error")
+        return redirect(url_for("admin.edit_user", user_id=user.id))
+
+    email = request.form.get("email", "").strip().lower()
+    temp_password = request.form.get("temp_password", "")
+    if not email or not temp_password:
+        flash("Para conceder acesso, informe email e senha temporária.", "error")
+        return redirect(url_for("admin.edit_user", user_id=user.id))
+    existing = User.query.filter(User.email == email, User.id != user.id).first()
+    if existing:
+        flash("Esse email já existe.", "error")
+        return redirect(url_for("admin.edit_user", user_id=user.id))
+
+    user.email = email
+    user.set_password(temp_password)
+    user.has_access = True
+    user.must_change_password = True
+    from app.utils import audit
+    audit("edit", "user", user.id, user.name, f"Acesso concedido: {user.email}")
+    db.session.commit()
+    flash("Acesso concedido. A pessoa deve trocar a senha no primeiro login.", "success")
+    return redirect(url_for("admin.edit_user", user_id=user.id))
+
+
 @admin_bp.route("/users/<int:user_id>/reset-password", methods=["POST"])
 @login_required
 @require_superadmin
@@ -269,8 +355,36 @@ def delete_user(user_id: int):
     if user.id == current_user.id:
         flash("Você não pode excluir seu próprio usuário.", "error")
         return redirect(url_for("admin.list_users"))
+
+    # Histórico financeiro não pode ser perdido: bloqueia exclusão e orienta desativar.
+    from app.models import CommissionPayment, OrcamentoHistory, SalaryPayment, SpecialExpense
+    blockers = []
+    if CommissionPayment.query.filter_by(seller_id=user.id).count():
+        blockers.append("comissões")
+    if OrcamentoHistory.query.filter_by(user_id=user.id).count():
+        blockers.append("orçamentos")
+    if SpecialExpense.query.filter_by(created_by_id=user.id).count():
+        blockers.append("gastos extras")
+    if CalendarEvent.query.filter_by(seller_id=user.id).count():
+        blockers.append("vendas de eventos")
+    if blockers:
+        flash(
+            f"Não é possível excluir: este usuário tem histórico de {', '.join(blockers)}. "
+            "Desmarque 'Usuário ativo' na edição para desativá-lo.",
+            "error",
+        )
+        return redirect(url_for("admin.list_users"))
+
+    # Folha de pagamento da pessoa sai junto; vínculos opcionais são desfeitos.
+    from app.models import EnsaioMaterial
+    SalaryPayment.query.filter_by(user_id=user.id).delete()
+    SalaryHistory.query.filter_by(user_id=user.id).delete()
+    EnsaioMaterial.query.filter_by(user_id=user.id).update({"user_id": None})
+    SpecialExpense.query.filter_by(approved_by_id=user.id).update({"approved_by_id": None})
+    SpecialExpense.query.filter_by(reimburse_user_id=user.id).update({"reimburse_user_id": None})
+
     from app.utils import audit
-    audit("delete", "user", user.id, user.name, f"Usuário excluído: {user.email}")
+    audit("delete", "user", user.id, user.name, f"Usuário excluído: {user.email or user.name}")
     db.session.delete(user)
     db.session.commit()
     flash("Usuário excluído.", "success")

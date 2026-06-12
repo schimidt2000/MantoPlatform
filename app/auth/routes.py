@@ -24,8 +24,8 @@ def login():
         email = request.form.get("email", "")
         password = request.form.get("password", "")
 
-    user = User.query.filter_by(email=email).first()
-    if not user or not user.check_password(password):
+    user = User.query.filter_by(email=email).first() if email else None
+    if not user or not user.has_access or not user.check_password(password):
         # Se veio do navegador, renderiza com erro
         if not request.is_json:
             return render_template("login.html", error="Email ou senha inválidos")
