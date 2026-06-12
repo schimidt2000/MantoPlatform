@@ -1,10 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Comissões de Vendas{% endblock %}
 {% block page_title %}Comissões de Vendas{% endblock %}
-{% block page_subtitle %}<p class="sub">Controle de comissões por ciclo mensal (pagamento no dia 5)</p>{% endblock %}
+{% block page_subtitle %}
+  {% if can_manage %}
+    <p class="sub">Controle de comissões por ciclo mensal (pagamento no dia 5)</p>
+  {% else %}
+    <p class="sub">Suas comissões por ciclo mensal (pagamento no dia 5)</p>
+  {% endif %}
+{% endblock %}
 
 {% block page_actions %}
+  {% if can_manage %}
   <a href="{{ url_for('financeiro.dashboard') }}" class="btn btn-secondary">← Financeiro</a>
+  {% endif %}
 {% endblock %}
 
 {% block content %}
@@ -37,7 +45,7 @@
           <th>Evento (cancelado)</th>
           <th>Data venda</th>
           <th class="text-right">Valor</th>
-          <th></th>
+          {% if can_manage %}<th></th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -49,6 +57,7 @@
           <td class="text-right" style="color:var(--red); font-weight:700;">
             R$ {{ "%.2f"|format(cp.amount|float)|replace(".", ",")|replace(",",".",1) }}
           </td>
+          {% if can_manage %}
           <td>
             <form method="post" action="{{ url_for('financeiro.set_commission_status') }}" style="display:inline;">
               <input type="hidden" name="cp_id" value="{{ cp.id }}">
@@ -60,6 +69,7 @@
               </button>
             </form>
           </td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -96,7 +106,7 @@
           <th class="text-right">Comissão</th>
           <th>Status</th>
           <th>Pago em</th>
-          <th></th>
+          {% if can_manage %}<th></th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -129,6 +139,7 @@
           <td class="meta" style="white-space:nowrap;">
             {{ cp.paid_at.strftime("%d/%m/%Y") if cp.paid_at else "—" }}
           </td>
+          {% if can_manage %}
           <td>
             {% if cp.status == "a_pagar" %}
             <form method="post" action="{{ url_for('financeiro.set_commission_status') }}" style="display:inline;">
@@ -154,6 +165,7 @@
             </form>
             {% endif %}
           </td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
