@@ -330,14 +330,14 @@
         {% if pending_payments %}
           {% for p in pending_payments %}
             {% set ev = p.event %}
-            <div class="flex-between gap-12 task-row" style="padding:10px 0;border-bottom:1px solid var(--line);{% if p.severity == 'urgent' %}background:rgba(228,88,88,0.06);margin:0 -18px;padding:10px 18px;{% elif p.severity == 'warn' %}background:rgba(245,200,66,0.06);margin:0 -18px;padding:10px 18px;{% endif %}">
+            {% set _red = p.severity in ('atrasado', 'vencido', 'urgent') %}
+            {% set _badge = {'atrasado': 'ATRASADO', 'vencido': 'VENCIDO', 'urgent': 'URGENTE', 'warn': 'SINAL PENDENTE'} %}
+            <div class="flex-between gap-12 task-row" style="padding:10px 0;border-bottom:1px solid var(--line);{% if _red %}background:rgba(228,88,88,0.06);margin:0 -18px;padding:10px 18px;{% elif p.severity == 'warn' %}background:rgba(245,200,66,0.06);margin:0 -18px;padding:10px 18px;{% endif %}">
               <div>
                 <div class="strong">
                   {{ ev.title }}
-                  {% if p.severity == 'urgent' %}
-                    <span class="badge badge-red" style="font-size:10px;margin-left:6px;">
-                      {{ 'VENCIDO' if p.due_date else 'URGENTE' }}
-                    </span>
+                  {% if _red %}
+                    <span class="badge badge-red" style="font-size:10px;margin-left:6px;">{{ _badge[p.severity] }}</span>
                   {% elif p.severity == 'warn' %}
                     <span class="badge badge-gold" style="font-size:10px;margin-left:6px;">SINAL PENDENTE</span>
                   {% endif %}

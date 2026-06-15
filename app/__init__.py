@@ -440,12 +440,17 @@ def create_app():
                 saldo = sale - received
                 if saldo <= 0:
                     continue
+                ev_date = ev.start_at.date() if ev.start_at else None
+                is_past = bool(ev_date and ev_date < today_sp)
                 due_date = None
                 if ev.payment_method in ("futuro", "faturado") and ev.payment_due_date:
                     due_date = ev.payment_due_date
-                    severity = "urgent" if due_date <= today_sp else "info"
+                    severity = "vencido" if due_date <= today_sp else "info"
+                elif is_past:
+                    # Evento já aconteceu e segue com saldo em aberto.
+                    severity = "atrasado"
                 else:
-                    days_left = (ev.start_at.date() - today_sp).days if ev.start_at else None
+                    days_left = (ev_date - today_sp).days if ev_date else None
                     if days_left is not None and days_left <= 2:
                         severity = "urgent"
                     elif received < sale * 0.5:
@@ -459,8 +464,9 @@ def create_app():
                     "saldo": saldo,
                     "severity": severity,
                     "due_date": due_date,
+                    "is_past": is_past,
                 })
-            _SEVERITY_ORDER = {"urgent": 0, "warn": 1, "info": 2}
+            _SEVERITY_ORDER = {"atrasado": 0, "vencido": 1, "urgent": 2, "warn": 3, "info": 4}
             pending_payments.sort(
                 key=lambda p: (
                     _SEVERITY_ORDER[p["severity"]],
