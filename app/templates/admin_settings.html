@@ -67,6 +67,26 @@
     <hr class="sep">
 
     <div class="form-group">
+      <label>Taxa de imposto provisionado (%)</label>
+      <div class="muted" style="margin-bottom:8px;">Aplicada sobre o valor de venda apenas dos eventos que exigem nota fiscal. Usada no painel financeiro para a Receita Líquida.</div>
+      <input type="number" step="0.1" min="0" max="100" name="tax_rate"
+        value="{{ settings.tax_rate if settings.tax_rate is not none else 16.0 }}"
+        style="width:140px;">
+    </div>
+
+    <hr class="sep">
+
+    <div class="form-group">
+      <label>Corte do Fator R (%)</label>
+      <div class="muted" style="margin-bottom:8px;">Folha ÷ faturamento. Acima do corte, a tributação tende ao Simples (6%); abaixo, risco de alíquota maior (15,5%).</div>
+      <input type="number" step="0.1" min="0" max="100" name="fator_r_threshold"
+        value="{{ settings.fator_r_threshold if settings.fator_r_threshold is not none else 28.0 }}"
+        style="width:140px;">
+    </div>
+
+    <hr class="sep">
+
+    <div class="form-group">
       <label>Endereço base (Manto Produções)</label>
       <div class="muted" style="margin-bottom:8px;">Usado como origem no cálculo de tempo de viagem até o evento.</div>
       <input type="text" name="manto_address"

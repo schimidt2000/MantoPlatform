@@ -408,6 +408,18 @@ def admin_settings():
         except ValueError:
             pass
 
+        tax_raw = request.form.get("tax_rate", "").strip()
+        try:
+            settings.tax_rate = float(tax_raw) if tax_raw else settings.tax_rate
+        except ValueError:
+            pass
+
+        fator_r_raw = request.form.get("fator_r_threshold", "").strip()
+        try:
+            settings.fator_r_threshold = float(fator_r_raw) if fator_r_raw else settings.fator_r_threshold
+        except ValueError:
+            pass
+
         file = request.files.get("logo")
         if file and file.filename:
             filename = secure_filename(file.filename)

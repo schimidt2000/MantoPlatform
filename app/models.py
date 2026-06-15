@@ -205,7 +205,9 @@ class CalendarEvent(db.Model):
     # valor antes do desconto (preço cheio); desconto = sale_value_gross - sale_value
     sale_value_gross = db.Column(db.Numeric(12, 2), nullable=True)
     sale_date = db.Column(db.Date, nullable=True)  # data em que a venda foi fechada
-    with_invoice = db.Column(db.Boolean, default=False, nullable=False)
+    with_invoice = db.Column(db.Boolean, default=False, nullable=False)  # exige nota fiscal ("Emitir Nota")
+    # Cortesia/permuta: venda tratada como 0 e cachê dos talentos vira "Custo de Marketing"
+    is_cortesia_permuta = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
     seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     commission_rate = db.Column(db.Float, nullable=True)  # null = usa SiteSetting.default_commission_rate
 
@@ -474,6 +476,8 @@ class SiteSetting(db.Model):
     secondary_color = db.Column(db.String(20), nullable=True)
     accent_color = db.Column(db.String(20), nullable=True)
     default_commission_rate = db.Column(db.Float, nullable=True)  # % padrão de comissão (default 2.5)
+    tax_rate = db.Column(db.Float, nullable=True)            # % provisionamento de imposto (default 16.0)
+    fator_r_threshold = db.Column(db.Float, nullable=True)   # % corte do Fator R (default 28.0)
     manto_address = db.Column(db.String(300), nullable=True)       # endereço base para cálculo de rota
     departure_margin_minutes = db.Column(db.Integer, nullable=True)  # margem de antecedência (default 60)
     google_maps_api_key = db.Column(db.String(100), nullable=True)   # API key para Distance Matrix
