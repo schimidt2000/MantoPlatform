@@ -152,6 +152,36 @@
       </p>
     </div>
 
+    <div class="pkg-panel">
+      <h3>Cachê do ensemble (por pessoa)</h3>
+      <p class="muted" style="font-size:11.5px; margin-bottom:12px;">
+        Valor pago a cada ensemble (figurante extra) por cenário. Cada ensemble também soma
+        +1 na ajuda de custo e no catering.
+      </p>
+      <div class="margin-grid">
+        <div class="form-group">
+          <label class="form-label">1 sessão (1 dia)</label>
+          <input type="number" name="ensemble_1s" class="form-control" min="0" step="any"
+                 value="{{ package.ensemble_1s|int if package and package.ensemble_1s == package.ensemble_1s|int else (package.ensemble_1s if package else 350) }}" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">2 sessões (1 dia)</label>
+          <input type="number" name="ensemble_2s" class="form-control" min="0" step="any"
+                 value="{{ package.ensemble_2s|int if package and package.ensemble_2s == package.ensemble_2s|int else (package.ensemble_2s if package else 600) }}" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">1 sessão (multi)</label>
+          <input type="number" name="ensemble_1s_days" class="form-control" min="0" step="any"
+                 value="{{ package.ensemble_1s_days|int if package and package.ensemble_1s_days == package.ensemble_1s_days|int else (package.ensemble_1s_days if package else 300) }}" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">2 sessões (multi)</label>
+          <input type="number" name="ensemble_2s_days" class="form-control" min="0" step="any"
+                 value="{{ package.ensemble_2s_days|int if package and package.ensemble_2s_days == package.ensemble_2s_days|int else (package.ensemble_2s_days if package else 550) }}" required>
+        </div>
+      </div>
+    </div>
+
     <div style="display:flex; gap:10px; align-items:center;">
       <button type="submit" class="btn btn-primary">
         {{ 'Salvar alterações' if package else 'Criar pacote' }}
@@ -185,6 +215,7 @@
             <th>2S</th>
             <th>1S/dia</th>
             <th>2S/dia</th>
+            <th title="Quanto a quantidade cresce por ensemble">Ens+</th>
             <th></th>
           </tr>
         </thead>
@@ -198,6 +229,7 @@
               <td><input type="number" name="item_cost_2s[]"      value="{{ item.cost_2s|int if item.cost_2s == item.cost_2s|int else item.cost_2s }}"      min="0" step="any"></td>
               <td><input type="number" name="item_cost_1s_days[]" value="{{ item.cost_1s_days|int if item.cost_1s_days == item.cost_1s_days|int else item.cost_1s_days }}" min="0" step="any"></td>
               <td><input type="number" name="item_cost_2s_days[]" value="{{ item.cost_2s_days|int if item.cost_2s_days == item.cost_2s_days|int else item.cost_2s_days }}" min="0" step="any"></td>
+              <td><input type="number" name="item_ensemble_add[]" value="{{ item.ensemble_add }}" min="0" step="1" style="min-width:50px;"></td>
               <td><button type="button" class="btn-remove" onclick="removeRow(this)" title="Remover">×</button></td>
             </tr>
             {% endfor %}
@@ -220,7 +252,7 @@
 {% endif %}
 
 <script>
-function addRow(name, qty, c1s, c2s, c1sd, c2sd) {
+function addRow(name, qty, c1s, c2s, c1sd, c2sd, ensAdd) {
   const tbody = document.getElementById('items-body');
   const tr = document.createElement('tr');
   tr.innerHTML = `
@@ -230,6 +262,7 @@ function addRow(name, qty, c1s, c2s, c1sd, c2sd) {
     <td><input type="number" name="item_cost_2s[]"      value="${c2s||0}"  min="0" step="any"></td>
     <td><input type="number" name="item_cost_1s_days[]" value="${c1sd||0}" min="0" step="any"></td>
     <td><input type="number" name="item_cost_2s_days[]" value="${c2sd||0}" min="0" step="any"></td>
+    <td><input type="number" name="item_ensemble_add[]" value="${ensAdd||0}" min="0" step="1" style="min-width:50px;"></td>
     <td><button type="button" class="btn-remove" onclick="removeRow(this)" title="Remover">×</button></td>
   `;
   tbody.appendChild(tr);
