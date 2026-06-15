@@ -1,7 +1,7 @@
 import os
 from flask import Flask, render_template, request, send_from_directory, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import and_, not_, func
+from sqlalchemy import and_, not_, or_, func
 from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_login import login_required, current_user
@@ -493,6 +493,19 @@ def create_app():
                 )
             )
 
+        events_sem_valor: list = []
+        if show_comercial:
+            events_sem_valor = (
+                CalendarEvent.query
+                .filter(
+                    or_(CalendarEvent.sale_value.is_(None), CalendarEvent.sale_value == 0),
+                    CalendarEvent.start_at >= task_cutoff,
+                    exclude_ensaios,
+                )
+                .order_by(CalendarEvent.start_at.asc())
+                .all()
+            )
+
         # Nota fiscal pendente: eventos com NF solicitada mas sem arquivo anexado
         pending_invoice = []
         if is_superadmin:
@@ -518,6 +531,7 @@ def create_app():
             pending_presence=pending_presence,
             pending_invoice=pending_invoice,
             show_comercial=show_comercial,
+            events_sem_valor=events_sem_valor,
             pending_payments=pending_payments,
             show_casting=show_casting,
             show_figurino=show_figurino,

@@ -337,22 +337,49 @@
     </div>
     {% endif %}
 
-    {# ── COMERCIAL: cobranças pendentes ── #}
+    {# ── COMERCIAL: tarefas pendentes ── #}
     {% if show_comercial %}
+    {% set _total_comercial = events_sem_valor|length + pending_payments|length %}
     <div class="sector-panel" id="sp-comercial">
       <div class="sector-header" onclick="toggleSector('comercial')">
         <div class="sector-header-left">
           <span class="badge badge-purple" style="background:#ede9fe;color:#5b21b6;">💰 Comercial</span>
-          {% if pending_payments %}
-            <span class="meta">{{ pending_payments|length }} cobrança{{ 's' if pending_payments|length != 1 else '' }} pendente{{ 's' if pending_payments|length != 1 else '' }}</span>
+          {% if _total_comercial > 0 %}
+            <span class="meta">{{ _total_comercial }} pendência{{ 's' if _total_comercial != 1 else '' }}</span>
           {% else %}
-            <span class="badge badge-green" style="font-size:11px;">Tudo recebido ✓</span>
+            <span class="badge badge-green" style="font-size:11px;">Tudo em dia ✓</span>
           {% endif %}
         </div>
         <span class="sector-chevron" id="chv-comercial">▼</span>
       </div>
       <div class="sector-body" id="sb-comercial">
+
+        {# — Eventos sem valor de venda — #}
+        {% if events_sem_valor %}
+          <div style="font-size:12px;font-weight:700;color:#b91c1c;text-transform:uppercase;letter-spacing:.5px;padding:8px 0 4px;">Sem valor de venda</div>
+          {% for ev in events_sem_valor %}
+            <div class="flex-between gap-12 task-row" style="padding:10px 0;border-bottom:1px solid var(--line);background:rgba(228,88,88,0.06);margin:0 -18px;padding:10px 18px;">
+              <div>
+                <div class="strong">
+                  {{ ev.title }}
+                  <span class="badge badge-red" style="font-size:10px;margin-left:6px;">SEM VALOR</span>
+                </div>
+                <div class="meta">
+                  {% if ev.start_at %}{{ ev.start_at.strftime("%d/%m/%Y") }} · {% endif %}
+                  Preencha os dados de venda deste evento
+                </div>
+              </div>
+              <a href="/events/{{ ev.id }}" class="btn btn-sm btn-secondary">Abrir</a>
+            </div>
+          {% endfor %}
+          <div style="height:8px;"></div>
+        {% endif %}
+
+        {# — Cobranças pendentes — #}
         {% if pending_payments %}
+          {% if events_sem_valor %}
+            <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;padding:8px 0 4px;">Cobranças pendentes</div>
+          {% endif %}
           {% for p in pending_payments %}
             {% set ev = p.event %}
             {% set _red = p.severity in ('atrasado', 'vencido', 'urgent') %}
@@ -380,9 +407,12 @@
             </div>
           {% endfor %}
           <div style="height:8px;"></div>
-        {% else %}
-          <p class="muted" style="padding:12px 0;">Nenhuma cobrança pendente.</p>
         {% endif %}
+
+        {% if not events_sem_valor and not pending_payments %}
+          <p class="muted" style="padding:12px 0;">Nenhuma pendência comercial.</p>
+        {% endif %}
+
       </div>
     </div>
     {% endif %}
