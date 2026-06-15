@@ -14,8 +14,10 @@ from app.models import EducaMantoItem, EducaMantoPackage
 
 educamanto_bp = Blueprint("educamanto", __name__, url_prefix="/educamanto")
 
-_CAN_USE    = {RoleName.COMERCIAL, RoleName.SUPERADMIN, RoleName.ENSAIO}
-_CAN_MANAGE = {RoleName.SUPERADMIN}
+_CAN_USE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN, RoleName.ENSAIO}
+# ENSAIO usa só a calculadora — não vê a aba de pacotes.
+_CAN_PACKAGES = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
+_CAN_MANAGE   = {RoleName.SUPERADMIN}
 
 _DEFAULT_ITEMS = [
     # (name, qty, cost_1s, cost_2s, cost_1s_days, cost_2s_days, ensemble_add)
@@ -40,6 +42,17 @@ def _require_use(f):
         if not current_user.is_authenticated:
             abort(401)
         if not {r.name.upper() for r in current_user.roles} & _CAN_USE:
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated
+
+
+def _require_packages(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            abort(401)
+        if not {r.name.upper() for r in current_user.roles} & _CAN_PACKAGES:
             abort(403)
         return f(*args, **kwargs)
     return decorated
@@ -107,7 +120,7 @@ def _parse_items_from_form() -> list[dict]:
 
 @educamanto_bp.route("/packages")
 @login_required
-@_require_use
+@_require_packages
 def packages_list():
     _seed_default_package()
     packages = EducaMantoPackage.query.order_by(EducaMantoPackage.id).all()
