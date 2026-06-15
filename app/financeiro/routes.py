@@ -151,33 +151,159 @@ def _prev_month(year: int, month: int):
     return year, month - 1
 
 
+# ── Constantes fiscais (sobrescrevíveis em Settings) ──────────────────────────
+DEFAULT_TAX_RATE = Decimal("16")        # % provisionamento de imposto sobre vendas com nota
+DEFAULT_FATOR_R = Decimal("28")         # % corte folha/faturamento (Simples Anexo III vs V)
+FATOR_R_RATE_LOW = "6"                  # alíquota protegida (rótulo)
+FATOR_R_RATE_HIGH = "15,5"             # alíquota de risco (rótulo)
+
+
+def _pct(num, den) -> Decimal:
+    """Percentual seguro: retorna 0 quando o denominador é 0 (sem divisão por zero)."""
+    if not den:
+        return Decimal("0")
+    return (Decimal(num) / Decimal(den) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+
+
+def _is_permuta(event) -> bool:
+    return bool(getattr(event, "is_cortesia_permuta", False))
+
+
+def _get_tax_rate(settings) -> Decimal:
+    if settings and settings.tax_rate is not None:
+        return Decimal(str(settings.tax_rate))
+    return DEFAULT_TAX_RATE
+
+
+def _get_fator_r_threshold(settings) -> Decimal:
+    if settings and settings.fator_r_threshold is not None:
+        return Decimal(str(settings.fator_r_threshold))
+    return DEFAULT_FATOR_R
+
+
+def _is_full_month(start_date: date, end_date: date) -> bool:
+    """True se [start, end] cobre exatamente um mês civil (dia 1 ao último dia)."""
+    import calendar as _cal
+    if start_date.day != 1 or start_date.year != end_date.year or start_date.month != end_date.month:
+        return False
+    last = _cal.monthrange(start_date.year, start_date.month)[1]
+    return end_date.day == last
+
+
+def _last_day_of_month(d: date) -> date:
+    import calendar as _cal
+    return date(d.year, d.month, _cal.monthrange(d.year, d.month)[1])
+
+
+def _resolve_period(today: date):
+    """Resolve o filtro de período. Retorna (period, start_date, end_date, is_full_month)."""
+    period = request.args.get("period", "este_mes")
+    start_str = request.args.get("start")
+    end_str = request.args.get("end")
+
+    if period == "30d":
+        return "30d", today - timedelta(days=29), today, False
+    if period == "mes_anterior":
+        py, pm = _prev_month(today.year, today.month)
+        start_date = date(py, pm, 1)
+        return "mes_anterior", start_date, _last_day_of_month(start_date), True
+    if period == "custom" and start_str and end_str:
+        try:
+            start_date = date.fromisoformat(start_str)
+            end_date = date.fromisoformat(end_str)
+            if end_date < start_date:
+                start_date, end_date = end_date, start_date
+            return "custom", start_date, end_date, _is_full_month(start_date, end_date)
+        except ValueError:
+            pass
+    # default: mês corrente
+    start_date = date(today.year, today.month, 1)
+    return "este_mes", start_date, _last_day_of_month(today), True
+
+
+def _salary_cost(start_date: date, end_date: date, is_full_month: bool) -> Decimal:
+    """Custo de pessoal do período.
+
+    Mês cheio → soma real dos SalaryPayment do mês (se já gerados).
+    Período fracionado (ou mês ainda sem lançamentos) → pro-rata do salário vigente.
+    """
+    if is_full_month:
+        month_ref = f"{start_date.year:04d}-{start_date.month:02d}"
+        total = db.session.query(
+            db.func.coalesce(db.func.sum(SalaryPayment.amount), 0)
+        ).filter(SalaryPayment.month_ref == month_ref).scalar()
+        if total:
+            return Decimal(total)
+        # ainda não gerado para o mês → cai no pro-rata abaixo
+    period_days = (end_date - start_date).days + 1
+    current = SalaryHistory.query.filter(
+        SalaryHistory.end_date.is_(None),
+        SalaryHistory.payment_type != "comissao",
+    ).all()
+    return (
+        Decimal(sum(s.salary for s in current)) / Decimal("30") * Decimal(period_days)
+    ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+
+def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal) -> dict:
+    """Cascata da DRE Gerencial para um conjunto de eventos.
+
+    Isola permutas/cortesias: o cachê delas não entra no CPV (não distorce a margem),
+    entra como Custo de Marketing. Impostos só sobre eventos com nota (with_invoice).
+    """
+    tax_rate = _get_tax_rate(settings)
+    normais = [e for e in events if not _is_permuta(e)]
+    permutas = [e for e in events if _is_permuta(e)]
+
+    receita_bruta = sum((Decimal(e.sale_value or 0) for e in normais), Decimal("0"))
+    impostos = sum(
+        (Decimal(e.sale_value or 0) * tax_rate / Decimal("100") for e in normais if e.with_invoice),
+        Decimal("0"),
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    receita_liquida = receita_bruta - impostos
+
+    cpv = Decimal(sum(_event_cost(e) for e in normais))
+    lucro_bruto = receita_liquida - cpv
+
+    marketing = Decimal(sum(_event_cost(e) for e in permutas))
+    comissoes = sum((_event_commission(e, settings) for e in normais), Decimal("0"))
+    pessoal = Decimal(salary_cost)
+    ebitda = lucro_bruto - marketing - comissoes - pessoal
+
+    gastos = Decimal(gastos_extras)
+    resultado_liquido = ebitda - gastos
+
+    return {
+        "receita_bruta": receita_bruta,
+        "impostos": impostos,
+        "receita_liquida": receita_liquida,
+        "cpv": cpv,
+        "lucro_bruto": lucro_bruto,
+        "margem_bruta": _pct(lucro_bruto, receita_liquida),
+        "marketing": marketing,
+        "comissoes": comissoes,
+        "pessoal": pessoal,
+        "ebitda": ebitda,
+        "margem_ebitda": _pct(ebitda, receita_liquida),
+        "gastos_extras": gastos,
+        "resultado_liquido": resultado_liquido,
+        "n_eventos": len(events),
+        "n_normais": len(normais),
+        "n_permutas": len(permutas),
+    }
+
+
 @financeiro_bp.route("/financeiro/")
 @login_required
 @require_financeiro
 def dashboard():
     settings = SiteSetting.query.get(1)
-    today = date.today()
+    # "Hoje" sempre em horário de Brasília (eventos são guardados naïve em SP).
+    today = datetime.now(TZ_SP).date()
+    now_naive = datetime.now(TZ_SP).replace(tzinfo=None)
 
-    # ── Filtro de período ─────────────────────────────────────────────────────
-    period = request.args.get("period", "30")
-    start_str = request.args.get("start")
-    end_str = request.args.get("end")
-
-    if period == "7":
-        start_date = today - timedelta(days=6)
-        end_date = today
-    elif period == "custom" and start_str and end_str:
-        try:
-            start_date = date.fromisoformat(start_str)
-            end_date = date.fromisoformat(end_str)
-        except ValueError:
-            start_date = today - timedelta(days=29)
-            end_date = today
-    else:
-        period = "30"
-        start_date = today - timedelta(days=29)
-        end_date = today
-
+    # ── Filtro de período (regime de competência: data do evento) ─────────────
+    period, start_date, end_date, is_full_month = _resolve_period(today)
     start_dt = datetime.combine(start_date, datetime.min.time())
     end_dt   = datetime.combine(end_date, datetime.max.time())
 
@@ -192,39 +318,12 @@ def dashboard():
         .all()
     )
 
-    # ── Demonstração de Resultado Gerencial (DRG) ─────────────────────────────
-    # Receita Bruta: soma dos sale_values do período
-    receita_bruta = sum(e.sale_value or 0 for e in events)
+    # Realizado (já ocorrido) × Projetado (futuro), pela data do evento.
+    realizados = [e for e in events if e.start_at and e.start_at < now_naive]
+    projetados = [e for e in events if e.start_at and e.start_at >= now_naive]
 
-    # CPV — Custo dos Serviços (cachês pagos a talentos)
-    cpv = sum(_event_cost(e) for e in events)
-
-    # Lucro Bruto = Receita - CPV
-    lucro_bruto = receita_bruta - cpv
-    margem_bruta = (
-        (Decimal(lucro_bruto) / Decimal(receita_bruta) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-        if receita_bruta else Decimal("0")
-    )
-
-    # Comissões de vendas
-    total_comissoes = sum((_event_commission(e, settings) for e in events), Decimal("0"))
-
-    # Despesas com pessoal (salários fixos vigentes — estimativa pro-rata)
-    period_days = (end_date - start_date).days + 1
-    current_salaries = SalaryHistory.query.filter_by(end_date=None).all()
-    # Custo mensal → diário → pro-rata do período
-    custo_pessoal = (
-        Decimal(sum(s.salary for s in current_salaries)) / Decimal("30") * Decimal(period_days)
-    ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-
-    # EBITDA / Resultado Operacional = Lucro Bruto - Comissões - Pessoal
-    ebitda = Decimal(lucro_bruto) - total_comissoes - custo_pessoal
-    margem_ebitda = (
-        (ebitda / Decimal(receita_bruta) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-        if receita_bruta else Decimal("0")
-    )
-
-    # Gastos extras aprovados no período (pela data do gasto) — entram no balanço
+    # ── Custos do período ─────────────────────────────────────────────────────
+    salary_cost = _salary_cost(start_date, end_date, is_full_month)
     gastos_extras = sum(
         (Decimal(g.amount) for g in SpecialExpense.query.filter(
             SpecialExpense.status == "aprovado",
@@ -233,35 +332,33 @@ def dashboard():
         ).all()),
         Decimal("0"),
     )
-    resultado_liquido = ebitda - gastos_extras
 
-    # ── Indicadores Comerciais ────────────────────────────────────────────────
-    eventos_com_venda = [e for e in events if e.sale_value]
+    # ── DRE Gerencial: realizado, projetado e total (consolidado do período) ──
+    drg_realizado = _compute_drg(realizados, settings, salary_cost, gastos_extras)
+    # Projetado mostra só a contribuição operacional dos eventos futuros (sem custo fixo).
+    drg_projetado = _compute_drg(projetados, settings, Decimal("0"), Decimal("0"))
+    drg_total = _compute_drg(events, settings, salary_cost, gastos_extras)
+
+    # ── KPIs (sobre o consolidado do período) ─────────────────────────────────
+    # Apenas eventos normais (não-permuta) com venda contam para indicadores comerciais.
+    eventos_com_venda = [e for e in events if not _is_permuta(e) and e.sale_value and e.sale_value > 0]
     ticket_medio = (
-        (Decimal(receita_bruta) / Decimal(len(eventos_com_venda))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        (drg_total["receita_bruta"] / Decimal(len(eventos_com_venda))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         if eventos_com_venda else Decimal("0")
     )
+    ratio_custo_talento = _pct(drg_total["cpv"], drg_total["receita_liquida"])
 
-    # Custo de talento como % da receita
-    ratio_custo_talento = (
-        (Decimal(cpv) / Decimal(receita_bruta) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-        if receita_bruta else Decimal("0")
-    )
+    # Termômetro de break-even: lucro bruto cobrindo o custo fixo (pessoal + comissões).
+    fixed_cost = drg_total["pessoal"] + drg_total["comissoes"]
+    breakeven_pct = _pct(drg_total["lucro_bruto"], fixed_cost)
+    breakeven_atingido = bool(fixed_cost > 0 and drg_total["lucro_bruto"] >= fixed_cost)
 
-    # Descontos concedidos no período (preço cheio − valor final, quando positivo)
-    _com_desconto = [
-        e for e in eventos_com_venda
-        if e.sale_value_gross and e.sale_value_gross > e.sale_value
-    ]
-    total_descontos = sum((e.sale_value_gross - e.sale_value) for e in _com_desconto)
-    _gross_descontados = sum(e.sale_value_gross for e in _com_desconto)
-    pct_desconto_medio = (
-        (Decimal(total_descontos) / Decimal(_gross_descontados) * 100)
-        .quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-        if _gross_descontados else Decimal("0")
-    )
+    # Alerta fiscal (Fator R): folha ÷ faturamento.
+    fator_r_threshold = _get_fator_r_threshold(settings)
+    fator_r_pct = _pct(drg_total["pessoal"], drg_total["receita_bruta"])
+    fator_r_protegido = bool(drg_total["receita_bruta"] > 0 and fator_r_pct >= fator_r_threshold)
 
-    # A receber de clientes: venda − comprovantes anexados, por evento do período
+    # A receber de clientes: venda − comprovantes anexados, por evento do período.
     _recebido_por_evento = dict(
         db.session.query(
             EventPayment.event_id,
@@ -276,13 +373,25 @@ def dashboard():
         for e in eventos_com_venda
     )
 
-    # Receita por tipo de evento
+    # A pagar / pago a talentos no período (exclui permutas? não: cachê é devido mesmo em permuta).
+    roles_no_periodo = [r for e in events for r in e.roles if r.talent_id]
+    pagamentos_pendentes = sum(
+        r.cache_value or 0 for r in roles_no_periodo
+        if r.payment_status == "nao_pago"
+    )
+    pagamentos_realizados = sum(
+        r.cache_value or 0 for r in roles_no_periodo
+        if r.payment_status in ("pago", "no_banco")
+    )
+
+    # ── Receita por tipo de evento ────────────────────────────────────────────
     receita_por_tipo = defaultdict(int)
     for e in eventos_com_venda:
         receita_por_tipo[e.event_type or "Outros"] += (e.sale_value or 0)
     receita_por_tipo = dict(sorted(receita_por_tipo.items(), key=lambda x: -x[1]))
+    receita_tipo_max = max(receita_por_tipo.values()) if receita_por_tipo else 0
 
-    # Top vendedores por receita
+    # ── Top vendedores por receita ────────────────────────────────────────────
     seller_revenue = defaultdict(int)
     seller_margin  = defaultdict(int)
     for e in eventos_com_venda:
@@ -295,19 +404,7 @@ def dashboard():
         if u:
             top_sellers.append({"user": u, "receita": rev, "lucro": seller_margin[sid]})
 
-    # ── Caixa / A Receber ─────────────────────────────────────────────────────
-    # Pagamentos pendentes a talentos no período
-    roles_no_periodo = [r for e in events for r in e.roles if r.talent_id]
-    pagamentos_pendentes = sum(
-        r.cache_value or 0 for r in roles_no_periodo
-        if r.payment_status == "nao_pago"
-    )
-    pagamentos_realizados = sum(
-        r.cache_value or 0 for r in roles_no_periodo
-        if r.payment_status in ("pago", "no_banco")
-    )
-
-    # ── Tendência mensal (últimos 6 meses) ───────────────────────────────────
+    # ── Tendência mensal (últimos 6 meses, visão operacional pura) ───────────
     monthly_trend = []
     y, m = today.year, today.month
     for _ in range(6):
@@ -317,67 +414,95 @@ def dashboard():
             CalendarEvent.start_at < e_dt,
             CalendarEvent.event_type != "ENSAIO",
         ).all()
-        rec = sum(e.sale_value or 0 for e in evs)
-        cst = sum(_event_cost(e) for e in evs)
+        normais = [e for e in evs if not _is_permuta(e)]
+        rec = sum(e.sale_value or 0 for e in normais)
+        cst = sum(_event_cost(e) for e in normais)
         monthly_trend.insert(0, {
             "label": f"{m:02d}/{str(y)[2:]}",
             "receita": rec,
             "custo": cst,
             "lucro": rec - cst,
+            "margem": _pct(rec - cst, rec),
             "n_eventos": len(evs),
         })
         y, m = _prev_month(y, m)
 
-    # ── Tabela de eventos do período ─────────────────────────────────────────
+    # ── Auditoria: eventos com receita zerada SEM flag de cortesia/permuta ────
+    auditoria = [
+        e for e in events
+        if not _is_permuta(e) and not (e.sale_value and e.sale_value > 0)
+    ]
+
+    # ── Tabela de eventos do período (com status financeiro) ─────────────────
     events_data = []
     for e in events:
         custo = _event_cost(e)
         comissao = _event_commission(e, settings)
+        recebido = float(_recebido_por_evento.get(e.id, 0))
+        venda = float(e.sale_value or 0)
+        if _is_permuta(e):
+            status = "permuta"
+        elif venda <= 0:
+            status = "sem_valor"
+        elif recebido >= venda:
+            status = "pago_total"
+        elif recebido > 0:
+            status = "parcial"
+        else:
+            status = "pendente"
         events_data.append({
             "event": e,
             "custo": custo,
-            "lucro": (e.sale_value or 0) - custo,
+            "lucro": (0 if _is_permuta(e) else venda) - custo,
             "comissao": comissao,
             "rate": _get_commission_rate(e, settings),
+            "is_projetado": bool(e.start_at and e.start_at >= now_naive),
+            "status": status,
         })
+
+    period_label = {
+        "este_mes": "Este mês",
+        "30d": "Últimos 30 dias",
+        "mes_anterior": "Mês anterior",
+        "custom": "Período personalizado",
+    }.get(period, "Este mês")
 
     return render_template(
         "financeiro/dashboard.html",
-        # DRG
-        receita_bruta=receita_bruta,
-        cpv=cpv,
-        lucro_bruto=lucro_bruto,
-        margem_bruta=margem_bruta,
-        total_comissoes=total_comissoes,
-        custo_pessoal=custo_pessoal,
-        ebitda=ebitda,
-        margem_ebitda=margem_ebitda,
-        gastos_extras=gastos_extras,
-        resultado_liquido=resultado_liquido,
-        # Comercial
+        # DRE (3 visões)
+        drg_realizado=drg_realizado,
+        drg_projetado=drg_projetado,
+        drg_total=drg_total,
+        # KPIs
         ticket_medio=ticket_medio,
         ratio_custo_talento=ratio_custo_talento,
-        total_descontos=total_descontos,
-        pct_desconto_medio=pct_desconto_medio,
-        eventos_com_desconto=len(_com_desconto),
+        breakeven_pct=breakeven_pct,
+        breakeven_atingido=breakeven_atingido,
+        fixed_cost=fixed_cost,
+        fator_r_pct=fator_r_pct,
+        fator_r_threshold=fator_r_threshold,
+        fator_r_protegido=fator_r_protegido,
+        fator_r_rate_low=FATOR_R_RATE_LOW,
+        fator_r_rate_high=FATOR_R_RATE_HIGH,
         a_receber_clientes=a_receber_clientes,
-        receita_por_tipo=receita_por_tipo,
-        top_sellers=top_sellers,
-        # Caixa
         pagamentos_pendentes=pagamentos_pendentes,
         pagamentos_realizados=pagamentos_realizados,
-        # Tendência
+        # Painéis laterais
+        receita_por_tipo=receita_por_tipo,
+        receita_tipo_max=receita_tipo_max,
+        top_sellers=top_sellers,
+        # Tendência / Auditoria / Tabela
         monthly_trend=monthly_trend,
-        # Tabela
+        auditoria=auditoria,
         events_data=events_data,
-        total_receita=receita_bruta,
-        total_custo=cpv,
-        total_lucro=lucro_bruto,
         # Filtros
         settings=settings,
         period=period,
-        start_str=start_str or "",
-        end_str=end_str or "",
+        period_label=period_label,
+        is_full_month=is_full_month,
+        start_str=start_date.isoformat(),
+        end_str=end_date.isoformat(),
+        today=today,
     )
 
 

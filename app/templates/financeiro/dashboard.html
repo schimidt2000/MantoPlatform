@@ -3,18 +3,23 @@
 {% block page_title %}Painel Financeiro{% endblock %}
 
 {% block page_subtitle %}
-  <p class="sub">Demonstração de resultado e indicadores de performance</p>
+  <p class="sub">Resultado mês a mês — regime de competência (data do evento) · {{ period_label }}</p>
 {% endblock %}
+
+{% macro money(v) %}R$ {{ "{:,.0f}".format(v or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}{% endmacro %}
 
 {% block content %}
 
 {# ── Filtro de período ──────────────────────────────────────────────────────── #}
 <form method="get" class="period-bar">
   <div class="period-pills">
-    <a href="?period=7"  class="period-pill {% if period=='7'  %}active{% endif %}">7 dias</a>
-    <a href="?period=30" class="period-pill {% if period=='30' %}active{% endif %}">30 dias</a>
+    <a href="?period=este_mes"     class="period-pill {% if period=='este_mes'     %}active{% endif %}">Este mês</a>
+    <a href="?period=30d"          class="period-pill {% if period=='30d'          %}active{% endif %}">Últimos 30 dias</a>
+    <a href="?period=mes_anterior" class="period-pill {% if period=='mes_anterior' %}active{% endif %}">Mês anterior</a>
   </div>
   <div class="period-custom">
+    <input type="month" id="month-jump" class="form-control form-control-sm" title="Ir para um mês">
+    <span class="period-sep">|</span>
     <input type="date" name="start" value="{{ start_str }}" class="form-control form-control-sm">
     <span>–</span>
     <input type="date" name="end"   value="{{ end_str }}"   class="form-control form-control-sm">
@@ -23,323 +28,453 @@
   </div>
 </form>
 
-{# ══ 1. DRG — DEMONSTRAÇÃO DE RESULTADO GERENCIAL ══════════════════════════ #}
-<div class="fin-section-title">📊 Demonstração de Resultado</div>
-<div class="drg-grid">
-
-  <div class="drg-row drg-header">
-    <span>Receita Bruta</span>
-    <span class="drg-value text-green">R$ {{ "{:,.0f}".format(receita_bruta).replace(",", ".") }}</span>
-  </div>
-  <div class="drg-row drg-sub">
-    <span>(–) Custo dos Serviços <small>(cachês dos talentos)</small></span>
-    <span class="drg-value text-red">– R$ {{ "{:,.0f}".format(cpv).replace(",", ".") }}</span>
-  </div>
-  <div class="drg-row drg-result">
-    <span>= Lucro Bruto</span>
-    <span class="drg-value {% if lucro_bruto >= 0 %}text-green{% else %}text-red{% endif %}">
-      R$ {{ "{:,.0f}".format(lucro_bruto).replace(",", ".") }}
-      <small class="drg-pct">{{ margem_bruta }}%</small>
-    </span>
-  </div>
-  <div class="drg-row drg-sub">
-    <span>(–) Comissões de vendas</span>
-    <span class="drg-value text-red">– R$ {{ "{:,.0f}".format(total_comissoes).replace(",", ".") }}</span>
-  </div>
-  <div class="drg-row drg-sub">
-    <span>(–) Despesas com pessoal <small>(salários — pro-rata do período)</small></span>
-    <span class="drg-value text-red">– R$ {{ "{:,.0f}".format(custo_pessoal).replace(",", ".") }}</span>
-  </div>
-  <div class="drg-row drg-result drg-ebitda">
-    <span>
-      = EBITDA / Resultado Operacional
-      <small class="drg-hint">Receita – Cachês – Comissões – Pessoal</small>
-    </span>
-    <span class="drg-value {% if ebitda >= 0 %}text-green{% else %}text-red{% endif %}">
-      R$ {{ "{:,.0f}".format(ebitda).replace(",", ".") }}
-      <small class="drg-pct">{{ margem_ebitda }}%</small>
-    </span>
-  </div>
-  <div class="drg-row drg-sub">
-    <span>(–) Gastos Extras <small>(aprovados, pela data do gasto)</small></span>
-    <span class="drg-value text-red">– R$ {{ "{:,.0f}".format(gastos_extras).replace(",", ".") }}</span>
-  </div>
-  <div class="drg-row drg-result">
-    <span>= Resultado Líquido</span>
-    <span class="drg-value {% if resultado_liquido >= 0 %}text-green{% else %}text-red{% endif %}">
-      R$ {{ "{:,.0f}".format(resultado_liquido).replace(",", ".") }}
-    </span>
-  </div>
-
-</div>
-
-{# ══ 2. KPI CARDS ═══════════════════════════════════════════════════════════ #}
-<div class="fin-section-title">📈 Indicadores de Performance</div>
-<div class="kpi-grid-4">
+{# ══ ROW 1 — KPI CARDS ══════════════════════════════════════════════════════ #}
+<div class="bento kpi-grid-4">
 
   <div class="kpi-card">
     <div class="kpi-label">Ticket Médio</div>
-    <div class="kpi-value">R$ {{ "{:,.0f}".format(ticket_medio).replace(",", ".") }}</div>
-    <div class="kpi-sub">por evento com venda registrada</div>
+    <div class="kpi-value">{{ money(ticket_medio) }}</div>
+    <div class="kpi-sub">por evento com venda</div>
   </div>
 
   <div class="kpi-card">
-    <div class="kpi-label">Custo de Talento / Receita</div>
-    <div class="kpi-value {% if ratio_custo_talento > 60 %}text-red{% elif ratio_custo_talento > 45 %}text-amber{% else %}text-green{% endif %}">
-      {{ ratio_custo_talento }}%
-    </div>
-    <div class="kpi-sub">cachê total ÷ receita bruta</div>
+    <div class="kpi-label">Custo Talento / Receita</div>
+    <div class="kpi-value {% if ratio_custo_talento > 60 %}text-red{% elif ratio_custo_talento > 45 %}text-amber{% else %}text-green{% endif %}">{{ ratio_custo_talento }}%</div>
+    <div class="kpi-sub">CPV ÷ receita líquida</div>
   </div>
 
   <div class="kpi-card">
     <div class="kpi-label">Margem Bruta</div>
-    <div class="kpi-value {% if margem_bruta >= 40 %}text-green{% elif margem_bruta >= 20 %}text-amber{% else %}text-red{% endif %}">
-      {{ margem_bruta }}%
-    </div>
-    <div class="kpi-sub">lucro bruto ÷ receita</div>
+    <div class="kpi-value {% if drg_total.margem_bruta >= 40 %}text-green{% elif drg_total.margem_bruta >= 20 %}text-amber{% else %}text-red{% endif %}">{{ drg_total.margem_bruta }}%</div>
+    <div class="kpi-sub">lucro bruto ÷ receita líquida</div>
   </div>
 
   <div class="kpi-card">
     <div class="kpi-label">Margem Operacional (EBITDA)</div>
-    <div class="kpi-value {% if margem_ebitda >= 20 %}text-green{% elif margem_ebitda >= 5 %}text-amber{% else %}text-red{% endif %}">
-      {{ margem_ebitda }}%
-    </div>
+    <div class="kpi-value {% if drg_total.margem_ebitda >= 20 %}text-green{% elif drg_total.margem_ebitda >= 5 %}text-amber{% else %}text-red{% endif %}">{{ drg_total.margem_ebitda }}%</div>
     <div class="kpi-sub">após pessoal e comissões</div>
   </div>
 
-  <div class="kpi-card {% if pagamentos_pendentes > 0 %}kpi-card-warn{% endif %}">
-    <div class="kpi-label">A Pagar — Talentos</div>
-    <div class="kpi-value {% if pagamentos_pendentes > 0 %}text-red{% else %}text-green{% endif %}">
-      R$ {{ "{:,.0f}".format(pagamentos_pendentes).replace(",", ".") }}
-    </div>
-    <div class="kpi-sub">cachês não pagos no período</div>
-  </div>
-
-  <div class="kpi-card {% if a_receber_clientes > 0 %}kpi-card-warn{% endif %}">
-    <div class="kpi-label">A Receber — Clientes</div>
-    <div class="kpi-value {% if a_receber_clientes > 0 %}text-red{% else %}text-green{% endif %}">
-      R$ {{ "{:,.0f}".format(a_receber_clientes).replace(",", ".") }}
-    </div>
-    <div class="kpi-sub">venda − comprovantes anexados</div>
-  </div>
-
-  <div class="kpi-card">
-    <div class="kpi-label">Descontos Concedidos</div>
-    <div class="kpi-value {% if total_descontos > 0 %}text-amber{% else %}text-green{% endif %}">
-      R$ {{ "{:,.0f}".format(total_descontos).replace(",", ".") }}
+  <div class="kpi-card kpi-card-wide">
+    <div class="kpi-label">Termômetro de Break-even</div>
+    <div class="be-row">
+      <div class="be-track">
+        <div class="be-fill {% if breakeven_atingido %}be-ok{% endif %}" style="width:{{ [breakeven_pct|float, 100]|min }}%"></div>
+      </div>
+      <div class="be-pct {% if breakeven_atingido %}text-green{% else %}text-amber{% endif %}">{{ breakeven_pct }}%</div>
     </div>
     <div class="kpi-sub">
-      {% if eventos_com_desconto %}
-        {{ eventos_com_desconto }} evento{{ 's' if eventos_com_desconto != 1 else '' }} · {{ pct_desconto_medio }}% médio sobre o preço cheio
+      {% if breakeven_atingido %}Custo fixo coberto ✓{% else %}Margem cobrindo custo fixo (pessoal + comissões){% endif %}
+      · alvo {{ money(fixed_cost) }}
+    </div>
+  </div>
+
+  <div class="kpi-card kpi-card-wide {% if fator_r_protegido %}kpi-card-ok{% else %}kpi-card-warn{% endif %}">
+    <div class="kpi-label">Alerta Fiscal — Fator R</div>
+    <div class="kpi-value {% if fator_r_protegido %}text-green{% else %}text-red{% endif %}">{{ fator_r_pct }}%</div>
+    <div class="kpi-sub">
+      {% if fator_r_protegido %}
+        🛡️ Imposto Protegido (~{{ fator_r_rate_low }}%) — folha ≥ {{ fator_r_threshold }}% do faturamento
       {% else %}
-        nenhum desconto no período
+        ⚠️ Risco de Alíquota (~{{ fator_r_rate_high }}%) — folha abaixo de {{ fator_r_threshold }}%
       {% endif %}
     </div>
   </div>
 
+  <div class="kpi-card {% if a_receber_clientes > 0 %}kpi-card-warn{% endif %}">
+    <div class="kpi-label">A Receber — Clientes</div>
+    <div class="kpi-value {% if a_receber_clientes > 0 %}text-red{% else %}text-green{% endif %}">{{ money(a_receber_clientes) }}</div>
+    <div class="kpi-sub">venda − comprovantes</div>
+  </div>
+
+  <div class="kpi-card {% if pagamentos_pendentes > 0 %}kpi-card-warn{% endif %}">
+    <div class="kpi-label">A Pagar — Talentos</div>
+    <div class="kpi-value {% if pagamentos_pendentes > 0 %}text-red{% else %}text-green{% endif %}">{{ money(pagamentos_pendentes) }}</div>
+    <div class="kpi-sub">cachês não pagos no período</div>
+  </div>
+
 </div>
 
-{# ══ 3. TENDÊNCIA MENSAL ════════════════════════════════════════════════════ #}
-<div class="fin-section-title">📅 Tendência — Últimos 6 Meses</div>
-<div class="table-wrap">
-  <table class="fin-table">
-    <thead>
-      <tr>
-        <th>Mês</th>
-        <th class="text-right">Receita</th>
-        <th class="text-right">Custo Talentos</th>
-        <th class="text-right">Lucro Bruto</th>
-        <th class="text-right">Margem</th>
-        <th class="text-right">Eventos</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for m in monthly_trend %}
-      {% set m_margem = ((m.lucro / m.receita * 100) | round(1)) if m.receita else 0 %}
-      <tr>
-        <td><strong>{{ m.label }}</strong></td>
-        <td class="text-right">R$ {{ "{:,.0f}".format(m.receita).replace(",", ".") }}</td>
-        <td class="text-right text-red">R$ {{ "{:,.0f}".format(m.custo).replace(",", ".") }}</td>
-        <td class="text-right {% if m.lucro >= 0 %}text-green{% else %}text-red{% endif %}">
-          R$ {{ "{:,.0f}".format(m.lucro).replace(",", ".") }}
-        </td>
-        <td class="text-right">
-          <span class="badge-pct {% if m_margem >= 40 %}pct-green{% elif m_margem >= 20 %}pct-amber{% else %}pct-red{% endif %}">
-            {{ m_margem }}%
-          </span>
-        </td>
-        <td class="text-right">{{ m.n_eventos }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+{# ══ ROW 2 — DRE (65%) + SIDEBAR (35%) ══════════════════════════════════════ #}
+<div class="bento fin-cols-65-35">
 
-{# ══ 4. RECEITA POR TIPO + TOP VENDEDORES + TOP CLIENTES ════════════════════ #}
-<div class="fin-cols-3">
+  {# ── DRE Gerencial ── #}
+  <div class="panel">
+    <div class="panel-head">
+      <span class="fin-section-title" style="margin:0;">📊 DRE Gerencial</span>
+      <span class="dre-legend">Realizado · Projetado · Total</span>
+    </div>
+    <div class="table-wrap table-flush">
+      <table class="fin-table dre-table">
+        <thead>
+          <tr>
+            <th>Linha</th>
+            <th class="text-right">Realizado</th>
+            <th class="text-right">Projetado</th>
+            <th class="text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Receita Bruta</td>
+            <td class="text-right num">{{ money(drg_realizado.receita_bruta) }}</td>
+            <td class="text-right num text-muted">{{ money(drg_projetado.receita_bruta) }}</td>
+            <td class="text-right num strong">{{ money(drg_total.receita_bruta) }}</td>
+          </tr>
+          <tr>
+            <td><span class="dre-op">(–)</span> Impostos Provisionados <small>(eventos com nota)</small></td>
+            <td class="text-right num text-red">– {{ money(drg_realizado.impostos) }}</td>
+            <td class="text-right num text-muted text-red">– {{ money(drg_projetado.impostos) }}</td>
+            <td class="text-right num strong text-red">– {{ money(drg_total.impostos) }}</td>
+          </tr>
+          <tr class="dre-result">
+            <td>= Receita Líquida Operacional</td>
+            <td class="text-right num">{{ money(drg_realizado.receita_liquida) }}</td>
+            <td class="text-right num text-muted">{{ money(drg_projetado.receita_liquida) }}</td>
+            <td class="text-right num strong">{{ money(drg_total.receita_liquida) }}</td>
+          </tr>
+          <tr>
+            <td><span class="dre-op">(–)</span> CPV <small>(cachês — eventos normais)</small></td>
+            <td class="text-right num text-red">– {{ money(drg_realizado.cpv) }}</td>
+            <td class="text-right num text-muted text-red">– {{ money(drg_projetado.cpv) }}</td>
+            <td class="text-right num strong text-red">– {{ money(drg_total.cpv) }}</td>
+          </tr>
 
-  <div>
-    <div class="fin-section-title">🎭 Receita por Tipo de Evento</div>
-    {% if receita_por_tipo %}
-    <div class="bar-list">
-      {% set max_val = receita_por_tipo.values() | max %}
-      {% for tipo, val in receita_por_tipo.items() %}
-      <div class="bar-item">
-        <div class="bar-label">{{ tipo }}</div>
-        <div class="bar-track">
-          <div class="bar-fill" style="width:{{ (val / max_val * 100) | int }}%"></div>
+          <tr class="dre-result">
+            <td>= Lucro Bruto</td>
+            <td class="text-right num {% if drg_realizado.lucro_bruto >= 0 %}text-green{% else %}text-red{% endif %}">{{ money(drg_realizado.lucro_bruto) }} <small class="dre-pct">{{ drg_realizado.margem_bruta }}%</small></td>
+            <td class="text-right num text-muted">{{ money(drg_projetado.lucro_bruto) }} <small class="dre-pct">{{ drg_projetado.margem_bruta }}%</small></td>
+            <td class="text-right num strong {% if drg_total.lucro_bruto >= 0 %}text-green{% else %}text-red{% endif %}">{{ money(drg_total.lucro_bruto) }} <small class="dre-pct">{{ drg_total.margem_bruta }}%</small></td>
+          </tr>
+
+          <tr>
+            <td><span class="dre-op">(–)</span> Custos de Marketing <small>(permutas/cortesias)</small></td>
+            <td class="text-right num text-red">– {{ money(drg_realizado.marketing) }}</td>
+            <td class="text-right num text-muted text-red">– {{ money(drg_projetado.marketing) }}</td>
+            <td class="text-right num strong text-red">– {{ money(drg_total.marketing) }}</td>
+          </tr>
+          <tr>
+            <td><span class="dre-op">(–)</span> Comissões de Vendas</td>
+            <td class="text-right num text-red">– {{ money(drg_realizado.comissoes) }}</td>
+            <td class="text-right num text-muted text-red">– {{ money(drg_projetado.comissoes) }}</td>
+            <td class="text-right num strong text-red">– {{ money(drg_total.comissoes) }}</td>
+          </tr>
+          <tr>
+            <td><span class="dre-op">(–)</span> Pessoal <small>(salários)</small></td>
+            <td class="text-right num text-red">– {{ money(drg_realizado.pessoal) }}</td>
+            <td class="text-right num text-muted text-red">– {{ money(drg_projetado.pessoal) }}</td>
+            <td class="text-right num strong text-red">– {{ money(drg_total.pessoal) }}</td>
+          </tr>
+
+          <tr class="dre-result dre-ebitda">
+            <td>= EBITDA / Resultado Operacional</td>
+            <td class="text-right num {% if drg_realizado.ebitda >= 0 %}text-green{% else %}text-red{% endif %}">{{ money(drg_realizado.ebitda) }} <small class="dre-pct">{{ drg_realizado.margem_ebitda }}%</small></td>
+            <td class="text-right num text-muted">{{ money(drg_projetado.ebitda) }} <small class="dre-pct">{{ drg_projetado.margem_ebitda }}%</small></td>
+            <td class="text-right num strong {% if drg_total.ebitda >= 0 %}text-green{% else %}text-red{% endif %}">{{ money(drg_total.ebitda) }} <small class="dre-pct">{{ drg_total.margem_ebitda }}%</small></td>
+          </tr>
+
+          <tr>
+            <td><span class="dre-op">(–)</span> Gastos Extras <small>(aprovados)</small></td>
+            <td class="text-right num text-red">– {{ money(drg_realizado.gastos_extras) }}</td>
+            <td class="text-right num text-muted text-red">– {{ money(drg_projetado.gastos_extras) }}</td>
+            <td class="text-right num strong text-red">– {{ money(drg_total.gastos_extras) }}</td>
+          </tr>
+
+          <tr class="dre-result dre-final">
+            <td>= Resultado Líquido</td>
+            <td class="text-right num {% if drg_realizado.resultado_liquido >= 0 %}text-green{% else %}text-red{% endif %}">{{ money(drg_realizado.resultado_liquido) }}</td>
+            <td class="text-right num text-muted">{{ money(drg_projetado.resultado_liquido) }}</td>
+            <td class="text-right num strong {% if drg_total.resultado_liquido >= 0 %}text-green{% else %}text-red{% endif %}">{{ money(drg_total.resultado_liquido) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="dre-note">
+      Projetado = contribuição operacional dos {{ drg_projetado.n_eventos }} evento(s) futuro(s) (sem custo fixo).
+      Custos fixos (pessoal e gastos extras) são atribuídos ao Realizado.
+    </div>
+  </div>
+
+  {# ── Sidebar: Receita por tipo + Top vendedores ── #}
+  <div class="side-stack">
+    <div class="panel">
+      <div class="fin-section-title" style="margin-top:0;">🎭 Receita por Tipo</div>
+      {% if receita_por_tipo %}
+      <div class="bar-list">
+        {% for tipo, val in receita_por_tipo.items() %}
+        <div class="bar-item">
+          <div class="bar-label">{{ tipo }}</div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:{{ (val / receita_tipo_max * 100) | int if receita_tipo_max else 0 }}%"></div>
+          </div>
+          <div class="bar-val">{{ money(val) }}</div>
         </div>
-        <div class="bar-val">R$ {{ "{:,.0f}".format(val).replace(",", ".") }}</div>
+        {% endfor %}
       </div>
-      {% endfor %}
+      {% else %}<p class="muted">Sem dados no período.</p>{% endif %}
     </div>
-    {% else %}
-      <p class="muted">Sem dados no período.</p>
-    {% endif %}
-  </div>
 
-  <div>
-    <div class="fin-section-title">🏆 Top Vendedores</div>
-    {% if top_sellers %}
-    <div class="rank-list">
-      {% for s in top_sellers %}
-      <div class="rank-item">
-        <span class="rank-name">{{ s.user.name.split()[0] }}</span>
-        <span class="rank-vals">
-          <span class="text-green">R$ {{ "{:,.0f}".format(s.receita).replace(",", ".") }}</span>
-          <span class="muted text-sm">lucro: R$ {{ "{:,.0f}".format(s.lucro).replace(",", ".") }}</span>
-        </span>
+    <div class="panel">
+      <div class="fin-section-title" style="margin-top:0;">🏆 Top Vendedores</div>
+      {% if top_sellers %}
+      <div class="rank-list">
+        {% for s in top_sellers %}
+        <div class="rank-item">
+          <span class="rank-pos">{{ loop.index }}</span>
+          <span class="rank-name">{{ s.user.name.split()[0] }}</span>
+          <span class="rank-vals">
+            <span class="text-green strong">{{ money(s.receita) }}</span>
+            <span class="muted text-sm">lucro {{ money(s.lucro) }}</span>
+          </span>
+        </div>
+        {% endfor %}
       </div>
-      {% endfor %}
+      {% else %}<p class="muted">Sem vendedor no período.</p>{% endif %}
     </div>
-    {% else %}
-      <p class="muted">Sem eventos com vendedor no período.</p>
-    {% endif %}
   </div>
-
 
 </div>
 
-{# ══ 5. TABELA DE EVENTOS ════════════════════════════════════════════════════ #}
-<div class="fin-section-title">📋 Eventos no Período</div>
-{% if events_data %}
-<div class="table-wrap">
-  <table class="fin-table">
-    <thead>
-      <tr>
-        <th>Data</th>
-        <th>Evento</th>
-        <th>Tipo</th>
-        <th class="text-right">Receita</th>
-        <th class="text-right">Custo</th>
-        <th class="text-right">Lucro</th>
-        <th class="text-right">Margem</th>
-        <th class="text-right">Comissão</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in events_data %}
-      {% set ev = row.event %}
-      {% set margem = ((row.lucro / ev.sale_value * 100) | round(1)) if ev.sale_value else 0 %}
-      <tr>
-        <td class="text-nowrap">{{ ev.start_at.strftime('%d/%m/%Y') if ev.start_at else '—' }}</td>
-        <td><a href="{{ url_for('calendar.event_detail', event_id=ev.id) }}">{{ ev.title }}</a></td>
-        <td><span class="badge-type">{{ ev.event_type or '—' }}</span></td>
-        <td class="text-right">
-          {% if ev.sale_value %}R$ {{ "{:,.0f}".format(ev.sale_value).replace(",", ".") }}
-          {% else %}<span class="muted">—</span>{% endif %}
-        </td>
-        <td class="text-right text-red">R$ {{ "{:,.0f}".format(row.custo).replace(",", ".") }}</td>
-        <td class="text-right {% if row.lucro >= 0 %}text-green{% else %}text-red{% endif %}">
-          R$ {{ "{:,.0f}".format(row.lucro).replace(",", ".") }}
-        </td>
-        <td class="text-right">
-          {% if ev.sale_value %}
-          <span class="badge-pct {% if margem >= 40 %}pct-green{% elif margem >= 20 %}pct-amber{% else %}pct-red{% endif %}">{{ margem }}%</span>
-          {% else %}—{% endif %}
-        </td>
-        <td class="text-right muted">R$ {{ "{:,.0f}".format(row.comissao).replace(",", ".") }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{# ══ ROW 3 — TENDÊNCIA + AUDITORIA ══════════════════════════════════════════ #}
+<div class="bento fin-cols-65-35">
+
+  <div class="panel">
+    <div class="fin-section-title" style="margin-top:0;">📅 Tendência — Últimos 6 Meses <small class="muted">(operacional puro)</small></div>
+    <div class="table-wrap table-flush">
+      <table class="fin-table">
+        <thead>
+          <tr>
+            <th>Mês</th>
+            <th class="text-right">Receita</th>
+            <th class="text-right">Custo Talentos</th>
+            <th class="text-right">Lucro Bruto</th>
+            <th class="text-right">Margem</th>
+            <th class="text-right">Eventos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for mt in monthly_trend %}
+          <tr>
+            <td><strong>{{ mt.label }}</strong></td>
+            <td class="text-right num">{{ money(mt.receita) }}</td>
+            <td class="text-right num text-red">{{ money(mt.custo) }}</td>
+            <td class="text-right num {% if mt.lucro >= 0 %}text-green{% else %}text-red{% endif %}">{{ money(mt.lucro) }}</td>
+            <td class="text-right">
+              <span class="badge-pct {% if mt.margem >= 40 %}pct-green{% elif mt.margem >= 20 %}pct-amber{% else %}pct-red{% endif %}">{{ mt.margem }}%</span>
+            </td>
+            <td class="text-right">{{ mt.n_eventos }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel {% if auditoria %}panel-alert{% endif %}">
+    <div class="fin-section-title" style="margin-top:0;">🔍 Auditoria de Input</div>
+    {% if auditoria %}
+      <p class="audit-lead">{{ auditoria|length }} evento(s) com receita zerada <strong>sem</strong> marcação de cortesia/permuta. Provável falta de preenchimento:</p>
+      <div class="audit-list">
+        {% for ev in auditoria %}
+        <a href="{{ url_for('calendar.event_detail', event_id=ev.id) }}" class="audit-item">
+          <span class="audit-title">{{ ev.title }}</span>
+          <span class="audit-date">{{ ev.start_at.strftime('%d/%m/%Y') if ev.start_at else '—' }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Tudo certo ✓ Nenhum evento com receita zerada sem justificativa.</p>
+    {% endif %}
+  </div>
+
 </div>
-{% else %}
-  <div class="empty-state">Nenhum evento no período selecionado.</div>
-{% endif %}
+
+{# ══ ROW 4 — TABELA DE EVENTOS ══════════════════════════════════════════════ #}
+<div class="panel" style="margin-top:20px;">
+  <div class="fin-section-title" style="margin-top:0;">📋 Eventos no Período</div>
+  {% if events_data %}
+  <div class="table-wrap table-flush">
+    <table class="fin-table">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Evento</th>
+          <th>Tipo</th>
+          <th>Status</th>
+          <th class="text-right">Receita</th>
+          <th class="text-right">Custo</th>
+          <th class="text-right">Lucro</th>
+          <th class="text-right">Comissão</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in events_data %}
+        {% set ev = row.event %}
+        <tr>
+          <td class="text-nowrap">
+            {{ ev.start_at.strftime('%d/%m/%Y') if ev.start_at else '—' }}
+            {% if row.is_projetado %}<span class="badge-soft badge-proj">Projetado</span>{% endif %}
+          </td>
+          <td><a href="{{ url_for('calendar.event_detail', event_id=ev.id) }}">{{ ev.title }}</a></td>
+          <td><span class="badge-type">{{ ev.event_type or '—' }}</span></td>
+          <td>
+            {% if row.status == 'pago_total' %}<span class="st st-green">Pago total</span>
+            {% elif row.status == 'parcial' %}<span class="st st-amber">Parcial</span>
+            {% elif row.status == 'pendente' %}<span class="st st-red">Pendente</span>
+            {% elif row.status == 'permuta' %}<span class="st st-purple">Permuta/Cortesia</span>
+            {% else %}<span class="st st-gray">Sem valor</span>{% endif %}
+          </td>
+          <td class="text-right num">
+            {% if row.status == 'permuta' %}<span class="muted">—</span>
+            {% elif ev.sale_value %}{{ money(ev.sale_value) }}
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td class="text-right num text-red">{{ money(row.custo) }}</td>
+          <td class="text-right num {% if row.lucro >= 0 %}text-green{% else %}text-red{% endif %}">{{ money(row.lucro) }}</td>
+          <td class="text-right num muted">{{ money(row.comissao) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <div class="empty-state">Nenhum evento no período selecionado.</div>
+  {% endif %}
+</div>
+
+<script>
+(function(){
+  var mj = document.getElementById('month-jump');
+  if (mj) mj.addEventListener('change', function(){
+    if (!this.value) return;
+    var p = this.value.split('-'); var y = +p[0], m = +p[1];
+    var start = y + '-' + String(m).padStart(2,'0') + '-01';
+    var last = new Date(y, m, 0).getDate();
+    var end = y + '-' + String(m).padStart(2,'0') + '-' + String(last).padStart(2,'0');
+    window.location = '?period=custom&start=' + start + '&end=' + end;
+  });
+})();
+</script>
 
 <style>
-.period-bar { display:flex; align-items:center; gap:16px; margin-bottom:28px; flex-wrap:wrap; }
+.period-bar { display:flex; align-items:center; gap:16px; margin-bottom:24px; flex-wrap:wrap; justify-content:space-between; }
 .period-pills { display:flex; gap:6px; }
-.period-pill { padding:5px 14px; border-radius:20px; font-size:13px; border:1px solid var(--border);
-               color:var(--muted); text-decoration:none; }
+.period-pill { padding:6px 14px; border-radius:20px; font-size:13px; border:1px solid var(--border);
+               color:var(--muted); text-decoration:none; font-weight:600; }
 .period-pill.active { background:var(--accent); color:#fff; border-color:var(--accent); }
 .period-custom { display:flex; align-items:center; gap:8px; }
+.period-sep { color:var(--border); }
 .form-control-sm { padding:4px 8px; font-size:13px; height:32px; }
 .btn-sm { padding:5px 12px; font-size:13px; }
 
-.fin-section-title { font-size:13px; font-weight:700; color:var(--muted); margin:28px 0 10px;
+.bento { margin-bottom:20px; }
+.fin-section-title { font-size:13px; font-weight:700; color:var(--muted); margin:0 0 12px;
                      text-transform:uppercase; letter-spacing:.6px; }
 
-.drg-grid { background:var(--surface); border:1px solid var(--border); border-radius:10px;
-            overflow:hidden; }
-.drg-row { display:flex; justify-content:space-between; align-items:center;
-           padding:11px 20px; border-bottom:1px solid var(--border); font-size:14px; }
-.drg-row:last-child { border-bottom:none; }
-.drg-sub { background:var(--bg); color:var(--muted); font-size:13px; }
-.drg-header { font-weight:700; font-size:15px; }
-.drg-result { font-weight:700; }
-.drg-ebitda { font-size:15px; padding:14px 20px; }
-.drg-value { font-weight:700; font-variant-numeric:tabular-nums; }
-.drg-pct { font-size:11px; font-weight:400; margin-left:6px; color:var(--muted); }
-.drg-hint { font-size:11px; font-weight:400; color:var(--muted); display:block; margin-top:2px; }
-
+/* ── KPI grid ── */
 .kpi-grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-@media(max-width:900px){ .kpi-grid-4 { grid-template-columns:repeat(2,1fr); } }
-.kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
-.kpi-card-warn { border-color:#f59e0b55; background:#fffbeb; }
+@media(max-width:1000px){ .kpi-grid-4 { grid-template-columns:repeat(2,1fr); } }
+@media(max-width:560px){ .kpi-grid-4 { grid-template-columns:1fr; } }
+.kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+.kpi-card-wide { grid-column:span 2; }
+@media(max-width:560px){ .kpi-card-wide { grid-column:span 1; } }
+.kpi-card-warn { border-color:#f59e0b66; background:#fffbeb; }
+.kpi-card-ok { border-color:#16a34a55; background:#f0fdf4; }
 .kpi-label { font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase;
-             letter-spacing:.5px; margin-bottom:4px; }
-.kpi-value { font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; margin-bottom:2px; }
+             letter-spacing:.5px; margin-bottom:6px; }
+.kpi-value { font-size:24px; font-weight:800; font-variant-numeric:tabular-nums; margin-bottom:3px; }
 .kpi-sub { font-size:11px; color:var(--muted); }
 
+/* break-even bar */
+.be-row { display:flex; align-items:center; gap:10px; margin:4px 0 6px; }
+.be-track { flex:1; height:12px; background:var(--border); border-radius:8px; overflow:hidden; }
+.be-fill { height:100%; background:#f59e0b; border-radius:8px; transition:width .3s; min-width:2px; }
+.be-fill.be-ok { background:#16a34a; }
+.be-pct { font-weight:800; font-size:18px; min-width:56px; text-align:right; }
+
+/* ── Panels & layout ── */
+.panel { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; }
+.panel-alert { border-color:#dc262655; background:#fef2f2; }
+.panel-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.fin-cols-65-35 { display:grid; grid-template-columns:65fr 35fr; gap:16px; align-items:start; }
+@media(max-width:900px){ .fin-cols-65-35 { grid-template-columns:1fr; } }
+.side-stack { display:flex; flex-direction:column; gap:16px; }
+
+/* ── Tables ── */
 .table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:auto; }
+.table-flush { border:none; border-radius:0; }
 .fin-table { width:100%; border-collapse:collapse; font-size:13px; }
 .fin-table th { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
-                color:var(--muted); border-bottom:2px solid var(--border); padding:8px 12px; }
+                color:var(--muted); border-bottom:2px solid var(--border); padding:8px 12px; text-align:left; }
 .fin-table td { padding:9px 12px; border-bottom:1px solid var(--border); }
 .fin-table tr:last-child td { border-bottom:none; }
-.fin-table tr:hover td { background:var(--bg); }
+.fin-table tbody tr:hover td { background:var(--bg); }
+.num { font-variant-numeric:tabular-nums; }
 .text-right { text-align:right; }
 .text-nowrap { white-space:nowrap; }
 .text-sm { font-size:11px; }
+.strong { font-weight:700; }
+.text-muted { color:var(--muted); }
 
+/* ── DRE specifics ── */
+.dre-legend { font-size:11px; color:var(--muted); }
+.dre-table td:first-child { color:var(--text); }
+.dre-table td small { color:var(--muted); font-weight:400; }
+.dre-op { color:var(--muted); font-weight:700; }
+.dre-result td { background:var(--bg); font-weight:700; }
+.dre-ebitda td { border-top:2px solid var(--border); }
+.dre-final td { border-top:2px solid var(--border); font-size:14px; }
+.dre-pct { font-size:10px; font-weight:600; color:var(--muted); margin-left:4px; }
+.dre-note { font-size:11px; color:var(--muted); margin-top:10px; line-height:1.5; }
+
+/* ── Badges & status ── */
 .badge-type { font-size:11px; padding:2px 8px; border-radius:10px;
               background:var(--accent)22; color:var(--accent); font-weight:600; }
 .badge-pct { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; display:inline-block; }
 .pct-green { background:#16a34a22; color:#16a34a; }
 .pct-amber { background:#f59e0b22; color:#b45309; }
 .pct-red   { background:#dc262622; color:#dc2626; }
+.badge-soft { font-size:10px; padding:1px 6px; border-radius:8px; font-weight:700; margin-left:6px; }
+.badge-proj { background:#6366f122; color:#4f46e5; }
+.st { font-size:11px; padding:2px 9px; border-radius:10px; font-weight:600; white-space:nowrap; }
+.st-green  { background:#16a34a22; color:#16a34a; }
+.st-amber  { background:#f59e0b22; color:#b45309; }
+.st-red    { background:#dc262622; color:#dc2626; }
+.st-purple { background:#a855f722; color:#9333ea; }
+.st-gray   { background:#9ca3af33; color:#6b7280; }
 
 .text-green { color:#16a34a; }
 .text-red   { color:#dc2626; }
 .text-amber { color:#b45309; }
 
-.fin-cols-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; }
-@media(max-width:800px){ .fin-cols-3 { grid-template-columns:1fr; } }
-
+/* ── Bars / ranks ── */
 .bar-list { display:flex; flex-direction:column; gap:10px; }
 .bar-item { display:flex; align-items:center; gap:8px; font-size:12px; }
-.bar-label { width:60px; color:var(--muted); flex-shrink:0; text-align:right; font-size:11px; }
-.bar-track { flex:1; background:var(--border); border-radius:4px; height:7px; }
+.bar-label { width:70px; color:var(--muted); flex-shrink:0; text-align:right; font-size:11px;
+             overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bar-track { flex:1; background:var(--border); border-radius:4px; height:8px; }
 .bar-fill { height:100%; background:var(--accent); border-radius:4px; min-width:2px; }
-.bar-val { width:100px; text-align:right; font-variant-numeric:tabular-nums; font-size:12px; }
+.bar-val { width:90px; text-align:right; font-variant-numeric:tabular-nums; font-size:12px; }
 
-.rank-list { display:flex; flex-direction:column; gap:6px; }
-.rank-item { display:flex; justify-content:space-between; align-items:center; font-size:13px;
-             padding:7px 0; border-bottom:1px solid var(--border); }
+.rank-list { display:flex; flex-direction:column; gap:4px; }
+.rank-item { display:flex; align-items:center; gap:10px; font-size:13px;
+             padding:8px 0; border-bottom:1px solid var(--border); }
 .rank-item:last-child { border-bottom:none; }
-.rank-name { font-weight:600; }
+.rank-pos { width:20px; height:20px; border-radius:50%; background:var(--bg); border:1px solid var(--border);
+            display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--muted); flex-shrink:0; }
+.rank-name { font-weight:600; flex:1; }
 .rank-vals { display:flex; flex-direction:column; align-items:flex-end; gap:1px; }
+
+/* ── Audit ── */
+.audit-lead { font-size:12px; color:#b91c1c; margin:0 0 10px; line-height:1.5; }
+.audit-list { display:flex; flex-direction:column; gap:6px; }
+.audit-item { display:flex; justify-content:space-between; align-items:center; gap:8px;
+              padding:8px 10px; border-radius:8px; background:rgba(220,38,38,0.06);
+              text-decoration:none; color:var(--text); font-size:12px; }
+.audit-item:hover { background:rgba(220,38,38,0.12); }
+.audit-title { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.audit-date { color:var(--muted); flex-shrink:0; }
+
+.empty-state { padding:32px; text-align:center; color:var(--muted); }
 </style>
 {% endblock %}

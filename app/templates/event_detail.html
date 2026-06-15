@@ -1167,6 +1167,17 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       </div>
     </div>
 
+    <div style="margin-bottom: 16px;">
+      <label class="checkbox-row" style="font-weight: 600;">
+        <input type="checkbox" name="is_cortesia_permuta" value="1"
+               {% if event.is_cortesia_permuta %}checked{% endif %}>
+        Cortesia / Permuta
+      </label>
+      <div class="meta" style="margin-top: 4px;">
+        Marque para eventos sem receita (cortesia ou troca). A venda será tratada como R$ 0 e o cachê dos talentos entra como custo de marketing — sem distorcer a margem.
+      </div>
+    </div>
+
     <div class="panel-title" style="margin-bottom: 10px;">Forma de pagamento</div>
     <input type="hidden" name="payment_method" id="pay-detail-method" value="{{ event.payment_method or '' }}">
     <div class="com-pay-btns" style="margin-bottom: 12px;">

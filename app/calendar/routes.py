@@ -595,6 +595,10 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     event.transport_value  = parse_brl(request.form.get("transport_value", ""))
     event.acrescimo_value = parse_brl(request.form.get("acrescimo_value", ""))
     event.with_invoice    = request.form.get("with_invoice") == "1"
+    event.is_cortesia_permuta = request.form.get("is_cortesia_permuta") == "1"
+    if event.is_cortesia_permuta:
+        # Permuta/cortesia: a venda é tratada como 0 (cachê dos talentos vira marketing).
+        event.sale_value = 0
     sale_date_raw = request.form.get("sale_date", "").strip()
     try:
         event.sale_date = date.fromisoformat(sale_date_raw) if sale_date_raw else event.sale_date
