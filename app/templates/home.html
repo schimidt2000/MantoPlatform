@@ -134,13 +134,38 @@
           {% if scheduled_ensaio %}
             <span class="badge badge-green" style="font-size:11px;">{{ scheduled_ensaio|length }} agendado{{ 's' if scheduled_ensaio|length != 1 else '' }}</span>
           {% endif %}
-          {% if not pending_ensaio and not scheduled_ensaio %}
+          {% if pending_presence %}
+            <span class="badge badge-gold" style="font-size:11px;">{{ pending_presence|length }} sem presença</span>
+          {% endif %}
+          {% if not pending_ensaio and not scheduled_ensaio and not pending_presence %}
             <span class="meta">Nenhum show futuro com ensaio</span>
           {% endif %}
         </div>
         <span class="sector-chevron" id="chv-ensaio">▼</span>
       </div>
       <div class="sector-body" id="sb-ensaio">
+
+        {# — Presença pendente: shows sem técnico de presença definido — #}
+        {% if pending_presence %}
+          <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.07em;padding:14px 0 6px;">
+            Falta definir presença
+          </div>
+          {% for r in pending_presence %}
+            {% set ev = r.event %}
+            {% set days_left = ((ev.start_at.date() - today).days) if ev.start_at else 999 %}
+            <div class="flex-between gap-12 task-row" style="padding:10px 0;border-bottom:1px solid var(--line);{% if days_left <= 7 %}background:rgba(228,88,88,0.06);margin:0 -18px;padding:10px 18px;{% endif %}">
+              <div>
+                <div class="strong">
+                  {{ ev.title }}
+                  {% if days_left <= 7 %}<span class="badge badge-red" style="font-size:10px;margin-left:6px;">{{ days_left }}d</span>{% endif %}
+                </div>
+                <div class="meta">Técnico de som (presença){% if ev.start_at %} · {{ ev.start_at.strftime("%d/%m/%Y às %H:%M") }}{% endif %}{% if ev.location %} · {{ ev.location }}{% endif %}</div>
+              </div>
+              <a href="/events/{{ ev.id }}" class="btn btn-sm btn-secondary">Definir</a>
+            </div>
+          {% endfor %}
+          <div style="height:6px;"></div>
+        {% endif %}
 
         {# — Pendentes: shows sem ensaio marcado — #}
         {% if pending_ensaio %}

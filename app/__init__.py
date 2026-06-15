@@ -265,11 +265,15 @@ def create_app():
         _release = _settings.release_date if _settings and _settings.release_date else date.today()
         task_cutoff = datetime(_release.year, _release.month, _release.day)
 
+        from app.calendar.routes import PRESENCE_CHARACTER
+        not_presence = EventRole.character_name != PRESENCE_CHARACTER
+
         exclude_ensaios = not_(CalendarEvent.title.like("🟧 ENSAIO%"))
         future_events = CalendarEvent.start_at >= task_cutoff
 
+        # Presença (técnico de som que vai ao evento) é tarefa do ensaio — fora do casting.
         pending_casting = (
-            EventRole.query.filter(EventRole.talent_id.is_(None))
+            EventRole.query.filter(EventRole.talent_id.is_(None), not_presence)
             .join(CalendarEvent)
             .filter(exclude_ensaios, future_events)
             .order_by(CalendarEvent.start_at.asc())
@@ -284,10 +288,13 @@ def create_app():
             .all()
         )
 
-        total_casting = EventRole.query.join(CalendarEvent).filter(exclude_ensaios, future_events).count()
+        total_casting = (
+            EventRole.query.filter(not_presence)
+            .join(CalendarEvent).filter(exclude_ensaios, future_events).count()
+        )
         done_casting = (
             EventRole.query
-            .filter(EventRole.talent_id.isnot(None), EventRole.invite_status != "rejected")
+            .filter(EventRole.talent_id.isnot(None), EventRole.invite_status != "rejected", not_presence)
             .join(CalendarEvent)
             .filter(exclude_ensaios, future_events)
             .count()
@@ -335,6 +342,7 @@ def create_app():
         # Ensaio: separa pendentes (sem ensaio) de agendados (com ensaio)
         pending_ensaio   = []
         scheduled_ensaio = []
+        pending_presence = []
         if show_ensaio:
             future_shows = (
                 CalendarEvent.query
@@ -351,6 +359,17 @@ def create_app():
             )
             pending_ensaio   = [e for e in future_shows if not e.ensaios]
             scheduled_ensaio = [e for e in future_shows if e.ensaios]
+
+            # Presença pendente: shows futuros sem o técnico de presença definido.
+            pending_presence = (
+                EventRole.query
+                .filter(EventRole.talent_id.is_(None),
+                        EventRole.character_name == PRESENCE_CHARACTER)
+                .join(CalendarEvent)
+                .filter(exclude_ensaios, CalendarEvent.start_at >= datetime.utcnow())
+                .order_by(CalendarEvent.start_at.asc())
+                .all()
+            )
 
         perf_range = request.args.get("perf_range", "7")
         perf_start = request.args.get("perf_start")
@@ -496,6 +515,7 @@ def create_app():
             pending_figurino=pending_figurino,
             pending_ensaio=pending_ensaio,
             scheduled_ensaio=scheduled_ensaio,
+            pending_presence=pending_presence,
             pending_invoice=pending_invoice,
             show_comercial=show_comercial,
             pending_payments=pending_payments,

@@ -41,6 +41,10 @@ _CAN_DELETE      = {RoleName.SUPERADMIN, RoleName.COMERCIAL}
 # Técnico de Som padrão para eventos SHOW (Nivaldo de Andrade — recebe o PIX)
 SOUND_TECH_TALENT_ID: int = 42
 
+# Vaga "presença" definida pela equipe de ensaio (quem vai ao evento). É tarefa do ensaio,
+# não do casting.
+PRESENCE_CHARACTER: str = "Técnico de Som (Presença)"
+
 def _mark_month_synced(ym: str) -> None:
     settings = SiteSetting.query.get(1)
     if not settings:
@@ -887,7 +891,7 @@ def _handle_assign_tech_presence(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     talent_id = request.form.get("talent_id")
     role = EventRole.query.filter_by(
         event_id=event.id,
-        character_name="Técnico de Som (Presença)",
+        character_name=PRESENCE_CHARACTER,
         role_type="extra",
     ).first()
     if not role:
@@ -1163,13 +1167,13 @@ def _ensure_sound_technician(event_id: int) -> None:
 
     presence_exists = EventRole.query.filter_by(
         event_id=event_id,
-        character_name="Técnico de Som (Presença)",
+        character_name=PRESENCE_CHARACTER,
         role_type="extra",
     ).first()
     if not presence_exists:
         db.session.add(EventRole(
             event_id=event_id,
-            character_name="Técnico de Som (Presença)",
+            character_name=PRESENCE_CHARACTER,
             role_type="extra",
         ))
 
