@@ -676,6 +676,11 @@ class EducaMantoPackage(db.Model):
     discount_days    = db.Column(db.Integer, nullable=False, default=2)
     discount_pct     = db.Column(db.Float, nullable=False, default=0.05)
     commission_rate  = db.Column(db.Float, nullable=False, default=0.05)
+    # Cachê do ensemble (figurante extra) por cenário — somado por ensemble no orçamento.
+    ensemble_1s      = db.Column(db.Float, nullable=False, default=350, server_default="350")
+    ensemble_2s      = db.Column(db.Float, nullable=False, default=600, server_default="600")
+    ensemble_1s_days = db.Column(db.Float, nullable=False, default=300, server_default="300")
+    ensemble_2s_days = db.Column(db.Float, nullable=False, default=550, server_default="550")
     created_at       = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     items = db.relationship(
@@ -697,6 +702,10 @@ class EducaMantoPackage(db.Model):
             "discount_days": self.discount_days,
             "discount_pct": self.discount_pct,
             "commission_rate": self.commission_rate,
+            "ensemble_1s": self.ensemble_1s,
+            "ensemble_2s": self.ensemble_2s,
+            "ensemble_1s_days": self.ensemble_1s_days,
+            "ensemble_2s_days": self.ensemble_2s_days,
             "items": [item.to_dict() for item in self.items],
         }
 
@@ -714,6 +723,8 @@ class EducaMantoItem(db.Model):
     cost_1s_days = db.Column(db.Float, nullable=False, default=0)
     cost_2s_days = db.Column(db.Float, nullable=False, default=0)
     sort_order   = db.Column(db.Integer, nullable=False, default=0)
+    # Quanto a quantidade do item cresce por ensemble adicionado (0 = não cresce).
+    ensemble_add = db.Column(db.Integer, nullable=False, default=0, server_default="0")
 
     def to_dict(self) -> dict:
         return {
@@ -724,6 +735,7 @@ class EducaMantoItem(db.Model):
             "cost_2s": self.cost_2s,
             "cost_1s_days": self.cost_1s_days,
             "cost_2s_days": self.cost_2s_days,
+            "ensemble_add": self.ensemble_add,
         }
 
 

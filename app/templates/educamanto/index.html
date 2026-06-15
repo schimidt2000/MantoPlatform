@@ -309,14 +309,15 @@
 </div>
 {% else %}
 
-{# ── Package tabs ─────────────────────────────────────────── #}
-<div class="edu-tabs">
-  {% for pkg in packages %}
-  <button class="edu-tab {% if pkg.id == active_id %}active{% endif %}"
-          onclick="location.href='/educamanto/?pkg={{ pkg.id }}'">
-    {{ pkg.name }}
-  </button>
-  {% endfor %}
+{# ── Package dropdown ─────────────────────────────────────── #}
+<div style="margin-bottom:24px; max-width:420px;">
+  <label class="form-label" style="font-size:12px; color:var(--muted); font-weight:600;">Pacote</label>
+  <select id="pkg-select" class="form-control" style="width:100%; font-weight:600;"
+          onchange="location.href='/educamanto/?pkg=' + this.value">
+    {% for pkg in packages %}
+    <option value="{{ pkg.id }}" {% if pkg.id == active_id %}selected{% endif %}>{{ pkg.name }}</option>
+    {% endfor %}
+  </select>
 </div>
 
 {# ── Main grid ────────────────────────────────────────────── #}
@@ -346,7 +347,21 @@
         <input type="number" id="d2" class="edu-session-num"
                min="0" value="0">
       </div>
+
+      <div class="edu-session-block" id="ensemble-block" style="display:none;">
+        <div class="edu-session-icon" style="background:var(--accent-soft);">👥</div>
+        <div class="edu-session-label">
+          Ensemble
+          <small>Figurantes extras (cachê + ajuda de custo + catering)</small>
+        </div>
+        <input type="number" id="ensemble" class="edu-session-num" min="0" value="0">
+      </div>
     </div>
+
+    <button type="button" id="add-ensemble-btn" class="btn btn-ghost btn-sm" style="margin-bottom:16px;"
+            onclick="document.getElementById('ensemble-block').style.display='flex'; this.style.display='none'; document.getElementById('ensemble').focus();">
+      + Adicionar ensemble
+    </button>
 
     <div style="margin-bottom:8px;">
       <div class="edu-scenario-pill idle" id="scenario-pill">
@@ -470,13 +485,34 @@
     document.getElementById('cfg-cr').textContent   = pct(pkg.commission_rate);
   }
 
+  /* ── Itens efetivos (aplicando o ensemble) ─────────────── */
+  function effectiveItems(E) {
+    const list = pkg.items.map(it => ({
+      name: it.name,
+      qty: it.qty + (it.ensemble_add || 0) * E,
+      cost_1s: it.cost_1s, cost_2s: it.cost_2s,
+      cost_1s_days: it.cost_1s_days, cost_2s_days: it.cost_2s_days,
+    }));
+    if (E > 0) {
+      list.push({
+        name: 'Ensemble (' + E + ')',
+        qty: E,
+        cost_1s: pkg.ensemble_1s, cost_2s: pkg.ensemble_2s,
+        cost_1s_days: pkg.ensemble_1s_days, cost_2s_days: pkg.ensemble_2s_days,
+      });
+    }
+    return list;
+  }
+
   /* ── Calculation engine ────────────────────────────────── */
   function calcular() {
     if (!pkg) return;
 
     const d1 = Math.max(0, parseInt(document.getElementById('d1').value) || 0);
     const d2 = Math.max(0, parseInt(document.getElementById('d2').value) || 0);
+    const E  = Math.max(0, parseInt(document.getElementById('ensemble').value) || 0);
     const total = d1 + d2;
+    const items = effectiveItems(E);
 
     const pill    = document.getElementById('scenario-pill');
     const discTag = document.getElementById('discount-tag');
@@ -498,7 +534,7 @@
       scenario = '1 sessão — 1 dia';
       pill.className = 'edu-scenario-pill s1';
       let sumRaw = 0;
-      itemRows = pkg.items.map(it => {
+      itemRows = items.map(it => {
         const raw  = it.qty * it.cost_1s;
         const sell = raw * pkg.margin_1s;
         sumRaw += raw;
@@ -511,7 +547,7 @@
       scenario = '2 sessões — 1 dia';
       pill.className = 'edu-scenario-pill s2';
       let sumRaw = 0;
-      itemRows = pkg.items.map(it => {
+      itemRows = items.map(it => {
         const raw  = it.qty * it.cost_2s;
         const sell = raw * pkg.margin_2s;
         sumRaw += raw;
@@ -528,7 +564,7 @@
       pill.className = 'edu-scenario-pill multi';
 
       let sumRaw = 0;
-      itemRows = pkg.items.map(it => {
+      itemRows = items.map(it => {
         const raw1 = it.qty * it.cost_1s_days * d1;
         const raw2 = it.qty * it.cost_2s_days * d2;
         const rawItem = raw1 + raw2;
@@ -538,8 +574,8 @@
                  cost_1s_days: it.cost_1s_days, cost_2s_days: it.cost_2s_days };
       });
       rawCost   = sumRaw;
-      const part1 = pkg.items.reduce((s, it) => s + it.qty * it.cost_1s_days, 0) * d1 * pkg.margin_1s_days;
-      const part2 = pkg.items.reduce((s, it) => s + it.qty * it.cost_2s_days, 0) * d2 * pkg.margin_2s_days;
+      const part1 = items.reduce((s, it) => s + it.qty * it.cost_1s_days, 0) * d1 * pkg.margin_1s_days;
+      const part2 = items.reduce((s, it) => s + it.qty * it.cost_2s_days, 0) * d2 * pkg.margin_2s_days;
       valorBase = part1 + part2;
     }
 
@@ -662,6 +698,7 @@
   calcular();
   document.getElementById('d1').addEventListener('input', calcular);
   document.getElementById('d2').addEventListener('input', calcular);
+  document.getElementById('ensemble').addEventListener('input', calcular);
 })();
 </script>
 {% endblock %}

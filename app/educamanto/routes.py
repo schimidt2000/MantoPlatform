@@ -14,22 +14,23 @@ from app.models import EducaMantoItem, EducaMantoPackage
 
 educamanto_bp = Blueprint("educamanto", __name__, url_prefix="/educamanto")
 
-_CAN_USE    = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
+_CAN_USE    = {RoleName.COMERCIAL, RoleName.SUPERADMIN, RoleName.ENSAIO}
 _CAN_MANAGE = {RoleName.SUPERADMIN}
 
 _DEFAULT_ITEMS = [
-    # (name, qty, cost_1s, cost_2s, cost_1s_days, cost_2s_days)
-    ("Cara Limpa",              3, 400,  650,  350,  600),
-    ("Bonecos",                 6, 350,  600,  300,  550),
-    ("Produção",                2, 350,  600,  300,  550),
-    ("Som",                     1, 4000, 4000, 3500, 3500),
-    ("Cenógrafo",               1,   0,    0,    0,    0),
-    ("Transporte",              1, 600,  600,  600,  600),
-    ("Foto e vídeo",            1,   0,    0,    0,    0),
-    ("Catering ensaio",         1, 300,  300,  300,  300),
-    ("Catering apresentação",   1, 600,  800,  600,  800),
-    ("Ajuda de custo ensaio",  11,  50,   50,   50,   50),
-    ("Gráfica",                 1, 300,  500,  300,  500),
+    # (name, qty, cost_1s, cost_2s, cost_1s_days, cost_2s_days, ensemble_add)
+    # Catering é POR PESSOA (qty = headcount do elenco = 11); cresce com ensemble.
+    ("Cara Limpa",              3, 400,  650,  350,  600, 0),
+    ("Bonecos",                 6, 350,  600,  300,  550, 0),
+    ("Produção",                2, 350,  600,  300,  550, 0),
+    ("Som",                     1, 4000, 4000, 3500, 3500, 0),
+    ("Cenógrafo",               1,   0,    0,    0,    0, 0),
+    ("Transporte",              1, 600,  600,  600,  600, 0),
+    ("Foto e vídeo",            1,   0,    0,    0,    0, 0),
+    ("Catering ensaio",        11,  28,   28,   28,   28, 1),
+    ("Catering apresentação",  11,  55,   73,   55,   73, 1),
+    ("Ajuda de custo ensaio",  11,  50,   50,   50,   50, 1),
+    ("Gráfica",                 1, 300,  500,  300,  500, 0),
 ]
 
 
@@ -68,11 +69,12 @@ def _seed_default_package() -> None:
     )
     db.session.add(pkg)
     db.session.flush()
-    for i, (name, qty, c1s, c2s, c1sd, c2sd) in enumerate(_DEFAULT_ITEMS):
+    for i, (name, qty, c1s, c2s, c1sd, c2sd, ens_add) in enumerate(_DEFAULT_ITEMS):
         db.session.add(EducaMantoItem(
             package_id=pkg.id, name=name, qty=qty,
             cost_1s=c1s, cost_2s=c2s,
             cost_1s_days=c1sd, cost_2s_days=c2sd,
+            ensemble_add=ens_add,
             sort_order=i,
         ))
     db.session.commit()
@@ -85,6 +87,7 @@ def _parse_items_from_form() -> list[dict]:
     c2s_list  = request.form.getlist("item_cost_2s[]")
     c1sd_list = request.form.getlist("item_cost_1s_days[]")
     c2sd_list = request.form.getlist("item_cost_2s_days[]")
+    ens_list  = request.form.getlist("item_ensemble_add[]")
     items = []
     for i, name in enumerate(names):
         if not name.strip():
@@ -96,6 +99,7 @@ def _parse_items_from_form() -> list[dict]:
             "cost_2s": float(c2s_list[i] or 0),
             "cost_1s_days": float(c1sd_list[i] or 0),
             "cost_2s_days": float(c2sd_list[i] or 0),
+            "ensemble_add": int(ens_list[i] or 0) if i < len(ens_list) else 0,
             "sort_order": i,
         })
     return items
@@ -176,6 +180,10 @@ def create_package():
             discount_days=int(request.form["discount_days"]),
             discount_pct=float(request.form["discount_pct"]) / 100,
             commission_rate=float(request.form["commission_rate"]) / 100,
+            ensemble_1s=float(request.form.get("ensemble_1s") or 350),
+            ensemble_2s=float(request.form.get("ensemble_2s") or 600),
+            ensemble_1s_days=float(request.form.get("ensemble_1s_days") or 300),
+            ensemble_2s_days=float(request.form.get("ensemble_2s_days") or 550),
         )
         db.session.add(pkg)
         db.session.flush()
@@ -201,6 +209,10 @@ def edit_package(pkg_id: int):
         pkg.discount_days = int(request.form["discount_days"])
         pkg.discount_pct = float(request.form["discount_pct"]) / 100
         pkg.commission_rate = float(request.form["commission_rate"]) / 100
+        pkg.ensemble_1s = float(request.form.get("ensemble_1s") or 350)
+        pkg.ensemble_2s = float(request.form.get("ensemble_2s") or 600)
+        pkg.ensemble_1s_days = float(request.form.get("ensemble_1s_days") or 300)
+        pkg.ensemble_2s_days = float(request.form.get("ensemble_2s_days") or 550)
         for item in list(pkg.items):
             db.session.delete(item)
         db.session.flush()
