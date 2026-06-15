@@ -252,7 +252,7 @@ def create_app():
 
     @app.errorhandler(403)
     def forbidden(e):
-        return render_template("404.html", wa_link=_wa_link(403)), 403
+        return render_template("403.html", wa_link=_wa_link(403)), 403
 
     @app.route("/")
     @login_required
