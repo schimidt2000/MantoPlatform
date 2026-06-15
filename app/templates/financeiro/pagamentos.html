@@ -48,6 +48,25 @@
   </div>
 </div>
 
+{# ── Busca ─────────────────────────────────────────────────────── #}
+<div class="panel" style="margin-bottom:16px; padding:10px 16px;">
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    <div style="position:relative; flex:1; min-width:240px;">
+      <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"
+           style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none;">
+        <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+      </svg>
+      <input type="search" id="pay-search" autocomplete="off"
+             placeholder="Buscar por evento, nome, função, valor, PIX, data…"
+             style="width:100%; padding:8px 10px 8px 32px; font-size:13px;">
+    </div>
+    <button type="button" id="pay-search-clear" class="btn btn-sm btn-ghost" style="display:none;">
+      ✕ Limpar
+    </button>
+    <span id="search-summary" class="meta" style="display:none; font-weight:600; white-space:nowrap;"></span>
+  </div>
+</div>
+
 {# ── Tabela ────────────────────────────────────────────────────── #}
 <div class="panel" style="padding:0; overflow-x:auto; padding-bottom:70px;">
   {% if items %}
@@ -395,28 +414,98 @@ function rowMatches(tr, f) {
   }
 }
 
-function applyFilter(f) {
-  currentFilter = f;
-  localStorage.setItem(FILTER_KEY, f);
+// ── Busca por qualquer dado da linha ────────────────────────────────────────
+const searchInput   = document.getElementById('pay-search');
+const searchClear   = document.getElementById('pay-search-clear');
+const searchSummary = document.getElementById('search-summary');
+let currentSearch = '';
+
+function normTxt(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// Índice de texto por linha: células visíveis (menos a coluna Situação, que tem o select com
+// todas as opções) + valor sem separador de milhar + situação atual.
+const SEARCH_STATUS_TXT = { nao_pago: 'nao pago', pago: 'pago', no_banco: 'no banco' };
+
+function buildRowIndex(tr) {
+  const tds = tr.querySelectorAll('td');
+  let txt = '';
+  for (let i = 0; i < tds.length - 1; i++) txt += ' ' + tds[i].textContent;
+  const amt = parseFloat(tr.dataset.amount) || 0;
+  const plainAmount = amt.toFixed(2).replace('.', ',');   // "1950,00"
+  const statusTxt = SEARCH_STATUS_TXT[tr.dataset.status] || '';
+  const futureTxt = tr.dataset.future === '1' ? ' futuro' : '';
+  tr.dataset.search = normTxt(txt.replace(/\s+/g, ' ')) + ' ' + plainAmount + ' ' + statusTxt + futureTxt;
+}
+
+document.querySelectorAll('tr.pay-row').forEach(buildRowIndex);
+
+function rowMatchesSearch(tr) {
+  if (!currentSearch) return true;
+  return (tr.dataset.search || '').indexOf(currentSearch) !== -1;
+}
+
+function applyView() {
   let visible = 0;
+  let visibleSum = 0;
   document.querySelectorAll('tr.pay-row').forEach(function (tr) {
-    const show = rowMatches(tr, f);
+    const show = rowMatches(tr, currentFilter) && rowMatchesSearch(tr);
     tr.style.display = show ? '' : 'none';
-    if (show) visible++;
-    // Linha escondida nunca fica selecionada — ação em massa só atinge o que está na tela.
-    if (!show) {
+    if (show) {
+      visible++;
+      visibleSum += parseFloat(tr.dataset.amount) || 0;
+    } else {
+      // Linha escondida nunca fica selecionada — ação em massa só atinge o que está na tela.
       const cb = tr.querySelector('.row-check');
       if (cb) cb.checked = false;
     }
   });
   document.querySelectorAll('#kpi-cards .kpi-filter').forEach(function (c) {
-    c.classList.toggle('kpi-active', c.dataset.filter === f);
+    c.classList.toggle('kpi-active', c.dataset.filter === currentFilter);
   });
   if (selectAll) selectAll.checked = false;
   updateBulkBar();
   const empty = document.getElementById('empty-filter-row');
-  if (empty) empty.style.display = visible === 0 ? '' : 'none';
+  if (empty) {
+    empty.style.display = visible === 0 ? '' : 'none';
+    const cell = empty.querySelector('td');
+    if (cell) {
+      cell.innerHTML = currentSearch
+        ? 'Nenhum item encontrado para a busca. <a href="#" onclick="clearSearch(); return false;">Limpar busca</a>'
+        : 'Nenhum item nesta situação.';
+    }
+  }
+  if (searchSummary) {
+    if (currentSearch) {
+      searchSummary.textContent = visible + ' ite' + (visible === 1 ? 'm' : 'ns') + ' · ' + fmtBRL(visibleSum);
+      searchSummary.style.display = '';
+    } else {
+      searchSummary.style.display = 'none';
+    }
+  }
+  if (searchClear) searchClear.style.display = currentSearch ? '' : 'none';
 }
+
+function applyFilter(f) {
+  currentFilter = f;
+  localStorage.setItem(FILTER_KEY, f);
+  applyView();
+}
+
+function clearSearch() {
+  if (searchInput) searchInput.value = '';
+  currentSearch = '';
+  applyView();
+}
+
+if (searchInput) {
+  searchInput.addEventListener('input', function () {
+    currentSearch = normTxt(searchInput.value.trim());
+    applyView();
+  });
+}
+if (searchClear) searchClear.addEventListener('click', clearSearch);
 
 function recomputeTotals() {
   const t = { total_val: 0, total_pago: 0, total_banco: 0, total_pend: 0, total_future: 0 };
@@ -445,6 +534,7 @@ function applyRowStatus(tr, select, status) {
     select.value = status;
     select.className = 'pay-status-select pay-status-' + status;
   }
+  buildRowIndex(tr);   // mantém a busca em dia com a nova situação
 }
 
 function onStatusChange(select) {
