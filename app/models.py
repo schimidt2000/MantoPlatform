@@ -217,6 +217,10 @@ class CalendarEvent(db.Model):
     source = db.Column(db.String(20), nullable=False, default="google_calendar", server_default="google_calendar")
     # source: 'google_calendar' | 'platform'
 
+    # agrupamento comercial: evento satélite aponta para o evento principal do grupo.
+    # Distinto de parent_event_id (vínculo de Ensaios) — não reutilizar.
+    group_leader_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
+
     # logística
     makeup_time = db.Column(db.String(5), nullable=True)       # "HH:MM"
     makeup_location = db.Column(db.String(200), nullable=True) # "manto" | "local" | endereço livre
@@ -253,6 +257,22 @@ class CalendarEvent(db.Model):
         cascade="all, delete-orphan",
         order_by="EnsaioMaterial.created_at.asc()",
     )
+    group_leader = db.relationship(
+        "CalendarEvent",
+        remote_side="CalendarEvent.id",
+        backref=db.backref("satellites", lazy=True),
+        foreign_keys=[group_leader_id],
+    )
+
+    @property
+    def is_satellite(self) -> bool:
+        """True se este evento é satélite de um grupo (campos comerciais herdados do principal)."""
+        return self.group_leader_id is not None
+
+    @property
+    def is_group_leader(self) -> bool:
+        """True se este evento é principal de pelo menos um evento satélite."""
+        return len(self.satellites) > 0
 
 
 class FigurinoSheet(db.Model):

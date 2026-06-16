@@ -57,6 +57,14 @@ def _event_cost(event) -> int:
     return sum(r.cache_value or 0 for r in event.roles if r.talent_id)
 
 
+def _group_cost(event) -> int:
+    """Custo de cachês do evento, somando os satélites quando for principal de grupo (FR-011)."""
+    total = _event_cost(event)
+    for satellite in event.satellites:
+        total += _event_cost(satellite)
+    return total
+
+
 def _event_commission(event, settings) -> Decimal:
     if not event.sale_value:
         return Decimal("0")
@@ -252,7 +260,9 @@ def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal)
     entra como Custo de Marketing. Impostos só sobre eventos com nota (with_invoice).
     """
     tax_rate = _get_tax_rate(settings)
-    normais = [e for e in events if not _is_permuta(e)]
+    # Satélites não entram como linha própria: seu cachê é somado ao grupo via _group_cost
+    # no evento principal (FR-010/FR-011) — evita contar a venda do grupo mais de uma vez.
+    normais = [e for e in events if not _is_permuta(e) and not e.is_satellite]
     permutas = [e for e in events if _is_permuta(e)]
 
     receita_bruta = sum((Decimal(e.sale_value or 0) for e in normais), Decimal("0"))
@@ -262,7 +272,7 @@ def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal)
     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     receita_liquida = receita_bruta - impostos
 
-    cpv = Decimal(sum(_event_cost(e) for e in normais))
+    cpv = Decimal(sum(_group_cost(e) for e in normais))
     lucro_bruto = receita_liquida - cpv
 
     marketing = Decimal(sum(_event_cost(e) for e in permutas))
@@ -341,7 +351,10 @@ def dashboard():
 
     # ── KPIs (sobre o consolidado do período) ─────────────────────────────────
     # Apenas eventos normais (não-permuta) com venda contam para indicadores comerciais.
-    eventos_com_venda = [e for e in events if not _is_permuta(e) and e.sale_value and e.sale_value > 0]
+    eventos_com_venda = [
+        e for e in events
+        if not _is_permuta(e) and not e.is_satellite and e.sale_value and e.sale_value > 0
+    ]
     ticket_medio = (
         (drg_total["receita_bruta"] / Decimal(len(eventos_com_venda))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         if eventos_com_venda else Decimal("0")
@@ -397,7 +410,7 @@ def dashboard():
     for e in eventos_com_venda:
         if e.seller_id:
             seller_revenue[e.seller_id] += (e.sale_value or 0)
-            seller_margin[e.seller_id]  += (e.sale_value or 0) - _event_cost(e)
+            seller_margin[e.seller_id]  += (e.sale_value or 0) - _group_cost(e)
     top_sellers = []
     for sid, rev in sorted(seller_revenue.items(), key=lambda x: -x[1])[:5]:
         u = User.query.get(sid)
@@ -414,9 +427,9 @@ def dashboard():
             CalendarEvent.start_at < e_dt,
             CalendarEvent.event_type != "ENSAIO",
         ).all()
-        normais = [e for e in evs if not _is_permuta(e)]
+        normais = [e for e in evs if not _is_permuta(e) and not e.is_satellite]
         rec = sum(e.sale_value or 0 for e in normais)
-        cst = sum(_event_cost(e) for e in normais)
+        cst = sum(_group_cost(e) for e in normais)
         monthly_trend.insert(0, {
             "label": f"{m:02d}/{str(y)[2:]}",
             "receita": rec,
@@ -430,7 +443,7 @@ def dashboard():
     # ── Auditoria: eventos com receita zerada SEM flag de cortesia/permuta ────
     auditoria = [
         e for e in events
-        if not _is_permuta(e) and not (e.sale_value and e.sale_value > 0)
+        if not _is_permuta(e) and not e.is_satellite and not (e.sale_value and e.sale_value > 0)
     ]
 
     # ── Tabela de eventos do período (com status financeiro) ─────────────────
@@ -438,7 +451,8 @@ def dashboard():
     for e in events:
         # float() normaliza: cache_value é Numeric (Decimal no Postgres), e Decimal não
         # pode ser subtraído de float diretamente (TypeError) — venda/recebido já são float.
-        custo = float(_event_cost(e) or 0)
+        # _group_cost soma os satélites no principal (FR-011); satélite mostra só o próprio cachê.
+        custo = float(_group_cost(e) if e.is_group_leader else _event_cost(e) or 0)
         comissao = _event_commission(e, settings)
         recebido = float(_recebido_por_evento.get(e.id, 0))
         venda = float(e.sale_value or 0)
@@ -1058,7 +1072,7 @@ def pipeline():
 
     events_data = []
     for e in events:
-        custo = _event_cost(e)
+        custo = _group_cost(e) if e.is_group_leader else _event_cost(e)
         comissao = _event_commission(e, settings)
         events_data.append({
             "event": e,
