@@ -905,6 +905,119 @@ def _handle_assign_tech_presence(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     db.session.commit()
 
 
+# Campos comerciais zerados quando um evento se torna satélite (FR-005).
+_SATELLITE_FIELDS_CLEARED = (
+    "sale_value", "sale_value_gross", "sale_date", "with_invoice",
+    "is_cortesia_permuta", "seller_id", "commission_rate",
+    "payment_method", "payment_installments", "payment_due_date",
+    "transport_value", "acrescimo_value", "invoice_file", "orcamento_history_id",
+)
+
+
+def _has_financial_data(event: CalendarEvent) -> bool:
+    """True se o evento já tem valor de venda preenchido (gatilho de confirmação na FR-005)."""
+    return bool(event.sale_value)
+
+
+def _apply_satellite(event: CalendarEvent) -> None:
+    """Zera os campos comerciais de um evento ao vinculá-lo como satélite de um grupo (FR-005)."""
+    for field in _SATELLITE_FIELDS_CLEARED:
+        setattr(event, field, False if field == "with_invoice" else None)
+    event.is_cortesia_permuta = False
+
+
+def _can_group_events() -> bool:
+    return any(
+        r.name.upper() in (RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN)
+        for r in current_user.roles
+    )
+
+
+def _handle_group_events(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    """Vincula `event` e outro evento existente sob um único grupo comercial (FR-001)."""
+    if not _can_group_events():
+        flash("Apenas Comercial, Financeiro ou Super Admin podem agrupar eventos.", "error")
+        return
+
+    target_raw = request.form.get("target_event_id", "").strip()
+    leader_raw = request.form.get("leader_event_id", "").strip()
+    target = CalendarEvent.query.get(int(target_raw)) if target_raw.isdigit() else None
+    if not target:
+        flash("Selecione um evento válido para agrupar.", "error")
+        return
+    if target.id == event.id:
+        flash("Não é possível agrupar um evento a ele mesmo.", "error")  # FR-004
+        return
+    if leader_raw not in (str(event.id), str(target.id)):
+        flash("Selecione qual dos dois eventos é o principal do grupo.", "error")
+        return
+
+    leader, satellite = (event, target) if leader_raw == str(event.id) else (target, event)
+
+    if satellite.is_satellite:  # FR-002
+        flash(f'"{satellite.title}" já pertence a outro grupo — desagrupe antes de continuar.', "error")
+        return
+    if leader.is_satellite:
+        flash(f'"{leader.title}" já é satélite de outro grupo e não pode ser principal.', "error")
+        return
+    if satellite.is_group_leader:
+        flash(f'"{satellite.title}" já é principal de outro grupo — desagrupe os satélites dele antes.', "error")
+        return
+    if leader.event_type == "ENSAIO" or satellite.event_type == "ENSAIO":  # FR-003
+        flash("Eventos do tipo ENSAIO não podem ser agrupados por este mecanismo.", "error")
+        return
+    if _has_financial_data(satellite) and request.form.get("confirm_clear_financials") != "1":
+        flash(
+            f'"{satellite.title}" já tem valor de venda preenchido. Marque a confirmação '
+            "para substituí-lo pelos dados do evento principal e tente novamente.",
+            "error",
+        )
+        return
+
+    _apply_satellite(satellite)
+    satellite.group_leader_id = leader.id
+
+    db.session.add(EventLog(
+        event_id=leader.id, actor_name=current_user.name, actor_role="Comercial",
+        message=f'Agrupou o evento "{satellite.title}" como satélite deste contrato',
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.add(EventLog(
+        event_id=satellite.id, actor_name=current_user.name, actor_role="Comercial",
+        message=f'Vinculado ao grupo do evento "{leader.title}" — dados comerciais agora seguem o principal',
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+    flash(f'Eventos agrupados: "{leader.title}" é o evento principal.', "success")
+
+
+def _handle_ungroup_event(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    """Desfaz o vínculo de um evento satélite, devolvendo-o ao estado independente (FR-008)."""
+    if not _can_group_events():
+        flash("Apenas Comercial, Financeiro ou Super Admin podem desagrupar eventos.", "error")
+        return
+    if not event.is_satellite:
+        flash("Este evento não pertence a um grupo.", "error")
+        return
+
+    leader = event.group_leader
+    event.group_leader_id = None
+    db.session.add(EventLog(
+        event_id=event.id, actor_name=current_user.name, actor_role="Comercial",
+        message=f'Desfez o agrupamento com "{leader.title if leader else "?"}" '
+                "— campos comerciais voltam a ser próprios e editáveis",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    if leader:
+        db.session.add(EventLog(
+            event_id=leader.id, actor_name=current_user.name, actor_role="Comercial",
+            message=f'O evento "{event.title}" deixou de ser satélite deste contrato',
+            created_at=datetime.now(tz=tz_sp),
+        ))
+    db.session.commit()
+    flash("Agrupamento desfeito.", "success")
+
+
 _EVENT_ACTIONS = {
     "assign_casting":       _handle_assign_casting,
     "assign_tech_presence": _handle_assign_tech_presence,
@@ -923,6 +1036,8 @@ _EVENT_ACTIONS = {
     "toggle_contract_signed": _handle_toggle_contract_signed,
     "send_invite":          _handle_send_invite,
     "save_logistics":       _handle_save_logistics,
+    "group_events":         _handle_group_events,
+    "ungroup_event":        _handle_ungroup_event,
 }
 
 
@@ -1073,6 +1188,23 @@ def event_detail(event_id: int):
         .all()
     )
 
+    # Candidatos a agrupar: eventos próximos na data (±3 dias), exceto ENSAIO e o próprio evento.
+    groupable_events = []
+    if show_comercial and event.start_at:
+        window_start = event.start_at - timedelta(days=3)
+        window_end = event.start_at + timedelta(days=3)
+        groupable_events = (
+            CalendarEvent.query
+            .filter(
+                CalendarEvent.id != event.id,
+                CalendarEvent.start_at >= window_start,
+                CalendarEvent.start_at <= window_end,
+                CalendarEvent.event_type != "ENSAIO",
+            )
+            .order_by(CalendarEvent.start_at.asc())
+            .all()
+        )
+
     return render_template(
         "event_detail.html",
         event=event,
@@ -1102,6 +1234,7 @@ def event_detail(event_id: int):
         settings=settings,
         has_makeup_role=has_makeup_role,
         event_ratings=event_ratings,
+        groupable_events=groupable_events,
     )
 
 
@@ -2380,6 +2513,12 @@ def delete_calendar_event(event_id: int):
     if not any(r.name.upper() in _CAN_DELETE for r in current_user.roles):
         abort(403)
     event = CalendarEvent.query.get_or_404(event_id)
+    if event.is_group_leader:  # FR-009
+        flash(
+            f'Não é possível excluir "{event.title}": desagrupe os eventos satélites antes de excluir.',
+            "error",
+        )
+        return redirect(url_for("calendar.event_detail", event_id=event.id))
     also_google = True  # sempre sincroniza com o GCal
     title = event.title
     _log_sync(

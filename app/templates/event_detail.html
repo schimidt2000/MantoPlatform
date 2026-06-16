@@ -1102,7 +1102,78 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 <div class="panel">
   <h2>Comercial</h2>
 
+  {# ── Agrupamento de eventos por contrato (feature 053) ───────── #}
+  {% if event.is_satellite %}
+  <div class="alert alert-info" style="margin-bottom: 16px;">
+    <p style="margin: 0 0 8px;">
+      Este evento faz parte do grupo de
+      <a href="/events/{{ event.group_leader.id }}"><strong>{{ event.group_leader.title }}</strong></a>
+      — os dados comerciais (venda, comissão, pagamento, nota fiscal) seguem o evento principal.
+    </p>
+    <form method="post" action="/events/{{ event.id }}" style="margin: 0;"
+          onsubmit="return confirm('Desfazer o agrupamento? Este evento volta a ter campos comerciais próprios e editáveis (zerados).')">
+      <input type="hidden" name="action" value="ungroup_event">
+      <button type="submit" class="btn btn-sm btn-secondary">Desfazer agrupamento</button>
+    </form>
+  </div>
+  {% else %}
+
+    {% if event.is_group_leader %}
+    <div class="alert alert-info" style="margin-bottom: 16px;">
+      <p style="margin: 0 0 8px; font-weight: 600;">Eventos agrupados a este contrato:</p>
+      <ul style="margin: 0; padding-left: 20px;">
+        {% for s in event.satellites %}
+        <li>
+          <a href="/events/{{ s.id }}">{{ s.title }}</a>
+          {% if s.start_at %} — {{ s.start_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if groupable_events %}
+    <details style="margin-bottom: 16px;">
+      <summary style="cursor: pointer; font-weight: 600;">Agrupar a outro evento (mesmo contrato)</summary>
+      <form method="post" action="/events/{{ event.id }}" style="margin-top: 10px;"
+            onsubmit="return confirm('Agrupar estes eventos? O evento satélite perderá seus dados comerciais próprios, que passam a seguir o evento principal.')">
+        <input type="hidden" name="action" value="group_events">
+        <div class="form-group">
+          <label>Evento a vincular</label>
+          <select name="target_event_id" required>
+            <option value="">Selecione...</option>
+            {% for ge in groupable_events %}
+            <option value="{{ ge.id }}">{{ ge.title }}{% if ge.start_at %} — {{ ge.start_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Qual dos dois é o evento principal (concentra os dados comerciais)?</label>
+          <label class="checkbox-row"><input type="radio" name="leader_event_id" value="{{ event.id }}" checked> Este evento ({{ event.title }})</label>
+          <label class="checkbox-row"><input type="radio" name="leader_event_id" id="leader-other-radio" value=""> O evento selecionado acima</label>
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" name="confirm_clear_financials" value="1">
+          Confirmo a substituição dos dados comerciais do evento satélite, se houver
+        </label>
+        <button type="submit" class="btn btn-sm btn-primary" style="margin-top: 8px;">Agrupar eventos</button>
+      </form>
+      <script>
+        (function() {
+          var sel = document.querySelector('select[name="target_event_id"]');
+          var otherRadio = document.getElementById('leader-other-radio');
+          if (sel && otherRadio) {
+            sel.addEventListener('change', function() { otherRadio.value = sel.value; });
+          }
+        })();
+      </script>
+    </details>
+    {% endif %}
+
+  {% endif %}
+
   {# ── Dados da venda ─────────────────────────────────────────── #}
+  {% if not event.is_satellite %}
   <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}">
     <input type="hidden" name="action" value="update_comercial">
 
@@ -1251,6 +1322,7 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 
     <button type="submit" class="btn btn-primary">Salvar dados comerciais</button>
   </form>
+  {% endif %}
 
   {% if show_financeiro %}
   <hr class="sep">
