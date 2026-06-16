@@ -436,7 +436,9 @@ def dashboard():
     # ── Tabela de eventos do período (com status financeiro) ─────────────────
     events_data = []
     for e in events:
-        custo = _event_cost(e)
+        # float() normaliza: cache_value é Numeric (Decimal no Postgres), e Decimal não
+        # pode ser subtraído de float diretamente (TypeError) — venda/recebido já são float.
+        custo = float(_event_cost(e) or 0)
         comissao = _event_commission(e, settings)
         recebido = float(_recebido_por_evento.get(e.id, 0))
         venda = float(e.sale_value or 0)
