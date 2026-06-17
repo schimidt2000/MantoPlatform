@@ -34,11 +34,14 @@
           {{ e.start_at.strftime("%d/%m/%Y") if e.start_at else "—" }}
         </td>
         <td>
-          {{ e.title }}
           {% if e.is_satellite %}
-          <span class="badge badge-gray" title="Agrupado sob {{ e.group_leader.title }}">satélite</span>
+          {{ e.title }}
+          <span class="badge badge-gray" title="Agrupado sob {{ e.group_leader.group_display_name }}">satélite</span>
           {% elif e.is_group_leader %}
+          {{ e.group_display_name }}
           <span class="badge badge-blue" title="{{ e.satellites|length }} evento(s) satélite(s) agrupados">grupo</span>
+          {% else %}
+          {{ e.title }}
           {% endif %}
         </td>
         <td>{{ e.location or "—" }}</td>

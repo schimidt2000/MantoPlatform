@@ -500,6 +500,7 @@ def create_app():
                 .filter(
                     or_(CalendarEvent.sale_value.is_(None), CalendarEvent.sale_value == 0),
                     CalendarEvent.start_at >= task_cutoff,
+                    CalendarEvent.group_leader_id.is_(None),  # satélite herda do principal (055)
                     exclude_ensaios,
                 )
                 .order_by(CalendarEvent.start_at.asc())

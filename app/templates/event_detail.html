@@ -1106,8 +1106,8 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
   {% if event.is_satellite %}
   <div class="alert alert-info" style="margin-bottom: 16px;">
     <p style="margin: 0 0 8px;">
-      Este evento faz parte do grupo de
-      <a href="/events/{{ event.group_leader.id }}"><strong>{{ event.group_leader.title }}</strong></a>
+      Este evento faz parte do grupo
+      <a href="/events/{{ event.group_leader.id }}"><strong>{{ event.group_leader.group_display_name }}</strong></a>
       — os dados comerciais (venda, comissão, pagamento, nota fiscal) seguem o evento principal.
     </p>
     <form method="post" action="/events/{{ event.id }}" style="margin: 0;"
@@ -1120,7 +1120,24 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 
     {% if event.is_group_leader %}
     <div class="alert alert-info" style="margin-bottom: 16px;">
-      <p style="margin: 0 0 8px; font-weight: 600;">Eventos agrupados a este contrato:</p>
+      <p style="margin: 0 0 8px; font-weight: 600;">
+        Grupo: {{ event.group_display_name }}
+        {% if not event.group_name %}<span class="meta" style="font-weight: 400;">(sem nome — usando o título do evento)</span>{% endif %}
+      </p>
+
+      <form method="post" action="/events/{{ event.id }}" id="rename-group-form"
+            style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin: 0 0 12px;">
+        <input type="hidden" name="action" value="rename_group">
+        <div class="form-group" style="margin: 0; flex: 1; min-width: 220px;">
+          <label for="group-name-input" style="font-weight: 400;">Nome do grupo</label>
+          <input type="text" id="group-name-input" name="group_name" maxlength="200"
+                 value="{{ event.group_name or '' }}" placeholder="Ex.: Campanha Mensageiros — Empresa X"
+                 style="width: 100%; padding: 8px 10px;">
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary" id="rename-group-submit">Salvar nome</button>
+      </form>
+
+      <p style="margin: 0 0 6px; font-weight: 600;">Eventos agrupados a este contrato:</p>
       <ul style="margin: 0; padding-left: 20px;">
         {% for s in event.satellites %}
         <li>
@@ -1129,6 +1146,19 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
         </li>
         {% endfor %}
       </ul>
+
+      <script>
+        (function () {
+          var f = document.getElementById('rename-group-form');
+          var b = document.getElementById('rename-group-submit');
+          if (f && b) {
+            f.addEventListener('submit', function () {
+              b.disabled = true; b.style.opacity = '0.7'; b.style.cursor = 'wait';
+              b.textContent = 'Salvando…';
+            });
+          }
+        })();
+      </script>
     </div>
     {% endif %}
 
@@ -1174,6 +1204,13 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
               Este evento ({{ event.title }})
             </label>
           </div>
+        </div>
+
+        <div class="form-group">
+          <label for="group-name-new">Nome do grupo <span class="meta">(opcional)</span></label>
+          <input type="text" id="group-name-new" name="group_name" maxlength="200"
+                 placeholder="Ex.: Campanha Mensageiros — Empresa X" style="width: 100%; padding: 8px 10px;">
+          <p class="meta" style="margin: 4px 2px 0;">Identifica o contrato na home comercial e nos balanços. Em branco, usa o título do evento principal.</p>
         </div>
 
         <label class="checkbox-row">

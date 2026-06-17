@@ -315,7 +315,7 @@
             {{ ev.start_at.strftime('%d/%m/%Y') if ev.start_at else '—' }}
             {% if row.is_projetado %}<span class="badge-soft badge-proj">Projetado</span>{% endif %}
           </td>
-          <td><a href="{{ url_for('calendar.event_detail', event_id=ev.id) }}">{{ ev.title }}</a></td>
+          <td><a href="{{ url_for('calendar.event_detail', event_id=ev.id) }}">{{ ev.group_display_name }}</a></td>
           <td><span class="badge-type">{{ ev.event_type or '—' }}</span></td>
           <td>
             {% if row.status == 'pago_total' %}<span class="st st-green">Pago total</span>
