@@ -933,62 +933,99 @@ def _can_group_events() -> bool:
     )
 
 
+def _resolve_group_selection(
+    event: CalendarEvent,
+) -> tuple[CalendarEvent | None, list[CalendarEvent], str | None]:
+    """Lê o formulário de agrupamento e resolve principal + satélites.
+
+    Returns:
+        (leader, satellites, error) — em caso de erro, `error` traz a mensagem amigável
+        e os demais vêm vazios; do contrário `error` é None.
+    """
+    target_ids = [t for t in request.form.getlist("target_event_ids") if t.strip().isdigit()]
+    if not target_ids:
+        return None, [], "Selecione ao menos um evento para agrupar."
+
+    targets = CalendarEvent.query.filter(CalendarEvent.id.in_([int(t) for t in target_ids])).all()
+    if len(targets) != len(set(target_ids)):
+        return None, [], "Selecione eventos válidos para agrupar."
+    if any(t.id == event.id for t in targets):
+        return None, [], "Não é possível agrupar um evento a ele mesmo."  # FR-004
+
+    participants = {event.id: event, **{t.id: t for t in targets}}
+    leader_raw = request.form.get("leader_event_id", "").strip()
+    if leader_raw not in {str(pid) for pid in participants}:
+        return None, [], "Selecione qual evento é o principal do grupo."  # FR-004
+
+    leader = participants.pop(int(leader_raw))
+    satellites = list(participants.values())
+    return leader, satellites, None
+
+
+def _validate_group_satellites(leader: CalendarEvent, satellites: list[CalendarEvent]) -> str | None:
+    """Aplica as regras de integridade da feature 053 a cada participante. Retorna erro ou None."""
+    if leader.is_satellite:
+        return f'"{leader.title}" já é satélite de outro grupo e não pode ser principal.'
+    # Um principal que já lidera um grupo pode receber novos satélites (mesma regra da 053).
+    if leader.event_type == "ENSAIO":  # FR-003
+        return "Eventos do tipo ENSAIO não podem ser agrupados por este mecanismo."
+    for sat in satellites:
+        if sat.event_type == "ENSAIO":  # FR-003
+            return "Eventos do tipo ENSAIO não podem ser agrupados por este mecanismo."
+        if sat.is_satellite:  # FR-002
+            return f'"{sat.title}" já pertence a outro grupo — desagrupe antes de continuar.'
+        if sat.is_group_leader:
+            return f'"{sat.title}" já é principal de outro grupo — desagrupe os satélites dele antes.'
+    return None
+
+
 def _handle_group_events(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    """Vincula `event` e outro evento existente sob um único grupo comercial (FR-001)."""
+    """Vincula `event` e os eventos selecionados sob um único grupo comercial (FR-001/FR-003)."""
     if not _can_group_events():
         flash("Apenas Comercial, Financeiro ou Super Admin podem agrupar eventos.", "error")
         return
 
-    target_raw = request.form.get("target_event_id", "").strip()
-    leader_raw = request.form.get("leader_event_id", "").strip()
-    target = CalendarEvent.query.get(int(target_raw)) if target_raw.isdigit() else None
-    if not target:
-        flash("Selecione um evento válido para agrupar.", "error")
-        return
-    if target.id == event.id:
-        flash("Não é possível agrupar um evento a ele mesmo.", "error")  # FR-004
-        return
-    if leader_raw not in (str(event.id), str(target.id)):
-        flash("Selecione qual dos dois eventos é o principal do grupo.", "error")
+    leader, satellites, error = _resolve_group_selection(event)
+    if error:
+        flash(error, "error")
         return
 
-    leader, satellite = (event, target) if leader_raw == str(event.id) else (target, event)
-
-    if satellite.is_satellite:  # FR-002
-        flash(f'"{satellite.title}" já pertence a outro grupo — desagrupe antes de continuar.', "error")
-        return
-    if leader.is_satellite:
-        flash(f'"{leader.title}" já é satélite de outro grupo e não pode ser principal.', "error")
-        return
-    if satellite.is_group_leader:
-        flash(f'"{satellite.title}" já é principal de outro grupo — desagrupe os satélites dele antes.', "error")
-        return
-    if leader.event_type == "ENSAIO" or satellite.event_type == "ENSAIO":  # FR-003
-        flash("Eventos do tipo ENSAIO não podem ser agrupados por este mecanismo.", "error")
-        return
-    if _has_financial_data(satellite) and request.form.get("confirm_clear_financials") != "1":
-        flash(
-            f'"{satellite.title}" já tem valor de venda preenchido. Marque a confirmação '
-            "para substituí-lo pelos dados do evento principal e tente novamente.",
-            "error",
-        )
+    error = _validate_group_satellites(leader, satellites)
+    if error:
+        flash(error, "error")
         return
 
-    _apply_satellite(satellite)
-    satellite.group_leader_id = leader.id
+    if request.form.get("confirm_clear_financials") != "1":
+        com_venda = [s for s in satellites if _has_financial_data(s)]
+        if com_venda:
+            nomes = ", ".join(f'"{s.title}"' for s in com_venda)
+            flash(
+                f"{nomes} já tem valor de venda preenchido. Marque a confirmação para "
+                "substituí-lo pelos dados do evento principal e tente novamente.",
+                "error",
+            )
+            return
 
-    db.session.add(EventLog(
-        event_id=leader.id, actor_name=current_user.name, actor_role="Comercial",
-        message=f'Agrupou o evento "{satellite.title}" como satélite deste contrato',
-        created_at=datetime.now(tz=tz_sp),
-    ))
-    db.session.add(EventLog(
-        event_id=satellite.id, actor_name=current_user.name, actor_role="Comercial",
-        message=f'Vinculado ao grupo do evento "{leader.title}" — dados comerciais agora seguem o principal',
-        created_at=datetime.now(tz=tz_sp),
-    ))
+    now = datetime.now(tz=tz_sp)
+    for sat in satellites:
+        _apply_satellite(sat)
+        sat.group_leader_id = leader.id
+        db.session.add(EventLog(
+            event_id=leader.id, actor_name=current_user.name, actor_role="Comercial",
+            message=f'Agrupou o evento "{sat.title}" como satélite deste contrato',
+            created_at=now,
+        ))
+        db.session.add(EventLog(
+            event_id=sat.id, actor_name=current_user.name, actor_role="Comercial",
+            message=f'Vinculado ao grupo do evento "{leader.title}" — dados comerciais agora seguem o principal',
+            created_at=now,
+        ))
     db.session.commit()
-    flash(f'Eventos agrupados: "{leader.title}" é o evento principal.', "success")
+    flash(
+        f'Eventos agrupados: "{leader.title}" é o evento principal '
+        f"({len(satellites)} satélite{'s' if len(satellites) != 1 else ''}).",
+        "success",
+    )
 
 
 def _handle_ungroup_event(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
@@ -1188,20 +1225,18 @@ def event_detail(event_id: int):
         .all()
     )
 
-    # Candidatos a agrupar: eventos próximos na data (±3 dias), exceto ENSAIO e o próprio evento.
+    # Candidatos a agrupar: todos os eventos não-ENSAIO exceto o próprio (sem janela de data,
+    # feature 054). A busca/filtragem é feita no cliente; eventos já agrupados aparecem
+    # desabilitados na UI (não some, para o usuário entender o porquê).
     groupable_events = []
-    if show_comercial and event.start_at:
-        window_start = event.start_at - timedelta(days=3)
-        window_end = event.start_at + timedelta(days=3)
+    if show_comercial and not event.is_satellite:
         groupable_events = (
             CalendarEvent.query
             .filter(
                 CalendarEvent.id != event.id,
-                CalendarEvent.start_at >= window_start,
-                CalendarEvent.start_at <= window_end,
                 CalendarEvent.event_type != "ENSAIO",
             )
-            .order_by(CalendarEvent.start_at.asc())
+            .order_by(CalendarEvent.start_at.desc())
             .all()
         )
 
