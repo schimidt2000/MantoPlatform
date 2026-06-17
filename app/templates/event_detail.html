@@ -1133,38 +1133,160 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
     {% endif %}
 
     {% if groupable_events %}
-    <details style="margin-bottom: 16px;">
-      <summary style="cursor: pointer; font-weight: 600;">Agrupar a outro evento (mesmo contrato)</summary>
-      <form method="post" action="/events/{{ event.id }}" style="margin-top: 10px;"
-            onsubmit="return confirm('Agrupar estes eventos? O evento satélite perderá seus dados comerciais próprios, que passam a seguir o evento principal.')">
+    <details style="margin-bottom: 16px;" id="group-details">
+      <summary style="cursor: pointer; font-weight: 600;">Agrupar eventos (mesmo contrato)</summary>
+      <form method="post" action="/events/{{ event.id }}" id="group-form" style="margin-top: 10px;">
         <input type="hidden" name="action" value="group_events">
+
         <div class="form-group">
-          <label>Evento a vincular</label>
-          <select name="target_event_id" required>
-            <option value="">Selecione...</option>
+          <label for="group-search">Buscar evento por nome ou data</label>
+          <input type="search" id="group-search" autocomplete="off" placeholder="🔍 buscar evento..."
+                 style="width: 100%; padding: 8px 10px;">
+        </div>
+
+        <div class="form-group">
+          <label>Eventos a agrupar (marque um ou mais)</label>
+          <div id="group-list"
+               style="max-height: 260px; overflow-y: auto; border: 1px solid var(--border, #ddd); border-radius: 8px; padding: 6px;">
             {% for ge in groupable_events %}
-            <option value="{{ ge.id }}">{{ ge.title }}{% if ge.start_at %} — {{ ge.start_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}</option>
+            {% set blocked = ge.is_satellite or ge.is_group_leader %}
+            <label class="checkbox-row group-item"
+                   data-text="{{ ge.title }} {{ ge.start_at.strftime('%d/%m/%Y %H:%M') if ge.start_at else '' }}"
+                   {% if blocked %}style="opacity: 0.55;"{% endif %}>
+              <input type="checkbox" name="target_event_ids" value="{{ ge.id }}" class="group-check"
+                     data-title="{{ ge.title }}" data-hasvenda="{{ '1' if ge.sale_value else '0' }}"
+                     {% if blocked %}disabled{% endif %}>
+              <span>
+                {{ ge.title }}{% if ge.start_at %} — {{ ge.start_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+                {% if blocked %}<span class="badge badge-gray">já agrupado</span>{% endif %}
+              </span>
+            </label>
             {% endfor %}
-          </select>
+          </div>
+          <p id="group-empty" class="meta" style="display: none; margin: 8px 2px;">Nenhum evento encontrado.</p>
         </div>
+
         <div class="form-group">
-          <label>Qual dos dois é o evento principal (concentra os dados comerciais)?</label>
-          <label class="checkbox-row"><input type="radio" name="leader_event_id" value="{{ event.id }}" checked> Este evento ({{ event.title }})</label>
-          <label class="checkbox-row"><input type="radio" name="leader_event_id" id="leader-other-radio" value=""> O evento selecionado acima</label>
+          <label>Qual evento é o principal (concentra os dados comerciais)?</label>
+          <div id="leader-options">
+            <label class="checkbox-row">
+              <input type="radio" name="leader_event_id" value="{{ event.id }}" checked>
+              Este evento ({{ event.title }})
+            </label>
+          </div>
         </div>
+
         <label class="checkbox-row">
-          <input type="checkbox" name="confirm_clear_financials" value="1">
-          Confirmo a substituição dos dados comerciais do evento satélite, se houver
+          <input type="checkbox" name="confirm_clear_financials" value="1" id="group-confirm">
+          Confirmo a substituição dos dados comerciais dos eventos satélites, se houver
         </label>
-        <button type="submit" class="btn btn-sm btn-primary" style="margin-top: 8px;">Agrupar eventos</button>
+
+        <button type="submit" class="btn btn-sm btn-primary" id="group-submit" style="margin-top: 8px;">Agrupar eventos</button>
       </form>
+
+      <style>
+        #group-form .grp-error {
+          border-color: #dc2626 !important;
+          box-shadow: 0 0 0 3px rgba(220, 38, 38, .18) !important;
+          border-radius: 6px;
+        }
+        #group-form .grp-shake { animation: grp-shake .3s ease; }
+        @keyframes grp-shake {
+          0%, 100% { transform: translateX(0); }
+          25%      { transform: translateX(-5px); }
+          75%      { transform: translateX(5px); }
+        }
+      </style>
+
       <script>
-        (function() {
-          var sel = document.querySelector('select[name="target_event_id"]');
-          var otherRadio = document.getElementById('leader-other-radio');
-          if (sel && otherRadio) {
-            sel.addEventListener('change', function() { otherRadio.value = sel.value; });
+        (function () {
+          var form    = document.getElementById('group-form');
+          var search  = document.getElementById('group-search');
+          var listEl  = document.getElementById('group-list');
+          var emptyEl = document.getElementById('group-empty');
+          var leaderBox = document.getElementById('leader-options');
+          var confirmEl = document.getElementById('group-confirm');
+          var btn     = document.getElementById('group-submit');
+          if (!form) return;
+
+          var CURRENT_ID = '{{ event.id }}';
+          var CURRENT_LABEL = 'Este evento ({{ event.title | replace("'", "\\'") }})';
+          var submitting = false;
+
+          // Busca acento-insensível (mesmo padrão de financeiro/pagamentos.html — feature 045).
+          function normalize(s) {
+            return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
           }
+
+          function runSearch() {
+            var q = normalize(search.value.trim());
+            var visible = 0;
+            listEl.querySelectorAll('.group-item').forEach(function (item) {
+              var hit = !q || normalize(item.getAttribute('data-text')).indexOf(q) !== -1;
+              item.style.display = hit ? '' : 'none';
+              if (hit) visible++;
+            });
+            emptyEl.style.display = visible ? 'none' : 'block';
+          }
+
+          // Reconstrói as opções de "principal" com base nos eventos marcados (FR-004).
+          function syncLeaderOptions() {
+            var prev = (leaderBox.querySelector('input[name="leader_event_id"]:checked') || {}).value || CURRENT_ID;
+            var rows = ['<label class="checkbox-row"><input type="radio" name="leader_event_id" value="' +
+                        CURRENT_ID + '"> ' + CURRENT_LABEL + '</label>'];
+            form.querySelectorAll('.group-check:checked').forEach(function (cb) {
+              var title = (cb.getAttribute('data-title') || '').replace(/</g, '&lt;');
+              rows.push('<label class="checkbox-row"><input type="radio" name="leader_event_id" value="' +
+                        cb.value + '"> ' + title + '</label>');
+            });
+            leaderBox.innerHTML = rows.join('');
+            var match = leaderBox.querySelector('input[value="' + prev + '"]');
+            (match || leaderBox.querySelector('input[name="leader_event_id"]')).checked = true;
+          }
+
+          function flagError(el) {
+            if (!el) return;
+            el.classList.remove('grp-shake'); void el.offsetWidth;
+            el.classList.add('grp-error', 'grp-shake');
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+
+          search.addEventListener('input', runSearch);
+          form.addEventListener('change', function (e) {
+            if (e.target.classList.contains('group-check')) syncLeaderOptions();
+          });
+
+          form.addEventListener('submit', function (e) {
+            if (submitting) { e.preventDefault(); return; }
+            listEl.classList.remove('grp-error', 'grp-shake');
+            if (confirmEl) confirmEl.parentNode.classList.remove('grp-error', 'grp-shake');
+
+            var checked = Array.prototype.slice.call(form.querySelectorAll('.group-check:checked'));
+            if (!checked.length) {
+              e.preventDefault();
+              flagError(listEl);
+              return;
+            }
+            var temVenda = checked.some(function (cb) { return cb.getAttribute('data-hasvenda') === '1'; });
+            if (temVenda && confirmEl && !confirmEl.checked) {
+              e.preventDefault();
+              flagError(confirmEl.parentNode);
+              try { confirmEl.focus(); } catch (_) {}
+              return;
+            }
+            if (!window.confirm('Agrupar os eventos selecionados? Os satélites perderão seus dados '
+                + 'comerciais próprios, que passam a seguir o evento principal.')) {
+              e.preventDefault();
+              return;
+            }
+            submitting = true;
+            if (btn) {
+              btn.disabled = true;
+              btn.style.opacity = '0.7';
+              btn.style.cursor = 'wait';
+              btn.textContent = '⏳ Agrupando…';
+            }
+          });
         })();
       </script>
     </details>
