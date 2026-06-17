@@ -1006,6 +1006,10 @@ def _handle_group_events(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             )
             return
 
+    group_name = request.form.get("group_name", "").strip()
+    if group_name:
+        leader.group_name = group_name
+
     now = datetime.now(tz=tz_sp)
     for sat in satellites:
         _apply_satellite(sat)
@@ -1055,6 +1059,27 @@ def _handle_ungroup_event(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     flash("Agrupamento desfeito.", "success")
 
 
+def _handle_rename_group(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    """Define/edita/limpa o nome do grupo, sempre no evento principal (feature 055)."""
+    if not _can_group_events():
+        flash("Apenas Comercial, Financeiro ou Super Admin podem renomear grupos.", "error")
+        return
+    if not event.is_group_leader:
+        flash("Apenas o evento principal de um grupo pode ser renomeado.", "error")
+        return
+
+    novo_nome = request.form.get("group_name", "").strip() or None
+    event.group_name = novo_nome
+    rotulo = f'"{novo_nome}"' if novo_nome else "o título do evento (sem nome)"
+    db.session.add(EventLog(
+        event_id=event.id, actor_name=current_user.name, actor_role="Comercial",
+        message=f"Nome do grupo definido para {rotulo}",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+    flash("Nome do grupo atualizado.", "success")
+
+
 _EVENT_ACTIONS = {
     "assign_casting":       _handle_assign_casting,
     "assign_tech_presence": _handle_assign_tech_presence,
@@ -1075,6 +1100,7 @@ _EVENT_ACTIONS = {
     "save_logistics":       _handle_save_logistics,
     "group_events":         _handle_group_events,
     "ungroup_event":        _handle_ungroup_event,
+    "rename_group":         _handle_rename_group,
 }
 
 

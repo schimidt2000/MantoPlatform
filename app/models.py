@@ -220,6 +220,8 @@ class CalendarEvent(db.Model):
     # agrupamento comercial: evento satélite aponta para o evento principal do grupo.
     # Distinto de parent_event_id (vínculo de Ensaios) — não reutilizar.
     group_leader_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
+    # nome do grupo comercial, preenchido apenas no evento principal (feature 055).
+    group_name = db.Column(db.String(200), nullable=True)
 
     # logística
     makeup_time = db.Column(db.String(5), nullable=True)       # "HH:MM"
@@ -273,6 +275,11 @@ class CalendarEvent(db.Model):
     def is_group_leader(self) -> bool:
         """True se este evento é principal de pelo menos um evento satélite."""
         return len(self.satellites) > 0
+
+    @property
+    def group_display_name(self) -> str:
+        """Rótulo do grupo para exibição: o nome do grupo, ou o título do evento (fallback)."""
+        return self.group_name or self.title
 
 
 class FigurinoSheet(db.Model):

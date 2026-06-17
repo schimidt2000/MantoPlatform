@@ -449,6 +449,10 @@ def dashboard():
     # ── Tabela de eventos do período (com status financeiro) ─────────────────
     events_data = []
     for e in events:
+        # Satélites não viram linha própria: o grupo aparece como 1 entrada no principal,
+        # com o nome do grupo e os custos somados (feature 055; consolidação da 053).
+        if e.is_satellite:
+            continue
         # float() normaliza: cache_value é Numeric (Decimal no Postgres), e Decimal não
         # pode ser subtraído de float diretamente (TypeError) — venda/recebido já são float.
         # _group_cost soma os satélites no principal (FR-011); satélite mostra só o próprio cachê.
