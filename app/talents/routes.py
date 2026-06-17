@@ -260,9 +260,11 @@ def _parse_period(period: str, from_raw: str, to_raw: str) -> tuple:
 @talents_bp.route("/talents/avaliacoes")
 @login_required
 def avaliacoes():
-    """Resumo das avaliações — filtros combináveis de período, categoria e evento."""
-    if not _can_edit_talent():
-        abort(403)
+    """Resumo das avaliações — filtros combináveis de período, categoria e evento.
+
+    Visível a todos os usuários autenticados; a autoria fica anônima para todos,
+    exceto super admin (salvo modo anônimo total) — ver feature 056.
+    """
 
     event_id_raw = request.args.get("event_id", "").strip()
     event_id = int(event_id_raw) if event_id_raw.isdigit() else None
