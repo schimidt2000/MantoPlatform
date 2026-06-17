@@ -137,7 +137,10 @@
           {% if pending_presence %}
             <span class="badge badge-gold" style="font-size:11px;">{{ pending_presence|length }} sem presença</span>
           {% endif %}
-          {% if not pending_ensaio and not scheduled_ensaio and not pending_presence %}
+          {% if orphan_ensaios %}
+            <span class="badge badge-red" style="font-size:11px;">{{ orphan_ensaios|length }} órfão{{ 's' if orphan_ensaios|length != 1 else '' }}</span>
+          {% endif %}
+          {% if not pending_ensaio and not scheduled_ensaio and not pending_presence and not orphan_ensaios %}
             <span class="meta">Nenhum show futuro com ensaio</span>
           {% endif %}
         </div>
@@ -221,6 +224,10 @@
                             onclick="toggleEnsaioEdit('ee-{{ ens.id }}')">
                       Editar
                     </button>
+                    <form method="POST" action="/events/{{ ens.id }}/delete-ensaio" style="margin:0;"
+                          onsubmit="return confirm('Cancelar este ensaio? Esta ação remove o ensaio do sistema e da agenda. O show não é afetado.');">
+                      <button type="submit" class="btn btn-sm btn-secondary" style="color:#b91c1c;">Cancelar</button>
+                    </form>
                   </div>
                   {# Formulário de edição inline — oculto por padrão #}
                   <div id="ee-{{ ens.id }}" style="display:none;padding:12px 14px 14px;background:#fff;border-top:1px solid var(--line);">
@@ -263,7 +270,33 @@
           {% endfor %}
         {% endif %}
 
-        {% if not pending_ensaio and not scheduled_ensaio %}
+        {% if orphan_ensaios %}
+          <div style="font-size:11px;font-weight:700;color:#b91c1c;text-transform:uppercase;letter-spacing:.07em;padding:14px 0 6px;">
+            Ensaios sem show (órfãos)
+          </div>
+          <p class="meta" style="margin:0 0 8px;">
+            O show destes ensaios não está mais na agenda. Você pode cancelá-los aqui.
+          </p>
+          {% for ens in orphan_ensaios %}
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;margin-bottom:6px;
+                        border:1px solid var(--line);border-radius:var(--r-md);background:rgba(228,88,88,0.06);">
+              <span style="font-size:18px;">🟧</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:13px;">{{ ens.title }}</div>
+                <div class="meta" style="margin-top:2px;">
+                  {% if ens.start_at %}{{ ens.start_at.strftime("%d/%m/%Y · %H:%M") }}{% else %}Data não definida{% endif %}
+                  {% if ens.description %} · {{ ens.description }}{% endif %}
+                </div>
+              </div>
+              <form method="POST" action="/events/{{ ens.id }}/delete-ensaio" style="margin:0;"
+                    onsubmit="return confirm('Cancelar este ensaio? Esta ação remove o ensaio do sistema e da agenda.');">
+                <button type="submit" class="btn btn-sm btn-secondary" style="color:#b91c1c;">Cancelar ensaio</button>
+              </form>
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        {% if not pending_ensaio and not scheduled_ensaio and not orphan_ensaios %}
           <p class="muted" style="padding:12px 0;">Nenhum show futuro com ensaio cadastrado.</p>
         {% endif %}
         <div style="height:4px;"></div>
