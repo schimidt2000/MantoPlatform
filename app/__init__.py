@@ -342,6 +342,7 @@ def create_app():
         # Ensaio: separa pendentes (sem ensaio) de agendados (com ensaio)
         pending_ensaio   = []
         scheduled_ensaio = []
+        orphan_ensaios   = []
         pending_presence = []
         if show_ensaio:
             future_shows = (
@@ -359,6 +360,17 @@ def create_app():
             )
             pending_ensaio   = [e for e in future_shows if not e.ensaios]
             scheduled_ensaio = [e for e in future_shows if e.ensaios]
+
+            # Ensaios órfãos: do tipo ENSAIO cujo show pai não existe mais (feature 057).
+            # parent is None cobre FK nulo e FK apontando para show já removido.
+            # Inclui datas passadas (o caso típico é um show antigo cancelado).
+            orphan_ensaios = [
+                e for e in CalendarEvent.query
+                .filter(CalendarEvent.event_type == "ENSAIO")
+                .order_by(CalendarEvent.start_at.asc())
+                .all()
+                if e.parent is None
+            ]
 
             # Presença pendente: shows futuros sem o técnico de presença definido.
             pending_presence = (
@@ -529,6 +541,7 @@ def create_app():
             pending_figurino=pending_figurino,
             pending_ensaio=pending_ensaio,
             scheduled_ensaio=scheduled_ensaio,
+            orphan_ensaios=orphan_ensaios,
             pending_presence=pending_presence,
             pending_invoice=pending_invoice,
             show_comercial=show_comercial,
