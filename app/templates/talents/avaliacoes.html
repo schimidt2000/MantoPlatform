@@ -24,6 +24,49 @@
 
 {% block content %}
 
+{# ── Privacidade: modo anônimo total (só super admin) — feature 056 ── #}
+{% if is_superadmin %}
+<div class="panel" style="margin-bottom:16px; padding:14px 20px;">
+  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+    <div style="flex:1; min-width:240px;">
+      <div style="font-weight:600; font-size:14px;">
+        Privacidade das avaliações:
+        {% if fully_anonymous %}
+          <span class="badge badge-gray">Anônimo total (ativo)</span>
+        {% else %}
+          <span class="badge badge-blue">Você vê a autoria</span>
+        {% endif %}
+      </div>
+      <p class="muted" style="font-size:12px; margin:4px 0 0;">
+        {% if fully_anonymous %}
+          A autoria está oculta para todos, inclusive para você. Desative para voltar a ver quem avaliou.
+        {% else %}
+          Os comentários são anônimos para os demais usuários; só você (super admin) vê a autoria.
+          Ative o modo anônimo total para ocultar a autoria até para você.
+        {% endif %}
+      </p>
+    </div>
+    <form method="post" action="{{ url_for('talents.toggle_modo_anonimo') }}" id="anon-form"
+          onsubmit="return confirm({% if fully_anonymous %}'Desativar o modo anônimo total? A autoria volta a aparecer para o super admin.'{% else %}'Ativar o modo anônimo total? Nem o super admin verá quem fez cada avaliação.'{% endif %});">
+      <input type="hidden" name="enabled" value="{{ '0' if fully_anonymous else '1' }}">
+      <button type="submit" id="anon-submit"
+              class="btn btn-sm {{ 'btn-secondary' if fully_anonymous else 'btn-primary' }}">
+        {{ 'Desativar modo anônimo total' if fully_anonymous else 'Ativar modo anônimo total' }}
+      </button>
+    </form>
+  </div>
+  <script>
+    (function () {
+      var f = document.getElementById('anon-form'), b = document.getElementById('anon-submit');
+      if (f && b) f.addEventListener('submit', function (e) {
+        // o confirm() do onsubmit já barrou se cancelado; aqui só trava duplo envio
+        setTimeout(function () { b.disabled = true; b.style.opacity = '0.7'; b.textContent = 'Salvando…'; }, 0);
+      });
+    })();
+  </script>
+</div>
+{% endif %}
+
 {# ── Filtros ──────────────────────────────────────────────────── #}
 <div class="panel" style="margin-bottom:16px; padding:14px 20px;">
 
@@ -230,6 +273,7 @@
         <span style="color:#dc2626; font-weight:700; font-size:13px;">{{ a.score }} ★</span>
         {{ cat_chip(a) }}
         <span style="font-weight:600; font-size:13px;">{{ a.author }}</span>
+        {% if a.author_funcao %}<span class="muted" style="font-size:12px;">· {{ a.author_funcao }}</span>{% endif %}
         {% if not selected_event and a.event_id %}
           <span class="muted" style="font-size:12px;">·
             <a href="#" onclick="setFilter({event_id: '{{ a.event_id }}'}); return false;" style="color:inherit;">{{ a.event_title }}</a>
@@ -263,6 +307,7 @@
         <span style="color:#f59e0b; font-size:14px;">{{ stars(c.score) }}</span>
         {{ cat_chip(c) }}
         <span style="font-weight:600; font-size:13px;">{{ c.author }}</span>
+        {% if c.author_funcao %}<span class="muted" style="font-size:12px;">· {{ c.author_funcao }}</span>{% endif %}
         {% if not selected_event and c.event_id %}
           <span class="muted" style="font-size:12px;">·
             <a href="#" onclick="setFilter({event_id: '{{ c.event_id }}'}); return false;" style="color:inherit;">{{ c.event_title }}</a>

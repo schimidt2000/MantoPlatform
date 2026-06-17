@@ -299,6 +299,39 @@ def avaliacoes():
     )
     rating_by_id = {r.id: r for r in ratings}
 
+    # ── Anonimato da autoria (feature 056) ────────────────────────────────────
+    # Por padrão a autoria é anônima para todos; só o super admin vê o nome real,
+    # exceto quando o "modo anônimo total" estiver ligado (esconde até do super admin).
+    from app.models import SiteSetting
+    settings = SiteSetting.query.get(1)
+    is_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
+    fully_anonymous = bool(settings and settings.ratings_fully_anonymous)
+    show_authors = is_superadmin and not fully_anonymous
+
+    # Função (personagem) do autor em cada evento avaliado — só quando a autoria é
+    # visível, em uma única query (sem N+1). Múltiplas funções unidas por vírgula.
+    event_functions: dict[tuple[int, int], str] = {}
+    if show_authors and ratings:
+        from app.calendar.routes import strip_role_prefix
+        pairs = {(r.event_id, r.talent_id) for r in ratings}
+        roles = (
+            EventRole.query
+            .filter(
+                EventRole.event_id.in_({e for e, _ in pairs}),
+                EventRole.talent_id.in_({t for _, t in pairs}),
+            )
+            .all()
+        )
+        for role in roles:
+            key = (role.event_id, role.talent_id)
+            if key not in pairs or not role.character_name:
+                continue
+            nome = strip_role_prefix(role.character_name)
+            if not nome:
+                continue
+            atual = event_functions.get(key)
+            event_functions[key] = f"{atual}, {nome}" if atual else nome
+
     # ── Pontuações primárias do recorte (geral ou da categoria filtrada) ──
     if cat:
         cat_subs = [s for s in subs if s.category == cat and s.score]
@@ -334,10 +367,19 @@ def avaliacoes():
 
     # ── Comentários unificados: gerais ("Geral") + por categoria ──
     def _comment_item(score, text, rating, cat_key="", subject=None):
+        # Anonimização no servidor (FR-006): quando a autoria não é visível, o nome e a
+        # função NÃO entram no dado — vira apenas "Anônimo", sem identificador algum.
+        if show_authors:
+            author = rating.talent.full_name if rating.talent else "—"
+            funcao = event_functions.get((rating.event_id, rating.talent_id))
+        else:
+            author = "Anônimo"
+            funcao = None
         return {
             "score": score,
             "comment": text,
-            "author": rating.talent.full_name if rating.talent else "—",
+            "author": author,
+            "author_funcao": funcao,
             "event_title": rating.event.title if rating.event else "—",
             "event_id": rating.event_id,
             "event_date": rating.event.start_at if rating.event else None,
@@ -489,7 +531,42 @@ def avaliacoes():
         best_events=best_events,
         worst_events=worst_events,
         trend=trend,
+        show_authors=show_authors,
+        fully_anonymous=fully_anonymous,
+        is_superadmin=is_superadmin,
     )
+
+
+@talents_bp.route("/talents/avaliacoes/modo-anonimo", methods=["POST"])
+@login_required
+def toggle_modo_anonimo():
+    """Liga/desliga o modo anônimo total das avaliações (só super admin) — feature 056."""
+    if not any(r.name == RoleName.SUPERADMIN for r in current_user.roles):
+        abort(403)
+
+    from app.models import AuditLog, SiteSetting
+    settings = SiteSetting.query.get(1)
+    if settings is None:
+        settings = SiteSetting(id=1)
+        db.session.add(settings)
+
+    enabled = request.form.get("enabled") == "1"
+    settings.ratings_fully_anonymous = enabled
+    db.session.add(AuditLog(
+        actor_name=current_user.name,
+        entity_type="settings",
+        entity_id=1,
+        action="ratings_fully_anonymous_on" if enabled else "ratings_fully_anonymous_off",
+        detail=f"Modo anônimo total das avaliações {'ativado' if enabled else 'desativado'}.",
+    ))
+    db.session.commit()
+    flash(
+        "Modo anônimo total ativado — nem o super admin vê a autoria."
+        if enabled else
+        "Modo anônimo total desativado — o super admin volta a ver a autoria.",
+        "success",
+    )
+    return redirect(url_for("talents.avaliacoes"))
 
 
 @talents_bp.route("/talents/<int:talent_id>")

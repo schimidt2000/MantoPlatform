@@ -513,6 +513,9 @@ class SiteSetting(db.Model):
     clicksign_sandbox = db.Column(db.Boolean, default=False, nullable=False)
     # Notificações por email (desligar durante testes)
     email_notifications_enabled = db.Column(db.Boolean, default=True, nullable=False)
+    # Modo anônimo total das avaliações: quando True, a autoria fica oculta até para o
+    # super admin na página /talents/avaliacoes (feature 056).
+    ratings_fully_anonymous = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
     # Data de início do sistema (eventos anteriores são ignorados nas tasks)
     release_date = db.Column(db.Date, nullable=True)
     # Token OAuth do Google Calendar — persistido no banco para sobreviver a redeploys
