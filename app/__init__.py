@@ -363,10 +363,12 @@ def create_app():
 
             # Ensaios órfãos: do tipo ENSAIO cujo show pai não existe mais (feature 057).
             # parent is None cobre FK nulo e FK apontando para show já removido.
-            # Inclui datas passadas (o caso típico é um show antigo cancelado).
+            # Conta apenas a partir da data de início do sistema (mesmo corte das demais
+            # tarefas) para não poluir a home com órfãos antigos (feature 060).
             orphan_ensaios = [
                 e for e in CalendarEvent.query
-                .filter(CalendarEvent.event_type == "ENSAIO")
+                .filter(CalendarEvent.event_type == "ENSAIO",
+                        CalendarEvent.start_at >= task_cutoff)
                 .order_by(CalendarEvent.start_at.asc())
                 .all()
                 if e.parent is None
