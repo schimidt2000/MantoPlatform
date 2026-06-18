@@ -4,10 +4,10 @@
 {% block page_title %}Banco de Figurinos{% endblock %}
 
 {% block page_actions %}
-  {% if is_real_superadmin() %}
+  {% if eff_has_role('FIGURINO', 'SUPERADMIN') %}
     <a href="{{ url_for('figurino.sync_drive_page') }}" class="btn btn-secondary">&#8635; Sync Drive</a>
+    <a href="/figurinos/new" class="btn btn-primary">+ Nova Ficha</a>
   {% endif %}
-  <a href="/figurinos/new" class="btn btn-primary">+ Nova Ficha</a>
 {% endblock %}
 
 {% block content %}
@@ -28,7 +28,9 @@
       <span class="badge badge-red">{{ char }}</span>
     {% endfor %}
   </div>
+  {% if eff_has_role('FIGURINO', 'SUPERADMIN') %}
   <a href="/figurinos/new" class="btn btn-sm btn-primary">+ Criar ficha</a>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -91,8 +93,10 @@
          title="Visualizar / Imprimir">
         &#128247; Imprimir
       </a>
+      {% if eff_has_role('FIGURINO', 'SUPERADMIN') %}
       <a href="/figurinos/{{ sheet.id }}/edit"
          class="btn btn-sm btn-secondary" title="Editar ficha">&#9998;</a>
+      {% endif %}
     </div>
 
   </div>
@@ -108,7 +112,9 @@
 <div class="panel" style="text-align: center; padding: 56px 32px;">
   <div style="font-size: 56px; margin-bottom: 12px;">&#128248;</div>
   <p class="muted" style="margin-bottom: 16px;">Nenhuma ficha cadastrada ainda.</p>
+  {% if eff_has_role('FIGURINO', 'SUPERADMIN') %}
   <a href="/figurinos/new" class="btn btn-primary">+ Criar primeira ficha</a>
+  {% endif %}
 </div>
 {% endif %}
 
