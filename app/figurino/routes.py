@@ -2,7 +2,7 @@ import json
 import os
 from datetime import datetime
 
-from flask import Blueprint, render_template, redirect, url_for, request, flash, Response, stream_with_context, current_app
+from flask import Blueprint, render_template, redirect, url_for, request, flash, Response, stream_with_context, current_app, abort
 from flask_login import login_required, current_user
 
 from app.models import FigurinoSheet, EventRole
@@ -29,6 +29,16 @@ def _parse_pieces(form) -> list:
                 qty = 1
             result.append({"name": name, "qty": qty})
     return result
+
+
+def _can_edit_figurino() -> bool:
+    """True se o usuário pode editar figurinos (SUPERADMIN ou FIGURINO) — feature 058.
+
+    Visualização/impressão são abertas a qualquer autenticado; mutações são restritas.
+    """
+    return current_user.is_authenticated and any(
+        r.name in (RoleName.SUPERADMIN, RoleName.FIGURINO) for r in current_user.roles
+    )
 
 
 # ── Listing ────────────────────────────────────────────────────
@@ -58,6 +68,8 @@ def figurinos():
 @figurino_bp.route("/figurinos/new", methods=["GET", "POST"])
 @login_required
 def new_sheet():
+    if not _can_edit_figurino():
+        abort(403)
     from .drive_service import normalize_name
 
     if request.method == "POST":
@@ -102,6 +114,8 @@ def new_sheet():
 @figurino_bp.route("/figurinos/<int:sheet_id>/edit", methods=["GET", "POST"])
 @login_required
 def edit_sheet(sheet_id: int):
+    if not _can_edit_figurino():
+        abort(403)
     from .drive_service import normalize_name
 
     sheet = FigurinoSheet.query.get_or_404(sheet_id)
@@ -184,6 +198,8 @@ def print_event_figurinos(event_id: int):
 @figurino_bp.route("/figurinos/<int:sheet_id>/rotate-photo", methods=["POST"])
 @login_required
 def rotate_photo(sheet_id: int):
+    if not _can_edit_figurino():
+        abort(403)
     sheet = FigurinoSheet.query.get_or_404(sheet_id)
 
     if not sheet.photo_filename:
@@ -219,6 +235,8 @@ def rotate_photo(sheet_id: int):
 @figurino_bp.route("/figurinos/<int:sheet_id>/delete", methods=["POST"])
 @login_required
 def delete_sheet(sheet_id: int):
+    if not _can_edit_figurino():
+        abort(403)
     sheet = FigurinoSheet.query.get_or_404(sheet_id)
 
     delete_file(sheet.photo_filename)
@@ -232,13 +250,7 @@ def delete_sheet(sheet_id: int):
     return redirect(url_for("figurino.figurinos"))
 
 
-# ── Sync Drive (SUPERADMIN only) ───────────────────────────────
-
-def _is_superadmin() -> bool:
-    return current_user.is_authenticated and any(
-        r.name == RoleName.SUPERADMIN for r in current_user.roles
-    )
-
+# ── Sync Drive (SUPERADMIN/FIGURINO — ver _can_edit_figurino) ──────────────
 
 def _sync_normalize(text: str) -> str:
     import re as _re, unicodedata as _ud
@@ -361,16 +373,15 @@ def _sync_save_photo(doc, file_id: str) -> tuple[str | None, str | None]:
 @figurino_bp.route("/figurinos/sync-drive")
 @login_required
 def sync_drive_page():
-    if not _is_superadmin():
-        flash("Acesso restrito.", "error")
-        return redirect(url_for("figurino.figurinos"))
+    if not _can_edit_figurino():
+        abort(403)
     return render_template("figurino_sync.html")
 
 
 @figurino_bp.route("/figurinos/sync-drive/stream")
 @login_required
 def sync_drive_stream():
-    if not _is_superadmin():
+    if not _can_edit_figurino():
         return Response("data: {}\n\n", content_type="text/event-stream", status=403)
 
     def generate():

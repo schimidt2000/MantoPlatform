@@ -61,8 +61,8 @@
     </div>
 
 
-    {# Figurino — visível para FIGURINO e SUPERADMIN #}
-    {% if current_user.is_authenticated and eff_has_role('FIGURINO', 'SUPERADMIN') %}
+    {# Figurino — visível a todos os usuários autenticados (edição restrita a FIGURINO/SUPERADMIN) #}
+    {% if current_user.is_authenticated %}
     <div class="sidebar-section">
       <div class="sidebar-section-label">Produção</div>
       <a href="/figurinos" class="sidebar-item {% if '/figurinos' in request.path %}active{% endif %}">
