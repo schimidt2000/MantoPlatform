@@ -515,6 +515,7 @@ def create_app():
                     or_(CalendarEvent.sale_value.is_(None), CalendarEvent.sale_value == 0),
                     CalendarEvent.start_at >= task_cutoff,
                     CalendarEvent.group_leader_id.is_(None),  # satélite herda do principal (055)
+                    CalendarEvent.is_cortesia_permuta.is_(False),  # permuta/cortesia não é "sem valor"
                     exclude_ensaios,
                 )
                 .order_by(CalendarEvent.start_at.asc())
