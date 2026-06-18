@@ -901,7 +901,8 @@ function prefillMultipliers() {
 }
 
 function setPersonalizadoVal(kind, idx, val) {
-  const num = parseFloat(val) || 0;
+  // 'valor' usa a máscara BR (R$); 'mult' é multiplicador numérico simples.
+  const num = kind === 'valor' ? MoneyMask.parseNumber(val) : (parseFloat(val) || 0);
   if (kind === 'mult') custMult[idx] = num;
   else custValor[idx] = num;
   updateTotals();

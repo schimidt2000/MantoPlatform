@@ -122,12 +122,12 @@
 
     <div class="filter-group">
       <label>Valor 4h — mín (R$)</label>
-      <input type="number" name="min_val" min="0" step="100"
-             value="{{ request.args.get('min_val','') }}" placeholder="0">
+      <input type="text" inputmode="decimal" class="brl-input" name="min_val"
+             value="{{ request.args.get('min_val','') }}" placeholder="0,00">
     </div>
     <div class="filter-group">
       <label>Valor 4h — máx (R$)</label>
-      <input type="number" name="max_val" min="0" step="100"
+      <input type="text" inputmode="decimal" class="brl-input" name="max_val"
              value="{{ request.args.get('max_val','') }}" placeholder="—">
     </div>
 
