@@ -282,8 +282,8 @@
           </div>
           <span style="color:var(--muted);font-size:13px;">ou</span>
           <div class="prefix" style="width:auto;"><span>R$</span>
-            <input type="number" id="desc-val" min="0" step="1"
-                   placeholder="0" style="width:100px;" oninput="calcDesconto('val')">
+            <input type="text" inputmode="decimal" class="brl-input" id="desc-val"
+                   placeholder="0,00" style="width:100px;" oninput="calcDesconto('val')">
           </div>
         </div>
         <div id="desc-result" style="margin-top:10px;font-size:13px;color:var(--muted);"></div>

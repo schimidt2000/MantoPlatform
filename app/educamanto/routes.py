@@ -10,9 +10,19 @@ from flask_login import current_user, login_required
 
 from app import db
 from app.constants import RoleName
+from app.money import parse_brl
 from app.models import EducaMantoItem, EducaMantoPackage
 
 educamanto_bp = Blueprint("educamanto", __name__, url_prefix="/educamanto")
+
+
+def _money(value, default: float) -> float:
+    """Lê um valor em R$ (mascarado ou cru) como float; usa o default só se vazio/inválido.
+
+    Diferente de ``parse_brl(x) or default``, preserva o zero explícito (R$ 0,00).
+    """
+    parsed = parse_brl(value)
+    return float(parsed) if parsed is not None else float(default)
 
 _CAN_USE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN, RoleName.ENSAIO}
 # ENSAIO usa só a calculadora — não vê a aba de pacotes.
@@ -108,10 +118,10 @@ def _parse_items_from_form() -> list[dict]:
         items.append({
             "name": name.strip(),
             "qty": int(qtys[i] or 1),
-            "cost_1s": float(c1s_list[i] or 0),
-            "cost_2s": float(c2s_list[i] or 0),
-            "cost_1s_days": float(c1sd_list[i] or 0),
-            "cost_2s_days": float(c2sd_list[i] or 0),
+            "cost_1s": _money(c1s_list[i], 0),
+            "cost_2s": _money(c2s_list[i], 0),
+            "cost_1s_days": _money(c1sd_list[i], 0),
+            "cost_2s_days": _money(c2sd_list[i], 0),
             "ensemble_add": int(ens_list[i] or 0) if i < len(ens_list) else 0,
             "sort_order": i,
         })
@@ -193,10 +203,10 @@ def create_package():
             discount_days=int(request.form["discount_days"]),
             discount_pct=float(request.form["discount_pct"]) / 100,
             commission_rate=float(request.form["commission_rate"]) / 100,
-            ensemble_1s=float(request.form.get("ensemble_1s") or 350),
-            ensemble_2s=float(request.form.get("ensemble_2s") or 600),
-            ensemble_1s_days=float(request.form.get("ensemble_1s_days") or 300),
-            ensemble_2s_days=float(request.form.get("ensemble_2s_days") or 550),
+            ensemble_1s=_money(request.form.get("ensemble_1s"), 350),
+            ensemble_2s=_money(request.form.get("ensemble_2s"), 600),
+            ensemble_1s_days=_money(request.form.get("ensemble_1s_days"), 300),
+            ensemble_2s_days=_money(request.form.get("ensemble_2s_days"), 550),
         )
         db.session.add(pkg)
         db.session.flush()
@@ -222,10 +232,10 @@ def edit_package(pkg_id: int):
         pkg.discount_days = int(request.form["discount_days"])
         pkg.discount_pct = float(request.form["discount_pct"]) / 100
         pkg.commission_rate = float(request.form["commission_rate"]) / 100
-        pkg.ensemble_1s = float(request.form.get("ensemble_1s") or 350)
-        pkg.ensemble_2s = float(request.form.get("ensemble_2s") or 600)
-        pkg.ensemble_1s_days = float(request.form.get("ensemble_1s_days") or 300)
-        pkg.ensemble_2s_days = float(request.form.get("ensemble_2s_days") or 550)
+        pkg.ensemble_1s = _money(request.form.get("ensemble_1s"), 350)
+        pkg.ensemble_2s = _money(request.form.get("ensemble_2s"), 600)
+        pkg.ensemble_1s_days = _money(request.form.get("ensemble_1s_days"), 300)
+        pkg.ensemble_2s_days = _money(request.form.get("ensemble_2s_days"), 550)
         for item in list(pkg.items):
             db.session.delete(item)
         db.session.flush()

@@ -12,7 +12,7 @@ from flask_login import current_user, login_required
 
 from app import db
 from app.constants import RoleName
-from app.money import format_brl
+from app.money import format_brl, parse_brl
 from . import settings as _cfg
 from .pricing import (
     aplicar_markup,
@@ -680,15 +680,13 @@ def historico():
         query = query.filter(OrcamentoHistory.event_date <= ev_to)
 
     if min_val:
-        try:
-            query = query.filter(OrcamentoHistory.total_4h >= float(min_val))
-        except ValueError:
-            pass
+        _min = parse_brl(min_val)
+        if _min is not None:
+            query = query.filter(OrcamentoHistory.total_4h >= float(_min))
     if max_val:
-        try:
-            query = query.filter(OrcamentoHistory.total_4h <= float(max_val))
-        except ValueError:
-            pass
+        _max = parse_brl(max_val)
+        if _max is not None:
+            query = query.filter(OrcamentoHistory.total_4h <= float(_max))
 
     if show_f in ("1", "0"):
         query = query.filter(OrcamentoHistory.has_show == (show_f == "1"))
@@ -810,6 +808,12 @@ def pricing_settings():
     if request.method == "POST":
         s = _cfg.load()
 
+        def _money(field, default):
+            """Lê um preço em R$ enviado com a máscara BR; cai no default se vazio/inválido."""
+            val = parse_brl(request.form.get(field, ""))
+            return float(val) if val is not None else float(default)
+
+        # markup é multiplicador (não é R$) — segue como número cru.
         for modelo in ("receptivo", "show"):
             s["markup"][modelo] = [
                 float(request.form.get(f"markup_{modelo}_{i}", s["markup"][modelo][i]))
@@ -819,24 +823,24 @@ def pricing_settings():
         for key in s["ator"]:
             safe = key.replace("|", "_").replace(" ", "_")
             s["ator"][key] = [
-                float(request.form.get(f"ator_{safe}_{i}", s["ator"][key][i]))
+                _money(f"ator_{safe}_{i}", s["ator"][key][i])
                 for i in range(3)
             ]
 
         for key in s["cantor"]:
             s["cantor"][key] = [
-                float(request.form.get(f"cantor_{key}_{i}", s["cantor"][key][i]))
+                _money(f"cantor_{key}_{i}", s["cantor"][key][i])
                 for i in range(3)
             ]
 
         s["tecnico_som"] = [
-            float(request.form.get(f"tecnico_som_{i}", s["tecnico_som"][i]))
+            _money(f"tecnico_som_{i}", s["tecnico_som"][i])
             for i in range(3)
         ]
 
         for key in s["coordenador"]:
             s["coordenador"][key] = [
-                float(request.form.get(f"coordenador_{key}_{i}", s["coordenador"][key][i]))
+                _money(f"coordenador_{key}_{i}", s["coordenador"][key][i])
                 for i in range(3)
             ]
 
@@ -845,19 +849,19 @@ def pricing_settings():
             if isinstance(val, dict):
                 for show_key in val:
                     s["especiais"][nome][show_key] = [
-                        float(request.form.get(f"especial_{safe}_{show_key}_{i}", val[show_key][i]))
+                        _money(f"especial_{safe}_{show_key}_{i}", val[show_key][i])
                         for i in range(3)
                     ]
             else:
                 s["especiais"][nome] = [
-                    float(request.form.get(f"especial_{safe}_{i}", val[i]))
+                    _money(f"especial_{safe}_{i}", val[i])
                     for i in range(3)
                 ]
 
-        s["brinde_show"] = float(request.form.get("brinde_show", s.get("brinde_show", 100)))
+        s["brinde_show"] = _money("brinde_show", s.get("brinde_show", 100))
 
         for key in s["maquiador"]:
-            s["maquiador"][key] = float(request.form.get(f"maquiador_{key}", s["maquiador"][key]))
+            s["maquiador"][key] = _money(f"maquiador_{key}", s["maquiador"][key])
 
         for key in s["transporte"]:
             s["transporte"][key] = float(request.form.get(f"transporte_{key}", s["transporte"][key]))

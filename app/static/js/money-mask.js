@@ -57,8 +57,27 @@
     });
   }
 
+  /**
+   * Lê o valor numérico (em reais) de um input mascarado ou de uma string.
+   * Ex.: "1.500,00" → 1500. Vazio/inválido → 0. Use em cálculos ao vivo no lugar
+   * de parseFloat(input.value), que não entende o padrão brasileiro.
+   */
+  function parseNumber(valueOrInput) {
+    var text =
+      valueOrInput && valueOrInput.value !== undefined
+        ? valueOrInput.value
+        : valueOrInput;
+    var cents = digitsToCents(text);
+    return cents === null ? 0 : cents / 100;
+  }
+
   // Exposto para reinicializar campos inseridos dinamicamente (ex.: linhas de personagem).
-  window.MoneyMask = { init: init, format: formatCents, applyMask: applyMask };
+  window.MoneyMask = {
+    init: init,
+    format: formatCents,
+    applyMask: applyMask,
+    parseNumber: parseNumber,
+  };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
