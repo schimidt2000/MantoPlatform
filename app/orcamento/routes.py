@@ -96,6 +96,55 @@ def index():
     )
 
 
+@orcamento_bp.route("/personagens-no-dia")
+@login_required
+@_require_vendas
+def personagens_no_dia():
+    """Personagens já escalados em eventos na data informada (evita venda duplicada — feature 061).
+
+    Retorna JSON ``{date, personagens:[{nome, eventos[]}]}``. Considera apenas papéis de
+    personagem (``role_type='character'``) — apoio (Coordenador, Técnico, Presença, Maquiador)
+    e ensaios ficam de fora. Vaga sem talento conta (a vaga já compromete o personagem no dia).
+    """
+    from datetime import date as _date
+
+    from sqlalchemy import func, not_
+
+    from app.models import CalendarEvent, EventRole
+
+    raw = (request.args.get("date") or "").strip()
+    try:
+        dia = _date.fromisoformat(raw)
+    except ValueError:
+        return jsonify({"date": None, "personagens": []})
+
+    rows = (
+        EventRole.query
+        .join(CalendarEvent, EventRole.event_id == CalendarEvent.id)
+        .filter(
+            EventRole.role_type == "character",
+            not_(CalendarEvent.title.like("🟧 ENSAIO%")),
+            func.date(CalendarEvent.start_at) == dia,
+        )
+        .with_entities(EventRole.character_name, CalendarEvent.title)
+        .all()
+    )
+
+    agrupado: dict[str, list[str]] = {}
+    for nome, titulo in rows:
+        if not nome or not nome.strip():
+            continue
+        eventos = agrupado.setdefault(nome.strip(), [])
+        if titulo and titulo not in eventos:
+            eventos.append(titulo)
+
+    personagens = [
+        {"nome": nome, "eventos": eventos}
+        for nome, eventos in sorted(agrupado.items(), key=lambda kv: kv[0].lower())
+    ]
+    return jsonify({"date": dia.isoformat(), "personagens": personagens})
+
+
 _ADICIONAL_NOTURNO = 50.0  # R$ por artista/coordenador, aplicado pré-markup
 
 
