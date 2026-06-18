@@ -171,13 +171,16 @@
         <div class="form-grid-2">
           <div class="form-group">
             <label>Data</label>
-            <input type="date" name="event_date" required>
+            <input type="date" name="event_date" id="event_date" required>
           </div>
           <div class="form-group">
             <label>Horário</label>
             <input type="time" name="event_time" required>
           </div>
         </div>
+
+        {# Personagens já na agenda no dia — alerta de venda duplicada (feature 061) #}
+        <div id="agenda-no-dia" style="display:none;margin:-4px 0 14px;"></div>
 
         {# Transporte #}
         <div class="transport-panel" id="transport-section">
@@ -462,6 +465,58 @@
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/orcamento.js') }}"></script>
 <script>
+// ── Personagens já na agenda no dia (alerta de venda duplicada — feature 061) ──
+(function () {
+  var dateEl = document.getElementById('event_date');
+  var box = document.getElementById('agenda-no-dia');
+  if (!dateEl || !box) return;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function render(data) {
+    var personagens = (data && data.personagens) || [];
+    if (!personagens.length) {
+      box.style.display = '';
+      box.innerHTML =
+        '<div style="padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-md);' +
+        'background:rgba(0,0,0,0.02);font-size:13px;color:var(--muted);">' +
+        'Nenhum personagem agendado neste dia.</div>';
+      return;
+    }
+    var itens = personagens.map(function (p) {
+      var ev = (p.eventos && p.eventos.length)
+        ? ' <span style="color:var(--muted);font-weight:400;">— ' + esc(p.eventos.join(' · ')) + '</span>'
+        : '';
+      return '<li style="margin:2px 0;"><strong>' + esc(p.nome) + '</strong>' + ev + '</li>';
+    }).join('');
+    box.style.display = '';
+    box.innerHTML =
+      '<div style="padding:10px 12px;border:1px solid #f0c36d;border-radius:var(--r-md);' +
+      'background:rgba(240,195,109,0.14);font-size:13px;">' +
+      '<div style="font-weight:700;color:#92600a;margin-bottom:4px;">' +
+      '⚠️ Já na agenda neste dia — não vender em dobro</div>' +
+      '<ul style="margin:0;padding-left:18px;">' + itens + '</ul></div>';
+  }
+
+  function update() {
+    var v = (dateEl.value || '').trim();
+    if (!v) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    fetch('/orcamento/personagens-no-dia?date=' + encodeURIComponent(v), {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d) render(d); else { box.style.display = 'none'; } })
+      .catch(function () { box.style.display = 'none'; });
+  }
+
+  dateEl.addEventListener('change', update);
+  if (dateEl.value) update();  // data pré-preenchida (ex.: vindo de prefill)
+})();
+
 function toggleDebug() {
   const p = document.getElementById('debug-panel');
   p.style.display = p.style.display === 'none' || !p.style.display ? 'block' : 'none';
