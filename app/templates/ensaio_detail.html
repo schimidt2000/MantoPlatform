@@ -55,6 +55,36 @@
         Este ensaio não está vinculado a nenhum show na agenda (show removido ou cancelado).
       </p>
     {% endif %}
+
+    {% if show_ensaio %}
+      <div style="margin-top:14px; border-top:1px solid var(--line); padding-top:12px;">
+        <form method="post" action="/events/{{ event.id }}/link-parent"
+              style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+          <div style="flex:1; min-width:240px;">
+            <label class="form-label">{% if parent %}Trocar show vinculado{% else %}Vincular a um show{% endif %}</label>
+            <input type="text" id="show-filter" class="form-control" autocomplete="off"
+                   placeholder="Buscar show pelo nome..." oninput="filterShows()" style="margin-bottom:6px;">
+            <select name="parent_event_id" id="show-select" class="form-control" required>
+              <option value="">— selecione um show —</option>
+              {% for s in candidate_shows %}
+                <option value="{{ s.id }}">{{ s.title }}{% if s.start_at %} — {{ s.start_at.strftime('%d/%m/%Y') }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary">{% if parent %}Trocar{% else %}Vincular{% endif %}</button>
+        </form>
+      </div>
+      <script>
+      function filterShows() {
+        var q = document.getElementById('show-filter').value.toLowerCase();
+        var opts = document.getElementById('show-select').options;
+        for (var i = 0; i < opts.length; i++) {
+          if (!opts[i].value) continue;
+          opts[i].hidden = q !== '' && opts[i].text.toLowerCase().indexOf(q) === -1;
+        }
+      }
+      </script>
+    {% endif %}
   </div>
 
   {# ── Ações (equipe de ensaio / casting / admin) ──────────────── #}
