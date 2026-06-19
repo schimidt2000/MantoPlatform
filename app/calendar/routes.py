@@ -26,7 +26,7 @@ from .service import (
 from .. import db
 from app.constants import RoleName
 from app.money import parse_brl, parse_brl_int
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -615,7 +615,17 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             inv_file.save(os.path.join(current_app.config["UPLOAD_INVOICES"], fname))
             event.invoice_file = f"/uploads/invoices/{fname}"
 
-    _VALID_METHODS = {"avista", "pix_parcelado", "faturado", "cartao", "futuro"}
+    # Data prevista de emissão da NF (feature 065): só faz sentido com nota.
+    inv_due_raw = request.form.get("invoice_due_date", "").strip()
+    if event.with_invoice and inv_due_raw:
+        try:
+            event.invoice_due_date = date.fromisoformat(inv_due_raw)
+        except ValueError:
+            event.invoice_due_date = None
+    elif not event.with_invoice:
+        event.invoice_due_date = None
+
+    _VALID_METHODS = {"avista", "pix_parcelado", "faturado", "cartao", "futuro", "parcelado_datas"}
     pay_method = request.form.get("payment_method", "").strip()
     event.payment_method = pay_method if pay_method in _VALID_METHODS else None
     if pay_method == "pix_parcelado":
@@ -629,6 +639,22 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             event.payment_due_date = None
         if pay_method == "futuro" and not event.payment_due_date:
             flash("Pagamento futuro: informe a data combinada de pagamento.", "error")
+
+    # Cronograma de parcelas com data + valor (feature 065): recria as parcelas do evento.
+    if pay_method == "parcelado_datas":
+        EventInstallment.query.filter_by(event_id=event.id).delete()
+        _dates = request.form.getlist("parcela_date[]")
+        _amounts = request.form.getlist("parcela_amount[]")
+        for _i, _draw in enumerate(_dates):
+            _draw = (_draw or "").strip()
+            _amt = parse_brl(_amounts[_i]) if _i < len(_amounts) else None
+            if not _draw or _amt is None:
+                continue
+            try:
+                _d = date.fromisoformat(_draw)
+            except ValueError:
+                continue
+            db.session.add(EventInstallment(event_id=event.id, due_date=_d, amount=_amt))
 
     if any(r.name.upper() == RoleName.COMERCIAL for r in current_user.roles):
         if not event.seller_id:

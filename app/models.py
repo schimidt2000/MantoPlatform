@@ -240,8 +240,13 @@ class CalendarEvent(db.Model):
     acrescimo_value      = db.Column(db.Numeric(12, 2), nullable=True)  # acréscimo separado (R$)
     orcamento_history_id = db.Column(db.Integer, db.ForeignKey("orcamento_history.id"), nullable=True)
     invoice_file         = db.Column(db.String(255), nullable=True)   # filename em uploads/invoices/
+    invoice_due_date     = db.Column(db.Date, nullable=True)          # data prevista de emissão da NF (feature 065)
 
     roles = db.relationship("EventRole", backref="event", lazy=True, cascade="all, delete-orphan")
+    installments = db.relationship(
+        "EventInstallment", backref="event", lazy=True,
+        cascade="all, delete-orphan", order_by="EventInstallment.due_date",
+    )
     observations = db.relationship("EventObservation", backref="event", lazy=True,
                                    cascade="all, delete-orphan",
                                    order_by="EventObservation.created_at")
@@ -438,6 +443,25 @@ class EventPayment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     event = db.relationship("CalendarEvent", lazy=True)
+
+
+class EventInstallment(db.Model):
+    """Parcela de recebimento planejada de um evento (cronograma data + valor) — feature 065.
+
+    Distinta de EventPayment (comprovante de prova): aqui é o recebimento previsto, com data de
+    vencimento, valor e marcação de recebida (para a visão de fluxo de caixa do painel).
+    """
+    __tablename__ = "event_installments"
+    __table_args__ = (
+        db.Index("ix_event_installments_event_id", "event_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    due_date = db.Column(db.Date, nullable=True)
+    amount = db.Column(db.Numeric(12, 2), nullable=True)
+    received = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class EventObservation(db.Model):

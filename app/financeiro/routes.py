@@ -10,7 +10,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, abort,
 from flask_login import login_required, current_user
 
 from app import db
-from app.models import CalendarEvent, EventRole, EventPayment, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SpecialExpense
+from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SpecialExpense
 from app.constants import RoleName
 
 financeiro_bp = Blueprint("financeiro", __name__)
@@ -487,8 +487,49 @@ def dashboard():
         "custom": "Período personalizado",
     }.get(period, "Este mês")
 
+    # Recebimentos previstos (parcelas com vencimento no período, ainda não recebidas) — feature 065.
+    # Informativo (fluxo de caixa); NÃO altera a receita reconhecida (que segue pela data do evento).
+    _inst_rows = (
+        db.session.query(EventInstallment, CalendarEvent)
+        .join(CalendarEvent, EventInstallment.event_id == CalendarEvent.id)
+        .filter(
+            EventInstallment.due_date >= start_date,
+            EventInstallment.due_date <= end_date,
+            EventInstallment.received.is_(False),
+        )
+        .order_by(EventInstallment.due_date.asc())
+        .all()
+    )
+    recebimentos_previstos = [
+        {"date": inst.due_date, "event_id": ev.id, "event_title": ev.title, "amount": inst.amount or 0}
+        for inst, ev in _inst_rows
+    ]
+    recebimentos_previstos_total = sum(
+        (Decimal(r["amount"]) for r in recebimentos_previstos), Decimal("0")
+    )
+
+    # NF a emitir (eventos com data prevista de emissão no período) — feature 065.
+    _nf_events = (
+        CalendarEvent.query
+        .filter(
+            CalendarEvent.invoice_due_date >= start_date,
+            CalendarEvent.invoice_due_date <= end_date,
+        )
+        .order_by(CalendarEvent.invoice_due_date.asc())
+        .all()
+    )
+    nf_a_emitir = [
+        {"date": e.invoice_due_date, "event_id": e.id, "event_title": e.title, "amount": e.sale_value or 0}
+        for e in _nf_events
+    ]
+    nf_a_emitir_total = sum((Decimal(n["amount"]) for n in nf_a_emitir), Decimal("0"))
+
     return render_template(
         "financeiro/dashboard.html",
+        recebimentos_previstos=recebimentos_previstos,
+        recebimentos_previstos_total=recebimentos_previstos_total,
+        nf_a_emitir=nf_a_emitir,
+        nf_a_emitir_total=nf_a_emitir_total,
         # DRE (3 visões)
         drg_realizado=drg_realizado,
         drg_projetado=drg_projetado,
