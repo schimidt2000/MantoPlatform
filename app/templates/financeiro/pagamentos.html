@@ -304,11 +304,19 @@ function getChecked() {
   return Array.from(document.querySelectorAll('.row-check:checked'));
 }
 
+function fmtBRL(v) {
+  // Formato brasileiro: ponto no milhar, vírgula nos centavos. Ex.: 1500 -> "R$ 1.500,00".
+  return 'R$ ' + v.toFixed(2).replace('.', '#').replace(/\B(?=(\d{3})+(?!\d))/g, '.').replace('#', ',');
+}
+
 function updateBulkBar() {
   const checked = getChecked();
   if (checked.length > 0) {
     bulkBar.style.display = 'flex';
-    bulkCount.textContent = checked.length + ' selecionado' + (checked.length > 1 ? 's' : '');
+    let sum = 0;
+    checked.forEach(function(cb) { sum += parseFloat(cb.closest('tr').dataset.amount) || 0; });
+    bulkCount.textContent = checked.length + ' selecionado' + (checked.length > 1 ? 's' : '')
+      + ' · ' + fmtBRL(sum);
     document.querySelectorAll('.row-check').forEach(function(cb) {
       cb.closest('tr').classList.toggle('row-selected', cb.checked);
     });
@@ -366,8 +374,21 @@ if (selectAll) {
   });
 }
 
-document.querySelectorAll('.row-check').forEach(function(cb) {
+// Seleção estilo planilha/explorador: clique simples alterna 1; Shift seleciona o intervalo.
+const rowChecks = Array.from(document.querySelectorAll('.row-check'));
+let lastIndex = null;
+rowChecks.forEach(function(cb, i) {
   cb.addEventListener('change', updateBulkBar);
+  cb.addEventListener('click', function(e) {
+    if (e.shiftKey && lastIndex !== null) {
+      const lo = Math.min(lastIndex, i), hi = Math.max(lastIndex, i);
+      for (let j = lo; j <= hi; j++) {
+        if (isRowVisible(rowChecks[j])) rowChecks[j].checked = cb.checked;
+      }
+      updateBulkBar();
+    }
+    lastIndex = i;
+  });
 });
 
 // Botões de copiar
