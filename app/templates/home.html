@@ -266,6 +266,35 @@
                   </div>
                 </div>
               {% endfor %}
+
+              {# + Marcar outro ensaio para o mesmo show (feature 062) #}
+              <details style="margin-top:2px;">
+                <summary style="cursor:pointer; font-size:13px; color:var(--accent); font-weight:600; user-select:none;">
+                  + Marcar outro ensaio
+                </summary>
+                <form method="POST" action="/events/{{ ev.id }}/create-ensaio"
+                      style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; padding:12px 14px; border:1px solid var(--line); border-radius:var(--r-md); background:#fff;">
+                  <input type="hidden" name="redirect_to" value="home">
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:12px;">Data</label>
+                    <input type="date" name="ensaio_date" required style="width:140px;">
+                  </div>
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:12px;">Início</label>
+                    <input type="time" name="ensaio_start" required style="width:100px;">
+                  </div>
+                  <div class="form-group" style="margin-bottom:0;">
+                    <label style="font-size:12px;">Fim</label>
+                    <input type="time" name="ensaio_end" required style="width:100px;">
+                  </div>
+                  <div class="form-group" style="margin-bottom:0; flex:1; min-width:160px;">
+                    <label style="font-size:12px;">Observação</label>
+                    <input type="text" name="ensaio_desc" placeholder="(opcional)" style="width:100%;">
+                  </div>
+                  <button type="submit" class="btn btn-sm btn-primary">Criar</button>
+                </form>
+                <p class="meta" style="margin:6px 0 0;">Local padrão: Manto Produções (ajuste depois, se precisar).</p>
+              </details>
             </div>
           {% endfor %}
         {% endif %}

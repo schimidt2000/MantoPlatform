@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.title }}{% endblock %}
+
+{% block page_title %}{{ event.title }}{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+    <span class="badge badge-gold">🟧 Ensaio</span>
+    <span>
+      {% if event.start_at %}{{ event.start_at.strftime("%d/%m/%Y %H:%M") }}{% endif %}
+      {% if event.start_at and event.end_at %} &mdash; {{ event.end_at.strftime("%H:%M") }}{% endif %}
+      {% if event.location %}<span class="muted">&nbsp;&bull;&nbsp;{{ event.location }}</span>{% endif %}
+    </span>
+  </p>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:720px;">
+
+  {# ── Detalhes do ensaio ─────────────────────────────────────── #}
+  <div class="panel" style="margin-bottom:16px;">
+    <h2 style="margin:0 0 12px;">Detalhes do ensaio</h2>
+    <div style="display:grid; grid-template-columns:140px 1fr; gap:8px 16px; font-size:14px;">
+      <div class="muted">Data</div>
+      <div>{{ event.start_at.strftime("%d/%m/%Y") if event.start_at else "—" }}</div>
+      <div class="muted">Horário</div>
+      <div>
+        {% if event.start_at %}{{ event.start_at.strftime("%H:%M") }}{% else %}—{% endif %}
+        {% if event.end_at %} – {{ event.end_at.strftime("%H:%M") }}{% endif %}
+      </div>
+      <div class="muted">Local</div>
+      <div>{{ event.location or "—" }}</div>
+      <div class="muted">Descrição</div>
+      <div>{{ event.description or "—" }}</div>
+    </div>
+  </div>
+
+  {# ── Show de origem ──────────────────────────────────────────── #}
+  <div class="panel" style="margin-bottom:16px;">
+    <h2 style="margin:0 0 12px;">Show de origem</h2>
+    {% if parent %}
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:600;">{{ parent.title }}</div>
+          <div class="muted" style="font-size:13px;">
+            {% if parent.start_at %}{{ parent.start_at.strftime("%d/%m/%Y %H:%M") }}{% endif %}
+            {% if parent.location %} · {{ parent.location }}{% endif %}
+          </div>
+        </div>
+        <a href="/events/{{ parent.id }}" class="btn btn-sm btn-secondary" style="margin-left:auto;">Abrir show</a>
+      </div>
+    {% else %}
+      <p class="muted" style="margin:0;">
+        Este ensaio não está vinculado a nenhum show na agenda (show removido ou cancelado).
+      </p>
+    {% endif %}
+  </div>
+
+  {# ── Ações (equipe de ensaio / casting / admin) ──────────────── #}
+  {% if show_ensaio %}
+  <div class="panel" style="margin-bottom:16px;">
+    <h2 style="margin:0 0 12px;">Ações</h2>
+
+    <details style="margin-bottom:12px;">
+      <summary style="cursor:pointer; font-weight:600; user-select:none;">&#128197; Editar ensaio</summary>
+      <form method="post" action="/events/{{ event.id }}/edit-ensaio"
+            style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; margin-top:12px;">
+        <input type="hidden" name="redirect_to" value="ensaio">
+        <div>
+          <label class="form-label">Data</label>
+          <input type="date" name="ensaio_date" required class="form-control" style="width:150px;"
+                 value="{{ event.start_at.strftime('%Y-%m-%d') if event.start_at else '' }}">
+        </div>
+        <div>
+          <label class="form-label">Início</label>
+          <input type="time" name="ensaio_start" required class="form-control" style="width:110px;"
+                 value="{{ event.start_at.strftime('%H:%M') if event.start_at else '' }}">
+        </div>
+        <div>
+          <label class="form-label">Fim</label>
+          <input type="time" name="ensaio_end" required class="form-control" style="width:110px;"
+                 value="{{ event.end_at.strftime('%H:%M') if event.end_at else '' }}">
+        </div>
+        <div style="flex:1; min-width:180px;">
+          <label class="form-label">Descrição (opcional)</label>
+          <input type="text" name="ensaio_desc" class="form-control"
+                 value="{{ event.description or '' }}" placeholder="ex: Ensaio geral com figurino">
+        </div>
+        <div style="width:100%;">
+          <label class="form-label">Local (opcional — deixe em branco para manter)</label>
+          <input type="text" name="ensaio_location" class="form-control" style="max-width:420px;"
+                 value="{{ event.location or '' }}" placeholder="Endereço do ensaio">
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:8px;">Salvar</button>
+      </form>
+    </details>
+
+    <form method="post" action="/events/{{ event.id }}/delete-ensaio" style="margin:0;"
+          onsubmit="return confirm('Cancelar este ensaio? Esta ação remove o ensaio do sistema e da agenda.{% if parent %} O show não é afetado.{% endif %}');">
+      <button type="submit" class="btn btn-secondary" style="color:#b91c1c;">Cancelar ensaio</button>
+    </form>
+  </div>
+  {% endif %}
+
+  {# ── Histórico ───────────────────────────────────────────────── #}
+  {% if logs %}
+  <details class="panel">
+    <summary style="cursor:pointer; font-weight:600; user-select:none;">Histórico</summary>
+    <div style="margin-top:10px; font-size:13px;">
+      {% for log in logs %}
+        <div style="padding:6px 0; border-bottom:1px solid var(--line);">
+          <span class="muted">{{ log.ts }}</span> ·
+          <strong>{{ log.actor_name }}</strong> — {{ log.message }}
+        </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+
+</div>
+{% endblock %}
