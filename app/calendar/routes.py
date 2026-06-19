@@ -1146,12 +1146,21 @@ def event_detail(event_id: int):
         can_manage_ensaio = current_user.is_authenticated and any(
             r.name.upper() in _CAN_ENSAIO for r in current_user.roles
         )
+        candidate_shows = []
+        if can_manage_ensaio:
+            candidate_shows = (
+                CalendarEvent.query
+                .filter(~CalendarEvent.title.like("🟧 ENSAIO%"), CalendarEvent.id != event.id)
+                .order_by(CalendarEvent.start_at.desc())
+                .all()
+            )
         return render_template(
             "ensaio_detail.html",
             event=event,
             parent=event.parent,
             logs=logs,
             show_ensaio=can_manage_ensaio,
+            candidate_shows=candidate_shows,
             settings=SiteSetting.query.get(1),
         )
 
@@ -1899,6 +1908,39 @@ def delete_ensaio(ensaio_id: int):
     if parent_id:
         return redirect(url_for("calendar.event_detail", event_id=parent_id))
     return redirect(url_for("home"))
+
+
+@calendar_bp.route("/events/<int:ensaio_id>/link-parent", methods=["POST"])
+@login_required
+def link_ensaio_parent(ensaio_id: int):
+    """Vincula um ensaio existente a um evento pai (show) — feature 063."""
+    ensaio = CalendarEvent.query.get_or_404(ensaio_id)
+
+    if ensaio.event_type != "ENSAIO":
+        abort(400)
+    if not any(r.name.upper() in _CAN_ENSAIO for r in current_user.roles):
+        abort(403)
+
+    raw = request.form.get("parent_event_id", "").strip()
+    if not raw.isdigit():
+        flash("Selecione um show para vincular o ensaio.", "error")
+        return redirect(url_for("calendar.event_detail", event_id=ensaio.id))
+
+    parent = CalendarEvent.query.get(int(raw))
+    if parent is None or parent.event_type == "ENSAIO" or parent.id == ensaio.id:
+        flash("Show inválido para vínculo.", "error")
+        return redirect(url_for("calendar.event_detail", event_id=ensaio.id))
+
+    ensaio.parent_event_id = parent.id
+    db.session.add(EventLog(
+        event_id=ensaio.id,
+        actor_name=current_user.name,
+        actor_role="Ensaio",
+        message=f"Vinculou o ensaio ao show: {parent.title}",
+    ))
+    db.session.commit()
+    flash(f'Ensaio vinculado a "{parent.title}".', "success")
+    return redirect(url_for("calendar.event_detail", event_id=ensaio.id))
 
 
 # ─── CRIAR EVENTO (COMERCIAL) ─────────────────────────────────────────────────
