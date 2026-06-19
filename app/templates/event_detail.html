@@ -250,7 +250,7 @@
 
 <details class="panel" style="margin-bottom:16px;">
   <summary style="padding:12px 20px; cursor:pointer; font-weight:600; user-select:none;">
-    &#128197; Marcar Ensaio
+    &#128197; Marcar {% if event.ensaios %}outro {% endif %}ensaio
   </summary>
   <div style="padding:0 20px 16px;">
     <form method="post" action="/events/{{ event.id }}/create-ensaio"

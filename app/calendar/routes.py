@@ -1141,6 +1141,20 @@ def event_detail(event_id: int):
             handler(event, tz_sp)
         return redirect(url_for("calendar.event_detail", event_id=eid))
 
+    # Ensaio: página simplificada dedicada (feature 062) — não carrega os painéis de show.
+    if event.event_type == "ENSAIO":
+        can_manage_ensaio = current_user.is_authenticated and any(
+            r.name.upper() in _CAN_ENSAIO for r in current_user.roles
+        )
+        return render_template(
+            "ensaio_detail.html",
+            event=event,
+            parent=event.parent,
+            logs=logs,
+            show_ensaio=can_manage_ensaio,
+            settings=SiteSetting.query.get(1),
+        )
+
     talents = Talent.query.filter_by(status="active").order_by(Talent.full_name.asc()).all()
     contracts = EventContract.query.filter_by(event_id=event.id).order_by(EventContract.created_at.desc()).all()
     payments = EventPayment.query.filter_by(event_id=event.id).order_by(EventPayment.created_at.desc()).all()
@@ -1733,6 +1747,10 @@ def create_ensaio(event_id: int):
     desc          = request.form.get("ensaio_desc", "").strip()
     location_type = request.form.get("ensaio_location_type", "manto")
     custom_loc    = request.form.get("ensaio_location", "").strip()
+    redirect_to   = request.form.get("redirect_to", "event")
+
+    # Destino pós-ação (sucesso ou erro): home (quando veio da home) ou página do show.
+    back = url_for("home") if redirect_to == "home" else url_for("calendar.event_detail", event_id=event_id)
 
     if location_type == "outro" and custom_loc:
         ensaio_loc = custom_loc
@@ -1760,7 +1778,7 @@ def create_ensaio(event_id: int):
 
     if errors:
         flash(" ".join(errors), "error")
-        return redirect(url_for("calendar.event_detail", event_id=event_id))
+        return redirect(back)
 
     title = f"🟧 ENSAIO — {event.title}"
     try:
@@ -1781,7 +1799,7 @@ def create_ensaio(event_id: int):
     except RuntimeError as exc:
         flash(str(exc), "error")
 
-    return redirect(url_for("calendar.event_detail", event_id=event_id))
+    return redirect(back)
 
 
 @calendar_bp.route("/events/<int:ensaio_id>/edit-ensaio", methods=["POST"])
@@ -1847,6 +1865,8 @@ def edit_ensaio(ensaio_id: int):
 
         flash("Ensaio atualizado com sucesso!", "success")
 
+    if redirect_to == "ensaio":
+        return redirect(url_for("calendar.event_detail", event_id=ensaio.id))
     if redirect_to == "event" and ensaio.parent_event_id:
         return redirect(url_for("calendar.event_detail", event_id=ensaio.parent_event_id))
     return redirect(url_for("home"))
