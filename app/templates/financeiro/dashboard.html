@@ -289,6 +289,44 @@
 
 </div>
 
+{# ══ ROW — RECEBIMENTOS PREVISTOS & NF A EMITIR (feature 065) ═══════════════ #}
+<div style="margin-top:20px; display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+  <div class="panel">
+    <div class="fin-section-title" style="margin-top:0;">📥 Recebimentos previstos
+      <span class="muted" style="font-weight:400; font-size:13px;">({{ money(recebimentos_previstos_total) }})</span>
+    </div>
+    {% if recebimentos_previstos %}
+      <div class="audit-list">
+        {% for r in recebimentos_previstos %}
+        <a href="{{ url_for('calendar.event_detail', event_id=r.event_id) }}" class="audit-item">
+          <span class="audit-title">{{ r.event_title }}</span>
+          <span class="audit-date">{{ r.date.strftime('%d/%m/%Y') if r.date else '—' }} · {{ money(r.amount) }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Nenhuma parcela prevista no período.</p>
+    {% endif %}
+  </div>
+  <div class="panel">
+    <div class="fin-section-title" style="margin-top:0;">🧾 NF a emitir
+      <span class="muted" style="font-weight:400; font-size:13px;">({{ money(nf_a_emitir_total) }})</span>
+    </div>
+    {% if nf_a_emitir %}
+      <div class="audit-list">
+        {% for n in nf_a_emitir %}
+        <a href="{{ url_for('calendar.event_detail', event_id=n.event_id) }}" class="audit-item">
+          <span class="audit-title">{{ n.event_title }}</span>
+          <span class="audit-date">{{ n.date.strftime('%d/%m/%Y') if n.date else '—' }} · {{ money(n.amount) }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Nenhuma nota a emitir no período.</p>
+    {% endif %}
+  </div>
+</div>
+
 {# ══ ROW 4 — TABELA DE EVENTOS ══════════════════════════════════════════════ #}
 <div class="panel" style="margin-top:20px;">
   <div class="fin-section-title" style="margin-top:0;">📋 Eventos no Período</div>

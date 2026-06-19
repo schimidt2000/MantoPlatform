@@ -1414,6 +1414,12 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
         Nota fiscal solicitada
       </label>
       <div id="nf-file-area" style="margin-top: 8px;{% if not event.with_invoice %} display: none;{% endif %}">
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>Data prevista de emissão da NF</label>
+          <input type="date" name="invoice_due_date" style="width:160px;"
+                 value="{{ event.invoice_due_date.strftime('%Y-%m-%d') if event.invoice_due_date else '' }}">
+          <p class="meta" style="margin-top:4px;">Opcional — aparece em "NF a emitir" no painel financeiro.</p>
+        </div>
         {% if event.invoice_file %}
           <div style="margin-bottom: 6px;">
             <a href="{{ event.invoice_file }}" target="_blank" class="btn btn-sm btn-secondary">Ver NF atual</a>
@@ -1448,6 +1454,8 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
               data-method="cartao" onclick="setDetailPayMethod('cartao')">Cartão de Crédito</button>
       <button type="button" class="com-pay-btn{% if event.payment_method == 'futuro' %} active{% endif %}"
               data-method="futuro" onclick="setDetailPayMethod('futuro')">Pagamento futuro</button>
+      <button type="button" class="com-pay-btn{% if event.payment_method == 'parcelado_datas' %} active{% endif %}"
+              data-method="parcelado_datas" onclick="setDetailPayMethod('parcelado_datas')">Parcelado (datas)</button>
     </div>
     <div id="detail-extra-pix_parcelado"
          style="margin-bottom: 12px;{% if event.payment_method != 'pix_parcelado' %} display: none;{% endif %}">
@@ -1468,6 +1476,25 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
           Obrigatória — gera lembrete de cobrança na home do comercial.
         </p>
       </div>
+    </div>
+    <div id="detail-extra-parcelado_datas"
+         style="margin-bottom:12px;{% if event.payment_method != 'parcelado_datas' %} display:none;{% endif %}">
+      <label class="form-label">Parcelas (data de vencimento + valor)</label>
+      <div id="parcelas-list">
+        {% for inst in event.installments %}
+          <div class="parcela-row" style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+            <input type="date" name="parcela_date[]" style="width:160px;"
+                   value="{{ inst.due_date.strftime('%Y-%m-%d') if inst.due_date else '' }}">
+            <input type="text" inputmode="decimal" class="brl-input parcela-amount" name="parcela_amount[]"
+                   placeholder="0,00" style="width:140px;"
+                   value="{{ inst.amount | brl if inst.amount is not none else '' }}">
+            <button type="button" class="btn btn-sm btn-secondary" style="color:#b91c1c;"
+                    onclick="removeParcela(this)">✕</button>
+          </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="btn btn-sm btn-secondary" onclick="addParcela()">+ Adicionar parcela</button>
+      <p class="meta" id="parcelas-soma" style="margin-top:6px;"></p>
     </div>
 
     <div class="form-group" style="margin-top:8px; margin-bottom:16px;">
@@ -2088,7 +2115,60 @@ function setDetailPayMethod(method) {
   if (dueHint) dueHint.style.display = method === 'futuro' ? '' : 'none';
   const dueInput = document.getElementById('pay-due-date');
   if (dueInput) dueInput.required = method === 'futuro';
+  const parcEl = document.getElementById('detail-extra-parcelado_datas');
+  if (parcEl) parcEl.style.display = method === 'parcelado_datas' ? '' : 'none';
 }
+
+// ── Parcelas com data + valor (feature 065) ───────────────────────
+const _saleValueNum = {{ (event.sale_value | float) if event.sale_value is not none else 0 }};
+
+function addParcela(d, amount) {
+  const list = document.getElementById('parcelas-list');
+  if (!list) return;
+  const row = document.createElement('div');
+  row.className = 'parcela-row';
+  row.style.cssText = 'display:flex; gap:8px; align-items:center; margin-bottom:6px;';
+  row.innerHTML =
+    '<input type="date" name="parcela_date[]" style="width:160px;" value="' + (d || '') + '">' +
+    '<input type="text" inputmode="decimal" class="brl-input parcela-amount" name="parcela_amount[]" ' +
+    'placeholder="0,00" style="width:140px;" value="' + (amount || '') + '">' +
+    '<button type="button" class="btn btn-sm btn-secondary" style="color:#b91c1c;" onclick="removeParcela(this)">✕</button>';
+  list.appendChild(row);
+  if (window.MoneyMask) MoneyMask.init(row);
+  recompParcelas();
+}
+
+function removeParcela(btn) {
+  const row = btn.closest('.parcela-row');
+  if (row) row.remove();
+  recompParcelas();
+}
+
+function recompParcelas() {
+  const el = document.getElementById('parcelas-soma');
+  if (!el) return;
+  let sum = 0;
+  document.querySelectorAll('#parcelas-list .parcela-amount').forEach(function (inp) {
+    sum += window.MoneyMask ? MoneyMask.parseNumber(inp) : (parseFloat(inp.value) || 0);
+  });
+  const somaTxt = (window.MoneyMask ? MoneyMask.format(Math.round(sum * 100)) : sum.toFixed(2));
+  let msg = 'Soma das parcelas: R$ ' + somaTxt;
+  if (_saleValueNum > 0 && Math.abs(sum - _saleValueNum) > 0.01) {
+    el.style.color = '#b45309';
+    msg += ' ⚠️ difere do valor de venda';
+  } else {
+    el.style.color = 'var(--muted)';
+  }
+  el.textContent = msg;
+}
+
+(function () {
+  const list = document.getElementById('parcelas-list');
+  if (list) {
+    list.addEventListener('input', recompParcelas);
+    recompParcelas();
+  }
+})();
 
 // ── WhatsApp invite ────────────────────────────────────────────
 const _evTitle     = {{ event.title | tojson }};
