@@ -666,9 +666,26 @@ def edit_talent(talent_id: int):
     if not _can_edit_talent():
         abort(403)
     talent = Talent.query.get_or_404(talent_id)
+    is_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
 
     if request.method == "POST":
         f = request.form
+
+        # CPF editável apenas por super admin (feature 066). Valida antes de mutar os demais campos.
+        cpf_changed = False
+        if is_superadmin:
+            from app.talents.importer import only_digits
+            cpf_raw = only_digits(f.get("cpf", ""))
+            if cpf_raw and cpf_raw != talent.cpf:
+                if len(cpf_raw) != 11:
+                    flash("CPF inválido: informe 11 dígitos.", "error")
+                    return render_template("talent_edit.html", talent=talent, is_superadmin=is_superadmin)
+                if Talent.query.filter(Talent.cpf == cpf_raw, Talent.id != talent.id).first():
+                    flash("CPF já cadastrado para outro talento.", "error")
+                    return render_template("talent_edit.html", talent=talent, is_superadmin=is_superadmin)
+                talent.cpf = cpf_raw
+                cpf_changed = True
+
         talent.full_name            = f.get("full_name", "").strip() or talent.full_name
         talent.artistic_name        = f.get("artistic_name", "").strip() or None
         talent.phone                = f.get("phone", "").strip() or None
@@ -707,12 +724,13 @@ def edit_talent(talent_id: int):
         talent.cnh_expiration = parse_date(f.get("cnh_expiration", ""))
 
         from app.utils import audit
-        audit("edit", "talent", talent.id, talent.full_name, "Perfil editado")
+        audit("edit", "talent", talent.id, talent.full_name,
+              "Perfil editado" + ("; CPF alterado" if cpf_changed else ""))
         db.session.commit()
         flash("Talento atualizado com sucesso.", "success")
         return redirect(url_for("talents.talent_detail", talent_id=talent.id))
 
-    return render_template("talent_edit.html", talent=talent)
+    return render_template("talent_edit.html", talent=talent, is_superadmin=is_superadmin)
 
 
 @talents_bp.route("/talents/character-suggestions")
