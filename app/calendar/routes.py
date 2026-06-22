@@ -45,6 +45,32 @@ SOUND_TECH_TALENT_ID: int = 42
 # não do casting.
 PRESENCE_CHARACTER: str = "Técnico de Som (Presença)"
 
+
+def _build_start_end(d: date, start_str: str, end_str: str) -> tuple[datetime, datetime]:
+    """Combina data + horários de início/fim em datetimes.
+
+    Se o horário de fim for **menor** que o de início, o evento cruza a meia-noite: o fim é
+    interpretado como sendo no **dia seguinte** (feature 071). Fim igual ao início mantém a mesma
+    data (duração zero — o chamador valida e rejeita).
+
+    Args:
+        d: Data de início do evento.
+        start_str: Horário de início no formato ``HH:MM``.
+        end_str: Horário de fim no formato ``HH:MM``.
+
+    Returns:
+        Tupla ``(start, end)`` de ``datetime``.
+
+    Raises:
+        ValueError: Se algum horário não estiver em ``HH:MM``.
+    """
+    st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time())
+    et = datetime.combine(d, datetime.strptime(end_str, "%H:%M").time())
+    if et < st:
+        et += timedelta(days=1)
+    return st, et
+
+
 def _mark_month_synced(ym: str) -> None:
     settings = SiteSetting.query.get(1)
     if not settings:
@@ -1861,13 +1887,12 @@ def create_ensaio(event_id: int):
     st = et = None
     if d:
         try:
-            st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time())
-            et = datetime.combine(d, datetime.strptime(end_str,   "%H:%M").time())
+            st, et = _build_start_end(d, start_str, end_str)
         except ValueError:
             errors.append("Horário inválido (use HH:MM).")
 
-    if st and et and et <= st:
-        errors.append("Horário de fim deve ser após o início.")
+    if st and et and et == st:
+        errors.append("Horário de fim deve ser diferente do início.")
 
     if errors:
         flash(" ".join(errors), "error")
@@ -1924,13 +1949,12 @@ def edit_ensaio(ensaio_id: int):
     st = et = None
     if d:
         try:
-            st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time())
-            et = datetime.combine(d, datetime.strptime(end_str,   "%H:%M").time())
+            st, et = _build_start_end(d, start_str, end_str)
         except ValueError:
             errors.append("Horário inválido (use HH:MM).")
 
-    if st and et and et <= st:
-        errors.append("Horário de fim deve ser após o início.")
+    if st and et and et == st:
+        errors.append("Horário de fim deve ser diferente do início.")
 
     if errors:
         flash(" ".join(errors), "error")
@@ -2321,13 +2345,12 @@ def create_event():
 
     if d and start_str and end_str:
         try:
-            st = datetime.combine(d, datetime.strptime(start_str, "%H:%M").time())
-            et = datetime.combine(d, datetime.strptime(end_str,   "%H:%M").time())
+            st, et = _build_start_end(d, start_str, end_str)
         except ValueError:
             errors.append("Horário inválido (use HH:MM).")
 
-    if st and et and et <= st:
-        errors.append("Horário de fim deve ser após o início.")
+    if st and et and et == st:
+        errors.append("Horário de fim deve ser diferente do início.")
 
     # Valor antes do desconto obrigatório (> 0) — base para relatório de desconto.
     if (parse_brl(sale_value_gross_raw) or 0) <= 0:
