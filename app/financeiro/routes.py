@@ -990,7 +990,22 @@ def salary_advance(sp_id: int):
 
     proof = request.files.get("advance_proof")
     has_new = bool(proof and proof.filename)
-    if adv > 0 and not has_new and not sp.advance_proof:
+
+    # Adiantamento zero/vazio: remover (se havia) ou avisar que nada foi informado.
+    if adv == 0:
+        if sp.advance_amount:
+            sp.advance_amount = None
+            sp.advance_proof = None
+            audit("payment", "salary_payment", sp.id, sp.user.name if sp.user else "—",
+                  "Adiantamento removido")
+            db.session.commit()
+            flash("Adiantamento removido.", "success")
+        else:
+            flash("Informe o valor do adiantamento.", "error")
+        return back
+
+    # adv > 0: comprovante obrigatório (novo upload ou já existente).
+    if not has_new and not sp.advance_proof:
         flash("Anexe o comprovante do adiantamento.", "error")
         return back
 
@@ -1005,11 +1020,11 @@ def salary_advance(sp_id: int):
         proof.save(os.path.join(current_app.config["UPLOAD_PAYMENTS"], fname))
         sp.advance_proof = f"/uploads/payments/{fname}"
 
-    sp.advance_amount = None if adv == 0 else adv
+    sp.advance_amount = adv
     audit("payment", "salary_payment", sp.id, sp.user.name if sp.user else "—",
           f"Adiantamento de salário: R$ {adv}")
     db.session.commit()
-    flash("Adiantamento salvo.", "success")
+    flash(f"Adiantamento de R$ {adv} salvo. Valor a pagar atualizado.", "success")
     return back
 
 
