@@ -635,6 +635,10 @@ class SalaryPayment(db.Model):
     notes             = db.Column(db.Text, nullable=True)
     month_ref         = db.Column(db.String(7), nullable=False)  # YYYY-MM
     created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Adiantamento (feature 067): valor já pago antecipadamente + comprovante. Reduz o valor a
+    # pagar (líquido = amount − advance_amount); NÃO reduz o custo de salário do balanço.
+    advance_amount    = db.Column(db.Numeric(12, 2), nullable=True)
+    advance_proof     = db.Column(db.String(300), nullable=True)
 
     user           = db.relationship("User", backref=db.backref("salary_payments", lazy="dynamic"))
     salary_history = db.relationship("SalaryHistory", lazy=True)
