@@ -2374,6 +2374,18 @@ document.querySelectorAll('.wa-copy-btn').forEach(function(btn) {
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
         <input type="checkbox" id="ee-doc"> Link documento
       </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="ee-top"> Top
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="ee-bottom"> Bottom
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="ee-shoe"> Calçado
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="ee-height"> Altura
+      </label>
     </div>
     <textarea id="ee-text" readonly rows="8"
               style="width:100%; font-size:12px; font-family:monospace;
@@ -2399,6 +2411,10 @@ const _ELENCO = [
     cpf:        {{ (r.talent.cpf or '') | tojson }},
     rg:         {{ (r.talent.rg or '') | tojson }},
     doc:        {{ (r.talent.doc_photo_path or '') | tojson }},
+    top:        {{ (r.talent.clothing_size_top or '') | tojson }},
+    bottom:     {{ (r.talent.clothing_size_bottom or '') | tojson }},
+    shoe:       {{ (r.talent.shoe_size or '') | tojson }},
+    height:     {{ (r.talent.height_cm if r.talent and r.talent.height_cm else '') | tojson }},
   },
   {% endfor %}
 ];
@@ -2409,6 +2425,10 @@ function generateElenco() {
   const wCpf        = document.getElementById('ee-cpf').checked;
   const wRg         = document.getElementById('ee-rg').checked;
   const wDoc        = document.getElementById('ee-doc').checked;
+  const wTop        = document.getElementById('ee-top').checked;
+  const wBottom     = document.getElementById('ee-bottom').checked;
+  const wShoe       = document.getElementById('ee-shoe').checked;
+  const wHeight     = document.getElementById('ee-height').checked;
   const lines = _ELENCO.map(r => {
     const parts = [];
     if (wPersonagem && r.personagem) parts.push(r.personagem);
@@ -2417,6 +2437,10 @@ function generateElenco() {
     if (wCpf && r.cpf)               parts.push('CPF: ' + r.cpf);
     if (wRg && r.rg)                 parts.push('RG: ' + r.rg);
     if (wDoc && r.doc)               parts.push('Doc: ' + window.location.origin + r.doc);
+    if (wTop && r.top)               parts.push('Top: ' + r.top);
+    if (wBottom && r.bottom)         parts.push('Bottom: ' + r.bottom);
+    if (wShoe && r.shoe)             parts.push('Calçado: ' + r.shoe);
+    if (wHeight && r.height)         parts.push('Altura: ' + r.height + 'cm');
     return parts.join(' | ');
   }).filter(l => l);
   document.getElementById('ee-text').value = lines.join('\n\n');
