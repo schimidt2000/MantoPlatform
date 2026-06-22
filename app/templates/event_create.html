@@ -137,12 +137,16 @@
     <div class="form-group" style="margin:0;">
       <label>Início <span style="color:var(--red);">*</span></label>
       <input type="time" name="event_start" id="event-start" required style="width:110px;"
-             value="{{ old.get('event_start') or prefill.start_time or '' }}">
+             value="{{ old.get('event_start') or prefill.start_time or '' }}"
+             oninput="checkOvernight()">
     </div>
     <div class="form-group" style="margin:0;">
       <label>Fim <span style="color:var(--red);">*</span></label>
       <input type="time" name="event_end" id="event-end" required style="width:110px;"
-             value="{{ old.get('event_end') or '' }}">
+             value="{{ old.get('event_end') or '' }}"
+             oninput="checkOvernight()">
+      <span id="overnight-hint" style="display:none; font-size:11px; color:var(--accent, #d97706);
+            margin-top:4px;">↪ termina no dia seguinte</span>
     </div>
     <div class="form-group" style="margin:0;">
       <label>Tipo</label>
@@ -557,6 +561,16 @@ document.getElementById('event-title').addEventListener('input', function() {
 
 function onTypeChange() { autoTitle(); }
 
+// Mostra o aviso de que o evento vira a noite (fim < início → termina no dia seguinte).
+function checkOvernight() {
+  const s = document.getElementById('event-start');
+  const e = document.getElementById('event-end');
+  const hint = document.getElementById('overnight-hint');
+  if (!s || !e || !hint) return;
+  hint.style.display = (s.value && e.value && e.value < s.value) ? 'block' : 'none';
+}
+document.addEventListener('DOMContentLoaded', checkOvernight);
+
 // ── Personagens ──────────────────────────────────────────────────────────────
 function buildCharRow(idx, label, makeup, singer, roleType, sheetId) {
   const row = document.createElement('div');
@@ -865,7 +879,9 @@ function escHtml(s) {
     if (dateEl  && !dateEl.value.trim())  invalid.push(dateEl);
     if (startEl && !startEl.value) invalid.push(startEl);
     if (endEl   && !endEl.value)   invalid.push(endEl);
-    if (startEl && endEl && startEl.value && endEl.value && endEl.value <= startEl.value)
+    // Fim < início é permitido (evento vira a noite, termina no dia seguinte).
+    // Só bloqueia quando início == fim (duração zero).
+    if (startEl && endEl && startEl.value && endEl.value && endEl.value === startEl.value)
       invalid.push(endEl);
     // Valor antes do desconto obrigatório (> 0)
     if (grossEl && (!grossEl.value.trim() || parseBRL(grossEl.value) <= 0)) invalid.push(grossEl);
