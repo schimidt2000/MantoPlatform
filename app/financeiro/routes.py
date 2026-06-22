@@ -638,9 +638,12 @@ def _ensure_salary_payments(year: int, month: int) -> None:
     # Recompõe os lançamentos NÃO pagos do mês a partir do salário vigente:
     # apaga os não pagos (serão recriados com o valor/frequência atuais) e preserva os
     # já pagos / "no banco" (histórico real do que foi efetivamente pago).
+    # IMPORTANTE (feature 068): também preserva os que têm adiantamento lançado
+    # (advance_amount), senão a regeneração apagaria o adiantamento salvo ao recarregar a tela.
     SalaryPayment.query.filter(
         SalaryPayment.month_ref == month_ref,
         SalaryPayment.payment_status == "nao_pago",
+        SalaryPayment.advance_amount.is_(None),
     ).delete(synchronize_session="fetch")
 
     active_histories = SalaryHistory.query.filter(
