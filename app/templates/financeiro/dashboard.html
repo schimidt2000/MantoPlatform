@@ -309,22 +309,75 @@
     {% endif %}
   </div>
   <div class="panel">
-    <div class="fin-section-title" style="margin-top:0;">🧾 NF a emitir
-      <span class="muted" style="font-weight:400; font-size:13px;">({{ money(nf_a_emitir_total) }})</span>
+    <div class="fin-section-title" style="margin-top:0;">🧾 Notas a emitir
+      <span class="muted" style="font-weight:400; font-size:13px;">({{ nf_a_emitir|length }} · {{ money(nf_a_emitir_total) }})</span>
     </div>
     {% if nf_a_emitir %}
       <div class="audit-list">
         {% for n in nf_a_emitir %}
-        <a href="{{ url_for('calendar.event_detail', event_id=n.event_id) }}" class="audit-item">
-          <span class="audit-title">{{ n.event_title }}</span>
-          <span class="audit-date">{{ n.date.strftime('%d/%m/%Y') if n.date else '—' }} · {{ money(n.amount) }}</span>
-        </a>
+        <div class="audit-item" style="display:block;">
+          <div style="display:flex;justify-content:space-between;gap:8px;">
+            <a href="{{ url_for('calendar.event_detail', event_id=n.event_id) }}" class="audit-title">{{ n.event_title }}</a>
+            <span class="audit-date">{{ n.date.strftime('%d/%m/%Y') if n.date else 'sem data' }} · {{ money(n.amount) }}</span>
+          </div>
+          <form method="POST" action="{{ url_for('financeiro.nf_emitir', invoice_id=n.id) }}"
+                enctype="multipart/form-data"
+                style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <input type="file" name="nf_file" accept=".pdf,.xml,.png,.jpg,.jpeg" style="font-size:12px;">
+            <button type="submit" class="btn btn-sm btn-primary">Marcar emitida</button>
+          </form>
+        </div>
         {% endfor %}
       </div>
     {% else %}
-      <p class="muted">Nenhuma nota a emitir no período.</p>
+      <p class="muted">Nenhuma nota pendente de emissão ✓</p>
     {% endif %}
   </div>
+</div>
+
+{# ══ ROW — CUSTO DE NOTAS FISCAIS (por mês de emissão) — feature 069 ════════ #}
+<div class="panel" style="margin-top:20px;">
+  <div class="fin-section-title" style="margin-top:0;">🧾 Custo de Notas Fiscais no período
+    <span class="muted" style="font-weight:400; font-size:13px;">(emitidas/previstas neste período · {{ money(custo_nota_total) }})</span>
+  </div>
+  <p class="muted" style="margin-top:-4px;">
+    16% de cada nota com data de emissão no período selecionado. Reconhecido pelo mês da emissão
+    (visão de caixa); o balanço/DRE continua por data do evento.
+  </p>
+  {% if custo_nota_itens %}
+  <div class="table-wrap table-flush">
+    <table class="fin-table">
+      <thead>
+        <tr>
+          <th>Emissão</th>
+          <th>Evento</th>
+          <th>Status</th>
+          <th class="text-right">Valor da nota</th>
+          <th class="text-right">Custo (16%)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in custo_nota_itens %}
+        <tr>
+          <td>{{ i.date.strftime('%d/%m/%Y') if i.date else '—' }}</td>
+          <td><a href="{{ url_for('calendar.event_detail', event_id=i.event_id) }}">{{ i.event_title }}</a></td>
+          <td>{% if i.status == 'emitida' %}✓ emitida{% else %}a emitir{% endif %}</td>
+          <td class="text-right">{{ money(i.amount) }}</td>
+          <td class="text-right">{{ money(i.custo) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="4" class="text-right">Total de custo de nota</th>
+          <th class="text-right">{{ money(custo_nota_total) }}</th>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Nenhuma nota com emissão no período.</p>
+  {% endif %}
 </div>
 
 {# ══ ROW 4 — TABELA DE EVENTOS ══════════════════════════════════════════════ #}

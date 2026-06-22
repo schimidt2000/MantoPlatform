@@ -26,7 +26,7 @@ from .service import (
 from .. import db
 from app.constants import RoleName
 from app.money import parse_brl, parse_brl_int
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -585,6 +585,28 @@ def _handle_add_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     flash("Contrato enviado.", "success")
 
 
+def _save_nf_file(file_storage) -> str | None:
+    """Salva o arquivo de uma nota fiscal em UPLOAD_INVOICES.
+
+    Args:
+        file_storage: o ``FileStorage`` recebido do form (ou None).
+
+    Returns:
+        O caminho público do arquivo (``/uploads/invoices/<nome>``) ou None se não houve
+        upload válido (sem arquivo ou acima de 10 MB).
+    """
+    if not file_storage or not file_storage.filename:
+        return None
+    file_storage.stream.seek(0, 2)
+    size = file_storage.stream.tell()
+    file_storage.stream.seek(0)
+    if size > 10 * 1024 * 1024:
+        return None
+    fname = secure_filename(file_storage.filename)
+    file_storage.save(os.path.join(current_app.config["UPLOAD_INVOICES"], fname))
+    return f"/uploads/invoices/{fname}"
+
+
 def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     can_vendas = any(r.name.upper() in (RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN) for r in current_user.roles)
     if not can_vendas:
@@ -605,25 +627,61 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     except ValueError:
         pass
 
-    inv_file = request.files.get("invoice_file")
-    if inv_file and inv_file.filename:
-        inv_file.stream.seek(0, 2)
-        inv_size = inv_file.stream.tell()
-        inv_file.stream.seek(0)
-        if inv_size <= 10 * 1024 * 1024:
-            fname = secure_filename(inv_file.filename)
-            inv_file.save(os.path.join(current_app.config["UPLOAD_INVOICES"], fname))
-            event.invoice_file = f"/uploads/invoices/{fname}"
-
-    # Data prevista de emissão da NF (feature 065): só faz sentido com nota.
-    inv_due_raw = request.form.get("invoice_due_date", "").strip()
-    if event.with_invoice and inv_due_raw:
-        try:
-            event.invoice_due_date = date.fromisoformat(inv_due_raw)
-        except ValueError:
-            event.invoice_due_date = None
-    elif not event.with_invoice:
-        event.invoice_due_date = None
+    # ── Notas fiscais (feature 069): coleção de notas por evento (valor + data + arquivo) ──
+    # Linhas do form: nf_key[] ("id_<n>" p/ existente, "new_*" p/ nova), nf_amount[], nf_date[];
+    # arquivo opcional por linha em nf_file__<key>. Linha com arquivo → nota "emitida".
+    if not event.with_invoice:
+        # venda deixou de ser "com nota": remove as notas
+        EventInvoice.query.filter_by(event_id=event.id).delete()
+    else:
+        _existing = {inv.id: inv for inv in event.invoices}
+        _keys = request.form.getlist("nf_key[]")
+        _amounts = request.form.getlist("nf_amount[]")
+        _dates = request.form.getlist("nf_date[]")
+        _seen_ids: set[int] = set()
+        for _i, _key in enumerate(_keys):
+            _key = (_key or "").strip()
+            if not _key:
+                continue
+            _amt = parse_brl(_amounts[_i]) if _i < len(_amounts) else None
+            _draw = (_dates[_i] if _i < len(_dates) else "").strip()
+            try:
+                _dval = date.fromisoformat(_draw) if _draw else None
+            except ValueError:
+                _dval = None
+            _upload = _save_nf_file(request.files.get(f"nf_file__{_key}"))
+            if _key.startswith("id_") and _key[3:].isdigit():
+                _inv = _existing.get(int(_key[3:]))
+                if not _inv:
+                    continue
+                _seen_ids.add(_inv.id)
+                _inv.amount = _amt
+                _inv.issue_date = _dval
+                if _upload:
+                    _inv.file = _upload
+                    if _inv.status != "emitida":
+                        _inv.status = "emitida"
+                        _inv.issued_at = datetime.now(tz=tz_sp)
+            else:  # nova nota
+                if _amt is None and not _dval and not _upload:
+                    continue
+                db.session.add(EventInvoice(
+                    event_id=event.id, amount=_amt, issue_date=_dval, file=_upload,
+                    status="emitida" if _upload else "a_emitir",
+                    issued_at=datetime.now(tz=tz_sp) if _upload else None,
+                ))
+        # remove notas existentes que não vieram no form (removidas pelo usuário)
+        for _id, _inv in _existing.items():
+            if _id not in _seen_ids:
+                db.session.delete(_inv)
+        # sinaliza divergência soma != total (sem bloquear)
+        _sum = sum((parse_brl(x) or Decimal("0") for x in _amounts), Decimal("0"))
+        if event.sale_value and _sum and _sum != Decimal(event.sale_value):
+            flash(
+                f"Atenção: a soma das notas (R$ {_sum:.2f}) é diferente do valor da venda "
+                f"(R$ {Decimal(event.sale_value):.2f}).",
+                "warning",
+            )
 
     _VALID_METHODS = {"avista", "pix_parcelado", "faturado", "cartao", "futuro", "parcelado_datas"}
     pay_method = request.form.get("payment_method", "").strip()
@@ -2349,6 +2407,17 @@ def create_event():
     )
     db.session.add(event)
     db.session.flush()
+
+    # Nota fiscal (feature 069): cria a nota inicial se a venda é "com nota".
+    if with_invoice:
+        db.session.add(EventInvoice(
+            event_id=event.id,
+            amount=event.sale_value,
+            issue_date=None,
+            file=(f"/uploads/invoices/{invoice_filename}" if invoice_filename else None),
+            status="emitida" if invoice_filename else "a_emitir",
+            issued_at=datetime.now(tz=ZoneInfo("America/Sao_Paulo")) if invoice_filename else None,
+        ))
 
     # Determina se é fora de SP e auto-estima distância
     event.is_outside_sp = _lookup_sp_status(location)
