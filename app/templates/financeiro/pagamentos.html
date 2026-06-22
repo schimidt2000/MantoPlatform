@@ -176,6 +176,12 @@
               </button>
             </div>
           {% else %}<span class="muted">—</span>{% endif %}
+          {% if item.type == 'salary' and item.advance_amount and item.advance_amount > 0 %}
+            <div style="font-size:10px; color:#b45309; font-weight:600;">
+              adiantado R$ {{ item.advance_amount | brl }}
+              {% if item.advance_proof %}<a href="{{ item.advance_proof }}" target="_blank" style="color:inherit;">📎</a>{% endif %}
+            </div>
+          {% endif %}
         </td>
 
         {# PIX com tipo e botão copiar #}
@@ -235,6 +241,15 @@
               </select>
             </form>
           {% endif %}
+          {% if item.type == 'salary' %}
+            <button type="button" class="btn btn-sm btn-ghost adv-edit-btn"
+                    style="margin-top:4px; font-size:11px;"
+                    data-id="{{ item.id }}"
+                    data-person="{{ item.person_name }}"
+                    data-gross="{{ item.gross_amount | brl }}"
+                    data-advance="{{ item.advance_amount | brl if item.advance_amount else '' }}"
+                    data-proof="{{ item.advance_proof or '' }}">✎ Adiantamento</button>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -253,6 +268,53 @@
   </div>
   {% endif %}
 </div>
+
+{# Modal: adiantamento de salário (feature 067) #}
+<div id="adv-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; padding:20px; width:min(420px,92vw); box-shadow:0 10px 40px rgba(0,0,0,0.25);">
+    <h3 style="margin:0 0 4px;">Adiantamento de salário</h3>
+    <p class="muted" id="adv-person" style="margin:0 0 12px; font-size:13px;"></p>
+    <form id="adv-form" method="post" enctype="multipart/form-data">
+      <input type="hidden" name="month" value="{{ month }}">
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Salário</label>
+        <div id="adv-gross" style="font-weight:700;"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Valor adiantado (R$)</label>
+        <input type="text" inputmode="decimal" class="brl-input" name="advance_amount" id="adv-amount" placeholder="0,00" style="width:140px;">
+        <p class="meta" style="margin-top:4px;">Deixe vazio (0) para remover o adiantamento.</p>
+      </div>
+      <div class="form-group" style="margin-bottom:6px;">
+        <label>Comprovante <span class="muted">(obrigatório se houver adiantamento)</span></label>
+        <input type="file" name="advance_proof" accept=".pdf,.png,.jpg,.jpeg">
+        <div id="adv-current-proof" class="meta" style="margin-top:4px;"></div>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+        <button type="button" class="btn btn-sm btn-ghost" onclick="closeAdvModal()">Cancelar</button>
+        <button type="submit" class="btn btn-sm btn-primary">Salvar adiantamento</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function closeAdvModal() { document.getElementById('adv-modal').style.display = 'none'; }
+document.querySelectorAll('.adv-edit-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    document.getElementById('adv-form').action = '/financeiro/pagamentos/salary/' + btn.dataset.id + '/advance';
+    document.getElementById('adv-person').textContent = btn.dataset.person || '';
+    document.getElementById('adv-gross').textContent = 'R$ ' + (btn.dataset.gross || '0,00');
+    var amt = document.getElementById('adv-amount');
+    amt.value = btn.dataset.advance || '';
+    if (window.MoneyMask) MoneyMask.applyMask(amt);
+    var cp = document.getElementById('adv-current-proof');
+    cp.innerHTML = btn.dataset.proof
+      ? 'Comprovante atual: <a href="' + btn.dataset.proof + '" target="_blank">ver</a>'
+      : '';
+    document.getElementById('adv-modal').style.display = 'flex';
+  });
+});
+</script>
 
 {% endblock %}
 

@@ -719,6 +719,7 @@ def _build_payment_items(roles, salary_payments, today: date, expenses=None, now
         pix_type = sp.user.pix_key_type if sp.user else ""
         freq = sp.salary_history.payment_type if sp.salary_history else "—"
         copy_label = sp.due_date.strftime("%d/%m/%Y") + " - Salário " + (sp.user.name if sp.user else "")
+        _adv = sp.advance_amount or Decimal("0")
         items.append({
             "type":        "salary",
             "id":          sp.id,
@@ -728,7 +729,10 @@ def _build_payment_items(roles, salary_payments, today: date, expenses=None, now
             "copy_label":  copy_label,
             "sublabel":    freq,
             "person_name": sp.user.name if sp.user else "—",
-            "amount":      sp.amount,
+            "amount":      (sp.amount or Decimal("0")) - _adv,  # líquido a pagar (feature 067)
+            "gross_amount": sp.amount,
+            "advance_amount": _adv,
+            "advance_proof": sp.advance_proof,
             "pix_key":     pix,
             "pix_key_type": pix_type,
             "status":      sp.payment_status,
@@ -951,6 +955,62 @@ def set_payment_status():
             db.session.commit()
 
     return _done(status)
+
+
+@financeiro_bp.route("/financeiro/pagamentos/salary/<int:sp_id>/advance", methods=["POST"])
+@login_required
+@require_financeiro
+def salary_advance(sp_id: int):
+    """Registra/edita o adiantamento de um salário (valor + comprovante) — feature 067.
+
+    O valor a pagar passa a ser o líquido (salário − adiantamento). Comprovante é obrigatório
+    quando o adiantamento é maior que zero; não pode exceder o salário. Não altera o custo de
+    salário do balanço.
+    """
+    import os
+
+    from flask import current_app
+    from werkzeug.utils import secure_filename
+
+    from app.money import parse_brl
+    from app.utils import audit
+
+    sp = SalaryPayment.query.get_or_404(sp_id)
+    month = request.form.get("month", sp.month_ref)
+    back = redirect(url_for("financeiro.pagamentos", month=month))
+
+    adv = parse_brl(request.form.get("advance_amount", ""))
+    adv = adv if adv is not None else Decimal("0")
+    if adv < 0:
+        flash("Valor de adiantamento inválido.", "error")
+        return back
+    if adv > (sp.amount or Decimal("0")):
+        flash("O adiantamento não pode ser maior que o salário.", "error")
+        return back
+
+    proof = request.files.get("advance_proof")
+    has_new = bool(proof and proof.filename)
+    if adv > 0 and not has_new and not sp.advance_proof:
+        flash("Anexe o comprovante do adiantamento.", "error")
+        return back
+
+    if has_new:
+        proof.stream.seek(0, 2)
+        size = proof.stream.tell()
+        proof.stream.seek(0)
+        if size > 10 * 1024 * 1024:
+            flash("Comprovante acima de 10 MB.", "error")
+            return back
+        fname = f"adv_{sp.id}_{secure_filename(proof.filename)}"
+        proof.save(os.path.join(current_app.config["UPLOAD_PAYMENTS"], fname))
+        sp.advance_proof = f"/uploads/payments/{fname}"
+
+    sp.advance_amount = None if adv == 0 else adv
+    audit("payment", "salary_payment", sp.id, sp.user.name if sp.user else "—",
+          f"Adiantamento de salário: R$ {adv}")
+    db.session.commit()
+    flash("Adiantamento salvo.", "success")
+    return back
 
 
 def _bulk_set_commission_period(commission_id: str, action: str) -> bool:
