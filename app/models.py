@@ -247,6 +247,10 @@ class CalendarEvent(db.Model):
         "EventInstallment", backref="event", lazy=True,
         cascade="all, delete-orphan", order_by="EventInstallment.due_date",
     )
+    invoices = db.relationship(
+        "EventInvoice", backref="event", lazy=True,
+        cascade="all, delete-orphan", order_by="EventInvoice.issue_date",
+    )
     observations = db.relationship("EventObservation", backref="event", lazy=True,
                                    cascade="all, delete-orphan",
                                    order_by="EventObservation.created_at")
@@ -461,6 +465,28 @@ class EventInstallment(db.Model):
     due_date = db.Column(db.Date, nullable=True)
     amount = db.Column(db.Numeric(12, 2), nullable=True)
     received = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class EventInvoice(db.Model):
+    """Nota fiscal de um evento (feature 069).
+
+    Um evento "com nota" pode ter várias notas, cada uma com valor e data próprios. Notas em
+    ``status='a_emitir'`` viram tarefa de emissão para o super admin; subir o arquivo e marcar
+    emitida conclui a tarefa. O custo de nota (``tax_rate``%) é reconhecido pelo mês de ``issue_date``.
+    """
+    __tablename__ = "event_invoices"
+    __table_args__ = (
+        db.Index("ix_event_invoices_event_id", "event_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=True)        # valor da nota
+    issue_date = db.Column(db.Date, nullable=True)             # data de emissão (prevista/real)
+    status = db.Column(db.String(12), nullable=False, default="a_emitir", server_default="a_emitir")
+    file = db.Column(db.String(300), nullable=True)           # arquivo da nota
+    issued_at = db.Column(db.DateTime, nullable=True)        # quando marcada emitida
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 

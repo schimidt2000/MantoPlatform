@@ -10,7 +10,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, abort,
 from flask_login import login_required, current_user
 
 from app import db
-from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SpecialExpense
+from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SpecialExpense
 from app.constants import RoleName
 
 financeiro_bp = Blueprint("financeiro", __name__)
@@ -508,21 +508,53 @@ def dashboard():
         (Decimal(r["amount"]) for r in recebimentos_previstos), Decimal("0")
     )
 
-    # NF a emitir (eventos com data prevista de emissão no período) — feature 065.
-    _nf_events = (
-        CalendarEvent.query
-        .filter(
-            CalendarEvent.invoice_due_date >= start_date,
-            CalendarEvent.invoice_due_date <= end_date,
-        )
-        .order_by(CalendarEvent.invoice_due_date.asc())
+    # ── Notas fiscais (feature 069) ──────────────────────────────────────────
+    tax_rate_nf = _get_tax_rate(settings)
+
+    # Tarefas de emissão: TODAS as notas "a emitir" (independem do período) — pendência aberta.
+    _nf_pend = (
+        EventInvoice.query
+        .filter(EventInvoice.status == "a_emitir")
+        .join(CalendarEvent, EventInvoice.event_id == CalendarEvent.id)
+        .order_by(EventInvoice.issue_date.is_(None), EventInvoice.issue_date.asc())
         .all()
     )
     nf_a_emitir = [
-        {"date": e.invoice_due_date, "event_id": e.id, "event_title": e.title, "amount": e.sale_value or 0}
-        for e in _nf_events
+        {
+            "id": inv.id, "date": inv.issue_date, "event_id": inv.event_id,
+            "event_title": inv.event.title if inv.event else "—",
+            "amount": inv.amount or 0,
+        }
+        for inv in _nf_pend
     ]
     nf_a_emitir_total = sum((Decimal(n["amount"]) for n in nf_a_emitir), Decimal("0"))
+
+    # Custo de nota por mês de EMISSÃO: 16% (tax_rate) de cada nota com issue_date no período.
+    _nf_emit = (
+        EventInvoice.query
+        .filter(
+            EventInvoice.issue_date >= start_date,
+            EventInvoice.issue_date <= end_date,
+        )
+        .join(CalendarEvent, EventInvoice.event_id == CalendarEvent.id)
+        .order_by(EventInvoice.issue_date.asc())
+        .all()
+    )
+    custo_nota_itens = []
+    for inv in _nf_emit:
+        _val = Decimal(inv.amount or 0)
+        _custo = (_val * tax_rate_nf / Decimal("100")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        custo_nota_itens.append({
+            "event_id": inv.event_id,
+            "event_title": inv.event.title if inv.event else "—",
+            "amount": _val,
+            "date": inv.issue_date,
+            "status": inv.status,
+            "custo": _custo,
+        })
+    custo_nota_total = sum((i["custo"] for i in custo_nota_itens), Decimal("0"))
 
     return render_template(
         "financeiro/dashboard.html",
@@ -530,6 +562,8 @@ def dashboard():
         recebimentos_previstos_total=recebimentos_previstos_total,
         nf_a_emitir=nf_a_emitir,
         nf_a_emitir_total=nf_a_emitir_total,
+        custo_nota_itens=custo_nota_itens,
+        custo_nota_total=custo_nota_total,
         # DRE (3 visões)
         drg_realizado=drg_realizado,
         drg_projetado=drg_projetado,
@@ -565,6 +599,55 @@ def dashboard():
         end_str=end_date.isoformat(),
         today=today,
     )
+
+
+@financeiro_bp.route("/financeiro/nf/<int:invoice_id>/emitir", methods=["POST"])
+@login_required
+@require_financeiro
+def nf_emitir(invoice_id: int):
+    """Marca uma nota fiscal como emitida (feature 069).
+
+    O super admin/financeiro sobe o arquivo (opcional) e a nota passa a ``emitida``, concluindo a
+    tarefa de emissão. Mantém a data de emissão informada na venda; se vier ``issue_date`` no form,
+    atualiza.
+    """
+    import os
+
+    from flask import current_app
+    from werkzeug.utils import secure_filename
+
+    from app.utils import audit
+
+    inv = EventInvoice.query.get_or_404(invoice_id)
+    back = redirect(request.referrer or url_for("financeiro.dashboard"))
+
+    # data de emissão (opcional) — usa a informada ou mantém a existente
+    _draw = (request.form.get("issue_date", "") or "").strip()
+    if _draw:
+        try:
+            inv.issue_date = date.fromisoformat(_draw)
+        except ValueError:
+            pass
+
+    nf_file = request.files.get("nf_file")
+    if nf_file and nf_file.filename:
+        nf_file.stream.seek(0, 2)
+        size = nf_file.stream.tell()
+        nf_file.stream.seek(0)
+        if size > 10 * 1024 * 1024:
+            flash("Arquivo da nota acima de 10 MB.", "error")
+            return back
+        fname = f"nf_{inv.id}_{secure_filename(nf_file.filename)}"
+        nf_file.save(os.path.join(current_app.config["UPLOAD_INVOICES"], fname))
+        inv.file = f"/uploads/invoices/{fname}"
+
+    inv.status = "emitida"
+    inv.issued_at = datetime.now(TZ_SP).replace(tzinfo=None)
+    _title = inv.event.title if inv.event else "—"
+    audit("invoice", "event_invoice", inv.id, _title, f"Nota fiscal emitida (R$ {inv.amount or 0})")
+    db.session.commit()
+    flash("Nota fiscal marcada como emitida.", "success")
+    return back
 
 
 @financeiro_bp.route("/financeiro/funcionarios")

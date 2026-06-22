@@ -1414,19 +1414,41 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
         Nota fiscal solicitada
       </label>
       <div id="nf-file-area" style="margin-top: 8px;{% if not event.with_invoice %} display: none;{% endif %}">
-        <div class="form-group" style="margin-bottom:10px;">
-          <label>Data prevista de emissão da NF</label>
-          <input type="date" name="invoice_due_date" style="width:160px;"
-                 value="{{ event.invoice_due_date.strftime('%Y-%m-%d') if event.invoice_due_date else '' }}">
-          <p class="meta" style="margin-top:4px;">Opcional — aparece em "NF a emitir" no painel financeiro.</p>
-        </div>
-        {% if event.invoice_file %}
-          <div style="margin-bottom: 6px;">
-            <a href="{{ event.invoice_file }}" target="_blank" class="btn btn-sm btn-secondary">Ver NF atual</a>
+        <label class="form-label">Notas fiscais (valor + data de emissão)</label>
+        <p class="meta" style="margin-top:0;margin-bottom:8px;">
+          Cada nota sem arquivo vira tarefa de emissão para o super admin. Anexe o arquivo para já
+          marcá-la como emitida. Pode haver mais de uma nota em datas diferentes.
+        </p>
+        <div id="notas-list">
+          {% for inv in event.invoices %}
+          <div class="nota-row" style="border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:10px;margin-bottom:8px;">
+            <input type="hidden" name="nf_key[]" value="id_{{ inv.id }}">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input type="text" inputmode="decimal" class="brl-input nota-amount" name="nf_amount[]"
+                     placeholder="0,00" style="width:140px;"
+                     value="{{ inv.amount | brl if inv.amount is not none else '' }}">
+              <input type="date" name="nf_date[]" style="width:160px;"
+                     value="{{ inv.issue_date.strftime('%Y-%m-%d') if inv.issue_date else '' }}">
+              {% if inv.status == 'emitida' %}
+                <span class="badge" style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:12px;">✓ emitida</span>
+              {% else %}
+                <span class="badge" style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:12px;">a emitir</span>
+              {% endif %}
+              <button type="button" class="btn btn-sm btn-secondary" style="color:#b91c1c;"
+                      onclick="removeNota(this)">✕</button>
+            </div>
+            <div style="margin-top:6px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              {% if inv.file %}
+                <a href="{{ inv.file }}" target="_blank" class="btn btn-sm btn-secondary">Ver nota</a>
+              {% endif %}
+              <input type="file" name="nf_file__id_{{ inv.id }}" accept=".pdf,.xml,.png,.jpg,.jpeg">
+            </div>
           </div>
-        {% endif %}
-        <input type="file" name="invoice_file" accept=".pdf,.xml,.png,.jpg,.jpeg">
-        <div class="meta">PDF, XML ou imagem · máx. 10 MB</div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="addNota()">+ Adicionar nota</button>
+        <p class="meta" id="notas-soma" style="margin-top:6px;"></p>
+        <div class="meta">PDF, XML ou imagem · máx. 10 MB por nota</div>
       </div>
     </div>
 
@@ -2161,6 +2183,60 @@ function recompParcelas() {
   }
   el.textContent = msg;
 }
+
+// ── Notas fiscais: coleção de notas (valor + data + arquivo) — feature 069 ──
+let _notaSeq = 0;
+function addNota(amount, d) {
+  const list = document.getElementById('notas-list');
+  if (!list) return;
+  const key = 'new_' + (_notaSeq++);
+  const row = document.createElement('div');
+  row.className = 'nota-row';
+  row.style.cssText = 'border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:10px;margin-bottom:8px;';
+  row.innerHTML =
+    '<input type="hidden" name="nf_key[]" value="' + key + '">' +
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+      '<input type="text" inputmode="decimal" class="brl-input nota-amount" name="nf_amount[]" ' +
+        'placeholder="0,00" style="width:140px;" value="' + (amount || '') + '">' +
+      '<input type="date" name="nf_date[]" style="width:160px;" value="' + (d || '') + '">' +
+      '<span class="badge" style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:12px;">a emitir</span>' +
+      '<button type="button" class="btn btn-sm btn-secondary" style="color:#b91c1c;" onclick="removeNota(this)">✕</button>' +
+    '</div>' +
+    '<div style="margin-top:6px;">' +
+      '<input type="file" name="nf_file__' + key + '" accept=".pdf,.xml,.png,.jpg,.jpeg">' +
+    '</div>';
+  list.appendChild(row);
+  if (window.MoneyMask) MoneyMask.init(row);
+  recompNotas();
+}
+
+function removeNota(btn) {
+  const row = btn.closest('.nota-row');
+  if (row) row.remove();
+  recompNotas();
+}
+
+function recompNotas() {
+  const el = document.getElementById('notas-soma');
+  if (!el) return;
+  let sum = 0;
+  document.querySelectorAll('#notas-list .nota-amount').forEach(function (inp) {
+    sum += window.MoneyMask ? MoneyMask.parseNumber(inp) : (parseFloat(inp.value) || 0);
+  });
+  const somaTxt = (window.MoneyMask ? MoneyMask.format(Math.round(sum * 100)) : sum.toFixed(2));
+  let msg = 'Soma das notas: R$ ' + somaTxt;
+  if (_saleValueNum > 0 && Math.abs(sum - _saleValueNum) > 0.01) {
+    el.style.color = '#b45309';
+    msg += ' ⚠️ difere do valor de venda';
+  } else {
+    el.style.color = 'var(--muted)';
+  }
+  el.textContent = msg;
+}
+document.addEventListener('DOMContentLoaded', recompNotas);
+document.addEventListener('input', function (e) {
+  if (e.target && e.target.classList && e.target.classList.contains('nota-amount')) recompNotas();
+});
 
 (function () {
   const list = document.getElementById('parcelas-list');

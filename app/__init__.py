@@ -522,17 +522,19 @@ def create_app():
                 .all()
             )
 
-        # Nota fiscal pendente: eventos com NF solicitada mas sem arquivo anexado
+        # Nota fiscal pendente: eventos com nota(s) "a emitir" (feature 069)
         pending_invoice = []
         if is_superadmin:
+            from app.models import EventInvoice
             pending_invoice = (
                 CalendarEvent.query
+                .join(EventInvoice, EventInvoice.event_id == CalendarEvent.id)
                 .filter(
-                    CalendarEvent.with_invoice == True,
-                    CalendarEvent.invoice_file.is_(None),
+                    EventInvoice.status == "a_emitir",
                     CalendarEvent.start_at >= task_cutoff,
                 )
                 .order_by(CalendarEvent.start_at.asc())
+                .distinct()
                 .all()
             )
 
