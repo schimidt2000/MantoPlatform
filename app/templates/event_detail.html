@@ -2144,6 +2144,21 @@ function setDetailPayMethod(method) {
 // ── Parcelas com data + valor (feature 065) ───────────────────────
 const _saleValueNum = {{ (event.sale_value | float) if event.sale_value is not none else 0 }};
 
+// Leitura/formatação BR-segura, independente da ordem de carga do money-mask.js (feature 072).
+// Campos .brl-input usam estilo calculadora: TODOS os dígitos representam centavos.
+// Ex.: "9.400,00" → "940000" → 9400.00. Antes caía em parseFloat("9.400,00") = 9.4 quando a
+// soma era calculada na carga, antes do money-mask.js (defer) executar.
+function _brlSum(inp) {
+  const v = (inp && inp.value !== undefined) ? inp.value : inp;
+  const digits = String(v == null ? '' : v).replace(/\D/g, '');
+  return digits ? parseInt(digits, 10) / 100 : 0;
+}
+function _brlSumFmt(n) {
+  return (Math.round(n * 100) / 100).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+}
+
 function addParcela(d, amount) {
   const list = document.getElementById('parcelas-list');
   if (!list) return;
@@ -2171,9 +2186,9 @@ function recompParcelas() {
   if (!el) return;
   let sum = 0;
   document.querySelectorAll('#parcelas-list .parcela-amount').forEach(function (inp) {
-    sum += window.MoneyMask ? MoneyMask.parseNumber(inp) : (parseFloat(inp.value) || 0);
+    sum += _brlSum(inp);
   });
-  const somaTxt = (window.MoneyMask ? MoneyMask.format(Math.round(sum * 100)) : sum.toFixed(2));
+  const somaTxt = _brlSumFmt(sum);
   let msg = 'Soma das parcelas: R$ ' + somaTxt;
   if (_saleValueNum > 0 && Math.abs(sum - _saleValueNum) > 0.01) {
     el.style.color = '#b45309';
@@ -2221,9 +2236,9 @@ function recompNotas() {
   if (!el) return;
   let sum = 0;
   document.querySelectorAll('#notas-list .nota-amount').forEach(function (inp) {
-    sum += window.MoneyMask ? MoneyMask.parseNumber(inp) : (parseFloat(inp.value) || 0);
+    sum += _brlSum(inp);
   });
-  const somaTxt = (window.MoneyMask ? MoneyMask.format(Math.round(sum * 100)) : sum.toFixed(2));
+  const somaTxt = _brlSumFmt(sum);
   let msg = 'Soma das notas: R$ ' + somaTxt;
   if (_saleValueNum > 0 && Math.abs(sum - _saleValueNum) > 0.01) {
     el.style.color = '#b45309';
