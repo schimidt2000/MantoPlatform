@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, send_from_directory, session, redirect, url_for
+from flask import Flask, render_template, request, send_from_directory, session, redirect
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_, not_, or_, func
 from flask_migrate import Migrate
@@ -19,6 +19,30 @@ login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 login_manager.login_message = None  # suprime mensagem automática de "faça login"
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
+
+
+def _safe_next(value, default="/"):
+    """Retorna ``value`` apenas se for um destino interno seguro; senão, ``default`` (feature 074).
+
+    Bloqueia open redirect: aceita caminho relativo interno (``/algo``) ou URL absoluta do **mesmo
+    host**; rejeita esquemas/hosts externos (``http://evil``, ``//evil``).
+    """
+    from urllib.parse import urlparse
+    if not value:
+        return default
+    parsed = urlparse(value)
+    if not parsed.scheme and not parsed.netloc:
+        # caminho relativo: precisa começar com '/' e não ser protocol-relative ('//')
+        if value.startswith("/") and not value.startswith("//"):
+            return value
+        return default
+    # URL absoluta: só aceita o mesmo host da requisição atual
+    try:
+        if parsed.netloc == request.host:
+            return (parsed.path or "/") + (("?" + parsed.query) if parsed.query else "")
+    except RuntimeError:
+        pass  # fora de contexto de requisição
+    return default
 
 def _start_talent_sync(app):
     """Inicia thread de background que importa novos talentos da planilha periodicamente."""
@@ -157,6 +181,28 @@ def create_app():
     login_manager.init_app(app)
     mail.init_app(app)
     limiter.init_app(app)
+
+    # ── Segurança: cabeçalhos em todas as respostas (feature 074) ──────────────
+    @app.after_request
+    def _security_headers(resp):
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        resp.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+        )
+        # CSP mínima: protege clickjacking, base-tag e hijack de <form> sem restringir
+        # script/style/img/font/frame-src (não quebra inline nem integrações externas).
+        resp.headers.setdefault(
+            "Content-Security-Policy",
+            "object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
+        )
+        # HSTS só sob HTTPS (atrás do proxy do Railway, confere X-Forwarded-Proto).
+        if request.is_secure or request.headers.get("X-Forwarded-Proto") == "https":
+            resp.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return resp
 
     @app.context_processor
     def inject_settings():
@@ -599,13 +645,13 @@ def create_app():
         if role_name.upper() not in _IMPERSONABLE_ROLES:
             return "", 400
         session["impersonate_role"] = role_name.upper()
-        return redirect(request.referrer or "/")
+        return redirect(_safe_next(request.referrer, "/"))
 
     @app.route("/impersonate/reset", methods=["POST"])
     @login_required
     def impersonate_reset():
         session.pop("impersonate_role", None)
-        return redirect(request.referrer or "/")
+        return redirect(_safe_next(request.referrer, "/"))
 
     @app.route("/health")
     def health():

@@ -1,7 +1,24 @@
+import json as _json
 from datetime import datetime
 from flask_login import current_user
 from app import db
 from app.models import AuditLog
+
+
+def json_for_script(value) -> str:
+    """Serializa ``value`` em JSON seguro para injetar dentro de ``<script>`` (feature 074).
+
+    Escapa ``<``, ``>`` e ``&`` (que poderiam fechar o contexto via ``</script>``). Como
+    ``json.dumps`` usa ``ensure_ascii=True``, os separadores de linha U+2028/U+2029 já saem como
+    ``\\uXXXX``. O resultado continua sendo JSON válido (os escapes voltam ao original no parse).
+    Use no lugar de ``json.dumps(...) | safe`` para evitar XSS armazenado.
+    """
+    return (
+        _json.dumps(value)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
 
 
 def audit(

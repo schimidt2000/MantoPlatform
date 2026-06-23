@@ -13,6 +13,7 @@ from flask_login import current_user, login_required
 from app import db
 from app.constants import RoleName
 from app.money import format_brl, parse_brl
+from app.utils import json_for_script
 from . import settings as _cfg
 from .pricing import (
     aplicar_markup,
@@ -92,7 +93,7 @@ def index():
         especiais_com_show=list(_cfg.especiais_com_show()),
         especiais_com_cantor=list(_cfg.especiais_com_cantor()),
         especiais_sempre_show=list(_cfg.ESPECIAIS_SEMPRE_SHOW),
-        settings_json=json.dumps(s),
+        settings_json=json_for_script(s),
     )
 
 

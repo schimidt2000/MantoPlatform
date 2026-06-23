@@ -1,4 +1,7 @@
 import os
+import secrets
+
+_WEAK_SECRET = "dev-secret-key"
 
 
 def _db_url() -> str:
@@ -9,10 +12,62 @@ def _db_url() -> str:
     return url
 
 
+def _resolve_secret_key() -> str:
+    """Resolve a SECRET_KEY de forma segura (feature 074).
+
+    - Usa ``SECRET_KEY`` do ambiente quando definida e forte.
+    - Em desenvolvimento, aceita o default fraco (conveniência local).
+    - Em produção, **nunca** usa a chave fraca conhecida: se ausente/fraca, gera uma chave forte e a
+      persiste em ``instance/.secret_key`` (compartilhada entre workers e estável durante o deploy).
+      Se não for possível gravar, usa uma chave aleatória em memória (sessões caem em restart, mas
+      sem a chave fraca conhecida).
+    """
+    env_key = os.getenv("SECRET_KEY", "").strip()
+    is_prod = os.getenv("FLASK_ENV", "development") == "production"
+
+    if env_key and (env_key != _WEAK_SECRET or not is_prod):
+        return env_key
+    if not is_prod:
+        return _WEAK_SECRET  # dev: conveniência
+
+    # Produção sem chave forte: gera e persiste em instance/.secret_key
+    key_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "instance", ".secret_key")
+    )
+    try:
+        if os.path.exists(key_path):
+            with open(key_path, "r", encoding="utf-8") as fh:
+                saved = fh.read().strip()
+            if saved:
+                return saved
+        os.makedirs(os.path.dirname(key_path), exist_ok=True)
+        new_key = secrets.token_hex(32)
+        # Escrita atômica + permissões restritas quando suportado.
+        with open(key_path, "w", encoding="utf-8") as fh:
+            fh.write(new_key)
+        try:
+            os.chmod(key_path, 0o600)
+        except OSError:
+            pass
+        return new_key
+    except OSError:
+        # Último recurso: chave aleatória em memória (melhor que a chave fraca conhecida).
+        return secrets.token_hex(32)
+
+
 class Config:
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
+    SECRET_KEY = _resolve_secret_key()
     SQLALCHEMY_DATABASE_URI = _db_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Segurança de sessão (074): válidas em qualquer ambiente. 'Secure' é ligado só em produção
+    # (ProductionConfig), pois o dev roda em HTTP.
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+
+    # Limite global de upload/requisição (defesa contra DoS por arquivo gigante).
+    # Acima dos limites por arquivo (10–20 MB) usados nas rotas.
+    MAX_CONTENT_LENGTH = 64 * 1024 * 1024  # 64 MB
 
     # Email — Gmail Workspace via App Password
     MAIL_SERVER   = os.getenv("MAIL_SERVER", "smtp.gmail.com")
