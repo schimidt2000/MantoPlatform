@@ -16,6 +16,7 @@
 <script>
   window.PACKAGES_DATA = {{ packages_json | safe }};
   window.ACTIVE_PKG_ID = {{ active_id or 'null' }};
+  window.TRANSPORTE_CFG = {{ transporte_json | safe }};
 </script>
 <style>
   /* ── Package tabs ─────────────────────────────────── */
@@ -377,6 +378,38 @@
 
     <hr style="border:none; border-top:1px solid var(--line); margin:20px 0 16px;">
 
+    <h3>Transporte (opcional)</h3>
+    <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:8px;">
+      <div>
+        <label class="form-label" style="font-size:12px; color:var(--muted); font-weight:600;">Endereço do evento</label>
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="t-endereco" class="form-control" placeholder="Rua, número, cidade…" style="flex:1; font-size:13px;">
+          <button type="button" id="t-calc-btn" class="btn btn-secondary btn-sm" style="white-space:nowrap;">Calcular</button>
+        </div>
+        <div id="t-dist-msg" style="font-size:11.5px; color:var(--muted); margin-top:4px;"></div>
+      </div>
+      <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:12.5px;">
+        <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;">
+          <input type="radio" name="t-tipo" value="van" checked> Van
+        </label>
+        <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;">
+          <input type="radio" name="t-tipo" value="carro"> Carro
+        </label>
+        <label id="t-carretinha-wrap" style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;">
+          <input type="checkbox" id="t-carretinha"> c/ carretinha
+        </label>
+        <span id="t-carros-wrap" style="display:none; align-items:center; gap:5px;">
+          Carros <input type="number" id="t-carros" min="1" value="1" style="width:48px; text-align:center;">
+        </span>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; font-size:12.5px;">
+        <span style="color:var(--muted);">Pessoas no transporte</span>
+        <input type="number" id="t-pessoas" min="0" value="0" style="width:60px; text-align:center;">
+      </div>
+    </div>
+
+    <hr style="border:none; border-top:1px solid var(--line); margin:16px 0 16px;">
+
     <h3>Configurações do pacote</h3>
     <div style="display:flex; flex-direction:column; gap:8px; font-size:12.5px;">
       <div style="display:flex; justify-content:space-between;">
@@ -427,6 +460,10 @@
       </div>
     </div>
 
+    {# Transporte (feature 076) — somado ao valor final #}
+    <div id="t-result-line" style="display:none; padding:12px 16px; background:var(--panel);
+         border:1px solid var(--line); border-radius:var(--r-md); font-size:13px;"></div>
+
     {# Summary strip #}
     <div class="edu-summary-row" style="grid-template-columns: 1fr 1fr;">
       <div class="edu-summary-item">
@@ -472,6 +509,61 @@
   }
   function pct(v) { return (v * 100).toFixed(0) + '%'; }
   function x(v)   { return v.toFixed(2) + 'x'; }
+
+  /* ── Transporte (feature 076) — mesma fórmula do orçamento ──────── */
+  const T_CFG = window.TRANSPORTE_CFG || {};
+  let tKmIda = 0;
+
+  function fetchDistancia() {
+    const end = document.getElementById('t-endereco').value.trim();
+    const msg = document.getElementById('t-dist-msg');
+    if (!end) { msg.style.color = 'var(--red)'; msg.textContent = 'Informe o endereço primeiro.'; return; }
+    msg.style.color = 'var(--muted)'; msg.textContent = 'Calculando…';
+    fetch('/educamanto/api/distancia?endereco=' + encodeURIComponent(end))
+      .then(r => r.json())
+      .then(d => {
+        if (d.km_ida !== undefined && d.km_ida !== null) {
+          tKmIda = d.km_ida;
+          msg.style.color = 'var(--green)';
+          msg.textContent = `Distância: ${tKmIda} km (ida) · ${tKmIda * 2} km ida e volta`;
+          calcular();
+        } else {
+          msg.style.color = 'var(--red)';
+          msg.textContent = d.error || 'Não foi possível calcular a distância.';
+        }
+      })
+      .catch(() => { msg.style.color = 'var(--red)'; msg.textContent = 'Erro de conexão ao calcular distância.'; });
+  }
+
+  function onTipoChange() {
+    const tipo = (document.querySelector('input[name="t-tipo"]:checked') || {}).value || 'van';
+    document.getElementById('t-carretinha-wrap').style.display = (tipo === 'van') ? 'inline-flex' : 'none';
+    document.getElementById('t-carros-wrap').style.display = (tipo === 'carro') ? 'inline-flex' : 'none';
+    calcular();
+  }
+
+  // Reproduz calcular_van / calcular_carro do orçamento: tarifa por km (ida e volta) +
+  // adicional por pessoa (rateio fora-SP). Adicional de show não se aplica ao EducaManto.
+  function calcTransporte() {
+    if (!tKmIda || tKmIda <= 0) return { total: 0 };
+    const kmT = tKmIda * 2;
+    const tipo = (document.querySelector('input[name="t-tipo"]:checked') || {}).value || 'van';
+    const pessoas = Math.max(0, parseInt(document.getElementById('t-pessoas').value) || 0);
+    let vt, label;
+    if (tipo === 'van') {
+      const carretinha = document.getElementById('t-carretinha').checked;
+      const tarifa = carretinha ? T_CFG.van_com_carretinha : T_CFG.van_sem_carretinha;
+      vt = kmT * tarifa;
+      label = `Van ${carretinha ? 'c/ carretinha' : 's/ carretinha'}`;
+    } else {
+      const carros = Math.max(1, parseInt(document.getElementById('t-carros').value) || 1);
+      vt = carros * T_CFG.carro_por_km * kmT;
+      label = `${carros} carro(s)`;
+    }
+    const afsp = (pessoas * kmT) / T_CFG.afsp_divisor;
+    const total = Math.round((vt + afsp) * 100) / 100;
+    return { total, kmT, pessoas, label, vt: Math.round(vt * 100) / 100, afsp: Math.round(afsp * 100) / 100 };
+  }
 
   /* ── Populate config panel ─────────────────────────────── */
   function loadConfig() {
@@ -600,11 +692,24 @@
       discTag.innerHTML = `<svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg> Desconto de ${pct(pkg.discount_pct)} aplicado (−${brl(desconto)})`;
     }
 
-    /* Update cards */
-    document.getElementById('val-sem-nota').textContent = brl(valorFinalSemNota);
-    document.getElementById('val-com-nota').textContent = brl(valorFinalComNota);
+    /* Transporte (feature 076): somado ao valor final, como custo de logística repassado
+       (não entra na margem/desconto do pacote nem na comissão). */
+    const tp = calcTransporte();
+    const transporte = tp.total || 0;
+    document.getElementById('val-sem-nota').textContent = brl(valorFinalSemNota + transporte);
+    document.getElementById('val-com-nota').textContent = brl(valorFinalComNota + transporte);
 
-    /* Update summary */
+    const tLine = document.getElementById('t-result-line');
+    if (transporte > 0) {
+      tLine.style.display = 'block';
+      tLine.innerHTML = `🚐 <strong>Transporte: ${brl(transporte)}</strong>`
+        + ` <span style="color:var(--muted)">— ${tp.kmT} km (ida e volta) · ${tp.label}`
+        + ` · adicional ${tp.pessoas} pessoa(s). Já somado ao valor final.</span>`;
+    } else {
+      tLine.style.display = 'none';
+    }
+
+    /* Update summary (comissão/lucro consideram só o pacote — transporte é repasse) */
     const lucro    = valorFinalSemNota - rawCost;
     const comissao = lucro * pkg.commission_rate;
     document.getElementById('sum-custo').textContent    = brl(rawCost);
@@ -616,6 +721,8 @@
   }
 
   function setEmpty() {
+    const tLine = document.getElementById('t-result-line');
+    if (tLine) tLine.style.display = 'none';
     ['val-sem-nota','val-com-nota'].forEach(id => document.getElementById(id).textContent = '—');
     ['sum-custo','sum-comissao'].forEach(id => document.getElementById(id).textContent = '—');
     document.getElementById('detail-head').innerHTML = '';
@@ -699,6 +806,16 @@
   document.getElementById('d1').addEventListener('input', calcular);
   document.getElementById('d2').addEventListener('input', calcular);
   document.getElementById('ensemble').addEventListener('input', calcular);
+
+  // Transporte (feature 076)
+  document.getElementById('t-calc-btn').addEventListener('click', fetchDistancia);
+  document.getElementById('t-endereco').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); fetchDistancia(); }
+  });
+  document.getElementById('t-pessoas').addEventListener('input', calcular);
+  document.getElementById('t-carros').addEventListener('input', calcular);
+  document.getElementById('t-carretinha').addEventListener('change', calcular);
+  document.querySelectorAll('input[name="t-tipo"]').forEach(r => r.addEventListener('change', onTipoChange));
 })();
 </script>
 {% endblock %}
