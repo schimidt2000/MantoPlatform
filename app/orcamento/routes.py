@@ -1,6 +1,5 @@
 """Quote calculator blueprint — accessible to COMERCIAL and SUPERADMIN."""
 import json
-import math
 from datetime import datetime
 from functools import wraps
 
@@ -819,34 +818,12 @@ def api_historico_delete(entry_id: int):
 @login_required
 @_require_vendas
 def api_distancia():
-    from app.models import SiteSetting
-    setting = SiteSetting.query.get(1)
-    import os
-    api_key = (setting.google_maps_api_key if setting else "") or os.getenv("GOOGLE_MAPS_API_KEY", "")
-    if not api_key:
-        return jsonify({"error": "Google Maps não configurado. Configure a API Key em Admin → Configurações."}), 503
-
-    origin  = setting.manto_address if setting and setting.manto_address else ""
-    if not origin:
-        return jsonify({"error": "Endereço da Manto não configurado em Configurações."}), 503
-
-    endereco = request.args.get("endereco", "").strip()
-    if not endereco:
-        return jsonify({"error": "Endereço não informado."}), 400
-
-    try:
-        import googlemaps
-        gmaps   = googlemaps.Client(key=api_key)
-        result  = gmaps.distance_matrix(origin, endereco, mode="driving")
-        element = result["rows"][0]["elements"][0]
-        if element["status"] != "OK":
-            return jsonify({"error": "Endereço não encontrado pelo Google Maps."}), 400
-        km_ida = math.ceil(element["distance"]["value"] / 1000)
-        return jsonify({"km_ida": km_ida})
-    except ImportError:
-        return jsonify({"error": "Biblioteca googlemaps não instalada."}), 503
-    except Exception as exc:
-        return jsonify({"error": f"Erro ao consultar Google Maps: {exc}"}), 500
+    # Fonte única do cálculo de distância (feature 076) — compartilhado com o EducaManto.
+    from app.maps import distance_km_ida
+    km_ida, error, status = distance_km_ida(request.args.get("endereco", ""))
+    if error:
+        return jsonify({"error": error}), status
+    return jsonify({"km_ida": km_ida})
 
 
 # ── Pricing settings (SUPERADMIN only) ───────────────────────────────────────

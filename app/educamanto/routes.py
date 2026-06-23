@@ -2,7 +2,7 @@
 from functools import wraps
 
 from flask import (
-    Blueprint, abort, flash, redirect,
+    Blueprint, abort, flash, jsonify, redirect,
     render_template, request, url_for,
 )
 from flask_login import current_user, login_required
@@ -180,13 +180,33 @@ def index():
     active_id = request.args.get("pkg", type=int) or (packages[0].id if packages else None)
     packages_json = json_for_script([p.to_dict() for p in packages])
     can_manage = bool({r.name.upper() for r in current_user.roles} & _CAN_MANAGE)
+    # Config de transporte (fonte única do orçamento) p/ o cálculo no cliente (feature 076).
+    from app.orcamento import settings as _orc_settings
+    transporte_cfg = _orc_settings.load().get("transporte", {})
     return render_template(
         "educamanto/index.html",
         packages=packages,
         active_id=active_id,
         packages_json=packages_json,
+        transporte_json=json_for_script(transporte_cfg),
         can_manage=can_manage,
     )
+
+
+@educamanto_bp.route("/api/distancia")
+@login_required
+@_require_use
+def api_distancia():
+    """Distância até o endereço do evento — mesmo cálculo do orçamento (feature 076).
+
+    Endpoint próprio (em vez de reusar o do orçamento) porque o EducaManto também é usado pelo
+    perfil ENSAIO, que não tem acesso às rotas de vendas/orçamento.
+    """
+    from app.maps import distance_km_ida
+    km_ida, error, status = distance_km_ida(request.args.get("endereco", ""))
+    if error:
+        return jsonify({"error": error}), status
+    return jsonify({"km_ida": km_ida})
 
 
 @educamanto_bp.route("/packages/create", methods=["GET", "POST"])
