@@ -827,6 +827,27 @@ class EducaMantoItem(db.Model):
         }
 
 
+class EducaMantoQuote(db.Model):
+    """Orçamento PDF gerado no EducaManto (feature 077) — histórico por usuário.
+
+    Guarda um instantâneo (``snapshot``) da configuração e dos valores por pacote no momento da
+    geração, para reproduzir o mesmo PDF depois (valores congelados, como o histórico da calculadora).
+    """
+    __tablename__ = "educamanto_quotes"
+    __table_args__ = (
+        db.Index("ix_educamanto_quotes_user_id", "user_id"),
+    )
+
+    id             = db.Column(db.Integer, primary_key=True)
+    user_id        = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    client_name    = db.Column(db.String(200), nullable=True)
+    packages_label = db.Column(db.String(300), nullable=True)   # nomes p/ a lista do histórico
+    snapshot       = db.Column(db.Text, nullable=True)          # JSON: dias/ensemble/transporte + pacotes
+
+    user = db.relationship("User", lazy=True)
+
+
 class ImportState(db.Model):
     __tablename__ = "import_state"
 

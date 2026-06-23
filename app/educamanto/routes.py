@@ -209,6 +209,111 @@ def api_distancia():
     return jsonify({"km_ida": km_ida})
 
 
+def _build_snapshot(data: dict) -> tuple[dict, str]:
+    """Monta o snapshot do orçamento a partir do JSON do cliente. Retorna (snapshot, label)."""
+    clean_pkgs = []
+    for p in (data.get("packages") or []):
+        clean_pkgs.append({
+            "id": p.get("id"),
+            "name": str(p.get("name") or "Pacote")[:200],
+            "sem_nota": float(p.get("sem_nota") or 0),
+            "com_nota": float(p.get("com_nota") or 0),
+        })
+    try:
+        d1 = int(data.get("d1") or 0)
+        d2 = int(data.get("d2") or 0)
+    except (TypeError, ValueError):
+        d1 = d2 = 0
+    transporte = data.get("transporte") or {}
+    client_name = (data.get("client_name") or "").strip()[:200]
+    snapshot = {
+        "d1": d1,
+        "d2": d2,
+        "ensemble": int(data.get("ensemble") or 0),
+        "transporte": {
+            "total": float(transporte.get("total") or 0),
+            "label": str(transporte.get("label") or ""),
+            "kmT": transporte.get("kmT"),
+            "pessoas": transporte.get("pessoas"),
+        },
+        "client_name": client_name,
+        "packages": clean_pkgs,
+    }
+    label = ", ".join(p["name"] for p in clean_pkgs)[:300]
+    return snapshot, label
+
+
+def _pdf_response(snapshot: dict, quote_id: int, inline: bool = False):
+    from flask import make_response
+
+    from app.educamanto.pdf import gerar_orcamento_pdf
+    pdf_bytes = gerar_orcamento_pdf(snapshot)
+    resp = make_response(pdf_bytes)
+    resp.headers["Content-Type"] = "application/pdf"
+    disp = "inline" if inline else "attachment"
+    resp.headers["Content-Disposition"] = f'{disp}; filename="orcamento-educamanto-{quote_id}.pdf"'
+    return resp
+
+
+@educamanto_bp.route("/orcamento/gerar", methods=["POST"])
+@login_required
+@_require_use
+def gerar_orcamento():
+    """Gera o PDF (1 página por pacote), salva no histórico e devolve para download (feature 077)."""
+    import json
+
+    from app.models import EducaMantoQuote
+    data = request.get_json(silent=True) or {}
+    if not (data.get("packages") or []):
+        return jsonify({"error": "Selecione ao menos um pacote."}), 400
+
+    snapshot, label = _build_snapshot(data)
+    if snapshot["d1"] + snapshot["d2"] <= 0:
+        return jsonify({"error": "Preencha os dias (1 e/ou 2 sessões) antes de gerar."}), 400
+
+    quote = EducaMantoQuote(
+        user_id=current_user.id,
+        client_name=snapshot["client_name"] or None,
+        packages_label=label,
+        snapshot=json.dumps(snapshot, ensure_ascii=False),
+    )
+    db.session.add(quote)
+    db.session.commit()
+    return _pdf_response(snapshot, quote.id)
+
+
+@educamanto_bp.route("/orcamento/<int:quote_id>/pdf")
+@login_required
+@_require_use
+def orcamento_pdf(quote_id: int):
+    """Re-renderiza o PDF de um orçamento do histórico (valores congelados)."""
+    import json
+
+    from app.models import EducaMantoQuote
+    q = EducaMantoQuote.query.get_or_404(quote_id)
+    snapshot = json.loads(q.snapshot or "{}")
+    return _pdf_response(snapshot, q.id, inline=True)
+
+
+@educamanto_bp.route("/historico")
+@login_required
+@_require_use
+def historico():
+    """Histórico dos orçamentos gerados (estilo da calculadora)."""
+    from app.models import EducaMantoQuote
+    q = request.args.get("q", "").strip()
+    query = EducaMantoQuote.query
+    if q:
+        from sqlalchemy import or_
+        like = f"%{q}%"
+        query = query.filter(
+            or_(EducaMantoQuote.client_name.ilike(like),
+                EducaMantoQuote.packages_label.ilike(like))
+        )
+    entries = query.order_by(EducaMantoQuote.created_at.desc()).limit(300).all()
+    return render_template("educamanto/historico.html", entries=entries, q=q)
+
+
 @educamanto_bp.route("/packages/create", methods=["GET", "POST"])
 @login_required
 @_require_manage
