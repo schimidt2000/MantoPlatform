@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from flask import Blueprint, render_template, request, redirect, url_for, abort, make_response, jsonify, flash
 from flask_login import login_required, current_user
 
-from app import db
+from app import db, _safe_next
 from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SpecialExpense
 from app.constants import RoleName
 
@@ -964,7 +964,7 @@ def set_payment_status():
     item_type = request.form.get("item_type", "cache")
     item_id   = request.form.get("item_id") or request.form.get("role_id")
     status    = request.form.get("payment_status")
-    next_url  = request.form.get("next", url_for("financeiro.pagamentos"))
+    next_url  = _safe_next(request.form.get("next"), url_for("financeiro.pagamentos"))
 
     is_ajax = (
         request.headers.get("X-Requested-With") == "XMLHttpRequest"
@@ -1380,7 +1380,7 @@ def comissoes():
 def set_commission_status():
     cp_id  = request.form.get("cp_id")
     status = request.form.get("status")
-    next_url = request.form.get("next", url_for("financeiro.comissoes"))
+    next_url = _safe_next(request.form.get("next"), url_for("financeiro.comissoes"))
     valid = {"a_pagar", "pago", "cancelado"}
     if cp_id and status in valid:
         cp = CommissionPayment.query.get(cp_id)

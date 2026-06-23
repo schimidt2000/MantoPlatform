@@ -1,5 +1,4 @@
 """EducaManto — Motor de orçamentos por pacote musical."""
-import json
 from functools import wraps
 
 from flask import (
@@ -12,6 +11,7 @@ from app import db
 from app.constants import RoleName
 from app.money import parse_brl
 from app.models import EducaMantoItem, EducaMantoPackage
+from app.utils import json_for_script
 
 educamanto_bp = Blueprint("educamanto", __name__, url_prefix="/educamanto")
 
@@ -178,7 +178,7 @@ def index():
     _seed_default_package()
     packages = EducaMantoPackage.query.order_by(EducaMantoPackage.id).all()
     active_id = request.args.get("pkg", type=int) or (packages[0].id if packages else None)
-    packages_json = json.dumps([p.to_dict() for p in packages])
+    packages_json = json_for_script([p.to_dict() for p in packages])
     can_manage = bool({r.name.upper() for r in current_user.roles} & _CAN_MANAGE)
     return render_template(
         "educamanto/index.html",
