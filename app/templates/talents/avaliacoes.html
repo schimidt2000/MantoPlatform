@@ -88,6 +88,18 @@
     {% endif %}
   </div>
 
+  {% if not event_id %}
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+    <span class="muted" style="font-size:13px; width:72px;">Filtrar por:</span>
+    <a href="#" class="filter-chip {{ 'active' if date_mode != 'avaliacao' }}"
+       onclick="setFilter({date_mode: null}); return false;"
+       title="O período considera a data de realização do evento">📅 Data do evento</a>
+    <a href="#" class="filter-chip {{ 'active' if date_mode == 'avaliacao' }}"
+       onclick="setFilter({date_mode: 'avaliacao'}); return false;"
+       title="O período considera a data em que a avaliação foi enviada">✍️ Data da avaliação</a>
+  </div>
+  {% endif %}
+
   <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
     <span class="muted" style="font-size:13px; width:72px;">Categoria:</span>
     <a href="#" class="filter-chip {{ 'active' if not cat }}"
