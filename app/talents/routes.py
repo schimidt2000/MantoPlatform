@@ -279,6 +279,14 @@ def avaliacoes():
     from_raw = request.args.get("from", "").strip()
     to_raw = request.args.get("to", "").strip()
 
+    # Critério de data do filtro de período (075): "evento" = data de realização do show
+    # (CalendarEvent.start_at, padrão); "avaliacao" = data em que a nota foi enviada
+    # (EventRating.submitted_at).
+    date_mode = request.args.get("date_mode", "evento").strip().lower()
+    if date_mode not in ("evento", "avaliacao"):
+        date_mode = "evento"
+    _date_col = EventRating.submitted_at if date_mode == "avaliacao" else CalendarEvent.start_at
+
     # Visão por evento: o evento já é o recorte — período não se aplica.
     period_start, period_end = (None, None) if event_id else _parse_period(period, from_raw, to_raw)
 
@@ -289,9 +297,9 @@ def avaliacoes():
     if event_id:
         ratings_q = ratings_q.filter(EventRating.event_id == event_id)
     if period_start:
-        ratings_q = ratings_q.filter(CalendarEvent.start_at >= period_start)
+        ratings_q = ratings_q.filter(_date_col >= period_start)
     if period_end:
-        ratings_q = ratings_q.filter(CalendarEvent.start_at < period_end)
+        ratings_q = ratings_q.filter(_date_col < period_end)
     ratings = ratings_q.order_by(EventRating.submitted_at.desc()).all()
 
     rating_ids = [r.id for r in ratings]
@@ -474,9 +482,9 @@ def avaliacoes():
         .join(EventRating, EventRating.event_id == CalendarEvent.id)
     )
     if period_start:
-        rated_q = rated_q.filter(CalendarEvent.start_at >= period_start)
+        rated_q = rated_q.filter(_date_col >= period_start)
     if period_end:
-        rated_q = rated_q.filter(CalendarEvent.start_at < period_end)
+        rated_q = rated_q.filter(_date_col < period_end)
     rated_rows = (
         rated_q.group_by(CalendarEvent.id, CalendarEvent.title, CalendarEvent.start_at)
         .order_by(CalendarEvent.start_at.desc())
@@ -508,6 +516,8 @@ def avaliacoes():
             ini = period_start.strftime("%d/%m/%Y") if period_start else "…"
             fim = (period_end - timedelta(days=1)).strftime("%d/%m/%Y") if period_end else "…"
             recorte_parts.append(f"{ini} – {fim}")
+        if date_mode == "avaliacao" and period != "all":
+            recorte_parts.append("por data da avaliação")
 
     return render_template(
         "talents/avaliacoes.html",
@@ -518,6 +528,7 @@ def avaliacoes():
         cat_label=_RATING_CATEGORY_LABELS.get(cat, ""),
         categories=_RATING_CATEGORIES,
         period=period,
+        date_mode=date_mode,
         from_raw=from_raw,
         to_raw=to_raw,
         recorte_label=" · ".join(recorte_parts),
