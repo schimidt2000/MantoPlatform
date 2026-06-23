@@ -88,7 +88,7 @@
     <div class="sector-panel" id="sp-casting">
       <div class="sector-header" onclick="toggleSector('casting')">
         <div class="sector-header-left">
-          <span class="badge badge-gold">Casting</span>
+          <span class="badge badge-gold">👥 Casting</span>
           {% if pending_casting %}
             <span class="meta">{{ pending_casting|length }} pendente{{ 's' if pending_casting|length != 1 else '' }}</span>
           {% else %}
@@ -127,7 +127,7 @@
     <div class="sector-panel" id="sp-ensaio">
       <div class="sector-header" onclick="toggleSector('ensaio')">
         <div class="sector-header-left">
-          <span class="badge" style="background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44;">Ensaio</span>
+          <span class="badge" style="background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44;">🎭 Ensaio</span>
           {% if pending_ensaio %}
             <span class="badge badge-red" style="font-size:11px;">{{ pending_ensaio|length }} sem ensaio</span>
           {% endif %}
@@ -338,7 +338,7 @@
     <div class="sector-panel" id="sp-figurino">
       <div class="sector-header" onclick="toggleSector('figurino')">
         <div class="sector-header-left">
-          <span class="badge badge-gray">Figurino</span>
+          <span class="badge badge-gray">👗 Figurino</span>
           {% if pending_figurino %}
             <span class="meta">{{ pending_figurino|length }} pendente{{ 's' if pending_figurino|length != 1 else '' }}</span>
           {% else %}
