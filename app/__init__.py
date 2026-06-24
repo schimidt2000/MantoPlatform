@@ -21,6 +21,22 @@ login_manager.login_message = None  # suprime mensagem automática de "faça log
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 
+def _is_revendedor_only(user) -> bool:
+    """True se o usuário tem APENAS o perfil Revendedor EducaManto (feature 078).
+
+    Multi-perfil (revendedor + outro) NÃO é restrito — preserva os acessos dos demais perfis.
+    Usa os papéis reais (não a impersonação), por ser controle de acesso.
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    names = {r.name.upper() for r in user.roles}
+    return names == {RoleName.REVENDEDOR_EDUCAMANTO}
+
+
+# Páginas que o Revendedor EducaManto pode acessar (prefixos). O resto é redirecionado à agenda.
+_REVENDEDOR_ALLOWED = ("/agenda", "/events/", "/educamanto", "/auth", "/uploads", "/static", "/health")
+
+
 def _safe_next(value, default="/"):
     """Retorna ``value`` apenas se for um destino interno seguro; senão, ``default`` (feature 074).
 
@@ -203,6 +219,22 @@ def create_app():
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
             )
         return resp
+
+    # ── Acesso restrito do Revendedor EducaManto (feature 078) ────────────────
+    @app.before_request
+    def _revendedor_guard():
+        if not _is_revendedor_only(current_user):
+            return None
+        path = request.path
+        if path == "/":
+            return redirect("/agenda")
+        if any(path == p or path.startswith(p) for p in _REVENDEDOR_ALLOWED):
+            return None
+        return redirect("/agenda")
+
+    @app.context_processor
+    def inject_revendedor_flag():
+        return {"is_revendedor_only": _is_revendedor_only(current_user)}
 
     @app.context_processor
     def inject_settings():

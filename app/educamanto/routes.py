@@ -24,8 +24,8 @@ def _money(value, default: float) -> float:
     parsed = parse_brl(value)
     return float(parsed) if parsed is not None else float(default)
 
-_CAN_USE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN, RoleName.ENSAIO}
-# ENSAIO usa só a calculadora — não vê a aba de pacotes.
+_CAN_USE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN, RoleName.ENSAIO, RoleName.REVENDEDOR_EDUCAMANTO}
+# ENSAIO/Revendedor usam só a calculadora — não veem a aba de pacotes.
 _CAN_PACKAGES = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
 _CAN_MANAGE   = {RoleName.SUPERADMIN}
 
@@ -230,6 +230,7 @@ def _build_snapshot(data: dict) -> tuple[dict, str]:
         "d1": d1,
         "d2": d2,
         "ensemble": int(data.get("ensemble") or 0),
+        "acrescimo": float(data.get("acrescimo") or 0),   # comissão do vendedor (feature 078)
         "transporte": {
             "total": float(transporte.get("total") or 0),
             "label": str(transporte.get("label") or ""),

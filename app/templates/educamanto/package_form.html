@@ -139,11 +139,11 @@
                  value="{{ (package.discount_pct * 100) | round(1) if package else '5' }}" required>
         </div>
         <div class="form-group" style="grid-column: 1 / -1;">
-          <label class="form-label">Comissão do vendedor (%)</label>
+          <label class="form-label">Taxa interna (%)</label>
           <input type="number" name="commission_rate" class="form-control" step="0.1" min="0" max="100"
                  value="{{ (package.commission_rate * 100) | round(1) if package else '5' }}" required>
           <p class="muted" style="font-size:11.5px; margin-top:4px;">
-            Calculada sobre o lucro: (valor sem nota − custo base) × taxa
+            Uso interno (não aparece na calculadora). Base: (valor sem nota − custo base) × taxa.
           </p>
         </div>
       </div>

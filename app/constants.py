@@ -14,3 +14,5 @@ class RoleName:
     COMERCIAL  = "COMERCIAL"
     FINANCEIRO = "FINANCEIRO"
     ENSAIO     = "ENSAIO"
+    # Perfil restrito (feature 078): só agenda (visualização) + EducaManto.
+    REVENDEDOR_EDUCAMANTO = "REVENDEDOR_EDUCAMANTO"

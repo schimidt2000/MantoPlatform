@@ -389,6 +389,7 @@
         <div style="display:flex; gap:6px;">
           <input type="text" id="t-endereco" class="form-control" placeholder="Rua, número, cidade…" style="flex:1; font-size:13px;">
           <button type="button" id="t-calc-btn" class="btn btn-secondary btn-sm" style="white-space:nowrap;">Calcular</button>
+          <button type="button" id="t-clear-btn" class="btn btn-ghost btn-sm" style="white-space:nowrap; color:#b91c1c;" title="Zerar o transporte">Limpar</button>
         </div>
         <div id="t-dist-msg" style="font-size:11.5px; color:var(--muted); margin-top:4px;"></div>
       </div>
@@ -410,6 +411,18 @@
         <span style="color:var(--muted);">Pessoas no transporte</span>
         <input type="number" id="t-pessoas" min="0" value="0" style="width:60px; text-align:center;">
       </div>
+    </div>
+
+    <hr style="border:none; border-top:1px solid var(--line); margin:16px 0 16px;">
+
+    <h3>Acréscimo do vendedor</h3>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+      <span style="font-size:12.5px; color:var(--muted); flex:1;">
+        Valor acrescentado ao orçamento — esta é a <strong>sua comissão</strong>.
+      </span>
+      <span style="font-size:13px; color:var(--muted);">R$</span>
+      <input type="text" inputmode="decimal" id="acrescimo" class="brl-input"
+             placeholder="0,00" value="" style="width:120px; text-align:right;">
     </div>
 
     <hr style="border:none; border-top:1px solid var(--line); margin:16px 0 16px;">
@@ -440,8 +453,10 @@
         <span style="color:var(--muted);">% de desconto</span>
         <span id="cfg-dp" style="font-weight:600;"></span>
       </div>
-      <div style="display:flex; justify-content:space-between;">
-        <span style="color:var(--muted);">Comissão vendedor</span>
+      {# Taxa interna (antiga "comissão vendedor") — oculta na calculadora (feature 078).
+         Continua customizável no cadastro do pacote. #}
+      <div style="display:none; justify-content:space-between;">
+        <span style="color:var(--muted);">Taxa interna</span>
         <span id="cfg-cr" style="font-weight:600;"></span>
       </div>
     </div>
@@ -475,7 +490,7 @@
         <div class="val" id="sum-custo">—</div>
       </div>
       <div class="edu-summary-item">
-        <div class="lbl">Comissão Vendedor</div>
+        <div class="lbl">Comissão do vendedor</div>
         <div class="val" id="sum-comissao">—</div>
       </div>
     </div>
@@ -601,6 +616,25 @@
     const afsp = (pessoas * kmT) / T_CFG.afsp_divisor;
     const total = Math.round((vt + afsp) * 100) / 100;
     return { total, kmT, pessoas, label, vt: Math.round(vt * 100) / 100, afsp: Math.round(afsp * 100) / 100 };
+  }
+
+  /* Limpa o transporte (feature 078): zera endereço/distância/campos e recalcula. */
+  function limparTransporte() {
+    tKmIda = 0;
+    const end = document.getElementById('t-endereco'); if (end) end.value = '';
+    const msg = document.getElementById('t-dist-msg'); if (msg) msg.textContent = '';
+    const pes = document.getElementById('t-pessoas'); if (pes) pes.value = '0';
+    const car = document.getElementById('t-carros'); if (car) car.value = '1';
+    const cct = document.getElementById('t-carretinha'); if (cct) cct.checked = false;
+    const van = document.querySelector('input[name="t-tipo"][value="van"]');
+    if (van) van.checked = true;
+    onTipoChange();  // ajusta visibilidade + recalcula
+  }
+
+  /* Acréscimo do vendedor (feature 078) = comissão do vendedor. Leitura BR-segura (072). */
+  function acrescimoValor() {
+    const el = document.getElementById('acrescimo');
+    return el ? _brlSum(el) : 0;
   }
 
   /* ── Populate config panel ─────────────────────────────── */
@@ -745,12 +779,14 @@
       discTag.innerHTML = `<svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg> Desconto de ${pct(pkg.discount_pct)} aplicado (−${brl(desconto)})`;
     }
 
-    /* Transporte (feature 076): somado ao valor final, como custo de logística repassado
-       (não entra na margem/desconto do pacote nem na comissão). */
+    /* Transporte (076) e Acréscimo do vendedor (078): ambos somados ao valor final.
+       O acréscimo é a comissão do vendedor (entra no total do PDF). */
     const tp = calcTransporte();
     const transporte = tp.total || 0;
-    document.getElementById('val-sem-nota').textContent = brl(valorFinalSemNota + transporte);
-    document.getElementById('val-com-nota').textContent = brl(valorFinalComNota + transporte);
+    const acrescimo = acrescimoValor();
+    const extra = transporte + acrescimo;
+    document.getElementById('val-sem-nota').textContent = brl(valorFinalSemNota + extra);
+    document.getElementById('val-com-nota').textContent = brl(valorFinalComNota + extra);
 
     const tLine = document.getElementById('t-result-line');
     if (transporte > 0) {
@@ -762,11 +798,10 @@
       tLine.style.display = 'none';
     }
 
-    /* Update summary (comissão/lucro consideram só o pacote — transporte é repasse) */
-    const lucro    = valorFinalSemNota - rawCost;
-    const comissao = lucro * pkg.commission_rate;
+    /* Resumo: Custo base + Comissão do vendedor (= acréscimo). A "taxa interna" (antiga
+       comissão do pacote) fica oculta — usada internamente/no futuro. */
     document.getElementById('sum-custo').textContent    = brl(rawCost);
-    document.getElementById('sum-comissao').textContent = brl(comissao);
+    document.getElementById('sum-comissao').textContent = brl(acrescimo);
 
     /* Update detail table */
     updateDetailTable(itemRows, total, rawCost, valorBase, valorFinalSemNota, descontoAplicado, d1, d2);
@@ -874,14 +909,17 @@
 
     const tp = calcTransporte();
     const tTotal = tp.total || 0;
+    const acrescimo = acrescimoValor();   // comissão do vendedor (078) — entra no total
+    const extra = tTotal + acrescimo;
     const packages = ids.map(id => {
       const p = all.find(x => x.id === id);
       const v = valoresPacote(p, d1, d2, E);
-      return { id: p.id, name: p.name, sem_nota: v.semNota + tTotal, com_nota: v.comNota + tTotal };
+      return { id: p.id, name: p.name, sem_nota: v.semNota + extra, com_nota: v.comNota + extra };
     });
     const payload = {
       client_name: document.getElementById('g-cliente').value.trim(),
       d1, d2, ensemble: E,
+      acrescimo,
       transporte: tTotal ? { total: tTotal, label: tp.label, kmT: tp.kmT, pessoas: tp.pessoas } : { total: 0 },
       packages,
     };
@@ -913,8 +951,14 @@
   document.getElementById('d2').addEventListener('input', calcular);
   document.getElementById('ensemble').addEventListener('input', calcular);
 
-  // Transporte (feature 076)
+  // Acréscimo do vendedor (feature 078)
+  const _acr = document.getElementById('acrescimo');
+  if (_acr) _acr.addEventListener('input', calcular);
+
+  // Transporte (feature 076) + Limpar (078)
   document.getElementById('t-calc-btn').addEventListener('click', fetchDistancia);
+  const _tclear = document.getElementById('t-clear-btn');
+  if (_tclear) _tclear.addEventListener('click', limparTransporte);
   document.getElementById('t-endereco').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); fetchDistancia(); }
   });
