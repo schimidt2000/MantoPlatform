@@ -25,7 +25,7 @@ from .service import (
 )
 from .. import db
 from app.constants import RoleName
-from app.money import parse_brl, parse_brl_int
+from app.money import format_brl, parse_brl, parse_brl_int
 from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
@@ -1399,10 +1399,44 @@ def event_detail(event_id: int):
             .all()
         )
 
+    # ── Mensagens de confirmação/cobrança (feature 083) ─────────────────────
+    # Dados fixos da mensagem (a saudação por horário é montada no cliente, no clique).
+    confirm_characters = " + ".join(parse_characters(event.title))
+    confirm_date_line = _format_event_date_ptbr(event.start_at, event.end_at)
+    confirm_location = event.location or ""
+
+    # Valor em aberto + data limite para o botão de cobrança.
+    _today = date.today()
+    unreceived = [i for i in event.installments if not i.received]
+    if event.installments:
+        cobranca_outstanding = sum((i.amount or 0 for i in unreceived), Decimal("0"))
+        _due_dates = [i.due_date for i in unreceived if i.due_date]
+        cobranca_due = min(_due_dates) if _due_dates else None
+    else:
+        _received = sum((p.amount or 0 for p in payments), Decimal("0"))
+        cobranca_outstanding = Decimal(event.sale_value or 0) - _received
+        cobranca_due = event.payment_due_date
+    cobranca_enabled = (
+        cobranca_due is not None
+        and cobranca_due <= _today
+        and cobranca_outstanding > 0
+    )
+    cobranca_amount = format_brl(cobranca_outstanding, prefix=True)
+    cobranca_due_line = (
+        f"{cobranca_due.day:02d}/{cobranca_due.month:02d}/{cobranca_due.year}"
+        if cobranca_due else ""
+    )
+
     return render_template(
         "event_detail.html",
         event=event,
         event_type=parse_event_type(event.title),
+        confirm_characters=confirm_characters,
+        confirm_date_line=confirm_date_line,
+        confirm_location=confirm_location,
+        cobranca_enabled=cobranca_enabled,
+        cobranca_amount=cobranca_amount,
+        cobranca_due_line=cobranca_due_line,
         talents=talents,
         logs=logs,
         contracts=contracts,
@@ -1452,6 +1486,40 @@ def parse_characters(title: str) -> list[str]:
     # Remove prefixo (TIPO) de cada personagem
     cleaned = [strip_role_prefix(p) for p in parts]
     return [p for p in cleaned if p]
+
+
+_PTBR_WEEKDAYS = [
+    "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira",
+    "Sexta-feira", "Sábado", "Domingo",
+]
+_PTBR_MONTHS = [
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+]
+
+
+def _format_event_date_ptbr(start_at, end_at) -> str:
+    """Formata a data/horário do evento em português para a mensagem de confirmação.
+
+    Ex.: "Sexta-feira, 19 de junho · 19:00 – 20:00". Se não houver término, mostra só o
+    horário de início. Retorna string vazia se ``start_at`` for ``None``.
+
+    Args:
+        start_at: Início do evento (datetime naïve, horário local).
+        end_at: Término do evento (datetime) ou ``None``.
+
+    Returns:
+        Linha de data formatada em pt-BR, ou "" se não houver início.
+    """
+    if start_at is None:
+        return ""
+    weekday = _PTBR_WEEKDAYS[start_at.weekday()]
+    month = _PTBR_MONTHS[start_at.month - 1]
+    date_part = f"{weekday}, {start_at.day} de {month}"
+    time_part = start_at.strftime("%H:%M")
+    if end_at is not None:
+        time_part = f"{time_part} – {end_at.strftime('%H:%M')}"
+    return f"{date_part} · {time_part}"
 
 
 def _dt_naive(dt):
