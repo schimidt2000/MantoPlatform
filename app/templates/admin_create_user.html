@@ -45,7 +45,16 @@
 
       <div class="form-group">
         <label>Senha de primeiro uso</label>
-        <input type="password" name="temp_password" id="password-input" required>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <input type="text" name="temp_password" id="password-input" required
+                 autocomplete="off" spellcheck="false"
+                 style="flex:1; min-width:200px; font-family:monospace;">
+          <button type="button" class="btn btn-ghost btn-sm" id="gen-password-btn"
+                  title="Gerar uma nova senha">🔄 Gerar nova</button>
+        </div>
+        <p class="muted small" style="margin-top:6px;">
+          Gerada automaticamente. Ao criar, será copiada para a área de transferência.
+        </p>
       </div>
 
       <div class="form-group">
@@ -133,5 +142,74 @@ function toggleUserType() {
   document.getElementById('submit-btn').textContent = paymentOnly ? 'Cadastrar pessoa' : 'Criar usuário';
 }
 toggleUserType();
+
+// ── Senha de primeiro uso: geração automática + cópia ao criar (feature 084) ──
+(function () {
+  // Conjuntos sem caracteres ambíguos (0/O, 1/l/I).
+  var LOWER = 'abcdefghijkmnpqrstuvwxyz';
+  var UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  var DIGIT = '23456789';
+  var SYMBOL = '!@#$%&*?';
+
+  function pick(set) {
+    var arr = new Uint32Array(1);
+    (window.crypto || window.msCrypto).getRandomValues(arr);
+    return set[arr[0] % set.length];
+  }
+
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var r = new Uint32Array(1);
+      (window.crypto || window.msCrypto).getRandomValues(r);
+      var j = r[0] % (i + 1);
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+
+  function genPassword() {
+    var all = LOWER + UPPER + DIGIT + SYMBOL;
+    // Garante ao menos um de cada classe e completa até 12 caracteres.
+    var chars = [pick(LOWER), pick(UPPER), pick(DIGIT), pick(SYMBOL)];
+    while (chars.length < 12) chars.push(pick(all));
+    return shuffle(chars).join('');
+  }
+
+  function copySync(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+    document.body.removeChild(ta);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try { navigator.clipboard.writeText(text); } catch (e) { /* ignore */ }
+    }
+  }
+
+  var input = document.getElementById('password-input');
+  var genBtn = document.getElementById('gen-password-btn');
+
+  // Pré-preenche ao carregar (só se vazio).
+  if (input && !input.value) input.value = genPassword();
+
+  if (genBtn) {
+    genBtn.addEventListener('click', function () {
+      input.value = genPassword();
+      input.focus();
+    });
+  }
+
+  // Copia a senha ao criar (apenas modo com acesso), de forma síncrona antes do envio.
+  var form = input ? input.closest('form') : null;
+  if (form) {
+    form.addEventListener('submit', function () {
+      var paymentOnly = document.querySelector('input[name="user_type"][value="payment_only"]').checked;
+      if (!paymentOnly && input.value) copySync(input.value);
+    });
+  }
+})();
 </script>
 {% endblock %}

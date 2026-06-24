@@ -74,24 +74,51 @@ def list_users():
     )
 
 
+def _normalize_salary(salary_value: int | None, payment_type: str) -> tuple[int, str | None]:
+    """Valida o par (valor, tipo de pagamento) de um salário.
+
+    Regras (feature 084):
+    - ``comissao`` ("Somente comissão"): salário-base é sempre 0, qualquer valor é ignorado.
+    - ``semanal`` / ``quinzenal``: exigem valor > 0.
+    - tipo vazio/desconhecido: erro pedindo para selecionar o tipo.
+
+    Args:
+        salary_value: Valor já convertido em inteiro (ou ``None`` se vazio).
+        payment_type: Tipo de pagamento selecionado.
+
+    Returns:
+        Tupla ``(salário_normalizado, erro)`` — ``erro`` é ``None`` quando válido.
+    """
+    if payment_type == "comissao":
+        return 0, None
+    if payment_type in ("semanal", "quinzenal"):
+        if salary_value is None or salary_value <= 0:
+            return 0, "Salário inválido."
+        return salary_value, None
+    return 0, "Selecione o tipo de pagamento."
+
+
 def _parse_salary_form() -> tuple:
     """Lê os campos de salário do form. Retorna (dados ou None, lista de erros).
 
-    Salário é opcional: se valor, tipo e data estiverem todos vazios, retorna (None, []).
+    Salário é opcional (feature 084): sem tipo selecionado e sem valor (> 0), retorna (None, []) —
+    nenhum registro de salário é criado. Isso cobre o estado padrão do formulário ("0,00" + tipo não
+    selecionado). "Somente comissão" é aceito com salário-base 0.
     """
     salary_raw = request.form.get("salary", "").strip()
     payment_type = request.form.get("payment_type", "").strip()
     start_str = request.form.get("start_date", "").strip()
     notes = request.form.get("notes", "").strip()
-    if not salary_raw and not payment_type:
+
+    salary_value = parse_brl_int(salary_raw)  # None se vazio; 0 para "0,00"
+    # Seção não preenchida → sem registro de salário, sem erro.
+    if not payment_type and (salary_value is None or salary_value <= 0):
         return None, []
 
     errors = []
-    salary_value = parse_brl_int(salary_raw)
-    if salary_value is None or salary_value <= 0:
-        errors.append("Salário inválido.")
-    if payment_type not in ("semanal", "quinzenal", "comissao"):
-        errors.append("Tipo de pagamento inválido.")
+    salary_value, type_error = _normalize_salary(salary_value, payment_type)
+    if type_error:
+        errors.append(type_error)
     try:
         start_date = date.fromisoformat(start_str) if start_str else date.today()
     except ValueError:
@@ -178,7 +205,7 @@ def create_user():
     if user_type == "payment_only":
         flash("Pessoa cadastrada com sucesso (sem acesso ao sistema).", "success")
     else:
-        flash("Usuário criado com sucesso!", "success")
+        flash("Usuário criado com sucesso! A senha de primeiro uso foi copiada para a área de transferência.", "success")
     return redirect(url_for("admin.list_users"))
 
 
@@ -264,10 +291,9 @@ def add_salary(user_id: int):
     salary_value = parse_brl_int(salary_raw)
 
     errors = []
-    if salary_value is None or salary_value <= 0:
-        errors.append("Salário inválido.")
-    if payment_type not in ("semanal", "quinzenal", "comissao"):
-        errors.append("Tipo de pagamento inválido.")
+    salary_value, type_error = _normalize_salary(salary_value, payment_type)
+    if type_error:
+        errors.append(type_error)
     try:
         start_date = date.fromisoformat(start_str) if start_str else date.today()
     except ValueError:
