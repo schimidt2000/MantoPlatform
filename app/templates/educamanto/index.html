@@ -409,8 +409,11 @@
       </div>
       <div style="display:flex; gap:8px; align-items:center; font-size:12.5px;">
         <span style="color:var(--muted);">Pessoas no transporte</span>
-        <input type="number" id="t-pessoas" min="0" value="0" style="width:60px; text-align:center;">
+        <input type="number" id="t-pessoas" min="0" value="0" readonly
+               title="Igual ao catering da apresentação (quem vai na van)"
+               style="width:60px; text-align:center; background:var(--surface-2); color:var(--muted);">
       </div>
+      <div style="font-size:11px; color:var(--muted); margin-top:-4px;">= catering da apresentação</div>
     </div>
 
     <hr style="border:none; border-top:1px solid var(--line); margin:16px 0 16px;">
@@ -631,10 +634,28 @@
     onTipoChange();  // ajusta visibilidade + recalcula
   }
 
-  /* Acréscimo do vendedor (feature 078) = comissão do vendedor. Leitura BR-segura (072). */
+  /* Acréscimo do vendedor (078) = comissão. Leitura BR-segura (máscara calculadora: dígitos = centavos).
+     OBS: antes usava _brlSum (definido só em event_detail.html) — ReferenceError quebrava o cálculo
+     em tempo real. Agora é local (feature 079). */
   function acrescimoValor() {
     const el = document.getElementById('acrescimo');
-    return el ? _brlSum(el) : 0;
+    if (!el) return 0;
+    const digits = String(el.value || '').replace(/\D/g, '');
+    return digits ? parseInt(digits, 10) / 100 : 0;
+  }
+
+  /* Pessoas que vão na van = headcount do "Catering apresentação" (feature 079),
+     crescendo com o ensemble. */
+  function cateringApresentacaoQty(E) {
+    if (!pkg || !pkg.items) return 0;
+    const norm = s => (s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const it = pkg.items.find(i => norm(i.name).includes('catering apresenta'));
+    return it ? it.qty + (it.ensemble_add || 0) * E : 0;
+  }
+  function syncPessoasTransporte(E) {
+    const n = cateringApresentacaoQty(E);
+    const el = document.getElementById('t-pessoas');
+    if (el && n > 0) el.value = n;
   }
 
   /* ── Populate config panel ─────────────────────────────── */
@@ -669,9 +690,11 @@
   }
   function effectiveItems(E) { return effectiveItemsFor(pkg, E); }
 
-  /* Valor final (sem/com NF) de um pacote — fonte única usada pela tela e pelo PDF (077).
+  /* Valor final (sem/com NF) de um pacote — fonte única usada pela tela e pelo PDF (077/079).
+     Acréscimo do vendedor: apenas SOMA no sem NF; o com NF é calculado sobre (original + acréscimo).
      NÃO inclui transporte (somado por fora, igual para todos os pacotes). */
-  function valoresPacote(p, d1, d2, E) {
+  function valoresPacote(p, d1, d2, E, acrescimo) {
+    acrescimo = acrescimo || 0;
     const total = d1 + d2;
     if (total <= 0) return { semNota: 0, comNota: 0, valorBase: 0, semExato: 0 };
     const items = effectiveItemsFor(p, E);
@@ -686,8 +709,13 @@
       valorBase = part1 + part2;
     }
     const semExato = (total > p.discount_days) ? valorBase * (1 - p.discount_pct) : valorBase;
+    const semComAcr = semExato + acrescimo;          // acréscimo só soma no sem NF
     const ceil100 = v => Math.ceil(v / 100) * 100;
-    return { semNota: ceil100(semExato), comNota: ceil100(semExato / 0.84), valorBase, semExato };
+    return {
+      semNota: ceil100(semComAcr),
+      comNota: ceil100(semComAcr / 0.84),            // com NF sobre (original + acréscimo)
+      valorBase, semExato,
+    };
   }
 
   /* ── Calculation engine ────────────────────────────────── */
@@ -767,8 +795,10 @@
 
     pill.textContent = scenario;
 
-    // Valores finais via fonte única (mesma usada pelo PDF) — garante paridade tela/PDF (077).
-    const vp = valoresPacote(pkg, d1, d2, E);
+    // Valores finais via fonte única (mesma do PDF). Acréscimo (= comissão) só soma no sem NF;
+    // o com NF é calculado sobre (original + acréscimo) — feature 079.
+    const acrescimo = acrescimoValor();
+    const vp = valoresPacote(pkg, d1, d2, E, acrescimo);
     const descontoAplicado = total > pkg.discount_days;
     const valorFinalSemNota = vp.semNota;
     const valorFinalComNota = vp.comNota;
@@ -779,14 +809,13 @@
       discTag.innerHTML = `<svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg> Desconto de ${pct(pkg.discount_pct)} aplicado (−${brl(desconto)})`;
     }
 
-    /* Transporte (076) e Acréscimo do vendedor (078): ambos somados ao valor final.
-       O acréscimo é a comissão do vendedor (entra no total do PDF). */
+    /* Transporte (076/079): pessoas na van = catering apresentação; somado flat aos dois valores
+       (custo de logística repassado, fora do gross-up da NF). */
+    syncPessoasTransporte(E);
     const tp = calcTransporte();
     const transporte = tp.total || 0;
-    const acrescimo = acrescimoValor();
-    const extra = transporte + acrescimo;
-    document.getElementById('val-sem-nota').textContent = brl(valorFinalSemNota + extra);
-    document.getElementById('val-com-nota').textContent = brl(valorFinalComNota + extra);
+    document.getElementById('val-sem-nota').textContent = brl(valorFinalSemNota + transporte);
+    document.getElementById('val-com-nota').textContent = brl(valorFinalComNota + transporte);
 
     const tLine = document.getElementById('t-result-line');
     if (transporte > 0) {
@@ -907,14 +936,14 @@
     const ids = Array.from(document.querySelectorAll('.g-pkg:checked')).map(c => parseInt(c.value));
     if (!ids.length) { msg.style.color = 'var(--red)'; msg.textContent = 'Selecione ao menos um pacote.'; return; }
 
+    syncPessoasTransporte(E);
     const tp = calcTransporte();
     const tTotal = tp.total || 0;
-    const acrescimo = acrescimoValor();   // comissão do vendedor (078) — entra no total
-    const extra = tTotal + acrescimo;
+    const acrescimo = acrescimoValor();   // comissão do vendedor (078) — só soma no sem; com NF sobre (orig+acr)
     const packages = ids.map(id => {
       const p = all.find(x => x.id === id);
-      const v = valoresPacote(p, d1, d2, E);
-      return { id: p.id, name: p.name, sem_nota: v.semNota + extra, com_nota: v.comNota + extra };
+      const v = valoresPacote(p, d1, d2, E, acrescimo);
+      return { id: p.id, name: p.name, sem_nota: v.semNota + tTotal, com_nota: v.comNota + tTotal };
     });
     const payload = {
       client_name: document.getElementById('g-cliente').value.trim(),
