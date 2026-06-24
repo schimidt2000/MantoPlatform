@@ -38,6 +38,7 @@ def main():
         get_or_create_role("COMERCIAL")
         get_or_create_role("FINANCEIRO")
         get_or_create_role("ENSAIO")
+        get_or_create_role("REVENDEDOR_EDUCAMANTO")  # feature 078
 
         if p_user_manage not in superadmin.permissions:
             superadmin.permissions.append(p_user_manage)
