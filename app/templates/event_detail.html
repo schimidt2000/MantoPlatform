@@ -42,6 +42,21 @@
       📋 Exportar elenco
     </button>
   {% endif %}
+  {% if eff_has_role('COMERCIAL', 'SUPERADMIN') %}
+    <button type="button" class="btn btn-ghost btn-sm" id="btn-confirmar-dados"
+            title="Copiar mensagem de confirmação do evento">
+      ✅ Confirmar dados do evento
+    </button>
+    <button type="button" class="btn btn-ghost btn-sm" id="btn-cobranca"
+            {% if not cobranca_enabled %}disabled
+            style="opacity:.45; cursor:not-allowed;"
+            title="Disponível apenas na data limite de pagamento ou em atraso"
+            {% else %}
+            title="Copiar mensagem de cobrança do valor em aberto"
+            {% endif %}>
+      💰 Cobrança
+    </button>
+  {% endif %}
   {% if eff_has_role('SUPERADMIN', 'COMERCIAL') %}
     <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger,#c0392b);"
             onclick="document.getElementById('delete-event-modal').style.display='flex'">
@@ -54,6 +69,92 @@
 {% endblock %}
 
 {% block content %}
+
+{% if eff_has_role('COMERCIAL', 'SUPERADMIN') %}
+{# ── Mensagens de confirmação / cobrança (feature 083) ───────── #}
+<script>
+(function () {
+  const DATA = {
+    characters: {{ confirm_characters | tojson }},
+    dateLine:   {{ confirm_date_line | tojson }},
+    location:   {{ confirm_location | tojson }},
+    cobrAmount: {{ cobranca_amount | tojson }},
+    cobrDue:    {{ cobranca_due_line | tojson }},
+  };
+
+  function saudacao() {
+    const h = new Date().getHours();
+    if (h >= 5 && h < 12) return 'Bom dia';
+    if (h >= 12 && h < 18) return 'Boa tarde';
+    return 'Boa noite';
+  }
+
+  function buildConfirmacao() {
+    const linhas = [
+      saudacao() + '! Como vai?',
+      'Passando para confirmar seu evento!',
+      '',
+      DATA.characters,
+      DATA.dateLine,
+    ];
+    if (DATA.location) linhas.push(DATA.location);
+    linhas.push('', 'Tudo certinho? Estamos ansiosos por esse momento!');
+    return linhas.join('\n');
+  }
+
+  function buildCobranca() {
+    const linhas = [
+      saudacao() + '! Tudo bem?',
+      'Passando sobre o pagamento do seu evento:',
+      '',
+      DATA.characters,
+      DATA.dateLine,
+    ];
+    if (DATA.location) linhas.push(DATA.location);
+    linhas.push('');
+    if (DATA.cobrDue) {
+      linhas.push('Consta um valor em aberto de ' + DATA.cobrAmount +
+                  ' com vencimento em ' + DATA.cobrDue + '.');
+    } else {
+      linhas.push('Consta um valor em aberto de ' + DATA.cobrAmount + '.');
+    }
+    linhas.push('Poderia, por gentileza, confirmar o pagamento? Qualquer dúvida estou à disposição!');
+    return linhas.join('\n');
+  }
+
+  function copiar(texto, btn) {
+    const original = btn.innerHTML;
+    const ok = function () {
+      btn.innerHTML = '✅ Copiado!';
+      setTimeout(function () { btn.innerHTML = original; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(texto).then(ok).catch(function () { fallback(texto); ok(); });
+    } else {
+      fallback(texto); ok();
+    }
+  }
+
+  function fallback(texto) {
+    const ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+    document.body.removeChild(ta);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const bc = document.getElementById('btn-confirmar-dados');
+    if (bc) bc.addEventListener('click', function () { copiar(buildConfirmacao(), bc); });
+    const bp = document.getElementById('btn-cobranca');
+    if (bp && !bp.disabled) bp.addEventListener('click', function () { copiar(buildCobranca(), bp); });
+  });
+})();
+</script>
+{% endif %}
 
 {# ── Event description (if present) ──────────────────────────── #}
 {% if event.description %}

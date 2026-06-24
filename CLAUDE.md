@@ -159,7 +159,8 @@ def get_active_users(users: list[User]) -> list[User]:
 
 ### Antes de qualquer task grande, fazer:
 ```bash
-# Verificar estado atual dos testes
+# Verificar estado atual dos testes — SEMPRE contra a cópia local manto_local (Postgres),
+# nunca contra o SQLite vazio. Ver a "REGRA DE TESTES" em "🔧 Comandos do Projeto".
 pytest tests/ -v
 
 # Verificar se não há erros de tipo
@@ -223,7 +224,7 @@ config = Config()
 
 ## ✅ Checklist Antes de Dizer "Pronto"
 
-- [ ] Todos os testes passando (`pytest`)
+- [ ] Todos os testes passando (`pytest`) — **rodados contra `manto_local` (Postgres), não SQLite**
 - [ ] Sem erros de tipo (`mypy`)
 - [ ] Código formatado (`ruff format`)
 - [ ] Sem warnings de linting (`ruff check`)
@@ -236,12 +237,33 @@ config = Config()
 
 ## 🔧 Comandos do Projeto
 
-```bash
+> ⚠️ **REGRA DE TESTES — LEIA ANTES DE VERIFICAR QUALQUER COISA**
+> Produção roda em **PostgreSQL**. Por isso, **todo teste/verificação DEVE rodar contra a
+> cópia local do banco real** (`manto_local`, PostgreSQL 18 local) — **nunca** contra o
+> SQLite vazio de `instance/`. O SQLite não pega bugs Postgres-only (ex.: `float−Decimal` no
+> financeiro). Antes de verificar: garanta que `manto_local` está atualizado e aponte o app/
+> teste para ele via `DATABASE_URL` (use `scripts/db/run-local.ps1`).
+> Detalhes e setup: `scripts/db/README.md`.
+
+```powershell
 # Instalar dependências
 pip install -r requirements.txt
 
-# Rodar aplicação
+# Rodar aplicação (SQLite de dev — só para uso casual)
 python run.py
+
+# ── BANCO DE TESTES (cópia real de produção) ──────────────────────────
+# Rodar o app/verificações apontando para a cópia local (Postgres) — USE ISTO PARA TESTAR
+.\scripts\db\run-local.ps1
+#   (equivale a: $env:DATABASE_URL = (Get-Content .local-db-url -Raw).Trim(); python run.py)
+
+# Atualizar a cópia local com o backup mais recente
+.\scripts\db\refresh-local-db.ps1
+# Baixar um dump novo do Railway E atualizar a cópia local
+.\scripts\db\refresh-local-db.ps1 -Fresh
+# Backup manual do banco de produção (também roda sozinho toda noite, 02:00)
+.\scripts\db\backup-railway.ps1
+# ──────────────────────────────────────────────────────────────────────
 
 # Aplicar migrations do banco
 python -m flask db upgrade
@@ -249,7 +271,7 @@ python -m flask db upgrade
 # Criar nova migration após alterar models.py
 python -m flask db migrate -m "descrição"
 
-# Rodar testes
+# Rodar testes — SEMPRE contra manto_local (defina DATABASE_URL para a cópia local antes)
 pytest tests/ -v
 
 # Rodar com cobertura
@@ -283,5 +305,6 @@ O Claude deve ler os arquivos em `.claude/skills/` quando trabalhar nas áreas c
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+shell commands, and other important information, read the current plan:
+`specs/083-evento-botoes-mensagens/plan.md`
 <!-- SPECKIT END -->
