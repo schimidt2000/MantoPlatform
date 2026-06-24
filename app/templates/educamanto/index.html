@@ -382,7 +382,7 @@
 
     <hr style="border:none; border-top:1px solid var(--line); margin:20px 0 16px;">
 
-    <h3>Transporte (opcional)</h3>
+    <h3>Transporte <span style="font-weight:600; text-transform:none; letter-spacing:0;">(APENAS SE FOR FORA DA CIDADE DE SÃO PAULO)</span></h3>
     <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:8px;">
       <div>
         <label class="form-label" style="font-size:12px; color:var(--muted); font-weight:600;">Endereço do evento</label>
@@ -393,27 +393,15 @@
         </div>
         <div id="t-dist-msg" style="font-size:11.5px; color:var(--muted); margin-top:4px;"></div>
       </div>
-      <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:12.5px;">
-        <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;">
-          <input type="radio" name="t-tipo" value="van" checked> Van
-        </label>
-        <label style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;">
-          <input type="radio" name="t-tipo" value="carro"> Carro
-        </label>
-        <label id="t-carretinha-wrap" style="display:inline-flex; align-items:center; gap:5px; cursor:pointer;">
-          <input type="checkbox" id="t-carretinha"> c/ carretinha
-        </label>
-        <span id="t-carros-wrap" style="display:none; align-items:center; gap:5px;">
-          Carros <input type="number" id="t-carros" min="1" value="1" style="width:48px; text-align:center;">
-        </span>
+      {# Transporte fixo: sempre van c/ carretinha (080). Tipo/carretinha/carros e nº de pessoas
+         ficam ocultos; pessoas = catering da apresentação. Elementos mantidos (ocultos) para o JS. #}
+      <div style="display:none;">
+        <label><input type="radio" name="t-tipo" value="van" checked> Van</label>
+        <label><input type="radio" name="t-tipo" value="carro"> Carro</label>
+        <label id="t-carretinha-wrap"><input type="checkbox" id="t-carretinha" checked> c/ carretinha</label>
+        <span id="t-carros-wrap"><input type="number" id="t-carros" min="1" value="1"></span>
+        <input type="number" id="t-pessoas" min="0" value="0" readonly>
       </div>
-      <div style="display:flex; gap:8px; align-items:center; font-size:12.5px;">
-        <span style="color:var(--muted);">Pessoas no transporte</span>
-        <input type="number" id="t-pessoas" min="0" value="0" readonly
-               title="Igual ao catering da apresentação (quem vai na van)"
-               style="width:60px; text-align:center; background:var(--surface-2); color:var(--muted);">
-      </div>
-      <div style="font-size:11px; color:var(--muted); margin-top:-4px;">= catering da apresentação</div>
     </div>
 
     <hr style="border:none; border-top:1px solid var(--line); margin:16px 0 16px;">
@@ -427,9 +415,11 @@
       <input type="text" inputmode="decimal" id="acrescimo" class="brl-input"
              placeholder="0,00" value="" style="width:120px; text-align:right;">
     </div>
+    <div id="acrescimo-msg" style="display:none; font-size:11px; color:#b45309; margin-bottom:6px;"></div>
 
     <hr style="border:none; border-top:1px solid var(--line); margin:16px 0 16px;">
 
+    {% if can_manage %}
     <h3>Configurações do pacote</h3>
     <div style="display:flex; flex-direction:column; gap:8px; font-size:12.5px;">
       <div style="display:flex; justify-content:space-between;">
@@ -463,6 +453,7 @@
         <span id="cfg-cr" style="font-weight:600;"></span>
       </div>
     </div>
+    {% endif %}
   </div>
 
   {# ── Right: Results area ────────────────────────────────── #}
@@ -603,22 +594,13 @@
   function calcTransporte() {
     if (!tKmIda || tKmIda <= 0) return { total: 0 };
     const kmT = tKmIda * 2;
-    const tipo = (document.querySelector('input[name="t-tipo"]:checked') || {}).value || 'van';
+    // Transporte sempre van COM carretinha (feature 080); pessoas = catering da apresentação.
     const pessoas = Math.max(0, parseInt(document.getElementById('t-pessoas').value) || 0);
-    let vt, label;
-    if (tipo === 'van') {
-      const carretinha = document.getElementById('t-carretinha').checked;
-      const tarifa = carretinha ? T_CFG.van_com_carretinha : T_CFG.van_sem_carretinha;
-      vt = kmT * tarifa;
-      label = `Van ${carretinha ? 'c/ carretinha' : 's/ carretinha'}`;
-    } else {
-      const carros = Math.max(1, parseInt(document.getElementById('t-carros').value) || 1);
-      vt = carros * T_CFG.carro_por_km * kmT;
-      label = `${carros} carro(s)`;
-    }
+    const vt = kmT * T_CFG.van_com_carretinha;
     const afsp = (pessoas * kmT) / T_CFG.afsp_divisor;
     const total = Math.round((vt + afsp) * 100) / 100;
-    return { total, kmT, pessoas, label, vt: Math.round(vt * 100) / 100, afsp: Math.round(afsp * 100) / 100 };
+    return { total, kmT, pessoas, label: 'Van c/ carretinha',
+             vt: Math.round(vt * 100) / 100, afsp: Math.round(afsp * 100) / 100 };
   }
 
   /* Limpa o transporte (feature 078): zera endereço/distância/campos e recalcula. */
@@ -661,6 +643,8 @@
   /* ── Populate config panel ─────────────────────────────── */
   function loadConfig() {
     if (!pkg) return;
+    // Painel "Configurações do pacote" só existe p/ super admin (080) — sai se ausente.
+    if (!document.getElementById('cfg-m1s')) return;
     document.getElementById('cfg-m1s').textContent  = x(pkg.margin_1s);
     document.getElementById('cfg-m2s').textContent  = x(pkg.margin_2s);
     document.getElementById('cfg-m1sd').textContent = x(pkg.margin_1s_days);
@@ -797,7 +781,23 @@
 
     // Valores finais via fonte única (mesma do PDF). Acréscimo (= comissão) só soma no sem NF;
     // o com NF é calculado sobre (original + acréscimo) — feature 079.
-    const acrescimo = acrescimoValor();
+    // Cap (080): o acréscimo não pode passar do valor original (sem nota, sem acréscimo).
+    const original = valoresPacote(pkg, d1, d2, E, 0).semNota;
+    let acrescimo = acrescimoValor();
+    const acrMsg = document.getElementById('acrescimo-msg');
+    if (acrescimo > original && original > 0) {
+      acrescimo = original;
+      const acrEl = document.getElementById('acrescimo');
+      if (acrEl) acrEl.value = (window.MoneyMask
+        ? MoneyMask.format(Math.round(original * 100))
+        : original.toFixed(2));
+      if (acrMsg) {
+        acrMsg.style.display = 'block';
+        acrMsg.textContent = `Máximo: ${brl(original)} — o acréscimo não pode passar do valor original.`;
+      }
+    } else if (acrMsg) {
+      acrMsg.style.display = 'none';
+    }
     const vp = valoresPacote(pkg, d1, d2, E, acrescimo);
     const descontoAplicado = total > pkg.discount_days;
     const valorFinalSemNota = vp.semNota;

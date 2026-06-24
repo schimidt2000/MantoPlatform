@@ -32,8 +32,9 @@ _RIGHT = _W - 56
 _CONTACT_PHONE = "+55 (11) 97057-0577"
 _CONTACT_EMAIL = "educamanto@mantoproducoes.com.br"
 
-# Explicação fixa por nome do pacote (decisão da feature 077: pacotes são Master/Intermediário/Básico).
-PACKAGE_EXPLANATIONS = {
+# Descrição CURTA do tipo (abaixo do título). Tipo detectado por substring no nome do pacote
+# (ex.: "Uma Aventura Animal - Master" -> master). Feature 077/080.
+SHORT_DESC = {
     "master": (
         "A Manto Produções se responsabiliza pela sonorização, iluminação completa e "
         "alimentação no dia do evento."
@@ -42,10 +43,31 @@ PACKAGE_EXPLANATIONS = {
         "A Manto Produções se responsabiliza pela sonorização, iluminação básica e "
         "alimentação no dia do evento."
     ),
-    "basico": (
+    "economica": (
         "A Manto Produções se responsabiliza apenas pela sonorização básica. Iluminação e "
         "Alimentação no dia do evento por conta da parte contratante."
     ),
+}
+
+# Descrição LONGA do plano (após as formas de pagamento) — conteúdo de planos.md. Feature 080.
+LONG_DESC = {
+    "master": [
+        ("Geral", "Cenografia Completa, Sonorização Completa, Iluminação Completa, Técnico de Som e Alimentação por conta da Manto Produções"),
+        ("Iluminação Cênica Completa", "Moving Head, Moving Bee, Parleds, Ribaltas, Máquinas de Fumaça, Máquinas de Bolha de Sabão, Mesa DMX, Estrutura Box Truss"),
+        ("Sonorização Teatral", "Caixas de Som, Microfones Headset, Microfones Headset e/ou Bastão e Mesa Digital"),
+        ("Cenografia", "3 Backdrops cenográficos, 2 Árvores Cenográficas, 1 Bateria Cenográfica e Elementos de Selva"),
+    ],
+    "intermediario": [
+        ("Geral", "Cenografia, Sonorização Básica, Iluminação Básica, Técnico de Som e Alimentação por conta da Manto Produções"),
+        ("Iluminação Cênica Básica", "Moving Bee, Parleds, Máquinas de Bolha de Sabão, Mesa DMX, Estrutura Box Truss"),
+        ("Sonorização Simplificada", "Caixas de Som, Microfones Headset e/ou Bastão e Mesa Digital"),
+        ("Cenografia", "3 Backdrops cenográficos, 2 Árvores Cenográficas, 1 Bateria Cenográfica e Elementos de Selva"),
+    ],
+    "economica": [
+        ("Geral", "Cenografia Reduzida, Sonorização Básica, Técnico por conta da Manto Produções. Alimentação deverá ser disponibilizada pela contratante."),
+        ("Sonorização Simplificada", "Caixas de Som, Microfones Headset e/ou Bastão e Mesa Digital"),
+        ("Cenografia", "1 Backdrop cenográfico, Bateria Cenográfica e Elementos de Selva"),
+    ],
 }
 
 _PAYMENT_LINES = [
@@ -61,9 +83,26 @@ def _norm(name: str) -> str:
     return "".join(ch for ch in n if not unicodedata.combining(ch))
 
 
+def _tipo_for(name: str) -> str:
+    """Detecta o tipo do plano pelo nome do pacote (substring). '' se não reconhecido."""
+    n = _norm(name)
+    if "master" in n:
+        return "master"
+    if "intermedi" in n:
+        return "intermediario"
+    if "economic" in n or "basic" in n:
+        return "economica"
+    return ""
+
+
 def explanation_for(name: str) -> str:
-    """Retorna a explicação fixa do pacote pelo nome (vazio se não mapeado)."""
-    return PACKAGE_EXPLANATIONS.get(_norm(name), "")
+    """Descrição CURTA do tipo (abaixo do título); vazio se tipo não reconhecido."""
+    return SHORT_DESC.get(_tipo_for(name), "")
+
+
+def detalhes_for(name: str) -> list[tuple[str, str]]:
+    """Descrição LONGA do plano (após as formas de pagamento); [] se tipo não reconhecido."""
+    return LONG_DESC.get(_tipo_for(name), [])
 
 
 def _wrap(c: rl_canvas.Canvas, text: str, font: str, size: float, max_width: float) -> list[str]:
@@ -181,6 +220,30 @@ def _draw_page(c: rl_canvas.Canvas, pk: dict, d1: int, d2: int, transporte: dict
             c.drawString(_LEFT + 130, y, ln)
             y -= 13
         y -= 5
+
+    # ── Descrição longa do plano (planos.md) — após as formas de pagamento (080) ──
+    detalhes = detalhes_for(pk.get("name", ""))
+    if detalhes:
+        y -= 8
+        c.setFillColor(_PURPLE)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(_LEFT, y, "O QUE ESTÁ INCLUSO")
+        y -= 6
+        c.setStrokeColor(_GOLD)
+        c.setLineWidth(0.5)
+        c.line(_LEFT, y, _RIGHT, y)
+        y -= 14
+        for label, txt in detalhes:
+            c.setFont("Helvetica-Bold", 8.5)
+            c.setFillColor(_GRAY)
+            c.drawString(_LEFT, y, f"{label}:")
+            y -= 11
+            c.setFont("Helvetica", 8.5)
+            c.setFillColor(_LIGHT)
+            for ln in _wrap(c, txt, "Helvetica", 8.5, _RIGHT - _LEFT - 12):
+                c.drawString(_LEFT + 12, y, ln)
+                y -= 10
+            y -= 4
 
     # ── Rodapé ────────────────────────────────────────────────────────────
     c.setFillColor(_LIGHT)
