@@ -9,7 +9,7 @@
     <a href="/educamanto/historico" class="btn btn-secondary btn-sm">🕘 Histórico</a>
   {% endif %}
   {% if can_manage and active_id %}
-    <a href="/educamanto/packages/{{ active_id }}/edit" class="btn btn-secondary btn-sm">Editar pacote</a>
+    <a id="edu-edit-link" href="/educamanto/packages/{{ active_id }}/edit" class="btn btn-secondary btn-sm">Editar pacote</a>
   {% endif %}
   {% if can_manage %}
     <a href="/educamanto/packages/create" class="btn btn-primary btn-sm">+ Novo pacote</a>
@@ -318,7 +318,7 @@
 <div style="margin-bottom:24px; max-width:420px;">
   <label class="form-label" style="font-size:12px; color:var(--muted); font-weight:600;">Pacote</label>
   <select id="pkg-select" class="form-control" style="width:100%; font-weight:600;"
-          onchange="location.href='/educamanto/?pkg=' + this.value">
+          onchange="switchPackage(this.value)">
     {% for pkg in packages %}
     <option value="{{ pkg.id }}" {% if pkg.id == active_id %}selected{% endif %}>{{ pkg.name }}</option>
     {% endfor %}
@@ -548,6 +548,20 @@
   const all  = window.PACKAGES_DATA || [];
   const pkgId = window.ACTIVE_PKG_ID;
   let pkg = all.find(p => p.id === pkgId) || all[0];
+
+  /* Troca de pacote SEM recarregar a página (feature 081): preserva dias/ensemble/transporte/
+     acréscimo, então o valor na tela bate com o do PDF para o mesmo pacote. */
+  window.switchPackage = function (id) {
+    const novo = all.find(p => p.id === parseInt(id));
+    if (!novo) return;
+    pkg = novo;
+    window.ACTIVE_PKG_ID = pkg.id;
+    loadConfig();
+    calcular();
+    const editLink = document.getElementById('edu-edit-link');
+    if (editLink) editLink.href = '/educamanto/packages/' + pkg.id + '/edit';
+    try { history.replaceState(null, '', '/educamanto/?pkg=' + pkg.id); } catch (e) { /* ignore */ }
+  };
 
   /* ── Helpers ───────────────────────────────────────────── */
   function brl(v) {
@@ -781,22 +795,20 @@
 
     // Valores finais via fonte única (mesma do PDF). Acréscimo (= comissão) só soma no sem NF;
     // o com NF é calculado sobre (original + acréscimo) — feature 079.
-    // Cap (080): o acréscimo não pode passar do valor original (sem nota, sem acréscimo).
+    // Cap (080/081): o acréscimo efetivo não passa do valor original do pacote em tela.
+    // NÃO reescreve o input (preserva o valor digitado ao trocar de pacote — 081); apenas
+    // limita o valor usado e avisa o máximo.
     const original = valoresPacote(pkg, d1, d2, E, 0).semNota;
-    let acrescimo = acrescimoValor();
+    const acrescimoRaw = acrescimoValor();
+    const acrescimo = (original > 0) ? Math.min(acrescimoRaw, original) : acrescimoRaw;
     const acrMsg = document.getElementById('acrescimo-msg');
-    if (acrescimo > original && original > 0) {
-      acrescimo = original;
-      const acrEl = document.getElementById('acrescimo');
-      if (acrEl) acrEl.value = (window.MoneyMask
-        ? MoneyMask.format(Math.round(original * 100))
-        : original.toFixed(2));
-      if (acrMsg) {
+    if (acrMsg) {
+      if (acrescimoRaw > original && original > 0) {
         acrMsg.style.display = 'block';
-        acrMsg.textContent = `Máximo: ${brl(original)} — o acréscimo não pode passar do valor original.`;
+        acrMsg.textContent = `Máximo para este plano: ${brl(original)} — o acréscimo não pode passar do valor original (usando o máximo).`;
+      } else {
+        acrMsg.style.display = 'none';
       }
-    } else if (acrMsg) {
-      acrMsg.style.display = 'none';
     }
     const vp = valoresPacote(pkg, d1, d2, E, acrescimo);
     const descontoAplicado = total > pkg.discount_days;
@@ -939,10 +951,14 @@
     syncPessoasTransporte(E);
     const tp = calcTransporte();
     const tTotal = tp.total || 0;
-    const acrescimo = acrescimoValor();   // comissão do vendedor (078) — só soma no sem; com NF sobre (orig+acr)
+    const acrescimoRaw = acrescimoValor();   // comissão do vendedor (078)
     const packages = ids.map(id => {
       const p = all.find(x => x.id === id);
-      const v = valoresPacote(p, d1, d2, E, acrescimo);
+      // Cap por pacote (080/081): acréscimo efetivo = min(digitado, valor original do pacote),
+      // exatamente como a tela calcula — garante que o PDF bata com o valor exibido.
+      const original = valoresPacote(p, d1, d2, E, 0).semNota;
+      const acr = (original > 0) ? Math.min(acrescimoRaw, original) : acrescimoRaw;
+      const v = valoresPacote(p, d1, d2, E, acr);
       return { id: p.id, name: p.name, sem_nota: v.semNota + tTotal, com_nota: v.comNota + tTotal };
     });
     const payload = {
