@@ -277,7 +277,7 @@ def create_app():
     def portal_domain_routing():
         host = request.host.split(":")[0]
         if host in PORTAL_HOSTS:
-            if not request.path.startswith(("/portal", "/static", "/uploads")):
+            if not request.path.startswith(("/portal", "/cadastro", "/static", "/uploads")):
                 return redirect("/portal/")
 
     # ✅ Importa blueprints AQUI (depois do db existir)
@@ -292,6 +292,7 @@ def create_app():
     from .orcamento.routes import orcamento_bp
     from .educamanto.routes import educamanto_bp
     from .gastos.routes import gastos_bp
+    from .cadastro.routes import cadastro_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
@@ -304,6 +305,7 @@ def create_app():
     app.register_blueprint(orcamento_bp)
     app.register_blueprint(educamanto_bp)
     app.register_blueprint(gastos_bp)
+    app.register_blueprint(cadastro_bp)
 
     def _wa_link(code: int) -> str:
         from zoneinfo import ZoneInfo
