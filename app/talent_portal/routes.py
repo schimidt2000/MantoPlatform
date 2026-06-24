@@ -10,7 +10,7 @@ from flask import (
     session, flash, current_app, send_from_directory, abort
 )
 from werkzeug.utils import secure_filename
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app import db, limiter
 from app.models import Talent, EventRole, CalendarEvent, TalentMedia, EventRating, EventSubRating
@@ -228,10 +228,20 @@ def _rated_event_ids(talent) -> set[int]:
     return {r.event_id for r in EventRating.query.filter_by(talent_id=talent.id).all()}
 
 
-def _rateable_event_ids(talent) -> set[int]:
-    """IDs de eventos que o talento pode avaliar: terminados nos últimos 7 dias e ainda não avaliados.
+def _not_rejected():
+    """Cláusula: talento escalado cujo convite NÃO foi recusado (aceito, pendente ou sem status).
 
-    Usa o término efetivo (end_at); se não houver, cai no start_at — mesma regra do destaque.
+    Em SQL ``NULL != 'rejected'`` resulta em NULL (não True), então NULL é tratado explicitamente.
+    """
+    return or_(EventRole.invite_status.is_(None), EventRole.invite_status != "rejected")
+
+
+def _rateable_event_ids(talent) -> set[int]:
+    """IDs de eventos que o talento pode avaliar e ainda não avaliou.
+
+    Elegível: escalado (convite não recusado) num evento já terminado, dentro de 7 dias contados do
+    MAIS RECENTE entre o término do evento e a inclusão do talento (``assigned_at``). Assim, quem é
+    adicionado tardiamente ganha a janela a partir da inclusão (feature 085).
     """
     now = _now_sp()
     window = now - timedelta(days=7)
@@ -239,16 +249,22 @@ def _rateable_event_ids(talent) -> set[int]:
     rated = _rated_event_ids(talent)
     rows = (
         EventRole.query
-        .filter_by(talent_id=talent.id, invite_status="accepted")
+        .filter(EventRole.talent_id == talent.id, _not_rejected())
         .join(CalendarEvent)
-        .filter(event_end < now, event_end >= window)
+        .filter(
+            event_end < now,
+            or_(event_end >= window, EventRole.assigned_at >= window),
+        )
         .all()
     )
     return {r.event_id for r in rows if r.event_id and r.event_id not in rated}
 
 
 def _editable_rating_event_ids(talent) -> set[int]:
-    """IDs de eventos já avaliados pelo talento e terminados nos últimos 30 dias (janela de edição)."""
+    """IDs de eventos já avaliados pelo talento, na janela de edição (30 dias).
+
+    Janela contada do mais recente entre o término do evento e a inclusão do talento (feature 085).
+    """
     rated = _rated_event_ids(talent)
     if not rated:
         return set()
@@ -257,12 +273,12 @@ def _editable_rating_event_ids(talent) -> set[int]:
     event_end = func.coalesce(CalendarEvent.end_at, CalendarEvent.start_at)
     rows = (
         EventRole.query
-        .filter_by(talent_id=talent.id, invite_status="accepted")
+        .filter(EventRole.talent_id == talent.id, _not_rejected())
         .join(CalendarEvent)
         .filter(
             CalendarEvent.id.in_(rated),
             event_end < now,
-            event_end >= window,
+            or_(event_end >= window, EventRole.assigned_at >= window),
         )
         .all()
     )
@@ -693,7 +709,7 @@ def rate_event(event_id: int):
     role = EventRole.query.filter(
         EventRole.event_id == event_id,
         EventRole.talent_id == talent.id,
-        EventRole.invite_status == "accepted",
+        _not_rejected(),
     ).first_or_404()
     event = role.event
 
@@ -728,7 +744,7 @@ def submit_rating(event_id: int):
     role = EventRole.query.filter(
         EventRole.event_id == event_id,
         EventRole.talent_id == talent.id,
-        EventRole.invite_status == "accepted",
+        _not_rejected(),
     ).first_or_404()
 
     if not _event_ended(role.event):
