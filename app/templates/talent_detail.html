@@ -19,6 +19,28 @@
 
 {% block content %}
 
+{% if talent.status == 'pending' %}
+  <div class="panel" style="margin-bottom:16px; border:1px solid #f0c98a; background:#fff7ed;">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+      <div>
+        <strong>Cadastro pendente</strong>
+        <span class="muted" style="font-size:13px;"> — recebido pelo formulário público, aguardando revisão.</span>
+      </div>
+      {% if can_edit %}
+        <div style="display:flex; gap:8px;">
+          <form method="post" action="/talents/{{ talent.id }}/approve">
+            <button type="submit" class="btn btn-sm btn-primary">✓ Aprovar e adicionar ao banco</button>
+          </form>
+          <form method="post" action="/talents/{{ talent.id }}/reject"
+                onsubmit="return confirm('Rejeitar e remover este cadastro?')">
+            <button type="submit" class="btn btn-sm btn-ghost" style="color:var(--danger,#c0392b);">Rejeitar</button>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
 <div class="grid-2" style="align-items:start;">
 
   {# ── Left column: photo ─────────────────────────────────────── #}

@@ -204,7 +204,23 @@
      class="btn {% if status == 'active' %}btn-primary{% else %}btn-ghost{% endif %}">
     Ativos
   </a>
+  <a href="/talents?status=pending"
+     class="btn {% if status == 'pending' %}btn-primary{% else %}btn-ghost{% endif %}">
+    Pendentes
+    {% if pending_count %}
+      <span class="badge" style="background:#ea580c; color:#fff; margin-left:6px;">{{ pending_count }}</span>
+    {% endif %}
+  </a>
 </div>
+
+{% if status == 'pending' %}
+  <div class="panel" style="margin-bottom:16px;">
+    <p class="muted" style="margin:0; font-size:13px;">
+      Cadastros recebidos pelo formulário público (<code>/cadastro</code>), aguardando revisão. Aprove
+      para adicionar ao banco ou rejeite para descartar.
+    </p>
+  </div>
+{% endif %}
 
 {% if status == "active" %}
 
@@ -435,6 +451,7 @@
 
     </div>
   </form>
+{% endif %}{# /painel de filtros (apenas em "Ativos") #}
 
   {# ── Results Container (updated via fetch) ───────────────────── #}
   <div id="results-container">
@@ -447,6 +464,7 @@
   {% if people %}
     <div class="talent-grid">
       {% for p in people %}
+       <div>
         <a href="/talents/{{ p.id }}" class="talent-card">
           {% if p.photo_face_path %}
             <img src="{{ p.photo_face_path }}" alt="Foto de {{ p.full_name }}">
@@ -486,6 +504,18 @@
             {% endif %}
           </div>
         </a>
+        {% if status == 'pending' and eff_has_role('CASTING', 'SUPERADMIN') %}
+          <div style="display:flex; gap:6px; margin-top:6px;">
+            <form method="post" action="/talents/{{ p.id }}/approve" style="flex:1;">
+              <button type="submit" class="btn btn-sm btn-primary" style="width:100%;">✓ Aprovar</button>
+            </form>
+            <form method="post" action="/talents/{{ p.id }}/reject"
+                  onsubmit="return confirm('Rejeitar e remover o cadastro de {{ p.full_name }}?')">
+              <button type="submit" class="btn btn-sm btn-ghost" style="color:var(--danger,#c0392b);">Rejeitar</button>
+            </form>
+          </div>
+        {% endif %}
+       </div>
       {% endfor %}
     </div>
   {% else %}
@@ -533,8 +563,6 @@
   {% endif %}
 
   </div>{# /results-container #}
-
-{% endif %}
 
 {% endblock %}
 
