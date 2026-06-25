@@ -17,55 +17,39 @@
       font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
       line-height: 1.5; padding-bottom: 64px;
     }
-    .topbar {
-      background: var(--accent); color: #fff; padding: 18px 20px;
-      position: sticky; top: 0; z-index: 5;
-    }
+    .topbar { background: var(--accent); color: #fff; padding: 18px 20px; position: sticky; top: 0; z-index: 5; }
     .topbar h1 { margin: 0; font-size: 19px; font-weight: 700; }
     .topbar p { margin: 3px 0 0; font-size: 13px; opacity: .9; }
     .wrap { max-width: 640px; margin: 0 auto; padding: 16px; }
-    .intro {
-      background: var(--accent-soft); border: 1px solid var(--line);
-      border-radius: var(--r); padding: 14px 16px; font-size: 14px; margin-bottom: 18px;
-    }
-    .section {
-      background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
-      padding: 18px; margin-bottom: 16px;
-    }
-    .section h2 {
-      margin: 0 0 4px; font-size: 15px; color: var(--accent-dark);
-      display: flex; align-items: center; gap: 8px;
-    }
+    .intro { background: var(--accent-soft); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; font-size: 14px; margin-bottom: 18px; }
+    .section { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; margin-bottom: 16px; }
+    .section h2 { margin: 0 0 4px; font-size: 15px; color: var(--accent-dark); }
     .section .hint { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); }
-    .field { margin-bottom: 14px; }
+    .field { margin-bottom: 16px; }
     .field:last-child { margin-bottom: 0; }
-    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
-    label .req { color: var(--danger); }
+    label.q { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
+    label.q .req { color: var(--danger); }
     .opt { color: var(--muted); font-weight: 400; }
-    input, select, textarea {
+    input[type=text], input[type=email], input[type=date], input[type=tel], input[type=number], select, textarea {
       width: 100%; padding: 11px 12px; font-size: 15px; font-family: inherit;
       border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--text);
     }
-    input:focus, select:focus, textarea:focus {
-      outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
-    }
-    textarea { resize: vertical; min-height: 70px; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
     .row { display: flex; gap: 12px; flex-wrap: wrap; }
-    .row > .field { flex: 1; min-width: 140px; }
+    .row > .field { flex: 1; min-width: 150px; }
+    .opts { display: flex; flex-direction: column; gap: 8px; }
+    .opt-row { display: flex; align-items: center; gap: 9px; font-size: 14.5px; cursor: pointer; }
+    .opt-row input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+    .opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+    @media (max-width: 480px) { .opt-grid { grid-template-columns: 1fr; } }
     .filehint { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
-    input[type=file] { padding: 9px; background: #fbfbfe; }
+    input[type=file] { width: 100%; padding: 9px; background: #fbfbfe; border: 1px solid var(--line); border-radius: 10px; }
     .preview { margin-top: 8px; display: none; }
     .preview img { max-width: 120px; max-height: 120px; border-radius: 8px; border: 1px solid var(--line); }
-    .err {
-      background: #fde8e6; border: 1px solid #f5c6c2; color: var(--danger);
-      border-radius: var(--r); padding: 12px 14px; font-size: 14px; margin-bottom: 16px;
-    }
+    .err { background: #fde8e6; border: 1px solid #f5c6c2; color: var(--danger); border-radius: var(--r); padding: 12px 14px; font-size: 14px; margin-bottom: 16px; }
     .hp { position: absolute; left: -9999px; top: -9999px; }
     .actions { position: sticky; bottom: 0; padding: 14px 0 0; }
-    button.submit {
-      width: 100%; padding: 15px; font-size: 16px; font-weight: 700; color: #fff;
-      background: var(--accent); border: none; border-radius: var(--r); cursor: pointer;
-    }
+    button.submit { width: 100%; padding: 15px; font-size: 16px; font-weight: 700; color: #fff; background: var(--accent); border: none; border-radius: var(--r); cursor: pointer; }
     button.submit:hover { background: var(--accent-dark); }
     button.submit:disabled { opacity: .6; cursor: progress; }
     .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 18px; }
@@ -73,172 +57,206 @@
 </head>
 <body>
   <div class="topbar">
-    <h1>Cadastro de Talento</h1>
+    <h1>Banco de Talentos</h1>
     <p>Manto Produções</p>
   </div>
 
   <div class="wrap">
     <div class="intro">
-      Preencha seus dados e envie suas fotos e documentos <strong>direto por aqui</strong> — não é
-      preciso espaço no Google Drive. Os campos com <span style="color:var(--danger)">*</span> são
-      obrigatórios.
+      Preencha este formulário para fazer parte do nosso banco de talentos. Os dados não serão
+      compartilhados e serão utilizados pela empresa apenas para seleção em eventos e envio de documentos
+      quando necessário (liberação em eventos específicos e/ou compra de passagens). Os campos com
+      <span style="color:var(--danger)">*</span> são obrigatórios — e você envia as fotos/documentos
+      <strong>direto por aqui</strong>, sem precisar de espaço no Google Drive.
     </div>
 
     {% if error %}<div class="err">⚠️ {{ error }}</div>{% endif %}
 
+    {% set genders = ['Homem Cis', 'Mulher Cis', 'Homem Trans', 'Mulher Trans', 'Não-Binário', 'Prefiro não responder'] %}
+    {% set sources = ['Instagram @mantoproducoes', 'Instagram @castingmantoproducoes', 'Indicação', 'Site', 'Anúncio', 'Outros'] %}
+    {% set idiomas = ['Português', 'Inglês', 'Espanhol', 'Francês', 'Alemão', 'Japonês', 'Mandarim', 'Hindi', 'Árabe', 'Libras'] %}
+    {% set racas = ['Branca', 'Preta', 'Parda', 'Amarela', 'Indígena'] %}
+    {% set pix_tipos = ['CPF', 'CNPJ', 'Telefone', 'Chave aleatória', 'e-mail'] %}
+    {% set manequins = ['XGG', 'GG', 'G', 'M', 'P', 'PP'] %}
+    {% set passaportes = ['Apenas Passaporte', 'Possuo Passaporte e Visto', 'Não'] %}
+    {% set habilidades = ['Acrobacia', 'Animação de Pista', 'Apresentação de shows', 'Atuação', 'Canto',
+      'Canto lírico', 'Contorcionismo', 'Coordenação de Eventos', 'Dança', 'DJ', 'Dublagem', 'Filmmaking',
+      'Fotografia', 'Instrumentos de Corda', 'Instrumento de Percussão', 'Instrumento de Sopro',
+      'Malabarismo', 'Manipulador de Bonecos', 'Maquiagem Artística', 'Maquiagem Artística com Prótese',
+      'Maquiagem Social', 'Mestre de Cerimônia', 'Patinação', 'Pirofagia', 'Recreação', 'Técnico de Som',
+      'Transporte de Pessoas', 'Transporte de Materiais'] %}
+
     <form method="post" action="{{ url_for('cadastro.submit') }}" enctype="multipart/form-data" id="cad-form">
-      <!-- honeypot anti-bot -->
       <div class="hp" aria-hidden="true">
         <label>Não preencha este campo</label>
         <input type="text" name="website" tabindex="-1" autocomplete="off">
       </div>
 
       <div class="section">
+        <h2>✨ Sobre você</h2>
+        <div class="field">
+          <label class="q">Já trabalhou com a Manto? <span class="opt">(opcional)</span></label>
+          <div class="opts">
+            {% for o in ['Sim', 'Não'] %}
+              <label class="opt-row"><input type="radio" name="worked_before" value="{{ o }}">{{ o }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="field">
+          <label class="q">Onde conheceu a Manto? <span class="opt">(opcional)</span></label>
+          <div class="opts">
+            {% for o in sources %}
+              <label class="opt-row"><input type="radio" name="how_found_us" value="{{ o }}">{{ o }}</label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
         <h2>👤 Dados pessoais</h2>
         <div class="field">
-          <label>Nome completo <span class="req">*</span></label>
-          <input name="full_name" required value="{{ form.get('full_name', '') }}">
+          <label class="q">Nome Completo <span class="req">*</span></label>
+          <input type="text" name="full_name" required value="{{ form.get('full_name', '') }}">
         </div>
         <div class="field">
-          <label>Nome artístico <span class="opt">(opcional)</span></label>
-          <input name="artistic_name" value="{{ form.get('artistic_name', '') }}">
-        </div>
-        <div class="row">
-          <div class="field">
-            <label>Data de nascimento <span class="req">*</span></label>
-            <input type="date" name="birth_date" required value="{{ form.get('birth_date', '') }}">
-          </div>
-          <div class="field">
-            <label>Gênero <span class="opt">(opcional)</span></label>
-            <select name="gender">
-              {% set g = form.get('gender', '') %}
-              <option value="">— selecione —</option>
-              {% for o in ['Feminino', 'Masculino', 'Não-binário', 'Outro', 'Prefiro não informar'] %}
-                <option value="{{ o }}" {% if g == o %}selected{% endif %}>{{ o }}</option>
-              {% endfor %}
-            </select>
-          </div>
+          <label class="q">Nome Artístico <span class="opt">(opcional)</span></label>
+          <input type="text" name="artistic_name" value="{{ form.get('artistic_name', '') }}">
         </div>
         <div class="field">
-          <label>Raça/cor <span class="opt">(opcional)</span></label>
-          <select name="race">
-            {% set rc = form.get('race', '') %}
-            <option value="">— selecione —</option>
-            {% for o in ['Branca', 'Preta', 'Parda', 'Amarela', 'Indígena', 'Prefiro não informar'] %}
-              <option value="{{ o }}" {% if rc == o %}selected{% endif %}>{{ o }}</option>
+          <label class="q">Gênero <span class="req">*</span></label>
+          <div class="opts">
+            {% for o in genders %}
+              <label class="opt-row"><input type="radio" name="gender" value="{{ o }}" {% if loop.first %}required{% endif %}>{{ o }}</label>
             {% endfor %}
-          </select>
+            <label class="opt-row"><input type="radio" name="gender" value="Outro" id="gender-outro">Outro:</label>
+            <input type="text" name="gender_other" id="gender-other-text" placeholder="Especifique" style="display:none; margin-left:27px; max-width:300px;">
+          </div>
         </div>
         <div class="row">
           <div class="field">
-            <label>Telefone com DDD <span class="req">*</span></label>
-            <input name="phone" required placeholder="(11) 99999-9999" value="{{ form.get('phone', '') }}">
+            <label class="q">Telefone com DDD <span class="req">*</span></label>
+            <input type="text" name="phone" required placeholder="(11) 99999-9999" value="{{ form.get('phone', '') }}">
           </div>
           <div class="field">
-            <label>E-mail <span class="req">*</span></label>
+            <label class="q">E-mail <span class="req">*</span></label>
             <input type="email" name="email" required value="{{ form.get('email', '') }}">
           </div>
+        </div>
+        <div class="field">
+          <label class="q">Idiomas <span class="req">*</span>
+            <span class="opt">(com nível suficiente para interagir num evento e/ou cantar)</span></label>
+          <div class="opt-grid" data-required-group="Selecione ao menos um idioma.">
+            {% for o in idiomas %}
+              <label class="opt-row"><input type="checkbox" name="languages" value="{{ o }}">{{ o }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="field">
+          <label class="q">Data de Nascimento <span class="req">*</span></label>
+          <input type="date" name="birth_date" required value="{{ form.get('birth_date', '') }}">
         </div>
       </div>
 
       <div class="section">
         <h2>🪪 Documentos</h2>
-        <p class="hint">Imagem ou PDF. Tamanho máximo: 10 MB por arquivo.</p>
         <div class="row">
           <div class="field">
-            <label>CPF <span class="req">*</span></label>
-            <input name="cpf" required inputmode="numeric" placeholder="000.000.000-00" value="{{ form.get('cpf', '') }}">
+            <label class="q">CPF <span class="req">*</span></label>
+            <input type="text" name="cpf" required inputmode="numeric" placeholder="000.000.000-00" value="{{ form.get('cpf', '') }}">
           </div>
           <div class="field">
-            <label>RG <span class="opt">(opcional)</span></label>
-            <input name="rg" value="{{ form.get('rg', '') }}">
+            <label class="q">RG <span class="req">*</span></label>
+            <input type="text" name="rg" required value="{{ form.get('rg', '') }}">
           </div>
         </div>
         <div class="field">
-          <label>Foto do documento (CPF, RG ou CNH) <span class="req">*</span></label>
+          <label class="q">Foto do seu documento (CPF, RG ou CNH) <span class="req">*</span></label>
           <input type="file" name="doc_photo" accept="image/*,application/pdf" required>
-          <div class="filehint">JPG, PNG, WEBP ou PDF — até 10 MB.</div>
-        </div>
-      </div>
-
-      <div class="section">
-        <h2>📸 Fotos</h2>
-        <p class="hint">Imagens (JPG, PNG ou WEBP), até 8 MB cada. Boa iluminação ajuda muito!</p>
-        <div class="field">
-          <label>Foto do rosto (close-up) <span class="req">*</span></label>
-          <input type="file" name="photo_face" accept="image/*" required data-preview="pv-face">
-          <div class="preview" id="pv-face"><img></div>
-        </div>
-        <div class="field">
-          <label>Foto de corpo inteiro <span class="req">*</span></label>
-          <input type="file" name="photo_full" accept="image/*" required data-preview="pv-full">
-          <div class="preview" id="pv-full"><img></div>
-        </div>
-      </div>
-
-      <div class="section">
-        <h2>📏 Medidas e perfil</h2>
-        <div class="row">
-          <div class="field">
-            <label>Altura (em metros) <span class="opt">(opcional)</span></label>
-            <input name="height" placeholder="Ex: 1,75" value="{{ form.get('height', '') }}">
-          </div>
-          <div class="field">
-            <label>Nº do sapato <span class="opt">(opcional)</span></label>
-            <input name="shoe_size" inputmode="numeric" placeholder="Ex: 38" value="{{ form.get('shoe_size', '') }}">
-          </div>
-        </div>
-        <div class="row">
-          <div class="field">
-            <label>Manequim superior <span class="opt">(opcional)</span></label>
-            <input name="clothing_top" placeholder="Ex: M" value="{{ form.get('clothing_top', '') }}">
-          </div>
-          <div class="field">
-            <label>Manequim inferior <span class="opt">(opcional)</span></label>
-            <input name="clothing_bottom" placeholder="Ex: 40" value="{{ form.get('clothing_bottom', '') }}">
-          </div>
-        </div>
-        <div class="field">
-          <label>Idiomas <span class="opt">(opcional)</span></label>
-          <input name="languages" placeholder="Ex: Português, Inglês, Espanhol" value="{{ form.get('languages', '') }}">
-        </div>
-        <div class="field">
-          <label>Habilidades <span class="opt">(opcional)</span></label>
-          <textarea name="skills" placeholder="Ex: atuação, canto, dança, performance, personagem/mascote, host…">{{ form.get('skills', '') }}</textarea>
-        </div>
-        <div class="field">
-          <label>Possui passaporte e visto americano? <span class="opt">(opcional)</span></label>
-          <select name="passport">
-            {% set ps = form.get('passport', '') %}
-            <option value="">— selecione —</option>
-            {% for o in ['Não', 'Apenas Passaporte', 'Possuo Passaporte e Visto'] %}
-              <option value="{{ o }}" {% if ps == o %}selected{% endif %}>{{ o }}</option>
-            {% endfor %}
-          </select>
+          <div class="filehint">Imagem ou PDF — até 10 MB.</div>
         </div>
       </div>
 
       <div class="section">
         <h2>💸 Pagamento (PIX)</h2>
+        <div class="field">
+          <label class="q">Tipo de chave PIX <span class="req">*</span></label>
+          <div class="opts">
+            {% for o in pix_tipos %}
+              <label class="opt-row"><input type="radio" name="pix_key_type" value="{{ o }}" {% if loop.first %}required{% endif %}>{{ o }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="field">
+          <label class="q">Chave PIX <span class="req">*</span></label>
+          <input type="text" name="pix_key" required value="{{ form.get('pix_key', '') }}">
+        </div>
+        <div class="field">
+          <label class="q">Chave PIX (secundária) <span class="opt">(opcional)</span></label>
+          <input type="text" name="pix_key_secondary" value="{{ form.get('pix_key_secondary', '') }}">
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>📸 Perfil e aparência</h2>
+        <div class="field">
+          <label class="q">Raça <span class="req">*</span></label>
+          <div class="opts">
+            {% for o in racas %}
+              <label class="opt-row"><input type="radio" name="race" value="{{ o }}" {% if loop.first %}required{% endif %}>{{ o }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="field">
+          <label class="q">Foto do Rosto (Close-up) <span class="req">*</span></label>
+          <input type="file" name="photo_face" accept="image/*" required data-preview="pv-face">
+          <div class="preview" id="pv-face"><img></div>
+        </div>
+        <div class="field">
+          <label class="q">Foto de Corpo Inteiro <span class="req">*</span></label>
+          <input type="file" name="photo_full" accept="image/*" required data-preview="pv-full">
+          <div class="preview" id="pv-full"><img></div>
+        </div>
+        <div class="field">
+          <label class="q">Altura (em metros, ex: 1,75) <span class="req">*</span></label>
+          <input type="text" name="height" required placeholder="Ex: 1,75" value="{{ form.get('height', '') }}">
+        </div>
         <div class="row">
           <div class="field">
-            <label>Chave PIX <span class="opt">(opcional)</span></label>
-            <input name="pix_key" value="{{ form.get('pix_key', '') }}">
+            <label class="q">Tamanho de Manequim/Roupa Superior <span class="req">*</span></label>
+            <select name="clothing_top" required>
+              <option value="">— selecione —</option>
+              {% for o in manequins %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+            </select>
           </div>
           <div class="field">
-            <label>Tipo da chave <span class="opt">(opcional)</span></label>
-            <select name="pix_key_type">
-              {% set pt = form.get('pix_key_type', '') %}
+            <label class="q">Manequim/Roupa Inferior (Calças, Saias, Shorts) <span class="req">*</span></label>
+            <select name="clothing_bottom" required>
               <option value="">— selecione —</option>
-              {% for o in ['CPF', 'CNPJ', 'E-mail', 'Telefone', 'Aleatória'] %}
-                <option value="{{ o }}" {% if pt == o %}selected{% endif %}>{{ o }}</option>
-              {% endfor %}
+              {% for o in manequins %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
             </select>
           </div>
         </div>
         <div class="field">
-          <label>Chave PIX secundária <span class="opt">(opcional)</span></label>
-          <input name="pix_key_secondary" value="{{ form.get('pix_key_secondary', '') }}">
+          <label class="q">Tamanho do Sapato (Numeração Brasileira) <span class="req">*</span></label>
+          <input type="text" name="shoe_size" required inputmode="numeric" placeholder="Ex: 38" value="{{ form.get('shoe_size', '') }}">
+        </div>
+        <div class="field">
+          <label class="q">Possui Passaporte e visto americano? <span class="req">*</span></label>
+          <div class="opts">
+            {% for o in passaportes %}
+              <label class="opt-row"><input type="radio" name="passport" value="{{ o }}" {% if loop.first %}required{% endif %}>{{ o }}</label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>🎭 Habilidades <span class="req">*</span></h2>
+        <p class="hint">Marque todas as opções que te definem.</p>
+        <div class="opt-grid" data-required-group="Selecione ao menos uma habilidade.">
+          {% for o in habilidades %}
+            <label class="opt-row"><input type="checkbox" name="skills" value="{{ o }}">{{ o }}</label>
+          {% endfor %}
         </div>
       </div>
 
@@ -246,52 +264,21 @@
         <h2>🚗 Carro e CNH <span class="opt" style="font-size:12px;">(opcional)</span></h2>
         <p class="hint">Preencha só se você tem carro e/ou pode dirigir em trabalhos.</p>
         <div class="row">
-          <div class="field">
-            <label>Marca</label>
-            <input name="car_brand" value="{{ form.get('car_brand', '') }}">
-          </div>
-          <div class="field">
-            <label>Modelo</label>
-            <input name="car_model" value="{{ form.get('car_model', '') }}">
-          </div>
+          <div class="field"><label class="q">Marca do Carro</label><input type="text" name="car_brand" value="{{ form.get('car_brand', '') }}"></div>
+          <div class="field"><label class="q">Modelo do Carro</label><input type="text" name="car_model" value="{{ form.get('car_model', '') }}"></div>
         </div>
         <div class="row">
-          <div class="field">
-            <label>Ano</label>
-            <input name="car_year" inputmode="numeric" value="{{ form.get('car_year', '') }}">
-          </div>
-          <div class="field">
-            <label>Placa</label>
-            <input name="car_plate" value="{{ form.get('car_plate', '') }}">
-          </div>
-        </div>
-        <div class="row">
-          <div class="field">
-            <label>Vencimento da CNH</label>
-            <input type="date" name="cnh_expiration" value="{{ form.get('cnh_expiration', '') }}">
-          </div>
-          <div class="field">
-            <label>Arquivo da CNH</label>
-            <input type="file" name="cnh_file" accept="image/*,application/pdf">
-            <div class="filehint">Imagem ou PDF — até 10 MB.</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="section">
-        <h2>✨ Sobre você</h2>
-        <div class="field">
-          <label>Já trabalhou com a Manto? <span class="opt">(opcional)</span></label>
-          <select name="worked_before">
-            {% set wb = form.get('worked_before', '') %}
-            <option value="">— selecione —</option>
-            <option value="sim" {% if wb == 'sim' %}selected{% endif %}>Sim</option>
-            <option value="nao" {% if wb == 'nao' %}selected{% endif %}>Não</option>
-          </select>
+          <div class="field"><label class="q">Ano do Carro</label><input type="text" name="car_year" inputmode="numeric" value="{{ form.get('car_year', '') }}"></div>
+          <div class="field"><label class="q">Placa do Carro</label><input type="text" name="car_plate" value="{{ form.get('car_plate', '') }}"></div>
         </div>
         <div class="field">
-          <label>Onde conheceu a Manto? <span class="opt">(opcional)</span></label>
-          <input name="how_found_us" value="{{ form.get('how_found_us', '') }}">
+          <label class="q">Data de vencimento da CNH</label>
+          <input type="date" name="cnh_expiration" value="{{ form.get('cnh_expiration', '') }}">
+        </div>
+        <div class="field">
+          <label class="q">Foto ou arquivo da CNH aberta</label>
+          <input type="file" name="cnh_file" accept="image/*,application/pdf">
+          <div class="filehint">Imagem ou PDF — até 10 MB.</div>
         </div>
       </div>
 
@@ -311,16 +298,32 @@
         if (file && file.type.indexOf('image/') === 0) {
           box.querySelector('img').src = URL.createObjectURL(file);
           box.style.display = 'block';
-        } else {
-          box.style.display = 'none';
-        }
+        } else { box.style.display = 'none'; }
       });
     });
-    // Trava de duplo envio
-    document.getElementById('cad-form').addEventListener('submit', function () {
+    // Gênero "Outro" -> revela campo de texto
+    document.querySelectorAll('input[name="gender"]').forEach(function (r) {
+      r.addEventListener('change', function () {
+        var other = document.getElementById('gender-other-text');
+        var isOutro = document.getElementById('gender-outro').checked;
+        other.style.display = isOutro ? 'block' : 'none';
+        other.required = isOutro;
+      });
+    });
+    // Valida grupos de checkbox obrigatórios (idiomas, habilidades) + trava duplo envio
+    document.getElementById('cad-form').addEventListener('submit', function (e) {
+      var groups = document.querySelectorAll('[data-required-group]');
+      for (var i = 0; i < groups.length; i++) {
+        var checked = groups[i].querySelectorAll('input[type=checkbox]:checked').length;
+        if (checked === 0) {
+          e.preventDefault();
+          alert(groups[i].getAttribute('data-required-group'));
+          groups[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+      }
       var b = document.getElementById('submit-btn');
-      b.disabled = true;
-      b.textContent = 'Enviando…';
+      b.disabled = true; b.textContent = 'Enviando…';
     });
   </script>
 </body>
