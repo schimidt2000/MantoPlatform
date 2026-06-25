@@ -980,3 +980,84 @@ class SyncLog(db.Model):
     event_id        = db.Column(db.Integer, nullable=True)   # sem FK — evento pode ter sido deletado
     details         = db.Column(db.Text, nullable=True)      # mudanças ou motivo
     actor           = db.Column(db.String(120), nullable=True)  # "Sistema" ou nome do usuário
+
+
+class ReviewSpace(db.Model):
+    """Espaço de revisão de mídia estilo Vimeo Review (feature 088)."""
+    __tablename__ = "review_spaces"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    creator = db.relationship("User", lazy=True, foreign_keys=[created_by])
+    assets = db.relationship(
+        "ReviewAsset", backref="space", lazy=True,
+        cascade="all, delete-orphan", order_by="ReviewAsset.position",
+    )
+    reviewers = db.relationship(
+        "ReviewReviewer", backref="space", lazy=True, cascade="all, delete-orphan",
+    )
+
+    @property
+    def reviewer_ids(self) -> set:
+        return {r.user_id for r in self.reviewers}
+
+
+class ReviewAsset(db.Model):
+    """Material (vídeo/áudio/imagem/PDF) dentro de um espaço de revisão (feature 088)."""
+    __tablename__ = "review_assets"
+    __table_args__ = (db.Index("ix_review_assets_space_id", "space_id"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    space_id = db.Column(db.Integer, db.ForeignKey("review_spaces.id"), nullable=False)
+    file_path = db.Column(db.String(400), nullable=False)   # URL no nosso armazenamento
+    original_name = db.Column(db.String(300), nullable=True)
+    media_type = db.Column(db.String(10), nullable=False)   # 'video' | 'audio' | 'image' | 'pdf'
+    position = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    comments = db.relationship(
+        "ReviewComment", backref="asset", lazy=True,
+        cascade="all, delete-orphan", order_by="ReviewComment.created_at",
+    )
+
+
+class ReviewReviewer(db.Model):
+    """Usuário autorizado a revisar um espaço (feature 088)."""
+    __tablename__ = "review_reviewers"
+    __table_args__ = (
+        db.UniqueConstraint("space_id", "user_id", name="uq_review_reviewer"),
+        db.Index("ix_review_reviewers_space_id", "space_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    space_id = db.Column(db.Integer, db.ForeignKey("review_spaces.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+    user = db.relationship("User", lazy=True, foreign_keys=[user_id])
+
+
+class ReviewComment(db.Model):
+    """Comentário ancorado num material (feature 088).
+
+    Âncora conforme o tipo: ``timecode`` (segundos) em vídeo/áudio; ``page`` em PDF;
+    ``pos_x``/``pos_y`` (0–1, relativos) em imagem.
+    """
+    __tablename__ = "review_comments"
+    __table_args__ = (db.Index("ix_review_comments_asset_id", "asset_id"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    asset_id = db.Column(db.Integer, db.ForeignKey("review_assets.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    timecode = db.Column(db.Float, nullable=True)   # segundos (vídeo/áudio)
+    page = db.Column(db.Integer, nullable=True)     # página (PDF)
+    pos_x = db.Column(db.Float, nullable=True)       # 0–1 (imagem)
+    pos_y = db.Column(db.Float, nullable=True)       # 0–1 (imagem)
+    resolved = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    user = db.relationship("User", lazy=True, foreign_keys=[user_id])

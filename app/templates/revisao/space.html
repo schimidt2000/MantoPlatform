@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ space.title }}{% endblock %}
+{% block page_title %}{{ space.title }}{% endblock %}
+
+{% block page_subtitle %}
+  <p class="sub">
+    {{ space.assets|length }} material(is) · {{ space.reviewers|length }} revisor(es)
+    {% if space.creator %}· por {{ space.creator.name }}{% endif %}
+  </p>
+{% endblock %}
+
+{% block page_actions %}
+  <a href="/revisao/" class="btn btn-ghost">← Espaços</a>
+  {% if can_manage %}
+    <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger,#c0392b);"
+            onclick="document.getElementById('del-space').style.display='flex'">🗑 Excluir espaço</button>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+{% if space.description %}
+  <div class="panel" style="margin-bottom:16px;"><p class="meta" style="margin:0;">{{ space.description }}</p></div>
+{% endif %}
+
+{% set icons = {'video':'🎬','audio':'🎧','image':'🖼️','pdf':'📄'} %}
+
+<div class="panel">
+  <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:12px;">Materiais</div>
+  {% if space.assets %}
+    <div class="grid-2" style="gap:12px;">
+      {% for a in space.assets %}
+        <div style="border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden;">
+          <a href="/revisao/{{ space.id }}/asset/{{ a.id }}" style="text-decoration:none; color:inherit; display:block;">
+            <div style="height:140px; background:#f1eff7; display:flex; align-items:center; justify-content:center;">
+              {% if a.media_type == 'image' %}
+                <img src="{{ a.file_path }}" alt="" style="max-width:100%; max-height:140px; object-fit:cover;">
+              {% else %}
+                <span style="font-size:42px;">{{ icons.get(a.media_type, '📁') }}</span>
+              {% endif %}
+            </div>
+            <div style="padding:10px 12px;">
+              <div style="font-size:13px; font-weight:600; word-break:break-word;">{{ a.original_name or a.media_type }}</div>
+              <div class="muted" style="font-size:11.5px; margin-top:2px;">{{ a.media_type }} · {{ a.comments|length }} comentário(s)</div>
+            </div>
+          </a>
+          {% if can_manage %}
+            <form method="post" action="/revisao/asset/{{ a.id }}/delete"
+                  onsubmit="return confirm('Excluir este material e seus comentários?')"
+                  style="padding:0 12px 10px; text-align:right;">
+              <button class="btn btn-ghost btn-sm" style="color:var(--danger,#c0392b);">Excluir</button>
+            </form>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted" style="margin:0;">Nenhum material ainda.</p>
+  {% endif %}
+</div>
+
+{% if can_manage %}
+  <div class="panel" style="margin-top:16px;">
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:12px;">Adicionar materiais</div>
+    <form method="post" action="/revisao/{{ space.id }}/upload" enctype="multipart/form-data"
+          style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input type="file" name="files" multiple accept="video/*,audio/*,image/*,application/pdf" required>
+      <button type="submit" class="btn btn-primary btn-sm">Enviar</button>
+    </form>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:12px;">Revisores</div>
+    <form method="post" action="/revisao/{{ space.id }}/reviewers">
+      <div class="panel" style="margin:0; padding:12px; max-height:240px; overflow:auto;">
+        {% set current_ids = space.reviewer_ids %}
+        {% for u in users %}
+          <label class="checkbox-row" style="display:flex; align-items:center; gap:8px; padding:3px 0;">
+            <input type="checkbox" name="reviewers" value="{{ u.id }}" {% if u.id in current_ids %}checked{% endif %}>
+            {{ u.name }} <span class="muted" style="font-size:12px;">{{ u.email or '' }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm" style="margin-top:10px;">Salvar revisores</button>
+    </form>
+  </div>
+
+  {# Modal excluir espaço #}
+  <div id="del-space" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); align-items:center; justify-content:center; z-index:50;">
+    <div class="panel" style="max-width:380px;">
+      <h3 style="margin-top:0;">Excluir espaço?</h3>
+      <p class="muted">Isso remove o espaço, todos os materiais e comentários. Não dá para desfazer.</p>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('del-space').style.display='none'">Cancelar</button>
+        <form method="post" action="/revisao/{{ space.id }}/delete">
+          <button class="btn btn-sm" style="background:var(--danger,#c0392b); color:#fff;">Excluir</button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
