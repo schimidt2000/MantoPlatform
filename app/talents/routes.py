@@ -167,11 +167,13 @@ def list_talents():
     people = pagination.items
     from datetime import datetime as _now_dt
     import_state = ImportState.query.filter_by(key="talents_form").first()
+    pending_count = Talent.query.filter_by(status="pending").count()
     return render_template(
         "talents_list.html",
         people=people,
         pagination=pagination,
         status=status,
+        pending_count=pending_count,
         ja_trabalhou=ja_trabalhou,
         language_options=language_options,
         race_options=race_options,
@@ -801,6 +803,36 @@ def upload_talent_photo(talent_id: int):
     db.session.commit()
     flash("Documento atualizado." if is_doc else "Foto atualizada.", "success")
     return redirect(url_for("talents.talent_detail", talent_id=talent_id))
+
+
+@talents_bp.route("/talents/<int:talent_id>/approve", methods=["POST"])
+@login_required
+def approve_talent(talent_id: int):
+    """Aprova um cadastro pendente (do formulário público), tornando-o ativo no banco."""
+    if not _can_edit_talent():
+        abort(403)
+    talent = Talent.query.get_or_404(talent_id)
+    talent.status = "active"
+    db.session.commit()
+    flash(f"{talent.full_name} aprovado(a) e adicionado(a) ao banco.", "success")
+    return redirect(request.referrer or url_for("talents.list_talents", status="pending"))
+
+
+@talents_bp.route("/talents/<int:talent_id>/reject", methods=["POST"])
+@login_required
+def reject_talent(talent_id: int):
+    """Rejeita/exclui um cadastro pendente."""
+    if not _can_edit_talent():
+        abort(403)
+    talent = Talent.query.get_or_404(talent_id)
+    if talent.status != "pending":
+        flash("Só é possível rejeitar cadastros pendentes.", "error")
+        return redirect(url_for("talents.talent_detail", talent_id=talent_id))
+    name = talent.full_name
+    db.session.delete(talent)
+    db.session.commit()
+    flash(f"Cadastro de {name} rejeitado e removido.", "success")
+    return redirect(url_for("talents.list_talents", status="pending"))
 
 
 @talents_bp.route("/talents/<int:talent_id>/reset-password", methods=["POST"])
