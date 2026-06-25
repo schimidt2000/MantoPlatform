@@ -775,23 +775,31 @@ def upload_talent_photo(talent_id: int):
     from werkzeug.utils import secure_filename
     from app.storage import save_file
     talent = Talent.query.get_or_404(talent_id)
-    photo_type = request.form.get("photo_type", "face")  # 'face' ou 'full'
+    photo_type = request.form.get("photo_type", "face")  # 'face' | 'full' | 'doc' | 'cnh'
     file = request.files.get("photo")
     if not file or not file.filename:
         flash("Nenhum arquivo selecionado.", "error")
         return redirect(url_for("talents.talent_detail", talent_id=talent_id))
+    is_doc = photo_type in ("doc", "cnh")  # documentos aceitam PDF além de imagem
     ext = os.path.splitext(secure_filename(file.filename))[1].lower()
-    if ext not in (".jpg", ".jpeg", ".png", ".webp"):
-        flash("Formato não suportado. Use JPG, PNG ou WEBP.", "error")
+    allowed = (".jpg", ".jpeg", ".png", ".webp", ".pdf") if is_doc else (".jpg", ".jpeg", ".png", ".webp")
+    if ext not in allowed:
+        msg = "Use JPG, PNG, WEBP ou PDF." if is_doc else "Use JPG, PNG ou WEBP."
+        flash(f"Formato não suportado. {msg}", "error")
         return redirect(url_for("talents.talent_detail", talent_id=talent_id))
+    subfolder = "talent_docs" if is_doc else "talent_photos"
     filename = f"talent_{talent_id}_{photo_type}_{_uuid.uuid4().hex[:8]}{ext}"
-    url_path = save_file(file, "talent_photos", filename)
+    url_path = save_file(file, subfolder, filename)
     if photo_type == "full":
         talent.photo_full_path = url_path
+    elif photo_type == "doc":
+        talent.doc_photo_path = url_path
+    elif photo_type == "cnh":
+        talent.cnh_file_path = url_path
     else:
         talent.photo_face_path = url_path
     db.session.commit()
-    flash("Foto atualizada.", "success")
+    flash("Documento atualizado." if is_doc else "Foto atualizada.", "success")
     return redirect(url_for("talents.talent_detail", talent_id=talent_id))
 
 
