@@ -100,15 +100,45 @@ def submit():
     email = (f.get("email") or "").strip()
     birth_date = parse_date(f.get("birth_date") or "")
 
-    # Obrigatórios mínimos
+    # Múltipla escolha (checkboxes) → texto separado por vírgula (fiel ao Google Form)
+    languages = ", ".join(s.strip() for s in f.getlist("languages") if s.strip())
+    skills = ", ".join(s.strip() for s in f.getlist("skills") if s.strip())
+
+    # Gênero: a opção "Outro" usa o texto livre digitado
+    gender = (f.get("gender") or "").strip()
+    if gender == "Outro":
+        gender = (f.get("gender_other") or "").strip() or "Outro"
+
+    # Obrigatórios (fiel ao formulário original)
     if not full_name:
         return _render_error("Informe o nome completo.")
-    if len(cpf) < 11:
-        return _render_error("CPF inválido — confira os 11 dígitos.")
+    if not gender:
+        return _render_error("Selecione o gênero.")
     if not phone:
         return _render_error("Informe um telefone com DDD.")
     if not email:
         return _render_error("Informe um e-mail.")
+    if not languages:
+        return _render_error("Selecione ao menos um idioma.")
+    if not birth_date:
+        return _render_error("Informe a data de nascimento.")
+    if len(cpf) < 11:
+        return _render_error("CPF inválido — confira os 11 dígitos.")
+    for value, msg in (
+        (f.get("rg"), "Informe o RG."),
+        (f.get("pix_key_type"), "Selecione o tipo de chave PIX."),
+        (f.get("pix_key"), "Informe a chave PIX."),
+        (f.get("race"), "Selecione a raça/cor."),
+        (f.get("height"), "Informe a altura."),
+        (f.get("clothing_top"), "Selecione o manequim superior."),
+        (f.get("clothing_bottom"), "Selecione o manequim inferior."),
+        (f.get("shoe_size"), "Informe o tamanho do sapato."),
+        (f.get("passport"), "Responda sobre passaporte e visto."),
+    ):
+        if not (value or "").strip():
+            return _render_error(msg)
+    if not skills:
+        return _render_error("Selecione ao menos uma habilidade.")
 
     # CPF duplicado
     if Talent.query.filter_by(cpf=cpf).first():
@@ -138,7 +168,6 @@ def submit():
     doc_photo_url = save_file(doc_photo, "talent_docs") if doc_photo else None
     cnh_file_url = save_file(cnh_file, "talent_docs") if cnh_file else None
 
-    skills = (f.get("skills") or "").strip()
     passport_text = (f.get("passport") or "").strip()
     passport_status = _parse_passport_status(passport_text)
 
@@ -150,9 +179,9 @@ def submit():
         email_contact=email or None,
         birth_date=birth_date,
         rg=(f.get("rg") or "").strip() or None,
-        gender=(f.get("gender") or "").strip() or None,
+        gender=gender or None,
         race=(f.get("race") or "").strip() or None,
-        languages=(f.get("languages") or "").strip() or None,
+        languages=languages or None,
         skills=skills or None,
         tags=normalize_tags(skills),
         height_cm=_height_to_cm(f.get("height") or ""),
