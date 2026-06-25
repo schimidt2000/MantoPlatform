@@ -1,44 +1,8 @@
 """Comandos Flask CLI para operações de manutenção."""
 import io
 import os
-import re
 
 import click
-
-# Campos de mídia do Talent e a subpasta de destino no volume (feature 087).
-_TALENT_MEDIA_FIELDS = {
-    "photo_face_path": "talent_photos",
-    "photo_full_path": "talent_photos",
-    "doc_photo_path": "talent_docs",
-    "cnh_file_path": "talent_docs",
-}
-
-# Extensão por Content-Type retornado no download.
-_CT_EXT = {
-    "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/pjpeg": ".jpg",
-    "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif",
-    "application/pdf": ".pdf",
-}
-
-
-def _is_drive_url(value: str | None) -> bool:
-    """True se o valor é um link hospedado no Google Drive (foto lh3 ou documento drive.google)."""
-    if not value or not value.startswith(("http://", "https://")):
-        return False
-    return "googleusercontent.com" in value or "drive.google.com" in value
-
-
-def _drive_file_id(url: str) -> str | None:
-    """Extrai o file_id de um link do Google Drive em qualquer formato conhecido.
-
-    Suporta ``lh3.googleusercontent.com/d/<id>``, ``drive.google.com/open?id=<id>``,
-    ``.../file/d/<id>/view`` e ``?id=<id>``.
-    """
-    for pat in (r"/d/([A-Za-z0-9_-]+)", r"[?&]id=([A-Za-z0-9_-]+)"):
-        m = re.search(pat, url)
-        if m:
-            return m.group(1)
-    return None
 
 
 def register_commands(app):
@@ -236,126 +200,27 @@ def register_commands(app):
         Atualiza o link de cada campo de mídia para o armazenamento próprio. Idempotente (pula o que já
         está em /uploads/) e resiliente (falha em um item não derruba o processo).
         """
-        import requests
-        from werkzeug.datastructures import FileStorage
-
-        from app import db
+        from app.drive_migration import TALENT_MEDIA_FIELDS, is_drive_url, run_drive_migration
         from app.models import Talent
-        from app.storage import save_file
-
-        creds_path = os.path.abspath(os.path.join("instance", "credentials", "sheets_service_account.json"))
-        # Estado da conta de serviço: None=não testada, True=tem acesso, False=sem acesso (pula daí pra frente)
-        sa_state = {"svc": None, "ok": None}
-
-        def _public_download(file_id: str, url: str) -> tuple[bytes, str] | None:
-            """Tenta baixar pelo link público (lh3 para imagens; uc para arquivos compartilhados)."""
-            for link in (
-                f"https://lh3.googleusercontent.com/d/{file_id}=s0",
-                f"https://drive.google.com/uc?export=download&id={file_id}",
-            ):
-                try:
-                    resp = requests.get(link, timeout=30, allow_redirects=True)
-                except requests.RequestException:
-                    continue
-                if resp.status_code != 200 or not resp.content:
-                    continue
-                ct = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-                if ct.startswith("text/html"):
-                    continue  # página de erro/login/preview, não é o arquivo
-                ext = _CT_EXT.get(ct) or (
-                    os.path.splitext(url.split("?")[0])[1].lower()
-                    if os.path.splitext(url.split("?")[0])[1].lower() in (".jpg", ".jpeg", ".png", ".webp", ".pdf")
-                    else ".jpg"
-                )
-                return resp.content, ext
-            return None
-
-        def _sa_download(file_id: str) -> tuple[bytes, str] | None:
-            """Baixa via API do Drive com a conta de serviço (funciona para qualquer tipo, se houver acesso)."""
-            if sa_state["ok"] is False:
-                return None
-            try:
-                if sa_state["svc"] is None:
-                    from app.figurino.drive_service import get_drive_service
-                    sa_state["svc"] = get_drive_service(creds_path)
-                from googleapiclient.http import MediaIoBaseDownload
-                svc = sa_state["svc"]
-                meta = svc.files().get(fileId=file_id, fields="mimeType").execute()
-                buf = io.BytesIO()
-                dl = MediaIoBaseDownload(buf, svc.files().get_media(fileId=file_id))
-                done = False
-                while not done:
-                    _, done = dl.next_chunk()
-                sa_state["ok"] = True
-                mime = (meta.get("mimeType") or "").lower()
-                ext = _CT_EXT.get(mime) or (".pdf" if mime == "application/pdf" else ".jpg")
-                return buf.getvalue(), ext
-            except Exception:
-                # Primeira falha (sem credenciais ou sem acesso) desliga a SA p/ o resto da execução.
-                if sa_state["ok"] is None:
-                    sa_state["ok"] = False
-                return None
-
-        def _download_drive(url: str) -> tuple[bytes, str] | None:
-            """Baixa o arquivo do Drive: link público primeiro (imagens), conta de serviço como reserva."""
-            file_id = _drive_file_id(url)
-            if not file_id:
-                return None
-            return _public_download(file_id, url) or _sa_download(file_id)
-
-        talents = Talent.query.order_by(Talent.id).all()
-        # Levanta a fila (talent, campo, subpasta, url)
-        jobs = []
-        for t in talents:
-            for field, subfolder in _TALENT_MEDIA_FIELDS.items():
-                url = getattr(t, field)
-                if _is_drive_url(url):
-                    jobs.append((t, field, subfolder, url))
-
-        click.echo(f"\n{'-'*60}")
-        click.echo(f"  Migração Google Drive -> volume   ({'DRY-RUN' if dry_run else 'EXECUTANDO'})")
-        click.echo(f"  Arquivos no Drive: {len(jobs)}  (de {len(talents)} talentos)")
-        if limit:
-            click.echo(f"  Limite desta execução: {limit}")
-        click.echo(f"{'-'*60}")
 
         if dry_run:
             by_sub = {}
-            for _, _, subfolder, _ in jobs:
-                by_sub[subfolder] = by_sub.get(subfolder, 0) + 1
+            for t in Talent.query.all():
+                for field, subfolder in TALENT_MEDIA_FIELDS.items():
+                    if is_drive_url(getattr(t, field)):
+                        by_sub[subfolder] = by_sub.get(subfolder, 0) + 1
+            total = sum(by_sub.values())
+            click.echo(f"\n{'-'*60}")
+            click.echo("  Migração Google Drive -> volume   (DRY-RUN)")
+            click.echo(f"  Arquivos no Drive: {total}")
             for sub, n in sorted(by_sub.items()):
                 click.echo(f"  {sub:>14}: {n}")
             click.echo(f"{'-'*60}\n")
             return
 
-        migrated = 0
-        errors = 0
-        processed = 0
-        for t, field, subfolder, url in jobs:
-            if limit and processed >= limit:
-                break
-            processed += 1
-            tag = f"#{t.id} {field}"
-            try:
-                downloaded = _download_drive(url)
-                if downloaded is None:
-                    errors += 1
-                    click.echo(f"  [{processed:>4}] ERRO    {tag}  (download falhou)")
-                    continue
-                data, ext = downloaded
-                fs = FileStorage(stream=io.BytesIO(data), filename=f"migrado{ext}")
-                new_url = save_file(fs, subfolder)
-                setattr(t, field, new_url)
-                db.session.commit()
-                migrated += 1
-                click.echo(f"  [{processed:>4}] OK      {tag}  -> {new_url}")
-            except Exception as e:  # noqa: BLE001 — falha de 1 item não pode derrubar a migração
-                db.session.rollback()
-                errors += 1
-                click.echo(f"  [{processed:>4}] ERRO    {tag}  ({e})", err=True)
-
+        result = run_drive_migration(limit=limit, echo=click.echo)
         click.echo(f"\n{'-'*60}")
-        click.echo(f"  Migrados : {migrated}")
-        click.echo(f"  Erros    : {errors}  (links mantidos para nova tentativa)")
-        click.echo(f"  Restantes: {max(0, len(jobs) - processed)}")
+        click.echo(f"  Migrados : {result['migrated']}")
+        click.echo(f"  Erros    : {result['errors']}  (links mantidos para nova tentativa)")
+        click.echo(f"  Restantes: {result['remaining']}")
         click.echo(f"{'-'*60}\n")
