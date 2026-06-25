@@ -5,7 +5,7 @@ não dependem do Drive do candidato. Cada envio válido cria um ``Talent`` pende
 """
 import os
 
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 from werkzeug.datastructures import FileStorage
 
 from app import db, limiter
@@ -72,7 +72,19 @@ def _height_to_cm(raw: str) -> int | None:
 @cadastro_bp.route("/", methods=["GET"])
 def form():
     """Renderiza o formulário público de cadastro."""
-    return render_template("cadastro/form.html", form={}, error=None)
+    # request.form é um MultiDict vazio no GET — dá suporte a form.get/getlist no template.
+    return render_template("cadastro/form.html", form=request.form, error=None)
+
+
+@cadastro_bp.route("/check-cpf")
+@limiter.limit("60 per hour")
+def check_cpf():
+    """Verifica em tempo real se um CPF já existe no banco (avisa antes de enviar tudo)."""
+    cpf = only_digits(request.args.get("cpf") or "")
+    if len(cpf) < 11:
+        return jsonify({"exists": False, "valid": False})
+    exists = Talent.query.filter_by(cpf=cpf).first() is not None
+    return jsonify({"exists": exists, "valid": True})
 
 
 @cadastro_bp.route("/enviado", methods=["GET"])

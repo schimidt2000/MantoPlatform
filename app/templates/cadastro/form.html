@@ -70,7 +70,14 @@
       <strong>direto por aqui</strong>, sem precisar de espaço no Google Drive.
     </div>
 
-    {% if error %}<div class="err">⚠️ {{ error }}</div>{% endif %}
+    {% if error %}
+      <div class="err">⚠️ {{ error }}
+        <div style="font-weight:400; font-size:12.5px; margin-top:6px;">
+          Seus dados foram mantidos. Por segurança, o navegador não guarda arquivos — por favor
+          <strong>anexe as fotos e o documento novamente</strong> antes de reenviar.
+        </div>
+      </div>
+    {% endif %}
 
     {% set genders = ['Homem Cis', 'Mulher Cis', 'Homem Trans', 'Mulher Trans', 'Não-Binário', 'Prefiro não responder'] %}
     {% set sources = ['Instagram @mantoproducoes', 'Instagram @castingmantoproducoes', 'Indicação', 'Site', 'Anúncio', 'Outros'] %}
@@ -98,7 +105,7 @@
           <label class="q">Já trabalhou com a Manto? <span class="opt">(opcional)</span></label>
           <div class="opts">
             {% for o in ['Sim', 'Não'] %}
-              <label class="opt-row"><input type="radio" name="worked_before" value="{{ o }}">{{ o }}</label>
+              <label class="opt-row"><input type="radio" name="worked_before" value="{{ o }}" {% if form.get('worked_before') == o %}checked{% endif %}>{{ o }}</label>
             {% endfor %}
           </div>
         </div>
@@ -106,7 +113,7 @@
           <label class="q">Onde conheceu a Manto? <span class="opt">(opcional)</span></label>
           <div class="opts">
             {% for o in sources %}
-              <label class="opt-row"><input type="radio" name="how_found_us" value="{{ o }}">{{ o }}</label>
+              <label class="opt-row"><input type="radio" name="how_found_us" value="{{ o }}" {% if form.get('how_found_us') == o %}checked{% endif %}>{{ o }}</label>
             {% endfor %}
           </div>
         </div>
@@ -126,10 +133,10 @@
           <label class="q">Gênero <span class="req">*</span></label>
           <div class="opts">
             {% for o in genders %}
-              <label class="opt-row"><input type="radio" name="gender" value="{{ o }}" {% if loop.first %}required{% endif %}>{{ o }}</label>
+              <label class="opt-row"><input type="radio" name="gender" value="{{ o }}" {% if loop.first %}required{% endif %} {% if form.get('gender') == o %}checked{% endif %}>{{ o }}</label>
             {% endfor %}
-            <label class="opt-row"><input type="radio" name="gender" value="Outro" id="gender-outro">Outro:</label>
-            <input type="text" name="gender_other" id="gender-other-text" placeholder="Especifique" style="display:none; margin-left:27px; max-width:300px;">
+            <label class="opt-row"><input type="radio" name="gender" value="Outro" id="gender-outro" {% if form.get('gender') == 'Outro' %}checked{% endif %}>Outro:</label>
+            <input type="text" name="gender_other" id="gender-other-text" placeholder="Especifique" value="{{ form.get('gender_other', '') }}" style="{% if form.get('gender') != 'Outro' %}display:none;{% endif %} margin-left:27px; max-width:300px;">
           </div>
         </div>
         <div class="row">
@@ -147,7 +154,7 @@
             <span class="opt">(com nível suficiente para interagir num evento e/ou cantar)</span></label>
           <div class="opt-grid" data-required-group="Selecione ao menos um idioma.">
             {% for o in idiomas %}
-              <label class="opt-row"><input type="checkbox" name="languages" value="{{ o }}">{{ o }}</label>
+              <label class="opt-row"><input type="checkbox" name="languages" value="{{ o }}" {% if o in form.getlist('languages') %}checked{% endif %}>{{ o }}</label>
             {% endfor %}
           </div>
         </div>
@@ -162,7 +169,8 @@
         <div class="row">
           <div class="field">
             <label class="q">CPF <span class="req">*</span></label>
-            <input type="text" name="cpf" required inputmode="numeric" placeholder="000.000.000-00" value="{{ form.get('cpf', '') }}">
+            <input type="text" name="cpf" id="cpf-input" required inputmode="numeric" placeholder="000.000.000-00" value="{{ form.get('cpf', '') }}">
+            <div id="cpf-msg" style="font-size:12px; margin-top:4px;"></div>
           </div>
           <div class="field">
             <label class="q">RG <span class="req">*</span></label>
@@ -182,7 +190,7 @@
           <label class="q">Tipo de chave PIX <span class="req">*</span></label>
           <div class="opts">
             {% for o in pix_tipos %}
-              <label class="opt-row"><input type="radio" name="pix_key_type" value="{{ o }}" {% if loop.first %}required{% endif %}>{{ o }}</label>
+              <label class="opt-row"><input type="radio" name="pix_key_type" value="{{ o }}" {% if loop.first %}required{% endif %} {% if form.get('pix_key_type') == o %}checked{% endif %}>{{ o }}</label>
             {% endfor %}
           </div>
         </div>
@@ -202,7 +210,7 @@
           <label class="q">Raça <span class="req">*</span></label>
           <div class="opts">
             {% for o in racas %}
-              <label class="opt-row"><input type="radio" name="race" value="{{ o }}" {% if loop.first %}required{% endif %}>{{ o }}</label>
+              <label class="opt-row"><input type="radio" name="race" value="{{ o }}" {% if loop.first %}required{% endif %} {% if form.get('race') == o %}checked{% endif %}>{{ o }}</label>
             {% endfor %}
           </div>
         </div>
@@ -225,14 +233,14 @@
             <label class="q">Tamanho de Manequim/Roupa Superior <span class="req">*</span></label>
             <select name="clothing_top" required>
               <option value="">— selecione —</option>
-              {% for o in manequins %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+              {% for o in manequins %}<option value="{{ o }}" {% if form.get('clothing_top') == o %}selected{% endif %}>{{ o }}</option>{% endfor %}
             </select>
           </div>
           <div class="field">
             <label class="q">Manequim/Roupa Inferior (Calças, Saias, Shorts) <span class="req">*</span></label>
             <select name="clothing_bottom" required>
               <option value="">— selecione —</option>
-              {% for o in manequins %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+              {% for o in manequins %}<option value="{{ o }}" {% if form.get('clothing_bottom') == o %}selected{% endif %}>{{ o }}</option>{% endfor %}
             </select>
           </div>
         </div>
@@ -244,7 +252,7 @@
           <label class="q">Possui Passaporte e visto americano? <span class="req">*</span></label>
           <div class="opts">
             {% for o in passaportes %}
-              <label class="opt-row"><input type="radio" name="passport" value="{{ o }}" {% if loop.first %}required{% endif %}>{{ o }}</label>
+              <label class="opt-row"><input type="radio" name="passport" value="{{ o }}" {% if loop.first %}required{% endif %} {% if form.get('passport') == o %}checked{% endif %}>{{ o }}</label>
             {% endfor %}
           </div>
         </div>
@@ -255,7 +263,7 @@
         <p class="hint">Marque todas as opções que te definem.</p>
         <div class="opt-grid" data-required-group="Selecione ao menos uma habilidade.">
           {% for o in habilidades %}
-            <label class="opt-row"><input type="checkbox" name="skills" value="{{ o }}">{{ o }}</label>
+            <label class="opt-row"><input type="checkbox" name="skills" value="{{ o }}" {% if o in form.getlist('skills') %}checked{% endif %}>{{ o }}</label>
           {% endfor %}
         </div>
       </div>
@@ -301,15 +309,37 @@
         } else { box.style.display = 'none'; }
       });
     });
-    // Gênero "Outro" -> revela campo de texto
+    // Gênero "Outro" -> revela campo de texto (e restaura ao recarregar com erro)
+    function syncGenderOther() {
+      var other = document.getElementById('gender-other-text');
+      var isOutro = document.getElementById('gender-outro').checked;
+      other.style.display = isOutro ? 'block' : 'none';
+      other.required = isOutro;
+    }
     document.querySelectorAll('input[name="gender"]').forEach(function (r) {
-      r.addEventListener('change', function () {
-        var other = document.getElementById('gender-other-text');
-        var isOutro = document.getElementById('gender-outro').checked;
-        other.style.display = isOutro ? 'block' : 'none';
-        other.required = isOutro;
-      });
+      r.addEventListener('change', syncGenderOther);
     });
+    syncGenderOther();
+
+    // CPF: verificação em tempo real (avisa antes de preencher tudo)
+    var cpfInput = document.getElementById('cpf-input');
+    var cpfMsg = document.getElementById('cpf-msg');
+    if (cpfInput) {
+      cpfInput.addEventListener('blur', function () {
+        var digits = (cpfInput.value || '').replace(/\D/g, '');
+        if (digits.length < 11) { cpfMsg.textContent = ''; return; }
+        cpfMsg.style.color = 'var(--muted)'; cpfMsg.textContent = 'Verificando CPF…';
+        fetch('/cadastro/check-cpf?cpf=' + digits)
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (j.exists) {
+              cpfMsg.style.color = 'var(--danger)';
+              cpfMsg.innerHTML = '⚠️ Este CPF já está cadastrado. Fale com a equipe da Manto.';
+            } else { cpfMsg.textContent = ''; }
+          })
+          .catch(function () { cpfMsg.textContent = ''; });
+      });
+    }
     // Valida grupos de checkbox obrigatórios (idiomas, habilidades) + trava duplo envio
     document.getElementById('cad-form').addEventListener('submit', function (e) {
       var groups = document.querySelectorAll('[data-required-group]');
