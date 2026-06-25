@@ -784,17 +784,30 @@ def migrar_arquivos():
     from app.drive_migration import TALENT_MEDIA_FIELDS, is_drive_url, migration_status
     from app.models import Talent
 
-    remaining = 0
-    for t in Talent.query.all():
+    field_labels = {
+        "photo_face_path": "Foto do rosto",
+        "photo_full_path": "Foto de corpo inteiro",
+        "doc_photo_path": "Foto do documento",
+        "cnh_file_path": "Arquivo da CNH",
+    }
+    pending = []
+    for t in Talent.query.order_by(Talent.full_name).all():
         for field in TALENT_MEDIA_FIELDS:
-            if is_drive_url(getattr(t, field)):
-                remaining += 1
+            url = getattr(t, field)
+            if is_drive_url(url):
+                pending.append({
+                    "id": t.id,
+                    "name": t.full_name,
+                    "field": field_labels.get(field, field),
+                    "url": url,
+                })
     return render_template(
         "admin_migrar_arquivos.html",
         settings=get_settings(),
         active="users",
         title="Admin - Migrar arquivos do Drive",
-        remaining=remaining,
+        remaining=len(pending),
+        pending=pending,
         status=migration_status,
     )
 

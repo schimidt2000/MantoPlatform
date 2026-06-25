@@ -58,6 +58,27 @@
   {% endif %}
 </div>
 
+{% if pending %}
+<div class="panel" style="max-width:640px; margin-top:16px;">
+  <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:12px;">
+    Ainda no Google Drive ({{ pending|length }})
+  </div>
+  <p class="muted" style="font-size:12.5px; margin-top:0;">
+    Estes não foram baixados (link quebrado, arquivo apagado/movido no Drive, ou sem permissão). Abra o
+    talento para conferir, ou o link do Drive para ver o que há de errado.
+  </p>
+  {% for p in pending %}
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; {% if not loop.last %}padding-bottom:10px; margin-bottom:10px; border-bottom:1px solid var(--line);{% endif %}">
+      <div style="flex:1; min-width:200px;">
+        <a href="/talents/{{ p.id }}" style="font-weight:600;">{{ p.name }}</a>
+        <span class="muted" style="font-size:12.5px;">&nbsp;—&nbsp;{{ p.field }}</span>
+      </div>
+      <a href="{{ p.url }}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">Abrir no Drive ↗</a>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if status.running %}
 <script>setTimeout(function(){ location.reload(); }, 5000);</script>
 {% endif %}
