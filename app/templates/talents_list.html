@@ -8,6 +8,11 @@
   <a href="/talents/add" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
     + Adicionar Talento
   </a>
+  {% if eff_has_role('SUPERADMIN') %}
+    <a href="/admin/migrar-arquivos" class="btn btn-ghost" title="Mover fotos/documentos do Google Drive para o nosso armazenamento">
+      ☁️ Migrar arquivos do Drive
+    </a>
+  {% endif %}
   {% if eff_has_role('CASTING', 'SUPERADMIN') %}
   <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px;">
     <form method="post" action="/talents/import" style="margin:0;" id="import-form">

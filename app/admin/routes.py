@@ -774,3 +774,41 @@ def desempenho():
         total_vendas=sum(v["count"] for v in vendas_raw.values()),
         total_valor=sum(v["total"] for v in vendas_raw.values()),
     )
+
+
+@admin_bp.route("/migrar-arquivos", methods=["GET"])
+@login_required
+@require_superadmin
+def migrar_arquivos():
+    """Página para migrar fotos/documentos de talentos do Google Drive para o volume (feature 087)."""
+    from app.drive_migration import TALENT_MEDIA_FIELDS, is_drive_url, migration_status
+    from app.models import Talent
+
+    remaining = 0
+    for t in Talent.query.all():
+        for field in TALENT_MEDIA_FIELDS:
+            if is_drive_url(getattr(t, field)):
+                remaining += 1
+    return render_template(
+        "admin_migrar_arquivos.html",
+        settings=get_settings(),
+        active="users",
+        title="Admin - Migrar arquivos do Drive",
+        remaining=remaining,
+        status=migration_status,
+    )
+
+
+@admin_bp.route("/migrar-arquivos", methods=["POST"])
+@login_required
+@require_superadmin
+def migrar_arquivos_start():
+    """Dispara a migração Drive -> volume em segundo plano."""
+    from app.drive_migration import start_background_migration
+
+    started = start_background_migration(current_app._get_current_object())
+    if started:
+        flash("Migração iniciada. Acompanhe o progresso nesta página.", "success")
+    else:
+        flash("A migração já está em andamento.", "warning")
+    return redirect(url_for("admin.migrar_arquivos"))

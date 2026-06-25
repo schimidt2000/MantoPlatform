@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Migrar arquivos do Drive{% endblock %}
+{% block page_title %}Migrar arquivos do Google Drive{% endblock %}
+
+{% block page_actions %}
+  <a class="btn btn-ghost" href="/talents">← Banco de Talentos</a>
+{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width:640px;">
+  <p class="muted" style="margin-top:0;">
+    Move as fotos e documentos dos talentos que ainda estão no <strong>Google Drive</strong> para o
+    armazenamento próprio (volume do Railway), atualizando os links. Pode rodar quantas vezes quiser —
+    ele continua de onde parou e não duplica nada.
+  </p>
+
+  {% set running = status.running %}
+  {% set pct = ((status.processed / status.total * 100) | round(0, 'floor')) if status.total else 0 %}
+
+  <div style="background:var(--accent-soft, #efeaf8); border:1px solid var(--line); border-radius:12px; padding:16px; margin:16px 0;">
+    {% if running %}
+      <div style="font-weight:700; color:var(--accent, #544596);">⏳ Migração em andamento…</div>
+      <div style="margin-top:10px; height:10px; background:#e5e3ef; border-radius:6px; overflow:hidden;">
+        <div style="height:100%; width:{{ pct }}%; background:var(--accent, #544596);"></div>
+      </div>
+      <div class="muted" style="margin-top:8px; font-size:13px;">
+        {{ status.processed }} de {{ status.total }} processados
+        &nbsp;·&nbsp; {{ status.migrated }} migrados
+        &nbsp;·&nbsp; {{ status.errors }} com erro
+      </div>
+      <div class="muted" style="font-size:12px; margin-top:4px;">Esta página atualiza sozinha a cada 5s.</div>
+    {% elif status.done %}
+      <div style="font-weight:700; color:var(--ok, #2e7d32);">✅ Última migração concluída</div>
+      <div class="muted" style="margin-top:8px; font-size:13px;">
+        {{ status.migrated }} migrados &nbsp;·&nbsp; {{ status.errors }} com erro
+        &nbsp;·&nbsp; {{ status.processed }} processados
+      </div>
+    {% else %}
+      <div style="font-weight:700;">Pronto para migrar</div>
+    {% endif %}
+
+    <div class="muted" style="margin-top:10px; font-size:13px;">
+      Ainda no Google Drive: <strong>{{ remaining }}</strong> arquivo(s).
+    </div>
+  </div>
+
+  <form method="post" action="/admin/migrar-arquivos">
+    <button type="submit" class="btn btn-primary" {% if running %}disabled{% endif %}>
+      {% if running %}Migrando…{% elif remaining == 0 %}Nada a migrar{% else %}▶ Iniciar migração{% endif %}
+    </button>
+  </form>
+
+  {% if remaining > 0 %}
+    <p class="muted" style="font-size:12px; margin-top:14px;">
+      Observação: documentos em PDF só migram se a pasta de respostas do Formulário estiver compartilhada
+      (como Leitor) com a conta de serviço do Google. Fotos migram normalmente.
+    </p>
+  {% endif %}
+</div>
+
+{% if status.running %}
+<script>setTimeout(function(){ location.reload(); }, 5000);</script>
+{% endif %}
+{% endblock %}
