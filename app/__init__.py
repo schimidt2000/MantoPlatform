@@ -293,6 +293,7 @@ def create_app():
     from .educamanto.routes import educamanto_bp
     from .gastos.routes import gastos_bp
     from .cadastro.routes import cadastro_bp
+    from .revisao.routes import revisao_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
@@ -306,6 +307,7 @@ def create_app():
     app.register_blueprint(educamanto_bp)
     app.register_blueprint(gastos_bp)
     app.register_blueprint(cadastro_bp)
+    app.register_blueprint(revisao_bp)
 
     def _wa_link(code: int) -> str:
         from zoneinfo import ZoneInfo

@@ -16,3 +16,5 @@ class RoleName:
     ENSAIO     = "ENSAIO"
     # Perfil restrito (feature 078): só agenda (visualização) + EducaManto.
     REVENDEDOR_EDUCAMANTO = "REVENDEDOR_EDUCAMANTO"
+    # Equipe de marketing (feature 088): cria espaços de revisão de mídia.
+    MARKETING  = "MARKETING"

@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}{{ asset.original_name or 'Material' }}{% endblock %}
+{% block page_title %}{{ asset.original_name or 'Material' }}{% endblock %}
+
+{% block page_actions %}
+  <a href="/revisao/{{ space.id }}" class="btn btn-ghost">← {{ space.title }}</a>
+{% endblock %}
+
+{% block content %}
+<div id="review-app"
+     data-asset-id="{{ asset.id }}"
+     data-media-type="{{ asset.media_type }}"
+     data-file="{{ asset.file_path }}"
+     style="display:grid; grid-template-columns: 1fr 360px; gap:16px; align-items:start;">
+
+  {# ── Visualizador ───────────────────────────────────────────── #}
+  <div>
+    <div class="panel" style="padding:12px;">
+      {% if asset.media_type == 'video' %}
+        <video id="player" src="{{ asset.file_path }}" controls playsinline style="width:100%; border-radius:var(--r-md); background:#000;"></video>
+        <div id="markerbar" title="Comentários" style="position:relative; height:14px; margin-top:6px; background:#e9e6f2; border-radius:7px; cursor:pointer;"></div>
+      {% elif asset.media_type == 'audio' %}
+        <audio id="player" src="{{ asset.file_path }}" controls style="width:100%;"></audio>
+        <div id="markerbar" title="Comentários" style="position:relative; height:14px; margin-top:6px; background:#e9e6f2; border-radius:7px; cursor:pointer;"></div>
+      {% elif asset.media_type == 'image' %}
+        <div id="img-wrap" style="position:relative; line-height:0;">
+          <img id="img" src="{{ asset.file_path }}" alt="" style="max-width:100%; border-radius:var(--r-md); cursor:crosshair;">
+          <div id="pins"></div>
+        </div>
+        <p class="muted small" style="margin:8px 0 0;">Clique na imagem para marcar um ponto e comentar.</p>
+      {% elif asset.media_type == 'pdf' %}
+        <iframe src="{{ asset.file_path }}" style="width:100%; height:620px; border:1px solid var(--line); border-radius:var(--r-md);"></iframe>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Comentários ────────────────────────────────────────────── #}
+  <div class="panel" style="position:sticky; top:12px;">
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:10px;">Comentários</div>
+
+    <div id="new-comment">
+      <div id="anchor-info" class="muted" style="font-size:12px; margin-bottom:6px;"></div>
+      {% if asset.media_type == 'pdf' %}
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <label class="muted" style="font-size:12.5px;">Página</label>
+          <input type="number" id="page-input" min="1" style="width:80px;" placeholder="—">
+        </div>
+      {% endif %}
+      <textarea id="comment-body" rows="3" style="width:100%; resize:vertical;" placeholder="Escreva um comentário…"></textarea>
+      <button type="button" class="btn btn-primary btn-sm" id="send-comment" style="margin-top:8px; width:100%;">Comentar</button>
+    </div>
+
+    <div id="comments" style="margin-top:14px; display:flex; flex-direction:column; gap:10px;"></div>
+  </div>
+</div>
+
+<style>
+  @media (max-width: 880px) { #review-app { grid-template-columns: 1fr !important; } }
+  .rc { border:1px solid var(--line); border-radius:var(--r-md); padding:10px; }
+  .rc.resolved { opacity:.6; }
+  .rc-head { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  .rc-author { font-weight:600; font-size:13px; }
+  .rc-date { color:var(--muted); font-size:11px; white-space:nowrap; }
+  .rc-anchor { display:inline-block; font-size:11.5px; font-weight:700; color:var(--accent,#544596);
+               background:var(--accent-soft,rgba(84,69,150,.1)); border-radius:6px; padding:1px 7px; margin-top:6px; cursor:pointer; }
+  .rc-body { font-size:13.5px; margin:6px 0 0; white-space:pre-wrap; }
+  .rc-actions { display:flex; gap:10px; margin-top:8px; }
+  .rc-actions button { background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; padding:0; }
+  .rc-actions button:hover { color:var(--accent,#544596); }
+  .marker { position:absolute; top:0; width:3px; height:14px; background:var(--accent,#544596); border-radius:2px; transform:translateX(-1px); }
+  .pin { position:absolute; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%; background:var(--accent,#544596);
+         color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;
+         border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.3); cursor:pointer; }
+  .pin.temp { background:#c0392b; }
+</style>
+
+<script>
+(function () {
+  var app = document.getElementById('review-app');
+  var assetId = app.dataset.assetId;
+  var mediaType = app.dataset.mediaType;
+  var player = document.getElementById('player');
+  var base = '/revisao/asset/' + assetId;
+
+  var pendingPin = null;  // {x, y} para imagem
+
+  function fmt(sec) {
+    sec = Math.max(0, Math.floor(sec || 0));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function anchorInfo() {
+    var el = document.getElementById('anchor-info');
+    if (!el) return;
+    if (mediaType === 'video' || mediaType === 'audio') {
+      el.textContent = player ? ('No tempo ' + fmt(player.currentTime)) : '';
+    } else if (mediaType === 'image') {
+      el.textContent = pendingPin ? 'Ponto marcado na imagem' : 'Clique na imagem para marcar um ponto (opcional).';
+    } else {
+      el.textContent = '';
+    }
+  }
+  if (player) player.addEventListener('timeupdate', anchorInfo);
+  anchorInfo();
+
+  function escapeHtml(t) {
+    var d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML;
+  }
+
+  function render(comments) {
+    var box = document.getElementById('comments');
+    box.innerHTML = '';
+    comments.forEach(function (c) {
+      var div = document.createElement('div');
+      div.className = 'rc' + (c.resolved ? ' resolved' : '');
+      div.id = 'rc-' + c.id;
+      var anchor = '';
+      if (c.timecode != null) anchor = '⏱ ' + fmt(c.timecode);
+      else if (c.page != null) anchor = '📄 página ' + c.page;
+      else if (c.pos_x != null) anchor = '📍 ponto';
+      div.innerHTML =
+        '<div class="rc-head"><span class="rc-author">' + escapeHtml(c.author) + '</span>' +
+        '<span class="rc-date">' + c.created_at + '</span></div>' +
+        (anchor ? '<span class="rc-anchor" data-tc="' + (c.timecode != null ? c.timecode : '') + '">' + anchor + '</span>' : '') +
+        '<p class="rc-body">' + escapeHtml(c.body) + '</p>' +
+        '<div class="rc-actions">' +
+        '<button data-act="resolve">' + (c.resolved ? '↺ Reabrir' : '✓ Concluir') + '</button>' +
+        (c.can_delete ? '<button data-act="delete">🗑 Excluir</button>' : '') +
+        '</div>';
+      div.querySelector('[data-act="resolve"]').onclick = function () { resolveComment(c.id); };
+      var del = div.querySelector('[data-act="delete"]');
+      if (del) del.onclick = function () { if (confirm('Excluir comentário?')) deleteComment(c.id); };
+      var anc = div.querySelector('.rc-anchor');
+      if (anc) anc.onclick = function () {
+        var tc = this.getAttribute('data-tc');
+        if (tc !== '' && player) { player.currentTime = parseFloat(tc); player.play().catch(function(){}); }
+      };
+      box.appendChild(div);
+    });
+    renderMarkers(comments);
+    renderPins(comments);
+  }
+
+  function renderMarkers(comments) {
+    var bar = document.getElementById('markerbar');
+    if (!bar || !player) return;
+    bar.querySelectorAll('.marker').forEach(function (m) { m.remove(); });
+    var dur = player.duration;
+    if (!dur || !isFinite(dur)) return;
+    comments.forEach(function (c) {
+      if (c.timecode == null) return;
+      var m = document.createElement('div');
+      m.className = 'marker';
+      m.style.left = (c.timecode / dur * 100) + '%';
+      m.title = fmt(c.timecode);
+      m.onclick = function () { player.currentTime = c.timecode; player.play().catch(function(){}); };
+      bar.appendChild(m);
+    });
+  }
+
+  function renderPins(comments) {
+    var wrap = document.getElementById('pins');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    var n = 0;
+    comments.forEach(function (c) {
+      if (c.pos_x == null) return;
+      n++;
+      var p = document.createElement('div');
+      p.className = 'pin';
+      p.style.left = (c.pos_x * 100) + '%';
+      p.style.top = (c.pos_y * 100) + '%';
+      p.textContent = n;
+      p.title = c.body;
+      p.onclick = function () {
+        var el = document.getElementById('rc-' + c.id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
+      wrap.appendChild(p);
+    });
+  }
+
+  // Markerbar click → seek
+  var bar = document.getElementById('markerbar');
+  if (bar && player) {
+    bar.addEventListener('click', function (e) {
+      if (e.target.classList.contains('marker')) return;
+      var dur = player.duration;
+      if (!dur || !isFinite(dur)) return;
+      var rect = bar.getBoundingClientRect();
+      player.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * dur;
+    });
+    player.addEventListener('loadedmetadata', load);
+  }
+
+  // Imagem: clique adiciona pin temporário
+  var img = document.getElementById('img');
+  if (img) {
+    img.addEventListener('click', function (e) {
+      var rect = img.getBoundingClientRect();
+      pendingPin = { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+      var wrap = document.getElementById('pins');
+      var t = wrap.querySelector('.pin.temp');
+      if (!t) { t = document.createElement('div'); t.className = 'pin temp'; t.textContent = '+'; wrap.appendChild(t); }
+      t.style.left = (pendingPin.x * 100) + '%';
+      t.style.top = (pendingPin.y * 100) + '%';
+      anchorInfo();
+      document.getElementById('comment-body').focus();
+    });
+  }
+
+  function send() {
+    var body = document.getElementById('comment-body').value.trim();
+    if (!body) { alert('Escreva um comentário.'); return; }
+    var payload = { body: body };
+    if (mediaType === 'video' || mediaType === 'audio') payload.timecode = player ? player.currentTime : null;
+    if (mediaType === 'image' && pendingPin) { payload.pos_x = pendingPin.x; payload.pos_y = pendingPin.y; }
+    if (mediaType === 'pdf') {
+      var pg = document.getElementById('page-input');
+      if (pg && pg.value) payload.page = pg.value;
+    }
+    var btn = document.getElementById('send-comment');
+    btn.disabled = true;
+    fetch(base + '/comment', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        btn.disabled = false;
+        if (!res.ok) { alert(res.j.error || 'Erro ao comentar.'); return; }
+        document.getElementById('comment-body').value = '';
+        pendingPin = null;
+        var t = document.querySelector('.pin.temp'); if (t) t.remove();
+        load();
+      }).catch(function () { btn.disabled = false; alert('Erro de conexão.'); });
+  }
+  document.getElementById('send-comment').onclick = send;
+
+  function resolveComment(id) {
+    fetch('/revisao/comment/' + id + '/resolve', { method: 'POST' }).then(load);
+  }
+  function deleteComment(id) {
+    fetch('/revisao/comment/' + id + '/delete', { method: 'POST' }).then(load);
+  }
+
+  function load() {
+    fetch(base + '/comments').then(function (r) { return r.json(); }).then(render);
+  }
+  load();
+})();
+</script>
+{% endblock %}

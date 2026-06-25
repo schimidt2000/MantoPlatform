@@ -66,8 +66,9 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"
 
     # Limite global de upload/requisição (defesa contra DoS por arquivo gigante).
-    # Acima dos limites por arquivo (10–20 MB) usados nas rotas.
-    MAX_CONTENT_LENGTH = 64 * 1024 * 1024  # 64 MB
+    # 512 MB para acomodar vídeos do módulo de Revisão (feature 088); as demais rotas
+    # mantêm limites menores por arquivo (10–20 MB) validados nelas próprias.
+    MAX_CONTENT_LENGTH = 512 * 1024 * 1024  # 512 MB
 
     # Email — Gmail Workspace via App Password
     MAIL_SERVER   = os.getenv("MAIL_SERVER", "smtp.gmail.com")
