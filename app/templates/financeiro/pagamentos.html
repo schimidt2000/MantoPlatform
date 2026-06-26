@@ -178,8 +178,7 @@
           {% else %}<span class="muted">—</span>{% endif %}
           {% if item.type == 'salary' and item.advance_amount and item.advance_amount > 0 %}
             <div style="font-size:10px; color:#b45309; font-weight:600;">
-              adiantado R$ {{ item.advance_amount | brl }}
-              {% if item.advance_proof %}<a href="{{ item.advance_proof }}" target="_blank" style="color:inherit;">📎</a>{% endif %}
+              adiantado R$ {{ item.advance_amount | brl }}{% if item.advances|length > 1 %} ({{ item.advances|length }}x){% endif %}
             </div>
           {% endif %}
         </td>
@@ -247,8 +246,9 @@
                     data-id="{{ item.id }}"
                     data-person="{{ item.person_name }}"
                     data-gross="{{ item.gross_amount | brl }}"
-                    data-advance="{{ item.advance_amount | brl if item.advance_amount else '' }}"
-                    data-proof="{{ item.advance_proof or '' }}">✎ Adiantamento</button>
+                    data-total="{{ item.advance_amount | brl }}"
+                    data-net="{{ item.amount | brl }}"
+                    data-advances='{{ item.advances | tojson }}'>✎ Adiantamentos</button>
           {% endif %}
         </td>
       </tr>
@@ -269,48 +269,74 @@
   {% endif %}
 </div>
 
-{# Modal: adiantamento de salário (feature 067) #}
+{# Modal: adiantamentos de salário — lista (feature 089) #}
 <div id="adv-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center;">
-  <div style="background:#fff; border-radius:12px; padding:20px; width:min(420px,92vw); box-shadow:0 10px 40px rgba(0,0,0,0.25);">
-    <h3 style="margin:0 0 4px;">Adiantamento de salário</h3>
+  <div style="background:#fff; border-radius:12px; padding:20px; width:min(460px,92vw); max-height:90vh; overflow:auto; box-shadow:0 10px 40px rgba(0,0,0,0.25);">
+    <h3 style="margin:0 0 4px;">Adiantamentos de salário</h3>
     <p class="muted" id="adv-person" style="margin:0 0 12px; font-size:13px;"></p>
-    <form id="adv-form" method="post" enctype="multipart/form-data">
+
+    <div class="form-group" style="margin-bottom:10px;">
+      <label>Salário</label>
+      <div id="adv-gross" style="font-weight:700;"></div>
+    </div>
+
+    <label style="font-size:13px; font-weight:600;">Adiantamentos lançados</label>
+    <div id="adv-list" style="margin:6px 0 10px;"></div>
+
+    <div style="display:flex; justify-content:space-between; gap:12px; font-size:13px; padding:8px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line);">
+      <span>Total adiantado: <strong id="adv-total" style="color:#b45309;"></strong></span>
+      <span>A pagar: <strong id="adv-net"></strong></span>
+    </div>
+
+    <form id="adv-form" method="post" enctype="multipart/form-data" style="margin-top:12px;">
       <input type="hidden" name="month" value="{{ month }}">
-      <div class="form-group" style="margin-bottom:10px;">
-        <label>Salário</label>
-        <div id="adv-gross" style="font-weight:700;"></div>
-      </div>
-      <div class="form-group" style="margin-bottom:10px;">
-        <label>Valor adiantado (R$)</label>
-        <input type="text" inputmode="decimal" class="brl-input" name="advance_amount" id="adv-amount" placeholder="0,00" style="width:140px;">
-        <p class="meta" style="margin-top:4px;">Valor já pago antecipadamente. Deixe vazio para remover.</p>
+      <label style="font-size:13px; font-weight:600;">Adicionar adiantamento</label>
+      <div class="form-group" style="margin:6px 0 10px;">
+        <input type="text" inputmode="decimal" class="brl-input" name="advance_amount" id="adv-amount" placeholder="Valor (R$)" style="width:140px;">
       </div>
       <div class="form-group" style="margin-bottom:6px;">
-        <label>Comprovante <span class="muted">(obrigatório se houver adiantamento)</span></label>
+        <label>Comprovante <span class="muted">(obrigatório)</span></label>
         <input type="file" name="advance_proof" accept=".pdf,.png,.jpg,.jpeg">
-        <div id="adv-current-proof" class="meta" style="margin-top:4px;"></div>
       </div>
       <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
-        <button type="button" class="btn btn-sm btn-ghost" onclick="closeAdvModal()">Cancelar</button>
-        <button type="submit" class="btn btn-sm btn-primary">Salvar adiantamento</button>
+        <button type="button" class="btn btn-sm btn-ghost" onclick="closeAdvModal()">Fechar</button>
+        <button type="submit" class="btn btn-sm btn-primary">Adicionar adiantamento</button>
       </div>
     </form>
   </div>
 </div>
 <script>
+var ADV_MONTH = "{{ month }}";
 function closeAdvModal() { document.getElementById('adv-modal').style.display = 'none'; }
+function escAttr(t) { var d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML; }
 document.querySelectorAll('.adv-edit-btn').forEach(function (btn) {
   btn.addEventListener('click', function () {
     document.getElementById('adv-form').action = '/financeiro/pagamentos/salary/' + btn.dataset.id + '/advance';
     document.getElementById('adv-person').textContent = btn.dataset.person || '';
     document.getElementById('adv-gross').textContent = 'R$ ' + (btn.dataset.gross || '0,00');
+    document.getElementById('adv-total').textContent = 'R$ ' + (btn.dataset.total || '0,00');
+    document.getElementById('adv-net').textContent = 'R$ ' + (btn.dataset.net || '0,00');
     var amt = document.getElementById('adv-amount');
-    amt.value = btn.dataset.advance || '';
+    amt.value = '';
     if (window.MoneyMask) MoneyMask.applyMask(amt);
-    var cp = document.getElementById('adv-current-proof');
-    cp.innerHTML = btn.dataset.proof
-      ? 'Comprovante atual: <a href="' + btn.dataset.proof + '" target="_blank">ver</a>'
-      : '';
+
+    var advances = [];
+    try { advances = JSON.parse(btn.dataset.advances || '[]'); } catch (e) {}
+    var list = document.getElementById('adv-list');
+    if (!advances.length) {
+      list.innerHTML = '<p class="muted" style="font-size:12.5px; margin:0;">Nenhum adiantamento ainda.</p>';
+    } else {
+      list.innerHTML = advances.map(function (a) {
+        var proof = a.proof ? ' · <a href="' + escAttr(a.proof) + '" target="_blank">ver</a>' : '';
+        return '<div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--line); font-size:13px;">' +
+          '<span style="font-weight:600;">R$ ' + escAttr(a.amount) + '</span>' +
+          '<span class="muted" style="font-size:11.5px;">' + escAttr(a.date) + proof + '</span>' +
+          '<form method="post" action="/financeiro/pagamentos/salary/advance/' + a.id + '/delete" style="margin:0 0 0 auto;" onsubmit="return confirm(\'Remover este adiantamento?\')">' +
+          '<input type="hidden" name="month" value="' + escAttr(ADV_MONTH) + '">' +
+          '<button type="submit" class="btn btn-sm btn-ghost" style="color:var(--danger,#c0392b); font-size:11px;">Remover</button>' +
+          '</form></div>';
+      }).join('');
+    }
     document.getElementById('adv-modal').style.display = 'flex';
   });
 });
