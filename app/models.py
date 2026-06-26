@@ -663,11 +663,37 @@ class SalaryPayment(db.Model):
     created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     # Adiantamento (feature 067): valor já pago antecipadamente + comprovante. Reduz o valor a
     # pagar (líquido = amount − advance_amount); NÃO reduz o custo de salário do balanço.
-    advance_amount    = db.Column(db.Numeric(12, 2), nullable=True)
-    advance_proof     = db.Column(db.String(300), nullable=True)
+    advance_amount    = db.Column(db.Numeric(12, 2), nullable=True)   # legado (feature 067) — migrado p/ SalaryAdvance
+    advance_proof     = db.Column(db.String(300), nullable=True)      # legado (feature 067)
 
     user           = db.relationship("User", backref=db.backref("salary_payments", lazy="dynamic"))
     salary_history = db.relationship("SalaryHistory", lazy=True)
+    advances       = db.relationship(
+        "SalaryAdvance", backref="payment", lazy=True,
+        cascade="all, delete-orphan", order_by="SalaryAdvance.created_at",
+    )
+
+    @property
+    def advance_total(self):
+        """Soma de todos os adiantamentos deste salário (feature 089)."""
+        from decimal import Decimal as _D
+        return sum((a.amount or _D("0") for a in self.advances), _D("0"))
+
+
+class SalaryAdvance(db.Model):
+    """Um adiantamento de salário (valor + comprovante) — feature 089.
+
+    Vários por ``SalaryPayment``; o líquido a pagar = salário − soma dos adiantamentos. Não reduz o
+    custo de salário do balanço (apenas o valor a pagar).
+    """
+    __tablename__ = "salary_advances"
+    __table_args__ = (db.Index("ix_salary_advances_payment_id", "salary_payment_id"),)
+
+    id                = db.Column(db.Integer, primary_key=True)
+    salary_payment_id = db.Column(db.Integer, db.ForeignKey("salary_payments.id"), nullable=False)
+    amount            = db.Column(db.Numeric(12, 2), nullable=False)
+    proof             = db.Column(db.String(300), nullable=True)
+    created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class SpecialExpense(db.Model):

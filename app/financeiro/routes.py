@@ -10,7 +10,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, abort,
 from flask_login import login_required, current_user
 
 from app import db, _safe_next
-from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SpecialExpense
+from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SalaryAdvance, SpecialExpense
+from app.money import format_brl
 from app.constants import RoleName
 
 financeiro_bp = Blueprint("financeiro", __name__)
@@ -721,12 +722,14 @@ def _ensure_salary_payments(year: int, month: int) -> None:
     # Recompõe os lançamentos NÃO pagos do mês a partir do salário vigente:
     # apaga os não pagos (serão recriados com o valor/frequência atuais) e preserva os
     # já pagos / "no banco" (histórico real do que foi efetivamente pago).
-    # IMPORTANTE (feature 068): também preserva os que têm adiantamento lançado
-    # (advance_amount), senão a regeneração apagaria o adiantamento salvo ao recarregar a tela.
+    # IMPORTANTE (feature 068/089): também preserva os que têm adiantamento(s) lançado(s), senão a
+    # regeneração apagaria os adiantamentos salvos ao recarregar a tela.
+    _sp_with_advances = db.session.query(SalaryAdvance.salary_payment_id).distinct()
     SalaryPayment.query.filter(
         SalaryPayment.month_ref == month_ref,
         SalaryPayment.payment_status == "nao_pago",
         SalaryPayment.advance_amount.is_(None),
+        ~SalaryPayment.id.in_(_sp_with_advances),
     ).delete(synchronize_session="fetch")
 
     active_histories = SalaryHistory.query.filter(
@@ -805,7 +808,16 @@ def _build_payment_items(roles, salary_payments, today: date, expenses=None, now
         pix_type = sp.user.pix_key_type if sp.user else ""
         freq = sp.salary_history.payment_type if sp.salary_history else "—"
         copy_label = sp.due_date.strftime("%d/%m/%Y") + " - Salário " + (sp.user.name if sp.user else "")
-        _adv = sp.advance_amount or Decimal("0")
+        _adv = sp.advance_total  # soma de todos os adiantamentos (feature 089)
+        _advances = [
+            {
+                "id": a.id,
+                "amount": format_brl(a.amount or 0),
+                "date": a.created_at.strftime("%d/%m/%Y") if a.created_at else "",
+                "proof": a.proof or "",
+            }
+            for a in sp.advances
+        ]
         items.append({
             "type":        "salary",
             "id":          sp.id,
@@ -815,10 +827,10 @@ def _build_payment_items(roles, salary_payments, today: date, expenses=None, now
             "copy_label":  copy_label,
             "sublabel":    freq,
             "person_name": sp.user.name if sp.user else "—",
-            "amount":      (sp.amount or Decimal("0")) - _adv,  # líquido a pagar (feature 067)
+            "amount":      (sp.amount or Decimal("0")) - _adv,  # líquido a pagar (feature 067/089)
             "gross_amount": sp.amount,
             "advance_amount": _adv,
-            "advance_proof": sp.advance_proof,
+            "advances":    _advances,
             "pix_key":     pix,
             "pix_key_type": pix_type,
             "status":      sp.payment_status,
@@ -1047,11 +1059,11 @@ def set_payment_status():
 @login_required
 @require_financeiro
 def salary_advance(sp_id: int):
-    """Registra/edita o adiantamento de um salário (valor + comprovante) — feature 067.
+    """Adiciona um adiantamento de salário (valor + comprovante) à lista — feature 067/089.
 
-    O valor a pagar passa a ser o líquido (salário − adiantamento). Comprovante é obrigatório
-    quando o adiantamento é maior que zero; não pode exceder o salário. Não altera o custo de
-    salário do balanço.
+    Cada adiantamento é um item próprio (não sobrescreve os anteriores). O valor a pagar passa a ser
+    o líquido (salário − soma dos adiantamentos). Comprovante é obrigatório; a soma não pode exceder o
+    salário. Não altera o custo de salário do balanço.
     """
     import os
 
@@ -1067,50 +1079,68 @@ def salary_advance(sp_id: int):
 
     adv = parse_brl(request.form.get("advance_amount", ""))
     adv = adv if adv is not None else Decimal("0")
-    if adv < 0:
-        flash("Valor de adiantamento inválido.", "error")
+    if adv <= 0:
+        flash("Informe um valor de adiantamento maior que zero.", "error")
         return back
-    if adv > (sp.amount or Decimal("0")):
-        flash("O adiantamento não pode ser maior que o salário.", "error")
+    if (sp.advance_total + adv) > (sp.amount or Decimal("0")):
+        flash("A soma dos adiantamentos não pode ser maior que o salário.", "error")
         return back
 
     proof = request.files.get("advance_proof")
-    has_new = bool(proof and proof.filename)
-
-    # Adiantamento zero/vazio: remover (se havia) ou avisar que nada foi informado.
-    if adv == 0:
-        if sp.advance_amount:
-            sp.advance_amount = None
-            sp.advance_proof = None
-            audit("payment", "salary_payment", sp.id, sp.user.name if sp.user else "—",
-                  "Adiantamento removido")
-            db.session.commit()
-            flash("Adiantamento removido.", "success")
-        else:
-            flash("Informe o valor do adiantamento.", "error")
-        return back
-
-    # adv > 0: comprovante obrigatório (novo upload ou já existente).
-    if not has_new and not sp.advance_proof:
+    if not (proof and proof.filename):
         flash("Anexe o comprovante do adiantamento.", "error")
         return back
 
-    if has_new:
-        proof.stream.seek(0, 2)
-        size = proof.stream.tell()
-        proof.stream.seek(0)
-        if size > 10 * 1024 * 1024:
-            flash("Comprovante acima de 10 MB.", "error")
-            return back
-        fname = f"adv_{sp.id}_{secure_filename(proof.filename)}"
-        proof.save(os.path.join(current_app.config["UPLOAD_PAYMENTS"], fname))
-        sp.advance_proof = f"/uploads/payments/{fname}"
+    proof.stream.seek(0, 2)
+    size = proof.stream.tell()
+    proof.stream.seek(0)
+    if size > 10 * 1024 * 1024:
+        flash("Comprovante acima de 10 MB.", "error")
+        return back
 
-    sp.advance_amount = adv
+    advance = SalaryAdvance(salary_payment_id=sp.id, amount=adv)
+    db.session.add(advance)
+    db.session.flush()  # garante advance.id para nomear o arquivo
+    fname = f"adv_{sp.id}_{advance.id}_{secure_filename(proof.filename)}"
+    proof.save(os.path.join(current_app.config["UPLOAD_PAYMENTS"], fname))
+    advance.proof = f"/uploads/payments/{fname}"
+
     audit("payment", "salary_payment", sp.id, sp.user.name if sp.user else "—",
-          f"Adiantamento de salário: R$ {adv}")
+          f"Adiantamento de salário adicionado: R$ {adv}")
     db.session.commit()
-    flash(f"Adiantamento de R$ {adv} salvo. Valor a pagar atualizado.", "success")
+    flash(f"Adiantamento de R$ {adv} adicionado. Valor a pagar atualizado.", "success")
+    return back
+
+
+@financeiro_bp.route("/financeiro/pagamentos/salary/advance/<int:adv_id>/delete", methods=["POST"])
+@login_required
+@require_financeiro
+def salary_advance_delete(adv_id: int):
+    """Remove um adiantamento específico da lista (e o comprovante) — feature 089."""
+    import os
+
+    from flask import current_app
+
+    from app.utils import audit
+
+    advance = SalaryAdvance.query.get_or_404(adv_id)
+    sp = advance.payment
+    month = request.form.get("month", sp.month_ref if sp else "")
+    back = redirect(url_for("financeiro.pagamentos", month=month))
+
+    if advance.proof and advance.proof.startswith("/uploads/payments/"):
+        try:
+            os.remove(os.path.join(
+                current_app.config["UPLOAD_PAYMENTS"], os.path.basename(advance.proof)))
+        except OSError:
+            pass
+
+    valor = advance.amount
+    db.session.delete(advance)
+    audit("payment", "salary_payment", sp.id if sp else 0, sp.user.name if sp and sp.user else "—",
+          f"Adiantamento removido: R$ {valor}")
+    db.session.commit()
+    flash("Adiantamento removido.", "success")
     return back
 
 
