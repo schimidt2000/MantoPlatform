@@ -32,7 +32,7 @@
         <div style="border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden;">
           <a href="/revisao/{{ space.id }}/asset/{{ a.id }}" style="text-decoration:none; color:inherit; display:block;">
             <div style="height:140px; background:#f1eff7; display:flex; align-items:center; justify-content:center;">
-              {% if a.media_type == 'image' %}
+              {% if a.media_type == 'image' and not a.file_removed %}
                 <img src="{{ a.file_path }}" alt="" style="max-width:100%; max-height:140px; object-fit:cover;">
               {% else %}
                 <span style="font-size:42px;">{{ icons.get(a.media_type, '📁') }}</span>
@@ -40,7 +40,16 @@
             </div>
             <div style="padding:10px 12px;">
               <div style="font-size:13px; font-weight:600; word-break:break-word;">{{ a.original_name or a.media_type }}</div>
-              <div class="muted" style="font-size:11.5px; margin-top:2px;">{{ a.media_type }} · {{ a.comments|length }} comentário(s)</div>
+              <div class="muted" style="font-size:11.5px; margin-top:2px;">{{ a.media_type }} · {{ a.comments|length }} comentário(s){% if a.version > 1 %} · v{{ a.version }}{% endif %}</div>
+              <div style="margin-top:4px;">
+                {% if a.finalized_at %}
+                  <span class="badge" style="background:#dcfce7; color:#166534; font-size:10px;">✓ Finalizado</span>
+                {% elif a.file_removed %}
+                  <span class="badge" style="background:#f1f5f9; color:#475569; font-size:10px;">Arquivo expirado</span>
+                {% elif a.days_left is not none %}
+                  <span class="badge" style="background:#fff7ed; color:#b45309; font-size:10px;">⏳ expira em {{ a.days_left }} dia(s)</span>
+                {% endif %}
+              </div>
             </div>
           </a>
           {% if can_manage %}

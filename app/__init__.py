@@ -164,6 +164,40 @@ def _start_calendar_sync(app):
     app.logger.info(f"[calendar-sync] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _start_review_cleanup(app):
+    """Thread diária que remove os arquivos de revisão vencidos (feature 090).
+
+    Materiais de revisão expiram em 7 dias; esta rotina apaga só o arquivo do armazenamento
+    (registro e comentários permanecem). Idempotente — rodar em vários workers é inofensivo.
+    """
+    import os as _os
+    import threading
+
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    INTERVAL = app.config.get("REVIEW_CLEANUP_INTERVAL", 24 * 3600)
+
+    def _loop():
+        import time
+        time.sleep(30)  # aguarda o app estar pronto
+        from app.revisao.cleanup import cleanup_expired_review_files
+        while True:
+            try:
+                with app.app_context():
+                    removed = cleanup_expired_review_files()
+                    if removed:
+                        app.logger.info(f"[review-cleanup] {removed} arquivo(s) de revisão removido(s)")
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[review-cleanup] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_loop, daemon=True, name="review-cleanup")
+    t.start()
+    app.logger.info(f"[review-cleanup] thread iniciada (intervalo: {INTERVAL}s)")
+
+
 def create_app():
     from urllib.parse import quote as _url_quote
     app = Flask(__name__)
@@ -657,6 +691,7 @@ def create_app():
 
     # ── Sincronização automática da agenda (cron interno) ──────────
     _start_calendar_sync(app)
+    _start_review_cleanup(app)
 
     # ── Comandos CLI de manutenção ─────────────────────────────────
     from app.cli import register_commands
