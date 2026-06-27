@@ -16,7 +16,15 @@
   {# ── Visualizador ───────────────────────────────────────────── #}
   <div>
     <div class="panel" style="padding:12px;">
-      {% if asset.media_type == 'video' %}
+      {% if asset.file_removed %}
+        <div style="padding:44px 16px; text-align:center; color:var(--muted);">
+          <div style="font-size:42px;">{% if asset.finalized_at %}✅{% else %}🗑️{% endif %}</div>
+          <p style="font-weight:700; color:var(--text); margin:10px 0 2px;">
+            {% if asset.finalized_at %}Material finalizado{% else %}Arquivo expirado{% endif %}
+          </p>
+          <p style="font-size:13px; margin:0;">O arquivo foi removido do armazenamento. Os comentários abaixo permanecem como histórico.</p>
+        </div>
+      {% elif asset.media_type == 'video' %}
         <video id="player" src="{{ asset.file_path }}" controls playsinline style="width:100%; border-radius:var(--r-md); background:#000;"></video>
         <div id="markerbar" title="Comentários" style="position:relative; height:14px; margin-top:6px; background:#e9e6f2; border-radius:7px; cursor:pointer;"></div>
       {% elif asset.media_type == 'audio' %}
@@ -30,6 +38,39 @@
         <p class="muted small" style="margin:8px 0 0;">Clique na imagem para marcar um ponto e comentar.</p>
       {% elif asset.media_type == 'pdf' %}
         <iframe src="{{ asset.file_path }}" style="width:100%; height:620px; border:1px solid var(--line); border-radius:var(--r-md);"></iframe>
+      {% endif %}
+    </div>
+
+    {# Estado / ações do criador — arquivos temporários (feature 090) #}
+    {% set accept_map = {'video':'video/*','audio':'audio/*','image':'image/*','pdf':'application/pdf'} %}
+    <div class="panel" style="padding:12px; margin-top:12px; font-size:13px;">
+      <div>
+        {% if asset.finalized_at %}
+          <span class="badge" style="background:#dcfce7; color:#166534;">✓ Finalizado</span>
+        {% elif asset.file_removed %}
+          <span class="badge" style="background:#f1f5f9; color:#475569;">Arquivo expirado</span>
+        {% elif asset.days_left is not none %}
+          <span class="badge" style="background:#fff7ed; color:#b45309;">⏳ expira em {{ asset.days_left }} dia(s)</span>
+        {% endif %}
+        {% if asset.version > 1 %}<span class="muted" style="margin-left:6px;">versão {{ asset.version }}</span>{% endif %}
+      </div>
+      {% if can_manage %}
+        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <form method="post" action="/revisao/asset/{{ asset.id }}/replace" enctype="multipart/form-data"
+                style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+            <input type="file" name="file" accept="{{ accept_map.get(asset.media_type, '') }}" required style="max-width:230px;">
+            <button type="submit" class="btn btn-sm btn-secondary">Substituir arquivo</button>
+          </form>
+          {% if not asset.file_removed %}
+            <form method="post" action="/revisao/asset/{{ asset.id }}/finalize"
+                  onsubmit="return confirm('Finalizar e REMOVER o arquivo do armazenamento? Os comentários permanecem.')">
+              <button type="submit" class="btn btn-sm btn-primary">✓ Finalizar (remover arquivo)</button>
+            </form>
+          {% endif %}
+        </div>
+        <p class="muted" style="font-size:11.5px; margin-top:6px;">
+          Substituir gera uma nova versão (mesmo tipo) e reinicia o prazo de 7 dias. Finalizar libera o espaço imediatamente.
+        </p>
       {% endif %}
     </div>
   </div>

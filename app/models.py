@@ -1044,11 +1044,31 @@ class ReviewAsset(db.Model):
     media_type = db.Column(db.String(10), nullable=False)   # 'video' | 'audio' | 'image' | 'pdf'
     position = db.Column(db.Integer, default=0, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Arquivos temporários (feature 090): expiram em 7 dias; o arquivo é removido do armazenamento
+    # (registro e comentários permanecem). 'finalized' = aprovado pelo criador (arquivo removido na hora).
+    expires_at   = db.Column(db.DateTime, nullable=True)
+    finalized_at = db.Column(db.DateTime, nullable=True)
+    file_removed = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+    version      = db.Column(db.Integer, default=1, nullable=False, server_default="1")
 
     comments = db.relationship(
         "ReviewComment", backref="asset", lazy=True,
         cascade="all, delete-orphan", order_by="ReviewComment.created_at",
     )
+
+    @property
+    def is_available(self) -> bool:
+        """True se o arquivo ainda está no armazenamento (não expirado nem finalizado)."""
+        return not self.file_removed
+
+    @property
+    def days_left(self):
+        """Dias restantes (arredondados p/ cima) até a expiração; None se sem prazo/removido."""
+        if self.file_removed or not self.expires_at:
+            return None
+        import math
+        secs = (self.expires_at - datetime.utcnow()).total_seconds()
+        return math.ceil(secs / 86400) if secs > 0 else 0
 
 
 class ReviewReviewer(db.Model):

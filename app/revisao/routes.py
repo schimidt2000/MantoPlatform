@@ -4,6 +4,7 @@ Equipe de marketing cria espaços, sobe materiais (vídeo/áudio/imagem/PDF) e e
 Revisores comentam ancorando no time code (vídeo/áudio), na página (PDF) ou num ponto (imagem).
 """
 import os
+from datetime import datetime, timedelta
 
 from flask import (
     Blueprint,
@@ -24,6 +25,8 @@ from app.models import ReviewAsset, ReviewComment, ReviewReviewer, ReviewSpace, 
 from app.storage import delete_file, save_file
 
 revisao_bp = Blueprint("revisao", __name__, url_prefix="/revisao")
+
+_EXPIRY_DAYS = 7  # arquivos de revisão são temporários (feature 090)
 
 # Extensões permitidas por tipo de mídia.
 _MEDIA_EXTS = {
@@ -99,6 +102,7 @@ def _save_assets(space: ReviewSpace, files: list[FileStorage]) -> tuple[int, lis
             original_name=file.filename,
             media_type=media_type,
             position=start + saved,
+            expires_at=datetime.utcnow() + timedelta(days=_EXPIRY_DAYS),
         ))
         saved += 1
     return saved, errors
@@ -263,6 +267,61 @@ def delete_asset(asset_id: int):
     db.session.delete(asset)
     db.session.commit()
     flash("Material excluído.", "success")
+    return redirect(url_for("revisao.space_detail", space_id=space.id))
+
+
+@revisao_bp.route("/asset/<int:asset_id>/replace", methods=["POST"])
+@login_required
+def replace_asset(asset_id: int):
+    """Substitui o arquivo de um material por uma nova versão (feature 090).
+
+    Remove o arquivo antigo, salva o novo (mesmo tipo de mídia), incrementa a versão e reinicia o
+    prazo de 7 dias. Os comentários são mantidos.
+    """
+    asset = ReviewAsset.query.get_or_404(asset_id)
+    space = asset.space
+    if not _can_manage(space):
+        abort(403)
+
+    file = request.files.get("file")
+    if not file or not file.filename:
+        flash("Selecione um arquivo para substituir.", "error")
+        return redirect(url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id))
+    media_type = _detect_media_type(file.filename)
+    if media_type != asset.media_type:
+        flash(f"A nova versão precisa ser do mesmo tipo ({asset.media_type}).", "error")
+        return redirect(url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id))
+    if _file_size(file) > _MAX_FILE:
+        flash("Arquivo acima de 512 MB.", "error")
+        return redirect(url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id))
+
+    if asset.file_path and not asset.file_removed:
+        delete_file(asset.file_path)
+    asset.file_path = save_file(file, "review")
+    asset.original_name = file.filename
+    asset.version = (asset.version or 1) + 1
+    asset.expires_at = datetime.utcnow() + timedelta(days=_EXPIRY_DAYS)
+    asset.file_removed = False
+    asset.finalized_at = None
+    db.session.commit()
+    flash(f"Arquivo substituído (versão {asset.version}). Prazo reiniciado para {_EXPIRY_DAYS} dias.", "success")
+    return redirect(url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id))
+
+
+@revisao_bp.route("/asset/<int:asset_id>/finalize", methods=["POST"])
+@login_required
+def finalize_asset(asset_id: int):
+    """Finaliza um material aprovado: remove o arquivo do armazenamento (registro + comentários ficam)."""
+    asset = ReviewAsset.query.get_or_404(asset_id)
+    space = asset.space
+    if not _can_manage(space):
+        abort(403)
+    if not asset.file_removed and asset.file_path:
+        delete_file(asset.file_path)
+    asset.file_removed = True
+    asset.finalized_at = datetime.utcnow()
+    db.session.commit()
+    flash("Material finalizado. Arquivo removido do armazenamento.", "success")
     return redirect(url_for("revisao.space_detail", space_id=space.id))
 
 

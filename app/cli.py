@@ -6,6 +6,13 @@ import click
 
 
 def register_commands(app):
+    @app.cli.command("cleanup-review-files")
+    def cleanup_review_files():
+        """Remove os arquivos de revisão vencidos (mantém registro e comentários) — feature 090."""
+        from app.revisao.cleanup import cleanup_expired_review_files
+        removed = cleanup_expired_review_files()
+        click.echo(f"Arquivos de revisão removidos: {removed}")
+
     @app.cli.command("compress-images")
     def compress_images():
         """Comprime todas as imagens existentes no servidor mantendo os mesmos URLs."""
