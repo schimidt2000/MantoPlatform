@@ -2380,8 +2380,9 @@ const _makeupLoc   = {{ makeup_loc_label | tojson }};
 const _ensaioDate  = {{ (first_ensaio.start_at.strftime("%d/%m/%Y") if first_ensaio.start_at else "") | tojson }};
 const _ensaioStart = {{ (first_ensaio.start_at.strftime("%H:%M") if first_ensaio.start_at else "") | tojson }};
 const _ensaioEnd   = {{ (first_ensaio.end_at.strftime("%H:%M") if first_ensaio.end_at else "") | tojson }};
+const _ensaioLoc   = {{ (first_ensaio.location or "") | tojson }};
 {% else %}
-const _ensaioDate = "", _ensaioStart = "", _ensaioEnd = "";
+const _ensaioDate = "", _ensaioStart = "", _ensaioEnd = "", _ensaioLoc = "";
 {% endif %}
 const _ensaioMaterials = [
   {% for mat in event.ensaio_materials %}
@@ -2426,6 +2427,7 @@ function buildWAMsg(firstName, cache, character) {
     msg += `\n${em.musica} *Ensaio*\n`;
     msg += `${em.data} ${_ensaioDate}\n`;
     if (_ensaioStart) msg += `${em.relogio} ${_ensaioStart}${_ensaioEnd ? ' - ' + _ensaioEnd : ''}\n`;
+    if (_ensaioLoc) msg += `${em.local} Local: ${_ensaioLoc}\n`;
     if (_ensaioMaterials.length > 0) {
       msg += `\nMateriais disponíveis no portal:\n`;
       _ensaioMaterials.forEach(m => {
