@@ -56,6 +56,29 @@ def _current_talent():
     return Talent.query.get(tid)
 
 
+def _talent_by_login(value: str):
+    """Acha um talento por CPF (dígitos) ou e-mail (feature 092).
+
+    Talentos estrangeiros não têm CPF e acessam o portal pelo **e-mail**. Se o valor tiver ``@``, busca por
+    ``email_contact`` (case-insensitive); caso contrário, trata como CPF (apenas dígitos).
+
+    Args:
+        value: O identificador digitado no formulário (CPF ou e-mail).
+
+    Returns:
+        O ``Talent`` correspondente, ou ``None`` se nada casar.
+    """
+    value = (value or "").strip()
+    if not value:
+        return None
+    if "@" in value:
+        return Talent.query.filter(func.lower(Talent.email_contact) == value.lower()).first()
+    digits = "".join(c for c in value if c.isdigit())
+    if not digits:
+        return None
+    return Talent.query.filter_by(cpf=digits).first()
+
+
 def portal_login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -80,13 +103,11 @@ def login():
 
     error = None
     if request.method == "POST":
-        cpf_raw = request.form.get("cpf", "")
         password = request.form.get("password", "")
-        cpf = "".join(c for c in cpf_raw if c.isdigit())
 
-        talent = Talent.query.filter_by(cpf=cpf).first()
+        talent = _talent_by_login(request.form.get("cpf", ""))
         if not talent or not talent.check_password(password):
-            error = "CPF ou senha incorretos."
+            error = "CPF/e-mail ou senha incorretos."
         else:
             session.clear()
             session["talent_id"] = talent.id
@@ -154,11 +175,10 @@ def first_access():
         import secrets as _sec, string as _str
         from app.email_service import send_welcome_email as _send_welcome
 
-        cpf = "".join(c for c in request.form.get("cpf", "") if c.isdigit())
-        talent = Talent.query.filter_by(cpf=cpf).first()
+        talent = _talent_by_login(request.form.get("cpf", ""))
 
         if not talent:
-            error = "CPF não encontrado. Verifique se você está cadastrado ou fale com nossa equipe."
+            error = "CPF/e-mail não encontrado. Verifique se você está cadastrado ou fale com nossa equipe."
         elif talent.password_hash:
             error = "Este CPF já possui senha. Use a opção 'Esqueci minha senha' abaixo para recuperar o acesso."
         elif not talent.email_contact:
@@ -880,12 +900,10 @@ def forgot_password():
     error = None
 
     if request.method == "POST":
-        cpf_raw = request.form.get("cpf", "")
         email   = request.form.get("email", "").strip().lower()
-        cpf     = "".join(c for c in cpf_raw if c.isdigit())
 
         try:
-            talent = Talent.query.filter_by(cpf=cpf).first()
+            talent = _talent_by_login(request.form.get("cpf", ""))
             if (
                 talent
                 and talent.password_hash
