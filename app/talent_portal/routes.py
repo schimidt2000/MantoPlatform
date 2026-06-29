@@ -107,13 +107,14 @@ def terms():
     talent = _current_talent()
     if talent and talent.must_change_password:
         return redirect(url_for("portal.change_password"))
-    if talent and talent.terms_accepted_at:
-        return redirect(url_for("portal.home"))
+    # Já aceitou: mostra o termo em modo leitura (feature 091), em vez de redirecionar.
+    if request.method == "GET" and talent and talent.terms_accepted_at:
+        return render_template("portal/terms.html", talent=talent, view_only=True)
     if request.method == "POST" and talent:
         talent.terms_accepted_at = datetime.utcnow()
         db.session.commit()
         return redirect(url_for("portal.home"))
-    return render_template("portal/terms.html", talent=talent)
+    return render_template("portal/terms.html", talent=talent, view_only=False)
 
 
 @portal_bp.route("/logout", methods=["POST"])
