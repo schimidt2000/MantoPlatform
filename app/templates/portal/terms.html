@@ -159,20 +159,31 @@
     <p>O(a) CONTRATADO(A) declara que leu, compreendeu e concorda com todos os termos acima, prestando seu consentimento de forma livre e esclarecida.</p>
 
   </div>
-  <div class="scroll-hint" id="scroll-hint">Role até o fim para aceitar</div>
+  {% if view_only %}
+    <div class="terms-footer" style="text-align:center;">
+      <p style="font-size:13px; color:var(--muted); margin-bottom:12px;">
+        ✓ Você aceitou este termo
+        {% if talent and talent.terms_accepted_at %}em {{ talent.terms_accepted_at.strftime('%d/%m/%Y') }}{% endif %}.
+      </p>
+      <a href="/portal/" class="btn btn-primary btn-accept">← Voltar ao portal</a>
+    </div>
+  {% else %}
+    <div class="scroll-hint" id="scroll-hint">Role até o fim para aceitar</div>
 
-  <form method="post" class="terms-footer">
-    <label class="terms-check">
-      <input type="checkbox" id="chk-terms" onchange="toggleBtn()" disabled>
-      Li e concordo com todos os termos acima, prestando meu consentimento de forma livre e esclarecida.
-    </label>
-    <button type="submit" class="btn btn-primary btn-accept" id="btn-accept" disabled>
-      Aceitar e entrar no portal
-    </button>
-  </form>
+    <form method="post" class="terms-footer">
+      <label class="terms-check">
+        <input type="checkbox" id="chk-terms" onchange="toggleBtn()" disabled>
+        Li e concordo com todos os termos acima, prestando meu consentimento de forma livre e esclarecida.
+      </label>
+      <button type="submit" class="btn btn-primary btn-accept" id="btn-accept" disabled>
+        Aceitar e entrar no portal
+      </button>
+    </form>
+  {% endif %}
 
 </div>
 
+{% if not view_only %}
 <script>
   var box = document.getElementById('terms-box');
   var chk = document.getElementById('chk-terms');
@@ -191,5 +202,6 @@
     }
   });
 </script>
+{% endif %}
 </body>
 </html>
