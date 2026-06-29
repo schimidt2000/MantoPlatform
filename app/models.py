@@ -126,7 +126,10 @@ class Talent(db.Model):
 
     # sensíveis (depois controlamos por permissão)
     rg = db.Column(db.String(30), nullable=True)
-    cpf = db.Column(db.String(20), unique=True, nullable=False)
+    # CPF é único, mas opcional: talentos estrangeiros não têm CPF (feature 092).
+    # No Postgres, múltiplos NULL não violam UNIQUE — por isso estrangeiro grava cpf=None (nunca "").
+    cpf = db.Column(db.String(20), unique=True, nullable=True)
+    is_foreigner = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
     pix_key = db.Column(db.String(120), nullable=True)
     pix_key_secondary = db.Column(db.String(120), nullable=True)
 
@@ -180,6 +183,21 @@ class Talent(db.Model):
     def phone_digits(self) -> str:
         """Retorna só os dígitos do telefone (para link WhatsApp)."""
         return _re.sub(r"\D", "", self.phone or "")
+
+    @property
+    def whatsapp_number(self) -> str:
+        """Número para links wa.me: dígitos **com** código de país, sem o ``+``.
+
+        A partir da feature 092 os telefones são gravados com DDI (ex.: ``+55 ...``), então os dígitos já
+        incluem o código do país. Para registros antigos/editados que ainda venham só com DDD (sem ``+`` e
+        com até 11 dígitos), assume Brasil (prefixa ``55``) — assim o link não fica sem país.
+        """
+        digits = self.phone_digits
+        if not digits:
+            return ""
+        if not (self.phone or "").strip().startswith("+") and len(digits) <= 11:
+            return "55" + digits
+        return digits
 
 
 class CalendarEvent(db.Model):

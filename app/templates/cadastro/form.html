@@ -141,8 +141,25 @@
         </div>
         <div class="row">
           <div class="field">
-            <label class="q">Telefone com DDD <span class="req">*</span></label>
-            <input type="text" name="phone" required placeholder="(11) 99999-9999" value="{{ form.get('phone', '') }}">
+            <label class="q">Telefone / WhatsApp <span class="req">*</span></label>
+            {% set ddis = [
+              ('+55', '🇧🇷 Brasil +55'), ('+1', '🇺🇸 EUA/Canadá +1'), ('+351', '🇵🇹 Portugal +351'),
+              ('+54', '🇦🇷 Argentina +54'), ('+598', '🇺🇾 Uruguai +598'), ('+595', '🇵🇾 Paraguai +595'),
+              ('+56', '🇨🇱 Chile +56'), ('+57', '🇨🇴 Colômbia +57'), ('+52', '🇲🇽 México +52'),
+              ('+44', '🇬🇧 Reino Unido +44'), ('+34', '🇪🇸 Espanha +34'), ('+33', '🇫🇷 França +33'),
+              ('+49', '🇩🇪 Alemanha +49'), ('+39', '🇮🇹 Itália +39'), ('+81', '🇯🇵 Japão +81'),
+              ('+86', '🇨🇳 China +86'), ('+61', '🇦🇺 Austrália +61')] %}
+            {% set sel_ddi = form.get('phone_ddi', '+55') %}
+            <div style="display:flex; gap:8px;">
+              <select name="phone_ddi" style="max-width:170px; flex:0 0 auto;">
+                {% for code, label in ddis %}
+                  <option value="{{ code }}" {% if sel_ddi == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+              <input type="text" name="phone_national" required inputmode="tel" style="flex:1 1 auto;"
+                     placeholder="(11) 99999-9999" value="{{ form.get('phone_national', '') }}">
+            </div>
+            <div class="filehint">Selecione o país e digite o número com DDD.</div>
           </div>
           <div class="field">
             <label class="q">E-mail <span class="req">*</span></label>
@@ -166,19 +183,29 @@
 
       <div class="section">
         <h2>🪪 Documentos</h2>
+        <div class="field">
+          <label class="opt-row" style="font-weight:600;">
+            <input type="checkbox" name="is_foreigner" id="foreigner-chk" value="1"
+                   {% if form.get('is_foreigner') %}checked{% endif %}>
+            Sou estrangeiro(a) — não tenho CPF
+          </label>
+          <div class="filehint">Marque se você não possui CPF brasileiro. Usaremos seu documento, telefone
+            e e-mail para identificá-lo(a).</div>
+        </div>
         <div class="row">
-          <div class="field">
-            <label class="q">CPF <span class="req">*</span></label>
+          <div class="field" id="cpf-field">
+            <label class="q">CPF <span class="req" id="cpf-req">*</span></label>
             <input type="text" name="cpf" id="cpf-input" required inputmode="numeric" placeholder="000.000.000-00" value="{{ form.get('cpf', '') }}">
             <div id="cpf-msg" style="font-size:12px; margin-top:4px;"></div>
           </div>
           <div class="field">
-            <label class="q">RG <span class="req">*</span></label>
+            <label class="q">RG / Documento <span class="req">*</span>
+              <span class="opt" id="rg-foreign-hint" style="display:none;">(passaporte ou documento do seu país)</span></label>
             <input type="text" name="rg" required value="{{ form.get('rg', '') }}">
           </div>
         </div>
         <div class="field">
-          <label class="q">Foto do seu documento (CPF, RG ou CNH) <span class="req">*</span></label>
+          <label class="q">Foto do seu documento (CPF, RG, CNH ou passaporte) <span class="req">*</span></label>
           <input type="file" name="doc_photo" accept="image/*,application/pdf" required>
           <div class="filehint">Imagem ou PDF — até 10 MB.</div>
         </div>
@@ -340,6 +367,27 @@
           .catch(function () { cpfMsg.textContent = ''; });
       });
     }
+    // Estrangeiro: sem CPF -> tira o "obrigatório" do CPF e ajusta a dica do documento
+    var foreignerChk = document.getElementById('foreigner-chk');
+    function syncForeigner() {
+      var isForeign = foreignerChk && foreignerChk.checked;
+      var cpfField = document.getElementById('cpf-field');
+      var cpfReq = document.getElementById('cpf-req');
+      var rgHint = document.getElementById('rg-foreign-hint');
+      if (cpfInput) {
+        cpfInput.required = !isForeign;
+        cpfInput.disabled = isForeign;
+      }
+      if (cpfField) cpfField.style.opacity = isForeign ? '0.5' : '1';
+      if (cpfReq) cpfReq.style.display = isForeign ? 'none' : 'inline';
+      if (rgHint) rgHint.style.display = isForeign ? 'inline' : 'none';
+      if (isForeign && cpfMsg) cpfMsg.textContent = '';
+    }
+    if (foreignerChk) {
+      foreignerChk.addEventListener('change', syncForeigner);
+      syncForeigner();
+    }
+
     // Valida grupos de checkbox obrigatórios (idiomas, habilidades) + trava duplo envio
     document.getElementById('cad-form').addEventListener('submit', function (e) {
       var groups = document.querySelectorAll('[data-required-group]');

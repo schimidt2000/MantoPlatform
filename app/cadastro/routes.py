@@ -55,6 +55,29 @@ def _validate_upload(file: FileStorage | None, allowed_exts: set[str], max_bytes
     return file, None
 
 
+def _build_phone(form) -> str:
+    """Monta o telefone a partir do seletor de país (DDI) + número nacional (feature 092).
+
+    Aceita o formato novo (``phone_ddi`` + ``phone_national``) e cai para o campo ``phone`` legado quando
+    necessário. Resultado típico: ``"+55 (11) 99999-9999"``. Não duplica o ``+`` se o nacional já o tiver.
+
+    Args:
+        form: O ``request.form`` (MultiDict) da submissão.
+
+    Returns:
+        Telefone com código de país, ou string vazia se nada foi informado.
+    """
+    national = (form.get("phone_national") or "").strip()
+    if not national:
+        return (form.get("phone") or "").strip()
+    if national.startswith("+"):
+        return national
+    ddi = (form.get("phone_ddi") or "+55").strip()
+    if not ddi.startswith("+"):
+        ddi = "+" + ddi.lstrip("+")
+    return f"{ddi} {national}".strip()
+
+
 def _height_to_cm(raw: str) -> int | None:
     """Converte altura em metros ("1,75") para centímetros (175)."""
     if not raw:
@@ -107,8 +130,9 @@ def submit():
         return redirect(url_for("cadastro.enviado"))
 
     full_name = (f.get("full_name") or "").strip()
+    is_foreigner = bool(f.get("is_foreigner"))
     cpf = only_digits(f.get("cpf") or "")
-    phone = (f.get("phone") or "").strip()
+    phone = _build_phone(f)
     email = (f.get("email") or "").strip()
     birth_date = parse_date(f.get("birth_date") or "")
 
@@ -134,10 +158,11 @@ def submit():
         return _render_error("Selecione ao menos um idioma.")
     if not birth_date:
         return _render_error("Informe a data de nascimento.")
-    if len(cpf) < 11:
+    # CPF é obrigatório só para quem não é estrangeiro (feature 092).
+    if not is_foreigner and len(cpf) < 11:
         return _render_error("CPF inválido — confira os 11 dígitos.")
     for value, msg in (
-        (f.get("rg"), "Informe o RG."),
+        (f.get("rg"), "Informe o RG/documento."),
         (f.get("pix_key_type"), "Selecione o tipo de chave PIX."),
         (f.get("pix_key"), "Informe a chave PIX."),
         (f.get("race"), "Selecione a raça/cor."),
@@ -152,8 +177,8 @@ def submit():
     if not skills:
         return _render_error("Selecione ao menos uma habilidade.")
 
-    # CPF duplicado
-    if Talent.query.filter_by(cpf=cpf).first():
+    # CPF duplicado (não se aplica a estrangeiro, que grava cpf = None)
+    if not is_foreigner and Talent.query.filter_by(cpf=cpf).first():
         return _render_error("Este CPF já está cadastrado. Fale com a equipe da Manto.")
 
     # Uploads (rosto, corpo e documento são obrigatórios; CNH é opcional)
@@ -185,7 +210,8 @@ def submit():
 
     talent = Talent(
         full_name=full_name,
-        cpf=cpf,
+        cpf=(cpf or None) if not is_foreigner else None,
+        is_foreigner=is_foreigner,
         artistic_name=(f.get("artistic_name") or "").strip() or None,
         phone=phone or None,
         email_contact=email or None,

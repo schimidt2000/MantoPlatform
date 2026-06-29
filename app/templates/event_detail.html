@@ -560,7 +560,7 @@
                data-name="{{ r.talent.full_name.split()[0] }}"
                data-cache="{{ r.cache_value | brl if r.cache_value else '' }}"
                data-char="{{ r.character_name }}">📋 Copiar convite</button>
-            <a href="https://wa.me/55{{ r.talent.phone_digits }}" target="_blank"
+            <a href="https://wa.me/{{ r.talent.whatsapp_number }}" target="_blank"
                class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</a>
           {% endif %}
         {% endif %}
@@ -691,7 +691,7 @@
                data-name="{{ r.talent.full_name.split()[0] }}"
                data-cache="{{ r.cache_value | brl if r.cache_value else '' }}"
                data-char="{{ r.character_name }}">📋 Copiar convite</button>
-            <a href="https://wa.me/55{{ r.talent.phone_digits }}" target="_blank"
+            <a href="https://wa.me/{{ r.talent.whatsapp_number }}" target="_blank"
                class="btn btn-sm btn-ghost" style="font-size:11px; padding:3px 10px;">📱 WhatsApp</a>
           {% endif %}
         {% endif %}
