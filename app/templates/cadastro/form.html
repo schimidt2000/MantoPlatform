@@ -41,7 +41,12 @@
     .opt-row { display: flex; align-items: center; gap: 9px; font-size: 14.5px; cursor: pointer; }
     .opt-row input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
     .opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
-    @media (max-width: 480px) { .opt-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) {
+      .opt-grid { grid-template-columns: 1fr; }
+      /* No celular, empilha os campos lado-a-lado (ex.: Telefone + E-mail) para o número não ficar espremido. */
+      .row { flex-direction: column; gap: 0; }
+      .row > .field { min-width: 0; width: 100%; }
+    }
     .filehint { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
     input[type=file] { width: 100%; padding: 9px; background: #fbfbfe; border: 1px solid var(--line); border-radius: 10px; }
     .preview { margin-top: 8px; display: none; }
