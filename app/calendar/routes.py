@@ -1552,6 +1552,47 @@ def _dt_naive(dt):
     return dt.replace(tzinfo=None) if dt.tzinfo else dt
 
 
+def _talent_time_conflict(talent_id: int, start, end, exclude_event_id: int | None = None):
+    """Retorna o primeiro evento que sobrepõe o horário [start, end] para o talento (ou None).
+
+    Reaproveita a regra de conflito usada na página do evento: considera apenas eventos do mês atual em
+    diante (evita "fantasmas" de eventos já removidos) e detecta sobreposição real de horário.
+
+    Args:
+        talent_id: Talento a checar.
+        start: Início do evento sendo criado (naïve, Brasília).
+        end: Fim do evento sendo criado.
+        exclude_event_id: Evento a ignorar na busca (o próprio).
+
+    Returns:
+        O ``CalendarEvent`` conflitante mais próximo, ou ``None`` se não houver conflito.
+    """
+    if not start:
+        return None
+    end = end or (start + timedelta(hours=2))
+    _today = date.today()
+    cutoff = datetime(_today.year, _today.month, 1)
+    rows = (
+        EventRole.query.join(CalendarEvent)
+        .filter(
+            EventRole.talent_id == talent_id,
+            CalendarEvent.id != exclude_event_id,
+            CalendarEvent.start_at >= cutoff,
+        )
+        .all()
+    )
+    for r in rows:
+        ev = r.event
+        if not ev or not ev.start_at:
+            continue
+        o_start = ev.start_at.replace(tzinfo=None) if ev.start_at.tzinfo else ev.start_at
+        o_end = ev.end_at or (ev.start_at + timedelta(hours=2))
+        o_end = o_end.replace(tzinfo=None) if o_end.tzinfo else o_end
+        if max(start, o_start) < min(end, o_end):
+            return ev
+    return None
+
+
 def _ensure_coordinator(event_id: int) -> None:
     """Garante que o evento tenha ao menos 1 role de Coordenador sem talento."""
     exists = EventRole.query.filter_by(
@@ -2299,6 +2340,11 @@ def create_event():
     # Índice nome→id para auto-match figurino
     sheet_by_name = {s.character_name.lower(): s.id for s in figurino_sheets}
     sellers = User.query.join(User.roles).filter(Role.name == RoleName.COMERCIAL).order_by(User.name.asc()).all()
+    # Talentos atribuíveis para pré-escala na criação (feature 095) — id + nome para autocomplete.
+    assignable_talents = [
+        {"id": t.id, "name": t.artistic_name or t.full_name}
+        for t in Talent.query.filter_by(status="active").order_by(Talent.full_name.asc()).all()
+    ]
 
     # ── GET — pré-fill a partir do orçamento ────────────────────────────────
     if request.method == "GET":
@@ -2363,6 +2409,7 @@ def create_event():
             "event_create.html",
             figurino_sheets=figurino_sheets,
             sellers=sellers,
+            assignable_talents=assignable_talents,
             errors=[],
             prefill=prefill,
             today_str=date.today().isoformat(),
@@ -2384,6 +2431,7 @@ def create_event():
     transport_value_raw = request.form.get("transport_value", "").strip()
     acrescimo_value_raw = request.form.get("acrescimo_value", "").strip()
     with_invoice     = bool(request.form.get("with_invoice"))
+    is_cortesia_permuta = bool(request.form.get("is_cortesia_permuta"))
     seller_id_raw    = request.form.get("seller_id", "").strip()
     sale_date_raw    = request.form.get("sale_date", "").strip()
     try:
@@ -2407,6 +2455,7 @@ def create_event():
     char_makeups = request.form.getlist("char_needs_makeup[]")   # '1' ou ''
     char_singers = request.form.getlist("char_is_singer[]")      # '1' ou ''
     char_caches  = request.form.getlist("char_cache[]")          # valor em R$
+    char_talent_ids = request.form.getlist("char_talent_id[]")   # pré-escala (feature 095), '' se vazio
 
     # Personagens enviados, p/ repopular o form se o servidor re-renderizar por erro
     # (apenas dados alinhados por linha: nome + figurino; anexos não são restauráveis).
@@ -2443,13 +2492,15 @@ def create_event():
     if st and et and et == st:
         errors.append("Horário de fim deve ser diferente do início.")
 
-    # Valor antes do desconto obrigatório (> 0) — base para relatório de desconto.
-    if (parse_brl(sale_value_gross_raw) or 0) <= 0:
-        errors.append("Informe o valor antes do desconto.")
+    # Cortesia/permuta (feature 095): evento sem venda em dinheiro — dispensa os valores.
+    if not is_cortesia_permuta:
+        # Valor antes do desconto obrigatório (> 0) — base para relatório de desconto.
+        if (parse_brl(sale_value_gross_raw) or 0) <= 0:
+            errors.append("Informe o valor antes do desconto.")
 
-    # Valor de venda obrigatório (> 0) — coerente com o asterisco do campo.
-    if (parse_brl(sale_value_raw) or 0) <= 0:
-        errors.append("Informe o valor de venda.")
+        # Valor de venda obrigatório (> 0) — coerente com o asterisco do campo.
+        if (parse_brl(sale_value_raw) or 0) <= 0:
+            errors.append("Informe o valor de venda.")
 
     # Vendedor responsável obrigatório (define a comissão do mês).
     if not seller_id_raw.isdigit():
@@ -2462,7 +2513,8 @@ def create_event():
 
     if errors:
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
-                               sellers=sellers, errors=errors, prefill={}, today_str=date.today().isoformat(),
+                               sellers=sellers, assignable_talents=assignable_talents,
+                               errors=errors, prefill={}, today_str=date.today().isoformat(),
                                old=request.form, old_chars=old_chars)
 
     # Remove prefixo (TIPO) que o JS já inseriu no título para não duplicar
@@ -2481,7 +2533,8 @@ def create_event():
             friendly = ("Não foi possível criar o evento na Agenda do Google agora. "
                         "Verifique a conexão e tente novamente. Se persistir, avise o suporte.")
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
-                               sellers=sellers, errors=[friendly], prefill={}, today_str=date.today().isoformat(),
+                               sellers=sellers, assignable_talents=assignable_talents,
+                               errors=[friendly], prefill={}, today_str=date.today().isoformat(),
                                old=request.form, old_chars=old_chars)
 
     # ── Nota fiscal file (opcional) ──────────────────────────────────────────
@@ -2506,8 +2559,10 @@ def create_event():
         event_type           = event_type or None,
         needs_rehearsal      = needs_rehearsal,
         source               = "platform",
-        sale_value           = parse_brl(sale_value_raw),
-        sale_value_gross     = parse_brl(sale_value_gross_raw),
+        # Cortesia/permuta: venda tratada como 0 (cachês dos talentos viram custo de marketing).
+        is_cortesia_permuta  = is_cortesia_permuta,
+        sale_value           = 0 if is_cortesia_permuta else parse_brl(sale_value_raw),
+        sale_value_gross     = None if is_cortesia_permuta else parse_brl(sale_value_gross_raw),
         sale_date            = sale_date_val,
         transport_value      = parse_brl(transport_value_raw),
         acrescimo_value      = parse_brl(acrescimo_value_raw),
@@ -2549,6 +2604,21 @@ def create_event():
         except _json.JSONDecodeError:
             orc_caches = []
 
+    # Pré-escala (feature 095): talentos atribuíveis válidos + acompanhamento p/ evitar duplicata e
+    # sinalizar conflito depois. assigned_now guarda (talent_id, character_name) das vagas pré-escaladas.
+    valid_talent_ids = {t["id"] for t in assignable_talents}
+    used_talent_ids: set[int] = set()
+    assigned_now: list[tuple[int, str]] = []
+
+    def _preassign_talent_id(raw: str) -> int | None:
+        """Valida o id de talento vindo do form (existe, ativo, ainda não usado neste evento)."""
+        if not (raw or "").isdigit():
+            return None
+        tid = int(raw)
+        if tid not in valid_talent_ids or tid in used_talent_ids:
+            return None
+        return tid
+
     for i, (char, sheet_id_raw) in enumerate(zip(char_names, sheet_ids)):
         char = char.strip()
         if not char:
@@ -2571,6 +2641,12 @@ def create_event():
 
         role_type = orc_caches[i].get("role_type", "character") if i < len(orc_caches) else "character"
 
+        # Pré-escala do talento (opcional): vaga nasce atribuída, SEM convite automático.
+        pre_tid = _preassign_talent_id(char_talent_ids[i] if i < len(char_talent_ids) else "")
+        if pre_tid is not None:
+            used_talent_ids.add(pre_tid)
+            assigned_now.append((pre_tid, char))
+
         # cache_cap guarda o teto definido pelo orçamento (imutável para casting)
         from_orc = bool(orc_caches) and cache_val is not None
         db.session.add(EventRole(
@@ -2582,11 +2658,27 @@ def create_event():
             role_type        = role_type,
             needs_makeup     = makeup or None,
             is_singer        = singer or None,
+            talent_id        = pre_tid,
+            assigned_at      = datetime.now(tz=ZoneInfo("America/Sao_Paulo")) if pre_tid else None,
         ))
 
-    # Se não veio de orçamento, garante coordenador padrão
+    # Coordenador: no fluxo manual (sem orçamento), o vendedor pode pré-escalar um coordenador
+    # específico (feature 095); senão a vaga nasce vazia. No fluxo de orçamento o coordenador já vem
+    # como linha da equipe, então não criamos outra aqui.
     if not orc_caches:
-        _ensure_coordinator(event.id)
+        coord_tid = _preassign_talent_id(request.form.get("coordinator_talent_id", "").strip())
+        if coord_tid is not None:
+            used_talent_ids.add(coord_tid)
+            assigned_now.append((coord_tid, "Coordenador"))
+            db.session.add(EventRole(
+                event_id       = event.id,
+                character_name = "Coordenador",
+                role_type      = "extra",
+                talent_id      = coord_tid,
+                assigned_at    = datetime.now(tz=ZoneInfo("America/Sao_Paulo")),
+            ))
+        else:
+            _ensure_coordinator(event.id)
 
     # Para eventos SHOW: garante técnico de som (PIX Nivaldo + vaga de presença)
     if event_type == "SHOW":
@@ -2661,6 +2753,17 @@ def create_event():
     db.session.commit()
     if needs_rehearsal:
         _notify_ensaio_team(event)
+
+    # Pré-escala (feature 095): sinaliza (sem bloquear) talentos com conflito de agenda no horário.
+    _conflicts = []
+    for tid, char_name in assigned_now:
+        other = _talent_time_conflict(tid, st, et, exclude_event_id=event.id)
+        if other:
+            tname = next((x["name"] for x in assignable_talents if x["id"] == tid), f"Talento {tid}")
+            _conflicts.append(f"{tname} ({char_name}) — já em “{other.title}”")
+    if _conflicts:
+        flash("Atenção: conflito de agenda na pré-escala — " + "; ".join(_conflicts), "warning")
+
     flash("Evento criado com sucesso!", "success")
     return redirect(url_for("calendar.event_detail", event_id=event.id))
 
