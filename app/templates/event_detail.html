@@ -1466,6 +1466,62 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
     <input type="hidden" name="action" value="update_comercial">
 
     <div class="panel-title" style="margin-bottom: 12px;">Dados da venda</div>
+
+    {# ── Cliente associado (feature 094) ───────────────────────── #}
+    <div id="client-block" class="com-val-item" style="width:100%; margin-bottom:16px;"
+         data-search-url="/clientes/search" data-create-url="/clientes/quick-create">
+      <label style="font-weight:600;">Cliente {% if client_required %}<span style="color:#c0392b;">*</span>{% endif %}</label>
+      <input type="hidden" name="client_id" id="client_id" value="{{ event.client_id or '' }}">
+
+      <div id="client-selected" style="{% if not event.client %}display:none;{% endif %}
+           align-items:center; gap:10px; background:#f4f2f7; border:1px solid var(--line);
+           border-radius:8px; padding:8px 12px; max-width:420px; {% if event.client %}display:flex;{% endif %}">
+        <span style="font-size:18px;">👤</span>
+        <div style="flex:1; min-width:0;">
+          <div id="client-selected-name" style="font-weight:600;">{{ event.client.name if event.client else '' }}</div>
+          <div id="client-selected-phone" class="meta" style="font-size:12px;">
+            {{ (event.client.phone_display or event.client.phone) if event.client else '' }}
+          </div>
+        </div>
+        {% if event.client %}
+        <a href="/clientes/{{ event.client.id }}" target="_blank" class="btn btn-sm btn-ghost"
+           style="font-size:11px;">Ver ficha</a>
+        {% endif %}
+        <button type="button" id="client-clear" class="btn btn-sm btn-ghost"
+                style="font-size:11px; color:#c0392b;">Trocar</button>
+      </div>
+
+      <div id="client-picker" style="{% if event.client %}display:none;{% endif %} max-width:420px;">
+        <input type="text" id="client-search" autocomplete="off"
+               placeholder="Buscar cliente por nome ou telefone…"
+               class="form-control" style="width:100%;">
+        <div id="client-results" style="border:1px solid var(--line); border-radius:8px;
+             margin-top:4px; display:none; max-height:220px; overflow-y:auto; background:#fff;"></div>
+        <div style="margin-top:8px;">
+          <button type="button" id="client-new-toggle" class="btn btn-sm btn-secondary"
+                  style="font-size:12px;">+ Cadastrar novo cliente</button>
+        </div>
+        <div id="client-new-form" style="display:none; margin-top:10px; padding:12px;
+             border:1px dashed var(--line); border-radius:8px;">
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <input type="text" id="client-new-name" placeholder="Nome completo *"
+                   class="form-control" style="width:100%;">
+            <input type="text" id="client-new-phone" placeholder="Telefone com DDD *"
+                   class="form-control" style="width:100%;">
+            <input type="text" id="client-new-company" placeholder="Empresa (opcional)"
+                   class="form-control" style="width:100%;">
+            <div id="client-new-error" class="meta" style="color:#c0392b; display:none;"></div>
+            <button type="button" id="client-new-save" class="btn btn-sm btn-primary"
+                    style="font-size:12px; align-self:flex-start;">Salvar e associar</button>
+          </div>
+        </div>
+      </div>
+      {% if client_required %}
+      <p class="meta" style="margin:6px 0 0; font-size:12px;">
+        Eventos a partir de agora exigem um cliente associado para salvar a venda.
+      </p>
+      {% endif %}
+    </div>
     <div style="display: flex; flex-wrap: wrap; gap: 16px 24px; margin-bottom: 16px; align-items: flex-start;">
       <div class="com-val-item">
         <label>Valor antes do desconto (R$)</label>
@@ -2635,6 +2691,115 @@ document.querySelectorAll('.fig-widget').forEach(function(wrap) {
 });
 </script>
 {% endif %}
+
+{# ── Seletor de cliente do evento (feature 094) ─────────────────── #}
+<script>
+(function () {
+  const block = document.getElementById('client-block');
+  if (!block) return;
+  const searchUrl = block.dataset.searchUrl;
+  const createUrl = block.dataset.createUrl;
+  const hidden    = document.getElementById('client_id');
+  const selected  = document.getElementById('client-selected');
+  const selName   = document.getElementById('client-selected-name');
+  const selPhone  = document.getElementById('client-selected-phone');
+  const picker    = document.getElementById('client-picker');
+  const search    = document.getElementById('client-search');
+  const results   = document.getElementById('client-results');
+  const clearBtn  = document.getElementById('client-clear');
+  const newToggle = document.getElementById('client-new-toggle');
+  const newForm   = document.getElementById('client-new-form');
+  const newName   = document.getElementById('client-new-name');
+  const newPhone  = document.getElementById('client-new-phone');
+  const newCompany= document.getElementById('client-new-company');
+  const newSave   = document.getElementById('client-new-save');
+  const newError  = document.getElementById('client-new-error');
+
+  function showSelected(c) {
+    hidden.value = c.id;
+    selName.textContent = c.name;
+    selPhone.textContent = c.phone_display || c.phone;
+    selected.style.display = 'flex';
+    picker.style.display = 'none';
+    results.style.display = 'none';
+  }
+  function showPicker() {
+    hidden.value = '';
+    selected.style.display = 'none';
+    picker.style.display = 'block';
+    search.value = '';
+    results.innerHTML = '';
+    results.style.display = 'none';
+    search.focus();
+  }
+
+  if (clearBtn) clearBtn.addEventListener('click', showPicker);
+
+  let timer = null;
+  if (search) search.addEventListener('input', function () {
+    const q = search.value.trim();
+    clearTimeout(timer);
+    if (q.length < 2) { results.style.display = 'none'; return; }
+    timer = setTimeout(function () {
+      fetch(searchUrl + '?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(list => {
+          results.innerHTML = '';
+          if (!list.length) { results.style.display = 'none'; return; }
+          list.forEach(c => {
+            const row = document.createElement('div');
+            row.style.cssText = 'padding:8px 12px; cursor:pointer; border-bottom:1px solid var(--line);';
+            row.innerHTML = '<div style="font-weight:600;">' + c.name +
+              '</div><div style="font-size:12px; color:var(--muted);">' +
+              (c.phone_display || c.phone) + (c.company ? ' · ' + c.company : '') + '</div>';
+            row.addEventListener('mouseenter', () => row.style.background = '#f4f2f7');
+            row.addEventListener('mouseleave', () => row.style.background = '#fff');
+            row.addEventListener('click', () => showSelected(c));
+            results.appendChild(row);
+          });
+          results.style.display = 'block';
+        })
+        .catch(() => { results.style.display = 'none'; });
+    }, 250);
+  });
+
+  if (newToggle) newToggle.addEventListener('click', function () {
+    newForm.style.display = newForm.style.display === 'none' ? 'block' : 'none';
+  });
+
+  if (newSave) newSave.addEventListener('click', function () {
+    newError.style.display = 'none';
+    const data = new FormData();
+    data.append('name', newName.value.trim());
+    data.append('phone', newPhone.value.trim());
+    data.append('company', newCompany.value.trim());
+    newSave.disabled = true;
+    fetch(createUrl, { method: 'POST', body: data })
+      .then(r => r.json().then(j => ({ ok: r.ok, j })))
+      .then(({ ok, j }) => {
+        newSave.disabled = false;
+        if (!ok) { newError.textContent = j.error || 'Erro ao salvar.'; newError.style.display = 'block'; return; }
+        showSelected(j);
+        newForm.style.display = 'none';
+        newName.value = newPhone.value = newCompany.value = '';
+      })
+      .catch(() => { newSave.disabled = false; newError.textContent = 'Erro de rede.'; newError.style.display = 'block'; });
+  });
+
+  // Guarda no submit: evita perder o que foi preenchido quando o cliente é obrigatório (feature 094).
+  {% if client_required %}
+  const vendaForm = block.closest('form');
+  if (vendaForm) vendaForm.addEventListener('submit', function (ev) {
+    if (!hidden.value) {
+      ev.preventDefault();
+      showPicker();
+      block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      alert('Associe um cliente ao evento antes de salvar os dados de venda.');
+    }
+  });
+  {% endif %}
+})();
+</script>
 
 {% endblock %}
 

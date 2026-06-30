@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}{{ client.name }}{% endblock %}
+{% block page_title %}{{ client.name }}{% endblock %}
+{% block page_subtitle %}
+  <span class="muted">{{ client.phone_display or client.phone }}{% if client.company %} · {{ client.company }}{% endif %}</span>
+{% endblock %}
+
+{% block page_actions %}
+  <a href="/clientes/" class="btn btn-ghost btn-sm">← Clientes</a>
+  {% if client.whatsapp_number %}
+  <a href="https://wa.me/{{ client.whatsapp_number }}" target="_blank" class="btn btn-secondary btn-sm">📱 WhatsApp</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+    <div class="alert alert-{{ 'success' if cat == 'success' else 'info' }}" style="margin-bottom:16px;">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+{# ── KPIs ──────────────────────────────────────────────────────── #}
+<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px;">
+  <div class="panel" style="margin:0;">
+    <div class="meta" style="font-size:11px; text-transform:uppercase; letter-spacing:.04em;">Eventos fechados</div>
+    <div style="font-size:24px; font-weight:700;">{{ event_count }}</div>
+  </div>
+  <div class="panel" style="margin:0;">
+    <div class="meta" style="font-size:11px; text-transform:uppercase; letter-spacing:.04em;">Total em vendas</div>
+    <div style="font-size:24px; font-weight:700; color:var(--green, #1a7f3c);">R$ {{ total_sales | brl }}</div>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 2fr; gap:20px; align-items:start;">
+
+  {# ── Dados de marketing / contato ─────────────────────────────── #}
+  <div class="panel" style="margin:0;">
+    <div class="panel-title" style="margin-bottom:12px;">Dados do cliente</div>
+    <dl style="margin:0; font-size:14px; line-height:1.7;">
+      <div><strong>Telefone:</strong> {{ client.phone_display or client.phone }}</div>
+      {% if client.email %}<div><strong>E-mail:</strong> {{ client.email }}</div>{% endif %}
+      {% if client.company %}<div><strong>Empresa:</strong> {{ client.company }}</div>{% endif %}
+      <div><strong>Origem:</strong>
+        {% if client.source == 'kommo_import' %}Importado do Kommo{% else %}Cadastro manual{% endif %}
+      </div>
+      {% if client.responsible %}<div><strong>Responsável:</strong> {{ client.responsible }}</div>{% endif %}
+      {% if client.lead_stage %}<div><strong>Etapa (Kommo):</strong> {{ client.lead_stage }}</div>{% endif %}
+      {% if client.funnel %}<div><strong>Funil:</strong> {{ client.funnel }}</div>{% endif %}
+      {% if client.tags %}
+      <div style="margin-top:8px;">
+        {% for t in client.tags.split(',') %}
+          {% if t.strip() %}<span class="badge badge-gray" style="margin-right:4px;">{{ t.strip() }}</span>{% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if client.kommo_created_at %}
+      <div class="meta" style="font-size:12px; margin-top:8px;">No Kommo desde {{ client.kommo_created_at.strftime('%d/%m/%Y') }}</div>
+      {% endif %}
+    </dl>
+
+    {% if is_superadmin or eff_has_role('FINANCEIRO') %}
+    <form method="post" action="/clientes/{{ client.id }}/delete" style="margin-top:16px;"
+          onsubmit="return confirm('Excluir este cliente? Os {{ event_count }} evento(s) associados serão desvinculados.');">
+      <button type="submit" class="btn btn-sm btn-ghost" style="color:#c0392b; font-size:12px;">Excluir cliente</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {# ── Eventos associados ───────────────────────────────────────── #}
+  <div class="panel" style="margin:0;">
+    <div class="panel-title" style="margin-bottom:12px;">Eventos associados</div>
+    {% if events %}
+    <table class="data-table" style="width:100%;">
+      <thead>
+        <tr><th>Data</th><th>Evento</th><th style="text-align:right;">Venda</th><th>Pagamento</th></tr>
+      </thead>
+      <tbody>
+        {% for e in events %}
+        <tr>
+          <td class="muted" style="white-space:nowrap;">{{ e.start_at.strftime('%d/%m/%Y') if e.start_at else '—' }}</td>
+          <td><a href="/events/{{ e.id }}" style="font-weight:600;">{{ e.title }}</a></td>
+          <td style="text-align:right; white-space:nowrap;">
+            {% if e.sale_value %}R$ {{ e.sale_value | brl }}{% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td>
+            {% if e.payment_due_date and not e.sale_value %}<span class="muted">—</span>
+            {% else %}{{ e.payment_method or '—' }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="text-align:center; padding:32px 16px; color:var(--muted);">
+      Nenhum evento associado a este cliente ainda.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

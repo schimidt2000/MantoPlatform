@@ -229,6 +229,9 @@ class CalendarEvent(db.Model):
     seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     commission_rate = db.Column(db.Float, nullable=True)  # null = usa SiteSetting.default_commission_rate
 
+    # cliente associado (feature 094) — opcional; eventos passados podem ficar sem cliente.
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=True, index=True)
+
     # ensaios / origem
     parent_event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
     needs_rehearsal = db.Column(db.Boolean, default=False, nullable=False)
@@ -273,6 +276,7 @@ class CalendarEvent(db.Model):
                                    cascade="all, delete-orphan",
                                    order_by="EventObservation.created_at")
     seller = db.relationship("User", lazy=True, foreign_keys=[seller_id])
+    client = db.relationship("Client", back_populates="events", lazy=True, foreign_keys=[client_id])
     parent = db.relationship(
         "CalendarEvent",
         remote_side="CalendarEvent.id",
@@ -1125,3 +1129,61 @@ class ReviewComment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     user = db.relationship("User", lazy=True, foreign_keys=[user_id])
+
+
+class Client(db.Model):
+    """Cliente da base de relacionamento/marketing (feature 094).
+
+    Importado do Kommo CRM (CSV) ou criado manualmente pelo vendedor. A identidade é o **telefone
+    normalizado** (``phone``, só dígitos) — chave única usada para deduplicar a base. Um cliente
+    relaciona-se a zero ou mais ``CalendarEvent`` via ``CalendarEvent.client_id``.
+    """
+
+    __tablename__ = "clients"
+    __table_args__ = (
+        db.Index("ix_clients_name", "name"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    # telefone normalizado (apenas dígitos, com DDI/DDD) — chave de identidade/dedup
+    phone = db.Column(db.String(20), nullable=False, unique=True, index=True)
+    phone_display = db.Column(db.String(30), nullable=True)  # telefone como exibir/formatar
+    email = db.Column(db.String(200), nullable=True)
+    company = db.Column(db.String(200), nullable=True)
+
+    source = db.Column(db.String(20), nullable=False, default="manual",
+                       server_default="manual")  # 'kommo_import' | 'manual'
+
+    # ── Metadados de marketing (agregados do Kommo) ──────────────────
+    kommo_lead_id = db.Column(db.String(40), nullable=True)   # lead mais recente do telefone
+    responsible = db.Column(db.String(120), nullable=True)    # "Usuário responsável"
+    tags = db.Column(db.String(300), nullable=True)           # "Tags" agregadas
+    lead_stage = db.Column(db.String(120), nullable=True)     # "Etapa do lead" mais recente
+    funnel = db.Column(db.String(120), nullable=True)         # "Funil de vendas"
+    lead_value = db.Column(db.Numeric(12, 2), nullable=True)  # "Lead venda R$" (maior/agregado)
+    kommo_created_at = db.Column(db.DateTime, nullable=True)  # "Criado em" no Kommo
+    notes = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    events = db.relationship(
+        "CalendarEvent", back_populates="client", lazy=True,
+        foreign_keys="CalendarEvent.client_id",
+    )
+
+    @property
+    def event_count(self) -> int:
+        """Número de eventos associados a este cliente."""
+        return len(self.events)
+
+    @property
+    def whatsapp_number(self) -> str:
+        """Número para links wa.me: dígitos com DDI, sem ``+`` (assume Brasil se vier sem país)."""
+        digits = _re.sub(r"\D", "", self.phone or "")
+        if not digits:
+            return ""
+        if len(digits) <= 11:
+            return "55" + digits
+        return digits

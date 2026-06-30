@@ -13,6 +13,14 @@ def register_commands(app):
         removed = cleanup_expired_review_files()
         click.echo(f"Arquivos de revisão removidos: {removed}")
 
+    @app.cli.command("import-kommo-clients")
+    @click.argument("path", default="kommo_export_leads_2026-06-29.csv")
+    def import_kommo_clients(path):
+        """Importa a base de clientes do CSV do Kommo (dedup por telefone) — feature 094."""
+        from app.clientes.importer import import_kommo_csv
+        report = import_kommo_csv(path)
+        click.echo(f"Importação do Kommo concluída: {report}")
+
     @app.cli.command("compress-images")
     def compress_images():
         """Comprime todas as imagens existentes no servidor mantendo os mesmos URLs."""
