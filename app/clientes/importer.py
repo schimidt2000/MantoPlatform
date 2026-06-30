@@ -174,8 +174,10 @@ def import_kommo_csv(path: str) -> ImportReport:
         Um :class:`ImportReport` com contagens de criados/mesclados/ignorados.
     """
     report = ImportReport()
-    # cache phone -> Client desta execução (evita N queries e detecta duplicatas dentro do arquivo)
-    cache: dict[str, Client] = {}
+    # Pré-carrega TODOS os clientes existentes (1 query) em vez de consultar por telefone a cada linha —
+    # essencial para importar contra um banco remoto sem milhares de idas e voltas. O mesmo dict serve
+    # de cache para detectar duplicatas dentro do próprio arquivo.
+    cache: dict[str, Client] = {c.phone: c for c in Client.query.all()}
 
     with open(path, encoding="utf-8-sig", newline="") as f:
         for row in csv.DictReader(f):
@@ -191,8 +193,6 @@ def import_kommo_csv(path: str) -> ImportReport:
             created_at = _parse_created(row.get(COL_CREATED))
 
             client = cache.get(phone)
-            if client is None:
-                client = Client.query.filter_by(phone=phone).first()
             if client is None:
                 client = Client(name=name[:200], phone=phone, source="kommo_import")
                 phone_display = (row.get(COL_PHONE) or "").lstrip("'").strip()
