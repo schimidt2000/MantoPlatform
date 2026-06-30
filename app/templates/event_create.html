@@ -199,6 +199,21 @@
   <button type="button" class="btn btn-sm btn-secondary" id="btn-add-char"
           style="margin-top:4px;">+ Adicionar personagem / equipe</button>
 
+  {# Datalist compartilhado de talentos para pré-escala (feature 095) #}
+  <datalist id="talents-datalist">
+    {% for t in assignable_talents %}<option value="{{ t.name }}"></option>{% endfor %}
+  </datalist>
+
+  {# Coordenador específico (pré-escala opcional — feature 095) #}
+  <div class="form-group" style="margin-top:20px; max-width:340px;">
+    <label>Coordenador específico <span class="meta">(opcional)</span></label>
+    <input type="hidden" name="coordinator_talent_id" id="coordinator-talent-id" value="">
+    <input type="text" id="coordinator-talent-input" list="talents-datalist" autocomplete="off"
+           placeholder="Pré-escalar um coordenador do banco"
+           style="width:100%; font-size:13px;" oninput="resolveCoordinator(this)">
+    <div class="meta">Se vazio, a vaga de Coordenador fica aberta para o casting designar.</div>
+  </div>
+
   {# Título do evento #}
   <div class="form-group" style="margin-top:20px;">
     <label>Título do evento <span style="color:var(--red);">*</span></label>
@@ -254,9 +269,24 @@
   <input type="hidden" name="duracao" id="duracao-hidden" value="1">
   {% endif %}
 
-  <div class="val-breakdown">
+  {# ── Cortesia / permuta (feature 095) ─────────────────────────────────── #}
+  <div style="margin-bottom:16px;">
+    <input type="hidden" name="is_cortesia_permuta" id="cortesia-hidden" value="{{ '1' if old.get('is_cortesia_permuta') else '' }}">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <button type="button" id="btn-cortesia" onclick="toggleCortesia()"
+              style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:var(--r-md);border:2px solid var(--line);background:var(--surface);cursor:pointer;font-size:14px;font-weight:600;transition:all .15s;">
+        <span id="cortesia-icon">◻</span> Cortesia / permuta (sem venda)
+      </button>
+      <span id="cortesia-badge" style="display:none;" class="badge badge-amber">Sem valor de venda</span>
+    </div>
+    <div id="cortesia-note" class="meta" style="display:none;margin-top:6px;">
+      Evento sem venda em dinheiro — os valores abaixo não são necessários; a venda é registrada como R$ 0.
+    </div>
+  </div>
+
+  <div class="val-breakdown" id="val-breakdown">
     <div class="val-item">
-      <label>Valor antes do desconto (R$) <span style="color:var(--red);">*</span></label>
+      <label>Valor antes do desconto (R$) <span class="val-req" style="color:var(--red);">*</span></label>
       <div class="prefix"><span>R$</span>
         <input type="text" inputmode="decimal" name="sale_value_gross" id="sale-value-gross" class="brl-input"
                placeholder="0,00" style="width:150px;"
@@ -266,7 +296,7 @@
     </div>
 
     <div class="val-item">
-      <label>Valor de venda (R$) <span style="color:var(--red);">*</span></label>
+      <label>Valor de venda (R$) <span class="val-req" style="color:var(--red);">*</span></label>
       <div class="prefix"><span>R$</span>
         <input type="text" inputmode="decimal" name="sale_value" id="sale-value" class="brl-input"
                placeholder="0,00" style="width:150px;"
@@ -602,6 +632,15 @@ function buildCharRow(idx, label, makeup, singer, roleType, sheetId) {
         </label>
         ${isExtra ? '<span class="meta extra-row-label">Equipe</span>' : ''}
       </div>
+      <input type="hidden" name="char_talent_id[]" class="char-talent-id" value="">
+      ${isExtra ? '' : `
+      <div class="char-talent" style="margin-top:6px;">
+        <input type="text" class="char-talent-input" list="talents-datalist" autocomplete="off"
+               placeholder="Pré-escalar talento específico (opcional)"
+               style="width:100%; max-width:320px; font-size:13px;"
+               oninput="resolveTalent(this)">
+        <span class="char-talent-flag meta" style="display:none; font-size:12px; color:var(--green,#1a7f3c);">✓ pré-escalado</span>
+      </div>`}
     </div>
     <button type="button" class="btn btn-sm btn-danger char-remove"
             style="width:32px; padding:0; flex-shrink:0; margin-top:2px;">&times;</button>`;
@@ -839,6 +878,59 @@ function toggleNF() {
 
 _renderNF();
 
+// ── Cortesia / permuta (feature 095) ─────────────────────────────────────────
+let _cortesiaOn = document.getElementById('cortesia-hidden')?.value === '1';
+function _renderCortesia() {
+  const hidden = document.getElementById('cortesia-hidden');
+  const btn    = document.getElementById('btn-cortesia');
+  const icon   = document.getElementById('cortesia-icon');
+  const badge  = document.getElementById('cortesia-badge');
+  const note   = document.getElementById('cortesia-note');
+  const breakdown = document.getElementById('val-breakdown');
+  if (!hidden) return;
+  hidden.value = _cortesiaOn ? '1' : '';
+  if (icon)  icon.textContent = _cortesiaOn ? '☑' : '◻';
+  if (badge) badge.style.display = _cortesiaOn ? '' : 'none';
+  if (note)  note.style.display = _cortesiaOn ? '' : 'none';
+  if (btn) {
+    btn.style.borderColor = _cortesiaOn ? 'var(--accent)' : 'var(--line)';
+    btn.style.background  = _cortesiaOn ? 'rgba(84,69,150,0.06)' : 'var(--surface)';
+  }
+  // Esmaece os campos de valor e oculta os asteriscos de obrigatório.
+  if (breakdown) {
+    breakdown.style.opacity = _cortesiaOn ? '0.5' : '';
+    breakdown.style.pointerEvents = _cortesiaOn ? 'none' : '';
+  }
+  document.querySelectorAll('.val-req').forEach(el => el.style.display = _cortesiaOn ? 'none' : '');
+}
+function toggleCortesia() {
+  _cortesiaOn = !_cortesiaOn;
+  _renderCortesia();
+}
+_renderCortesia();
+
+// ── Pré-escala de talentos (feature 095) ─────────────────────────────────────
+const TALENTS = {{ assignable_talents | tojson }};
+const _talentByName = new Map(TALENTS.map(t => [t.name.trim().toLowerCase(), t.id]));
+function _resolveTalentId(value) {
+  return _talentByName.get((value || '').trim().toLowerCase()) || '';
+}
+// Resolve o talento digitado numa linha de personagem para o hidden char_talent_id[].
+function resolveTalent(input) {
+  const row = input.closest('.char-row');
+  if (!row) return;
+  const hidden = row.querySelector('.char-talent-id');
+  const flag   = row.querySelector('.char-talent-flag');
+  const id = _resolveTalentId(input.value);
+  if (hidden) hidden.value = id;
+  if (flag) flag.style.display = id ? '' : 'none';
+}
+// Resolve o coordenador específico digitado.
+function resolveCoordinator(input) {
+  const hidden = document.getElementById('coordinator-talent-id');
+  if (hidden) hidden.value = _resolveTalentId(input.value);
+}
+
 // ── Utilitários ──────────────────────────────────────────────────────────────
 function escHtml(s) {
   return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -884,10 +976,14 @@ function escHtml(s) {
     // Só bloqueia quando início == fim (duração zero).
     if (startEl && endEl && startEl.value && endEl.value && endEl.value === startEl.value)
       invalid.push(endEl);
-    // Valor antes do desconto obrigatório (> 0)
-    if (grossEl && (!grossEl.value.trim() || parseBRL(grossEl.value) <= 0)) invalid.push(grossEl);
-    // Valor de venda obrigatório (> 0)
-    if (saleEl && (!saleEl.value.trim() || parseBRL(saleEl.value) <= 0)) invalid.push(saleEl);
+    // Cortesia/permuta dispensa os valores de venda (feature 095)
+    const cortesiaOn = (document.getElementById('cortesia-hidden') || {}).value === '1';
+    if (!cortesiaOn) {
+      // Valor antes do desconto obrigatório (> 0)
+      if (grossEl && (!grossEl.value.trim() || parseBRL(grossEl.value) <= 0)) invalid.push(grossEl);
+      // Valor de venda obrigatório (> 0)
+      if (saleEl && (!saleEl.value.trim() || parseBRL(saleEl.value) <= 0)) invalid.push(saleEl);
+    }
     // Vendedor responsável obrigatório
     if (sellerEl && !sellerEl.value) invalid.push(sellerEl);
     // Parcelas obrigatórias quando "Dividido no PIX"
