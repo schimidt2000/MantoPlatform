@@ -6,6 +6,24 @@ means a typo becomes an ``AttributeError`` at import time instead of a
 silent authorisation bypass at runtime.
 """
 
+from datetime import date
+
+# Feature 094: a partir desta data, salvar os dados de venda de um evento exige um cliente associado.
+# Eventos com início ANTERIOR a esta data são grandfathered (podem ficar sem cliente).
+CLIENT_REQUIRED_FROM = date(2026, 6, 29)
+
+
+def event_requires_client(event) -> bool:
+    """True se o evento exige cliente para salvar a venda (feature 094).
+
+    Baseia-se na data de início do evento: eventos a partir de ``CLIENT_REQUIRED_FROM`` exigem cliente;
+    passados/antigos (ou sem data) são isentos (grandfathering).
+    """
+    start = getattr(event, "start_at", None)
+    if start is None:
+        return False
+    return start.date() >= CLIENT_REQUIRED_FROM
+
 
 class RoleName:
     SUPERADMIN = "SUPERADMIN"
