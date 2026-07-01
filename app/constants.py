@@ -38,6 +38,16 @@ ACRESCIMO_TIPOS = [
     ACRESCIMO_TIPO_OUTRO,
 ]
 
+# Feature 100: tipos de relação de um cliente com o evento (lista fixa). Usada na associação
+# múltipla evento↔cliente. "Contratante" é o padrão da migração do vínculo único anterior.
+CLIENT_RELATION_TIPOS = [
+    "Contratante",
+    "Assessora",
+    "Mãe/Pai",
+    "Familiar",
+    "Outros",
+]
+
 
 class RoleName:
     SUPERADMIN = "SUPERADMIN"

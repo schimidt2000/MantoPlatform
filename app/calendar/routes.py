@@ -24,7 +24,8 @@ from .service import (
     delete_event,
 )
 from .. import db
-from app.constants import RoleName, event_requires_client, ACRESCIMO_TIPOS, ACRESCIMO_TIPO_BV
+from app.constants import RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CLIENT_RELATION_TIPOS
+from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
 from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
@@ -638,27 +639,48 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     if not can_vendas:
         return
 
-    # ── Cliente associado (feature 094) ──────────────────────────────
-    # Lê o client_id do form; valida existência. Eventos a partir da ativação exigem cliente para
-    # salvar a venda (grandfathering para passados). Bloqueia ANTES de qualquer alteração/commit.
-    from app.models import Client
+    # ── Clientes associados (features 094/100) ──────────────────────────────
+    # Múltiplos clientes por evento, cada um com uma relação. Lê client_id[]/client_relation[], valida,
+    # e recria as associações. Eventos elegíveis exigem ≥1 cliente. Bloqueia ANTES de qualquer alteração.
+    from app.models import Client, EventClient
 
-    client_raw = (request.form.get("client_id") or "").strip()
-    new_client_id = None
-    if client_raw.isdigit():
-        if Client.query.get(int(client_raw)) is not None:
-            new_client_id = int(client_raw)
+    _cli_ids  = request.form.getlist("client_id[]")
+    _cli_rels = request.form.getlist("client_relation[]")
+    _pairs: list[tuple[int, str]] = []
+    _seen_cli: set[int] = set()
+    for _i, _cid in enumerate(_cli_ids):
+        _cid = (_cid or "").strip()
+        if not _cid.isdigit():
+            continue
+        _cid_int = int(_cid)
+        if _cid_int in _seen_cli or Client.query.get(_cid_int) is None:
+            continue
+        _rel = (_cli_rels[_i].strip() if _i < len(_cli_rels) else "") or "Contratante"
+        if _rel not in CLIENT_RELATION_TIPOS:
+            _rel = "Outros"
+        _seen_cli.add(_cid_int)
+        _pairs.append((_cid_int, _rel))
 
-    if event_requires_client(event) and new_client_id is None:
+    # Só considera a seção de clientes se o editor foi enviado (marcador oculto), mesmo com zero clientes.
+    _clients_submitted = request.form.get("clients_editor") == "1"
+
+    if _clients_submitted and event_requires_client(event) and not _pairs:
         flash(
-            "Associe um cliente ao evento para salvar os dados de venda. "
+            "Associe ao menos um cliente ao evento para salvar os dados de venda. "
             "Busque na base ou cadastre um novo cliente.",
             "error",
         )
         return
 
-    if new_client_id != event.client_id:
-        event.client_id = new_client_id
+    if _clients_submitted:
+        EventClient.query.filter_by(event_id=event.id).delete()
+        for _cid_int, _rel in _pairs:
+            db.session.add(EventClient(event_id=event.id, client_id=_cid_int, relationship_type=_rel))
+        # client_id denormalizado = contratante (ou o primeiro), p/ compat de telas que mostram "o cliente".
+        _primary = next((c for c, r in _pairs if r == "Contratante"), None)
+        if _primary is None and _pairs:
+            _primary = _pairs[0][0]
+        event.client_id = _primary
 
     event.sale_value       = parse_brl(request.form.get("sale_value", ""))
     event.sale_value_gross = parse_brl(request.form.get("sale_value_gross", ""))
@@ -1535,8 +1557,9 @@ def event_detail(event_id: int):
         event_expenses_total=event_expenses_total,
         event_commission=event_commission,
         event_bv_total=event_bv_total,
-        acrescimo_tipos=ACRESCIMO_TIPOS,
+        acrescimo_tipos=acrescimo_tipos_list(),
         acrescimo_tipo_bv=ACRESCIMO_TIPO_BV,
+        client_relation_tipos=CLIENT_RELATION_TIPOS,
         event_rate=event_rate,
         default_commission=default_commission,
         figurino_sheets=figurino_sheets,

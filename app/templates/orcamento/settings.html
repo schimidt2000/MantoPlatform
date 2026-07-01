@@ -289,11 +289,54 @@
     </div>
   </div>
 
+  {# ── Tipos de acréscimo (feature 100) ──────────────────────────── #}
+  <div class="panel" style="margin-bottom:20px;">
+    <div class="panel-title">Tipos de Acréscimo</div>
+    <p class="sub" style="margin:-4px 0 12px;">
+      Motivos disponíveis ao adicionar um acréscimo no orçamento/evento. <strong>BV</strong> e
+      <strong>Outro</strong> são fixos e sempre disponíveis (o BV tem tratamento financeiro especial).
+    </p>
+    <div id="acr-tipos-list" style="display:flex; flex-direction:column; gap:8px; max-width:420px;">
+      {% for t in s.acrescimo_tipos %}
+      <div class="acr-tipo-row" style="display:flex; gap:8px; align-items:center;">
+        <input type="text" name="acrescimo_tipo_nome[]" value="{{ t }}" class="form-control" style="flex:1;">
+        <button type="button" class="btn btn-sm btn-ghost acr-tipo-remove" style="color:#c0392b;">×</button>
+      </div>
+      {% endfor %}
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; margin-top:10px;">
+      <span class="badge badge-gray">BV</span>
+      <span class="badge badge-gray">Outro</span>
+      <span class="sub" style="font-size:12px;">(fixos)</span>
+    </div>
+    <button type="button" id="acr-tipo-add" class="btn btn-sm btn-secondary" style="margin-top:10px;">+ Adicionar tipo</button>
+  </div>
+
   <div style="display:flex;gap:12px;padding-bottom:32px;">
     <button type="submit" class="btn btn-primary">Salvar Configurações</button>
     <a href="{{ url_for('orcamento.index') }}" class="btn btn-secondary">Cancelar</a>
   </div>
 </form>
+
+<script>
+(function () {
+  const list = document.getElementById('acr-tipos-list');
+  const add  = document.getElementById('acr-tipo-add');
+  if (!list || !add) return;
+  add.addEventListener('click', function () {
+    const row = document.createElement('div');
+    row.className = 'acr-tipo-row';
+    row.style.cssText = 'display:flex; gap:8px; align-items:center;';
+    row.innerHTML = '<input type="text" name="acrescimo_tipo_nome[]" class="form-control" placeholder="Nome do tipo" style="flex:1;">'
+                  + '<button type="button" class="btn btn-sm btn-ghost acr-tipo-remove" style="color:#c0392b;">×</button>';
+    list.appendChild(row);
+    row.querySelector('input').focus();
+  });
+  list.addEventListener('click', function (e) {
+    if (e.target.classList.contains('acr-tipo-remove')) e.target.closest('.acr-tipo-row').remove();
+  });
+})();
+</script>
 {% endblock %}
 
 {% block extra_scripts %}

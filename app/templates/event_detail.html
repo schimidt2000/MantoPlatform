@@ -1467,33 +1467,39 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 
     <div class="panel-title" style="margin-bottom: 12px;">Dados da venda</div>
 
-    {# ── Cliente associado (feature 094) ───────────────────────── #}
-    <div id="client-block" class="com-val-item" style="width:100%; margin-bottom:16px;"
-         data-search-url="/clientes/search" data-create-url="/clientes/quick-create">
-      <label style="font-weight:600;">Cliente {% if client_required %}<span style="color:#c0392b;">*</span>{% endif %}</label>
-      <input type="hidden" name="client_id" id="client_id" value="{{ event.client_id or '' }}">
+    {# ── Clientes associados (features 094/100 — múltiplos, com relação) ──── #}
+    <div id="clients-block" class="com-val-item" style="width:100%; margin-bottom:16px;"
+         data-search-url="/clientes/search" data-create-url="/clientes/quick-create"
+         data-relations='{{ client_relation_tipos | tojson }}'>
+      <input type="hidden" name="clients_editor" value="1">
+      <label style="font-weight:600; display:block; margin-bottom:6px;">
+        Clientes {% if client_required %}<span style="color:#c0392b;">*</span>{% endif %}
+      </label>
 
-      <div id="client-selected" style="{% if not event.client %}display:none;{% endif %}
-           align-items:center; gap:10px; background:#f4f2f7; border:1px solid var(--line);
-           border-radius:8px; padding:8px 12px; max-width:420px; {% if event.client %}display:flex;{% endif %}">
-        <span style="font-size:18px;">👤</span>
-        <div style="flex:1; min-width:0;">
-          <div id="client-selected-name" style="font-weight:600;">{{ event.client.name if event.client else '' }}</div>
-          <div id="client-selected-phone" class="meta" style="font-size:12px;">
-            {{ (event.client.phone_display or event.client.phone) if event.client else '' }}
+      <div id="clients-list" style="display:flex; flex-direction:column; gap:8px; max-width:540px;">
+        {% for ec in event.event_clients %}
+        <div class="client-row" style="display:flex; gap:8px; align-items:center; background:#f4f2f7;
+             border:1px solid var(--line); border-radius:8px; padding:8px 12px;">
+          <input type="hidden" name="client_id[]" value="{{ ec.client_id }}">
+          <span style="font-size:16px;">👤</span>
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:600;">{{ ec.client.name if ec.client else '—' }}</div>
+            <div class="meta" style="font-size:12px;">{{ (ec.client.phone_display or ec.client.phone) if ec.client else '' }}</div>
           </div>
+          <select name="client_relation[]" class="form-control" style="font-size:12px; width:130px; flex:0 0 auto;">
+            {% for r in client_relation_tipos %}<option value="{{ r }}" {% if ec.relationship_type == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+          </select>
+          <a href="/clientes/{{ ec.client_id }}" target="_blank" class="btn btn-sm btn-ghost" style="font-size:11px;">Ficha</a>
+          <button type="button" class="btn btn-sm btn-ghost client-remove" style="font-size:13px; color:#c0392b;">×</button>
         </div>
-        {% if event.client %}
-        <a href="/clientes/{{ event.client.id }}" target="_blank" class="btn btn-sm btn-ghost"
-           style="font-size:11px;">Ver ficha</a>
-        {% endif %}
-        <button type="button" id="client-clear" class="btn btn-sm btn-ghost"
-                style="font-size:11px; color:#c0392b;">Trocar</button>
+        {% endfor %}
       </div>
+      <div id="clients-empty" class="meta" style="font-size:12px; margin-top:4px;
+           {% if event.event_clients %}display:none;{% endif %}">Nenhum cliente associado ainda.</div>
 
-      <div id="client-picker" style="{% if event.client %}display:none;{% endif %} max-width:420px;">
+      <div style="margin-top:10px; max-width:540px;">
         <input type="text" id="client-search" autocomplete="off"
-               placeholder="Buscar cliente por nome ou telefone…"
+               placeholder="Buscar cliente por nome ou telefone para adicionar…"
                class="form-control" style="width:100%;">
         <div id="client-results" style="border:1px solid var(--line); border-radius:8px;
              margin-top:4px; display:none; max-height:220px; overflow-y:auto; background:#fff;"></div>
@@ -1504,21 +1510,18 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
         <div id="client-new-form" style="display:none; margin-top:10px; padding:12px;
              border:1px dashed var(--line); border-radius:8px;">
           <div style="display:flex; flex-direction:column; gap:8px;">
-            <input type="text" id="client-new-name" placeholder="Nome completo *"
-                   class="form-control" style="width:100%;">
-            <input type="text" id="client-new-phone" placeholder="Telefone com DDD *"
-                   class="form-control" style="width:100%;">
-            <input type="text" id="client-new-company" placeholder="Empresa (opcional)"
-                   class="form-control" style="width:100%;">
+            <input type="text" id="client-new-name" placeholder="Nome completo *" class="form-control" style="width:100%;">
+            <input type="text" id="client-new-phone" placeholder="Telefone com DDD *" class="form-control" style="width:100%;">
+            <input type="text" id="client-new-company" placeholder="Empresa (opcional)" class="form-control" style="width:100%;">
             <div id="client-new-error" class="meta" style="color:#c0392b; display:none;"></div>
             <button type="button" id="client-new-save" class="btn btn-sm btn-primary"
-                    style="font-size:12px; align-self:flex-start;">Salvar e associar</button>
+                    style="font-size:12px; align-self:flex-start;">Salvar e adicionar</button>
           </div>
         </div>
       </div>
       {% if client_required %}
       <p class="meta" style="margin:6px 0 0; font-size:12px;">
-        Eventos a partir de agora exigem um cliente associado para salvar a venda.
+        Eventos a partir de agora exigem <strong>ao menos um</strong> cliente associado para salvar a venda.
       </p>
       {% endif %}
     </div>
@@ -1557,13 +1560,25 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       </div>
     </div>
 
-    {# ── Acréscimos tipados (feature 099) ─────────────────────────────── #}
-    <div class="com-acrescimos" id="acrescimos-block" style="margin-bottom:16px;"
+    {# ── Acréscimos tipados (feature 099/100) ───────────────────────────── #}
+    <div class="com-acrescimos" id="acrescimos-block" style="margin-bottom:16px; background:var(--surface,#faf9fc);
+         border:1px solid var(--line); border-radius:10px; padding:14px;"
          data-tipos='{{ acrescimo_tipos | tojson }}' data-bv="{{ acrescimo_tipo_bv }}">
-      <label style="font-weight:600; display:block; margin-bottom:6px;">Acréscimos</label>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+        <label style="font-weight:600;">Acréscimos</label>
+        <button type="button" id="btn-add-acrescimo" class="btn btn-sm btn-primary" style="font-size:12px;">+ Adicionar acréscimo</button>
+      </div>
+      <p class="meta" style="margin:0 0 10px; font-size:12px;">
+        Escolha o <strong>tipo</strong>, o <strong>valor</strong> e a unidade (R$ ou %). O <strong>BV</strong>
+        é um repasse: não entra no lucro nem na comissão e pede o PIX de quem recebe.
+      </p>
+      <div id="acrescimos-empty" class="meta" style="font-size:13px; padding:10px; text-align:center;
+           border:1px dashed var(--line); border-radius:8px; {% if event.acrescimos %}display:none;{% endif %}">
+        Nenhum acréscimo. Clique em “+ Adicionar acréscimo”.
+      </div>
       <div id="acrescimos-list" style="display:flex; flex-direction:column; gap:8px;">
         {% for a in event.acrescimos %}
-        <div class="acrescimo-row" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px; border:1px solid var(--line); border-radius:8px;">
+        <div class="acrescimo-row" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:10px; background:#fff; border:1px solid var(--line); border-radius:8px;">
           <select name="acrescimo_tipo[]" class="acr-tipo" onchange="onAcrescimoTipoChange(this)" style="font-size:13px;">
             {% for t in acrescimo_tipos %}<option value="{{ t }}" {% if a.tipo == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
           </select>
@@ -1575,7 +1590,7 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
             <option value="0" {% if not a.is_percent %}selected{% endif %}>R$</option>
             <option value="1" {% if a.is_percent %}selected{% endif %}>%</option>
           </select>
-          <div class="acr-bv" style="display:{% if a.is_bv %}flex{% else %}none{% endif %}; gap:6px; flex-wrap:wrap; align-items:center;">
+          <div class="acr-bv" style="display:{% if a.is_bv %}flex{% else %}none{% endif %}; gap:6px; flex-wrap:wrap; align-items:center; background:#ede9fe; border:1px solid #c4b5fd; border-radius:6px; padding:6px 8px;">
             <input type="text" name="acrescimo_bv_recipient[]" class="form-control" placeholder="Quem recebe o BV"
                    value="{{ a.bv_recipient or '' }}" style="font-size:13px; width:160px;">
             <input type="text" name="acrescimo_bv_pix[]" class="form-control" placeholder="PIX de quem recebe"
@@ -1585,10 +1600,6 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
         </div>
         {% endfor %}
       </div>
-      <button type="button" id="btn-add-acrescimo" class="btn btn-sm btn-secondary" style="margin-top:8px; font-size:12px;">+ Adicionar acréscimo</button>
-      <p class="meta" style="margin:6px 0 0; font-size:12px;">
-        O <strong>BV</strong> é um repasse: não entra no lucro nem na comissão, e precisa do PIX de quem recebe (vai para a planilha de pagamentos).
-      </p>
     </div>
 
     <div style="margin-bottom: 16px;">
@@ -2719,21 +2730,18 @@ document.querySelectorAll('.fig-widget').forEach(function(wrap) {
 </script>
 {% endif %}
 
-{# ── Seletor de cliente do evento (feature 094) ─────────────────── #}
+{# ── Editor de clientes do evento (features 094/100 — múltiplos + relação) ─── #}
 <script>
 (function () {
-  const block = document.getElementById('client-block');
+  const block = document.getElementById('clients-block');
   if (!block) return;
   const searchUrl = block.dataset.searchUrl;
   const createUrl = block.dataset.createUrl;
-  const hidden    = document.getElementById('client_id');
-  const selected  = document.getElementById('client-selected');
-  const selName   = document.getElementById('client-selected-name');
-  const selPhone  = document.getElementById('client-selected-phone');
-  const picker    = document.getElementById('client-picker');
+  const relations = JSON.parse(block.dataset.relations || '["Contratante"]');
+  const listEl    = document.getElementById('clients-list');
+  const emptyEl   = document.getElementById('clients-empty');
   const search    = document.getElementById('client-search');
   const results   = document.getElementById('client-results');
-  const clearBtn  = document.getElementById('client-clear');
   const newToggle = document.getElementById('client-new-toggle');
   const newForm   = document.getElementById('client-new-form');
   const newName   = document.getElementById('client-new-name');
@@ -2742,25 +2750,34 @@ document.querySelectorAll('.fig-widget').forEach(function(wrap) {
   const newSave   = document.getElementById('client-new-save');
   const newError  = document.getElementById('client-new-error');
 
-  function showSelected(c) {
-    hidden.value = c.id;
-    selName.textContent = c.name;
-    selPhone.textContent = c.phone_display || c.phone;
-    selected.style.display = 'flex';
-    picker.style.display = 'none';
-    results.style.display = 'none';
+  function esc(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+  function currentIds() {
+    return [...listEl.querySelectorAll('input[name="client_id[]"]')].map(i => i.value);
   }
-  function showPicker() {
-    hidden.value = '';
-    selected.style.display = 'none';
-    picker.style.display = 'block';
-    search.value = '';
-    results.innerHTML = '';
-    results.style.display = 'none';
-    search.focus();
+  function refreshEmpty() {
+    if (emptyEl) emptyEl.style.display = listEl.children.length ? 'none' : '';
+  }
+  function addClient(c) {
+    if (currentIds().includes(String(c.id))) return; // evita duplicar o mesmo cliente
+    const relOpts = relations.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+    const row = document.createElement('div');
+    row.className = 'client-row';
+    row.style.cssText = 'display:flex; gap:8px; align-items:center; background:#f4f2f7; border:1px solid var(--line); border-radius:8px; padding:8px 12px;';
+    row.innerHTML =
+      `<input type="hidden" name="client_id[]" value="${esc(String(c.id))}">` +
+      `<span style="font-size:16px;">👤</span>` +
+      `<div style="flex:1; min-width:0;"><div style="font-weight:600;">${esc(c.name)}</div>` +
+      `<div class="meta" style="font-size:12px;">${esc(c.phone_display || c.phone || '')}</div></div>` +
+      `<select name="client_relation[]" class="form-control" style="font-size:12px; width:130px; flex:0 0 auto;">${relOpts}</select>` +
+      `<a href="/clientes/${esc(String(c.id))}" target="_blank" class="btn btn-sm btn-ghost" style="font-size:11px;">Ficha</a>` +
+      `<button type="button" class="btn btn-sm btn-ghost client-remove" style="font-size:13px; color:#c0392b;">×</button>`;
+    listEl.appendChild(row);
+    refreshEmpty();
   }
 
-  if (clearBtn) clearBtn.addEventListener('click', showPicker);
+  listEl.addEventListener('click', function (e) {
+    if (e.target.classList.contains('client-remove')) { e.target.closest('.client-row').remove(); refreshEmpty(); }
+  });
 
   let timer = null;
   if (search) search.addEventListener('input', function () {
@@ -2776,12 +2793,12 @@ document.querySelectorAll('.fig-widget').forEach(function(wrap) {
           list.forEach(c => {
             const row = document.createElement('div');
             row.style.cssText = 'padding:8px 12px; cursor:pointer; border-bottom:1px solid var(--line);';
-            row.innerHTML = '<div style="font-weight:600;">' + c.name +
+            row.innerHTML = '<div style="font-weight:600;">' + esc(c.name) +
               '</div><div style="font-size:12px; color:var(--muted);">' +
-              (c.phone_display || c.phone) + (c.company ? ' · ' + c.company : '') + '</div>';
+              esc(c.phone_display || c.phone) + (c.company ? ' · ' + esc(c.company) : '') + '</div>';
             row.addEventListener('mouseenter', () => row.style.background = '#f4f2f7');
             row.addEventListener('mouseleave', () => row.style.background = '#fff');
-            row.addEventListener('click', () => showSelected(c));
+            row.addEventListener('click', () => { addClient(c); search.value = ''; results.style.display = 'none'; });
             results.appendChild(row);
           });
           results.style.display = 'block';
@@ -2806,22 +2823,22 @@ document.querySelectorAll('.fig-widget').forEach(function(wrap) {
       .then(({ ok, j }) => {
         newSave.disabled = false;
         if (!ok) { newError.textContent = j.error || 'Erro ao salvar.'; newError.style.display = 'block'; return; }
-        showSelected(j);
+        addClient(j);
         newForm.style.display = 'none';
         newName.value = newPhone.value = newCompany.value = '';
       })
       .catch(() => { newSave.disabled = false; newError.textContent = 'Erro de rede.'; newError.style.display = 'block'; });
   });
 
-  // Guarda no submit: evita perder o que foi preenchido quando o cliente é obrigatório (feature 094).
+  // Guarda no submit: exige ao menos um cliente quando obrigatório (feature 094/100).
   {% if client_required %}
   const vendaForm = block.closest('form');
   if (vendaForm) vendaForm.addEventListener('submit', function (ev) {
-    if (!hidden.value) {
+    if (!currentIds().length) {
       ev.preventDefault();
-      showPicker();
       block.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      alert('Associe um cliente ao evento antes de salvar os dados de venda.');
+      if (search) search.focus();
+      alert('Associe ao menos um cliente ao evento antes de salvar os dados de venda.');
     }
   });
   {% endif %}
@@ -2834,19 +2851,21 @@ document.querySelectorAll('.fig-widget').forEach(function(wrap) {
   const block = document.getElementById('acrescimos-block');
   if (!block) return;
   const list  = document.getElementById('acrescimos-list');
+  const empty = document.getElementById('acrescimos-empty');
   const tipos = JSON.parse(block.dataset.tipos || '[]');
   const BV    = block.dataset.bv || 'BV';
 
+  function refreshEmpty() { if (empty) empty.style.display = list.children.length ? 'none' : ''; }
   function optionsHtml(sel) {
     return tipos.map(t => `<option value="${t}"${t === sel ? ' selected' : ''}>${t}</option>`).join('');
   }
   function rowHtml() {
-    return `<div class="acrescimo-row" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px; border:1px solid var(--line); border-radius:8px;">
+    return `<div class="acrescimo-row" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:10px; background:#fff; border:1px solid var(--line); border-radius:8px;">
       <select name="acrescimo_tipo[]" class="acr-tipo" onchange="onAcrescimoTipoChange(this)" style="font-size:13px;">${optionsHtml(tipos[0])}</select>
       <input type="text" name="acrescimo_descricao[]" class="acr-desc form-control" placeholder="Descrição" style="font-size:13px; width:150px; display:none;">
       <input type="text" inputmode="decimal" name="acrescimo_value[]" class="brl-input acr-value" placeholder="0,00" style="width:100px;">
       <select name="acrescimo_is_percent[]" class="acr-unit" style="font-size:13px;"><option value="0">R$</option><option value="1">%</option></select>
-      <div class="acr-bv" style="display:none; gap:6px; flex-wrap:wrap; align-items:center;">
+      <div class="acr-bv" style="display:none; gap:6px; flex-wrap:wrap; align-items:center; background:#ede9fe; border:1px solid #c4b5fd; border-radius:6px; padding:6px 8px;">
         <input type="text" name="acrescimo_bv_recipient[]" class="form-control" placeholder="Quem recebe o BV" style="font-size:13px; width:160px;">
         <input type="text" name="acrescimo_bv_pix[]" class="form-control" placeholder="PIX de quem recebe" style="font-size:13px; width:180px;">
       </div>
@@ -2867,11 +2886,13 @@ document.querySelectorAll('.fig-widget').forEach(function(wrap) {
     const tmp = document.createElement('div');
     tmp.innerHTML = rowHtml().trim();
     list.appendChild(tmp.firstChild);
+    refreshEmpty();
   });
 
   list.addEventListener('click', function (e) {
     if (e.target.classList.contains('btn-remove-acrescimo')) {
       e.target.closest('.acrescimo-row').remove();
+      refreshEmpty();
     }
   });
 })();
