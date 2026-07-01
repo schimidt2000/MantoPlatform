@@ -277,6 +277,10 @@ class CalendarEvent(db.Model):
                                    order_by="EventObservation.created_at")
     seller = db.relationship("User", lazy=True, foreign_keys=[seller_id])
     client = db.relationship("Client", back_populates="events", lazy=True, foreign_keys=[client_id])
+    acrescimos = db.relationship(
+        "EventAcrescimo", backref="event", lazy=True,
+        cascade="all, delete-orphan", order_by="EventAcrescimo.id",
+    )
     parent = db.relationship(
         "CalendarEvent",
         remote_side="CalendarEvent.id",
@@ -1130,6 +1134,43 @@ class ReviewComment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     user = db.relationship("User", lazy=True, foreign_keys=[user_id])
+
+
+class EventAcrescimo(db.Model):
+    """Acréscimo tipado de um evento/orçamento (feature 099).
+
+    Cada acréscimo tem um ``tipo`` (lista fixa + BV + Outro) e um valor em R$ ou %. O valor efetivo em
+    reais fica congelado em ``amount_brl`` (fonte estável para lucro/comissão/pagamento). O tipo **BV** é
+    um repasse: não é lucro da Manto nem entra na comissão da vendedora, e vira um pagamento (com PIX do
+    recebedor) na planilha de pagamentos.
+    """
+
+    __tablename__ = "event_acrescimos"
+    __table_args__ = (db.Index("ix_event_acrescimos_event_id", "event_id"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    tipo = db.Column(db.String(40), nullable=False)
+    descricao = db.Column(db.String(200), nullable=True)   # usado quando tipo = "Outro"
+    is_percent = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+    value = db.Column(db.Numeric(12, 2), nullable=True)     # número informado (R$ ou % base)
+    amount_brl = db.Column(db.Numeric(12, 2), nullable=True)  # valor efetivo em R$ (congelado no save)
+    is_bv = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+
+    # Dados do repasse BV (preenchidos na tela comercial do evento)
+    bv_recipient = db.Column(db.String(200), nullable=True)
+    bv_pix = db.Column(db.String(140), nullable=True)
+    bv_payment_status = db.Column(db.String(20), nullable=False, default="nao_pago",
+                                  server_default="nao_pago")
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    @property
+    def display_label(self) -> str:
+        """Rótulo do acréscimo: a descrição (para 'Outro') ou o próprio tipo."""
+        if self.tipo == "Outro" and self.descricao:
+            return self.descricao
+        return self.tipo
 
 
 class Client(db.Model):

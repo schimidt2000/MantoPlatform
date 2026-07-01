@@ -12,8 +12,25 @@ let transportTipo = 'carro';
 let comCarretinha = false;
 let numCarros     = 1;
 let colabOverride  = null;  // null = auto
-let acrescimo      = 0;
-let acrescimoTipo  = 'valor'; // 'valor' | 'percent'
+let acrescimo      = 0;        // legado (não usado; mantido p/ compat de reset/reabertura)
+let acrescimoTipo  = 'valor';  // legado
+
+// ── Acréscimos tipados (feature 099) ─────────────────────────────────────────
+function readOrcAcrescimos() {
+  const list = document.getElementById('orc-acrescimos-list');
+  if (!list) return [];
+  return [...list.querySelectorAll('.orc-acr-row')].map(row => ({
+    tipo: (row.querySelector('.acr-tipo') || {}).value || '',
+    descricao: (row.querySelector('.acr-desc') || {}).value || '',
+    isPercent: (row.querySelector('.acr-unit') || {}).value === '1',
+    value: parseFloat(((row.querySelector('.acr-value') || {}).value || '0').replace(/\./g, '').replace(',', '.')) || 0,
+  })).filter(a => a.tipo && a.value);
+}
+function acrescimoAddFor(base) {
+  let add = 0;
+  for (const a of readOrcAcrescimos()) add += a.isPercent ? base * a.value / 100 : a.value;
+  return add;
+}
 let showSosiaCustom = false;
 let notaFiscal     = false;
 let modoEntradas   = false;
@@ -223,13 +240,9 @@ function calcTotals() {
   const tc = transportCost();
   for (let i = 0; i < 4; i++) t[i] += tc;
 
-  // Acréscimo
-  if (acrescimo > 0) {
-    for (let i = 0; i < 4; i++) {
-      t[i] = acrescimoTipo === 'percent'
-        ? Math.round(t[i] * (1 + acrescimo / 100) * 100) / 100
-        : Math.round((t[i] + acrescimo) * 100) / 100;
-    }
+  // Acréscimos tipados (feature 099): percentuais sobre o total pré-acréscimos; R$ somam.
+  for (let i = 0; i < 4; i++) {
+    t[i] = Math.round((t[i] + acrescimoAddFor(t[i])) * 100) / 100;
   }
 
   // Nota Fiscal (÷ 0,84)
@@ -633,18 +646,13 @@ function updateDebugPanel() {
     runningNh += tb.total;
   }
 
-  if (acrescimo > 0) {
-    if (acrescimoTipo === 'percent') {
-      const addVals = running.map(v => Math.round(v * acrescimo / 100 * 100) / 100);
-      const addNh   = Math.round(runningNh * acrescimo / 100 * 100) / 100;
-      html += `<tr style="background:${C_POST};"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(${acrescimo}%)</span></td>${perCols(addVals, addNh, true)}</tr>`;
-      for (let i = 0; i < 4; i++) running[i] = Math.round((running[i] + addVals[i]) * 100) / 100;
-      runningNh = Math.round((runningNh + addNh) * 100) / 100;
-    } else {
-      html += `<tr style="background:${C_POST};"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(valor fixo)</span></td>${flatCols(acrescimo, 'font-weight:600;')}</tr>`;
-      for (let i = 0; i < 4; i++) running[i] = Math.round((running[i] + acrescimo) * 100) / 100;
-      runningNh = Math.round((runningNh + acrescimo) * 100) / 100;
-    }
+  const _acrs = readOrcAcrescimos();
+  if (_acrs.length) {
+    const addVals = running.map(v => Math.round(acrescimoAddFor(v) * 100) / 100);
+    const addNh   = Math.round(acrescimoAddFor(runningNh) * 100) / 100;
+    html += `<tr style="background:${C_POST};"><td><strong>+ Acréscimos</strong> <span style="color:var(--muted)">(${_acrs.length})</span></td>${perCols(addVals, addNh, true)}</tr>`;
+    for (let i = 0; i < 4; i++) running[i] = Math.round((running[i] + addVals[i]) * 100) / 100;
+    runningNh = Math.round((runningNh + addNh) * 100) / 100;
   }
 
   if (notaFiscal) {
@@ -667,7 +675,7 @@ function updateDebugPanel() {
       <td colspan="${totalCols + 1}" style="font-size:12px;font-style:italic;">
         Markup (${modeloLabel}): 1h × ${markup[0]} · 2h × ${markup[1]} · 3h × ${markup[2]} · 4h × ${markup[3]}
         ${tb ? ` · Transporte total ${fmt(tb.total)}` : ''}
-        ${acrescimo > 0 ? ` · Acréscimo ${acrescimoTipo === 'percent' ? acrescimo + '%' : fmt(acrescimo)}` : ''}
+        ${readOrcAcrescimos().length ? ` · Acréscimos (${readOrcAcrescimos().length})` : ''}
         ${notaFiscal ? ' · Nota Fiscal (÷ 0,84)' : ''}
       </td>
     </tr>`;
@@ -835,16 +843,44 @@ function setSosiaShowTipo(tipo) {
   update();
 }
 
-function setAcrescimoTipo(tipo) {
-  acrescimoTipo = tipo;
-  document.getElementById('acrescimo-unit').textContent = tipo === 'percent' ? '%' : 'R$';
+// ── Editor de acréscimos tipados (feature 099) ───────────────────────────────
+function _orcAcrTipos() {
+  const blk = document.getElementById('orc-acrescimos');
+  try { return JSON.parse(blk.dataset.tipos || '[]'); } catch (_) { return []; }
+}
+function orcAcrescimoRowHtml(sel) {
+  const tipos = _orcAcrTipos();
+  const opts = tipos.map(t => `<option value="${t}"${t === sel ? ' selected' : ''}>${t}</option>`).join('');
+  return `<div class="orc-acr-row" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+    <select class="acr-tipo" onchange="onOrcAcrescimoTipoChange(this)" style="font-size:13px;">${opts}</select>
+    <input type="text" class="acr-desc" placeholder="Descrição" style="font-size:13px; width:140px; display:none;">
+    <input type="number" class="acr-value" min="0" step="0.01" placeholder="0" style="width:90px;" oninput="update()">
+    <select class="acr-unit" onchange="update()" style="font-size:13px;"><option value="0">R$</option><option value="1">%</option></select>
+    <button type="button" class="btn btn-sm btn-ghost orc-acr-remove" style="color:#c0392b;">×</button>
+  </div>`;
+}
+function onOrcAcrescimoTipoChange(sel) {
+  const row = sel.closest('.orc-acr-row');
+  if (row) row.querySelector('.acr-desc').style.display = sel.value === 'Outro' ? '' : 'none';
   update();
 }
-
-function setAcrescimo(val) {
-  acrescimo = parseFloat(val) || 0;
+function orcAddAcrescimo(sel) {
+  const list = document.getElementById('orc-acrescimos-list');
+  if (!list) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = orcAcrescimoRowHtml(sel).trim();
+  list.appendChild(tmp.firstChild);
   update();
 }
+(function initOrcAcrescimos() {
+  const addBtn = document.getElementById('orc-add-acrescimo');
+  const list = document.getElementById('orc-acrescimos-list');
+  if (!addBtn || !list) return;
+  addBtn.addEventListener('click', () => orcAddAcrescimo());
+  list.addEventListener('click', (e) => {
+    if (e.target.classList.contains('orc-acr-remove')) { e.target.closest('.orc-acr-row').remove(); update(); }
+  });
+})();
 
 function setNotaFiscal(checked) {
   notaFiscal = checked;
@@ -984,7 +1020,8 @@ function clearAll() {
   document.getElementById('transport-section').style.display = 'none';
   document.getElementById('van-options').style.display   = '';
   document.getElementById('carro-options').style.display = 'none';
-  document.getElementById('acrescimo-unit').textContent = 'R$';
+  const acrList = document.getElementById('orc-acrescimos-list');
+  if (acrList) acrList.innerHTML = '';
   update();
 }
 
@@ -999,8 +1036,26 @@ function _applySnapshot(snap) {
   comCarretinha = !!snap.carretinha;
   numCarros     = parseInt(snap.num_carros) || 1;
   colabOverride = snap.num_colaboradores ? parseInt(snap.num_colaboradores) : null;
-  acrescimo     = parseFloat(snap.acrescimo_valor) || 0;
-  acrescimoTipo = snap.acrescimo_tipo || 'valor';
+  // Acréscimos (feature 099): reconstrói as linhas do editor a partir do snapshot.
+  const _acrList = document.getElementById('orc-acrescimos-list');
+  if (_acrList) {
+    _acrList.innerHTML = '';
+    let _acrs = snap.acrescimos;
+    // Compat: snapshots antigos tinham um único acréscimo (acrescimo_valor/tipo).
+    if (!_acrs && parseFloat(snap.acrescimo_valor) > 0) {
+      _acrs = [{ tipo: 'Outro', descricao: 'Acréscimo', is_percent: snap.acrescimo_tipo === 'percent', value: parseFloat(snap.acrescimo_valor) }];
+    }
+    (_acrs || []).forEach(a => {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = orcAcrescimoRowHtml(a.tipo).trim();
+      const row = tmp.firstChild;
+      if (a.descricao) { const d = row.querySelector('.acr-desc'); d.value = a.descricao; }
+      row.querySelector('.acr-value').value = a.value || 0;
+      row.querySelector('.acr-unit').value = a.is_percent ? '1' : '0';
+      if (a.tipo === 'Outro') row.querySelector('.acr-desc').style.display = '';
+      _acrList.appendChild(row);
+    });
+  }
 
   document.querySelector('[name=client_name]').value    = snap.client_name    || '';
   document.querySelector('[name=event_location]').value = snap.event_location || '';
@@ -1040,11 +1095,7 @@ function _applySnapshot(snap) {
   const nfEl = document.getElementById('nota_fiscal');
   if (nfEl) nfEl.checked = notaFiscal;
 
-  const isPercent = acrescimoTipo === 'percent';
-  document.getElementById('acrescimo_valor').value            = acrescimo || 0;
-  document.getElementById('acrescimo-valor-radio').checked    = !isPercent;
-  document.getElementById('acrescimo-percent-radio').checked  = isPercent;
-  document.getElementById('acrescimo-unit').textContent       = isPercent ? '%' : 'R$';
+  // (acréscimos já reconstruídos acima a partir de snap.acrescimos)
 
   // Orçamento personalizado
   personalizadoAtivo    = !!snap.personalizado_ativo;

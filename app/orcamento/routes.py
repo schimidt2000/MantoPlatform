@@ -10,7 +10,7 @@ from flask import (
 from flask_login import current_user, login_required
 
 from app import db
-from app.constants import RoleName
+from app.constants import RoleName, ACRESCIMO_TIPOS, ACRESCIMO_TIPO_BV
 from app.money import format_brl, parse_brl
 from app.utils import json_for_script
 from . import settings as _cfg
@@ -93,6 +93,8 @@ def index():
         especiais_com_cantor=list(_cfg.especiais_com_cantor()),
         especiais_sempre_show=list(_cfg.ESPECIAIS_SEMPRE_SHOW),
         settings_json=json_for_script(s),
+        acrescimo_tipos=ACRESCIMO_TIPOS,
+        acrescimo_tipo_bv=ACRESCIMO_TIPO_BV,
     )
 
 
@@ -178,8 +180,24 @@ def _process_quote():
 
     fora_sp          = "fora_sp" in request.form
     noturno          = _is_noturno(request.form.get("event_time", ""))
-    acrescimo_valor  = _parse_num(request.form.get("acrescimo_valor")) or 0.0
-    acrescimo_tipo   = request.form.get("acrescimo_tipo", "valor")
+    # Acréscimos tipados (feature 099): lista de {tipo, descricao, is_percent, value, is_bv}.
+    _acr_tipos    = request.form.getlist("acrescimo_tipo[]")
+    _acr_descr    = request.form.getlist("acrescimo_descricao[]")
+    _acr_values   = request.form.getlist("acrescimo_value[]")
+    _acr_percents = request.form.getlist("acrescimo_is_percent[]")
+    acrescimos: list[dict] = []
+    for _i, _t in enumerate(_acr_tipos):
+        _t = (_t or "").strip()
+        _v = _parse_num(_acr_values[_i]) if _i < len(_acr_values) else 0.0
+        if not _t or not _v:
+            continue
+        acrescimos.append({
+            "tipo": _t,
+            "descricao": (_acr_descr[_i].strip() if _i < len(_acr_descr) else ""),
+            "is_percent": (_acr_percents[_i] == "1") if _i < len(_acr_percents) else False,
+            "value": float(_v),
+            "is_bv": _t == ACRESCIMO_TIPO_BV,
+        })
     show_sosia_tipo  = request.form.get("show_sosia_tipo", "predefinido")
     nota_fiscal      = "nota_fiscal" in request.form
     modo_duracao     = request.form.get("modo_duracao", "horas")
@@ -344,11 +362,15 @@ def _process_quote():
             totals[i] = round(totals[i] + tb["total"], 2)
         transport_total += tb["total"]
 
-    if acrescimo_valor > 0:
-        if acrescimo_tipo == "percent":
-            totals = [round(t * (1 + acrescimo_valor / 100), 2) for t in totals]
-        else:
-            totals = [round(t + acrescimo_valor, 2) for t in totals]
+    # Aplica todos os acréscimos: percentuais incidem sobre o total antes dos acréscimos; R$ somam.
+    if acrescimos:
+        _new_totals = []
+        for _t in totals:
+            _add = 0.0
+            for _a in acrescimos:
+                _add += (_t * _a["value"] / 100.0) if _a["is_percent"] else _a["value"]
+            _new_totals.append(round(_t + _add, 2))
+        totals = _new_totals
 
     if nota_fiscal:
         totals = [round(t / 0.84, 2) for t in totals]
@@ -525,8 +547,7 @@ def _process_quote():
         "event_time":       raw_time,
         "client_name":      client_name,
         "event_location":   event_location,
-        "acrescimo_valor":  str(acrescimo_valor),
-        "acrescimo_tipo":   acrescimo_tipo,
+        "acrescimos":       acrescimos,
         "show_sosia_tipo":  show_sosia_tipo,
         "nota_fiscal":      nota_fiscal,
         "modo_duracao":     modo_duracao,

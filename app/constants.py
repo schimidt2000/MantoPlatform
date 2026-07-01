@@ -25,6 +25,20 @@ def event_requires_client(event) -> bool:
     return start.date() >= CLIENT_REQUIRED_FROM
 
 
+# Feature 099: tipos de acréscimo do orçamento/evento. "BV" é um repasse (não é lucro nem comissão);
+# "Outro" permite descrição livre. A lista é um ponto de partida ajustável.
+ACRESCIMO_TIPO_BV = "BV"
+ACRESCIMO_TIPO_OUTRO = "Outro"
+ACRESCIMO_TIPOS = [
+    "Taxa de urgência",
+    "Deslocamento/Logística",
+    "Domingo/Feriado",
+    "Hora extra",
+    ACRESCIMO_TIPO_BV,
+    ACRESCIMO_TIPO_OUTRO,
+]
+
+
 class RoleName:
     SUPERADMIN = "SUPERADMIN"
     CASTING    = "CASTING"

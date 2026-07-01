@@ -24,7 +24,7 @@ from .service import (
     delete_event,
 )
 from .. import db
-from app.constants import RoleName, event_requires_client
+from app.constants import RoleName, event_requires_client, ACRESCIMO_TIPOS, ACRESCIMO_TIPO_BV
 from app.money import format_brl, parse_brl, parse_brl_int
 from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
@@ -674,6 +674,55 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         event.sale_date = date.fromisoformat(sale_date_raw) if sale_date_raw else event.sale_date
     except ValueError:
         pass
+
+    # ── Acréscimos tipados (feature 099) ─────────────────────────────────────
+    # Recria a coleção a partir das linhas do form; congela o valor efetivo em R$ (amount_brl):
+    # R$ direto, ou % sobre o valor de venda. O tipo BV guarda recebedor/PIX para a planilha de pagamentos.
+    from app.models import EventAcrescimo as _EventAcrescimo
+
+    _acr_tipos      = request.form.getlist("acrescimo_tipo[]")
+    _acr_descricoes = request.form.getlist("acrescimo_descricao[]")
+    _acr_valores    = request.form.getlist("acrescimo_value[]")
+    _acr_percents   = request.form.getlist("acrescimo_is_percent[]")
+    _acr_bv_recip   = request.form.getlist("acrescimo_bv_recipient[]")
+    _acr_bv_pix     = request.form.getlist("acrescimo_bv_pix[]")
+
+    if _acr_tipos:  # só mexe nos acréscimos se o editor foi enviado (evita apagar em POSTs de outras seções)
+        # preserva o status de pagamento de BVs já existentes (por recebedor+pix), para não "despagar"
+        _prev_bv_status = {
+            (a.bv_recipient or "", a.bv_pix or ""): a.bv_payment_status
+            for a in event.acrescimos if a.is_bv
+        }
+        _EventAcrescimo.query.filter_by(event_id=event.id).delete()
+        _sale = Decimal(event.sale_value or 0)
+        for _i, _tipo in enumerate(_acr_tipos):
+            _tipo = (_tipo or "").strip()
+            if not _tipo:
+                continue
+            _val = parse_brl(_acr_valores[_i]) if _i < len(_acr_valores) else None
+            if _val is None or _val == 0:
+                continue
+            _is_pct = (_acr_percents[_i] == "1") if _i < len(_acr_percents) else False
+            _amount = (
+                (_sale * Decimal(_val) / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                if _is_pct else Decimal(_val)
+            )
+            _is_bv = _tipo == ACRESCIMO_TIPO_BV
+            _recip = (_acr_bv_recip[_i].strip() if _i < len(_acr_bv_recip) else "") or None
+            _pix = (_acr_bv_pix[_i].strip() if _i < len(_acr_bv_pix) else "") or None
+            _status = _prev_bv_status.get((_recip or "", _pix or ""), "nao_pago") if _is_bv else "nao_pago"
+            db.session.add(_EventAcrescimo(
+                event_id=event.id,
+                tipo=_tipo,
+                descricao=(_acr_descricoes[_i].strip() if _i < len(_acr_descricoes) else "") or None,
+                is_percent=_is_pct,
+                value=Decimal(_val),
+                amount_brl=_amount,
+                is_bv=_is_bv,
+                bv_recipient=_recip if _is_bv else None,
+                bv_pix=_pix if _is_bv else None,
+                bv_payment_status=_status,
+            ))
 
     # ── Notas fiscais (feature 069): coleção de notas por evento (valor + data + arquivo) ──
     # Linhas do form: nf_key[] ("id_<n>" p/ existente, "new_*" p/ nova), nf_amount[], nf_date[];
@@ -1385,8 +1434,16 @@ def event_detail(event_id: int):
         .all()
     )
     event_expenses_total = sum((e.amount for e in event_expenses), Decimal("0"))
+    # BV (feature 099): repasse a terceiros — sai da base de comissão e desconta do lucro.
+    event_bv_total = sum(
+        (Decimal(a.amount_brl) for a in event.acrescimos if a.is_bv and a.amount_brl),
+        Decimal("0"),
+    )
+    _commission_base = Decimal(event.sale_value or 0) - event_bv_total
+    if _commission_base < 0:
+        _commission_base = Decimal("0")
     event_commission = (
-        Decimal(event.sale_value or 0) * event_rate / Decimal("100")
+        _commission_base * event_rate / Decimal("100")
     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     sellers = User.query.join(User.roles).filter(Role.name == RoleName.COMERCIAL).order_by(User.name.asc()).all()
 
@@ -1477,6 +1534,9 @@ def event_detail(event_id: int):
         event_expenses=event_expenses,
         event_expenses_total=event_expenses_total,
         event_commission=event_commission,
+        event_bv_total=event_bv_total,
+        acrescimo_tipos=ACRESCIMO_TIPOS,
+        acrescimo_tipo_bv=ACRESCIMO_TIPO_BV,
         event_rate=event_rate,
         default_commission=default_commission,
         figurino_sheets=figurino_sheets,
@@ -2379,8 +2439,10 @@ def create_event():
                         )
                     transport_val = int(tb["total"])
 
+                # Acréscimo legado (single) — só p/ snapshots antigos; novos usam a lista "acrescimos".
                 acrescimo = float(snap.get("acrescimo_valor", 0) or 0)
                 acrescimo_val = int(acrescimo) if snap.get("acrescimo_tipo", "valor") == "valor" else 0
+                acrescimos_json = _json.dumps(snap.get("acrescimos", []), ensure_ascii=False)
 
                 caches = _compute_performer_caches(snap)
 
@@ -2407,6 +2469,7 @@ def create_event():
                     "has_show":       entry.has_show,
                     "transport_value": transport_val,
                     "acrescimo_value": acrescimo_val,
+                    "acrescimos_json": acrescimos_json,
                     "with_invoice":   bool(snap.get("nota_fiscal", False)),
                     "caches_json":    _json.dumps(caches, ensure_ascii=False),
                 }
@@ -2581,6 +2644,37 @@ def create_event():
     )
     db.session.add(event)
     db.session.flush()
+
+    # Acréscimos tipados vindos do orçamento (feature 099): cria as linhas EventAcrescimo.
+    # BV nasce sem PIX (o financeiro/comercial preenche depois na tela do evento).
+    _acr_json = request.form.get("acrescimos_json", "").strip()
+    if _acr_json:
+        from app.models import EventAcrescimo as _EventAcrescimo
+        try:
+            _acr_list = _json.loads(_acr_json)
+        except _json.JSONDecodeError:
+            _acr_list = []
+        _sale_ev = Decimal(event.sale_value or 0)
+        for _a in _acr_list:
+            _tipo = (_a.get("tipo") or "").strip()
+            _val = _a.get("value")
+            if not _tipo or not _val:
+                continue
+            _is_pct = bool(_a.get("is_percent"))
+            _val_d = Decimal(str(_val))
+            _amount = (
+                (_sale_ev * _val_d / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                if _is_pct else _val_d
+            )
+            db.session.add(_EventAcrescimo(
+                event_id=event.id,
+                tipo=_tipo,
+                descricao=(_a.get("descricao") or "").strip() or None,
+                is_percent=_is_pct,
+                value=_val_d,
+                amount_brl=_amount,
+                is_bv=bool(_a.get("is_bv")) or _tipo == ACRESCIMO_TIPO_BV,
+            ))
 
     # Nota fiscal (feature 069): cria a nota inicial se a venda é "com nota".
     if with_invoice:

@@ -10,7 +10,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, abort,
 from flask_login import login_required, current_user
 
 from app import db, _safe_next
-from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SalaryAdvance, SpecialExpense
+from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SalaryAdvance, SpecialExpense, EventAcrescimo
 from app.money import format_brl
 from app.constants import RoleName
 
@@ -66,13 +66,30 @@ def _group_cost(event) -> int:
     return total
 
 
+def _event_bv_total(event) -> Decimal:
+    """Soma dos acréscimos BV do evento, em R$ (feature 099).
+
+    BV é um repasse a terceiros: não é lucro da Manto nem entra na comissão da vendedora. Usa o valor
+    efetivo já congelado (``amount_brl``) de cada acréscimo marcado como BV.
+    """
+    total = Decimal("0")
+    for a in getattr(event, "acrescimos", []) or []:
+        if a.is_bv and a.amount_brl:
+            total += Decimal(a.amount_brl)
+    return total
+
+
 def _event_commission(event, settings) -> Decimal:
     if not event.sale_value:
         return Decimal("0")
     if event.seller and not event.seller.receives_commission:
         return Decimal("0")
     rate = _get_commission_rate(event, settings)
-    return (Decimal(event.sale_value) * rate / Decimal("100")).quantize(
+    # BV sai da base de comissão (repasse, não é receita comissionável) — feature 099.
+    base = Decimal(event.sale_value) - _event_bv_total(event)
+    if base < 0:
+        base = Decimal("0")
+    return (base * rate / Decimal("100")).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
 
@@ -273,7 +290,9 @@ def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal)
     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     receita_liquida = receita_bruta - impostos
 
-    cpv = Decimal(sum(_group_cost(e) for e in normais))
+    # BV é repasse a terceiros: entra como custo (não é lucro da Manto) — feature 099.
+    bv_total = sum((_event_bv_total(e) for e in normais), Decimal("0"))
+    cpv = Decimal(sum(_group_cost(e) for e in normais)) + bv_total
     lucro_bruto = receita_liquida - cpv
 
     marketing = Decimal(sum(_event_cost(e) for e in permutas))
@@ -857,6 +876,40 @@ def _build_payment_items(roles, salary_payments, today: date, expenses=None, now
     return items
 
 
+def _build_bv_items(bv_rows, today: date, now_dt=None) -> list:
+    """Itens de pagamento de BV (repasse) — feature 099.
+
+    Cada acréscimo BV vira um item a pagar, com recebedor, PIX, valor e status. BV sem PIX é sinalizado
+    como pendente de dados (``missing_data``) para não ser esquecido.
+    """
+    if now_dt is None:
+        now_dt = datetime.now(TZ_SP).replace(tzinfo=None)
+    items = []
+    for a in bv_rows:
+        ev = a.event
+        ev_date = ev.start_at.date() if ev and ev.start_at else date.min
+        ev_end = (ev.end_at or ev.start_at) if ev else None
+        copy_label = (ev.start_at.strftime("%d/%m/%Y") if ev and ev.start_at else "") \
+                     + " - " + (ev.title if ev else "")
+        items.append({
+            "type":        "bv",
+            "id":          a.id,
+            "date":        ev_date,
+            "event_title": ev.title if ev else "—",
+            "event_id":    ev.id if ev else None,
+            "copy_label":  copy_label,
+            "sublabel":    "BV (repasse)",
+            "person_name": a.bv_recipient or "(sem recebedor)",
+            "amount":      a.amount_brl,
+            "pix_key":     (a.bv_pix or "").strip(),
+            "pix_key_type": "",
+            "status":      a.bv_payment_status or "nao_pago",
+            "is_future":   bool(ev_end and ev_end > now_dt),
+            "missing_data": not (a.bv_pix or "").strip(),
+        })
+    return items
+
+
 def _build_commission_items(period_start: date, period_end: date, due_date: date, today: date) -> list:
     """Resumo de comissões por vendedor: eventos vendidos em [period_start, period_end).
 
@@ -935,6 +988,18 @@ def pagamentos():
     ).order_by(SpecialExpense.expense_date.asc()).all()
 
     items = _build_payment_items(roles, salary_payments, today, expenses, now_sp)
+
+    # BV (feature 099): repasses dos eventos do mês (pela data do evento) entram como itens a pagar.
+    bv_rows = (
+        EventAcrescimo.query.join(CalendarEvent)
+        .filter(
+            EventAcrescimo.is_bv.is_(True),
+            CalendarEvent.start_at >= datetime.combine(_m_start, datetime.min.time()),
+            CalendarEvent.start_at < datetime.combine(_m_end, datetime.min.time()),
+        )
+        .all()
+    )
+    items += _build_bv_items(bv_rows, today, now_sp)
 
     # Comissões: soma por vendedor dos eventos vendidos no MÊS ANTERIOR, a pagar no dia 5 do mês visto.
     prev_year, prev_month = (year_i - 1, 12) if month_i == 1 else (year_i, month_i - 1)
@@ -1041,6 +1106,14 @@ def set_payment_status():
             exp.payment_status = status
             audit("payment", "special_expense", exp.id, exp.payee_name,
                   f"Desembolso gasto: {old} → {status} | {exp.description}")
+            db.session.commit()
+    elif item_type == "bv":
+        acr = EventAcrescimo.query.get(int(item_id))
+        if acr and acr.is_bv:
+            old = acr.bv_payment_status
+            acr.bv_payment_status = status
+            audit("payment", "event_bv", acr.id, acr.bv_recipient or "—",
+                  f"BV (repasse): {old} → {status}")
             db.session.commit()
     else:
         role = EventRole.query.get(int(item_id))

@@ -120,6 +120,7 @@
   {% if prefill.orcamento_id %}
     <input type="hidden" name="orcamento_history_id" value="{{ prefill.orcamento_id }}">
     <input type="hidden" name="orc_caches_json" id="orc-caches-json" value="{{ prefill.caches_json | e }}">
+    <input type="hidden" name="acrescimos_json" value="{{ prefill.acrescimos_json or '[]' | e }}">
   {% endif %}
 
 {# ══════════════════════════════════════════════════
