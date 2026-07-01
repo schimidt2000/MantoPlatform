@@ -290,19 +290,17 @@
         </div>
       </div>
 
-      {# Acréscimo #}
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 14px; margin-top:12px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md);">
-        <span style="font-size:13px; font-weight:600; color:var(--ink); white-space:nowrap;">Acréscimo</span>
-        <label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer; white-space:nowrap;">
-          <input type="radio" name="acrescimo_tipo" id="acrescimo-valor-radio" value="valor" checked onchange="setAcrescimoTipo('valor')"> Valor fixo
-        </label>
-        <label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer; white-space:nowrap;">
-          <input type="radio" name="acrescimo_tipo" id="acrescimo-percent-radio" value="percent" onchange="setAcrescimoTipo('percent')"> Porcentagem
-        </label>
-        <div style="display:flex; align-items:center; gap:6px; margin-left:auto;">
-          <span id="acrescimo-unit" style="font-size:13px; color:var(--muted); font-weight:600; min-width:20px;">R$</span>
-          <input type="number" name="acrescimo_valor" id="acrescimo_valor" min="0" step="0.01" value="0" style="width:100px;" oninput="setAcrescimo(this.value)">
+      {# Acréscimos tipados (feature 099) #}
+      <div id="orc-acrescimos" data-tipos='{{ acrescimo_tipos | tojson }}' data-bv="{{ acrescimo_tipo_bv }}"
+           style="padding:10px 14px; margin-top:12px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md);">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:13px; font-weight:600; color:var(--ink);">Acréscimos</span>
+          <button type="button" id="orc-add-acrescimo" class="btn btn-sm btn-secondary" style="font-size:12px;">+ Adicionar acréscimo</button>
         </div>
+        <div id="orc-acrescimos-list" style="display:flex; flex-direction:column; gap:6px;"></div>
+        <p style="font-size:11px; color:var(--muted); margin:6px 0 0;">
+          O <strong>BV</strong> entra no total, mas é um repasse (não aparece para o cliente; o PIX de quem recebe é informado no evento).
+        </p>
       </div>
 
       {# Nota Fiscal #}

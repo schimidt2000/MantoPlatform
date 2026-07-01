@@ -1555,13 +1555,40 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
                  style="width: 120px;" value="{{ event.transport_value | brl if event.transport_value is not none else '' }}">
         </div>
       </div>
-      <div class="com-val-item">
-        <label>Acréscimo (R$)</label>
-        <div class="com-prefix"><span>R$</span>
-          <input type="text" inputmode="decimal" name="acrescimo_value" class="brl-input" placeholder="0,00"
-                 style="width: 110px;" value="{{ event.acrescimo_value | brl if event.acrescimo_value is not none else '' }}">
+    </div>
+
+    {# ── Acréscimos tipados (feature 099) ─────────────────────────────── #}
+    <div class="com-acrescimos" id="acrescimos-block" style="margin-bottom:16px;"
+         data-tipos='{{ acrescimo_tipos | tojson }}' data-bv="{{ acrescimo_tipo_bv }}">
+      <label style="font-weight:600; display:block; margin-bottom:6px;">Acréscimos</label>
+      <div id="acrescimos-list" style="display:flex; flex-direction:column; gap:8px;">
+        {% for a in event.acrescimos %}
+        <div class="acrescimo-row" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px; border:1px solid var(--line); border-radius:8px;">
+          <select name="acrescimo_tipo[]" class="acr-tipo" onchange="onAcrescimoTipoChange(this)" style="font-size:13px;">
+            {% for t in acrescimo_tipos %}<option value="{{ t }}" {% if a.tipo == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+          </select>
+          <input type="text" name="acrescimo_descricao[]" class="acr-desc form-control" placeholder="Descrição"
+                 value="{{ a.descricao or '' }}" style="font-size:13px; width:150px; {% if a.tipo != 'Outro' %}display:none;{% endif %}">
+          <input type="text" inputmode="decimal" name="acrescimo_value[]" class="brl-input acr-value"
+                 placeholder="0,00" value="{{ a.value | brl if a.value is not none else '' }}" style="width:100px;">
+          <select name="acrescimo_is_percent[]" class="acr-unit" style="font-size:13px;">
+            <option value="0" {% if not a.is_percent %}selected{% endif %}>R$</option>
+            <option value="1" {% if a.is_percent %}selected{% endif %}>%</option>
+          </select>
+          <div class="acr-bv" style="display:{% if a.is_bv %}flex{% else %}none{% endif %}; gap:6px; flex-wrap:wrap; align-items:center;">
+            <input type="text" name="acrescimo_bv_recipient[]" class="form-control" placeholder="Quem recebe o BV"
+                   value="{{ a.bv_recipient or '' }}" style="font-size:13px; width:160px;">
+            <input type="text" name="acrescimo_bv_pix[]" class="form-control" placeholder="PIX de quem recebe"
+                   value="{{ a.bv_pix or '' }}" style="font-size:13px; width:180px;">
+          </div>
+          <button type="button" class="btn btn-sm btn-ghost btn-remove-acrescimo" style="color:#c0392b;">×</button>
         </div>
+        {% endfor %}
       </div>
+      <button type="button" id="btn-add-acrescimo" class="btn btn-sm btn-secondary" style="margin-top:8px; font-size:12px;">+ Adicionar acréscimo</button>
+      <p class="meta" style="margin:6px 0 0; font-size:12px;">
+        O <strong>BV</strong> é um repasse: não entra no lucro nem na comissão, e precisa do PIX de quem recebe (vai para a planilha de pagamentos).
+      </p>
     </div>
 
     <div style="margin-bottom: 16px;">
@@ -1740,12 +1767,12 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       {% endif %}
     </div>
     <div class="kpi">
-      {% set lucro = (event.sale_value or 0) | float - (event_cost or 0) | float - (event_expenses_total or 0) | float %}
+      {% set lucro = (event.sale_value or 0) | float - (event_cost or 0) | float - (event_expenses_total or 0) | float - (event_bv_total or 0) | float %}
       <div class="kpi-label">Lucro líquido</div>
       <div class="kpi-value {% if lucro >= 0 %}green{% else %}red{% endif %}">
         R$&nbsp;{{ lucro | brl }}
       </div>
-      <div class="kpi-sub">venda − cachês − gastos extras</div>
+      <div class="kpi-sub">venda − cachês − gastos extras{% if event_bv_total and event_bv_total > 0 %} − BV{% endif %}</div>
     </div>
   </div>
 
@@ -2798,6 +2825,55 @@ document.querySelectorAll('.fig-widget').forEach(function(wrap) {
     }
   });
   {% endif %}
+})();
+</script>
+
+{# ── Editor de acréscimos tipados (feature 099) ─────────────────── #}
+<script>
+(function () {
+  const block = document.getElementById('acrescimos-block');
+  if (!block) return;
+  const list  = document.getElementById('acrescimos-list');
+  const tipos = JSON.parse(block.dataset.tipos || '[]');
+  const BV    = block.dataset.bv || 'BV';
+
+  function optionsHtml(sel) {
+    return tipos.map(t => `<option value="${t}"${t === sel ? ' selected' : ''}>${t}</option>`).join('');
+  }
+  function rowHtml() {
+    return `<div class="acrescimo-row" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px; border:1px solid var(--line); border-radius:8px;">
+      <select name="acrescimo_tipo[]" class="acr-tipo" onchange="onAcrescimoTipoChange(this)" style="font-size:13px;">${optionsHtml(tipos[0])}</select>
+      <input type="text" name="acrescimo_descricao[]" class="acr-desc form-control" placeholder="Descrição" style="font-size:13px; width:150px; display:none;">
+      <input type="text" inputmode="decimal" name="acrescimo_value[]" class="brl-input acr-value" placeholder="0,00" style="width:100px;">
+      <select name="acrescimo_is_percent[]" class="acr-unit" style="font-size:13px;"><option value="0">R$</option><option value="1">%</option></select>
+      <div class="acr-bv" style="display:none; gap:6px; flex-wrap:wrap; align-items:center;">
+        <input type="text" name="acrescimo_bv_recipient[]" class="form-control" placeholder="Quem recebe o BV" style="font-size:13px; width:160px;">
+        <input type="text" name="acrescimo_bv_pix[]" class="form-control" placeholder="PIX de quem recebe" style="font-size:13px; width:180px;">
+      </div>
+      <button type="button" class="btn btn-sm btn-ghost btn-remove-acrescimo" style="color:#c0392b;">×</button>
+    </div>`;
+  }
+
+  // exposto no escopo global porque o onchange inline chama por nome
+  window.onAcrescimoTipoChange = function (sel) {
+    const row = sel.closest('.acrescimo-row');
+    if (!row) return;
+    row.querySelector('.acr-desc').style.display = sel.value === 'Outro' ? '' : 'none';
+    row.querySelector('.acr-bv').style.display   = sel.value === BV ? 'flex' : 'none';
+  };
+
+  const addBtn = document.getElementById('btn-add-acrescimo');
+  if (addBtn) addBtn.addEventListener('click', function () {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = rowHtml().trim();
+    list.appendChild(tmp.firstChild);
+  });
+
+  list.addEventListener('click', function (e) {
+    if (e.target.classList.contains('btn-remove-acrescimo')) {
+      e.target.closest('.acrescimo-row').remove();
+    }
+  });
 })();
 </script>
 
