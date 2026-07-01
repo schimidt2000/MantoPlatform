@@ -36,7 +36,9 @@
     }
     input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
     .row { display: flex; gap: 12px; flex-wrap: wrap; }
-    .row > .field { flex: 1; min-width: 150px; }
+    /* min-width alto o suficiente para os campos (ex.: Telefone país+número) caberem sem espremer;
+       quando não cabem dois lado a lado, o flex-wrap quebra em coluna sozinho. */
+    .row > .field { flex: 1 1 240px; min-width: 240px; }
     .opts { display: flex; flex-direction: column; gap: 8px; }
     .opt-row { display: flex; align-items: center; gap: 9px; font-size: 14.5px; cursor: pointer; }
     .opt-row input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
@@ -155,13 +157,13 @@
               ('+49', '🇩🇪 Alemanha +49'), ('+39', '🇮🇹 Itália +39'), ('+81', '🇯🇵 Japão +81'),
               ('+86', '🇨🇳 China +86'), ('+61', '🇦🇺 Austrália +61')] %}
             {% set sel_ddi = form.get('phone_ddi', '+55') %}
-            <div style="display:flex; gap:8px;">
-              <select name="phone_ddi" style="max-width:170px; flex:0 0 auto;">
+            <div style="display:flex; gap:8px; min-width:0;">
+              <select name="phone_ddi" style="width:130px; max-width:170px; flex:0 1 auto; min-width:0;">
                 {% for code, label in ddis %}
                   <option value="{{ code }}" {% if sel_ddi == code %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
               </select>
-              <input type="text" name="phone_national" required inputmode="tel" style="flex:1 1 auto;"
+              <input type="text" name="phone_national" required inputmode="tel" style="flex:1 1 auto; min-width:0;"
                      placeholder="(11) 99999-9999" value="{{ form.get('phone_national', '') }}">
             </div>
             <div class="filehint">Selecione o país e digite o número com DDD.</div>
