@@ -210,7 +210,7 @@ def _process_quote():
             else:
                 num_makes_regular += 1
 
-    cache_totals = [0.0, 0.0, 0.0]
+    cache_totals = [0.0, 0.0, 0.0, 0.0]
     team_lines   = []
     num_going    = coordenador_qty
 
@@ -255,24 +255,24 @@ def _process_quote():
 
         team_lines.append(label)
         num_going += 1
-        for i in range(3):
+        for i in range(4):
             cache_totals[i] += prices[i]
 
     # Show customizado: +R$50 por artista (não conta coord, técnico nem maquiador)
     if show_sosia_tipo == "customizado" and performers:
         custom_add = len(performers) * 50
-        for i in range(3):
+        for i in range(4):
             cache_totals[i] += custom_add
 
     coord_prices = get_coordenador_prices(event_has_show, coordenador_qty)
-    for i in range(3):
+    for i in range(4):
         cache_totals[i] += coord_prices[i]
 
     # Cachê-base (pré-markup): base do orçamento personalizado por multiplicador.
     cache_base = [round(v, 2) for v in cache_totals]
     personalizado = "personalizado_ativo" in request.form
     criterio_pers = request.form.get("personalizado_criterio", "valor_final")
-    cust_mult = [0.0, 0.0, 0.0]
+    cust_mult = [0.0, 0.0, 0.0, 0.0]
 
     brinde = 0.0
     if event_has_show:
@@ -282,24 +282,24 @@ def _process_quote():
     totals = aplicar_markup(cache_totals, event_has_show)
 
     if brinde:
-        for i in range(3):
+        for i in range(4):
             totals[i] = round(totals[i] + brinde, 2)
 
     if noturno:
         adicional_noturno = (len(performers) + coordenador_qty) * _ADICIONAL_NOTURNO
-        for i in range(3):
+        for i in range(4):
             totals[i] = round(totals[i] + adicional_noturno, 2)
 
     _MARKUP_SERVICE = 1.5
     if event_has_show:
         tecnico = get_tecnico_prices()
-        for i in range(3):
+        for i in range(4):
             totals[i] = round(totals[i] + round(tecnico[i] * _MARKUP_SERVICE, 2), 2)
 
     if event_has_makeup:
         maquiador_cost = calcular_maquiador(num_makes_regular, num_makes_especial)
         maq_with_markup = round(maquiador_cost * _MARKUP_SERVICE, 2)
-        for i in range(3):
+        for i in range(4):
             totals[i] = round(totals[i] + maq_with_markup, 2)
 
     transport_total = 0.0  # acumulador para split apresentação / logística na mensagem
@@ -312,7 +312,7 @@ def _process_quote():
             if personagem not in _seen_transport:
                 transport_esp = _regras.get(personagem, {}).get("transporte_especial", 0)
                 if transport_esp:
-                    for i in range(3):
+                    for i in range(4):
                         totals[i] = round(totals[i] + transport_esp, 2)
                     transport_total += transport_esp
                     _seen_transport.add(personagem)
@@ -323,7 +323,7 @@ def _process_quote():
             bge_sub = p.get("bge_subtipo", "")
             bge_extra = 130 if bge_sub == "dinossauro" else 70 if bge_sub == "transformers" else 0
             if bge_extra:
-                for i in range(3):
+                for i in range(4):
                     totals[i] = round(totals[i] + bge_extra, 2)
 
     transport_breakdown = None
@@ -340,7 +340,7 @@ def _process_quote():
             tb = calcular_carro(num_carros, num_colaboradores, km_ida, event_has_show)
 
         transport_breakdown = tb
-        for i in range(3):
+        for i in range(4):
             totals[i] = round(totals[i] + tb["total"], 2)
         transport_total += tb["total"]
 
@@ -353,10 +353,10 @@ def _process_quote():
     if nota_fiscal:
         totals = [round(t / 0.84, 2) for t in totals]
 
-    # Duração personalizada: interpola a partir do preço de 4h
+    # Duração personalizada: interpola a partir do preço de 4h (índice 3 após incluir 3h — feature 098)
     total_custom = None
-    if duracao_custom > 0 and duracao_custom not in (1, 2, 4):
-        total_custom = round(totals[2] / 4 * duracao_custom, 2)
+    if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4):
+        total_custom = round(totals[3] / 4 * duracao_custom, 2)
 
     # ── Orçamento personalizado ────────────────────────────────────────────────
     # Sobrescreve os totais: valor final digitado ou cachê-base × multiplicador.
@@ -365,13 +365,13 @@ def _process_quote():
         if criterio_pers == "multiplicador":
             cust_mult = [
                 _parse_num(request.form.get(f"cust_mult_{d}")) or 0.0
-                for d in ("1h", "2h", "4h")
+                for d in ("1h", "2h", "3h", "4h")
             ]
-            totals = [round(cache_base[i] * cust_mult[i], 2) for i in range(3)]
+            totals = [round(cache_base[i] * cust_mult[i], 2) for i in range(4)]
         else:
             totals = [
                 _parse_num(request.form.get(f"cust_valor_{d}")) or 0.0
-                for d in ("1h", "2h", "4h")
+                for d in ("1h", "2h", "3h", "4h")
             ]
         transport_breakdown = None
         transport_total = 0.0
@@ -379,8 +379,8 @@ def _process_quote():
 
         # Fallback de validação (o cliente já bloqueia): se as durações incluídas
         # ficarem todas zeradas, não gera orçamento vazio.
-        _incluir_chk = request.form.getlist("incluir_duracao") or ["1h", "2h", "4h"]
-        _idx = {"1h": 0, "2h": 1, "4h": 2}
+        _incluir_chk = request.form.getlist("incluir_duracao") or ["1h", "2h", "3h", "4h"]
+        _idx = {"1h": 0, "2h": 1, "3h": 2, "4h": 3}
         if all(totals[_idx[d]] <= 0 for d in _incluir_chk if d in _idx):
             flash("Informe valores válidos para o orçamento personalizado.", "warning")
             return redirect(url_for("orcamento.index"))
@@ -416,19 +416,20 @@ def _process_quote():
         dur_labels = [
             "🎭 *1 entrada de 30 minutos*",
             "🎭 *2 entradas de 30 minutos (2h)*",
+            "🎭 *3 entradas de 30 minutos (3h)*",
             "🎭 *4 entradas de 30 minutos (4h)*",
         ]
     else:
-        dur_labels = ["🕐 *1 hora*", "🕑 *2 horas*", "🕓 *4 horas*"]
+        dur_labels = ["🕐 *1 hora*", "🕑 *2 horas*", "🕒 *3 horas*", "🕓 *4 horas*"]
 
     # Quais durações o vendedor escolheu incluir (padrão: todas; vazio → todas, evita orçamento vazio)
     incluir = request.form.getlist("incluir_duracao")
     if not incluir:
-        incluir = ["1h", "2h", "4h"]
-    show = [("1h" in incluir), ("2h" in incluir), ("4h" in incluir)]
+        incluir = ["1h", "2h", "3h", "4h"]
+    show = [("1h" in incluir), ("2h" in incluir), ("3h" in incluir), ("4h" in incluir)]
 
     investimento = "\n\n".join(
-        _dur_block(dur_labels[i], totals[i]) for i in range(3) if show[i]
+        _dur_block(dur_labels[i], totals[i]) for i in range(4) if show[i]
     )
 
     if total_custom:
@@ -439,7 +440,7 @@ def _process_quote():
             custom_label = f"🕐 *{duracao_custom} horas*"
         investimento += f"\n\n{_dur_block(custom_label, total_custom)}"
 
-    _pix_durs = [("1h", totals[0]), ("2h", totals[1]), ("4h", totals[2])]
+    _pix_durs = [("1h", totals[0]), ("2h", totals[1]), ("3h", totals[2]), ("4h", totals[3])]
     pix_vista = "\n".join(
         f"  • {lbl}: *{_fmt_brl(round(tot * 0.95, 2))}*"
         for i, (lbl, tot) in enumerate(_pix_durs) if show[i]
@@ -485,13 +486,15 @@ def _process_quote():
         "markup_used":         markup_used,
         "total_1h":            totals[0],
         "total_2h":            totals[1],
-        "total_4h":            totals[2],
+        "total_3h":            totals[2],
+        "total_4h":            totals[3],
         "total_custom":        total_custom,
         "duracao_custom":      duracao_custom,
         # quais durações padrão entram no orçamento (mensagem/tela/PDF)
         "show_1h":             show[0],
         "show_2h":             show[1],
-        "show_4h":             show[2],
+        "show_3h":             show[2],
+        "show_4h":             show[3],
         # campos extras para geração de PDF
         "client_name":         client_name,
         "fmt_date":            fmt_date,
@@ -533,9 +536,11 @@ def _process_quote():
         "personalizado_criterio":  criterio_pers,
         "cust_mult_1h":   request.form.get("cust_mult_1h", ""),
         "cust_mult_2h":   request.form.get("cust_mult_2h", ""),
+        "cust_mult_3h":   request.form.get("cust_mult_3h", ""),
         "cust_mult_4h":   request.form.get("cust_mult_4h", ""),
         "cust_valor_1h":  request.form.get("cust_valor_1h", ""),
         "cust_valor_2h":  request.form.get("cust_valor_2h", ""),
+        "cust_valor_3h":  request.form.get("cust_valor_3h", ""),
         "cust_valor_4h":  request.form.get("cust_valor_4h", ""),
     }
     entry = OrcamentoHistory(
@@ -545,7 +550,8 @@ def _process_quote():
         event_date     = raw_date or None,
         total_1h       = totals[0],
         total_2h       = totals[1],
-        total_4h       = totals[2],
+        total_3h       = totals[2],
+        total_4h       = totals[3],
         has_show       = event_has_show,
         result_snapshot = json.dumps(session["orcamento_quote"], ensure_ascii=False),
         form_snapshot  = json.dumps(snapshot, ensure_ascii=False),
@@ -586,10 +592,12 @@ def _legacy_quote(entry) -> dict:
         "markup_used": None,
         "total_1h": float(entry.total_1h or 0),
         "total_2h": float(entry.total_2h or 0),
+        "total_3h": float(entry.total_3h or 0),
         "total_4h": float(entry.total_4h or 0),
         "total_custom": None,
         "duracao_custom": 0,
-        "show_1h": True, "show_2h": True, "show_4h": True,
+        # 3h só é exibida em orçamentos que a registraram (antigos ficam sem 3h).
+        "show_1h": True, "show_2h": True, "show_3h": entry.total_3h is not None, "show_4h": True,
         "client_name": entry.client_name or "",
         "fmt_date": fmt_date,
         "fmt_time": "",
@@ -783,6 +791,7 @@ def api_historico():
         "event_date":     e.event_date or "",
         "total_1h":       float(e.total_1h) if e.total_1h is not None else 0,
         "total_2h":       float(e.total_2h) if e.total_2h is not None else 0,
+        "total_3h":       float(e.total_3h) if e.total_3h is not None else 0,
         "total_4h":       float(e.total_4h) if e.total_4h is not None else 0,
         "has_show":       e.has_show,
     } for e in entries])
@@ -844,31 +853,31 @@ def pricing_settings():
         for modelo in ("receptivo", "show"):
             s["markup"][modelo] = [
                 float(request.form.get(f"markup_{modelo}_{i}", s["markup"][modelo][i]))
-                for i in range(3)
+                for i in range(4)
             ]
 
         for key in s["ator"]:
             safe = key.replace("|", "_").replace(" ", "_")
             s["ator"][key] = [
                 _money(f"ator_{safe}_{i}", s["ator"][key][i])
-                for i in range(3)
+                for i in range(4)
             ]
 
         for key in s["cantor"]:
             s["cantor"][key] = [
                 _money(f"cantor_{key}_{i}", s["cantor"][key][i])
-                for i in range(3)
+                for i in range(4)
             ]
 
         s["tecnico_som"] = [
             _money(f"tecnico_som_{i}", s["tecnico_som"][i])
-            for i in range(3)
+            for i in range(4)
         ]
 
         for key in s["coordenador"]:
             s["coordenador"][key] = [
                 _money(f"coordenador_{key}_{i}", s["coordenador"][key][i])
-                for i in range(3)
+                for i in range(4)
             ]
 
         for nome, val in s["especiais"].items():
@@ -877,12 +886,12 @@ def pricing_settings():
                 for show_key in val:
                     s["especiais"][nome][show_key] = [
                         _money(f"especial_{safe}_{show_key}_{i}", val[show_key][i])
-                        for i in range(3)
+                        for i in range(4)
                     ]
             else:
                 s["especiais"][nome] = [
                     _money(f"especial_{safe}_{i}", val[i])
-                    for i in range(3)
+                    for i in range(4)
                 ]
 
         s["brinde_show"] = _money("brinde_show", s.get("brinde_show", 100))

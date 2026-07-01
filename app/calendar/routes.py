@@ -2252,7 +2252,7 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
             if cantor_flag:
                 is_singer = True
         else:
-            prices = (0, 0, 0)
+            prices = (0, 0, 0, 0)
             label  = nome or "Profissional"
 
         if makeup:
@@ -2265,7 +2265,8 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
             "label":       label,
             "cache_1h":    round(int(prices[0]) + noturno_add + transport_add),
             "cache_2h":    round(int(prices[1]) + noturno_add + transport_add),
-            "cache_4h":    round(int(prices[2]) + noturno_add + transport_add),
+            "cache_3h":    round(int(prices[2]) + noturno_add + transport_add),
+            "cache_4h":    round(int(prices[3]) + noturno_add + transport_add),
             "needs_makeup": makeup,
             "is_singer":    is_singer,
             "role_type":   "character",
@@ -2273,13 +2274,14 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
 
     # Coordenadores
     coord_prices = get_coordenador_prices(has_show, coordenador_qty)
-    per_coord    = [coord_prices[i] // max(coordenador_qty, 1) for i in range(3)]
+    per_coord    = [coord_prices[i] // max(coordenador_qty, 1) for i in range(4)]
     for _ in range(coordenador_qty):
         result.append({
             "label":       "Coordenador",
             "cache_1h":    round(int(per_coord[0]) + noturno_add + transport_add),
             "cache_2h":    round(int(per_coord[1]) + noturno_add + transport_add),
-            "cache_4h":    round(int(per_coord[2]) + noturno_add + transport_add),
+            "cache_3h":    round(int(per_coord[2]) + noturno_add + transport_add),
+            "cache_4h":    round(int(per_coord[3]) + noturno_add + transport_add),
             "needs_makeup": False,
             "is_singer":    False,
             "role_type":   "extra",
@@ -2292,7 +2294,8 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
             "label":       "Técnico de Som",
             "cache_1h":    int(tp[0]),
             "cache_2h":    int(tp[1]),
-            "cache_4h":    int(tp[2]),
+            "cache_3h":    int(tp[2]),
+            "cache_4h":    int(tp[3]),
             "needs_makeup": False,
             "is_singer":    False,
             "role_type":   "extra",
@@ -2305,6 +2308,7 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
             "label":       "Maquiador",
             "cache_1h":    int(mq_cost),
             "cache_2h":    int(mq_cost),
+            "cache_3h":    int(mq_cost),
             "cache_4h":    int(mq_cost),
             "needs_makeup": False,
             "is_singer":    False,
@@ -2384,7 +2388,7 @@ def create_event():
                 total_4h_val   = float(entry.total_4h or 0)
                 total_custom   = (
                     round(total_4h_val / 4 * duracao_custom, 2)
-                    if duracao_custom > 0 and duracao_custom not in (1, 2, 4)
+                    if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4)
                     else None
                 )
 
@@ -2396,6 +2400,7 @@ def create_event():
                     "client_name":    entry.client_name or "",
                     "total_1h":       float(entry.total_1h or 0),
                     "total_2h":       float(entry.total_2h or 0),
+                    "total_3h":       float(entry.total_3h or 0),
                     "total_4h":       float(entry.total_4h or 0),
                     "total_custom":   total_custom,
                     "duracao_custom": duracao_custom if total_custom else None,
@@ -2446,8 +2451,8 @@ def create_event():
 
     # orçamento de origem + duração selecionada
     orcamento_id_raw = request.form.get("orcamento_history_id", "").strip()
-    duracao_raw      = request.form.get("duracao", "1").strip()   # '1' | '2' | '4'
-    dur_idx          = {"1": 0, "2": 1, "4": 2}.get(duracao_raw, 0)
+    duracao_raw      = request.form.get("duracao", "1").strip()   # '1' | '2' | '3' | '4'
+    dur_idx          = {"1": 0, "2": 1, "3": 2, "4": 3}.get(duracao_raw, 0)
 
     # personagens do form
     char_names   = request.form.getlist("character_names[]")
@@ -2636,7 +2641,7 @@ def create_event():
         singer    = (char_singers[i] == "1") if i < len(char_singers) else False
 
         if cache_val is None and i < len(orc_caches):
-            key = ["cache_1h", "cache_2h", "cache_4h"][dur_idx]
+            key = ["cache_1h", "cache_2h", "cache_3h", "cache_4h"][dur_idx]
             cache_val = orc_caches[i].get(key)
 
         role_type = orc_caches[i].get("role_type", "character") if i < len(orc_caches) else "character"

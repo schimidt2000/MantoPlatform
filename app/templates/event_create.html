@@ -248,6 +248,13 @@
       <div class="lbl">2 horas</div>
       <div class="val">{{ "R$ {:,.2f}".format(prefill.total_2h).replace(",","X").replace(".",",").replace("X",".") }}</div>
     </div>
+    <div class="dur-card" data-dur="3"
+         data-total="{{ prefill.total_3h }}"
+         data-transport="{{ prefill.transport_value }}"
+         onclick="selectDuracao(this)">
+      <div class="lbl">3 horas</div>
+      <div class="val">{{ "R$ {:,.2f}".format(prefill.total_3h or 0).replace(",","X").replace(".",",").replace("X",".") }}</div>
+    </div>
     <div class="dur-card" data-dur="4"
          data-total="{{ prefill.total_4h }}"
          data-transport="{{ prefill.transport_value }}"
