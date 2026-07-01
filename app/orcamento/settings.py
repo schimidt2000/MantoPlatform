@@ -10,38 +10,40 @@ import logging
 logger = logging.getLogger(__name__)
 
 DEFAULTS: dict = {
+    # Cada tabela é uma lista de 4 valores por duração, na ordem [1h, 2h, 3h, 4h] (feature 098).
+    # O valor de 3h é a média entre 2h e 4h (progressão linear), editável nas configurações.
     "markup": {
-        "receptivo": [3.0, 2.7, 2.5],
-        "show":      [2.6, 2.4, 2.2],
+        "receptivo": [3.0, 2.7, 2.6, 2.5],
+        "show":      [2.6, 2.4, 2.3, 2.2],
     },
     "ator": {
-        "cara_limpa|false|false": [200, 250, 300],
-        "cara_limpa|false|true":  [220, 270, 320],
-        "cara_limpa|true|false":  [300, 350, 400],
-        "cara_limpa|true|true":   [320, 370, 420],
-        "boneco|false|false":     [200, 250, 300],
-        "boneco|true|false":      [300, 350, 400],
+        "cara_limpa|false|false": [200, 250, 275, 300],
+        "cara_limpa|false|true":  [220, 270, 295, 320],
+        "cara_limpa|true|false":  [300, 350, 375, 400],
+        "cara_limpa|true|true":   [320, 370, 395, 420],
+        "boneco|false|false":     [200, 250, 275, 300],
+        "boneco|true|false":      [300, 350, 375, 400],
     },
     "cantor": {
-        "base":       [250, 300, 350],
-        "show_extra": [100, 100, 100],
-        "make_extra": [20,  20,  20],
+        "base":       [250, 300, 325, 350],
+        "show_extra": [100, 100, 100, 100],
+        "make_extra": [20,  20,  20,  20],
     },
-    "tecnico_som": [750, 800, 850],
+    "tecnico_som": [750, 800, 825, 850],
     "coordenador": {
-        "false": [250, 300, 350],
-        "true":  [300, 350, 400],
+        "false": [250, 300, 325, 350],
+        "true":  [300, 350, 375, 400],
     },
     "especiais": {
-        "Homem-Aranha":           {"false": [250, 300, 350], "true": [400, 450, 500]},
-        "Perna de Pau":           [400, 450, 500],
-        "Monociclo":              [400, 450, 500],
-        "Malabar":                [350, 400, 450],
-        "Pirofagista":            [450, 500, 550],
-        "Boneco Grande Especial": {"false": [400, 450, 500], "true": [400, 450, 500]},
-        "Sósia":                  {"none": [350, 400, 450], "show": [450, 500, 550], "cantor": [500, 550, 600]},
-        "Bailarino":              [400, 450, 500],
-        "DJ":                     [200, 300, 400],
+        "Homem-Aranha":           {"false": [250, 300, 325, 350], "true": [400, 450, 475, 500]},
+        "Perna de Pau":           [400, 450, 475, 500],
+        "Monociclo":              [400, 450, 475, 500],
+        "Malabar":                [350, 400, 425, 450],
+        "Pirofagista":            [450, 500, 525, 550],
+        "Boneco Grande Especial": {"false": [400, 450, 475, 500], "true": [400, 450, 475, 500]},
+        "Sósia":                  {"none": [350, 400, 425, 450], "show": [450, 500, 525, 550], "cantor": [500, 550, 575, 600]},
+        "Bailarino":              [400, 450, 475, 500],
+        "DJ":                     [200, 300, 350, 400],
     },
     "especiais_regras": {
         "Boneco Grande Especial": {
@@ -74,6 +76,62 @@ ESPECIAIS_COM_CANTOR: set = {"Sósia"}
 
 # Especiais que sempre ativam técnico de som (sem checkbox — comportamento fixo)
 ESPECIAIS_SEMPRE_SHOW: set = {"DJ"}
+
+
+def interpolar_3h(v2, v4):
+    """Deriva o valor de 3h como a média entre 2h e 4h (feature 098).
+
+    Mantém inteiro para cachês (valores em reais inteiros) e decimal para coeficientes de markup.
+
+    Args:
+        v2: Valor de 2h. v4: Valor de 4h.
+
+    Returns:
+        A média arredondada — ``int`` se ambos forem inteiros, senão ``float`` com 2 casas.
+    """
+    mean = (v2 + v4) / 2
+    if isinstance(v2, int) and isinstance(v4, int):
+        return int(round(mean))
+    return round(mean, 2)
+
+
+def _ensure4(lst):
+    """Normaliza uma lista de preços de 3 valores [1h,2h,4h] para 4 [1h,2h,3h,4h], injetando o 3h.
+
+    Idempotente: listas que já têm 4 valores (ou tamanho diferente de 3) são retornadas sem mudança.
+    """
+    if isinstance(lst, list) and len(lst) == 3:
+        return [lst[0], lst[1], interpolar_3h(lst[1], lst[2]), lst[2]]
+    return lst
+
+
+def _inject_3h(data: dict) -> None:
+    """Injeta o valor de 3h em toda tabela de preços/coeficientes salva com 3 valores (feature 098)."""
+    markup = data.get("markup", {})
+    for k in ("receptivo", "show"):
+        if k in markup:
+            markup[k] = _ensure4(markup[k])
+
+    for key, val in list(data.get("ator", {}).items()):
+        data["ator"][key] = _ensure4(val)
+
+    cantor = data.get("cantor", {})
+    for k in ("base", "show_extra", "make_extra"):
+        if k in cantor:
+            cantor[k] = _ensure4(cantor[k])
+
+    if "tecnico_som" in data:
+        data["tecnico_som"] = _ensure4(data["tecnico_som"])
+
+    coord = data.get("coordenador", {})
+    for k in list(coord.keys()):
+        coord[k] = _ensure4(coord[k])
+
+    for nome, val in list(data.get("especiais", {}).items()):
+        if isinstance(val, dict):
+            data["especiais"][nome] = {vk: _ensure4(vv) for vk, vv in val.items()}
+        else:
+            data["especiais"][nome] = _ensure4(val)
 
 
 def _migrate(data: dict) -> dict:
@@ -129,6 +187,9 @@ def _migrate(data: dict) -> dict:
     # Adicionar especiais_regras se ausente
     if "especiais_regras" not in data:
         data["especiais_regras"] = copy.deepcopy(DEFAULTS["especiais_regras"])
+
+    # Feature 098: normaliza todas as tabelas para 4 durações [1h,2h,3h,4h], injetando o 3h por média.
+    _inject_3h(data)
 
     return data
 

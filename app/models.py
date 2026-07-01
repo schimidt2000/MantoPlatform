@@ -922,6 +922,7 @@ class OrcamentoHistory(db.Model):
     event_date     = db.Column(db.String(20), nullable=True)   # ISO date string
     total_1h       = db.Column(db.Numeric(10, 2), nullable=True)
     total_2h       = db.Column(db.Numeric(10, 2), nullable=True)
+    total_3h       = db.Column(db.Numeric(10, 2), nullable=True)  # feature 098
     total_4h       = db.Column(db.Numeric(10, 2), nullable=True)
     has_show       = db.Column(db.Boolean, default=False, nullable=False)
     form_snapshot  = db.Column(db.Text, nullable=True)  # JSON com todo o estado do form

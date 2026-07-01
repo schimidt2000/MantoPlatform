@@ -21,8 +21,8 @@ let prevOnlyDJ     = false;
 let duracaoCustom  = 0;
 let personalizadoAtivo    = false;
 let personalizadoCriterio = 'valor_final'; // 'valor_final' | 'multiplicador'
-let custMult       = [0, 0, 0];
-let custValor      = [0, 0, 0];
+let custMult       = [0, 0, 0, 0];
+let custValor      = [0, 0, 0, 0];
 
 // ── Formatação ────────────────────────────────────────────────────────────────
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -108,7 +108,7 @@ function transportCost() {
 function cacheBase() {
   const { show } = eventFlags();
   const cfg   = S();
-  const cache = [0, 0, 0];
+  const cache = [0, 0, 0, 0];
 
   for (const p of performers) {
     let prices;
@@ -120,7 +120,7 @@ function cacheBase() {
         );
       } else {
         const key = `${p.subtipo}|${p.show}|${p.makeup}`;
-        prices = cfg.ator[key] || [0, 0, 0];
+        prices = cfg.ator[key] || [0, 0, 0, 0];
       }
     } else if (p.type === 'cantor') {
       // legado: cantor era tipo separado, sempre com show
@@ -129,25 +129,25 @@ function cacheBase() {
     } else if (p.type === 'especial') {
       const ep = cfg.especiais[p.personagem];
       const comCantor = new Set(window.ESPECIAIS_COM_CANTOR || []);
-      if (!ep) { prices = [0, 0, 0]; }
+      if (!ep) { prices = [0, 0, 0, 0]; }
       else if (Array.isArray(ep)) { prices = ep; }
-      else if (comCantor.has(p.personagem) && p.cantor) { prices = ep['cantor'] || [0, 0, 0]; }
-      else if (p.show) { prices = ep['show'] || ep['true'] || [0, 0, 0]; }
-      else { prices = ep['none'] || ep['false'] || [0, 0, 0]; }
+      else if (comCantor.has(p.personagem) && p.cantor) { prices = ep['cantor'] || [0, 0, 0, 0]; }
+      else if (p.show) { prices = ep['show'] || ep['true'] || [0, 0, 0, 0]; }
+      else { prices = ep['none'] || ep['false'] || [0, 0, 0, 0]; }
     } else {
-      prices = [0, 0, 0];
+      prices = [0, 0, 0, 0];
     }
-    for (let i = 0; i < 3; i++) cache[i] += prices[i];
+    for (let i = 0; i < 4; i++) cache[i] += prices[i];
   }
 
   // Coordenador
-  const cp = cfg.coordenador[String(show)] || [0, 0, 0];
-  for (let i = 0; i < 3; i++) cache[i] += cp[i] * coordQty;
+  const cp = cfg.coordenador[String(show)] || [0, 0, 0, 0];
+  for (let i = 0; i < 4; i++) cache[i] += cp[i] * coordQty;
 
   // Show customizado: +R$50 por artista (não inclui coord, técnico, maquiador)
   if (showSosiaCustom && performers.length > 0) {
     const customAdd = performers.length * 50;
-    for (let i = 0; i < 3; i++) cache[i] += customAdd;
+    for (let i = 0; i < 4; i++) cache[i] += customAdd;
   }
 
   return cache;
@@ -162,9 +162,9 @@ function calcTotals() {
   // Nada é somado depois (transporte/NF/extras ficam fora).
   if (personalizadoAtivo) {
     if (personalizadoCriterio === 'multiplicador') {
-      return [0, 1, 2].map(i => Math.round(cache[i] * (custMult[i] || 0) * 100) / 100);
+      return [0, 1, 2, 3].map(i => Math.round(cache[i] * (custMult[i] || 0) * 100) / 100);
     }
-    return [0, 1, 2].map(i => Math.round((custValor[i] || 0) * 100) / 100);
+    return [0, 1, 2, 3].map(i => Math.round((custValor[i] || 0) * 100) / 100);
   }
 
   // Markup
@@ -174,24 +174,24 @@ function calcTotals() {
   // Brinde (pós-markup)
   if (show) {
     const brinde = cfg.brinde_show ?? 100;
-    for (let i = 0; i < 3; i++) t[i] += brinde;
+    for (let i = 0; i < 4; i++) t[i] += brinde;
   }
 
   // Adicional noturno (pós-markup)
   if (isNoturno()) {
     const notAdd = (performers.length + coordQty) * 50;
-    for (let i = 0; i < 3; i++) t[i] += notAdd;
+    for (let i = 0; i < 4; i++) t[i] += notAdd;
   }
 
   // Técnico de Som (pós-markup, 1.5×)
   if (show) {
-    for (let i = 0; i < 3; i++) t[i] += Math.round(cfg.tecnico_som[i] * 1.5 * 100) / 100;
+    for (let i = 0; i < 4; i++) t[i] += Math.round(cfg.tecnico_som[i] * 1.5 * 100) / 100;
   }
 
   // Maquiador (pós-markup, 1.5×)
   if (makeup) {
     const mc = maquiadorCost(makesReg, makesEsp);
-    for (let i = 0; i < 3; i++) t[i] += Math.round(mc * 1.5 * 100) / 100;
+    for (let i = 0; i < 4; i++) t[i] += Math.round(mc * 1.5 * 100) / 100;
   }
 
   // Transporte especial pós-markup — uma vez por tipo
@@ -201,7 +201,7 @@ function calcTotals() {
     if (p.type === 'especial' && !seenTransport.has(p.personagem)) {
       const tEsp = (regras[p.personagem] || {}).transporte_especial || 0;
       if (tEsp) {
-        for (let i = 0; i < 3; i++) t[i] += tEsp;
+        for (let i = 0; i < 4; i++) t[i] += tEsp;
         seenTransport.add(p.personagem);
       }
     }
@@ -214,18 +214,18 @@ function calcTotals() {
                      : p.bge_subtipo === 'transformers' ? 70
                      : 0;
       if (bgeExtra > 0) {
-        for (let i = 0; i < 3; i++) t[i] = Math.round((t[i] + bgeExtra) * 100) / 100;
+        for (let i = 0; i < 4; i++) t[i] = Math.round((t[i] + bgeExtra) * 100) / 100;
       }
     }
   }
 
   // Transporte (pós-markup)
   const tc = transportCost();
-  for (let i = 0; i < 3; i++) t[i] += tc;
+  for (let i = 0; i < 4; i++) t[i] += tc;
 
   // Acréscimo
   if (acrescimo > 0) {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       t[i] = acrescimoTipo === 'percent'
         ? Math.round(t[i] * (1 + acrescimo / 100) * 100) / 100
         : Math.round((t[i] + acrescimo) * 100) / 100;
@@ -234,7 +234,7 @@ function calcTotals() {
 
   // Nota Fiscal (÷ 0,84)
   if (notaFiscal) {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       t[i] = Math.round((t[i] / 0.84) * 100) / 100;
     }
   }
@@ -270,13 +270,14 @@ function update() {
 }
 
 function updateTotals() {
-  const [t1, t2, t4] = calcTotals();
+  const [t1, t2, t3, t4] = calcTotals();
   document.getElementById('total-1h').textContent = fmt(t1);
   document.getElementById('total-2h').textContent = fmt(t2);
+  document.getElementById('total-3h').textContent = fmt(t3);
   document.getElementById('total-4h').textContent = fmt(t4);
 
   const customWrap = document.getElementById('total-custom-wrap');
-  if (customWrap && !personalizadoAtivo && duracaoCustom > 0 && ![1, 2, 4].includes(duracaoCustom)) {
+  if (customWrap && !personalizadoAtivo && duracaoCustom > 0 && ![1, 2, 3, 4].includes(duracaoCustom)) {
     const tCustom = Math.round(t4 / 4 * duracaoCustom * 100) / 100;
     document.getElementById('total-custom').textContent = fmt(tCustom);
     const lblEl = document.getElementById('lbl-custom');
@@ -357,6 +358,7 @@ function updateDebugPanel() {
       thead.innerHTML = `<tr><th>Item</th>
         <th style="text-align:right;">1h</th>
         <th style="text-align:right;">2h</th>
+        <th style="text-align:right;">3h</th>
         <th style="text-align:right;">4h</th></tr>`;
     }
     let rows = `<tr style="background:#f1f5f9;"><td><strong>Subtotal Cachê (base)</strong></td>` +
@@ -390,7 +392,7 @@ function updateDebugPanel() {
     ? Math.round(kmIda * 2 / tCfg.afsp_divisor * 100) / 100
     : 0;
 
-  const showCustomCol = duracaoCustom > 0 && ![1, 2, 4].includes(duracaoCustom);
+  const showCustomCol = duracaoCustom > 0 && ![1, 2, 3, 4].includes(duracaoCustom);
   const totalCols = 3 + (showCustomCol ? 1 : 0);
 
   if (thead) {
@@ -398,6 +400,7 @@ function updateDebugPanel() {
       <th>Profissional</th>
       <th style="text-align:right;">Cachê 1h</th>
       <th style="text-align:right;">Cachê 2h</th>
+      <th style="text-align:right;">Cachê 3h</th>
       <th style="text-align:right;">Cachê 4h</th>
       ${showCustomCol ? `<th style="text-align:right;background:var(--surface-2);">Cachê ${duracaoCustom}h</th>` : ''}
     </tr>`;
@@ -415,8 +418,8 @@ function updateDebugPanel() {
     if (showCustomCol) {
       let nV;
       if (nhValue !== undefined) { nV = nhValue; }
-      else if (flat)             { nV = basePrices[2]; }
-      else                       { nV = nhScale(basePrices[2]); }
+      else if (flat)             { nV = basePrices[3]; }
+      else                       { nV = nhScale(basePrices[3]); }
       cells += `<td style="text-align:right;${bst};background:var(--surface-2);">${fmt(nV)}</td>`;
     }
     return cells;
@@ -437,7 +440,7 @@ function updateDebugPanel() {
   }
 
   const rows  = [];
-  const cache = [0, 0, 0];
+  const cache = [0, 0, 0, 0];
   let cacheNh = 0;
 
   for (const p of performers) {
@@ -454,7 +457,7 @@ function updateDebugPanel() {
         label = (p.nome || 'Cantor') + ` <span style="color:var(--muted)">(${parts.join(', ')})</span>`;
       } else {
         const key = `${p.subtipo}|${p.show}|${p.makeup}`;
-        prices = cfg.ator[key] || [0, 0, 0];
+        prices = cfg.ator[key] || [0, 0, 0, 0];
         const parts = [p.subtipo === 'boneco' ? 'Boneco' : 'Cara Limpa'];
         if (p.show)   parts.push('show');
         if (p.makeup) parts.push(`make ${p.makeup_tipo}`);
@@ -468,37 +471,37 @@ function updateDebugPanel() {
       const ep = cfg.especiais[p.personagem];
       const comCantor  = new Set(window.ESPECIAIS_COM_CANTOR  || []);
       const sempShowD  = new Set(window.ESPECIAIS_SEMPRE_SHOW || []);
-      if (!ep) { prices = [0, 0, 0]; }
+      if (!ep) { prices = [0, 0, 0, 0]; }
       else if (Array.isArray(ep)) { prices = ep; }
-      else if (comCantor.has(p.personagem) && p.cantor) { prices = ep['cantor'] || [0, 0, 0]; }
-      else if (p.show) { prices = ep['show'] || ep['true'] || [0, 0, 0]; }
-      else { prices = ep['none'] || ep['false'] || [0, 0, 0]; }
+      else if (comCantor.has(p.personagem) && p.cantor) { prices = ep['cantor'] || [0, 0, 0, 0]; }
+      else if (p.show) { prices = ep['show'] || ep['true'] || [0, 0, 0, 0]; }
+      else { prices = ep['none'] || ep['false'] || [0, 0, 0, 0]; }
       const parts = [p.personagem];
       if (p.cantor) parts.push('cantor');
       else if (p.show) parts.push('show');
       else if (sempShowD.has(p.personagem)) parts.push('técnico incluso');
       label = (p.nome || p.personagem) + ` <span style="color:var(--muted)">(${parts.join(', ')})</span>`;
     } else {
-      prices = [0, 0, 0]; label = p.nome || '?';
+      prices = [0, 0, 0, 0]; label = p.nome || '?';
     }
     rows.push({ label, prices, flat: false });
-    for (let i = 0; i < 3; i++) cache[i] += prices[i];
-    cacheNh += nhScale(prices[2]);
+    for (let i = 0; i < 4; i++) cache[i] += prices[i];
+    cacheNh += nhScale(prices[3]);
   }
 
-  const cp = cfg.coordenador[String(show)] || [0, 0, 0];
+  const cp = cfg.coordenador[String(show)] || [0, 0, 0, 0];
   const coordPrices = cp.map(v => v * coordQty);
   rows.push({
     label: `Coordenador(es) (${coordQty}) <span style="color:var(--muted)">${show ? 'com show' : 'sem show'}</span>`,
     prices: coordPrices, flat: false,
   });
-  for (let i = 0; i < 3; i++) cache[i] += coordPrices[i];
-  cacheNh += nhScale(coordPrices[2]);
+  for (let i = 0; i < 4; i++) cache[i] += coordPrices[i];
+  cacheNh += nhScale(coordPrices[3]);
 
   if (showSosiaCustom && performers.length > 0) {
     const customAdd = performers.length * 50;
-    rows.push({ label: `Show Customizado <span style="color:var(--muted)">(${performers.length} artista${performers.length !== 1 ? 's' : ''} × R$50)</span>`, prices: [customAdd, customAdd, customAdd], flat: true });
-    for (let i = 0; i < 3; i++) cache[i] += customAdd;
+    rows.push({ label: `Show Customizado <span style="color:var(--muted)">(${performers.length} artista${performers.length !== 1 ? 's' : ''} × R$50)</span>`, prices: [customAdd, customAdd, customAdd, customAdd], flat: true });
+    for (let i = 0; i < 4; i++) cache[i] += customAdd;
     cacheNh += customAdd;
   }
 
@@ -506,7 +509,7 @@ function updateDebugPanel() {
   if (tb) {
     rows.push({
       label: `Adicional Transporte (fora SP) <span style="color:var(--muted)">(${tb.colab} pessoas × ${fmt(perPersonTransport)}/pessoa)</span>`,
-      prices: [tb.afsp, tb.afsp, tb.afsp],
+      prices: [tb.afsp, tb.afsp, tb.afsp, tb.afsp],
       flat: true,
       hl: 'transport',
     });
@@ -524,7 +527,7 @@ function updateDebugPanel() {
   rows.push({ label: '<strong>Subtotal Cachê</strong>', prices: [...cache], bold: true, nhValue: subtotalNh, hl: 'subtotal' });
 
   const afterMarkup  = cache.map((v, i) => v * markup[i]);
-  const afterMarkupNh = showCustomCol ? Math.round(cacheNh * markup[2] * 100) / 100 : undefined;
+  const afterMarkupNh = showCustomCol ? Math.round(cacheNh * markup[3] * 100) / 100 : undefined;
   rows.push({
     label: `<strong>× Markup</strong> <span style="color:var(--muted)">${modeloLabel} — ${markupLabels.join(' / ')}</span>`,
     prices: afterMarkup, bold: true, hl: 'warning', nhValue: afterMarkupNh,
@@ -558,7 +561,7 @@ function updateDebugPanel() {
   if (show) {
     const brinde = cfg.brinde_show ?? 100;
     html += `<tr style="background:${C_POST};"><td>Brinde aniversariante <span style="color:var(--muted)">(pós-markup)</span></td>${flatCols(brinde)}</tr>`;
-    for (let i = 0; i < 3; i++) running[i] += brinde;
+    for (let i = 0; i < 4; i++) running[i] += brinde;
     runningNh += brinde;
   }
 
@@ -566,15 +569,15 @@ function updateDebugPanel() {
     const notCount = performers.length + coordQty;
     const notAdd = notCount * 50;
     html += `<tr style="background:${C_POST};"><td>Adicional Noturno <span style="color:var(--muted)">(≥ 19h · ${notCount} pessoa${notCount !== 1 ? 's' : ''} × R$50)</span></td>${flatCols(notAdd)}</tr>`;
-    for (let i = 0; i < 3; i++) running[i] += notAdd;
+    for (let i = 0; i < 4; i++) running[i] += notAdd;
     runningNh += notAdd;
   }
 
   if (show) {
     const tecVals = cfg.tecnico_som.map(v => Math.round(v * 1.5 * 100) / 100);
-    const tecNh = showCustomCol ? Math.round(cfg.tecnico_som[2] / 4 * duracaoCustom * 1.5 * 100) / 100 : 0;
+    const tecNh = showCustomCol ? Math.round(cfg.tecnico_som[3] / 4 * duracaoCustom * 1.5 * 100) / 100 : 0;
     html += `<tr style="background:${C_POST};"><td>Técnico de Som <span style="color:var(--muted)">(pós-markup · 1,5×)</span></td>${perCols(tecVals, tecNh)}</tr>`;
-    for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + tecVals[i]) * 100) / 100;
+    for (let i = 0; i < 4; i++) running[i] = Math.round((running[i] + tecVals[i]) * 100) / 100;
     if (showCustomCol) runningNh = Math.round((runningNh + tecNh) * 100) / 100;
   }
 
@@ -583,7 +586,7 @@ function updateDebugPanel() {
     const mcMkp = Math.round(mc * 1.5 * 100) / 100;
     const totalMakes = makesReg + makesEsp;
     html += `<tr style="background:${C_POST};"><td>Maquiador <span style="color:var(--muted)">(${totalMakes} make${totalMakes !== 1 ? 's' : ''} · pós-markup · 1,5×)</span></td>${flatCols(mcMkp)}</tr>`;
-    for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + mcMkp) * 100) / 100;
+    for (let i = 0; i < 4; i++) running[i] = Math.round((running[i] + mcMkp) * 100) / 100;
     if (showCustomCol) runningNh = Math.round((runningNh + mcMkp) * 100) / 100;
   }
 
@@ -594,7 +597,7 @@ function updateDebugPanel() {
       const tEsp = (dbgRegras[p.personagem] || {}).transporte_especial || 0;
       if (tEsp) {
         html += `<tr style="background:${C_POST};"><td>Transporte Especial — ${p.personagem} <span style="color:var(--muted)">(pós-markup, único)</span></td>${flatCols(tEsp)}</tr>`;
-        for (let i = 0; i < 3; i++) running[i] += tEsp;
+        for (let i = 0; i < 4; i++) running[i] += tEsp;
         runningNh += tEsp;
         dbgSeenTransport.add(p.personagem);
       }
@@ -610,7 +613,7 @@ function updateDebugPanel() {
       if (bgeExtra > 0) {
         const bgeNomeDbg = p.bge_subtipo === 'dinossauro' ? 'Dinossauro' : 'Transformers';
         html += `<tr style="background:${C_POST};"><td>BGE ${bgeNomeDbg} <span style="color:var(--muted)">(acréscimo pós-markup)</span></td>${flatCols(bgeExtra)}</tr>`;
-        for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + bgeExtra) * 100) / 100;
+        for (let i = 0; i < 4; i++) running[i] = Math.round((running[i] + bgeExtra) * 100) / 100;
         runningNh = Math.round((runningNh + bgeExtra) * 100) / 100;
       }
     }
@@ -626,7 +629,7 @@ function updateDebugPanel() {
       <tr style="background:${C_POST};"><td style="padding-left:16px;">Adicional Fora SP <span style="color:var(--muted)">(${tb.colab} pessoas × ${fmt(perPersonTransport)}/pessoa)</span></td>${flatCols(tb.afsp)}</tr>
       <tr style="background:${C_POST};"><td style="padding-left:16px;">Adicional Show <span style="color:var(--muted)">${tb.ashow > 0 ? `(${tb.kmT}km ÷ 6)` : '(km ≤ 500 ou sem show)'}</span></td>${flatCols(tb.ashow)}</tr>
       <tr style="background:${C_POST};"><td style="font-weight:600;padding-left:16px;">Total Transporte</td>${flatCols(tb.total, 'font-weight:600;')}</tr>`;
-    for (let i = 0; i < 3; i++) running[i] += tb.total;
+    for (let i = 0; i < 4; i++) running[i] += tb.total;
     runningNh += tb.total;
   }
 
@@ -635,11 +638,11 @@ function updateDebugPanel() {
       const addVals = running.map(v => Math.round(v * acrescimo / 100 * 100) / 100);
       const addNh   = Math.round(runningNh * acrescimo / 100 * 100) / 100;
       html += `<tr style="background:${C_POST};"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(${acrescimo}%)</span></td>${perCols(addVals, addNh, true)}</tr>`;
-      for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + addVals[i]) * 100) / 100;
+      for (let i = 0; i < 4; i++) running[i] = Math.round((running[i] + addVals[i]) * 100) / 100;
       runningNh = Math.round((runningNh + addNh) * 100) / 100;
     } else {
       html += `<tr style="background:${C_POST};"><td><strong>+ Acréscimo</strong> <span style="color:var(--muted)">(valor fixo)</span></td>${flatCols(acrescimo, 'font-weight:600;')}</tr>`;
-      for (let i = 0; i < 3; i++) running[i] = Math.round((running[i] + acrescimo) * 100) / 100;
+      for (let i = 0; i < 4; i++) running[i] = Math.round((running[i] + acrescimo) * 100) / 100;
       runningNh = Math.round((runningNh + acrescimo) * 100) / 100;
     }
   }
@@ -648,7 +651,7 @@ function updateDebugPanel() {
     const nfAdd   = running.map(v => Math.round((v / 0.84 - v) * 100) / 100);
     const nfAddNh = Math.round((runningNh / 0.84 - runningNh) * 100) / 100;
     html += `<tr style="background:${C_POST};"><td><strong>+ Nota Fiscal</strong> <span style="color:var(--muted)">(÷ 0,84)</span></td>${perCols(nfAdd, nfAddNh, true)}</tr>`;
-    for (let i = 0; i < 3; i++) running[i] = Math.round(running[i] / 0.84 * 100) / 100;
+    for (let i = 0; i < 4; i++) running[i] = Math.round(running[i] / 0.84 * 100) / 100;
     runningNh = Math.round(runningNh / 0.84 * 100) / 100;
   }
 
@@ -662,7 +665,7 @@ function updateDebugPanel() {
   tfoot.innerHTML = `
     <tr style="background:var(--surface);color:var(--muted);">
       <td colspan="${totalCols + 1}" style="font-size:12px;font-style:italic;">
-        Markup (${modeloLabel}): 1h × ${markup[0]} · 2h × ${markup[1]} · 4h × ${markup[2]}
+        Markup (${modeloLabel}): 1h × ${markup[0]} · 2h × ${markup[1]} · 3h × ${markup[2]} · 4h × ${markup[3]}
         ${tb ? ` · Transporte total ${fmt(tb.total)}` : ''}
         ${acrescimo > 0 ? ` · Acréscimo ${acrescimoTipo === 'percent' ? acrescimo + '%' : fmt(acrescimo)}` : ''}
         ${notaFiscal ? ' · Nota Fiscal (÷ 0,84)' : ''}
@@ -853,7 +856,7 @@ function setModoEntradas(checked) {
   const lbls = modoEntradas
     ? ['1 entrada', '2 entradas', '4 entradas']
     : ['1 hora',    '2 horas',    '4 horas'];
-  ['1h', '2h', '4h'].forEach((id, i) => {
+  ['1h', '2h', '3h', '4h'].forEach((id, i) => {
     const el = document.getElementById(`lbl-${id}`);
     if (el) el.textContent = lbls[i];
   });
@@ -861,7 +864,7 @@ function setModoEntradas(checked) {
 }
 
 // ── Orçamento personalizado ────────────────────────────────────────────────────
-const _DURS = ['1h', '2h', '4h'];
+const _DURS = ['1h', '2h', '3h', '4h'];
 
 function setPersonalizado(checked) {
   personalizadoAtivo = checked;
@@ -911,7 +914,7 @@ function setPersonalizadoVal(kind, idx, val) {
 function updateCacheBaseReadout() {
   if (!personalizadoAtivo || personalizadoCriterio !== 'multiplicador') return;
   const base = cacheBase();
-  ['cb-1h', 'cb-2h', 'cb-4h'].forEach((id, i) => {
+  ['cb-1h', 'cb-2h', 'cb-3h', 'cb-4h'].forEach((id, i) => {
     const el = document.getElementById(id);
     if (el) el.textContent = fmt(base[i]);
   });
@@ -969,7 +972,7 @@ function clearAll() {
   acrescimo = 0; acrescimoTipo = 'valor'; showSosiaCustom = false; prevOnlyDJ = false;
   duracaoCustom = 0;
   personalizadoAtivo = false; personalizadoCriterio = 'valor_final';
-  custMult = [0, 0, 0]; custValor = [0, 0, 0];
+  custMult = [0, 0, 0, 0]; custValor = [0, 0, 0, 0];
   document.getElementById('quote-form').reset();
   const persPanel = document.getElementById('personalizado-panel');
   if (persPanel) persPanel.style.display = 'none';
@@ -1046,8 +1049,8 @@ function _applySnapshot(snap) {
   // Orçamento personalizado
   personalizadoAtivo    = !!snap.personalizado_ativo;
   personalizadoCriterio = snap.personalizado_criterio || 'valor_final';
-  custMult  = [parseFloat(snap.cust_mult_1h)  || 0, parseFloat(snap.cust_mult_2h)  || 0, parseFloat(snap.cust_mult_4h)  || 0];
-  custValor = [parseFloat(snap.cust_valor_1h) || 0, parseFloat(snap.cust_valor_2h) || 0, parseFloat(snap.cust_valor_4h) || 0];
+  custMult  = [parseFloat(snap.cust_mult_1h)  || 0, parseFloat(snap.cust_mult_2h)  || 0, parseFloat(snap.cust_mult_3h)  || 0, parseFloat(snap.cust_mult_4h)  || 0];
+  custValor = [parseFloat(snap.cust_valor_1h) || 0, parseFloat(snap.cust_valor_2h) || 0, parseFloat(snap.cust_valor_3h) || 0, parseFloat(snap.cust_valor_4h) || 0];
   const persChk = document.getElementById('personalizado_ativo');
   if (persChk) persChk.checked = personalizadoAtivo;
   document.getElementById('crit-valor').checked = personalizadoCriterio !== 'multiplicador';
@@ -1108,6 +1111,7 @@ function renderHistory() {
               <div class="history-entry-vals">
                 <span class="badge badge-gray">1h ${fmt(e.total_1h)}</span>
                 <span class="badge badge-gray">2h ${fmt(e.total_2h)}</span>
+                ${e.total_3h ? `<span class="badge badge-gray">3h ${fmt(e.total_3h)}</span>` : ''}
                 <span class="badge badge-gray">4h ${fmt(e.total_4h)}</span>
                 <span class="badge ${e.has_show ? 'badge-green' : 'badge-gray'}">${e.has_show ? 'Show' : 'Receptivo'}</span>
               </div>
@@ -1192,7 +1196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (personalizadoAtivo) {
       const incl = Array.from(document.querySelectorAll('input[name="incluir_duracao"]:checked'))
         .map(c => c.value);
-      const durs = incl.length ? incl : ['1h', '2h', '4h'];
+      const durs = incl.length ? incl : ['1h', '2h', '3h', '4h'];
       const totals = calcTotals();
       const idx = { '1h': 0, '2h': 1, '4h': 2 };
       const bad = durs.filter(d => !(totals[idx[d]] > 0));

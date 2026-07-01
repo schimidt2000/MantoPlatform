@@ -3,28 +3,28 @@ from . import settings as _cfg
 
 
 def aplicar_markup(totais: list, show: bool) -> list:
-    """Apply markup multipliers to a list of [1h, 2h, 4h] cache totals."""
+    """Apply markup multipliers to a list of [1h, 2h, 3h, 4h] cache totals."""
     s = _cfg.load()
     m = s["markup"]["show" if show else "receptivo"]
-    return [round(totais[i] * m[i], 2) for i in range(3)]
+    return [round(totais[i] * m[i], 2) for i in range(4)]
 
 
 def get_ator_prices(subtipo: str, show: bool, makeup: bool) -> tuple:
-    """Return (1h, 2h, 4h) cache prices for an actor."""
+    """Return (1h, 2h, 3h, 4h) cache prices for an actor."""
     key = f"{subtipo}|{str(show).lower()}|{str(makeup).lower()}"
-    p = _cfg.load()["ator"].get(key, [0, 0, 0])
+    p = _cfg.load()["ator"].get(key, [0, 0, 0, 0])
     return tuple(p)
 
 
 def get_cantor_prices(show: bool, makeup: bool) -> tuple:
-    """Return (1h, 2h, 4h) cache prices for a singer (ator subtype)."""
+    """Return (1h, 2h, 3h, 4h) cache prices for a singer (ator subtype)."""
     c = _cfg.load()["cantor"]
     base       = c["base"]
     show_extra = c["show_extra"]
     make_extra = c["make_extra"]
     return tuple(
         base[i] + (show_extra[i] if show else 0) + (make_extra[i] if makeup else 0)
-        for i in range(3)
+        for i in range(4)
     )
 
 
@@ -34,9 +34,9 @@ def get_tecnico_prices() -> tuple:
 
 
 def get_coordenador_prices(show: bool, qty: int) -> tuple:
-    """Return (1h, 2h, 4h) cache prices for coordinators (multiplied by qty)."""
+    """Return (1h, 2h, 3h, 4h) cache prices for coordinators (multiplied by qty)."""
     p = _cfg.load()["coordenador"][str(show).lower()]
-    return (p[0] * qty, p[1] * qty, p[2] * qty)
+    return tuple(p[i] * qty for i in range(4))
 
 
 def get_especial_prices(personagem: str, show: bool, cantor: bool = False) -> tuple:

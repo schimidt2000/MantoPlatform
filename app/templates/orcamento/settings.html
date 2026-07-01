@@ -16,12 +16,12 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Modelo</th><th style="text-align:center;">1h (Flash)</th><th style="text-align:center;">2h (Pocket)</th><th style="text-align:center;">4h (Full)</th></tr>
+          <tr><th>Modelo</th><th style="text-align:center;">1h (Flash)</th><th style="text-align:center;">2h (Pocket)</th><th style="text-align:center;">3h</th><th style="text-align:center;">4h (Full)</th></tr>
         </thead>
         <tbody>
           <tr>
             <td><strong>Receptivo / Interativo</strong></td>
-            {% for i in range(3) %}
+            {% for i in range(4) %}
             <td style="text-align:center;">
               <input type="number" step="0.01" style="width:80px;text-align:center;"
                      name="markup_receptivo_{{ i }}" value="{{ s.markup.receptivo[i] }}">
@@ -30,7 +30,7 @@
           </tr>
           <tr>
             <td><strong>Show</strong></td>
-            {% for i in range(3) %}
+            {% for i in range(4) %}
             <td style="text-align:center;">
               <input type="number" step="0.01" style="width:80px;text-align:center;"
                      name="markup_show_{{ i }}" value="{{ s.markup.show[i] }}">
@@ -48,7 +48,7 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Tipo</th><th>Show</th><th>Maquiagem</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr>
+          <tr><th>Tipo</th><th>Show</th><th>Maquiagem</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">3h</th><th style="text-align:center;">4h</th></tr>
         </thead>
         <tbody>
           {% set ator_labels = {
@@ -64,7 +64,7 @@
           {% set labels = ator_labels.get(key, (key, '', '')) %}
           <tr>
             <td>{{ labels[0] }}</td><td>{{ labels[1] }}</td><td>{{ labels[2] }}</td>
-            {% for i in range(3) %}
+            {% for i in range(4) %}
             <td style="text-align:center;">
               <input type="text" inputmode="decimal" class="brl-input" style="width:80px;text-align:center;"
                      name="ator_{{ safe }}_{{ i }}" value="{{ prices[i] | brl }}">
@@ -83,24 +83,24 @@
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Componente</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr>
+          <tr><th>Componente</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">3h</th><th style="text-align:center;">4h</th></tr>
         </thead>
         <tbody>
           <tr>
             <td>Base (sem show, sem maquiagem)</td>
-            {% for i in range(3) %}
+            {% for i in range(4) %}
             <td style="text-align:center;"><input type="text" inputmode="decimal" class="brl-input" style="width:80px;text-align:center;" name="cantor_base_{{ i }}" value="{{ s.cantor['base'][i] | brl }}"></td>
             {% endfor %}
           </tr>
           <tr>
             <td>Adicional por show</td>
-            {% for i in range(3) %}
+            {% for i in range(4) %}
             <td style="text-align:center;"><input type="text" inputmode="decimal" class="brl-input" style="width:80px;text-align:center;" name="cantor_show_extra_{{ i }}" value="{{ s.cantor['show_extra'][i] | brl }}"></td>
             {% endfor %}
           </tr>
           <tr>
             <td>Adicional por maquiagem</td>
-            {% for i in range(3) %}
+            {% for i in range(4) %}
             <td style="text-align:center;"><input type="text" inputmode="decimal" class="brl-input" style="width:80px;text-align:center;" name="cantor_make_extra_{{ i }}" value="{{ s.cantor['make_extra'][i] | brl }}"></td>
             {% endfor %}
           </tr>
@@ -114,10 +114,10 @@
     <div class="panel-title">Cachê — Técnico de Som</div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr></thead>
+        <thead><tr><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">3h</th><th style="text-align:center;">4h</th></tr></thead>
         <tbody>
           <tr>
-            {% for i in range(3) %}
+            {% for i in range(4) %}
             <td style="text-align:center;"><input type="text" inputmode="decimal" class="brl-input" style="width:80px;text-align:center;" name="tecnico_som_{{ i }}" value="{{ s.tecnico_som[i] | brl }}"></td>
             {% endfor %}
           </tr>
@@ -131,17 +131,17 @@
     <div class="panel-title">Cachê — Coordenador <span style="font-weight:400;font-size:13px;color:var(--muted);">(por pessoa)</span></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Tipo</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th></tr></thead>
+        <thead><tr><th>Tipo</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">3h</th><th style="text-align:center;">4h</th></tr></thead>
         <tbody>
           <tr>
             <td>Sem show</td>
-            {% for i in range(3) %}
+            {% for i in range(4) %}
             <td style="text-align:center;"><input type="text" inputmode="decimal" class="brl-input" style="width:80px;text-align:center;" name="coordenador_false_{{ i }}" value="{{ s.coordenador['false'][i] | brl }}"></td>
             {% endfor %}
           </tr>
           <tr>
             <td>Com show</td>
-            {% for i in range(3) %}
+            {% for i in range(4) %}
             <td style="text-align:center;"><input type="text" inputmode="decimal" class="brl-input" style="width:80px;text-align:center;" name="coordenador_true_{{ i }}" value="{{ s.coordenador['true'][i] | brl }}"></td>
             {% endfor %}
           </tr>
@@ -155,7 +155,7 @@
     <div class="panel-title">Cachê — Especiais</div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Personagem</th><th>Show</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">4h</th><th style="width:40px;"></th></tr></thead>
+        <thead><tr><th>Personagem</th><th>Show</th><th style="text-align:center;">1h</th><th style="text-align:center;">2h</th><th style="text-align:center;">3h</th><th style="text-align:center;">4h</th><th style="width:40px;"></th></tr></thead>
         <tbody>
           {% set show_key_labels = {'true': 'Com show', 'false': 'Sem show', 'none': 'Sem show/cantor', 'show': 'Com show', 'cantor': 'Com cantor'} %}
           {% for nome, val in s.especiais.items() %}
@@ -167,7 +167,7 @@
             <tr>
               <td>{{ nome if ns.first else '' }}</td>
               <td>{{ show_key_labels.get(show_key, show_key) }}</td>
-              {% for i in range(3) %}
+              {% for i in range(4) %}
               <td style="text-align:center;"><input type="text" inputmode="decimal" class="brl-input" style="width:80px;text-align:center;" name="especial_{{ safe }}_{{ show_key }}_{{ i }}" value="{{ prices[i] | brl }}"></td>
               {% endfor %}
               {% if ns.first %}
@@ -186,7 +186,7 @@
             <tr>
               <td>{{ nome }}</td>
               <td style="color:var(--muted);">—</td>
-              {% for i in range(3) %}
+              {% for i in range(4) %}
               <td style="text-align:center;"><input type="text" inputmode="decimal" class="brl-input" style="width:80px;text-align:center;" name="especial_{{ safe }}_{{ i }}" value="{{ val[i] | brl }}"></td>
               {% endfor %}
               <td style="text-align:center;">

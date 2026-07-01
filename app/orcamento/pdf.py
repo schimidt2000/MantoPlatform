@@ -5,8 +5,8 @@ import io
 import os
 from typing import Any
 
-from reportlab.lib.pagesizes import A4
 from reportlab.lib.colors import HexColor
+from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas as rl_canvas
 
 from app.money import format_brl
@@ -133,27 +133,31 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
 
     def _dur_label(idx: int) -> str:
         if modo_duracao == "entradas":
-            labels = ["1 entrada de 30 min", "2 entradas de 30 min (2h)", "4 entradas de 30 min (4h)"]
+            labels = ["1 entrada de 30 min", "2 entradas de 30 min (2h)",
+                      "3 entradas de 30 min (3h)", "4 entradas de 30 min (4h)"]
         else:
-            labels = ["1 hora", "2 horas", "4 horas"]
+            labels = ["1 hora", "2 horas", "3 horas", "4 horas"]
         return labels[idx]
 
     totals = [
         float(quote.get("total_1h", 0) or 0),
         float(quote.get("total_2h", 0) or 0),
+        float(quote.get("total_3h", 0) or 0),
         float(quote.get("total_4h", 0) or 0),
     ]
-    # Durações que o vendedor escolheu incluir (default True p/ orçamentos antigos)
+    # Durações que o vendedor escolheu incluir. 1h/2h/4h default True p/ orçamentos antigos;
+    # 3h default False (orçamentos antigos não têm 3h e não devem exibir uma linha zerada).
     show = [
         quote.get("show_1h", True),
         quote.get("show_2h", True),
+        quote.get("show_3h", False),
         quote.get("show_4h", True),
     ]
 
     for i, total in enumerate(totals):
         if not show[i]:
             continue
-        y = _price_row(c, y, _dur_label(i), _fmt_brl(total), highlight=(i == 2))
+        y = _price_row(c, y, _dur_label(i), _fmt_brl(total), highlight=(i == 3))
         y -= 2
 
     if total_custom:
@@ -178,7 +182,8 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
     _pix_vista = [
         f"1h {_fmt_brl(round(totals[0]*0.95,2))}" if show[0] else None,
         f"2h {_fmt_brl(round(totals[1]*0.95,2))}" if show[1] else None,
-        f"4h {_fmt_brl(round(totals[2]*0.95,2))}" if show[2] else None,
+        f"3h {_fmt_brl(round(totals[2]*0.95,2))}" if show[2] else None,
+        f"4h {_fmt_brl(round(totals[3]*0.95,2))}" if show[3] else None,
     ]
     pix_lines = [
         ("PIX à vista (5% desc.):", " | ".join(p for p in _pix_vista if p)),

@@ -71,14 +71,15 @@
             <tr><th>Duração</th><th style="text-align:right;">Cachê-base</th><th style="text-align:right;">Multiplicador</th><th style="text-align:right;">Total</th></tr>
           </thead>
           <tbody>
-            {% set labels = ['1 hora', '2 horas', '4 horas'] %}
-            {% set tots = [quote.total_1h, quote.total_2h, quote.total_4h] %}
-            {% for i in range(3) %}
+            {% set labels = ['1 hora', '2 horas', '3 horas', '4 horas'] %}
+            {% set tots = [quote.total_1h, quote.total_2h, quote.get('total_3h'), quote.total_4h] %}
+            {# Itera pelo tamanho real da base (orçamentos antigos têm 3 valores, novos têm 4). #}
+            {% for i in range(quote.cache_base|length) %}
             <tr>
               <td>{{ labels[i] }}</td>
               <td style="text-align:right;">{{ fmt_brl(quote.cache_base[i]) }}</td>
               <td style="text-align:right;">{{ quote.custom_mult[i] }}×</td>
-              <td style="text-align:right;font-weight:700;">{{ fmt_brl(tots[i]) }}</td>
+              <td style="text-align:right;font-weight:700;">{{ fmt_brl(tots[i] or 0) }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -95,8 +96,9 @@
     <div style="font-weight:700;margin-bottom:14px;">Resumo de Valores</div>
     {% set s1 = quote.get('show_1h', True) %}
     {% set s2 = quote.get('show_2h', True) %}
+    {% set s3 = quote.get('show_3h', False) %}
     {% set s4 = quote.get('show_4h', True) %}
-    {% set ncols = (s1|int) + (s2|int) + (s4|int) + (1 if quote.total_custom else 0) %}
+    {% set ncols = (s1|int) + (s2|int) + (s3|int) + (s4|int) + (1 if quote.total_custom else 0) %}
     <div class="kpi-grid" style="--cols:{{ ncols if ncols > 0 else 1 }};">
       {% if s1 %}
       <div class="kpi" style="border:1px solid var(--line);border-radius:var(--r-md);padding:16px;">
@@ -108,6 +110,12 @@
       <div class="kpi" style="border:1px solid var(--line);border-radius:var(--r-md);padding:16px;">
         <div class="kpi-label">2 horas</div>
         <div class="kpi-value gold">{{ fmt_brl(quote.total_2h) }}</div>
+      </div>
+      {% endif %}
+      {% if s3 %}
+      <div class="kpi" style="border:1px solid var(--line);border-radius:var(--r-md);padding:16px;">
+        <div class="kpi-label">3 horas</div>
+        <div class="kpi-value gold">{{ fmt_brl(quote.total_3h) }}</div>
       </div>
       {% endif %}
       {% if s4 %}
