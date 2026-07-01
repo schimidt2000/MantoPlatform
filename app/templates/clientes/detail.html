@@ -74,13 +74,14 @@
     {% if events %}
     <table class="data-table" style="width:100%;">
       <thead>
-        <tr><th>Data</th><th>Evento</th><th style="text-align:right;">Venda</th><th>Pagamento</th></tr>
+        <tr><th>Data</th><th>Evento</th><th>Relação</th><th style="text-align:right;">Venda</th><th>Pagamento</th></tr>
       </thead>
       <tbody>
         {% for e in events %}
         <tr>
           <td class="muted" style="white-space:nowrap;">{{ e.start_at.strftime('%d/%m/%Y') if e.start_at else '—' }}</td>
           <td><a href="/events/{{ e.id }}" style="font-weight:600;">{{ e.title }}</a></td>
+          <td><span class="badge badge-gray">{{ rel_by_event.get(e.id, '—') }}</span></td>
           <td style="text-align:right; white-space:nowrap;">
             {% if e.sale_value %}R$ {{ e.sale_value | brl }}{% else %}<span class="muted">—</span>{% endif %}
           </td>

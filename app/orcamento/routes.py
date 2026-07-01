@@ -10,7 +10,7 @@ from flask import (
 from flask_login import current_user, login_required
 
 from app import db
-from app.constants import RoleName, ACRESCIMO_TIPOS, ACRESCIMO_TIPO_BV
+from app.constants import RoleName, ACRESCIMO_TIPO_BV
 from app.money import format_brl, parse_brl
 from app.utils import json_for_script
 from . import settings as _cfg
@@ -93,7 +93,7 @@ def index():
         especiais_com_cantor=list(_cfg.especiais_com_cantor()),
         especiais_sempre_show=list(_cfg.ESPECIAIS_SEMPRE_SHOW),
         settings_json=json_for_script(s),
-        acrescimo_tipos=ACRESCIMO_TIPOS,
+        acrescimo_tipos=_cfg.acrescimo_tipos_list(),
         acrescimo_tipo_bv=ACRESCIMO_TIPO_BV,
     )
 
@@ -922,6 +922,15 @@ def pricing_settings():
 
         for key in s["transporte"]:
             s["transporte"][key] = float(request.form.get(f"transporte_{key}", s["transporte"][key]))
+
+        # Feature 100: tipos de acréscimo comuns (BV/Outro nunca entram nesta lista — são fixos).
+        _acr_tipos_raw = request.form.getlist("acrescimo_tipo_nome[]")
+        _acr_tipos_new: list[str] = []
+        for _t in _acr_tipos_raw:
+            _t = (_t or "").strip()
+            if _t and _t not in ("BV", "Outro") and _t not in _acr_tipos_new:
+                _acr_tipos_new.append(_t)
+        s["acrescimo_tipos"] = _acr_tipos_new
 
         _cfg.save(s)
         flash("Configurações de preços salvas com sucesso!", "success")

@@ -281,6 +281,11 @@ class CalendarEvent(db.Model):
         "EventAcrescimo", backref="event", lazy=True,
         cascade="all, delete-orphan", order_by="EventAcrescimo.id",
     )
+    # Feature 100: múltiplos clientes por evento, cada um com um tipo de relação.
+    event_clients = db.relationship(
+        "EventClient", backref="event", lazy=True,
+        cascade="all, delete-orphan", order_by="EventClient.id",
+    )
     parent = db.relationship(
         "CalendarEvent",
         remote_side="CalendarEvent.id",
@@ -1171,6 +1176,30 @@ class EventAcrescimo(db.Model):
         if self.tipo == "Outro" and self.descricao:
             return self.descricao
         return self.tipo
+
+
+class EventClient(db.Model):
+    """Associação evento↔cliente com tipo de relação (feature 100).
+
+    Um evento pode ter vários clientes (contratante, assessora, mãe/pai, familiar, outros). Substitui o
+    vínculo único ``CalendarEvent.client_id`` como fonte de verdade; ``client_id`` é mantido de forma
+    denormalizada apontando para o contratante (compat com telas que mostram "o cliente").
+    """
+
+    __tablename__ = "event_clients"
+    __table_args__ = (
+        db.Index("ix_event_clients_event_id", "event_id"),
+        db.Index("ix_event_clients_client_id", "client_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False)
+    relationship_type = db.Column(db.String(30), nullable=False, default="Contratante",
+                                  server_default="Contratante")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    client = db.relationship("Client", lazy=True, foreign_keys=[client_id])
 
 
 class Client(db.Model):

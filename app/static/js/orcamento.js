@@ -864,12 +864,18 @@ function onOrcAcrescimoTipoChange(sel) {
   if (row) row.querySelector('.acr-desc').style.display = sel.value === 'Outro' ? '' : 'none';
   update();
 }
+function _orcAcrRefreshEmpty() {
+  const list = document.getElementById('orc-acrescimos-list');
+  const empty = document.getElementById('orc-acrescimos-empty');
+  if (empty && list) empty.style.display = list.children.length ? 'none' : '';
+}
 function orcAddAcrescimo(sel) {
   const list = document.getElementById('orc-acrescimos-list');
   if (!list) return;
   const tmp = document.createElement('div');
   tmp.innerHTML = orcAcrescimoRowHtml(sel).trim();
   list.appendChild(tmp.firstChild);
+  _orcAcrRefreshEmpty();
   update();
 }
 (function initOrcAcrescimos() {
@@ -878,8 +884,9 @@ function orcAddAcrescimo(sel) {
   if (!addBtn || !list) return;
   addBtn.addEventListener('click', () => orcAddAcrescimo());
   list.addEventListener('click', (e) => {
-    if (e.target.classList.contains('orc-acr-remove')) { e.target.closest('.orc-acr-row').remove(); update(); }
+    if (e.target.classList.contains('orc-acr-remove')) { e.target.closest('.orc-acr-row').remove(); _orcAcrRefreshEmpty(); update(); }
   });
+  _orcAcrRefreshEmpty();
 })();
 
 function setNotaFiscal(checked) {
@@ -1022,6 +1029,7 @@ function clearAll() {
   document.getElementById('carro-options').style.display = 'none';
   const acrList = document.getElementById('orc-acrescimos-list');
   if (acrList) acrList.innerHTML = '';
+  _orcAcrRefreshEmpty();
   update();
 }
 
@@ -1055,6 +1063,7 @@ function _applySnapshot(snap) {
       if (a.tipo === 'Outro') row.querySelector('.acr-desc').style.display = '';
       _acrList.appendChild(row);
     });
+    _orcAcrRefreshEmpty();
   }
 
   document.querySelector('[name=client_name]').value    = snap.client_name    || '';

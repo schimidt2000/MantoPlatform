@@ -24,7 +24,7 @@ from sqlalchemy import func, nullslast, or_
 from app import db
 from app.clientes.importer import normalize_phone
 from app.constants import RoleName
-from app.models import CalendarEvent, Client
+from app.models import CalendarEvent, Client, EventClient
 
 clientes_bp = Blueprint("clientes", __name__, url_prefix="/clientes")
 
@@ -117,11 +117,10 @@ def quick_create():
 def index():
     """Lista pesquisável de clientes com o número de eventos associados."""
     q = (request.args.get("q") or "").strip()
-    # nº de eventos por cliente em uma única query agregada
+    # nº de eventos por cliente via a associação (feature 100), distinto por evento.
     counts = dict(
-        db.session.query(CalendarEvent.client_id, func.count(CalendarEvent.id))
-        .filter(CalendarEvent.client_id.isnot(None))
-        .group_by(CalendarEvent.client_id)
+        db.session.query(EventClient.client_id, func.count(func.distinct(EventClient.event_id)))
+        .group_by(EventClient.client_id)
         .all()
     )
     query = Client.query
@@ -154,16 +153,28 @@ def index():
 def detail(client_id: int):
     """Ficha do cliente: contato, metadados de marketing, eventos associados e totais."""
     client = Client.query.get_or_404(client_id)
-    events = (
-        CalendarEvent.query.filter_by(client_id=client.id)
+    # Eventos do cliente via a associação (feature 100); guarda a relação do cliente em cada evento.
+    assocs = (
+        EventClient.query.filter_by(client_id=client.id)
+        .join(CalendarEvent)
         .order_by(nullslast(CalendarEvent.start_at.desc()))
         .all()
     )
+    seen: set[int] = set()
+    events = []
+    rel_by_event: dict[int, str] = {}
+    for a in assocs:
+        if a.event_id in seen or not a.event:
+            continue
+        seen.add(a.event_id)
+        events.append(a.event)
+        rel_by_event[a.event_id] = a.relationship_type
     total_sales = sum((Decimal(e.sale_value) for e in events if e.sale_value), Decimal("0"))
     return render_template(
         "clientes/detail.html",
         client=client,
         events=events,
+        rel_by_event=rel_by_event,
         event_count=len(events),
         total_sales=total_sales,
     )
@@ -179,6 +190,8 @@ def delete(client_id: int):
     if not _has_role(RoleName.SUPERADMIN, RoleName.FINANCEIRO):
         abort(403)
     client = Client.query.get_or_404(client_id)
+    # Remove as associações (feature 100) e limpa o client_id denormalizado que apontava p/ este cliente.
+    EventClient.query.filter_by(client_id=client.id).delete()
     CalendarEvent.query.filter_by(client_id=client.id).update({"client_id": None})
     db.session.delete(client)
     db.session.commit()

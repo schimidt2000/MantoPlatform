@@ -66,6 +66,14 @@ DEFAULTS: dict = {
         "ashow_divisor":      6.0,
         "ashow_min_km":       500,
     },
+    # Feature 100: tipos de acréscimo comuns, editáveis nas Configurações de Preços. BV e Outro são
+    # sempre acrescentados pelo helper acrescimo_tipos_list() (BV é protegido — regra financeira).
+    "acrescimo_tipos": [
+        "Taxa de urgência",
+        "Deslocamento/Logística",
+        "Domingo/Feriado",
+        "Hora extra",
+    ],
 }
 
 # Especiais que têm checkbox de show (técnico de som é adicionado se marcado)
@@ -191,6 +199,10 @@ def _migrate(data: dict) -> dict:
     # Feature 098: normaliza todas as tabelas para 4 durações [1h,2h,3h,4h], injetando o 3h por média.
     _inject_3h(data)
 
+    # Feature 100: garante a chave de tipos de acréscimo em configs salvas antes desta feature.
+    if "acrescimo_tipos" not in data:
+        data["acrescimo_tipos"] = copy.deepcopy(DEFAULTS["acrescimo_tipos"])
+
     return data
 
 
@@ -216,6 +228,22 @@ def save(data: dict) -> None:
         db.session.add(setting)
     setting.pricing_config = json.dumps(data, ensure_ascii=False)
     db.session.commit()
+
+
+def acrescimo_tipos_list() -> list:
+    """Lista de tipos de acréscimo p/ os seletores (feature 100).
+
+    Junta os tipos comuns configurados + ``BV`` + ``Outro`` (dedup, preservando ordem). BV e Outro estão
+    sempre presentes; BV é protegido (regra financeira de repasse).
+    """
+    from app.constants import ACRESCIMO_TIPO_BV, ACRESCIMO_TIPO_OUTRO
+    salvos = load().get("acrescimo_tipos") or []
+    out: list[str] = []
+    for t in [*salvos, ACRESCIMO_TIPO_BV, ACRESCIMO_TIPO_OUTRO]:
+        t = (t or "").strip()
+        if t and t not in out:
+            out.append(t)
+    return out
 
 
 def especiais_list() -> list:
