@@ -48,7 +48,7 @@
 
     <div class="form-group">
       <label>Data de início do sistema</label>
-      <div class="muted" style="margin-bottom:8px;">Eventos anteriores a esta data são ignorados nas tarefas (casting, figurino, ensaio) e nas cobranças do comercial na home. Defina a data em que você passou a registrar tudo no sistema (ex.: 01/05/2026) para ver as cobranças em aberto do passado.</div>
+      <div class="muted" style="margin-bottom:8px;">Eventos anteriores a esta data são ignorados nas tarefas do comercial na home (casting, figurino, ensaio, cobranças e <strong>eventos sem cliente</strong>). Defina a data em que você passou a registrar tudo no sistema (ex.: 01/05/2026) para ver as pendências em aberto do passado.</div>
       <input type="date" name="release_date"
         value="{{ settings.release_date.isoformat() if settings and settings.release_date else '' }}"
         style="width:180px;">
