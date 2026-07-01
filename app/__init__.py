@@ -626,6 +626,7 @@ def create_app():
             )
 
         events_sem_valor: list = []
+        events_sem_cliente: list = []
         if show_comercial:
             events_sem_valor = (
                 CalendarEvent.query
@@ -634,6 +635,20 @@ def create_app():
                     CalendarEvent.start_at >= task_cutoff,
                     CalendarEvent.group_leader_id.is_(None),  # satélite herda do principal (055)
                     CalendarEvent.is_cortesia_permuta.is_(False),  # permuta/cortesia não é "sem valor"
+                    exclude_ensaios,
+                )
+                .order_by(CalendarEvent.start_at.asc())
+                .all()
+            )
+
+            # Tarefa "sem cliente" (feature 101): eventos a partir da data de início do sistema, sem
+            # NENHUM cliente associado (feature 100), exceto ENSAIO e satélites. O comercial completa.
+            events_sem_cliente = (
+                CalendarEvent.query
+                .filter(
+                    ~CalendarEvent.event_clients.any(),
+                    CalendarEvent.start_at >= task_cutoff,
+                    CalendarEvent.group_leader_id.is_(None),  # satélite herda do principal
                     exclude_ensaios,
                 )
                 .order_by(CalendarEvent.start_at.asc())
@@ -669,6 +684,7 @@ def create_app():
             pending_invoice=pending_invoice,
             show_comercial=show_comercial,
             events_sem_valor=events_sem_valor,
+            events_sem_cliente=events_sem_cliente,
             pending_payments=pending_payments,
             show_casting=show_casting,
             show_figurino=show_figurino,
