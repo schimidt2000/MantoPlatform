@@ -134,17 +134,17 @@
         <div class="invite-detail">
           {% if ev.start_at %}
           <div class="invite-detail-row">
-            <span class="invite-detail-label">📅 Data</span>
+            <span class="invite-detail-label">📅 Data do evento</span>
             <span>{{ ev.start_at.strftime("%d/%m/%Y") }}</span>
           </div>
           <div class="invite-detail-row">
-            <span class="invite-detail-label">🕐 Horário</span>
+            <span class="invite-detail-label">🕐 Horário do evento</span>
             <span>{{ ev.start_at.strftime("%H:%M") }}{% if ev.end_at %} – {{ ev.end_at.strftime("%H:%M") }}{% endif %}</span>
           </div>
           {% endif %}
           {% if ev.location %}
           <div class="invite-detail-row">
-            <span class="invite-detail-label">📍 Local</span>
+            <span class="invite-detail-label">📍 Local do evento</span>
             <span>{{ ev.location }}</span>
           </div>
           {% endif %}
@@ -177,21 +177,43 @@
           </div>
           {% endif %}
           {% for ensaio in ev.ensaios | sort(attribute='start_at') %}
-          <div class="invite-detail-row" style="margin-top:4px; padding-top:8px; border-top:1px solid var(--line);">
-            <span class="invite-detail-label">🎭 Ensaio</span>
-            <div style="display:flex; flex-direction:column; gap:3px;">
-              <span>{{ ensaio.start_at.strftime("%d/%m/%Y %H:%M") if ensaio.start_at else "—" }}{% if ensaio.location %} · {{ ensaio.location }}{% endif %}</span>
-              {% if ensaio.description %}
-              <span style="font-size:11px; color:var(--muted);">{{ ensaio.description }}</span>
-              {% endif %}
+          <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--line);">
+            <div style="font-weight:600; font-size:13px; margin-bottom:4px;">
+              🎭 Ensaio{% if ev.ensaios|length > 1 %} {{ loop.index }}{% endif %}
+            </div>
+            {% if ensaio.start_at %}
+            <div class="invite-detail-row">
+              <span class="invite-detail-label">📅 Data do ensaio</span>
+              <span>{{ ensaio.start_at.strftime("%d/%m/%Y") }}</span>
+            </div>
+            <div class="invite-detail-row">
+              <span class="invite-detail-label">🕐 Horário do ensaio</span>
+              <span>{{ ensaio.start_at.strftime("%H:%M") }}{% if ensaio.end_at %} – {{ ensaio.end_at.strftime("%H:%M") }}{% endif %}</span>
+            </div>
+            {% endif %}
+            {% if ensaio.location %}
+            <div class="invite-detail-row">
+              <span class="invite-detail-label">📍 Local do ensaio</span>
+              <span>{{ ensaio.location }}</span>
+            </div>
+            {% endif %}
+            {% if ensaio.description %}
+            <div class="invite-detail-row">
+              <span class="invite-detail-label">📝 Observação</span>
+              <span style="color:var(--muted);">{{ ensaio.description }}</span>
+            </div>
+            {% endif %}
+            {% if ensaio.ensaio_materials %}
+            <div style="display:flex; flex-direction:column; gap:3px; margin-top:2px; margin-left:98px;">
               {% for mat in ensaio.ensaio_materials %}
                 {% if mat.material_type == 'link' and mat.url %}
-                <a href="{{ mat.url }}" target="_blank" rel="noopener" style="font-size:11px; color:var(--accent);">🔗 {{ mat.label or mat.url }}</a>
+                <a href="{{ mat.url }}" target="_blank" rel="noopener" style="font-size:12px; color:var(--accent);">🔗 {{ mat.label or mat.url }}</a>
                 {% elif mat.material_type == 'file' %}
-                <span style="font-size:11px; color:var(--muted);">📎 {{ mat.label or "Arquivo" }}</span>
+                <span style="font-size:12px; color:var(--muted);">📎 {{ mat.label or "Arquivo" }}</span>
                 {% endif %}
               {% endfor %}
             </div>
+            {% endif %}
           </div>
           {% endfor %}
 
@@ -293,7 +315,7 @@
             {% for ensaio in ev_ensaios %}
             <div>
               <span>🎭 Ensaio:
-                <strong>{{ ensaio.start_at.strftime("%d/%m/%Y %H:%M") if ensaio.start_at else "—" }}</strong>
+                <strong>{{ ensaio.start_at.strftime("%d/%m/%Y %H:%M") if ensaio.start_at else "—" }}{% if ensaio.end_at %} – {{ ensaio.end_at.strftime("%H:%M") }}{% endif %}</strong>
                 {% if ensaio.location %} · {{ ensaio.location }}{% endif %}
               </span>
               {% if ensaio.description %}
