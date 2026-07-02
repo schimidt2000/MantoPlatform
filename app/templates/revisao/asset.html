@@ -7,112 +7,295 @@
 {% endblock %}
 
 {% block content %}
-<div id="review-app"
+{% set is_old = viewing_version is not none %}
+{% set display_version = viewing_version if is_old else (asset.version or 1) %}
+{% set display_path = version_file.file_path if is_old else asset.file_path %}
+{% set display_removed = version_file.file_removed if is_old else asset.file_removed %}
+{% set total_versions = (history|length) + 1 %}
+
+<div id="review-app" class="rv-app"
      data-asset-id="{{ asset.id }}"
      data-media-type="{{ asset.media_type }}"
-     data-file="{{ asset.file_path }}"
-     style="display:grid; grid-template-columns: 1fr 360px; gap:16px; align-items:start;">
+     data-version="{{ display_version }}"
+     data-current-version="{{ asset.version or 1 }}"
+     data-readonly="{{ '1' if is_old else '0' }}">
 
-  {# ── Visualizador ───────────────────────────────────────────── #}
-  <div>
-    <div class="panel" style="padding:12px;">
-      {% if asset.file_removed %}
-        <div style="padding:44px 16px; text-align:center; color:var(--muted);">
-          <div style="font-size:42px;">{% if asset.finalized_at %}✅{% else %}🗑️{% endif %}</div>
-          <p style="font-weight:700; color:var(--text); margin:10px 0 2px;">
-            {% if asset.finalized_at %}Material finalizado{% else %}Arquivo expirado{% endif %}
+  {# ── Coluna do visualizador ─────────────────────────────────── #}
+  <div class="rv-viewer">
+
+    {% if is_old %}
+      <div class="rv-banner">
+        <span>Você está vendo a <strong>versão {{ display_version }} de {{ asset.version or 1 }}</strong> — somente leitura.</span>
+        <a class="btn btn-sm btn-secondary" href="/revisao/{{ space.id }}/asset/{{ asset.id }}">Ver versão atual</a>
+      </div>
+    {% endif %}
+
+    <div class="rv-player-wrap">
+      {% if display_removed %}
+        <div class="rv-removed">
+          <div class="rv-removed-icon">{% if not is_old and asset.finalized_at %}✅{% else %}🗑️{% endif %}</div>
+          <p class="rv-removed-title">
+            {% if not is_old and asset.finalized_at %}Material finalizado{% else %}Arquivo expirado{% endif %}
           </p>
-          <p style="font-size:13px; margin:0;">O arquivo foi removido do armazenamento. Os comentários abaixo permanecem como histórico.</p>
+          <p class="rv-removed-sub">O arquivo foi removido do armazenamento. Os comentários permanecem como histórico.</p>
         </div>
       {% elif asset.media_type == 'video' %}
-        <video id="player" src="{{ asset.file_path }}" controls playsinline style="width:100%; border-radius:var(--r-md); background:#000;"></video>
-        <div id="markerbar" title="Comentários" style="position:relative; height:14px; margin-top:6px; background:#e9e6f2; border-radius:7px; cursor:pointer;"></div>
+        <video id="player" src="{{ display_path }}" controls playsinline preload="metadata"></video>
       {% elif asset.media_type == 'audio' %}
-        <audio id="player" src="{{ asset.file_path }}" controls style="width:100%;"></audio>
-        <div id="markerbar" title="Comentários" style="position:relative; height:14px; margin-top:6px; background:#e9e6f2; border-radius:7px; cursor:pointer;"></div>
+        <div class="rv-audio"><audio id="player" src="{{ display_path }}" controls></audio></div>
       {% elif asset.media_type == 'image' %}
-        <div id="img-wrap" style="position:relative; line-height:0;">
-          <img id="img" src="{{ asset.file_path }}" alt="" style="max-width:100%; border-radius:var(--r-md); cursor:crosshair;">
+        <div id="img-wrap" class="rv-img-wrap">
+          <img id="img" src="{{ display_path }}" alt="{{ asset.original_name or 'imagem' }}">
           <div id="pins"></div>
         </div>
-        <p class="muted small" style="margin:8px 0 0;">Clique na imagem para marcar um ponto e comentar.</p>
       {% elif asset.media_type == 'pdf' %}
-        <iframe src="{{ asset.file_path }}" style="width:100%; height:620px; border:1px solid var(--line); border-radius:var(--r-md);"></iframe>
+        <iframe class="rv-pdf" src="{{ display_path }}" title="{{ asset.original_name or 'PDF' }}"></iframe>
+      {% endif %}
+
+      {% if asset.media_type in ('video', 'audio') and not display_removed %}
+        <div id="markerbar" class="rv-markerbar" title="Comentários na linha do tempo"></div>
       {% endif %}
     </div>
 
-    {# Estado / ações do criador — arquivos temporários (feature 090) #}
-    {% set accept_map = {'video':'video/*','audio':'audio/*','image':'image/*','pdf':'application/pdf'} %}
-    <div class="panel" style="padding:12px; margin-top:12px; font-size:13px;">
-      <div>
-        {% if asset.finalized_at %}
-          <span class="badge" style="background:#dcfce7; color:#166534;">✓ Finalizado</span>
-        {% elif asset.file_removed %}
-          <span class="badge" style="background:#f1f5f9; color:#475569;">Arquivo expirado</span>
-        {% elif asset.days_left is not none %}
-          <span class="badge" style="background:#fff7ed; color:#b45309;">⏳ expira em {{ asset.days_left }} dia(s)</span>
+    {# Cabeçalho compacto: versão + estado #}
+    <div class="rv-meta panel">
+      <div class="rv-meta-row">
+        <button type="button" class="rv-version-badge" id="open-history"
+                title="Histórico de versões" aria-haspopup="dialog">
+          v{{ display_version }}{% if is_old %} <span class="muted">(antiga)</span>{% endif %}
+          {% if total_versions > 1 %}<span class="rv-caret">▾</span>{% endif %}
+        </button>
+        {% if not is_old %}
+          {% if asset.finalized_at %}
+            <span class="badge rv-badge-ok">✓ Finalizado</span>
+          {% elif asset.file_removed %}
+            <span class="badge rv-badge-off">Arquivo expirado</span>
+          {% elif asset.days_left is not none %}
+            <span class="badge rv-badge-warn">⏳ expira em {{ asset.days_left }} dia(s)</span>
+          {% endif %}
+          {% if asset.uploader %}<span class="muted rv-uploader">enviado por {{ asset.uploader.name }}</span>{% endif %}
+        {% else %}
+          {% if version_file.uploader %}<span class="muted rv-uploader">enviado por {{ version_file.uploader.name }} em {{ version_file.created_at.strftime('%d/%m/%Y') }}</span>
+          {% else %}<span class="muted rv-uploader">enviada em {{ version_file.created_at.strftime('%d/%m/%Y') }}</span>{% endif %}
         {% endif %}
-        {% if asset.version > 1 %}<span class="muted" style="margin-left:6px;">versão {{ asset.version }}</span>{% endif %}
       </div>
-      {% if can_manage %}
-        <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          <form method="post" action="/revisao/asset/{{ asset.id }}/replace" enctype="multipart/form-data"
-                style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-            <input type="file" name="file" accept="{{ accept_map.get(asset.media_type, '') }}" required style="max-width:230px;">
-            <button type="submit" class="btn btn-sm btn-secondary">Substituir arquivo</button>
+
+      {% if can_manage and not is_old %}
+        {% set accept_map = {'video':'video/*','audio':'audio/*','image':'image/*','pdf':'application/pdf'} %}
+        <div class="rv-manage">
+          <form method="post" action="/revisao/asset/{{ asset.id }}/replace" enctype="multipart/form-data" class="rv-manage-form"
+                onsubmit="var b=this.querySelector('button'); b.disabled=true; b.textContent='Enviando…';">
+            <input type="file" name="file" accept="{{ accept_map.get(asset.media_type, '') }}" required>
+            <button type="submit" class="btn btn-sm btn-secondary">Enviar nova versão</button>
           </form>
           {% if not asset.file_removed %}
             <form method="post" action="/revisao/asset/{{ asset.id }}/finalize"
-                  onsubmit="return confirm('Finalizar e REMOVER o arquivo do armazenamento? Os comentários permanecem.')">
-              <button type="submit" class="btn btn-sm btn-primary">✓ Finalizar (remover arquivo)</button>
+                  onsubmit="return confirm('Finalizar e REMOVER os arquivos do armazenamento? Comentários e histórico permanecem.')">
+              <button type="submit" class="btn btn-sm btn-primary">✓ Finalizar</button>
             </form>
           {% endif %}
         </div>
-        <p class="muted" style="font-size:11.5px; margin-top:6px;">
-          Substituir gera uma nova versão (mesmo tipo) e reinicia o prazo de 7 dias. Finalizar libera o espaço imediatamente.
+        <p class="muted rv-manage-hint">
+          Enviar nova versão preserva a anterior no histórico e reinicia o prazo de 7 dias. Finalizar remove os arquivos (atual e antigos).
         </p>
       {% endif %}
     </div>
   </div>
 
-  {# ── Comentários ────────────────────────────────────────────── #}
-  <div class="panel" style="position:sticky; top:12px;">
-    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:10px;">Comentários</div>
-
-    <div id="new-comment">
-      <div id="anchor-info" class="muted" style="font-size:12px; margin-bottom:6px;"></div>
-      {% if asset.media_type == 'pdf' %}
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-          <label class="muted" style="font-size:12.5px;">Página</label>
-          <input type="number" id="page-input" min="1" style="width:80px;" placeholder="—">
-        </div>
-      {% endif %}
-      <textarea id="comment-body" rows="3" style="width:100%; resize:vertical;" placeholder="Escreva um comentário…"></textarea>
-      <button type="button" class="btn btn-primary btn-sm" id="send-comment" style="margin-top:8px; width:100%;">Comentar</button>
+  {# ── Coluna de comentários ──────────────────────────────────── #}
+  <div class="rv-side">
+    <div class="rv-tabs" role="tablist">
+      <button type="button" class="rv-tab active" id="tab-pending" role="tab" aria-selected="true">
+        Pendentes <span class="rv-count" id="count-pending">0</span>
+      </button>
+      <button type="button" class="rv-tab" id="tab-resolved" role="tab" aria-selected="false">
+        Concluídos <span class="rv-count" id="count-resolved">0</span>
+      </button>
     </div>
 
-    <div id="comments" style="margin-top:14px; display:flex; flex-direction:column; gap:10px;"></div>
+    <div id="comments-pending" class="rv-comments" aria-live="polite"></div>
+    <div id="comments-resolved" class="rv-comments" hidden></div>
+
+    {% if not is_old %}
+      <div class="rv-composer" id="composer">
+        <div class="rv-anchor-row">
+          <span id="anchor-chip" class="rv-anchor-chip" hidden></span>
+          <span id="anchor-hint" class="muted rv-anchor-hint"></span>
+        </div>
+        {% if asset.media_type == 'pdf' %}
+          <div class="rv-page-row">
+            <label class="muted" for="page-input">Página</label>
+            <input type="number" id="page-input" min="1" inputmode="numeric" placeholder="—">
+          </div>
+        {% endif %}
+        <div class="rv-composer-row">
+          <textarea id="comment-body" rows="1" placeholder="Escreva um comentário…"></textarea>
+          <button type="button" class="btn btn-primary rv-send" id="send-comment">Comentar</button>
+        </div>
+        <p id="composer-error" class="rv-error" hidden></p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Histórico de versões (modal) ─────────────────────────────── #}
+<div id="version-modal" class="rv-modal" hidden>
+  <div class="rv-modal-card panel" role="dialog" aria-label="Histórico de versões">
+    <div class="rv-modal-head">
+      <strong>Histórico de versões</strong>
+      <button type="button" class="rv-modal-close" id="close-history" aria-label="Fechar">✕</button>
+    </div>
+    <ul class="rv-version-list">
+      <li class="rv-version-item {% if not is_old %}current{% endif %}">
+        <a href="/revisao/{{ space.id }}/asset/{{ asset.id }}">
+          <span class="rv-vnum">v{{ asset.version or 1 }}</span>
+          <span class="rv-vinfo">
+            Versão atual{% if asset.uploader %} · {{ asset.uploader.name }}{% endif %}
+            {% if asset.file_removed %} · <em>arquivo removido</em>{% endif %}
+          </span>
+        </a>
+      </li>
+      {% for v in history %}
+        <li class="rv-version-item {% if is_old and viewing_version == v.version_number %}current{% endif %}">
+          <a href="/revisao/{{ space.id }}/asset/{{ asset.id }}?v={{ v.version_number }}">
+            <span class="rv-vnum">v{{ v.version_number }}</span>
+            <span class="rv-vinfo">
+              {{ v.created_at.strftime('%d/%m/%Y') }}{% if v.uploader %} · {{ v.uploader.name }}{% endif %}
+              {% if v.file_removed %} · <em>arquivo expirado</em>{% endif %}
+            </span>
+          </a>
+        </li>
+      {% endfor %}
+      {% if not history %}
+        <li class="muted rv-version-empty">Ainda não há versões anteriores — elas aparecem aqui quando um novo arquivo é enviado.</li>
+      {% endif %}
+    </ul>
   </div>
 </div>
 
 <style>
-  @media (max-width: 880px) { #review-app { grid-template-columns: 1fr !important; } }
-  .rc { border:1px solid var(--line); border-radius:var(--r-md); padding:10px; }
-  .rc.resolved { opacity:.6; }
-  .rc-head { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
-  .rc-author { font-weight:600; font-size:13px; }
-  .rc-date { color:var(--muted); font-size:11px; white-space:nowrap; }
-  .rc-anchor { display:inline-block; font-size:11.5px; font-weight:700; color:var(--accent,#544596);
-               background:var(--accent-soft,rgba(84,69,150,.1)); border-radius:6px; padding:1px 7px; margin-top:6px; cursor:pointer; }
-  .rc-body { font-size:13.5px; margin:6px 0 0; white-space:pre-wrap; }
-  .rc-actions { display:flex; gap:10px; margin-top:8px; }
-  .rc-actions button { background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; padding:0; }
-  .rc-actions button:hover { color:var(--accent,#544596); }
-  .marker { position:absolute; top:0; width:3px; height:14px; background:var(--accent,#544596); border-radius:2px; transform:translateX(-1px); }
-  .pin { position:absolute; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%; background:var(--accent,#544596);
-         color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center;
-         border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.3); cursor:pointer; }
-  .pin.temp { background:#c0392b; }
+  /* ── Layout mobile-first ─────────────────────────────────────── */
+  .rv-app { display: flex; flex-direction: column; gap: 12px; }
+  .rv-viewer { min-width: 0; }
+  .rv-side { min-width: 0; display: flex; flex-direction: column; }
+
+  .rv-player-wrap { position: sticky; top: 0; z-index: 20; background: var(--bg, #fff); padding-bottom: 4px; }
+  .rv-player-wrap video { width: 100%; max-height: 46vh; border-radius: var(--r-md); background: #000; display: block; }
+  .rv-audio { padding: 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel, #fff); }
+  .rv-audio audio { width: 100%; }
+  .rv-img-wrap { position: relative; line-height: 0; }
+  .rv-img-wrap img { max-width: 100%; border-radius: var(--r-md); cursor: crosshair; }
+  .rv-pdf { width: 100%; height: 60vh; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel, #fff); }
+
+  .rv-markerbar { position: relative; height: 20px; margin-top: 8px; background: var(--accent-soft, rgba(84,69,150,.1));
+                  border-radius: 10px; cursor: pointer; }
+  .rv-marker { position: absolute; top: 3px; width: 4px; height: 14px; background: var(--accent); border-radius: 2px;
+               transform: translateX(-2px); }
+  .rv-marker::after { content: ""; position: absolute; inset: -12px -10px; } /* alvo de toque maior */
+
+  .rv-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+               border: 1px solid var(--accent); background: var(--accent-soft, rgba(84,69,150,.1));
+               border-radius: var(--r-md); padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
+
+  .rv-removed { padding: 44px 16px; text-align: center; color: var(--muted); border: 1px solid var(--line);
+                border-radius: var(--r-md); background: var(--panel, #fff); }
+  .rv-removed-icon { font-size: 42px; }
+  .rv-removed-title { font-weight: 700; color: var(--ink); margin: 10px 0 2px; }
+  .rv-removed-sub { font-size: 13px; margin: 0; }
+
+  .rv-meta { margin-top: 12px; padding: 12px; }
+  .rv-meta-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rv-version-badge { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 14px;
+                      border: 1px solid var(--line); border-radius: 22px; background: var(--panel, #fff);
+                      font-weight: 700; font-size: 13.5px; color: var(--accent); cursor: pointer; }
+  .rv-caret { font-size: 10px; color: var(--muted); }
+  .rv-uploader { font-size: 12px; }
+  .rv-badge-ok   { background: var(--green-soft); color: var(--green); }
+  .rv-badge-off  { background: var(--line); color: var(--muted); }
+  .rv-badge-warn { background: var(--blue-soft); color: var(--blue); }
+  .rv-manage { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .rv-manage-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .rv-manage-form input[type="file"] { max-width: 230px; font-size: 12.5px; }
+  .rv-manage-hint { font-size: 11.5px; margin: 8px 0 0; }
+
+  /* ── Abas ────────────────────────────────────────────────────── */
+  .rv-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+  .rv-tab { flex: 1; min-height: 44px; border: none; background: none; font: inherit; font-size: 13.5px; font-weight: 600;
+            color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; padding: 8px 4px; }
+  .rv-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .rv-count { display: inline-block; min-width: 22px; padding: 1px 7px; border-radius: 11px; font-size: 11.5px;
+              background: var(--accent-soft, rgba(84,69,150,.1)); color: var(--accent); }
+
+  /* ── Cards de comentário ─────────────────────────────────────── */
+  .rv-comments { display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
+  .rv-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 20px 8px; }
+  .rc { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px; background: var(--panel, #fff); }
+  .rc.resolved { background: transparent; }
+  .rc.resolved .rc-body { color: var(--muted); }
+  .rc-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .rc-author { font-weight: 600; font-size: 13px; }
+  .rc-date { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .rc-anchor { display: inline-flex; align-items: center; min-height: 32px; font-size: 12px; font-weight: 700;
+               color: var(--accent); background: var(--accent-soft, rgba(84,69,150,.1)); border: none;
+               border-radius: 16px; padding: 2px 12px; margin-top: 8px; cursor: pointer; font-family: inherit; }
+  .rc-body { font-size: 13.5px; margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: break-word; }
+  .rc-resolved-info { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+  .rc-actions { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+  .rc-actions button { background: none; border: none; color: var(--muted); font-size: 12.5px; font-family: inherit;
+                       cursor: pointer; min-height: 40px; padding: 4px 12px; border-radius: var(--r-md); }
+  .rc-actions button:hover { color: var(--accent); background: var(--accent-soft, rgba(84,69,150,.1)); }
+  .rc-actions button:disabled { opacity: .5; cursor: default; }
+  .rc-actions .rc-del { margin-left: auto; }
+
+  .pin { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: var(--accent);
+         color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+         border: 2px solid var(--panel, #fff); box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer; }
+  .pin.temp { background: var(--accent-dark, var(--accent)); }
+
+  /* ── Composer (fixo no rodapé no mobile) ─────────────────────── */
+  .rv-composer { position: sticky; bottom: 0; z-index: 30; background: var(--panel, #fff);
+                 border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px;
+                 margin-top: 4px; box-shadow: 0 -2px 12px rgba(0,0,0,.06); }
+  .rv-anchor-row { display: flex; align-items: center; gap: 8px; min-height: 20px; margin-bottom: 6px; }
+  .rv-anchor-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+                    color: var(--accent); background: var(--accent-soft, rgba(84,69,150,.1));
+                    border-radius: 14px; padding: 3px 12px; cursor: pointer; }
+  .rv-anchor-hint { font-size: 11.5px; }
+  .rv-page-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12.5px; }
+  .rv-page-row input { width: 80px; min-height: 40px; }
+  .rv-composer-row { display: flex; gap: 8px; align-items: flex-end; }
+  .rv-composer-row textarea { flex: 1; resize: none; min-height: 44px; max-height: 120px; font: inherit;
+                              font-size: 14px; padding: 11px 12px; }
+  .rv-send { min-height: 44px; white-space: nowrap; }
+  .rv-error { color: var(--red); font-size: 12.5px; margin: 6px 0 0; }
+
+  /* ── Modal do histórico ──────────────────────────────────────── */
+  .rv-modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60;
+              display: flex; align-items: flex-end; justify-content: center; }
+  .rv-modal-card { width: 100%; max-width: 440px; max-height: 70vh; overflow: auto; margin: 0;
+                   border-radius: var(--r-md) var(--r-md) 0 0; }
+  .rv-modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .rv-modal-close { background: none; border: none; font-size: 16px; color: var(--muted); cursor: pointer;
+                    min-width: 44px; min-height: 44px; }
+  .rv-version-list { list-style: none; margin: 0; padding: 0; }
+  .rv-version-item a { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 4px;
+                       color: inherit; text-decoration: none; border-bottom: 1px solid var(--line); }
+  .rv-version-item.current a { background: var(--accent-soft, rgba(84,69,150,.1)); border-radius: var(--r-md); }
+  .rv-vnum { font-weight: 700; color: var(--accent); min-width: 40px; }
+  .rv-vinfo { font-size: 12.5px; color: var(--muted); }
+  .rv-version-empty { padding: 12px 4px; font-size: 12.5px; }
+
+  /* ── Desktop: duas colunas ───────────────────────────────────── */
+  @media (min-width: 900px) {
+    .rv-app { display: grid; grid-template-columns: 1fr 400px; gap: 16px; align-items: start; }
+    .rv-player-wrap { position: static; padding-bottom: 0; }
+    .rv-player-wrap video { max-height: 70vh; }
+    .rv-side { position: sticky; top: 12px; max-height: calc(100vh - 24px); }
+    .rv-comments { overflow-y: auto; }
+    .rv-composer { box-shadow: none; }
+    .rv-modal { align-items: center; }
+    .rv-modal-card { border-radius: var(--r-md); }
+  }
 </style>
 
 <script>
@@ -120,87 +303,178 @@
   var app = document.getElementById('review-app');
   var assetId = app.dataset.assetId;
   var mediaType = app.dataset.mediaType;
+  var displayVersion = parseInt(app.dataset.version, 10);
+  var currentVersion = parseInt(app.dataset.currentVersion, 10);
+  var readOnly = app.dataset.readonly === '1';
   var player = document.getElementById('player');
   var base = '/revisao/asset/' + assetId;
 
-  var pendingPin = null;  // {x, y} para imagem
+  var frozenTimecode = null;   // segundos congelados no focus (vídeo/áudio)
+  var pendingPin = null;       // {x, y} para imagem
+  var comments = [];
+  var activeTab = 'pending';
 
   function fmt(sec) {
     sec = Math.max(0, Math.floor(sec || 0));
     var m = Math.floor(sec / 60), s = sec % 60;
     return m + ':' + (s < 10 ? '0' : '') + s;
   }
-
-  function anchorInfo() {
-    var el = document.getElementById('anchor-info');
-    if (!el) return;
-    if (mediaType === 'video' || mediaType === 'audio') {
-      el.textContent = player ? ('No tempo ' + fmt(player.currentTime)) : '';
-    } else if (mediaType === 'image') {
-      el.textContent = pendingPin ? 'Ponto marcado na imagem' : 'Clique na imagem para marcar um ponto (opcional).';
-    } else {
-      el.textContent = '';
-    }
-  }
-  if (player) player.addEventListener('timeupdate', anchorInfo);
-  anchorInfo();
-
   function escapeHtml(t) {
     var d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML;
   }
 
-  function render(comments) {
-    var box = document.getElementById('comments');
-    box.innerHTML = '';
-    comments.forEach(function (c) {
-      var div = document.createElement('div');
-      div.className = 'rc' + (c.resolved ? ' resolved' : '');
-      div.id = 'rc-' + c.id;
-      var anchor = '';
-      if (c.timecode != null) anchor = '⏱ ' + fmt(c.timecode);
-      else if (c.page != null) anchor = '📄 página ' + c.page;
-      else if (c.pos_x != null) anchor = '📍 ponto';
-      div.innerHTML =
-        '<div class="rc-head"><span class="rc-author">' + escapeHtml(c.author) + '</span>' +
-        '<span class="rc-date">' + c.created_at + '</span></div>' +
-        (anchor ? '<span class="rc-anchor" data-tc="' + (c.timecode != null ? c.timecode : '') + '">' + anchor + '</span>' : '') +
-        '<p class="rc-body">' + escapeHtml(c.body) + '</p>' +
-        '<div class="rc-actions">' +
-        '<button data-act="resolve">' + (c.resolved ? '↺ Reabrir' : '✓ Concluir') + '</button>' +
-        (c.can_delete ? '<button data-act="delete">🗑 Excluir</button>' : '') +
-        '</div>';
-      div.querySelector('[data-act="resolve"]').onclick = function () { resolveComment(c.id); };
-      var del = div.querySelector('[data-act="delete"]');
-      if (del) del.onclick = function () { if (confirm('Excluir comentário?')) deleteComment(c.id); };
-      var anc = div.querySelector('.rc-anchor');
-      if (anc) anc.onclick = function () {
-        var tc = this.getAttribute('data-tc');
-        if (tc !== '' && player) { player.currentTime = parseFloat(tc); player.play().catch(function(){}); }
-      };
-      box.appendChild(div);
-    });
-    renderMarkers(comments);
-    renderPins(comments);
+  /* ── Composer: congela a âncora no focus ─────────────────────── */
+  var bodyInput = document.getElementById('comment-body');
+  var anchorChip = document.getElementById('anchor-chip');
+  var anchorHint = document.getElementById('anchor-hint');
+
+  function refreshAnchorUI() {
+    if (!anchorChip) return;
+    if ((mediaType === 'video' || mediaType === 'audio') && frozenTimecode !== null) {
+      anchorChip.innerHTML = '⏱ ' + fmt(frozenTimecode) + ' <span aria-hidden="true">✕</span>';
+      anchorChip.hidden = false;
+      anchorHint.textContent = 'Comentário ancorado neste tempo — toque no chip para remover.';
+    } else if (mediaType === 'image' && pendingPin) {
+      anchorChip.innerHTML = '📍 ponto marcado <span aria-hidden="true">✕</span>';
+      anchorChip.hidden = false;
+      anchorHint.textContent = 'Comentário ancorado no ponto — toque no chip para remover.';
+    } else {
+      anchorChip.hidden = true;
+      if (mediaType === 'video' || mediaType === 'audio') anchorHint.textContent = 'Ao focar o campo, o tempo atual é capturado.';
+      else if (mediaType === 'image') anchorHint.textContent = 'Toque na imagem para marcar um ponto (opcional).';
+      else anchorHint.textContent = '';
+    }
   }
 
-  function renderMarkers(comments) {
+  if (bodyInput) {
+    bodyInput.addEventListener('focus', function () {
+      if ((mediaType === 'video' || mediaType === 'audio') && player && frozenTimecode === null) {
+        frozenTimecode = player.currentTime || 0;
+        if (!player.paused) player.pause();
+      }
+      refreshAnchorUI();
+    });
+    // Auto-resize do textarea (1 a ~5 linhas)
+    bodyInput.addEventListener('input', function () {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+  }
+  if (anchorChip) {
+    anchorChip.addEventListener('click', function () {
+      frozenTimecode = null;
+      pendingPin = null;
+      var t = document.querySelector('.pin.temp'); if (t) t.remove();
+      refreshAnchorUI();
+    });
+  }
+  refreshAnchorUI();
+
+  /* ── Render dos comentários (abas pendentes/concluídos) ──────── */
+  function commentCard(c) {
+    var div = document.createElement('div');
+    div.className = 'rc' + (c.resolved ? ' resolved' : '');
+    div.id = 'rc-' + c.id;
+    var anchor = '';
+    if (c.timecode != null) anchor = '⏱ ' + fmt(c.timecode);
+    else if (c.page != null) anchor = '📄 página ' + c.page;
+    else if (c.pos_x != null) anchor = '📍 ponto';
+    var resolvedInfo = '';
+    if (c.resolved) {
+      resolvedInfo = '<div class="rc-resolved-info">✓ Concluído' +
+        (c.resolved_by_name ? ' por ' + escapeHtml(c.resolved_by_name) : '') +
+        (c.resolved_at ? ' em ' + c.resolved_at : '') + '</div>';
+    }
+    div.innerHTML =
+      '<div class="rc-head"><span class="rc-author">' + escapeHtml(c.author) + '</span>' +
+      '<span class="rc-date">' + c.created_at + '</span></div>' +
+      (anchor ? '<button type="button" class="rc-anchor" data-tc="' + (c.timecode != null ? c.timecode : '') + '">' + anchor + '</button>' : '') +
+      '<p class="rc-body">' + escapeHtml(c.body) + '</p>' +
+      resolvedInfo +
+      '<div class="rc-actions">' +
+      (c.can_resolve ? '<button type="button" data-act="resolve">' + (c.resolved ? '↺ Reabrir' : '✓ Concluir') + '</button>' : '') +
+      (c.can_delete ? '<button type="button" class="rc-del" data-act="delete">Excluir</button>' : '') +
+      '</div>';
+    var res = div.querySelector('[data-act="resolve"]');
+    if (res) res.onclick = function () { resolveComment(c.id, this); };
+    var del = div.querySelector('[data-act="delete"]');
+    if (del) del.onclick = function () { if (confirm('Excluir este comentário? Prefira "Concluir" quando ele já foi atendido.')) deleteComment(c.id, this); };
+    var anc = div.querySelector('.rc-anchor');
+    if (anc) anc.onclick = function () {
+      var tc = this.getAttribute('data-tc');
+      if (tc !== '' && player) { player.currentTime = parseFloat(tc); player.play().catch(function () {}); }
+    };
+    return div;
+  }
+
+  function render() {
+    var pendingBox = document.getElementById('comments-pending');
+    var resolvedBox = document.getElementById('comments-resolved');
+    pendingBox.innerHTML = '';
+    resolvedBox.innerHTML = '';
+    var pending = comments.filter(function (c) { return !c.resolved; });
+    var resolved = comments.filter(function (c) { return c.resolved; });
+    document.getElementById('count-pending').textContent = pending.length;
+    document.getElementById('count-resolved').textContent = resolved.length;
+    if (!pending.length) pendingBox.innerHTML = '<div class="rv-empty">Nenhum comentário pendente' + (readOnly ? ' nesta versão' : '') + '.</div>';
+    if (!resolved.length) resolvedBox.innerHTML = '<div class="rv-empty">Nada concluído ainda.</div>';
+    pending.forEach(function (c) { pendingBox.appendChild(commentCard(c)); });
+    resolved.forEach(function (c) { resolvedBox.appendChild(commentCard(c)); });
+    renderMarkers();
+    renderPins();
+  }
+
+  /* Abas */
+  var tabPending = document.getElementById('tab-pending');
+  var tabResolved = document.getElementById('tab-resolved');
+  function setTab(tab) {
+    activeTab = tab;
+    tabPending.classList.toggle('active', tab === 'pending');
+    tabResolved.classList.toggle('active', tab === 'resolved');
+    tabPending.setAttribute('aria-selected', tab === 'pending');
+    tabResolved.setAttribute('aria-selected', tab === 'resolved');
+    document.getElementById('comments-pending').hidden = tab !== 'pending';
+    document.getElementById('comments-resolved').hidden = tab !== 'resolved';
+  }
+  tabPending.onclick = function () { setTab('pending'); };
+  tabResolved.onclick = function () { setTab('resolved'); };
+
+  /* ── Marcadores na timeline ──────────────────────────────────── */
+  function renderMarkers() {
     var bar = document.getElementById('markerbar');
     if (!bar || !player) return;
-    bar.querySelectorAll('.marker').forEach(function (m) { m.remove(); });
+    bar.querySelectorAll('.rv-marker').forEach(function (m) { m.remove(); });
     var dur = player.duration;
     if (!dur || !isFinite(dur)) return;
     comments.forEach(function (c) {
       if (c.timecode == null) return;
       var m = document.createElement('div');
-      m.className = 'marker';
+      m.className = 'rv-marker';
       m.style.left = (c.timecode / dur * 100) + '%';
-      m.title = fmt(c.timecode);
-      m.onclick = function () { player.currentTime = c.timecode; player.play().catch(function(){}); };
+      m.title = fmt(c.timecode) + ' — ' + c.author;
+      m.onclick = function (e) {
+        e.stopPropagation();
+        player.currentTime = c.timecode;
+        player.play().catch(function () {});
+        var el = document.getElementById('rc-' + c.id);
+        if (el) { setTab(c.resolved ? 'resolved' : 'pending'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      };
       bar.appendChild(m);
     });
   }
+  var bar = document.getElementById('markerbar');
+  if (bar && player) {
+    bar.addEventListener('click', function (e) {
+      var dur = player.duration;
+      if (!dur || !isFinite(dur)) return;
+      var rect = bar.getBoundingClientRect();
+      player.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * dur;
+    });
+    player.addEventListener('loadedmetadata', renderMarkers);
+  }
 
-  function renderPins(comments) {
+  /* ── Pins na imagem ──────────────────────────────────────────── */
+  function renderPins() {
     var wrap = document.getElementById('pins');
     if (!wrap) return;
     wrap.innerHTML = '';
@@ -216,28 +490,13 @@
       p.title = c.body;
       p.onclick = function () {
         var el = document.getElementById('rc-' + c.id);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (el) { setTab(c.resolved ? 'resolved' : 'pending'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
       };
       wrap.appendChild(p);
     });
   }
-
-  // Markerbar click → seek
-  var bar = document.getElementById('markerbar');
-  if (bar && player) {
-    bar.addEventListener('click', function (e) {
-      if (e.target.classList.contains('marker')) return;
-      var dur = player.duration;
-      if (!dur || !isFinite(dur)) return;
-      var rect = bar.getBoundingClientRect();
-      player.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * dur;
-    });
-    player.addEventListener('loadedmetadata', load);
-  }
-
-  // Imagem: clique adiciona pin temporário
   var img = document.getElementById('img');
-  if (img) {
+  if (img && !readOnly) {
     img.addEventListener('click', function (e) {
       var rect = img.getBoundingClientRect();
       pendingPin = { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
@@ -246,16 +505,28 @@
       if (!t) { t = document.createElement('div'); t.className = 'pin temp'; t.textContent = '+'; wrap.appendChild(t); }
       t.style.left = (pendingPin.x * 100) + '%';
       t.style.top = (pendingPin.y * 100) + '%';
-      anchorInfo();
-      document.getElementById('comment-body').focus();
+      refreshAnchorUI();
+      if (bodyInput) bodyInput.focus();
     });
   }
 
+  /* ── Ações (comentar / concluir / excluir) ───────────────────── */
+  function showError(msg) {
+    var el = document.getElementById('composer-error');
+    if (el) { el.textContent = msg; el.hidden = false; setTimeout(function () { el.hidden = true; }, 6000); }
+    else alert(msg);
+  }
+
   function send() {
-    var body = document.getElementById('comment-body').value.trim();
-    if (!body) { alert('Escreva um comentário.'); return; }
-    var payload = { body: body };
-    if (mediaType === 'video' || mediaType === 'audio') payload.timecode = player ? player.currentTime : null;
+    var body = (bodyInput.value || '').trim();
+    if (!body) {
+      bodyInput.style.borderColor = 'var(--red)';
+      bodyInput.focus();
+      setTimeout(function () { bodyInput.style.borderColor = ''; }, 1200);
+      return;
+    }
+    var payload = { body: body, version: currentVersion };
+    if ((mediaType === 'video' || mediaType === 'audio') && frozenTimecode !== null) payload.timecode = frozenTimecode;
     if (mediaType === 'image' && pendingPin) { payload.pos_x = pendingPin.x; payload.pos_y = pendingPin.y; }
     if (mediaType === 'pdf') {
       var pg = document.getElementById('page-input');
@@ -263,31 +534,60 @@
     }
     var btn = document.getElementById('send-comment');
     btn.disabled = true;
+    btn.textContent = 'Enviando…';
     fetch(base + '/comment', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         btn.disabled = false;
-        if (!res.ok) { alert(res.j.error || 'Erro ao comentar.'); return; }
-        document.getElementById('comment-body').value = '';
+        btn.textContent = 'Comentar';
+        if (!res.ok) { showError(res.j.error || 'Erro ao comentar. Tente novamente.'); return; }
+        bodyInput.value = '';
+        bodyInput.style.height = '';
+        frozenTimecode = null;
         pendingPin = null;
         var t = document.querySelector('.pin.temp'); if (t) t.remove();
+        refreshAnchorUI();
+        setTab('pending');
         load();
-      }).catch(function () { btn.disabled = false; alert('Erro de conexão.'); });
+      }).catch(function () { btn.disabled = false; btn.textContent = 'Comentar'; showError('Erro de conexão. Verifique a internet e tente de novo.'); });
   }
-  document.getElementById('send-comment').onclick = send;
+  var sendBtn = document.getElementById('send-comment');
+  if (sendBtn) sendBtn.onclick = send;
 
-  function resolveComment(id) {
-    fetch('/revisao/comment/' + id + '/resolve', { method: 'POST' }).then(load);
+  function resolveComment(id, btn) {
+    btn.disabled = true;
+    fetch('/revisao/comment/' + id + '/resolve', { method: 'POST' })
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || 'Sem permissão.'); });
+        return r.json();
+      })
+      .then(load)
+      .catch(function (e) { btn.disabled = false; showError(e.message); });
   }
-  function deleteComment(id) {
-    fetch('/revisao/comment/' + id + '/delete', { method: 'POST' }).then(load);
+  function deleteComment(id, btn) {
+    btn.disabled = true;
+    fetch('/revisao/comment/' + id + '/delete', { method: 'POST' })
+      .then(function (r) { if (!r.ok) throw new Error('Sem permissão para excluir.'); return r.json(); })
+      .then(load)
+      .catch(function (e) { btn.disabled = false; showError(e.message); });
   }
 
   function load() {
-    fetch(base + '/comments').then(function (r) { return r.json(); }).then(render);
+    fetch(base + '/comments?v=' + displayVersion)
+      .then(function (r) { return r.json(); })
+      .then(function (list) { comments = list; render(); })
+      .catch(function () { showError('Não foi possível carregar os comentários.'); });
   }
   load();
+
+  /* ── Modal do histórico ──────────────────────────────────────── */
+  var modal = document.getElementById('version-modal');
+  var openBtn = document.getElementById('open-history');
+  var closeBtn = document.getElementById('close-history');
+  if (openBtn) openBtn.onclick = function () { modal.hidden = false; };
+  if (closeBtn) closeBtn.onclick = function () { modal.hidden = true; };
+  if (modal) modal.addEventListener('click', function (e) { if (e.target === modal) modal.hidden = true; });
 })();
 </script>
 {% endblock %}
