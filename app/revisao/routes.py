@@ -89,6 +89,15 @@ def _can_delete_comment(comment: ReviewComment) -> bool:
     return _is_superadmin() or comment.user_id == current_user.id
 
 
+def _wants_json() -> bool:
+    """True quando o request veio do upload com progresso (feature 105).
+
+    Nesse fluxo a rota responde ``{"redirect": url}`` em vez de 302 — o XHR seguiria o
+    redirect automaticamente e consumiria as flash messages da página de destino.
+    """
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
 def _detect_media_type(filename: str) -> str | None:
     ext = os.path.splitext(filename or "")[1].lower()
     for media_type, exts in _MEDIA_EXTS.items():
@@ -203,6 +212,8 @@ def new_space():
 
     title = (request.form.get("title") or "").strip()
     if not title:
+        if _wants_json():
+            return jsonify({"error": "Informe um título para o espaço."}), 400
         flash("Informe um título para o espaço.", "error")
         return render_template("revisao/new.html", users=users)
 
@@ -227,10 +238,24 @@ def new_space():
     for e in errors:
         flash(e, "warning")
     flash(f"Espaço criado com {saved} material(is).", "success")
-    return redirect(url_for("revisao.space_detail", space_id=space.id))
+    # ?novo=1 destaca o convite aos revisores na tela do espaço (feature 105)
+    target = url_for("revisao.space_detail", space_id=space.id, novo=1)
+    if _wants_json():
+        return jsonify({"redirect": target})
+    return redirect(target)
 
 
 # ── Detalhe do espaço ─────────────────────────────────────────────────────────
+
+def _invite_text(space: ReviewSpace) -> str:
+    """Mensagem pronta para a editoria colar no WhatsApp dos revisores (feature 105)."""
+    link = url_for("revisao.space_detail", space_id=space.id, _external=True)
+    return (
+        f'Olá! 👋 Você foi adicionado(a) como revisor(a) de "{space.title}" na Plataforma Manto.\n'
+        f"Acesse aqui: {link}\n"
+        "(entre com seu login de sempre)"
+    )
+
 
 @revisao_bp.route("/<int:space_id>")
 @login_required
@@ -246,6 +271,8 @@ def space_detail(space_id: int):
         space=space,
         can_manage=_can_manage(space),
         users=users,
+        just_created=request.args.get("novo") == "1",
+        invite_text=_invite_text(space),
     )
 
 
@@ -260,7 +287,10 @@ def upload_assets(space_id: int):
     for e in errors:
         flash(e, "warning")
     flash(f"{saved} material(is) adicionado(s).", "success")
-    return redirect(url_for("revisao.space_detail", space_id=space.id))
+    target = url_for("revisao.space_detail", space_id=space.id)
+    if _wants_json():
+        return jsonify({"redirect": target})
+    return redirect(target)
 
 
 @revisao_bp.route("/<int:space_id>/reviewers", methods=["POST"])
@@ -356,17 +386,20 @@ def replace_asset(asset_id: int):
     if not _can_manage(space):
         abort(403)
 
+    def _replace_error(message: str):
+        if _wants_json():
+            return jsonify({"error": message}), 400
+        flash(message, "error")
+        return redirect(url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id))
+
     file = request.files.get("file")
     if not file or not file.filename:
-        flash("Selecione um arquivo para substituir.", "error")
-        return redirect(url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id))
+        return _replace_error("Selecione um arquivo para substituir.")
     media_type = _detect_media_type(file.filename)
     if media_type != asset.media_type:
-        flash(f"A nova versão precisa ser do mesmo tipo ({asset.media_type}).", "error")
-        return redirect(url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id))
+        return _replace_error(f"A nova versão precisa ser do mesmo tipo ({asset.media_type}).")
     if _file_size(file) > _MAX_FILE:
-        flash("Arquivo acima de 512 MB.", "error")
-        return redirect(url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id))
+        return _replace_error("Arquivo acima de 512 MB.")
 
     _snapshot_current_version(asset)
     asset.file_path = save_file(file, "review")
@@ -378,7 +411,10 @@ def replace_asset(asset_id: int):
     asset.uploaded_by = current_user.id
     db.session.commit()
     flash(f"Nova versão enviada (v{asset.version}). Prazo reiniciado para {_EXPIRY_DAYS} dias.", "success")
-    return redirect(url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id))
+    target = url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id)
+    if _wants_json():
+        return jsonify({"redirect": target})
+    return redirect(target)
 
 
 @revisao_bp.route("/asset/<int:asset_id>/finalize", methods=["POST"])

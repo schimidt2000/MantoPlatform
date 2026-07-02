@@ -83,10 +83,10 @@
       {% if can_manage and not is_old %}
         {% set accept_map = {'video':'video/*','audio':'audio/*','image':'image/*','pdf':'application/pdf'} %}
         <div class="rv-manage">
-          <form method="post" action="/revisao/asset/{{ asset.id }}/replace" enctype="multipart/form-data" class="rv-manage-form"
-                onsubmit="var b=this.querySelector('button'); b.disabled=true; b.textContent='Enviando…';">
+          <form method="post" action="/revisao/asset/{{ asset.id }}/replace" enctype="multipart/form-data"
+                class="rv-manage-form" id="replace-form">
             <input type="file" name="file" accept="{{ accept_map.get(asset.media_type, '') }}" required>
-            <button type="submit" class="btn btn-sm btn-secondary">Enviar nova versão</button>
+            <button type="submit" class="btn btn-sm btn-secondary" id="replace-btn">Enviar nova versão</button>
           </form>
           {% if not asset.file_removed %}
             <form method="post" action="/revisao/asset/{{ asset.id }}/finalize"
@@ -95,6 +95,14 @@
             </form>
           {% endif %}
         </div>
+        {# Barra de progresso do envio de nova versão (feature 105) #}
+        <div id="replace-progress" hidden style="margin-top:10px;">
+          <div style="height:8px; background:var(--line); border-radius:4px; overflow:hidden;">
+            <div id="replace-bar" style="height:100%; width:0%; background:var(--accent); border-radius:4px; transition:width .2s;"></div>
+          </div>
+          <p id="replace-label" class="muted" style="font-size:12px; margin:4px 0 0;">Preparando envio…</p>
+        </div>
+        <p id="replace-error" hidden style="color:var(--red); font-size:12.5px; margin:8px 0 0;"></p>
         <p class="muted rv-manage-hint">
           Enviar nova versão preserva a anterior no histórico e reinicia o prazo de 7 dias. Finalizar remove os arquivos (atual e antigos).
         </p>
@@ -272,6 +280,7 @@
   /* ── Modal do histórico ──────────────────────────────────────── */
   .rv-modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60;
               display: flex; align-items: flex-end; justify-content: center; }
+  .rv-modal[hidden] { display: none; } /* o display:flex acima venceria o [hidden] do user-agent */
   .rv-modal-card { width: 100%; max-width: 440px; max-height: 70vh; overflow: auto; margin: 0;
                    border-radius: var(--r-md) var(--r-md) 0 0; }
   .rv-modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -298,6 +307,7 @@
   }
 </style>
 
+<script src="/static/upload_progress.js"></script>
 <script>
 (function () {
   var app = document.getElementById('review-app');
@@ -588,6 +598,18 @@
   if (openBtn) openBtn.onclick = function () { modal.hidden = false; };
   if (closeBtn) closeBtn.onclick = function () { modal.hidden = true; };
   if (modal) modal.addEventListener('click', function (e) { if (e.target === modal) modal.hidden = true; });
+
+  /* ── Nova versão com progresso real (feature 105) ────────────── */
+  var replaceForm = document.getElementById('replace-form');
+  if (replaceForm && window.uploadFormWithProgress) {
+    uploadFormWithProgress(replaceForm, {
+      wrapEl: document.getElementById('replace-progress'),
+      barEl: document.getElementById('replace-bar'),
+      labelEl: document.getElementById('replace-label'),
+      errorEl: document.getElementById('replace-error'),
+      submitBtn: document.getElementById('replace-btn'),
+    });
+  }
 })();
 </script>
 {% endblock %}
