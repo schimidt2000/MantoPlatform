@@ -272,6 +272,7 @@
   /* ── Modal do histórico ──────────────────────────────────────── */
   .rv-modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60;
               display: flex; align-items: flex-end; justify-content: center; }
+  .rv-modal[hidden] { display: none; } /* o display:flex acima venceria o [hidden] do user-agent */
   .rv-modal-card { width: 100%; max-width: 440px; max-height: 70vh; overflow: auto; margin: 0;
                    border-radius: var(--r-md) var(--r-md) 0 0; }
   .rv-modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
