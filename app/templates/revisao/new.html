@@ -50,12 +50,22 @@
       </div>
     </div>
 
+    {# Barra de progresso real do upload (feature 105) #}
+    <div id="upload-progress" hidden style="margin-top:16px;">
+      <div style="height:10px; background:var(--line); border-radius:5px; overflow:hidden;">
+        <div id="upload-bar" style="height:100%; width:0%; background:var(--accent); border-radius:5px; transition:width .2s;"></div>
+      </div>
+      <p id="upload-label" class="muted" style="font-size:12.5px; margin:6px 0 0;">Preparando envio…</p>
+    </div>
+    <p id="upload-error" class="small" hidden style="color:var(--red); margin-top:10px;"></p>
+
     <div style="margin-top:16px;">
       <button type="submit" class="btn btn-primary" id="create-btn">Criar espaço</button>
     </div>
   </form>
 </div>
 
+<script src="/static/upload_progress.js"></script>
 <script>
   // Permite selecionar uma pasta inteira (onde o navegador suporta) e lista os arquivos escolhidos
   var inp = document.getElementById('files-input');
@@ -64,9 +74,22 @@
     var n = inp.files ? inp.files.length : 0;
     document.getElementById('files-list').textContent = n ? (n + ' arquivo(s) selecionado(s)') : '';
   });
-  document.getElementById('new-space-form').addEventListener('submit', function () {
-    var b = document.getElementById('create-btn');
-    b.disabled = true; b.textContent = 'Enviando…';
+
+  var form = document.getElementById('new-space-form');
+  // Com arquivos: XHR com progresso real; sem arquivos: envio tradicional com anti duplo clique.
+  uploadFormWithProgress(form, {
+    wrapEl: document.getElementById('upload-progress'),
+    barEl: document.getElementById('upload-bar'),
+    labelEl: document.getElementById('upload-label'),
+    errorEl: document.getElementById('upload-error'),
+    submitBtn: document.getElementById('create-btn'),
+  });
+  form.addEventListener('submit', function () {
+    var hasFiles = inp.files && inp.files.length;
+    if (!hasFiles) {
+      var b = document.getElementById('create-btn');
+      b.disabled = true; b.textContent = 'Criando…';
+    }
   });
 </script>
 {% endblock %}
