@@ -21,7 +21,14 @@ from werkzeug.datastructures import FileStorage
 
 from app import db
 from app.constants import RoleName
-from app.models import ReviewAsset, ReviewComment, ReviewReviewer, ReviewSpace, User
+from app.models import (
+    ReviewAsset,
+    ReviewAssetVersion,
+    ReviewComment,
+    ReviewReviewer,
+    ReviewSpace,
+    User,
+)
 from app.storage import delete_file, save_file
 
 revisao_bp = Blueprint("revisao", __name__, url_prefix="/revisao")
@@ -65,6 +72,23 @@ def _can_manage(space: ReviewSpace) -> bool:
     return _is_superadmin() or space.created_by == current_user.id
 
 
+def _can_resolve(comment: ReviewComment) -> bool:
+    """Criador do espaço, super admin ou autor do comentário podem concluir/reabrir (FR-010)."""
+    return (
+        _is_superadmin()
+        or comment.asset.space.created_by == current_user.id
+        or comment.user_id == current_user.id
+    )
+
+
+def _can_delete_comment(comment: ReviewComment) -> bool:
+    """Só o autor do comentário ou super admin podem excluir (FR-011).
+
+    Excluir fica fora do fluxo normal de revisão — quem atende um comentário o CONCLUI.
+    """
+    return _is_superadmin() or comment.user_id == current_user.id
+
+
 def _detect_media_type(filename: str) -> str | None:
     ext = os.path.splitext(filename or "")[1].lower()
     for media_type, exts in _MEDIA_EXTS.items():
@@ -103,9 +127,40 @@ def _save_assets(space: ReviewSpace, files: list[FileStorage]) -> tuple[int, lis
             media_type=media_type,
             position=start + saved,
             expires_at=datetime.utcnow() + timedelta(days=_EXPIRY_DAYS),
+            uploaded_by=current_user.id,
         ))
         saved += 1
     return saved, errors
+
+
+def _snapshot_current_version(asset: ReviewAsset) -> None:
+    """Preserva a versão atual do material como entrada de histórico (feature 104).
+
+    Chamado ANTES de sobrescrever o asset em uma substituição: guarda arquivo, autor e prazos
+    da versão vigente. O arquivo NÃO é apagado — segue vivo até o ``expires_at`` herdado.
+    """
+    uploaded_at = (
+        asset.expires_at - timedelta(days=_EXPIRY_DAYS)
+        if asset.expires_at else asset.created_at
+    )
+    db.session.add(ReviewAssetVersion(
+        asset_id=asset.id,
+        version_number=asset.version or 1,
+        file_path=asset.file_path,
+        original_name=asset.original_name,
+        uploaded_by=asset.uploaded_by,
+        created_at=uploaded_at,
+        expires_at=asset.expires_at,
+        file_removed=asset.file_removed,
+    ))
+
+
+def _delete_version_files(asset: ReviewAsset) -> None:
+    """Remove do armazenamento os arquivos de snapshots ainda disponíveis do material."""
+    for version in asset.versions:
+        if not version.file_removed and version.file_path:
+            delete_file(version.file_path)
+            version.file_removed = True
 
 
 # ── Lista ─────────────────────────────────────────────────────────────────────
@@ -233,6 +288,7 @@ def delete_space(space_id: int):
         abort(403)
     for asset in space.assets:
         delete_file(asset.file_path)
+        _delete_version_files(asset)
     db.session.delete(space)
     db.session.commit()
     flash("Espaço excluído.", "success")
@@ -244,15 +300,30 @@ def delete_space(space_id: int):
 @revisao_bp.route("/<int:space_id>/asset/<int:asset_id>")
 @login_required
 def asset_view(space_id: int, asset_id: int):
+    """Visualizador do material. ``?v=N`` abre uma versão antiga em modo somente leitura."""
     space = ReviewSpace.query.get_or_404(space_id)
     if not _can_view(space):
         abort(403)
     asset = ReviewAsset.query.filter_by(id=asset_id, space_id=space.id).first_or_404()
+
+    current_version = asset.version or 1
+    requested = request.args.get("v", type=int)
+    viewing_version = None   # None = versão atual
+    version_file = None      # snapshot exibido quando é versão antiga
+    if requested is not None and requested != current_version:
+        version_file = ReviewAssetVersion.query.filter_by(
+            asset_id=asset.id, version_number=requested,
+        ).first_or_404()
+        viewing_version = requested
+
     return render_template(
         "revisao/asset.html",
         space=space,
         asset=asset,
         can_manage=_can_manage(space),
+        viewing_version=viewing_version,
+        version_file=version_file,
+        history=asset.history,
     )
 
 
@@ -264,6 +335,7 @@ def delete_asset(asset_id: int):
     if not _can_manage(space):
         abort(403)
     delete_file(asset.file_path)
+    _delete_version_files(asset)
     db.session.delete(asset)
     db.session.commit()
     flash("Material excluído.", "success")
@@ -273,10 +345,11 @@ def delete_asset(asset_id: int):
 @revisao_bp.route("/asset/<int:asset_id>/replace", methods=["POST"])
 @login_required
 def replace_asset(asset_id: int):
-    """Substitui o arquivo de um material por uma nova versão (feature 090).
+    """Substitui o arquivo por uma nova versão, preservando a anterior no histórico (feature 104).
 
-    Remove o arquivo antigo, salva o novo (mesmo tipo de mídia), incrementa a versão e reinicia o
-    prazo de 7 dias. Os comentários são mantidos.
+    A versão vigente vira um snapshot (``ReviewAssetVersion``) com o arquivo intacto até o prazo
+    herdado. A nova versão incrementa o número, reinicia o prazo de 7 dias e mantém os
+    comentários antigos associados à versão em que foram feitos.
     """
     asset = ReviewAsset.query.get_or_404(asset_id)
     space = asset.space
@@ -295,33 +368,37 @@ def replace_asset(asset_id: int):
         flash("Arquivo acima de 512 MB.", "error")
         return redirect(url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id))
 
-    if asset.file_path and not asset.file_removed:
-        delete_file(asset.file_path)
+    _snapshot_current_version(asset)
     asset.file_path = save_file(file, "review")
     asset.original_name = file.filename
     asset.version = (asset.version or 1) + 1
     asset.expires_at = datetime.utcnow() + timedelta(days=_EXPIRY_DAYS)
     asset.file_removed = False
     asset.finalized_at = None
+    asset.uploaded_by = current_user.id
     db.session.commit()
-    flash(f"Arquivo substituído (versão {asset.version}). Prazo reiniciado para {_EXPIRY_DAYS} dias.", "success")
+    flash(f"Nova versão enviada (v{asset.version}). Prazo reiniciado para {_EXPIRY_DAYS} dias.", "success")
     return redirect(url_for("revisao.asset_view", space_id=space.id, asset_id=asset.id))
 
 
 @revisao_bp.route("/asset/<int:asset_id>/finalize", methods=["POST"])
 @login_required
 def finalize_asset(asset_id: int):
-    """Finaliza um material aprovado: remove o arquivo do armazenamento (registro + comentários ficam)."""
+    """Finaliza um material aprovado: remove os arquivos (atual e de versões antigas) do armazenamento.
+
+    Registros, histórico de versões e comentários permanecem.
+    """
     asset = ReviewAsset.query.get_or_404(asset_id)
     space = asset.space
     if not _can_manage(space):
         abort(403)
     if not asset.file_removed and asset.file_path:
         delete_file(asset.file_path)
+    _delete_version_files(asset)
     asset.file_removed = True
     asset.finalized_at = datetime.utcnow()
     db.session.commit()
-    flash("Material finalizado. Arquivo removido do armazenamento.", "success")
+    flash("Material finalizado. Arquivos removidos do armazenamento.", "success")
     return redirect(url_for("revisao.space_detail", space_id=space.id))
 
 
@@ -337,20 +414,26 @@ def _comment_json(c: ReviewComment) -> dict:
         "page": c.page,
         "pos_x": c.pos_x,
         "pos_y": c.pos_y,
+        "version_number": c.version_number or 1,
         "resolved": c.resolved,
+        "resolved_by_name": c.resolver.name if c.resolver else None,
+        "resolved_at": c.resolved_at.strftime("%d/%m/%Y %H:%M") if c.resolved_at else None,
         "created_at": c.created_at.strftime("%d/%m/%Y %H:%M"),
-        "can_delete": _is_superadmin() or c.user_id == current_user.id or c.asset.space.created_by == current_user.id,
+        "can_resolve": _can_resolve(c),
+        "can_delete": _can_delete_comment(c),
     }
 
 
 @revisao_bp.route("/asset/<int:asset_id>/comments")
 @login_required
 def list_comments(asset_id: int):
+    """Lista os comentários de UMA versão do material (``?v=``; padrão: versão atual)."""
     asset = ReviewAsset.query.get_or_404(asset_id)
     if not _can_view(asset.space):
         abort(403)
+    version = request.args.get("v", type=int) or asset.version or 1
     comments = sorted(
-        asset.comments,
+        (c for c in asset.comments if (c.version_number or 1) == version),
         key=lambda c: (c.timecode if c.timecode is not None else 1e9, c.page or 0, c.created_at),
     )
     return jsonify([_comment_json(c) for c in comments])
@@ -359,6 +442,7 @@ def list_comments(asset_id: int):
 @revisao_bp.route("/asset/<int:asset_id>/comment", methods=["POST"])
 @login_required
 def add_comment(asset_id: int):
+    """Cria um comentário na versão ATUAL do material (versões antigas são só leitura)."""
     asset = ReviewAsset.query.get_or_404(asset_id)
     if not _can_view(asset.space):
         abort(403)
@@ -366,6 +450,9 @@ def add_comment(asset_id: int):
     body = (data.get("body") or "").strip()
     if not body:
         return jsonify({"error": "Comentário vazio."}), 400
+    requested_version = data.get("version")
+    if requested_version not in (None, "") and int(requested_version) != (asset.version or 1):
+        return jsonify({"error": "Comentários só podem ser feitos na versão atual."}), 409
 
     def _to_float(v):
         try:
@@ -387,6 +474,7 @@ def add_comment(asset_id: int):
         page=_to_int(data.get("page")),
         pos_x=_to_float(data.get("pos_x")),
         pos_y=_to_float(data.get("pos_y")),
+        version_number=asset.version or 1,
     )
     db.session.add(comment)
     db.session.commit()
@@ -396,10 +484,20 @@ def add_comment(asset_id: int):
 @revisao_bp.route("/comment/<int:comment_id>/resolve", methods=["POST"])
 @login_required
 def resolve_comment(comment_id: int):
+    """Conclui ou reabre um comentário, registrando quem concluiu e quando (feature 104)."""
     comment = ReviewComment.query.get_or_404(comment_id)
     if not _can_view(comment.asset.space):
         abort(403)
-    comment.resolved = not comment.resolved
+    if not _can_resolve(comment):
+        return jsonify({"error": "Você não pode concluir este comentário."}), 403
+    if comment.resolved:
+        comment.resolved = False
+        comment.resolved_by = None
+        comment.resolved_at = None
+    else:
+        comment.resolved = True
+        comment.resolved_by = current_user.id
+        comment.resolved_at = datetime.utcnow()
     db.session.commit()
     return jsonify(_comment_json(comment))
 
@@ -408,8 +506,7 @@ def resolve_comment(comment_id: int):
 @login_required
 def delete_comment(comment_id: int):
     comment = ReviewComment.query.get_or_404(comment_id)
-    space = comment.asset.space
-    if not (_is_superadmin() or comment.user_id == current_user.id or space.created_by == current_user.id):
+    if not _can_delete_comment(comment):
         abort(403)
     db.session.delete(comment)
     db.session.commit()

@@ -1082,10 +1082,17 @@ class ReviewAsset(db.Model):
     finalized_at = db.Column(db.DateTime, nullable=True)
     file_removed = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
     version      = db.Column(db.Integer, default=1, nullable=False, server_default="1")
+    # Quem enviou a versão ATUAL do arquivo (feature 104) — copiado para o snapshot na substituição.
+    uploaded_by  = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
+    uploader = db.relationship("User", lazy=True, foreign_keys=[uploaded_by])
     comments = db.relationship(
         "ReviewComment", backref="asset", lazy=True,
         cascade="all, delete-orphan", order_by="ReviewComment.created_at",
+    )
+    versions = db.relationship(
+        "ReviewAssetVersion", backref="asset", lazy=True,
+        cascade="all, delete-orphan", order_by="ReviewAssetVersion.version_number",
     )
 
     @property
@@ -1101,6 +1108,40 @@ class ReviewAsset(db.Model):
         import math
         secs = (self.expires_at - datetime.utcnow()).total_seconds()
         return math.ceil(secs / 86400) if secs > 0 else 0
+
+    @property
+    def history(self) -> list:
+        """Snapshots de versões anteriores, da mais recente para a mais antiga."""
+        return sorted(self.versions, key=lambda v: v.version_number, reverse=True)
+
+
+class ReviewAssetVersion(db.Model):
+    """Snapshot de uma versão ANTERIOR de um material de revisão (feature 104).
+
+    Criado no momento da substituição do arquivo: a versão atual continua vivendo no próprio
+    ``ReviewAsset``; aqui fica o histórico navegável. O arquivo do snapshot herda o
+    ``expires_at`` que tinha quando era atual (não renova) e é removido pelo cleanup da
+    feature 090 quando vence.
+    """
+    __tablename__ = "review_asset_versions"
+    __table_args__ = (db.Index("ix_review_asset_versions_asset_id", "asset_id"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    asset_id = db.Column(db.Integer, db.ForeignKey("review_assets.id"), nullable=False)
+    version_number = db.Column(db.Integer, nullable=False)  # número que tinha quando era atual
+    file_path = db.Column(db.String(400), nullable=False)
+    original_name = db.Column(db.String(300), nullable=True)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    file_removed = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+
+    uploader = db.relationship("User", lazy=True, foreign_keys=[uploaded_by])
+
+    @property
+    def is_available(self) -> bool:
+        """True se o arquivo do snapshot ainda está no armazenamento."""
+        return not self.file_removed
 
 
 class ReviewReviewer(db.Model):
@@ -1137,8 +1178,14 @@ class ReviewComment(db.Model):
     pos_y = db.Column(db.Float, nullable=True)       # 0–1 (imagem)
     resolved = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Feature 104: versão do material vigente quando o comentário foi criado, e registro
+    # transparente de conclusão (quem concluiu e quando — visível a todos os envolvidos).
+    version_number = db.Column(db.Integer, default=1, nullable=False, server_default="1")
+    resolved_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship("User", lazy=True, foreign_keys=[user_id])
+    resolver = db.relationship("User", lazy=True, foreign_keys=[resolved_by])
 
 
 class EventAcrescimo(db.Model):
