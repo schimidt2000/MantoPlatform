@@ -851,11 +851,14 @@ function _orcAcrTipos() {
 function orcAcrescimoRowHtml(sel) {
   const tipos = _orcAcrTipos();
   const opts = tipos.map(t => `<option value="${t}"${t === sel ? ' selected' : ''}>${t}</option>`).join('');
+  // Os atributos name="acrescimo_*[]" são obrigatórios para o servidor aplicar os acréscimos no
+  // orçamento final (feature 103): sem eles, o navegador não envia os campos e o total gerado ignora
+  // o acréscimo, embora a prévia (lida por classe) o some.
   return `<div class="orc-acr-row" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
-    <select class="acr-tipo" onchange="onOrcAcrescimoTipoChange(this)" style="font-size:13px;">${opts}</select>
-    <input type="text" class="acr-desc" placeholder="Descrição" style="font-size:13px; width:140px; display:none;">
-    <input type="number" class="acr-value" min="0" step="0.01" placeholder="0" style="width:90px;" oninput="update()">
-    <select class="acr-unit" onchange="update()" style="font-size:13px;"><option value="0">R$</option><option value="1">%</option></select>
+    <select name="acrescimo_tipo[]" class="acr-tipo" onchange="onOrcAcrescimoTipoChange(this)" style="font-size:13px;">${opts}</select>
+    <input type="text" name="acrescimo_descricao[]" class="acr-desc" placeholder="Descrição" style="font-size:13px; width:140px; display:none;">
+    <input type="number" name="acrescimo_value[]" class="acr-value" min="0" step="0.01" placeholder="0" style="width:90px;" oninput="update()">
+    <select name="acrescimo_is_percent[]" class="acr-unit" onchange="update()" style="font-size:13px;"><option value="0">R$</option><option value="1">%</option></select>
     <button type="button" class="btn btn-sm btn-ghost orc-acr-remove" style="color:#c0392b;">×</button>
   </div>`;
 }
