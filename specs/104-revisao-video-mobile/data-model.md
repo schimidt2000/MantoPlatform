@@ -43,9 +43,13 @@ concluído
    └─ reabrir → pendente (limpa os três campos)
 ```
 
-### ReviewAsset (INALTERADA no schema)
+### ReviewAsset (1 coluna nova)
 
-Nenhuma coluna nova. Ganha apenas relationship `versions` e helpers Python:
+| Campo novo | Tipo | Regras |
+|---|---|---|
+| `uploaded_by` | Integer FK → `users.id` | nullable — quem enviou a versão ATUAL do arquivo; preenchido no upload/substituição e copiado para o snapshot ao substituir (necessário para FR-012: "autor do envio" no histórico) |
+
+Ganha também relationship `versions` e helpers Python:
 
 - `history` (property): lista de snapshots ordenada por `version_number` desc.
 - Ao **substituir** (`replace_asset`): antes de sobrescrever, cria
