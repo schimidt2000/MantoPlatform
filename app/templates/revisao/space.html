@@ -11,6 +11,7 @@
 
 {% block page_actions %}
   <a href="/revisao/" class="btn btn-ghost">← Espaços</a>
+  <button type="button" class="btn btn-secondary btn-sm invite-copy-btn">🔗 Copiar convite</button>
   {% if can_manage %}
     <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger,#c0392b);"
             onclick="document.getElementById('del-space').style.display='flex'">🗑 Excluir espaço</button>
@@ -18,6 +19,14 @@
 {% endblock %}
 
 {% block content %}
+{% if just_created %}
+  {# Destaque pós-criação: convite aos revisores (feature 105) #}
+  <div class="panel" style="margin-bottom:16px; border:1px solid var(--accent); background:var(--accent-soft);">
+    <p style="margin:0 0 10px; font-size:14px;"><strong>🎉 Espaço criado!</strong> Envie o convite para os revisores terem acesso:</p>
+    <button type="button" class="btn btn-primary btn-sm invite-copy-btn">🔗 Copiar convite</button>
+  </div>
+{% endif %}
+
 {% if space.description %}
   <div class="panel" style="margin-bottom:16px;"><p class="meta" style="margin:0;">{{ space.description }}</p></div>
 {% endif %}
@@ -75,11 +84,19 @@
 {% if can_manage %}
   <div class="panel" style="margin-top:16px;">
     <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:12px;">Adicionar materiais</div>
-    <form method="post" action="/revisao/{{ space.id }}/upload" enctype="multipart/form-data"
+    <form method="post" action="/revisao/{{ space.id }}/upload" enctype="multipart/form-data" id="add-files-form"
           style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <input type="file" name="files" multiple accept="video/*,audio/*,image/*,application/pdf" required>
-      <button type="submit" class="btn btn-primary btn-sm">Enviar</button>
+      <button type="submit" class="btn btn-primary btn-sm" id="add-files-btn">Enviar</button>
     </form>
+    {# Barra de progresso do upload (feature 105) #}
+    <div id="add-progress" hidden style="margin-top:10px;">
+      <div style="height:8px; background:var(--line); border-radius:4px; overflow:hidden;">
+        <div id="add-bar" style="height:100%; width:0%; background:var(--accent); border-radius:4px; transition:width .2s;"></div>
+      </div>
+      <p id="add-label" class="muted" style="font-size:12px; margin:4px 0 0;">Preparando envio…</p>
+    </div>
+    <p id="add-error" hidden style="color:var(--red); font-size:12.5px; margin:8px 0 0;"></p>
   </div>
 
   <div class="panel" style="margin-top:16px;">
@@ -112,4 +129,57 @@
     </div>
   </div>
 {% endif %}
+
+{# Convite copiável (feature 105) — textarea escondida serve de fonte e de fallback manual #}
+<div id="invite-fallback" hidden class="panel" style="margin-top:16px;">
+  <p class="muted" style="font-size:12.5px; margin:0 0 8px;">Não foi possível copiar automaticamente — selecione e copie o texto abaixo:</p>
+  <textarea id="invite-text" readonly rows="4" style="width:100%; font-size:13px;">{{ invite_text }}</textarea>
+</div>
+
+<script src="/static/upload_progress.js"></script>
+<script>
+  // Copiar convite (feature 105)
+  (function () {
+    var buttons = document.querySelectorAll('.invite-copy-btn');
+    var text = document.getElementById('invite-text').value;
+    function showCopied(btn) {
+      var original = btn.textContent;
+      btn.textContent = '✓ Copiado!';
+      btn.disabled = true;
+      setTimeout(function () { btn.textContent = original; btn.disabled = false; }, 2500);
+    }
+    function fallback() {
+      var box = document.getElementById('invite-fallback');
+      box.hidden = false;
+      var ta = document.getElementById('invite-text');
+      ta.focus(); ta.select();
+      box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text)
+            .then(function () { showCopied(btn); })
+            .catch(fallback);
+        } else {
+          fallback();
+        }
+      });
+    });
+  })();
+
+  // Adicionar materiais com progresso real (feature 105)
+  (function () {
+    var form = document.getElementById('add-files-form');
+    if (form && window.uploadFormWithProgress) {
+      uploadFormWithProgress(form, {
+        wrapEl: document.getElementById('add-progress'),
+        barEl: document.getElementById('add-bar'),
+        labelEl: document.getElementById('add-label'),
+        errorEl: document.getElementById('add-error'),
+        submitBtn: document.getElementById('add-files-btn'),
+      });
+    }
+  })();
+</script>
 {% endblock %}
