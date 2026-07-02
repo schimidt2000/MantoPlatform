@@ -109,7 +109,7 @@ versÃ£o e snapshot no banco (roteiro US3 do [quickstart.md](./quickstart.md)).
 
 - [X] T021 PortÃµes de qualidade: `mypy app/` sem erros novos nos arquivos tocados, `ruff format app/` e `ruff check app/` limpos; docstrings e type hints em todas as funÃ§Ãµes novas/alteradas
 - [X] T022 Passada final de consistÃªncia visual nas 3 telas do mÃ³dulo (list/space/asset) â€” espaÃ§amentos mÃºltiplos de 4px, zero cor hardcoded nova, textos pt-BR â€” e re-execuÃ§Ã£o rÃ¡pida do quickstart completo
-- [ ] T023 Commits atÃ´micos por fase + merge da branch `104-revisao-video-mobile` em `main` e push (stage explÃ­cito, nunca `git add -A`)
+- [X] T023 Commits atÃ´micos por fase + merge da branch `104-revisao-video-mobile` em `main` e push (stage explÃ­cito, nunca `git add -A`)
 
 ---
 
