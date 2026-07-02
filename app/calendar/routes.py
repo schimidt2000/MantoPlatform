@@ -1507,16 +1507,22 @@ def event_detail(event_id: int):
     confirm_location = event.location or ""
 
     # Valor em aberto + data limite para o botão de cobrança.
+    # Política padrão: o saldo vence "2 dias antes do evento" (dia inteiro). Quando não há data limite
+    # explícita (faturado/futuro) nem parcelas com data, cai nessa política baseada na DATA do evento —
+    # assim o botão libera a partir das 00:00 do dia 2 dias antes, e não exatamente 48h antes.
     _today = date.today()
+    _policy_due = (
+        event.start_at.date() - timedelta(days=2) if event.start_at else None
+    )
     unreceived = [i for i in event.installments if not i.received]
     if event.installments:
         cobranca_outstanding = sum((i.amount or 0 for i in unreceived), Decimal("0"))
         _due_dates = [i.due_date for i in unreceived if i.due_date]
-        cobranca_due = min(_due_dates) if _due_dates else None
+        cobranca_due = min(_due_dates) if _due_dates else _policy_due
     else:
         _received = sum((p.amount or 0 for p in payments), Decimal("0"))
         cobranca_outstanding = Decimal(event.sale_value or 0) - _received
-        cobranca_due = event.payment_due_date
+        cobranca_due = event.payment_due_date or _policy_due
     cobranca_enabled = (
         cobranca_due is not None
         and cobranca_due <= _today
