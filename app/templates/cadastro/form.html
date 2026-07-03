@@ -54,6 +54,16 @@
     .preview { margin-top: 8px; display: none; }
     .preview img { max-width: 120px; max-height: 120px; border-radius: 8px; border: 1px solid var(--line); }
     .err { background: #fde8e6; border: 1px solid #f5c6c2; color: var(--danger); border-radius: var(--r); padding: 12px 14px; font-size: 14px; margin-bottom: 16px; }
+    /* Feedback de validação por campo (feature 106): destaque + mensagem junto ao campo */
+    .field-invalid { animation: field-shake .4s ease; }
+    .field-invalid input, .field-invalid select, .field-invalid textarea { border-color: var(--danger) !important; }
+    .field-invalid.opt-grid, .field-invalid .opt-grid { outline: 2px solid var(--danger); outline-offset: 6px; border-radius: 4px; }
+    .field-errmsg { color: var(--danger); font-size: 12.5px; font-weight: 600; margin-top: 6px; }
+    @keyframes field-shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-6px); }
+      40%, 80% { transform: translateX(6px); }
+    }
     .hp { position: absolute; left: -9999px; top: -9999px; }
     .actions { position: sticky; bottom: 0; padding: 14px 0 0; }
     button.submit { width: 100%; padding: 15px; font-size: 16px; font-weight: 700; color: #fff; background: var(--accent); border: none; border-radius: var(--r); cursor: pointer; }
@@ -100,7 +110,7 @@
       'Maquiagem Social', 'Mestre de Cerimônia', 'Patinação', 'Pirofagia', 'Recreação', 'Técnico de Som',
       'Transporte de Pessoas', 'Transporte de Materiais'] %}
 
-    <form method="post" action="{{ url_for('cadastro.submit') }}" enctype="multipart/form-data" id="cad-form">
+    <form method="post" action="{{ url_for('cadastro.submit') }}" enctype="multipart/form-data" id="cad-form" novalidate>
       <div class="hp" aria-hidden="true">
         <label>Não preencha este campo</label>
         <input type="text" name="website" tabindex="-1" autocomplete="off">
@@ -395,21 +405,101 @@
       syncForeigner();
     }
 
-    // Valida grupos de checkbox obrigatórios (idiomas, habilidades) + trava duplo envio
-    document.getElementById('cad-form').addEventListener('submit', function (e) {
-      var groups = document.querySelectorAll('[data-required-group]');
-      for (var i = 0; i < groups.length; i++) {
-        var checked = groups[i].querySelectorAll('input[type=checkbox]:checked').length;
-        if (checked === 0) {
-          e.preventDefault();
-          alert(groups[i].getAttribute('data-required-group'));
-          groups[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
-          return;
+    // ── Validação com feedback visível (feature 106) ─────────────────────────
+    // O form usa `novalidate`: em vez do balão nativo, cada campo/grupo com problema é
+    // destacado (borda + tremida) com mensagem própria, e a tela rola até o primeiro.
+    var cadForm = document.getElementById('cad-form');
+
+    function fieldContainer(el) {
+      return el.closest('.field') || el;
+    }
+    function clearFieldError(container) {
+      container.classList.remove('field-invalid');
+      var msg = container.querySelector('.field-errmsg');
+      if (msg) msg.remove();
+    }
+    function markFieldError(container, message) {
+      void container.offsetWidth; // reinicia a animação de shake em tentativas seguidas
+      container.classList.add('field-invalid');
+      var msg = document.createElement('div');
+      msg.className = 'field-errmsg';
+      msg.textContent = message;
+      container.appendChild(msg);
+    }
+    function messageFor(el) {
+      if (el.type === 'file') return 'Anexe o arquivo.';
+      if (el.validity && el.validity.typeMismatch && el.type === 'email') return 'Informe um e-mail válido.';
+      if (el.type === 'radio') return 'Selecione uma opção.';
+      return 'Preencha este campo.';
+    }
+    function isVisible(el) {
+      return !!el.offsetParent; // cobre campos ocultos por regras condicionais
+    }
+
+    cadForm.addEventListener('submit', function (e) {
+      cadForm.querySelectorAll('.field-invalid').forEach(clearFieldError);
+
+      var problems = [];
+      var seen = [];
+
+      cadForm.querySelectorAll('input, select, textarea').forEach(function (el) {
+        if (el.disabled || !isVisible(el)) return;
+        if (el.willValidate && !el.checkValidity()) {
+          var container = fieldContainer(el);
+          if (seen.indexOf(container) !== -1) return;
+          seen.push(container);
+          problems.push({ container: container, focusEl: el, message: messageFor(el) });
         }
+      });
+
+      cadForm.querySelectorAll('[data-required-group]').forEach(function (group) {
+        if (group.querySelectorAll('input[type=checkbox]:checked').length === 0) {
+          var container = group.closest('.field') || group;
+          if (seen.indexOf(container) !== -1) return;
+          seen.push(container);
+          problems.push({
+            container: container,
+            focusEl: group.querySelector('input'),
+            message: group.getAttribute('data-required-group'),
+          });
+        }
+      });
+
+      if (problems.length) {
+        e.preventDefault();
+        problems.sort(function (a, b) {
+          return (a.container.compareDocumentPosition(b.container) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
+        });
+        problems.forEach(function (p) { markFieldError(p.container, p.message); });
+        var first = problems[0];
+        first.container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (first.focusEl) {
+          try { first.focusEl.focus({ preventScroll: true }); } catch (err) { first.focusEl.focus(); }
+        }
+        return;
       }
+
       var b = document.getElementById('submit-btn');
       b.disabled = true; b.textContent = 'Enviando…';
     });
+
+    // O destaque some assim que a pessoa corrige o campo/grupo
+    function onFieldFixed(e) {
+      var el = e.target;
+      var group = el.closest('[data-required-group]');
+      if (group) {
+        var gContainer = group.closest('.field') || group;
+        if (gContainer.classList.contains('field-invalid') &&
+            group.querySelectorAll('input[type=checkbox]:checked').length > 0) {
+          clearFieldError(gContainer);
+        }
+        return;
+      }
+      var container = el.closest('.field-invalid');
+      if (container && (!el.willValidate || el.checkValidity())) clearFieldError(container);
+    }
+    cadForm.addEventListener('input', onFieldFixed);
+    cadForm.addEventListener('change', onFieldFixed);
   </script>
 </body>
 </html>
