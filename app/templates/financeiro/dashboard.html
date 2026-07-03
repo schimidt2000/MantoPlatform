@@ -6,7 +6,7 @@
   <p class="sub">Resultado mês a mês — regime de competência (data do evento) · {{ period_label }}</p>
 {% endblock %}
 
-{% macro money(v) %}R$ {{ "{:,.0f}".format(v or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}{% endmacro %}
+{% macro money(v) %}R$ {{ (v or 0) | brl }}{% endmacro %}
 
 {% block content %}
 

@@ -564,7 +564,7 @@
         </div>
         <div class="kpi" style="grid-column:span 2;">
           <div class="kpi-label">Entrada total</div>
-          <div class="kpi-value gold">R$&nbsp;{{ "{:,.0f}".format(perf_money) }}</div>
+          <div class="kpi-value gold">R$&nbsp;{{ perf_money | brl }}</div>
           <div class="kpi-sub">soma dos cachês no período</div>
         </div>
       </div>
