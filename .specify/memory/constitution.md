@@ -88,11 +88,24 @@ ou `4,000.00` (padrão americano é proibido).
   enviado/persistido é convertido de volta para número (`,` decimal → ponto) antes
   de salvar. Nunca persistir a string formatada.
 
+### VIII. Superfícies públicas são mobile-first
+O Portal do Artista, o `/cadastro` público e o espaço de revisão são usados majoritariamente
+em smartphones. Toda tela nova ou tocada nessas superfícies DEVE:
+- Funcionar sem rolagem horizontal de 320px a 430px de largura.
+- Ter alvos de toque confortáveis (≥ 44px) nas ações principais.
+- Não usar texto informativo abaixo de 12px.
+- Considerar o teclado virtual (campo de digitação e ação de envio visíveis com ele aberto).
+- Ser conferida em viewport mobile ANTES de declarar pronto.
+
 ## Stack e Restrições Técnicas
 
 - **Backend**: Python + Flask + SQLAlchemy. Entrada: `python run.py`.
-- **Banco**: SQLite em desenvolvimento; PostgreSQL/AWS RDS em produção. Migrations
-  via Alembic (Flask-Migrate) — toda mudança em `app/models.py` gera migration.
+- **Banco**: PostgreSQL em produção (Railway); cópia local de produção `manto_local`
+  (Postgres) para desenvolvimento/verificação — **nunca** confie no SQLite vazio de
+  `instance/` para validar (não pega bugs Postgres-only). Scripts em `scripts/db/`.
+- **Migrations SEMPRE escritas à mão**: o autogenerate (`flask db migrate`) está quebrado
+  por drift pré-existente. Toda mudança em `app/models.py` gera migration manual
+  (`down_revision` = head atual) com upgrade/downgrade completos e backfill quando preciso.
 - **Frontend**: Jinja2 + HTML/CSS/JS vanilla. Sem framework JS.
 - **Integrações**: Google Calendar (OAuth 2.0) e Google Sheets (service account).
 - **RBAC**: papéis SUPERADMIN, CASTING, FIGURINO, COMERCIAL, FINANCEIRO, VENDAS,
@@ -103,14 +116,22 @@ ou `4,000.00` (padrão americano é proibido).
 ## Portões de Qualidade (antes de "pronto")
 
 Uma tarefa só está concluída quando:
-- [ ] Os testes relevantes passam (`pytest tests/ -v`).
-- [ ] Sem erros de tipo nos arquivos tocados (`mypy app/`).
-- [ ] Código formatado e sem lint (`ruff format app/` e `ruff check app/`).
-- [ ] Funções/classes novas têm docstring e type hints.
-- [ ] Casos de erro tratados; nada de `except` silencioso.
+- [ ] **Verificação funcional automatizada da feature executada e passando** contra a cópia
+  local de produção (`manto_local`): script com o test client do Flask cobrindo os fluxos
+  da feature (sucesso, erro e permissões). Regra prática: requests do test client SEMPRE
+  fora de `with app.app_context()` (contexto persistente vaza o usuário logado entre
+  requests); blocos de contexto curtos só para preparar dados e conferir o banco.
+- [ ] Sem lint nos arquivos tocados (`ruff check <arquivos>`).
+- [ ] Arquivos **novos** formatados com `ruff format`; em arquivos legados, siga o estilo
+  circundante (não reformatar o arquivo inteiro — evita diffs gigantes não relacionados).
+- [ ] Funções/classes novas têm docstring e type hints. (mypy é recomendado; passa a ser
+  obrigatório quando estiver instalado no ambiente do projeto.)
+- [ ] Casos de erro tratados; nada de `except` silencioso — todo `except` amplo registra o
+  erro em log (`logging`), mesmo quando a recuperação é seguir em frente.
 - [ ] Nenhum segredo hardcoded.
-- [ ] Migration criada se `models.py` mudou.
-- [ ] Comportamento conferido no app real quando há mudança de interface.
+- [ ] Migration manual criada se `models.py` mudou (e aplicada na cópia local).
+- [ ] Comportamento conferido no app real quando há mudança de interface (viewport mobile
+  incluído quando for superfície pública — Princípio VIII).
 
 ## Governança
 
@@ -124,9 +145,17 @@ Uma tarefa só está concluída quando:
 - Para orientação detalhada de runtime, o Claude também segue `CLAUDE.md` e os
   arquivos em `.claude/skills/`.
 
-**Versão**: 1.2.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-06-04
+**Versão**: 1.3.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-07-03
 
 > **Changelog**
+> - **1.3.0** (2026-07-03): Portões de qualidade tornados EXECUTÁVEIS no ambiente real —
+>   o portão `pytest tests/` (suíte inexistente) foi substituído pela verificação funcional
+>   automatizada por feature contra `manto_local` (test client, requests fora de
+>   `app_context`); `ruff format` restrito a arquivos novos (legado segue estilo circundante);
+>   mypy rebaixado a recomendação até existir no ambiente. Novo Princípio VIII — superfícies
+>   públicas mobile-first (portal, /cadastro, revisão). Stack atualizada: migrations sempre
+>   manuais (autogenerate quebrado) e verificação contra a cópia local Postgres, nunca
+>   SQLite. `except` amplo agora exige log explicitamente no portão.
 > - **1.2.0** (2026-06-04): Novo Princípio VII — todo valor monetário no padrão
 >   brasileiro (milhar com `.`, decimal com `,`, duas casas), tanto na exibição
 >   quanto na digitação (máscara automática), com fonte única de formatação e valor
