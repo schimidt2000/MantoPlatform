@@ -240,28 +240,28 @@
          data-transport="{{ prefill.transport_value }}"
          onclick="selectDuracao(this)">
       <div class="lbl">1 hora</div>
-      <div class="val" id="dur-val-1h">{{ "R$ {:,.2f}".format(prefill.total_1h).replace(",","X").replace(".",",").replace("X",".") }}</div>
+      <div class="val" id="dur-val-1h">R$ {{ prefill.total_1h | brl }}</div>
     </div>
     <div class="dur-card" data-dur="2"
          data-total="{{ prefill.total_2h }}"
          data-transport="{{ prefill.transport_value }}"
          onclick="selectDuracao(this)">
       <div class="lbl">2 horas</div>
-      <div class="val">{{ "R$ {:,.2f}".format(prefill.total_2h).replace(",","X").replace(".",",").replace("X",".") }}</div>
+      <div class="val">R$ {{ prefill.total_2h | brl }}</div>
     </div>
     <div class="dur-card" data-dur="3"
          data-total="{{ prefill.total_3h }}"
          data-transport="{{ prefill.transport_value }}"
          onclick="selectDuracao(this)">
       <div class="lbl">3 horas</div>
-      <div class="val">{{ "R$ {:,.2f}".format(prefill.total_3h or 0).replace(",","X").replace(".",",").replace("X",".") }}</div>
+      <div class="val">R$ {{ (prefill.total_3h or 0) | brl }}</div>
     </div>
     <div class="dur-card" data-dur="4"
          data-total="{{ prefill.total_4h }}"
          data-transport="{{ prefill.transport_value }}"
          onclick="selectDuracao(this)">
       <div class="lbl">4 horas</div>
-      <div class="val">{{ "R$ {:,.2f}".format(prefill.total_4h).replace(",","X").replace(".",",").replace("X",".") }}</div>
+      <div class="val">R$ {{ prefill.total_4h | brl }}</div>
     </div>
     {% if prefill.total_custom %}
     <div class="dur-card" data-dur="{{ prefill.duracao_custom }}"
@@ -270,7 +270,7 @@
          data-is-custom="1"
          onclick="selectDuracao(this)">
       <div class="lbl">{{ prefill.duracao_custom }} horas</div>
-      <div class="val">{{ "R$ {:,.2f}".format(prefill.total_custom).replace(",","X").replace(".",",").replace("X",".") }}</div>
+      <div class="val">R$ {{ prefill.total_custom | brl }}</div>
     </div>
     {% endif %}
   </div>

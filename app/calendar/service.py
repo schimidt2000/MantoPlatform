@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -7,6 +8,8 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+
+logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
@@ -183,7 +186,8 @@ def fetch_single_event(calendar_id: str, google_event_id: str) -> dict | None:
     service = build("calendar", "v3", credentials=creds)
     try:
         return service.events().get(calendarId=calendar_id, eventId=google_event_id).execute()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — evento pode ter sido removido do Google
+        logger.warning("[gcal] falha ao buscar evento %s: %s", google_event_id, exc)
         return None
 
 

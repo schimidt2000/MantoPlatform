@@ -1953,8 +1953,8 @@ def _lookup_sp_status(location: str) -> bool | None:
                 uf   = data.get("uf", "").strip().upper()
                 is_sp = city in ("são paulo", "sao paulo") and uf == "SP"
                 return not is_sp
-        except Exception:
-            pass  # fall through to string check
+        except Exception as exc:  # noqa: BLE001 — resposta externa inesperada; cai no fallback de string
+            current_app.logger.warning("[transporte] geocode fora de SP falhou, usando fallback: %s", exc)
 
     # Fallback: se "São Paulo" está explicitamente no endereço, é dentro da cidade
     loc_lower = location.lower()
@@ -2018,7 +2018,8 @@ def _fetch_travel_data(event: CalendarEvent, settings) -> dict:
             "duration_minutes": duration_min,
             "distance_km":    distance_km,
         }
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — cálculo de rota é opcional; segue sem estimativa
+        current_app.logger.warning("[transporte] cálculo de rota falhou: %s", exc)
         return {}
 
 

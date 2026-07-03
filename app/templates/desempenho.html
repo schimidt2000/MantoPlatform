@@ -24,7 +24,7 @@
   </div>
   <div class="panel" style="text-align:center; padding:20px 12px;">
     <div style="font-size:28px; font-weight:700; color:var(--gold);">
-      R$ {{ "{:,.0f}".format(total_valor).replace(",", ".") }}
+      R$ {{ total_valor | brl }}
     </div>
     <div class="muted" style="font-size:12px; margin-top:4px;">Volume de vendas</div>
   </div>
@@ -58,7 +58,7 @@
         <tr>
           <td>{{ nome }}</td>
           <td style="text-align:right;">{{ info.count }}</td>
-          <td style="text-align:right;">{{ "{:,.0f}".format(info.total).replace(",", ".") }}</td>
+          <td style="text-align:right;">{{ info.total | brl }}</td>
         </tr>
         {% endfor %}
       </tbody>

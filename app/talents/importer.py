@@ -31,7 +31,7 @@ def parse_date(value: Any) -> Optional[date]:
         # Google Sheets date serial (days since 1899-12-30)
         try:
             return date(1899, 12, 30) + timedelta(days=int(value))
-        except Exception:
+        except (ValueError, TypeError, OverflowError):
             return None
     if isinstance(value, str):
         raw = value.strip()
@@ -39,7 +39,7 @@ def parse_date(value: Any) -> Optional[date]:
         if raw.lstrip("-").isdigit():
             try:
                 return date(1899, 12, 30) + timedelta(days=int(raw))
-            except Exception:
+            except (ValueError, OverflowError):
                 pass
         for fmt in ("%m/%d/%Y", "%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"):
             try:

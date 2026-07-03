@@ -677,7 +677,16 @@ function onStatusChange(select) {
     .catch(function () {
       select.value = prev;          // reverte (sem mudança fantasma)
       select.className = 'pay-status-select pay-status-' + prev;
-      alert('Não foi possível salvar a situação. Tente novamente.');
+      var cell = select.parentElement;
+      var err = cell.querySelector('.pay-save-error');
+      if (!err) {
+        err = document.createElement('div');
+        err.className = 'pay-save-error';
+        err.style.cssText = 'color:var(--red); font-size:11.5px; margin-top:4px;';
+        cell.appendChild(err);
+      }
+      err.textContent = 'Não foi possível salvar. Tente novamente.';
+      setTimeout(function () { err.remove(); }, 5000);
     })
     .finally(function () { select.disabled = false; });
 }

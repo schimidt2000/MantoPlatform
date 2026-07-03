@@ -68,15 +68,18 @@ Manto_Platform/
 
 ### Ferramentas que devem ser usadas:
 ```bash
-# Verificar tipos
-mypy app/
-
-# Linting e formatação
+# Linting (obrigatório nos arquivos tocados)
 ruff check app/
-ruff format app/
 
-# Testes
-pytest tests/ -v --cov=app
+# Formatação: só em arquivos NOVOS (legado segue o estilo circundante — não reformatar arquivo inteiro)
+ruff format <arquivo_novo.py>
+
+# Verificação funcional da feature (obrigatória antes do merge):
+# script com test client do Flask contra a cópia local manto_local (Postgres).
+# REGRA: requests do test client SEMPRE fora de `with app.app_context()` —
+# contexto persistente vaza o usuário logado entre requests.
+
+# mypy: recomendado (vira obrigatório quando instalado no ambiente)
 ```
 
 ### Exemplo de código de qualidade:
@@ -159,15 +162,13 @@ def get_active_users(users: list[User]) -> list[User]:
 
 ### Antes de qualquer task grande, fazer:
 ```bash
-# Verificar estado atual dos testes — SEMPRE contra a cópia local manto_local (Postgres),
-# nunca contra o SQLite vazio. Ver a "REGRA DE TESTES" em "🔧 Comandos do Projeto".
-pytest tests/ -v
+# Garantir que a cópia local (manto_local, Postgres) está atualizada e no head das
+# migrations — toda verificação roda contra ela, nunca contra o SQLite vazio.
+# Ver a "REGRA DE TESTES" em "🔧 Comandos do Projeto".
+python -m flask db heads   # com DATABASE_URL apontando p/ manto_local
 
-# Verificar se não há erros de tipo
-mypy app/
-
-# Garantir que o código está formatado
-ruff format app/ --check
+# Lint limpo nos arquivos que serão tocados
+ruff check app/
 ```
 
 ---
@@ -224,14 +225,16 @@ config = Config()
 
 ## ✅ Checklist Antes de Dizer "Pronto"
 
-- [ ] Todos os testes passando (`pytest`) — **rodados contra `manto_local` (Postgres), não SQLite**
-- [ ] Sem erros de tipo (`mypy`)
-- [ ] Código formatado (`ruff format`)
-- [ ] Sem warnings de linting (`ruff check`)
-- [ ] Funções novas têm docstring
-- [ ] Casos de erro tratados
+- [ ] **Verificação funcional automatizada da feature passando** — script com test client
+      contra `manto_local` (Postgres), cobrindo sucesso/erro/permissões; requests fora de
+      `app_context`. Nunca validar contra o SQLite vazio.
+- [ ] Sem warnings de linting nos arquivos tocados (`ruff check`)
+- [ ] Arquivos novos formatados (`ruff format`); legado segue o estilo circundante
+- [ ] Funções novas têm docstring e type hints
+- [ ] Casos de erro tratados — todo `except` amplo registra em log
 - [ ] Sem secrets/senhas hardcoded no código
 - [ ] Variáveis com nomes claros e descritivos
+- [ ] Superfície pública tocada? Conferida em viewport mobile (Princípio VIII da constituição)
 
 ---
 
@@ -271,20 +274,16 @@ python -m flask db upgrade
 # Criar nova migration após alterar models.py
 python -m flask db migrate -m "descrição"
 
-# Rodar testes — SEMPRE contra manto_local (defina DATABASE_URL para a cópia local antes)
-pytest tests/ -v
-
-# Rodar com cobertura
-pytest tests/ --cov=app --cov-report=html
-
-# Verificar tipos
-mypy app/
-
-# Formatar código
-ruff format app/
+# Verificação funcional — SEMPRE contra manto_local (defina DATABASE_URL para a cópia local)
+# Padrão: script com test client do Flask (requests FORA de app_context)
+$env:DATABASE_URL = (Get-Content .local-db-url -Raw).Trim(); $env:PYTHONPATH = (Get-Location).Path
+.venv\Scripts\python.exe <script_de_verificacao.py>
 
 # Verificar lint
 ruff check app/
+
+# Formatar (apenas arquivos novos)
+ruff format <arquivo_novo.py>
 ```
 
 ---
@@ -306,5 +305,5 @@ O Claude deve ler os arquivos em `.claude/skills/` quando trabalhar nas áreas c
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/106-portal-mobile-cadastro-feedback/plan.md`
+`specs/107-constituicao-auditoria-sistema/plan.md`
 <!-- SPECKIT END -->

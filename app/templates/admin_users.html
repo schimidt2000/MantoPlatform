@@ -59,7 +59,8 @@
               <div class="flex-center gap-8">
                 <a class="btn btn-sm btn-secondary" href="{{ url_for('admin.edit_user', user_id=u.id) }}">Editar</a>
                 {% if is_superadmin %}
-                <form method="post" action="{{ url_for('admin.delete_user', user_id=u.id) }}" style="display:inline;">
+                <form method="post" action="{{ url_for('admin.delete_user', user_id=u.id) }}" style="display:inline;"
+                      onsubmit="return confirm('Excluir o usuário {{ u.name }}? Esta ação não pode ser desfeita.');">
                   <button class="btn btn-sm btn-danger" type="submit">Excluir</button>
                 </form>
                 {% endif %}

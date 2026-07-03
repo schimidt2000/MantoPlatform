@@ -137,7 +137,15 @@ function rotatePhoto(direction) {
     };
   }).catch(function() {
     btns.forEach(function(b) { b.disabled = false; });
-    alert('Erro ao girar foto.');
+    var err = document.getElementById('rotate-error');
+    if (!err) {
+      err = document.createElement('p');
+      err.id = 'rotate-error';
+      err.style.cssText = 'color:var(--red); font-size:12.5px; margin:6px 0 0;';
+      btns[0].parentElement.appendChild(err);
+    }
+    err.textContent = 'Não foi possível girar a foto. Tente novamente.';
+    setTimeout(function () { err.remove(); }, 5000);
   });
 }
 {% endif %}

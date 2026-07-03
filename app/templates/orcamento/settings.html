@@ -345,9 +345,26 @@ function toggleNewEspShowPrices(tipo) {
   document.getElementById('new-esp-show-prices').style.display = tipo === 'com_show' ? '' : 'none';
 }
 
+function espError(msg) {
+  const input = document.getElementById('new-esp-nome');
+  let el = document.getElementById('esp-error');
+  if (!el) {
+    el = document.createElement('p');
+    el.id = 'esp-error';
+    el.style.cssText = 'color:var(--red); font-size:12.5px; font-weight:600; margin:6px 0 0;';
+    input.closest('div').appendChild(el);
+  }
+  el.textContent = msg;
+  setTimeout(() => { el.textContent = ''; }, 6000);
+}
+
 function addEspecial() {
   const nome = document.getElementById('new-esp-nome').value.trim();
-  if (!nome) { alert('Informe o nome do personagem.'); return; }
+  if (!nome) {
+    espError('Informe o nome do personagem.');
+    document.getElementById('new-esp-nome').focus();
+    return;
+  }
   const tipo = document.getElementById('new-esp-tipo').value;
   const base = [
     MoneyMask.parseNumber(document.getElementById('new-esp-p0')),
@@ -371,8 +388,8 @@ function addEspecial() {
     body: JSON.stringify({nome, prices})
   }).then(r => r.json()).then(d => {
     if (d.ok) window.location.reload();
-    else alert('Erro: ' + d.error);
-  }).catch(() => alert('Erro de conexão.'));
+    else espError('Erro: ' + d.error);
+  }).catch(() => espError('Erro de conexão.'));
 }
 
 function deleteEspecial(nome) {
@@ -383,8 +400,8 @@ function deleteEspecial(nome) {
     body: JSON.stringify({nome})
   }).then(r => r.json()).then(d => {
     if (d.ok) window.location.reload();
-    else alert('Erro: ' + d.error);
-  }).catch(() => alert('Erro de conexão.'));
+    else espError('Erro: ' + d.error);
+  }).catch(() => espError('Erro de conexão.'));
 }
 </script>
 {% endblock %}

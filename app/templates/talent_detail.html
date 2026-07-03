@@ -383,7 +383,7 @@
     </div>
     <div class="kpi">
       <div class="kpi-label">Total faturado</div>
-      <div class="kpi-value gold">R$&nbsp;{{ "{:,.0f}".format(total_earned) }}</div>
+      <div class="kpi-value gold">R$&nbsp;{{ total_earned | brl }}</div>
       <div class="kpi-sub">soma dos cachês</div>
     </div>
     <div class="kpi">
@@ -434,7 +434,7 @@
           <td>{{ r.event.title }}</td>
           <td><span class="badge badge-gray">{{ r.character_name }}</span></td>
           <td style="text-align:right; font-weight:600;">
-            {% if r.cache_value %}R$&nbsp;{{ "{:,.0f}".format(r.cache_value) }}{% else %}<span class="muted">—</span>{% endif %}
+            {% if r.cache_value %}R$&nbsp;{{ r.cache_value | brl }}{% else %}<span class="muted">—</span>{% endif %}
           </td>
           <td>
             <a href="/events/{{ r.event_id }}" class="btn btn-sm btn-secondary">Ver evento</a>

@@ -14,12 +14,15 @@ Para Cloudflare R2, defina também:
   AWS_SECRET_ACCESS_KEY = R2 Secret Access Key
 """
 import io
+import logging
 import os
 import shutil
 import uuid as _uuid
 from typing import BinaryIO
 
 from flask import current_app
+
+logger = logging.getLogger(__name__)
 
 # Extensões que passam por compressão automática (GIF excluído — pode ser animado)
 _COMPRESS_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -63,8 +66,8 @@ def _compress_image(file_obj: BinaryIO, ext: str) -> tuple[io.BytesIO, str] | No
         out.seek(0)
         return out, ".jpg"
 
-    except Exception:
-        # Se falhar por qualquer motivo, salva o arquivo original sem compressão
+    except Exception as exc:  # noqa: BLE001 — compressão é otimização; original segue válido
+        logger.warning("compressão de imagem falhou; salvando original: %s", exc)
         return None
 
 
@@ -198,8 +201,8 @@ def _delete_from_object_storage(url: str) -> None:
 
     try:
         _get_s3_client().delete_object(Bucket=bucket, Key=key)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 — objeto órfão no S3 não pode travar o fluxo
+        logger.warning("falha ao remover objeto S3 %s: %s", key, exc)
 
 
 def _guess_content_type(filename: str) -> str:

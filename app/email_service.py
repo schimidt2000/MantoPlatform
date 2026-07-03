@@ -497,7 +497,8 @@ def _emails_enabled() -> bool:
         from app.models import SiteSetting
         settings = SiteSetting.query.first()
         return bool(settings and settings.email_notifications_enabled)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — sem acesso à config: assume desabilitado
+        log.warning("falha ao ler configuração de notificações: %s", exc)
         return False
 
 

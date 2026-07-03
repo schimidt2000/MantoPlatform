@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 import re
 import unicodedata
@@ -7,6 +8,8 @@ from flask import current_app
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google.oauth2 import service_account
+
+logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
@@ -87,6 +90,6 @@ def generate_thumbnail(service, file_id: str, mime_type: str, output_path: str) 
         doc.close()
         return True
 
-    except Exception as e:
-        print(f"[figurino] thumbnail error for {file_id}: {e}")
+    except Exception as e:  # noqa: BLE001 — thumbnail é opcional; ficha segue sem imagem
+        logger.warning("[figurino] erro ao gerar thumbnail de %s: %s", file_id, e)
         return False
