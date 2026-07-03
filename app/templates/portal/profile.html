@@ -88,7 +88,7 @@
         <label>Nome artístico</label>
         <input type="text" name="artistic_name" value="{{ talent.artistic_name or '' }}" placeholder="Como gosta de ser chamado(a)">
       </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div class="grid-pair" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
           <label>Telefone / WhatsApp</label>
           <input type="tel" name="phone" value="{{ talent.phone or '' }}" placeholder="(11) 99999-9999">
@@ -98,7 +98,7 @@
           <input type="email" name="email_contact" value="{{ talent.email_contact or '' }}" placeholder="seu@email.com">
         </div>
       </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div class="grid-pair" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
           <label>Data de nascimento</label>
           <input type="date" name="birth_date"
@@ -114,7 +114,7 @@
           </select>
         </div>
       </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div class="grid-pair" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
           <label>Raça / Etnia</label>
           <input type="text" name="race" value="{{ talent.race or '' }}" placeholder="Ex: Branca, Parda, Preta...">
@@ -156,7 +156,7 @@
     {# ── PIX / Pagamento ─────────────────────────────────────────── #}
     <div class="section-title">Dados de Pagamento (PIX)</div>
     <div class="panel" style="margin-bottom: 16px;">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div class="grid-pair" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
           <label>Tipo de chave PIX</label>
           <select name="pix_key_type">
@@ -180,7 +180,7 @@
     {# ── Documentos ─────────────────────────────────────────────── #}
     <div class="section-title">Documentos</div>
     <div class="panel" style="margin-bottom: 16px;">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div class="grid-pair" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div class="form-group">
           <label>RG</label>
           <input type="text" name="rg" value="{{ talent.rg or '' }}" placeholder="00.000.000-0">
@@ -247,14 +247,14 @@
       {% for m in photos %}
       <div style="position:relative; width:100px;">
         <img src="{{ m.file_path }}" alt="{{ m.label or 'foto' }}"
-             style="width:100px; height:100px; object-fit:cover; border-radius:8px; border:1px solid #e0e0e0;">
-        {% if m.label %}<div style="font-size:10px; text-align:center; margin-top:4px; color:#666;">{{ m.label }}</div>{% endif %}
+             style="width:100px; height:100px; object-fit:cover; border-radius:8px; border:1px solid var(--line);">
+        {% if m.label %}<div style="font-size:12px; text-align:center; margin-top:4px; color:var(--muted);">{{ m.label }}</div>{% endif %}
         <form method="post" action="/portal/media/{{ m.id }}/delete"
               onsubmit="return confirm('Remover esta foto?')"
               style="position:absolute; top:4px; right:4px;">
           <button type="submit"
-                  style="background:rgba(0,0,0,.5);border:none;border-radius:50%;width:20px;height:20px;
-                         color:#fff;font-size:12px;cursor:pointer;line-height:1;padding:0;">×</button>
+                  style="background:rgba(0,0,0,.55);border:none;border-radius:50%;width:28px;height:28px;
+                         color:#fff;font-size:15px;cursor:pointer;line-height:1;padding:0;">×</button>
         </form>
       </div>
       {% endfor %}
@@ -280,15 +280,16 @@
     {% if links %}
     <div style="margin-bottom:12px;">
       {% for m in links %}
-      <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #f0f0f0;">
+      <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--line);">
         <span style="font-size:18px;">🔗</span>
-        <div style="flex:1;">
+        <div style="flex:1; min-width:0;">
           <a href="{{ m.url }}" target="_blank" style="font-size:13px; font-weight:600;">{{ m.label }}</a>
-          <div style="font-size:11px; color:#888; word-break:break-all;">{{ m.url }}</div>
+          <div style="font-size:12px; color:var(--muted); word-break:break-all;">{{ m.url }}</div>
         </div>
         <form method="post" action="/portal/media/{{ m.id }}/delete"
               onsubmit="return confirm('Remover este link?')" style="margin:0;">
-          <button type="submit" style="background:none;border:none;cursor:pointer;color:#e45858;font-size:18px;">×</button>
+          <button type="submit" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:18px;
+                                       min-width:44px;min-height:44px;padding:0;">×</button>
         </form>
       </div>
       {% endfor %}

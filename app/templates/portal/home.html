@@ -39,16 +39,16 @@
     .event-card-footer { display: flex; justify-content: space-between; align-items: center;
                          margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
     .event-row { display: flex; justify-content: space-between; align-items: center;
-                 padding: 10px 0; border-bottom: 1px solid var(--line); gap: 12px; }
+                 padding: 10px 0; border-bottom: 1px solid var(--line); gap: 12px; flex-wrap: wrap; }
     .event-row:last-child { border-bottom: none; }
     .event-row-title { font-weight: 600; font-size: 14px; }
     .event-row-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    .days-badge { font-size: 11px; font-weight: 700; padding: 3px 8px;
+    .days-badge { font-size: 12px; font-weight: 700; padding: 3px 8px;
                   border-radius: 20px; white-space: nowrap; }
     .days-urgent { background: var(--red-soft); color: var(--red); }
     .days-soon   { background: rgba(245,200,66,0.15); color: #b8860b; }
     .days-ok     { background: var(--green-soft); color: var(--green); }
-    .pay-badge   { font-size: 11px; font-weight: 700; padding: 3px 8px;
+    .pay-badge   { font-size: 12px; font-weight: 700; padding: 3px 8px;
                    border-radius: 99px; white-space: nowrap; }
     .pay-pago    { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
     .pay-banco   { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
@@ -171,8 +171,8 @@
           <div class="invite-detail-row">
             <span class="invite-detail-label">💰 Cachê</span>
             <span style="font-weight:600; color: var(--accent-dark);">
-              R$ {{ "{:,.0f}".format(r.cache_value) }}
-              {% if r.travel_cache %}+ R$ {{ "{:,.0f}".format(r.travel_cache) }} transporte{% endif %}
+              R$ {{ r.cache_value | brl }}
+              {% if r.travel_cache %}+ R$ {{ r.travel_cache | brl }} transporte{% endif %}
             </span>
           </div>
           {% endif %}
@@ -204,7 +204,7 @@
             </div>
             {% endif %}
             {% if ensaio.ensaio_materials %}
-            <div style="display:flex; flex-direction:column; gap:3px; margin-top:2px; margin-left:98px;">
+            <div style="display:flex; flex-direction:column; gap:3px; margin-top:2px; margin-left:16px;">
               {% for mat in ensaio.ensaio_materials %}
                 {% if mat.material_type == 'link' and mat.url %}
                 <a href="{{ mat.url }}" target="_blank" rel="noopener" style="font-size:12px; color:var(--accent);">🔗 {{ mat.label or mat.url }}</a>
@@ -339,10 +339,10 @@
           {% if r.cache_value %}
           <div class="event-card-footer">
             <span style="font-weight:600; font-size:13px; color:var(--accent-dark);">
-              💰 R$ {{ "{:,.0f}".format(r.cache_value) }}
+              💰 R$ {{ r.cache_value | brl }}
               {% if r.travel_cache %}
                 <span style="font-size:12px; font-weight:400; color:var(--muted);">
-                  + R$ {{ "{:,.0f}".format(r.travel_cache) }} transp.
+                  + R$ {{ r.travel_cache | brl }} transp.
                 </span>
               {% endif %}
             </span>
@@ -380,11 +380,11 @@
     <div class="fin-summary">
       <div class="fin-card">
         <div class="fin-card-label">Recebido</div>
-        <div class="fin-card-value" style="color: var(--green);">R$ {{ "{:,.0f}".format(total_pago) }}</div>
+        <div class="fin-card-value" style="color: var(--green);">R$ {{ total_pago | brl }}</div>
       </div>
       <div class="fin-card">
         <div class="fin-card-label">Pendente</div>
-        <div class="fin-card-value" style="color: #92400e;">R$ {{ "{:,.0f}".format(total_pendente) }}</div>
+        <div class="fin-card-value" style="color: #92400e;">R$ {{ total_pendente | brl }}</div>
       </div>
     </div>
   </div>
@@ -408,7 +408,7 @@
           <div class="event-row-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.character_name }}</div>
           <div class="event-row-meta">{{ ev.title }}{% if ev.start_at %} · {{ ev.start_at.strftime("%d/%m/%Y") }}{% endif %}</div>
         </div>
-        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
           {% if ev.id in rateable_event_ids %}
             <a href="/portal/events/{{ ev.id }}/rate" class="btn btn-sm btn-secondary" style="font-size:12px;">⭐ Avaliar</a>
           {% elif ev.id in rated_event_ids %}
@@ -419,7 +419,7 @@
           {% endif %}
           {% if r.cache_value %}
             <span style="font-weight:600; font-size:13px; color:var(--accent-dark);">
-              R$ {{ "{:,.0f}".format((r.cache_value or 0) + (r.travel_cache or 0)) }}
+              R$ {{ ((r.cache_value or 0) + (r.travel_cache or 0)) | brl }}
             </span>
           {% endif %}
           {% if r.payment_status == 'pago' %}

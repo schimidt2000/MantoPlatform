@@ -1011,6 +1011,14 @@ tbody tr:hover td { background: #faf9f6; }
 
   /* Formulário medidas: 2 colunas em tablet */
   .grid-medidas { grid-template-columns: 1fr 1fr !important; }
+
+  /* Alvos de toque confortáveis em todo o portal (feature 106) */
+  .portal-wrap .btn { min-height: 44px; align-items: center; }
+}
+
+@media (max-width: 480px) {
+  /* Pares de campos do perfil do portal empilham em telas estreitas (feature 106) */
+  .grid-pair { grid-template-columns: 1fr !important; }
 }
 
 @media (max-width: 600px) {
