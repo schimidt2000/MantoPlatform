@@ -332,6 +332,19 @@
     document.getElementById('overlay').classList.remove('open');
     document.body.style.overflow = '';
   }
+
+  // Proteção global contra duplo envio (feature 107 — Constituição V).
+  // Bubble no document roda DEPOIS dos handlers do form; se algum preveniu (validação/XHR),
+  // não interfere. O setTimeout garante que o valor do botão submitter já foi serializado.
+  document.addEventListener('submit', function (e) {
+    if (e.defaultPrevented) return;
+    var form = e.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    setTimeout(function () {
+      form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])')
+        .forEach(function (btn) { btn.disabled = true; });
+    }, 0);
+  });
 </script>
 <script src="/static/js/password-toggle.js"></script>
 <script src="/static/js/money-mask.js" defer></script>
