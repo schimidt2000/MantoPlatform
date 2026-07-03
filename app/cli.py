@@ -1,8 +1,11 @@
 """Comandos Flask CLI para operações de manutenção."""
 import io
+import logging
 import os
 
 import click
+
+logger = logging.getLogger(__name__)
 
 
 def register_commands(app):
@@ -68,7 +71,8 @@ def register_commands(app):
                 else:
                     img.save(out, format="PNG", optimize=True)
                 return out.getvalue()
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 — imagem corrompida: mantém original
+                logger.warning("[migrate-drive] falha ao comprimir imagem: %s", exc)
                 return None
 
         def _compress_local(url: str) -> tuple[int, int] | None:

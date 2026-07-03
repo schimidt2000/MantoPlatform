@@ -1,4 +1,7 @@
 from flask_login import UserMixin
+import logging
+
+logger = logging.getLogger(__name__)
 from werkzeug.security import generate_password_hash, check_password_hash
 import re as _re
 from . import db, login_manager
@@ -362,7 +365,8 @@ class FigurinoSheet(db.Model):
                         "qty": int(item.get("qty", 1) or 1),
                     })
             return result
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 — JSON de peças corrompido não pode quebrar a tela
+            logger.warning("pieces JSON inválido na FigurinoSheet %s: %s", self.id, exc)
             return []
 
     @property
