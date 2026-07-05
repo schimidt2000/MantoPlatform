@@ -3095,3 +3095,60 @@ def delete_calendar_event(event_id: int):
     db.session.commit()
     flash(f'Evento "{title}" excluído com sucesso.', "success")
     return redirect(url_for("calendar.agenda"))
+
+
+def _redirect_back():
+    """Volta para a página de onde veio o form (ex.: home); cai na home se não houver referrer."""
+    return redirect(request.referrer or url_for("home"))
+
+
+@calendar_bp.route("/roles/<int:role_id>/dismiss", methods=["POST"])
+@login_required
+def dismiss_role(role_id: int):
+    """Dispensa um cargo de casting pendente sem excluí-lo (feature 108).
+
+    Diferente de excluir, o cargo continua existindo — por isso a sincronização com o Google
+    Agenda nunca o recria — mas para de contar como tarefa pendente de casting. Restrito ao
+    super admin (mais restrito que a exclusão de cargo, que também aceita o papel Casting).
+    """
+    if not _is_superadmin():
+        abort(403)
+    role = EventRole.query.get_or_404(role_id)
+    if role.talent_id is not None:
+        flash("Só é possível dispensar cargos sem talento atribuído.", "error")
+        return _redirect_back()
+    if role.dismissed_at is None:
+        role.dismissed_at = datetime.utcnow()
+        role.dismissed_by = current_user.id
+        db.session.add(EventLog(
+            event_id=role.event_id,
+            actor_name=current_user.name,
+            actor_role="Casting",
+            message=f"Dispensou tarefa de casting: {role.character_name}",
+            created_at=datetime.utcnow(),
+        ))
+        db.session.commit()
+        flash("Tarefa dispensada.", "success")
+    return _redirect_back()
+
+
+@calendar_bp.route("/roles/<int:role_id>/restore", methods=["POST"])
+@login_required
+def restore_role(role_id: int):
+    """Reverte a dispensa de um cargo de casting, voltando a contá-lo como pendente (feature 108)."""
+    if not _is_superadmin():
+        abort(403)
+    role = EventRole.query.get_or_404(role_id)
+    if role.dismissed_at is not None:
+        role.dismissed_at = None
+        role.dismissed_by = None
+        db.session.add(EventLog(
+            event_id=role.event_id,
+            actor_name=current_user.name,
+            actor_role="Casting",
+            message=f"Restaurou tarefa de casting: {role.character_name}",
+            created_at=datetime.utcnow(),
+        ))
+        db.session.commit()
+        flash("Tarefa restaurada.", "success")
+    return _redirect_back()

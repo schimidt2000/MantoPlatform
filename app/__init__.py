@@ -389,9 +389,13 @@ def create_app():
         exclude_ensaios = not_(CalendarEvent.title.like("🟧 ENSAIO%"))
         future_events = CalendarEvent.start_at >= task_cutoff
 
+        # Cargos dispensados (feature 108) não contam mais como tarefa de casting em nenhuma
+        # das três métricas — o super admin marcou como "não existe de verdade" para o setor.
+        not_dismissed = EventRole.dismissed_at.is_(None)
+
         # Presença (técnico de som que vai ao evento) é tarefa do ensaio — fora do casting.
         pending_casting = (
-            EventRole.query.filter(EventRole.talent_id.is_(None), not_presence)
+            EventRole.query.filter(EventRole.talent_id.is_(None), not_presence, not_dismissed)
             .join(CalendarEvent)
             .filter(exclude_ensaios, future_events)
             .order_by(CalendarEvent.start_at.asc())
@@ -407,12 +411,13 @@ def create_app():
         )
 
         total_casting = (
-            EventRole.query.filter(not_presence)
+            EventRole.query.filter(not_presence, not_dismissed)
             .join(CalendarEvent).filter(exclude_ensaios, future_events).count()
         )
         done_casting = (
             EventRole.query
-            .filter(EventRole.talent_id.isnot(None), EventRole.invite_status != "rejected", not_presence)
+            .filter(EventRole.talent_id.isnot(None), EventRole.invite_status != "rejected",
+                    not_presence, not_dismissed)
             .join(CalendarEvent)
             .filter(exclude_ensaios, future_events)
             .count()

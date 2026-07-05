@@ -111,7 +111,15 @@
                 </div>
                 <div class="meta"><a href="/events/{{ r.event.id }}">{{ r.event.title }}</a>{% if r.event.start_at %} &mdash; {{ r.event.start_at.strftime("%d/%m/%Y") }}{% endif %}</div>
               </div>
-              <a href="/events/{{ r.event.id }}" class="btn btn-sm btn-secondary">Abrir</a>
+              <div style="display:flex;gap:8px;flex-shrink:0;">
+                {% if is_superadmin %}
+                  <form method="post" action="/roles/{{ r.id }}/dismiss"
+                        onsubmit="return confirm('Dispensar esta tarefa de casting? Ela deixa de aparecer como pendente — mesmo após uma nova sincronização com o Google Agenda.');">
+                    <button type="submit" class="btn btn-sm btn-ghost" title="Dispensar tarefa">Dispensar</button>
+                  </form>
+                {% endif %}
+                <a href="/events/{{ r.event.id }}" class="btn btn-sm btn-secondary">Abrir</a>
+              </div>
             </div>
           {% endfor %}
           <div style="height:8px;"></div>
