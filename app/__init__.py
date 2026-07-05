@@ -389,9 +389,13 @@ def create_app():
         exclude_ensaios = not_(CalendarEvent.title.like("🟧 ENSAIO%"))
         future_events = CalendarEvent.start_at >= task_cutoff
 
+        # Cargos dispensados (feature 108) não contam mais como tarefa de casting em nenhuma
+        # das três métricas — o super admin marcou como "não existe de verdade" para o setor.
+        not_dismissed = EventRole.dismissed_at.is_(None)
+
         # Presença (técnico de som que vai ao evento) é tarefa do ensaio — fora do casting.
         pending_casting = (
-            EventRole.query.filter(EventRole.talent_id.is_(None), not_presence)
+            EventRole.query.filter(EventRole.talent_id.is_(None), not_presence, not_dismissed)
             .join(CalendarEvent)
             .filter(exclude_ensaios, future_events)
             .order_by(CalendarEvent.start_at.asc())
@@ -407,12 +411,13 @@ def create_app():
         )
 
         total_casting = (
-            EventRole.query.filter(not_presence)
+            EventRole.query.filter(not_presence, not_dismissed)
             .join(CalendarEvent).filter(exclude_ensaios, future_events).count()
         )
         done_casting = (
             EventRole.query
-            .filter(EventRole.talent_id.isnot(None), EventRole.invite_status != "rejected", not_presence)
+            .filter(EventRole.talent_id.isnot(None), EventRole.invite_status != "rejected",
+                    not_presence, not_dismissed)
             .join(CalendarEvent)
             .filter(exclude_ensaios, future_events)
             .count()
@@ -452,6 +457,16 @@ def create_app():
             return any(r.name.upper() == name.upper() for r in current_user.roles)
 
         is_superadmin = _is_real_superadmin and not _impersonate
+
+        # Cargos de casting dispensados (feature 108) — só o super admin vê e pode restaurar.
+        dismissed_casting = (
+            EventRole.query.filter(EventRole.dismissed_at.isnot(None), not_presence)
+            .join(CalendarEvent)
+            .filter(exclude_ensaios, future_events)
+            .order_by(EventRole.dismissed_at.desc())
+            .all()
+            if is_superadmin else []
+        )
 
         show_casting = has_role(RoleName.CASTING) or is_superadmin
         show_figurino = has_role(RoleName.FIGURINO) or is_superadmin
@@ -675,6 +690,7 @@ def create_app():
             "home.html",
             today=date.today(),
             pending_casting=pending_casting,
+            dismissed_casting=dismissed_casting,
             rejected_invites=rejected_invites,
             pending_figurino=pending_figurino,
             pending_ensaio=pending_ensaio,

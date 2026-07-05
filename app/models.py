@@ -413,8 +413,14 @@ class EventRole(db.Model):
     needs_makeup  = db.Column(db.Boolean, nullable=True)  # pré-preenchido do orçamento
     is_singer     = db.Column(db.Boolean, nullable=True)  # pré-preenchido do orçamento
 
+    # Dispensa de tarefa de casting obsoleta (feature 108): o cargo continua existindo (por
+    # isso a sincronização com o Google Agenda não o recria) mas para de contar como pendente.
+    dismissed_at = db.Column(db.DateTime, nullable=True)
+    dismissed_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
     talent = db.relationship("Talent", lazy=True)
     figurino_sheet = db.relationship("FigurinoSheet", lazy=True)
+    dismisser = db.relationship("User", lazy=True, foreign_keys=[dismissed_by])
 
 
 class EventLog(db.Model):
