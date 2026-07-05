@@ -458,6 +458,16 @@ def create_app():
 
         is_superadmin = _is_real_superadmin and not _impersonate
 
+        # Cargos de casting dispensados (feature 108) — só o super admin vê e pode restaurar.
+        dismissed_casting = (
+            EventRole.query.filter(EventRole.dismissed_at.isnot(None), not_presence)
+            .join(CalendarEvent)
+            .filter(exclude_ensaios, future_events)
+            .order_by(EventRole.dismissed_at.desc())
+            .all()
+            if is_superadmin else []
+        )
+
         show_casting = has_role(RoleName.CASTING) or is_superadmin
         show_figurino = has_role(RoleName.FIGURINO) or is_superadmin
         show_ensaio = has_role(RoleName.ENSAIO) or is_superadmin
@@ -680,6 +690,7 @@ def create_app():
             "home.html",
             today=date.today(),
             pending_casting=pending_casting,
+            dismissed_casting=dismissed_casting,
             rejected_invites=rejected_invites,
             pending_figurino=pending_figurino,
             pending_ensaio=pending_ensaio,

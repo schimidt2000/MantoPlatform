@@ -126,6 +126,26 @@
         {% else %}
           <p class="muted" style="padding:12px 0;">Nenhuma tarefa pendente.</p>
         {% endif %}
+
+        {% if is_superadmin and dismissed_casting %}
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;padding:14px 0 6px;border-top:1px solid var(--line);margin-top:8px;">
+            🗂 {{ dismissed_casting|length }} dispensada{{ 's' if dismissed_casting|length != 1 else '' }}
+          </div>
+          {% for r in dismissed_casting %}
+            <div class="flex-between gap-12 task-row" style="padding:10px 0;border-bottom:1px solid var(--line);opacity:.75;">
+              <div>
+                <div class="strong">{{ r.character_name }}</div>
+                <div class="meta">
+                  <a href="/events/{{ r.event.id }}">{{ r.event.title }}</a>
+                  &mdash; dispensada por {{ r.dismisser.name if r.dismisser else "—" }} em {{ r.dismissed_at.strftime("%d/%m/%Y") }}
+                </div>
+              </div>
+              <form method="post" action="/roles/{{ r.id }}/restore">
+                <button type="submit" class="btn btn-sm btn-secondary">Restaurar</button>
+              </form>
+            </div>
+          {% endfor %}
+        {% endif %}
       </div>
     </div>
     {% endif %}
