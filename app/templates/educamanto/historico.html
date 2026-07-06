@@ -8,11 +8,35 @@
 {% endblock %}
 
 {% block content %}
-<form method="get" style="margin-bottom:18px; display:flex; gap:8px; max-width:460px;">
-  <input type="text" name="q" value="{{ q }}" class="form-control"
-         placeholder="Buscar por cliente ou pacote…" style="flex:1;">
-  <button class="btn btn-primary btn-sm">Buscar</button>
-  {% if q %}<a href="/educamanto/historico" class="btn btn-ghost btn-sm">Limpar</a>{% endif %}
+<form method="get" style="margin-bottom:18px; display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+  <div>
+    <label class="muted" style="display:block; font-size:12px; margin-bottom:4px;">Buscar</label>
+    <input type="text" name="q" value="{{ q }}" class="form-control"
+           placeholder="Cliente ou pacote…" style="width:220px;">
+  </div>
+  <div>
+    <label class="muted" style="display:block; font-size:12px; margin-bottom:4px;">Gerado de</label>
+    <input type="date" name="date_from" value="{{ date_from }}" class="form-control" style="width:150px;">
+  </div>
+  <div>
+    <label class="muted" style="display:block; font-size:12px; margin-bottom:4px;">Gerado até</label>
+    <input type="date" name="date_to" value="{{ date_to }}" class="form-control" style="width:150px;">
+  </div>
+  {% if is_superadmin %}
+  <div>
+    <label class="muted" style="display:block; font-size:12px; margin-bottom:4px;">Gerado por</label>
+    <select name="user_id" class="form-control" style="width:180px;">
+      <option value="">Todos</option>
+      {% for u in users %}
+      <option value="{{ u.id }}" {{ 'selected' if request.args.get('user_id') == u.id|string }}>{{ u.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <button class="btn btn-primary btn-sm">Filtrar</button>
+  {% if q or date_from or date_to or request.args.get('user_id') %}
+  <a href="/educamanto/historico" class="btn btn-ghost btn-sm">Limpar</a>
+  {% endif %}
 </form>
 
 {% if entries %}
@@ -23,6 +47,7 @@
         <th style="padding:10px 14px; border-bottom:1px solid var(--line);">Data</th>
         <th style="padding:10px 14px; border-bottom:1px solid var(--line);">Cliente</th>
         <th style="padding:10px 14px; border-bottom:1px solid var(--line);">Pacotes</th>
+        {% if is_superadmin %}<th style="padding:10px 14px; border-bottom:1px solid var(--line);">Gerado por</th>{% endif %}
         <th style="padding:10px 14px; border-bottom:1px solid var(--line); text-align:right;"></th>
       </tr>
     </thead>
@@ -32,6 +57,7 @@
         <td style="padding:10px 14px; white-space:nowrap;">{{ e.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
         <td style="padding:10px 14px;">{{ e.client_name or '—' }}</td>
         <td style="padding:10px 14px; color:var(--muted);">{{ e.packages_label or '—' }}</td>
+        {% if is_superadmin %}<td style="padding:10px 14px; font-size:13px;">{{ e.user.name if e.user else '—' }}</td>{% endif %}
         <td style="padding:10px 14px; text-align:right; white-space:nowrap;">
           <a href="/educamanto/orcamento/{{ e.id }}/pdf" target="_blank"
              class="btn btn-sm btn-secondary">Baixar PDF</a>

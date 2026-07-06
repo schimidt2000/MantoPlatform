@@ -188,6 +188,7 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
                 event_title=cp.event_title,
                 seller_id=cp.seller_id,
                 sale_date=cp.sale_date,
+                payable_from=cp.payable_from,
                 amount=-cp.amount,
                 status="a_pagar",
                 original_id=cp.id,

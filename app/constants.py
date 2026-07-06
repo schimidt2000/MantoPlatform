@@ -25,6 +25,11 @@ def event_requires_client(event) -> bool:
     return start.date() >= CLIENT_REQUIRED_FROM
 
 
+# Feature 109: eventos cujo título começa com este prefixo (case-insensitive) são EducaManto —
+# cobre "(EDU)" e "(EDUCAMANTO)". A comissão da venda vai ao responsável EducaManto configurado.
+EDUCAMANTO_TITLE_PREFIX = "(EDU"
+
+
 # Feature 099: tipos de acréscimo do orçamento/evento. "BV" é um repasse (não é lucro nem comissão);
 # "Outro" permite descrição livre. A lista é um ponto de partida ajustável.
 ACRESCIMO_TIPO_BV = "BV"

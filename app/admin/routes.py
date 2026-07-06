@@ -403,6 +403,8 @@ def delete_user(user_id: int):
 
     # Folha de pagamento da pessoa sai junto; vínculos opcionais são desfeitos.
     from app.models import EnsaioMaterial
+    # Feature 109: se o usuário é o responsável EducaManto, a configuração volta a vazio.
+    SiteSetting.query.filter_by(educamanto_seller_id=user.id).update({"educamanto_seller_id": None})
     SalaryPayment.query.filter_by(user_id=user.id).delete()
     SalaryHistory.query.filter_by(user_id=user.id).delete()
     EnsaioMaterial.query.filter_by(user_id=user.id).update({"user_id": None})
@@ -433,6 +435,10 @@ def admin_settings():
             settings.default_commission_rate = float(commission_raw) if commission_raw else settings.default_commission_rate
         except ValueError:
             pass
+
+        # Responsável EducaManto (feature 109): beneficiário das comissões de eventos "(EDU…".
+        edu_raw = request.form.get("educamanto_seller_id", "").strip()
+        settings.educamanto_seller_id = int(edu_raw) if edu_raw.isdigit() else None
 
         tax_raw = request.form.get("tax_rate", "").strip()
         try:
@@ -487,9 +493,11 @@ def admin_settings():
         flash("Configurações salvas.", "success")
         return redirect(url_for("admin.admin_settings"))
 
+    users = User.query.order_by(User.name.asc()).all()
     return render_template(
         "admin_settings.html",
         settings=settings,
+        users=users,
         active="settings",
         title="Admin - Configurações",
     )

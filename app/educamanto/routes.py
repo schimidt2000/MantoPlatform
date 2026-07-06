@@ -300,9 +300,22 @@ def orcamento_pdf(quote_id: int):
 @login_required
 @_require_use
 def historico():
-    """Histórico dos orçamentos gerados (estilo da calculadora)."""
-    from app.models import EducaMantoQuote
-    q = request.args.get("q", "").strip()
+    """Histórico dos orçamentos gerados — mesmo padrão da calculadora (feature 109).
+
+    Busca por texto para todos; filtros de período de geração para todos; coluna e filtro
+    "Gerado por" apenas para o super admin (regra idêntica ao histórico da calculadora).
+    """
+    from datetime import datetime, timedelta
+
+    from app.models import EducaMantoQuote, User
+
+    is_superadmin = bool({r.name.upper() for r in current_user.roles} & {RoleName.SUPERADMIN})
+
+    q         = request.args.get("q", "").strip()
+    date_from = request.args.get("date_from", "").strip()
+    date_to   = request.args.get("date_to", "").strip()
+    user_id_f = request.args.get("user_id", "").strip()
+
     query = EducaMantoQuote.query
     if q:
         from sqlalchemy import or_
@@ -311,8 +324,41 @@ def historico():
             or_(EducaMantoQuote.client_name.ilike(like),
                 EducaMantoQuote.packages_label.ilike(like))
         )
+    if date_from:
+        try:
+            query = query.filter(EducaMantoQuote.created_at >= datetime.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            query = query.filter(
+                EducaMantoQuote.created_at < datetime.fromisoformat(date_to) + timedelta(days=1)
+            )
+        except ValueError:
+            pass
+    if is_superadmin and user_id_f.isdigit():
+        query = query.filter_by(user_id=int(user_id_f))
+
     entries = query.order_by(EducaMantoQuote.created_at.desc()).limit(300).all()
-    return render_template("educamanto/historico.html", entries=entries, q=q)
+
+    users = []
+    if is_superadmin:
+        users = (
+            User.query
+            .filter(User.id.in_(db.session.query(EducaMantoQuote.user_id).distinct()))
+            .order_by(User.name.asc())
+            .all()
+        )
+
+    return render_template(
+        "educamanto/historico.html",
+        entries=entries,
+        q=q,
+        date_from=date_from,
+        date_to=date_to,
+        users=users,
+        is_superadmin=is_superadmin,
+    )
 
 
 @educamanto_bp.route("/packages/create", methods=["GET", "POST"])
