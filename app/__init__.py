@@ -276,6 +276,17 @@ def create_app():
         return {"settings": SiteSetting.query.get(1)}
 
     @app.context_processor
+    def inject_educamanto_responsavel_flag():
+        # Feature 109: o responsável EducaManto vê os links de Pipeline/Comissões no menu.
+        def _flag() -> bool:
+            if not current_user.is_authenticated:
+                return False
+            from app.models import SiteSetting
+            s = SiteSetting.query.get(1)
+            return bool(s and s.educamanto_seller_id == current_user.id)
+        return {"is_educamanto_responsavel": _flag()}
+
+    @app.context_processor
     def inject_roles():
         def is_real_superadmin() -> bool:
             return current_user.is_authenticated and any(

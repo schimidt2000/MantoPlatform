@@ -12,7 +12,7 @@ from flask_login import login_required, current_user
 from app import db, _safe_next
 from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SalaryAdvance, SpecialExpense, EventAcrescimo
 from app.money import format_brl
-from app.constants import RoleName
+from app.constants import RoleName, EDUCAMANTO_TITLE_PREFIX
 
 financeiro_bp = Blueprint("financeiro", __name__)
 
@@ -36,10 +36,20 @@ def require_financeiro(fn):
     return wrapper
 
 
+def _is_educamanto_responsavel() -> bool:
+    """True se o usuário logado é o responsável EducaManto configurado (feature 109)."""
+    if not current_user.is_authenticated:
+        return False
+    settings = SiteSetting.query.get(1)
+    return bool(settings and settings.educamanto_seller_id == current_user.id)
+
+
 def require_vendas(fn):
+    """Permite COMERCIAL/FINANCEIRO/SUPERADMIN e o responsável EducaManto (feature 109)."""
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not _has_role(RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN):
+        if not _has_role(RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN) \
+                and not _is_educamanto_responsavel():
             abort(403)
         return fn(*args, **kwargs)
     return wrapper
@@ -79,10 +89,31 @@ def _event_bv_total(event) -> Decimal:
     return total
 
 
+def _educamanto_responsavel(settings) -> User | None:
+    """Usuário configurado como responsável EducaManto, ou None (feature 109)."""
+    if settings and settings.educamanto_seller_id:
+        return User.query.get(settings.educamanto_seller_id)
+    return None
+
+
+def _commission_beneficiary(event, settings) -> User | None:
+    """Beneficiário da comissão do evento (feature 109).
+
+    Evento EducaManto (título "(EDU…") com responsável configurado → responsável;
+    caso contrário → vendedor do evento (regra original).
+    """
+    if event.is_educamanto:
+        responsavel = _educamanto_responsavel(settings)
+        if responsavel is not None:
+            return responsavel
+    return event.seller
+
+
 def _event_commission(event, settings) -> Decimal:
     if not event.sale_value:
         return Decimal("0")
-    if event.seller and not event.seller.receives_commission:
+    beneficiary = _commission_beneficiary(event, settings)
+    if beneficiary and not beneficiary.receives_commission:
         return Decimal("0")
     rate = _get_commission_rate(event, settings)
     # BV sai da base de comissão (repasse, não é receita comissionável) — feature 099.
@@ -100,11 +131,13 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
         CommissionPayment.status != "cancelado"
     ).first()
 
+    settings = SiteSetting.query.get(1)
+    beneficiary = _commission_beneficiary(event, settings)
+
     should_have = (
         event.sale_value
-        and event.seller_id
-        and event.seller
-        and event.seller.receives_commission
+        and beneficiary is not None
+        and beneficiary.receives_commission
     )
 
     if not should_have:
@@ -113,19 +146,31 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
             existing.notes = (existing.notes or "") + " | Cancelado: sem comissão elegível"
         return
 
-    amount = _event_commission(event, SiteSetting.query.get(1))
+    # Comissão EducaManto (feature 109): só entra no ciclo de pagamento após a realização —
+    # payable_from = data do evento. Comissão comum fica NULL (ciclo pela sale_date).
+    is_edu_com_responsavel = event.is_educamanto and _educamanto_responsavel(settings) is not None
+    payable_from = (
+        event.start_at.date()
+        if is_edu_com_responsavel and event.start_at is not None
+        else None
+    )
+
+    amount = _event_commission(event, settings)
     if existing:
         if existing.status == "a_pagar":
             existing.amount = amount
             existing.sale_date = event.sale_date
             existing.event_title = event.title
+            existing.seller_id = beneficiary.id
+            existing.payable_from = payable_from
         # Se já está pago, não alteramos o registro histórico
     else:
         db.session.add(CommissionPayment(
             event_id=event.id,
             event_title=event.title,
-            seller_id=event.seller_id,
+            seller_id=beneficiary.id,
             sale_date=event.sale_date,
+            payable_from=payable_from,
             amount=amount,
             status="a_pagar",
         ))
@@ -911,17 +956,21 @@ def _build_bv_items(bv_rows, today: date, now_dt=None) -> list:
 
 
 def _build_commission_items(period_start: date, period_end: date, due_date: date, today: date) -> list:
-    """Resumo de comissões por vendedor: eventos vendidos em [period_start, period_end).
+    """Resumo de comissões por vendedor com ciclo em [period_start, period_end).
 
-    Uma linha por vendedor (soma das comissões a_pagar/pago no período; estornos reduzem).
-    Datada em due_date (dia 5 do mês visualizado). id = "sellerId:YYYY-MM" (período de venda).
+    Ciclo = data da venda (comissões comuns) ou data da realização do evento (EducaManto,
+    feature 109). Uma linha por vendedor (soma das comissões a_pagar/pago no período;
+    estornos reduzem). Datada em due_date (dia 5 do mês visualizado). id = "sellerId:YYYY-MM".
     """
+    # Feature 109: comissões EducaManto entram no ciclo pela data da REALIZAÇÃO do evento
+    # (payable_from); as demais seguem pela data da venda (payable_from IS NULL).
+    cycle_date = db.func.coalesce(CommissionPayment.payable_from, CommissionPayment.sale_date)
     rows = (
         CommissionPayment.query
         .filter(
             CommissionPayment.status.in_(["a_pagar", "pago"]),
-            CommissionPayment.sale_date >= period_start,
-            CommissionPayment.sale_date < period_end,
+            cycle_date >= period_start,
+            cycle_date < period_end,
         )
         .all()
     )
@@ -1372,12 +1421,11 @@ def pipeline():
     settings = SiteSetting.query.get(1)
     is_financeiro = _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN)
 
-    events = (
-        CalendarEvent.query
-        .filter(CalendarEvent.event_type != "ENSAIO")
-        .order_by(CalendarEvent.start_at.desc())
-        .all()
-    )
+    events_q = CalendarEvent.query.filter(CalendarEvent.event_type != "ENSAIO")
+    # Responsável EducaManto sem os papéis plenos vê APENAS os eventos EducaManto (feature 109).
+    if not _has_role(RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN):
+        events_q = events_q.filter(CalendarEvent.title.ilike(EDUCAMANTO_TITLE_PREFIX + "%"))
+    events = events_q.order_by(CalendarEvent.start_at.desc()).all()
 
     events_data = []
     for e in events:

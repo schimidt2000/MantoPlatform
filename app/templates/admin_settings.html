@@ -67,6 +67,19 @@
     <hr class="sep">
 
     <div class="form-group">
+      <label>Responsável EducaManto</label>
+      <div class="muted" style="margin-bottom:8px;">Recebe a comissão dos eventos EducaManto (título começando com "(EDU") — paga após a realização do evento. Vazio = comissão segue a regra comum (vendedor do evento).</div>
+      <select name="educamanto_seller_id" style="width:280px;">
+        <option value="">— Sem responsável —</option>
+        {% for u in users %}
+        <option value="{{ u.id }}" {{ 'selected' if settings.educamanto_seller_id == u.id }}>{{ u.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <hr class="sep">
+
+    <div class="form-group">
       <label>Taxa de imposto provisionado (%)</label>
       <div class="muted" style="margin-bottom:8px;">Aplicada sobre o valor de venda apenas dos eventos que exigem nota fiscal. Usada no painel financeiro para a Receita Líquida.</div>
       <input type="number" step="0.1" min="0" max="100" name="tax_rate"

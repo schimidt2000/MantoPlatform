@@ -310,6 +310,16 @@ class CalendarEvent(db.Model):
     )
 
     @property
+    def is_educamanto(self) -> bool:
+        """True se o evento é EducaManto (feature 109): título começa com "(EDU".
+
+        Cobre "(EDU)" e "(EDUCAMANTO)", sem diferenciar maiúsculas. Equivalente SQL:
+        ``CalendarEvent.title.ilike("(EDU%")``.
+        """
+        from app.constants import EDUCAMANTO_TITLE_PREFIX
+        return bool(self.title) and self.title.upper().startswith(EDUCAMANTO_TITLE_PREFIX)
+
+    @property
     def is_satellite(self) -> bool:
         """True se este evento é satélite de um grupo (campos comerciais herdados do principal)."""
         return self.group_leader_id is not None
@@ -594,6 +604,9 @@ class SiteSetting(db.Model):
     secondary_color = db.Column(db.String(20), nullable=True)
     accent_color = db.Column(db.String(20), nullable=True)
     default_commission_rate = db.Column(db.Float, nullable=True)  # % padrão de comissão (default 2.5)
+    # Responsável EducaManto (feature 109): beneficiário das comissões de eventos "(EDU…".
+    # NULL = sem responsável (a comissão EDU segue a regra comum, do vendedor).
+    educamanto_seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     tax_rate = db.Column(db.Float, nullable=True)            # % provisionamento de imposto (default 16.0)
     fator_r_threshold = db.Column(db.Float, nullable=True)   # % corte do Fator R (default 28.0)
     manto_address = db.Column(db.String(300), nullable=True)       # endereço base para cálculo de rota
@@ -660,6 +673,9 @@ class CommissionPayment(db.Model):
     event_title = db.Column(db.String(200), nullable=False)  # cópia: persiste mesmo se evento for deletado
     seller_id   = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     sale_date   = db.Column(db.Date, nullable=True)          # data da venda (herda do evento)
+    # Feature 109: comissões EducaManto só entram no ciclo de pagamento após a realização do
+    # evento — esta é a data da realização. NULL = comissão comum (ciclo pela sale_date).
+    payable_from = db.Column(db.Date, nullable=True)
     amount      = db.Column(db.Numeric(12, 2), nullable=False)  # positivo ou negativo (estorno)
     status      = db.Column(db.String(20), nullable=False, default="a_pagar", server_default="a_pagar")
     paid_at     = db.Column(db.Date, nullable=True)
