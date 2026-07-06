@@ -845,6 +845,14 @@ class RecurringExpense(db.Model):
         "debito_automatico": "Débito automático",
         "assinatura": "Assinatura (cartão)",
     }
+    # Feature 112: frequência da cobrança.
+    FREQUENCIES = ["mensal", "semanal", "quinzenal", "anual"]
+    FREQUENCY_LABELS = {
+        "mensal": "Mensal",
+        "semanal": "Semanal",
+        "quinzenal": "Quinzenal",
+        "anual": "Anual",
+    }
 
     id            = db.Column(db.Integer, primary_key=True)
     name          = db.Column(db.String(200), nullable=False)
@@ -857,6 +865,10 @@ class RecurringExpense(db.Model):
     card_name     = db.Column(db.String(100), nullable=True)      # assinaturas
     notes         = db.Column(db.Text, nullable=True)
     is_active     = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
+    # Feature 112: frequência da cobrança e vigência (end_date NULL = eterna).
+    frequency     = db.Column(db.String(20), nullable=False, default="mensal", server_default="mensal")
+    start_date    = db.Column(db.Date, nullable=False, default=lambda: datetime.utcnow().date())
+    end_date      = db.Column(db.Date, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -888,6 +900,52 @@ class RecurringExpense(db.Model):
             hi = format_brl(self.amount_max or 0, prefix=True)
             return f"faixa {lo} – {hi}"
         return None
+
+    def occurrences_in_month(self, year: int, month: int) -> int:
+        """Quantas cobranças a conta tem no mês (feature 112). 0 = fora do ciclo/vigência.
+
+        Regras: fora de [start_date, end_date] → 0; anual → 1 só no mês de aniversário da
+        data de início; quinzenal → janelas 1–15 e 16–fim que intersectam a vigência no mês;
+        semanal → nº de ocorrências do dia da semana da data de início dentro da interseção
+        mês × vigência; mensal → 1.
+        """
+        import calendar as cal_mod
+        from datetime import date as _date
+        _, last_day = cal_mod.monthrange(year, month)
+        month_start = _date(year, month, 1)
+        month_end = _date(year, month, last_day)
+        if self.start_date and self.start_date > month_end:
+            return 0
+        if self.end_date and self.end_date < month_start:
+            return 0
+        lo = max(month_start, self.start_date or month_start)
+        hi = min(month_end, self.end_date or month_end)
+        freq = self.frequency or "mensal"
+        if freq == "anual":
+            anchor = self.start_date or month_start
+            return 1 if month == anchor.month else 0
+        if freq == "quinzenal":
+            n = 0
+            if lo.day <= 15 and hi.day >= 1:          # janela 1–15 intersecta a vigência
+                n += 1
+            if hi.day >= 16:                          # janela 16–fim intersecta a vigência
+                n += 1
+            return n
+        if freq == "semanal":
+            anchor_wd = (self.start_date or month_start).weekday()
+            return sum(
+                1 for d in range(lo.day, hi.day + 1)
+                if _date(year, month, d).weekday() == anchor_wd
+            )
+        return 1
+
+    @property
+    def vigencia_label(self) -> str:
+        """Rótulo da vigência: "desde dd/mm/aaaa" + "até dd/mm/aaaa" ou "eterna"."""
+        desde = self.start_date.strftime("%d/%m/%Y") if self.start_date else "—"
+        if self.end_date:
+            return f"desde {desde} até {self.end_date.strftime('%d/%m/%Y')}"
+        return f"desde {desde} · eterna"
 
 
 class RecurringExpenseEntry(db.Model):
