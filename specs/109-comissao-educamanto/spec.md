@@ -138,8 +138,9 @@ admin, abrir o histórico, ver a coluna "Gerado por" e filtrar por usuário e po
 - **FR-002**: O sistema DEVE permitir configurar qual usuário é o **responsável EducaManto**
   (nas configurações administrativas), podendo ficar vazio.
 - **FR-003**: Ao registrar/atualizar a venda de um evento EducaManto, a comissão DEVE ser
-  gerada em nome do responsável EducaManto configurado, usando as mesmas regras de taxa das
-  comissões atuais (taxa padrão do sistema, com possibilidade de taxa específica por evento).
+  gerada em nome do responsável EducaManto configurado, no valor de **5% sobre o LUCRO** do
+  evento (valor de venda menos repasses BV e menos os cachês dos talentos escalados) — com
+  possibilidade de taxa específica por evento, como nas comissões atuais.
 - **FR-004**: A comissão de um evento EducaManto SÓ PODE entrar como pagável na planilha de
   pagamentos após a realização do evento — no ciclo do mês seguinte ao mês da realização
   (vencimento dia 5), em vez do mês da venda.
@@ -190,9 +191,10 @@ admin, abrir o histórico, ver a coluna "Gerado por" e filtrar por usuário e po
 - "Gabriel Lara" não é gravado em código: a feature cria a configuração "responsável
   EducaManto" e o valor inicial aponta para o usuário Gabriel Lara já existente
   (gabriel@mantoproducoes.com.br); trocável a qualquer momento pelo admin.
-- A taxa de comissão EducaManto segue as regras atuais (taxa padrão do sistema, hoje 2,5%,
-  com override por evento editável pelo super admin) — o usuário não pediu taxa diferente;
-  se quiserem taxa própria para EducaManto, basta usar o override por evento.
+- Taxa de comissão EducaManto (ajuste pós-entrega, pedido do usuário): **5% sobre o lucro**
+  do evento — base diferente da comissão comum (que é % sobre a venda). Lucro = venda − BV −
+  cachês (mesma conta de custo/margem já usada no pipeline). Override por evento
+  (`commission_rate`) continua valendo e substitui os 5%.
 - "Planilha de pagamento" = tela Pagamentos do financeiro (`/financeiro/pagamentos`), onde
   as comissões já aparecem agregadas por beneficiário com vencimento dia 5.
 - "Acompanhar da mesma forma que a Thays" = Pipeline de Vendas + tela de Comissões (leitura

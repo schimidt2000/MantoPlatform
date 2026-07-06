@@ -123,7 +123,8 @@ cada responsabilidade.
    filtrado a EDU quando ele não tem os papéis plenos; comissões já filtram por dono.
 6. **Histórico padronizado** (R6): EducaManto sobe ao padrão da calculadora (autor + filtros,
    regras de visibilidade idênticas); calculadora intocada.
-7. **Taxa** (R7): mesmas regras atuais (padrão 2,5% + override por evento).
+7. **Taxa** (R7, ajustada a pedido do usuário): 5% sobre o LUCRO do evento EDU (venda − BV −
+   cachês); override por evento substitui os 5%. Comissão comum segue % sobre a venda.
 
 ## Complexity Tracking
 
