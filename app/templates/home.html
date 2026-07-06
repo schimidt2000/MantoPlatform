@@ -528,6 +528,46 @@
     </div>
     {% endif %}
 
+    {# ── CONTAS RECORRENTES (feature 110) — só financeiro/superadmin ── #}
+    {% if show_financeiro and recurring_expense_alerts %}
+    <div class="sector-panel" id="sp-recorrentes">
+      <div class="sector-header" onclick="toggleSector('recorrentes')">
+        <div class="sector-header-left">
+          <span class="badge badge-amber" style="background:#fef3c7;color:#92400e;">🔁 Contas recorrentes</span>
+          <span class="meta">{{ recurring_expense_alerts|length }} pendente{{ 's' if recurring_expense_alerts|length != 1 else '' }}</span>
+        </div>
+        <span class="sector-chevron" id="chv-recorrentes">▼</span>
+      </div>
+      <div class="sector-body" id="sb-recorrentes">
+        {% for a in recurring_expense_alerts %}
+          <div class="flex-between gap-12 task-row" style="padding:10px 0;border-bottom:1px solid var(--line);{% if a.estado == 'aguardando' %}background:rgba(245,158,11,0.06);margin:0 -18px;padding:10px 18px;{% endif %}">
+            <div>
+              <div class="strong">
+                {{ a.conta.name }}
+                {% if a.estado == 'aguardando' %}
+                  <span class="badge badge-gold" style="font-size:10px;margin-left:6px;">AGUARDANDO VALOR</span>
+                {% else %}
+                  <span class="badge badge-red" style="font-size:10px;margin-left:6px;">A PAGAR</span>
+                {% endif %}
+              </div>
+              <div class="meta">
+                Esperada dia {{ a.conta.due_day }}
+                {% if a.estado == 'aguardando' and (a.conta.amount_min or a.conta.amount_max) %}
+                  · faixa R$ {{ (a.conta.amount_min or 0) | brl }} – R$ {{ (a.conta.amount_max or 0) | brl }}
+                {% elif a.entry and a.entry.amount %}
+                  · R$ {{ a.entry.amount | brl }}{% if a.entry.due_date %} · vence {{ a.entry.due_date.strftime("%d/%m/%Y") }}{% endif %}
+                  {% if a.entry.out_of_range %}<span style="color:#b91c1c;font-weight:700;"> · fora da faixa</span>{% endif %}
+                {% endif %}
+              </div>
+            </div>
+            <a href="/gastos/recorrentes" class="btn btn-sm btn-secondary">{{ 'Preencher' if a.estado == 'aguardando' else 'Abrir' }}</a>
+          </div>
+        {% endfor %}
+        <div style="height:8px;"></div>
+      </div>
+    </div>
+    {% endif %}
+
   </div>
 
   {# ── RIGHT: Indicadores + Performance ── #}

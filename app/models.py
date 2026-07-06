@@ -825,6 +825,95 @@ class SpecialExpense(db.Model):
         return ""
 
 
+class RecurringExpense(db.Model):
+    """Gasto recorrente da empresa (feature 110): conta de luz, advogado, assinaturas.
+
+    Diferente do gasto extra (``SpecialExpense``): não passa por aprovação, é restrito a
+    FINANCEIRO/SUPERADMIN e repete todo mês. Três tipos:
+
+    - ``variavel``: valor muda dentro de uma faixa (``amount_min``–``amount_max``); a partir
+      do ``due_day`` a home alerta até o lançamento do mês ser preenchido e pago.
+    - ``debito_automatico``: valor fixo debitado sozinho — lançamento mensal automático
+      "registrado", sem ação de pagamento.
+    - ``assinatura``: valor fixo no cartão de crédito (``card_name``) — idem.
+    """
+    __tablename__ = "recurring_expenses"
+
+    TYPES = ["variavel", "debito_automatico", "assinatura"]
+    TYPE_LABELS = {
+        "variavel": "Conta variável",
+        "debito_automatico": "Débito automático",
+        "assinatura": "Assinatura (cartão)",
+    }
+
+    id            = db.Column(db.Integer, primary_key=True)
+    name          = db.Column(db.String(200), nullable=False)
+    expense_type  = db.Column(db.String(20), nullable=False)
+    amount        = db.Column(db.Numeric(10, 2), nullable=True)   # valor fixo (fixos)
+    amount_min    = db.Column(db.Numeric(10, 2), nullable=True)   # faixa esperada (variável)
+    amount_max    = db.Column(db.Numeric(10, 2), nullable=True)
+    due_day       = db.Column(db.Integer, nullable=False)         # 1–31; clampado no fim do mês
+    default_pix   = db.Column(db.String(120), nullable=True)
+    card_name     = db.Column(db.String(100), nullable=True)      # assinaturas
+    notes         = db.Column(db.Text, nullable=True)
+    is_active     = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    created_by = db.relationship("User", foreign_keys=[created_by_id], lazy=True)
+    entries    = db.relationship(
+        "RecurringExpenseEntry", backref="recurring", lazy=True,
+        order_by="RecurringExpenseEntry.month_ref.desc()",
+    )
+
+    @property
+    def is_fixed(self) -> bool:
+        """True para tipos de valor fixo (débito automático/assinatura)."""
+        return self.expense_type in ("debito_automatico", "assinatura")
+
+
+class RecurringExpenseEntry(db.Model):
+    """Lançamento mensal de um gasto recorrente (feature 110) — um por conta/mês.
+
+    Estados: ``a_pagar`` (variável preenchida, entra na planilha de pagamentos) → ``pago``;
+    ``registrado`` (fixos, criado automaticamente, nunca vira pendência); ``pulado``
+    (variável cujo boleto não veio no mês — sem valor). "Aguardando valor" não é linha no
+    banco: é a ausência de lançamento no mês para conta variável ativa.
+    """
+    __tablename__ = "recurring_expense_entries"
+    __table_args__ = (
+        db.UniqueConstraint("recurring_id", "month_ref", name="uq_recurring_entry_month"),
+        db.Index("ix_recurring_entries_month_ref", "month_ref"),
+        db.Index("ix_recurring_entries_status", "status"),
+    )
+
+    STATUSES = ["a_pagar", "pago", "registrado", "pulado"]
+
+    id           = db.Column(db.Integer, primary_key=True)
+    recurring_id = db.Column(db.Integer, db.ForeignKey("recurring_expenses.id"), nullable=False)
+    month_ref    = db.Column(db.String(7), nullable=False)   # "YYYY-MM"
+    amount       = db.Column(db.Numeric(10, 2), nullable=True)  # NULL só em "pulado"
+    pix          = db.Column(db.String(120), nullable=True)
+    due_date     = db.Column(db.Date, nullable=True)
+    status       = db.Column(db.String(20), nullable=False, default="a_pagar")
+    filled_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    filled_at    = db.Column(db.DateTime, nullable=True)
+    paid_at      = db.Column(db.Date, nullable=True)
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    filled_by = db.relationship("User", foreign_keys=[filled_by_id], lazy=True)
+
+    @property
+    def out_of_range(self) -> bool:
+        """True se o valor preenchido saiu da faixa esperada da conta (só destaque visual)."""
+        if self.amount is None or not self.recurring:
+            return False
+        lo, hi = self.recurring.amount_min, self.recurring.amount_max
+        if lo is not None and self.amount < lo:
+            return True
+        return hi is not None and self.amount > hi
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))

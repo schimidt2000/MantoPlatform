@@ -180,6 +180,13 @@
             <td class="text-right num strong text-red">– {{ money(drg_total.gastos_extras) }}</td>
           </tr>
 
+          <tr>
+            <td><span class="dre-op">(–)</span> Gastos Recorrentes <small>(contas do mês)</small></td>
+            <td class="text-right num text-red">– {{ money(drg_realizado.gastos_recorrentes) }}</td>
+            <td class="text-right num text-muted text-red">– {{ money(drg_projetado.gastos_recorrentes) }}</td>
+            <td class="text-right num strong text-red">– {{ money(drg_total.gastos_recorrentes) }}</td>
+          </tr>
+
           <tr class="dre-result dre-final">
             <td>= Resultado Líquido</td>
             <td class="text-right num {% if drg_realizado.resultado_liquido >= 0 %}text-green{% else %}text-red{% endif %}">{{ money(drg_realizado.resultado_liquido) }}</td>
