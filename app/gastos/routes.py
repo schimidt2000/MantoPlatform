@@ -324,6 +324,30 @@ def _clamp_day(year: int, month: int, day: int) -> date:
     return date(year, month, min(max(day, 1), last_day))
 
 
+def _weekly_first_date(conta: RecurringExpense, year: int, month: int) -> date | None:
+    """Primeira ocorrência do dia da semana da conta no mês∩vigência (feature 113)."""
+    import calendar as cal_mod
+    from datetime import timedelta
+    _, last_day = cal_mod.monthrange(year, month)
+    lo = max(date(year, month, 1), conta.start_date or date(year, month, 1))
+    hi = min(date(year, month, last_day), conta.end_date or date(year, month, last_day))
+    d = lo
+    while d <= hi:
+        if d.weekday() == conta.anchor_weekday:
+            return d
+        d += timedelta(days=1)
+    return None
+
+
+def _conta_due_date(conta: RecurringExpense, year: int, month: int) -> date:
+    """Vencimento exibido no mês: 1ª ocorrência (semanal) ou o dia do mês clampado."""
+    if conta.frequency == "semanal":
+        first = _weekly_first_date(conta, year, month)
+        if first is not None:
+            return first
+    return _clamp_day(year, month, conta.due_day)
+
+
 def ensure_recurring_entries(year: int, month: int) -> None:
     """Cria os lançamentos 'registrado' do mês para os fixos ativos (idempotente).
 
@@ -354,7 +378,7 @@ def ensure_recurring_entries(year: int, month: int) -> None:
             recurring_id=r.id,
             month_ref=ref,
             amount=r.amount * occurrences,
-            due_date=_clamp_day(year, month, r.due_day),
+            due_date=_conta_due_date(r, year, month),
             status="registrado",
         ))
         created = True
@@ -387,7 +411,8 @@ def recurring_alerts(today: date) -> list[dict]:
         # Feature 112: fora da vigência ou fora do ciclo (anual) não alerta.
         if r.occurrences_in_month(today.year, today.month) == 0:
             continue
-        if today < _clamp_day(today.year, today.month, r.due_day):
+        # Feature 113: semanal alerta a partir da 1ª ocorrência do dia da semana no mês.
+        if today < _conta_due_date(r, today.year, today.month):
             continue
         entry = entries.get(r.id)
         if entry is None:
@@ -414,14 +439,30 @@ def _parse_conta_form() -> dict | None:
     """Lê e valida o formulário de conta recorrente; None (com flash) se inválido."""
     name = request.form.get("name", "").strip()
     expense_type = request.form.get("expense_type", "").strip()
-    day_raw = request.form.get("due_day", "").strip()
-    if not name or expense_type not in RecurringExpense.TYPES or not day_raw.isdigit():
-        flash("Informe nome, tipo e dia (1 a 31) da conta.", "error")
+    if not name or expense_type not in RecurringExpense.TYPES:
+        flash("Informe nome e tipo da conta.", "error")
         return None
-    due_day = int(day_raw)
-    if not 1 <= due_day <= 31:
-        flash("Dia deve estar entre 1 e 31.", "error")
-        return None
+    frequency = request.form.get("frequency", "mensal").strip()
+    if frequency not in RecurringExpense.FREQUENCIES:
+        frequency = "mensal"
+    # Semanal (feature 113): dia da SEMANA obrigatório; dia do mês fica irrelevante (=1).
+    weekday = None
+    if frequency == "semanal":
+        wd_raw = request.form.get("weekday", "").strip()
+        if not wd_raw.isdigit() or not 0 <= int(wd_raw) <= 6:
+            flash("Escolha o dia da semana da cobrança semanal.", "error")
+            return None
+        weekday = int(wd_raw)
+        due_day = 1
+    else:
+        day_raw = request.form.get("due_day", "").strip()
+        if not day_raw.isdigit():
+            flash("Informe o dia (1 a 31) da conta.", "error")
+            return None
+        due_day = int(day_raw)
+        if not 1 <= due_day <= 31:
+            flash("Dia deve estar entre 1 e 31.", "error")
+            return None
     amount = parse_brl(request.form.get("amount", ""))
     if expense_type != "variavel" and (amount is None or amount <= 0):
         flash("Informe o valor fixo da conta (ex.: 1.000,00).", "error")
@@ -433,10 +474,7 @@ def _parse_conta_form() -> dict | None:
         var_amount = amount if ref_mode == "exato" else None
         var_min = parse_brl(request.form.get("amount_min", "")) if ref_mode != "exato" else None
         var_max = parse_brl(request.form.get("amount_max", "")) if ref_mode != "exato" else None
-    # Frequência e vigência (feature 112).
-    frequency = request.form.get("frequency", "mensal").strip()
-    if frequency not in RecurringExpense.FREQUENCIES:
-        frequency = "mensal"
+    # Vigência (feature 112).
     try:
         start_raw = request.form.get("start_date", "").strip()
         start_date = date.fromisoformat(start_raw) if start_raw else date.today()
@@ -455,6 +493,7 @@ def _parse_conta_form() -> dict | None:
         "expense_type": expense_type,
         "due_day": due_day,
         "frequency": frequency,
+        "weekday": weekday,
         "start_date": start_date,
         "end_date": end_date,
         "amount": amount if expense_type != "variavel" else var_amount,
