@@ -853,6 +853,8 @@ class RecurringExpense(db.Model):
         "quinzenal": "Quinzenal",
         "anual": "Anual",
     }
+    # Feature 113: dia da semana da cobrança semanal (índice = weekday() do Python).
+    WEEKDAY_LABELS = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
 
     id            = db.Column(db.Integer, primary_key=True)
     name          = db.Column(db.String(200), nullable=False)
@@ -869,6 +871,8 @@ class RecurringExpense(db.Model):
     frequency     = db.Column(db.String(20), nullable=False, default="mensal", server_default="mensal")
     start_date    = db.Column(db.Date, nullable=False, default=lambda: datetime.utcnow().date())
     end_date      = db.Column(db.Date, nullable=True)
+    # Feature 113: dia da semana (0=segunda … 6=domingo) — só para frequência semanal.
+    weekday       = db.Column(db.Integer, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -932,12 +936,25 @@ class RecurringExpense(db.Model):
                 n += 1
             return n
         if freq == "semanal":
-            anchor_wd = (self.start_date or month_start).weekday()
             return sum(
                 1 for d in range(lo.day, hi.day + 1)
-                if _date(year, month, d).weekday() == anchor_wd
+                if _date(year, month, d).weekday() == self.anchor_weekday
             )
         return 1
+
+    @property
+    def anchor_weekday(self) -> int:
+        """Dia da semana da cobrança semanal (feature 113): escolhido, ou o da data de início."""
+        if self.weekday is not None:
+            return self.weekday
+        return self.start_date.weekday() if self.start_date else 0
+
+    @property
+    def dia_label(self) -> str:
+        """Rótulo do "dia" da conta: "dia N" ou, na semanal, "toda semana (quarta)"."""
+        if self.frequency == "semanal":
+            return f"toda semana ({self.WEEKDAY_LABELS[self.anchor_weekday]})"
+        return f"dia {self.due_day}"
 
     @property
     def vigencia_label(self) -> str:

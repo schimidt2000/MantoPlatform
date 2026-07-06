@@ -32,16 +32,28 @@
       </select>
     </div>
     <div>
-      <label class="meta" style="display:block; margin-bottom:4px;">Dia* <span title="Variável: dia em que a conta costuma chegar (início do alerta). Fixos: dia do débito/cobrança.">ⓘ</span></label>
-      <input type="number" name="due_day" min="1" max="31" required placeholder="10" style="width:70px;">
-    </div>
-    <div>
       <label class="meta" style="display:block; margin-bottom:4px;">Frequência*</label>
-      <select name="frequency" style="width:120px;">
+      <select name="frequency" onchange="freqCampos(this.closest('form'))" style="width:120px;">
         <option value="mensal">Mensal</option>
         <option value="semanal">Semanal</option>
         <option value="quinzenal">Quinzenal</option>
         <option value="anual">Anual</option>
+      </select>
+    </div>
+    <div class="campo-dia">
+      <label class="meta" style="display:block; margin-bottom:4px;">Dia* <span title="Variável: dia em que a conta costuma chegar (início do alerta). Fixos: dia do débito/cobrança.">ⓘ</span></label>
+      <input type="number" name="due_day" min="1" max="31" required placeholder="10" style="width:70px;">
+    </div>
+    <div class="campo-weekday" style="display:none;">
+      <label class="meta" style="display:block; margin-bottom:4px;">Dia da semana*</label>
+      <select name="weekday" style="width:130px;">
+        <option value="0">Segunda</option>
+        <option value="1">Terça</option>
+        <option value="2">Quarta</option>
+        <option value="3">Quinta</option>
+        <option value="4">Sexta</option>
+        <option value="5">Sábado</option>
+        <option value="6">Domingo</option>
       </select>
     </div>
     <div>
@@ -115,7 +127,7 @@
           {% if not c.is_active %}<span class="badge" style="font-size:10px; margin-left:6px;">inativa</span>{% endif %}
           {% if c.notes %}<div class="meta" style="font-size:11px;">{{ c.notes }}</div>{% endif %}
         </td>
-        <td style="padding:10px 14px;">{{ c.due_day }}</td>
+        <td style="padding:10px 14px;">{% if c.frequency == 'semanal' %}{{ c.WEEKDAY_LABELS[c.anchor_weekday] }}{% else %}{{ c.due_day }}{% endif %}</td>
         <td style="padding:10px 14px; white-space:nowrap;">
           {{ frequency_labels.get(c.frequency, 'Mensal') }}
           <div class="meta" style="font-size:11px;">{{ c.vigencia_label }}</div>
@@ -185,6 +197,7 @@
             'amount_max': (c.amount_max|float) if c.amount_max is not none else None,
             'default_pix': c.default_pix or '', 'card_name': c.card_name or '', 'notes': c.notes or '',
             'frequency': c.frequency or 'mensal',
+            'weekday': c.anchor_weekday if c.frequency == 'semanal' else None,
             'start_date': c.start_date.isoformat() if c.start_date else '',
             'end_date': c.end_date.isoformat() if c.end_date else ''
           } | tojson }})">Editar</button>
@@ -291,16 +304,28 @@
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <div class="form-group" style="margin-bottom:8px;">
-          <label>Dia*</label>
-          <input type="number" name="due_day" id="ed-day" min="1" max="31" required style="width:70px;">
-        </div>
-        <div class="form-group" style="margin-bottom:8px;">
           <label>Frequência*</label>
-          <select name="frequency" id="ed-frequency" style="width:120px;">
+          <select name="frequency" id="ed-frequency" onchange="edFreqCampos()" style="width:120px;">
             <option value="mensal">Mensal</option>
             <option value="semanal">Semanal</option>
             <option value="quinzenal">Quinzenal</option>
             <option value="anual">Anual</option>
+          </select>
+        </div>
+        <div class="form-group ed-dia" style="margin-bottom:8px;">
+          <label>Dia*</label>
+          <input type="number" name="due_day" id="ed-day" min="1" max="31" required style="width:70px;">
+        </div>
+        <div class="form-group ed-weekday" style="margin-bottom:8px; display:none;">
+          <label>Dia da semana*</label>
+          <select name="weekday" id="ed-weekday-sel" style="width:130px;">
+            <option value="0">Segunda</option>
+            <option value="1">Terça</option>
+            <option value="2">Quarta</option>
+            <option value="3">Quinta</option>
+            <option value="4">Sexta</option>
+            <option value="5">Sábado</option>
+            <option value="6">Domingo</option>
           </select>
         </div>
         <div class="form-group" style="margin-bottom:8px;">
@@ -368,6 +393,22 @@ function refMode(form) {
 }
 function tipoConta(sel) { refMode(sel.closest('form')); }
 
+function freqCampos(form) {
+  const semanal = form.querySelector('[name=frequency]').value === 'semanal';
+  const dia = form.querySelector('.campo-dia');
+  const wd = form.querySelector('.campo-weekday');
+  dia.style.display = semanal ? 'none' : '';
+  dia.querySelector('input[name=due_day]').required = !semanal;
+  wd.style.display = semanal ? '' : 'none';
+}
+
+function edFreqCampos() {
+  const semanal = document.getElementById('ed-frequency').value === 'semanal';
+  document.querySelector('#form-editar .ed-dia').style.display = semanal ? 'none' : '';
+  document.getElementById('ed-day').required = !semanal;
+  document.querySelector('#form-editar .ed-weekday').style.display = semanal ? '' : 'none';
+}
+
 function abrirPreencher(id, nome, pixPadrao) {
   document.getElementById('preencher-titulo').textContent = 'Preencher — ' + nome;
   document.getElementById('form-preencher').action = '/gastos/recorrentes/' + id + '/preencher';
@@ -407,6 +448,10 @@ function abrirEditar(c) {
   document.getElementById('ed-frequency').value = c.frequency;
   document.getElementById('ed-start').value = c.start_date;
   document.getElementById('ed-end').value = c.end_date;
+  if (c.weekday !== null && c.weekday !== undefined) {
+    document.getElementById('ed-weekday-sel').value = String(c.weekday);
+  }
+  edFreqCampos();
   const exato = c.expense_type === 'variavel' && c.amount !== null;
   document.getElementById('ed-ref-exato').checked = exato;
   document.getElementById('ed-ref-faixa').checked = !exato;

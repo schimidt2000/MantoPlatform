@@ -551,7 +551,7 @@
                 {% endif %}
               </div>
               <div class="meta">
-                Esperada dia {{ a.conta.due_day }}
+                Esperada {{ a.conta.dia_label }}
                 {% if a.estado == 'aguardando' and a.conta.expected_label %}
                   · {{ a.conta.expected_label }}
                 {% elif a.entry and a.entry.amount %}
