@@ -82,9 +82,12 @@ Calculadora não muda.
 
 ## R7. Taxa da comissão EDU
 
-Usuário não pediu taxa própria. `EducaMantoPackage.commission_rate` existe mas serve ao
-acréscimo de revendedor no PDF (feature 078) — outra coisa.
+`EducaMantoPackage.commission_rate` existe mas serve ao acréscimo de revendedor no PDF
+(feature 078) — outra coisa.
 
-**Decision**: mesmas regras de hoje — `event.commission_rate` (override por evento, editável
-pelo superadmin em Dados de Venda) senão `default_commission_rate` (2,5%). Padronização de
-verdade: EDU e comum diferem só em beneficiário e ciclo.
+**Decision (ajustada a pedido do usuário)**: **5% sobre o LUCRO** do evento EducaManto —
+base = `sale_value − BV − cachês` (mesma conta de custo do pipeline: `_group_cost`/
+`_event_cost`), constante `EDUCAMANTO_COMMISSION_RATE = 5` no módulo financeiro. Difere da
+comissão comum (% sobre a venda). `event.commission_rate` (override por evento) continua
+valendo e substitui os 5% — mas a base segue sendo o lucro para eventos EDU. Se o lucro for
+negativo, a comissão é 0 (mesmo floor da base comum).

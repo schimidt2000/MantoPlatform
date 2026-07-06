@@ -13,6 +13,9 @@ Nenhuma rota nova. Contratos das regras/rotas alteradas:
 | Evento comum | `event.seller` (regra atual) |
 
 `_event_commission` retorna 0 se o beneficiário não existir ou `receives_commission=False`.
+Valor (feature 109, ajuste): evento EDU com responsável → **5% sobre o lucro**
+(`sale_value − BV − cachês`, floor 0), override `event.commission_rate` substitui os 5%;
+evento comum → % sobre a venda (regra atual, inalterada).
 `_sync_commission_payment` cria/atualiza a linha com `seller_id = beneficiário.id` e
 `payable_from = data do evento` (EDU) / `NULL` (comum). Exigência de `event.seller_id` cai
 apenas no caso EDU-com-responsável.

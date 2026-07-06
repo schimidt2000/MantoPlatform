@@ -20,6 +20,9 @@ financeiro_bp = Blueprint("financeiro", __name__)
 TZ_SP = ZoneInfo("America/Sao_Paulo")
 
 DEFAULT_COMMISSION = Decimal("2.5")
+# Comissão EducaManto (feature 109): % sobre o LUCRO do evento (venda − BV − cachês),
+# diferente da comissão comum (% sobre a venda). Override por evento continua valendo.
+EDUCAMANTO_COMMISSION_RATE = Decimal("5")
 
 
 def _has_role(*names):
@@ -115,9 +118,19 @@ def _event_commission(event, settings) -> Decimal:
     beneficiary = _commission_beneficiary(event, settings)
     if beneficiary and not beneficiary.receives_commission:
         return Decimal("0")
-    rate = _get_commission_rate(event, settings)
-    # BV sai da base de comissão (repasse, não é receita comissionável) — feature 099.
-    base = Decimal(event.sale_value) - _event_bv_total(event)
+    if event.is_educamanto and _educamanto_responsavel(settings) is not None:
+        # Comissão EducaManto (feature 109): 5% sobre o LUCRO (venda − BV − cachês).
+        rate = (
+            Decimal(str(event.commission_rate))
+            if event.commission_rate is not None
+            else EDUCAMANTO_COMMISSION_RATE
+        )
+        custo = _group_cost(event) if event.is_group_leader else _event_cost(event)
+        base = Decimal(event.sale_value) - _event_bv_total(event) - Decimal(custo)
+    else:
+        rate = _get_commission_rate(event, settings)
+        # BV sai da base de comissão (repasse, não é receita comissionável) — feature 099.
+        base = Decimal(event.sale_value) - _event_bv_total(event)
     if base < 0:
         base = Decimal("0")
     return (base * rate / Decimal("100")).quantize(
