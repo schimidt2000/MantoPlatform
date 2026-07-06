@@ -871,6 +871,24 @@ class RecurringExpense(db.Model):
         """True para tipos de valor fixo (débito automático/assinatura)."""
         return self.expense_type in ("debito_automatico", "assinatura")
 
+    @property
+    def expected_label(self) -> str | None:
+        """Rótulo da referência da conta variável (feature 111): faixa ou valor exato.
+
+        Variável com ``amount`` preenchido = valor exato esperado; com min/max = faixa;
+        sem nada = None (sem referência). Não se aplica aos tipos fixos.
+        """
+        if self.expense_type != "variavel":
+            return None
+        from app.money import format_brl
+        if self.amount is not None:
+            return f"esperado {format_brl(self.amount, prefix=True)}"
+        if self.amount_min is not None or self.amount_max is not None:
+            lo = format_brl(self.amount_min or 0, prefix=True)
+            hi = format_brl(self.amount_max or 0, prefix=True)
+            return f"faixa {lo} – {hi}"
+        return None
+
 
 class RecurringExpenseEntry(db.Model):
     """Lançamento mensal de um gasto recorrente (feature 110) — um por conta/mês.
@@ -905,9 +923,15 @@ class RecurringExpenseEntry(db.Model):
 
     @property
     def out_of_range(self) -> bool:
-        """True se o valor preenchido saiu da faixa esperada da conta (só destaque visual)."""
+        """True se o valor preenchido fugiu da referência da conta (só destaque visual).
+
+        Feature 111: a referência da conta variável pode ser uma faixa (min–max) ou um
+        valor exato esperado (``recurring.amount``) — qualquer diferença do exato destaca.
+        """
         if self.amount is None or not self.recurring:
             return False
+        if self.recurring.expense_type == "variavel" and self.recurring.amount is not None:
+            return self.amount != self.recurring.amount
         lo, hi = self.recurring.amount_min, self.recurring.amount_max
         if lo is not None and self.amount < lo:
             return True

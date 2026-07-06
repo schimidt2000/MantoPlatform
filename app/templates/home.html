@@ -552,11 +552,11 @@
               </div>
               <div class="meta">
                 Esperada dia {{ a.conta.due_day }}
-                {% if a.estado == 'aguardando' and (a.conta.amount_min or a.conta.amount_max) %}
-                  · faixa R$ {{ (a.conta.amount_min or 0) | brl }} – R$ {{ (a.conta.amount_max or 0) | brl }}
+                {% if a.estado == 'aguardando' and a.conta.expected_label %}
+                  · {{ a.conta.expected_label }}
                 {% elif a.entry and a.entry.amount %}
                   · R$ {{ a.entry.amount | brl }}{% if a.entry.due_date %} · vence {{ a.entry.due_date.strftime("%d/%m/%Y") }}{% endif %}
-                  {% if a.entry.out_of_range %}<span style="color:#b91c1c;font-weight:700;"> · fora da faixa</span>{% endif %}
+                  {% if a.entry.out_of_range %}<span style="color:#b91c1c;font-weight:700;"> · fora do esperado</span>{% endif %}
                 {% endif %}
               </div>
             </div>

@@ -35,8 +35,15 @@
       <label class="meta" style="display:block; margin-bottom:4px;">Dia* <span title="Variável: dia em que a conta costuma chegar (início do alerta). Fixos: dia do débito/cobrança.">ⓘ</span></label>
       <input type="number" name="due_day" min="1" max="31" required placeholder="10" style="width:70px;">
     </div>
+    <div class="campo-ref">
+      <label class="meta" style="display:block; margin-bottom:4px;">Referência</label>
+      <div style="display:flex; gap:10px; align-items:center; height:34px;">
+        <label style="font-size:12px; display:flex; gap:4px; align-items:center;"><input type="radio" name="ref_mode" value="faixa" checked onchange="refMode(this.closest('form'))"> Faixa</label>
+        <label style="font-size:12px; display:flex; gap:4px; align-items:center;"><input type="radio" name="ref_mode" value="exato" onchange="refMode(this.closest('form'))"> Valor exato</label>
+      </div>
+    </div>
     <div class="campo-fixo" style="display:none;">
-      <label class="meta" style="display:block; margin-bottom:4px;">Valor fixo (R$)*</label>
+      <label class="meta campo-fixo-label" style="display:block; margin-bottom:4px;">Valor fixo (R$)*</label>
       <input type="text" name="amount" inputmode="decimal" class="brl-input" placeholder="1.000,00" style="width:120px;">
     </div>
     <div class="campo-variavel">
@@ -74,7 +81,7 @@
       <tr style="background:var(--surface); text-align:left;">
         <th style="padding:10px 14px; border-bottom:1px solid var(--line);">Conta</th>
         <th style="padding:10px 14px; border-bottom:1px solid var(--line);">Dia</th>
-        <th style="padding:10px 14px; border-bottom:1px solid var(--line);">{{ 'Faixa esperada' if t == 'variavel' else 'Valor' }}</th>
+        <th style="padding:10px 14px; border-bottom:1px solid var(--line);">{{ 'Referência' if t == 'variavel' else 'Valor' }}</th>
         {% if t == 'assinatura' %}<th style="padding:10px 14px; border-bottom:1px solid var(--line);">Cartão</th>{% endif %}
         <th style="padding:10px 14px; border-bottom:1px solid var(--line);">Mês {{ month_ref }}</th>
         <th style="padding:10px 14px; border-bottom:1px solid var(--line); text-align:right;">Ações</th>
@@ -92,7 +99,7 @@
         <td style="padding:10px 14px;">{{ c.due_day }}</td>
         <td style="padding:10px 14px; white-space:nowrap;">
           {% if t == 'variavel' %}
-            {% if c.amount_min or c.amount_max %}{{ fmt_brl(c.amount_min or 0) }} – {{ fmt_brl(c.amount_max or 0) }}{% else %}—{% endif %}
+            {{ c.expected_label or '—' }}
           {% else %}
             {{ fmt_brl(c.amount) }}
           {% endif %}
@@ -110,12 +117,12 @@
           {% elif entry.status == 'a_pagar' %}
             <span class="badge badge-red" style="font-size:10px;">a pagar</span>
             <span style="white-space:nowrap;">{{ fmt_brl(entry.amount) }}</span>
-            {% if entry.out_of_range %}<span title="Valor fora da faixa esperada" style="color:#b91c1c; font-weight:700;">⚠</span>{% endif %}
+            {% if entry.out_of_range %}<span title="Valor fora do esperado" style="color:#b91c1c; font-weight:700;">⚠</span>{% endif %}
             {% if entry.due_date %}<div class="meta" style="font-size:11px;">vence {{ entry.due_date.strftime("%d/%m") }}</div>{% endif %}
           {% elif entry.status == 'pago' %}
             <span class="badge badge-green" style="font-size:10px;">pago</span>
             <span style="white-space:nowrap;">{{ fmt_brl(entry.amount) }}</span>
-            {% if entry.out_of_range %}<span title="Valor fora da faixa esperada" style="color:#b91c1c; font-weight:700;">⚠</span>{% endif %}
+            {% if entry.out_of_range %}<span title="Valor fora do esperado" style="color:#b91c1c; font-weight:700;">⚠</span>{% endif %}
           {% elif entry.status == 'registrado' %}
             <span class="badge" style="background:#e0f2fe; color:#075985; font-size:10px;">registrado</span>
             <span style="white-space:nowrap;">{{ fmt_brl(entry.amount) }}</span>
@@ -197,7 +204,7 @@
       {% for e in hist_conta.entries %}
       <tr style="border-bottom:1px solid var(--line);">
         <td style="padding:8px 12px;">{{ e.month_ref }}</td>
-        <td style="padding:8px 12px;">{{ fmt_brl(e.amount) if e.amount is not none else '—' }}{% if e.out_of_range %} <span style="color:#b91c1c; font-weight:700;" title="Fora da faixa">⚠</span>{% endif %}</td>
+        <td style="padding:8px 12px;">{{ fmt_brl(e.amount) if e.amount is not none else '—' }}{% if e.out_of_range %} <span style="color:#b91c1c; font-weight:700;" title="Fora do esperado">⚠</span>{% endif %}</td>
         <td style="padding:8px 12px;">{{ {'a_pagar':'A pagar','pago':'Pago','registrado':'Registrado','pulado':'Pulado'}[e.status] }}</td>
         <td style="padding:8px 12px;">{{ e.filled_by.name if e.filled_by else '—' }}</td>
         <td style="padding:8px 12px;">{{ e.paid_at.strftime("%d/%m/%Y") if e.paid_at else '—' }}</td>
@@ -247,13 +254,20 @@
         <input type="text" name="name" id="ed-name" required style="width:100%;">
       </div>
       <input type="hidden" name="expense_type" id="ed-type">
+      <div class="form-group ed-ref" style="margin-bottom:8px;">
+        <label>Referência</label>
+        <div style="display:flex; gap:12px;">
+          <label style="font-size:12px; display:flex; gap:4px; align-items:center;"><input type="radio" name="ref_mode" value="faixa" id="ed-ref-faixa" onchange="edRefMode()"> Faixa</label>
+          <label style="font-size:12px; display:flex; gap:4px; align-items:center;"><input type="radio" name="ref_mode" value="exato" id="ed-ref-exato" onchange="edRefMode()"> Valor exato</label>
+        </div>
+      </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <div class="form-group" style="margin-bottom:8px;">
           <label>Dia*</label>
           <input type="number" name="due_day" id="ed-day" min="1" max="31" required style="width:70px;">
         </div>
         <div class="form-group ed-fixo" style="margin-bottom:8px;">
-          <label>Valor fixo (R$)</label>
+          <label id="ed-fixo-label">Valor fixo (R$)</label>
           <input type="text" name="amount" id="ed-amount" inputmode="decimal" class="brl-input" style="width:120px;">
         </div>
         <div class="form-group ed-variavel" style="margin-bottom:8px;">
@@ -286,12 +300,28 @@
 </div>
 
 <script>
-function tipoConta(sel) {
-  const form = sel.closest('form');
-  form.querySelector('.campo-fixo').style.display = sel.value === 'variavel' ? 'none' : '';
-  form.querySelector('.campo-variavel').style.display = sel.value === 'variavel' ? '' : 'none';
-  form.querySelector('.campo-assinatura').style.display = sel.value === 'assinatura' ? '' : 'none';
+function refMode(form) {
+  const tipo = form.querySelector('[name=expense_type]').value;
+  const checked = form.querySelector('[name=ref_mode]:checked');
+  const mode = checked ? checked.value : 'faixa';
+  const fixo = form.querySelector('.campo-fixo');
+  const faixa = form.querySelector('.campo-variavel');
+  const ref = form.querySelector('.campo-ref');
+  const label = form.querySelector('.campo-fixo-label');
+  if (tipo === 'variavel') {
+    ref.style.display = '';
+    fixo.style.display = mode === 'exato' ? '' : 'none';
+    label.textContent = 'Valor exato esperado (R$)';
+    faixa.style.display = mode === 'exato' ? 'none' : '';
+  } else {
+    ref.style.display = 'none';
+    fixo.style.display = '';
+    label.textContent = 'Valor fixo (R$)*';
+    faixa.style.display = 'none';
+  }
+  form.querySelector('.campo-assinatura').style.display = tipo === 'assinatura' ? '' : 'none';
 }
+function tipoConta(sel) { refMode(sel.closest('form')); }
 
 function abrirPreencher(id, nome, pixPadrao) {
   document.getElementById('preencher-titulo').textContent = 'Preencher — ' + nome;
@@ -307,6 +337,17 @@ function brlFromFloat(v) {
   return v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
+function edRefMode() {
+  const tipo = document.getElementById('ed-type').value;
+  const exato = document.getElementById('ed-ref-exato').checked;
+  const isVar = tipo === 'variavel';
+  document.querySelector('#form-editar .ed-ref').style.display = isVar ? '' : 'none';
+  document.querySelector('#form-editar .ed-fixo').style.display = (!isVar || exato) ? '' : 'none';
+  document.getElementById('ed-fixo-label').textContent = isVar ? 'Valor exato esperado (R$)' : 'Valor fixo (R$)';
+  document.querySelector('#form-editar .ed-variavel').style.display = (isVar && !exato) ? '' : 'none';
+  document.querySelector('#form-editar .ed-assinatura').style.display = tipo === 'assinatura' ? '' : 'none';
+}
+
 function abrirEditar(c) {
   document.getElementById('form-editar').action = '/gastos/recorrentes/' + c.id + '/editar';
   document.getElementById('ed-name').value = c.name;
@@ -318,9 +359,10 @@ function abrirEditar(c) {
   document.getElementById('ed-card').value = c.card_name;
   document.getElementById('ed-pix').value = c.default_pix;
   document.getElementById('ed-notes').value = c.notes;
-  document.querySelector('#form-editar .ed-fixo').style.display = c.expense_type === 'variavel' ? 'none' : '';
-  document.querySelector('#form-editar .ed-variavel').style.display = c.expense_type === 'variavel' ? '' : 'none';
-  document.querySelector('#form-editar .ed-assinatura').style.display = c.expense_type === 'assinatura' ? '' : 'none';
+  const exato = c.expense_type === 'variavel' && c.amount !== null;
+  document.getElementById('ed-ref-exato').checked = exato;
+  document.getElementById('ed-ref-faixa').checked = !exato;
+  edRefMode();
   document.getElementById('modal-editar').style.display = 'flex';
 }
 function fecharEditar() { document.getElementById('modal-editar').style.display = 'none'; }
