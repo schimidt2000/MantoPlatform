@@ -418,13 +418,20 @@ def _parse_conta_form() -> dict | None:
     if expense_type != "variavel" and (amount is None or amount <= 0):
         flash("Informe o valor fixo da conta (ex.: 1.000,00).", "error")
         return None
+    # Referência da conta variável (feature 111): faixa (min–max) OU valor exato esperado
+    # (reusa o campo "amount"). Salvar um modo zera os campos do outro.
+    ref_mode = request.form.get("ref_mode", "faixa")
+    if expense_type == "variavel":
+        var_amount = amount if ref_mode == "exato" else None
+        var_min = parse_brl(request.form.get("amount_min", "")) if ref_mode != "exato" else None
+        var_max = parse_brl(request.form.get("amount_max", "")) if ref_mode != "exato" else None
     return {
         "name": name,
         "expense_type": expense_type,
         "due_day": due_day,
-        "amount": amount if expense_type != "variavel" else None,
-        "amount_min": parse_brl(request.form.get("amount_min", "")) if expense_type == "variavel" else None,
-        "amount_max": parse_brl(request.form.get("amount_max", "")) if expense_type == "variavel" else None,
+        "amount": amount if expense_type != "variavel" else var_amount,
+        "amount_min": var_min if expense_type == "variavel" else None,
+        "amount_max": var_max if expense_type == "variavel" else None,
         "default_pix": request.form.get("default_pix", "").strip() or None,
         "card_name": (request.form.get("card_name", "").strip() or None) if expense_type == "assinatura" else None,
         "notes": request.form.get("notes", "").strip() or None,
@@ -462,11 +469,11 @@ def recorrentes():
     if raw_conta.isdigit():
         hist_conta = RecurringExpense.query.get(int(raw_conta))
 
-    # Soma mensal estimada por tipo (fixos: valor; variáveis: teto da faixa quando houver)
+    # Soma mensal estimada por tipo (fixos: valor; variáveis: exato esperado ou teto da faixa)
     def _estimate(c: RecurringExpense):
         if c.is_fixed:
             return c.amount or 0
-        return c.amount_max or c.amount_min or 0
+        return c.amount or c.amount_max or c.amount_min or 0
     somas = {
         t: sum((Decimal(str(_estimate(c))) for c in grupos[t] if c.is_active), Decimal("0"))
         for t in RecurringExpense.TYPES
