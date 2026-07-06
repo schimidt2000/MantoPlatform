@@ -345,10 +345,15 @@ def ensure_recurring_entries(year: int, month: int) -> None:
     for r in fixed:
         if r.id in existing_ids or r.amount is None:
             continue
+        # Feature 112: frequência/vigência — 0 ocorrências = sem lançamento no mês;
+        # semanal/quinzenal multiplicam o valor pelas ocorrências do mês.
+        occurrences = r.occurrences_in_month(year, month)
+        if occurrences == 0:
+            continue
         db.session.add(RecurringExpenseEntry(
             recurring_id=r.id,
             month_ref=ref,
-            amount=r.amount,
+            amount=r.amount * occurrences,
             due_date=_clamp_day(year, month, r.due_day),
             status="registrado",
         ))
@@ -379,6 +384,9 @@ def recurring_alerts(today: date) -> list[dict]:
     }
     alerts = []
     for r in variaveis:
+        # Feature 112: fora da vigência ou fora do ciclo (anual) não alerta.
+        if r.occurrences_in_month(today.year, today.month) == 0:
+            continue
         if today < _clamp_day(today.year, today.month, r.due_day):
             continue
         entry = entries.get(r.id)
@@ -425,10 +433,30 @@ def _parse_conta_form() -> dict | None:
         var_amount = amount if ref_mode == "exato" else None
         var_min = parse_brl(request.form.get("amount_min", "")) if ref_mode != "exato" else None
         var_max = parse_brl(request.form.get("amount_max", "")) if ref_mode != "exato" else None
+    # Frequência e vigência (feature 112).
+    frequency = request.form.get("frequency", "mensal").strip()
+    if frequency not in RecurringExpense.FREQUENCIES:
+        frequency = "mensal"
+    try:
+        start_raw = request.form.get("start_date", "").strip()
+        start_date = date.fromisoformat(start_raw) if start_raw else date.today()
+    except ValueError:
+        start_date = date.today()
+    end_raw = request.form.get("end_date", "").strip()
+    try:
+        end_date = date.fromisoformat(end_raw) if end_raw else None
+    except ValueError:
+        end_date = None
+    if end_date and end_date < start_date:
+        flash("A data de fim não pode ser anterior à data de início.", "error")
+        return None
     return {
         "name": name,
         "expense_type": expense_type,
         "due_day": due_day,
+        "frequency": frequency,
+        "start_date": start_date,
+        "end_date": end_date,
         "amount": amount if expense_type != "variavel" else var_amount,
         "amount_min": var_min if expense_type == "variavel" else None,
         "amount_max": var_max if expense_type == "variavel" else None,
@@ -469,11 +497,20 @@ def recorrentes():
     if raw_conta.isdigit():
         hist_conta = RecurringExpense.query.get(int(raw_conta))
 
-    # Soma mensal estimada por tipo (fixos: valor; variáveis: exato esperado ou teto da faixa)
+    # Soma mensal estimada por tipo (fixos: valor; variáveis: exato esperado ou teto da faixa).
+    # Feature 112: ajustada pela frequência (semanal ×4, quinzenal ×2, anual ÷12) —
+    # referência visual, não competência.
     def _estimate(c: RecurringExpense):
-        if c.is_fixed:
-            return c.amount or 0
-        return c.amount or c.amount_max or c.amount_min or 0
+        base = (c.amount or 0) if c.is_fixed else (c.amount or c.amount_max or c.amount_min or 0)
+        base = Decimal(str(base))
+        freq = c.frequency or "mensal"
+        if freq == "semanal":
+            return base * 4
+        if freq == "quinzenal":
+            return base * 2
+        if freq == "anual":
+            return (base / 12).quantize(Decimal("0.01"))
+        return base
     somas = {
         t: sum((Decimal(str(_estimate(c))) for c in grupos[t] if c.is_active), Decimal("0"))
         for t in RecurringExpense.TYPES
@@ -485,8 +522,11 @@ def recorrentes():
         entries=entries,
         somas=somas,
         month_ref=ref,
+        ref_year=year_i,
+        ref_month=month_i,
         is_current_month=(ref == _month_ref(today.year, today.month)),
         type_labels=RecurringExpense.TYPE_LABELS,
+        frequency_labels=RecurringExpense.FREQUENCY_LABELS,
         hist_conta=hist_conta,
         today=today,
         fmt_brl=_fmt_brl,
