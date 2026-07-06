@@ -18,7 +18,9 @@ from werkzeug.utils import secure_filename
 
 from app import db
 from app.constants import RoleName
-from app.models import AuditLog, CalendarEvent, SpecialExpense, User
+from app.models import (
+    AuditLog, CalendarEvent, RecurringExpense, RecurringExpenseEntry, SpecialExpense, User,
+)
 from app.money import format_brl, parse_brl
 
 gastos_bp = Blueprint("gastos", __name__, url_prefix="/gastos")
@@ -290,3 +292,380 @@ def vincular_evento(expense_id: int):
     db.session.commit()
     flash("Vínculo de evento atualizado.", "success")
     return redirect(url_for("gastos.index"))
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Gastos recorrentes (feature 110) — FINANCEIRO/SUPERADMIN
+# ══════════════════════════════════════════════════════════════════
+
+def _is_financeiro() -> bool:
+    """True se o usuário atual tem papel FINANCEIRO ou SUPERADMIN."""
+    return any(
+        r.name.upper() in (RoleName.FINANCEIRO, RoleName.SUPERADMIN)
+        for r in current_user.roles
+    )
+
+
+def _require_financeiro_recorrentes() -> None:
+    """Aborta 403 fora de FINANCEIRO/SUPERADMIN (guard das rotas de recorrentes)."""
+    if not _is_financeiro():
+        abort(403)
+
+
+def _month_ref(year: int, month: int) -> str:
+    """Formata a referência mensal: '2026-07'."""
+    return f"{year:04d}-{month:02d}"
+
+
+def _clamp_day(year: int, month: int, day: int) -> date:
+    """Data no mês com o dia clampado no último dia (dia 31 num mês de 30 vira dia 30)."""
+    import calendar as cal_mod
+    _, last_day = cal_mod.monthrange(year, month)
+    return date(year, month, min(max(day, 1), last_day))
+
+
+def ensure_recurring_entries(year: int, month: int) -> None:
+    """Cria os lançamentos 'registrado' do mês para os fixos ativos (idempotente).
+
+    Padrão de geração preguiçosa (mesmo dos salários): chamada pelas telas que consomem os
+    dados; a unique (recurring_id, month_ref) garante 1 lançamento por conta/mês. Faz commit.
+    """
+    ref = _month_ref(year, month)
+    fixed = RecurringExpense.query.filter(
+        RecurringExpense.is_active.is_(True),
+        RecurringExpense.expense_type.in_(["debito_automatico", "assinatura"]),
+    ).all()
+    if not fixed:
+        return
+    existing_ids = {
+        e.recurring_id
+        for e in RecurringExpenseEntry.query.filter_by(month_ref=ref).all()
+    }
+    created = False
+    for r in fixed:
+        if r.id in existing_ids or r.amount is None:
+            continue
+        db.session.add(RecurringExpenseEntry(
+            recurring_id=r.id,
+            month_ref=ref,
+            amount=r.amount,
+            due_date=_clamp_day(year, month, r.due_day),
+            status="registrado",
+        ))
+        created = True
+    if created:
+        db.session.commit()
+
+
+def recurring_alerts(today: date) -> list[dict]:
+    """Alertas do mês corrente para contas variáveis ativas (home, feature 110).
+
+    A partir do dia esperado (clampado no fim do mês): sem lançamento vira "aguardando";
+    lançamento a_pagar vira "a_pagar" (com valor). pago/pulado: sem alerta.
+    """
+    ref = _month_ref(today.year, today.month)
+    variaveis = RecurringExpense.query.filter(
+        RecurringExpense.is_active.is_(True),
+        RecurringExpense.expense_type == "variavel",
+    ).order_by(RecurringExpense.due_day.asc(), RecurringExpense.name.asc()).all()
+    if not variaveis:
+        return []
+    entries = {
+        e.recurring_id: e
+        for e in RecurringExpenseEntry.query.filter(
+            RecurringExpenseEntry.month_ref == ref,
+            RecurringExpenseEntry.recurring_id.in_([r.id for r in variaveis]),
+        ).all()
+    }
+    alerts = []
+    for r in variaveis:
+        if today < _clamp_day(today.year, today.month, r.due_day):
+            continue
+        entry = entries.get(r.id)
+        if entry is None:
+            alerts.append({"conta": r, "estado": "aguardando", "entry": None})
+        elif entry.status == "a_pagar":
+            alerts.append({"conta": r, "estado": "a_pagar", "entry": entry})
+    return alerts
+
+
+def _log_recorrente(action: str, conta: RecurringExpense, detail: str = "") -> None:
+    """Auditoria das ações de gastos recorrentes."""
+    db.session.add(AuditLog(
+        actor_name=current_user.name,
+        actor_role=", ".join(r.name for r in current_user.roles),
+        entity_type="gasto_recorrente",
+        entity_id=conta.id,
+        entity_name=conta.name,
+        action=action,
+        detail=detail,
+    ))
+
+
+def _parse_conta_form() -> dict | None:
+    """Lê e valida o formulário de conta recorrente; None (com flash) se inválido."""
+    name = request.form.get("name", "").strip()
+    expense_type = request.form.get("expense_type", "").strip()
+    day_raw = request.form.get("due_day", "").strip()
+    if not name or expense_type not in RecurringExpense.TYPES or not day_raw.isdigit():
+        flash("Informe nome, tipo e dia (1 a 31) da conta.", "error")
+        return None
+    due_day = int(day_raw)
+    if not 1 <= due_day <= 31:
+        flash("Dia deve estar entre 1 e 31.", "error")
+        return None
+    amount = parse_brl(request.form.get("amount", ""))
+    if expense_type != "variavel" and (amount is None or amount <= 0):
+        flash("Informe o valor fixo da conta (ex.: 1.000,00).", "error")
+        return None
+    return {
+        "name": name,
+        "expense_type": expense_type,
+        "due_day": due_day,
+        "amount": amount if expense_type != "variavel" else None,
+        "amount_min": parse_brl(request.form.get("amount_min", "")) if expense_type == "variavel" else None,
+        "amount_max": parse_brl(request.form.get("amount_max", "")) if expense_type == "variavel" else None,
+        "default_pix": request.form.get("default_pix", "").strip() or None,
+        "card_name": (request.form.get("card_name", "").strip() or None) if expense_type == "assinatura" else None,
+        "notes": request.form.get("notes", "").strip() or None,
+    }
+
+
+@gastos_bp.route("/recorrentes")
+@login_required
+def recorrentes():
+    """Tela de gastos recorrentes: contas por tipo + status do mês (FINANCEIRO/SUPERADMIN)."""
+    _require_financeiro_recorrentes()
+    today = date.today()
+    month = request.args.get("month", "").strip()
+    try:
+        year_i, month_i = int(month[:4]), int(month[5:7])
+    except (ValueError, IndexError):
+        year_i, month_i = today.year, today.month
+    ref = _month_ref(year_i, month_i)
+
+    ensure_recurring_entries(year_i, month_i)
+
+    contas = RecurringExpense.query.order_by(
+        RecurringExpense.is_active.desc(), RecurringExpense.due_day.asc(),
+        RecurringExpense.name.asc(),
+    ).all()
+    entries = {
+        e.recurring_id: e
+        for e in RecurringExpenseEntry.query.filter_by(month_ref=ref).all()
+    }
+    grupos = {t: [c for c in contas if c.expense_type == t] for t in RecurringExpense.TYPES}
+
+    # Histórico expandido de uma conta (?conta=ID)
+    hist_conta = None
+    raw_conta = request.args.get("conta", "").strip()
+    if raw_conta.isdigit():
+        hist_conta = RecurringExpense.query.get(int(raw_conta))
+
+    # Soma mensal estimada por tipo (fixos: valor; variáveis: teto da faixa quando houver)
+    def _estimate(c: RecurringExpense):
+        if c.is_fixed:
+            return c.amount or 0
+        return c.amount_max or c.amount_min or 0
+    somas = {
+        t: sum((Decimal(str(_estimate(c))) for c in grupos[t] if c.is_active), Decimal("0"))
+        for t in RecurringExpense.TYPES
+    }
+
+    return render_template(
+        "gastos/recorrentes.html",
+        grupos=grupos,
+        entries=entries,
+        somas=somas,
+        month_ref=ref,
+        is_current_month=(ref == _month_ref(today.year, today.month)),
+        type_labels=RecurringExpense.TYPE_LABELS,
+        hist_conta=hist_conta,
+        today=today,
+        fmt_brl=_fmt_brl,
+    )
+
+
+@gastos_bp.route("/recorrentes/nova", methods=["POST"])
+@login_required
+def recorrente_nova():
+    """Cadastra uma conta recorrente."""
+    _require_financeiro_recorrentes()
+    data = _parse_conta_form()
+    if data is None:
+        return redirect(url_for("gastos.recorrentes"))
+    conta = RecurringExpense(created_by_id=current_user.id, **data)
+    db.session.add(conta)
+    db.session.flush()
+    _log_recorrente("create", conta, f"Conta recorrente criada ({data['expense_type']})")
+    db.session.commit()
+    flash(f'Conta "{conta.name}" cadastrada.', "success")
+    return redirect(url_for("gastos.recorrentes"))
+
+
+@gastos_bp.route("/recorrentes/<int:conta_id>/editar", methods=["POST"])
+@login_required
+def recorrente_editar(conta_id: int):
+    """Edita uma conta recorrente (lançamentos já criados não mudam)."""
+    _require_financeiro_recorrentes()
+    conta = RecurringExpense.query.get_or_404(conta_id)
+    data = _parse_conta_form()
+    if data is None:
+        return redirect(url_for("gastos.recorrentes"))
+    for key, value in data.items():
+        setattr(conta, key, value)
+    _log_recorrente("edit", conta, "Conta recorrente editada")
+    db.session.commit()
+    flash(f'Conta "{conta.name}" atualizada.', "success")
+    return redirect(url_for("gastos.recorrentes"))
+
+
+@gastos_bp.route("/recorrentes/<int:conta_id>/toggle", methods=["POST"])
+@login_required
+def recorrente_toggle(conta_id: int):
+    """Ativa/desativa uma conta (desativada: sem alertas nem lançamentos novos)."""
+    _require_financeiro_recorrentes()
+    conta = RecurringExpense.query.get_or_404(conta_id)
+    conta.is_active = not conta.is_active
+    _log_recorrente("toggle", conta, "Reativada" if conta.is_active else "Desativada")
+    db.session.commit()
+    flash(f'Conta "{conta.name}" {"reativada" if conta.is_active else "desativada"}.', "success")
+    return redirect(url_for("gastos.recorrentes"))
+
+
+@gastos_bp.route("/recorrentes/<int:conta_id>/excluir", methods=["POST"])
+@login_required
+def recorrente_excluir(conta_id: int):
+    """Exclui conta SEM lançamentos; com histórico, o caminho é desativar."""
+    _require_financeiro_recorrentes()
+    conta = RecurringExpense.query.get_or_404(conta_id)
+    if RecurringExpenseEntry.query.filter_by(recurring_id=conta.id).count():
+        flash("Conta com lançamentos não pode ser excluída — desative-a.", "error")
+        return redirect(url_for("gastos.recorrentes"))
+    _log_recorrente("delete", conta, "Conta recorrente excluída (sem lançamentos)")
+    db.session.delete(conta)
+    db.session.commit()
+    flash(f'Conta "{conta.name}" excluída.', "success")
+    return redirect(url_for("gastos.recorrentes"))
+
+
+def _entry_do_mes(conta: RecurringExpense, ref: str) -> RecurringExpenseEntry | None:
+    return RecurringExpenseEntry.query.filter_by(recurring_id=conta.id, month_ref=ref).first()
+
+
+def _ref_do_form(today: date) -> str:
+    """month_ref do formulário (default: mês corrente), validado."""
+    raw = request.form.get("month_ref", "").strip()
+    if len(raw) == 7 and raw[:4].isdigit() and raw[5:7].isdigit() and raw[4] == "-":
+        return raw
+    return _month_ref(today.year, today.month)
+
+
+@gastos_bp.route("/recorrentes/<int:conta_id>/preencher", methods=["POST"])
+@login_required
+def recorrente_preencher(conta_id: int):
+    """Preenche a conta variável do mês (valor + PIX + vencimento): lançamento a pagar."""
+    _require_financeiro_recorrentes()
+    conta = RecurringExpense.query.get_or_404(conta_id)
+    if conta.expense_type != "variavel":
+        flash("Só contas variáveis são preenchidas manualmente.", "error")
+        return redirect(url_for("gastos.recorrentes"))
+    amount = _parse_brl(request.form.get("amount", ""))
+    if amount is None:
+        flash("Informe o valor exato da conta (ex.: 512,30).", "error")
+        return redirect(url_for("gastos.recorrentes"))
+    today = date.today()
+    ref = _ref_do_form(today)
+    due_raw = request.form.get("due_date", "").strip()
+    try:
+        due_date = date.fromisoformat(due_raw) if due_raw else None
+    except ValueError:
+        due_date = None
+
+    entry = _entry_do_mes(conta, ref)
+    if entry and entry.status == "pago":
+        flash("Lançamento já pago — não pode ser alterado.", "error")
+        return redirect(url_for("gastos.recorrentes"))
+    if entry is None:
+        entry = RecurringExpenseEntry(recurring_id=conta.id, month_ref=ref)
+        db.session.add(entry)
+    entry.amount = amount
+    entry.pix = request.form.get("pix", "").strip() or conta.default_pix
+    entry.due_date = due_date
+    entry.status = "a_pagar"
+    entry.filled_by_id = current_user.id
+    entry.filled_at = datetime.utcnow()
+    _log_recorrente("fill", conta, f"Conta de {ref} preenchida: {_fmt_brl(amount)}")
+    db.session.commit()
+    flash(f'"{conta.name}" ({ref}) preenchida — já aparece na planilha de pagamentos.', "success")
+    return redirect(url_for("gastos.recorrentes"))
+
+
+@gastos_bp.route("/recorrentes/<int:conta_id>/pular", methods=["POST"])
+@login_required
+def recorrente_pular(conta_id: int):
+    """Pula o mês de uma conta variável (boleto não veio) — encerra o alerta sem pagamento."""
+    _require_financeiro_recorrentes()
+    conta = RecurringExpense.query.get_or_404(conta_id)
+    if conta.expense_type != "variavel":
+        flash("Só contas variáveis podem pular o mês.", "error")
+        return redirect(url_for("gastos.recorrentes"))
+    today = date.today()
+    ref = _ref_do_form(today)
+    entry = _entry_do_mes(conta, ref)
+    if entry and entry.status == "pago":
+        flash("Lançamento já pago — não pode ser pulado.", "error")
+        return redirect(url_for("gastos.recorrentes"))
+    if entry is None:
+        entry = RecurringExpenseEntry(recurring_id=conta.id, month_ref=ref)
+        db.session.add(entry)
+    entry.amount = None
+    entry.pix = None
+    entry.due_date = None
+    entry.status = "pulado"
+    entry.filled_by_id = current_user.id
+    entry.filled_at = datetime.utcnow()
+    _log_recorrente("skip", conta, f"Mês {ref} pulado (conta não veio)")
+    db.session.commit()
+    flash(f'"{conta.name}" ({ref}) marcada como pulada neste mês.', "success")
+    return redirect(url_for("gastos.recorrentes"))
+
+
+@gastos_bp.route("/recorrentes/entry/<int:entry_id>/pagar", methods=["POST"])
+@login_required
+def recorrente_pagar(entry_id: int):
+    """Marca um lançamento a pagar como pago (também possível na planilha de pagamentos)."""
+    _require_financeiro_recorrentes()
+    entry = RecurringExpenseEntry.query.get_or_404(entry_id)
+    if entry.status != "a_pagar":
+        flash("Só lançamentos a pagar podem ser marcados como pagos.", "error")
+        return redirect(url_for("gastos.recorrentes"))
+    entry.status = "pago"
+    entry.paid_at = date.today()
+    _log_recorrente("pay", entry.recurring, f"Conta de {entry.month_ref} paga: {_fmt_brl(entry.amount)}")
+    db.session.commit()
+    flash("Lançamento marcado como pago.", "success")
+    return redirect(url_for("gastos.recorrentes"))
+
+
+@gastos_bp.route("/recorrentes/entry/<int:entry_id>/reabrir", methods=["POST"])
+@login_required
+def recorrente_reabrir(entry_id: int):
+    """Reabre um lançamento (pago volta a 'a pagar'; pulado é removido e volta a aguardar)."""
+    _require_financeiro_recorrentes()
+    entry = RecurringExpenseEntry.query.get_or_404(entry_id)
+    conta = entry.recurring
+    if entry.status == "pago":
+        entry.status = "a_pagar"
+        entry.paid_at = None
+        detail = f"Pagamento de {entry.month_ref} reaberto"
+    elif entry.status == "pulado":
+        db.session.delete(entry)
+        detail = f"Pulo de {entry.month_ref} desfeito (volta a aguardar valor)"
+    else:
+        flash("Este lançamento não pode ser reaberto.", "error")
+        return redirect(url_for("gastos.recorrentes"))
+    _log_recorrente("reopen", conta, detail)
+    db.session.commit()
+    flash("Lançamento reaberto.", "success")
+    return redirect(url_for("gastos.recorrentes"))

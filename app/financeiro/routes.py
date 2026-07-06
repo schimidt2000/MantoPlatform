@@ -10,7 +10,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, abort,
 from flask_login import login_required, current_user
 
 from app import db, _safe_next
-from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SalaryAdvance, SpecialExpense, EventAcrescimo
+from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SalaryAdvance, SpecialExpense, EventAcrescimo, RecurringExpenseEntry
 from app.money import format_brl
 from app.constants import RoleName, EDUCAMANTO_TITLE_PREFIX
 
@@ -329,7 +329,8 @@ def _salary_cost(start_date: date, end_date: date, is_full_month: bool) -> Decim
     ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
-def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal) -> dict:
+def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal,
+                 gastos_recorrentes: Decimal = Decimal("0")) -> dict:
     """Cascata da DRE Gerencial para um conjunto de eventos.
 
     Isola permutas/cortesias: o cachê delas não entra no CPV (não distorce a margem),
@@ -359,7 +360,8 @@ def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal)
     ebitda = lucro_bruto - marketing - comissoes - pessoal
 
     gastos = Decimal(gastos_extras)
-    resultado_liquido = ebitda - gastos
+    recorrentes = Decimal(gastos_recorrentes)
+    resultado_liquido = ebitda - gastos - recorrentes
 
     return {
         "receita_bruta": receita_bruta,
@@ -374,6 +376,7 @@ def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal)
         "ebitda": ebitda,
         "margem_ebitda": _pct(ebitda, receita_liquida),
         "gastos_extras": gastos,
+        "gastos_recorrentes": recorrentes,
         "resultado_liquido": resultado_liquido,
         "n_eventos": len(events),
         "n_normais": len(normais),
@@ -421,11 +424,23 @@ def dashboard():
         Decimal("0"),
     )
 
+    # Gastos recorrentes do período (feature 110): competência pelo mês de referência.
+    from app.gastos.routes import ensure_recurring_entries
+    ensure_recurring_entries(today.year, today.month)
+    gastos_recorrentes = sum(
+        (Decimal(e.amount) for e in RecurringExpenseEntry.query.filter(
+            RecurringExpenseEntry.month_ref.in_(_month_refs_between(start_date, end_date)),
+            RecurringExpenseEntry.status != "pulado",
+            RecurringExpenseEntry.amount.isnot(None),
+        ).all()),
+        Decimal("0"),
+    )
+
     # ── DRE Gerencial: realizado, projetado e total (consolidado do período) ──
-    drg_realizado = _compute_drg(realizados, settings, salary_cost, gastos_extras)
+    drg_realizado = _compute_drg(realizados, settings, salary_cost, gastos_extras, gastos_recorrentes)
     # Projetado mostra só a contribuição operacional dos eventos futuros (sem custo fixo).
     drg_projetado = _compute_drg(projetados, settings, Decimal("0"), Decimal("0"))
-    drg_total = _compute_drg(events, settings, salary_cost, gastos_extras)
+    drg_total = _compute_drg(events, settings, salary_cost, gastos_extras, gastos_recorrentes)
 
     # ── KPIs (sobre o consolidado do período) ─────────────────────────────────
     # Apenas eventos normais (não-permuta) com venda contam para indicadores comerciais.
@@ -754,6 +769,16 @@ _STATUS_LABELS = {
 _VALID_PAYMENT_STATUS = set(_STATUS_LABELS.keys())
 
 
+def _month_refs_between(start_date: date, end_date: date) -> list[str]:
+    """Lista de "YYYY-MM" entre o mês de start_date e o de end_date (inclusive)."""
+    refs = []
+    y, m = start_date.year, start_date.month
+    while (y, m) <= (end_date.year, end_date.month):
+        refs.append(f"{y:04d}-{m:02d}")
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return refs
+
+
 def _pagamentos_query(month_str: str):
     """Returns EventRole queryset for roles with talent assigned in the given month (YYYY-MM)."""
     try:
@@ -1018,6 +1043,48 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
     return items
 
 
+def _build_recurring_items(year: int, month: int, today: date) -> list:
+    """Itens de gastos recorrentes do mês para a planilha de pagamentos (feature 110).
+
+    Só lançamentos "a_pagar"/"pago" (contas variáveis preenchidas). Lançamentos
+    "registrado" (débito automático/assinatura) nunca viram pendência.
+    """
+    month_ref = f"{year:04d}-{month:02d}"
+    entries = (
+        RecurringExpenseEntry.query
+        .filter(
+            RecurringExpenseEntry.month_ref == month_ref,
+            RecurringExpenseEntry.status.in_(["a_pagar", "pago"]),
+        )
+        .all()
+    )
+    items = []
+    for e in entries:
+        conta = e.recurring
+        if e.due_date:
+            item_date = e.due_date
+        else:
+            import calendar as cal_mod
+            _, last_day = cal_mod.monthrange(year, month)
+            item_date = date(year, month, min(max(conta.due_day if conta else 1, 1), last_day))
+        items.append({
+            "type":        "recurring",
+            "id":          e.id,
+            "date":        item_date,
+            "event_title": conta.name if conta else "Conta recorrente",
+            "event_id":    None,
+            "copy_label":  item_date.strftime("%d/%m/%Y") + " - " + (conta.name if conta else "Conta recorrente"),
+            "sublabel":    "Conta recorrente",
+            "person_name": conta.name if conta else "—",
+            "amount":      e.amount,
+            "pix_key":     (e.pix or "").strip(),
+            "pix_key_type": "",
+            "status":      "pago" if e.status == "pago" else "nao_pago",
+            "is_future":   item_date > today,
+        })
+    return items
+
+
 @financeiro_bp.route("/financeiro/pagamentos")
 @login_required
 @require_financeiro
@@ -1068,6 +1135,11 @@ def pagamentos():
     prev_start = date(prev_year, prev_month, 1)
     prev_end = _m_start
     items += _build_commission_items(prev_start, prev_end, date(year_i, month_i, 5), today)
+
+    # Gastos recorrentes (feature 110): contas variáveis preenchidas do mês visto.
+    from app.gastos.routes import ensure_recurring_entries
+    ensure_recurring_entries(year_i, month_i)
+    items += _build_recurring_items(year_i, month_i, today)
     items.sort(key=lambda x: x["date"])
 
     def _amt(item):
@@ -1150,6 +1222,23 @@ def set_payment_status():
         db.session.commit()
         # Para a UI, comissão só tem "pago" ou "nao_pago".
         return _done("pago" if target == "pago" else "nao_pago")
+
+    if item_type == "recurring":
+        # Feature 110: lançamento de conta recorrente — só "pago" / "a pagar" (sem "no banco").
+        entry = RecurringExpenseEntry.query.get(int(item_id))
+        if entry and entry.status in ("a_pagar", "pago"):
+            old = entry.status
+            if status == "pago":
+                entry.status = "pago"
+                entry.paid_at = date.today()
+            else:
+                entry.status = "a_pagar"
+                entry.paid_at = None
+            conta_nome = entry.recurring.name if entry.recurring else "—"
+            audit("payment", "recurring_expense", entry.id, conta_nome,
+                  f"Conta recorrente: {old} → {entry.status} | {entry.month_ref}")
+            db.session.commit()
+        return _done("pago" if status == "pago" else "nao_pago")
 
     if item_type == "salary":
         sp = SalaryPayment.query.get(int(item_id))

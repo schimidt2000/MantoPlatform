@@ -482,6 +482,15 @@ def create_app():
         show_casting = has_role(RoleName.CASTING) or is_superadmin
         show_figurino = has_role(RoleName.FIGURINO) or is_superadmin
         show_ensaio = has_role(RoleName.ENSAIO) or is_superadmin
+        show_financeiro = has_role(RoleName.FINANCEIRO) or is_superadmin
+
+        # Contas recorrentes (feature 110): alertas do mês para o time financeiro.
+        recurring_expense_alerts = []
+        if show_financeiro:
+            from app.gastos.routes import ensure_recurring_entries, recurring_alerts
+            _today = date.today()
+            ensure_recurring_entries(_today.year, _today.month)
+            recurring_expense_alerts = recurring_alerts(_today)
 
         # Ensaio: separa pendentes (sem ensaio) de agendados (com ensaio)
         pending_ensaio   = []
@@ -716,6 +725,8 @@ def create_app():
             show_casting=show_casting,
             show_figurino=show_figurino,
             show_ensaio=show_ensaio,
+            show_financeiro=show_financeiro,
+            recurring_expense_alerts=recurring_expense_alerts,
             is_superadmin=is_superadmin,
             total_casting=total_casting,
             done_casting=done_casting,
