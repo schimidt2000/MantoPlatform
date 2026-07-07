@@ -235,6 +235,11 @@ class CalendarEvent(db.Model):
     # cliente associado (feature 094) — opcional; eventos passados podem ficar sem cliente.
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=True, index=True)
 
+    # Confirmação do evento (feature 116): registro simples de quem confirmou e quando —
+    # independente da mensagem de WhatsApp copiada pelo botão "Confirmar dados do evento".
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+    confirmed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
     # ensaios / origem
     parent_event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
     needs_rehearsal = db.Column(db.Boolean, default=False, nullable=False)
@@ -279,6 +284,7 @@ class CalendarEvent(db.Model):
                                    cascade="all, delete-orphan",
                                    order_by="EventObservation.created_at")
     seller = db.relationship("User", lazy=True, foreign_keys=[seller_id])
+    confirmer = db.relationship("User", lazy=True, foreign_keys=[confirmed_by_id])
     client = db.relationship("Client", back_populates="events", lazy=True, foreign_keys=[client_id])
     acrescimos = db.relationship(
         "EventAcrescimo", backref="event", lazy=True,

@@ -1041,6 +1041,35 @@ def _handle_toggle_contract_signed(event: CalendarEvent, tz_sp: ZoneInfo) -> Non
     flash("Status do contrato atualizado.", "success")
 
 
+def _handle_toggle_confirmado(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    """Liga/desliga a confirmação do evento (feature 116) — registra autor e data/hora.
+
+    Independente do botão "Confirmar dados do evento" (que só copia uma mensagem de
+    WhatsApp): este é o registro persistido de que o evento foi de fato confirmado.
+    """
+    if not any(r.name.upper() in (RoleName.COMERCIAL, RoleName.SUPERADMIN) for r in current_user.roles):
+        flash("Apenas comercial/super admin podem confirmar o evento.", "error")
+        return
+    if event.confirmed_at is None:
+        event.confirmed_at = datetime.now(tz=tz_sp)
+        event.confirmed_by_id = current_user.id
+        message = "Marcou o evento como confirmado"
+        flash("Evento marcado como confirmado.", "success")
+    else:
+        event.confirmed_at = None
+        event.confirmed_by_id = None
+        message = "Desfez a confirmação do evento"
+        flash("Confirmação do evento desfeita.", "success")
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Comercial",
+        message=message,
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+
+
 def _handle_send_invite(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     role_id = request.form.get("role_id")
     role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
@@ -1317,6 +1346,7 @@ _EVENT_ACTIONS = {
     "delete_payment":       _handle_delete_payment,
     "delete_contract":      _handle_delete_contract,
     "toggle_contract_signed": _handle_toggle_contract_signed,
+    "toggle_confirmado":    _handle_toggle_confirmado,
     "send_invite":          _handle_send_invite,
     "save_logistics":       _handle_save_logistics,
     "group_events":         _handle_group_events,
