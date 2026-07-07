@@ -26,6 +26,11 @@
         <span class="muted">&nbsp;&bull;&nbsp;{{ event.location }}</span>
       {% endif %}
     </span>
+    {% if event.confirmed_at %}
+      <span class="badge badge-green" title="{{ event.confirmer.name if event.confirmer else '—' }}">
+        ✓ Confirmado por {{ event.confirmer.name if event.confirmer else '—' }} em {{ event.confirmed_at.strftime('%d/%m/%Y %H:%M') }}
+      </span>
+    {% endif %}
   </p>
 {% endblock %}
 
@@ -48,6 +53,19 @@
             title="Copiar mensagem de confirmação do evento">
       ✅ Confirmar dados do evento
     </button>
+    <form method="post" style="display:inline;">
+      <input type="hidden" name="action" value="toggle_confirmado">
+      {% if event.confirmed_at %}
+        <button type="submit" class="btn btn-sm" style="background:rgba(46,125,50,.12); color:#2e7d32; border:1px solid rgba(46,125,50,.35);"
+                title="Confirmado por {{ event.confirmer.name if event.confirmer else '—' }} em {{ event.confirmed_at.strftime('%d/%m/%Y %H:%M') }} — clique para desfazer">
+          ✓ Evento confirmado
+        </button>
+      {% else %}
+        <button type="submit" class="btn btn-ghost btn-sm" title="Marcar este evento como confirmado">
+          ☐ Marcar evento como confirmado
+        </button>
+      {% endif %}
+    </form>
     <button type="button" class="btn btn-ghost btn-sm" id="btn-cobranca"
             {% if not cobranca_enabled %}disabled
             style="opacity:.45; cursor:not-allowed;"
