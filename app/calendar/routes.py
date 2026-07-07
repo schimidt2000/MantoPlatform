@@ -1858,6 +1858,7 @@ def sync_events(items: list[dict]) -> None:
         if not event:
             event = CalendarEvent(
                 google_event_id=google_id,
+                google_html_link=item.get("htmlLink"),
                 title=title,
                 description=description,
                 location=location,
@@ -1902,6 +1903,7 @@ def sync_events(items: list[dict]) -> None:
             event.start_at = start_at
             event.end_at = end_at
             event.event_type = event_type
+            event.google_html_link = item.get("htmlLink") or event.google_html_link
             # parent_event_id NÃO é sobrescrito — gerenciado pela plataforma
             if gc_needs_rehearsal and not old_needs_rehearsal:
                 event.needs_rehearsal = True

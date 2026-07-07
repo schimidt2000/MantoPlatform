@@ -212,6 +212,10 @@ class CalendarEvent(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     google_event_id = db.Column(db.String(128), unique=True, nullable=False)
+    # Link direto do evento no site do Google Calendar (feature 117) — vem pronto em todo
+    # payload da API ("htmlLink"), capturado na sincronização; usado só pelo botão
+    # "Editar no Google Agenda" (nenhuma escrita do Manto pro Google).
+    google_html_link = db.Column(db.String(500), nullable=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     location = db.Column(db.String(200), nullable=True)

@@ -49,6 +49,12 @@
     </button>
   {% endif %}
   {% if eff_has_role('COMERCIAL', 'SUPERADMIN') %}
+    {% if event.google_html_link %}
+    <a href="{{ event.google_html_link }}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"
+       title="Abrir este evento no Google Agenda para editar data, horário ou local">
+      📅 Editar no Google Agenda
+    </a>
+    {% endif %}
     <button type="button" class="btn btn-ghost btn-sm" id="btn-confirmar-dados"
             title="Copiar mensagem de confirmação do evento">
       ✅ Confirmar dados do evento
