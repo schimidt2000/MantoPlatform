@@ -1939,6 +1939,34 @@ def sync_events(items: list[dict]) -> None:
                 db.session.add(EventRole(event_id=event.id, character_name=char))
 
     db.session.commit()
+    _mark_talents_worked()
+
+
+def _mark_talents_worked() -> None:
+    """Liga "já trabalhou com a Manto" para talentos que realizaram um evento (feature 115).
+
+    "Realizou" = teve talento atribuído a um cargo, em evento que não é Ensaio, com convite
+    não recusado, e cuja data já passou. Roda a cada sincronização da agenda (mesma função
+    usada pelo botão "Sincronizar agora", pela thread automática e pelo sync de um evento).
+    Só LIGA o campo — nunca desliga uma marcação existente (FR-002).
+    """
+    now = datetime.utcnow()
+    worked_talent_ids = (
+        db.session.query(EventRole.talent_id)
+        .join(CalendarEvent, EventRole.event_id == CalendarEvent.id)
+        .filter(
+            EventRole.talent_id.isnot(None),
+            db.or_(EventRole.invite_status.is_(None), EventRole.invite_status != "rejected"),
+            CalendarEvent.event_type != "ENSAIO",
+            db.func.coalesce(CalendarEvent.end_at, CalendarEvent.start_at) < now,
+        )
+        .distinct()
+    )
+    Talent.query.filter(
+        Talent.id.in_(worked_talent_ids),
+        Talent.worked_before.isnot(True),
+    ).update({"worked_before": True}, synchronize_session=False)
+    db.session.commit()
 
 
 # ─── LOGÍSTICA / ESTIMATIVA DE VIAGEM ────────────────────────────────────────
