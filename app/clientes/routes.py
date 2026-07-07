@@ -68,9 +68,11 @@ def search():
     q = (request.args.get("q") or "").strip()
     if len(q) < 2:
         return jsonify([])
-    like = f"%{q}%"
+    # Busca sem acentos (feature 114): normaliza o termo e a coluna dos dois lados.
+    from app.utils import strip_accents_lower, unaccent_lower_sql
+    like = f"%{strip_accents_lower(q)}%"
     digits = "".join(c for c in q if c.isdigit())
-    conditions = [Client.name.ilike(like)]
+    conditions = [unaccent_lower_sql(Client.name).like(like)]
     if digits:
         conditions.append(Client.phone.ilike(f"%{digits}%"))
     results = Client.query.filter(or_(*conditions)).order_by(Client.name.asc()).limit(10).all()
@@ -125,9 +127,11 @@ def index():
     )
     query = Client.query
     if q:
-        like = f"%{q}%"
+        # Busca sem acentos (feature 114) — mesma regra do autocomplete do evento.
+        from app.utils import strip_accents_lower, unaccent_lower_sql
+        like = f"%{strip_accents_lower(q)}%"
         digits = "".join(c for c in q if c.isdigit())
-        conditions = [Client.name.ilike(like)]
+        conditions = [unaccent_lower_sql(Client.name).like(like)]
         if digits:
             conditions.append(Client.phone.ilike(f"%{digits}%"))
         query = query.filter(or_(*conditions))

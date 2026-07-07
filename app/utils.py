@@ -1,8 +1,30 @@
 import json as _json
+import unicodedata
 from datetime import datetime
 from flask_login import current_user
+from sqlalchemy import func
 from app import db
 from app.models import AuditLog
+
+# Feature 114: busca sem acentos. Tabela espelhada entre SQL (translate) e Python (NFD) —
+# cobre os acentos do PT-BR nos dois lados da comparação sem depender da extensão unaccent.
+_SQL_ACCENTS = "áàãâäéèêëíìîïóòõôöúùûüçñ"
+_SQL_PLAIN   = "aaaaaeeeeiiiiooooouuuucn"
+
+
+def strip_accents_lower(text: str) -> str:
+    """Normaliza um termo de busca: minúsculas e sem acentos (feature 114)."""
+    decomposed = unicodedata.normalize("NFD", (text or "").lower())
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+def unaccent_lower_sql(column):
+    """Expressão SQL equivalente a strip_accents_lower() para uma coluna (feature 114).
+
+    Usa ``translate(lower(col), acentos, sem_acentos)`` — funciona em qualquer PostgreSQL,
+    sem exigir a extensão ``unaccent``.
+    """
+    return func.translate(func.lower(column), _SQL_ACCENTS, _SQL_PLAIN)
 
 
 def json_for_script(value) -> str:

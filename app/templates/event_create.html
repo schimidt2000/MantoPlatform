@@ -124,6 +124,60 @@
   {% endif %}
 
 {# ══════════════════════════════════════════════════
+   0. CLIENTE (feature 114 — mesmo componente da tela do evento)
+══════════════════════════════════════════════════ #}
+<div class="panel ec-panel">
+  <div class="panel-title">Cliente</div>
+  <div id="clients-block" style="width:100%;"
+       data-search-url="/clientes/search" data-create-url="/clientes/quick-create"
+       data-relations='{{ client_relation_tipos | tojson }}'>
+    <div id="clients-list" style="display:flex; flex-direction:column; gap:8px; max-width:540px;">
+      {% for oc in old_clients %}
+      <div class="client-row" style="display:flex; gap:8px; align-items:center; background:#f4f2f7;
+           border:1px solid var(--line); border-radius:8px; padding:8px 12px;">
+        <input type="hidden" name="client_id[]" value="{{ oc.id }}">
+        <span style="font-size:16px;">👤</span>
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:600;">{{ oc.name }}</div>
+          <div class="meta" style="font-size:12px;">{{ oc.phone }}</div>
+        </div>
+        <select name="client_relation[]" class="form-control" style="font-size:12px; width:130px; flex:0 0 auto;">
+          {% for r in client_relation_tipos %}<option value="{{ r }}" {% if oc.relation == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+        </select>
+        <a href="/clientes/{{ oc.id }}" target="_blank" class="btn btn-sm btn-ghost" style="font-size:11px;">Ficha</a>
+        <button type="button" class="btn btn-sm btn-ghost client-remove" style="font-size:13px; color:#c0392b;">×</button>
+      </div>
+      {% endfor %}
+    </div>
+    <div id="clients-empty" class="meta" style="font-size:12px; margin-top:4px;
+         {% if old_clients %}display:none;{% endif %}">Nenhum cliente associado ainda.</div>
+
+    <div style="margin-top:10px; max-width:540px;">
+      <input type="text" id="client-search" autocomplete="off"
+             placeholder="Buscar cliente por nome ou telefone para adicionar…"
+             class="form-control" style="width:100%;">
+      <div id="client-results" style="border:1px solid var(--line); border-radius:8px;
+           margin-top:4px; display:none; max-height:220px; overflow-y:auto; background:#fff;"></div>
+      <div style="margin-top:8px;">
+        <button type="button" id="client-new-toggle" class="btn btn-sm btn-secondary"
+                style="font-size:12px;">+ Cadastrar novo cliente</button>
+      </div>
+      <div id="client-new-form" style="display:none; margin-top:10px; padding:12px;
+           border:1px dashed var(--line); border-radius:8px;">
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <input type="text" id="client-new-name" placeholder="Nome completo *" class="form-control" style="width:100%;">
+          <input type="text" id="client-new-phone" placeholder="Telefone com DDD *" class="form-control" style="width:100%;">
+          <input type="text" id="client-new-company" placeholder="Empresa (opcional)" class="form-control" style="width:100%;">
+          <div id="client-new-error" class="meta" style="color:#c0392b; display:none;"></div>
+          <button type="button" id="client-new-save" class="btn btn-sm btn-primary"
+                  style="font-size:12px; align-self:flex-start;">Salvar e adicionar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════
    1. DADOS DO EVENTO
 ══════════════════════════════════════════════════ #}
 <div class="panel ec-panel">
@@ -501,6 +555,8 @@
 
 
 {% block extra_scripts %}
+{# Editor de clientes compartilhado (feature 114 — mesmo componente da tela do evento) #}
+<script src="/static/js/client_picker.js"></script>
 <script>
 // ── Figurino data ────────────────────────────────────────────────────────────
 const FIGURINO_DATA = [
