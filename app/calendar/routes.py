@@ -635,15 +635,13 @@ def _save_nf_file(file_storage) -> str | None:
     return f"/uploads/invoices/{fname}"
 
 
-def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    can_vendas = any(r.name.upper() in (RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN) for r in current_user.roles)
-    if not can_vendas:
-        return
+def _parse_client_pairs() -> list[tuple[int, str]]:
+    """Lê client_id[]/client_relation[] do form e devolve pares (client_id, relação) válidos.
 
-    # ── Clientes associados (features 094/100) ──────────────────────────────
-    # Múltiplos clientes por evento, cada um com uma relação. Lê client_id[]/client_relation[], valida,
-    # e recria as associações. Eventos elegíveis exigem ≥1 cliente. Bloqueia ANTES de qualquer alteração.
-    from app.models import Client, EventClient
+    Compartilhado entre o save da venda (features 094/100) e a criação de evento (feature
+    114): dedup por cliente, ignora ids inexistentes, relação fora da lista vira "Outros".
+    """
+    from app.models import Client
 
     _cli_ids  = request.form.getlist("client_id[]")
     _cli_rels = request.form.getlist("client_relation[]")
@@ -661,6 +659,28 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             _rel = "Outros"
         _seen_cli.add(_cid_int)
         _pairs.append((_cid_int, _rel))
+    return _pairs
+
+
+def _primary_client_id(pairs: list[tuple[int, str]]) -> int | None:
+    """client_id denormalizado: o Contratante, ou o primeiro da lista (compat de telas)."""
+    primary = next((c for c, r in pairs if r == "Contratante"), None)
+    if primary is None and pairs:
+        primary = pairs[0][0]
+    return primary
+
+
+def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    can_vendas = any(r.name.upper() in (RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN) for r in current_user.roles)
+    if not can_vendas:
+        return
+
+    # ── Clientes associados (features 094/100) ──────────────────────────────
+    # Múltiplos clientes por evento, cada um com uma relação. Lê client_id[]/client_relation[], valida,
+    # e recria as associações. Eventos elegíveis exigem ≥1 cliente. Bloqueia ANTES de qualquer alteração.
+    from app.models import EventClient
+
+    _pairs = _parse_client_pairs()
 
     # Só considera a seção de clientes se o editor foi enviado (marcador oculto), mesmo com zero clientes.
     _clients_submitted = request.form.get("clients_editor") == "1"
@@ -678,10 +698,7 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         for _cid_int, _rel in _pairs:
             db.session.add(EventClient(event_id=event.id, client_id=_cid_int, relationship_type=_rel))
         # client_id denormalizado = contratante (ou o primeiro), p/ compat de telas que mostram "o cliente".
-        _primary = next((c for c, r in _pairs if r == "Contratante"), None)
-        if _primary is None and _pairs:
-            _primary = _pairs[0][0]
-        event.client_id = _primary
+        event.client_id = _primary_client_id(_pairs)
 
     event.sale_value       = parse_brl(request.form.get("sale_value", ""))
     event.sale_value_gross = parse_brl(request.form.get("sale_value_gross", ""))
@@ -2514,6 +2531,8 @@ def create_event():
             today_str=date.today().isoformat(),
             old={},
             old_chars=[],
+            old_clients=[],
+            client_relation_tipos=CLIENT_RELATION_TIPOS,
         )
 
     # ── POST ────────────────────────────────────────────────────────────────
@@ -2563,6 +2582,20 @@ def create_event():
         for i, nm in enumerate(char_names)
         if nm.strip()
     ]
+
+    # Clientes associados na criação (feature 114) — também preservados no re-render de erro.
+    from app.models import Client as _Client
+    client_pairs = _parse_client_pairs()
+    old_clients = []
+    for _cid, _rel in client_pairs:
+        _cli = _Client.query.get(_cid)
+        if _cli:
+            old_clients.append({
+                "id": _cli.id,
+                "name": _cli.name,
+                "phone": _cli.phone_display or _cli.phone or "",
+                "relation": _rel,
+            })
 
     errors = []
     if not title:
@@ -2614,7 +2647,9 @@ def create_event():
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
                                sellers=sellers, assignable_talents=assignable_talents,
                                errors=errors, prefill={}, today_str=date.today().isoformat(),
-                               old=request.form, old_chars=old_chars)
+                               old=request.form, old_chars=old_chars,
+                               old_clients=old_clients,
+                               client_relation_tipos=CLIENT_RELATION_TIPOS)
 
     # Remove prefixo (TIPO) que o JS já inseriu no título para não duplicar
     clean_title = re.sub(r'^\s*\([^)]*\)\s*', '', title).strip() if title else title
@@ -2634,7 +2669,9 @@ def create_event():
         return render_template("event_create.html", figurino_sheets=figurino_sheets,
                                sellers=sellers, assignable_talents=assignable_talents,
                                errors=[friendly], prefill={}, today_str=date.today().isoformat(),
-                               old=request.form, old_chars=old_chars)
+                               old=request.form, old_chars=old_chars,
+                               old_clients=old_clients,
+                               client_relation_tipos=CLIENT_RELATION_TIPOS)
 
     # ── Nota fiscal file (opcional) ──────────────────────────────────────────
     invoice_filename = None
@@ -2675,6 +2712,13 @@ def create_event():
     )
     db.session.add(event)
     db.session.flush()
+
+    # Clientes associados na criação (feature 114) — mesmo formato do save da venda.
+    if client_pairs:
+        from app.models import EventClient as _EventClient
+        for _cid, _rel in client_pairs:
+            db.session.add(_EventClient(event_id=event.id, client_id=_cid, relationship_type=_rel))
+        event.client_id = _primary_client_id(client_pairs)
 
     # Acréscimos tipados vindos do orçamento (feature 099): cria as linhas EventAcrescimo.
     # BV nasce sem PIX (o financeiro/comercial preenche depois na tela do evento).
