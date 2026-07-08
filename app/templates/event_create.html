@@ -175,6 +175,34 @@
       </div>
     </div>
   </div>
+
+  {# ── Pré-contrato (formulário) — feature 118 ── #}
+  <div id="form-response-block" style="margin-top:16px; padding-top:14px; border-top:1px solid var(--line); max-width:540px;"
+       data-search-url="/formularios/respostas/search">
+    <div class="panel-title" style="font-size:13px;">Pré-contrato (formulário)</div>
+    <div class="meta" style="font-size:12px; margin-bottom:8px;">
+      Vincule a resposta do formulário de pré-contrato preenchida pela cliente (opcional).
+    </div>
+    <input type="hidden" name="form_response_id" id="form-response-id"
+           value="{{ old_form_response.id if old_form_response else '' }}">
+    <div id="form-response-selected" style="{% if not old_form_response %}display:none;{% endif %}
+         background:#fdf6e9; border:1px solid var(--line); border-radius:8px; padding:8px 12px;
+         display:{% if old_form_response %}flex{% else %}none{% endif %}; gap:8px; align-items:center;">
+      <span style="font-size:16px;">📋</span>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600;" id="form-response-name">{{ old_form_response.name if old_form_response else '' }}</div>
+        <div class="meta" style="font-size:12px;" id="form-response-meta">{{ old_form_response.form_type if old_form_response else '' }}</div>
+      </div>
+      <button type="button" id="form-response-remove" class="btn btn-sm btn-ghost" style="font-size:13px; color:#c0392b;">×</button>
+    </div>
+    <div id="form-response-search-wrap" {% if old_form_response %}style="display:none;"{% endif %}>
+      <input type="text" id="form-response-search" autocomplete="off"
+             placeholder="Buscar resposta por nome, telefone ou data…"
+             class="form-control" style="width:100%;">
+      <div id="form-response-results" style="border:1px solid var(--line); border-radius:8px;
+           margin-top:4px; display:none; max-height:220px; overflow-y:auto; background:#fff;"></div>
+    </div>
+  </div>
 </div>
 
 {# ══════════════════════════════════════════════════
@@ -225,7 +253,7 @@
   <div class="form-group">
     <label>Descrição do evento</label>
     <textarea name="description" rows="4" style="max-width:520px; resize:vertical;"
-              placeholder="Colar aqui resposta whatsform">{{ old.get('description') or '' }}</textarea>
+              placeholder="Observações do evento…">{{ old.get('description') or '' }}</textarea>
     <div class="meta">Aparece na descrição do Google Agenda e na página do evento.</div>
   </div>
 
@@ -557,6 +585,7 @@
 {% block extra_scripts %}
 {# Editor de clientes compartilhado (feature 114 — mesmo componente da tela do evento) #}
 <script src="/static/js/client_picker.js"></script>
+<script src="/static/js/form_response_picker.js"></script>
 <script>
 // ── Figurino data ────────────────────────────────────────────────────────────
 const FIGURINO_DATA = [

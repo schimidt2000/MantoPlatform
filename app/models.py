@@ -641,6 +641,9 @@ class SiteSetting(db.Model):
     # Marcador da última sincronização automática da agenda (cron interno).
     # Serve de "lock" de execução única entre workers e de visibilidade do último ciclo.
     calendar_auto_sync_at = db.Column(db.DateTime, nullable=True)
+    # Número WhatsApp (só dígitos, com DDI) que recebe as respostas dos formulários de
+    # pré-contrato (feature 118). NULL = usa o padrão em app/formularios/routes.py.
+    whatsapp_form_number = db.Column(db.String(20), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
@@ -1529,3 +1532,45 @@ class Client(db.Model):
         if len(digits) <= 11:
             return "55" + digits
         return digits
+
+
+class FormResponse(db.Model):
+    """Resposta de um formulário público de pré-contrato (feature 118).
+
+    Substitui o WhatsForm: a cliente preenche o formulário hospedado no Manto, a resposta é
+    salva aqui ANTES de abrir o WhatsApp dela com a mensagem formatada. ``data`` guarda o
+    JSON completo (rótulo→valor, na ordem do formulário); as colunas extraídas cobrem
+    busca, sugestão de cliente por telefone e ordenação.
+    """
+
+    __tablename__ = "form_responses"
+
+    id = db.Column(db.Integer, primary_key=True)
+    form_type = db.Column(db.String(20), nullable=False)  # 'comum' | 'corporativo'
+    data = db.Column(db.Text, nullable=False)  # JSON: [{"secao":..., "campos": [[rotulo, valor], ...]}]
+    contact_name = db.Column(db.String(200), nullable=False)  # contratante / razão social
+    # WhatsApp normalizado (só dígitos, com DDI) — usado para sugerir cliente existente
+    contact_phone = db.Column(db.String(20), nullable=True, index=True)
+    contact_phone_display = db.Column(db.String(30), nullable=True)
+    event_date = db.Column(db.Date, nullable=True, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=True, index=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    client = db.relationship("Client", lazy=True)
+    event = db.relationship("CalendarEvent", lazy=True, backref=db.backref("form_responses", lazy=True))
+
+    @property
+    def data_sections(self) -> list:
+        """Seções decodificadas do JSON de ``data`` (lista vazia se corrompido)."""
+        import json
+
+        try:
+            return json.loads(self.data or "[]")
+        except (ValueError, TypeError):
+            return []
+
+    @property
+    def form_type_label(self) -> str:
+        """Rótulo amigável do tipo de formulário."""
+        return "Corporativo" if self.form_type == "corporativo" else "Pré-contrato"

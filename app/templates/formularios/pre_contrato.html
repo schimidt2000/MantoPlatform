@@ -1,0 +1,98 @@
+{% extends "formularios/_public_base.html" %}
+{% import "formularios/_field_macros.html" as m %}
+
+{% block title %}Informações para Pré-Contrato — Manto Produções{% endblock %}
+{% block header %}INFORMAÇÕES PARA PRÉ-CONTRATO{% endblock %}
+
+{% block content %}
+  {{ m.error_banner(errors) }}
+
+  <form method="post" action="{{ url_for('formularios.submit_comum') }}" id="pre-form" novalidate>
+    {{ m.honeypot() }}
+
+    <div class="section">
+      <h2>Dados do Contratante</h2>
+      {{ m.text_field(form, errors, 'nome_contratante', 'Nome Completo Contratante', required=True) }}
+      {{ m.text_field(form, errors, 'endereco_contratante', 'Endereço completo da contratante', required=True, placeholder='ENDEREÇO DA CONTRATANTE') }}
+      <div class="field{% if errors.get('cpf') %} field-invalid{% endif %}">
+        <label class="q" for="f-cpf"><span class="req">*</span> CPF</label>
+        <input type="text" id="f-cpf" name="cpf" inputmode="numeric" placeholder="000.000.000-00"
+               value="{{ form.get('cpf') or '' }}" data-mask="cpf">
+        {% if errors.get('cpf') %}<div class="field-errmsg">{{ errors['cpf'] }}</div>{% endif %}
+      </div>
+      {{ m.text_field(form, errors, 'email', 'E-mail', required=True, type='email') }}
+      {{ m.phone_field(form, errors, 'whatsapp', 'Número de WhatsApp', required=True, subtext='Esse número será usado para assinar o contrato') }}
+      {{ m.phone_field(form, errors, 'assessoria', 'Gostaria que a confirmação do evento seja com assessoria? Se sim, digite o telefone') }}
+    </div>
+
+    <div class="section">
+      <h2>Dados do Evento</h2>
+      {{ m.text_field(form, errors, 'nome_aniversariante', 'Nome do Aniversariante') }}
+      {{ m.text_field(form, errors, 'idade_aniversariante', 'Idade a Completar do Aniversariante', inputmode='numeric') }}
+      {{ m.select_field(form, errors, 'tipo_contratacao', 'Tipo de Contratação', tipos_contratacao, required=True) }}
+      {{ m.text_field(form, errors, 'qtd_personagens', 'Quantidade de Personagens', required=True, inputmode='numeric') }}
+      {{ m.text_field(form, errors, 'quais_personagens', 'Quais personagens?', required=True) }}
+      {{ m.text_field(form, errors, 'tema_evento', 'Tema do Evento', required=True) }}
+      {{ m.datetime_row(form, errors) }}
+      {{ m.text_field(form, errors, 'periodo_contratacao', 'Período De Contratação', required=True, placeholder='Ex.: das 15h às 19h') }}
+    </div>
+
+    <div class="section">
+      <h2>Endereço do Evento</h2>
+      {{ m.radio_field(form, errors, 'espaco_evento', 'Espaço Escolhido para o Evento', espacos_evento, required=True) }}
+      <div class="field{% if errors.get('cep') %} field-invalid{% endif %}">
+        <label class="q" for="f-cep"><span class="req">*</span> CEP</label>
+        <input type="text" id="f-cep" name="cep" inputmode="numeric" placeholder="00000-000"
+               value="{{ form.get('cep') or '' }}" data-mask="cep">
+        {% if errors.get('cep') %}<div class="field-errmsg">{{ errors['cep'] }}</div>{% endif %}
+      </div>
+      {{ m.text_field(form, errors, 'logradouro', 'Logradouro', required=True, placeholder='Nome da Rua ou Avenida') }}
+      <div class="row">
+        {{ m.text_field(form, errors, 'numero', 'Número', required=True, inputmode='numeric') }}
+        {{ m.text_field(form, errors, 'complemento', 'Complemento') }}
+      </div>
+      {{ m.text_field(form, errors, 'bairro', 'Bairro', required=True) }}
+      <div class="row">
+        {{ m.text_field(form, errors, 'cidade', 'Cidade', required=True) }}
+        {{ m.text_field(form, errors, 'estado', 'Estado', required=True, maxlength='2', placeholder='SP') }}
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Pagamento e Observações</h2>
+      {{ m.select_field(form, errors, 'forma_pagamento', 'Forma de Pagamento', pagamento_opcoes, required=True) }}
+      <div id="wrap-descreva_outros">
+        {{ m.text_field(form, errors, 'descreva_outros', 'Descreva Outros') }}
+      </div>
+      {{ m.textarea_field(form, errors, 'observacoes', 'Observações Contratuais', rows=3) }}
+    </div>
+
+    {{ m.submit_button() }}
+  </form>
+{% endblock %}
+
+{% block scripts %}
+  {% include "formularios/_form_scripts.html" %}
+  <script>
+    // ViaCEP: auto-preenche endereço; se falhar, a cliente preenche manualmente (nunca bloqueia).
+    (function () {
+      var cep = document.getElementById('f-cep');
+      if (!cep) return;
+      cep.addEventListener('blur', function () {
+        var digits = cep.value.replace(/\D/g, '');
+        if (digits.length !== 8) return;
+        fetch('https://viacep.com.br/ws/' + digits + '/json/')
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.erro) return;
+            var map = { logradouro: 'logradouro', bairro: 'bairro', localidade: 'cidade', uf: 'estado' };
+            Object.keys(map).forEach(function (k) {
+              var el = document.getElementById('f-' + map[k]);
+              if (el && !el.value && data[k]) el.value = data[k];
+            });
+          })
+          .catch(function () { /* falha silenciosa — preenchimento manual */ });
+      });
+    })();
+  </script>
+{% endblock %}

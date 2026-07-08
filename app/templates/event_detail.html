@@ -1491,6 +1491,18 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 
     <div class="panel-title" style="margin-bottom: 12px;">Dados da venda</div>
 
+    {# ── Pré-contrato vinculado (feature 118) ── #}
+    {% if event.form_responses %}
+      <div style="margin-bottom:14px;">
+        {% for fr in event.form_responses %}
+          <a href="/formularios/respostas/{{ fr.id }}" class="btn btn-ghost btn-sm"
+             title="Ver a resposta completa do formulário de pré-contrato">
+            📋 Ver pré-contrato ({{ fr.contact_name }})
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
     {# ── Clientes associados (features 094/100 — múltiplos, com relação) ──── #}
     <div id="clients-block" class="com-val-item" style="width:100%; margin-bottom:16px;"
          data-search-url="/clientes/search" data-create-url="/clientes/quick-create"

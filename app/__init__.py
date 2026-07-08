@@ -322,7 +322,7 @@ def create_app():
     def portal_domain_routing():
         host = request.host.split(":")[0]
         if host in PORTAL_HOSTS:
-            if not request.path.startswith(("/portal", "/cadastro", "/static", "/uploads")):
+            if not request.path.startswith(("/portal", "/cadastro", "/f/", "/static", "/uploads")):
                 return redirect("/portal/")
 
     # ✅ Importa blueprints AQUI (depois do db existir)
@@ -340,6 +340,7 @@ def create_app():
     from .cadastro.routes import cadastro_bp
     from .revisao.routes import revisao_bp
     from .clientes.routes import clientes_bp
+    from .formularios.routes import formularios_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
@@ -355,6 +356,7 @@ def create_app():
     app.register_blueprint(cadastro_bp)
     app.register_blueprint(revisao_bp)
     app.register_blueprint(clientes_bp)
+    app.register_blueprint(formularios_bp)
 
     def _wa_link(code: int) -> str:
         from zoneinfo import ZoneInfo
@@ -690,6 +692,17 @@ def create_app():
                 .all()
             )
 
+        # Pré-contratos preenchidos e ainda sem cliente associado (feature 118)
+        form_responses_sem_cliente: list = []
+        if show_comercial:
+            from app.models import FormResponse
+            form_responses_sem_cliente = (
+                FormResponse.query
+                .filter(FormResponse.client_id.is_(None))
+                .order_by(FormResponse.created_at.desc())
+                .all()
+            )
+
         # Nota fiscal pendente: eventos com nota(s) "a emitir" (feature 069)
         pending_invoice = []
         if is_superadmin:
@@ -721,6 +734,7 @@ def create_app():
             show_comercial=show_comercial,
             events_sem_valor=events_sem_valor,
             events_sem_cliente=events_sem_cliente,
+            form_responses_sem_cliente=form_responses_sem_cliente,
             pending_payments=pending_payments,
             show_casting=show_casting,
             show_figurino=show_figurino,

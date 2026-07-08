@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Resposta — {{ response.contact_name }}{% endblock %}
+{% block page_title %}{{ response.contact_name }}{% endblock %}
+{% block page_subtitle %}
+  <span class="muted">
+    {{ response.form_type_label }} · recebida em {{ response.created_at.strftime('%d/%m/%Y %H:%M') }}
+    {% if response.event_date %} · evento em {{ response.event_date.strftime('%d/%m/%Y') }}{% endif %}
+  </span>
+{% endblock %}
+
+{% block page_actions %}
+  <a href="{{ url_for('formularios.index') }}" class="btn btn-ghost btn-sm">← Formulários</a>
+  {% if eff_has_role('SUPERADMIN') %}
+  <form method="post" action="{{ url_for('formularios.delete', response_id=response.id) }}" style="display:inline;"
+        onsubmit="return confirm('Excluir a resposta de {{ response.contact_name }}? Esta ação não pode ser desfeita.');">
+    <button type="submit" class="btn btn-danger btn-sm">Excluir resposta</button>
+  </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+    <div class="alert alert-{{ 'success' if cat == 'success' else 'info' }}" style="margin-bottom:16px;">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div style="display:grid; grid-template-columns:1fr 2fr; gap:20px; align-items:start;">
+
+  {# ── Cliente / associação ─────────────────────────────────────── #}
+  <div class="panel" style="margin:0;">
+    <div class="panel-title" style="margin-bottom:12px;">Cliente</div>
+
+    {% if response.client_id %}
+      <div style="font-size:14px;">
+        <span class="badge badge-green">Associada</span>
+        <div style="margin-top:8px;">
+          <a href="/clientes/{{ response.client_id }}" class="strong">{{ response.client.name }}</a>
+          <div class="meta">{{ response.client.phone_display or response.client.phone }}</div>
+        </div>
+      </div>
+      <form method="post" action="{{ url_for('formularios.desassociar', response_id=response.id) }}" style="margin-top:12px;">
+        <button type="submit" class="btn btn-ghost btn-sm">Remover associação</button>
+      </form>
+    {% else %}
+      <div class="meta" style="margin-bottom:12px;">Esta resposta ainda não está associada a um cliente.</div>
+
+      {% if suggested %}
+      <div style="border:1px solid var(--line, #e5e3ef); border-radius:10px; padding:10px 12px; margin-bottom:12px; font-size:14px;">
+        <div class="meta" style="font-size:11.5px; text-transform:uppercase; letter-spacing:.04em;">Sugestão (mesmo telefone)</div>
+        <div class="strong" style="margin:4px 0;">{{ suggested.name }}</div>
+        <div class="meta">{{ suggested.phone_display or suggested.phone }}</div>
+        <form method="post" action="{{ url_for('formularios.associar', response_id=response.id) }}" style="margin-top:8px;">
+          <input type="hidden" name="client_id" value="{{ suggested.id }}">
+          <button type="submit" class="btn btn-primary btn-sm">Associar a este cliente</button>
+        </form>
+      </div>
+      {% endif %}
+
+      <div style="margin-bottom:12px;">
+        <label class="meta" style="display:block; margin-bottom:6px;">Buscar cliente existente</label>
+        <input type="text" id="resp-client-search" class="form-control" placeholder="Nome ou telefone…" autocomplete="off">
+        <div id="resp-client-results" style="margin-top:6px;"></div>
+      </div>
+
+      {% if response.contact_phone %}
+      <form method="post" action="{{ url_for('formularios.associar', response_id=response.id) }}">
+        <button type="submit" class="btn btn-secondary btn-sm">＋ Criar cliente a partir da resposta</button>
+        <div class="meta" style="font-size:12px; margin-top:6px;">
+          Cria "{{ response.contact_name }}" com o telefone {{ response.contact_phone_display }} (ou reaproveita se o telefone já existir).
+        </div>
+      </form>
+      {% else %}
+      <div class="meta">Sem telefone válido na resposta — busque e associe manualmente.</div>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {# ── Resposta completa ────────────────────────────────────────── #}
+  <div class="panel" style="margin:0;">
+    <div class="panel-title" style="margin-bottom:12px;">Resposta completa</div>
+    {% for section in response.data_sections %}
+      <div style="margin-bottom:16px;">
+        <div class="meta" style="font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">{{ section['secao'] }}</div>
+        <dl style="margin:0; font-size:14px; line-height:1.8;">
+          {% for label, value in section['campos'] %}
+            {% if value %}
+              <div><strong>{{ label }}:</strong> {{ value }}</div>
+            {% endif %}
+          {% endfor %}
+        </dl>
+      </div>
+    {% endfor %}
+    {% if response.event_id %}
+      <div style="border-top:1px solid var(--line, #e5e3ef); padding-top:12px;">
+        <strong>Evento vinculado:</strong>
+        <a href="/events/{{ response.event_id }}">{{ response.event.title }}</a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  // Busca de cliente para associação (reusa /clientes/search, mesmo shape do client_picker).
+  (function () {
+    var input = document.getElementById('resp-client-search');
+    var results = document.getElementById('resp-client-results');
+    if (!input || !results) return;
+    var timer = null;
+    input.addEventListener('input', function () {
+      clearTimeout(timer);
+      var q = input.value.trim();
+      if (q.length < 2) { results.innerHTML = ''; return; }
+      timer = setTimeout(function () {
+        fetch('/clientes/search?q=' + encodeURIComponent(q))
+          .then(function (r) { return r.json(); })
+          .then(function (list) {
+            results.innerHTML = '';
+            list.forEach(function (c) {
+              var form = document.createElement('form');
+              form.method = 'post';
+              form.action = '{{ url_for("formularios.associar", response_id=response.id) }}';
+              form.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--line, #e5e3ef); border-radius:8px; margin-bottom:6px; font-size:13.5px;';
+              var info = document.createElement('span');
+              info.textContent = c.name + ' · ' + (c.phone_display || c.phone);
+              var hidden = document.createElement('input');
+              hidden.type = 'hidden'; hidden.name = 'client_id'; hidden.value = c.id;
+              var btn = document.createElement('button');
+              btn.type = 'submit'; btn.className = 'btn btn-primary btn-sm'; btn.textContent = 'Associar';
+              form.appendChild(info); form.appendChild(hidden); form.appendChild(btn);
+              results.appendChild(form);
+            });
+            if (!list.length) results.innerHTML = '<div class="meta">Nenhum cliente encontrado.</div>';
+          })
+          .catch(function () { results.innerHTML = '<div class="meta">Erro na busca. Tente novamente.</div>'; });
+      }, 250);
+    });
+  })();
+</script>
+
+{% endblock %}

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}Manto Produções{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #f4f3f8; --card: #ffffff; --text: #1d1b2b; --muted: #6b6b6b;
+      --line: #e5e3ef; --accent: #544596; --accent-dark: #3c316b;
+      --accent-soft: rgba(84,69,150,0.10); --danger: #c0392b;
+      --wa: #24b33b; --wa-dark: #1d9531; --gold: #b8963e;
+      --r: 12px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+      line-height: 1.5; padding-bottom: 64px;
+    }
+    .topbar { background: var(--accent); color: #fff; padding: 18px 20px; text-align: center; }
+    .topbar h1 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: .04em; }
+    .topbar .brand { font-size: 13px; letter-spacing: .35em; text-transform: lowercase; opacity: .92; }
+    .topbar .spiral { color: var(--gold); font-size: 15px; }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 16px; }
+    .section { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; margin-bottom: 16px; }
+    .section h2 { margin: 0 0 14px; font-size: 15px; color: var(--accent-dark); }
+    .field { margin-bottom: 16px; }
+    .field:last-child { margin-bottom: 0; }
+    label.q { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
+    label.q .req { color: var(--danger); }
+    .subtext { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+    input[type=text], input[type=email], input[type=date], input[type=time], input[type=tel], input[type=number], select, textarea {
+      width: 100%; padding: 11px 12px; font-size: 15px; font-family: inherit;
+      border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--text);
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #7fce8e; box-shadow: 0 0 0 3px rgba(36,179,59,0.12); }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .row > .field { flex: 1 1 200px; min-width: 200px; }
+    .ddi-row { display: flex; gap: 8px; }
+    .ddi-row select { width: 92px; flex: none; }
+    .opts { display: flex; flex-direction: column; gap: 8px; }
+    .opt-row { display: flex; align-items: center; gap: 9px; font-size: 14.5px; cursor: pointer; }
+    .opt-row input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+    @media (max-width: 480px) {
+      .row { flex-direction: column; gap: 0; }
+      .row > .field { min-width: 0; width: 100%; }
+    }
+    .err { background: #fde8e6; border: 1px solid #f5c6c2; color: var(--danger); border-radius: var(--r); padding: 12px 14px; font-size: 14px; margin-bottom: 16px; }
+    .field-invalid input, .field-invalid select, .field-invalid textarea { border-color: var(--danger) !important; }
+    .field-errmsg { color: var(--danger); font-size: 12.5px; font-weight: 600; margin-top: 6px; }
+    .hp { position: absolute; left: -9999px; top: -9999px; }
+    .actions { position: sticky; bottom: 0; padding: 14px 0 0; }
+    button.submit {
+      width: 100%; padding: 15px; font-size: 16px; font-weight: 700; color: #fff;
+      background: var(--wa); border: none; border-radius: var(--r); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    button.submit:hover { background: var(--wa-dark); }
+    button.submit:disabled { opacity: .6; cursor: progress; }
+    .wa-ico { width: 22px; height: 22px; flex: none; }
+    .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 18px; }
+    {% block extra_css %}{% endblock %}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>{% block header %}MANTO{% endblock %}</h1>
+    <div class="brand">produções <span class="spiral">✦</span></div>
+  </div>
+  <div class="wrap">
+    {% block content %}{% endblock %}
+    <div class="foot">Manto Produções · Seus dados são usados apenas para a elaboração do contrato.</div>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
