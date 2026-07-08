@@ -42,6 +42,9 @@
       <div><strong>Telefone:</strong> {{ client.phone_display or client.phone }}</div>
       {% if client.email %}<div><strong>E-mail:</strong> {{ client.email }}</div>{% endif %}
       {% if client.company %}<div><strong>Empresa:</strong> {{ client.company }}</div>{% endif %}
+      {% if client.cpf %}<div><strong>CPF:</strong> {{ client.cpf }}</div>{% endif %}
+      {% if client.cnpj %}<div><strong>CNPJ:</strong> {{ client.cnpj }}</div>{% endif %}
+      {% if client.address %}<div><strong>Endereço:</strong> {{ client.address }}</div>{% endif %}
       <div><strong>Origem:</strong>
         {% if client.source == 'kommo_import' %}Importado do Kommo{% else %}Cadastro manual{% endif %}
       </div>
@@ -59,6 +62,25 @@
       <div class="meta" style="font-size:12px; margin-top:8px;">No Kommo desde {{ client.kommo_created_at.strftime('%d/%m/%Y') }}</div>
       {% endif %}
     </dl>
+
+    <details style="margin-top:16px;">
+      <summary style="cursor:pointer; font-size:13px; font-weight:600; color:var(--accent, #544596);">Editar CPF/CNPJ e endereço</summary>
+      <form method="post" action="/clientes/{{ client.id }}/update" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:12px;">CPF</label>
+          <input type="text" name="cpf" value="{{ client.cpf or '' }}" class="form-control" placeholder="000.000.000-00">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:12px;">CNPJ</label>
+          <input type="text" name="cnpj" value="{{ client.cnpj or '' }}" class="form-control" placeholder="00.000.000/0001-00">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:12px;">Endereço</label>
+          <textarea name="address" rows="2" class="form-control">{{ client.address or '' }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-start;">Salvar</button>
+      </form>
+    </details>
 
     {% if is_superadmin or eff_has_role('FINANCEIRO') %}
     <form method="post" action="/clientes/{{ client.id }}/delete" style="margin-top:16px;"
