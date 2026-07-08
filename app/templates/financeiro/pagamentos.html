@@ -303,8 +303,13 @@
     <form id="adv-form" method="post" enctype="multipart/form-data" style="margin-top:12px;">
       <input type="hidden" name="month" value="{{ month }}">
       <label style="font-size:13px; font-weight:600;">Adicionar adiantamento</label>
-      <div class="form-group" style="margin:6px 0 10px;">
-        <input type="text" inputmode="decimal" class="brl-input" name="advance_amount" id="adv-amount" placeholder="Valor (R$)" style="width:140px;">
+      <div style="display:flex; gap:8px; margin:6px 0 10px;">
+        <div class="form-group" style="margin:0;">
+          <input type="text" inputmode="decimal" class="brl-input" name="advance_amount" id="adv-amount" placeholder="Valor (R$)" style="width:140px;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <input type="date" name="advance_date" id="adv-date" value="{{ today.isoformat() }}" style="width:150px;">
+        </div>
       </div>
       <div class="form-group" style="margin-bottom:6px;">
         <label>Comprovante <span class="muted">(obrigatório)</span></label>
@@ -319,6 +324,7 @@
 </div>
 <script>
 var ADV_MONTH = "{{ month }}";
+var ADV_TODAY = "{{ today.isoformat() }}";
 function closeAdvModal() { document.getElementById('adv-modal').style.display = 'none'; }
 function escAttr(t) { var d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML; }
 document.querySelectorAll('.adv-edit-btn').forEach(function (btn) {
@@ -331,6 +337,7 @@ document.querySelectorAll('.adv-edit-btn').forEach(function (btn) {
     var amt = document.getElementById('adv-amount');
     amt.value = '';
     if (window.MoneyMask) MoneyMask.applyMask(amt);
+    document.getElementById('adv-date').value = ADV_TODAY;
 
     var advances = [];
     try { advances = JSON.parse(btn.dataset.advances || '[]'); } catch (e) {}

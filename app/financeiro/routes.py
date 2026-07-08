@@ -915,7 +915,7 @@ def _build_payment_items(roles, salary_payments, today: date, expenses=None, now
             {
                 "id": a.id,
                 "amount": format_brl(a.amount or 0),
-                "date": a.created_at.strftime("%d/%m/%Y") if a.created_at else "",
+                "date": a.advance_date.strftime("%d/%m/%Y") if a.advance_date else "",
                 "proof": a.proof or "",
             }
             for a in sp.advances
@@ -1310,6 +1310,12 @@ def salary_advance(sp_id: int):
         flash("A soma dos adiantamentos não pode ser maior que o salário.", "error")
         return back
 
+    # Data customizável (feature 120): se vazia ou inválida, assume hoje sem travar o lançamento.
+    try:
+        adv_date = date.fromisoformat(request.form.get("advance_date", "").strip())
+    except ValueError:
+        adv_date = datetime.now(TZ_SP).date()
+
     proof = request.files.get("advance_proof")
     if not (proof and proof.filename):
         flash("Anexe o comprovante do adiantamento.", "error")
@@ -1322,7 +1328,7 @@ def salary_advance(sp_id: int):
         flash("Comprovante acima de 10 MB.", "error")
         return back
 
-    advance = SalaryAdvance(salary_payment_id=sp.id, amount=adv)
+    advance = SalaryAdvance(salary_payment_id=sp.id, amount=adv, advance_date=adv_date)
     db.session.add(advance)
     db.session.flush()  # garante advance.id para nomear o arquivo
     fname = f"adv_{sp.id}_{advance.id}_{secure_filename(proof.filename)}"
