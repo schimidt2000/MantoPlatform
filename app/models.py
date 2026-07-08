@@ -763,6 +763,9 @@ class SalaryAdvance(db.Model):
     salary_payment_id = db.Column(db.Integer, db.ForeignKey("salary_payments.id"), nullable=False)
     amount            = db.Column(db.Numeric(12, 2), nullable=False)
     proof             = db.Column(db.String(300), nullable=True)
+    # Data do adiantamento (feature 120) — escolhida pelo financeiro no lançamento, default
+    # hoje; diferente de created_at (timestamp de quando o registro foi gravado no sistema).
+    advance_date      = db.Column(db.Date, nullable=False)
     created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
