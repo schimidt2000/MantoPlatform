@@ -128,6 +128,40 @@ def _whatsapp_link(message: str) -> str:
     )
 
 
+def _field_from_sections(sections: list[dict], section_name: str, label: str) -> str:
+    """Busca o valor de um campo pelo nome da seção e rótulo em ``data_sections``."""
+    for section in sections:
+        if section["secao"] == section_name:
+            for campo_label, value in section["campos"]:
+                if campo_label == label:
+                    return (value or "").strip()
+    return ""
+
+
+def _fill_client_from_response(client: Client, response: FormResponse) -> None:
+    """Completa CPF/CNPJ e endereço do cliente com dados da resposta (feature 119).
+
+    Só preenche campos que estiverem vazios no cliente — nunca sobrescreve um valor já
+    existente (manual ou de uma associação anterior).
+    """
+    sections = response.data_sections
+    if response.form_type == "corporativo":
+        cnpj = _field_from_sections(sections, "Informações da Empresa", "CNPJ")
+        address = _field_from_sections(sections, "Informações da Empresa", "Endereço")
+        if cnpj and not client.cnpj:
+            client.cnpj = cnpj
+        if address and not client.address:
+            client.address = address
+    else:
+        cpf = _field_from_sections(sections, "Dados do Contratante", "CPF")
+        address = _field_from_sections(
+            sections, "Dados do Contratante", "Endereço completo da contratante")
+        if cpf and not client.cpf:
+            client.cpf = cpf
+        if address and not client.address:
+            client.address = address
+
+
 def _save_response(form_type: str, contact_name: str, phone_display: str,
                    event_date: date | None, sections: list[dict]) -> FormResponse:
     """Persiste a resposta (sempre ANTES de abrir o WhatsApp — SC-002)."""
@@ -419,6 +453,7 @@ def associar(response_id: int):
             )
             db.session.add(client)
             db.session.flush()
+    _fill_client_from_response(client, response)
     response.client_id = client.id
     db.session.commit()
     flash(f"Resposta associada ao cliente {client.name}.", "success")

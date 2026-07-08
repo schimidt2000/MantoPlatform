@@ -184,6 +184,22 @@ def detail(client_id: int):
     )
 
 
+# ── Editar dados (CPF/CNPJ/endereço) ────────────────────────────────
+
+
+@clientes_bp.route("/<int:client_id>/update", methods=["POST"])
+@require_vendas
+def update(client_id: int):
+    """Atualiza CPF/CNPJ e endereço do cliente (edição manual, feature 119)."""
+    client = Client.query.get_or_404(client_id)
+    client.cpf = (request.form.get("cpf") or "").strip()[:20] or None
+    client.cnpj = (request.form.get("cnpj") or "").strip()[:20] or None
+    client.address = (request.form.get("address") or "").strip() or None
+    db.session.commit()
+    flash("Dados do cliente atualizados.", "success")
+    return redirect(url_for("clientes.detail", client_id=client.id))
+
+
 # ── Excluir cliente (desvincula eventos com segurança) ──────────────
 
 

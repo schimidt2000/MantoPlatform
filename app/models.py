@@ -1496,6 +1496,11 @@ class Client(db.Model):
     phone_display = db.Column(db.String(30), nullable=True)  # telefone como exibir/formatar
     email = db.Column(db.String(200), nullable=True)
     company = db.Column(db.String(200), nullable=True)
+    # CPF (pessoa física) / CNPJ (empresa) e endereço — texto livre, como capturado no
+    # formulário de pré-contrato (feature 119) ou digitado manualmente na ficha do cliente.
+    cpf = db.Column(db.String(20), nullable=True)
+    cnpj = db.Column(db.String(20), nullable=True)
+    address = db.Column(db.Text, nullable=True)
 
     source = db.Column(db.String(20), nullable=False, default="manual",
                        server_default="manual")  # 'kommo_import' | 'manual'
