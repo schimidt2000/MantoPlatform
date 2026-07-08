@@ -429,7 +429,7 @@
 
     {# ── COMERCIAL: tarefas pendentes ── #}
     {% if show_comercial %}
-    {% set _total_comercial = events_sem_valor|length + events_sem_cliente|length + pending_payments|length %}
+    {% set _total_comercial = events_sem_valor|length + events_sem_cliente|length + pending_payments|length + form_responses_sem_cliente|length %}
     <div class="sector-panel" id="sp-comercial">
       <div class="sector-header" onclick="toggleSector('comercial')">
         <div class="sector-header-left">
@@ -486,9 +486,31 @@
           <div style="height:8px;"></div>
         {% endif %}
 
+        {# — Pré-contratos preenchidos sem cliente (feature 118) — #}
+        {% if form_responses_sem_cliente %}
+          <div style="font-size:12px;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:.5px;padding:8px 0 4px;">Pré-contrato preenchido · sem cliente</div>
+          {% for r in form_responses_sem_cliente %}
+            <div class="flex-between gap-12 task-row" style="padding:10px 0;border-bottom:1px solid var(--line);background:rgba(245,158,11,0.07);margin:0 -18px;padding:10px 18px;">
+              <div>
+                <div class="strong">
+                  {{ r.contact_name }}
+                  <span class="badge badge-amber" style="font-size:10px;margin-left:6px;">{{ r.form_type_label|upper }}</span>
+                </div>
+                <div class="meta">
+                  Recebido em {{ r.created_at.strftime("%d/%m/%Y %H:%M") }}
+                  {% if r.event_date %} · evento em {{ r.event_date.strftime("%d/%m/%Y") }}{% endif %}
+                  · associe a um cliente
+                </div>
+              </div>
+              <a href="/formularios/respostas/{{ r.id }}" class="btn btn-sm btn-secondary">Abrir</a>
+            </div>
+          {% endfor %}
+          <div style="height:8px;"></div>
+        {% endif %}
+
         {# — Cobranças pendentes — #}
         {% if pending_payments %}
-          {% if events_sem_valor or events_sem_cliente %}
+          {% if events_sem_valor or events_sem_cliente or form_responses_sem_cliente %}
             <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;padding:8px 0 4px;">Cobranças pendentes</div>
           {% endif %}
           {% for p in pending_payments %}
@@ -520,7 +542,7 @@
           <div style="height:8px;"></div>
         {% endif %}
 
-        {% if not events_sem_valor and not events_sem_cliente and not pending_payments %}
+        {% if not events_sem_valor and not events_sem_cliente and not pending_payments and not form_responses_sem_cliente %}
           <p class="muted" style="padding:12px 0;">Nenhuma pendência comercial.</p>
         {% endif %}
 

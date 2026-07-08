@@ -2592,6 +2592,7 @@ def create_event():
             old={},
             old_chars=[],
             old_clients=[],
+            old_form_response=None,
             client_relation_tipos=CLIENT_RELATION_TIPOS,
         )
 
@@ -2642,6 +2643,19 @@ def create_event():
         for i, nm in enumerate(char_names)
         if nm.strip()
     ]
+
+    # Pré-contrato (formulário) vinculado na criação (feature 118) — preservado no re-render.
+    old_form_response = None
+    _fr_raw = request.form.get("form_response_id", "").strip()
+    if _fr_raw.isdigit():
+        from app.models import FormResponse as _FormResponse
+        _fr_obj = _FormResponse.query.get(int(_fr_raw))
+        if _fr_obj:
+            old_form_response = {
+                "id": _fr_obj.id,
+                "name": _fr_obj.contact_name,
+                "form_type": _fr_obj.form_type_label,
+            }
 
     # Clientes associados na criação (feature 114) — também preservados no re-render de erro.
     from app.models import Client as _Client
@@ -2709,6 +2723,7 @@ def create_event():
                                errors=errors, prefill={}, today_str=date.today().isoformat(),
                                old=request.form, old_chars=old_chars,
                                old_clients=old_clients,
+                               old_form_response=old_form_response,
                                client_relation_tipos=CLIENT_RELATION_TIPOS)
 
     # Remove prefixo (TIPO) que o JS já inseriu no título para não duplicar
@@ -2731,6 +2746,7 @@ def create_event():
                                errors=[friendly], prefill={}, today_str=date.today().isoformat(),
                                old=request.form, old_chars=old_chars,
                                old_clients=old_clients,
+                               old_form_response=old_form_response,
                                client_relation_tipos=CLIENT_RELATION_TIPOS)
 
     # ── Nota fiscal file (opcional) ──────────────────────────────────────────
@@ -2779,6 +2795,13 @@ def create_event():
         for _cid, _rel in client_pairs:
             db.session.add(_EventClient(event_id=event.id, client_id=_cid, relationship_type=_rel))
         event.client_id = _primary_client_id(client_pairs)
+
+    # Pré-contrato vinculado na criação (feature 118): a resposta aponta pro evento novo.
+    if old_form_response:
+        from app.models import FormResponse as _FormResponse2
+        _fr_link = _FormResponse2.query.get(old_form_response["id"])
+        if _fr_link and _fr_link.event_id is None:
+            _fr_link.event_id = event.id
 
     # Acréscimos tipados vindos do orçamento (feature 099): cria as linhas EventAcrescimo.
     # BV nasce sem PIX (o financeiro/comercial preenche depois na tela do evento).

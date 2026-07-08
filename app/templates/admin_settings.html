@@ -57,6 +57,17 @@
     <hr class="sep">
 
     <div class="form-group">
+      <label>WhatsApp dos formulários de pré-contrato</label>
+      <div class="muted" style="margin-bottom:8px;">Número que recebe a mensagem quando a cliente envia um formulário de pré-contrato (só dígitos, com DDI — ex.: 5511970570577). Vazio = padrão 5511970570577.</div>
+      <input type="text" name="whatsapp_form_number" inputmode="numeric"
+        value="{{ settings.whatsapp_form_number or '' }}"
+        placeholder="5511970570577"
+        style="width:220px;">
+    </div>
+
+    <hr class="sep">
+
+    <div class="form-group">
       <label>Taxa de comissão padrão (%)</label>
       <div class="muted" style="margin-bottom:8px;">Porcentagem paga ao vendedor sobre o valor de venda bruto. Pode ser sobrescrita por evento.</div>
       <input type="number" step="0.1" min="0" max="100" name="default_commission_rate"

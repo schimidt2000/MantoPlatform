@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Formulários{% endblock %}
+{% block page_title %}Formulários de Pré-Contrato{% endblock %}
+{% block page_subtitle %}
+  <span class="muted">Copie o link, envie para a cliente e acompanhe as respostas aqui</span>
+{% endblock %}
+
+{% block content %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+    <div class="alert alert-{{ 'success' if cat == 'success' else 'info' }}" style="margin-bottom:16px;">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+{# ── Links copiáveis ─────────────────────────────────────────────── #}
+<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; margin-bottom:20px;">
+  {% for slug, nome, desc in [
+    ('pre-contrato', 'Pré-Contrato (comum)', 'Festas e eventos de pessoa física'),
+    ('corporativo', 'Contrato Corporativo', 'Empresas / pessoa jurídica'),
+  ] %}
+  <div class="panel" style="margin:0;">
+    <div class="panel-title" style="margin-bottom:6px;">📋 {{ nome }}</div>
+    <div class="meta" style="margin-bottom:10px;">{{ desc }}</div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input type="text" class="form-control" readonly id="link-{{ slug }}"
+             value="{{ request.url_root.rstrip('/') }}{{ url_for('formularios.form_comum' if slug == 'pre-contrato' else 'formularios.form_corporativo') }}"
+             style="font-size:12.5px;" onclick="this.select();">
+      <button type="button" class="btn btn-secondary btn-sm" style="flex:none;"
+              onclick="navigator.clipboard.writeText(document.getElementById('link-{{ slug }}').value).then(() => { this.textContent = '✓ Copiado'; setTimeout(() => this.textContent = 'Copiar link', 1500); });">Copiar link</button>
+      <a href="{{ url_for('formularios.form_comum' if slug == 'pre-contrato' else 'formularios.form_corporativo') }}"
+         target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="flex:none;">Abrir</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{# ── Respostas ───────────────────────────────────────────────────── #}
+<div class="panel">
+  <div class="panel-title" style="margin-bottom:12px;">Respostas recebidas</div>
+  {% if not responses %}
+    <div class="meta">Nenhuma resposta ainda. Envie o link de um formulário para uma cliente — as respostas aparecem aqui assim que ela enviar.</div>
+  {% else %}
+  <div style="overflow-x:auto;">
+    <table class="table" style="width:100%;">
+      <thead>
+        <tr>
+          <th>Contratante</th>
+          <th>Formulário</th>
+          <th>Data do evento</th>
+          <th>Recebida em</th>
+          <th>Situação</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in responses %}
+        <tr>
+          <td>
+            <a href="{{ url_for('formularios.detail', response_id=r.id) }}" class="strong">{{ r.contact_name }}</a>
+            {% if r.contact_phone_display %}<div class="meta">{{ r.contact_phone_display }}</div>{% endif %}
+          </td>
+          <td><span class="badge badge-gray">{{ r.form_type_label }}</span></td>
+          <td>{{ r.event_date.strftime('%d/%m/%Y') if r.event_date else '—' }}</td>
+          <td>{{ r.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+          <td>
+            {% if r.client_id %}
+              <span class="badge badge-green">Cliente: {{ r.client.name }}</span>
+            {% else %}
+              <span class="badge badge-amber">Sem cliente</span>
+            {% endif %}
+            {% if r.event_id %}
+              <span class="badge badge-gray">Evento vinculado</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;">
+            <a href="{{ url_for('formularios.detail', response_id=r.id) }}" class="btn btn-ghost btn-sm">Ver</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

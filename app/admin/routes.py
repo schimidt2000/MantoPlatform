@@ -475,6 +475,11 @@ def admin_settings():
 
         settings.email_notifications_enabled = request.form.get("email_notifications_enabled") == "1"
 
+        # Número WhatsApp que recebe as respostas dos formulários de pré-contrato (feature 118)
+        wa_form_raw = request.form.get("whatsapp_form_number", "").strip()
+        wa_form_digits = "".join(c for c in wa_form_raw if c.isdigit())
+        settings.whatsapp_form_number = wa_form_digits or None
+
         # Data de início do sistema
         release_raw = request.form.get("release_date", "").strip()
         if release_raw:
