@@ -7,12 +7,19 @@
 
 {# ── Resumo mensal estimado ── #}
 <div class="kpi-grid" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
-  {% for t, label in type_labels.items() %}
+  {% for t, label in type_labels.items() if t != 'programado' %}
   <div class="panel" style="padding:14px 18px; min-width:190px;">
     <div class="meta">{{ label }}{{ 's' if t != 'variavel' else 'is' }} ativas</div>
     <div class="kpi-value" style="font-size:20px; font-weight:700;">{{ fmt_brl(somas[t]) }}<span class="meta" style="font-size:11px;">/mês{{ ' (teto)' if t == 'variavel' else '' }}</span></div>
   </div>
   {% endfor %}
+  <div class="panel" style="padding:14px 18px; min-width:190px;">
+    <div class="meta">Pagamentos programados ativos</div>
+    <div class="kpi-value" style="font-size:20px; font-weight:700;">
+      {{ fmt_brl(programado_pendente_total) }}
+      <span class="meta" style="font-size:11px;">a pagar</span>
+    </div>
+  </div>
 </div>
 
 {# ── Nova conta ── #}
@@ -100,7 +107,7 @@
 </div>
 
 {# ── Grupos por tipo ── #}
-{% for t, label in type_labels.items() %}
+{% for t, label in type_labels.items() if t != 'programado' %}
 {% set contas = grupos[t] %}
 <div class="panel" style="margin-bottom:18px; padding:0; overflow-x:auto;">
   <h2 style="padding:14px 18px 0;">{{ label }}{{ 's' if t != 'variavel' else 'is' }}</h2>
@@ -222,6 +229,121 @@
   <div style="height:10px;"></div>
 </div>
 {% endfor %}
+
+{# ── Pagamentos programados (feature 121) ── #}
+<div class="panel" style="margin-bottom:18px;">
+  <h2 style="margin-bottom:4px;">Novo pagamento programado</h2>
+  <p class="meta" style="margin-bottom:10px;">Datas e valores explícitos — não segue ciclo automático. Ex.: pagar R$ 1.500 nos dias 20/07, 05/08, 20/08…</p>
+  <form method="post" action="/gastos/recorrentes/programado/nova" id="form-programado">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px;">
+      <div>
+        <label class="meta" style="display:block; margin-bottom:4px;">Descrição*</label>
+        <input type="text" name="name" required placeholder="Pagamento Edileuza" style="width:220px;">
+      </div>
+      <div>
+        <label class="meta" style="display:block; margin-bottom:4px;">PIX padrão</label>
+        <input type="text" name="default_pix" placeholder="opcional" style="width:180px;">
+      </div>
+      <div>
+        <label class="meta" style="display:block; margin-bottom:4px;">Observações</label>
+        <input type="text" name="notes" placeholder="opcional" style="width:200px;">
+      </div>
+      <div>
+        <label class="meta" style="display:block; margin-bottom:4px;">Valor</label>
+        <div style="display:flex; gap:10px; align-items:center; height:34px;">
+          <label style="font-size:12px; display:flex; gap:4px; align-items:center;">
+            <input type="radio" name="valor_mode" value="mesmo" checked onchange="progValorMode(this.form)"> Mesmo valor
+          </label>
+          <label style="font-size:12px; display:flex; gap:4px; align-items:center;">
+            <input type="radio" name="valor_mode" value="individual" onchange="progValorMode(this.form)"> Valor por data
+          </label>
+        </div>
+      </div>
+      <div id="prog-valor-unico">
+        <label class="meta" style="display:block; margin-bottom:4px;">Valor de cada parcela (R$)*</label>
+        <input type="text" name="sched_amount_same" inputmode="decimal" class="brl-input" placeholder="1.500,00" style="width:130px;">
+      </div>
+    </div>
+
+    <label class="meta" style="display:block; margin-bottom:6px;">Datas das parcelas*</label>
+    <div id="prog-linhas" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;"></div>
+    <button type="button" class="btn btn-sm btn-secondary" onclick="progAddLinha()" style="margin-bottom:12px;">+ Adicionar data</button>
+    <br>
+    <button class="btn btn-primary">Cadastrar pagamento programado</button>
+  </form>
+</div>
+
+{% set prog_contas = grupos['programado'] %}
+<div class="panel" style="margin-bottom:18px; padding:0;">
+  <h2 style="padding:14px 18px 0;">Pagamentos programados</h2>
+  {% if prog_contas %}
+  {% for c in prog_contas %}
+  <div style="margin:14px 18px; padding:12px; border:1px solid var(--line); border-radius:8px; {% if not c.is_active %}opacity:.5;{% endif %}">
+    <div class="flex-between" style="margin-bottom:6px;">
+      <div>
+        <span class="strong">{{ c.name }}</span>
+        {% if not c.is_active %}<span class="badge" style="font-size:10px; margin-left:6px;">inativa</span>{% endif %}
+        <span class="meta" style="margin-left:8px;">{{ c.parcelas_summary }}</span>
+        {% if c.notes %}<div class="meta" style="font-size:11px;">{{ c.notes }}</div>{% endif %}
+      </div>
+      <div style="white-space:nowrap;">
+        <form method="post" action="/gastos/recorrentes/{{ c.id }}/toggle" style="display:inline;"
+              onsubmit="return confirm('{{ 'Reativar' if not c.is_active else 'Desativar' }} {{ c.name|e }}?');">
+          <button class="btn btn-sm btn-ghost">{{ 'Reativar' if not c.is_active else 'Desativar' }}</button>
+        </form>
+        {% if not c.entries %}
+        <form method="post" action="/gastos/recorrentes/{{ c.id }}/excluir" style="display:inline;"
+              onsubmit="return confirm('Excluir {{ c.name|e }}? Esta ação não pode ser desfeita.');">
+          <button class="btn btn-sm btn-ghost" style="color:#b91c1c;">Excluir</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+      <thead>
+        <tr style="background:var(--surface); text-align:left;">
+          <th style="padding:6px 10px; border-bottom:1px solid var(--line);">Data</th>
+          <th style="padding:6px 10px; border-bottom:1px solid var(--line);">Valor</th>
+          <th style="padding:6px 10px; border-bottom:1px solid var(--line);">Situação</th>
+          <th style="padding:6px 10px; border-bottom:1px solid var(--line); text-align:right;">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in c.entries | sort(attribute='due_date') %}
+        <tr style="border-bottom:1px solid var(--line);">
+          <td style="padding:6px 10px;">{{ e.due_date.strftime("%d/%m/%Y") if e.due_date else e.month_ref }}</td>
+          <td style="padding:6px 10px;">{{ fmt_brl(e.amount) }}</td>
+          <td style="padding:6px 10px;">
+            {% if e.status == 'pago' %}<span class="badge badge-green" style="font-size:10px;">pago</span>
+            {% else %}<span class="badge badge-red" style="font-size:10px;">a pagar</span>{% endif %}
+          </td>
+          <td style="padding:6px 10px; text-align:right; white-space:nowrap;">
+            {% if e.status == 'a_pagar' %}
+            <form method="post" action="/gastos/recorrentes/entry/{{ e.id }}/pagar" style="display:inline;">
+              <button class="btn btn-sm btn-secondary">Pagar</button>
+            </form>
+            <form method="post" action="/gastos/recorrentes/entry/{{ e.id }}/excluir-parcela" style="display:inline;"
+                  onsubmit="return confirm('Excluir esta parcela ({{ fmt_brl(e.amount) }})?');">
+              <button class="btn btn-sm btn-ghost" style="color:#b91c1c;">Excluir parcela</button>
+            </form>
+            {% else %}
+            <form method="post" action="/gastos/recorrentes/entry/{{ e.id }}/reabrir" style="display:inline;"
+                  onsubmit="return confirm('Reabrir esta parcela?');">
+              <button class="btn btn-sm btn-ghost">Reabrir</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="muted" style="padding:8px 18px 18px;">Nenhum pagamento programado cadastrado.</p>
+  {% endif %}
+  <div style="height:10px;"></div>
+</div>
 
 {# ── Histórico de uma conta ── #}
 {% if hist_conta %}
@@ -463,5 +585,31 @@ function fecharEditar() { document.getElementById('modal-editar').style.display 
 document.querySelectorAll('#modal-preencher, #modal-editar').forEach(function (m) {
   m.addEventListener('click', function (ev) { if (ev.target === m) m.style.display = 'none'; });
 });
+
+/* ── Pagamento programado (feature 121): linhas dinâmicas de data + valor ── */
+function progValorMode(form) {
+  const individual = form.querySelector('[name=valor_mode]:checked').value === 'individual';
+  document.getElementById('prog-valor-unico').style.display = individual ? 'none' : '';
+  document.querySelectorAll('#prog-linhas .prog-linha-valor').forEach(function (el) {
+    el.style.display = individual ? '' : 'none';
+  });
+}
+
+function progAddLinha() {
+  const wrap = document.getElementById('prog-linhas');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:8px; align-items:center;';
+  const individual = document.querySelector('#form-programado [name=valor_mode]:checked').value === 'individual';
+  row.innerHTML =
+    '<input type="date" name="sched_date[]" required style="width:160px;">' +
+    '<input type="text" name="sched_amount[]" inputmode="decimal" class="brl-input prog-linha-valor" placeholder="Valor (R$)" style="width:130px; display:' + (individual ? '' : 'none') + ';">' +
+    '<button type="button" class="btn btn-sm btn-ghost" style="color:#b91c1c;" onclick="this.parentElement.remove()">×</button>';
+  wrap.appendChild(row);
+  if (window.MoneyMask) MoneyMask.init(row);
+}
+
+// Duas linhas de partida, para não começar vazio.
+progAddLinha();
+progAddLinha();
 </script>
 {% endblock %}

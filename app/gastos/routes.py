@@ -540,6 +540,10 @@ def recorrentes():
     # Feature 112: ajustada pela frequência (semanal ×4, quinzenal ×2, anual ÷12) —
     # referência visual, não competência.
     def _estimate(c: RecurringExpense):
+        # Pagamento programado (feature 121) é um cronograma finito e não regular — não
+        # entra na estimativa "R$/mês" das demais contas.
+        if c.expense_type == "programado":
+            return Decimal("0")
         base = (c.amount or 0) if c.is_fixed else (c.amount or c.amount_max or c.amount_min or 0)
         base = Decimal(str(base))
         freq = c.frequency or "mensal"
@@ -555,11 +559,20 @@ def recorrentes():
         for t in RecurringExpense.TYPES
     }
 
+    # Pagamentos programados ativos: soma das parcelas ainda "a_pagar" (feature 121).
+    programado_pendente_total = sum(
+        (e.amount or Decimal("0")
+         for c in grupos["programado"] if c.is_active
+         for e in c.entries if e.status == "a_pagar"),
+        Decimal("0"),
+    )
+
     return render_template(
         "gastos/recorrentes.html",
         grupos=grupos,
         entries=entries,
         somas=somas,
+        programado_pendente_total=programado_pendente_total,
         month_ref=ref,
         ref_year=year_i,
         ref_month=month_i,
@@ -570,6 +583,109 @@ def recorrentes():
         today=today,
         fmt_brl=_fmt_brl,
     )
+
+
+def _parse_programado_form() -> dict | None:
+    """Lê e valida o formulário de pagamento programado (feature 121).
+
+    Retorna ``{"name", "default_pix", "notes", "parcelas": [(date, Decimal), ...]}`` ou
+    ``None`` (com flash) se inválido. ``parcelas`` já vem com uma data+valor por linha,
+    seja "mesmo valor para todas" ou "valor individual por data".
+    """
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Informe o nome/descrição do pagamento programado.", "error")
+        return None
+
+    dates_raw = request.form.getlist("sched_date[]")
+    same_value = request.form.get("valor_mode", "mesmo") == "mesmo"
+
+    dates: list[date] = []
+    for raw in dates_raw:
+        raw = (raw or "").strip()
+        if not raw:
+            continue
+        try:
+            dates.append(date.fromisoformat(raw))
+        except ValueError:
+            flash(f"Data inválida: {raw}.", "error")
+            return None
+    if not dates:
+        flash("Informe ao menos uma data de parcela.", "error")
+        return None
+
+    parcelas: list[tuple[date, Decimal]] = []
+    if same_value:
+        amount = parse_brl(request.form.get("sched_amount_same", ""))
+        if amount is None or amount <= 0:
+            flash("Informe o valor das parcelas (ex.: 1.500,00).", "error")
+            return None
+        parcelas = [(d, amount) for d in dates]
+    else:
+        amounts_raw = request.form.getlist("sched_amount[]")
+        if len(amounts_raw) != len(dates_raw):
+            flash("Cada data precisa do seu valor.", "error")
+            return None
+        # Alinha pelos mesmos índices não vazios usados na coleta de datas.
+        idx = 0
+        for raw_date, raw_amount in zip(dates_raw, amounts_raw, strict=True):
+            if not (raw_date or "").strip():
+                continue
+            amount = parse_brl(raw_amount)
+            if amount is None or amount <= 0:
+                flash(f"Valor inválido para a data {dates[idx].strftime('%d/%m/%Y')}.", "error")
+                return None
+            parcelas.append((dates[idx], amount))
+            idx += 1
+
+    return {
+        "name": name,
+        "default_pix": request.form.get("default_pix", "").strip() or None,
+        "notes": request.form.get("notes", "").strip() or None,
+        "parcelas": parcelas,
+    }
+
+
+@gastos_bp.route("/recorrentes/programado/nova", methods=["POST"])
+@login_required
+def recorrente_programado_nova():
+    """Cadastra um pagamento programado: N parcelas com data e valor próprios (feature 121).
+
+    Diferente das demais contas recorrentes, as parcelas nascem todas de uma vez — já
+    aparecem na planilha de pagamentos na data certa, sem geração posterior por mês.
+    """
+    _require_financeiro_recorrentes()
+    data = _parse_programado_form()
+    if data is None:
+        return redirect(url_for("gastos.recorrentes"))
+
+    parcelas = data.pop("parcelas")
+    conta = RecurringExpense(
+        created_by_id=current_user.id,
+        expense_type="programado",
+        due_day=1,
+        frequency="mensal",
+        start_date=min(d for d, _ in parcelas),
+        end_date=max(d for d, _ in parcelas),
+        **data,
+    )
+    db.session.add(conta)
+    db.session.flush()
+    for due, amount in parcelas:
+        db.session.add(RecurringExpenseEntry(
+            recurring_id=conta.id,
+            month_ref=due.strftime("%Y-%m"),
+            amount=amount,
+            pix=conta.default_pix,
+            due_date=due,
+            status="a_pagar",
+        ))
+    _log_recorrente(
+        "create", conta,
+        f"Pagamento programado criado: {len(parcelas)} parcela(s)")
+    db.session.commit()
+    flash(f'Pagamento "{conta.name}" cadastrado com {len(parcelas)} parcela(s).', "success")
+    return redirect(url_for("gastos.recorrentes"))
 
 
 @gastos_bp.route("/recorrentes/nova", methods=["POST"])
@@ -731,6 +847,27 @@ def recorrente_pagar(entry_id: int):
     _log_recorrente("pay", entry.recurring, f"Conta de {entry.month_ref} paga: {_fmt_brl(entry.amount)}")
     db.session.commit()
     flash("Lançamento marcado como pago.", "success")
+    return redirect(url_for("gastos.recorrentes"))
+
+
+@gastos_bp.route("/recorrentes/entry/<int:entry_id>/excluir-parcela", methods=["POST"])
+@login_required
+def recorrente_excluir_parcela(entry_id: int):
+    """Exclui uma parcela avulsa de pagamento programado ainda não paga (feature 121)."""
+    _require_financeiro_recorrentes()
+    entry = RecurringExpenseEntry.query.get_or_404(entry_id)
+    conta = entry.recurring
+    if not conta or conta.expense_type != "programado":
+        flash("Esta ação só vale para parcelas de pagamento programado.", "error")
+        return redirect(url_for("gastos.recorrentes"))
+    if entry.status == "pago":
+        flash("Parcela já paga não pode ser excluída.", "error")
+        return redirect(url_for("gastos.recorrentes"))
+    detail = f"Parcela de {entry.due_date.strftime('%d/%m/%Y') if entry.due_date else entry.month_ref} excluída: {_fmt_brl(entry.amount)}"
+    db.session.delete(entry)
+    _log_recorrente("delete_parcela", conta, detail)
+    db.session.commit()
+    flash("Parcela excluída.", "success")
     return redirect(url_for("gastos.recorrentes"))
 
 
