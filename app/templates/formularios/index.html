@@ -32,6 +32,12 @@
       <a href="{{ url_for('formularios.form_comum' if slug == 'pre-contrato' else 'formularios.form_corporativo') }}"
          target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="flex:none;">Abrir</a>
     </div>
+    {% if can_edit_structure %}
+      <div style="margin-top:8px;">
+        <a href="{{ url_for('formularios.editor', form_type='comum' if slug == 'pre-contrato' else 'corporativo') }}"
+           class="btn btn-ghost btn-sm">✎ Editar campos deste formulário</a>
+      </div>
+    {% endif %}
   </div>
   {% endfor %}
 </div>

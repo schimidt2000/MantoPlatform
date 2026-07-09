@@ -1,4 +1,7 @@
-{# Macros compartilhadas dos formulários públicos de pré-contrato (feature 118). #}
+{# Macros compartilhadas dos formulários públicos de pré-contrato (feature 118).
+
+   feature 123: a macro `field()` despacha o widget certo a partir de uma definição de campo
+   dinâmica (`FormFieldDefinition`) — a estrutura do formulário deixou de ser hardcoded aqui. #}
 
 {% macro text_field(form, errors, name, label, required=False, type='text', placeholder='', inputmode='', subtext='', maxlength='') %}
 <div class="field{% if errors.get(name) %} field-invalid{% endif %}">
@@ -34,21 +37,6 @@
 </div>
 {% endmacro %}
 
-{% macro radio_field(form, errors, name, label, options, required=False) %}
-<div class="field{% if errors.get(name) %} field-invalid{% endif %}">
-  <label class="q">{% if required %}<span class="req">*</span> {% endif %}{{ label }}</label>
-  <div class="opts">
-    {% for opt in options %}
-      <label class="opt-row">
-        <input type="radio" name="{{ name }}" value="{{ opt }}" {% if form.get(name) == opt %}checked{% endif %}>
-        {{ opt }}
-      </label>
-    {% endfor %}
-  </div>
-  {% if errors.get(name) %}<div class="field-errmsg">{{ errors[name] }}</div>{% endif %}
-</div>
-{% endmacro %}
-
 {% macro phone_field(form, errors, prefix, label, required=False, subtext='') %}
 <div class="field{% if errors.get(prefix ~ '_national') %} field-invalid{% endif %}">
   <label class="q" for="f-{{ prefix }}_national">{% if required %}<span class="req">*</span> {% endif %}{{ label }}</label>
@@ -66,19 +54,66 @@
 </div>
 {% endmacro %}
 
-{% macro datetime_row(form, errors) %}
-<div class="row">
-  <div class="field{% if errors.get('data_evento') %} field-invalid{% endif %}">
-    <label class="q" for="f-data_evento"><span class="req">*</span> Data do Evento</label>
-    <input type="date" id="f-data_evento" name="data_evento" value="{{ form.get('data_evento') or '' }}">
-    {% if errors.get('data_evento') %}<div class="field-errmsg">{{ errors['data_evento'] }}</div>{% endif %}
-  </div>
-  <div class="field{% if errors.get('hora_evento') %} field-invalid{% endif %}">
-    <label class="q" for="f-hora_evento"><span class="req">*</span> Hora</label>
-    <input type="time" id="f-hora_evento" name="hora_evento" value="{{ form.get('hora_evento') or '' }}">
-    {% if errors.get('hora_evento') %}<div class="field-errmsg">{{ errors['hora_evento'] }}</div>{% endif %}
-  </div>
+{% macro date_field(form, errors, name, label, required=False) %}
+<div class="field{% if errors.get(name) %} field-invalid{% endif %}">
+  <label class="q" for="f-{{ name }}">{% if required %}<span class="req">*</span> {% endif %}{{ label }}</label>
+  <input type="date" id="f-{{ name }}" name="{{ name }}" value="{{ form.get(name) or '' }}">
+  {% if errors.get(name) %}<div class="field-errmsg">{{ errors[name] }}</div>{% endif %}
 </div>
+{% endmacro %}
+
+{% macro time_field(form, errors, name, label, required=False) %}
+<div class="field{% if errors.get(name) %} field-invalid{% endif %}">
+  <label class="q" for="f-{{ name }}">{% if required %}<span class="req">*</span> {% endif %}{{ label }}</label>
+  <input type="time" id="f-{{ name }}" name="{{ name }}" value="{{ form.get(name) or '' }}">
+  {% if errors.get(name) %}<div class="field-errmsg">{{ errors[name] }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro masked_field(form, errors, name, label, mask, placeholder='', required=False) %}
+<div class="field{% if errors.get(name) %} field-invalid{% endif %}">
+  <label class="q" for="f-{{ name }}">{% if required %}<span class="req">*</span> {% endif %}{{ label }}</label>
+  <input type="text" id="f-{{ name }}" name="{{ name }}" inputmode="numeric"
+         {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+         value="{{ form.get(name) or '' }}" data-mask="{{ mask }}">
+  {% if errors.get(name) %}<div class="field-errmsg">{{ errors[name] }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro checkbox_field(form, errors, name, label, required=False) %}
+<div class="field{% if errors.get(name) %} field-invalid{% endif %}">
+  <label class="opt-row">
+    <input type="checkbox" id="f-{{ name }}" name="{{ name }}" value="Sim" {% if form.get(name) == 'Sim' %}checked{% endif %}>
+    {% if required %}<span class="req">*</span> {% endif %}{{ label }}
+  </label>
+  {% if errors.get(name) %}<div class="field-errmsg">{{ errors[name] }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro field(f, form, errors) %}
+  {% if f.field_type == 'texto_curto' %}
+    {{ text_field(form, errors, f.field_key, f.label, required=f.required, placeholder=f.placeholder or '', subtext=f.help_text or '') }}
+  {% elif f.field_type == 'texto_longo' %}
+    {{ textarea_field(form, errors, f.field_key, f.label, required=f.required, subtext=f.help_text or '') }}
+  {% elif f.field_type == 'selecao' %}
+    {{ select_field(form, errors, f.field_key, f.label, f.options_list, required=f.required) }}
+  {% elif f.field_type == 'telefone' %}
+    {{ phone_field(form, errors, f.field_key, f.label, required=f.required, subtext=f.help_text or '') }}
+  {% elif f.field_type == 'data' %}
+    {{ date_field(form, errors, f.field_key, f.label, required=f.required) }}
+  {% elif f.field_type == 'hora' %}
+    {{ time_field(form, errors, f.field_key, f.label, required=f.required) }}
+  {% elif f.field_type == 'email' %}
+    {{ text_field(form, errors, f.field_key, f.label, required=f.required, type='email', placeholder=f.placeholder or '', subtext=f.help_text or '') }}
+  {% elif f.field_type == 'cpf' %}
+    {{ masked_field(form, errors, f.field_key, f.label, mask='cpf', placeholder='000.000.000-00', required=f.required) }}
+  {% elif f.field_type == 'cnpj' %}
+    {{ masked_field(form, errors, f.field_key, f.label, mask='cnpj', placeholder='00.000.000/0001-00', required=f.required) }}
+  {% elif f.field_type == 'cep' %}
+    {{ masked_field(form, errors, f.field_key, f.label, mask='cep', placeholder='00000-000', required=f.required) }}
+  {% elif f.field_type == 'sim_nao' %}
+    {{ checkbox_field(form, errors, f.field_key, f.label, required=f.required) }}
+  {% endif %}
 {% endmacro %}
 
 {% macro honeypot() %}

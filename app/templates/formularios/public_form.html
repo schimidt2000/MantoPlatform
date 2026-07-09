@@ -1,0 +1,59 @@
+{# Formulário público genérico (feature 123): renderiza a partir da definição de campos
+   vigente (FormFieldDefinition) — substitui os antigos pre_contrato.html/corporativo.html
+   hardcoded. `meta`, `sections`, `submit_url` e `has_cep` vêm de `_render_public_form()`. #}
+{% extends "formularios/_public_base.html" %}
+{% import "formularios/_field_macros.html" as m %}
+
+{% block title %}{{ meta.title }}{% endblock %}
+{% block header %}{{ meta.header }}{% endblock %}
+
+{% block content %}
+  {{ m.error_banner(errors) }}
+
+  <form method="post" action="{{ submit_url }}" id="pre-form" novalidate>
+    {{ m.honeypot() }}
+
+    {% for section in sections %}
+      <div class="section">
+        <h2>{{ section.secao }}</h2>
+        {% for campo in section.campos %}
+          {% if campo.field_key == 'descreva_outros' %}
+            <div id="wrap-descreva_outros">{{ m.field(campo, form, errors) }}</div>
+          {% else %}
+            {{ m.field(campo, form, errors) }}
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endfor %}
+
+    {{ m.submit_button() }}
+  </form>
+{% endblock %}
+
+{% block scripts %}
+  {% include "formularios/_form_scripts.html" %}
+  {% if has_cep %}
+  <script>
+    // ViaCEP: auto-preenche endereço; se falhar, a cliente preenche manualmente (nunca bloqueia).
+    (function () {
+      var cep = document.getElementById('f-cep');
+      if (!cep) return;
+      cep.addEventListener('blur', function () {
+        var digits = cep.value.replace(/\D/g, '');
+        if (digits.length !== 8) return;
+        fetch('https://viacep.com.br/ws/' + digits + '/json/')
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.erro) return;
+            var map = { logradouro: 'logradouro', bairro: 'bairro', localidade: 'cidade', uf: 'estado' };
+            Object.keys(map).forEach(function (k) {
+              var el = document.getElementById('f-' + map[k]);
+              if (el && !el.value && data[k]) el.value = data[k];
+            });
+          })
+          .catch(function () { /* falha silenciosa — preenchimento manual */ });
+      });
+    })();
+  </script>
+  {% endif %}
+{% endblock %}
