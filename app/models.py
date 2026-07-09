@@ -855,11 +855,14 @@ class RecurringExpense(db.Model):
     """
     __tablename__ = "recurring_expenses"
 
-    TYPES = ["variavel", "debito_automatico", "assinatura"]
+    # Feature 121: "programado" não segue ciclo automático — parcelas com data e valor
+    # próprios, criadas de uma vez no cadastro (ver RecurringExpenseEntry).
+    TYPES = ["variavel", "debito_automatico", "assinatura", "programado"]
     TYPE_LABELS = {
         "variavel": "Conta variável",
         "debito_automatico": "Débito automático",
         "assinatura": "Assinatura (cartão)",
+        "programado": "Pagamento programado",
     }
     # Feature 112: frequência da cobrança.
     FREQUENCIES = ["mensal", "semanal", "quinzenal", "anual"]
@@ -920,6 +923,15 @@ class RecurringExpense(db.Model):
             hi = format_brl(self.amount_max or 0, prefix=True)
             return f"faixa {lo} – {hi}"
         return None
+
+    @property
+    def parcelas_summary(self) -> str:
+        """Resumo do pagamento programado (feature 121): "N parcelas · R$ total"."""
+        from app.money import format_brl
+        n = len(self.entries)
+        total = sum((e.amount or 0 for e in self.entries), 0)
+        plural = "s" if n != 1 else ""
+        return f"{n} parcela{plural} · {format_brl(total, prefix=True)} no total"
 
     def occurrences_in_month(self, year: int, month: int) -> int:
         """Quantas cobranças a conta tem no mês (feature 112). 0 = fora do ciclo/vigência.
