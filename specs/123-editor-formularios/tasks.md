@@ -36,4 +36,4 @@
       e confirma que a automação da feature 119 continua funcionando; busca de
       `/formularios/respostas/search` (usada em `/events/new`) não quebra; acesso não-SUPERADMIN
       ao editor bloqueado (403); ruff nos arquivos tocados — 38/38 cenários passaram
-- [ ] T009 Commit, merge em main, push
+- [X] T009 Commit, merge em main, push
