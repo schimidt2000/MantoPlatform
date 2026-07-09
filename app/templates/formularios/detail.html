@@ -85,9 +85,9 @@
       <div style="margin-bottom:16px;">
         <div class="meta" style="font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">{{ section['secao'] }}</div>
         <dl style="margin:0; font-size:14px; line-height:1.8;">
-          {% for label, value in section['campos'] %}
-            {% if value %}
-              <div><strong>{{ label }}:</strong> {{ value }}</div>
+          {% for campo in section['campos'] %}
+            {% if campo[-1] %}
+              <div><strong>{{ campo[-2] }}:</strong> {{ campo[-1] }}</div>
             {% endif %}
           {% endfor %}
         </dl>

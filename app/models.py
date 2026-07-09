@@ -1567,7 +1567,10 @@ class FormResponse(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     form_type = db.Column(db.String(20), nullable=False)  # 'comum' | 'corporativo'
-    data = db.Column(db.Text, nullable=False)  # JSON: [{"secao":..., "campos": [[rotulo, valor], ...]}]
+    # JSON: [{"secao":..., "campos": [[chave, rotulo, valor], ...]}] (feature 123 — chave
+    # estável de FormFieldDefinition.field_key; respostas anteriores à 123 têm campos com só
+    # [rotulo, valor], sem chave — lidas normalmente, só não participam de busca por chave)
+    data = db.Column(db.Text, nullable=False)
     contact_name = db.Column(db.String(200), nullable=False)  # contratante / razão social
     # WhatsApp normalizado (só dígitos, com DDI) — usado para sugerir cliente existente
     contact_phone = db.Column(db.String(20), nullable=True, index=True)
@@ -1594,3 +1597,52 @@ class FormResponse(db.Model):
     def form_type_label(self) -> str:
         """Rótulo amigável do tipo de formulário."""
         return "Corporativo" if self.form_type == "corporativo" else "Pré-contrato"
+
+
+class FormFieldDefinition(db.Model):
+    """Definição editável de um campo de formulário público (feature 123).
+
+    Substitui os campos hardcoded que existiam em ``app/formularios/routes.py``. Cada linha é
+    um campo de um dos dois formulários (``form_type``: ``'comum'`` | ``'corporativo'``),
+    agrupado visualmente por ``section_name`` e ordenado por ``order`` (a seção muda quando
+    ``section_name`` muda ao percorrer os campos em ordem — não existe tabela de seção
+    separada). Campos com ``is_system=True`` alimentam outras partes do sistema (extração de
+    contratante/telefone/data do evento, preenchimento automático de CPF/CNPJ/endereço do
+    cliente na feature 119, autopreenchimento por CEP) e por isso não podem ser removidos nem
+    ter ``field_type``/``field_key`` alterados pelo editor.
+    """
+
+    __tablename__ = "form_field_definitions"
+
+    FIELD_TYPES = (
+        "texto_curto", "texto_longo", "selecao", "data", "hora",
+        "telefone", "email", "cpf", "cnpj", "cep", "sim_nao",
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    form_type = db.Column(db.String(20), nullable=False)
+    section_name = db.Column(db.String(100), nullable=False)
+    field_key = db.Column(db.String(60), nullable=False)
+    field_type = db.Column(db.String(20), nullable=False)
+    label = db.Column(db.String(200), nullable=False)
+    help_text = db.Column(db.String(300), nullable=True)
+    placeholder = db.Column(db.String(200), nullable=True)
+    required = db.Column(db.Boolean, default=False, nullable=False)
+    options = db.Column(db.Text, nullable=True)  # JSON list[str] — só para field_type='selecao'
+    order = db.Column(db.Integer, nullable=False)
+    is_system = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("form_type", "field_key", name="uq_form_field_key"),)
+
+    @property
+    def options_list(self) -> list[str]:
+        """Opções decodificadas do JSON de ``options`` (lista vazia se corrompido/ausente)."""
+        import json
+
+        try:
+            return json.loads(self.options or "[]")
+        except (ValueError, TypeError):
+            return []
