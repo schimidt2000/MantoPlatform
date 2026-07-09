@@ -165,16 +165,28 @@ def _build_events_from_db(
     return event_map, events_by_day, list_items
 
 
+def _clear_event_side_tables(event_id: int) -> None:
+    """Remove os registros de um evento (ou ensaio) sem cascade automático (feature 122).
+
+    ``EventLog``, ``EventContract``, ``EventPayment`` e ``EventRating`` não têm
+    ``cascade="all, delete-orphan"`` no relacionamento de ``CalendarEvent`` — sem esta
+    limpeza, ``db.session.delete(event)`` falha com violação de chave estrangeira sempre
+    que existir algum desses registros (ex.: histórico de ações do evento).
+    """
+    EventLog.query.filter_by(event_id=event_id).delete()
+    EventContract.query.filter_by(event_id=event_id).delete()
+    EventPayment.query.filter_by(event_id=event_id).delete()
+    EventRating.query.filter_by(event_id=event_id).delete()
+
+
 def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
     """Deleta um evento do banco removendo manualmente as tabelas sem cascade.
 
     Cascades automáticos: EventRole, EventObservation, ensaios, EnsaioMaterial.
-    Sem cascade (deletados manualmente): EventLog, EventContract, EventPayment, EventRating.
+    Sem cascade (deletados manualmente via ``_clear_event_side_tables``): EventLog,
+    EventContract, EventPayment, EventRating.
     """
-    EventLog.query.filter_by(event_id=event.id).delete()
-    EventContract.query.filter_by(event_id=event.id).delete()
-    EventPayment.query.filter_by(event_id=event.id).delete()
-    EventRating.query.filter_by(event_id=event.id).delete()
+    _clear_event_side_tables(event.id)
 
     # Comissões: se pendente, cancela; se paga, cria estorno
     for cp in list(CommissionPayment.query.filter_by(event_id=event.id).all()):
@@ -199,8 +211,10 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
     if also_from_google and event.google_event_id:
         try:
             delete_event(CALENDAR_ID, event.google_event_id)
-        except RuntimeError:
-            pass
+        except Exception as exc:  # noqa: BLE001 — qualquer falha do Google não pode travar a exclusão local
+            current_app.logger.exception(
+                "Falha ao remover evento %s do Google Agenda", event.id)
+            flash(f"Salvo no banco, mas erro ao remover do Google Calendar: {exc}", "warning")
     db.session.delete(event)
 
 
@@ -2306,9 +2320,15 @@ def delete_ensaio(ensaio_id: int):
     if ensaio.google_event_id:
         try:
             delete_event(CALENDAR_ID, ensaio.google_event_id)
-        except RuntimeError as exc:
+        except Exception as exc:  # noqa: BLE001 — qualquer falha do Google não pode travar a exclusão local
+            current_app.logger.exception(
+                "Falha ao remover ensaio %s do Google Agenda", ensaio.id)
             flash(f"Salvo no banco, mas erro ao remover do Google Calendar: {exc}", "warning")
 
+    # Feature 122: EventLog/EventContract/EventPayment/EventRating não têm cascade
+    # automático — sem esta limpeza, o delete abaixo falha por violação de chave
+    # estrangeira sempre que o ensaio tiver histórico de ações registrado.
+    _clear_event_side_tables(ensaio.id)
     db.session.delete(ensaio)
     db.session.commit()
 
