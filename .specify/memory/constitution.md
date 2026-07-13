@@ -50,10 +50,18 @@ Toda interface segue o padrão visual do sistema, fala com o usuário em pt-BR e
 **nunca deixa o usuário sem resposta**.
 - Cores SEMPRE via variáveis CSS — zero cores hardcoded no HTML.
 - Todo estado assíncrono tem feedback visual: **loading, erro e sucesso**.
-- **Prevenir envio duplicado (NÃO-NEGOCIÁVEL)**: todo botão que dispara uma ação
-  lenta (salvar, criar, enviar, sincronizar) DEVE se desabilitar e mostrar estado
-  de carregamento ao ser clicado, até a resposta chegar. Um clique a mais nunca
-  pode criar registro duplicado.
+- **Nenhum botão fica "morto" ao ser clicado (NÃO-NEGOCIÁVEL)**: todo botão que
+  dispara uma ação (salvar, criar, enviar, sincronizar, aprovar, excluir — rápida
+  ou lenta) DEVE mudar de aparência de forma visível ao ser clicado, até a
+  resposta chegar — não basta desabilitar via atributo `disabled` sem nenhuma
+  mudança visual perceptível (opacidade, cursor, texto). "Cliquei e não vi nada
+  acontecer" é sempre um bug de UI, mesmo que o clique tenha sido processado nos
+  bastidores. Um clique a mais nunca pode criar registro duplicado. Cobertura
+  automática: formulários HTML comuns (`<form>`) herdam esse comportamento do
+  guard global (`base.html` / `_form_scripts.html` dos formulários públicos) sem
+  precisar de código por tela; ações disparadas por JavaScript puro (fetch fora
+  de um `<form>`, botões com `onclick`) DEVEM implementar o próprio feedback
+  visual manualmente, pois o guard global não as cobre.
 - **Nunca limpar o que o usuário preencheu**: um erro de validação JAMAIS apaga os
   dados já digitados. O formulário preserva os valores e aponta o(s) campo(s) com
   problema.
@@ -132,6 +140,9 @@ Uma tarefa só está concluída quando:
 - [ ] Migration manual criada se `models.py` mudou (e aplicada na cópia local).
 - [ ] Comportamento conferido no app real quando há mudança de interface (viewport mobile
   incluído quando for superfície pública — Princípio VIII).
+- [ ] Todo botão de ação nesta tela muda de aparência visível ao ser clicado (Princípio V) —
+  herdado automaticamente se for um `<form>` comum; implementado manualmente se a ação for
+  disparada por JavaScript puro (fetch fora de formulário, `onclick`).
 
 ## Governança
 
@@ -145,9 +156,15 @@ Uma tarefa só está concluída quando:
 - Para orientação detalhada de runtime, o Claude também segue `CLAUDE.md` e os
   arquivos em `.claude/skills/`.
 
-**Versão**: 1.3.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-07-03
+**Versão**: 1.4.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-07-13
 
 > **Changelog**
+> - **1.4.0** (2026-07-13): Princípio V reforçado — "prevenir envio duplicado" virou "nenhum
+>   botão fica morto ao ser clicado" (NÃO-NEGOCIÁVEL): `disabled` sozinho, sem mudança visual
+>   perceptível, não conta como feedback. Motivado por incidente real (gasto extra com nota
+>   fiscal grande, upload lento em 4G, usuário sem nenhum sinal de "enviando" travou o celular
+>   e abortou o envio — feature 124). Novo item no portão de qualidade cobrando essa checagem
+>   por tela tocada.
 > - **1.3.0** (2026-07-03): Portões de qualidade tornados EXECUTÁVEIS no ambiente real —
 >   o portão `pytest tests/` (suíte inexistente) foi substituído pela verificação funcional
 >   automatizada por feature contra `manto_local` (test client, requests fora de

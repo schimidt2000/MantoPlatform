@@ -359,6 +359,15 @@ img { display: block; max-width: 100%; }
 .btn:hover { text-decoration: none; transform: translateY(-1px); }
 .btn:active { transform: translateY(0); }
 
+/* feature 124: "disabled" sozinho não muda a aparência do botão — sem isto, um clique
+   durante um envio lento parece não ter feito nada (Princípio V, NÃO-NEGOCIÁVEL). */
+.btn:disabled, .btn.is-loading {
+  opacity: 0.55;
+  cursor: progress;
+  transform: none;
+}
+.btn.is-loading::after { content: "\2026"; }
+
 .btn-primary {
   background: var(--accent);
   color: #fff;
