@@ -395,6 +395,37 @@ img { display: block; max-width: 100%; }
 }
 .btn-danger:hover { background: #fdd0d0; }
 
+/* ── Menu de ações (reticências) — feature 129 ──────────────────
+   Mesmo padrão de posicionamento/abertura do .fp/.fp-panel de talents_list.html,
+   generalizado para qualquer menu de ações (não só filtros). */
+.action-menu { position: relative; display: inline-block; }
+.action-menu-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 6px;
+  min-width: 260px;
+  box-shadow: var(--shadow-lg);
+  z-index: 300;
+}
+.action-menu.open .action-menu-panel { display: flex; flex-direction: column; gap: 2px; }
+.action-menu-panel form,
+.action-menu-panel > .btn,
+.action-menu-panel > a.btn {
+  width: 100%;
+}
+.action-menu-panel .btn {
+  width: 100%;
+  justify-content: flex-start;
+  border-color: transparent;
+  box-shadow: none;
+}
+.action-menu-panel .btn:hover { background: var(--surface-2, #f7f6f3); }
+
 .btn-ghost {
   background: transparent;
   color: var(--muted);
