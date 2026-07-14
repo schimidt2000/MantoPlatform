@@ -805,6 +805,10 @@ class SpecialExpense(db.Model):
     supplier_name     = db.Column(db.String(200), nullable=True)  # nome do fornecedor
     supplier_pix      = db.Column(db.String(120), nullable=True)  # chave PIX do fornecedor
     payment_status    = db.Column(db.String(20), nullable=False, default="nao_pago", server_default="nao_pago")
+    # True quando o desembolso já foi pago no ato do registro (ex.: PIX direto da conta
+    # da Manto) — nunca entra na Planilha de Pagamentos, mesmo com payment_status="pago"
+    # (feature 128).
+    paid_at_creation  = db.Column(db.Boolean, default=False, nullable=False)
 
     # Vínculo opcional a um evento: gasto aprovado entra como custo do evento
     # (lucro do evento = venda − cachês − gastos extras aprovados)

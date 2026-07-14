@@ -91,6 +91,13 @@
             <input type="text" name="supplier_pix" placeholder="CNPJ, e-mail, telefone…" style="width:100%;">
           </div>
         </div>
+        {# feature 128: pagamento já feito no ato do registro (ex.: PIX direto da conta da Manto) — nunca entra na planilha de pagamentos #}
+        <div id="disb-paid-now" style="display:none; margin-top:10px;">
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+            <input type="checkbox" name="paid_at_creation">
+            Já foi pago (ex.: PIX direto da conta da Manto) — não entra na Planilha de Pagamentos
+          </label>
+        </div>
       </div>
       {# Vincular a evento (opcional): busca por data #}
       <div style="margin-top:12px; padding:12px; background:var(--surface-2, #f7f6f3); border-radius:var(--r-md);">
@@ -188,7 +195,9 @@
                   <span class="muted" style="font-size:10px;">({{ 'reembolso' if e.disbursement_type == 'reembolso' else 'fornecedor' }})</span>
                 </div>
                 {% if e.status == 'aprovado' %}
-                  {% if e.payment_status == 'pago' %}
+                  {% if e.paid_at_creation %}
+                    <span class="badge badge-green" style="font-size:10px;" title="Pago no ato do registro — não entra na Planilha de Pagamentos">Pago (direto)</span>
+                  {% elif e.payment_status == 'pago' %}
                     <span class="badge badge-green" style="font-size:10px;">Pago</span>
                   {% elif e.payment_status == 'no_banco' %}
                     <span class="badge badge-blue" style="font-size:10px;">No banco</span>
@@ -272,6 +281,7 @@ function toggleDisb() {
   var val = tipo ? tipo.value : '';
   document.getElementById('disb-reembolso').style.display  = (val === 'reembolso')  ? 'block' : 'none';
   document.getElementById('disb-fornecedor').style.display = (val === 'fornecedor') ? 'flex'  : 'none';
+  document.getElementById('disb-paid-now').style.display   = val ? 'block' : 'none';
 }
 
 // Busca eventos por data e preenche o <select> indicado.

@@ -157,6 +157,10 @@ def novo():
     else:
         disbursement_type = None
 
+    # Já pago no ato do registro (feature 128): ex. PIX direto da conta da Manto — nunca
+    # entra na Planilha de Pagamentos. Só se aplica quando há desembolso definido.
+    paid_at_creation = bool(disbursement_type) and request.form.get("paid_at_creation") == "on"
+
     try:
         expense_date = date.fromisoformat(date_raw) if date_raw else date.today()
     except ValueError:
@@ -185,6 +189,8 @@ def novo():
         reimburse_user_id=reimburse_user_id,
         supplier_name=supplier_name,
         supplier_pix=supplier_pix,
+        payment_status="pago" if paid_at_creation else "nao_pago",
+        paid_at_creation=paid_at_creation,
         event_id=event_id,
     )
     db.session.add(expense)
