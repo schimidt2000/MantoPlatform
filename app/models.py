@@ -1578,6 +1578,13 @@ class FormResponse(db.Model):
     event_date = db.Column(db.Date, nullable=True, index=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=True, index=True)
     event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True, index=True)
+    # Vínculo automático de evento (feature 126): 'auto_date' | 'auto_client' | 'manual' | None.
+    event_link_source = db.Column(db.String(20), nullable=True)
+    # True quando a tentativa automática ficou ambígua/conflitante — aparece no aviso da home.
+    event_link_ambiguous = db.Column(db.Boolean, default=False, nullable=False)
+    # True assim que um humano decide (associa OU desvincula manualmente) — a automação
+    # nunca mais tenta vincular essa resposta sozinha depois disso (não sobrescreve decisão).
+    event_link_locked = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     client = db.relationship("Client", lazy=True)

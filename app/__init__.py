@@ -694,11 +694,20 @@ def create_app():
 
         # Pré-contratos preenchidos e ainda sem cliente associado (feature 118)
         form_responses_sem_cliente: list = []
+        # Pré-contratos cujo vínculo automático de evento ficou ambíguo/conflitante —
+        # precisam de revisão manual (feature 126)
+        form_responses_precisam_revisao: list = []
         if show_comercial:
             from app.models import FormResponse
             form_responses_sem_cliente = (
                 FormResponse.query
                 .filter(FormResponse.client_id.is_(None))
+                .order_by(FormResponse.created_at.desc())
+                .all()
+            )
+            form_responses_precisam_revisao = (
+                FormResponse.query
+                .filter(FormResponse.event_link_ambiguous.is_(True))
                 .order_by(FormResponse.created_at.desc())
                 .all()
             )
@@ -735,6 +744,7 @@ def create_app():
             events_sem_valor=events_sem_valor,
             events_sem_cliente=events_sem_cliente,
             form_responses_sem_cliente=form_responses_sem_cliente,
+            form_responses_precisam_revisao=form_responses_precisam_revisao,
             pending_payments=pending_payments,
             show_casting=show_casting,
             show_figurino=show_figurino,

@@ -24,6 +24,14 @@ def register_commands(app):
         report = import_kommo_csv(path)
         click.echo(f"Importação do Kommo concluída: {report}")
 
+    @app.cli.command("backfill-form-event-links")
+    def backfill_form_event_links():
+        """Tenta vincular automaticamente respostas de formulário antigas ainda sem
+        evento (feature 126) — rodar uma vez após o deploy da feature."""
+        from app.formularios.routes import retry_auto_link_pending
+        linked = retry_auto_link_pending()
+        click.echo(f"Respostas vinculadas automaticamente: {linked}")
+
     @app.cli.command("compress-images")
     def compress_images():
         """Comprime todas as imagens existentes no servidor mantendo os mesmos URLs."""
