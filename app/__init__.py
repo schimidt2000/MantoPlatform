@@ -343,6 +343,7 @@ def create_app():
     from .revisao.routes import revisao_bp
     from .clientes.routes import clientes_bp
     from .formularios.routes import formularios_bp
+    from .feedback.routes import feedback_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
@@ -359,6 +360,7 @@ def create_app():
     app.register_blueprint(revisao_bp)
     app.register_blueprint(clientes_bp)
     app.register_blueprint(formularios_bp)
+    app.register_blueprint(feedback_bp)
 
     def _wa_link(code: int) -> str:
         from zoneinfo import ZoneInfo

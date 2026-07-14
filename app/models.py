@@ -244,6 +244,10 @@ class CalendarEvent(db.Model):
     confirmed_at = db.Column(db.DateTime, nullable=True)
     confirmed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
+    # Link público de avaliação da cliente (feature 130): token aleatório, gerado só na
+    # primeira vez que alguém pede o link — nunca o id sequencial, para não ser adivinhável.
+    feedback_token = db.Column(db.String(43), unique=True, nullable=True)
+
     # ensaios / origem
     parent_event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
     needs_rehearsal = db.Column(db.Boolean, default=False, nullable=False)
@@ -1266,6 +1270,39 @@ class EventRatingVersion(db.Model):
             return _json.loads(self.snapshot)
         except (ValueError, TypeError):
             return {}
+
+
+class ClientFeedback(db.Model):
+    """Avaliação da cliente sobre a experiência com a equipe da Manto (feature 130).
+
+    Distinta de ``EventRating`` (avaliação do artista sobre o evento, via portal do
+    talento, com login): aqui quem avalia é a cliente, sem login, através do link público
+    gerado a partir de ``CalendarEvent.feedback_token``. Sem identificação de quem
+    responde, então cada envio vira uma linha própria — não há "atualizar" uma avaliação
+    anterior.
+    """
+    __tablename__ = "client_feedbacks"
+    __table_args__ = (
+        db.Index("ix_client_feedbacks_event_id", "event_id"),
+    )
+
+    id           = db.Column(db.Integer, primary_key=True)
+    event_id     = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    score        = db.Column(db.Integer, nullable=False)  # 1–5
+    tags         = db.Column(db.Text, nullable=True)      # JSON: lista de cards marcados
+    comment      = db.Column(db.Text, nullable=True)
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    event = db.relationship("CalendarEvent", lazy=True)
+
+    @property
+    def tags_list(self) -> list[str]:
+        """Cards marcados, desserializados."""
+        import json as _json
+        try:
+            return _json.loads(self.tags) if self.tags else []
+        except (ValueError, TypeError):
+            return []
 
 
 class SyncLog(db.Model):

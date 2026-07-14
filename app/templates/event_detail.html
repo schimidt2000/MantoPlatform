@@ -94,6 +94,10 @@
                 {% endif %}>
           💰 Cobrança
         </button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-feedback-cliente"
+                title="Copiar link da página de avaliação deste evento">
+          💬 Pedir feedback da cliente
+        </button>
       {% endif %}
       {% if eff_has_role('SUPERADMIN', 'COMERCIAL') %}
         <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger,#c0392b);"
@@ -226,6 +230,13 @@
     if (bc) bc.addEventListener('click', function () { copiar(buildConfirmacao(), bc); });
     const bp = document.getElementById('btn-cobranca');
     if (bp && !bp.disabled) bp.addEventListener('click', function () { copiar(buildCobranca(), bp); });
+    const bf = document.getElementById('btn-feedback-cliente');
+    if (bf) bf.addEventListener('click', function () {
+      fetch('/events/{{ event.id }}/gerar-link-feedback', { method: 'POST' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) { if (data.url) copiar(data.url, bf); })
+        .catch(function () { /* ignore */ });
+    });
   });
 })();
 </script>
@@ -2155,6 +2166,54 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
     {% endif %}
   </div>
   {% endfor %}
+</div>
+{% endif %}
+
+{# ── Feedback da cliente (feature 130) ─────────────────────────── #}
+{% if eff_has_role('COMERCIAL', 'SUPERADMIN') %}
+<div class="panel" style="margin-top:24px;">
+  <div class="panel-title">💬 Feedback da Cliente</div>
+
+  {% if client_feedbacks %}
+    {% set _fb_avg = (client_feedbacks | map(attribute='score') | list | sum) / client_feedbacks | length %}
+    <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--line);">
+      <div style="text-align:center;">
+        <div style="font-size:36px; font-weight:800; color:#f59e0b;">{{ "%.1f"|format(_fb_avg) }}</div>
+        <div style="font-size:12px; color:var(--muted);">média geral</div>
+      </div>
+      <div>
+        <div style="color:#f59e0b; letter-spacing:2px; font-size:20px;">
+          {% for i in range(_fb_avg | round | int) %}★{% endfor %}{% for i in range(5 - (_fb_avg | round | int)) %}☆{% endfor %}
+        </div>
+        <div style="font-size:13px; color:var(--muted);">{{ client_feedbacks | length }} {{ 'avaliações' if client_feedbacks | length > 1 else 'avaliação' }}</div>
+      </div>
+    </div>
+
+    {% for fb in client_feedbacks %}
+    <div style="padding:14px 0; border-bottom:1px solid var(--line);">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+        <span style="color:#f59e0b; font-size:15px;">
+          {% for i in range(fb.score) %}★{% endfor %}{% for i in range(5 - fb.score) %}☆{% endfor %}
+        </span>
+        <span class="meta">{{ fb.submitted_at.strftime('%d/%m/%Y %H:%M') }}</span>
+      </div>
+      {% if fb.tags_list %}
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+        {% for tag in fb.tags_list %}
+        <span style="background:var(--surface); border:1px solid var(--line); border-radius:var(--r-sm);
+                     padding:4px 10px; font-size:12px; color:var(--muted);">{{ tag }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if fb.comment %}
+      <p style="font-size:13px; color:var(--muted); margin:0; padding-left:4px;">{{ fb.comment }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="muted small">Nenhum feedback recebido ainda. Use "⋯ Ferramentas" → "Pedir
+      feedback da cliente" para copiar o link e enviar à cliente.</p>
+  {% endif %}
 </div>
 {% endif %}
 
