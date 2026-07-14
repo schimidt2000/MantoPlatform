@@ -1106,12 +1106,15 @@ def pagamentos():
         month_ref=f"{year_i:04d}-{month_i:02d}"
     ).order_by(SalaryPayment.due_date.asc()).all()
 
-    # Desembolsos de gastos aprovados no mês (pela data do gasto), com destino definido
+    # Desembolsos de gastos aprovados no mês (pela data do gasto), com destino definido.
+    # paid_at_creation=True (feature 128) nunca entra aqui — já foi pago no ato do
+    # registro (ex.: PIX direto da conta da Manto), não é uma pendência de pagamento.
     _m_start = date(year_i, month_i, 1)
     _m_end = date(year_i + 1, 1, 1) if month_i == 12 else date(year_i, month_i + 1, 1)
     expenses = SpecialExpense.query.filter(
         SpecialExpense.status == "aprovado",
         SpecialExpense.disbursement_type.isnot(None),
+        SpecialExpense.paid_at_creation.is_(False),
         SpecialExpense.expense_date >= _m_start,
         SpecialExpense.expense_date < _m_end,
     ).order_by(SpecialExpense.expense_date.asc()).all()
