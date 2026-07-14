@@ -27,7 +27,7 @@ from .. import db
 from app.constants import RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CLIENT_RELATION_TIPOS
 from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense, ClientFeedback
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -168,15 +168,16 @@ def _build_events_from_db(
 def _clear_event_side_tables(event_id: int) -> None:
     """Remove os registros de um evento (ou ensaio) sem cascade automático (feature 122).
 
-    ``EventLog``, ``EventContract``, ``EventPayment`` e ``EventRating`` não têm
-    ``cascade="all, delete-orphan"`` no relacionamento de ``CalendarEvent`` — sem esta
-    limpeza, ``db.session.delete(event)`` falha com violação de chave estrangeira sempre
-    que existir algum desses registros (ex.: histórico de ações do evento).
+    ``EventLog``, ``EventContract``, ``EventPayment``, ``EventRating`` e ``ClientFeedback``
+    não têm ``cascade="all, delete-orphan"`` no relacionamento de ``CalendarEvent`` — sem
+    esta limpeza, ``db.session.delete(event)`` falha com violação de chave estrangeira
+    sempre que existir algum desses registros (ex.: histórico de ações do evento).
     """
     EventLog.query.filter_by(event_id=event_id).delete()
     EventContract.query.filter_by(event_id=event_id).delete()
     EventPayment.query.filter_by(event_id=event_id).delete()
     EventRating.query.filter_by(event_id=event_id).delete()
+    ClientFeedback.query.filter_by(event_id=event_id).delete()
 
 
 def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
@@ -184,7 +185,7 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
 
     Cascades automáticos: EventRole, EventObservation, ensaios, EnsaioMaterial.
     Sem cascade (deletados manualmente via ``_clear_event_side_tables``): EventLog,
-    EventContract, EventPayment, EventRating.
+    EventContract, EventPayment, EventRating, ClientFeedback.
     """
     _clear_event_side_tables(event.id)
 
@@ -1547,6 +1548,13 @@ def event_detail(event_id: int):
         .all()
     )
 
+    client_feedbacks = (
+        ClientFeedback.query
+        .filter_by(event_id=event.id)
+        .order_by(ClientFeedback.submitted_at.desc())
+        .all()
+    )
+
     # Candidatos a agrupar: todos os eventos não-ENSAIO exceto o próprio (sem janela de data,
     # feature 054). A busca/filtragem é feita no cliente; eventos já agrupados aparecem
     # desabilitados na UI (não some, para o usuário entender o porquê).
@@ -1635,6 +1643,7 @@ def event_detail(event_id: int):
         settings=settings,
         has_makeup_role=has_makeup_role,
         event_ratings=event_ratings,
+        client_feedbacks=client_feedbacks,
         groupable_events=groupable_events,
         client_required=event_requires_client(event),
     )
