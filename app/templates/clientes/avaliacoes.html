@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Avaliações das Clientes{% endblock %}
+{% block page_title %}Avaliações das Clientes{% endblock %}
+{% block page_subtitle %}
+  <p class="sub">Feedback recebido das clientes sobre a equipe — filtre por período, nota, card ou cliente</p>
+{% endblock %}
+{% block page_actions %}
+  <a href="/clientes/" class="btn btn-secondary">🔍 Buscar clientes</a>
+{% endblock %}
+
+{% macro stars(value) -%}
+  {% set full = value | round(0, 'floor') | int %}
+  {% set half = 1 if (value - full) >= 0.5 else 0 %}
+  <span class="stars" title="{{ '%.1f'|format(value) }} de 5">
+    {%- for i in range(full) %}★{% endfor -%}
+    {%- if half %}⯨{% endif -%}
+    {%- for i in range(5 - full - half) %}<span class="star-empty">★</span>{% endfor -%}
+  </span>
+{%- endmacro %}
+
+{% block content %}
+
+{# ── Filtros ──────────────────────────────────────────────────── #}
+<div class="panel" style="margin-bottom:16px; padding:14px 20px;">
+
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+    <span class="muted" style="font-size:13px; width:72px;">Período:</span>
+    {% for key, label in [('all','Tudo'), ('30d','30 dias'), ('90d','3 meses'), ('365d','12 meses')] %}
+      <a href="#" class="filter-chip {{ 'active' if period == key }}"
+         onclick="setFilter({period: '{{ key if key != 'all' else '' }}' || null, from: null, to: null}); return false;">{{ label }}</a>
+    {% endfor %}
+    <span class="filter-chip {{ 'active' if period == 'custom' }}" style="cursor:default; display:inline-flex; align-items:center; gap:6px;">
+      Personalizado:
+      <input type="date" id="f-from" value="{{ from_raw }}" style="width:auto; padding:2px 6px; font-size:12px;">
+      –
+      <input type="date" id="f-to" value="{{ to_raw }}" style="width:auto; padding:2px 6px; font-size:12px;">
+      <button type="button" class="btn btn-sm btn-secondary" style="padding:2px 10px;" onclick="applyCustom()">Aplicar</button>
+    </span>
+  </div>
+
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+    <span class="muted" style="font-size:13px; width:72px;">Nota:</span>
+    <a href="#" class="filter-chip {{ 'active' if not score }}"
+       onclick="setFilter({score: null}); return false;">Todas</a>
+    {% for s in [5,4,3,2,1] %}
+      <a href="#" class="filter-chip {{ 'active' if score == s }}"
+         onclick="setFilter({score: {{ s }}}); return false;">{{ s }} ★</a>
+    {% endfor %}
+  </div>
+
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+    <span class="muted" style="font-size:13px; width:72px;">Card:</span>
+    <select onchange="setFilter({tag: this.value || null})" style="width:auto; max-width:320px;">
+      <option value="">Todos</option>
+      {% for t in all_tags %}
+        <option value="{{ t }}" {% if tag == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    <span class="muted" style="font-size:13px; width:72px;">Cliente:</span>
+    <select onchange="setFilter({client_id: this.value || null})" style="width:auto; max-width:320px;">
+      <option value="">Todas</option>
+      {% for c in clients_with_feedback %}
+        <option value="{{ c.id }}" {% if client_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+    {% if selected_client %}
+      <a href="/clientes/{{ selected_client.id }}" class="btn btn-sm btn-secondary">Ver ficha</a>
+    {% endif %}
+    {% if has_filters %}
+      <a href="/clientes/avaliacoes" class="btn btn-sm btn-ghost" style="margin-left:auto;">✕ Limpar filtros</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if total == 0 %}
+  <div class="panel" style="padding:48px; text-align:center; color:var(--muted);">
+    <div style="font-size:40px; margin-bottom:8px;">💬</div>
+    <div style="margin-bottom:14px;">
+      Nenhuma avaliação {% if has_filters %}encontrada com esse filtro{% else %}recebida ainda{% endif %}.
+    </div>
+    {% if has_filters %}
+      <a href="/clientes/avaliacoes" class="btn btn-sm btn-secondary">Limpar filtros</a>
+    {% else %}
+      <p class="muted small" style="margin:0;">
+        Peça feedback na página de um evento: "⋯ Ferramentas" → "Pedir feedback da cliente".
+      </p>
+    {% endif %}
+  </div>
+{% else %}
+
+{# ── Cards de destaque ─────────────────────────────────────────── #}
+<div class="kpi-grid" style="margin-bottom:16px;">
+  <div class="kpi">
+    <div class="kpi-label">Nota média</div>
+    <div class="kpi-value" style="display:flex; align-items:center; gap:8px;">
+      <span>{{ '%.1f'|format(avg_overall) }}</span>
+      <span style="font-size:18px; color:#f59e0b;">{{ stars(avg_overall) }}</span>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Total de avaliações</div>
+    <div class="kpi-value">{{ total }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Clientes avaliadas</div>
+    <div class="kpi-value">{{ clients_rated }}</div>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin-bottom:16px;">
+  {# ── Distribuição das notas ──────────────────────────────────── #}
+  <div class="panel">
+    <div class="panel-title" style="margin-bottom:14px;">Distribuição das notas</div>
+    {% for s in [5,4,3,2,1] %}
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+      <span style="width:54px; font-size:13px; color:#f59e0b; white-space:nowrap;">{{ s }} ★</span>
+      <div style="flex:1; background:var(--surface-2); border-radius:99px; height:14px; overflow:hidden;">
+        <div style="height:100%; border-radius:99px; background:#f59e0b;
+                    width:{{ (dist[s] / dist_max * 100) if dist_max else 0 }}%;"></div>
+      </div>
+      <span style="width:32px; text-align:right; font-size:13px; font-weight:600;">{{ dist[s] }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{# ── Pontos de atenção ────────────────────────────────────────── #}
+<div class="panel" style="margin-bottom:16px; border-left:3px solid {{ '#dc2626' if attention else '#16a34a' }};">
+  <div class="panel-title" style="margin-bottom:12px;">
+    ⚠️ Pontos de atenção <span class="muted" style="font-weight:400; font-size:12px;">(notas 1–2 do recorte)</span>
+  </div>
+  {% if attention %}
+    {% for fb in attention %}
+    <div style="padding:10px 0; border-bottom:1px solid var(--line);">
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:2px;">
+        <span style="color:#dc2626; font-weight:700; font-size:13px;">{{ fb.score }} ★</span>
+        {% if fb.event and fb.event.client %}
+          <a href="/clientes/{{ fb.event.client.id }}" style="font-weight:600; font-size:13px; color:inherit;">{{ fb.event.client.name }}</a>
+        {% else %}
+          <span class="muted" style="font-size:13px;">Cliente não identificada</span>
+        {% endif %}
+        {% if fb.event %}
+          <span class="muted" style="font-size:12px;">·
+            <a href="/events/{{ fb.event.id }}" style="color:inherit;">{{ fb.event.title }}</a>
+          </span>
+        {% endif %}
+        <span class="muted" style="font-size:11px; margin-left:auto;">
+          {{ fb.submitted_at.strftime('%d/%m/%Y') if fb.submitted_at else '' }}
+        </span>
+      </div>
+      {% if fb.comment %}
+        <div style="font-size:13px; white-space:pre-wrap;">{{ fb.comment }}</div>
+      {% else %}
+        <div class="muted" style="font-size:12px;">Sem comentário.</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="muted small" style="margin:0;">✅ Nenhuma nota baixa no recorte.</p>
+  {% endif %}
+</div>
+
+{# ── Lista de avaliações ──────────────────────────────────────── #}
+<div class="panel">
+  <div class="panel-title" style="margin-bottom:12px;">
+    Avaliações <span class="muted" style="font-weight:400; font-size:12px;">(mais recentes)</span>
+  </div>
+  {% for fb in feedbacks %}
+  <div style="padding:12px 0; border-bottom:1px solid var(--line);">
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+      <span style="color:#f59e0b; font-size:14px;">{{ stars(fb.score) }}</span>
+      {% if fb.event and fb.event.client %}
+        <a href="/clientes/{{ fb.event.client.id }}" style="font-weight:600; font-size:13px; color:inherit;">{{ fb.event.client.name }}</a>
+      {% else %}
+        <span class="muted" style="font-size:13px;">Cliente não identificada</span>
+      {% endif %}
+      {% if fb.event %}
+        <span class="muted" style="font-size:12px;">·
+          <a href="/events/{{ fb.event.id }}" style="color:inherit;">{{ fb.event.title }}</a>
+        </span>
+      {% endif %}
+      <span class="muted" style="font-size:11px; margin-left:auto;">
+        {{ fb.submitted_at.strftime('%d/%m/%Y') if fb.submitted_at else '' }}
+      </span>
+    </div>
+    {% if fb.tags_list %}
+    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
+      {% for t in fb.tags_list %}
+        <span class="cat-chip">{{ t }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if fb.comment %}
+      <div style="font-size:13px; color:var(--text); white-space:pre-wrap;">{{ fb.comment }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<style>
+  .stars { letter-spacing: 1px; }
+  .stars .star-empty { color: var(--line); }
+  .filter-chip {
+    display: inline-block; padding: 4px 12px; border-radius: 99px;
+    border: 1px solid var(--line); background: var(--surface-2);
+    color: var(--text); font-size: 12px; text-decoration: none; transition: all .15s;
+  }
+  a.filter-chip:hover { border-color: var(--accent); }
+  .filter-chip.active {
+    background: var(--accent); border-color: var(--accent);
+    color: #fff; font-weight: 600;
+  }
+  .cat-chip {
+    display: inline-block; padding: 1px 8px; border-radius: 99px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    font-size: 11px; font-weight: 600; color: var(--text);
+  }
+</style>
+<script>
+  function setFilter(changes) {
+    const p = new URLSearchParams(location.search);
+    for (const [k, v] of Object.entries(changes)) {
+      if (v === null || v === '') { p.delete(k); } else { p.set(k, String(v)); }
+    }
+    if (!p.has('from') && !p.has('to') && p.get('period') === 'custom') { p.delete('period'); }
+    const qs = p.toString();
+    location = location.pathname + (qs ? '?' + qs : '');
+  }
+  function applyCustom() {
+    const from = document.getElementById('f-from').value;
+    const to = document.getElementById('f-to').value;
+    if (!from && !to) { return; }
+    setFilter({ period: 'custom', from: from || null, to: to || null });
+  }
+</script>
+{% endblock %}
