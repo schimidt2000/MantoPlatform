@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, send_from_directory, session, redirect
+from flask import Flask, Response, render_template, request, send_from_directory, session, redirect
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import and_, not_, or_, func
 from flask_migrate import Migrate
@@ -241,6 +241,8 @@ def create_app():
         resp.headers.setdefault(
             "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
         )
+        # Sistema interno — nenhuma página deve ser indexada por buscadores (feature 127).
+        resp.headers.setdefault("X-Robots-Tag", "noindex, nofollow, noarchive")
         # CSP mínima: protege clickjacking, base-tag e hijack de <form> sem restringir
         # script/style/img/font/frame-src (não quebra inline nem integrações externas).
         resp.headers.setdefault(
@@ -384,6 +386,11 @@ def create_app():
     @app.errorhandler(403)
     def forbidden(e):
         return render_template("403.html", wa_link=_wa_link(403)), 403
+
+    @app.route("/robots.txt")
+    def robots_txt():
+        """Nega rastreamento de tudo — sistema interno, não deve ser indexado (feature 127)."""
+        return Response("User-agent: *\nDisallow: /\n", mimetype="text/plain")
 
     @app.route("/")
     @login_required
