@@ -35,62 +35,112 @@
 {% endblock %}
 
 {% block page_actions %}
-  {% if event.google_event_id and eff_has_role('CASTING', 'SUPERADMIN') %}
-    <form method="post" action="/events/{{ event.id }}/sync" style="display:inline;">
-      <button type="submit" class="btn btn-ghost btn-sm" title="Sincronizar dados do Google Calendar">
-        🔄 Sincronizar
-      </button>
-    </form>
-  {% endif %}
-  {% if eff_has_role('CASTING', 'COMERCIAL', 'SUPERADMIN') %}
-    <button type="button" class="btn btn-ghost btn-sm"
-            onclick="document.getElementById('export-elenco-modal').style.display='flex'">
-      📋 Exportar elenco
+  {% set show_tools_menu = (
+    (event.google_event_id and eff_has_role('CASTING', 'SUPERADMIN'))
+    or eff_has_role('CASTING', 'COMERCIAL', 'SUPERADMIN')
+    or eff_has_role('COMERCIAL', 'SUPERADMIN')
+    or eff_has_role('SUPERADMIN', 'COMERCIAL')
+  ) %}
+  {% if show_tools_menu %}
+  <div class="action-menu" id="event-tools-menu">
+    <button type="button" class="btn btn-ghost btn-sm action-menu-trigger"
+            onclick="toggleActionMenu(this)" aria-haspopup="true" aria-expanded="false">
+      ⋯ Ferramentas
     </button>
-  {% endif %}
-  {% if eff_has_role('COMERCIAL', 'SUPERADMIN') %}
-    {% if event.google_html_link %}
-    <a href="{{ event.google_html_link }}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"
-       title="Abrir este evento no Google Agenda para editar data, horário ou local">
-      📅 Editar no Google Agenda
-    </a>
-    {% endif %}
-    <button type="button" class="btn btn-ghost btn-sm" id="btn-confirmar-dados"
-            title="Copiar mensagem de confirmação do evento">
-      ✅ Confirmar dados do evento
-    </button>
-    <form method="post" style="display:inline;">
-      <input type="hidden" name="action" value="toggle_confirmado">
-      {% if event.confirmed_at %}
-        <button type="submit" class="btn btn-sm" style="background:rgba(46,125,50,.12); color:#2e7d32; border:1px solid rgba(46,125,50,.35);"
-                title="Confirmado por {{ event.confirmer.name if event.confirmer else '—' }} em {{ event.confirmed_at.strftime('%d/%m/%Y %H:%M') }} — clique para desfazer">
-          ✓ Evento confirmado
-        </button>
-      {% else %}
-        <button type="submit" class="btn btn-ghost btn-sm" title="Marcar este evento como confirmado">
-          ☐ Marcar evento como confirmado
+    <div class="action-menu-panel">
+      {% if event.google_event_id and eff_has_role('CASTING', 'SUPERADMIN') %}
+        <form method="post" action="/events/{{ event.id }}/sync">
+          <button type="submit" class="btn btn-ghost btn-sm" title="Sincronizar dados do Google Calendar">
+            🔄 Sincronizar
+          </button>
+        </form>
+      {% endif %}
+      {% if eff_has_role('CASTING', 'COMERCIAL', 'SUPERADMIN') %}
+        <button type="button" class="btn btn-ghost btn-sm"
+                onclick="document.getElementById('export-elenco-modal').style.display='flex'">
+          📋 Exportar elenco
         </button>
       {% endif %}
-    </form>
-    <button type="button" class="btn btn-ghost btn-sm" id="btn-cobranca"
-            {% if not cobranca_enabled %}disabled
-            style="opacity:.45; cursor:not-allowed;"
-            title="Disponível apenas na data limite de pagamento ou em atraso"
-            {% else %}
-            title="Copiar mensagem de cobrança do valor em aberto"
-            {% endif %}>
-      💰 Cobrança
-    </button>
-  {% endif %}
-  {% if eff_has_role('SUPERADMIN', 'COMERCIAL') %}
-    <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger,#c0392b);"
-            onclick="document.getElementById('delete-event-modal').style.display='flex'">
-      🗑 Excluir evento
-    </button>
+      {% if eff_has_role('COMERCIAL', 'SUPERADMIN') %}
+        {% if event.google_html_link %}
+        <a href="{{ event.google_html_link }}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm"
+           title="Abrir este evento no Google Agenda para editar data, horário ou local">
+          📅 Editar no Google Agenda
+        </a>
+        {% endif %}
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-confirmar-dados"
+                title="Copiar mensagem de confirmação do evento">
+          ✅ Confirmar dados do evento
+        </button>
+        <form method="post">
+          <input type="hidden" name="action" value="toggle_confirmado">
+          {% if event.confirmed_at %}
+            <button type="submit" class="btn btn-sm" style="background:rgba(46,125,50,.12); color:#2e7d32; border:1px solid rgba(46,125,50,.35);"
+                    title="Confirmado por {{ event.confirmer.name if event.confirmer else '—' }} em {{ event.confirmed_at.strftime('%d/%m/%Y %H:%M') }} — clique para desfazer">
+              ✓ Evento confirmado
+            </button>
+          {% else %}
+            <button type="submit" class="btn btn-ghost btn-sm" title="Marcar este evento como confirmado">
+              ☐ Marcar evento como confirmado
+            </button>
+          {% endif %}
+        </form>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-cobranca"
+                {% if not cobranca_enabled %}disabled
+                style="opacity:.45; cursor:not-allowed;"
+                title="Disponível apenas na data limite de pagamento ou em atraso"
+                {% else %}
+                title="Copiar mensagem de cobrança do valor em aberto"
+                {% endif %}>
+          💰 Cobrança
+        </button>
+      {% endif %}
+      {% if eff_has_role('SUPERADMIN', 'COMERCIAL') %}
+        <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger,#c0392b);"
+                onclick="document.getElementById('delete-event-modal').style.display='flex'">
+          🗑 Excluir evento
+        </button>
+      {% endif %}
+    </div>
+  </div>
   {% endif %}
   <a href="/agenda" class="btn btn-secondary">
     &larr; Voltar para Agenda
   </a>
+  <script>
+    // Menu de ferramentas do evento (feature 129): mesmo padrão de abertura/fechamento
+    // do .fp/.fp-panel (talents_list.html), generalizado como .action-menu.
+    function toggleActionMenu(btn) {
+      var menu = btn.closest('.action-menu');
+      var isOpen = menu.classList.contains('open');
+      document.querySelectorAll('.action-menu.open').forEach(function (m) {
+        m.classList.remove('open');
+        var trigger = m.querySelector('.action-menu-trigger');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      });
+      if (!isOpen) {
+        menu.classList.add('open');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    }
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('.action-menu')) {
+        document.querySelectorAll('.action-menu.open').forEach(function (m) {
+          m.classList.remove('open');
+          var trigger = m.querySelector('.action-menu-trigger');
+          if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        });
+      }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      document.querySelectorAll('.action-menu.open').forEach(function (m) {
+        m.classList.remove('open');
+        var trigger = m.querySelector('.action-menu-trigger');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      });
+    });
+  </script>
 {% endblock %}
 
 {% block content %}
