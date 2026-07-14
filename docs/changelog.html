@@ -1,0 +1,407 @@
+<title>Manto Plataforma — Changelog</title>
+<style>
+  :root {
+    --bg: #faf8f4;
+    --panel: #ffffff;
+    --ink: #211c36;
+    --muted: #6e6580;
+    --line: #e5e1ee;
+    --accent: #544596;
+    --accent-dark: #3c316b;
+    --accent-soft: rgba(84,69,150,0.08);
+    --gold: #a97e2f;
+    --gold-soft: rgba(169,126,47,0.12);
+    --green: #1a7f3c;
+    --green-soft: rgba(26,127,60,0.10);
+    --red: #b3372c;
+    --red-soft: rgba(179,55,44,0.10);
+    --blue: #2860b8;
+    --blue-soft: rgba(40,96,184,0.10);
+    --shadow: 0 1px 2px rgba(33,28,54,0.04), 0 8px 24px rgba(33,28,54,0.06);
+  }
+  :root[data-theme="dark"] {
+    --bg: #17141f;
+    --panel: #1f1c2b;
+    --ink: #eeeaf7;
+    --muted: #a79fc0;
+    --line: #33304a;
+    --accent: #a794e8;
+    --accent-dark: #cabdf3;
+    --accent-soft: rgba(167,148,232,0.14);
+    --gold: #d8b464;
+    --gold-soft: rgba(216,180,100,0.14);
+    --green: #6fcf8f;
+    --green-soft: rgba(111,207,143,0.14);
+    --red: #e2857a;
+    --red-soft: rgba(226,133,122,0.14);
+    --blue: #7fb0ec;
+    --blue-soft: rgba(127,176,236,0.14);
+    --shadow: 0 1px 2px rgba(0,0,0,0.2), 0 8px 24px rgba(0,0,0,0.32);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17141f;
+      --panel: #1f1c2b;
+      --ink: #eeeaf7;
+      --muted: #a79fc0;
+      --line: #33304a;
+      --accent: #a794e8;
+      --accent-dark: #cabdf3;
+      --accent-soft: rgba(167,148,232,0.14);
+      --gold: #d8b464;
+      --gold-soft: rgba(216,180,100,0.14);
+      --green: #6fcf8f;
+      --green-soft: rgba(111,207,143,0.14);
+      --red: #e2857a;
+      --red-soft: rgba(226,133,122,0.14);
+      --blue: #7fb0ec;
+      --blue-soft: rgba(127,176,236,0.14);
+      --shadow: 0 1px 2px rgba(0,0,0,0.2), 0 8px 24px rgba(0,0,0,0.32);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  header.top { margin-bottom: 40px; }
+  .eyebrow {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--gold); display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  }
+  .eyebrow .spiral { font-size: 13px; }
+  h1 {
+    font-family: Georgia, "Iowan Old Style", ui-serif, serif;
+    font-size: clamp(30px, 5vw, 40px);
+    font-weight: 600;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  .subtitle { color: var(--muted); font-size: 15.5px; max-width: 58ch; }
+  .updated-at { font-size: 12px; color: var(--muted); margin-top: 10px; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    margin: 32px 0 40px;
+  }
+  .stat { background: var(--panel); padding: 18px 16px; }
+  .stat-value {
+    font-family: Georgia, ui-serif, serif;
+    font-size: 26px; font-weight: 600; color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label { font-size: 11.5px; color: var(--muted); margin-top: 4px; letter-spacing: 0.02em; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 36px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+  .day-group { margin-bottom: 36px; }
+  .day-label {
+    font-size: 12.5px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+  }
+
+  .entry {
+    display: flex; gap: 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 10px; box-shadow: var(--shadow);
+  }
+  .entry-bar { width: 4px; border-radius: 3px; flex: none; }
+  .entry-body { flex: 1; min-width: 0; }
+  .entry-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .entry-num { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .entry-title { font-size: 15px; font-weight: 700; color: var(--ink); }
+  .entry-tag {
+    font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+    letter-spacing: 0.02em; white-space: nowrap;
+  }
+  .entry-desc { font-size: 13.5px; color: var(--muted); }
+
+  .tag-comercial { background: var(--accent-soft); color: var(--accent-dark); }
+  .tag-financeiro { background: var(--gold-soft); color: var(--gold); }
+  .tag-agenda { background: var(--blue-soft); color: var(--blue); }
+  .tag-qualidade { background: var(--green-soft); color: var(--green); }
+  .tag-talentos { background: var(--red-soft); color: var(--red); }
+
+  .bar-comercial { background: var(--accent); }
+  .bar-financeiro { background: var(--gold); }
+  .bar-agenda { background: var(--blue); }
+  .bar-qualidade { background: var(--green); }
+  .bar-talentos { background: var(--red); }
+
+  footer.note {
+    margin-top: 44px; padding-top: 20px; border-top: 1px solid var(--line);
+    font-size: 12.5px; color: var(--muted); line-height: 1.7;
+  }
+  footer.note strong { color: var(--ink); }
+
+  @media (max-width: 560px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .wrap { padding: 32px 16px 64px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow"><span class="spiral">✦</span> Plataforma Manto — resumo de mudanças</div>
+    <h1>Mudanças na Plataforma Manto</h1>
+    <p class="subtitle">Registro contínuo do que muda no sistema, em linguagem simples — atualizado a cada entrega que vai ao ar.</p>
+    <div class="updated-at">Atualizado em 14/07/2026</div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-value">17</div><div class="stat-label">mudanças no ar</div></div>
+    <div class="stat"><div class="stat-value">5</div><div class="stat-label">dias de trabalho</div></div>
+    <div class="stat"><div class="stat-value">6</div><div class="stat-label">áreas do sistema</div></div>
+    <div class="stat"><div class="stat-value">0</div><div class="stat-label">quebras no ar</div></div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><span class="dot bar-comercial"></span>Comercial &amp; Clientes</div>
+    <div class="legend-item"><span class="dot bar-financeiro"></span>Financeiro</div>
+    <div class="legend-item"><span class="dot bar-agenda"></span>Agenda &amp; Eventos</div>
+    <div class="legend-item"><span class="dot bar-qualidade"></span>Qualidade &amp; Segurança</div>
+    <div class="legend-item"><span class="dot bar-talentos"></span>Talentos</div>
+  </div>
+
+  <!-- Novas entradas entram aqui em cima, como um novo <div class="day-group"> (mais recente primeiro) -->
+
+  <!-- 07/07 -->
+  <div class="day-group">
+    <div class="day-label">Terça, 07/07</div>
+
+    <div class="entry">
+      <div class="entry-bar bar-comercial"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">114</span>
+          <span class="entry-title">Cliente já na criação do evento</span>
+          <span class="entry-tag tag-comercial">Comercial</span>
+        </div>
+        <div class="entry-desc">Dá para associar o cliente no momento de criar o evento — não precisa mais lembrar de fazer isso depois. A busca de clientes também passa a ignorar acentos ("jose" encontra "José").</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-talentos"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">115</span>
+          <span class="entry-title">"Já trabalhou com a Manto" atualiza sozinho</span>
+          <span class="entry-tag tag-talentos">Talentos</span>
+        </div>
+        <div class="entry-desc">O banco de talentos passa a marcar automaticamente quem já trabalhou com a Manto assim que a pessoa realiza um evento de verdade — sem precisar de ninguém mexendo na ficha manualmente.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-agenda"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">116</span>
+          <span class="entry-title">Botão de confirmar evento</span>
+          <span class="entry-tag tag-agenda">Agenda</span>
+        </div>
+        <div class="entry-desc">Novo botão na página do evento para registrar que a confirmação com a cliente foi feita — guarda quem confirmou e quando, e dá pra desfazer em caso de engano.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-agenda"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">117</span>
+          <span class="entry-title">Atalho para o Google Agenda</span>
+          <span class="entry-tag tag-agenda">Agenda</span>
+        </div>
+        <div class="entry-desc">A página do evento ganhou um botão que leva direto para aquele evento no Google Agenda, sem precisar procurar manualmente lá.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 08/07 -->
+  <div class="day-group">
+    <div class="day-label">Quarta, 08/07</div>
+
+    <div class="entry">
+      <div class="entry-bar bar-comercial"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">118</span>
+          <span class="entry-title">Formulários próprios, sem depender do WhatsForm</span>
+          <span class="entry-tag tag-comercial">Comercial</span>
+        </div>
+        <div class="entry-desc">Os formulários de pré-contrato (pessoa física e corporativo) passaram a rodar dentro do próprio sistema — cada resposta fica salva e aparece na home quando ainda não tem cliente associado.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-comercial"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">119</span>
+          <span class="entry-title">Cadastro de cliente mais completo</span>
+          <span class="entry-tag tag-comercial">Comercial</span>
+        </div>
+        <div class="entry-desc">CPF/CNPJ e endereço agora são preenchidos automaticamente a partir do formulário de pré-contrato, sem apagar nada que já tenha sido digitado manualmente.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-qualidade"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-title">Menu lateral reorganizado</span>
+          <span class="entry-tag tag-qualidade">Sistema</span>
+        </div>
+        <div class="entry-desc">O menu do painel ganhou grupos que fazem mais sentido (Casting, Comercial, Financeiro) — "Novo Evento" agora é o primeiro item do Comercial.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-financeiro"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">120</span>
+          <span class="entry-title">Data do adiantamento fica editável</span>
+          <span class="entry-tag tag-financeiro">Financeiro</span>
+        </div>
+        <div class="entry-desc">Ao lançar um adiantamento de salário, agora dá pra escolher a data — se não mexer em nada, continua usando a data de hoje.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 09/07 -->
+  <div class="day-group">
+    <div class="day-label">Quinta, 09/07</div>
+
+    <div class="entry">
+      <div class="entry-bar bar-financeiro"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">121</span>
+          <span class="entry-title">Pagamento programado em várias parcelas</span>
+          <span class="entry-tag tag-financeiro">Financeiro</span>
+        </div>
+        <div class="entry-desc">Dentro de Gastos Recorrentes, agora dá pra cadastrar um pagamento com várias datas de uma vez (mesmo valor ou valores diferentes por parcela) — cada uma aparece na planilha na data certa.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-agenda"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">122</span>
+          <span class="entry-title">Corrigido erro ao cancelar ensaio</span>
+          <span class="entry-tag tag-agenda">Correção</span>
+        </div>
+        <div class="entry-desc">"Cancelar ensaio" às vezes mostrava uma tela de erro mesmo funcionando por trás — corrigido para concluir de primeira, sem tela de erro.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-comercial"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">123</span>
+          <span class="entry-title">Editor de campos dos formulários</span>
+          <span class="entry-tag tag-comercial">Comercial</span>
+        </div>
+        <div class="entry-desc">Super admin agora edita rótulo, obrigatoriedade e adiciona campos novos aos formulários de pré-contrato direto pelo painel — sem precisar de deploy.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 13/07 -->
+  <div class="day-group">
+    <div class="day-label">Segunda, 13/07</div>
+
+    <div class="entry">
+      <div class="entry-bar bar-qualidade"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">124</span>
+          <span class="entry-title">Todo botão agora dá feedback visível</span>
+          <span class="entry-tag tag-qualidade">Qualidade</span>
+        </div>
+        <div class="entry-desc">Motivado por um caso real: um envio travou sem nenhum aviso visual e pareceu que "não tinha funcionado". Agora, em qualquer tela, clicar num botão de ação sempre mostra uma mudança visível até a resposta chegar.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 14/07 -->
+  <div class="day-group">
+    <div class="day-label">Terça, 14/07</div>
+
+    <div class="entry">
+      <div class="entry-bar bar-financeiro"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">125</span>
+          <span class="entry-title">Gastos Extras reorganizada e filtrável</span>
+          <span class="entry-tag tag-financeiro">Financeiro</span>
+        </div>
+        <div class="entry-desc">A lista de gastos ganhou cartões clicáveis para filtrar por situação (pendente/aprovado/rejeitado) e busca em tempo real — o formulário de cadastro agora fica recolhido, sem empurrar a lista pra baixo.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-comercial"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">126</span>
+          <span class="entry-title">Formulário se conecta sozinho ao evento</span>
+          <span class="entry-tag tag-comercial">Comercial</span>
+        </div>
+        <div class="entry-desc">Motivado por um caso real de cliente que "sumiu" depois de preencher o formulário. Agora, quando o evento já existe na agenda, a resposta se conecta a ele automaticamente — e, quando não tem certeza, avisa alguém em vez de arriscar errar.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-qualidade"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">127</span>
+          <span class="entry-title">Sistema fora dos buscadores</span>
+          <span class="entry-tag tag-qualidade">Segurança</span>
+        </div>
+        <div class="entry-desc">Nenhuma página do sistema (nem os formulários públicos) pode mais ser indexada no Google ou em qualquer outro buscador daqui pra frente.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-financeiro"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">128</span>
+          <span class="entry-title">Gasto pode nascer já pago</span>
+          <span class="entry-tag tag-financeiro">Financeiro</span>
+        </div>
+        <div class="entry-desc">Um pagamento feito na hora (ex.: PIX direto da conta da Manto para um fornecedor) já pode ser registrado como pago — sem virar uma pendência na Planilha de Pagamentos.</div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="note">
+    <strong>Sobre este changelog:</strong> registro contínuo do que vai ao ar em produção na Plataforma Manto. Cada entrega passou por verificação funcional antes de ir ao ar. Detalhes técnicos de qualquer item ficam disponíveis sob pedido.
+  </footer>
+
+</div>

@@ -154,6 +154,10 @@ def get_active_users(users: list[User]) -> list[User]:
 - **Pequenos commits**: cada funcionalidade = um commit atômico
 - **Não quebre o que funciona**: rode os testes antes de cada commit
 - **Relate o progresso**: informe o que foi feito e o que falta
+- **Mantenha o changelog do time atualizado**: ao concluir uma feature/mudança visível ao
+  usuário, adicione uma entrada em `docs/changelog.html` (linguagem simples, o que mudou —
+  não como) e republique no mesmo link já existente (nunca crie um link novo). É a página
+  que o usuário usa para acompanhar e apresentar as entregas ao time.
 
 ### Quando travar:
 1. Tente 2 abordagens diferentes

@@ -143,6 +143,9 @@ Uma tarefa só está concluída quando:
 - [ ] Todo botão de ação nesta tela muda de aparência visível ao ser clicado (Princípio V) —
   herdado automaticamente se for um `<form>` comum; implementado manualmente se a ação for
   disparada por JavaScript puro (fetch fora de formulário, `onclick`).
+- [ ] **Changelog do time atualizado** (`docs/changelog.html`): toda feature/mudança visível
+  ao usuário ganha uma entrada nova, em português simples (o que mudou, não como) — sem
+  remover entradas antigas. Republicar no mesmo link já existente (nunca criar um link novo).
 
 ## Governança
 
@@ -156,9 +159,14 @@ Uma tarefa só está concluída quando:
 - Para orientação detalhada de runtime, o Claude também segue `CLAUDE.md` e os
   arquivos em `.claude/skills/`.
 
-**Versão**: 1.4.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-07-13
+**Versão**: 1.5.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-07-14
 
 > **Changelog**
+> - **1.5.0** (2026-07-14): Novo item no portão de qualidade — toda feature ganha uma
+>   entrada no changelog do time (`docs/changelog.html`, publicado como página web para
+>   apresentar à equipe), em linguagem simples, sempre republicado no mesmo link. Registra
+>   o que já foi entregue de forma contínua, sem depender de reconstruir o histórico do
+>   zero a cada pedido.
 > - **1.4.0** (2026-07-13): Princípio V reforçado — "prevenir envio duplicado" virou "nenhum
 >   botão fica morto ao ser clicado" (NÃO-NEGOCIÁVEL): `disabled` sozinho, sem mudança visual
 >   perceptível, não conta como feedback. Motivado por incidente real (gasto extra com nota
