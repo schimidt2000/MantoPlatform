@@ -24,7 +24,9 @@ from sqlalchemy import func, nullslast, or_
 from app import db
 from app.clientes.importer import normalize_phone
 from app.constants import RoleName
-from app.models import CalendarEvent, Client, EventClient
+from app.feedback.routes import ATTENTION_TAGS, POSITIVE_TAGS
+from app.models import CalendarEvent, Client, ClientFeedback, EventClient
+from app.talents.routes import _parse_period
 
 clientes_bp = Blueprint("clientes", __name__, url_prefix="/clientes")
 
@@ -146,6 +148,97 @@ def index():
         q=q,
         total_clients=total_clients,
         showing=len(clients),
+    )
+
+
+# ── Avaliações recebidas das clientes (feature 131) ─────────────────
+
+
+ALL_FEEDBACK_TAGS = POSITIVE_TAGS + ATTENTION_TAGS
+
+
+@clientes_bp.route("/avaliacoes")
+@require_vendas
+def avaliacoes():
+    """Resumo do feedback das clientes (feature 130) — filtros de período, nota, card e cliente.
+
+    Mesmo padrão de filtros de ``talents.avaliacoes`` (chips de período reaproveitando
+    ``_parse_period``), adaptado ao que ``ClientFeedback`` de fato tem: sem categorias
+    com nota própria (usa cards/tags) e sem múltiplos avaliadores por evento com função.
+    """
+    period = request.args.get("period", "all").strip().lower()
+    if period not in ("30d", "90d", "365d", "custom", "all"):
+        period = "all"
+    from_raw = request.args.get("from", "").strip()
+    to_raw = request.args.get("to", "").strip()
+    period_start, period_end = _parse_period(period, from_raw, to_raw)
+
+    score_raw = request.args.get("score", "").strip()
+    score = int(score_raw) if score_raw.isdigit() and 1 <= int(score_raw) <= 5 else None
+
+    tag = request.args.get("tag", "").strip()
+    if tag not in ALL_FEEDBACK_TAGS:
+        tag = ""
+
+    client_id_raw = request.args.get("client_id", "").strip()
+    client_id = int(client_id_raw) if client_id_raw.isdigit() else None
+    selected_client = Client.query.get(client_id) if client_id else None
+
+    fb_query = ClientFeedback.query.join(CalendarEvent, ClientFeedback.event_id == CalendarEvent.id)
+    if period_start:
+        fb_query = fb_query.filter(ClientFeedback.submitted_at >= period_start)
+    if period_end:
+        fb_query = fb_query.filter(ClientFeedback.submitted_at < period_end)
+    if score:
+        fb_query = fb_query.filter(ClientFeedback.score == score)
+    if tag:
+        fb_query = fb_query.filter(ClientFeedback.tags.ilike(f'%"{tag}"%'))
+    if client_id:
+        fb_query = fb_query.filter(CalendarEvent.client_id == client_id)
+    feedbacks = fb_query.order_by(ClientFeedback.submitted_at.desc()).all()
+
+    total = len(feedbacks)
+    avg_overall = round(sum(f.score for f in feedbacks) / total, 1) if total else 0.0
+    clients_rated = len({f.event.client_id for f in feedbacks if f.event and f.event.client_id})
+
+    dist = {s: 0 for s in range(1, 6)}
+    for f in feedbacks:
+        if 1 <= f.score <= 5:
+            dist[f.score] += 1
+    dist_max = max(dist.values()) if dist else 0
+
+    attention = [f for f in feedbacks if f.score <= 2][:10]
+
+    clients_with_feedback = (
+        db.session.query(Client.id, Client.name)
+        .join(CalendarEvent, CalendarEvent.client_id == Client.id)
+        .join(ClientFeedback, ClientFeedback.event_id == CalendarEvent.id)
+        .distinct()
+        .order_by(Client.name.asc())
+        .all()
+    )
+
+    has_filters = bool(period != "all" or score or tag or client_id)
+
+    return render_template(
+        "clientes/avaliacoes.html",
+        feedbacks=feedbacks,
+        total=total,
+        avg_overall=avg_overall,
+        clients_rated=clients_rated,
+        dist=dist,
+        dist_max=dist_max,
+        attention=attention,
+        clients_with_feedback=clients_with_feedback,
+        selected_client=selected_client,
+        client_id=client_id,
+        period=period,
+        from_raw=from_raw,
+        to_raw=to_raw,
+        score=score,
+        tag=tag,
+        all_tags=ALL_FEEDBACK_TAGS,
+        has_filters=has_filters,
     )
 
 

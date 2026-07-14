@@ -5,6 +5,9 @@
 {% block page_subtitle %}
   <span class="muted">{{ total_clients }} cliente{{ 's' if total_clients != 1 else '' }} na base</span>
 {% endblock %}
+{% block page_actions %}
+  <a href="/clientes/avaliacoes" class="btn btn-secondary">⭐ Ver avaliações</a>
+{% endblock %}
 
 {% block content %}
 <div class="panel">

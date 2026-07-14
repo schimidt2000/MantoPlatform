@@ -95,7 +95,12 @@
           💰 Cobrança
         </button>
         <button type="button" class="btn btn-ghost btn-sm" id="btn-feedback-cliente"
-                title="Copiar link da página de avaliação deste evento">
+                {% if client_feedbacks %}disabled
+                style="opacity:.45; cursor:not-allowed;"
+                title="A cliente já enviou feedback para este evento"
+                {% else %}
+                title="Copiar link da página de avaliação deste evento"
+                {% endif %}>
           💬 Pedir feedback da cliente
         </button>
       {% endif %}
@@ -231,7 +236,7 @@
     const bp = document.getElementById('btn-cobranca');
     if (bp && !bp.disabled) bp.addEventListener('click', function () { copiar(buildCobranca(), bp); });
     const bf = document.getElementById('btn-feedback-cliente');
-    if (bf) bf.addEventListener('click', function () {
+    if (bf && !bf.disabled) bf.addEventListener('click', function () {
       fetch('/events/{{ event.id }}/gerar-link-feedback', { method: 'POST' })
         .then(function (r) { return r.json(); })
         .then(function (data) { if (data.url) copiar(data.url, bf); })
