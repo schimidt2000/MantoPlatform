@@ -8,9 +8,11 @@ whatsapp_form_number``). A área interna lista as respostas, permite associar a 
 vincular a um evento em ``/events/new``.
 
 A estrutura dos dois formulários (seções, campos, tipos, obrigatoriedade, ordem) é
-editável pelo painel (SUPERADMIN) via ``FormFieldDefinition`` — feature 123. As rotas
-públicas renderizam e validam dinamicamente a partir dessa tabela em vez de campos
-hardcoded no código.
+editável pelo painel (SUPERADMIN) via ``FormFieldDefinition`` — feature 123.
+
+O vínculo com um evento da agenda pode ser automático (por data e, em caso de empate/
+ausência, por cliente já associada a um evento — feature 126) ou manual, sempre que a
+automação não tiver certeza suficiente para decidir sozinha.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from functools import wraps
 from flask import (
     Blueprint,
     abort,
+    current_app,
     flash,
     jsonify,
     redirect,
@@ -32,12 +35,19 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
-from sqlalchemy import or_
+from sqlalchemy import not_, or_
 
 from app import db, limiter
 from app.clientes.importer import normalize_phone
 from app.constants import RoleName
-from app.models import Client, FormFieldDefinition, FormResponse, SiteSetting
+from app.models import (
+    CalendarEvent,
+    Client,
+    EventClient,
+    FormFieldDefinition,
+    FormResponse,
+    SiteSetting,
+)
 from app.utils import strip_accents_lower
 
 formularios_bp = Blueprint("formularios", __name__)
@@ -229,6 +239,131 @@ def _save_response(form_type: str, contact_name: str, phone_display: str,
     return response
 
 
+# ── Vínculo automático a evento da agenda (feature 126) ──────────────
+
+
+def _real_event_candidates(event_date: date) -> list[CalendarEvent]:
+    """Eventos "reais" (não ensaio, não satélite) numa data — candidatos a vínculo."""
+    return (
+        CalendarEvent.query
+        .filter(
+            db.func.date(CalendarEvent.start_at) == event_date,
+            not_(CalendarEvent.title.like("🟧 ENSAIO%")),
+            CalendarEvent.group_leader_id.is_(None),
+        )
+        .all()
+    )
+
+
+def _client_by_phone(phone: str | None) -> Client | None:
+    if not phone:
+        return None
+    return Client.query.filter_by(phone=phone).first()
+
+
+def _client_real_event_ids(client_id: int, future_only: bool = False) -> set[int]:
+    """Ids de eventos reais (não ensaio/satélite) já associados a um cliente."""
+    q = (
+        db.session.query(CalendarEvent.id)
+        .join(EventClient, EventClient.event_id == CalendarEvent.id)
+        .filter(
+            EventClient.client_id == client_id,
+            not_(CalendarEvent.title.like("🟧 ENSAIO%")),
+            CalendarEvent.group_leader_id.is_(None),
+        )
+    )
+    if future_only:
+        q = q.filter(CalendarEvent.start_at >= datetime.utcnow())
+    return {row[0] for row in q.all()}
+
+
+def _event_client_phones(event_id: int) -> set[str]:
+    """Telefones dos clientes já associados a um evento (para checar contradição)."""
+    return {
+        ec.client.phone for ec in EventClient.query.filter_by(event_id=event_id).all()
+        if ec.client and ec.client.phone
+    }
+
+
+def _attempt_auto_link(response: FormResponse) -> str | None:
+    """Tenta vincular a resposta a um evento real da agenda (feature 126).
+
+    Critério, do mais para o menos confiável: (1) exatamente um evento real na data
+    informada, sem contradição de cliente; (2) telefone da resposta já associado a um
+    cliente que resolve o empate entre vários candidatos da mesma data, ou aponta para um
+    único evento futuro quando nenhum candidato bate por data. Nunca força um vínculo
+    quando os sinais são ambíguos ou se contradizem — nesse caso sinaliza para revisão
+    manual em vez de adivinhar.
+
+    Retorna ``"auto_date"``/``"auto_client"`` se vinculou (já persiste ``response.
+    event_id`` no objeto, sem commit — quem chama decide quando salvar), ``"ambiguous"``
+    se precisa de revisão manual, ou ``None`` se não havia nada a tentar.
+    """
+    if response.event_id is not None or response.event_link_locked or not response.event_date:
+        return None
+
+    candidates = _real_event_candidates(response.event_date)
+    client = _client_by_phone(response.contact_phone)
+
+    if len(candidates) == 1:
+        event = candidates[0]
+        if response.contact_phone:
+            existing_phones = _event_client_phones(event.id)
+            if existing_phones and response.contact_phone not in existing_phones:
+                return "ambiguous"  # evento já tem outra cliente — contradição, não força
+        response.event_id = event.id
+        return "auto_date"
+
+    if len(candidates) > 1:
+        if client:
+            client_event_ids = _client_real_event_ids(client.id)
+            matched = [e for e in candidates if e.id in client_event_ids]
+            if len(matched) == 1:
+                response.event_id = matched[0].id
+                return "auto_client"
+        return "ambiguous"
+
+    # Nenhum candidato na data informada: só resolve se a identidade da cliente apontar
+    # para um único evento futuro (a data digitada pode estar errada/desatualizada).
+    if client:
+        future_ids = _client_real_event_ids(client.id, future_only=True)
+        if len(future_ids) == 1:
+            response.event_id = next(iter(future_ids))
+            return "auto_client"
+        if len(future_ids) > 1:
+            return "ambiguous"
+
+    return None
+
+
+def retry_auto_link_pending() -> int:
+    """Reprocessa respostas sem evento vinculado (feature 126).
+
+    Chamada pelo ciclo de sincronização da agenda para cobrir o caso do evento ser
+    criado/importado DEPOIS da resposta já ter chegado. Nunca reprocessa uma resposta
+    que um humano já decidiu manualmente (``event_link_locked``). Retorna quantas
+    respostas foram vinculadas nesta chamada.
+    """
+    pending = FormResponse.query.filter(
+        FormResponse.event_id.is_(None),
+        FormResponse.event_link_locked.is_(False),
+        FormResponse.event_date.isnot(None),
+    ).all()
+    if not pending:
+        return 0
+    linked = 0
+    for response in pending:
+        result = _attempt_auto_link(response)
+        if result in ("auto_date", "auto_client"):
+            response.event_link_source = result
+            response.event_link_ambiguous = False
+            linked += 1
+        elif result == "ambiguous":
+            response.event_link_ambiguous = True
+    db.session.commit()
+    return linked
+
+
 # ── Motor dinâmico dos formulários públicos (feature 123) ────────────
 
 
@@ -337,9 +472,24 @@ def _submit_public_form(form_type: str):
     sections = _build_sections_dynamic(f, fields)
     meta = FORM_META[form_type]
     contact_name = (f.get(meta["name_key"]) or "").strip()
-    _save_response(
+    response = _save_response(
         form_type, contact_name, _build_phone_display(f, "whatsapp"),
         _parse_event_date(f.get("data_evento")), sections)
+    # Vínculo automático a um evento já existente na agenda (feature 126) — best-effort,
+    # nunca pode impedir a resposta de ser salva/enviada mesmo se algo aqui falhar.
+    try:
+        result = _attempt_auto_link(response)
+        if result in ("auto_date", "auto_client"):
+            response.event_link_source = result
+        elif result == "ambiguous":
+            response.event_link_ambiguous = True
+        if result:
+            db.session.commit()
+    except Exception:  # noqa: BLE001 — best-effort, a resposta já foi salva antes disso
+        db.session.rollback()
+        current_app.logger.exception(
+            "[formularios] falha ao tentar vínculo automático de evento (resposta %s)",
+            response.id)
     message = _build_message(meta["message_title"], sections)
     return render_template(
         "formularios/enviado.html", wa_link=_whatsapp_link(message), contact_name=contact_name)
@@ -436,6 +586,50 @@ def desassociar(response_id: int):
     response.client_id = None
     db.session.commit()
     flash("Associação removida.", "success")
+    return redirect(url_for("formularios.detail", response_id=response.id))
+
+
+@formularios_bp.route("/formularios/respostas/<int:response_id>/vincular-evento", methods=["POST"])
+@require_vendas
+def vincular_evento(response_id: int):
+    """Associa manualmente a resposta a um evento existente da agenda (feature 126).
+
+    Marca ``event_link_locked`` — a partir daqui, a automação nunca mais tenta decidir
+    sozinha por essa resposta (respeita a decisão humana).
+    """
+    response = FormResponse.query.get_or_404(response_id)
+    raw = request.form.get("event_id", "").strip()
+    if not raw.isdigit():
+        flash("Selecione um evento válido.", "error")
+        return redirect(url_for("formularios.detail", response_id=response.id))
+    event = CalendarEvent.query.get(int(raw))
+    if not event:
+        flash("Evento não encontrado.", "error")
+        return redirect(url_for("formularios.detail", response_id=response.id))
+    response.event_id = event.id
+    response.event_link_source = "manual"
+    response.event_link_ambiguous = False
+    response.event_link_locked = True
+    db.session.commit()
+    flash(f'Resposta vinculada ao evento "{event.title}".', "success")
+    return redirect(url_for("formularios.detail", response_id=response.id))
+
+
+@formularios_bp.route("/formularios/respostas/<int:response_id>/desvincular-evento", methods=["POST"])
+@require_vendas
+def desvincular_evento(response_id: int):
+    """Desfaz o vínculo de evento — automático ou manual (feature 126, FR-008).
+
+    Também marca ``event_link_locked``: uma vez que um humano decide desfazer, a
+    automação não pode religar sozinha ao mesmo evento no próximo ciclo de sincronização.
+    """
+    response = FormResponse.query.get_or_404(response_id)
+    response.event_id = None
+    response.event_link_source = None
+    response.event_link_ambiguous = False
+    response.event_link_locked = True
+    db.session.commit()
+    flash("Vínculo de evento removido.", "success")
     return redirect(url_for("formularios.detail", response_id=response.id))
 
 

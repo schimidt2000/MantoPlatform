@@ -84,9 +84,19 @@ def run_calendar_sync(lookahead_months: int = 6) -> dict:
             errors += 1
             results.append(f"{ym}: ERRO — {exc}")
 
+    # feature 126: reprocessa respostas de formulário ainda sem evento vinculado — cobre o
+    # caso do evento ter sido criado/importado DEPOIS da resposta já ter chegado.
+    linked_count = 0
+    try:
+        from app.formularios.routes import retry_auto_link_pending
+        linked_count = retry_auto_link_pending()
+    except Exception:  # noqa: BLE001 — best-effort, não pode derrubar o ciclo de sync
+        pass
+
     status = "ok" if not errors else "erro"
     detail = (
         f"{len(months)} mês(es) sincronizado(s). {errors} erro(s). "
+        + (f"{linked_count} resposta(s) de formulário vinculada(s) automaticamente. " if linked_count else "")
         + " | ".join(results[:8])
         + (" [...]" if len(results) > 8 else "")
     )
