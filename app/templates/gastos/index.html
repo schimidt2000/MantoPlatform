@@ -1,26 +1,46 @@
 {% extends "base.html" %}
 {% block title %}Gastos Extras{% endblock %}
 {% block page_title %}Gastos Extras{% endblock %}
+{% block page_subtitle %}
+  <span class="muted">{{ expenses|length }} gasto{{ 's' if expenses|length != 1 else '' }}{{ ' no histórico' if is_superadmin else '' }}</span>
+{% endblock %}
+{% block page_actions %}
+  <button type="button" class="btn btn-primary btn-sm" id="btn-toggle-novo" onclick="toggleNovoGasto()">+ Novo gasto</button>
+{% endblock %}
 
 {% block content %}
-<div style="display:flex; flex-direction:column; gap:16px; max-width:1000px;">
+{% set flashes = get_flashed_messages(with_categories=true) %}
+{% set has_error_flash = flashes|selectattr('0', 'equalto', 'error')|list|length > 0 %}
 
-  {# ── Totais (balanço) — só super admin ──────────────────────────── #}
-  {% if is_superadmin %}
-  <div class="kpi-grid" style="--cols:2;">
-    <div class="kpi" style="border:1px solid var(--line); border-radius:var(--r-md); padding:16px;">
-      <div class="kpi-label">Aprovados (entram no balanço)</div>
-      <div class="kpi-value" style="color:var(--success);">{{ fmt_brl(total_aprovado) }}</div>
+<div style="display:flex; flex-direction:column; gap:16px;">
+
+  {# ── Filtro por situação (clicável, feature 125 — mesmo padrão de /financeiro/pagamentos) ── #}
+  {% set n_pendente = expenses|selectattr('status', 'equalto', 'pendente')|list|length %}
+  {% set n_aprovado = expenses|selectattr('status', 'equalto', 'aprovado')|list|length %}
+  {% set n_rejeitado = expenses|selectattr('status', 'equalto', 'rejeitado')|list|length %}
+  <div class="kpi-grid" id="status-filter-bar" style="--cols:4;">
+    <div class="kpi kpi-filter" data-filter="all" role="button" tabindex="0" title="Mostrar todos">
+      <div class="kpi-label">Todos</div>
+      <div class="kpi-value">{{ expenses|length }}</div>
     </div>
-    <div class="kpi" style="border:1px solid var(--line); border-radius:var(--r-md); padding:16px;">
-      <div class="kpi-label">Pendentes (aguardando aprovação)</div>
-      <div class="kpi-value" style="color:var(--muted);">{{ fmt_brl(total_pendente) }}</div>
+    <div class="kpi kpi-filter" data-filter="pendente" role="button" tabindex="0" title="Filtrar pendentes">
+      <div class="kpi-label">Pendentes</div>
+      <div class="kpi-value" style="color:var(--muted);">{{ n_pendente }}</div>
+      {% if is_superadmin %}<div class="meta" style="font-size:11px;">{{ fmt_brl(total_pendente) }}</div>{% endif %}
+    </div>
+    <div class="kpi kpi-filter" data-filter="aprovado" role="button" tabindex="0" title="Filtrar aprovados">
+      <div class="kpi-label">Aprovados</div>
+      <div class="kpi-value" style="color:var(--green);">{{ n_aprovado }}</div>
+      {% if is_superadmin %}<div class="meta" style="font-size:11px;">{{ fmt_brl(total_aprovado) }}</div>{% endif %}
+    </div>
+    <div class="kpi kpi-filter" data-filter="rejeitado" role="button" tabindex="0" title="Filtrar rejeitados">
+      <div class="kpi-label">Rejeitados</div>
+      <div class="kpi-value" style="color:var(--red);">{{ n_rejeitado }}</div>
     </div>
   </div>
-  {% endif %}
 
-  {# ── Novo gasto ─────────────────────────────────────────────────── #}
-  <div class="panel">
+  {# ── Novo gasto (recolhível — feature 125) ─────────────────────────── #}
+  <div class="panel" id="novo-gasto-panel" style="display:{{ 'block' if has_error_flash else 'none' }};">
     <h3 style="margin:0 0 12px;">Registrar novo gasto</h3>
     <form method="post" action="{{ url_for('gastos.novo') }}" enctype="multipart/form-data">
       <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
@@ -116,7 +136,20 @@
 
   {# ── Lista ──────────────────────────────────────────────────────── #}
   <div class="panel">
-    <h3 style="margin:0 0 12px;">{{ 'Histórico de gastos' if is_superadmin else 'Meus gastos' }}</h3>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+      <h3 style="margin:0;">{{ 'Histórico de gastos' if is_superadmin else 'Meus gastos' }}</h3>
+      {% if expenses %}
+      <div style="position:relative; flex:1; max-width:340px; min-width:220px;">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="currentColor"
+             style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none;">
+          <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+        </svg>
+        <input type="search" id="gasto-search" autocomplete="off"
+               placeholder="Buscar por descrição, categoria, autor, fornecedor…"
+               class="form-control" style="width:100%; padding-left:32px;">
+      </div>
+      {% endif %}
+    </div>
     {% if expenses %}
     <div class="table-wrap">
       <table>
@@ -128,7 +161,7 @@
         </thead>
         <tbody>
           {% for e in expenses %}
-          <tr>
+          <tr class="gasto-row" data-status="{{ e.status }}">
             <td class="meta" style="white-space:nowrap;">{{ e.expense_date.strftime('%d/%m/%Y') }}</td>
             <td>
               <span class="strong">{{ e.description }}</span>
@@ -142,11 +175,11 @@
             <td class="strong" style="white-space:nowrap;">{{ fmt_brl(e.amount) }}</td>
             <td>
               {% if e.status == 'aprovado' %}
-                <span class="badge" style="background:var(--success); color:#fff;">Aprovado</span>
+                <span class="badge badge-green">Aprovado</span>
               {% elif e.status == 'rejeitado' %}
-                <span class="badge" style="background:var(--danger); color:#fff;">Rejeitado</span>
+                <span class="badge badge-red">Rejeitado</span>
               {% else %}
-                <span class="badge" style="background:var(--muted, #6b7280); color:#fff;">Pendente</span>
+                <span class="badge badge-amber">Pendente</span>
               {% endif %}
             </td>
             <td class="meta">
@@ -156,11 +189,11 @@
                 </div>
                 {% if e.status == 'aprovado' %}
                   {% if e.payment_status == 'pago' %}
-                    <span class="badge" style="background:var(--success); color:#fff; font-size:10px;">Pago</span>
+                    <span class="badge badge-green" style="font-size:10px;">Pago</span>
                   {% elif e.payment_status == 'no_banco' %}
-                    <span class="badge" style="background:#b45309; color:#fff; font-size:10px;">No banco</span>
+                    <span class="badge badge-blue" style="font-size:10px;">No banco</span>
                   {% else %}
-                    <span class="badge" style="background:var(--muted, #6b7280); color:#fff; font-size:10px;">A pagar</span>
+                    <span class="badge badge-gray" style="font-size:10px;">A pagar</span>
                   {% endif %}
                 {% endif %}
               {% else %}
@@ -191,14 +224,14 @@
               {% endif %}
             </td>
             {% if is_superadmin %}<td class="meta">{{ e.created_by.name if e.created_by else '—' }}</td>{% endif %}
-            <td>
+            <td data-noindex>
               {% if e.receipt_url %}
                 <a href="{{ e.receipt_url }}" target="_blank" class="btn btn-sm btn-ghost">Ver</a>
               {% else %}
                 <span class="muted small">—</span>
               {% endif %}
             </td>
-            <td style="white-space:nowrap; text-align:right;">
+            <td data-noindex style="white-space:nowrap; text-align:right;">
               {% if is_superadmin and e.status == 'pendente' %}
                 <form method="post" action="{{ url_for('gastos.aprovar', expense_id=e.id) }}" style="display:inline;">
                   <button type="submit" class="btn btn-sm btn-primary" style="font-size:11px; padding:3px 10px;">Aprovar</button>
@@ -218,11 +251,16 @@
             </td>
           </tr>
           {% endfor %}
+          <tr id="empty-filter-row" style="display:none;">
+            <td colspan="{{ 10 if is_superadmin else 9 }}" style="text-align:center; padding:24px; color:var(--muted);">
+              Nenhum gasto encontrado para esse filtro/busca. <a href="#" onclick="clearGastoSearch(); return false;">Limpar busca</a>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
     {% else %}
-      <p class="muted">Nenhum gasto registrado ainda. Use o formulário acima para adicionar o primeiro.</p>
+      <p class="muted">Nenhum gasto registrado ainda. Use o botão "+ Novo gasto" acima para adicionar o primeiro.</p>
     {% endif %}
   </div>
 
@@ -268,5 +306,85 @@ function toggleVinc(id) {
   var f = document.getElementById('vinc-form-' + id);
   if (f) f.style.display = (f.style.display === 'none' || !f.style.display) ? 'block' : 'none';
 }
+
+// ── Painel de "Novo gasto" recolhível (feature 125) ─────────────────────────
+function toggleNovoGasto() {
+  var panel = document.getElementById('novo-gasto-panel');
+  var btn = document.getElementById('btn-toggle-novo');
+  var open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? '+ Novo gasto' : '− Fechar formulário';
+  if (!open) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+(function () {
+  var btn = document.getElementById('btn-toggle-novo');
+  var panel = document.getElementById('novo-gasto-panel');
+  if (btn && panel && panel.style.display !== 'none') btn.textContent = '− Fechar formulário';
+})();
+
+// ── Filtro por situação (cartões) + busca por texto (feature 125) ───────────
+const GASTO_FILTER_KEY = 'gastos_filtro';
+let currentGastoFilter = localStorage.getItem(GASTO_FILTER_KEY) || 'all';
+
+function normTxtGasto(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function buildGastoRowIndex(tr) {
+  var tds = tr.querySelectorAll('td:not([data-noindex])');
+  var txt = '';
+  tds.forEach(function (td) { txt += ' ' + td.textContent; });
+  tr.dataset.search = normTxtGasto(txt.replace(/\s+/g, ' '));
+}
+document.querySelectorAll('tr.gasto-row').forEach(buildGastoRowIndex);
+
+var gastoSearchInput = document.getElementById('gasto-search');
+var currentGastoSearch = '';
+
+function rowMatchesGastoFilter(tr, f) {
+  return f === 'all' || tr.dataset.status === f;
+}
+function rowMatchesGastoSearch(tr) {
+  if (!currentGastoSearch) return true;
+  return (tr.dataset.search || '').indexOf(currentGastoSearch) !== -1;
+}
+
+function applyGastoView() {
+  var visible = 0;
+  document.querySelectorAll('tr.gasto-row').forEach(function (tr) {
+    var show = rowMatchesGastoFilter(tr, currentGastoFilter) && rowMatchesGastoSearch(tr);
+    tr.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  document.querySelectorAll('#status-filter-bar .kpi-filter').forEach(function (c) {
+    c.classList.toggle('kpi-active', c.dataset.filter === currentGastoFilter);
+  });
+  var emptyRow = document.getElementById('empty-filter-row');
+  if (emptyRow) emptyRow.style.display = (visible === 0) ? '' : 'none';
+}
+
+function applyGastoFilter(f) {
+  currentGastoFilter = (f === currentGastoFilter && f !== 'all') ? 'all' : f;
+  localStorage.setItem(GASTO_FILTER_KEY, currentGastoFilter);
+  applyGastoView();
+}
+function clearGastoSearch() {
+  if (gastoSearchInput) gastoSearchInput.value = '';
+  currentGastoSearch = '';
+  applyGastoView();
+}
+if (gastoSearchInput) {
+  gastoSearchInput.addEventListener('input', function () {
+    currentGastoSearch = normTxtGasto(gastoSearchInput.value.trim());
+    applyGastoView();
+  });
+}
+document.querySelectorAll('#status-filter-bar .kpi-filter').forEach(function (card) {
+  card.addEventListener('click', function () { applyGastoFilter(card.dataset.filter); });
+  card.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyGastoFilter(card.dataset.filter); }
+  });
+});
+applyGastoView();
 </script>
 {% endblock %}

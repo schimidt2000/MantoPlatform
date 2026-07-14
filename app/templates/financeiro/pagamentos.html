@@ -390,14 +390,8 @@ document.querySelectorAll('.adv-edit-btn').forEach(function (btn) {
   }
   .copy-btn:hover { color: var(--accent); background: var(--surface-2); }
   .copy-btn.copied { color: #16a34a; }
-
-  .kpi-filter { cursor: pointer; transition: box-shadow .15s, transform .05s, border-color .15s; user-select: none; }
-  .kpi-filter:hover { box-shadow: 0 2px 10px rgba(0,0,0,.10); }
-  .kpi-filter:active { transform: translateY(1px); }
-  .kpi-filter.kpi-active {
-    border-color: var(--accent) !important;
-    box-shadow: 0 0 0 2px var(--accent);
-  }
+  /* .kpi-filter/.kpi-active: promovidas para style.css (feature 125) — usadas também em
+     gastos/index.html; fonte única. */
 </style>
 
 <script>
