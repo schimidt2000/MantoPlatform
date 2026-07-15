@@ -1291,6 +1291,9 @@ class ClientFeedback(db.Model):
     score        = db.Column(db.Integer, nullable=False)  # 1–5
     tags         = db.Column(db.Text, nullable=True)      # JSON: lista de cards marcados
     comment      = db.Column(db.Text, nullable=True)
+    # Nome de quem respondeu (feature 132) — obrigatório no formulário público a partir
+    # dessa feature; nulo em avaliações enviadas antes dela (nunca retroativamente exigido).
+    client_name  = db.Column(db.String(200), nullable=True)
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     event = db.relationship("CalendarEvent", lazy=True)

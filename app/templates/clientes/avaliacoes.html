@@ -143,6 +143,7 @@
         {% else %}
           <span class="muted" style="font-size:13px;">Cliente não identificada</span>
         {% endif %}
+        <span class="muted" style="font-size:12px;">· respondido por {{ fb.client_name or 'nome não informado' }}</span>
         {% if fb.event %}
           <span class="muted" style="font-size:12px;">·
             <a href="/events/{{ fb.event.id }}" style="color:inherit;">{{ fb.event.title }}</a>
@@ -178,6 +179,7 @@
       {% else %}
         <span class="muted" style="font-size:13px;">Cliente não identificada</span>
       {% endif %}
+      <span class="muted" style="font-size:12px;">· respondido por {{ fb.client_name or 'nome não informado' }}</span>
       {% if fb.event %}
         <span class="muted" style="font-size:12px;">·
           <a href="/events/{{ fb.event.id }}" style="color:inherit;">{{ fb.event.title }}</a>

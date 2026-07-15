@@ -66,6 +66,13 @@
       box-sizing: border-box; background: var(--surface); margin-bottom: 24px;
     }
     .fb-comment-box:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(84,69,150,.15); }
+    .fb-name-input {
+      width: 100%; padding: 12px 14px;
+      border: 1px solid var(--line); border-radius: var(--r-md);
+      font-size: 14px; font-family: inherit;
+      box-sizing: border-box; background: var(--surface); margin-bottom: 24px;
+    }
+    .fb-name-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(84,69,150,.15); }
     .fb-submit {
       display: block; width: 100%; padding: 16px;
       background: var(--accent); color: #fff; border: none;
@@ -105,9 +112,13 @@
       <div class="fb-error">{{ error }}</div>
     {% endif %}
 
-    <div class="fb-question">Como foi a experiência com a equipe da Manto Produções?</div>
-
     <form method="POST" id="feedbackForm">
+      <label class="fb-comment-label" for="clientNameInput">Seu nome</label>
+      <input type="text" class="fb-name-input" name="client_name" id="clientNameInput"
+             value="{{ client_name|default('') }}" placeholder="Como podemos te chamar?" required maxlength="200">
+
+      <div class="fb-question">Como foi a experiência com a equipe da Manto Produções?</div>
+
       <div class="fb-star-group" id="starGroup">
         {% for val in [5,4,3,2,1] %}
         <input type="radio" name="score" id="score{{ val }}" value="{{ val }}">
