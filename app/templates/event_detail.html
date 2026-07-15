@@ -206,6 +206,18 @@
     return linhas.join('\n');
   }
 
+  function buildFeedbackMsg(url) {
+    return [
+      'Olá! Como vai?',
+      'Obrigado por contar com a Manto para um momento tão mágico e especial!',
+      'Se puder, deixe uma avaliação no link abaixo. Seu feedback faz toda a diferença! 💙',
+      '',
+      '👉 ' + url,
+      '',
+      'Até a próxima!',
+    ].join('\n');
+  }
+
   function copiar(texto, btn) {
     const original = btn.innerHTML;
     const ok = function () {
@@ -239,7 +251,7 @@
     if (bf && !bf.disabled) bf.addEventListener('click', function () {
       fetch('/events/{{ event.id }}/gerar-link-feedback', { method: 'POST' })
         .then(function (r) { return r.json(); })
-        .then(function (data) { if (data.url) copiar(data.url, bf); })
+        .then(function (data) { if (data.url) copiar(buildFeedbackMsg(data.url), bf); })
         .catch(function () { /* ignore */ });
     });
   });
@@ -2200,6 +2212,7 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
         <span style="color:#f59e0b; font-size:15px;">
           {% for i in range(fb.score) %}★{% endfor %}{% for i in range(5 - fb.score) %}☆{% endfor %}
         </span>
+        <span style="font-weight:600; font-size:13px;">{{ fb.client_name or 'Nome não informado' }}</span>
         <span class="meta">{{ fb.submitted_at.strftime('%d/%m/%Y %H:%M') }}</span>
       </div>
       {% if fb.tags_list %}

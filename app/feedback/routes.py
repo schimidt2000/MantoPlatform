@@ -94,6 +94,18 @@ def avaliar_submit(token: str):
     if not event:
         return render_template("feedback/invalid.html"), 404
 
+    client_name = (request.form.get("client_name") or "").strip()[:200]
+    if not client_name:
+        return render_template(
+            "feedback/public.html",
+            event=event,
+            positive_tags=POSITIVE_TAGS,
+            attention_tags=ATTENTION_TAGS,
+            submitted=False,
+            client_name=client_name,
+            error="Informe seu nome antes de enviar a avaliação.",
+        )
+
     raw_score = (request.form.get("score") or "").strip()
     try:
         score = int(raw_score)
@@ -106,6 +118,7 @@ def avaliar_submit(token: str):
             positive_tags=POSITIVE_TAGS,
             attention_tags=ATTENTION_TAGS,
             submitted=False,
+            client_name=client_name,
             error="Selecione uma nota de 1 a 5 estrelas.",
         )
 
@@ -119,6 +132,7 @@ def avaliar_submit(token: str):
             score=score,
             tags=json.dumps(selected_tags) if selected_tags else None,
             comment=comment or None,
+            client_name=client_name,
         )
         db.session.add(feedback)
         db.session.commit()
@@ -133,6 +147,7 @@ def avaliar_submit(token: str):
             positive_tags=POSITIVE_TAGS,
             attention_tags=ATTENTION_TAGS,
             submitted=False,
+            client_name=client_name,
             error="Não foi possível enviar agora. Tente novamente em instantes.",
         )
 
