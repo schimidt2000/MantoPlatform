@@ -838,3 +838,42 @@ def migrar_arquivos_start():
     else:
         flash("A migração já está em andamento.", "warning")
     return redirect(url_for("admin.migrar_arquivos"))
+
+
+@admin_bp.route("/importar-catalogo", methods=["GET"])
+@login_required
+@require_superadmin
+def importar_catalogo():
+    """Página para (re)importar o catálogo de personagens do CSV do WordPress (feature 133).
+
+    Precisa ser disparado por aqui (botão, rodando no próprio servidor) — rodar o comando
+    CLI a partir de uma máquina local, apontando só o DATABASE_URL para produção, salva as
+    fotos baixadas no disco da máquina local, não no volume real do servidor.
+    """
+    from app.catalogo.importer import import_status
+    from app.models import CatalogItem
+
+    return render_template(
+        "admin_importar_catalogo.html",
+        settings=get_settings(),
+        active="users",
+        title="Admin - Importar catálogo",
+        total_items=CatalogItem.query.count(),
+        status=import_status,
+    )
+
+
+@admin_bp.route("/importar-catalogo", methods=["POST"])
+@login_required
+@require_superadmin
+def importar_catalogo_start():
+    """Dispara a (re)importação do catálogo em segundo plano."""
+    from app.catalogo.importer import start_background_import
+
+    csv_path = "Produtos Catalogo/wc-product-export-16-7-2026-1784216390934.csv"
+    started = start_background_import(current_app._get_current_object(), csv_path)
+    if started:
+        flash("Importação do catálogo iniciada. Acompanhe o progresso nesta página.", "success")
+    else:
+        flash("A importação já está em andamento.", "warning")
+    return redirect(url_for("admin.importar_catalogo"))

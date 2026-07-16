@@ -12,6 +12,7 @@ import io
 import json
 import os
 import re
+import threading
 import unicodedata
 from datetime import datetime
 
@@ -24,6 +25,17 @@ from app.storage import save_file
 
 HEAVY_IMAGE_BYTES = 300 * 1024  # acima disso entra no relatório de "imagens pesadas"
 DOWNLOAD_TIMEOUT = 30
+
+# Status compartilhado da importação (app roda em instância única) — lido pela página de
+# progresso do admin. O download de imagens só escreve no disco/volume de onde o processo
+# Flask está rodando de fato, por isso a importação PRECISA ser disparada a partir do
+# próprio servidor (botão do admin), nunca de uma máquina local apontando só o
+# DATABASE_URL para produção — os arquivos ficariam no disco local, não no volume.
+import_status = {
+    "running": False, "done": False, "total": 0, "processed": 0,
+    "imported": 0, "started_at": None, "finished_at": None, "report": None,
+}
+_status_lock = threading.Lock()
 
 
 def _slugify(text: str) -> str:
@@ -95,13 +107,15 @@ def _get_saved_file_size(url: str) -> int | None:
         return None
 
 
-def run_import(csv_path: str, limit: int = 0, echo=None) -> dict:
+def run_import(csv_path: str, limit: int = 0, echo=None, status: dict | None = None) -> dict:
     """Importa o catálogo a partir do CSV exportado do WordPress.
 
     Args:
         csv_path: caminho do CSV exportado (WooCommerce Product CSV Export).
         limit: máximo de linhas a processar (0 = todas).
         echo: callback opcional ``(str) -> None`` para log de progresso.
+        status: dicionário opcional (``import_status``) atualizado a cada item — usado
+            pela página de progresso do admin quando a importação roda em segundo plano.
 
     Returns:
         Dicionário de contagens da execução.
@@ -113,6 +127,10 @@ def run_import(csv_path: str, limit: int = 0, echo=None) -> dict:
 
     with open(csv_path, encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
+
+    if status is not None:
+        with _status_lock:
+            status["total"] = min(limit, len(rows)) if limit else len(rows)
 
     used_slugs = {s for (s,) in db.session.query(CatalogItem.slug).all()}
     existing_wp_ids = {
@@ -141,6 +159,10 @@ def run_import(csv_path: str, limit: int = 0, echo=None) -> dict:
             break
         processed += 1
         counts["processed"] += 1
+        if status is not None:
+            with _status_lock:
+                status["processed"] = processed
+                status["imported"] = counts["imported"]
 
         wp_id_raw = (row.get("ID") or "").strip()
         wp_id = int(wp_id_raw) if wp_id_raw.isdigit() else None
@@ -223,7 +245,41 @@ def run_import(csv_path: str, limit: int = 0, echo=None) -> dict:
         if wp_id:
             existing_wp_ids.add(wp_id)
         counts["imported"] += 1
+        if status is not None:
+            with _status_lock:
+                status["imported"] = counts["imported"]
 
     counts["heavy_images"] = heavy_images
     counts["errors"] = errors
     return counts
+
+
+def start_background_import(app, csv_path: str) -> bool:
+    """Dispara a importação em segundo plano (não bloqueia). Retorna False se já estiver
+    rodando. Precisa ser chamada a partir do próprio processo Flask que serve produção —
+    é o único jeito de as fotos baixadas caírem no volume/armazenamento certo."""
+    with _status_lock:
+        if import_status["running"]:
+            return False
+        import_status.update(
+            running=True, done=False, total=0, processed=0, imported=0,
+            started_at=datetime.utcnow(), finished_at=None, report=None,
+        )
+
+    def _run():
+        with app.app_context():
+            try:
+                report = run_import(csv_path, status=import_status)
+                with _status_lock:
+                    import_status.update(
+                        running=False, done=True, finished_at=datetime.utcnow(), report=report,
+                    )
+            except Exception as exc:
+                with _status_lock:
+                    import_status.update(
+                        running=False, done=True, finished_at=datetime.utcnow(),
+                        report={"error": str(exc)},
+                    )
+
+    threading.Thread(target=_run, daemon=True).start()
+    return True
