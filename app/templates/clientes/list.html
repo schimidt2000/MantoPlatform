@@ -7,6 +7,9 @@
 {% endblock %}
 {% block page_actions %}
   <a href="/clientes/avaliacoes" class="btn btn-secondary">⭐ Ver avaliações</a>
+  {% if eff_has_role('SUPERADMIN') %}
+    <a href="/admin/importar-catalogo" class="btn btn-ghost" title="(Re)importar o catálogo de personagens do WordPress">📖 Importar catálogo</a>
+  {% endif %}
 {% endblock %}
 
 {% block content %}
