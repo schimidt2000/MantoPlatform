@@ -24,6 +24,31 @@ def register_commands(app):
         report = import_kommo_csv(path)
         click.echo(f"Importação do Kommo concluída: {report}")
 
+    @app.cli.command("import-wordpress-catalog")
+    @click.argument(
+        "path",
+        default="Produtos Catalogo/wc-product-export-16-7-2026-1784216390934.csv",
+    )
+    @click.option("--limit", type=int, default=0, help="Importa no máximo N produtos (0 = todos).")
+    def import_wordpress_catalog(path, limit):
+        """Importa o catálogo de personagens exportado do WordPress — feature 133."""
+        from app.catalogo.importer import run_import
+        report = run_import(path, limit=limit, echo=click.echo)
+        click.echo(f"\n{'-'*60}")
+        click.echo(f"  Processados          : {report['processed']}")
+        click.echo(f"  Importados           : {report['imported']}")
+        click.echo(f"  Não publicados       : {report['skipped_unpublished']}")
+        click.echo(f"  Sem conteúdo         : {report['skipped_no_content']}")
+        click.echo(f"  Já importados antes  : {report['skipped_duplicate']}")
+        click.echo(f"  Sem nenhuma imagem   : {report['skipped_no_images']}")
+        click.echo(f"  Imagens baixadas     : {report['images_downloaded']}")
+        click.echo(f"  Imagens com falha    : {report['images_failed']}")
+        if report["heavy_images"]:
+            click.echo(f"  Imagens ainda pesadas (>300KB): {len(report['heavy_images'])}")
+            for line in report["heavy_images"]:
+                click.echo(f"    - {line}")
+        click.echo(f"{'-'*60}\n")
+
     @app.cli.command("backfill-form-event-links")
     def backfill_form_event_links():
         """Tenta vincular automaticamente respostas de formulário antigas ainda sem

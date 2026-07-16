@@ -1697,3 +1697,73 @@ class FormFieldDefinition(db.Model):
             return json.loads(self.options or "[]")
         except (ValueError, TypeError):
             return []
+
+
+# ── Catálogo público de personagens (feature 133) ───────────────────────────
+
+catalog_item_categories = db.Table(
+    "catalog_item_categories",
+    db.Column("item_id", db.Integer, db.ForeignKey("catalog_items.id"), primary_key=True),
+    db.Column("category_id", db.Integer, db.ForeignKey("catalog_categories.id"), primary_key=True),
+)
+
+
+class CatalogCategory(db.Model):
+    """Seção/categoria do catálogo (ex.: "Natal", "Princesas") — importada do WordPress."""
+    __tablename__ = "catalog_categories"
+
+    id   = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    slug = db.Column(db.String(120), nullable=False, unique=True)
+
+
+class CatalogItem(db.Model):
+    """Item do catálogo público (personagem/show) — importado do export do WordPress.
+
+    ``wp_product_id`` é a chave de deduplicação: reimportar o mesmo CSV não duplica itens
+    já trazidos. Sem tela de edição nesta feature (feature 133) — ``is_active`` já existe
+    para que uma futura tela de gestão não precise de uma migration nova só pra isso.
+    """
+    __tablename__ = "catalog_items"
+
+    id                      = db.Column(db.Integer, primary_key=True)
+    wp_product_id           = db.Column(db.Integer, nullable=True, unique=True)
+    name                    = db.Column(db.String(200), nullable=False)
+    slug                    = db.Column(db.String(220), nullable=False, unique=True)
+    short_description_html = db.Column(db.Text, nullable=True)
+    tags                    = db.Column(db.Text, nullable=True)  # JSON: lista de strings, só para busca
+    is_active               = db.Column(db.Boolean, default=True, nullable=False)
+    imported_at             = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    categories = db.relationship("CatalogCategory", secondary=catalog_item_categories, lazy=True)
+    images     = db.relationship(
+        "CatalogItemImage", backref="item", lazy=True,
+        cascade="all, delete-orphan", order_by="CatalogItemImage.position",
+    )
+
+    @property
+    def tags_list(self) -> list[str]:
+        import json as _json
+        try:
+            return _json.loads(self.tags) if self.tags else []
+        except (ValueError, TypeError):
+            return []
+
+    @property
+    def cover_image(self) -> "CatalogItemImage | None":
+        return self.images[0] if self.images else None
+
+
+class CatalogItemImage(db.Model):
+    """Uma foto de um item do catálogo — posição 0 é a capa (usada no Open Graph)."""
+    __tablename__ = "catalog_item_images"
+    __table_args__ = (
+        db.Index("ix_catalog_item_images_item_id", "item_id"),
+    )
+
+    id               = db.Column(db.Integer, primary_key=True)
+    item_id          = db.Column(db.Integer, db.ForeignKey("catalog_items.id"), nullable=False)
+    url              = db.Column(db.String(500), nullable=False)
+    original_url     = db.Column(db.String(500), nullable=True)
+    position         = db.Column(db.Integer, default=0, nullable=False)
+    file_size_bytes  = db.Column(db.Integer, nullable=True)
