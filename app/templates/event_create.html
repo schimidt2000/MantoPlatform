@@ -97,10 +97,11 @@
 
 {% block content %}
 
-{% if errors %}
-<div class="alert alert-error" id="form-errors" tabindex="-1" style="margin-bottom:16px;">
+<div class="alert alert-error" id="form-errors" tabindex="-1"
+     style="margin-bottom:16px; {{ '' if errors else 'display:none;' }}">
   {% for e in errors %}<div>{{ e }}</div>{% endfor %}
 </div>
+{% if errors %}
 <script>
   // Erro sempre visível: ao recarregar com falha, leva a tela até a mensagem.
   (function () {
@@ -1050,6 +1051,7 @@ function escHtml(s) {
     document.querySelectorAll('#event-form .field-error')
       .forEach(el => el.classList.remove('field-error'));
 
+    const box = document.getElementById('form-errors');
     const titleEl  = document.getElementById('event-title');
     const dateEl   = form.querySelector('[name="event_date"]');
     const startEl  = document.getElementById('event-start');
@@ -1060,42 +1062,70 @@ function escHtml(s) {
     const methodEl = document.getElementById('pay-method-hidden');
     const instEl   = form.querySelector('[name="payment_installments"]');
 
+    // Cada item é {el, msg} — msg vira texto explícito no banner de erro (não só borda/tremor,
+    // que já se mostrou fácil demais de passar despercebido em campos como um <select>).
     const invalid = [];
-    if (titleEl && !titleEl.value.trim()) invalid.push(titleEl);
-    if (dateEl  && !dateEl.value.trim())  invalid.push(dateEl);
-    if (startEl && !startEl.value) invalid.push(startEl);
-    if (endEl   && !endEl.value)   invalid.push(endEl);
+    if (titleEl && !titleEl.value.trim()) invalid.push({ el: titleEl, msg: 'Título do evento é obrigatório.' });
+    if (dateEl  && !dateEl.value.trim())  invalid.push({ el: dateEl, msg: 'Data do evento é obrigatória.' });
+    if (startEl && !startEl.value) invalid.push({ el: startEl, msg: 'Horário de início é obrigatório.' });
+    if (endEl   && !endEl.value)   invalid.push({ el: endEl, msg: 'Horário de fim é obrigatório.' });
     // Fim < início é permitido (evento vira a noite, termina no dia seguinte).
     // Só bloqueia quando início == fim (duração zero).
     if (startEl && endEl && startEl.value && endEl.value && endEl.value === startEl.value)
-      invalid.push(endEl);
+      invalid.push({ el: endEl, msg: 'Horário de fim deve ser diferente do início.' });
     // Cortesia/permuta dispensa os valores de venda (feature 095)
     const cortesiaOn = (document.getElementById('cortesia-hidden') || {}).value === '1';
     if (!cortesiaOn) {
       // Valor antes do desconto obrigatório (> 0)
-      if (grossEl && (!grossEl.value.trim() || parseBRL(grossEl.value) <= 0)) invalid.push(grossEl);
+      if (grossEl && (!grossEl.value.trim() || parseBRL(grossEl.value) <= 0))
+        invalid.push({ el: grossEl, msg: 'Informe o valor antes do desconto.' });
       // Valor de venda obrigatório (> 0)
-      if (saleEl && (!saleEl.value.trim() || parseBRL(saleEl.value) <= 0)) invalid.push(saleEl);
+      if (saleEl && (!saleEl.value.trim() || parseBRL(saleEl.value) <= 0))
+        invalid.push({ el: saleEl, msg: 'Informe o valor de venda.' });
     }
     // Vendedor responsável obrigatório
-    if (sellerEl && !sellerEl.value) invalid.push(sellerEl);
+    if (sellerEl && !sellerEl.value) invalid.push({ el: sellerEl, msg: 'Selecione o vendedor responsável.' });
     // Parcelas obrigatórias quando "Dividido no PIX"
     if (methodEl && methodEl.value === 'pix_parcelado' && instEl) {
       const n = parseInt(instEl.value, 10);
-      if (!instEl.value || isNaN(n) || n < 2 || n > 12) invalid.push(instEl);
+      if (!instEl.value || isNaN(n) || n < 2 || n > 12)
+        invalid.push({ el: instEl, msg: 'Informe o número de parcelas (2 a 12).' });
     }
 
     if (invalid.length) {
       e.preventDefault();
-      invalid.forEach(markError);
-      const first = invalid[0];
+      invalid.forEach(function (item) { markError(item.el); });
+
+      if (box) {
+        box.innerHTML = '';
+        const intro = document.createElement('div');
+        intro.textContent = 'Confira antes de enviar:';
+        intro.style.fontWeight = '700';
+        intro.style.marginBottom = '4px';
+        box.appendChild(intro);
+        invalid.forEach(function (item) {
+          const line = document.createElement('div');
+          line.textContent = item.msg;
+          box.appendChild(line);
+        });
+        box.style.display = '';
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        try { box.focus({ preventScroll: true }); } catch (_) {}
+      }
+
+      const first = invalid[0].el;
       first.classList.remove('shake');
       void first.offsetWidth;        // reinicia a animação
       first.classList.add('shake');
-      first.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      try { first.focus(); } catch (_) {}
+      if (!box) {
+        first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        try { first.focus(); } catch (_) {}
+      }
       return;
     }
+
+    // Envio válido: some com qualquer aviso de tentativa anterior.
+    if (box) box.style.display = 'none';
 
     // Tudo certo: trava duplo envio e mostra carregamento
     submitting = true;
