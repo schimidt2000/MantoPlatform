@@ -168,7 +168,7 @@
   </header>
 
   <div class="stats">
-    <div class="stat"><div class="stat-value">24</div><div class="stat-label">mudanças no ar</div></div>
+    <div class="stat"><div class="stat-value">25</div><div class="stat-label">mudanças no ar</div></div>
     <div class="stat"><div class="stat-value">8</div><div class="stat-label">dias de trabalho</div></div>
     <div class="stat"><div class="stat-value">6</div><div class="stat-label">áreas do sistema</div></div>
     <div class="stat"><div class="stat-value">0</div><div class="stat-label">quebras no ar</div></div>
@@ -494,6 +494,18 @@
           <span class="entry-tag tag-qualidade">Qualidade</span>
         </div>
         <div class="entry-desc">Motivado por um caso real: uma vendedora clicou em "Adicionar à Agenda" e pareceu que nada tinha acontecido. A tela de novo evento verificava alguns campos (valor de venda, vendedor responsável, parcelas) só com uma borda vermelha discreta, sem nenhum texto — agora, quando falta preencher algo, aparece uma mensagem clara dizendo exatamente o quê, com a tela rolando até ela.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-financeiro"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">135</span>
+          <span class="entry-title">Calculadora de desconto calculava valor errado</span>
+          <span class="entry-tag tag-financeiro">Financeiro</span>
+        </div>
+        <div class="entry-desc">Descoberto na mesma investigação: ao digitar o valor do desconto em reais na tela de novo evento, a calculadora às vezes registrava um valor 10x menor do que o digitado (ex.: digitar R$ 4.250,00 de desconto virava R$ 425,00 no cálculo, mesmo aparecendo certo na tela). Corrigido — o valor calculado agora sempre bate com o que está escrito no campo.</div>
       </div>
     </div>
   </div>

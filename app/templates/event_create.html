@@ -908,7 +908,7 @@ function toggleDiscount() {
 
 function calcDesconto(src) {
   const saleEl = document.getElementById('sale-value');
-  const base   = parseBRL(saleEl.value);
+  const base   = MoneyMask.parseNumber(saleEl);
   const pctEl  = document.getElementById('desc-pct');
   const valEl  = document.getElementById('desc-val');
   const resEl  = document.getElementById('desc-result');
@@ -918,7 +918,11 @@ function calcDesconto(src) {
     _descontoVal = Math.round(base * pct / 100 * 100) / 100;
     valEl.value  = formatBRL(_descontoVal);
   } else {
-    _descontoVal = parseBRL(valEl.value);
+    // MoneyMask.parseNumber lê os dígitos direto (ignora separadores), então dá o valor
+    // certo mesmo neste evento 'input' disparando ANTES da própria máscara reformatar o
+    // campo — ao contrário de parseBRL(valEl.value), que lia a formatação ainda não
+    // atualizada e ficava sistematicamente errada (ex.: "425,00" em vez de "4.250,00").
+    _descontoVal = MoneyMask.parseNumber(valEl);
     pctEl.value  = base > 0 ? (_descontoVal / base * 100).toFixed(1) : '0';
   }
   const novo = base - _descontoVal;
@@ -927,7 +931,7 @@ function calcDesconto(src) {
 
 function applyDesconto() {
   const saleEl = document.getElementById('sale-value');
-  const base   = parseBRL(saleEl.value);
+  const base   = MoneyMask.parseNumber(saleEl);
   if (!_descontoVal || !base) return;
   saleEl.value = formatBRL(base - _descontoVal);
   const prev = document.getElementById('desconto-preview');
