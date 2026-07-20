@@ -514,6 +514,38 @@ class EventPayment(db.Model):
     event = db.relationship("CalendarEvent", lazy=True)
 
 
+class EventReimbursement(db.Model):
+    """Valor que a Manto adiantou num evento (bagagem, alimentação etc.) e precisa cobrar
+    de volta da cliente — separado do valor de venda e de EventPayment (feature 136).
+    """
+    __tablename__ = "event_reimbursements"
+    __table_args__ = (
+        db.Index("ix_event_reimbursements_event_id", "event_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
+    description = db.Column(db.String(200), nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)  # valor a cobrar da cliente
+    invoice_file_path = db.Column(db.String(300), nullable=True)  # nota fiscal do gasto original
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    # Preenchidos só quando cobrado (feature 136) — collected_at nulo = pendente.
+    collected_at = db.Column(db.DateTime, nullable=True)
+    collected_amount = db.Column(db.Numeric(12, 2), nullable=True)
+    receipt_file_path = db.Column(db.String(300), nullable=True)  # comprovante do reembolso recebido
+    collected_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    event = db.relationship("CalendarEvent", lazy=True)
+    created_by = db.relationship("User", foreign_keys=[created_by_id], lazy=True)
+    collected_by = db.relationship("User", foreign_keys=[collected_by_id], lazy=True)
+
+    @property
+    def is_collected(self) -> bool:
+        return self.collected_at is not None
+
+
 class EventInstallment(db.Model):
     """Parcela de recebimento planejada de um evento (cronograma data + valor) — feature 065.
 

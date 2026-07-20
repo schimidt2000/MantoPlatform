@@ -673,6 +673,19 @@ def create_app():
                 )
             )
 
+        # ── Comercial: reembolsos pendentes (feature 136) ──────────
+        # Sem filtro de data: um reembolso continua pendente até ser cobrado,
+        # não importa se o evento já passou (decisão registrada no plan.md).
+        pending_reembolsos: list = []
+        if show_comercial:
+            from app.models import EventReimbursement
+            pending_reembolsos = (
+                EventReimbursement.query
+                .filter(EventReimbursement.collected_at.is_(None))
+                .order_by(EventReimbursement.created_at.asc())
+                .all()
+            )
+
         events_sem_valor: list = []
         events_sem_cliente: list = []
         if show_comercial:
@@ -757,6 +770,7 @@ def create_app():
             form_responses_sem_cliente=form_responses_sem_cliente,
             form_responses_precisam_revisao=form_responses_precisam_revisao,
             pending_payments=pending_payments,
+            pending_reembolsos=pending_reembolsos,
             show_casting=show_casting,
             show_figurino=show_figurino,
             show_ensaio=show_ensaio,

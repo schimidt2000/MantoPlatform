@@ -266,6 +266,31 @@
     </label>
     <div class="meta">Eventos SHOW sempre geram ensaio automaticamente.</div>
   </div>
+
+  {# ── Reembolso a cobrar da cliente (opcional — feature 136) ─────────────── #}
+  <div class="form-group" style="margin-bottom:0; margin-top:16px;">
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:400;">
+      <input type="checkbox" name="has_reembolso" value="1" id="has-reembolso"
+             {{ 'checked' if old.get('has_reembolso') }} onchange="toggleReembolso()">
+      <span>Este evento terá reembolso de despesas da cliente? (bagagem, alimentação etc.)</span>
+    </label>
+    <div id="reembolso-fields"
+         style="display:{{ 'block' if old.get('has_reembolso') else 'none' }}; margin-top:10px; padding:14px; background:var(--surface-2); border-radius:var(--r-md); border:1px solid var(--line); max-width:420px;">
+      <div class="form-group">
+        <label>Descrição</label>
+        <input type="text" name="reembolso_description" placeholder="Ex.: Bagagem extra" value="{{ old.get('reembolso_description') or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Valor a cobrar (R$)</label>
+        <input type="text" inputmode="decimal" name="reembolso_amount" class="brl-input" placeholder="0,00" value="{{ old.get('reembolso_amount') or '' }}">
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Nota fiscal do gasto <span class="meta">(opcional)</span></label>
+        <input type="file" name="reembolso_invoice_file" accept=".pdf,.png,.jpg,.jpeg">
+      </div>
+      <div class="meta" style="margin-top:6px;">Pode deixar em branco e adicionar depois, direto na página do evento.</div>
+    </div>
+  </div>
 </div>
 
 {# ══════════════════════════════════════════════════
