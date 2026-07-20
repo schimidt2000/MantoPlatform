@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_actions %}
+  <a href="/admin/catalogo" class="btn btn-secondary">&larr; Voltar</a>
+{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 720px;">
+  <form method="post" enctype="multipart/form-data">
+
+    <div class="form-group">
+      <label for="catalog-name">Nome do produto <span style="color: var(--red);">*</span></label>
+      <input type="text" id="catalog-name" name="name"
+             value="{{ old.get('name', item.name if item else '') }}"
+             placeholder="Ex: Frozen — Elsa e Anna" required autofocus>
+    </div>
+
+    <div class="form-group">
+      <label for="catalog-description">Descrição</label>
+      <textarea id="catalog-description" name="description" rows="4"
+                placeholder="Texto curto de apresentação — aceita formatação simples (negrito, quebra de linha).">{{ old.get('description', item.short_description_html if item else '') }}</textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="catalog-tags">Tags de busca <span class="meta">(separadas por vírgula)</span></label>
+      <input type="text" id="catalog-tags" name="tags"
+             value="{{ old.get('tags', (item.tags_list | join(', ')) if item else '') }}"
+             placeholder="Ex: princesa, natal, show infantil">
+    </div>
+
+    <div class="form-group">
+      <label>Categorias</label>
+      <div style="display:flex; flex-wrap:wrap; gap: 10px;">
+        {% for c in categories %}
+          <label style="display:flex; align-items:center; gap:6px; font-weight:400; cursor:pointer;">
+            <input type="checkbox" name="category_ids[]" value="{{ c.id }}"
+                   {% if c.id in selected_category_ids %}checked{% endif %}>
+            {{ c.name }}
+          </label>
+        {% endfor %}
+        {% if not categories %}
+          <span class="meta">Nenhuma categoria cadastrada ainda.</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Fotos <span style="color: var(--red);">*</span> <span class="meta">(a marcada como capa aparece na listagem e no link compartilhado)</span></label>
+
+      {% if item and item.images %}
+      <div id="existing-photos" style="display:flex; flex-wrap:wrap; gap: 10px; margin-bottom: 12px;">
+        {% for img in item.images %}
+        <div style="width: 120px; border: 1px solid var(--line); border-radius: var(--r-md); padding: 6px; text-align:center;">
+          <img src="{{ img.url }}" alt="" style="width:100%; height:90px; object-fit:cover; border-radius:6px; margin-bottom:6px;">
+          <label style="display:flex; align-items:center; justify-content:center; gap:4px; font-size:11px; font-weight:400; cursor:pointer;">
+            <input type="radio" name="cover_photo_id" value="{{ img.id }}" {% if loop.first %}checked{% endif %}>
+            Capa
+          </label>
+          <label style="display:flex; align-items:center; justify-content:center; gap:4px; font-size:11px; font-weight:400; color:#b91c1c; cursor:pointer; margin-top:2px;">
+            <input type="checkbox" name="remove_photo_ids[]" value="{{ img.id }}">
+            Remover
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <input type="file" name="new_photos" accept=".jpg,.jpeg,.png,.webp" multiple style="display:block; width:100%;">
+      <div class="meta" style="margin-top:4px;">JPG, PNG ou WebP. Pode selecionar várias de uma vez.</div>
+    </div>
+
+    <div class="flex-center gap-12" style="margin-top: 16px; flex-wrap: wrap;">
+      <button type="submit" class="btn btn-primary">
+        {{ 'Salvar alterações' if item else 'Criar produto' }}
+      </button>
+      {% if item %}
+        <a href="/catalogo/{{ item.slug }}" target="_blank" rel="noopener" class="btn btn-secondary">Ver página pública ↗</a>
+      {% endif %}
+      <a href="/admin/catalogo" class="btn btn-secondary">Cancelar</a>
+    </div>
+
+  </form>
+
+  {% if item %}
+  <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--line);">
+    <form method="post" action="/admin/catalogo/{{ item.id }}/excluir"
+          onsubmit="return confirm('Excluir \'{{ item.name }}\' definitivamente, com todas as fotos? Esta ação não pode ser desfeita. Para só tirar do ar mantendo os dados, use \'Editar\' e marque como inativo.')">
+      <button type="submit" class="btn btn-danger btn-sm">Excluir produto definitivamente</button>
+    </form>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
