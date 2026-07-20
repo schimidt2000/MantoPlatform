@@ -32,13 +32,21 @@
     }
 
     /* Proporção acompanha cada foto (feature 142) — sem aspect-ratio fixo; o JS aplica
-       a proporção real da foto atual conforme a navegação acontece. */
+       a altura real da foto atual conforme a navegação acontece. Transição suave na
+       troca (feature 143, Princípio IX da constituição — movimento com propósito). */
     .cat-gallery-main {
       border-radius: var(--cat-radius); overflow: hidden; background: var(--cat-bg-alt);
       aspect-ratio: 4/5; max-height: 70vh; box-shadow: var(--cat-shadow); margin-bottom: 12px;
       touch-action: pan-y; user-select: none;
+      transition: height .32s ease;
     }
-    .cat-gallery-main img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+    .cat-gallery-main img {
+      width: 100%; height: 100%; object-fit: contain; pointer-events: none;
+      transition: opacity .18s ease, transform .22s ease;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cat-gallery-main, .cat-gallery-main img { transition: none !important; }
+    }
     .cat-gallery-thumbs {
       display: flex; overflow-x: auto; gap: 8px; padding-bottom: 2px;
       scroll-snap-type: x proximity; scrollbar-width: thin;
@@ -150,15 +158,44 @@
 
 <script>
   (function () {
-    /* ── Galeria: proporção por foto + miniaturas sincronizadas + swipe (feature 142) ── */
+    /* ── Galeria: altura por foto + cross-fade + swipe com feedback ao vivo ──────
+       (feature 142 + animação suave da feature 143, Princípio IX da constituição) */
     var wrap = document.getElementById('galleryWrap');
     var main = document.getElementById('galleryMain');
     var thumbs = Array.prototype.slice.call(document.querySelectorAll('.cat-gallery-thumbs button'));
     var current = 0;
+    var pending = 0; // token: só a chamada de goToPhoto mais recente aplica o resultado
+    var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-    function applyRatio(img) {
+    function computeHeight(naturalW, naturalH) {
+      var width = wrap.clientWidth || 1;
+      var maxH = window.innerHeight * 0.7;
+      return Math.min(width * (naturalH / naturalW), maxH);
+    }
+
+    function applySize(img, animate) {
       if (!wrap || !img.naturalWidth || !img.naturalHeight) return;
-      wrap.style.aspectRatio = img.naturalWidth + ' / ' + img.naturalHeight;
+      var h = computeHeight(img.naturalWidth, img.naturalHeight);
+      if (!animate) {
+        wrap.style.transition = 'none';
+        wrap.style.height = h + 'px';
+        void wrap.offsetHeight; // força reflow antes de reabilitar a transição
+        wrap.style.transition = '';
+      } else {
+        wrap.style.height = h + 'px';
+      }
+    }
+
+    // Primeira foto: altura aplicada sem transição (sem efeito de entrada, spec 143).
+    if (main) {
+      if (main.complete && main.naturalWidth) {
+        applySize(main, false);
+      } else {
+        main.addEventListener('load', function onFirstLoad() {
+          applySize(main, false);
+          main.removeEventListener('load', onFirstLoad);
+        });
+      }
     }
 
     function goToPhoto(index) {
@@ -167,18 +204,38 @@
       var btn = thumbs[index];
       if (!btn) return;
       current = index;
-      main.src = btn.dataset.url;
-      if (main.complete) {
-        applyRatio(main);
-      } else {
-        main.addEventListener('load', function onLoad() {
-          applyRatio(main);
-          main.removeEventListener('load', onLoad);
-        });
-      }
+      var token = ++pending;
+
       thumbs.forEach(function (b) { b.classList.remove('active'); });
       btn.classList.add('active');
-      btn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+      btn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+
+      function swap() {
+        if (token !== pending) return; // uma troca mais nova já começou — abandona esta
+        main.src = btn.dataset.url;
+        function finish() {
+          if (token !== pending) return;
+          applySize(main, true);
+          main.style.transform = 'translateX(0)';
+          main.style.opacity = '1';
+        }
+        if (main.complete && main.naturalWidth) {
+          finish();
+        } else {
+          main.addEventListener('load', function onLoad() {
+            main.removeEventListener('load', onLoad);
+            finish();
+          });
+        }
+      }
+
+      if (reduceMotion) {
+        swap();
+      } else {
+        main.style.transform = 'translateX(0)';
+        main.style.opacity = '0';
+        setTimeout(swap, 180);
+      }
     }
 
     thumbs.forEach(function (btn) {
@@ -187,25 +244,52 @@
       });
     });
 
-    // Swipe (Pointer Events — cobre touch e mouse com a mesma API) — só reage a
-    // arrasto predominantemente horizontal, pra não capturar o scroll vertical da
-    // página por engano.
-    if (wrap && thumbs.length > 1) {
+    // Swipe (Pointer Events — cobre touch e mouse com a mesma API): a foto acompanha o
+    // arrasto ao vivo; solta com distância suficiente conclui a troca (cross-fade em
+    // goToPhoto), solta sem distância volta suavemente ao lugar. Só reage a arrasto
+    // predominantemente horizontal, pra não capturar o scroll vertical da página.
+    if (wrap && main && thumbs.length > 1) {
       var startX = null, startY = null, dragging = false;
+
       wrap.addEventListener('pointerdown', function (e) {
         startX = e.clientX; startY = e.clientY; dragging = true;
+        main.style.transition = 'none';
       });
+
+      wrap.addEventListener('pointermove', function (e) {
+        if (!dragging || startX === null) return;
+        var deltaX = e.clientX - startX;
+        var deltaY = e.clientY - startY;
+        if (Math.abs(deltaX) < Math.abs(deltaY)) return; // deixa o scroll vertical agir
+        main.style.transform = 'translateX(' + deltaX + 'px)';
+        main.style.opacity = String(Math.max(0.5, 1 - Math.abs(deltaX) / 400));
+      });
+
       wrap.addEventListener('pointerup', function (e) {
         if (!dragging || startX === null) { dragging = false; return; }
         var deltaX = e.clientX - startX;
         var deltaY = e.clientY - startY;
         dragging = false;
-        if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
-          goToPhoto(current + (deltaX < 0 ? 1 : -1));
-        }
         startX = null; startY = null;
+        var crossedThreshold = Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY);
+        if (crossedThreshold) {
+          main.style.transition = 'none';
+          main.style.transform = 'translateX(0)';
+          goToPhoto(current + (deltaX < 0 ? 1 : -1));
+        } else {
+          main.style.transition = reduceMotion ? 'none' : 'transform .22s ease, opacity .22s ease';
+          main.style.transform = 'translateX(0)';
+          main.style.opacity = '1';
+        }
       });
-      wrap.addEventListener('pointercancel', function () { dragging = false; startX = null; startY = null; });
+
+      wrap.addEventListener('pointercancel', function () {
+        if (!dragging) return;
+        dragging = false; startX = null; startY = null;
+        main.style.transition = reduceMotion ? 'none' : 'transform .22s ease, opacity .22s ease';
+        main.style.transform = 'translateX(0)';
+        main.style.opacity = '1';
+      });
     }
 
     var copyBtn = document.getElementById('copyLinkBtn');

@@ -105,6 +105,24 @@ em smartphones. Toda tela nova ou tocada nessas superfícies DEVE:
 - Considerar o teclado virtual (campo de digitação e ação de envio visíveis com ele aberto).
 - Ser conferida em viewport mobile ANTES de declarar pronto.
 
+### IX. Movimento com propósito (transições suaves em superfícies voltadas ao público)
+Uma mudança de estado visual sem transição — trocar uma imagem, redimensionar um
+elemento, abrir/fechar algo — vira um "tranco": o usuário só vê o antes e o depois, e
+isso passa sensação de descuido. Movimento bem aplicado é sofisticação, não enfeite.
+- Em superfícies pensadas para causar boa impressão em quem não é da equipe (catálogo
+  público, Portal do Artista, páginas voltadas à cliente final), toda mudança de estado
+  visual perceptível DEVE ter uma transição suave (CSS `transition`/`animation`, ou JS
+  quando a propriedade não anima de forma nativa/confiável entre navegadores).
+- **Respeita `prefers-reduced-motion` (NÃO-NEGOCIÁVEL)**: quem configura menos movimento
+  no sistema operacional recebe a versão sem animação (ou bem reduzida) — nunca ignorar
+  essa preferência de acessibilidade.
+- Movimento tem propósito: comunica causa e efeito (o que mudou, e por causa de quê) —
+  não é decoração adicionada por adicionar. Duração típica de 150–350ms com curva suave
+  (`ease`/`cubic-bezier`) — perceptível sem atrasar a interação.
+- Telas puramente administrativas/internas não precisam do mesmo capricho visual das
+  públicas, mas nenhuma tela (interna ou pública) pode trocar de estado de forma abrupta
+  a ponto de parecer quebrada.
+
 ## Stack e Restrições Técnicas
 
 - **Backend**: Python + Flask + SQLAlchemy. Entrada: `python run.py`.
@@ -159,9 +177,14 @@ Uma tarefa só está concluída quando:
 - Para orientação detalhada de runtime, o Claude também segue `CLAUDE.md` e os
   arquivos em `.claude/skills/`.
 
-**Versão**: 1.5.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-07-14
+**Versão**: 1.6.0 | **Ratificada**: 2026-05-29 | **Última alteração**: 2026-07-20
 
 > **Changelog**
+> - **1.6.0** (2026-07-20): Novo Princípio IX — movimento com propósito. Motivado por
+>   incidente real (feature 142: troca de foto/proporção na galeria do catálogo público
+>   trocava de estado sem nenhuma transição, "dando um tranco" na página). Toda mudança de
+>   estado visual perceptível em superfícies voltadas ao público exige transição suave,
+>   respeitando `prefers-reduced-motion`.
 > - **1.5.0** (2026-07-14): Novo item no portão de qualidade — toda feature ganha uma
 >   entrada no changelog do time (`docs/changelog.html`, publicado como página web para
 >   apresentar à equipe), em linguagem simples, sempre republicado no mesmo link. Registra
