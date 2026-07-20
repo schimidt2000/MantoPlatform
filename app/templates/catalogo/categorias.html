@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Categorias — Catálogo Manto Produções</title>
+  <meta property="og:title" content="Categorias do Catálogo — Manto Produções">
+  <meta property="og:description" content="Explore o catálogo por seção: princesas, heróis, temas natalinos e muito mais.">
+  <meta property="og:type" content="website">
+  {% include "catalogo/_head_shared.html" %}
+  <style>
+    .cat-hero {
+      padding: 56px 0 36px; text-align: center;
+      background: radial-gradient(circle at 50% -10%, var(--cat-bg-alt), var(--cat-bg) 60%);
+      border-bottom: 1px solid var(--cat-line);
+    }
+    .cat-hero h1 { font-size: clamp(30px, 5.5vw, 48px); margin: 12px 0 10px; text-wrap: balance; }
+    .cat-hero p { color: var(--cat-muted); font-size: 15.5px; max-width: 46ch; margin: 0 auto; }
+
+    .cat-main { padding: 40px 0 90px; }
+    .cat-catgrid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 22px;
+    }
+    .cat-catcard {
+      display: block; text-decoration: none; color: inherit;
+      border-radius: var(--cat-radius); overflow: hidden; position: relative;
+      box-shadow: var(--cat-shadow); aspect-ratio: 4/3;
+      background: var(--cat-bg-alt);
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .cat-catcard:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(36,28,46,.16); }
+    .cat-catcard img { width: 100%; height: 100%; object-fit: cover; }
+    .cat-catcard-overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(36,28,46,.78) 0%, rgba(36,28,46,.15) 55%, transparent 100%);
+      display: flex; flex-direction: column; justify-content: flex-end; padding: 20px;
+    }
+    .cat-catcard-name {
+      font-family: 'Fraunces', serif; font-weight: 550; font-size: 22px; color: #fff;
+      margin-bottom: 4px; text-wrap: balance;
+    }
+    .cat-catcard-count { color: rgba(255,255,255,.82); font-size: 13px; font-weight: 600; }
+
+    .cat-empty { text-align: center; padding: 70px 20px; color: var(--cat-muted); }
+    .cat-empty .emoji { font-size: 40px; margin-bottom: 12px; }
+
+    footer.cat-footer { text-align: center; padding: 30px 20px 46px; color: var(--cat-muted); font-size: 12.5px; }
+
+    @media (max-width: 560px) {
+      .cat-hero { padding: 40px 0 26px; }
+      .cat-catgrid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+      .cat-catcard-name { font-size: 17px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="cat-hero">
+    <div class="cat-shell">
+      <div class="cat-eyebrow">✦ Manto Produções</div>
+      <h1 class="cat-display">Explore por categoria</h1>
+      <p>Cada seção reúne personagens de um mesmo tema — escolha uma para ver todas as opções.</p>
+    </div>
+  </header>
+
+  <main class="cat-main">
+    <div class="cat-shell">
+      {% if cards %}
+      <div class="cat-catgrid">
+        {% for c in cards %}
+        <a class="cat-catcard" href="/catalogo/categoria/{{ c.category.slug }}">
+          {% if c.cover %}<img src="{{ c.cover.url }}" alt="{{ c.category.name }}" loading="lazy">{% endif %}
+          <div class="cat-catcard-overlay">
+            <div class="cat-catcard-name">{{ c.category.name }}</div>
+            <div class="cat-catcard-count">{{ c.count }} personagem{{ 's' if c.count != 1 else '' }}</div>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="cat-empty">
+        <div class="emoji">🎭</div>
+        <div>Nenhuma categoria disponível no momento.</div>
+      </div>
+      {% endif %}
+
+      <p style="text-align:center; margin-top:36px;">
+        <a href="/catalogo/" class="cat-btn cat-btn-ghost">← Ver catálogo completo</a>
+      </p>
+    </div>
+  </main>
+
+  <footer class="cat-footer">Manto Produções — personagens vivos para o seu evento</footer>
+
+{% include "catalogo/_wishlist_widget.html" %}
+</body>
+</html>

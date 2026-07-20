@@ -74,6 +74,54 @@ def midia(filename: str):
     return send_from_directory(folder, filename)
 
 
+@catalogo_bp.route("/categorias")
+def categorias():
+    """Grade de categorias do catálogo, cada uma com uma foto representativa (feature 140)."""
+    items = CatalogItem.query.filter_by(is_active=True).order_by(CatalogItem.name.asc()).all()
+
+    by_category: dict[int, list[CatalogItem]] = {}
+    for item in items:
+        for cat in item.categories:
+            by_category.setdefault(cat.id, []).append(item)
+
+    cards = [
+        {"category": c, "count": len(by_category[c.id]), "cover": by_category[c.id][0].cover_image}
+        for c in CatalogCategory.query.order_by(CatalogCategory.name.asc()).all()
+        if by_category.get(c.id)
+    ]
+
+    return render_template("catalogo/categorias.html", cards=cards)
+
+
+@catalogo_bp.route("/categoria/<slug>")
+def categoria_detail(slug: str):
+    """Produtos ativos de uma categoria, com fotos maiores que a grade compacta (feature 140)."""
+    category = CatalogCategory.query.filter_by(slug=slug).first()
+    items = (
+        CatalogItem.query.filter_by(is_active=True)
+        .filter(CatalogItem.categories.any(CatalogCategory.id == category.id))
+        .order_by(CatalogItem.name.asc())
+        .all()
+        if category else []
+    )
+    if not category or not items:
+        return render_template("catalogo/invalid.html"), 404
+
+    return render_template("catalogo/categoria_detail.html", category=category, items=items)
+
+
+@catalogo_bp.route("/lista-desejos")
+def lista_desejos():
+    """Página da lista de desejos — conteúdo é montado no navegador via localStorage
+    (feature 140); o servidor só injeta o WhatsApp comercial de destino."""
+    from app.formularios.routes import DEFAULT_WHATSAPP_NUMBER, _whatsapp_target
+
+    return render_template(
+        "catalogo/lista_desejos.html",
+        whatsapp_number=_whatsapp_target() or DEFAULT_WHATSAPP_NUMBER,
+    )
+
+
 @catalogo_bp.route("/<slug>")
 def detail(slug: str):
     item = CatalogItem.query.filter_by(slug=slug, is_active=True).first()
@@ -87,9 +135,24 @@ def detail(slug: str):
         if og_image.startswith("/"):
             og_image = request.url_root.rstrip("/") + og_image
 
+    category_ids = [c.id for c in item.categories]
+    related = []
+    if category_ids:
+        related = (
+            CatalogItem.query.filter_by(is_active=True)
+            .filter(
+                CatalogItem.id != item.id,
+                CatalogItem.categories.any(CatalogCategory.id.in_(category_ids)),
+            )
+            .order_by(CatalogItem.name.asc())
+            .limit(6)
+            .all()
+        )
+
     return render_template(
         "catalogo/detail.html",
         item=item,
+        related=related,
         og_title=item.name,
         og_description=_plain_text(item.short_description_html),
         og_image=og_image,
