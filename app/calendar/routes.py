@@ -442,11 +442,13 @@ def agenda_day(date_str: str):
 # ─── Event Detail — action handlers ──────────────────────────────────────────
 
 def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    role_id      = request.form.get("role_id")
+    role_id_raw  = request.form.get("role_id", "")
     talent_id    = request.form.get("talent_id")
     cache_value  = request.form.get("cache_value")
     travel_cache = request.form.get("travel_cache")
-    role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
+    if not role_id_raw.isdigit():
+        return
+    role = EventRole.query.filter_by(id=int(role_id_raw), event_id=event.id).first()
     if not role:
         return
     old_talent_id     = role.talent_id
@@ -486,27 +488,31 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         _cap_note = ""
         if role.cache_cap and role.cache_value and role.cache_value > role.cache_cap:
             _cap_note = f" (acima do cap de {role.cache_cap}R$ — autorizado pelo admin)"
+        _msg = f"Adicionou {role.talent.full_name} como {role.character_name} com cachê de {role.cache_value or 0}R${_cap_note}"
         db.session.add(EventLog(
             event_id=event.id,
             actor_name=current_user.name,
             actor_role="Casting",
-            message=f"Adicionou {role.talent.full_name} como {role.character_name} com cachê de {role.cache_value or 0}R${_cap_note}",
+            message=_msg,
             created_at=datetime.now(tz=tz_sp),
         ))
         db.session.commit()
+        flash(_msg, "success")
         send_async(send_invite_email, role)
     elif role.talent_id:
         _cap_note = ""
         if role.cache_cap and role.cache_value and role.cache_value > role.cache_cap:
             _cap_note = f" (acima do cap de {role.cache_cap}R$ — autorizado pelo admin)"
+        _msg = f"Atualizou cachê de {role.talent.full_name} como {role.character_name} para {role.cache_value or 0}R${_cap_note}"
         db.session.add(EventLog(
             event_id=event.id,
             actor_name=current_user.name,
             actor_role="Casting",
-            message=f"Atualizou cachê de {role.talent.full_name} como {role.character_name} para {role.cache_value or 0}R${_cap_note}",
+            message=_msg,
             created_at=datetime.now(tz=tz_sp),
         ))
         db.session.commit()
+        flash(_msg, "success")
         # Notifica talento confirmado se o cachê mudou
         if old_invite_status == "accepted":
             cache_changes = []
@@ -524,6 +530,11 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
                 role.change_description = "\n".join(cache_changes)
                 db.session.commit()
                 send_async(send_event_changed_email, role, cache_changes)
+    else:
+        # Sem talento (removido ou nunca teve) — ainda assim confirma visivelmente
+        # que a vaga foi salva (feature 138), para o Casting nunca ficar em dúvida
+        # se a ação teve efeito.
+        flash(f"Vaga de {role.character_name} atualizada.", "success")
 
 
 def _handle_add_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
