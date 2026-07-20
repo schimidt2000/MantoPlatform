@@ -131,11 +131,10 @@ Flask+Jinja antigo intacto, sem nenhuma outra rota migrada ainda.
       papel, logout (depende de T018, T020)
 - [X] T027 [US1] Rodar `npx tsc --noEmit` e `npm run build` em `frontend/apps/internal` —
       zero erros (portão de qualidade da constituição 2.0.0) (depende de T025)
-- [ ] T028 [US1] **(PENDENTE — com o usuário)** Conferência manual no browser: fluxo
-      login→dashboard completo, estados de loading/erro/sucesso, transição Framer Motion,
-      comportamento com `prefers-reduced-motion` ativado. Não pode ser feita pelo agente
-      (sem browser); `tsc --noEmit` e `vite build` passam, mas isso não substitui o olho no
-      app rodando (`npm run dev:internal` + Flask local).
+- [X] T028 [US1] Conferência manual no browser (feita pelo usuário em 2026-07-20, com o
+      Flask local + `npm run dev:internal` rodando): fluxo login→dashboard confirmado
+      funcionando. Não é executável pelo agente (sem browser) — `tsc --noEmit` e
+      `vite build` passam, mas não substituem o olho no app rodando.
 
 **Checkpoint**: Fundação funcional e testável de forma independente — próxima User Story
 (Agenda/Eventos, US2) pode começar seu próprio ciclo spec-kit reaproveitando tudo daqui.
