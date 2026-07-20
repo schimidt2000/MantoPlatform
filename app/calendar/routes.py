@@ -27,7 +27,7 @@ from .. import db
 from app.constants import RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CLIENT_RELATION_TIPOS
 from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense, ClientFeedback
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense, ClientFeedback, EventReimbursement
 from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -168,16 +168,18 @@ def _build_events_from_db(
 def _clear_event_side_tables(event_id: int) -> None:
     """Remove os registros de um evento (ou ensaio) sem cascade automático (feature 122).
 
-    ``EventLog``, ``EventContract``, ``EventPayment``, ``EventRating`` e ``ClientFeedback``
-    não têm ``cascade="all, delete-orphan"`` no relacionamento de ``CalendarEvent`` — sem
-    esta limpeza, ``db.session.delete(event)`` falha com violação de chave estrangeira
-    sempre que existir algum desses registros (ex.: histórico de ações do evento).
+    ``EventLog``, ``EventContract``, ``EventPayment``, ``EventRating``, ``ClientFeedback``
+    e ``EventReimbursement`` não têm ``cascade="all, delete-orphan"`` no relacionamento de
+    ``CalendarEvent`` — sem esta limpeza, ``db.session.delete(event)`` falha com violação
+    de chave estrangeira sempre que existir algum desses registros (ex.: histórico de
+    ações do evento).
     """
     EventLog.query.filter_by(event_id=event_id).delete()
     EventContract.query.filter_by(event_id=event_id).delete()
     EventPayment.query.filter_by(event_id=event_id).delete()
     EventRating.query.filter_by(event_id=event_id).delete()
     ClientFeedback.query.filter_by(event_id=event_id).delete()
+    EventReimbursement.query.filter_by(event_id=event_id).delete()
 
 
 def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
@@ -185,7 +187,7 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
 
     Cascades automáticos: EventRole, EventObservation, ensaios, EnsaioMaterial.
     Sem cascade (deletados manualmente via ``_clear_event_side_tables``): EventLog,
-    EventContract, EventPayment, EventRating, ClientFeedback.
+    EventContract, EventPayment, EventRating, ClientFeedback, EventReimbursement.
     """
     _clear_event_side_tables(event.id)
 
@@ -1014,6 +1016,103 @@ def _handle_delete_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     flash("Comprovante excluído.", "success")
 
 
+def _handle_add_reembolso(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    """Registra um novo reembolso a cobrar da cliente (feature 136)."""
+    description = (request.form.get("reembolso_description") or "").strip()
+    amount = parse_brl(request.form.get("reembolso_amount"))
+    if not description:
+        flash("Informe a descrição do reembolso.", "error")
+        return
+    if not amount or amount <= 0:
+        flash("Informe o valor do reembolso.", "error")
+        return
+    invoice_path = _save_nf_file(request.files.get("reembolso_invoice_file"))
+    db.session.add(EventReimbursement(
+        event_id=event.id,
+        description=description[:200],
+        amount=amount,
+        invoice_file_path=invoice_path,
+        created_by_id=current_user.id,
+    ))
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Comercial",
+        message=f"Registrou reembolso a cobrar: {description[:200]} — R$ {amount}",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+    flash("Reembolso registrado.", "success")
+
+
+def _handle_collect_reembolso(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    """Marca um reembolso como cobrado, com comprovante e valor recebido (feature 136)."""
+    reembolso_id_raw = request.form.get("reembolso_id", "")
+    if not reembolso_id_raw.isdigit():
+        return
+    reembolso = EventReimbursement.query.filter_by(
+        id=int(reembolso_id_raw), event_id=event.id
+    ).first()
+    if not reembolso:
+        return
+    if reembolso.is_collected:
+        flash("Esse reembolso já foi marcado como cobrado.", "error")
+        return
+    amount = parse_brl(request.form.get("reembolso_collected_amount"))
+    if not amount or amount <= 0:
+        flash("Informe o valor recebido do reembolso.", "error")
+        return
+    file = request.files.get("reembolso_receipt_file")
+    if not file or not file.filename:
+        flash("Anexe o comprovante para marcar o reembolso como cobrado.", "error")
+        return
+    file.stream.seek(0, 2)
+    size = file.stream.tell()
+    file.stream.seek(0)
+    if size > 10 * 1024 * 1024:
+        flash("Comprovante acima de 10 MB — envie um arquivo menor.", "error")
+        return
+    name = secure_filename(file.filename)
+    file.save(os.path.join(current_app.config["UPLOAD_PAYMENTS"], name))
+    reembolso.collected_at = datetime.now(tz=tz_sp)
+    reembolso.collected_amount = amount
+    reembolso.receipt_file_path = f"/uploads/payments/{name}"
+    reembolso.collected_by_id = current_user.id
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Comercial",
+        message=f"Marcou reembolso como cobrado: {reembolso.description} — R$ {amount}",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.commit()
+    flash("Reembolso marcado como cobrado.", "success")
+
+
+def _handle_delete_reembolso(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    if not _is_superadmin():
+        flash("Apenas o super admin pode excluir reembolsos.", "error")
+        return
+    reembolso_id_raw = request.form.get("reembolso_id", "")
+    if not reembolso_id_raw.isdigit():
+        return
+    reembolso = EventReimbursement.query.filter_by(
+        id=int(reembolso_id_raw), event_id=event.id
+    ).first()
+    if not reembolso:
+        return
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=current_user.name,
+        actor_role="Comercial",
+        message=f"Excluiu reembolso: {reembolso.description} — R$ {reembolso.amount or 0}",
+        created_at=datetime.now(tz=tz_sp),
+    ))
+    db.session.delete(reembolso)
+    db.session.commit()
+    flash("Reembolso excluído.", "success")
+
+
 def _handle_delete_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     if not _is_superadmin():
         flash("Apenas o super admin pode excluir contratos.", "error")
@@ -1359,6 +1458,9 @@ _EVENT_ACTIONS = {
     "add_payment":          _handle_add_payment,
     "edit_payment":         _handle_edit_payment,
     "delete_payment":       _handle_delete_payment,
+    "add_reembolso":        _handle_add_reembolso,
+    "collect_reembolso":    _handle_collect_reembolso,
+    "delete_reembolso":     _handle_delete_reembolso,
     "delete_contract":      _handle_delete_contract,
     "toggle_contract_signed": _handle_toggle_contract_signed,
     "toggle_confirmado":    _handle_toggle_confirmado,
@@ -1433,6 +1535,8 @@ def event_detail(event_id: int):
     talents = Talent.query.filter_by(status="active").order_by(Talent.full_name.asc()).all()
     contracts = EventContract.query.filter_by(event_id=event.id).order_by(EventContract.created_at.desc()).all()
     payments = EventPayment.query.filter_by(event_id=event.id).order_by(EventPayment.created_at.desc()).all()
+    reembolsos = EventReimbursement.query.filter_by(event_id=event.id).order_by(EventReimbursement.created_at.desc()).all()
+    reembolsos_pendentes_total = sum((r.amount or 0 for r in reembolsos if not r.is_collected), Decimal("0"))
 
     # Figurino: fichas disponíveis + sugestão automática por nome do personagem
     from app.figurino.drive_service import normalize_name as _norm_name
@@ -1603,6 +1707,10 @@ def event_detail(event_id: int):
         f"{cobranca_due.day:02d}/{cobranca_due.month:02d}/{cobranca_due.year}"
         if cobranca_due else ""
     )
+    reembolsos_pendentes_lines = [
+        f"{r.description} — {format_brl(r.amount or 0, prefix=True)}"
+        for r in reembolsos if not r.is_collected
+    ]
 
     return render_template(
         "event_detail.html",
@@ -1619,6 +1727,9 @@ def event_detail(event_id: int):
         contracts=contracts,
         payments=payments,
         received_total=sum(p.amount or 0 for p in payments),
+        reembolsos=reembolsos,
+        reembolsos_pendentes_total=reembolsos_pendentes_total,
+        reembolsos_pendentes_lines=reembolsos_pendentes_lines,
         availability=availability,
         show_casting=has_role(RoleName.CASTING) or has_role(RoleName.SUPERADMIN),
         show_figurino=has_role(RoleName.FIGURINO) or has_role(RoleName.SUPERADMIN),
@@ -2994,6 +3105,20 @@ def create_event():
             amount    = parse_brl_int(contract_amount),
             is_signed = is_signed,
         ))
+
+    # ── Reembolso a cobrar da cliente (opcional — feature 136) ────────────────
+    if request.form.get("has_reembolso"):
+        reembolso_desc = (request.form.get("reembolso_description") or "").strip()
+        reembolso_amount = parse_brl(request.form.get("reembolso_amount"))
+        if reembolso_desc and reembolso_amount and reembolso_amount > 0:
+            reembolso_invoice = _save_nf_file(request.files.get("reembolso_invoice_file"))
+            db.session.add(EventReimbursement(
+                event_id          = event.id,
+                description       = reembolso_desc[:200],
+                amount            = reembolso_amount,
+                invoice_file_path = reembolso_invoice,
+                created_by_id     = current_user.id,
+            ))
 
     # ── Observações (texto / link / imagem) ──────────────────────────────────
     obs_types    = request.form.getlist("obs_type[]")

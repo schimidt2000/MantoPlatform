@@ -94,6 +94,15 @@
                 {% endif %}>
           💰 Cobrança
         </button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-cobranca-reembolso"
+                {% if not reembolsos_pendentes_total %}disabled
+                style="opacity:.45; cursor:not-allowed;"
+                title="Nenhum reembolso pendente neste evento"
+                {% else %}
+                title="Copiar mensagem de cobrança dos reembolsos pendentes"
+                {% endif %}>
+          💸 Cobrar reembolsos
+        </button>
         <button type="button" class="btn btn-ghost btn-sm" id="btn-feedback-cliente"
                 {% if client_feedbacks %}disabled
                 style="opacity:.45; cursor:not-allowed;"
@@ -164,6 +173,7 @@
     location:   {{ confirm_location | tojson }},
     cobrAmount: {{ cobranca_amount | tojson }},
     cobrDue:    {{ cobranca_due_line | tojson }},
+    reembolsoLines: {{ reembolsos_pendentes_lines | tojson }},
   };
 
   function saudacao() {
@@ -203,6 +213,20 @@
       linhas.push('Consta um valor em aberto de ' + DATA.cobrAmount + '.');
     }
     linhas.push('Poderia, por gentileza, confirmar o pagamento? Qualquer dúvida estou à disposição!');
+    return linhas.join('\n');
+  }
+
+  function buildCobrancaReembolso() {
+    const linhas = [
+      saudacao() + '! Tudo bem?',
+      'Passando sobre os reembolsos pendentes do seu evento:',
+      '',
+      DATA.characters,
+      DATA.dateLine,
+      '',
+    ];
+    DATA.reembolsoLines.forEach(function (l) { linhas.push('• ' + l); });
+    linhas.push('', 'Poderia, por gentileza, providenciar o reembolso? Qualquer dúvida estou à disposição!');
     return linhas.join('\n');
   }
 
@@ -247,6 +271,8 @@
     if (bc) bc.addEventListener('click', function () { copiar(buildConfirmacao(), bc); });
     const bp = document.getElementById('btn-cobranca');
     if (bp && !bp.disabled) bp.addEventListener('click', function () { copiar(buildCobranca(), bp); });
+    const br = document.getElementById('btn-cobranca-reembolso');
+    if (br && !br.disabled) br.addEventListener('click', function () { copiar(buildCobrancaReembolso(), br); });
     const bf = document.getElementById('btn-feedback-cliente');
     if (bf && !bf.disabled) bf.addEventListener('click', function () {
       fetch('/events/{{ event.id }}/gerar-link-feedback', { method: 'POST' })
@@ -2056,6 +2082,92 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 
   </div>
   {% endif %}
+
+  <hr class="sep">
+
+  {# ── Reembolsos a cobrar da cliente (feature 136) ─────────────── #}
+  <div>
+    <div class="panel-title" style="margin-bottom: 10px;">💸 Reembolsos</div>
+    <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}">
+      <input type="hidden" name="action" value="add_reembolso">
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Descrição <span class="label-hint">obrigatório</span></label>
+          <input type="text" name="reembolso_description" placeholder="Ex.: Bagagem extra" required>
+        </div>
+        <div class="form-group">
+          <label>Valor a cobrar (R$) <span class="label-hint">obrigatório</span></label>
+          <input type="text" inputmode="decimal" name="reembolso_amount" class="brl-input" placeholder="0,00" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Nota fiscal do gasto <span class="label-hint">opcional</span></label>
+        <input type="file" name="reembolso_invoice_file" accept=".pdf,.png,.jpg,.jpeg">
+      </div>
+      <button type="submit" class="btn btn-sm btn-primary">Registrar reembolso</button>
+    </form>
+
+    <hr class="sep">
+    <div class="strong" style="font-size: 13px; margin-bottom: 8px;">Reembolsos registrados</div>
+
+    {% if reembolsos %}
+      {% for r in reembolsos %}
+        <div style="padding: 10px 0; border-bottom: 1px solid var(--line);">
+          <div class="flex-between gap-8">
+            <div>
+              <span class="strong">{{ r.description }}</span>
+              <span class="meta">— R$ {{ (r.amount or 0) | brl }}</span>
+              {% if r.invoice_file_path %}
+                <a href="{{ r.invoice_file_path }}" target="_blank" class="btn btn-sm btn-ghost">Nota fiscal</a>
+              {% endif %}
+            </div>
+            {% if r.is_collected %}
+              <span class="badge badge-green" style="font-size:11px;">✓ Cobrado</span>
+            {% else %}
+              <span class="badge badge-gold" style="font-size:11px;">Pendente</span>
+            {% endif %}
+          </div>
+          {% if r.is_collected %}
+            <div class="meta" style="margin-top:6px;">
+              R$ {{ (r.collected_amount or 0) | brl }} recebido em {{ r.collected_at.strftime('%d/%m/%Y') }}
+              por {{ r.collected_by.name if r.collected_by else '—' }}
+              {% if r.receipt_file_path %}
+                — <a href="{{ r.receipt_file_path }}" target="_blank">ver comprovante</a>
+              {% endif %}
+            </div>
+            {% if is_superadmin %}
+              <form method="post" action="/events/{{ event.id }}" style="display:inline;"
+                    onsubmit="return confirm('Excluir este reembolso? Essa ação não pode ser desfeita.');">
+                <input type="hidden" name="action" value="delete_reembolso">
+                <input type="hidden" name="reembolso_id" value="{{ r.id }}">
+                <button type="submit" class="btn btn-sm btn-ghost" style="color:#b91c1c; margin-top:6px;">Excluir</button>
+              </form>
+            {% endif %}
+          {% else %}
+            <form method="post" enctype="multipart/form-data" action="/events/{{ event.id }}"
+                  style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px;">
+              <input type="hidden" name="action" value="collect_reembolso">
+              <input type="hidden" name="reembolso_id" value="{{ r.id }}">
+              <input type="text" inputmode="decimal" name="reembolso_collected_amount" class="brl-input"
+                     style="width: 120px;" placeholder="0,00" required>
+              <input type="file" name="reembolso_receipt_file" accept=".pdf,.png,.jpg,.jpeg" required style="max-width:220px;">
+              <button type="submit" class="btn btn-sm btn-secondary">Marcar como cobrado</button>
+            </form>
+            {% if is_superadmin %}
+              <form method="post" action="/events/{{ event.id }}" style="display:inline;"
+                    onsubmit="return confirm('Excluir este reembolso? Essa ação não pode ser desfeita.');">
+                <input type="hidden" name="action" value="delete_reembolso">
+                <input type="hidden" name="reembolso_id" value="{{ r.id }}">
+                <button type="submit" class="btn btn-sm btn-ghost" style="color:#b91c1c; margin-top:6px;">Excluir</button>
+              </form>
+            {% endif %}
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="muted small">Nenhum reembolso registrado.</p>
+    {% endif %}
+  </div>
 </div>
 {% endif %}
 
