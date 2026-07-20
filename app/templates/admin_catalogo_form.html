@@ -38,7 +38,7 @@
 
 {% block content %}
 <div class="panel" style="max-width: 720px;">
-  <form method="post" enctype="multipart/form-data">
+  <form method="post" enctype="multipart/form-data" id="catalog-product-form">
 
     <div class="form-group">
       <label for="catalog-name">Nome do produto <span style="color: var(--red);">*</span></label>
@@ -93,10 +93,12 @@
       <label>Fotos <span style="color: var(--red);">*</span> <span class="meta">(a marcada como capa aparece na listagem e no link compartilhado)</span></label>
 
       {% if item and item.images %}
+      <div class="meta" style="margin-bottom:6px;">Arraste os cards pra reordenar as fotos.</div>
       <div id="existing-photos" style="display:flex; flex-wrap:wrap; gap: 10px; margin-bottom: 12px;">
         {% for img in item.images %}
-        <div style="width: 120px; border: 1px solid var(--line); border-radius: var(--r-md); padding: 6px; text-align:center;">
-          <img src="{{ img.url }}" alt="" style="width:100%; height:90px; object-fit:cover; border-radius:6px; margin-bottom:6px;">
+        <div draggable="true" data-photo-id="{{ img.id }}"
+             style="width: 120px; border: 1px solid var(--line); border-radius: var(--r-md); padding: 6px; text-align:center; cursor:grab; background:#fff;">
+          <img src="{{ img.url }}" alt="" style="width:100%; height:90px; object-fit:cover; border-radius:6px; margin-bottom:6px; pointer-events:none;">
           <label style="display:flex; align-items:center; justify-content:center; gap:4px; font-size:11px; font-weight:400; cursor:pointer;">
             <input type="radio" name="cover_photo_id" class="existing-cover-radio" value="{{ img.id }}" {% if loop.first %}checked{% endif %}>
             Capa
@@ -108,6 +110,7 @@
         </div>
         {% endfor %}
       </div>
+      <input type="hidden" name="photo_order" id="photo-order">
       {% endif %}
 
       <input type="file" name="new_photos" id="new-photos-input" accept=".jpg,.jpeg,.png,.webp" multiple style="display:block; width:100%;">
@@ -332,6 +335,40 @@
     // Sem escolha explícita, o backend já usa a 1ª foto nova como capa quando não há
     // foto existente marcada (FR-002) — nada a fazer aqui além de deixar o rádio
     // marcado visualmente (acima) para refletir esse padrão.
+  });
+})();
+
+(function () {
+  /* ── Reordenar fotos existentes por arrastar-e-soltar (feature 142) ───────── */
+  var list = document.getElementById('existing-photos');
+  var orderInput = document.getElementById('photo-order');
+  var form = document.getElementById('catalog-product-form');
+  if (!list || !orderInput || !form) return;
+
+  var dragged = null;
+
+  list.querySelectorAll('[draggable="true"]').forEach(function (card) {
+    card.addEventListener('dragstart', function () {
+      dragged = card;
+      card.style.opacity = '0.4';
+    });
+    card.addEventListener('dragend', function () {
+      dragged = null;
+      card.style.opacity = '';
+    });
+    card.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      if (!dragged || dragged === card) return;
+      var rect = card.getBoundingClientRect();
+      var before = (e.clientX - rect.left) < rect.width / 2;
+      list.insertBefore(dragged, before ? card : card.nextSibling);
+    });
+  });
+
+  form.addEventListener('submit', function () {
+    var ids = Array.prototype.slice.call(list.querySelectorAll('[data-photo-id]'))
+      .map(function (card) { return card.dataset.photoId; });
+    orderInput.value = ids.join(',');
   });
 })();
 </script>

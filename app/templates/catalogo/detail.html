@@ -31,15 +31,22 @@
       .cat-detail-grid { grid-template-columns: 1fr; gap: 28px; }
     }
 
+    /* Proporção acompanha cada foto (feature 142) — sem aspect-ratio fixo; o JS aplica
+       a proporção real da foto atual conforme a navegação acontece. */
     .cat-gallery-main {
       border-radius: var(--cat-radius); overflow: hidden; background: var(--cat-bg-alt);
-      aspect-ratio: 4/5; box-shadow: var(--cat-shadow); margin-bottom: 12px;
+      aspect-ratio: 4/5; max-height: 70vh; box-shadow: var(--cat-shadow); margin-bottom: 12px;
+      touch-action: pan-y; user-select: none;
     }
-    .cat-gallery-main img { width: 100%; height: 100%; object-fit: cover; }
-    .cat-gallery-thumbs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .cat-gallery-main img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+    .cat-gallery-thumbs {
+      display: flex; overflow-x: auto; gap: 8px; padding-bottom: 2px;
+      scroll-snap-type: x proximity; scrollbar-width: thin;
+    }
     .cat-gallery-thumbs button {
+      flex: none; width: 64px; height: 64px;
       padding: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden;
-      cursor: pointer; background: var(--cat-bg-alt); aspect-ratio: 1/1;
+      cursor: pointer; background: var(--cat-bg-alt); scroll-snap-align: center;
     }
     .cat-gallery-thumbs button.active { border-color: var(--cat-accent); }
     .cat-gallery-thumbs img { width: 100%; height: 100%; object-fit: cover; }
@@ -83,15 +90,15 @@
     <div class="cat-shell">
       <div class="cat-detail-grid">
         <div>
-          <div class="cat-gallery-main">
+          <div class="cat-gallery-main" id="galleryWrap">
             {% if item.images %}
               <img id="galleryMain" src="{{ item.images[0].url }}" alt="{{ item.name }}">
             {% endif %}
           </div>
           {% if item.images|length > 1 %}
-          <div class="cat-gallery-thumbs">
+          <div class="cat-gallery-thumbs" id="galleryThumbs">
             {% for img in item.images %}
-              <button type="button" class="{{ 'active' if loop.first }}" data-url="{{ img.url }}">
+              <button type="button" class="{{ 'active' if loop.first }}" data-url="{{ img.url }}" data-index="{{ loop.index0 }}">
                 <img src="{{ img.url }}" alt="{{ item.name }} — foto {{ loop.index }}" loading="lazy">
               </button>
             {% endfor %}
@@ -114,7 +121,9 @@
             <button type="button" class="wish-add-btn" data-slug="{{ item.slug }}"
                     data-name="{{ item.name }}"
                     data-cover="{{ item.cover_image.url if item.cover_image else '' }}">♡ Adicionar à lista</button>
-            <a href="/catalogo/" class="cat-btn cat-btn-ghost">Ver mais personagens</a>
+            {% if primary_category %}
+              <a href="/catalogo/categoria/{{ primary_category.slug }}" class="cat-btn cat-btn-ghost">Ver mais em {{ primary_category.name }}</a>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -141,15 +150,63 @@
 
 <script>
   (function () {
+    /* ── Galeria: proporção por foto + miniaturas sincronizadas + swipe (feature 142) ── */
+    var wrap = document.getElementById('galleryWrap');
     var main = document.getElementById('galleryMain');
-    var thumbs = document.querySelectorAll('.cat-gallery-thumbs button');
+    var thumbs = Array.prototype.slice.call(document.querySelectorAll('.cat-gallery-thumbs button'));
+    var current = 0;
+
+    function applyRatio(img) {
+      if (!wrap || !img.naturalWidth || !img.naturalHeight) return;
+      wrap.style.aspectRatio = img.naturalWidth + ' / ' + img.naturalHeight;
+    }
+
+    function goToPhoto(index) {
+      if (!main || !thumbs.length) return;
+      index = Math.max(0, Math.min(index, thumbs.length - 1));
+      var btn = thumbs[index];
+      if (!btn) return;
+      current = index;
+      main.src = btn.dataset.url;
+      if (main.complete) {
+        applyRatio(main);
+      } else {
+        main.addEventListener('load', function onLoad() {
+          applyRatio(main);
+          main.removeEventListener('load', onLoad);
+        });
+      }
+      thumbs.forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      btn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    }
+
     thumbs.forEach(function (btn) {
       btn.addEventListener('click', function () {
-        if (main) main.src = btn.dataset.url;
-        thumbs.forEach(function (b) { b.classList.remove('active'); });
-        btn.classList.add('active');
+        goToPhoto(parseInt(btn.dataset.index, 10) || 0);
       });
     });
+
+    // Swipe (Pointer Events — cobre touch e mouse com a mesma API) — só reage a
+    // arrasto predominantemente horizontal, pra não capturar o scroll vertical da
+    // página por engano.
+    if (wrap && thumbs.length > 1) {
+      var startX = null, startY = null, dragging = false;
+      wrap.addEventListener('pointerdown', function (e) {
+        startX = e.clientX; startY = e.clientY; dragging = true;
+      });
+      wrap.addEventListener('pointerup', function (e) {
+        if (!dragging || startX === null) { dragging = false; return; }
+        var deltaX = e.clientX - startX;
+        var deltaY = e.clientY - startY;
+        dragging = false;
+        if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
+          goToPhoto(current + (deltaX < 0 ? 1 : -1));
+        }
+        startX = null; startY = null;
+      });
+      wrap.addEventListener('pointercancel', function () { dragging = false; startX = null; startY = null; });
+    }
 
     var copyBtn = document.getElementById('copyLinkBtn');
     if (copyBtn) {
