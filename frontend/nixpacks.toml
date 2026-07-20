@@ -1,0 +1,25 @@
+# Serviço estático da SPA interna no Railway.
+# Requer "Root Directory = frontend" nas settings do serviço.
+#
+# IMPORTANTE: se houver um "Build Command"/"Start Command" custom nas settings do serviço
+# no painel do Railway, ELE TEM PRECEDÊNCIA sobre este arquivo. Limpe os dois campos no
+# painel para que estes comandos valham (foi um build command custom com `--filter=internal`
+# — sintaxe de Turborepo/pnpm, não de npm — que causou o erro "Missing script: build").
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+# npm ci exige lockfile em sincronia com todos os package.json do workspace.
+cmds = ["npm ci"]
+
+[phases.build]
+# Compila apps/internal. Os pacotes compartilhados (ui/api-client/money) NÃO têm build
+# próprio: são consumidos direto do TypeScript-fonte via alias do Vite + paths do tsconfig,
+# então o Vite os compila junto com o app. Não há ordem de build a orquestrar.
+cmds = ["npm run build"]
+
+[start]
+# SPA com react-router (BrowserRouter): "--single" é obrigatório para que /login e demais
+# rotas profundas devolvam index.html em vez de 404 ao recarregar a página.
+cmd = "npm run start"

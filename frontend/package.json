@@ -3,13 +3,23 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "workspaces": [
     "packages/*",
     "apps/*"
   ],
   "scripts": {
+    "dev": "npm run dev --workspace=apps/internal",
     "dev:internal": "npm run dev --workspace=apps/internal",
+    "build": "npm run build --workspace=apps/internal",
     "build:internal": "npm run build --workspace=apps/internal",
-    "typecheck:internal": "npm run typecheck --workspace=apps/internal"
+    "typecheck": "npm run typecheck --workspace=apps/internal",
+    "typecheck:internal": "npm run typecheck --workspace=apps/internal",
+    "start": "serve --single --no-clipboard apps/internal/dist"
+  },
+  "dependencies": {
+    "serve": "^14.2.4"
   }
 }
