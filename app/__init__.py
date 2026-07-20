@@ -235,12 +235,21 @@ def create_app():
     # ── CORS para a SPA React (feature 144) ───────────────────────────────────
     # Só habilita quando há origens configuradas (produção: domínios dos bundles React).
     # Em desenvolvimento o proxy do Vite torna as chamadas same-origin — CORS dispensável.
-    from flask_cors import CORS
+    # O import fica DENTRO do if e protegido de propósito: enquanto a SPA não estiver no ar,
+    # esta feature é inerte, e ela nunca pode impedir o ERP inteiro de subir por causa de uma
+    # dependência ausente (o start do Railway repete só 3 vezes antes de desistir).
     _cors_origins = [
         o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
     ]
     if _cors_origins:
-        CORS(app, resources={r"/api/*": {"origins": _cors_origins}}, supports_credentials=True)
+        try:
+            from flask_cors import CORS
+
+            CORS(app, resources={r"/api/*": {"origins": _cors_origins}}, supports_credentials=True)
+        except Exception:
+            app.logger.exception(
+                "[cors] flask-cors indisponível — API seguirá sem CORS (SPA cross-origin falhará)"
+            )
 
     # ── Segurança: cabeçalhos em todas as respostas (feature 074) ──────────────
     @app.after_request
