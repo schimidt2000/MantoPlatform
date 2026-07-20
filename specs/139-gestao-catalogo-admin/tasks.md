@@ -20,7 +20,12 @@
       `figurino_form.html`; gerenciador de fotos múltiplas (capa via rádio, remover via
       checkbox, adicionar via input múltiplo)
 - [X] T008 Link de descoberta: "🖼️ Gerenciar catálogo" em `admin_importar_catalogo.html`;
-      link recíproco "Importar do WordPress" na nova listagem
+      link recíproco "Importar do WordPress" na nova listagem.
+      Correção pós-entrega (mesmo dia): usuário não achou o link — ambas as páginas só
+      eram alcançáveis por URL direta ou uma a partir da outra, nenhuma linkada do menu
+      lateral. Adicionado item "Gerenciar catálogo" no `sidebar` (`base.html`, seção
+      Comercial, ao lado do link "Catálogo" já existente que abre a página pública),
+      visível só para SUPERADMIN.
 - [X] T009 Verificação funcional vs `manto_local`: 403 para não-SUPERADMIN; validação
       bloqueia produto sem nome/foto; criar produto aparece no público (index+detalhe);
       editar reflete imediato; adicionar/remover foto e trocar capa; inativar tira do
