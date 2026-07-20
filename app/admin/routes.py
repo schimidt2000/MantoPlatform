@@ -900,12 +900,41 @@ def _unique_catalog_slug(name: str) -> str:
     return slug
 
 
+_ALLOWED_CATALOG_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+class InvalidCatalogPhotoError(ValueError):
+    """Levantado quando um arquivo enviado como foto de produto não é um formato
+    suportado (feature 141) — nunca deixa o arquivo ser salvo sem compressão/tratamento.
+    """
+
+
+def _validate_catalog_photo_extensions(files) -> None:
+    """Recusa arquivos fora de `_ALLOWED_CATALOG_PHOTO_EXTENSIONS` antes de processar
+    qualquer coisa — evita salvar um arquivo cru (não comprimido) silenciosamente quando
+    o processador de imagem não consegue abri-lo (feature 141)."""
+    import os as _os
+
+    rejected = []
+    for f in files.getlist("new_photos"):
+        if not f or not f.filename:
+            continue
+        ext = _os.path.splitext(f.filename)[1].lower()
+        if ext not in _ALLOWED_CATALOG_PHOTO_EXTENSIONS:
+            rejected.append(f.filename)
+    if rejected:
+        raise InvalidCatalogPhotoError(
+            "Arquivo(s) não suportado(s) (use JPG, PNG ou WebP): " + ", ".join(rejected)
+        )
+
+
 def _apply_catalog_photos(item, form, files) -> None:
     """Aplica remoções, novos uploads e escolha de capa nas fotos de um item (feature 139).
 
     Regra de capa: usa a foto existente marcada em ``cover_photo_id`` se ela sobreviver
-    à remoção; senão, a primeira foto recém-enviada nesta mesma requisição; senão,
-    mantém a ordem atual.
+    à remoção; senão, a foto nova indicada em ``new_photo_cover_index`` (feature 141);
+    senão, a primeira foto recém-enviada nesta mesma requisição; senão, mantém a ordem
+    atual. Chamar `_validate_catalog_photo_extensions` antes desta função.
     """
     from app.catalogo.importer import _rewrite_public_url
     from app.models import CatalogItemImage
@@ -935,9 +964,14 @@ def _apply_catalog_photos(item, form, files) -> None:
     db.session.flush()
 
     cover_raw = form.get("cover_photo_id", "")
+    cover_index_raw = form.get("new_photo_cover_index", "")
     cover = None
     if cover_raw.isdigit():
         cover = next((im for im in remaining if im.id == int(cover_raw)), None)
+    if cover is None and cover_index_raw.isdigit():
+        idx = int(cover_index_raw)
+        if 0 <= idx < len(new_images):
+            cover = new_images[idx]
     if cover is None and new_images:
         cover = new_images[0]
     if cover is not None:
@@ -1068,6 +1102,10 @@ def catalogo_admin_new():
             errors.append("Nome do produto é obrigatório.")
         if not new_photos:
             errors.append("Envie ao menos uma foto.")
+        try:
+            _validate_catalog_photo_extensions(request.files)
+        except InvalidCatalogPhotoError as exc:
+            errors.append(str(exc))
         if errors:
             for e in errors:
                 flash(e, "error")
@@ -1132,6 +1170,10 @@ def catalogo_admin_edit(item_id: int):
             errors.append("Nome do produto é obrigatório.")
         if remaining_count + len(new_photos) == 0:
             errors.append("O produto precisa de ao menos uma foto.")
+        try:
+            _validate_catalog_photo_extensions(request.files)
+        except InvalidCatalogPhotoError as exc:
+            errors.append(str(exc))
         if errors:
             for e in errors:
                 flash(e, "error")

@@ -98,7 +98,7 @@
         <div style="width: 120px; border: 1px solid var(--line); border-radius: var(--r-md); padding: 6px; text-align:center;">
           <img src="{{ img.url }}" alt="" style="width:100%; height:90px; object-fit:cover; border-radius:6px; margin-bottom:6px;">
           <label style="display:flex; align-items:center; justify-content:center; gap:4px; font-size:11px; font-weight:400; cursor:pointer;">
-            <input type="radio" name="cover_photo_id" value="{{ img.id }}" {% if loop.first %}checked{% endif %}>
+            <input type="radio" name="cover_photo_id" class="existing-cover-radio" value="{{ img.id }}" {% if loop.first %}checked{% endif %}>
             Capa
           </label>
           <label style="display:flex; align-items:center; justify-content:center; gap:4px; font-size:11px; font-weight:400; color:#b91c1c; cursor:pointer; margin-top:2px;">
@@ -110,8 +110,10 @@
       </div>
       {% endif %}
 
-      <input type="file" name="new_photos" accept=".jpg,.jpeg,.png,.webp" multiple style="display:block; width:100%;">
+      <input type="file" name="new_photos" id="new-photos-input" accept=".jpg,.jpeg,.png,.webp" multiple style="display:block; width:100%;">
       <div class="meta" style="margin-top:4px;">JPG, PNG ou WebP. Pode selecionar várias de uma vez.</div>
+      <input type="hidden" name="new_photo_cover_index" id="new-photo-cover-index">
+      <div id="new-photos-preview" style="display:flex; flex-wrap:wrap; gap: 10px; margin-top: 12px;"></div>
     </div>
 
     <div class="flex-center gap-12" style="margin-top: 16px; flex-wrap: wrap;">
@@ -281,6 +283,55 @@
   btn.addEventListener('click', addCategory);
   input.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); addCategory(); }
+  });
+})();
+
+(function () {
+  /* ── Prévia das fotos recém-selecionadas + escolha de capa (feature 141) ──── */
+  var fileInput = document.getElementById('new-photos-input');
+  var preview = document.getElementById('new-photos-preview');
+  var coverIndex = document.getElementById('new-photo-cover-index');
+  if (!fileInput) return;
+
+  function clearExistingCoverSelection() {
+    document.querySelectorAll('.existing-cover-radio').forEach(function (r) { r.checked = false; });
+  }
+
+  fileInput.addEventListener('change', function () {
+    preview.innerHTML = '';
+    coverIndex.value = '';
+    var files = Array.prototype.slice.call(fileInput.files || []);
+    if (!files.length) return;
+
+    files.forEach(function (file, idx) {
+      var card = document.createElement('div');
+      card.style.cssText = 'width:120px; border:1px solid var(--line); border-radius:var(--r-md); padding:6px; text-align:center;';
+
+      var img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+      img.alt = '';
+      img.style.cssText = 'width:100%; height:90px; object-fit:cover; border-radius:6px; margin-bottom:6px;';
+      card.appendChild(img);
+
+      var label = document.createElement('label');
+      label.style.cssText = 'display:flex; align-items:center; justify-content:center; gap:4px; font-size:11px; font-weight:400; cursor:pointer;';
+      var radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'new_photo_cover_radio';
+      if (idx === 0) radio.checked = true;
+      radio.addEventListener('change', function () {
+        coverIndex.value = idx;
+        clearExistingCoverSelection();
+      });
+      label.appendChild(radio);
+      label.appendChild(document.createTextNode(' Capa'));
+      card.appendChild(label);
+
+      preview.appendChild(card);
+    });
+    // Sem escolha explícita, o backend já usa a 1ª foto nova como capa quando não há
+    // foto existente marcada (FR-002) — nada a fazer aqui além de deixar o rádio
+    // marcado visualmente (acima) para refletir esse padrão.
   });
 })();
 </script>
