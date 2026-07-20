@@ -232,6 +232,25 @@ def create_app():
     mail.init_app(app)
     limiter.init_app(app)
 
+    # ── CORS para a SPA React (feature 144) ───────────────────────────────────
+    # Só habilita quando há origens configuradas (produção: domínios dos bundles React).
+    # Em desenvolvimento o proxy do Vite torna as chamadas same-origin — CORS dispensável.
+    # O import fica DENTRO do if e protegido de propósito: enquanto a SPA não estiver no ar,
+    # esta feature é inerte, e ela nunca pode impedir o ERP inteiro de subir por causa de uma
+    # dependência ausente (o start do Railway repete só 3 vezes antes de desistir).
+    _cors_origins = [
+        o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
+    ]
+    if _cors_origins:
+        try:
+            from flask_cors import CORS
+
+            CORS(app, resources={r"/api/*": {"origins": _cors_origins}}, supports_credentials=True)
+        except Exception:
+            app.logger.exception(
+                "[cors] flask-cors indisponível — API seguirá sem CORS (SPA cross-origin falhará)"
+            )
+
     # ── Segurança: cabeçalhos em todas as respostas (feature 074) ──────────────
     @app.after_request
     def _security_headers(resp):
@@ -345,6 +364,7 @@ def create_app():
     from .formularios.routes import formularios_bp
     from .feedback.routes import feedback_bp
     from .catalogo.routes import catalogo_bp
+    from .api import api_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(rh_bp, url_prefix="/rh")
@@ -363,6 +383,7 @@ def create_app():
     app.register_blueprint(formularios_bp)
     app.register_blueprint(feedback_bp)
     app.register_blueprint(catalogo_bp)
+    app.register_blueprint(api_bp)
 
     def _wa_link(code: int) -> str:
         from zoneinfo import ZoneInfo
@@ -408,69 +429,27 @@ def create_app():
         task_cutoff = datetime(_release.year, _release.month, _release.day)
 
         from app.calendar.routes import PRESENCE_CHARACTER
-        not_presence = EventRole.character_name != PRESENCE_CHARACTER
-
         exclude_ensaios = not_(CalendarEvent.title.like("🟧 ENSAIO%"))
-        future_events = CalendarEvent.start_at >= task_cutoff
 
-        # Cargos dispensados (feature 108) não contam mais como tarefa de casting em nenhuma
-        # das três métricas — o super admin marcou como "não existe de verdade" para o setor.
-        not_dismissed = EventRole.dismissed_at.is_(None)
-
-        # Presença (técnico de som que vai ao evento) é tarefa do ensaio — fora do casting.
-        pending_casting = (
-            EventRole.query.filter(EventRole.talent_id.is_(None), not_presence, not_dismissed)
-            .join(CalendarEvent)
-            .filter(exclude_ensaios, future_events)
-            .order_by(CalendarEvent.start_at.asc())
-            .all()
+        # Tarefas de casting/figurino: mesma fonte de verdade usada pelo endpoint JSON
+        # /api/dashboard (feature 144, app/api/dashboard_service.py) — as consultas não
+        # existem em duas versões paralelas (Princípio I).
+        from app.api.dashboard_service import (
+            compute_casting_tasks,
+            compute_dismissed_casting_tasks,
+            compute_figurino_tasks,
         )
 
-        rejected_invites = (
-            EventRole.query.filter(EventRole.invite_status == "rejected")
-            .join(CalendarEvent)
-            .filter(exclude_ensaios, future_events)
-            .order_by(CalendarEvent.start_at.asc())
-            .all()
-        )
+        _casting = compute_casting_tasks(task_cutoff)
+        pending_casting = _casting["pending"]
+        rejected_invites = _casting["rejected_invites"]
+        total_casting = _casting["total"]
+        done_casting = _casting["done"]
 
-        total_casting = (
-            EventRole.query.filter(not_presence, not_dismissed)
-            .join(CalendarEvent).filter(exclude_ensaios, future_events).count()
-        )
-        done_casting = (
-            EventRole.query
-            .filter(EventRole.talent_id.isnot(None), EventRole.invite_status != "rejected",
-                    not_presence, not_dismissed)
-            .join(CalendarEvent)
-            .filter(exclude_ensaios, future_events)
-            .count()
-        )
-
-        # Figurino: roles COM talento atribuído, SEM figurino, excluindo rejeitados e equipe técnica
-        pending_figurino = (
-            EventRole.query.filter(
-                EventRole.talent_id.isnot(None),
-                EventRole.figurino_done_at.is_(None),
-                EventRole.invite_status != "rejected",
-                EventRole.role_type != "extra",
-            )
-            .join(CalendarEvent)
-            .filter(exclude_ensaios, future_events)
-            .order_by(CalendarEvent.start_at.asc())
-            .all()
-        )
-        total_figurino = (
-            EventRole.query.filter(
-                EventRole.talent_id.isnot(None),
-                EventRole.invite_status != "rejected",
-                EventRole.role_type != "extra",
-            )
-            .join(CalendarEvent)
-            .filter(exclude_ensaios, future_events)
-            .count()
-        )
-        done_figurino = total_figurino - len(pending_figurino)
+        _figurino = compute_figurino_tasks(task_cutoff)
+        pending_figurino = _figurino["pending"]
+        total_figurino = _figurino["total"]
+        done_figurino = _figurino["done"]
 
         _is_real_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
         _impersonate = session.get("impersonate_role") if _is_real_superadmin else None
@@ -484,12 +463,7 @@ def create_app():
 
         # Cargos de casting dispensados (feature 108) — só o super admin vê e pode restaurar.
         dismissed_casting = (
-            EventRole.query.filter(EventRole.dismissed_at.isnot(None), not_presence)
-            .join(CalendarEvent)
-            .filter(exclude_ensaios, future_events)
-            .order_by(EventRole.dismissed_at.desc())
-            .all()
-            if is_superadmin else []
+            compute_dismissed_casting_tasks(task_cutoff) if is_superadmin else []
         )
 
         show_casting = has_role(RoleName.CASTING) or is_superadmin
