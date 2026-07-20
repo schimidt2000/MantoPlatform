@@ -877,3 +877,260 @@ def importar_catalogo_start():
     else:
         flash("A importação já está em andamento.", "warning")
     return redirect(url_for("admin.importar_catalogo"))
+
+
+# ── Gestão de produtos do catálogo (criar/editar) — feature 139 ─────────────────
+
+def _unique_catalog_slug(name: str) -> str:
+    """Gera um slug único para um novo `CatalogItem` a partir do nome.
+
+    Mais simples que ``_unique_slug`` do importador (que resolve unicidade em lote
+    contra um CSV inteiro): aqui é só uma criação por vez, então basta checar contra
+    o banco e sufixar em caso de colisão.
+    """
+    from app.catalogo.importer import _slugify
+    from app.models import CatalogItem
+
+    base = _slugify(name)
+    slug = base
+    n = 2
+    while CatalogItem.query.filter_by(slug=slug).first():
+        slug = f"{base}-{n}"
+        n += 1
+    return slug
+
+
+def _apply_catalog_photos(item, form, files) -> None:
+    """Aplica remoções, novos uploads e escolha de capa nas fotos de um item (feature 139).
+
+    Regra de capa: usa a foto existente marcada em ``cover_photo_id`` se ela sobreviver
+    à remoção; senão, a primeira foto recém-enviada nesta mesma requisição; senão,
+    mantém a ordem atual.
+    """
+    from app.catalogo.importer import _rewrite_public_url
+    from app.models import CatalogItemImage
+    from app.storage import delete_file, save_file
+
+    remove_ids = {int(x) for x in form.getlist("remove_photo_ids[]") if x.isdigit()}
+    for img in list(item.images):
+        if img.id in remove_ids:
+            delete_file(img.url)
+            db.session.delete(img)
+    db.session.flush()
+
+    remaining = (
+        CatalogItemImage.query.filter_by(item_id=item.id)
+        .order_by(CatalogItemImage.position.asc()).all()
+    )
+    next_pos = len(remaining)
+    new_images = []
+    for f in files.getlist("new_photos"):
+        if not f or not f.filename:
+            continue
+        url = _rewrite_public_url(save_file(f, "catalog_photos"))
+        img = CatalogItemImage(item_id=item.id, url=url, position=next_pos)
+        db.session.add(img)
+        new_images.append(img)
+        next_pos += 1
+    db.session.flush()
+
+    cover_raw = form.get("cover_photo_id", "")
+    cover = None
+    if cover_raw.isdigit():
+        cover = next((im for im in remaining if im.id == int(cover_raw)), None)
+    if cover is None and new_images:
+        cover = new_images[0]
+    if cover is not None:
+        others = [im for im in (remaining + new_images) if im is not cover]
+        cover.position = 0
+        for i, im in enumerate(others, start=1):
+            im.position = i
+
+
+@admin_bp.route("/catalogo", methods=["GET"])
+@login_required
+@require_superadmin
+def catalogo_admin_list():
+    """Listagem de produtos do catálogo, com busca e filtros (feature 139)."""
+    from app.models import CatalogCategory, CatalogItem
+
+    q = request.args.get("q", "").strip()
+    categoria_id = request.args.get("categoria", "").strip()
+    status = request.args.get("status", "todos").strip()
+
+    query = CatalogItem.query
+    if q:
+        query = query.filter(CatalogItem.name.ilike(f"%{q}%"))
+    if categoria_id.isdigit():
+        query = query.filter(CatalogItem.categories.any(CatalogCategory.id == int(categoria_id)))
+    if status == "ativo":
+        query = query.filter_by(is_active=True)
+    elif status == "inativo":
+        query = query.filter_by(is_active=False)
+
+    items = query.order_by(CatalogItem.name.asc()).all()
+    categories = CatalogCategory.query.order_by(CatalogCategory.name.asc()).all()
+
+    return render_template(
+        "admin_catalogo_list.html",
+        settings=get_settings(),
+        active="users",
+        title="Admin - Gerenciar catálogo",
+        items=items,
+        categories=categories,
+        q=q,
+        categoria_id=categoria_id,
+        status=status,
+    )
+
+
+@admin_bp.route("/catalogo/novo", methods=["GET", "POST"])
+@login_required
+@require_superadmin
+def catalogo_admin_new():
+    """Cria um novo produto do catálogo nativamente (feature 139)."""
+    from app.models import CatalogCategory, CatalogItem
+    from app.utils import audit
+
+    categories = CatalogCategory.query.order_by(CatalogCategory.name.asc()).all()
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        new_photos = [f for f in request.files.getlist("new_photos") if f and f.filename]
+        errors = []
+        if not name:
+            errors.append("Nome do produto é obrigatório.")
+        if not new_photos:
+            errors.append("Envie ao menos uma foto.")
+        if errors:
+            for e in errors:
+                flash(e, "error")
+            return render_template(
+                "admin_catalogo_form.html", settings=get_settings(), active="users",
+                title="Novo produto do catálogo", item=None, categories=categories,
+                selected_category_ids=set(int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()),
+                old=request.form,
+            )
+
+        item = CatalogItem(
+            name=name,
+            slug=_unique_catalog_slug(name),
+            short_description_html=(request.form.get("description", "").strip() or None),
+            tags=None,
+        )
+        tags = [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()]
+        if tags:
+            import json as _json
+            item.tags = _json.dumps(tags, ensure_ascii=False)
+        db.session.add(item)
+        db.session.flush()
+
+        cat_ids = [int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()]
+        if cat_ids:
+            item.categories = CatalogCategory.query.filter(CatalogCategory.id.in_(cat_ids)).all()
+
+        _apply_catalog_photos(item, request.form, request.files)
+        audit("create", "CatalogItem", item.id, item.name, "Produto do catálogo criado")
+        db.session.commit()
+        flash(f'Produto "{item.name}" criado.', "success")
+        return redirect(url_for("admin.catalogo_admin_list"))
+
+    return render_template(
+        "admin_catalogo_form.html", settings=get_settings(), active="users",
+        title="Novo produto do catálogo", item=None, categories=categories,
+        selected_category_ids=set(), old={},
+    )
+
+
+@admin_bp.route("/catalogo/<int:item_id>/editar", methods=["GET", "POST"])
+@login_required
+@require_superadmin
+def catalogo_admin_edit(item_id: int):
+    """Edita um produto existente do catálogo (feature 139)."""
+    from app.models import CatalogCategory, CatalogItem
+    from app.utils import audit
+
+    item = CatalogItem.query.get_or_404(item_id)
+    categories = CatalogCategory.query.order_by(CatalogCategory.name.asc()).all()
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        remove_ids = {int(x) for x in request.form.getlist("remove_photo_ids[]") if x.isdigit()}
+        new_photos = [f for f in request.files.getlist("new_photos") if f and f.filename]
+        remaining_count = sum(1 for img in item.images if img.id not in remove_ids)
+        errors = []
+        if not name:
+            errors.append("Nome do produto é obrigatório.")
+        if remaining_count + len(new_photos) == 0:
+            errors.append("O produto precisa de ao menos uma foto.")
+        if errors:
+            for e in errors:
+                flash(e, "error")
+            return render_template(
+                "admin_catalogo_form.html", settings=get_settings(), active="users",
+                title=f"Editar — {item.name}", item=item, categories=categories,
+                selected_category_ids=set(int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()),
+                old=request.form,
+            )
+
+        item.name = name
+        item.short_description_html = request.form.get("description", "").strip() or None
+        tags = [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()]
+        import json as _json
+        item.tags = _json.dumps(tags, ensure_ascii=False) if tags else None
+
+        cat_ids = [int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()]
+        item.categories = (
+            CatalogCategory.query.filter(CatalogCategory.id.in_(cat_ids)).all() if cat_ids else []
+        )
+
+        _apply_catalog_photos(item, request.form, request.files)
+        audit("edit", "CatalogItem", item.id, item.name, "Produto do catálogo editado")
+        db.session.commit()
+        flash(f'Produto "{item.name}" atualizado.', "success")
+        return redirect(url_for("admin.catalogo_admin_list"))
+
+    return render_template(
+        "admin_catalogo_form.html", settings=get_settings(), active="users",
+        title=f"Editar — {item.name}", item=item, categories=categories,
+        selected_category_ids={c.id for c in item.categories}, old={},
+    )
+
+
+@admin_bp.route("/catalogo/<int:item_id>/toggle-ativo", methods=["POST"])
+@login_required
+@require_superadmin
+def catalogo_admin_toggle_ativo(item_id: int):
+    """Ativa/inativa um produto do catálogo sem apagar os dados (feature 139)."""
+    from app.models import CatalogItem
+    from app.utils import audit
+
+    item = CatalogItem.query.get_or_404(item_id)
+    item.is_active = not item.is_active
+    audit(
+        "edit", "CatalogItem", item.id, item.name,
+        f"Produto marcado como {'ativo' if item.is_active else 'inativo'}",
+    )
+    db.session.commit()
+    flash(f'Produto "{item.name}" agora está {"ativo" if item.is_active else "inativo"}.', "success")
+    return redirect(request.referrer or url_for("admin.catalogo_admin_list"))
+
+
+@admin_bp.route("/catalogo/<int:item_id>/excluir", methods=["POST"])
+@login_required
+@require_superadmin
+def catalogo_admin_delete(item_id: int):
+    """Exclui definitivamente um produto do catálogo, com suas fotos (feature 139)."""
+    from app.models import CatalogItem
+    from app.storage import delete_file
+    from app.utils import audit
+
+    item = CatalogItem.query.get_or_404(item_id)
+    name = item.name
+    for img in list(item.images):
+        delete_file(img.url)
+    audit("delete", "CatalogItem", item.id, name, "Produto do catálogo excluído definitivamente")
+    db.session.delete(item)
+    db.session.commit()
+    flash(f'Produto "{name}" excluído.', "success")
+    return redirect(url_for("admin.catalogo_admin_list"))

@@ -309,5 +309,5 @@ O Claude deve ler os arquivos em `.claude/skills/` quando trabalhar nas áreas c
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/138-salvar-cache-talento-evento/plan.md`
+`specs/139-gestao-catalogo-admin/plan.md`
 <!-- SPECKIT END -->
