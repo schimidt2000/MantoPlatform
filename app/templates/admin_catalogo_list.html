@@ -13,7 +13,7 @@
 
 <form method="get" action="/admin/catalogo" class="flex-center gap-8" style="flex-wrap: wrap; margin-bottom: 16px;">
   <input type="text" name="q" value="{{ q }}" placeholder="Buscar por nome..." style="max-width: 260px;">
-  <select name="categoria" style="max-width: 220px;">
+  <select name="categoria" id="categoria-filter-select" style="max-width: 220px;">
     <option value="">Todas as categorias</option>
     {% for c in categories %}
       <option value="{{ c.id }}" {% if categoria_id == c.id | string %}selected{% endif %}>{{ c.name }}</option>
@@ -29,6 +29,12 @@
     <a href="/admin/catalogo" class="btn btn-ghost">Limpar</a>
   {% endif %}
 </form>
+
+<div class="flex-center gap-8" style="flex-wrap: wrap; margin-bottom: 20px;">
+  <input type="text" id="new-category-name" placeholder="Nova categoria..." style="max-width: 220px;">
+  <button type="button" class="btn btn-sm btn-secondary" id="new-category-btn">+ Nova categoria</button>
+  <span class="meta" id="new-category-error" style="color:#b91c1c; display:none;"></span>
+</div>
 
 {% if items %}
 <div class="flex-between" style="margin-bottom: 12px;">
@@ -83,4 +89,57 @@
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  /* ── Criar categoria nova sem sair da tela (feature 140) ──────────────────── */
+  var btn = document.getElementById('new-category-btn');
+  var input = document.getElementById('new-category-name');
+  var select = document.getElementById('categoria-filter-select');
+  var errEl = document.getElementById('new-category-error');
+  if (!btn) return;
+
+  function addCategory() {
+    var name = input.value.trim();
+    if (!name) return;
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    var original = btn.textContent;
+    btn.textContent = 'Adicionando...';
+    var fd = new FormData();
+    fd.append('name', name);
+    fetch('/admin/catalogo/categorias', { method: 'POST', body: fd })
+      .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+      .then(function (res) {
+        btn.disabled = false; btn.textContent = original;
+        if (!res.ok || !res.data.ok) {
+          errEl.textContent = (res.data && res.data.error) || 'Não foi possível criar a categoria.';
+          errEl.style.display = '';
+          return;
+        }
+        var opt = select.querySelector('option[value="' + res.data.id + '"]');
+        if (!opt) {
+          opt = document.createElement('option');
+          opt.value = res.data.id;
+          opt.textContent = res.data.name;
+          select.appendChild(opt);
+        }
+        select.value = res.data.id;
+        input.value = '';
+      })
+      .catch(function () {
+        btn.disabled = false; btn.textContent = original;
+        errEl.textContent = 'Erro de conexão — tente novamente.';
+        errEl.style.display = '';
+      });
+  }
+
+  btn.addEventListener('click', addCategory);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); addCategory(); }
+  });
+})();
+</script>
 {% endblock %}

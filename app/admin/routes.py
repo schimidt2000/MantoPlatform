@@ -947,6 +947,71 @@ def _apply_catalog_photos(item, form, files) -> None:
             im.position = i
 
 
+def _all_catalog_tags() -> list[str]:
+    """Todas as tags distintas já usadas em qualquer produto do catálogo (feature 140).
+
+    Deduplica por slug (case/acento-insensitive) mantendo a primeira grafia encontrada —
+    fonte de sugestão para o seletor de tags do formulário.
+    """
+    import json as _json
+
+    from app.catalogo.importer import _slugify
+    from app.models import CatalogItem
+
+    seen: dict[str, str] = {}
+    for (raw_tags,) in db.session.query(CatalogItem.tags).filter(CatalogItem.tags.isnot(None)):
+        try:
+            tags = _json.loads(raw_tags) if raw_tags else []
+        except (ValueError, TypeError):
+            tags = []
+        for tag in tags:
+            key = _slugify(tag)
+            if key and key not in seen:
+                seen[key] = tag
+    return sorted(seen.values(), key=str.lower)
+
+
+def _normalize_tags(raw_tags: list[str], known_tags: list[str]) -> list[str]:
+    """Reaproveita a grafia já existente de uma tag quando bate (case/acento-insensitive).
+
+    Evita que "Natal" e "natal" coexistam como tags diferentes por digitação
+    inconsistente (FR-003) — sem isso virar uma tabela própria no banco.
+    """
+    from app.catalogo.importer import _slugify
+
+    by_key = {_slugify(t): t for t in known_tags}
+    result: list[str] = []
+    seen_keys: set[str] = set()
+    for tag in raw_tags:
+        key = _slugify(tag)
+        if not key or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        result.append(by_key.get(key, tag))
+    return result
+
+
+@admin_bp.route("/catalogo/categorias", methods=["POST"])
+@login_required
+@require_superadmin
+def catalogo_admin_new_category():
+    """Cria (ou reaproveita) uma categoria do catálogo via AJAX (feature 140)."""
+    from app.catalogo.importer import _slugify
+    from app.models import CatalogCategory
+
+    name = request.form.get("name", "").strip()
+    if not name:
+        return {"ok": False, "error": "Nome da categoria é obrigatório."}, 400
+
+    slug = _slugify(name)
+    category = CatalogCategory.query.filter_by(slug=slug).first()
+    if not category:
+        category = CatalogCategory(name=name, slug=slug)
+        db.session.add(category)
+        db.session.commit()
+    return {"ok": True, "id": category.id, "name": category.name}
+
+
 @admin_bp.route("/catalogo", methods=["GET"])
 @login_required
 @require_superadmin
@@ -993,6 +1058,7 @@ def catalogo_admin_new():
     from app.utils import audit
 
     categories = CatalogCategory.query.order_by(CatalogCategory.name.asc()).all()
+    all_tags = _all_catalog_tags()
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -1008,6 +1074,7 @@ def catalogo_admin_new():
             return render_template(
                 "admin_catalogo_form.html", settings=get_settings(), active="users",
                 title="Novo produto do catálogo", item=None, categories=categories,
+                all_tags=all_tags,
                 selected_category_ids=set(int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()),
                 old=request.form,
             )
@@ -1018,7 +1085,8 @@ def catalogo_admin_new():
             short_description_html=(request.form.get("description", "").strip() or None),
             tags=None,
         )
-        tags = [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()]
+        raw_tags = [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()]
+        tags = _normalize_tags(raw_tags, all_tags)
         if tags:
             import json as _json
             item.tags = _json.dumps(tags, ensure_ascii=False)
@@ -1038,7 +1106,7 @@ def catalogo_admin_new():
     return render_template(
         "admin_catalogo_form.html", settings=get_settings(), active="users",
         title="Novo produto do catálogo", item=None, categories=categories,
-        selected_category_ids=set(), old={},
+        all_tags=all_tags, selected_category_ids=set(), old={},
     )
 
 
@@ -1052,6 +1120,7 @@ def catalogo_admin_edit(item_id: int):
 
     item = CatalogItem.query.get_or_404(item_id)
     categories = CatalogCategory.query.order_by(CatalogCategory.name.asc()).all()
+    all_tags = _all_catalog_tags()
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -1069,13 +1138,15 @@ def catalogo_admin_edit(item_id: int):
             return render_template(
                 "admin_catalogo_form.html", settings=get_settings(), active="users",
                 title=f"Editar — {item.name}", item=item, categories=categories,
+                all_tags=all_tags,
                 selected_category_ids=set(int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()),
                 old=request.form,
             )
 
         item.name = name
         item.short_description_html = request.form.get("description", "").strip() or None
-        tags = [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()]
+        raw_tags = [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()]
+        tags = _normalize_tags(raw_tags, all_tags)
         import json as _json
         item.tags = _json.dumps(tags, ensure_ascii=False) if tags else None
 
@@ -1093,7 +1164,7 @@ def catalogo_admin_edit(item_id: int):
     return render_template(
         "admin_catalogo_form.html", settings=get_settings(), active="users",
         title=f"Editar — {item.name}", item=item, categories=categories,
-        selected_category_ids={c.id for c in item.categories}, old={},
+        all_tags=all_tags, selected_category_ids={c.id for c in item.categories}, old={},
     )
 
 

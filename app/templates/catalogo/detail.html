@@ -51,6 +51,24 @@
     .cat-detail-desc b { font-family: 'Fraunces', serif; font-weight: 600; font-size: 17px; }
 
     .cat-detail-actions { margin-top: 28px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .cat-related { margin-top: 64px; padding-top: 40px; border-top: 1px solid var(--cat-line); }
+    .cat-related h2 { font-size: clamp(22px, 3.5vw, 30px); margin: 0 0 20px; text-wrap: balance; }
+    .cat-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 18px;
+    }
+    .cat-card {
+      display: block; text-decoration: none; color: inherit;
+      background: var(--cat-panel); border-radius: var(--cat-radius);
+      overflow: hidden; box-shadow: var(--cat-shadow);
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .cat-card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(36,28,46,.14); }
+    .cat-card-img-wrap { aspect-ratio: 4/5; overflow: hidden; background: var(--cat-bg-alt); }
+    .cat-card-img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    .cat-card-body { padding: 14px 16px 18px; }
+    .cat-card-name { font-family: 'Fraunces', serif; font-weight: 500; font-size: 16px; }
   </style>
 </head>
 <body>
@@ -93,10 +111,31 @@
 
           <div class="cat-detail-actions">
             <button type="button" class="cat-btn" id="copyLinkBtn">🔗 Copiar link</button>
+            <button type="button" class="wish-add-btn" data-slug="{{ item.slug }}"
+                    data-name="{{ item.name }}"
+                    data-cover="{{ item.cover_image.url if item.cover_image else '' }}">♡ Adicionar à lista</button>
             <a href="/catalogo/" class="cat-btn cat-btn-ghost">Ver mais personagens</a>
           </div>
         </div>
       </div>
+
+      {% if related %}
+      <div class="cat-related">
+        <h2 class="cat-display">Você também pode gostar</h2>
+        <div class="cat-grid">
+          {% for r in related %}
+          <a class="cat-card" href="/catalogo/{{ r.slug }}">
+            <div class="cat-card-img-wrap">
+              {% if r.cover_image %}<img src="{{ r.cover_image.url }}" alt="{{ r.name }}" loading="lazy">{% endif %}
+            </div>
+            <div class="cat-card-body">
+              <div class="cat-card-name">{{ r.name }}</div>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
     </div>
   </main>
 
@@ -141,5 +180,6 @@
     }
   })();
 </script>
+{% include "catalogo/_wishlist_widget.html" %}
 </body>
 </html>

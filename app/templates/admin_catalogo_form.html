@@ -7,6 +7,35 @@
   <a href="/admin/catalogo" class="btn btn-secondary">&larr; Voltar</a>
 {% endblock %}
 
+{% block extra_head %}
+<style>
+  /* ── Seletor de tags (chips + autocomplete + criar nova) — feature 140 ────── */
+  .chip-picker { border: 1px solid var(--line); border-radius: var(--r-md); padding: 8px; }
+  .chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .chip-list:empty { display: none; }
+  .chip-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accent-soft, #efeaf8); color: var(--accent-dark, #3c316b);
+    border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 12.5px; font-weight: 600;
+  }
+  .chip-remove {
+    background: none; border: none; cursor: pointer; color: inherit;
+    font-size: 14px; line-height: 1; padding: 2px 4px; opacity: .7;
+  }
+  .chip-remove:hover { opacity: 1; }
+  .chip-picker input[type="text"] { border: none !important; box-shadow: none !important; padding: 6px 4px; width: 100%; }
+  .chip-dropdown {
+    position: absolute; top: calc(100% + 2px); left: 0; right: 0;
+    background: #fff; border: 1.5px solid var(--line); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.1); z-index: 200; max-height: 200px; overflow-y: auto;
+    list-style: none; margin: 0; padding: 4px 0;
+  }
+  .chip-dropdown-item { padding: 8px 12px; cursor: pointer; font-size: 13.5px; }
+  .chip-dropdown-item:hover { background: var(--bg, #f7f6f3); }
+  .chip-dropdown-create { color: var(--accent, #544596); font-weight: 600; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="panel" style="max-width: 720px;">
   <form method="post" enctype="multipart/form-data">
@@ -25,25 +54,38 @@
     </div>
 
     <div class="form-group">
-      <label for="catalog-tags">Tags de busca <span class="meta">(separadas por vírgula)</span></label>
-      <input type="text" id="catalog-tags" name="tags"
-             value="{{ old.get('tags', (item.tags_list | join(', ')) if item else '') }}"
-             placeholder="Ex: princesa, natal, show infantil">
+      <label for="tags-search">Tags de busca</label>
+      <div class="chip-picker" id="tags-picker">
+        <div class="chip-list" id="tags-chip-list"></div>
+        <div style="position:relative;">
+          <input type="text" id="tags-search" autocomplete="off"
+                 placeholder="Digite para buscar ou criar uma tag...">
+          <ul class="chip-dropdown" id="tags-dropdown" hidden></ul>
+        </div>
+      </div>
+      <input type="hidden" name="tags" id="tags-hidden"
+             value="{{ old.get('tags', (item.tags_list | join(',')) if item else '') }}">
+      <div class="meta" style="margin-top:4px;">Tags já usadas em outros produtos aparecem como sugestão; se não existir, é só criar na hora.</div>
     </div>
 
     <div class="form-group">
       <label>Categorias</label>
-      <div style="display:flex; flex-wrap:wrap; gap: 10px;">
+      <div id="category-checkboxes" style="display:flex; flex-wrap:wrap; gap: 10px; margin-bottom:10px;">
         {% for c in categories %}
-          <label style="display:flex; align-items:center; gap:6px; font-weight:400; cursor:pointer;">
+          <label style="display:flex; align-items:center; gap:6px; font-weight:400; cursor:pointer;" data-cat-id="{{ c.id }}">
             <input type="checkbox" name="category_ids[]" value="{{ c.id }}"
                    {% if c.id in selected_category_ids %}checked{% endif %}>
             {{ c.name }}
           </label>
         {% endfor %}
         {% if not categories %}
-          <span class="meta">Nenhuma categoria cadastrada ainda.</span>
+          <span class="meta" id="no-categories-msg">Nenhuma categoria cadastrada ainda.</span>
         {% endif %}
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <input type="text" id="new-category-name" placeholder="Nova categoria..." style="max-width:220px;">
+        <button type="button" class="btn btn-sm btn-secondary" id="new-category-btn">+ Adicionar categoria</button>
+        <span class="meta" id="new-category-error" style="color:#b91c1c; display:none;"></span>
       </div>
     </div>
 
@@ -94,4 +136,152 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  /* ── Seletor de tags: chips + autocomplete + criar nova (feature 140) ────── */
+  var ALL_TAGS = {{ all_tags | tojson }};
+  var hidden = document.getElementById('tags-hidden');
+  var list = document.getElementById('tags-chip-list');
+  var input = document.getElementById('tags-search');
+  var dropdown = document.getElementById('tags-dropdown');
+  if (!hidden) return;
+
+  var chips = (hidden.value || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+
+  function normKey(s) {
+    return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  }
+
+  function sync() {
+    hidden.value = chips.join(',');
+    list.innerHTML = '';
+    chips.forEach(function (tag) {
+      var pill = document.createElement('span');
+      pill.className = 'chip-pill';
+      pill.appendChild(document.createTextNode(tag));
+      var x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'chip-remove';
+      x.textContent = '×';
+      x.addEventListener('click', function () {
+        chips = chips.filter(function (t) { return t !== tag; });
+        sync();
+      });
+      pill.appendChild(x);
+      list.appendChild(pill);
+    });
+  }
+
+  function addTag(raw) {
+    var tag = (raw || '').trim();
+    if (!tag) return;
+    var key = normKey(tag);
+    if (chips.some(function (t) { return normKey(t) === key; })) {
+      input.value = ''; dropdown.hidden = true; return;
+    }
+    var existing = ALL_TAGS.filter(function (t) { return normKey(t) === key; })[0];
+    chips.push(existing || tag);
+    sync();
+    input.value = '';
+    dropdown.hidden = true;
+  }
+
+  function render(query) {
+    var key = normKey(query);
+    var matches = ALL_TAGS.filter(function (t) {
+      return normKey(t).indexOf(key) !== -1 && !chips.some(function (c) { return normKey(c) === normKey(t); });
+    }).slice(0, 8);
+    dropdown.innerHTML = '';
+    matches.forEach(function (t) {
+      var li = document.createElement('li');
+      li.className = 'chip-dropdown-item';
+      li.textContent = t;
+      li.addEventListener('mousedown', function (e) { e.preventDefault(); addTag(t); });
+      dropdown.appendChild(li);
+    });
+    var trimmed = query.trim();
+    var exactMatch = matches.some(function (t) { return normKey(t) === key; }) ||
+                      chips.some(function (c) { return normKey(c) === key; });
+    if (trimmed && !exactMatch) {
+      var create = document.createElement('li');
+      create.className = 'chip-dropdown-item chip-dropdown-create';
+      create.textContent = 'Criar tag "' + trimmed + '"';
+      create.addEventListener('mousedown', function (e) { e.preventDefault(); addTag(trimmed); });
+      dropdown.appendChild(create);
+    }
+    dropdown.hidden = dropdown.children.length === 0;
+  }
+
+  input.addEventListener('input', function () { render(this.value); });
+  input.addEventListener('focus', function () { render(this.value); });
+  input.addEventListener('blur', function () { setTimeout(function () { dropdown.hidden = true; }, 160); });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); addTag(input.value); }
+  });
+
+  sync();
+})();
+
+(function () {
+  /* ── Criar categoria nova sem sair da tela (feature 140) ──────────────────── */
+  var btn = document.getElementById('new-category-btn');
+  var input = document.getElementById('new-category-name');
+  var list = document.getElementById('category-checkboxes');
+  var errEl = document.getElementById('new-category-error');
+  if (!btn) return;
+
+  function addCategory() {
+    var name = input.value.trim();
+    if (!name) return;
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    var original = btn.textContent;
+    btn.textContent = 'Adicionando...';
+    var fd = new FormData();
+    fd.append('name', name);
+    fetch('/admin/catalogo/categorias', { method: 'POST', body: fd })
+      .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+      .then(function (res) {
+        btn.disabled = false; btn.textContent = original;
+        if (!res.ok || !res.data.ok) {
+          errEl.textContent = (res.data && res.data.error) || 'Não foi possível criar a categoria.';
+          errEl.style.display = '';
+          return;
+        }
+        var existing = list.querySelector('label[data-cat-id="' + res.data.id + '"]');
+        if (existing) {
+          existing.querySelector('input').checked = true;
+        } else {
+          var noMsg = document.getElementById('no-categories-msg');
+          if (noMsg) noMsg.remove();
+          var label = document.createElement('label');
+          label.style.cssText = 'display:flex; align-items:center; gap:6px; font-weight:400; cursor:pointer;';
+          label.setAttribute('data-cat-id', res.data.id);
+          var checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.name = 'category_ids[]';
+          checkbox.value = res.data.id;
+          checkbox.checked = true;
+          label.appendChild(checkbox);
+          label.appendChild(document.createTextNode(' ' + res.data.name));
+          list.appendChild(label);
+        }
+        input.value = '';
+      })
+      .catch(function () {
+        btn.disabled = false; btn.textContent = original;
+        errEl.textContent = 'Erro de conexão — tente novamente.';
+        errEl.style.display = '';
+      });
+  }
+
+  btn.addEventListener('click', addCategory);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); addCategory(); }
+  });
+})();
+</script>
 {% endblock %}

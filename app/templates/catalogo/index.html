@@ -93,6 +93,9 @@
         <span class="cat-search-icon">🔍</span>
         <input type="text" id="catSearch" placeholder="Buscar por nome, tema, estilo..." autocomplete="off">
       </div>
+      <p style="margin-top:18px;">
+        <a href="/catalogo/categorias" class="cat-btn cat-btn-ghost">📂 Ver por categoria</a>
+      </p>
     </div>
   </header>
 
@@ -112,23 +115,28 @@
       {% if cards %}
       <div class="cat-grid" id="catGrid">
         {% for c in cards %}
-        <a class="cat-card" href="/catalogo/{{ c.item.slug }}"
-           data-search="{{ c.search_text | lower }}"
-           data-categories="{{ c.category_names | join('|') }}">
-          <div class="cat-card-img-wrap">
-            {% if c.cover %}
-              <img src="{{ c.cover.url }}" alt="{{ c.item.name }}" loading="lazy">
-            {% endif %}
-          </div>
-          <div class="cat-card-body">
-            <div class="cat-card-name">{{ c.item.name }}</div>
-            <div class="cat-card-cats">
-              {% for cat_name in c.category_names[:3] %}
-                <span class="cat-chip">{{ cat_name }}</span>
-              {% endfor %}
+        <div class="cat-card-wrap" style="position:relative;"
+             data-search="{{ c.search_text | lower }}"
+             data-categories="{{ c.category_names | join('|') }}">
+          <a class="cat-card" href="/catalogo/{{ c.item.slug }}">
+            <div class="cat-card-img-wrap">
+              {% if c.cover %}
+                <img src="{{ c.cover.url }}" alt="{{ c.item.name }}" loading="lazy">
+              {% endif %}
             </div>
-          </div>
-        </a>
+            <div class="cat-card-body">
+              <div class="cat-card-name">{{ c.item.name }}</div>
+              <div class="cat-card-cats">
+                {% for cat_name in c.category_names[:3] %}
+                  <span class="cat-chip">{{ cat_name }}</span>
+                {% endfor %}
+              </div>
+            </div>
+          </a>
+          <button type="button" class="wish-add-btn" style="position:absolute; top:10px; right:10px;"
+                  data-slug="{{ c.item.slug }}" data-name="{{ c.item.name }}"
+                  data-cover="{{ c.cover.url if c.cover else '' }}">♡ Adicionar</button>
+        </div>
         {% endfor %}
       </div>
       <div class="cat-empty" id="catEmpty" style="display:none;">
@@ -154,7 +162,7 @@
     var empty = document.getElementById('catEmpty');
     var countEl = document.getElementById('catCount');
     if (!grid) return;
-    var cards = Array.prototype.slice.call(grid.querySelectorAll('.cat-card'));
+    var cards = Array.prototype.slice.call(grid.querySelectorAll('.cat-card-wrap'));
     var activeCat = '';
 
     function normalize(s) {
@@ -189,5 +197,6 @@
     apply();
   })();
 </script>
+{% include "catalogo/_wishlist_widget.html" %}
 </body>
 </html>
