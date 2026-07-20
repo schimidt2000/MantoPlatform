@@ -613,6 +613,7 @@
                       style="{{ '' if r.talent else 'display:none;' }}">&times;</button>
             </div>
             <ul class="ts-dropdown" hidden></ul>
+            <div class="ts-error-msg"></div>
           </div>
 
           <div>
@@ -730,6 +731,7 @@
               <button type="button" class="ts-clear" tabindex="-1" style="display:none;">&times;</button>
             </div>
             <ul class="ts-dropdown" hidden></ul>
+            <div class="ts-error-msg"></div>
           </div>
           <div style="width:110px;">
             <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Cachê (R$)</label>
@@ -782,6 +784,7 @@
                       style="{{ '' if r.talent else 'display:none;' }}">&times;</button>
             </div>
             <ul class="ts-dropdown" hidden></ul>
+            <div class="ts-error-msg"></div>
           </div>
           <div style="width:110px;">
             <input type="text" inputmode="decimal" name="cache_value" placeholder="Cachê (R$)"
@@ -872,6 +875,7 @@
               <button type="button" class="ts-clear" tabindex="-1" style="display:none;">&times;</button>
             </div>
             <ul class="ts-dropdown" hidden></ul>
+            <div class="ts-error-msg"></div>
           </div>
           <div style="width:110px;">
             <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">Cachê (R$)</label>
@@ -932,6 +936,7 @@
                     style="{{ '' if r.talent else 'display:none;' }}">&times;</button>
           </div>
           <ul class="ts-dropdown" hidden></ul>
+          <div class="ts-error-msg"></div>
         </div>
         <div style="padding-bottom:1px;">
           <button type="submit" class="btn btn-sm btn-primary">Salvar</button>
@@ -2424,6 +2429,23 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
     flex-shrink: 0;
   }
   .ts-clear:hover { color: var(--ink); }
+  {# ── seleção não confirmada (feature 138) — mesmo padrão visual de erro+shake
+       já usado em event_create.html, self-contido aqui pois o .field-error de lá é
+       escopado a #event-form #}
+  .ts-box.ts-error {
+    border-color: #dc2626 !important;
+    box-shadow: 0 0 0 3px rgba(220,38,38,.18) !important;
+  }
+  .ts-shake { animation: ts-shake .3s ease; }
+  @keyframes ts-shake {
+    0%,100% { transform: translateX(0); }
+    25%     { transform: translateX(-5px); }
+    75%     { transform: translateX(5px); }
+  }
+  .ts-error-msg {
+    display: none; color: #dc2626; font-size: 11.5px; margin-top: 4px;
+  }
+  .ts-error-msg.show { display: block; }
   .ts-dropdown {
     position: absolute; top: calc(100% + 4px); left: 0; right: 0;
     background: #fff; border: 1.5px solid var(--line);
@@ -2519,7 +2541,27 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
     const text     = wrap.querySelector('.ts-input');
     const clearBtn = wrap.querySelector('.ts-clear');
     const dropdown = wrap.querySelector('.ts-dropdown');
+    const errorMsg = wrap.querySelector('.ts-error-msg');
+    const box      = wrap.querySelector('.ts-box');
     let focusIdx   = -1;
+    // Feature 138: nome realmente confirmado (via pick()/clear()), separado do que
+    // está só digitado no campo — evita salvar um talento que não foi de fato
+    // selecionado da lista (a causa raiz do bug "salva a pessoa, não o valor, ou
+    // vice-versa": o texto digitado nunca chegava a atualizar o `talent_id` oculto).
+    let confirmedName = text.value;
+
+    function clearError() {
+      if (box) box.classList.remove('ts-error', 'ts-shake');
+      if (errorMsg) { errorMsg.classList.remove('show'); errorMsg.textContent = ''; }
+    }
+
+    function showError(msg) {
+      if (!box || !errorMsg) return;
+      errorMsg.textContent = msg;
+      errorMsg.classList.add('show');
+      box.classList.remove('ts-shake'); void box.offsetWidth;
+      box.classList.add('ts-error', 'ts-shake');
+    }
 
     function filter(q) {
       if (!q.trim()) return TALENTS.slice(0, 8);
@@ -2558,15 +2600,19 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       }
       hidden.value    = t.id;
       text.value      = t.name;
+      confirmedName   = t.name;
       clearBtn.style.display = '';
       dropdown.hidden = true;
+      clearError();
     }
 
     function clear() {
       hidden.value    = '';
       text.value      = '';
+      confirmedName   = '';
       clearBtn.style.display = 'none';
       dropdown.hidden = true;
+      clearError();
       const form = wrap.closest('form');
       if (form) {
         const cacheInput = form.querySelector('[name="cache_value"]');
@@ -2583,7 +2629,7 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       items[focusIdx].scrollIntoView({ block: 'nearest' });
     }
 
-    text.addEventListener('input',  function () { render(filter(this.value)); });
+    text.addEventListener('input',  function () { clearError(); render(filter(this.value)); });
     text.addEventListener('focus',  function () { if (!hidden.value) render(filter(this.value)); });
     text.addEventListener('blur',   function () { setTimeout(function () { dropdown.hidden = true; }, 160); });
     clearBtn.addEventListener('click', clear);
@@ -2598,6 +2644,25 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
         if (focused) focused.dispatchEvent(new MouseEvent('mousedown'));
       } else if (e.key === 'Escape') { dropdown.hidden = true; }
     });
+
+    // Feature 138: bloqueia o "Salvar" se o texto digitado não corresponde a uma
+    // seleção confirmada — sem isso, o formulário parecia preenchido mas enviava um
+    // talent_id desatualizado (vazio ou o antigo), dando a impressão de "não salvou
+    // a pessoa" mesmo com o nome certo visível na tela.
+    const form = wrap.closest('form');
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        const current = text.value.trim();
+        if (current === confirmedName.trim()) return;
+        e.preventDefault();
+        if (!current) {
+          showError('Confirme: clique no × para remover o talento, ou selecione um novo da lista.');
+        } else {
+          showError('Selecione um talento da lista de sugestões (ou apague o campo para deixar sem talento).');
+        }
+        text.focus();
+      });
+    }
   }
 
   document.querySelectorAll('.ts-wrap').forEach(initSearch);
