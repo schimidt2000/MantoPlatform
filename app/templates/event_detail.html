@@ -1894,13 +1894,22 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 
     <button type="submit" class="btn btn-primary">Salvar dados comerciais</button>
   </form>
+  {% endif %}
 
+  {# ── KPIs financeiros: visível também em satélites (feature 137) — a venda vem do
+       principal, mas cada evento do grupo mostra o mesmo resultado agregado do contrato. #}
   {% if show_financeiro %}
   <hr class="sep">
+  {% if event_group_size and event_group_size > 1 %}
+    <p class="meta" style="margin-bottom:10px;">
+      💼 Valores do contrato inteiro ({{ event_group_size }} eventos agrupados) — não só
+      deste evento individual.
+    </p>
+  {% endif %}
   <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr); margin-bottom: 0;">
     <div class="kpi">
       <div class="kpi-label">Venda</div>
-      <div class="kpi-value">R$&nbsp;{{ (event.sale_value or 0) | brl }}</div>
+      <div class="kpi-value">R$&nbsp;{{ (kpi_event.sale_value or 0) | brl }}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Custo (cachês)</div>
@@ -1914,12 +1923,12 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
     <div class="kpi">
       <div class="kpi-label">Comissão ({{ event_rate }}%)</div>
       <div class="kpi-value">R$&nbsp;{{ (event_commission or 0) | brl }}</div>
-      {% if event.seller %}
-        <div class="kpi-sub">{{ event.seller.name }}</div>
+      {% if kpi_event.seller %}
+        <div class="kpi-sub">{{ kpi_event.seller.name }}</div>
       {% endif %}
     </div>
     <div class="kpi">
-      {% set lucro = (event.sale_value or 0) | float - (event_cost or 0) | float - (event_expenses_total or 0) | float - (event_bv_total or 0) | float %}
+      {% set lucro = (kpi_event.sale_value or 0) | float - (event_cost or 0) | float - (event_expenses_total or 0) | float - (event_bv_total or 0) | float %}
       <div class="kpi-label">Lucro líquido</div>
       <div class="kpi-value {% if lucro >= 0 %}green{% else %}red{% endif %}">
         R$&nbsp;{{ lucro | brl }}
@@ -1934,7 +1943,11 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th>Nota Fiscal</th></tr>
+          <tr>
+            <th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th>
+            {% if event_group_size and event_group_size > 1 %}<th>Evento</th>{% endif %}
+            <th>Nota Fiscal</th>
+          </tr>
         </thead>
         <tbody>
           {% for g in event_expenses %}
@@ -1943,6 +1956,11 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
             <td>{{ g.description }}</td>
             <td class="meta">{{ g.category }}</td>
             <td class="strong" style="white-space:nowrap;">R$&nbsp;{{ g.amount | brl }}</td>
+            {% if event_group_size and event_group_size > 1 %}
+              <td class="meta">
+                <a href="/events/{{ g.event_id }}">{{ g.event.title if g.event else '—' }}</a>
+              </td>
+            {% endif %}
             <td>
               {% if g.receipt_url %}<a href="{{ g.receipt_url }}" target="_blank" class="btn btn-sm btn-ghost">Ver</a>
               {% else %}<span class="muted small">—</span>{% endif %}
@@ -1956,6 +1974,7 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
   {% endif %}
   {% endif %}
 
+  {% if not event.is_satellite %}
   <hr class="sep">
 
   {# ── Contratos e Comprovantes ─────────────────────────────────── #}

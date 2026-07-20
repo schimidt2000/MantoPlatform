@@ -1283,6 +1283,20 @@ def _has_financial_data(event: CalendarEvent) -> bool:
     return bool(event.sale_value)
 
 
+def _group_events(event: CalendarEvent) -> list[CalendarEvent]:
+    """Retorna todos os eventos do mesmo grupo comercial que `event`, o principal primeiro.
+
+    Se `event` não pertence a nenhum grupo, retorna ``[event]`` — mesmo comportamento de
+    um evento avulso, sem agregação (feature 137).
+    """
+    if event.is_satellite:
+        leader = event.group_leader
+        return [leader, *leader.satellites]
+    if event.is_group_leader:
+        return [event, *event.satellites]
+    return [event]
+
+
 def _apply_satellite(event: CalendarEvent) -> None:
     """Zera os campos comerciais de um evento ao vinculá-lo como satélite de um grupo (FR-005)."""
     for field in _SATELLITE_FIELDS_CLEARED:
@@ -1613,22 +1627,41 @@ def event_detail(event_id: int):
     default_commission = Decimal(str(
         settings.default_commission_rate if settings and settings.default_commission_rate is not None else 2
     ))
-    event_rate = Decimal(str(event.commission_rate)) if event.commission_rate is not None else default_commission
-    event_cost = sum(r.cache_value or 0 for r in event.roles if r.talent_id)
-    # Gastos extras aprovados vinculados ao evento (entram como custo: lucro = venda − cachês − gastos)
+    # Painel financeiro agregado por grupo comercial (feature 137): um evento agrupado
+    # (principal ou satélite) mostra custo/gastos/lucro do CONTRATO inteiro, não só do
+    # evento aberto — venda/comissão vêm sempre do principal (`kpi_event`), que é quem
+    # mantém esses campos preenchidos (satélites os têm zerados ao entrar no grupo).
+    group_events = _group_events(event)
+    kpi_event = group_events[0]
+    event_group_size = len(group_events)
+    event_rate = (
+        Decimal(str(kpi_event.commission_rate))
+        if kpi_event.commission_rate is not None else default_commission
+    )
+    event_cost = sum(
+        (r.cache_value or 0 for ge in group_events for r in ge.roles if r.talent_id), 0
+    )
+    # Gastos extras aprovados vinculados a qualquer evento do grupo (entram como custo:
+    # lucro = venda − cachês − gastos).
     event_expenses = (
         SpecialExpense.query
-        .filter_by(event_id=event.id, status="aprovado")
+        .filter(
+            SpecialExpense.event_id.in_([ge.id for ge in group_events]),
+            SpecialExpense.status == "aprovado",
+        )
         .order_by(SpecialExpense.expense_date.desc(), SpecialExpense.id.desc())
         .all()
     )
     event_expenses_total = sum((e.amount for e in event_expenses), Decimal("0"))
     # BV (feature 099): repasse a terceiros — sai da base de comissão e desconta do lucro.
     event_bv_total = sum(
-        (Decimal(a.amount_brl) for a in event.acrescimos if a.is_bv and a.amount_brl),
+        (
+            Decimal(a.amount_brl)
+            for ge in group_events for a in ge.acrescimos if a.is_bv and a.amount_brl
+        ),
         Decimal("0"),
     )
-    _commission_base = Decimal(event.sale_value or 0) - event_bv_total
+    _commission_base = Decimal(kpi_event.sale_value or 0) - event_bv_total
     if _commission_base < 0:
         _commission_base = Decimal("0")
     event_commission = (
@@ -1744,6 +1777,8 @@ def event_detail(event_id: int):
         event_expenses_total=event_expenses_total,
         event_commission=event_commission,
         event_bv_total=event_bv_total,
+        kpi_event=kpi_event,
+        event_group_size=event_group_size,
         acrescimo_tipos=acrescimo_tipos_list(),
         acrescimo_tipo_bv=ACRESCIMO_TIPO_BV,
         client_relation_tipos=CLIENT_RELATION_TIPOS,
