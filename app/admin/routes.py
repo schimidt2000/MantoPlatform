@@ -929,12 +929,15 @@ def _validate_catalog_photo_extensions(files) -> None:
 
 
 def _apply_catalog_photos(item, form, files) -> None:
-    """Aplica remoções, novos uploads e escolha de capa nas fotos de um item (feature 139).
+    """Aplica remoções, reordenação, novos uploads e escolha de capa nas fotos de um
+    item (features 139/141/142).
 
-    Regra de capa: usa a foto existente marcada em ``cover_photo_id`` se ela sobreviver
-    à remoção; senão, a foto nova indicada em ``new_photo_cover_index`` (feature 141);
-    senão, a primeira foto recém-enviada nesta mesma requisição; senão, mantém a ordem
-    atual. Chamar `_validate_catalog_photo_extensions` antes desta função.
+    Ordem: aplica `photo_order` (arrastar-e-soltar, feature 142) nas fotos existentes
+    antes de tudo. Regra de capa: usa a foto existente marcada em ``cover_photo_id`` se
+    ela sobreviver à remoção; senão, a foto nova indicada em ``new_photo_cover_index``
+    (feature 141); senão, a primeira foto recém-enviada nesta mesma requisição; senão,
+    mantém a ordem atual — sempre por cima da ordem manual, garantindo que a capa fique
+    em `position=0`. Chamar `_validate_catalog_photo_extensions` antes desta função.
     """
     from app.catalogo.importer import _rewrite_public_url
     from app.models import CatalogItemImage
@@ -951,6 +954,18 @@ def _apply_catalog_photos(item, form, files) -> None:
         CatalogItemImage.query.filter_by(item_id=item.id)
         .order_by(CatalogItemImage.position.asc()).all()
     )
+
+    # Reordenação manual (feature 142): `photo_order` traz os ids das fotos existentes
+    # na ordem visual definida pelo admin (arrastar-e-soltar) — sobrepõe a ordem atual
+    # do banco antes da regra de capa ser aplicada por cima.
+    order_raw = form.get("photo_order", "")
+    if order_raw:
+        order_ids = [int(x) for x in order_raw.split(",") if x.isdigit()]
+        by_id = {im.id: im for im in remaining}
+        ordered = [by_id[i] for i in order_ids if i in by_id]
+        ordered += [im for im in remaining if im.id not in set(order_ids)]
+        remaining = ordered
+
     next_pos = len(remaining)
     new_images = []
     for f in files.getlist("new_photos"):

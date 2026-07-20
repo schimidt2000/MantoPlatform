@@ -135,6 +135,8 @@ def detail(slug: str):
         if og_image.startswith("/"):
             og_image = request.url_root.rstrip("/") + og_image
 
+    primary_category = item.categories[0] if item.categories else None
+
     category_ids = [c.id for c in item.categories]
     related = []
     if category_ids:
@@ -153,6 +155,7 @@ def detail(slug: str):
         "catalogo/detail.html",
         item=item,
         related=related,
+        primary_category=primary_category,
         og_title=item.name,
         og_description=_plain_text(item.short_description_html),
         og_image=og_image,
