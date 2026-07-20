@@ -9,10 +9,28 @@
 
 - **Nome**: Plataforma Manto
 - **Descrição**: Sistema empresarial ERP para gestão de eventos, talentos, figurino, financeiro e agenda. Integrado com Google Calendar e Google Sheets.
-- **Stack**: Python + Flask + SQLAlchemy
-- **Frontend**: Jinja2 templates + HTML/CSS/JS vanilla (sem framework JS)
+- **Stack (backend)**: Python + Flask + SQLAlchemy
 - **Banco de dados**: SQLite (desenvolvimento) → PostgreSQL/AWS RDS (produção)
 - **Integrações**: Google Calendar API (OAuth 2.0), Google Sheets API (service account)
+
+> ⚠️ **MIGRAÇÃO EM ANDAMENTO (feature 144 — constituição v2.0.0).** O projeto está migrando
+> de Jinja2/vanilla para uma arquitetura desacoplada: **Frontend React (Vite) + TypeScript +
+> Tailwind + shadcn/ui + Framer Motion + TanStack Query** (em `frontend/`, npm workspaces com
+> 3 apps — `internal`, `portal`, `public` — e 3 pacotes compartilhados — `ui`, `api-client`,
+> `money`) consumindo o **Flask como API JSON** (`/api/*`). A migração é **strangler-fig,
+> blueprint por blueprint** — hoje o estado é **híbrido**:
+> - **Já migrado (React + API):** login e dashboard de início (`frontend/apps/internal`,
+>   endpoints `/api/auth/*` e `/api/dashboard`). A lógica do dashboard é fonte única em
+>   `app/api/dashboard_service.py`, reusada pela view Jinja `home` e pela API.
+> - **Ainda Jinja/vanilla:** todo o resto (agenda/eventos, financeiro, talentos, figurino,
+>   catálogo público, portal, etc.) — segue funcionando normalmente e **não deve ser tocado**
+>   por esta migração até chegar sua vez (US2→US6 em `specs/144-migracao-react-spa/`).
+> - **Padrões novos a seguir ao criar endpoint/tela:** contrato JSON em
+>   `specs/144-migracao-react-spa/contracts/api-conventions.md`; auth por cookie de sessão
+>   HttpOnly (Flask-Login) + `credentials:"include"`; máscara monetária BRL via
+>   `@manto/money` (nunca reinventar). Rodar `frontend/`: `npm run dev:internal` (proxy Vite
+>   `/api`→Flask). Este `CLAUDE.md` será reescrito por completo para o estado final quando a
+>   última fatia (US6) concluir.
 
 ---
 
@@ -309,5 +327,5 @@ O Claude deve ler os arquivos em `.claude/skills/` quando trabalhar nas áreas c
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/143-animacao-galeria-produto/plan.md`
+`specs/144-migracao-react-spa/plan.md`
 <!-- SPECKIT END -->
