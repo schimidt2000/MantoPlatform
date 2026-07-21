@@ -1,11 +1,27 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import { formatBRL, MoneyInput } from "@manto/money";
 import { useEvent, type EventoDetalhe, type RoleItem } from "../lib/agenda";
-import { useAddObservation, useDeleteObservation } from "../lib/observations";
+import {
+  useAddImageObservation,
+  useAddObservation,
+  useDeleteObservation,
+} from "../lib/observations";
+import {
+  useAddContract,
+  useAddInvoice,
+  useAddPayment,
+  useAddReimbursement,
+  useCollectReimbursement,
+  useDeleteContract,
+  useDeletePayment,
+  useDeleteReimbursement,
+  useEditPayment,
+  useToggleContractSigned,
+} from "../lib/eventAttachments";
 import {
   useAddRole,
   useAssignRole,
@@ -360,6 +376,185 @@ function Venda({ data }: { data: EventoDetalhe }) {
   );
 }
 
+/** Contratos do evento (feature 153) — anexar, e para SUPERADMIN, marcar assinado/excluir. */
+function Contratos({ data }: { data: EventoDetalhe }) {
+  if (!data.contratos) return null;
+  const eventId = data.event.id;
+  const isSuperadmin = Boolean(data.flags.is_superadmin);
+  const add = useAddContract(eventId);
+  const del = useDeleteContract(eventId);
+  const toggle = useToggleContractSigned(eventId);
+  const [file, setFile] = useState<File | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const submit = () => {
+    if (!file) return;
+    add.mutate(file, {
+      onSuccess: () => {
+        setFile(null);
+        if (inputRef.current) inputRef.current.value = "";
+      },
+    });
+  };
+
+  return (
+    <Section title="Contratos">
+      {data.contratos.length === 0 ? (
+        <p className="text-sm text-muted">Nenhum contrato anexado.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {data.contratos.map((c) => (
+            <li key={c.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+              <a
+                href={assetUrl(c.file_path)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue underline"
+              >
+                Abrir contrato
+              </a>
+              <span className="flex items-center gap-2">
+                <span className={c.is_signed ? "text-green" : "text-muted"}>
+                  {c.is_signed ? "Assinado" : "Pendente"}
+                </span>
+                {isSuperadmin && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={toggle.isPending}
+                      onClick={() => toggle.mutate(c.id)}
+                    >
+                      {c.is_signed ? "Desmarcar" : "Marcar assinado"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={del.isPending}
+                      onClick={() => {
+                        if (window.confirm("Excluir este contrato?")) del.mutate(c.id);
+                      }}
+                      aria-label="Excluir contrato"
+                    >
+                      ✕
+                    </Button>
+                  </>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-4 flex items-center gap-2 border-t border-line pt-4">
+        <input
+          ref={inputRef}
+          type="file"
+          className="text-sm text-ink"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          aria-label="Arquivo do contrato"
+        />
+        <Button size="sm" loading={add.isPending} disabled={!file} onClick={submit}>
+          Adicionar
+        </Button>
+      </div>
+      {add.isError && <p className="mt-1 text-sm text-red">Não foi possível anexar o contrato.</p>}
+    </Section>
+  );
+}
+
+/** Notas fiscais do evento (feature 153) — só adicionar (lista completa segue no formulário
+ * de venda, Jinja). Visível a Comercial/Financeiro/Superadmin (mesmo gate do servidor). */
+function NotasFiscais({ data }: { data: EventoDetalhe }) {
+  if (!data.notas_fiscais) return null;
+  const eventId = data.event.id;
+  const add = useAddInvoice(eventId);
+  const [amount, setAmount] = useState(0);
+  const [issueDate, setIssueDate] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const submit = () => {
+    if (!amount && !issueDate && !file) return;
+    add.mutate(
+      { amount: amount || undefined, issue_date: issueDate || undefined, file: file ?? undefined },
+      {
+        onSuccess: () => {
+          setAmount(0);
+          setIssueDate("");
+          setFile(null);
+          if (inputRef.current) inputRef.current.value = "";
+        },
+      },
+    );
+  };
+
+  return (
+    <Section title="Notas fiscais">
+      {data.notas_fiscais.length === 0 ? (
+        <p className="text-sm text-muted">Nenhuma nota fiscal anexada.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {data.notas_fiscais.map((inv) => (
+            <li key={inv.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+              <span className="text-ink">
+                {brl(inv.amount)}
+                {inv.issue_date && ` · ${inv.issue_date}`}
+              </span>
+              <span className="flex items-center gap-2">
+                <span className={inv.status === "emitida" ? "text-green" : "text-muted"}>
+                  {inv.status === "emitida" ? "Emitida" : "A emitir"}
+                </span>
+                {inv.file && (
+                  <a
+                    href={assetUrl(inv.file)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue underline"
+                  >
+                    Abrir
+                  </a>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+        <MoneyInput
+          value={amount}
+          onValueChange={setAmount}
+          className="h-11 w-32 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          placeholder="0,00"
+          aria-label="Valor da nota"
+        />
+        <input
+          type="date"
+          className="h-11 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          value={issueDate}
+          onChange={(e) => setIssueDate(e.target.value)}
+          aria-label="Data de emissão"
+        />
+        <input
+          ref={inputRef}
+          type="file"
+          className="text-sm text-ink"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          aria-label="Arquivo da nota"
+        />
+        <Button
+          size="sm"
+          loading={add.isPending}
+          disabled={!amount && !issueDate && !file}
+          onClick={submit}
+        >
+          Adicionar
+        </Button>
+      </div>
+      {add.isError && <p className="mt-1 text-sm text-red">Informe ao menos o valor, a data ou o arquivo.</p>}
+    </Section>
+  );
+}
+
 function Kpi({ data }: { data: EventoDetalhe }) {
   if (!data.kpi) return null;
   const k = data.kpi;
@@ -383,9 +578,138 @@ function Kpi({ data }: { data: EventoDetalhe }) {
   );
 }
 
+/** Um pagamento — para SUPERADMIN, permite corrigir o valor ou excluir (feature 153). */
+function PagamentoItem({
+  item,
+  eventId,
+  isSuperadmin,
+}: {
+  item: NonNullable<EventoDetalhe["pagamentos"]>["items"][number];
+  eventId: number;
+  isSuperadmin: boolean;
+}) {
+  const edit = useEditPayment(eventId);
+  const del = useDeletePayment(eventId);
+  const [editing, setEditing] = useState(false);
+  const [amount, setAmount] = useState(item.amount ?? 0);
+
+  if (editing) {
+    return (
+      <li className="flex items-center justify-between gap-2 py-1.5 text-sm">
+        <span className="text-muted">{formatDate(item.created_at)}</span>
+        <span className="flex items-center gap-2">
+          <MoneyInput
+            value={amount}
+            onValueChange={setAmount}
+            className="h-9 w-28 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+            aria-label="Novo valor"
+          />
+          <Button
+            size="sm"
+            loading={edit.isPending}
+            onClick={() =>
+              edit.mutate(
+                { paymentId: item.id, amount },
+                { onSuccess: () => setEditing(false) },
+              )
+            }
+          >
+            Salvar
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+            Cancelar
+          </Button>
+        </span>
+      </li>
+    );
+  }
+
+  return (
+    <li className="flex items-center justify-between gap-3 py-1.5 text-sm">
+      <span className="text-muted">{formatDate(item.created_at)}</span>
+      <span className="flex items-center gap-2">
+        <a
+          href={assetUrl(item.file_path)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="tabular-nums text-blue underline"
+        >
+          {brl(item.amount)}
+        </a>
+        {isSuperadmin && (
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+              Editar
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={del.isPending}
+              onClick={() => {
+                if (window.confirm("Excluir este comprovante de pagamento?")) del.mutate(item.id);
+              }}
+              aria-label="Excluir comprovante"
+            >
+              ✕
+            </Button>
+          </>
+        )}
+      </span>
+    </li>
+  );
+}
+
+/** Form para adicionar comprovante de pagamento (feature 153). */
+function AddPaymentForm({ eventId }: { eventId: number }) {
+  const add = useAddPayment(eventId);
+  const [amount, setAmount] = useState(0);
+  const [file, setFile] = useState<File | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const submit = () => {
+    if (!amount || !file) return;
+    add.mutate(
+      { amount, file },
+      {
+        onSuccess: () => {
+          setAmount(0);
+          setFile(null);
+          if (inputRef.current) inputRef.current.value = "";
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+      <MoneyInput
+        value={amount}
+        onValueChange={setAmount}
+        className="h-11 w-32 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+        placeholder="0,00"
+        aria-label="Valor recebido"
+      />
+      <input
+        ref={inputRef}
+        type="file"
+        className="text-sm text-ink"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        aria-label="Comprovante de pagamento"
+      />
+      <Button size="sm" loading={add.isPending} disabled={!amount || !file} onClick={submit}>
+        Adicionar
+      </Button>
+      {add.isError && (
+        <p className="w-full text-sm text-red">Informe o valor e anexe o comprovante.</p>
+      )}
+    </div>
+  );
+}
+
 function Pagamentos({ data }: { data: EventoDetalhe }) {
   if (!data.pagamentos) return null;
   const p = data.pagamentos;
+  const isSuperadmin = Boolean(data.flags.is_superadmin);
   return (
     <Section title="Pagamentos">
       <p className="mb-2 text-sm text-muted">
@@ -396,36 +720,201 @@ function Pagamentos({ data }: { data: EventoDetalhe }) {
       ) : (
         <ul className="divide-y divide-line">
           {p.items.map((it) => (
-            <li key={it.id} className="flex justify-between py-1.5 text-sm">
-              <span className="text-muted">{formatDate(it.created_at)}</span>
-              <span className="tabular-nums text-ink">{brl(it.amount)}</span>
-            </li>
+            <PagamentoItem key={it.id} item={it} eventId={data.event.id} isSuperadmin={isSuperadmin} />
           ))}
         </ul>
       )}
+      <AddPaymentForm eventId={data.event.id} />
     </Section>
   );
 }
 
+/** Form para marcar um reembolso pendente como cobrado (feature 153) — some quando já cobrado. */
+function CollectReembolsoForm({ reimbursementId, eventId }: { reimbursementId: number; eventId: number }) {
+  const collect = useCollectReimbursement(eventId);
+  const [amount, setAmount] = useState(0);
+  const [file, setFile] = useState<File | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const submit = () => {
+    if (!amount || !file) return;
+    collect.mutate(
+      { reimbursementId, collected_amount: amount, file },
+      {
+        onSuccess: () => {
+          setAmount(0);
+          setFile(null);
+          if (inputRef.current) inputRef.current.value = "";
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <MoneyInput
+        value={amount}
+        onValueChange={setAmount}
+        className="h-9 w-28 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+        placeholder="0,00"
+        aria-label="Valor recebido"
+      />
+      <input
+        ref={inputRef}
+        type="file"
+        className="text-sm text-ink"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        aria-label="Comprovante de recebimento"
+      />
+      <Button size="sm" loading={collect.isPending} disabled={!amount || !file} onClick={submit}>
+        Marcar cobrado
+      </Button>
+      {collect.isError && <p className="w-full text-sm text-red">Informe o valor e anexe o comprovante.</p>}
+    </div>
+  );
+}
+
+/** Um reembolso — link do comprovante do gasto, form de cobrar quando pendente, excluir (SUPERADMIN). */
+function ReembolsoItem({
+  item,
+  eventId,
+  isSuperadmin,
+}: {
+  item: NonNullable<EventoDetalhe["reembolsos"]>["items"][number];
+  eventId: number;
+  isSuperadmin: boolean;
+}) {
+  const del = useDeleteReimbursement(eventId);
+  return (
+    <li className="py-1.5 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-ink">
+          {item.description}
+          {item.invoice_file_path && (
+            <a
+              href={assetUrl(item.invoice_file_path)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-2 text-blue underline"
+            >
+              Nota do gasto
+            </a>
+          )}
+          {item.is_collected && <span className="text-green"> · cobrado</span>}
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="tabular-nums text-ink">{brl(item.amount)}</span>
+          {isSuperadmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={del.isPending}
+              onClick={() => {
+                if (window.confirm("Excluir este reembolso?")) del.mutate(item.id);
+              }}
+              aria-label="Excluir reembolso"
+            >
+              ✕
+            </Button>
+          )}
+        </span>
+      </div>
+      {item.is_collected && item.receipt_file_path ? (
+        <a
+          href={assetUrl(item.receipt_file_path)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-blue underline"
+        >
+          Comprovante de recebimento ({brl(item.collected_amount)})
+        </a>
+      ) : !item.is_collected ? (
+        <CollectReembolsoForm reimbursementId={item.id} eventId={eventId} />
+      ) : null}
+    </li>
+  );
+}
+
+/** Form para registrar um novo reembolso (feature 153). */
+function AddReembolsoForm({ eventId }: { eventId: number }) {
+  const add = useAddReimbursement(eventId);
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState(0);
+  const [file, setFile] = useState<File | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const submit = () => {
+    if (!description.trim() || !amount) return;
+    add.mutate(
+      { description: description.trim(), amount, file: file ?? undefined },
+      {
+        onSuccess: () => {
+          setDescription("");
+          setAmount(0);
+          setFile(null);
+          if (inputRef.current) inputRef.current.value = "";
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+      <input
+        className="h-11 min-w-40 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+        placeholder="Descrição do gasto"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        aria-label="Descrição do reembolso"
+      />
+      <MoneyInput
+        value={amount}
+        onValueChange={setAmount}
+        className="h-11 w-32 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+        placeholder="0,00"
+        aria-label="Valor a cobrar"
+      />
+      <input
+        ref={inputRef}
+        type="file"
+        className="text-sm text-ink"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        aria-label="Nota fiscal do gasto (opcional)"
+      />
+      <Button
+        size="sm"
+        loading={add.isPending}
+        disabled={!description.trim() || !amount}
+        onClick={submit}
+      >
+        Registrar reembolso
+      </Button>
+      {add.isError && (
+        <p className="w-full text-sm text-red">Informe a descrição e o valor do reembolso.</p>
+      )}
+    </div>
+  );
+}
+
 function Reembolsos({ data }: { data: EventoDetalhe }) {
-  if (!data.reembolsos || data.reembolsos.items.length === 0) return null;
+  if (!data.reembolsos) return null;
   const r = data.reembolsos;
+  const isSuperadmin = Boolean(data.flags.is_superadmin);
   return (
     <Section title="Reembolsos">
       <p className="mb-2 text-sm text-muted">
         Pendente: <span className="tabular-nums text-ink">{brl(r.pendentes_total)}</span>
       </p>
-      <ul className="divide-y divide-line">
-        {r.items.map((it) => (
-          <li key={it.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
-            <span className="text-ink">
-              {it.description}
-              {it.is_collected && <span className="text-green"> · cobrado</span>}
-            </span>
-            <span className="tabular-nums text-ink">{brl(it.amount)}</span>
-          </li>
-        ))}
-      </ul>
+      {r.items.length === 0 ? (
+        <p className="text-sm text-muted">Nenhum reembolso registrado.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {r.items.map((it) => (
+            <ReembolsoItem key={it.id} item={it} eventId={data.event.id} isSuperadmin={isSuperadmin} />
+          ))}
+        </ul>
+      )}
+      <AddReembolsoForm eventId={data.event.id} />
     </Section>
   );
 }
@@ -633,14 +1122,36 @@ function ObservationItem({ obs, eventId }: { obs: ObservationT; eventId: number 
   );
 }
 
-/** Form para adicionar observação de texto/link (imagem fica no Jinja — upload adiado). */
+/** Form para adicionar observação de texto/link/imagem (imagem via multipart, feature 153). */
 function AddObservationForm({ eventId }: { eventId: number }) {
   const add = useAddObservation(eventId);
-  const [obsType, setObsType] = useState<"text" | "link">("text");
+  const addImage = useAddImageObservation(eventId);
+  const [obsType, setObsType] = useState<"text" | "link" | "image">("text");
   const [content, setContent] = useState("");
   const [label, setLabel] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const isImage = obsType === "image";
+  const pending = isImage ? addImage.isPending : add.isPending;
+  const isError = isImage ? addImage.isError : add.isError;
+  const canSubmit = isImage ? Boolean(file) : Boolean(content.trim());
 
   const submit = () => {
+    if (isImage) {
+      if (!file) return;
+      addImage.mutate(
+        { file, label: label.trim() || undefined },
+        {
+          onSuccess: () => {
+            setFile(null);
+            setLabel("");
+            if (inputRef.current) inputRef.current.value = "";
+          },
+        },
+      );
+      return;
+    }
     if (!content.trim()) return;
     add.mutate(
       { obs_type: obsType, content: content.trim(), label: label.trim() || undefined },
@@ -655,19 +1166,31 @@ function AddObservationForm({ eventId }: { eventId: number }) {
         <select
           className="h-11 rounded-md border border-line bg-panel px-2 text-sm text-ink"
           value={obsType}
-          onChange={(e) => setObsType(e.target.value as "text" | "link")}
+          onChange={(e) => setObsType(e.target.value as "text" | "link" | "image")}
           aria-label="Tipo de observação"
         >
           <option value="text">Texto</option>
           <option value="link">Link</option>
+          <option value="image">Imagem</option>
         </select>
-        <input
-          className="h-11 min-w-40 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink"
-          placeholder={obsType === "link" ? "https://…" : "Escreva a observação"}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          aria-label="Conteúdo"
-        />
+        {isImage ? (
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="text-sm text-ink"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            aria-label="Arquivo da imagem"
+          />
+        ) : (
+          <input
+            className="h-11 min-w-40 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+            placeholder={obsType === "link" ? "https://…" : "Escreva a observação"}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            aria-label="Conteúdo"
+          />
+        )}
         <input
           className="h-11 w-32 rounded-md border border-line bg-panel px-2 text-sm text-ink"
           placeholder="Rótulo (opcional)"
@@ -675,11 +1198,11 @@ function AddObservationForm({ eventId }: { eventId: number }) {
           onChange={(e) => setLabel(e.target.value)}
           aria-label="Rótulo"
         />
-        <Button size="sm" loading={add.isPending} disabled={!content.trim()} onClick={submit}>
+        <Button size="sm" loading={pending} disabled={!canSubmit} onClick={submit}>
           Adicionar
         </Button>
       </div>
-      {add.isError && <p className="mt-1 text-sm text-red">Não foi possível adicionar.</p>}
+      {isError && <p className="mt-1 text-sm text-red">Não foi possível adicionar.</p>}
     </div>
   );
 }
@@ -820,6 +1343,8 @@ export function EventDetailPage() {
           <Elenco data={query.data} />
           <Logistica data={query.data} />
           <Venda data={query.data} />
+          <Contratos data={query.data} />
+          <NotasFiscais data={query.data} />
           <Pagamentos data={query.data} />
           <Reembolsos data={query.data} />
           <Observacoes data={query.data} />

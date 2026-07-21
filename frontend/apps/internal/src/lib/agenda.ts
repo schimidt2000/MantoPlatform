@@ -98,6 +98,13 @@ export interface EventoDetalhe {
     clients: { name: string | null; relation: string }[];
   };
   contratos?: { id: number; file_path: string; is_signed: boolean; created_at: string | null }[];
+  notas_fiscais?: {
+    id: number;
+    amount: number | null;
+    issue_date: string | null;
+    status: string;
+    file: string | null;
+  }[];
   cobranca?: { outstanding: number | null; due: string | null; enabled: boolean };
   kpi?: {
     sale_value: number | null;
@@ -111,7 +118,7 @@ export interface EventoDetalhe {
     seller: string | null;
   };
   pagamentos?: {
-    items: { id: number; amount: number | null; created_at: string | null }[];
+    items: { id: number; amount: number | null; file_path: string; created_at: string | null }[];
     received_total: number | null;
   };
   reembolsos?: {
@@ -119,7 +126,10 @@ export interface EventoDetalhe {
       id: number;
       description: string;
       amount: number | null;
+      invoice_file_path: string | null;
       is_collected: boolean;
+      collected_amount: number | null;
+      receipt_file_path: string | null;
       created_at: string | null;
     }[];
     pendentes_total: number | null;

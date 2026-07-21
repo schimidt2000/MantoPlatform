@@ -59,18 +59,23 @@ async function parseErrorBody(response: Response): Promise<ApiErrorBody> {
 }
 
 /**
- * Executa uma requisição JSON contra a API.
+ * Executa uma requisição JSON (ou multipart, quando `options.body` é `FormData`) contra a API.
+ *
+ * Upload de arquivo (feature 153, `contracts/upload-endpoints.md`) usa `FormData` como corpo —
+ * nesse caso o header `Content-Type` é omitido de propósito: o `fetch` nativo gera sozinho o
+ * `boundary` do multipart, que um `Content-Type: application/json` forçado quebraria.
  *
  * @param path Caminho iniciando em `/api/...`.
- * @param options Opções do fetch (method, body já serializado, etc.).
+ * @param options Opções do fetch (method, body já serializado ou `FormData`, etc.).
  * @returns O corpo da resposta desserializado como `T`.
  * @throws {ApiRequestError} Quando a resposta não é 2xx.
  */
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const isFormData = options.body instanceof FormData;
   const response = await fetch(`${API_BASE}${path}`, {
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(options.headers ?? {}),
     },
     ...options,

@@ -14,6 +14,7 @@ from app.constants import RoleName
 from app.models import (
     CalendarEvent,
     EventContract,
+    EventInvoice,
     EventLog,
     EventPayment,
     EventReimbursement,
@@ -313,6 +314,18 @@ def serialize_event_detail(
             .order_by(EventContract.created_at.desc())
             .all()
         ]
+        data["notas_fiscais"] = [
+            {
+                "id": inv.id,
+                "amount": _money(inv.amount),
+                "issue_date": inv.issue_date.isoformat() if inv.issue_date else None,
+                "status": inv.status,
+                "file": inv.file,
+            }
+            for inv in EventInvoice.query.filter_by(event_id=event.id)
+            .order_by(EventInvoice.created_at.desc())
+            .all()
+        ]
         data["cobranca"] = _compute_cobranca(event, payments)
 
     # KPIs, pagamentos e reembolsos — FINANCEIRO/SUPERADMIN.
@@ -323,6 +336,7 @@ def serialize_event_detail(
                 {
                     "id": p.id,
                     "amount": _money(p.amount),
+                    "file_path": p.file_path,
                     "created_at": p.created_at.isoformat() if p.created_at else None,
                 }
                 for p in payments
@@ -340,7 +354,10 @@ def serialize_event_detail(
                     "id": r.id,
                     "description": r.description,
                     "amount": _money(r.amount),
+                    "invoice_file_path": r.invoice_file_path,
                     "is_collected": r.is_collected,
+                    "collected_amount": _money(r.collected_amount),
+                    "receipt_file_path": r.receipt_file_path,
                     "created_at": r.created_at.isoformat() if r.created_at else None,
                 }
                 for r in reembolsos

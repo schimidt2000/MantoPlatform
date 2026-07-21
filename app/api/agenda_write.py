@@ -5,17 +5,27 @@ devolve o evento no formato de leitura da feature 145. As ações Jinja seguem i
 """
 
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from flask import jsonify, request, session
+from flask import current_app, jsonify, request, session
 from flask_login import current_user
 
 from app.api import api_bp
 from app.api.agenda_read import serialize_event_detail
 from app.api_utils import api_login_required, json_error
 from app.constants import CLIENT_RELATION_TIPOS, RoleName
-from app.models import CalendarEvent, Client, EventObservation, EventRole, db
+from app.models import (
+    CalendarEvent,
+    Client,
+    EventContract,
+    EventObservation,
+    EventPayment,
+    EventReimbursement,
+    EventRole,
+    db,
+)
 
 _TZ_SP = ZoneInfo("America/Sao_Paulo")
 
@@ -37,6 +47,16 @@ def _can_casting() -> bool:
 def _is_superadmin() -> bool:
     """Só superadmin (dispensar/restaurar cargo)."""
     return any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
+
+
+def _can_manage_sale() -> bool:
+    """Gate de nota fiscal: mesmo `can_vendas` de `_handle_update_comercial` (Jinja) — a nota
+    fiscal hoje só é criada dentro daquele formulário, gateado a Comercial/Financeiro/Superadmin.
+    """
+    return any(
+        r.name.upper() in (RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN)
+        for r in current_user.roles
+    )
 
 
 def _can_confirm() -> bool:
@@ -64,6 +84,27 @@ def _event_detail_json(event: Any) -> Any:
     """Serializa o evento atualizado com o RBAC do usuário atual (resposta padrão das escritas)."""
     impersonate = session.get("impersonate_role")
     return jsonify(serialize_event_detail(event, current_user, impersonate))
+
+
+def _decimal_from_form(raw: str | None) -> Decimal | None:
+    """Converte um campo de valor vindo de `multipart/form-data` (feature 153).
+
+    O React envia o número puro (mesma convenção do corpo JSON — Princípio VII: o valor
+    formatado em BRL é só de exibição), então o parsing aqui é direto, sem `parse_brl`
+    (que espera o formato BRL "1.234,56" usado pelo Jinja).
+
+    Args:
+        raw: valor do campo de formulário, ou None.
+
+    Returns:
+        O `Decimal` correspondente, ou None se ausente/vazio/inválido.
+    """
+    if raw is None or not raw.strip():
+        return None
+    try:
+        return Decimal(raw)
+    except InvalidOperation:
+        return None
 
 
 @api_bp.route("/roles/<int:role_id>/assign", methods=["POST"])
@@ -272,26 +313,48 @@ def api_save_logistics(event_id: int) -> Any:
 @api_bp.route("/events/<int:event_id>/observations", methods=["POST"])
 @api_login_required
 def api_add_observation(event_id: int) -> Any:
-    """Adiciona uma observação de texto/link ao evento (feature 150).
+    """Adiciona uma observação (texto/link/imagem) ao evento (features 150/153).
 
-    Sem gate de papel (paridade com o `@login_required` do Jinja). Imagem não é suportada por aqui
-    (upload adiado) — só `obs_type` "text" ou "link".
+    Sem gate de papel (paridade com o `@login_required` do Jinja). Aceita dois content-types:
+    JSON para texto/link (inalterado desde a feature 150) e `multipart/form-data` para imagem
+    (feature 153, exige arquivo) — endpoint único, sem duplicar rota (Princípio I).
     """
     event = CalendarEvent.query.get(event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
-    data = request.get_json(silent=True) or {}
-    obs_type = data.get("obs_type")
-    if obs_type not in ("text", "link"):
-        return json_error("Tipo de observação inválido", 400, {"obs_type": "Use texto ou link"})
+
+    is_multipart = bool(request.content_type) and request.content_type.startswith("multipart/")
+    file_storage = None
+    if is_multipart:
+        data = request.form
+        obs_type = data.get("obs_type")
+        file_storage = request.files.get("image")
+    else:
+        data = request.get_json(silent=True) or {}
+        obs_type = data.get("obs_type")
+
+    if obs_type not in ("text", "link", "image"):
+        return json_error("Tipo de observação inválido", 400, {"obs_type": "Use texto, link ou imagem"})
+    if obs_type == "image" and not (file_storage and file_storage.filename):
+        return json_error("Anexe uma imagem para a observação", 400, {"image": "Obrigatório"})
 
     from app.calendar.observation_ops import add_observation
+    from app.calendar.routes import _save_file_upload
+
+    file_path = (
+        _save_file_upload(file_storage, current_app.config["UPLOAD_EVENT_OBS"], "event_obs")
+        if obs_type == "image"
+        else None
+    )
+    if obs_type == "image" and not file_path:
+        return json_error("Imagem acima de 20 MB — envie um arquivo menor", 400, {"image": "Muito grande"})
 
     obs = add_observation(
         event,
         obs_type=obs_type,
         content=data.get("content"),
         label=data.get("label"),
+        file_path=file_path,
     )
     if obs is None:
         return json_error("Informe o conteúdo da observação", 400, {"content": "Obrigatório"})
@@ -511,3 +574,257 @@ def api_create_event() -> Any:
     result = serialize_event_detail(event, current_user, impersonate)
     result["warnings"] = conflicts
     return jsonify(result), 201
+
+
+# ── Upload e gestão de anexos do evento (feature 153) ────────────────────────
+# Convenção multipart: specs/144-migracao-react-spa/contracts/api-conventions.md.
+
+
+@api_bp.route("/events/<int:event_id>/invoices", methods=["POST"])
+@api_login_required
+def api_add_invoice(event_id: int) -> Any:
+    """Adiciona uma nota fiscal ao evento (feature 153). RBAC: Comercial/Financeiro/Superadmin
+    (mesmo gate de `_handle_update_comercial`, único lugar onde a nota fiscal é criada hoje).
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_manage_sale():
+        return json_error("Sem permissão", 403)
+
+    amount = _decimal_from_form(request.form.get("amount"))
+    issue_date_raw = (request.form.get("issue_date") or "").strip()
+    try:
+        issue_date = date.fromisoformat(issue_date_raw) if issue_date_raw else None
+    except ValueError:
+        issue_date = None
+    file_storage = request.files.get("file")
+
+    from app.calendar.routes import _add_invoice_record
+
+    invoice = _add_invoice_record(event, amount=amount, issue_date=issue_date, file_storage=file_storage)
+    if invoice is None:
+        return json_error(
+            "Informe ao menos o valor, a data ou o arquivo da nota.", 400,
+            {"amount": "Preencha ao menos um campo"},
+        )
+    db.session.commit()
+    return _event_detail_json(event), 201
+
+
+@api_bp.route("/events/<int:event_id>/contracts", methods=["POST"])
+@api_login_required
+def api_add_contract(event_id: int) -> Any:
+    """Adiciona um contrato ao evento (feature 153). RBAC: `_CAN_EDIT_EVENT` — o handler
+    `_handle_add_contract` não checa papel por dentro, mas todo POST de `/events/<id>` no
+    Jinja já é gateado por `_CAN_EDIT_EVENT` no dispatcher (`event_detail`), então esse é o
+    gate efetivo hoje."""
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+
+    file_storage = request.files.get("file")
+
+    from app.calendar.routes import _add_contract_record
+
+    contract = _add_contract_record(event, file_storage=file_storage)
+    if contract is None:
+        return json_error(
+            "Selecione o arquivo do contrato (até 10 MB).", 400, {"file": "Obrigatório"}
+        )
+    db.session.commit()
+    return _event_detail_json(event), 201
+
+
+@api_bp.route("/contracts/<int:contract_id>", methods=["DELETE"])
+@api_login_required
+def api_delete_contract(contract_id: int) -> Any:
+    """Exclui um contrato (feature 153). RBAC: só superadmin (paridade com `_handle_delete_contract`)."""
+    contract = EventContract.query.get(contract_id)
+    if contract is None:
+        return json_error("Contrato não encontrado", 404)
+    if not _is_superadmin():
+        return json_error("Apenas o super admin pode excluir contratos", 403)
+    event = CalendarEvent.query.get(contract.event_id)
+
+    from app.calendar.routes import _delete_contract_record
+
+    _delete_contract_record(contract)
+    db.session.commit()
+    return _event_detail_json(event)
+
+
+@api_bp.route("/contracts/<int:contract_id>/toggle-signed", methods=["POST"])
+@api_login_required
+def api_toggle_contract_signed(contract_id: int) -> Any:
+    """Alterna `is_signed` de um contrato (feature 153). RBAC: só superadmin (paridade com
+    `_handle_toggle_contract_signed`)."""
+    contract = EventContract.query.get(contract_id)
+    if contract is None:
+        return json_error("Contrato não encontrado", 404)
+    if not _is_superadmin():
+        return json_error("Apenas o super admin pode alterar o status do contrato", 403)
+    event = CalendarEvent.query.get(contract.event_id)
+
+    from app.calendar.routes import _toggle_contract_signed
+
+    _toggle_contract_signed(contract)
+    db.session.commit()
+    return _event_detail_json(event)
+
+
+@api_bp.route("/events/<int:event_id>/payments", methods=["POST"])
+@api_login_required
+def api_add_payment(event_id: int) -> Any:
+    """Registra um pagamento de cachê com comprovante (feature 153). RBAC: `_CAN_EDIT_EVENT`
+    (gate efetivo do dispatcher `event_detail` no Jinja — `_handle_add_payment` não checa
+    papel por dentro, mas todo POST daquela rota já passa por esse gate antes)."""
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+
+    amount = _decimal_from_form(request.form.get("amount"))
+    file_storage = request.files.get("file")
+
+    from app.calendar.routes import _add_payment_record
+
+    payment = _add_payment_record(event, amount=amount, file_storage=file_storage)
+    if payment is None:
+        return json_error(
+            "Informe o valor e anexe o comprovante para adicionar o pagamento.", 400,
+            {"amount": "Obrigatório", "file": "Obrigatório"},
+        )
+    db.session.commit()
+    return _event_detail_json(event), 201
+
+
+@api_bp.route("/payments/<int:payment_id>", methods=["PATCH"])
+@api_login_required
+def api_edit_payment(payment_id: int) -> Any:
+    """Corrige o valor de um comprovante de pagamento (feature 153). RBAC: só superadmin
+    (paridade com `_handle_edit_payment`)."""
+    payment = EventPayment.query.get(payment_id)
+    if payment is None:
+        return json_error("Comprovante não encontrado", 404)
+    if not _is_superadmin():
+        return json_error("Apenas o super admin pode editar comprovantes", 403)
+    event = CalendarEvent.query.get(payment.event_id)
+
+    body = request.get_json(silent=True) or {}
+    amount = Decimal(str(body["amount"])) if body.get("amount") is not None else None
+
+    from app.calendar.routes import _edit_payment_amount
+
+    if not _edit_payment_amount(payment, amount=amount):
+        return json_error("Informe um valor válido para o comprovante", 400, {"amount": "Obrigatório"})
+    db.session.commit()
+    return _event_detail_json(event)
+
+
+@api_bp.route("/payments/<int:payment_id>", methods=["DELETE"])
+@api_login_required
+def api_delete_payment(payment_id: int) -> Any:
+    """Exclui um comprovante de pagamento (feature 153). RBAC: só superadmin (paridade com
+    `_handle_delete_payment`)."""
+    payment = EventPayment.query.get(payment_id)
+    if payment is None:
+        return json_error("Comprovante não encontrado", 404)
+    if not _is_superadmin():
+        return json_error("Apenas o super admin pode excluir comprovantes", 403)
+    event = CalendarEvent.query.get(payment.event_id)
+
+    from app.calendar.routes import _delete_payment_record
+
+    _delete_payment_record(payment)
+    db.session.commit()
+    return _event_detail_json(event)
+
+
+@api_bp.route("/events/<int:event_id>/reimbursements", methods=["POST"])
+@api_login_required
+def api_add_reimbursement(event_id: int) -> Any:
+    """Registra um reembolso a cobrar da cliente (feature 153). RBAC: `_CAN_EDIT_EVENT` (gate
+    efetivo do dispatcher `event_detail` — `_handle_add_reembolso` não checa papel por dentro)."""
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+
+    description = request.form.get("description", "")
+    amount = _decimal_from_form(request.form.get("amount"))
+    file_storage = request.files.get("file")
+
+    from app.calendar.routes import _add_reimbursement_record
+
+    reimbursement = _add_reimbursement_record(
+        event,
+        description=description,
+        amount=amount,
+        file_storage=file_storage,
+        created_by_id=current_user.id,
+    )
+    if reimbursement is None:
+        return json_error(
+            "Informe a descrição e o valor do reembolso.", 400,
+            {"description": "Obrigatório", "amount": "Obrigatório"},
+        )
+    db.session.commit()
+    return _event_detail_json(event), 201
+
+
+@api_bp.route("/reimbursements/<int:reimbursement_id>/collect", methods=["POST"])
+@api_login_required
+def api_collect_reimbursement(reimbursement_id: int) -> Any:
+    """Marca um reembolso como cobrado (feature 153). RBAC: `_CAN_EDIT_EVENT` (gate efetivo do
+    dispatcher `event_detail` — `_handle_collect_reembolso` não checa papel por dentro)."""
+    reimbursement = EventReimbursement.query.get(reimbursement_id)
+    if reimbursement is None:
+        return json_error("Reembolso não encontrado", 404)
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+    if reimbursement.is_collected:
+        return json_error("Esse reembolso já foi marcado como cobrado", 400)
+    event = CalendarEvent.query.get(reimbursement.event_id)
+
+    collected_amount = _decimal_from_form(request.form.get("collected_amount"))
+    file_storage = request.files.get("file")
+
+    from app.calendar.routes import _collect_reimbursement_record
+
+    ok = _collect_reimbursement_record(
+        reimbursement,
+        collected_amount=collected_amount,
+        file_storage=file_storage,
+        collected_by_id=current_user.id,
+    )
+    if not ok:
+        return json_error(
+            "Informe o valor recebido e anexe o comprovante para marcar como cobrado.", 400,
+            {"collected_amount": "Obrigatório", "file": "Obrigatório"},
+        )
+    db.session.commit()
+    return _event_detail_json(event)
+
+
+@api_bp.route("/reimbursements/<int:reimbursement_id>", methods=["DELETE"])
+@api_login_required
+def api_delete_reimbursement(reimbursement_id: int) -> Any:
+    """Exclui um reembolso (feature 153). RBAC: só superadmin (paridade com
+    `_handle_delete_reembolso`)."""
+    reimbursement = EventReimbursement.query.get(reimbursement_id)
+    if reimbursement is None:
+        return json_error("Reembolso não encontrado", 404)
+    if not _is_superadmin():
+        return json_error("Apenas o super admin pode excluir reembolsos", 403)
+    event = CalendarEvent.query.get(reimbursement.event_id)
+
+    from app.calendar.routes import _delete_reimbursement_record
+
+    _delete_reimbursement_record(reimbursement)
+    db.session.commit()
+    return _event_detail_json(event)

@@ -536,18 +536,15 @@ def _handle_add_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     if not file or not file.filename:
         flash("Selecione o arquivo do contrato para enviar.", "error")
         return
-    file.stream.seek(0, 2)
-    size = file.stream.tell()
-    file.stream.seek(0)
-    if size > 10 * 1024 * 1024:
+    fpath = _save_bounded_upload(
+        file, current_app.config["UPLOAD_CONTRACTS"], "contracts", max_mb=10
+    )
+    if not fpath:
         flash("Arquivo do contrato acima de 10 MB — envie um arquivo menor.", "error")
         return
-    name = secure_filename(file.filename)
-    save_path = os.path.join(current_app.config["UPLOAD_CONTRACTS"], name)
-    file.save(save_path)
     db.session.add(EventContract(
         event_id=event.id,
-        file_path=f"/uploads/contracts/{name}",
+        file_path=fpath,
         amount=None,
     ))
     db.session.add(EventLog(
@@ -561,6 +558,37 @@ def _handle_add_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     flash("Contrato enviado.", "success")
 
 
+def _save_bounded_upload(
+    file_storage, upload_dir: str, subpath: str, *, max_mb: int = 10
+) -> str | None:
+    """Salva um arquivo enviado por form, respeitando um limite de tamanho.
+
+    Fonte única para "checar tamanho + secure_filename + salvar", reaproveitada por nota
+    fiscal, contrato, comprovante de pagamento e comprovante de reembolso (feature 153) — antes
+    duplicada inline em cada handler.
+
+    Args:
+        file_storage: o ``FileStorage`` recebido do form (ou None).
+        upload_dir: diretório absoluto onde salvar (ex.: ``current_app.config["UPLOAD_PAYMENTS"]``).
+        subpath: segmento usado no caminho público (``/uploads/<subpath>/<nome>``).
+        max_mb: limite de tamanho em megabytes.
+
+    Returns:
+        O caminho público do arquivo ou None se não houve upload válido (sem arquivo ou acima
+        do limite).
+    """
+    if not file_storage or not file_storage.filename:
+        return None
+    file_storage.stream.seek(0, 2)
+    size = file_storage.stream.tell()
+    file_storage.stream.seek(0)
+    if size > max_mb * 1024 * 1024:
+        return None
+    fname = secure_filename(file_storage.filename)
+    file_storage.save(os.path.join(upload_dir, fname))
+    return f"/uploads/{subpath}/{fname}"
+
+
 def _save_nf_file(file_storage) -> str | None:
     """Salva o arquivo de uma nota fiscal em UPLOAD_INVOICES.
 
@@ -571,16 +599,47 @@ def _save_nf_file(file_storage) -> str | None:
         O caminho público do arquivo (``/uploads/invoices/<nome>``) ou None se não houve
         upload válido (sem arquivo ou acima de 10 MB).
     """
-    if not file_storage or not file_storage.filename:
+    return _save_bounded_upload(
+        file_storage, current_app.config["UPLOAD_INVOICES"], "invoices", max_mb=10
+    )
+
+
+def _add_invoice_record(
+    event: CalendarEvent,
+    *,
+    amount: Decimal | None,
+    issue_date: date | None,
+    file_storage,
+) -> EventInvoice | None:
+    """Adiciona UMA nota fiscal ao evento (feature 153 — ação isolada, não mexe nas existentes).
+
+    Mesma regra de "nova nota" já usada na reconciliação do formulário de venda: rejeita só se
+    valor, data e arquivo vierem todos vazios. Não altera `event.with_invoice` nem qualquer
+    outra nota já cadastrada — a edição completa da lista continua só no formulário de venda
+    (Jinja).
+
+    Args:
+        event: evento ao qual a nota pertence.
+        amount: valor da nota, ou None.
+        issue_date: data de emissão, ou None.
+        file_storage: arquivo da nota (``FileStorage``) ou None.
+
+    Returns:
+        A ``EventInvoice`` criada, ou None se os três campos vierem vazios.
+    """
+    if amount is None and issue_date is None and not (file_storage and file_storage.filename):
         return None
-    file_storage.stream.seek(0, 2)
-    size = file_storage.stream.tell()
-    file_storage.stream.seek(0)
-    if size > 10 * 1024 * 1024:
-        return None
-    fname = secure_filename(file_storage.filename)
-    file_storage.save(os.path.join(current_app.config["UPLOAD_INVOICES"], fname))
-    return f"/uploads/invoices/{fname}"
+    file_path = _save_nf_file(file_storage)
+    invoice = EventInvoice(
+        event_id=event.id,
+        amount=amount,
+        issue_date=issue_date,
+        file=file_path,
+        status="emitida" if file_path else "a_emitir",
+        issued_at=datetime.now(tz=ZoneInfo("America/Sao_Paulo")) if file_path else None,
+    )
+    db.session.add(invoice)
+    return invoice
 
 
 def _parse_client_pairs() -> list[tuple[int, str]]:
@@ -871,18 +930,15 @@ def _handle_add_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     if not file or not file.filename:
         flash("Anexe o comprovante para adicionar o pagamento.", "error")
         return
-    file.stream.seek(0, 2)
-    size = file.stream.tell()
-    file.stream.seek(0)
-    if size > 10 * 1024 * 1024:
+    fpath = _save_bounded_upload(
+        file, current_app.config["UPLOAD_PAYMENTS"], "payments", max_mb=10
+    )
+    if not fpath:
         flash("Comprovante acima de 10 MB — envie um arquivo menor.", "error")
         return
-    name = secure_filename(file.filename)
-    save_path = os.path.join(current_app.config["UPLOAD_PAYMENTS"], name)
-    file.save(save_path)
     db.session.add(EventPayment(
         event_id=event.id,
-        file_path=f"/uploads/payments/{name}",
+        file_path=fpath,
         amount=amount,
     ))
     db.session.add(EventLog(
@@ -947,6 +1003,46 @@ def _handle_delete_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     flash("Comprovante excluído.", "success")
 
 
+def _add_payment_record(
+    event: CalendarEvent, *, amount: Decimal | None, file_storage
+) -> EventPayment | None:
+    """Adiciona um comprovante de pagamento ao evento (feature 153).
+
+    Paridade com `_handle_add_payment`: exige valor E arquivo.
+
+    Args:
+        event: evento ao qual o pagamento pertence.
+        amount: valor recebido.
+        file_storage: arquivo do comprovante (``FileStorage``).
+
+    Returns:
+        O ``EventPayment`` criado, ou None se faltar valor válido ou arquivo (ausente/> 10 MB).
+    """
+    if not amount or amount <= 0:
+        return None
+    file_path = _save_bounded_upload(
+        file_storage, current_app.config["UPLOAD_PAYMENTS"], "payments", max_mb=10
+    )
+    if not file_path:
+        return None
+    payment = EventPayment(event_id=event.id, file_path=file_path, amount=amount)
+    db.session.add(payment)
+    return payment
+
+
+def _edit_payment_amount(payment: EventPayment, *, amount: Decimal | None) -> bool:
+    """Corrige o valor de um comprovante já lançado. Paridade com `_handle_edit_payment`."""
+    if not amount or amount <= 0:
+        return False
+    payment.amount = amount
+    return True
+
+
+def _delete_payment_record(payment: EventPayment) -> None:
+    """Exclui um comprovante de pagamento. Paridade com `_handle_delete_payment`."""
+    db.session.delete(payment)
+
+
 def _handle_add_reembolso(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     """Registra um novo reembolso a cobrar da cliente (feature 136)."""
     description = (request.form.get("reembolso_description") or "").strip()
@@ -997,17 +1093,15 @@ def _handle_collect_reembolso(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     if not file or not file.filename:
         flash("Anexe o comprovante para marcar o reembolso como cobrado.", "error")
         return
-    file.stream.seek(0, 2)
-    size = file.stream.tell()
-    file.stream.seek(0)
-    if size > 10 * 1024 * 1024:
+    fpath = _save_bounded_upload(
+        file, current_app.config["UPLOAD_PAYMENTS"], "payments", max_mb=10
+    )
+    if not fpath:
         flash("Comprovante acima de 10 MB — envie um arquivo menor.", "error")
         return
-    name = secure_filename(file.filename)
-    file.save(os.path.join(current_app.config["UPLOAD_PAYMENTS"], name))
     reembolso.collected_at = datetime.now(tz=tz_sp)
     reembolso.collected_amount = amount
-    reembolso.receipt_file_path = f"/uploads/payments/{name}"
+    reembolso.receipt_file_path = fpath
     reembolso.collected_by_id = current_user.id
     db.session.add(EventLog(
         event_id=event.id,
@@ -1042,6 +1136,75 @@ def _handle_delete_reembolso(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     db.session.delete(reembolso)
     db.session.commit()
     flash("Reembolso excluído.", "success")
+
+
+def _add_reimbursement_record(
+    event: CalendarEvent,
+    *,
+    description: str,
+    amount: Decimal | None,
+    file_storage,
+    created_by_id: int,
+) -> EventReimbursement | None:
+    """Registra um reembolso a cobrar da cliente (feature 153). Paridade com
+    `_handle_add_reembolso` — comprovante do gasto original é opcional.
+
+    Args:
+        event: evento ao qual o reembolso pertence.
+        description: descrição do gasto (obrigatória).
+        amount: valor a cobrar (obrigatório).
+        file_storage: comprovante do gasto original (``FileStorage``) ou None.
+        created_by_id: id do usuário que registrou o reembolso.
+
+    Returns:
+        O ``EventReimbursement`` criado, ou None se faltar descrição ou valor válido.
+    """
+    description = (description or "").strip()
+    if not description or not amount or amount <= 0:
+        return None
+    reimbursement = EventReimbursement(
+        event_id=event.id,
+        description=description[:200],
+        amount=amount,
+        invoice_file_path=_save_nf_file(file_storage),
+        created_by_id=created_by_id,
+    )
+    db.session.add(reimbursement)
+    return reimbursement
+
+
+def _collect_reimbursement_record(
+    reimbursement: EventReimbursement,
+    *,
+    collected_amount: Decimal | None,
+    file_storage,
+    collected_by_id: int,
+) -> bool:
+    """Marca um reembolso como cobrado (feature 153). Paridade com `_handle_collect_reembolso`
+    — exige valor recebido E comprovante de recebimento; recusa se já cobrado.
+
+    Returns:
+        True se marcado com sucesso, False se já cobrado ou faltar valor/arquivo válido.
+    """
+    if reimbursement.is_collected:
+        return False
+    if not collected_amount or collected_amount <= 0:
+        return False
+    file_path = _save_bounded_upload(
+        file_storage, current_app.config["UPLOAD_PAYMENTS"], "payments", max_mb=10
+    )
+    if not file_path:
+        return False
+    reimbursement.collected_at = datetime.now(tz=ZoneInfo("America/Sao_Paulo"))
+    reimbursement.collected_amount = collected_amount
+    reimbursement.receipt_file_path = file_path
+    reimbursement.collected_by_id = collected_by_id
+    return True
+
+
+def _delete_reimbursement_record(reimbursement: EventReimbursement) -> None:
+    """Exclui um reembolso. Paridade com `_handle_delete_reembolso`."""
+    db.session.delete(reimbursement)
 
 
 def _handle_delete_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
@@ -1084,6 +1247,36 @@ def _handle_toggle_contract_signed(event: CalendarEvent, tz_sp: ZoneInfo) -> Non
     ))
     db.session.commit()
     flash("Status do contrato atualizado.", "success")
+
+
+def _add_contract_record(event: CalendarEvent, *, file_storage) -> EventContract | None:
+    """Adiciona um contrato ao evento (feature 153). Paridade com `_handle_add_contract`.
+
+    Args:
+        event: evento ao qual o contrato pertence.
+        file_storage: arquivo do contrato (``FileStorage``).
+
+    Returns:
+        O ``EventContract`` criado, ou None se não houver arquivo válido (ausente ou > 10 MB).
+    """
+    file_path = _save_bounded_upload(
+        file_storage, current_app.config["UPLOAD_CONTRACTS"], "contracts", max_mb=10
+    )
+    if not file_path:
+        return None
+    contract = EventContract(event_id=event.id, file_path=file_path, amount=None)
+    db.session.add(contract)
+    return contract
+
+
+def _delete_contract_record(contract: EventContract) -> None:
+    """Exclui um contrato. Paridade com `_handle_delete_contract`."""
+    db.session.delete(contract)
+
+
+def _toggle_contract_signed(contract: EventContract) -> None:
+    """Alterna `is_signed`. Paridade com `_handle_toggle_contract_signed`."""
+    contract.is_signed = not contract.is_signed
 
 
 def _handle_toggle_confirmado(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
