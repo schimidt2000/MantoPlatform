@@ -11,3 +11,4 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 # Importa os módulos de rotas para registrá-los no blueprint (ordem após a criação do bp).
 from app.api import auth as _auth  # noqa: E402,F401
 from app.api import dashboard as _dashboard  # noqa: E402,F401
+from app.api import agenda as _agenda  # noqa: E402,F401

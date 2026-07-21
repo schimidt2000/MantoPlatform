@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { apiFetch } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
@@ -50,9 +51,14 @@ export function DashboardPage() {
           <h1 className="text-2xl font-semibold text-ink">Início</h1>
           {user && <p className="text-sm text-muted">Olá, {user.name}</p>}
         </div>
-        <Button variant="outline" size="sm" loading={logout.isPending} onClick={() => logout.mutate()}>
-          Sair
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link to="/agenda">Agenda</Link>
+          </Button>
+          <Button variant="outline" size="sm" loading={logout.isPending} onClick={() => logout.mutate()}>
+            Sair
+          </Button>
+        </div>
       </header>
 
       {dashboard.isLoading && <DashboardSkeleton />}
