@@ -3197,7 +3197,14 @@ def sync_single_event(event_id: int):
 @calendar_bp.route("/events/<int:event_id>/observations/add", methods=["POST"])
 @login_required
 def add_observation(event_id: int):
-    """Adiciona observações a um evento existente."""
+    """Adiciona observações a um evento existente.
+
+    Adaptador fino: a regra de "o que conta como observação válida" vive em
+    `observation_ops.add_observation` (fonte única, feature 150). Este handler mantém o parsing dos
+    arrays do form e o upload de imagem; o núcleo cria (ou ignora) cada item.
+    """
+    from app.calendar.observation_ops import add_observation as _add_observation
+
     event = CalendarEvent.query.get_or_404(event_id)
 
     obs_types    = request.form.getlist("obs_type[]")
@@ -3207,29 +3214,20 @@ def add_observation(event_id: int):
     img_idx = 0
     added = 0
     for j, otype in enumerate(obs_types):
-        content   = obs_contents[j].strip() if j < len(obs_contents) else ""
-        label     = obs_labels[j].strip()   if j < len(obs_labels)   else ""
+        content   = obs_contents[j] if j < len(obs_contents) else ""
+        label     = obs_labels[j]   if j < len(obs_labels)   else ""
         file_path = None
-        if otype == "image":
-            if img_idx < len(obs_images):
-                file_path = _save_file_upload(
-                    obs_images[img_idx],
-                    current_app.config["UPLOAD_EVENT_OBS"],
-                    "event_obs",
-                )
-                img_idx += 1
-            if not file_path:
-                continue
-        elif otype in ("text", "link") and not content:
-            continue
-        db.session.add(EventObservation(
-            event_id  = event.id,
-            obs_type  = otype,
-            content   = content or None,
-            file_path = file_path,
-            label     = label or None,
-        ))
-        added += 1
+        if otype == "image" and img_idx < len(obs_images):
+            file_path = _save_file_upload(
+                obs_images[img_idx],
+                current_app.config["UPLOAD_EVENT_OBS"],
+                "event_obs",
+            )
+            img_idx += 1
+        if _add_observation(
+            event, obs_type=otype, content=content, label=label, file_path=file_path
+        ):
+            added += 1
 
     if added:
         db.session.commit()
@@ -3240,10 +3238,16 @@ def add_observation(event_id: int):
 @calendar_bp.route("/events/<int:event_id>/observations/<int:obs_id>/delete", methods=["POST"])
 @login_required
 def delete_observation(event_id: int, obs_id: int):
-    """Remove uma observação de um evento."""
-    obs = EventObservation.query.filter_by(id=obs_id, event_id=event_id).first_or_404()
-    db.session.delete(obs)
-    db.session.commit()
+    """Remove uma observação de um evento.
+
+    Adaptador fino sobre `observation_ops.delete_observation` (feature 150): 404 se a observação
+    não pertence ao evento, exatamente como o `first_or_404` de antes.
+    """
+    from app.calendar.observation_ops import delete_observation as _delete_observation
+
+    event = CalendarEvent.query.get_or_404(event_id)
+    if not _delete_observation(event, obs_id):
+        abort(404)
     return redirect(url_for("calendar.event_detail", event_id=event_id))
 
 

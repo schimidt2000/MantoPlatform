@@ -81,7 +81,13 @@ export interface EventoDetalhe {
   flags: Record<string, boolean>;
   logs: { ts: string; actor_name: string; actor_role: string; message: string }[];
   elenco?: RoleItem[];
-  observations?: { id: number; obs_type: string; content: string | null; label: string | null }[];
+  observations?: {
+    id: number;
+    obs_type: string;
+    content: string | null;
+    label: string | null;
+    image_url?: string | null;
+  }[];
   venda?: {
     sale_value: number | null;
     sale_value_gross: number | null;

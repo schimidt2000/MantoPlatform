@@ -14,7 +14,7 @@ from app.api import api_bp
 from app.api.agenda_read import serialize_event_detail
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
-from app.models import CalendarEvent, EventRole
+from app.models import CalendarEvent, EventObservation, EventRole, db
 
 _TZ_SP = ZoneInfo("America/Sao_Paulo")
 
@@ -248,4 +248,53 @@ def api_save_logistics(event_id: int) -> Any:
         actor_name=current_user.name,
         tz=_TZ_SP,
     )
+    return _event_detail_json(event)
+
+
+# ── Observações do evento (feature 150) ──────────────────────────────────────
+
+
+@api_bp.route("/events/<int:event_id>/observations", methods=["POST"])
+@api_login_required
+def api_add_observation(event_id: int) -> Any:
+    """Adiciona uma observação de texto/link ao evento (feature 150).
+
+    Sem gate de papel (paridade com o `@login_required` do Jinja). Imagem não é suportada por aqui
+    (upload adiado) — só `obs_type` "text" ou "link".
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    data = request.get_json(silent=True) or {}
+    obs_type = data.get("obs_type")
+    if obs_type not in ("text", "link"):
+        return json_error("Tipo de observação inválido", 400, {"obs_type": "Use texto ou link"})
+
+    from app.calendar.observation_ops import add_observation
+
+    obs = add_observation(
+        event,
+        obs_type=obs_type,
+        content=data.get("content"),
+        label=data.get("label"),
+    )
+    if obs is None:
+        return json_error("Informe o conteúdo da observação", 400, {"content": "Obrigatório"})
+    db.session.commit()
+    return _event_detail_json(event)
+
+
+@api_bp.route("/observations/<int:obs_id>", methods=["DELETE"])
+@api_login_required
+def api_delete_observation(obs_id: int) -> Any:
+    """Remove uma observação do evento (feature 150). Sem gate de papel (paridade com o Jinja)."""
+    obs = EventObservation.query.get(obs_id)
+    if obs is None:
+        return json_error("Observação não encontrada", 404)
+    event = CalendarEvent.query.get(obs.event_id)
+
+    from app.calendar.observation_ops import delete_observation
+
+    if not delete_observation(event, obs_id):
+        return json_error("Observação não encontrada", 404)
     return _event_detail_json(event)

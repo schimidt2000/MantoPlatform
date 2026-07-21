@@ -1,3 +1,3 @@
-export { apiFetch, ApiRequestError } from "./client";
+export { apiFetch, ApiRequestError, API_BASE, assetUrl } from "./client";
 export type { ApiErrorBody } from "./client";
 export { createQueryClient } from "./queryClient";
