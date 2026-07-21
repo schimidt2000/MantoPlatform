@@ -2,8 +2,10 @@ import { useState, type ReactNode } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { assetUrl } from "@manto/api-client";
 import { formatBRL, MoneyInput } from "@manto/money";
 import { useEvent, type EventoDetalhe, type RoleItem } from "../lib/agenda";
+import { useAddObservation, useDeleteObservation } from "../lib/observations";
 import {
   useAddRole,
   useAssignRole,
@@ -581,6 +583,121 @@ function Logistica({ data }: { data: EventoDetalhe }) {
   );
 }
 
+type ObservationT = NonNullable<EventoDetalhe["observations"]>[number];
+
+/** Uma observação (texto/link/imagem) com botão de remover. Remoção sem gate de papel. */
+function ObservationItem({ obs, eventId }: { obs: ObservationT; eventId: number }) {
+  const del = useDeleteObservation(eventId);
+  return (
+    <li className="flex items-start justify-between gap-3 py-2">
+      <div className="min-w-0 flex-1">
+        {obs.label && <div className="text-xs text-muted">{obs.label}</div>}
+        {obs.obs_type === "image" ? (
+          obs.image_url ? (
+            <img
+              src={assetUrl(obs.image_url)}
+              alt={obs.label ?? "Observação"}
+              className="mt-1 max-w-full rounded-md"
+            />
+          ) : null
+        ) : obs.obs_type === "link" ? (
+          <a
+            href={obs.content ?? "#"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="break-words text-sm text-blue underline"
+          >
+            {obs.content}
+          </a>
+        ) : (
+          <p className="whitespace-pre-wrap break-words text-sm text-ink">{obs.content}</p>
+        )}
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        loading={del.isPending}
+        onClick={() => {
+          if (window.confirm("Remover esta observação?")) del.mutate(obs.id);
+        }}
+        aria-label="Remover observação"
+      >
+        ✕
+      </Button>
+    </li>
+  );
+}
+
+/** Form para adicionar observação de texto/link (imagem fica no Jinja — upload adiado). */
+function AddObservationForm({ eventId }: { eventId: number }) {
+  const add = useAddObservation(eventId);
+  const [obsType, setObsType] = useState<"text" | "link">("text");
+  const [content, setContent] = useState("");
+  const [label, setLabel] = useState("");
+
+  const submit = () => {
+    if (!content.trim()) return;
+    add.mutate(
+      { obs_type: obsType, content: content.trim(), label: label.trim() || undefined },
+      { onSuccess: () => { setContent(""); setLabel(""); } },
+    );
+  };
+
+  return (
+    <div className="mt-4 border-t border-line pt-4">
+      <div className="mb-2 text-sm font-medium text-muted">Nova observação</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          className="h-11 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          value={obsType}
+          onChange={(e) => setObsType(e.target.value as "text" | "link")}
+          aria-label="Tipo de observação"
+        >
+          <option value="text">Texto</option>
+          <option value="link">Link</option>
+        </select>
+        <input
+          className="h-11 min-w-40 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          placeholder={obsType === "link" ? "https://…" : "Escreva a observação"}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          aria-label="Conteúdo"
+        />
+        <input
+          className="h-11 w-32 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          placeholder="Rótulo (opcional)"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          aria-label="Rótulo"
+        />
+        <Button size="sm" loading={add.isPending} disabled={!content.trim()} onClick={submit}>
+          Adicionar
+        </Button>
+      </div>
+      {add.isError && <p className="mt-1 text-sm text-red">Não foi possível adicionar.</p>}
+    </div>
+  );
+}
+
+function Observacoes({ data }: { data: EventoDetalhe }) {
+  if (!data.observations) return null; // ausente em eventos ENSAIO
+  const obs = data.observations;
+  return (
+    <Section title="Observações">
+      {obs.length === 0 ? (
+        <p className="text-sm text-muted">Nenhuma observação.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {obs.map((o) => (
+            <ObservationItem key={o.id} obs={o} eventId={data.event.id} />
+          ))}
+        </ul>
+      )}
+      <AddObservationForm eventId={data.event.id} />
+    </Section>
+  );
+}
+
 function Historico({ data }: { data: EventoDetalhe }) {
   if (data.logs.length === 0) return null;
   return (
@@ -651,6 +768,7 @@ export function EventDetailPage() {
           <Venda data={query.data} />
           <Pagamentos data={query.data} />
           <Reembolsos data={query.data} />
+          <Observacoes data={query.data} />
           <Historico data={query.data} />
         </motion.div>
       )}

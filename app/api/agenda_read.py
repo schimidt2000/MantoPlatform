@@ -273,6 +273,8 @@ def serialize_event_detail(
             "obs_type": o.obs_type,
             "content": o.content,
             "label": o.label,
+            # URL pública do arquivo (feature 150) — só para imagem; `file_path` já é `/uploads/...`.
+            "image_url": o.file_path if o.obs_type == "image" else None,
             "created_at": o.created_at.isoformat() if o.created_at else None,
         }
         for o in event.observations

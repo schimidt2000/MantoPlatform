@@ -31,10 +31,20 @@ export class ApiRequestError extends Error {
  * fica vazia e o proxy do Vite roteia `/api` para o Flask local (research.md §2). O `/` final
  * é removido para não gerar `//api/...`.
  */
-const API_BASE = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "").replace(
+export const API_BASE = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "").replace(
   /\/+$/,
   "",
 );
+
+/**
+ * Monta a URL absoluta de um arquivo servido pelo Flask (ex.: `/uploads/...`). Em produção
+ * prefixa a base do Flask (`API_BASE`); em dev fica o path puro e o proxy do Vite roteia. Fonte
+ * única da base — o frontend não concatena origem à mão. `null`/vazio → `undefined`.
+ */
+export function assetUrl(path: string | null | undefined): string | undefined {
+  if (!path) return undefined;
+  return `${API_BASE}${path}`;
+}
 
 async function parseErrorBody(response: Response): Promise<ApiErrorBody> {
   try {
