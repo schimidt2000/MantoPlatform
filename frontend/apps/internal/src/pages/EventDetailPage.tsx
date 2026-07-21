@@ -1,9 +1,10 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
-import { formatBRL } from "@manto/money";
-import { useEvent, type EventoDetalhe } from "../lib/agenda";
+import { formatBRL, MoneyInput } from "@manto/money";
+import { useEvent, type EventoDetalhe, type RoleItem } from "../lib/agenda";
+import { useAssignRole, useTalents, type TalentoOption } from "../lib/casting";
 
 function brl(v: number | null | undefined): string {
   return `R$ ${formatBRL(v ?? 0)}`;
@@ -31,25 +32,102 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+function RoleReadRow({ role }: { role: RoleItem }) {
+  return (
+    <li className="flex items-center justify-between gap-3 py-2">
+      <div>
+        <div className="font-medium text-ink">{role.character_name}</div>
+        <div className="text-sm text-muted">
+          {role.talent ? role.talent.name : "— sem talento —"}
+          {role.figurino_done && " · figurino ok"}
+        </div>
+      </div>
+      {role.cache_value != null && (
+        <span className="shrink-0 tabular-nums text-sm text-ink">{brl(role.cache_value)}</span>
+      )}
+    </li>
+  );
+}
+
+function RoleAssignRow({
+  role,
+  eventId,
+  talents,
+}: {
+  role: RoleItem;
+  eventId: number;
+  talents: TalentoOption[];
+}) {
+  const assign = useAssignRole(eventId);
+  const [talentId, setTalentId] = useState<number | null>(role.talent?.id ?? null);
+  const [cache, setCache] = useState<number>(role.cache_value ?? 0);
+
+  return (
+    <li className="py-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="font-medium text-ink">{role.character_name}</span>
+        {role.invite_status && (
+          <span className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-muted">
+            {role.invite_status}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          className="h-11 min-w-40 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          value={talentId ?? ""}
+          onChange={(e) => setTalentId(e.target.value ? Number(e.target.value) : null)}
+          aria-label="Talento"
+        >
+          <option value="">— sem talento —</option>
+          {talents.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        <MoneyInput
+          className="h-11 w-28 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          value={cache}
+          onValueChange={setCache}
+          aria-label="Cachê"
+        />
+        <Button
+          size="sm"
+          loading={assign.isPending}
+          onClick={() =>
+            assign.mutate({ roleId: role.role_id, talent_id: talentId, cache_value: cache })
+          }
+        >
+          Salvar
+        </Button>
+      </div>
+      {assign.isError && (
+        <p className="mt-1 text-sm text-red">Não foi possível salvar. Tente novamente.</p>
+      )}
+    </li>
+  );
+}
+
 function Elenco({ data }: { data: EventoDetalhe }) {
+  const talentsQuery = useTalents();
   if (!data.elenco || data.elenco.length === 0) return null;
+  const canEdit = Boolean(data.flags.show_casting) && Boolean(talentsQuery.data);
   return (
     <Section title="Elenco">
       <ul className="divide-y divide-line">
-        {data.elenco.map((r) => (
-          <li key={r.role_id} className="flex items-center justify-between gap-3 py-2">
-            <div>
-              <div className="font-medium text-ink">{r.character_name}</div>
-              <div className="text-sm text-muted">
-                {r.talent ? r.talent.name : "— sem talento —"}
-                {r.figurino_done && " · figurino ok"}
-              </div>
-            </div>
-            {r.cache_value != null && (
-              <span className="shrink-0 tabular-nums text-sm text-ink">{brl(r.cache_value)}</span>
-            )}
-          </li>
-        ))}
+        {data.elenco.map((r) =>
+          canEdit ? (
+            <RoleAssignRow
+              key={r.role_id}
+              role={r}
+              eventId={data.event.id}
+              talents={talentsQuery.data!.items}
+            />
+          ) : (
+            <RoleReadRow key={r.role_id} role={r} />
+          ),
+        )}
       </ul>
     </Section>
   );

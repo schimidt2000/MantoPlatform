@@ -450,99 +450,27 @@ def agenda_day(date_str: str):
 # ─── Event Detail — action handlers ──────────────────────────────────────────
 
 def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    role_id_raw  = request.form.get("role_id", "")
-    talent_id    = request.form.get("talent_id")
-    cache_value  = request.form.get("cache_value")
-    travel_cache = request.form.get("travel_cache")
+    # Adaptador fino: a regra vive em casting_ops.assign_role (fonte única, feature 146),
+    # reusada pelo endpoint JSON POST /api/roles/<id>/assign. Aqui só lemos o form e damos flash.
+    role_id_raw = request.form.get("role_id", "")
     if not role_id_raw.isdigit():
         return
     role = EventRole.query.filter_by(id=int(role_id_raw), event_id=event.id).first()
     if not role:
         return
-    old_talent_id     = role.talent_id
-    old_cache_value   = role.cache_value
-    old_travel_cache  = role.travel_cache
-    old_invite_status = role.invite_status
-
-    role.talent_id = int(talent_id) if talent_id else None
-
-    _is_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
-
-    new_cache = parse_brl(cache_value)
-
-    # Aplicar teto de cache: casting não pode ultrapassar o cap do orçamento
-    if new_cache is not None and role.cache_cap is not None and new_cache > role.cache_cap:
-        if not _is_superadmin:
-            new_cache = role.cache_cap   # força o limite silenciosamente (JS já avisa)
-        # superadmin pode ultrapassar — apenas registra no log depois
-
-    role.cache_value = new_cache
-    new_travel = parse_brl(travel_cache)
-    role.travel_cache = new_travel
-    role.assigned_at = datetime.now(tz=tz_sp) if role.talent_id else None
-    if role.talent_id != old_talent_id:
-        role.figurino_done_at = None
-        role.invite_status = None
-    if role.talent_id:
-        role.payment_status = "nao_pago"
-    # Envia remoção apenas se o talento não tinha recusado voluntariamente
-    if old_talent_id and old_talent_id != role.talent_id and old_invite_status != "rejected":
-        old_talent = Talent.query.get(old_talent_id)
-        if old_talent:
-            send_async(send_removal_email, old_talent, event, role.character_name)
-    db.session.commit()
-    if role.talent_id and role.talent_id != old_talent_id:
-        role.invite_status = "pending"
-        _cap_note = ""
-        if role.cache_cap and role.cache_value and role.cache_value > role.cache_cap:
-            _cap_note = f" (acima do cap de {role.cache_cap}R$ — autorizado pelo admin)"
-        _msg = f"Adicionou {role.talent.full_name} como {role.character_name} com cachê de {role.cache_value or 0}R${_cap_note}"
-        db.session.add(EventLog(
-            event_id=event.id,
-            actor_name=current_user.name,
-            actor_role="Casting",
-            message=_msg,
-            created_at=datetime.now(tz=tz_sp),
-        ))
-        db.session.commit()
-        flash(_msg, "success")
-        send_async(send_invite_email, role)
-    elif role.talent_id:
-        _cap_note = ""
-        if role.cache_cap and role.cache_value and role.cache_value > role.cache_cap:
-            _cap_note = f" (acima do cap de {role.cache_cap}R$ — autorizado pelo admin)"
-        _msg = f"Atualizou cachê de {role.talent.full_name} como {role.character_name} para {role.cache_value or 0}R${_cap_note}"
-        db.session.add(EventLog(
-            event_id=event.id,
-            actor_name=current_user.name,
-            actor_role="Casting",
-            message=_msg,
-            created_at=datetime.now(tz=tz_sp),
-        ))
-        db.session.commit()
-        flash(_msg, "success")
-        # Notifica talento confirmado se o cachê mudou
-        if old_invite_status == "accepted":
-            cache_changes = []
-            if new_cache != old_cache_value:
-                old_fmt = f"R$ {old_cache_value:,.0f}" if old_cache_value else "não definido"
-                new_fmt = f"R$ {new_cache:,.0f}" if new_cache else "não definido"
-                cache_changes.append(f"Cachê: {old_fmt} → {new_fmt}")
-            if new_travel != old_travel_cache:
-                old_fmt = f"R$ {old_travel_cache:,.0f}" if old_travel_cache else "não definido"
-                new_fmt = f"R$ {new_travel:,.0f}" if new_travel else "não definido"
-                cache_changes.append(f"Adicional de transporte: {old_fmt} → {new_fmt}")
-            if cache_changes:
-                now_sp = datetime.now(tz=tz_sp)
-                role.event_changed_at = now_sp
-                role.change_description = "\n".join(cache_changes)
-                db.session.commit()
-                send_async(send_event_changed_email, role, cache_changes)
-    else:
-        # Sem talento (removido ou nunca teve) — ainda assim confirma visivelmente
-        # que a vaga foi salva (feature 138), para o Casting nunca ficar em dúvida
-        # se a ação teve efeito.
-        flash(f"Vaga de {role.character_name} atualizada.", "success")
+    from app.calendar.casting_ops import assign_role
+    message = assign_role(
+        event,
+        role,
+        talent_id=request.form.get("talent_id"),
+        cache_value=request.form.get("cache_value"),
+        travel_cache=request.form.get("travel_cache"),
+        actor_name=current_user.name,
+        is_superadmin=any(r.name == RoleName.SUPERADMIN for r in current_user.roles),
+        tz=tz_sp,
+    )
+    if message:
+        flash(message, "success")
 
 
 def _handle_add_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
