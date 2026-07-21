@@ -41,3 +41,37 @@ export function useAssignRole(eventId: number) {
     },
   });
 }
+
+interface AddRoleInput {
+  character_name: string;
+  talent_id?: number | null;
+  cache_value?: number;
+  role_type?: string;
+}
+
+/** Adiciona um cargo ao evento. */
+export function useAddRole(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, AddRoleInput>({
+    mutationFn: (body) =>
+      apiFetch<EventoDetalhe>(`/api/events/${eventId}/roles`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["event", eventId], updated);
+    },
+  });
+}
+
+/** Remove um cargo do evento. */
+export function useDeleteRole(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, number>({
+    mutationFn: (roleId) =>
+      apiFetch<EventoDetalhe>(`/api/roles/${roleId}`, { method: "DELETE" }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["event", eventId], updated);
+    },
+  });
+}

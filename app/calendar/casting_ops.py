@@ -148,3 +148,73 @@ def _cache_changes(
         new_fmt = f"R$ {new_travel:,.0f}" if new_travel else "não definido"
         changes.append(f"Adicional de transporte: {old_fmt} → {new_fmt}")
     return changes
+
+
+def add_role(
+    event: Any,
+    *,
+    character_name: str,
+    talent_id: Any,
+    cache_value: Any,
+    role_type: str,
+    actor_name: str,
+    tz: ZoneInfo,
+) -> Any:
+    """Adiciona um cargo ao evento (com ou sem talento). Núcleo de `_handle_add_role`.
+
+    Cachê via `parse_brl` (Princípio VII — harmoniza com `assign_role`; o handler antigo usava
+    `int()`, agora aceita decimais pt-BR). Se tem talento: `invite_status=pending` + convite.
+
+    Returns:
+        O `EventRole` criado.
+    """
+    from app.models import EventRole
+
+    role = EventRole(event_id=event.id, character_name=character_name, role_type=role_type or "character")
+    if talent_id:
+        role.talent_id = int(talent_id)
+        role.assigned_at = datetime.now(tz=tz)
+        role.invite_status = "pending"
+    role.cache_value = parse_brl(cache_value)
+    db.session.add(role)
+    db.session.flush()
+    talent_name = role.talent.full_name if role.talent else None
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Casting",
+        message=(
+            f"Adicionou {talent_name} como {role.character_name} "
+            f"com um cachê de {role.cache_value or 0} reais"
+            if talent_name
+            else f"Adicionou função: {role.character_name}"
+        ),
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.commit()
+    if role.talent_id:
+        send_async(send_invite_email, role)
+    return role
+
+
+def delete_role(
+    event: Any, role: Any, *, is_superadmin: bool, actor_name: str, tz: ZoneInfo
+) -> bool:
+    """Remove um cargo. Núcleo de `_handle_delete_role`. Cargo com convite aceito só sai por
+    superadmin (retorna False sem remover, nesse caso).
+
+    Returns:
+        True se removeu; False se bloqueado (convite aceito e não-superadmin).
+    """
+    if role.invite_status == "accepted" and not is_superadmin:
+        return False
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Casting",
+        message=f"Removeu vaga: {role.character_name}",
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.delete(role)
+    db.session.commit()
+    return True
