@@ -101,17 +101,18 @@ def _month_sync_age_minutes(ym: str) -> int | None:
     return int(age_seconds // 60)
 
 
-def _build_events_from_db(
-    year: int, month: int, month_start: date, month_end: date
-) -> tuple[dict, dict, list]:
-    """Constrói event_map, events_by_day e list_items a partir do banco (sem chamar Google)."""
+def _query_month_events(year: int, month: int) -> list["CalendarEvent"]:
+    """Eventos que aparecem no mês (fonte única da agenda — reusada pela view e pela API 145).
+
+    Inclui eventos que começam no mês e os que atravessam o mês (fim >= início do mês). Ordena
+    por início. Não chama o Google — lê só do banco.
+    """
     month_start_dt = datetime(year, month, 1)
     if month == 12:
         month_end_dt = datetime(year + 1, 1, 1)
     else:
         month_end_dt = datetime(year, month + 1, 1)
-
-    db_events = (
+    return (
         CalendarEvent.query
         .filter(
             CalendarEvent.start_at < month_end_dt,
@@ -123,6 +124,13 @@ def _build_events_from_db(
         .order_by(CalendarEvent.start_at)
         .all()
     )
+
+
+def _build_events_from_db(
+    year: int, month: int, month_start: date, month_end: date
+) -> tuple[dict, dict, list]:
+    """Constrói event_map, events_by_day e list_items a partir do banco (sem chamar Google)."""
+    db_events = _query_month_events(year, month)
 
     event_map = {ev.google_event_id: ev.id for ev in db_events}
     events_by_day: dict[int, list] = {}
