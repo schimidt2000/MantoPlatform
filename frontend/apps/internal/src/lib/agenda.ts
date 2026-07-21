@@ -66,10 +66,17 @@ export interface EventoDetalhe {
     end_at: string | null;
     location: string | null;
     confirmed: boolean;
+    confirmed_by: string | null;
     is_satellite: boolean;
     group_name: string | null;
     characters: string[];
     is_ensaio: boolean;
+    // Logística (feature 149)
+    makeup_time: string | null;
+    makeup_location: string | null;
+    departure_time: string | null;
+    departure_location: string | null;
+    needs_rehearsal: boolean;
   };
   flags: Record<string, boolean>;
   logs: { ts: string; actor_name: string; actor_role: string; message: string }[];

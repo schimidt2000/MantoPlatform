@@ -97,6 +97,15 @@ def _role_flags(user: Any, impersonate: str | None) -> dict[str, bool]:
         "show_financeiro": has(RoleName.FINANCEIRO) or is_superadmin,
         "show_ensaio": has(RoleName.ENSAIO) or has(RoleName.CASTING) or is_superadmin,
         "is_superadmin": is_superadmin,
+        # Escrita de nível-evento (feature 149): confirmar = Comercial/SA; logística = _CAN_EDIT_EVENT.
+        "can_confirm": has(RoleName.COMERCIAL) or is_superadmin,
+        "can_edit_event": (
+            has(RoleName.CASTING)
+            or has(RoleName.FIGURINO)
+            or has(RoleName.COMERCIAL)
+            or has(RoleName.FINANCEIRO)
+            or is_superadmin
+        ),
     }
 
 
@@ -237,10 +246,17 @@ def serialize_event_detail(
             "end_at": event.end_at.isoformat() if event.end_at else None,
             "location": event.location or None,
             "confirmed": event.confirmed_at is not None,
+            "confirmed_by": event.confirmer.name if event.confirmer else None,
             "is_satellite": event.is_satellite,
             "group_name": event.group_name or None,
             "characters": parse_characters(event.title),
             "is_ensaio": is_ensaio,
+            # Logística (feature 149) — não-financeiro, sempre presente.
+            "makeup_time": event.makeup_time or None,
+            "makeup_location": event.makeup_location or None,
+            "departure_time": event.departure_time or None,
+            "departure_location": event.departure_location or None,
+            "needs_rehearsal": bool(event.needs_rehearsal),
         },
         "flags": flags,
         "logs": _serialize_logs(event.id),

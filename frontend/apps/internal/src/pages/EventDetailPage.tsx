@@ -15,6 +15,7 @@ import {
   useTalents,
   type TalentoOption,
 } from "../lib/casting";
+import { useSaveLogistics, useToggleConfirm } from "../lib/eventOps";
 
 function brl(v: number | null | undefined): string {
   return `R$ ${formatBRL(v ?? 0)}`;
@@ -29,6 +30,13 @@ function formatDate(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function makeupLocationLabel(loc: string | null): string {
+  if (!loc) return "";
+  if (loc === "manto") return "Manto Produções";
+  if (loc === "local") return "Local do evento";
+  return loc;
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -415,6 +423,164 @@ function Reembolsos({ data }: { data: EventoDetalhe }) {
   );
 }
 
+/** Toggle de confirmação do evento (feature 149). Comercial/SA vê o botão; os demais, só o badge. */
+function ConfirmControl({ data }: { data: EventoDetalhe }) {
+  const toggle = useToggleConfirm(data.event.id);
+  const { confirmed, confirmed_by } = data.event;
+  if (!data.flags.can_confirm) {
+    return confirmed ? (
+      <span className="rounded-md bg-green-soft px-2 py-0.5 text-xs text-green">Confirmado</span>
+    ) : null;
+  }
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Button
+        variant={confirmed ? "outline" : "default"}
+        size="sm"
+        loading={toggle.isPending}
+        onClick={() => toggle.mutate()}
+      >
+        {confirmed ? "✓ Confirmado — desfazer" : "Confirmar evento"}
+      </Button>
+      {confirmed && confirmed_by && <span className="text-xs text-muted">por {confirmed_by}</span>}
+    </span>
+  );
+}
+
+const LOGISTICS_INPUT =
+  "h-11 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
+
+/** Editor de logística (maquiagem/saída/precisa-ensaio) para quem pode editar o evento. */
+function LogisticaEdit({ data }: { data: EventoDetalhe }) {
+  const save = useSaveLogistics(data.event.id);
+  const ev = data.event;
+  const initLoc = ev.makeup_location;
+  const isPreset = initLoc === "manto" || initLoc === "local";
+  const [makeupTime, setMakeupTime] = useState(ev.makeup_time ?? "");
+  const [makeupSel, setMakeupSel] = useState<string>(isPreset ? initLoc! : initLoc ? "outro" : "manto");
+  const [makeupCustom, setMakeupCustom] = useState(!isPreset && initLoc ? initLoc : "");
+  const [departureTime, setDepartureTime] = useState(ev.departure_time ?? "");
+  const [departureLocation, setDepartureLocation] = useState(ev.departure_location ?? "Manto Produções");
+  const [needsRehearsal, setNeedsRehearsal] = useState(ev.needs_rehearsal);
+
+  const submit = () =>
+    save.mutate({
+      makeup_time: makeupTime,
+      makeup_location: makeupSel === "outro" ? makeupCustom.trim() : makeupSel,
+      departure_time: departureTime,
+      departure_location: departureLocation,
+      needs_rehearsal: needsRehearsal,
+    });
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm text-muted">Horário de maquiagem</span>
+          <input
+            type="time"
+            className={LOGISTICS_INPUT}
+            value={makeupTime}
+            onChange={(e) => setMakeupTime(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm text-muted">Local de maquiagem</span>
+          <select
+            className={LOGISTICS_INPUT}
+            value={makeupSel}
+            onChange={(e) => setMakeupSel(e.target.value)}
+          >
+            <option value="manto">Manto Produções</option>
+            <option value="local">Local do evento</option>
+            <option value="outro">Outro endereço…</option>
+          </select>
+        </label>
+      </div>
+      {makeupSel === "outro" && (
+        <input
+          type="text"
+          className={LOGISTICS_INPUT}
+          placeholder="Endereço da maquiagem"
+          value={makeupCustom}
+          onChange={(e) => setMakeupCustom(e.target.value)}
+          aria-label="Endereço da maquiagem"
+        />
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm text-muted">Horário de saída</span>
+          <input
+            type="time"
+            className={LOGISTICS_INPUT}
+            value={departureTime}
+            onChange={(e) => setDepartureTime(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm text-muted">Local de saída</span>
+          <input
+            type="text"
+            className={LOGISTICS_INPUT}
+            value={departureLocation}
+            onChange={(e) => setDepartureLocation(e.target.value)}
+          />
+        </label>
+      </div>
+      <label className="flex items-center gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          className="h-5 w-5"
+          checked={needsRehearsal}
+          onChange={(e) => setNeedsRehearsal(e.target.checked)}
+        />
+        Precisa de ensaio
+      </label>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" loading={save.isPending} onClick={submit}>
+          Salvar logística
+        </Button>
+        {save.isSuccess && !save.isPending && (
+          <span className="text-sm text-green">Logística salva.</span>
+        )}
+        {save.isError && <span className="text-sm text-red">Não foi possível salvar.</span>}
+      </div>
+    </div>
+  );
+}
+
+/** Exibição de logística para quem não pode editar. */
+function LogisticaRead({ data }: { data: EventoDetalhe }) {
+  const ev = data.event;
+  const maquiagem = [ev.makeup_time, makeupLocationLabel(ev.makeup_location)].filter(Boolean).join(" · ");
+  const saida = [ev.departure_time, ev.departure_location].filter(Boolean).join(" · ");
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      <dt className="text-muted">Maquiagem</dt>
+      <dd className="text-ink">{maquiagem || "—"}</dd>
+      <dt className="text-muted">Saída</dt>
+      <dd className="text-ink">{saida || "—"}</dd>
+      <dt className="text-muted">Precisa ensaio</dt>
+      <dd className="text-ink">{ev.needs_rehearsal ? "Sim" : "Não"}</dd>
+    </dl>
+  );
+}
+
+function Logistica({ data }: { data: EventoDetalhe }) {
+  const ev = data.event;
+  if (ev.is_ensaio) return null;
+  const canEdit = Boolean(data.flags.can_edit_event);
+  const hasAny = Boolean(
+    ev.makeup_time || ev.makeup_location || ev.departure_time || ev.departure_location || ev.needs_rehearsal,
+  );
+  if (!canEdit && !hasAny) return null;
+  return (
+    <Section title="Logística">
+      {canEdit ? <LogisticaEdit data={data} /> : <LogisticaRead data={data} />}
+    </Section>
+  );
+}
+
 function Historico({ data }: { data: EventoDetalhe }) {
   if (data.logs.length === 0) return null;
   return (
@@ -471,20 +637,17 @@ export function EventDetailPage() {
               {formatDate(query.data.event.start_at)}
               {query.data.event.location && ` · ${query.data.event.location}`}
             </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <span className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-muted">
                 {query.data.event.event_type}
               </span>
-              {query.data.event.confirmed && (
-                <span className="rounded-md bg-green-soft px-2 py-0.5 text-xs text-green">
-                  Confirmado
-                </span>
-              )}
+              <ConfirmControl data={query.data} />
             </div>
           </header>
 
           <Kpi data={query.data} />
           <Elenco data={query.data} />
+          <Logistica data={query.data} />
           <Venda data={query.data} />
           <Pagamentos data={query.data} />
           <Reembolsos data={query.data} />
