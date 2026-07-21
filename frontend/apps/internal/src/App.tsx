@@ -4,6 +4,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { AgendaPage } from "./pages/AgendaPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
+import { EventCreatePage } from "./pages/EventCreatePage";
 
 export function App() {
   return (
@@ -23,6 +24,14 @@ export function App() {
           element={
             <RequireAuth>
               <AgendaPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/events/new"
+          element={
+            <RequireAuth>
+              <EventCreatePage />
             </RequireAuth>
           }
         />

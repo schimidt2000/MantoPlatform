@@ -4,6 +4,7 @@ Cada ação reusa o núcleo em `app/calendar/casting_ops.py` (mesma lógica do h
 devolve o evento no formato de leitura da feature 145. As ações Jinja seguem intactas.
 """
 
+from datetime import date
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -13,8 +14,8 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api.agenda_read import serialize_event_detail
 from app.api_utils import api_login_required, json_error
-from app.constants import RoleName
-from app.models import CalendarEvent, EventObservation, EventRole, db
+from app.constants import CLIENT_RELATION_TIPOS, RoleName
+from app.models import CalendarEvent, Client, EventObservation, EventRole, db
 
 _TZ_SP = ZoneInfo("America/Sao_Paulo")
 
@@ -50,6 +51,13 @@ def _can_delete() -> bool:
     from app.calendar.routes import _CAN_DELETE
 
     return any(r.name.upper() in _CAN_DELETE for r in current_user.roles)
+
+
+def _can_create_event() -> bool:
+    """Gate de criar evento (`_CAN_CREATE` = Comercial ou Superadmin) — paridade com o Jinja."""
+    from app.calendar.routes import _CAN_CREATE
+
+    return any(r.name.upper() in _CAN_CREATE for r in current_user.roles)
 
 
 def _event_detail_json(event: Any) -> Any:
@@ -353,3 +361,153 @@ def api_sync_event(event_id: int) -> Any:
     if status == "not_found":
         return json_error("Não foi possível buscar o evento no Google Calendar", 502)
     return _event_detail_json(event)
+
+
+# ── Criar evento (feature 152) ───────────────────────────────────────────────
+
+
+def _client_pairs_from_json(raw: list) -> list[tuple[int, str]]:
+    """Normaliza clientes vindos do corpo JSON — mesma regra de `_parse_client_pairs` (routes.py):
+    dedup por cliente, ids inexistentes ignorados, relação fora da lista vira "Outros".
+    """
+    pairs: list[tuple[int, str]] = []
+    seen: set[int] = set()
+    for item in raw:
+        cid = item.get("client_id")
+        if not isinstance(cid, int) or cid in seen or Client.query.get(cid) is None:
+            continue
+        rel = (item.get("relation") or "Contratante").strip()
+        if rel not in CLIENT_RELATION_TIPOS:
+            rel = "Outros"
+        seen.add(cid)
+        pairs.append((cid, rel))
+    return pairs
+
+
+def _build_create_event_data(body: dict) -> dict:
+    """Converte o corpo JSON de `POST /api/events` no `data` esperado pelo núcleo de criação
+    (feature 152, `app/calendar/routes.py`). Sem nenhum campo de arquivo — money/ids já vêm como
+    número do React (Princípio VII), sem precisar de `parse_brl`.
+    """
+    characters = [
+        {
+            "name": (c.get("name") or "").strip(),
+            "figurino_sheet_id": c.get("figurino_sheet_id"),
+            "cache_value": c.get("cache_value"),
+            "needs_makeup": bool(c.get("needs_makeup")),
+            "is_singer": bool(c.get("is_singer")),
+            "talent_id": c.get("talent_id"),
+        }
+        for c in body.get("characters") or []
+    ]
+    observations = [
+        {
+            "obs_type": o.get("obs_type"),
+            "content": o.get("content") or "",
+            "label": o.get("label") or "",
+            "file_path": None,
+        }
+        for o in body.get("observations") or []
+        if o.get("obs_type") in ("text", "link")
+    ]
+    sale_date_raw = body.get("sale_date")
+    payment_due_raw = body.get("payment_due_date")
+
+    return {
+        "title": (body.get("title") or "").strip(),
+        "event_type": (body.get("event_type") or "").strip(),
+        "date_str": body.get("date") or "",
+        "start_str": body.get("start") or "",
+        "end_str": body.get("end") or "",
+        "location": (body.get("location") or "").strip(),
+        "description": (body.get("description") or "").strip(),
+        "needs_rehearsal": bool(body.get("needs_rehearsal")),
+        "sale_value": body.get("sale_value"),
+        "sale_value_gross": body.get("sale_value_gross"),
+        "transport_value": body.get("transport_value"),
+        "acrescimo_value": body.get("acrescimo_value"),
+        "with_invoice": bool(body.get("with_invoice")),
+        "invoice_filename": None,
+        "is_cortesia_permuta": bool(body.get("is_cortesia_permuta")),
+        "seller_id": body.get("seller_id"),
+        "sale_date": date.fromisoformat(sale_date_raw) if sale_date_raw else None,
+        "payment_method": body.get("payment_method") or None,
+        "payment_installments": body.get("payment_installments"),
+        "payment_due_date": date.fromisoformat(payment_due_raw) if payment_due_raw else None,
+        "orcamento_history_id": body.get("orcamento_history_id"),
+        "duracao": str(body.get("duracao") or "1"),
+        "characters": characters,
+        "orc_caches": body.get("orc_caches") or [],
+        "acrescimos": body.get("acrescimos") or [],
+        "coordinator_talent_id": body.get("coordinator_talent_id"),
+        "client_pairs": _client_pairs_from_json(body.get("clients") or []),
+        "form_response_id": body.get("form_response_id"),
+        "has_reembolso": bool(body.get("has_reembolso")),
+        "reembolso_description": (body.get("reembolso_description") or "").strip(),
+        "reembolso_amount": body.get("reembolso_amount"),
+        "reembolso_invoice_file_path": None,
+        "observations": observations,
+    }
+
+
+@api_bp.route("/events", methods=["POST"])
+@api_login_required
+def api_create_event() -> Any:
+    """Cria um evento novo (feature 152). RBAC: `_CAN_CREATE` (Comercial/Superadmin).
+
+    Corpo JSON sem nenhum campo de arquivo (nota fiscal/contrato/comprovantes/reembolso/
+    observação-imagem ficam fora nesta fatia — só o Jinja lida com upload). Sucesso devolve o
+    evento no formato de leitura da 145 + `warnings` (conflitos de agenda de talento
+    pré-escalado, se houver).
+    """
+    if not _can_create_event():
+        return json_error("Sem permissão", 403)
+
+    body = request.get_json(silent=True) or {}
+    data = _build_create_event_data(body)
+
+    from app.calendar.routes import _validate_event_core
+
+    errors = _validate_event_core(data)
+    if errors:
+        return json_error("Corrija os campos destacados", 400, fields=errors)
+
+    from app.calendar.routes import CALENDAR_ID, _build_start_end
+    from app.calendar.routes import insert_event as _insert_event
+
+    title = data["title"]
+    event_type = data["event_type"]
+    import re
+
+    clean_title = re.sub(r"^\s*\([^)]*\)\s*", "", title).strip() if title else title
+    gc_title = f"({event_type}) {clean_title}" if event_type else title
+    d = date.fromisoformat(data["date_str"])
+    st, et = _build_start_end(d, data["start_str"], data["end_str"])
+
+    try:
+        created = _insert_event(
+            CALENDAR_ID, gc_title, st, et,
+            description=data["description"], location=data["location"],
+        )
+    except Exception:
+        return json_error(
+            "Não foi possível criar o evento na Agenda do Google agora. "
+            "Verifique a conexão e tente novamente.",
+            502,
+        )
+
+    from app.calendar.routes import _create_event_core
+
+    event, conflicts = _create_event_core(
+        data,
+        google_event_id=created["id"],
+        gc_title=gc_title,
+        actor_name=current_user.name,
+        actor_id=current_user.id,
+        actor_role=", ".join(r.name for r in current_user.roles),
+    )
+
+    impersonate = session.get("impersonate_role")
+    result = serialize_event_detail(event, current_user, impersonate)
+    result["warnings"] = conflicts
+    return jsonify(result), 201

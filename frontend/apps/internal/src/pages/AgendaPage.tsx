@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button, Card, Skeleton } from "@manto/ui";
 import { useAgenda, type EventoResumo } from "../lib/agenda";
+import { useCurrentUser } from "../lib/useAuth";
 
 function currentYm(): string {
   const now = new Date();
@@ -75,10 +76,17 @@ function EventCard({ ev }: { ev: EventoResumo }) {
   );
 }
 
+/** COMERCIAL/SUPERADMIN podem criar evento (`_CAN_CREATE` — paridade com o Jinja). */
+function canCreateEvent(user: { roles: string[]; is_superadmin: boolean } | null | undefined) {
+  if (!user) return false;
+  return user.is_superadmin || user.roles.includes("COMERCIAL");
+}
+
 export function AgendaPage() {
   const reduceMotion = useReducedMotion();
   const [ym, setYm] = useState<string>(currentYm());
   const agenda = useAgenda(ym);
+  const currentUser = useCurrentUser();
 
   // Agrupa os eventos por dia de início, em ordem cronológica.
   const groups = useMemo(() => {
@@ -95,7 +103,7 @@ export function AgendaPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-4 sm:p-6">
-      <header className="mb-5 flex items-center justify-between gap-3">
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-ink">Agenda</h1>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setYm(shiftYm(ym, -1))}>
@@ -108,6 +116,11 @@ export function AgendaPage() {
             ›
           </Button>
         </div>
+        {canCreateEvent(currentUser.data) && (
+          <Button asChild size="sm">
+            <Link to="/events/new">Novo evento</Link>
+          </Button>
+        )}
       </header>
 
       {agenda.isLoading && (

@@ -88,3 +88,31 @@ def api_event_detail(event_id: int) -> Any:
         return json_error("Evento não encontrado", 404)
     impersonate = session.get("impersonate_role")
     return jsonify(serialize_event_detail(event, current_user, impersonate))
+
+
+@api_bp.route("/events/new/options")
+@api_login_required
+def api_event_create_options() -> Any:
+    """Opções do formulário de criação de evento — fichas, vendedores, talentos, tipos de
+    relação de cliente (feature 152). RBAC: `_CAN_CREATE` (Comercial/Superadmin).
+    """
+    from app.calendar.routes import _CAN_CREATE, _build_event_create_options
+
+    if not any(r.name.upper() in _CAN_CREATE for r in current_user.roles):
+        return json_error("Sem permissão", 403)
+    return jsonify(_build_event_create_options())
+
+
+@api_bp.route("/events/new/prefill")
+@api_login_required
+def api_event_create_prefill() -> Any:
+    """Pré-preenchimento a partir de um orçamento salvo (feature 152). RBAC: `_CAN_CREATE`.
+
+    `?orcamento_id=<id>` ausente ou inválido devolve `{}` — nunca erro (paridade com o Jinja).
+    """
+    from app.calendar.routes import _CAN_CREATE, _build_orcamento_prefill
+
+    if not any(r.name.upper() in _CAN_CREATE for r in current_user.roles):
+        return json_error("Sem permissão", 403)
+    orc_id = (request.args.get("orcamento_id") or "").strip()
+    return jsonify(_build_orcamento_prefill(int(orc_id) if orc_id.isdigit() else None))

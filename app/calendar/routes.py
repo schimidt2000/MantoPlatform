@@ -27,7 +27,7 @@ from .. import db
 from app.constants import RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CLIENT_RELATION_TIPOS
 from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense, ClientFeedback, EventReimbursement
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense, ClientFeedback, EventReimbursement, EventAcrescimo
 from app.email_service import send_removal_email
 # Notificadores de logística movidos para event_ops (feature 149); reimportados com alias para os
 # call sites existentes (sync inclusive) seguirem inalterados. Dependência unidirecional routes→event_ops.
@@ -2542,92 +2542,645 @@ def _save_file_upload(file, upload_dir: str, subpath: str) -> str | None:
     return f"/uploads/{subpath}/{name}"
 
 
+# ─── CRIAÇÃO DE EVENTO — núcleo compartilhado (feature 152) ──────────────────────
+# Funções de módulo puras (sem `request`/`flash`/`current_user`), reusadas pelo wrapper Jinja
+# (`create_event`, abaixo) e pelos endpoints JSON (`app/api/agenda_write.py`,
+# `app/api/agenda_read.py`). Ficam em `routes.py` (não em módulo `ops` dedicado) porque reusam
+# helpers já existentes aqui (`_build_start_end`, `_ensure_coordinator`,
+# `_ensure_sound_technician`, `_lookup_sp_status`, `_fetch_travel_data`, `_talent_time_conflict`,
+# `_compute_performer_caches`, `_parse_client_pairs`, `_primary_client_id`) que são usados por
+# outras rotas — mover para um módulo novo exigiria tocar esses call sites fora de escopo (ver
+# Complexity Tracking em specs/152-criar-evento-react/plan.md). Upload de arquivo (nota fiscal,
+# contrato, comprovantes de pagamento, comprovante de reembolso, imagem de observação) fica FORA
+# do núcleo — só o wrapper Jinja lida com isso.
+
+
+def _build_event_create_options() -> dict:
+    """Opções do formulário de criação de evento: fichas, vendedores, talentos, tipos de relação.
+
+    Fonte única reusada pelo GET do wrapper Jinja e por `GET /api/events/new/options` (152).
+    """
+    figurino_sheets = FigurinoSheet.query.order_by(FigurinoSheet.character_name.asc()).all()
+    sellers = (
+        User.query.join(User.roles)
+        .filter(Role.name == RoleName.COMERCIAL)
+        .order_by(User.name.asc())
+        .all()
+    )
+    assignable_talents = [
+        {"id": t.id, "name": t.artistic_name or t.full_name}
+        for t in Talent.query.filter_by(status="active").order_by(Talent.full_name.asc()).all()
+    ]
+    return {
+        "figurino_sheets": [
+            {"id": s.id, "character_name": s.character_name, "photo_url": s.photo_url}
+            for s in figurino_sheets
+        ],
+        "sellers": [{"id": u.id, "name": u.name} for u in sellers],
+        "assignable_talents": assignable_talents,
+        "client_relation_tipos": CLIENT_RELATION_TIPOS,
+    }
+
+
+def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
+    """Pré-preenchimento a partir de um orçamento salvo (`OrcamentoHistory`), feature 152.
+
+    Mesmo cálculo do GET de `create_event`: transporte fora-SP, acréscimo legado (snapshots
+    antigos) e cachês por personagem para as 4 durações. `{}` se `orcamento_id` for `None` ou
+    não existir — nunca levanta erro (paridade com o `if entry:` silencioso de hoje).
+    """
+    if orcamento_id is None:
+        return {}
+    entry = OrcamentoHistory.query.get(orcamento_id)
+    if entry is None:
+        return {}
+
+    snap = json.loads(entry.form_snapshot or "{}")
+    transport_val = 0
+    if snap.get("fora_sp"):
+        from app.orcamento.transport import calcular_carro, calcular_van
+
+        km = float(snap.get("km_ida", 0) or 0)
+        if snap.get("transporte_tipo", "van") == "van":
+            tb = calcular_van(
+                int(snap.get("num_colaboradores", 1) or 1),
+                km,
+                bool(snap.get("carretinha", False)),
+                entry.has_show,
+            )
+        else:
+            tb = calcular_carro(
+                int(snap.get("num_carros", 1) or 1),
+                int(snap.get("num_colaboradores", 1) or 1),
+                km,
+                entry.has_show,
+            )
+        transport_val = int(tb["total"])
+
+    acrescimo = float(snap.get("acrescimo_valor", 0) or 0)
+    acrescimo_val = int(acrescimo) if snap.get("acrescimo_tipo", "valor") == "valor" else 0
+
+    caches = _compute_performer_caches(snap)
+
+    duracao_custom = int(snap.get("duracao_custom", 0) or 0)
+    total_4h_val = float(entry.total_4h or 0)
+    total_custom = (
+        round(total_4h_val / 4 * duracao_custom, 2)
+        if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4)
+        else None
+    )
+
+    return {
+        "orcamento_id": entry.id,
+        "date": snap.get("event_date", ""),
+        "start_time": snap.get("event_time", ""),
+        "location": entry.event_location or "",
+        "client_name": entry.client_name or "",
+        "total_1h": float(entry.total_1h or 0),
+        "total_2h": float(entry.total_2h or 0),
+        "total_3h": float(entry.total_3h or 0),
+        "total_4h": float(entry.total_4h or 0),
+        "total_custom": total_custom,
+        "duracao_custom": duracao_custom if total_custom else None,
+        "has_show": entry.has_show,
+        "transport_value": transport_val,
+        "acrescimo_value": acrescimo_val,
+        "acrescimos": snap.get("acrescimos", []),
+        "with_invoice": bool(snap.get("nota_fiscal", False)),
+        "caches": caches,
+    }
+
+
+def _validate_event_core(data: dict) -> dict[str, str]:
+    """Valida os campos essenciais/financeiros da criação de evento (feature 152).
+
+    Espera valores já normalizados pelo adaptador (money/ids já convertidos para número —
+    Princípio VII; datas/horários continuam string ISO/"HH:MM" cru, mesmo formato nos dois
+    adaptadores). Devolve um mapa campo→mensagem (vazio = válido); o wrapper Jinja converte os
+    valores em lista para manter o flash de hoje.
+    """
+    errors: dict[str, str] = {}
+    title = (data.get("title") or "").strip()
+    if not title:
+        errors["title"] = "Título obrigatório."
+
+    date_str = (data.get("date_str") or "").strip()
+    start_str = (data.get("start_str") or "").strip()
+    end_str = (data.get("end_str") or "").strip()
+    d = st = et = None
+    if date_str:
+        try:
+            d = date.fromisoformat(date_str)
+        except ValueError:
+            errors["event_date"] = "Data inválida."
+    else:
+        errors["event_date"] = "Data obrigatória."
+
+    if not start_str or not end_str:
+        errors["event_time"] = "Informe o horário de início e de fim."
+    elif d:
+        try:
+            st, et = _build_start_end(d, start_str, end_str)
+        except ValueError:
+            errors["event_time"] = "Horário inválido (use HH:MM)."
+
+    if st and et and et == st:
+        errors["event_time"] = "Horário de fim deve ser diferente do início."
+
+    if not data.get("is_cortesia_permuta"):
+        if (data.get("sale_value_gross") or 0) <= 0:
+            errors["sale_value_gross"] = "Informe o valor antes do desconto."
+        if (data.get("sale_value") or 0) <= 0:
+            errors["sale_value"] = "Informe o valor de venda."
+
+    if not data.get("seller_id"):
+        errors["seller_id"] = "Selecione o vendedor responsável."
+
+    installments = data.get("payment_installments")
+    if data.get("payment_method") == "pix_parcelado" and not (
+        isinstance(installments, int) and 2 <= installments <= 12
+    ):
+        errors["payment_installments"] = "Informe o número de parcelas (2 a 12)."
+
+    return errors
+
+
+def _create_event_row(data: dict, *, google_event_id: str, gc_title: str) -> CalendarEvent:
+    """Grava o `CalendarEvent` essencial + financeiro + acréscimos tipados + nota fiscal (sem
+    arquivo) + detecção fora-de-SP (feature 152). Chamado depois que `insert_event` (Google) já
+    rodou com sucesso — recebe o id/título já prontos, não sabe nada de Google.
+    """
+    d = date.fromisoformat(data["date_str"])
+    st, et = _build_start_end(d, data["start_str"], data["end_str"])
+    is_cortesia = bool(data.get("is_cortesia_permuta"))
+
+    event = CalendarEvent(
+        google_event_id=google_event_id,
+        title=gc_title,
+        description=(data.get("description") or "").strip() or None,
+        location=(data.get("location") or "").strip() or None,
+        start_at=st,
+        end_at=et,
+        event_type=data.get("event_type") or None,
+        needs_rehearsal=bool(data.get("needs_rehearsal")),
+        source="platform",
+        is_cortesia_permuta=is_cortesia,
+        sale_value=0 if is_cortesia else data.get("sale_value"),
+        sale_value_gross=None if is_cortesia else data.get("sale_value_gross"),
+        sale_date=data.get("sale_date"),
+        transport_value=data.get("transport_value"),
+        acrescimo_value=data.get("acrescimo_value"),
+        with_invoice=bool(data.get("with_invoice")),
+        invoice_file=data.get("invoice_filename"),
+        seller_id=data.get("seller_id"),
+        payment_method=data.get("payment_method"),
+        payment_installments=data.get("payment_installments"),
+        payment_due_date=data.get("payment_due_date"),
+        orcamento_history_id=data.get("orcamento_history_id"),
+    )
+    db.session.add(event)
+    db.session.flush()
+
+    acr_list = data.get("acrescimos") or []
+    if acr_list:
+        sale_ev = Decimal(event.sale_value or 0)
+        for a in acr_list:
+            tipo = (a.get("tipo") or "").strip()
+            val = a.get("value")
+            if not tipo or not val:
+                continue
+            is_pct = bool(a.get("is_percent"))
+            val_d = Decimal(str(val))
+            amount = (
+                (sale_ev * val_d / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                if is_pct else val_d
+            )
+            db.session.add(EventAcrescimo(
+                event_id=event.id,
+                tipo=tipo,
+                descricao=(a.get("descricao") or "").strip() or None,
+                is_percent=is_pct,
+                value=val_d,
+                amount_brl=amount,
+                is_bv=bool(a.get("is_bv")) or tipo == ACRESCIMO_TIPO_BV,
+            ))
+
+    if event.with_invoice:
+        invoice_filename = data.get("invoice_filename")
+        db.session.add(EventInvoice(
+            event_id=event.id,
+            amount=event.sale_value,
+            issue_date=None,
+            file=(f"/uploads/invoices/{invoice_filename}" if invoice_filename else None),
+            status="emitida" if invoice_filename else "a_emitir",
+            issued_at=datetime.now(tz=TZ) if invoice_filename else None,
+        ))
+
+    event.is_outside_sp = _lookup_sp_status(event.location or "")
+    if event.is_outside_sp:
+        settings = SiteSetting.query.get(1)
+        _fetch_travel_data(event, settings)
+
+    return event
+
+
+def _create_roles_from_input(
+    event: CalendarEvent,
+    characters: list[dict],
+    *,
+    orc_caches: list[dict],
+    dur_idx: int,
+    figurino_by_name: dict[str, int],
+    valid_talent_ids: set[int],
+) -> list[tuple[int, str]]:
+    """Grava `EventRole` por personagem informado na criação (feature 152).
+
+    Auto-detecta a ficha de figurino pelo nome quando não selecionada manualmente; pré-escala um
+    talento por vaga sem duplicar o mesmo talento no mesmo formulário. Devolve `(talent_id,
+    character_name)` de cada pré-escala feita, para o aviso de conflito pós-commit.
+    """
+    used_talent_ids: set[int] = set()
+    assigned_now: list[tuple[int, str]] = []
+    cache_keys = ["cache_1h", "cache_2h", "cache_3h", "cache_4h"]
+
+    for i, char_data in enumerate(characters):
+        name = (char_data.get("name") or "").strip()
+        if not name:
+            continue
+
+        sheet_id = char_data.get("figurino_sheet_id") or figurino_by_name.get(name.lower())
+        cache_val = char_data.get("cache_value")
+        if cache_val is None and i < len(orc_caches):
+            cache_val = orc_caches[i].get(cache_keys[dur_idx])
+        role_type = orc_caches[i].get("role_type", "character") if i < len(orc_caches) else "character"
+
+        talent_id = char_data.get("talent_id")
+        pre_tid = None
+        if talent_id is not None and talent_id in valid_talent_ids and talent_id not in used_talent_ids:
+            pre_tid = talent_id
+            used_talent_ids.add(pre_tid)
+            assigned_now.append((pre_tid, name))
+
+        from_orc = bool(orc_caches) and cache_val is not None
+        db.session.add(EventRole(
+            event_id=event.id,
+            character_name=name,
+            figurino_sheet_id=sheet_id,
+            cache_value=cache_val,
+            cache_cap=cache_val if from_orc else None,
+            role_type=role_type,
+            needs_makeup=bool(char_data.get("needs_makeup")) or None,
+            is_singer=bool(char_data.get("is_singer")) or None,
+            talent_id=pre_tid,
+            assigned_at=datetime.now(tz=TZ) if pre_tid else None,
+        ))
+
+    return assigned_now
+
+
+def _apply_default_roles(
+    event: CalendarEvent,
+    *,
+    event_type: str | None,
+    came_from_orcamento: bool,
+    coordinator_talent_id: int | None,
+    valid_talent_ids: set[int],
+    used_talent_ids: set[int],
+) -> tuple[int, str] | None:
+    """Garante coordenador + (SHOW) técnico de som quando a criação não veio de um orçamento
+    (feature 152) — mesma regra condicional de `_ensure_coordinator`/`_ensure_sound_technician`.
+
+    Devolve a pré-escala do coordenador (para o aviso de conflito), se houver.
+    """
+    assigned: tuple[int, str] | None = None
+    if not came_from_orcamento:
+        if (
+            coordinator_talent_id is not None
+            and coordinator_talent_id in valid_talent_ids
+            and coordinator_talent_id not in used_talent_ids
+        ):
+            db.session.add(EventRole(
+                event_id=event.id,
+                character_name="Coordenador",
+                role_type="extra",
+                talent_id=coordinator_talent_id,
+                assigned_at=datetime.now(tz=TZ),
+            ))
+            assigned = (coordinator_talent_id, "Coordenador")
+        else:
+            _ensure_coordinator(event.id)
+
+    if event_type == "SHOW":
+        _ensure_sound_technician(event.id)
+
+    return assigned
+
+
+def _check_talent_conflicts(
+    assigned_now: list[tuple[int, str]],
+    start: datetime,
+    end: datetime,
+    event_id: int,
+    talents: list[dict],
+) -> list[str]:
+    """Aviso não-bloqueante de conflito de agenda para talentos pré-escalados (feature 152)."""
+    conflicts = []
+    for tid, char_name in assigned_now:
+        other = _talent_time_conflict(tid, start, end, exclude_event_id=event_id)
+        if other:
+            tname = next((t["name"] for t in talents if t["id"] == tid), f"Talento {tid}")
+            conflicts.append(f"{tname} ({char_name}) — já em “{other.title}”")
+    return conflicts
+
+
+def _create_client_links(event: CalendarEvent, client_pairs: list[tuple[int, str]]) -> None:
+    """Associa clientes ao evento na criação (feature 114/152)."""
+    if not client_pairs:
+        return
+    from app.models import EventClient
+
+    for cid, rel in client_pairs:
+        db.session.add(EventClient(event_id=event.id, client_id=cid, relationship_type=rel))
+    event.client_id = _primary_client_id(client_pairs)
+
+
+def _link_form_response(form_response_id: int | None, event_id: int) -> None:
+    """Vincula uma resposta de pré-contrato já recebida ao evento novo (feature 118/152)."""
+    if form_response_id is None:
+        return
+    from app.models import FormResponse
+
+    fr = FormResponse.query.get(form_response_id)
+    if fr and fr.event_id is None:
+        fr.event_id = event_id
+
+
+def _create_reembolso_entry(
+    event: CalendarEvent,
+    *,
+    description: str | None,
+    amount: float | None,
+    created_by_id: int,
+    invoice_file_path: str | None = None,
+) -> None:
+    """Reembolso a cobrar da cliente na criação, sem comprovante nesta fatia (feature 136/152)."""
+    desc = (description or "").strip()
+    if not desc or not amount or amount <= 0:
+        return
+    db.session.add(EventReimbursement(
+        event_id=event.id,
+        description=desc[:200],
+        amount=amount,
+        invoice_file_path=invoice_file_path,
+        created_by_id=created_by_id,
+    ))
+
+
+def _create_observations_from_input(event: CalendarEvent, observations: list[dict]) -> None:
+    """Observações de texto/link/imagem na criação (feature 150/152).
+
+    Cada item já vem com `file_path` resolvido pelo wrapper Jinja quando `obs_type == "image"`
+    (upload continua fora do núcleo). A API não envia imagem nesta fatia — um item de imagem sem
+    `file_path` é descartado, mesmo padrão da feature 150.
+    """
+    for obs in observations:
+        otype = obs.get("obs_type")
+        content = (obs.get("content") or "").strip()
+        label = (obs.get("label") or "").strip()
+        file_path = obs.get("file_path")
+        if otype == "image":
+            if not file_path:
+                continue
+        elif otype in ("text", "link"):
+            if not content:
+                continue
+        else:
+            continue
+        db.session.add(EventObservation(
+            event_id=event.id,
+            obs_type=otype,
+            content=content or None,
+            file_path=file_path,
+            label=label or None,
+        ))
+
+
+def _create_event_core(
+    data: dict,
+    *,
+    google_event_id: str,
+    gc_title: str,
+    actor_name: str,
+    actor_id: int,
+    actor_role: str,
+) -> tuple[CalendarEvent, list[str]]:
+    """Orquestra a criação completa do evento (feature 152) — único ponto chamado pelo wrapper
+    Jinja e pela API, depois que `insert_event` (Google) já rodou com sucesso (mesmo padrão de
+    `_delete_event_flow`/`_sync_single_event_flow`, 151). Devolve o evento criado e os avisos de
+    conflito de agenda (pré-escala de talento), não-bloqueantes.
+    """
+    event = _create_event_row(data, google_event_id=google_event_id, gc_title=gc_title)
+
+    _create_client_links(event, data.get("client_pairs") or [])
+    _link_form_response(data.get("form_response_id"), event.id)
+
+    figurino_by_name = {
+        s.character_name.lower(): s.id for s in FigurinoSheet.query.all()
+    }
+    assignable_talents = [
+        {"id": t.id, "name": t.artistic_name or t.full_name}
+        for t in Talent.query.filter_by(status="active").all()
+    ]
+    valid_talent_ids = {t["id"] for t in assignable_talents}
+    orc_caches = data.get("orc_caches") or []
+    dur_idx = {"1": 0, "2": 1, "3": 2, "4": 3}.get(str(data.get("duracao", "1")), 0)
+
+    assigned_now = _create_roles_from_input(
+        event,
+        data.get("characters") or [],
+        orc_caches=orc_caches,
+        dur_idx=dur_idx,
+        figurino_by_name=figurino_by_name,
+        valid_talent_ids=valid_talent_ids,
+    )
+    coord = _apply_default_roles(
+        event,
+        event_type=data.get("event_type"),
+        came_from_orcamento=bool(orc_caches),
+        coordinator_talent_id=data.get("coordinator_talent_id"),
+        valid_talent_ids=valid_talent_ids,
+        used_talent_ids={tid for tid, _ in assigned_now},
+    )
+    if coord:
+        assigned_now.append(coord)
+
+    if data.get("has_reembolso"):
+        _create_reembolso_entry(
+            event,
+            description=data.get("reembolso_description"),
+            amount=data.get("reembolso_amount"),
+            invoice_file_path=data.get("reembolso_invoice_file_path"),
+            created_by_id=actor_id,
+        )
+    _create_observations_from_input(event, data.get("observations") or [])
+
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="COMERCIAL",
+        message="Evento criado pela plataforma",
+        created_at=datetime.now(tz=TZ),
+    ))
+    _log_sync("platform_created", event, actor=actor_name, actor_role=actor_role)
+    from app.financeiro.routes import _sync_commission_payment
+    _sync_commission_payment(event)
+    db.session.commit()
+
+    if event.needs_rehearsal:
+        _notify_ensaio_team(event)
+
+    conflicts = _check_talent_conflicts(
+        assigned_now, event.start_at, event.end_at, event.id, assignable_talents
+    )
+    return event, conflicts
+
+
+def _parse_create_event_form() -> dict:
+    """Lê `request.form`/`request.files` e devolve o `data` normalizado para o núcleo (feature
+    152) — money/ids já convertidos, campos de arquivo resolvidos em caminho. Só usado pelo
+    wrapper Jinja (a API constrói seu próprio `data` a partir do corpo JSON).
+    """
+    def _int_or_none(raw: str) -> int | None:
+        raw = (raw or "").strip()
+        return int(raw) if raw.isdigit() else None
+
+    sale_date_raw = request.form.get("sale_date", "").strip()
+    try:
+        sale_date_val = date.fromisoformat(sale_date_raw) if sale_date_raw else None
+    except ValueError:
+        sale_date_val = None
+
+    payment_due_raw = request.form.get("payment_due_date", "").strip()
+
+    char_names = request.form.getlist("character_names[]")
+    sheet_ids = request.form.getlist("figurino_sheet_ids[]")
+    char_makeups = request.form.getlist("char_needs_makeup[]")
+    char_singers = request.form.getlist("char_is_singer[]")
+    char_caches = request.form.getlist("char_cache[]")
+    char_talent_ids = request.form.getlist("char_talent_id[]")
+    characters = []
+    for i, (char, sheet_id_raw) in enumerate(zip(char_names, sheet_ids, strict=False)):
+        char = char.strip()
+        if not char:
+            continue
+        characters.append({
+            "name": char,
+            "figurino_sheet_id": _int_or_none(sheet_id_raw),
+            "cache_value": parse_brl(char_caches[i]) if i < len(char_caches) else None,
+            "needs_makeup": (char_makeups[i] == "1") if i < len(char_makeups) else False,
+            "is_singer": (char_singers[i] == "1") if i < len(char_singers) else False,
+            "talent_id": _int_or_none(char_talent_ids[i]) if i < len(char_talent_ids) else None,
+        })
+
+    acr_json = request.form.get("acrescimos_json", "").strip()
+    try:
+        acrescimos = json.loads(acr_json) if acr_json else []
+    except json.JSONDecodeError:
+        acrescimos = []
+
+    orc_caches_json = request.form.get("orc_caches_json", "")
+    try:
+        orc_caches = json.loads(orc_caches_json) if orc_caches_json else []
+    except json.JSONDecodeError:
+        orc_caches = []
+
+    # Nota fiscal (arquivo opcional) — fora do núcleo, resolvido aqui em caminho salvo.
+    invoice_filename = None
+    invoice_file = request.files.get("invoice_file")
+    if invoice_file and invoice_file.filename:
+        inv_size = invoice_file.stream.seek(0, 2)
+        invoice_file.stream.seek(0)
+        if inv_size <= 20 * 1024 * 1024:
+            invoice_filename = secure_filename(invoice_file.filename)
+            invoice_file.save(os.path.join(current_app.config["UPLOAD_INVOICES"], invoice_filename))
+
+    # Observações texto/link/imagem — imagem resolvida em caminho aqui (fora do núcleo).
+    obs_types = request.form.getlist("obs_type[]")
+    obs_contents = request.form.getlist("obs_content[]")
+    obs_labels = request.form.getlist("obs_label[]")
+    obs_images = request.files.getlist("obs_image[]")
+    observations = []
+    img_idx = 0
+    for j, otype in enumerate(obs_types):
+        file_path = None
+        if otype == "image":
+            if img_idx < len(obs_images):
+                file_path = _save_file_upload(
+                    obs_images[img_idx], current_app.config["UPLOAD_EVENT_OBS"], "event_obs"
+                )
+                img_idx += 1
+        observations.append({
+            "obs_type": otype,
+            "content": obs_contents[j].strip() if j < len(obs_contents) else "",
+            "label": obs_labels[j].strip() if j < len(obs_labels) else "",
+            "file_path": file_path,
+        })
+
+    event_type = request.form.get("event_type", "").strip()
+    return {
+        "title": request.form.get("title", "").strip(),
+        "event_type": event_type,
+        "date_str": request.form.get("event_date", "").strip(),
+        "start_str": request.form.get("event_start", "").strip(),
+        "end_str": request.form.get("event_end", "").strip(),
+        "location": request.form.get("location", "").strip(),
+        "description": request.form.get("description", "").strip(),
+        "needs_rehearsal": (event_type == "SHOW") or bool(request.form.get("needs_rehearsal")),
+        "sale_value": parse_brl(request.form.get("sale_value", "")),
+        "sale_value_gross": parse_brl(request.form.get("sale_value_gross", "")),
+        "transport_value": parse_brl(request.form.get("transport_value", "")),
+        "acrescimo_value": parse_brl(request.form.get("acrescimo_value", "")),
+        "with_invoice": bool(request.form.get("with_invoice")),
+        "invoice_filename": invoice_filename,
+        "is_cortesia_permuta": bool(request.form.get("is_cortesia_permuta")),
+        "seller_id": _int_or_none(request.form.get("seller_id", "")),
+        "sale_date": sale_date_val,
+        "payment_method": request.form.get("payment_method", "").strip() or None,
+        "payment_installments": _int_or_none(request.form.get("payment_installments", "")),
+        "payment_due_date": date.fromisoformat(payment_due_raw) if payment_due_raw else None,
+        "orcamento_history_id": _int_or_none(request.form.get("orcamento_history_id", "")),
+        "duracao": request.form.get("duracao", "1").strip(),
+        "characters": characters,
+        "orc_caches": orc_caches,
+        "acrescimos": acrescimos,
+        "coordinator_talent_id": _int_or_none(request.form.get("coordinator_talent_id", "")),
+        "client_pairs": _parse_client_pairs(),
+        "form_response_id": _int_or_none(request.form.get("form_response_id", "")),
+        "has_reembolso": bool(request.form.get("has_reembolso")),
+        "reembolso_description": request.form.get("reembolso_description", "").strip(),
+        "reembolso_amount": parse_brl(request.form.get("reembolso_amount", "")),
+        "reembolso_invoice_file_path": _save_nf_file(request.files.get("reembolso_invoice_file")),
+        "observations": observations,
+    }
+
+
 @calendar_bp.route("/events/new", methods=["GET", "POST"])
 @login_required
 def create_event():
     if not any(r.name.upper() in _CAN_CREATE for r in current_user.roles):
         abort(403)
 
-    import json as _json
-
-    figurino_sheets = FigurinoSheet.query.order_by(FigurinoSheet.character_name.asc()).all()
-    # Índice nome→id para auto-match figurino
-    sheet_by_name = {s.character_name.lower(): s.id for s in figurino_sheets}
-    sellers = User.query.join(User.roles).filter(Role.name == RoleName.COMERCIAL).order_by(User.name.asc()).all()
-    # Talentos atribuíveis para pré-escala na criação (feature 095) — id + nome para autocomplete.
-    assignable_talents = [
-        {"id": t.id, "name": t.artistic_name or t.full_name}
-        for t in Talent.query.filter_by(status="active").order_by(Talent.full_name.asc()).all()
-    ]
+    options = _build_event_create_options()
 
     # ── GET — pré-fill a partir do orçamento ────────────────────────────────
     if request.method == "GET":
-        prefill = {}
-        orc_id  = request.args.get("orcamento_id", "").strip()
-        if orc_id and orc_id.isdigit():
-            entry = OrcamentoHistory.query.get(int(orc_id))
-            if entry:
-                snap = _json.loads(entry.form_snapshot or "{}")
-                # transporte fora SP
-                transport_val = 0
-                if snap.get("fora_sp"):
-                    from app.orcamento.transport import calcular_carro, calcular_van
-                    km = float(snap.get("km_ida", 0) or 0)
-                    if snap.get("transporte_tipo", "van") == "van":
-                        tb = calcular_van(
-                            int(snap.get("num_colaboradores", 1) or 1),
-                            km,
-                            bool(snap.get("carretinha", False)),
-                            entry.has_show,
-                        )
-                    else:
-                        tb = calcular_carro(
-                            int(snap.get("num_carros", 1) or 1),
-                            int(snap.get("num_colaboradores", 1) or 1),
-                            km,
-                            entry.has_show,
-                        )
-                    transport_val = int(tb["total"])
-
-                # Acréscimo legado (single) — só p/ snapshots antigos; novos usam a lista "acrescimos".
-                acrescimo = float(snap.get("acrescimo_valor", 0) or 0)
-                acrescimo_val = int(acrescimo) if snap.get("acrescimo_tipo", "valor") == "valor" else 0
-                acrescimos_json = _json.dumps(snap.get("acrescimos", []), ensure_ascii=False)
-
-                caches = _compute_performer_caches(snap)
-
-                duracao_custom = int(snap.get("duracao_custom", 0) or 0)
-                total_4h_val   = float(entry.total_4h or 0)
-                total_custom   = (
-                    round(total_4h_val / 4 * duracao_custom, 2)
-                    if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4)
-                    else None
-                )
-
-                prefill = {
-                    "orcamento_id":   entry.id,
-                    "date":           snap.get("event_date", ""),
-                    "start_time":     snap.get("event_time", ""),
-                    "location":       entry.event_location or "",
-                    "client_name":    entry.client_name or "",
-                    "total_1h":       float(entry.total_1h or 0),
-                    "total_2h":       float(entry.total_2h or 0),
-                    "total_3h":       float(entry.total_3h or 0),
-                    "total_4h":       float(entry.total_4h or 0),
-                    "total_custom":   total_custom,
-                    "duracao_custom": duracao_custom if total_custom else None,
-                    "has_show":       entry.has_show,
-                    "transport_value": transport_val,
-                    "acrescimo_value": acrescimo_val,
-                    "acrescimos_json": acrescimos_json,
-                    "with_invoice":   bool(snap.get("nota_fiscal", False)),
-                    "caches_json":    _json.dumps(caches, ensure_ascii=False),
-                }
+        orc_id = request.args.get("orcamento_id", "").strip()
+        prefill = _build_orcamento_prefill(int(orc_id) if orc_id.isdigit() else None)
         return render_template(
             "event_create.html",
-            figurino_sheets=figurino_sheets,
-            sellers=sellers,
-            assignable_talents=assignable_talents,
+            figurino_sheets=options["figurino_sheets"],
+            sellers=options["sellers"],
+            assignable_talents=options["assignable_talents"],
             errors=[],
             prefill=prefill,
             today_str=date.today().isoformat(),
@@ -2639,59 +3192,18 @@ def create_event():
         )
 
     # ── POST ────────────────────────────────────────────────────────────────
-    title        = request.form.get("title", "").strip()
-    event_type   = request.form.get("event_type", "").strip()
-    date_str     = request.form.get("event_date", "").strip()
-    start_str    = request.form.get("event_start", "").strip()
-    end_str      = request.form.get("event_end", "").strip()
-    location     = request.form.get("location", "").strip()
-    description  = request.form.get("description", "").strip()
-    needs_rehearsal  = (event_type == "SHOW") or bool(request.form.get("needs_rehearsal"))
-    sale_value_raw   = request.form.get("sale_value", "").strip()
-    sale_value_gross_raw = request.form.get("sale_value_gross", "").strip()
-    transport_value_raw = request.form.get("transport_value", "").strip()
-    acrescimo_value_raw = request.form.get("acrescimo_value", "").strip()
-    with_invoice     = bool(request.form.get("with_invoice"))
-    is_cortesia_permuta = bool(request.form.get("is_cortesia_permuta"))
-    seller_id_raw    = request.form.get("seller_id", "").strip()
-    sale_date_raw    = request.form.get("sale_date", "").strip()
-    try:
-        sale_date_val = date.fromisoformat(sale_date_raw) if sale_date_raw else None
-    except ValueError:
-        sale_date_val = None
-
-    # pagamento
-    payment_method   = request.form.get("payment_method", "").strip() or None
-    payment_inst_raw = request.form.get("payment_installments", "").strip()
-    payment_due_raw  = request.form.get("payment_due_date", "").strip()
-
-    # orçamento de origem + duração selecionada
-    orcamento_id_raw = request.form.get("orcamento_history_id", "").strip()
-    duracao_raw      = request.form.get("duracao", "1").strip()   # '1' | '2' | '3' | '4'
-    dur_idx          = {"1": 0, "2": 1, "3": 2, "4": 3}.get(duracao_raw, 0)
-
-    # personagens do form
-    char_names   = request.form.getlist("character_names[]")
-    sheet_ids    = request.form.getlist("figurino_sheet_ids[]")
-    char_makeups = request.form.getlist("char_needs_makeup[]")   # '1' ou ''
-    char_singers = request.form.getlist("char_is_singer[]")      # '1' ou ''
-    char_caches  = request.form.getlist("char_cache[]")          # valor em R$
-    char_talent_ids = request.form.getlist("char_talent_id[]")   # pré-escala (feature 095), '' se vazio
+    data = _parse_create_event_form()
 
     # Personagens enviados, p/ repopular o form se o servidor re-renderizar por erro
     # (apenas dados alinhados por linha: nome + figurino; anexos não são restauráveis).
     old_chars = [
-        {"label": nm, "sheet_id": (sheet_ids[i] if i < len(sheet_ids) else "")}
-        for i, nm in enumerate(char_names)
-        if nm.strip()
+        {"label": c["name"], "sheet_id": c["figurino_sheet_id"] or ""} for c in data["characters"]
     ]
 
-    # Pré-contrato (formulário) vinculado na criação (feature 118) — preservado no re-render.
     old_form_response = None
-    _fr_raw = request.form.get("form_response_id", "").strip()
-    if _fr_raw.isdigit():
+    if data["form_response_id"] is not None:
         from app.models import FormResponse as _FormResponse
-        _fr_obj = _FormResponse.query.get(int(_fr_raw))
+        _fr_obj = _FormResponse.query.get(data["form_response_id"])
         if _fr_obj:
             old_form_response = {
                 "id": _fr_obj.id,
@@ -2699,11 +3211,9 @@ def create_event():
                 "form_type": _fr_obj.form_type_label,
             }
 
-    # Clientes associados na criação (feature 114) — também preservados no re-render de erro.
     from app.models import Client as _Client
-    client_pairs = _parse_client_pairs()
     old_clients = []
-    for _cid, _rel in client_pairs:
+    for _cid, _rel in data["client_pairs"]:
         _cli = _Client.query.get(_cid)
         if _cli:
             old_clients.append({
@@ -2713,66 +3223,31 @@ def create_event():
                 "relation": _rel,
             })
 
-    errors = []
-    if not title:
-        errors.append("Título obrigatório.")
+    def _render_error(errors: list[str]):
+        return render_template(
+            "event_create.html", figurino_sheets=options["figurino_sheets"],
+            sellers=options["sellers"], assignable_talents=options["assignable_talents"],
+            errors=errors, prefill={}, today_str=date.today().isoformat(),
+            old=request.form, old_chars=old_chars, old_clients=old_clients,
+            old_form_response=old_form_response, client_relation_tipos=CLIENT_RELATION_TIPOS,
+        )
 
-    d = st = et = None
-    if date_str:
-        try:
-            d = date.fromisoformat(date_str)
-        except ValueError:
-            errors.append("Data inválida.")
-    else:
-        errors.append("Data obrigatória.")
-
-    # Início E fim são obrigatórios: sem ambos não dá para montar o evento no
-    # Google (evita criar com horário None e quebrar em insert_event).
-    if not start_str or not end_str:
-        errors.append("Informe o horário de início e de fim.")
-
-    if d and start_str and end_str:
-        try:
-            st, et = _build_start_end(d, start_str, end_str)
-        except ValueError:
-            errors.append("Horário inválido (use HH:MM).")
-
-    if st and et and et == st:
-        errors.append("Horário de fim deve ser diferente do início.")
-
-    # Cortesia/permuta (feature 095): evento sem venda em dinheiro — dispensa os valores.
-    if not is_cortesia_permuta:
-        # Valor antes do desconto obrigatório (> 0) — base para relatório de desconto.
-        if (parse_brl(sale_value_gross_raw) or 0) <= 0:
-            errors.append("Informe o valor antes do desconto.")
-
-        # Valor de venda obrigatório (> 0) — coerente com o asterisco do campo.
-        if (parse_brl(sale_value_raw) or 0) <= 0:
-            errors.append("Informe o valor de venda.")
-
-    # Vendedor responsável obrigatório (define a comissão do mês).
-    if not seller_id_raw.isdigit():
-        errors.append("Selecione o vendedor responsável.")
-
-    # "Dividido no PIX" exige número de parcelas válido (2 a 12).
-    if payment_method == "pix_parcelado":
-        if not payment_inst_raw.isdigit() or not (2 <= int(payment_inst_raw) <= 12):
-            errors.append("Informe o número de parcelas (2 a 12).")
-
-    if errors:
-        return render_template("event_create.html", figurino_sheets=figurino_sheets,
-                               sellers=sellers, assignable_talents=assignable_talents,
-                               errors=errors, prefill={}, today_str=date.today().isoformat(),
-                               old=request.form, old_chars=old_chars,
-                               old_clients=old_clients,
-                               old_form_response=old_form_response,
-                               client_relation_tipos=CLIENT_RELATION_TIPOS)
+    validation_errors = _validate_event_core(data)
+    if validation_errors:
+        return _render_error(list(validation_errors.values()))
 
     # Remove prefixo (TIPO) que o JS já inseriu no título para não duplicar
+    title = data["title"]
+    event_type = data["event_type"]
     clean_title = re.sub(r'^\s*\([^)]*\)\s*', '', title).strip() if title else title
     gc_title = f"({event_type}) {clean_title}" if event_type else title
+    d = date.fromisoformat(data["date_str"])
+    st, et = _build_start_end(d, data["start_str"], data["end_str"])
     try:
-        created = insert_event(CALENDAR_ID, gc_title, st, et, description=description, location=location)
+        created = insert_event(
+            CALENDAR_ID, gc_title, st, et,
+            description=data["description"], location=data["location"],
+        )
     except Exception as exc:
         # Qualquer falha do Google Agenda (desconectado, indisponível, erro da API) vira
         # um aviso amigável — nunca uma tela de erro técnica. Registra o erro real no log.
@@ -2783,303 +3258,42 @@ def create_event():
         else:
             friendly = ("Não foi possível criar o evento na Agenda do Google agora. "
                         "Verifique a conexão e tente novamente. Se persistir, avise o suporte.")
-        return render_template("event_create.html", figurino_sheets=figurino_sheets,
-                               sellers=sellers, assignable_talents=assignable_talents,
-                               errors=[friendly], prefill={}, today_str=date.today().isoformat(),
-                               old=request.form, old_chars=old_chars,
-                               old_clients=old_clients,
-                               old_form_response=old_form_response,
-                               client_relation_tipos=CLIENT_RELATION_TIPOS)
+        return _render_error([friendly])
 
-    # ── Nota fiscal file (opcional) ──────────────────────────────────────────
-    invoice_filename = None
-    invoice_file = request.files.get("invoice_file")
-    if invoice_file and invoice_file.filename:
-        _inv_size = invoice_file.stream.seek(0, 2)
-        invoice_file.stream.seek(0)
-        if _inv_size <= 20 * 1024 * 1024:
-            invoice_filename = secure_filename(invoice_file.filename)
-            invoice_file.save(
-                os.path.join(current_app.config["UPLOAD_INVOICES"], invoice_filename)
-            )
-
-    event = CalendarEvent(
-        google_event_id      = created["id"],
-        title                = gc_title,
-        description          = description or None,
-        location             = location or None,
-        start_at             = st,
-        end_at               = et,
-        event_type           = event_type or None,
-        needs_rehearsal      = needs_rehearsal,
-        source               = "platform",
-        # Cortesia/permuta: venda tratada como 0 (cachês dos talentos viram custo de marketing).
-        is_cortesia_permuta  = is_cortesia_permuta,
-        sale_value           = 0 if is_cortesia_permuta else parse_brl(sale_value_raw),
-        sale_value_gross     = None if is_cortesia_permuta else parse_brl(sale_value_gross_raw),
-        sale_date            = sale_date_val,
-        transport_value      = parse_brl(transport_value_raw),
-        acrescimo_value      = parse_brl(acrescimo_value_raw),
-        with_invoice         = with_invoice,
-        invoice_file         = invoice_filename,
-        seller_id            = int(seller_id_raw) if seller_id_raw.isdigit() else None,
-        payment_method       = payment_method,
-        payment_installments = int(payment_inst_raw) if payment_inst_raw.isdigit() else None,
-        payment_due_date     = date.fromisoformat(payment_due_raw) if payment_due_raw else None,
-        orcamento_history_id = int(orcamento_id_raw) if orcamento_id_raw.isdigit() else None,
+    event, conflicts = _create_event_core(
+        data,
+        google_event_id=created["id"],
+        gc_title=gc_title,
+        actor_name=current_user.name,
+        actor_id=current_user.id,
+        actor_role=", ".join(r.name for r in current_user.roles),
     )
-    db.session.add(event)
-    db.session.flush()
 
-    # Clientes associados na criação (feature 114) — mesmo formato do save da venda.
-    if client_pairs:
-        from app.models import EventClient as _EventClient
-        for _cid, _rel in client_pairs:
-            db.session.add(_EventClient(event_id=event.id, client_id=_cid, relationship_type=_rel))
-        event.client_id = _primary_client_id(client_pairs)
-
-    # Pré-contrato vinculado na criação (feature 118): a resposta aponta pro evento novo.
-    if old_form_response:
-        from app.models import FormResponse as _FormResponse2
-        _fr_link = _FormResponse2.query.get(old_form_response["id"])
-        if _fr_link and _fr_link.event_id is None:
-            _fr_link.event_id = event.id
-
-    # Acréscimos tipados vindos do orçamento (feature 099): cria as linhas EventAcrescimo.
-    # BV nasce sem PIX (o financeiro/comercial preenche depois na tela do evento).
-    _acr_json = request.form.get("acrescimos_json", "").strip()
-    if _acr_json:
-        from app.models import EventAcrescimo as _EventAcrescimo
-        try:
-            _acr_list = _json.loads(_acr_json)
-        except _json.JSONDecodeError:
-            _acr_list = []
-        _sale_ev = Decimal(event.sale_value or 0)
-        for _a in _acr_list:
-            _tipo = (_a.get("tipo") or "").strip()
-            _val = _a.get("value")
-            if not _tipo or not _val:
-                continue
-            _is_pct = bool(_a.get("is_percent"))
-            _val_d = Decimal(str(_val))
-            _amount = (
-                (_sale_ev * _val_d / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                if _is_pct else _val_d
-            )
-            db.session.add(_EventAcrescimo(
-                event_id=event.id,
-                tipo=_tipo,
-                descricao=(_a.get("descricao") or "").strip() or None,
-                is_percent=_is_pct,
-                value=_val_d,
-                amount_brl=_amount,
-                is_bv=bool(_a.get("is_bv")) or _tipo == ACRESCIMO_TIPO_BV,
-            ))
-
-    # Nota fiscal (feature 069): cria a nota inicial se a venda é "com nota".
-    if with_invoice:
-        db.session.add(EventInvoice(
-            event_id=event.id,
-            amount=event.sale_value,
-            issue_date=None,
-            file=(f"/uploads/invoices/{invoice_filename}" if invoice_filename else None),
-            status="emitida" if invoice_filename else "a_emitir",
-            issued_at=datetime.now(tz=ZoneInfo("America/Sao_Paulo")) if invoice_filename else None,
-        ))
-
-    # Determina se é fora de SP e auto-estima distância
-    event.is_outside_sp = _lookup_sp_status(location)
-    if event.is_outside_sp:
-        settings = SiteSetting.query.get(1)
-        _fetch_travel_data(event, settings)
-
-    # ── Personagens / equipe ─────────────────────────────────────────────────
-    # Se veio de orçamento, caches pré-calculados por index de duração
-    orc_caches_json = request.form.get("orc_caches_json", "")
-    orc_caches: list[dict] = []
-    if orc_caches_json:
-        try:
-            orc_caches = _json.loads(orc_caches_json)
-        except _json.JSONDecodeError:
-            orc_caches = []
-
-    # Pré-escala (feature 095): talentos atribuíveis válidos + acompanhamento p/ evitar duplicata e
-    # sinalizar conflito depois. assigned_now guarda (talent_id, character_name) das vagas pré-escaladas.
-    valid_talent_ids = {t["id"] for t in assignable_talents}
-    used_talent_ids: set[int] = set()
-    assigned_now: list[tuple[int, str]] = []
-
-    def _preassign_talent_id(raw: str) -> int | None:
-        """Valida o id de talento vindo do form (existe, ativo, ainda não usado neste evento)."""
-        if not (raw or "").isdigit():
-            return None
-        tid = int(raw)
-        if tid not in valid_talent_ids or tid in used_talent_ids:
-            return None
-        return tid
-
-    for i, (char, sheet_id_raw) in enumerate(zip(char_names, sheet_ids)):
-        char = char.strip()
-        if not char:
-            continue
-
-        # figurino: usuário selecionou, ou auto-match por nome
-        if sheet_id_raw and sheet_id_raw.isdigit():
-            sheet_id = int(sheet_id_raw)
-        else:
-            sheet_id = sheet_by_name.get(char.lower())
-
-        # cache: preferência manual do form, depois caches do orçamento
-        cache_val = parse_brl(char_caches[i]) if i < len(char_caches) else None
-        makeup    = (char_makeups[i] == "1") if i < len(char_makeups) else False
-        singer    = (char_singers[i] == "1") if i < len(char_singers) else False
-
-        if cache_val is None and i < len(orc_caches):
-            key = ["cache_1h", "cache_2h", "cache_3h", "cache_4h"][dur_idx]
-            cache_val = orc_caches[i].get(key)
-
-        role_type = orc_caches[i].get("role_type", "character") if i < len(orc_caches) else "character"
-
-        # Pré-escala do talento (opcional): vaga nasce atribuída, SEM convite automático.
-        pre_tid = _preassign_talent_id(char_talent_ids[i] if i < len(char_talent_ids) else "")
-        if pre_tid is not None:
-            used_talent_ids.add(pre_tid)
-            assigned_now.append((pre_tid, char))
-
-        # cache_cap guarda o teto definido pelo orçamento (imutável para casting)
-        from_orc = bool(orc_caches) and cache_val is not None
-        db.session.add(EventRole(
-            event_id         = event.id,
-            character_name   = char,
-            figurino_sheet_id= sheet_id,
-            cache_value      = cache_val,
-            cache_cap        = cache_val if from_orc else None,
-            role_type        = role_type,
-            needs_makeup     = makeup or None,
-            is_singer        = singer or None,
-            talent_id        = pre_tid,
-            assigned_at      = datetime.now(tz=ZoneInfo("America/Sao_Paulo")) if pre_tid else None,
-        ))
-
-    # Coordenador: no fluxo manual (sem orçamento), o vendedor pode pré-escalar um coordenador
-    # específico (feature 095); senão a vaga nasce vazia. No fluxo de orçamento o coordenador já vem
-    # como linha da equipe, então não criamos outra aqui.
-    if not orc_caches:
-        coord_tid = _preassign_talent_id(request.form.get("coordinator_talent_id", "").strip())
-        if coord_tid is not None:
-            used_talent_ids.add(coord_tid)
-            assigned_now.append((coord_tid, "Coordenador"))
-            db.session.add(EventRole(
-                event_id       = event.id,
-                character_name = "Coordenador",
-                role_type      = "extra",
-                talent_id      = coord_tid,
-                assigned_at    = datetime.now(tz=ZoneInfo("America/Sao_Paulo")),
-            ))
-        else:
-            _ensure_coordinator(event.id)
-
-    # Para eventos SHOW: garante técnico de som (PIX Nivaldo + vaga de presença)
-    if event_type == "SHOW":
-        _ensure_sound_technician(event.id)
-
-    # ── Comprovantes de pagamento (múltiplos) ────────────────────────────────
-    payment_files  = request.files.getlist("payment_files[]")
+    # ── Comprovantes de pagamento e contrato (dependem de arquivo — fora do núcleo) ──────────
+    payment_files = request.files.getlist("payment_files[]")
     payment_amounts = request.form.getlist("payment_amounts[]")
-    for pf, pa_raw in zip(payment_files, payment_amounts):
+    for pf, pa_raw in zip(payment_files, payment_amounts, strict=False):
         fpath = _save_file_upload(pf, current_app.config["UPLOAD_PAYMENTS"], "payments")
         if fpath:
-            db.session.add(EventPayment(
-                event_id  = event.id,
-                file_path = fpath,
-                amount    = parse_brl(pa_raw),
-            ))
+            db.session.add(EventPayment(event_id=event.id, file_path=fpath, amount=parse_brl(pa_raw)))
 
-    # ── Contrato ─────────────────────────────────────────────────────────────
-    contract_file   = request.files.get("contract_file")
+    contract_file = request.files.get("contract_file")
     contract_amount = request.form.get("contract_amount", "").strip()
-    is_signed       = bool(request.form.get("contract_signed"))
+    is_signed = bool(request.form.get("contract_signed"))
     fpath = _save_file_upload(contract_file, current_app.config["UPLOAD_CONTRACTS"], "contracts")
     if fpath:
         db.session.add(EventContract(
-            event_id  = event.id,
-            file_path = fpath,
-            amount    = parse_brl_int(contract_amount),
-            is_signed = is_signed,
+            event_id=event.id, file_path=fpath,
+            amount=parse_brl_int(contract_amount), is_signed=is_signed,
         ))
+    if payment_files or fpath:
+        db.session.commit()
 
-    # ── Reembolso a cobrar da cliente (opcional — feature 136) ────────────────
-    if request.form.get("has_reembolso"):
-        reembolso_desc = (request.form.get("reembolso_description") or "").strip()
-        reembolso_amount = parse_brl(request.form.get("reembolso_amount"))
-        if reembolso_desc and reembolso_amount and reembolso_amount > 0:
-            reembolso_invoice = _save_nf_file(request.files.get("reembolso_invoice_file"))
-            db.session.add(EventReimbursement(
-                event_id          = event.id,
-                description       = reembolso_desc[:200],
-                amount            = reembolso_amount,
-                invoice_file_path = reembolso_invoice,
-                created_by_id     = current_user.id,
-            ))
-
-    # ── Observações (texto / link / imagem) ──────────────────────────────────
-    obs_types    = request.form.getlist("obs_type[]")
-    obs_contents = request.form.getlist("obs_content[]")
-    obs_labels   = request.form.getlist("obs_label[]")
-    obs_images   = request.files.getlist("obs_image[]")
-    img_idx = 0
-    for j, otype in enumerate(obs_types):
-        content   = obs_contents[j].strip() if j < len(obs_contents) else ""
-        label     = obs_labels[j].strip()   if j < len(obs_labels)   else ""
-        file_path = None
-        if otype == "image":
-            if img_idx < len(obs_images):
-                file_path = _save_file_upload(
-                    obs_images[img_idx],
-                    current_app.config["UPLOAD_EVENT_OBS"],
-                    "event_obs",
-                )
-                img_idx += 1
-            if not file_path:
-                continue
-        elif otype in ("text", "link") and not content:
-            continue
-        db.session.add(EventObservation(
-            event_id   = event.id,
-            obs_type   = otype,
-            content    = content or None,
-            file_path  = file_path,
-            label      = label or None,
-        ))
-
-    db.session.add(EventLog(
-        event_id   = event.id,
-        actor_name = current_user.name,
-        actor_role = "COMERCIAL",
-        message    = "Evento criado pela plataforma",
-        created_at = datetime.now(tz=TZ),
-    ))
-    _log_sync("platform_created", event, actor=current_user.name,
-              actor_role=", ".join(r.name for r in current_user.roles))
-    from app.financeiro.routes import _sync_commission_payment
-    _sync_commission_payment(event)
-    db.session.commit()
-    if needs_rehearsal:
-        _notify_ensaio_team(event)
-
-    # Pré-escala (feature 095): sinaliza (sem bloquear) talentos com conflito de agenda no horário.
-    _conflicts = []
-    for tid, char_name in assigned_now:
-        other = _talent_time_conflict(tid, st, et, exclude_event_id=event.id)
-        if other:
-            tname = next((x["name"] for x in assignable_talents if x["id"] == tid), f"Talento {tid}")
-            _conflicts.append(f"{tname} ({char_name}) — já em “{other.title}”")
-    if _conflicts:
-        flash("Atenção: conflito de agenda na pré-escala — " + "; ".join(_conflicts), "warning")
+    if conflicts:
+        flash("Atenção: conflito de agenda na pré-escala — " + "; ".join(conflicts), "warning")
 
     flash("Evento criado com sucesso!", "success")
     return redirect(url_for("calendar.event_detail", event_id=event.id))
-
 
 # ─── MATERIAIS DE ENSAIO ──────────────────────────────────────────────────────
 
