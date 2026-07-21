@@ -53,6 +53,7 @@ export interface RoleItem {
   talent: { id: number; name: string } | null;
   figurino_done: boolean;
   invite_status: string | null;
+  dismissed: boolean;
   cache_value?: number | null; // só para casting/superadmin
 }
 

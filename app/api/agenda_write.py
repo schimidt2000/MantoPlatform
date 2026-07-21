@@ -33,6 +33,11 @@ def _can_casting() -> bool:
     )
 
 
+def _is_superadmin() -> bool:
+    """Só superadmin (dispensar/restaurar cargo)."""
+    return any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
+
+
 def _event_detail_json(event: Any) -> Any:
     """Serializa o evento atualizado com o RBAC do usuário atual (resposta padrão das escritas)."""
     impersonate = session.get("impersonate_role")
@@ -115,4 +120,78 @@ def api_delete_role(role_id: int) -> Any:
     )
     if not removed:
         return json_error("Cargo com convite aceito só pode ser removido por um superadmin", 403)
+    return _event_detail_json(event)
+
+
+@api_bp.route("/roles/<int:role_id>/invite", methods=["POST"])
+@api_login_required
+def api_send_invite(role_id: int) -> Any:
+    """Reenvia o convite de um cargo com talento (feature 148). No-op se não há talento."""
+    role = EventRole.query.get(role_id)
+    if role is None:
+        return json_error("Cargo não encontrado", 404)
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+    event = CalendarEvent.query.get(role.event_id)
+
+    from app.calendar.casting_ops import send_invite
+
+    send_invite(event, role, actor_name=current_user.name, tz=_TZ_SP)
+    return _event_detail_json(event)
+
+
+@api_bp.route("/roles/<int:role_id>/figurino-done", methods=["POST"])
+@api_login_required
+def api_figurino_done(role_id: int) -> Any:
+    """Marca o figurino de um cargo como separado (feature 148).
+
+    RBAC = `_CAN_EDIT_EVENT` (paridade exata: no Jinja o `figurino_done` é despachado pelo POST
+    de `/events/<id>`, gateado por quem pode editar o evento — não só Figurino).
+    """
+    role = EventRole.query.get(role_id)
+    if role is None:
+        return json_error("Cargo não encontrado", 404)
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+    event = CalendarEvent.query.get(role.event_id)
+
+    from app.calendar.casting_ops import set_figurino_done
+
+    set_figurino_done(event, role, actor_name=current_user.name, tz=_TZ_SP)
+    return _event_detail_json(event)
+
+
+@api_bp.route("/roles/<int:role_id>/dismiss", methods=["POST"])
+@api_login_required
+def api_dismiss_role(role_id: int) -> Any:
+    """Dispensa um cargo sem talento (feature 108/148). RBAC: só superadmin."""
+    role = EventRole.query.get(role_id)
+    if role is None:
+        return json_error("Cargo não encontrado", 404)
+    if not _is_superadmin():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.casting_ops import dismiss_role
+
+    ok = dismiss_role(role, actor_name=current_user.name, dismissed_by=current_user.id)
+    if not ok:
+        return json_error("Só é possível dispensar cargos sem talento atribuído", 400)
+    event = CalendarEvent.query.get(role.event_id)
+    return _event_detail_json(event)
+
+
+@api_bp.route("/roles/<int:role_id>/restore", methods=["POST"])
+@api_login_required
+def api_restore_role(role_id: int) -> Any:
+    """Restaura um cargo dispensado (feature 108/148). RBAC: só superadmin."""
+    role = EventRole.query.get(role_id)
+    if role is None:
+        return json_error("Cargo não encontrado", 404)
+    if not _is_superadmin():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.casting_ops import restore_role
+
+    restore_role(role, actor_name=current_user.name)
+    event = CalendarEvent.query.get(role.event_id)
     return _event_detail_json(event)

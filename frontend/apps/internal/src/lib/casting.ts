@@ -75,3 +75,35 @@ export function useDeleteRole(eventId: number) {
     },
   });
 }
+
+/** Ação simples sobre um cargo (POST sem corpo) que devolve o evento atualizado. */
+function useRoleAction(eventId: number, path: (roleId: number) => string) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, number>({
+    mutationFn: (roleId) =>
+      apiFetch<EventoDetalhe>(path(roleId), { method: "POST" }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["event", eventId], updated);
+    },
+  });
+}
+
+/** Reenvia o convite de um cargo com talento. */
+export function useSendInvite(eventId: number) {
+  return useRoleAction(eventId, (roleId) => `/api/roles/${roleId}/invite`);
+}
+
+/** Marca o figurino de um cargo como separado. */
+export function useSetFigurinoDone(eventId: number) {
+  return useRoleAction(eventId, (roleId) => `/api/roles/${roleId}/figurino-done`);
+}
+
+/** Dispensa um cargo sem talento (para de contar como pendente, sem excluir). */
+export function useDismissRole(eventId: number) {
+  return useRoleAction(eventId, (roleId) => `/api/roles/${roleId}/dismiss`);
+}
+
+/** Restaura um cargo dispensado. */
+export function useRestoreRole(eventId: number) {
+  return useRoleAction(eventId, (roleId) => `/api/roles/${roleId}/restore`);
+}
