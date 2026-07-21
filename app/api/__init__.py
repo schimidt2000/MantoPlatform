@@ -12,3 +12,4 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 from app.api import auth as _auth  # noqa: E402,F401
 from app.api import dashboard as _dashboard  # noqa: E402,F401
 from app.api import agenda as _agenda  # noqa: E402,F401
+from app.api import agenda_write as _agenda_write  # noqa: E402,F401

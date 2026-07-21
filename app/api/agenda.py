@@ -17,7 +17,7 @@ from app.api.agenda_read import (
     serialize_event_summary,
 )
 from app.api_utils import api_login_required, json_error
-from app.models import CalendarEvent
+from app.models import CalendarEvent, Talent
 
 
 @api_bp.route("/agenda")
@@ -59,6 +59,23 @@ def api_agenda_day(date_str: str) -> Any:
     )
     return jsonify(
         {"day": day.isoformat(), "events": [serialize_event_summary(e) for e in events]}
+    )
+
+
+@api_bp.route("/talents")
+@api_login_required
+def api_talents() -> Any:
+    """Talentos ativos para o seletor de casting (id + nome)."""
+    talents = (
+        Talent.query.filter_by(status="active").order_by(Talent.full_name.asc()).all()
+    )
+    return jsonify(
+        {
+            "items": [
+                {"id": t.id, "name": t.full_name, "artistic_name": t.artistic_name}
+                for t in talents
+            ]
+        }
     )
 
 
