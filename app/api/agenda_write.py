@@ -45,6 +45,13 @@ def _can_confirm() -> bool:
     )
 
 
+def _can_delete() -> bool:
+    """Gate de excluir o evento (`_CAN_DELETE` = Comercial ou Superadmin) — paridade com o Jinja."""
+    from app.calendar.routes import _CAN_DELETE
+
+    return any(r.name.upper() in _CAN_DELETE for r in current_user.roles)
+
+
 def _event_detail_json(event: Any) -> Any:
     """Serializa o evento atualizado com o RBAC do usuário atual (resposta padrão das escritas)."""
     impersonate = session.get("impersonate_role")
@@ -297,4 +304,52 @@ def api_delete_observation(obs_id: int) -> Any:
 
     if not delete_observation(event, obs_id):
         return json_error("Observação não encontrada", 404)
+    return _event_detail_json(event)
+
+
+# ── Excluir / sincronizar evento (feature 151) ───────────────────────────────
+
+
+@api_bp.route("/events/<int:event_id>", methods=["DELETE"])
+@api_login_required
+def api_delete_event(event_id: int) -> Any:
+    """Exclui o evento do banco e do Google (feature 151). RBAC: `_CAN_DELETE` (Comercial/SA).
+
+    Recusa a exclusão de um evento líder de grupo com 409 (desagrupar antes) — paridade com o Jinja.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_delete():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.routes import _delete_event_flow
+
+    deleted = _delete_event_flow(
+        event,
+        actor_name=current_user.name,
+        actor_role=", ".join(r.name for r in current_user.roles),
+    )
+    if not deleted:
+        return json_error(
+            "Desagrupe os eventos satélites antes de excluir este evento", 409
+        )
+    return jsonify({"ok": True})
+
+
+@api_bp.route("/events/<int:event_id>/sync", methods=["POST"])
+@api_login_required
+def api_sync_event(event_id: int) -> Any:
+    """Sincroniza um evento com o Google Calendar (feature 151). Sem gate de papel (paridade)."""
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+
+    from app.calendar.routes import _sync_single_event_flow
+
+    status = _sync_single_event_flow(event)
+    if status == "no_google_id":
+        return json_error("Evento sem ID do Google Calendar — não é possível sincronizar", 400)
+    if status == "not_found":
+        return json_error("Não foi possível buscar o evento no Google Calendar", 502)
     return _event_detail_json(event)

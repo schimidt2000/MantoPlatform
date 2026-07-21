@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
@@ -17,7 +17,12 @@ import {
   useTalents,
   type TalentoOption,
 } from "../lib/casting";
-import { useSaveLogistics, useToggleConfirm } from "../lib/eventOps";
+import {
+  useDeleteEvent,
+  useSaveLogistics,
+  useSyncEvent,
+  useToggleConfirm,
+} from "../lib/eventOps";
 
 function brl(v: number | null | undefined): string {
   return `R$ ${formatBRL(v ?? 0)}`;
@@ -698,6 +703,55 @@ function Observacoes({ data }: { data: EventoDetalhe }) {
   );
 }
 
+/** Ações de nível-evento: sincronizar (qualquer autenticado) e excluir (só can_delete). */
+function EventActions({ data }: { data: EventoDetalhe }) {
+  const navigate = useNavigate();
+  const sync = useSyncEvent(data.event.id);
+  const del = useDeleteEvent(data.event.id);
+  const canDelete = Boolean(data.flags.can_delete);
+
+  return (
+    <Section title="Ações">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="outline"
+          size="sm"
+          loading={sync.isPending}
+          onClick={() => sync.mutate()}
+        >
+          Sincronizar com Google
+        </Button>
+        {sync.isSuccess && !sync.isPending && (
+          <span className="text-sm text-green">Sincronizado.</span>
+        )}
+        {sync.isError && <span className="text-sm text-red">{sync.error?.message}</span>}
+      </div>
+      {canDelete && (
+        <div className="mt-4 border-t border-line pt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-red"
+            loading={del.isPending}
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Excluir o evento "${data.event.title}"? Esta ação não pode ser desfeita.`,
+                )
+              ) {
+                del.mutate(undefined, { onSuccess: () => navigate("/agenda") });
+              }
+            }}
+          >
+            Excluir evento
+          </Button>
+          {del.isError && <p className="mt-1 text-sm text-red">{del.error?.message}</p>}
+        </div>
+      )}
+    </Section>
+  );
+}
+
 function Historico({ data }: { data: EventoDetalhe }) {
   if (data.logs.length === 0) return null;
   return (
@@ -770,6 +824,7 @@ export function EventDetailPage() {
           <Reembolsos data={query.data} />
           <Observacoes data={query.data} />
           <Historico data={query.data} />
+          <EventActions data={query.data} />
         </motion.div>
       )}
     </div>

@@ -106,6 +106,8 @@ def _role_flags(user: Any, impersonate: str | None) -> dict[str, bool]:
             or has(RoleName.FINANCEIRO)
             or is_superadmin
         ),
+        # Excluir evento (feature 151): _CAN_DELETE = Comercial ou Superadmin.
+        "can_delete": has(RoleName.COMERCIAL) or is_superadmin,
     }
 
 

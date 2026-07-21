@@ -42,3 +42,34 @@ export function useSaveLogistics(eventId: number) {
     },
   });
 }
+
+/**
+ * Sincroniza o evento com o Google Calendar (feature 151). Ao suceder, atualiza o cache do evento
+ * com o estado retornado. Sem gate de papel no servidor.
+ */
+export function useSyncEvent(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, void>({
+    mutationFn: () => apiFetch<EventoDetalhe>(`/api/events/${eventId}/sync`, { method: "POST" }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["event", eventId], updated);
+    },
+  });
+}
+
+/**
+ * Exclui o evento (feature 151). RBAC no servidor: `_CAN_DELETE` (Comercial/Superadmin); um evento
+ * líder de grupo é recusado (409). Ao suceder, remove o cache do evento e invalida a agenda; a
+ * navegação de volta fica com o componente.
+ */
+export function useDeleteEvent(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<{ ok: boolean }, Error, void>({
+    mutationFn: () => apiFetch<{ ok: boolean }>(`/api/events/${eventId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["agenda"] });
+      queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+    },
+  });
+}
