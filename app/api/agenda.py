@@ -7,12 +7,16 @@ escrita, fatia US5). As views Jinja `/agenda` e `/agenda/day/<date>` seguem inta
 from datetime import datetime
 from typing import Any
 
-from flask import jsonify, request
+from flask import jsonify, request, session
+from flask_login import current_user
 
 from app.api import api_bp
-from app.api.agenda_read import build_agenda_month, serialize_event_summary
+from app.api.agenda_read import (
+    build_agenda_month,
+    serialize_event_detail,
+    serialize_event_summary,
+)
 from app.api_utils import api_login_required, json_error
-from app.calendar.routes import _query_month_events  # noqa: F401 (mantém dependência explícita)
 from app.models import CalendarEvent
 
 
@@ -56,3 +60,14 @@ def api_agenda_day(date_str: str) -> Any:
     return jsonify(
         {"day": day.isoformat(), "events": [serialize_event_summary(e) for e in events]}
     )
+
+
+@api_bp.route("/events/<int:event_id>")
+@api_login_required
+def api_event_detail(event_id: int) -> Any:
+    """Detalhe do evento (leitura), com blocos financeiros conforme o papel do usuário."""
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    impersonate = session.get("impersonate_role")
+    return jsonify(serialize_event_detail(event, current_user, impersonate))

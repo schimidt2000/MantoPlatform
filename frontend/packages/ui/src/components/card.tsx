@@ -1,12 +1,19 @@
 import { forwardRef, type HTMLAttributes } from "react";
+import { Slot } from "@radix-ui/react-slot";
 import { cn } from "../lib/cn";
 
-const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(function Card(
-  { className, ...props },
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
+  /** Renderiza como o filho (padrão Slot do shadcn/ui) — ex.: um `<Link>` clicável. */
+  asChild?: boolean;
+}
+
+const Card = forwardRef<HTMLDivElement, CardProps>(function Card(
+  { className, asChild = false, ...props },
   ref,
 ) {
+  const Comp = asChild ? Slot : "div";
   return (
-    <div
+    <Comp
       ref={ref}
       className={cn("rounded-lg border border-line bg-panel shadow-sm", className)}
       {...props}

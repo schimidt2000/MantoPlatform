@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button, Card, Skeleton } from "@manto/ui";
 import { useAgenda, type EventoResumo } from "../lib/agenda";
@@ -42,7 +43,8 @@ function eventTime(ev: EventoResumo): string {
 
 function EventCard({ ev }: { ev: EventoResumo }) {
   return (
-    <Card className="flex flex-col gap-1 p-4">
+    <Card asChild className="flex flex-col gap-1 p-4 transition-colors hover:bg-surface-2">
+      <Link to={`/events/${ev.id}`}>
       <div className="flex items-start justify-between gap-3">
         <span className="font-medium text-ink">{ev.title}</span>
         {eventTime(ev) && (
@@ -68,6 +70,7 @@ function EventCard({ ev }: { ev: EventoResumo }) {
           </span>
         )}
       </div>
+      </Link>
     </Card>
   );
 }

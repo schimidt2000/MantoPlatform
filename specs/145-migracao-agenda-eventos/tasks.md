@@ -42,26 +42,26 @@ com RBAC — a parte sensível). Recomendado parar e validar A antes de B.
 ## Incremento B — Detalhe do evento (leitura, com RBAC)
 
 ### Backend
-- [ ] T007 [US1] Ler `event_detail.html` para inventariar as seções/campos exibidos por bloco
+- [X] T007 [US1] Ler `event_detail.html` para inventariar as seções/campos exibidos por bloco
       (evitar regressão silenciosa — Edge Case).
-- [ ] T008 [US1] `serialize_event_detail(event, user, impersonate)` em `agenda_read.py`: blocos
+- [X] T008 [US1] `serialize_event_detail(event, user, impersonate)` em `agenda_read.py`: blocos
       sempre presentes (event, elenco, logs, observations, ratings, feedbacks) + blocos
       financeiros SÓ conforme papel (`show_comercial`: venda/kpi/cobranca/contratos/expenses;
       `show_financeiro`: pagamentos/reembolsos), reusando `_group_events` e replicando as
       fórmulas de KPI/cobrança da view. ENSAIO → shape reduzido.
-- [ ] T009 [US1] `GET /api/events/<id>` em `app/api/agenda.py` (404 inexistente); serializa via
+- [X] T009 [US1] `GET /api/events/<id>` em `app/api/agenda.py` (404 inexistente); serializa via
       T008 com o papel do usuário atual.
 
 ### Frontend
-- [ ] T010 [P] [US1] Estender `lib/agenda.ts`: tipo EventoDetalhe (blocos opcionais) +
+- [X] T010 [P] [US1] Estender `lib/agenda.ts`: tipo EventoDetalhe (blocos opcionais) +
       `useEvent(id)`.
-- [ ] T011 [US1] `frontend/apps/internal/src/pages/EventDetailPage.tsx`: renderiza cada bloco
+- [X] T011 [US1] `frontend/apps/internal/src/pages/EventDetailPage.tsx`: renderiza cada bloco
       presente (elenco, financeiro gated, contrato, logs, observações, avaliações); valores
       monetários via `@manto/money`; skeleton/erro; Framer Motion; mobile.
-- [ ] T012 [US1] Rota `/events/:id` no `App.tsx`; abrir a partir da AgendaPage.
+- [X] T012 [US1] Rota `/events/:id` no `App.tsx`; abrir a partir da AgendaPage.
 
 ### Verificação B (o coração — paridade por papel)
-- [ ] T013 [US1] Estender `verify_145_agenda_read.py`: usuários efêmeros (superadmin;
+- [X] T013 [US1] Estender `verify_145_agenda_read.py`: usuários efêmeros (superadmin;
       comercial; casting-sem-financeiro). Superadmin recebe blocos financeiros com totais
       (custo/comissão/recebido/reembolso pendente) == cálculo da view; casting-sem-financeiro
       NÃO recebe nenhum campo financeiro; 404/401 cobertos. `tsc`/`build` limpos; ruff nos
