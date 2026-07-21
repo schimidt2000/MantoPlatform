@@ -38,6 +38,13 @@ def _is_superadmin() -> bool:
     return any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
 
 
+def _can_confirm() -> bool:
+    """Gate de confirmar/desconfirmar o evento: Comercial ou Superadmin (paridade com o Jinja)."""
+    return any(
+        r.name.upper() in (RoleName.COMERCIAL, RoleName.SUPERADMIN) for r in current_user.roles
+    )
+
+
 def _event_detail_json(event: Any) -> Any:
     """Serializa o evento atualizado com o RBAC do usuário atual (resposta padrão das escritas)."""
     impersonate = session.get("impersonate_role")
@@ -194,4 +201,51 @@ def api_restore_role(role_id: int) -> Any:
 
     restore_role(role, actor_name=current_user.name)
     event = CalendarEvent.query.get(role.event_id)
+    return _event_detail_json(event)
+
+
+# ── Ações de nível-evento (feature 149) ──────────────────────────────────────
+
+
+@api_bp.route("/events/<int:event_id>/confirm", methods=["POST"])
+@api_login_required
+def api_toggle_confirm(event_id: int) -> Any:
+    """Confirma/desconfirma o evento (feature 149, toggle). RBAC: Comercial ou Superadmin."""
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_confirm():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.event_ops import toggle_confirmed
+
+    toggle_confirmed(event, actor_name=current_user.name, actor_id=current_user.id, tz=_TZ_SP)
+    return _event_detail_json(event)
+
+
+@api_bp.route("/events/<int:event_id>/logistics", methods=["PATCH"])
+@api_login_required
+def api_save_logistics(event_id: int) -> Any:
+    """Salva a logística do evento (feature 149). RBAC: `_CAN_EDIT_EVENT` (como o POST Jinja)."""
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+    data = request.get_json(silent=True) or {}
+
+    from app.calendar.event_ops import resolve_makeup_location, save_logistics
+
+    save_logistics(
+        event,
+        makeup_time=data.get("makeup_time", ""),
+        makeup_location=resolve_makeup_location(
+            data.get("makeup_location"), data.get("makeup_location_custom")
+        ),
+        departure_time=data.get("departure_time", ""),
+        departure_location=data.get("departure_location", ""),
+        needs_rehearsal=bool(data.get("needs_rehearsal")),
+        actor_name=current_user.name,
+        tz=_TZ_SP,
+    )
     return _event_detail_json(event)

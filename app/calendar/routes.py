@@ -28,7 +28,13 @@ from app.constants import RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CL
 from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
 from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense, ClientFeedback, EventReimbursement
-from app.email_service import send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
+from app.email_service import send_removal_email
+# Notificadores de logística movidos para event_ops (feature 149); reimportados com alias para os
+# call sites existentes (sync inclusive) seguirem inalterados. Dependência unidirecional routes→event_ops.
+from app.calendar.event_ops import (
+    notify_accepted_roles as _notify_accepted_roles,
+    notify_ensaio_team as _notify_ensaio_team,
+)
 
 calendar_bp = Blueprint("calendar", __name__)
 
@@ -1081,32 +1087,22 @@ def _handle_toggle_contract_signed(event: CalendarEvent, tz_sp: ZoneInfo) -> Non
 
 
 def _handle_toggle_confirmado(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    """Liga/desliga a confirmação do evento (feature 116) — registra autor e data/hora.
+    """Adaptador fino — regra em event_ops.toggle_confirmed (feature 149). RBAC Comercial/SA.
 
-    Independente do botão "Confirmar dados do evento" (que só copia uma mensagem de
-    WhatsApp): este é o registro persistido de que o evento foi de fato confirmado.
+    Independente do botão "Confirmar dados do evento" (que só copia uma mensagem de WhatsApp):
+    este é o registro persistido de que o evento foi de fato confirmado.
     """
     if not any(r.name.upper() in (RoleName.COMERCIAL, RoleName.SUPERADMIN) for r in current_user.roles):
         flash("Apenas comercial/super admin podem confirmar o evento.", "error")
         return
-    if event.confirmed_at is None:
-        event.confirmed_at = datetime.now(tz=tz_sp)
-        event.confirmed_by_id = current_user.id
-        message = "Marcou o evento como confirmado"
-        flash("Evento marcado como confirmado.", "success")
-    else:
-        event.confirmed_at = None
-        event.confirmed_by_id = None
-        message = "Desfez a confirmação do evento"
-        flash("Confirmação do evento desfeita.", "success")
-    db.session.add(EventLog(
-        event_id=event.id,
-        actor_name=current_user.name,
-        actor_role="Comercial",
-        message=message,
-        created_at=datetime.now(tz=tz_sp),
-    ))
-    db.session.commit()
+    from app.calendar.event_ops import toggle_confirmed
+    confirmed = toggle_confirmed(
+        event, actor_name=current_user.name, actor_id=current_user.id, tz=tz_sp
+    )
+    flash(
+        "Evento marcado como confirmado." if confirmed else "Confirmação do evento desfeita.",
+        "success",
+    )
 
 
 def _handle_send_invite(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
@@ -1129,46 +1125,20 @@ def _handle_send_invite(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 def _handle_save_logistics(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    old_needs_rehearsal  = event.needs_rehearsal
-    old_departure        = event.departure_time
-    old_departure_loc    = event.departure_location
-    old_makeup_time      = event.makeup_time
-    old_makeup_location  = event.makeup_location
-
-    event.makeup_time    = request.form.get("makeup_time", "").strip() or None
-    loc = request.form.get("makeup_location", "").strip()
-    if loc == "outro":
-        loc = request.form.get("makeup_location_custom", "").strip()
-    event.makeup_location = loc or None
-    event.departure_time  = request.form.get("departure_time", "").strip() or None
-    event.departure_location = request.form.get("departure_location", "").strip() or None
-    event.needs_rehearsal = bool(request.form.get("needs_rehearsal"))
-
-    logistics_changes = []
-    if event.departure_time != old_departure and old_departure is not None:
-        logistics_changes.append(
-            f"Horário de saída: {old_departure} → {event.departure_time or 'não definido'}"
-        )
-    if event.departure_location != old_departure_loc and old_departure_loc is not None:
-        logistics_changes.append(
-            f"Local de saída: {old_departure_loc} → {event.departure_location or 'Manto Produções'}"
-        )
-    if event.makeup_time != old_makeup_time and old_makeup_time is not None:
-        logistics_changes.append(
-            f"Horário de maquiagem: {old_makeup_time} → {event.makeup_time or 'não definido'}"
-        )
-    if event.makeup_location != old_makeup_location and old_makeup_location is not None:
-        logistics_changes.append(
-            f"Local de maquiagem: {old_makeup_location} → {event.makeup_location or 'não definido'}"
-        )
-    if logistics_changes:
-        _notify_accepted_roles(event, logistics_changes)
-
-    db.session.commit()
-
-    if event.needs_rehearsal and not old_needs_rehearsal:
-        ensaio_users = User.query.join(User.roles).filter(Role.name == RoleName.ENSAIO).all()
-        send_async(send_ensaio_alert_email, event, ensaio_users)
+    """Adaptador fino — regra em event_ops.save_logistics (feature 149)."""
+    from app.calendar.event_ops import resolve_makeup_location, save_logistics
+    save_logistics(
+        event,
+        makeup_time=request.form.get("makeup_time", ""),
+        makeup_location=resolve_makeup_location(
+            request.form.get("makeup_location"), request.form.get("makeup_location_custom")
+        ),
+        departure_time=request.form.get("departure_time", ""),
+        departure_location=request.form.get("departure_location", ""),
+        needs_rehearsal=bool(request.form.get("needs_rehearsal")),
+        actor_name=current_user.name,
+        tz=tz_sp,
+    )
     flash("Logística salva.", "success")
 
 
@@ -1896,32 +1866,8 @@ def _detect_changes(event: CalendarEvent, new_start, new_end, new_location) -> l
     return changes
 
 
-def _notify_accepted_roles(event: CalendarEvent, changes: list[str]) -> None:
-    """Marca roles aceitos como alterados e envia emails.
-
-    O email só é enviado uma vez por rodada de mudanças — enquanto o talento não
-    clicar 'Estou ciente' (que zera event_changed_at), notificações adicionais
-    atualizam a descrição silenciosamente, sem novo email.
-    """
-    now = datetime.now(tz=ZoneInfo("America/Sao_Paulo"))
-    description = "\n".join(changes)
-    for role in event.roles:
-        if role.invite_status == "accepted":
-            already_pending = role.event_changed_at is not None
-            role.event_changed_at = now
-            role.change_description = description
-            if not already_pending:
-                send_async(send_event_changed_email, role, changes)
-
-
-def _notify_ensaio_team(event: CalendarEvent) -> None:
-    """Envia alerta à equipe ENSAIO quando evento precisa de ensaio."""
-    ensaio_users = (
-        User.query.join(User.roles)
-        .filter(Role.name == RoleName.ENSAIO)
-        .all()
-    )
-    send_async(send_ensaio_alert_email, event, ensaio_users)
+# _notify_accepted_roles / _notify_ensaio_team → movidos para app/calendar/event_ops.py (feature 149),
+# reimportados com alias no topo deste módulo (dependência unidirecional routes → event_ops).
 
 
 def sync_events(items: list[dict]) -> None:
