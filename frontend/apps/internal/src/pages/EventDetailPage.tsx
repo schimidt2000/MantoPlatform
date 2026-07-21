@@ -8,6 +8,10 @@ import {
   useAddRole,
   useAssignRole,
   useDeleteRole,
+  useDismissRole,
+  useRestoreRole,
+  useSendInvite,
+  useSetFigurinoDone,
   useTalents,
   type TalentoOption,
 } from "../lib/casting";
@@ -38,7 +42,39 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function RoleReadRow({ role }: { role: RoleItem }) {
+/** Botão "marcar figurino" — visível a Figurino/superadmin, só se há talento e ainda não separado. */
+function FigurinoButton({
+  role,
+  eventId,
+  show,
+}: {
+  role: RoleItem;
+  eventId: number;
+  show: boolean;
+}) {
+  const figurino = useSetFigurinoDone(eventId);
+  if (!show || !role.talent || role.figurino_done) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      loading={figurino.isPending}
+      onClick={() => figurino.mutate(role.role_id)}
+    >
+      Marcar figurino
+    </Button>
+  );
+}
+
+function RoleReadRow({
+  role,
+  eventId,
+  showFigurino,
+}: {
+  role: RoleItem;
+  eventId: number;
+  showFigurino: boolean;
+}) {
   return (
     <li className="flex items-center justify-between gap-3 py-2">
       <div>
@@ -48,9 +84,12 @@ function RoleReadRow({ role }: { role: RoleItem }) {
           {role.figurino_done && " · figurino ok"}
         </div>
       </div>
-      {role.cache_value != null && (
-        <span className="shrink-0 tabular-nums text-sm text-ink">{brl(role.cache_value)}</span>
-      )}
+      <div className="flex shrink-0 items-center gap-2">
+        <FigurinoButton role={role} eventId={eventId} show={showFigurino} />
+        {role.cache_value != null && (
+          <span className="tabular-nums text-sm text-ink">{brl(role.cache_value)}</span>
+        )}
+      </div>
     </li>
   );
 }
@@ -59,20 +98,34 @@ function RoleAssignRow({
   role,
   eventId,
   talents,
+  showFigurino,
+  isSuperadmin,
 }: {
   role: RoleItem;
   eventId: number;
   talents: TalentoOption[];
+  showFigurino: boolean;
+  isSuperadmin: boolean;
 }) {
   const assign = useAssignRole(eventId);
   const remove = useDeleteRole(eventId);
+  const invite = useSendInvite(eventId);
+  const dismiss = useDismissRole(eventId);
+  const restore = useRestoreRole(eventId);
   const [talentId, setTalentId] = useState<number | null>(role.talent?.id ?? null);
   const [cache, setCache] = useState<number>(role.cache_value ?? 0);
 
   return (
     <li className="py-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="font-medium text-ink">{role.character_name}</span>
+        <span className="font-medium text-ink">
+          {role.character_name}
+          {role.dismissed && (
+            <span className="ml-2 rounded-md bg-surface-2 px-2 py-0.5 text-xs text-muted">
+              dispensado
+            </span>
+          )}
+        </span>
         <div className="flex items-center gap-2">
           {role.invite_status && (
             <span className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-muted">
@@ -123,6 +176,40 @@ function RoleAssignRow({
         >
           Salvar
         </Button>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {role.talent && (
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={invite.isPending}
+            onClick={() => invite.mutate(role.role_id)}
+          >
+            Reenviar convite
+          </Button>
+        )}
+        <FigurinoButton role={role} eventId={eventId} show={showFigurino} />
+        {isSuperadmin && !role.talent && (
+          role.dismissed ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={restore.isPending}
+              onClick={() => restore.mutate(role.role_id)}
+            >
+              Restaurar
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={dismiss.isPending}
+              onClick={() => dismiss.mutate(role.role_id)}
+            >
+              Dispensar
+            </Button>
+          )
+        )}
       </div>
       {assign.isError && (
         <p className="mt-1 text-sm text-red">Não foi possível salvar. Tente novamente.</p>
@@ -192,6 +279,8 @@ function AddRoleForm({ eventId, talents }: { eventId: number; talents: TalentoOp
 
 function Elenco({ data }: { data: EventoDetalhe }) {
   const talentsQuery = useTalents();
+  const showFigurino = Boolean(data.flags.show_figurino);
+  const isSuperadmin = Boolean(data.flags.is_superadmin);
   const canEdit = Boolean(data.flags.show_casting) && Boolean(talentsQuery.data);
   const hasRoles = Boolean(data.elenco && data.elenco.length > 0);
   if (!hasRoles && !canEdit) return null;
@@ -205,9 +294,16 @@ function Elenco({ data }: { data: EventoDetalhe }) {
               role={r}
               eventId={data.event.id}
               talents={talentsQuery.data!.items}
+              showFigurino={showFigurino}
+              isSuperadmin={isSuperadmin}
             />
           ) : (
-            <RoleReadRow key={r.role_id} role={r} />
+            <RoleReadRow
+              key={r.role_id}
+              role={r}
+              eventId={data.event.id}
+              showFigurino={showFigurino}
+            />
           ),
         )}
       </ul>

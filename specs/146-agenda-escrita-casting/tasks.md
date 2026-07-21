@@ -32,7 +32,7 @@ US3 (convite/dispensar/restaurar/figurino) têm seu próprio ciclo depois, reusa
       Jinja segue 200 (302 redirect). `ruff` nos arquivos novos; `tsc`/`build` limpos.
 
 ## Fase final
-- [ ] T007 Marcar tasks; commit no branch `146-...`; verificar na main mergeada; merge+push.
+- [X] T007 Marcar tasks; commit no branch `146-...`; verificar na main mergeada; merge+push.
       `CLAUDE.md` pointer + memória. Changelog só quando substituir algo em produção (equipe
       segue no Jinja) — não republicar agora.
 

@@ -134,6 +134,7 @@ def _serialize_role(role: Any, show_casting: bool) -> dict[str, Any]:
         "talent": {"id": role.talent.id, "name": role.talent.full_name} if role.talent else None,
         "figurino_done": role.figurino_done_at is not None,
         "invite_status": role.invite_status,
+        "dismissed": role.dismissed_at is not None,
     }
     if show_casting:
         data["cache_value"] = _money(role.cache_value)

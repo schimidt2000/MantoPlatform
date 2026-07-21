@@ -28,7 +28,7 @@ from app.constants import RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CL
 from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
 from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense, ClientFeedback, EventReimbursement
-from app.email_service import send_invite_email, send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
+from app.email_service import send_event_changed_email, send_ensaio_alert_email, send_removal_email, send_async
 
 calendar_bp = Blueprint("calendar", __name__)
 
@@ -513,19 +513,16 @@ def _handle_delete_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 def _handle_figurino_done(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    role_id = request.form.get("role_id")
-    role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
+    # Adaptador fino — regra em casting_ops.set_figurino_done (feature 148).
+    role_id_raw = request.form.get("role_id", "")
+    # int() explícito: filter_by(id=string) quebra em manto_local (psycopg3). Ver memória.
+    if not str(role_id_raw).isdigit():
+        return
+    role = EventRole.query.filter_by(id=int(role_id_raw), event_id=event.id).first()
     if not role:
         return
-    role.figurino_done_at = datetime.now(tz=tz_sp)
-    db.session.add(EventLog(
-        event_id=event.id,
-        actor_name=current_user.name,
-        actor_role="Figurino",
-        message=f"Separou figurino de {role.character_name}",
-        created_at=datetime.now(tz=tz_sp),
-    ))
-    db.session.commit()
+    from app.calendar.casting_ops import set_figurino_done
+    set_figurino_done(event, role, actor_name=current_user.name, tz=tz_sp)
 
 
 def _handle_add_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
@@ -1113,20 +1110,16 @@ def _handle_toggle_confirmado(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 def _handle_send_invite(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
-    role_id = request.form.get("role_id")
-    role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
+    # Adaptador fino — regra em casting_ops.send_invite (feature 148). Aqui só form + flash.
+    role_id_raw = request.form.get("role_id", "")
+    # int() explícito: filter_by(id=string) quebra em manto_local (psycopg3). Ver memória.
+    if not str(role_id_raw).isdigit():
+        return
+    role = EventRole.query.filter_by(id=int(role_id_raw), event_id=event.id).first()
     if not role or not role.talent_id:
         return
-    role.invite_status = "pending"
-    db.session.add(EventLog(
-        event_id=event.id,
-        actor_name=current_user.name,
-        actor_role="Casting",
-        message=f"Enviou convite para {role.talent.full_name} ({role.character_name})",
-        created_at=datetime.now(tz=tz_sp),
-    ))
-    db.session.commit()
-    email_sent = send_invite_email(role)
+    from app.calendar.casting_ops import send_invite
+    email_sent = send_invite(event, role, actor_name=current_user.name, tz=tz_sp)
     msg = f"Convite marcado como enviado para {role.talent.full_name}."
     if email_sent:
         msg += " Email enviado."
@@ -3356,23 +3349,15 @@ def dismiss_role(role_id: int):
     Agenda nunca o recria — mas para de contar como tarefa pendente de casting. Restrito ao
     super admin (mais restrito que a exclusão de cargo, que também aceita o papel Casting).
     """
+    # Adaptador fino — regra em casting_ops.dismiss_role (feature 148).
     if not _is_superadmin():
         abort(403)
     role = EventRole.query.get_or_404(role_id)
-    if role.talent_id is not None:
+    from app.calendar.casting_ops import dismiss_role as _dismiss_role
+    ok = _dismiss_role(role, actor_name=current_user.name, dismissed_by=current_user.id)
+    if not ok:
         flash("Só é possível dispensar cargos sem talento atribuído.", "error")
-        return _redirect_back()
-    if role.dismissed_at is None:
-        role.dismissed_at = datetime.utcnow()
-        role.dismissed_by = current_user.id
-        db.session.add(EventLog(
-            event_id=role.event_id,
-            actor_name=current_user.name,
-            actor_role="Casting",
-            message=f"Dispensou tarefa de casting: {role.character_name}",
-            created_at=datetime.utcnow(),
-        ))
-        db.session.commit()
+    else:
         flash("Tarefa dispensada.", "success")
     return _redirect_back()
 
@@ -3381,19 +3366,13 @@ def dismiss_role(role_id: int):
 @login_required
 def restore_role(role_id: int):
     """Reverte a dispensa de um cargo de casting, voltando a contá-lo como pendente (feature 108)."""
+    # Adaptador fino — regra em casting_ops.restore_role (feature 148).
     if not _is_superadmin():
         abort(403)
     role = EventRole.query.get_or_404(role_id)
-    if role.dismissed_at is not None:
-        role.dismissed_at = None
-        role.dismissed_by = None
-        db.session.add(EventLog(
-            event_id=role.event_id,
-            actor_name=current_user.name,
-            actor_role="Casting",
-            message=f"Restaurou tarefa de casting: {role.character_name}",
-            created_at=datetime.utcnow(),
-        ))
-        db.session.commit()
+    was_dismissed = role.dismissed_at is not None
+    from app.calendar.casting_ops import restore_role as _restore_role
+    _restore_role(role, actor_name=current_user.name)
+    if was_dismissed:
         flash("Tarefa restaurada.", "success")
     return _redirect_back()

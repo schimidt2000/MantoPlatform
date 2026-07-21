@@ -6,7 +6,9 @@ O núcleo de cada ação de casting mora aqui, com parâmetros explícitos (sem 
 que lê o JSON e devolve o evento serializado). UMA implementação da regra (teto de cachê,
 transições de convite, e-mails), zero divergência (Princípio I).
 
-Nesta fatia (US1): `assign_role` (escalar/atualizar/desescalar talento num cargo).
+Ações: `assign_role` (escalar/atualizar/desescalar — US1/146), `add_role`/`delete_role`
+(adicionar/remover cargo — US2/147), `send_invite`/`set_figurino_done`/`dismiss_role`/
+`restore_role` (convite/figurino/dispensar/restaurar — US3/148).
 """
 
 from datetime import datetime
@@ -218,3 +220,87 @@ def delete_role(
     db.session.delete(role)
     db.session.commit()
     return True
+
+
+def send_invite(event: Any, role: Any, *, actor_name: str, tz: ZoneInfo) -> bool:
+    """Reenvia o convite de um cargo com talento. Núcleo de `_handle_send_invite` (US3, feat. 148).
+
+    Marca `invite_status=pending`, registra em `EventLog` e envia o convite de forma **síncrona**
+    (`send_invite_email`, como o Jinja de hoje — não `send_async`), para o comportamento
+    observável não mudar. Cargo sem talento é no-op (retorna False), igual ao handler atual.
+
+    Returns:
+        True se o e-mail foi enviado; False se não havia talento (no-op) ou o envio falhou.
+    """
+    if not role.talent_id:
+        return False
+    role.invite_status = "pending"
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Casting",
+        message=f"Enviou convite para {role.talent.full_name} ({role.character_name})",
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.commit()
+    return send_invite_email(role)
+
+
+def set_figurino_done(event: Any, role: Any, *, actor_name: str, tz: ZoneInfo) -> None:
+    """Marca o figurino de um cargo como separado. Núcleo de `_handle_figurino_done` (feat. 148).
+
+    Ação de Figurino (não de casting): a RBAC (Figurino/superadmin) é aplicada nos adaptadores.
+    """
+    role.figurino_done_at = datetime.now(tz=tz)
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Figurino",
+        message=f"Separou figurino de {role.character_name}",
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.commit()
+
+
+def dismiss_role(role: Any, *, actor_name: str, dismissed_by: int) -> bool:
+    """Dispensa um cargo sem talento sem excluí-lo (feature 108). Núcleo de `dismiss_role`.
+
+    O cargo continua existindo (o sync do Google nunca o recria) mas para de contar como tarefa
+    pendente. Só cargos **sem talento** podem ser dispensados. Usa `datetime.utcnow()` (naive) e
+    `dismissed_by` como o fluxo Jinja atual. Idempotente: já dispensado retorna True sem duplicar.
+
+    Returns:
+        True se o cargo foi (ou já estava) dispensado; False se tem talento (bloqueado).
+    """
+    if role.talent_id is not None:
+        return False
+    if role.dismissed_at is None:
+        role.dismissed_at = datetime.utcnow()
+        role.dismissed_by = dismissed_by
+        db.session.add(EventLog(
+            event_id=role.event_id,
+            actor_name=actor_name,
+            actor_role="Casting",
+            message=f"Dispensou tarefa de casting: {role.character_name}",
+            created_at=datetime.utcnow(),
+        ))
+        db.session.commit()
+    return True
+
+
+def restore_role(role: Any, *, actor_name: str) -> None:
+    """Reverte a dispensa de um cargo, voltando a contá-lo como pendente. Núcleo de `restore_role`.
+
+    Idempotente: cargo não dispensado é no-op.
+    """
+    if role.dismissed_at is not None:
+        role.dismissed_at = None
+        role.dismissed_by = None
+        db.session.add(EventLog(
+            event_id=role.event_id,
+            actor_name=actor_name,
+            actor_role="Casting",
+            message=f"Restaurou tarefa de casting: {role.character_name}",
+            created_at=datetime.utcnow(),
+        ))
+        db.session.commit()
