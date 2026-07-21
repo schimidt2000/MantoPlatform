@@ -46,6 +46,21 @@ Ver `research.md` §3 para o raciocínio. Resumo normativo:
   `is_superadmin`/`impersonate_role` hoje em `app/__init__.py`)
 - 401: sem sessão válida
 
+## Upload de arquivo (multipart/form-data)
+
+Convenção introduzida na feature 153 (`specs/153-upload-anexos-evento/contracts/
+upload-endpoints.md`), normativa para toda rota futura que receba arquivo:
+
+- Requisição: `Content-Type: multipart/form-data`. Campos não-arquivo vão como campos de
+  formulário comuns (`request.form`), junto do arquivo (`request.files`) — nunca JSON no
+  mesmo corpo.
+- Resposta: **inalterada** — mesmo envelope de sucesso/erro acima, mesmos códigos HTTP. Só a
+  requisição muda de content-type; a resposta de um endpoint de upload é JSON como qualquer
+  outro.
+- Endpoint que edita/apaga sem receber arquivo novo continua `application/json` puro (ex.:
+  corrigir um valor, excluir um registro) — só quem recebe arquivo na requisição usa
+  multipart.
+
 ## Fora de escopo desta fatia
 
 Contratos de CRUD de Agenda/Eventos, Talentos, Figurino, Financeiro, Catálogo etc. — cada um

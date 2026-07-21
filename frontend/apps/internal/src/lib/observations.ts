@@ -27,6 +27,30 @@ export function useAddObservation(eventId: number) {
 }
 
 /**
+ * Adiciona uma observação de imagem ao evento (feature 153). Mesmo endpoint de
+ * `useAddObservation`, mas com corpo `multipart/form-data` (o `apiFetch` detecta `FormData` e
+ * deixa o `fetch` nativo gerar o boundary). Ao suceder, atualiza o cache do evento.
+ */
+export function useAddImageObservation(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, { file: File; label?: string }>({
+    mutationFn: ({ file, label }) => {
+      const form = new FormData();
+      form.append("obs_type", "image");
+      form.append("image", file);
+      if (label) form.append("label", label);
+      return apiFetch<EventoDetalhe>(`/api/events/${eventId}/observations`, {
+        method: "POST",
+        body: form,
+      });
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["event", eventId], updated);
+    },
+  });
+}
+
+/**
  * Remove uma observação do evento (feature 150). Ao suceder, atualiza o cache do evento com o
  * estado retornado. Sem gate de papel no servidor.
  */
