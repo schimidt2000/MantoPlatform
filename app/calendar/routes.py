@@ -3174,23 +3174,62 @@ def ensaio_delete_material(event_id: int, material_id: int):
     return redirect(url_for("calendar.event_detail", event_id=event_id))
 
 
+def _sync_single_event_flow(event: CalendarEvent) -> str:
+    """Núcleo da sincronização de um evento com o Google (feature 151), fonte única.
+
+    Reusado pelo wrapper Jinja e pelo endpoint JSON. Sem `flash`/`request` — o adaptador é quem
+    traduz o status em mensagem/resposta.
+
+    Returns:
+        `"no_google_id"` se o evento não tem `google_event_id`; `"not_found"` se o Google não
+        devolve o evento; `"ok"` quando sincroniza e commita.
+    """
+    if not event.google_event_id:
+        return "no_google_id"
+    item = fetch_single_event(CALENDAR_ID, event.google_event_id)
+    if not item:
+        return "not_found"
+    sync_events([item])
+    db.session.commit()
+    return "ok"
+
+
+def _delete_event_flow(event: CalendarEvent, *, actor_name: str, actor_role: str) -> bool:
+    """Núcleo da exclusão de um evento (feature 151), fonte única.
+
+    Reusado pelo wrapper Jinja e pelo endpoint JSON. Recusa a exclusão de um evento líder de grupo
+    (é preciso desagrupar os satélites antes). Registra o log `manual_deleted`, remove do banco e do
+    Google via `_delete_event` e commita.
+
+    Returns:
+        `False` se o evento é líder de grupo (não excluído); `True` quando excluído.
+    """
+    if event.is_group_leader:  # FR-004: desagrupar antes
+        return False
+    _log_sync(
+        "manual_deleted", event,
+        details="Removido do banco e do Google Calendar",
+        actor=actor_name,
+        actor_role=actor_role,
+    )
+    _delete_event(event, also_from_google=True)
+    db.session.commit()
+    return True
+
+
 @calendar_bp.route("/events/<int:event_id>/sync", methods=["POST"])
 @login_required
 def sync_single_event(event_id: int):
-    """Sincroniza um único evento com o Google Calendar."""
+    """Sincroniza um único evento com o Google Calendar (wrapper fino sobre
+    `_sync_single_event_flow`, feature 151)."""
     event = CalendarEvent.query.get_or_404(event_id)
-    if not event.google_event_id:
+    status = _sync_single_event_flow(event)
+    if status == "no_google_id":
         flash("Evento sem ID do Google Calendar — não é possível sincronizar.", "error")
-        return redirect(url_for("calendar.event_detail", event_id=event_id))
-
-    item = fetch_single_event(CALENDAR_ID, event.google_event_id)
-    if not item:
+    elif status == "not_found":
         flash("Não foi possível buscar o evento no Google Calendar.", "error")
-        return redirect(url_for("calendar.event_detail", event_id=event_id))
-
-    sync_events([item])
-    db.session.commit()
-    flash("Evento sincronizado com sucesso.", "success")
+    else:
+        flash("Evento sincronizado com sucesso.", "success")
     return redirect(url_for("calendar.event_detail", event_id=event_id))
 
 
@@ -3261,26 +3300,22 @@ def agenda_log():
 @calendar_bp.route("/events/<int:event_id>/delete", methods=["POST"])
 @login_required
 def delete_calendar_event(event_id: int):
-    """Exclui permanentemente um evento do banco e do Google Calendar."""
+    """Exclui permanentemente um evento do banco e do Google Calendar (wrapper fino sobre
+    `_delete_event_flow`, feature 151)."""
     if not any(r.name.upper() in _CAN_DELETE for r in current_user.roles):
         abort(403)
     event = CalendarEvent.query.get_or_404(event_id)
-    if event.is_group_leader:  # FR-009
+    title = event.title  # capturado antes da exclusão
+    if not _delete_event_flow(
+        event,
+        actor_name=current_user.name,
+        actor_role=", ".join(r.name for r in current_user.roles),
+    ):
         flash(
-            f'Não é possível excluir "{event.title}": desagrupe os eventos satélites antes de excluir.',
+            f'Não é possível excluir "{title}": desagrupe os eventos satélites antes de excluir.',
             "error",
         )
-        return redirect(url_for("calendar.event_detail", event_id=event.id))
-    also_google = True  # sempre sincroniza com o GCal
-    title = event.title
-    _log_sync(
-        "manual_deleted", event,
-        details="Removido do banco e do Google Calendar",
-        actor=current_user.name,
-        actor_role=", ".join(r.name for r in current_user.roles),
-    )
-    _delete_event(event, also_from_google=also_google)
-    db.session.commit()
+        return redirect(url_for("calendar.event_detail", event_id=event_id))
     flash(f'Evento "{title}" excluído com sucesso.', "success")
     return redirect(url_for("calendar.agenda"))
 
