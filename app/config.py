@@ -122,6 +122,16 @@ class ProductionConfig(Config):
     SESSION_COOKIE_SAMESITE = "Lax"
     PREFERRED_URL_SCHEME    = "https"
 
+    # Domínio do cookie de sessão (feature 144). Para a SPA React em outro subdomínio
+    # (ex.: beta.mantoproducoes.com.br) autenticar contra a API (app.mantoproducoes.com.br),
+    # o cookie precisa valer para todo o domínio registrável — defina o env
+    # SESSION_COOKIE_DOMAIN=".mantoproducoes.com.br". Como app.* e beta.* são o MESMO site
+    # (mesmo eTLD+1), SameSite="Lax" já deixa o cookie ser enviado no fetch entre eles — NÃO
+    # é preciso SameSite="None". Ausente (ex.: dev/localhost) = cookie host-only, como hoje.
+    # ATENÇÃO: definir isto amplia o alcance do cookie de sessão do ERP atual para todos os
+    # subdomínios — só use subdomínios confiáveis sob este domínio.
+    SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN") or None
+
     # PostgreSQL — obrigatório em produção
     # DATABASE_URL deve ser definida no .env
     SQLALCHEMY_ENGINE_OPTIONS = {

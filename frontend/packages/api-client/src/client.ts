@@ -25,8 +25,16 @@ export class ApiRequestError extends Error {
   }
 }
 
-/** URL base da API. Em dev, o proxy do Vite roteia `/api` para o Flask (research.md §2). */
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
+/**
+ * URL base da API. Em produção, aponta para o domínio do Flask (ex.:
+ * `https://app.mantoproducoes.com.br`), injetada no build via `VITE_API_BASE_URL`. Em dev,
+ * fica vazia e o proxy do Vite roteia `/api` para o Flask local (research.md §2). O `/` final
+ * é removido para não gerar `//api/...`.
+ */
+const API_BASE = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "").replace(
+  /\/+$/,
+  "",
+);
 
 async function parseErrorBody(response: Response): Promise<ApiErrorBody> {
   try {
