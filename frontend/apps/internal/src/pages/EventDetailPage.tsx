@@ -4,7 +4,13 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
 import { useEvent, type EventoDetalhe, type RoleItem } from "../lib/agenda";
-import { useAssignRole, useTalents, type TalentoOption } from "../lib/casting";
+import {
+  useAddRole,
+  useAssignRole,
+  useDeleteRole,
+  useTalents,
+  type TalentoOption,
+} from "../lib/casting";
 
 function brl(v: number | null | undefined): string {
   return `R$ ${formatBRL(v ?? 0)}`;
@@ -59,6 +65,7 @@ function RoleAssignRow({
   talents: TalentoOption[];
 }) {
   const assign = useAssignRole(eventId);
+  const remove = useDeleteRole(eventId);
   const [talentId, setTalentId] = useState<number | null>(role.talent?.id ?? null);
   const [cache, setCache] = useState<number>(role.cache_value ?? 0);
 
@@ -66,11 +73,26 @@ function RoleAssignRow({
     <li className="py-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="font-medium text-ink">{role.character_name}</span>
-        {role.invite_status && (
-          <span className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-muted">
-            {role.invite_status}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {role.invite_status && (
+            <span className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-muted">
+              {role.invite_status}
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={remove.isPending}
+            onClick={() => {
+              if (window.confirm(`Remover o cargo "${role.character_name}"?`)) {
+                remove.mutate(role.role_id);
+              }
+            }}
+            aria-label={`Remover ${role.character_name}`}
+          >
+            ✕
+          </Button>
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <select
@@ -109,14 +131,74 @@ function RoleAssignRow({
   );
 }
 
+function AddRoleForm({ eventId, talents }: { eventId: number; talents: TalentoOption[] }) {
+  const add = useAddRole(eventId);
+  const [name, setName] = useState("");
+  const [talentId, setTalentId] = useState<number | null>(null);
+  const [cache, setCache] = useState<number>(0);
+
+  const submit = () => {
+    if (!name.trim()) return;
+    add.mutate(
+      { character_name: name.trim(), talent_id: talentId, cache_value: cache },
+      {
+        onSuccess: () => {
+          setName("");
+          setTalentId(null);
+          setCache(0);
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="mt-4 border-t border-line pt-4">
+      <div className="mb-2 text-sm font-medium text-muted">Adicionar cargo</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          className="h-11 min-w-40 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          placeholder="Personagem / função"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          aria-label="Nome do personagem"
+        />
+        <select
+          className="h-11 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          value={talentId ?? ""}
+          onChange={(e) => setTalentId(e.target.value ? Number(e.target.value) : null)}
+          aria-label="Talento"
+        >
+          <option value="">— sem talento —</option>
+          {talents.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        <MoneyInput
+          className="h-11 w-28 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          value={cache}
+          onValueChange={setCache}
+          aria-label="Cachê"
+        />
+        <Button size="sm" loading={add.isPending} disabled={!name.trim()} onClick={submit}>
+          Adicionar
+        </Button>
+      </div>
+      {add.isError && <p className="mt-1 text-sm text-red">Não foi possível adicionar.</p>}
+    </div>
+  );
+}
+
 function Elenco({ data }: { data: EventoDetalhe }) {
   const talentsQuery = useTalents();
-  if (!data.elenco || data.elenco.length === 0) return null;
   const canEdit = Boolean(data.flags.show_casting) && Boolean(talentsQuery.data);
+  const hasRoles = Boolean(data.elenco && data.elenco.length > 0);
+  if (!hasRoles && !canEdit) return null;
   return (
     <Section title="Elenco">
       <ul className="divide-y divide-line">
-        {data.elenco.map((r) =>
+        {(data.elenco ?? []).map((r) =>
           canEdit ? (
             <RoleAssignRow
               key={r.role_id}
@@ -129,6 +211,7 @@ function Elenco({ data }: { data: EventoDetalhe }) {
           ),
         )}
       </ul>
+      {canEdit && <AddRoleForm eventId={data.event.id} talents={talentsQuery.data!.items} />}
     </Section>
   );
 }

@@ -474,61 +474,42 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 def _handle_add_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    # Adaptador fino — a regra vive em casting_ops.add_role (feature 147).
     character_name = request.form.get("character_name", "").strip()
-    talent_id      = request.form.get("talent_id")
-    cache_value    = request.form.get("cache_value")
-    role_type      = request.form.get("role_type", "character")
     if not character_name:
         return
-    role = EventRole(event_id=event.id, character_name=character_name, role_type=role_type)
-    if talent_id:
-        role.talent_id = int(talent_id)
-        role.assigned_at = datetime.now(tz=tz_sp)
-        role.invite_status = "pending"
-    try:
-        role.cache_value = int(cache_value) if cache_value else None
-    except ValueError:
-        role.cache_value = None
-    db.session.add(role)
-    db.session.flush()
-    talent_name = role.talent.full_name if role.talent else None
-    db.session.add(EventLog(
-        event_id=event.id,
+    from app.calendar.casting_ops import add_role
+    add_role(
+        event,
+        character_name=character_name,
+        talent_id=request.form.get("talent_id"),
+        cache_value=request.form.get("cache_value"),
+        role_type=request.form.get("role_type", "character"),
         actor_name=current_user.name,
-        actor_role="Casting",
-        message=(
-            f"Adicionou {talent_name} como {role.character_name} com um cachê de {role.cache_value or 0} reais"
-            if talent_name
-            else f"Adicionou função: {character_name}"
-        ),
-        created_at=datetime.now(tz=tz_sp),
-    ))
-    db.session.commit()
-    if role.talent_id:
-        send_async(send_invite_email, role)
+        tz=tz_sp,
+    )
 
 
 def _handle_delete_role(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
+    # Adaptador fino — regra em casting_ops.delete_role. Gate CASTING/SUPERADMIN.
     can_casting = any(r.name.upper() in (RoleName.CASTING, RoleName.SUPERADMIN) for r in current_user.roles)
     if not can_casting:
         return
-    role_id = request.form.get("role_id")
-    role = EventRole.query.filter_by(id=role_id, event_id=event.id).first()
+    role_id_raw = request.form.get("role_id", "")
+    # int() explícito: filter_by(id=string) quebra em manto_local (psycopg3). Ver memória.
+    if not str(role_id_raw).isdigit():
+        return
+    role = EventRole.query.filter_by(id=int(role_id_raw), event_id=event.id).first()
     if not role:
         return
-    _is_superadmin = any(r.name.upper() == RoleName.SUPERADMIN for r in current_user.roles)
-    if role.invite_status == "accepted" and not _is_superadmin:
-        return
-    name = role.character_name
-    db.session.add(EventLog(
-        event_id=event.id,
+    from app.calendar.casting_ops import delete_role
+    delete_role(
+        event,
+        role,
+        is_superadmin=any(r.name.upper() == RoleName.SUPERADMIN for r in current_user.roles),
         actor_name=current_user.name,
-        actor_role="Casting",
-        message=f"Removeu vaga: {name}",
-        created_at=datetime.now(tz=tz_sp),
-    ))
-    db.session.delete(role)
-    db.session.commit()
+        tz=tz_sp,
+    )
 
 
 def _handle_figurino_done(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
