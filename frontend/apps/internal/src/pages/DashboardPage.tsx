@@ -71,6 +71,9 @@ export function DashboardPage() {
             <Link to="/rh">RH</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
+            <Link to="/revisao">Revisão</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
             <Link to="/financeiro/comissoes">Comissões</Link>
           </Button>
           {(user?.is_superadmin || user?.roles.includes("FINANCEIRO")) && (
