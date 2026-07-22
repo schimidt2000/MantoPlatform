@@ -55,6 +55,12 @@ export function DashboardPage() {
           <Button asChild variant="outline" size="sm">
             <Link to="/agenda">Agenda</Link>
           </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/talents">Talentos</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/figurinos">Figurino</Link>
+          </Button>
           <Button variant="outline" size="sm" loading={logout.isPending} onClick={() => logout.mutate()}>
             Sair
           </Button>

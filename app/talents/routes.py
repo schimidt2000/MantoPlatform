@@ -4,7 +4,7 @@ import unicodedata
 from datetime import datetime, timedelta
 from flask import Blueprint, redirect, url_for, render_template, request, flash, jsonify, abort
 from flask_login import login_required, current_user
-from sqlalchemy import or_, and_, not_
+from sqlalchemy import or_
 
 from app.models import Talent, EventRole, CalendarEvent, ImportState, EventRating, EventSubRating
 from .. import db
@@ -653,8 +653,6 @@ def talent_detail(talent_id: int):
         given_ratings=given_ratings,
     )
 
-_WARNING_LEVELS = {"", "leve", "moderado", "grave"}
-
 
 @talents_bp.route("/talents/<int:talent_id>/notes", methods=["POST"])
 @login_required
@@ -663,11 +661,11 @@ def save_talent_notes(talent_id: int):
     if not _can_edit_talent():
         abort(403)
     talent = Talent.query.get_or_404(talent_id)
-    talent.notes = (request.form.get("notes", "") or "").strip() or None
-    level = (request.form.get("warning_level", "") or "").strip()
-    if level not in _WARNING_LEVELS:
-        level = ""
-    talent.warning_level = level or None
+    from app.talents.talent_ops import save_notes
+
+    save_notes(
+        talent, notes=request.form.get("notes", ""), warning_level=request.form.get("warning_level", "")
+    )
     db.session.commit()
     flash("Anotações salvas.", "success")
     return redirect(url_for("talents.talent_detail", talent_id=talent.id))
@@ -683,62 +681,46 @@ def edit_talent(talent_id: int):
 
     if request.method == "POST":
         f = request.form
+        from app.talents.talent_ops import update_talent_fields
 
-        # CPF editável apenas por super admin (feature 066). Valida antes de mutar os demais campos.
-        cpf_changed = False
-        if is_superadmin:
-            from app.talents.importer import only_digits
-            cpf_raw = only_digits(f.get("cpf", ""))
-            if cpf_raw and cpf_raw != talent.cpf:
-                if len(cpf_raw) != 11:
-                    flash("CPF inválido: informe 11 dígitos.", "error")
-                    return render_template("talent_edit.html", talent=talent, is_superadmin=is_superadmin)
-                if Talent.query.filter(Talent.cpf == cpf_raw, Talent.id != talent.id).first():
-                    flash("CPF já cadastrado para outro talento.", "error")
-                    return render_template("talent_edit.html", talent=talent, is_superadmin=is_superadmin)
-                talent.cpf = cpf_raw
-                cpf_changed = True
-
-        talent.full_name            = f.get("full_name", "").strip() or talent.full_name
-        talent.artistic_name        = f.get("artistic_name", "").strip() or None
-        talent.phone                = f.get("phone", "").strip() or None
-        talent.email_contact        = f.get("email_contact", "").strip() or None
-        talent.gender               = f.get("gender", "").strip() or None
-        talent.race                 = f.get("race", "").strip() or None
-        talent.languages            = f.get("languages", "").strip() or None
-        talent.skills               = f.get("skills", "").strip() or None
-        talent.tags                 = f.get("tags", "").strip() or None
-        talent.pix_key              = f.get("pix_key", "").strip() or None
-        talent.pix_key_secondary    = f.get("pix_key_secondary", "").strip() or None
-        talent.pix_key_type         = f.get("pix_key_type", "").strip() or None
-        talent.rg                   = f.get("rg", "").strip() or None
-        ps = f.get("passport_status", "").strip()
-        talent.passport_status      = ps if ps in ("visa", "passport", "none") else None
-        talent.has_visa             = talent.passport_status == "visa"  # manter sincronizado
-        talent.how_found_us         = f.get("how_found_us", "").strip() or None
-        talent.worked_before        = f.get("worked_before") == "1" if f.get("worked_before") != "" else None
-        talent.car_brand            = f.get("car_brand", "").strip() or None
-        talent.car_model            = f.get("car_model", "").strip() or None
-        talent.car_year             = f.get("car_year", "").strip() or None
-        talent.car_plate            = f.get("car_plate", "").strip() or None
-
-        try:
-            talent.height_cm = int(f.get("height_cm")) if f.get("height_cm") else None
-        except ValueError:
-            pass
-
-        talent.clothing_size_top    = f.get("clothing_size_top", "").strip() or None
-        talent.clothing_size_bottom = f.get("clothing_size_bottom", "").strip() or None
-        talent.shoe_size            = f.get("shoe_size", "").strip() or None
-
-        from datetime import date as date_type
-        from app.talents.importer import parse_date
-        talent.birth_date    = parse_date(f.get("birth_date", ""))
-        talent.cnh_expiration = parse_date(f.get("cnh_expiration", ""))
+        data = {
+            "cpf": f.get("cpf", ""),
+            "full_name": f.get("full_name", ""),
+            "artistic_name": f.get("artistic_name", ""),
+            "phone": f.get("phone", ""),
+            "email_contact": f.get("email_contact", ""),
+            "gender": f.get("gender", ""),
+            "race": f.get("race", ""),
+            "languages": f.get("languages", ""),
+            "skills": f.get("skills", ""),
+            "tags": f.get("tags", ""),
+            "pix_key": f.get("pix_key", ""),
+            "pix_key_secondary": f.get("pix_key_secondary", ""),
+            "pix_key_type": f.get("pix_key_type", ""),
+            "rg": f.get("rg", ""),
+            "passport_status": f.get("passport_status", ""),
+            "how_found_us": f.get("how_found_us", ""),
+            "worked_before": f.get("worked_before"),
+            "car_brand": f.get("car_brand", ""),
+            "car_model": f.get("car_model", ""),
+            "car_year": f.get("car_year", ""),
+            "car_plate": f.get("car_plate", ""),
+            "height_cm": f.get("height_cm", ""),
+            "clothing_size_top": f.get("clothing_size_top", ""),
+            "clothing_size_bottom": f.get("clothing_size_bottom", ""),
+            "shoe_size": f.get("shoe_size", ""),
+            "birth_date": f.get("birth_date", ""),
+            "cnh_expiration": f.get("cnh_expiration", ""),
+        }
+        cpf_before = talent.cpf
+        errors = update_talent_fields(talent, data, is_superadmin=is_superadmin)
+        if errors:
+            flash(next(iter(errors.values())), "error")
+            return render_template("talent_edit.html", talent=talent, is_superadmin=is_superadmin)
 
         from app.utils import audit
         audit("edit", "talent", talent.id, talent.full_name,
-              "Perfil editado" + ("; CPF alterado" if cpf_changed else ""))
+              "Perfil editado" + ("; CPF alterado" if talent.cpf != cpf_before else ""))
         db.session.commit()
         flash("Talento atualizado com sucesso.", "success")
         return redirect(url_for("talents.talent_detail", talent_id=talent.id))
@@ -812,7 +794,9 @@ def approve_talent(talent_id: int):
     if not _can_edit_talent():
         abort(403)
     talent = Talent.query.get_or_404(talent_id)
-    talent.status = "active"
+    from app.talents.talent_ops import approve_talent_status
+
+    approve_talent_status(talent)
     db.session.commit()
     flash(f"{talent.full_name} aprovado(a) e adicionado(a) ao banco.", "success")
     return redirect(request.referrer or url_for("talents.list_talents", status="pending"))
@@ -825,11 +809,12 @@ def reject_talent(talent_id: int):
     if not _can_edit_talent():
         abort(403)
     talent = Talent.query.get_or_404(talent_id)
-    if talent.status != "pending":
+    name = talent.full_name
+    from app.talents.talent_ops import reject_talent_record
+
+    if not reject_talent_record(talent):
         flash("Só é possível rejeitar cadastros pendentes.", "error")
         return redirect(url_for("talents.talent_detail", talent_id=talent_id))
-    name = talent.full_name
-    db.session.delete(talent)
     db.session.commit()
     flash(f"Cadastro de {name} rejeitado e removido.", "success")
     return redirect(url_for("talents.list_talents", status="pending"))
