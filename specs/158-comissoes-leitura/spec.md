@@ -12,9 +12,9 @@
 
 ### User Story 1 - Ver as comissões do mês em React (Priority: P1)
 
-Como usuário Financeiro/Superadmin ou Comercial/Vendas, preciso ver a lista de comissões
-(a pagar, pagas e estornos pendentes) de um mês na tela React, com o mesmo recorte que já vejo
-hoje — completo se eu gerencio comissões, ou só as minhas se eu sou vendedor.
+Como usuário Financeiro/Superadmin, Comercial ou responsável EducaManto, preciso ver a lista de
+comissões (a pagar, pagas e estornos pendentes) de um mês na tela React, com o mesmo recorte que
+já vejo hoje — completo se eu gerencio comissões, ou só as minhas se eu sou vendedor.
 
 **Why this priority**: é a tela que Financeiro consulta para fechar o ciclo de pagamento de
 comissões e que cada vendedor consulta para conferir o que tem a receber; é 100% leitura (sem
@@ -22,8 +22,8 @@ ação de marcar status), tornando-a a fatia mais estreita que resta na US4 depo
 (156) e do dashboard (157).
 
 **Independent Test**: abrir a tela de comissões em React para um mês qualquer, com um usuário
-Financeiro e com um usuário Comercial, e conferir que as linhas, o total a pagar e os estornos
-batem exatamente com os da tela antiga para o mesmo usuário e mesmo mês.
+Financeiro e com um usuário Comercial (sem papel Financeiro), e conferir que as linhas, o total a
+pagar e os estornos batem exatamente com os da tela antiga para o mesmo usuário e mesmo mês.
 
 **Acceptance Scenarios**:
 
@@ -38,9 +38,9 @@ batem exatamente com os da tela antiga para o mesmo usuário e mesmo mês.
    geradas por cancelamento de evento em mês anterior), **When** a tela carrega, **Then** esses
    estornos aparecem em uma lista separada, somados ao total a pagar do mês, independentemente do
    mês selecionado.
-4. **Given** um usuário Comercial ou Vendas autenticado, **When** ele abre a mesma tela, **Then**
-   vê somente as próprias comissões e estornos (filtrados pelo seu `seller_id`), sem opção de ver
-   as de outros vendedores.
+4. **Given** um usuário Comercial (sem papel Financeiro/Superadmin) ou o responsável EducaManto
+   autenticado, **When** ele abre a mesma tela, **Then** vê somente as próprias comissões e
+   estornos (filtrados pelo seu `seller_id`), sem opção de ver as de outros vendedores.
 5. **Given** um usuário Financeiro/Superadmin, **When** a tela carrega, **Then** vê a lista de
    vendedores elegíveis (papel Comercial) disponível para referência/seleção de mês, igual à tela
    antiga.
@@ -48,8 +48,9 @@ batem exatamente com os da tela antiga para o mesmo usuário e mesmo mês.
    realizados que ainda não geraram a linha de comissão), **Then** a sincronização acontece antes
    da consulta (mesmo comportamento de `_resync_pending_commissions` hoje), sem exigir ação
    manual do usuário.
-7. **Given** um usuário sem papel Comercial/Vendas/Financeiro/Superadmin, **When** ele tenta abrir
-   a tela ou chamar a API diretamente, **Then** o acesso é recusado (403).
+7. **Given** um usuário sem papel Comercial/Financeiro/Superadmin e que não é o responsável
+   EducaManto configurado, **When** ele tenta abrir a tela ou chamar a API diretamente, **Then**
+   o acesso é recusado (403).
 
 ---
 
@@ -73,13 +74,13 @@ batem exatamente com os da tela antiga para o mesmo usuário e mesmo mês.
   como endpoint JSON, reaproveitando exatamente a lógica já existente (`comissoes()`,
   `_resync_pending_commissions`) sem duplicar nenhuma regra de negócio.
 - **FR-002**: O sistema DEVE restringir o acesso a esse endpoint a usuários com papel Comercial,
-  Vendas, Financeiro ou Superadmin — mesma regra de hoje (`require_vendas`).
+  Financeiro ou Superadmin, ou ao responsável EducaManto configurado (independente de papel) —
+  mesma regra de hoje (`require_vendas`).
 - **FR-003**: O sistema DEVE aceitar o mesmo filtro de mês que a tela antiga aceita hoje via
   querystring (`month`, formato `YYYY-MM`), com o mesmo padrão (mês corrente) quando nenhum filtro
   é informado ou o valor é inválido.
 - **FR-004**: A resposta DEVE restringir as comissões e estornos aos do próprio vendedor quando o
-  usuário autenticado tem papel Comercial/Vendas (sem Financeiro/Superadmin) — mesma regra de
-  `can_manage` hoje.
+  usuário autenticado não tem papel Financeiro/Superadmin — mesma regra de `can_manage` hoje.
 - **FR-005**: A resposta DEVE incluir, para cada comissão: vendedor, evento (título), data da
   venda, valor, status e data de pagamento (quando paga) — mesmos campos exibidos hoje.
 - **FR-006**: A resposta DEVE incluir o total a pagar do mês (soma das comissões `a_pagar` mais os
@@ -99,13 +100,14 @@ batem exatamente com os da tela antiga para o mesmo usuário e mesmo mês.
 
 ### Measurable Outcomes
 
-- **SC-001**: Um usuário Financeiro/Superadmin ou Comercial/Vendas consegue conferir as comissões
-  do mês (e estornos pendentes) inteiramente pela tela React, sem abrir a tela antiga.
+- **SC-001**: Um usuário Financeiro/Superadmin, Comercial ou responsável EducaManto consegue
+  conferir as comissões do mês (e estornos pendentes) inteiramente pela tela React, sem abrir a
+  tela antiga.
 - **SC-002**: Os valores mostrados em React são idênticos aos da tela antiga para o mesmo
   usuário, mesmo mês e mesmos dados — verificado por paridade automatizada.
-- **SC-003**: Um usuário Comercial/Vendas não consegue ver comissões de outro vendedor nem pela
-  tela nem pela API; um usuário sem nenhum dos quatro papéis não consegue ver a tela nem a API
-  (403 nos dois casos).
+- **SC-003**: Um usuário Comercial (sem Financeiro/Superadmin) não consegue ver comissões de
+  outro vendedor nem pela tela nem pela API; um usuário sem nenhum dos papéis autorizados e que
+  não é o responsável EducaManto não consegue ver a tela nem a API (403 nos dois casos).
 
 ## Assumptions
 
