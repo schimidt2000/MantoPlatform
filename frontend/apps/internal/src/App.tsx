@@ -18,6 +18,9 @@ import { ClientsListPage } from "./pages/ClientsListPage";
 import { ClientDetailPage } from "./pages/ClientDetailPage";
 import { ClientFeedbackPage } from "./pages/ClientFeedbackPage";
 import { RhDashboardPage } from "./pages/RhDashboardPage";
+import { AdminUsersListPage } from "./pages/AdminUsersListPage";
+import { AdminUserCreatePage } from "./pages/AdminUserCreatePage";
+import { AdminUserEditPage } from "./pages/AdminUserEditPage";
 
 export function App() {
   return (
@@ -165,6 +168,30 @@ export function App() {
           element={
             <RequireAuth>
               <RhDashboardPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/usuarios"
+          element={
+            <RequireAuth>
+              <AdminUsersListPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/usuarios/novo"
+          element={
+            <RequireAuth>
+              <AdminUserCreatePage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/usuarios/:id"
+          element={
+            <RequireAuth>
+              <AdminUserEditPage />
             </RequireAuth>
           }
         />

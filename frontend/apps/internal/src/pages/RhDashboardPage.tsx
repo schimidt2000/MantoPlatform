@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { API_BASE } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
 import { useRhDashboard } from "../lib/rh";
 
@@ -35,9 +34,7 @@ export function RhDashboardPage() {
             </p>
             {query.data.can_manage_users && (
               <Button asChild variant="outline" size="sm">
-                {/* /admin/users ainda não migrou para React (fatia futura da US6) — link
-                    direto para a tela Jinja, servida pelo domínio do Flask (API_BASE). */}
-                <a href={`${API_BASE}/admin/users`}>Gerenciar usuários</a>
+                <Link to="/admin/usuarios">Gerenciar usuários</Link>
               </Button>
             )}
           </CardContent>
