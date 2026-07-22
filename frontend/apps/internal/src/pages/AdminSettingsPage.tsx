@@ -63,6 +63,9 @@ export function AdminSettingsPage() {
         <Button asChild variant="outline" size="sm">
           <Link to="/admin/importar-catalogo">Importar catálogo</Link>
         </Button>
+        <Button asChild variant="outline" size="sm">
+          <Link to="/admin/catalogo">Gerenciar catálogo</Link>
+        </Button>
       </div>
 
       {query.isLoading && <Skeleton className="h-64 w-full" />}

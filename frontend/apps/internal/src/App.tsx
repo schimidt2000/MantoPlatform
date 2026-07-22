@@ -28,6 +28,8 @@ import { AdminSyncPage } from "./pages/AdminSyncPage";
 import { AdminPortalAnnouncementPage } from "./pages/AdminPortalAnnouncementPage";
 import { AdminMigrarArquivosPage } from "./pages/AdminMigrarArquivosPage";
 import { AdminImportarCatalogoPage } from "./pages/AdminImportarCatalogoPage";
+import { AdminCatalogoListPage } from "./pages/AdminCatalogoListPage";
+import { AdminCatalogoFormPage } from "./pages/AdminCatalogoFormPage";
 
 export function App() {
   return (
@@ -255,6 +257,30 @@ export function App() {
           element={
             <RequireAuth>
               <AdminImportarCatalogoPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/catalogo"
+          element={
+            <RequireAuth>
+              <AdminCatalogoListPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/catalogo/novo"
+          element={
+            <RequireAuth>
+              <AdminCatalogoFormPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/catalogo/:id/editar"
+          element={
+            <RequireAuth>
+              <AdminCatalogoFormPage />
             </RequireAuth>
           }
         />
