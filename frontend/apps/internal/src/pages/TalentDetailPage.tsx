@@ -1,9 +1,15 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import { formatBRL } from "@manto/money";
-import { useSaveTalentNotes, useTalent } from "../lib/talents";
+import {
+  useRemoveTalentPhoto,
+  useSaveTalentNotes,
+  useTalent,
+  useUploadTalentPhoto,
+  type TalentPhotoType,
+} from "../lib/talents";
 
 function brl(v: number | null | undefined): string {
   return `R$ ${formatBRL(v ?? 0)}`;
@@ -40,6 +46,89 @@ const WARNING_LABELS: Record<string, string> = {
   moderado: "Alerta moderado",
   grave: "Alerta grave",
 };
+
+/** Campo de foto/documento do talento (feature 155) — envio, preview e remoção. */
+function TalentPhotoField({
+  talentId,
+  photoType,
+  label,
+  url,
+  accept,
+}: {
+  talentId: number;
+  photoType: TalentPhotoType;
+  label: string;
+  url: string | null;
+  accept: string;
+}) {
+  const upload = useUploadTalentPhoto(talentId);
+  const remove = useRemoveTalentPhoto(talentId);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const handleFile = (file: File | null) => {
+    if (!file) return;
+    setPreview(URL.createObjectURL(file));
+    upload.mutate(
+      { photoType, file },
+      { onSettled: () => inputRef.current && (inputRef.current.value = "") },
+    );
+  };
+
+  const displayUrl = preview ?? assetUrl(url ?? undefined);
+  const isPdf = !preview && Boolean(url) && url!.toLowerCase().endsWith(".pdf");
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-sm font-medium text-ink">{label}</p>
+      {displayUrl ? (
+        isPdf ? (
+          <a
+            href={displayUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue underline"
+          >
+            Abrir PDF
+          </a>
+        ) : (
+          <img src={displayUrl} alt={label} className="h-24 w-24 rounded-md object-cover" />
+        )
+      ) : (
+        <p className="text-sm text-muted">Nenhum arquivo enviado.</p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={inputRef}
+          type="file"
+          accept={accept}
+          className="max-w-[170px] text-xs text-ink"
+          onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+          aria-label={`Enviar ${label}`}
+        />
+        {upload.isPending && <span className="text-xs text-muted">Enviando…</span>}
+        {url && (
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={remove.isPending}
+            onClick={() => {
+              if (window.confirm(`Remover ${label.toLowerCase()}?`)) {
+                setPreview(null);
+                remove.mutate(photoType);
+              }
+            }}
+          >
+            Remover
+          </Button>
+        )}
+      </div>
+      {upload.isError && (
+        <p className="text-xs text-red">Formato não aceito ou falha ao enviar.</p>
+      )}
+    </div>
+  );
+}
 
 export function TalentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -144,38 +233,71 @@ export function TalentDetailPage() {
               <Field label="Chave PIX (2ª)" value={t.pix_key_secondary} />
               <Field label="Tipo de chave" value={t.pix_key_type} />
             </dl>
-            <div className="mt-3 flex flex-wrap gap-3">
-              {t.photo_full_path && (
-                <a
-                  href={assetUrl(t.photo_full_path)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue underline"
-                >
-                  Foto de corpo inteiro
-                </a>
-              )}
-              {t.doc_photo_path && (
-                <a
-                  href={assetUrl(t.doc_photo_path)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue underline"
-                >
-                  Documento (CPF/RG)
-                </a>
-              )}
-              {t.cnh_file_path && (
-                <a
-                  href={assetUrl(t.cnh_file_path)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue underline"
-                >
-                  CNH
-                </a>
-              )}
-            </div>
+            {query.data.can_edit ? (
+              <div className="mt-3 grid grid-cols-2 gap-4 border-t border-line pt-3 sm:grid-cols-4">
+                <TalentPhotoField
+                  talentId={id}
+                  photoType="face"
+                  label="Foto de rosto"
+                  url={t.photo_face_path}
+                  accept="image/jpeg,image/png,image/webp"
+                />
+                <TalentPhotoField
+                  talentId={id}
+                  photoType="full"
+                  label="Corpo inteiro"
+                  url={t.photo_full_path}
+                  accept="image/jpeg,image/png,image/webp"
+                />
+                <TalentPhotoField
+                  talentId={id}
+                  photoType="doc"
+                  label="Documento (CPF/RG)"
+                  url={t.doc_photo_path}
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                />
+                <TalentPhotoField
+                  talentId={id}
+                  photoType="cnh"
+                  label="CNH"
+                  url={t.cnh_file_path}
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                />
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-3">
+                {t.photo_full_path && (
+                  <a
+                    href={assetUrl(t.photo_full_path)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue underline"
+                  >
+                    Foto de corpo inteiro
+                  </a>
+                )}
+                {t.doc_photo_path && (
+                  <a
+                    href={assetUrl(t.doc_photo_path)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue underline"
+                  >
+                    Documento (CPF/RG)
+                  </a>
+                )}
+                {t.cnh_file_path && (
+                  <a
+                    href={assetUrl(t.cnh_file_path)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue underline"
+                  >
+                    CNH
+                  </a>
+                )}
+              </div>
+            )}
           </Section>
 
           {(t.car_brand || t.car_model || t.car_plate) && (

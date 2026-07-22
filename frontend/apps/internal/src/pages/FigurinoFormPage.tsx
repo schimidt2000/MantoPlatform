@@ -1,13 +1,89 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { Button, Card, CardContent } from "@manto/ui";
+import { assetUrl } from "@manto/api-client";
 import {
   useCreateFigurinoSheet,
   useDeleteFigurinoSheet,
   useEditFigurinoSheet,
   useFigurinoSheets,
+  useRemoveFigurinoPhoto,
+  useRotateFigurinoPhoto,
+  useUploadFigurinoPhoto,
   type FigurinoPiece,
 } from "../lib/figurino";
+
+/** Foto da ficha de figurino (feature 155) — envio, girar e remover. */
+function FigurinoPhotoField({ sheetId, photoUrl }: { sheetId: number; photoUrl: string | null }) {
+  const upload = useUploadFigurinoPhoto();
+  const remove = useRemoveFigurinoPhoto();
+  const rotate = useRotateFigurinoPhoto();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const handleFile = (file: File | null) => {
+    if (!file) return;
+    setPreview(URL.createObjectURL(file));
+    upload.mutate(
+      { id: sheetId, file },
+      { onSettled: () => inputRef.current && (inputRef.current.value = "") },
+    );
+  };
+
+  const displayUrl = preview ?? assetUrl(photoUrl ?? undefined);
+  const busy = upload.isPending || remove.isPending || rotate.isPending;
+
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-muted">Foto</label>
+      {displayUrl ? (
+        <img src={displayUrl} alt="Foto do figurino" className="mb-2 h-32 w-32 rounded-md object-cover" />
+      ) : (
+        <p className="mb-2 text-sm text-muted">Nenhuma foto enviada.</p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="max-w-[170px] text-xs text-ink"
+          onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+          aria-label="Enviar foto"
+        />
+        {photoUrl && (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={rotate.isPending}
+              disabled={busy}
+              onClick={() => rotate.mutate({ id: sheetId, direction: "cw" })}
+            >
+              Girar
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={remove.isPending}
+              disabled={busy}
+              onClick={() => {
+                if (window.confirm("Remover a foto?")) {
+                  setPreview(null);
+                  remove.mutate(sheetId);
+                }
+              }}
+            >
+              Remover
+            </Button>
+          </>
+        )}
+      </div>
+      {(upload.isError || rotate.isError) && (
+        <p className="mt-1 text-xs text-red">Formato não aceito ou falha ao processar a foto.</p>
+      )}
+    </div>
+  );
+}
 
 export function FigurinoFormPage() {
   const params = useParams<{ id: string }>();
@@ -124,6 +200,10 @@ export function FigurinoFormPage() {
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
+
+          {isEdit && sheetId && (
+            <FigurinoPhotoField sheetId={sheetId} photoUrl={sheet?.photo_url ?? null} />
+          )}
 
           {mutation.isError && (
             <p className="text-sm text-red">Não foi possível salvar a ficha.</p>

@@ -106,3 +106,55 @@ def api_save_talent_notes(talent_id: int) -> Any:
     result = get_talent_profile(talent)
     result["can_edit"] = True
     return jsonify(result)
+
+
+@api_bp.route("/talents/<int:talent_id>/photo", methods=["POST"])
+@api_login_required
+def api_upload_talent_photo(talent_id: int) -> Any:
+    """Envia/substitui foto ou documento do talento (feature 155)."""
+    talent = _get_talent_or_404(talent_id)
+    if talent is None:
+        return json_error("Talento não encontrado", 404)
+    if not _can_edit_talent():
+        return json_error("Sem permissão", 403)
+
+    from app.talents.talent_ops import get_talent_profile, save_talent_photo
+
+    photo_type = request.form.get("photo_type", "")
+    error = save_talent_photo(talent, photo_type=photo_type, file_storage=request.files.get("photo"))
+    if error:
+        return json_error(error, 400, {"photo": error})
+
+    from app.utils import audit
+
+    audit("edit", "talent", talent.id, talent.full_name, f"Foto/documento enviado ({photo_type}, API)")
+    db.session.commit()
+    result = get_talent_profile(talent)
+    result["can_edit"] = True
+    return jsonify(result)
+
+
+@api_bp.route("/talents/<int:talent_id>/photo", methods=["DELETE"])
+@api_login_required
+def api_remove_talent_photo(talent_id: int) -> Any:
+    """Remove foto ou documento do talento (feature 155). No-op seguro se já vazio."""
+    talent = _get_talent_or_404(talent_id)
+    if talent is None:
+        return json_error("Talento não encontrado", 404)
+    if not _can_edit_talent():
+        return json_error("Sem permissão", 403)
+
+    from app.talents.talent_ops import get_talent_profile, remove_talent_photo
+
+    photo_type = request.args.get("photo_type", "")
+    error = remove_talent_photo(talent, photo_type=photo_type)
+    if error:
+        return json_error(error, 400, {"photo": error})
+
+    from app.utils import audit
+
+    audit("edit", "talent", talent.id, talent.full_name, f"Foto/documento removido ({photo_type}, API)")
+    db.session.commit()
+    result = get_talent_profile(talent)
+    result["can_edit"] = True
+    return jsonify(result)

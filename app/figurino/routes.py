@@ -6,12 +6,9 @@ from flask_login import login_required, current_user
 
 from app.models import FigurinoSheet, EventRole
 from app.constants import RoleName
-from app.storage import save_file, delete_file
 from .. import db
 
 figurino_bp = Blueprint("figurino", __name__)
-
-_ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def _parse_pieces(form) -> list:
@@ -85,11 +82,11 @@ def new_sheet():
 
         sheet = create_sheet(character_name=character_name, pieces=pieces, notes=notes)
 
+        from app.figurino.figurino_ops import save_figurino_photo
+
         photo_file = request.files.get("photo")
         if photo_file and photo_file.filename:
-            ext = os.path.splitext(photo_file.filename)[1].lower()
-            if ext in _ALLOWED_PHOTO_EXTENSIONS:
-                sheet.photo_filename = save_file(photo_file, "figurino_photos")
+            save_figurino_photo(sheet, file_storage=photo_file)
 
         from app.utils import audit
         audit("create", "figurino", None, character_name, "Ficha de figurino criada")
@@ -126,12 +123,11 @@ def edit_sheet(sheet_id: int):
         notes = request.form.get("notes", "").strip()
         _edit_sheet_core(sheet, character_name=character_name, pieces=pieces, notes=notes)
 
+        from app.figurino.figurino_ops import save_figurino_photo
+
         photo_file = request.files.get("photo")
         if photo_file and photo_file.filename:
-            ext = os.path.splitext(photo_file.filename)[1].lower()
-            if ext in _ALLOWED_PHOTO_EXTENSIONS:
-                delete_file(sheet.photo_filename)
-                sheet.photo_filename = save_file(photo_file, "figurino_photos")
+            save_figurino_photo(sheet, file_storage=photo_file)
 
         from app.utils import audit
         audit("edit", "figurino", sheet.id, character_name, "Ficha de figurino editada")
@@ -192,33 +188,30 @@ def rotate_photo(sheet_id: int):
         abort(403)
     sheet = FigurinoSheet.query.get_or_404(sheet_id)
 
-    if not sheet.photo_filename:
-        flash("Sem foto para girar.")
-        return redirect(url_for("figurino.edit_sheet", sheet_id=sheet_id))
-
-    photo_url = sheet.photo_filename
-    if not photo_url.startswith("/uploads/"):
-        flash("Formato de foto não suportado para rotação.")
-        return redirect(url_for("figurino.edit_sheet", sheet_id=sheet_id))
-
-    rel_path = photo_url[len("/uploads/"):]
-    abs_path = os.path.join(current_app.config["UPLOAD_FOLDER"], rel_path)
+    from app.figurino.figurino_ops import rotate_figurino_photo
 
     direction = request.form.get("direction", "cw")  # cw | ccw
-
-    try:
-        from PIL import Image
-        img = Image.open(abs_path)
-        degrees = -90 if direction == "cw" else 90
-        img = img.rotate(degrees, expand=True)
-        if img.mode in ("RGBA", "LA", "P"):
-            img = img.convert("RGB")
-        img.save(abs_path, format="JPEG", quality=92, subsampling=0)
-        sheet.updated_at = datetime.utcnow()
+    error = rotate_figurino_photo(sheet, direction=direction)
+    if error:
+        flash(error)
+    else:
         db.session.commit()
-    except Exception as e:
-        flash(f"Erro ao girar foto: {e}")
 
+    return redirect(url_for("figurino.edit_sheet", sheet_id=sheet_id))
+
+
+@figurino_bp.route("/figurinos/<int:sheet_id>/remove-photo", methods=["POST"])
+@login_required
+def remove_photo(sheet_id: int):
+    if not _can_edit_figurino():
+        abort(403)
+    sheet = FigurinoSheet.query.get_or_404(sheet_id)
+
+    from app.figurino.figurino_ops import remove_figurino_photo
+
+    remove_figurino_photo(sheet)
+    db.session.commit()
+    flash("Foto removida.")
     return redirect(url_for("figurino.edit_sheet", sheet_id=sheet_id))
 
 
