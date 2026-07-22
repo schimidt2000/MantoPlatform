@@ -17,3 +17,4 @@ from app.api import talents_read as _talents_read  # noqa: E402,F401
 from app.api import talents_write as _talents_write  # noqa: E402,F401
 from app.api import figurino_read as _figurino_read  # noqa: E402,F401
 from app.api import figurino_write as _figurino_write  # noqa: E402,F401
+from app.api import financeiro_read as _financeiro_read  # noqa: E402,F401
