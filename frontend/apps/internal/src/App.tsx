@@ -21,6 +21,13 @@ import { RhDashboardPage } from "./pages/RhDashboardPage";
 import { AdminUsersListPage } from "./pages/AdminUsersListPage";
 import { AdminUserCreatePage } from "./pages/AdminUserCreatePage";
 import { AdminUserEditPage } from "./pages/AdminUserEditPage";
+import { AdminSettingsPage } from "./pages/AdminSettingsPage";
+import { AdminLogsPage } from "./pages/AdminLogsPage";
+import { AdminDesempenhoPage } from "./pages/AdminDesempenhoPage";
+import { AdminSyncPage } from "./pages/AdminSyncPage";
+import { AdminPortalAnnouncementPage } from "./pages/AdminPortalAnnouncementPage";
+import { AdminMigrarArquivosPage } from "./pages/AdminMigrarArquivosPage";
+import { AdminImportarCatalogoPage } from "./pages/AdminImportarCatalogoPage";
 
 export function App() {
   return (
@@ -192,6 +199,62 @@ export function App() {
           element={
             <RequireAuth>
               <AdminUserEditPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/configuracoes"
+          element={
+            <RequireAuth>
+              <AdminSettingsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/logs"
+          element={
+            <RequireAuth>
+              <AdminLogsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/desempenho"
+          element={
+            <RequireAuth>
+              <AdminDesempenhoPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/sync"
+          element={
+            <RequireAuth>
+              <AdminSyncPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/anuncio-portal"
+          element={
+            <RequireAuth>
+              <AdminPortalAnnouncementPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/migrar-arquivos"
+          element={
+            <RequireAuth>
+              <AdminMigrarArquivosPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/importar-catalogo"
+          element={
+            <RequireAuth>
+              <AdminImportarCatalogoPage />
             </RequireAuth>
           }
         />
