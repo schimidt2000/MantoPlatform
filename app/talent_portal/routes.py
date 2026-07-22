@@ -329,22 +329,25 @@ def _snapshot_rating(rating) -> dict:
 def _maybe_record_rating_version(event_id: int, rating) -> None:
     """Registra UMA versão anterior por sessão de edição, se o conteúdo mudou.
 
-    Usa um baseline (estado pré-edição) guardado na sessão no GET de `rate_event`. Como uma
-    edição ocorre em até 2 requests (nota geral + sub-avaliações), um flag de sessão garante que
-    só uma versão seja criada por sessão de edição. Não faz commit.
+    Usa um baseline (estado pré-edição) guardado na sessão no GET de `rate_event`, num único
+    slot ``rating_edit`` (não uma chave por evento — isso já causou estouro do limite de
+    tamanho de header do cookie de sessão em talentos com várias edições abertas/abandonadas).
+    Como uma edição ocorre em até 2 requests (nota geral + sub-avaliações), um flag no mesmo
+    slot garante que só uma versão seja criada por sessão de edição. Não faz commit.
     """
     import json as _json
     from app.models import EventRatingVersion
 
-    baseline = session.get(f"rating_baseline_{event_id}")
-    if baseline is None:
+    edit = session.get("rating_edit")
+    if not edit or edit.get("event_id") != event_id:
         return  # não é uma edição iniciada pela tela (ex.: primeira avaliação)
 
+    baseline = edit["baseline"]
     current = _snapshot_rating(rating)
     if current == baseline:
         return  # ainda não mudou nada nesta etapa
 
-    if session.get(f"rating_versioned_{event_id}"):
+    if edit.get("versioned"):
         return  # já registramos a versão desta sessão de edição
 
     db.session.add(EventRatingVersion(
@@ -354,7 +357,8 @@ def _maybe_record_rating_version(event_id: int, rating) -> None:
     ))
     rating.edit_count = (rating.edit_count or 0) + 1
     rating.edited_at = datetime.utcnow()
-    session[f"rating_versioned_{event_id}"] = True
+    edit["versioned"] = True
+    session["rating_edit"] = edit
 
 
 # ── Home ───────────────────────────────────────────────────────
@@ -741,13 +745,15 @@ def rate_event(event_id: int):
     existing = EventRating.query.filter_by(event_id=event_id, talent_id=talent.id).first()
     ctx = _build_rating_context(talent, event)
 
-    # Início de uma sessão de edição: guarda o baseline (estado atual) e limpa o flag de versão.
+    # Início de uma sessão de edição: guarda o baseline (estado atual) num slot único.
     if existing:
-        session[f"rating_baseline_{event_id}"] = _snapshot_rating(existing)
-        session.pop(f"rating_versioned_{event_id}", None)
+        session["rating_edit"] = {
+            "event_id": event_id,
+            "baseline": _snapshot_rating(existing),
+            "versioned": False,
+        }
     else:
-        session.pop(f"rating_baseline_{event_id}", None)
-        session.pop(f"rating_versioned_{event_id}", None)
+        session.pop("rating_edit", None)
 
     return render_template(
         "portal/rate.html",
@@ -798,8 +804,7 @@ def submit_rating(event_id: int):
     db.session.commit()
 
     if request.form.get("skip_detail"):
-        session.pop(f"rating_baseline_{event_id}", None)
-        session.pop(f"rating_versioned_{event_id}", None)
+        session.pop("rating_edit", None)
         flash("Obrigado pela avaliação!", "success")
         return redirect(url_for("portal.home"))
 
@@ -881,9 +886,8 @@ def rate_event_detail(event_id: int):
     db.session.refresh(rating)
     _maybe_record_rating_version(event_id, rating)
     db.session.commit()
-    # Encerrou a sessão de edição deste evento — limpa o baseline/flag.
-    session.pop(f"rating_baseline_{event_id}", None)
-    session.pop(f"rating_versioned_{event_id}", None)
+    # Encerrou a sessão de edição deste evento — limpa o slot de edição.
+    session.pop("rating_edit", None)
     flash("Obrigado! Sua avaliação completa foi enviada.", "success")
     return redirect(url_for("portal.home"))
 
