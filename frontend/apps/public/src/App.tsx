@@ -4,6 +4,8 @@ import { CategoriesPage } from "./pages/CategoriesPage";
 import { CategoryDetailPage } from "./pages/CategoryDetailPage";
 import { ProductDetailPage } from "./pages/ProductDetailPage";
 import { WishlistPage } from "./pages/WishlistPage";
+import { CadastroPage } from "./pages/CadastroPage";
+import { CadastroSucessoPage } from "./pages/CadastroSucessoPage";
 import { WishlistFloat } from "./components/WishlistFloat";
 
 export function App() {
@@ -14,6 +16,8 @@ export function App() {
         <Route path="/categorias" element={<CategoriesPage />} />
         <Route path="/categoria/:slug" element={<CategoryDetailPage />} />
         <Route path="/lista-desejos" element={<WishlistPage />} />
+        <Route path="/cadastro" element={<CadastroPage />} />
+        <Route path="/cadastro/enviado" element={<CadastroSucessoPage />} />
         <Route path="/:slug" element={<ProductDetailPage />} />
       </Routes>
       <WishlistFloat />

@@ -67,17 +67,29 @@ tela); rejeitado por criar a mesma dívida de novo em vez de resolvê-la na prim
 `observation_ops.py` para núcleo compartilhado entre o handler Jinja e o endpoint API. A rota
 Jinja passa a importar dessas funções do módulo novo (mesmo comportamento, zero duplicação).
 
-**Razão**: diferente da leitura do catálogo (161, onde as queries foram *copiadas* porque a
-rota Jinja tinha `render_template` inline e nada extraível), aqui as 4 funções já são helpers
-puros (recebem `FileStorage`/string, devolvem valor) — extrair para um módulo compartilhado é a
-mesma decisão já tomada em toda fatia de ESCRITA anterior (146–160): núcleo compartilhado quando
-há 2 chamadores reais (Jinja + API) e a lógica é pura o bastante para não precisar de contexto
-HTTP.
+Na implementação, essa extração foi um passo além do previsto: como as ~100 linhas de
+validação/montagem do `Talent` em `submit()` (honeypot → obrigatórios → CPF duplicado →
+uploads → `Talent(...)`) não têm nada de `render_template` misturado — só leem
+`request.form`/`request.files` e devolvem um `Talent` ou uma mensagem de erro —, essa orquestração
+inteira também foi extraída para `cadastro_ops.process_submission(form, files) ->
+SubmissionOutcome` (honeypot/talent/error/field), evitando duplicar ~100 linhas idênticas entre
+`routes.py` e `cadastro_write.py`. `routes.py` (Jinja) e `cadastro_write.py` (API) ficam cada um
+só com ~15 linhas de transporte HTTP (o que fazer com o `SubmissionOutcome`: redirect/render vs.
+JSON). `check_cpf_exists(raw_cpf) -> (exists, valid)` recebeu o mesmo tratamento.
 
-**Alternativas consideradas**: copiar as 4 funções para `cadastro_write.py` (mesmo padrão da
-161) — rejeitado porque, diferente das queries do catálogo, essas funções não têm
-`render_template` misturado — são unidades puras, extraíveis sem esforço extra; copiar criaria
-duas fontes de verdade para a mesma lógica de parsing.
+**Razão**: diferente da leitura do catálogo (161, onde as queries foram *copiadas* porque a
+rota Jinja tinha `render_template` inline e nada extraível), aqui a lógica inteira é pura o
+bastante para não precisar de contexto HTTP — extrair para um módulo compartilhado é a mesma
+decisão já tomada em toda fatia de ESCRITA anterior (146–160): núcleo compartilhado quando há 2
+chamadores reais (Jinja + API).
+
+**Alternativas consideradas**: copiar as funções para `cadastro_write.py` (mesmo padrão da 161,
+e o que o `plan.md`/`tasks.md` originalmente descreviam para as 4 funções pequenas) — rejeitado
+na prática porque, diferente das queries do catálogo, essa lógica não tem `render_template`
+misturado — é uma unidade pura, extraível sem esforço extra; copiar criaria duas fontes de
+verdade para a mesma regra de validação (exatamente o problema que o Princípio I existe para
+evitar), e o texto de mensagem de erro por campo precisaria ser mantido idêntico manualmente em
+dois lugares.
 
 ## §5 — CPF: checagem em tempo real via API
 

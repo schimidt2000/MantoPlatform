@@ -13,25 +13,25 @@ real, US3 proteção anti-abuso), nessa ordem de prioridade.
 
 ## Phase 1: Setup
 
-- [ ] T001 Adicionar `react-hook-form` e `zod` (mesmas versões de `apps/internal/package.json`)
+- [X] T001 Adicionar `react-hook-form` e `zod` (mesmas versões de `apps/internal/package.json`)
       às `dependencies` de `frontend/apps/public/package.json`.
-- [ ] T002 [P] Adicionar rotas `/cadastro` e `/cadastro/enviado` (placeholders) em
+- [X] T002 [P] Adicionar rotas `/cadastro` e `/cadastro/enviado` (placeholders) em
       `frontend/apps/public/src/App.tsx`, substituídos nas fases seguintes.
 
 ## Phase 2: Foundational
 
-- [ ] T003 Criar `app/cadastro/cadastro_ops.py` (NOVO — `research.md` §4): mover
+- [X] T003 Criar `app/cadastro/cadastro_ops.py` (NOVO — `research.md` §4): mover
       `_build_phone`, `_height_to_cm`, `_validate_upload`, `_yes_no` (e as constantes
       `_PHOTO_EXTS`/`_DOC_EXTS`/`_PHOTO_MAX`/`_DOC_MAX`) de `app/cadastro/routes.py` para cá,
       sem alterar comportamento; type hints e docstrings já existentes preservados.
-- [ ] T004 Atualizar `app/cadastro/routes.py` para importar essas funções/constantes de
+- [X] T004 Atualizar `app/cadastro/routes.py` para importar essas funções/constantes de
       `cadastro_ops.py` (mesmo comportamento do handler Jinja, zero duplicação).
-- [ ] T005 [P] Criar `frontend/packages/ui/src/components/file-upload.tsx` (`research.md` §3):
+- [X] T005 [P] Criar `frontend/packages/ui/src/components/file-upload.tsx` (`research.md` §3):
       componente `FileUpload` — input de arquivo estilizado (`Button` + input escondido),
       preview de thumbnail quando `image/*`, mensagem de erro (borda vermelha), texto de tipos/
       tamanho aceitos; props `accept`, `maxSizeBytes`, `label`, `required?`, `error?`,
       `onChange(file: File | null)`.
-- [ ] T006 [P] Exportar `FileUpload` em `frontend/packages/ui/src/index.ts`.
+- [X] T006 [P] Exportar `FileUpload` em `frontend/packages/ui/src/index.ts`.
 
 **Checkpoint**: núcleo compartilhado pronto (backend `cadastro_ops.py`, frontend `FileUpload`) —
 as user stories podem começar.
@@ -49,7 +49,7 @@ sem perder o preenchimento.
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Criar `app/api/cadastro_write.py` (NOVO): `POST /api/cadastro` — lê
+- [X] T007 [US1] Criar `app/api/cadastro_write.py` (NOVO): `POST /api/cadastro` — lê
       `request.form`/`request.files`, reaproveita `cadastro_ops` (T003) e
       `app/talents/importer.py` (`parse_date`, `normalize_tags`, `only_digits`,
       `_parse_passport_status`) para validar e montar o `Talent` exatamente como
@@ -57,14 +57,14 @@ sem perder o preenchimento.
       `data-model.md` e `contracts/cadastro-endpoints.md`); grava uploads via
       `app.storage.save_file`; responde `201 {"id": talent.id}` ou `400 {"error": {...}}`.
       Type hints e docstring (Google style).
-- [ ] T008 [US1] Importar `cadastro_write` em `app/api/__init__.py` (mesmo padrão dos demais
+- [X] T008 [US1] Importar `cadastro_write` em `app/api/__init__.py` (mesmo padrão dos demais
       módulos `_write`).
-- [ ] T009 [P] [US1] Criar `frontend/apps/public/src/lib/cadastro.ts`: schema `zod` espelhando
+- [X] T009 [P] [US1] Criar `frontend/apps/public/src/lib/cadastro.ts`: schema `zod` espelhando
       as validações obrigatórias do backend (`contracts/cadastro-endpoints.md`) + hook
       `useSubmitCadastro()` (`useMutation`, `@tanstack/react-query`) que monta `FormData` (campos
       de texto + `languages`/`skills` repetidos + 4 arquivos) e chama `apiFetch("/cadastro",
       {method: "POST", body: formData})` (`@manto/api-client`).
-- [ ] T010 [US1] Criar `frontend/apps/public/src/components/cadastro/CadastroForm.tsx`:
+- [X] T010 [US1] Criar `frontend/apps/public/src/components/cadastro/CadastroForm.tsx`:
       `react-hook-form` + resolver `zod` (T009); seções (dados pessoais, contato, medidas, PIX,
       veículo/CNH, uploads com `FileUpload` de T005 para rosto/corpo/documento/CNH); campo
       "Outro" de gênero revela input de texto livre; honeypot (`website`) como campo oculto
@@ -72,12 +72,12 @@ sem perder o preenchimento.
       botão de envio com estado "Enviando..." (disabled) via `isPending` da mutation (T009); em
       sucesso, navega para `/cadastro/enviado`; em erro 400, mostra a mensagem da API num
       alerta/toast sem apagar os campos preenchidos.
-- [ ] T011 [P] [US1] Criar `frontend/apps/public/src/pages/CadastroPage.tsx`: monta
+- [X] T011 [P] [US1] Criar `frontend/apps/public/src/pages/CadastroPage.tsx`: monta
       `CadastroForm` (T010) num layout mobile-first (coluna única em 320–430px).
-- [ ] T012 [P] [US1] Criar `frontend/apps/public/src/pages/CadastroSucessoPage.tsx`: tela de
+- [X] T012 [P] [US1] Criar `frontend/apps/public/src/pages/CadastroSucessoPage.tsx`: tela de
       confirmação (mensagem de recebido + link para o catálogo), paridade com
       `app/templates/cadastro/success.html`.
-- [ ] T013 [US1] Em `App.tsx` (T002), substituir os placeholders de `/cadastro` e
+- [X] T013 [US1] Em `App.tsx` (T002), substituir os placeholders de `/cadastro` e
       `/cadastro/enviado` pelas páginas reais (T011, T012).
 
 **Checkpoint**: US1 completa e testável isoladamente — envio ponta a ponta cria talento pendente.
@@ -93,17 +93,17 @@ formulário; digitar um CPF novo/incompleto e não ver aviso nenhum.
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Em `app/api/cadastro_write.py` (T007), adicionar `GET /api/cadastro/check-cpf`
+- [X] T014 [US2] Em `app/api/cadastro_write.py` (T007), adicionar `GET /api/cadastro/check-cpf`
       — mesma lógica de `app/cadastro/routes.py:check_cpf` (extrai dígitos, responde
       `{"exists", "valid"}`), `@limiter.limit("60 per hour")` (mesmo limite do Jinja).
-- [ ] T015 [P] [US2] Em `frontend/apps/public/src/lib/cadastro.ts` (T009), adicionar
+- [X] T015 [P] [US2] Em `frontend/apps/public/src/lib/cadastro.ts` (T009), adicionar
       `useCheckCpf(cpf: string)` (`useQuery`, debounced/`enabled` só com 11 dígitos) chamando
       `GET /cadastro/check-cpf?cpf=...`.
-- [ ] T016 [US2] Criar `frontend/apps/public/src/components/cadastro/CpfField.tsx`: campo de CPF
+- [X] T016 [US2] Criar `frontend/apps/public/src/components/cadastro/CpfField.tsx`: campo de CPF
       com máscara de dígitos, usa `useCheckCpf` (T015) — mostra aviso "CPF já cadastrado" abaixo
       do campo quando `exists=true`, sem bloquear a digitação; oculto quando `is_foreigner`
       estiver marcado (paridade com a regra de CPF opcional para estrangeiro).
-- [ ] T017 [US2] Em `CadastroForm.tsx` (T010), substituir o input de CPF genérico por
+- [X] T017 [US2] Em `CadastroForm.tsx` (T010), substituir o input de CPF genérico por
       `CpfField` (T016).
 
 **Checkpoint**: US1 + US2 funcionam juntas — aviso de duplicidade em tempo real, sem impedir o
@@ -121,10 +121,10 @@ temporariamente.
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Em `app/api/cadastro_write.py` (T007), adicionar a checagem de honeypot no
+- [X] T018 [US3] Em `app/api/cadastro_write.py` (T007), adicionar a checagem de honeypot no
       início de `POST /api/cadastro` (mesma regra do Jinja: se `website` vier preenchido,
       responde `201 {"id": null}` sem criar talento nem validar o restante).
-- [ ] T019 [US3] Adicionar `@limiter.limit("10 per hour")` em `POST /api/cadastro` (mesmo
+- [X] T019 [US3] Adicionar `@limiter.limit("10 per hour")` em `POST /api/cadastro` (mesmo
       limite do Jinja).
 
 **Checkpoint**: as 3 user stories completas — cadastro público 100% em React, com paridade de
@@ -134,19 +134,25 @@ proteção anti-abuso.
 
 ## Phase 6: Polish & Verificação
 
-- [ ] T020 Criar `scripts/db/verify_162_cadastro_publico_react.py` (gitignored): test client
+- [X] T020 Criar `scripts/db/verify_162_cadastro_publico_react.py` (gitignored): test client
       Flask contra `manto_local`, requests fora de `app_context` — cobre envio válido (paridade
       de campos do `Talent` resultante vs. o caminho Jinja para os mesmos dados/arquivos), erro
       por campo obrigatório faltante, erro por upload inválido (tipo/tamanho), CPF duplicado no
       POST final, estrangeiro sem CPF, honeypot preenchido (sem criar talento), `check-cpf` para
       CPF existente/inexistente/incompleto.
-- [ ] T021 Rodar `ruff check app/api/cadastro_write.py app/cadastro/cadastro_ops.py
+- [X] T021 Rodar `ruff check app/api/cadastro_write.py app/cadastro/cadastro_ops.py
       app/cadastro/routes.py`.
-- [ ] T022 Rodar `npm run typecheck:public` e `npm run build:public`.
-- [ ] T023 Conferência mobile (320–430px) da tela de cadastro (todas as seções, os 4 campos de
+- [X] T022 Rodar `npm run typecheck:public` e `npm run build:public`.
+- [X] T023 Conferência mobile (320–430px) da tela de cadastro (todas as seções, os 4 campos de
       upload com alvo de toque ≥44px, teclado virtual não esconde campo ativo/botão de envio) e
-      da tela de confirmação — Princípio VIII.
-- [ ] T024 Atualizar `docs/changelog.html` com entrada em linguagem simples (entrada 162) e
+      da tela de confirmação — Princípio VIII. **Não verificado visualmente nesta sessão**: sem
+      Playwright/chromium-cli disponível no ambiente (mesma limitação recorrente das fatias
+      156-161). O layout foi construído mobile-first desde o início (`Section`/`Card` em coluna
+      única, `grid-cols-1 sm:grid-cols-2` só expande a partir do breakpoint `sm`, botões/inputs
+      já em `h-11`/`h-12` ≥44px, `FileUpload` e `CpfField` seguem o mesmo padrão de largura
+      total); recomenda-se conferência visual manual em viewport real antes do próximo passo da
+      US5.
+- [X] T024 Atualizar `docs/changelog.html` com entrada em linguagem simples (entrada 162) e
       republicar no artifact já existente (mesmo link).
 
 ## Dependencies
