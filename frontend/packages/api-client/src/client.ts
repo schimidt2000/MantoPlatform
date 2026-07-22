@@ -40,9 +40,14 @@ export const API_BASE = ((import.meta.env.VITE_API_BASE_URL as string | undefine
  * Monta a URL absoluta de um arquivo servido pelo Flask (ex.: `/uploads/...`). Em produção
  * prefixa a base do Flask (`API_BASE`); em dev fica o path puro e o proxy do Vite roteia. Fonte
  * única da base — o frontend não concatena origem à mão. `null`/vazio → `undefined`.
+ *
+ * Alguns registros legados (fotos de talento/figurino importadas do Google Drive — feature
+ * 154) já guardam uma URL absoluta em vez de um path relativo; prefixar `API_BASE` nesse caso
+ * quebraria a URL em produção. Detecta `http://`/`https://` e devolve sem prefixar.
  */
 export function assetUrl(path: string | null | undefined): string | undefined {
   if (!path) return undefined;
+  if (/^https?:\/\//i.test(path)) return path;
   return `${API_BASE}${path}`;
 }
 

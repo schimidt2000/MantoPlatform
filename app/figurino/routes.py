@@ -1,4 +1,3 @@
-import json
 import os
 from datetime import datetime
 
@@ -70,7 +69,6 @@ def figurinos():
 def new_sheet():
     if not _can_edit_figurino():
         abort(403)
-    from .drive_service import normalize_name
 
     if request.method == "POST":
         character_name = request.form.get("character_name", "").strip()
@@ -80,24 +78,19 @@ def new_sheet():
                                    pieces=_parse_pieces(request.form) or [{"name": "", "qty": 1}],
                                    title="Nova Ficha de Figurino")
 
+        from app.figurino.figurino_ops import create_sheet
+
         pieces = _parse_pieces(request.form)
         notes = request.form.get("notes", "").strip()
 
-        photo_url = None
+        sheet = create_sheet(character_name=character_name, pieces=pieces, notes=notes)
+
         photo_file = request.files.get("photo")
         if photo_file and photo_file.filename:
             ext = os.path.splitext(photo_file.filename)[1].lower()
             if ext in _ALLOWED_PHOTO_EXTENSIONS:
-                photo_url = save_file(photo_file, "figurino_photos")
+                sheet.photo_filename = save_file(photo_file, "figurino_photos")
 
-        sheet = FigurinoSheet(
-            character_name=character_name,
-            character_name_norm=normalize_name(character_name),
-            photo_filename=photo_url,
-            pieces=json.dumps(pieces, ensure_ascii=False) if pieces else None,
-            notes=notes or None,
-        )
-        db.session.add(sheet)
         from app.utils import audit
         audit("create", "figurino", None, character_name, "Ficha de figurino criada")
         db.session.commit()
@@ -116,7 +109,6 @@ def new_sheet():
 def edit_sheet(sheet_id: int):
     if not _can_edit_figurino():
         abort(403)
-    from .drive_service import normalize_name
 
     sheet = FigurinoSheet.query.get_or_404(sheet_id)
 
@@ -128,8 +120,11 @@ def edit_sheet(sheet_id: int):
                                    pieces=sheet.pieces_list or [{"name": "", "qty": 1}],
                                    title=f"Editar — {sheet.character_name}")
 
+        from app.figurino.figurino_ops import edit_sheet as _edit_sheet_core
+
         pieces = _parse_pieces(request.form)
         notes = request.form.get("notes", "").strip()
+        _edit_sheet_core(sheet, character_name=character_name, pieces=pieces, notes=notes)
 
         photo_file = request.files.get("photo")
         if photo_file and photo_file.filename:
@@ -138,11 +133,6 @@ def edit_sheet(sheet_id: int):
                 delete_file(sheet.photo_filename)
                 sheet.photo_filename = save_file(photo_file, "figurino_photos")
 
-        sheet.character_name = character_name
-        sheet.character_name_norm = normalize_name(character_name)
-        sheet.pieces = json.dumps(pieces, ensure_ascii=False) if pieces else None
-        sheet.notes = notes or None
-        sheet.updated_at = datetime.utcnow()
         from app.utils import audit
         audit("edit", "figurino", sheet.id, character_name, "Ficha de figurino editada")
         db.session.commit()
@@ -239,12 +229,11 @@ def delete_sheet(sheet_id: int):
         abort(403)
     sheet = FigurinoSheet.query.get_or_404(sheet_id)
 
-    delete_file(sheet.photo_filename)
-
+    from app.figurino.figurino_ops import delete_sheet as _delete_sheet_core
     from app.utils import audit
+
     audit("delete", "figurino", sheet.id, sheet.character_name, "Ficha de figurino removida")
-    EventRole.query.filter_by(figurino_sheet_id=sheet_id).update({"figurino_sheet_id": None})
-    db.session.delete(sheet)
+    _delete_sheet_core(sheet)
     db.session.commit()
     flash("Ficha removida do catálogo.")
     return redirect(url_for("figurino.figurinos"))

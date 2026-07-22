@@ -5,6 +5,11 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { AgendaPage } from "./pages/AgendaPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
 import { EventCreatePage } from "./pages/EventCreatePage";
+import { TalentsListPage } from "./pages/TalentsListPage";
+import { TalentDetailPage } from "./pages/TalentDetailPage";
+import { TalentEditPage } from "./pages/TalentEditPage";
+import { FigurinoListPage } from "./pages/FigurinoListPage";
+import { FigurinoFormPage } from "./pages/FigurinoFormPage";
 
 export function App() {
   return (
@@ -40,6 +45,54 @@ export function App() {
           element={
             <RequireAuth>
               <EventDetailPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/talents"
+          element={
+            <RequireAuth>
+              <TalentsListPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/talents/:id"
+          element={
+            <RequireAuth>
+              <TalentDetailPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/talents/:id/edit"
+          element={
+            <RequireAuth>
+              <TalentEditPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/figurinos"
+          element={
+            <RequireAuth>
+              <FigurinoListPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/figurinos/new"
+          element={
+            <RequireAuth>
+              <FigurinoFormPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/figurinos/:id/edit"
+          element={
+            <RequireAuth>
+              <FigurinoFormPage />
             </RequireAuth>
           }
         />
