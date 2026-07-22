@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, curren
 from flask_login import login_required, current_user
 
 from app import db
-from app.admin import config_ops, user_ops
+from app.admin import catalog_ops, config_ops, user_ops
 from app.models import User, SiteSetting, Role, EventLog, CalendarEvent, AuditLog, SalaryHistory
 from app.constants import RoleName
 
@@ -640,183 +640,16 @@ def importar_catalogo_start():
 
 # ── Gestão de produtos do catálogo (criar/editar) — feature 139 ─────────────────
 
-def _unique_catalog_slug(name: str) -> str:
-    """Gera um slug único para um novo `CatalogItem` a partir do nome.
-
-    Mais simples que ``_unique_slug`` do importador (que resolve unicidade em lote
-    contra um CSV inteiro): aqui é só uma criação por vez, então basta checar contra
-    o banco e sufixar em caso de colisão.
-    """
-    from app.catalogo.importer import _slugify
-    from app.models import CatalogItem
-
-    base = _slugify(name)
-    slug = base
-    n = 2
-    while CatalogItem.query.filter_by(slug=slug).first():
-        slug = f"{base}-{n}"
-        n += 1
-    return slug
-
-
-_ALLOWED_CATALOG_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-
-
-class InvalidCatalogPhotoError(ValueError):
-    """Levantado quando um arquivo enviado como foto de produto não é um formato
-    suportado (feature 141) — nunca deixa o arquivo ser salvo sem compressão/tratamento.
-    """
-
-
-def _validate_catalog_photo_extensions(files) -> None:
-    """Recusa arquivos fora de `_ALLOWED_CATALOG_PHOTO_EXTENSIONS` antes de processar
-    qualquer coisa — evita salvar um arquivo cru (não comprimido) silenciosamente quando
-    o processador de imagem não consegue abri-lo (feature 141)."""
-    import os as _os
-
-    rejected = []
-    for f in files.getlist("new_photos"):
-        if not f or not f.filename:
-            continue
-        ext = _os.path.splitext(f.filename)[1].lower()
-        if ext not in _ALLOWED_CATALOG_PHOTO_EXTENSIONS:
-            rejected.append(f.filename)
-    if rejected:
-        raise InvalidCatalogPhotoError(
-            "Arquivo(s) não suportado(s) (use JPG, PNG ou WebP): " + ", ".join(rejected)
-        )
-
-
-def _apply_catalog_photos(item, form, files) -> None:
-    """Aplica remoções, reordenação, novos uploads e escolha de capa nas fotos de um
-    item (features 139/141/142).
-
-    Ordem: aplica `photo_order` (arrastar-e-soltar, feature 142) nas fotos existentes
-    antes de tudo. Regra de capa: usa a foto existente marcada em ``cover_photo_id`` se
-    ela sobreviver à remoção; senão, a foto nova indicada em ``new_photo_cover_index``
-    (feature 141); senão, a primeira foto recém-enviada nesta mesma requisição; senão,
-    mantém a ordem atual — sempre por cima da ordem manual, garantindo que a capa fique
-    em `position=0`. Chamar `_validate_catalog_photo_extensions` antes desta função.
-    """
-    from app.catalogo.importer import _rewrite_public_url
-    from app.models import CatalogItemImage
-    from app.storage import delete_file, save_file
-
-    remove_ids = {int(x) for x in form.getlist("remove_photo_ids[]") if x.isdigit()}
-    for img in list(item.images):
-        if img.id in remove_ids:
-            delete_file(img.url)
-            db.session.delete(img)
-    db.session.flush()
-
-    remaining = (
-        CatalogItemImage.query.filter_by(item_id=item.id)
-        .order_by(CatalogItemImage.position.asc()).all()
-    )
-
-    # Reordenação manual (feature 142): `photo_order` traz os ids das fotos existentes
-    # na ordem visual definida pelo admin (arrastar-e-soltar) — sobrepõe a ordem atual
-    # do banco antes da regra de capa ser aplicada por cima.
-    order_raw = form.get("photo_order", "")
-    if order_raw:
-        order_ids = [int(x) for x in order_raw.split(",") if x.isdigit()]
-        by_id = {im.id: im for im in remaining}
-        ordered = [by_id[i] for i in order_ids if i in by_id]
-        ordered += [im for im in remaining if im.id not in set(order_ids)]
-        remaining = ordered
-
-    next_pos = len(remaining)
-    new_images = []
-    for f in files.getlist("new_photos"):
-        if not f or not f.filename:
-            continue
-        url = _rewrite_public_url(save_file(f, "catalog_photos"))
-        img = CatalogItemImage(item_id=item.id, url=url, position=next_pos)
-        db.session.add(img)
-        new_images.append(img)
-        next_pos += 1
-    db.session.flush()
-
-    cover_raw = form.get("cover_photo_id", "")
-    cover_index_raw = form.get("new_photo_cover_index", "")
-    cover = None
-    if cover_raw.isdigit():
-        cover = next((im for im in remaining if im.id == int(cover_raw)), None)
-    if cover is None and cover_index_raw.isdigit():
-        idx = int(cover_index_raw)
-        if 0 <= idx < len(new_images):
-            cover = new_images[idx]
-    if cover is None and new_images:
-        cover = new_images[0]
-    if cover is not None:
-        others = [im for im in (remaining + new_images) if im is not cover]
-        cover.position = 0
-        for i, im in enumerate(others, start=1):
-            im.position = i
-
-
-def _all_catalog_tags() -> list[str]:
-    """Todas as tags distintas já usadas em qualquer produto do catálogo (feature 140).
-
-    Deduplica por slug (case/acento-insensitive) mantendo a primeira grafia encontrada —
-    fonte de sugestão para o seletor de tags do formulário.
-    """
-    import json as _json
-
-    from app.catalogo.importer import _slugify
-    from app.models import CatalogItem
-
-    seen: dict[str, str] = {}
-    for (raw_tags,) in db.session.query(CatalogItem.tags).filter(CatalogItem.tags.isnot(None)):
-        try:
-            tags = _json.loads(raw_tags) if raw_tags else []
-        except (ValueError, TypeError):
-            tags = []
-        for tag in tags:
-            key = _slugify(tag)
-            if key and key not in seen:
-                seen[key] = tag
-    return sorted(seen.values(), key=str.lower)
-
-
-def _normalize_tags(raw_tags: list[str], known_tags: list[str]) -> list[str]:
-    """Reaproveita a grafia já existente de uma tag quando bate (case/acento-insensitive).
-
-    Evita que "Natal" e "natal" coexistam como tags diferentes por digitação
-    inconsistente (FR-003) — sem isso virar uma tabela própria no banco.
-    """
-    from app.catalogo.importer import _slugify
-
-    by_key = {_slugify(t): t for t in known_tags}
-    result: list[str] = []
-    seen_keys: set[str] = set()
-    for tag in raw_tags:
-        key = _slugify(tag)
-        if not key or key in seen_keys:
-            continue
-        seen_keys.add(key)
-        result.append(by_key.get(key, tag))
-    return result
-
 
 @admin_bp.route("/catalogo/categorias", methods=["POST"])
 @login_required
 @require_superadmin
 def catalogo_admin_new_category():
     """Cria (ou reaproveita) uma categoria do catálogo via AJAX (feature 140)."""
-    from app.catalogo.importer import _slugify
-    from app.models import CatalogCategory
-
-    name = request.form.get("name", "").strip()
-    if not name:
-        return {"ok": False, "error": "Nome da categoria é obrigatório."}, 400
-
-    slug = _slugify(name)
-    category = CatalogCategory.query.filter_by(slug=slug).first()
-    if not category:
-        category = CatalogCategory(name=name, slug=slug)
-        db.session.add(category)
-        db.session.commit()
+    try:
+        category = catalog_ops.create_or_reuse_category(request.form.get("name", ""))
+    except catalog_ops.CatalogValidationError as exc:
+        return {"ok": False, "error": exc.message}, 400
     return {"ok": True, "id": category.id, "name": category.name}
 
 
@@ -862,27 +695,23 @@ def catalogo_admin_list():
 @require_superadmin
 def catalogo_admin_new():
     """Cria um novo produto do catálogo nativamente (feature 139)."""
-    from app.models import CatalogCategory, CatalogItem
-    from app.utils import audit
+    from app.models import CatalogCategory
 
     categories = CatalogCategory.query.order_by(CatalogCategory.name.asc()).all()
-    all_tags = _all_catalog_tags()
+    all_tags = catalog_ops.all_tags()
 
     if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        new_photos = [f for f in request.files.getlist("new_photos") if f and f.filename]
-        errors = []
-        if not name:
-            errors.append("Nome do produto é obrigatório.")
-        if not new_photos:
-            errors.append("Envie ao menos uma foto.")
         try:
-            _validate_catalog_photo_extensions(request.files)
-        except InvalidCatalogPhotoError as exc:
-            errors.append(str(exc))
-        if errors:
-            for e in errors:
-                flash(e, "error")
+            item = catalog_ops.create_product(
+                name=request.form.get("name", ""),
+                description=request.form.get("description", ""),
+                tags_raw=request.form.get("tags", ""),
+                category_ids=[int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()],
+                form=request.form,
+                files=request.files,
+            )
+        except catalog_ops.CatalogValidationError as exc:
+            flash(exc.message, "error")
             return render_template(
                 "admin_catalogo_form.html", settings=get_settings(), active="users",
                 title="Novo produto do catálogo", item=None, categories=categories,
@@ -890,28 +719,6 @@ def catalogo_admin_new():
                 selected_category_ids=set(int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()),
                 old=request.form,
             )
-
-        item = CatalogItem(
-            name=name,
-            slug=_unique_catalog_slug(name),
-            short_description_html=(request.form.get("description", "").strip() or None),
-            tags=None,
-        )
-        raw_tags = [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()]
-        tags = _normalize_tags(raw_tags, all_tags)
-        if tags:
-            import json as _json
-            item.tags = _json.dumps(tags, ensure_ascii=False)
-        db.session.add(item)
-        db.session.flush()
-
-        cat_ids = [int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()]
-        if cat_ids:
-            item.categories = CatalogCategory.query.filter(CatalogCategory.id.in_(cat_ids)).all()
-
-        _apply_catalog_photos(item, request.form, request.files)
-        audit("create", "CatalogItem", item.id, item.name, "Produto do catálogo criado")
-        db.session.commit()
         flash(f'Produto "{item.name}" criado.', "success")
         return redirect(url_for("admin.catalogo_admin_list"))
 
@@ -928,29 +735,24 @@ def catalogo_admin_new():
 def catalogo_admin_edit(item_id: int):
     """Edita um produto existente do catálogo (feature 139)."""
     from app.models import CatalogCategory, CatalogItem
-    from app.utils import audit
 
     item = CatalogItem.query.get_or_404(item_id)
     categories = CatalogCategory.query.order_by(CatalogCategory.name.asc()).all()
-    all_tags = _all_catalog_tags()
+    all_tags = catalog_ops.all_tags()
 
     if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        remove_ids = {int(x) for x in request.form.getlist("remove_photo_ids[]") if x.isdigit()}
-        new_photos = [f for f in request.files.getlist("new_photos") if f and f.filename]
-        remaining_count = sum(1 for img in item.images if img.id not in remove_ids)
-        errors = []
-        if not name:
-            errors.append("Nome do produto é obrigatório.")
-        if remaining_count + len(new_photos) == 0:
-            errors.append("O produto precisa de ao menos uma foto.")
         try:
-            _validate_catalog_photo_extensions(request.files)
-        except InvalidCatalogPhotoError as exc:
-            errors.append(str(exc))
-        if errors:
-            for e in errors:
-                flash(e, "error")
+            catalog_ops.update_product(
+                item,
+                name=request.form.get("name", ""),
+                description=request.form.get("description", ""),
+                tags_raw=request.form.get("tags", ""),
+                category_ids=[int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()],
+                form=request.form,
+                files=request.files,
+            )
+        except catalog_ops.CatalogValidationError as exc:
+            flash(exc.message, "error")
             return render_template(
                 "admin_catalogo_form.html", settings=get_settings(), active="users",
                 title=f"Editar — {item.name}", item=item, categories=categories,
@@ -958,22 +760,6 @@ def catalogo_admin_edit(item_id: int):
                 selected_category_ids=set(int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()),
                 old=request.form,
             )
-
-        item.name = name
-        item.short_description_html = request.form.get("description", "").strip() or None
-        raw_tags = [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()]
-        tags = _normalize_tags(raw_tags, all_tags)
-        import json as _json
-        item.tags = _json.dumps(tags, ensure_ascii=False) if tags else None
-
-        cat_ids = [int(c) for c in request.form.getlist("category_ids[]") if c.isdigit()]
-        item.categories = (
-            CatalogCategory.query.filter(CatalogCategory.id.in_(cat_ids)).all() if cat_ids else []
-        )
-
-        _apply_catalog_photos(item, request.form, request.files)
-        audit("edit", "CatalogItem", item.id, item.name, "Produto do catálogo editado")
-        db.session.commit()
         flash(f'Produto "{item.name}" atualizado.', "success")
         return redirect(url_for("admin.catalogo_admin_list"))
 
@@ -990,15 +776,9 @@ def catalogo_admin_edit(item_id: int):
 def catalogo_admin_toggle_ativo(item_id: int):
     """Ativa/inativa um produto do catálogo sem apagar os dados (feature 139)."""
     from app.models import CatalogItem
-    from app.utils import audit
 
     item = CatalogItem.query.get_or_404(item_id)
-    item.is_active = not item.is_active
-    audit(
-        "edit", "CatalogItem", item.id, item.name,
-        f"Produto marcado como {'ativo' if item.is_active else 'inativo'}",
-    )
-    db.session.commit()
+    catalog_ops.toggle_active(item)
     flash(f'Produto "{item.name}" agora está {"ativo" if item.is_active else "inativo"}.', "success")
     return redirect(request.referrer or url_for("admin.catalogo_admin_list"))
 
@@ -1009,15 +789,9 @@ def catalogo_admin_toggle_ativo(item_id: int):
 def catalogo_admin_delete(item_id: int):
     """Exclui definitivamente um produto do catálogo, com suas fotos (feature 139)."""
     from app.models import CatalogItem
-    from app.storage import delete_file
-    from app.utils import audit
 
     item = CatalogItem.query.get_or_404(item_id)
     name = item.name
-    for img in list(item.images):
-        delete_file(img.url)
-    audit("delete", "CatalogItem", item.id, name, "Produto do catálogo excluído definitivamente")
-    db.session.delete(item)
-    db.session.commit()
+    catalog_ops.delete_product(item)
     flash(f'Produto "{name}" excluído.', "success")
     return redirect(url_for("admin.catalogo_admin_list"))
