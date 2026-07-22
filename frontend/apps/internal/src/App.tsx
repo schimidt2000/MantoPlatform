@@ -14,6 +14,9 @@ import { VendasPipelinePage } from "./pages/VendasPipelinePage";
 import { FinanceiroDashboardPage } from "./pages/FinanceiroDashboardPage";
 import { ComissoesPage } from "./pages/ComissoesPage";
 import { PagamentosPage } from "./pages/PagamentosPage";
+import { ClientsListPage } from "./pages/ClientsListPage";
+import { ClientDetailPage } from "./pages/ClientDetailPage";
+import { ClientFeedbackPage } from "./pages/ClientFeedbackPage";
 
 export function App() {
   return (
@@ -129,6 +132,30 @@ export function App() {
           element={
             <RequireAuth>
               <PagamentosPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/clientes"
+          element={
+            <RequireAuth>
+              <ClientsListPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/clientes/avaliacoes"
+          element={
+            <RequireAuth>
+              <ClientFeedbackPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/clientes/:id"
+          element={
+            <RequireAuth>
+              <ClientDetailPage />
             </RequireAuth>
           }
         />

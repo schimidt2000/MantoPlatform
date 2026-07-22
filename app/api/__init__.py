@@ -23,3 +23,5 @@ from app.api import catalogo_read as _catalogo_read  # noqa: E402,F401
 from app.api import cadastro_write as _cadastro_write  # noqa: E402,F401
 from app.api import formularios_write as _formularios_write  # noqa: E402,F401
 from app.api import feedback_write as _feedback_write  # noqa: E402,F401
+from app.api import clientes_read as _clientes_read  # noqa: E402,F401
+from app.api import clientes_write as _clientes_write  # noqa: E402,F401

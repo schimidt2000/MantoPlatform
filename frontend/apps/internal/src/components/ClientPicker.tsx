@@ -1,36 +1,7 @@
-import { useEffect, useState } from "react";
-import { API_BASE } from "@manto/api-client";
+import { useState } from "react";
 import { Button } from "@manto/ui";
+import { useClientSearch, type ClientSummary } from "../lib/clientes";
 import type { ClientLinkInput } from "../lib/eventCreate";
-
-interface ClientResult {
-  id: number;
-  name: string;
-  phone_display: string;
-  company: string;
-}
-
-/** Busca clientes por nome/telefone (reusa `/clientes/search`, feature 114 — já JSON). */
-function useClientSearch(query: string) {
-  const [results, setResults] = useState<ClientResult[]>([]);
-
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) {
-      setResults([]);
-      return;
-    }
-    const timer = setTimeout(() => {
-      fetch(`${API_BASE}/clientes/search?q=${encodeURIComponent(q)}`, { credentials: "include" })
-        .then((r) => (r.ok ? (r.json() as Promise<ClientResult[]>) : []))
-        .then(setResults)
-        .catch(() => setResults([]));
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  return results;
-}
 
 interface SelectedClient extends ClientLinkInput {
   name: string;
@@ -38,7 +9,8 @@ interface SelectedClient extends ClientLinkInput {
 
 /**
  * Seleciona um ou mais clientes existentes com o tipo de relação (feature 114/152). Consome
- * `/clientes/search` diretamente (endpoint Jinja já-JSON) — sem endpoint `/api/*` novo.
+ * `/api/clientes/search` (feature 165) via `useClientSearch` — fonte única de busca de cliente,
+ * reusada por qualquer tela que precise selecionar cliente existente.
  */
 export function ClientPicker({
   value,
@@ -50,10 +22,11 @@ export function ClientPicker({
   relationOptions: string[];
 }) {
   const [query, setQuery] = useState("");
-  const results = useClientSearch(query);
+  const search = useClientSearch(query);
+  const results = search.data ?? [];
   const selectedIds = new Set(value.map((c) => c.client_id));
 
-  const addClient = (c: ClientResult) => {
+  const addClient = (c: ClientSummary) => {
     if (selectedIds.has(c.id)) return;
     onChange([...value, { client_id: c.id, name: c.name, relation: "Contratante" }]);
     setQuery("");
