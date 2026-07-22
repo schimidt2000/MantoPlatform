@@ -30,6 +30,10 @@ import { AdminMigrarArquivosPage } from "./pages/AdminMigrarArquivosPage";
 import { AdminImportarCatalogoPage } from "./pages/AdminImportarCatalogoPage";
 import { AdminCatalogoListPage } from "./pages/AdminCatalogoListPage";
 import { AdminCatalogoFormPage } from "./pages/AdminCatalogoFormPage";
+import { RevisaoListPage } from "./pages/RevisaoListPage";
+import { RevisaoSpaceCreatePage } from "./pages/RevisaoSpaceCreatePage";
+import { RevisaoSpacePage } from "./pages/RevisaoSpacePage";
+import { RevisaoAssetPage } from "./pages/RevisaoAssetPage";
 
 export function App() {
   return (
@@ -281,6 +285,38 @@ export function App() {
           element={
             <RequireAuth>
               <AdminCatalogoFormPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/revisao"
+          element={
+            <RequireAuth>
+              <RevisaoListPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/revisao/novo"
+          element={
+            <RequireAuth>
+              <RevisaoSpaceCreatePage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/revisao/:id"
+          element={
+            <RequireAuth>
+              <RevisaoSpacePage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/revisao/:spaceId/asset/:assetId"
+          element={
+            <RequireAuth>
+              <RevisaoAssetPage />
             </RequireAuth>
           }
         />

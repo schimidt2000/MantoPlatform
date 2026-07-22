@@ -32,3 +32,5 @@ from app.api import admin_config_read as _admin_config_read  # noqa: E402,F401
 from app.api import admin_config_write as _admin_config_write  # noqa: E402,F401
 from app.api import admin_catalogo_read as _admin_catalogo_read  # noqa: E402,F401
 from app.api import admin_catalogo_write as _admin_catalogo_write  # noqa: E402,F401
+from app.api import revisao_read as _revisao_read  # noqa: E402,F401
+from app.api import revisao_write as _revisao_write  # noqa: E402,F401
