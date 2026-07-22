@@ -1,14 +1,12 @@
-import os
 from collections import defaultdict
 from datetime import datetime, date, timedelta
 from functools import wraps
 
 from flask import Blueprint, render_template, request, redirect, url_for, current_app, flash, abort
 from flask_login import login_required, current_user
-from werkzeug.utils import secure_filename
 
 from app import db
-from app.admin import user_ops
+from app.admin import config_ops, user_ops
 from app.models import User, SiteSetting, Role, EventLog, CalendarEvent, AuditLog, SalaryHistory
 from app.constants import RoleName
 
@@ -255,71 +253,7 @@ def admin_settings():
         db.session.commit()
 
     if request.method == "POST":
-        commission_raw = request.form.get("default_commission_rate", "").strip()
-        try:
-            settings.default_commission_rate = float(commission_raw) if commission_raw else settings.default_commission_rate
-        except ValueError:
-            pass
-
-        # Responsável EducaManto (feature 109): beneficiário das comissões de eventos "(EDU…".
-        edu_raw = request.form.get("educamanto_seller_id", "").strip()
-        settings.educamanto_seller_id = int(edu_raw) if edu_raw.isdigit() else None
-
-        tax_raw = request.form.get("tax_rate", "").strip()
-        try:
-            settings.tax_rate = float(tax_raw) if tax_raw else settings.tax_rate
-        except ValueError:
-            pass
-
-        fator_r_raw = request.form.get("fator_r_threshold", "").strip()
-        try:
-            settings.fator_r_threshold = float(fator_r_raw) if fator_r_raw else settings.fator_r_threshold
-        except ValueError:
-            pass
-
-        file = request.files.get("logo")
-        if file and file.filename:
-            filename = secure_filename(file.filename)
-            ext = os.path.splitext(filename)[1].lower()
-            if ext in [".png", ".jpg", ".jpeg", ".webp", ".svg"]:
-                from app.storage import save_file as _save_file
-                settings.logo_path = _save_file(file, "logos", f"logo{ext}")
-
-        # logística
-        manto_addr = request.form.get("manto_address", "").strip()
-        if manto_addr:
-            settings.manto_address = manto_addr
-        margin_raw = request.form.get("departure_margin_minutes", "").strip()
-        try:
-            settings.departure_margin_minutes = int(margin_raw) if margin_raw else settings.departure_margin_minutes
-        except ValueError:
-            pass
-        maps_key = request.form.get("google_maps_api_key", "").strip()
-        if maps_key:
-            settings.google_maps_api_key = maps_key
-
-        settings.email_notifications_enabled = request.form.get("email_notifications_enabled") == "1"
-
-        # Número WhatsApp que recebe as respostas dos formulários de pré-contrato (feature 118)
-        wa_form_raw = request.form.get("whatsapp_form_number", "").strip()
-        wa_form_digits = "".join(c for c in wa_form_raw if c.isdigit())
-        settings.whatsapp_form_number = wa_form_digits or None
-
-        # Data de início do sistema
-        release_raw = request.form.get("release_date", "").strip()
-        if release_raw:
-            from datetime import date as _date
-            try:
-                settings.release_date = _date.fromisoformat(release_raw)
-            except ValueError:
-                pass
-        else:
-            settings.release_date = None
-
-        settings.updated_at = datetime.utcnow()
-        from app.utils import audit
-        audit("edit", "settings", 1, "Configurações", "Configurações do sistema atualizadas")
-        db.session.commit()
+        config_ops.update_settings(settings, request.form, logo_file=request.files.get("logo"))
         flash("Configurações salvas.", "success")
         return redirect(url_for("admin.admin_settings"))
 

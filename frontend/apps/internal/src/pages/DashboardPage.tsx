@@ -88,6 +88,11 @@ export function DashboardPage() {
               <Link to="/admin/usuarios">Usuários</Link>
             </Button>
           )}
+          {user?.is_superadmin && (
+            <Button asChild variant="outline" size="sm">
+              <Link to="/admin/configuracoes">Admin</Link>
+            </Button>
+          )}
           <Button variant="outline" size="sm" loading={logout.isPending} onClick={() => logout.mutate()}>
             Sair
           </Button>
