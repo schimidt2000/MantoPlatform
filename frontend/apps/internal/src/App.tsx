@@ -11,6 +11,7 @@ import { TalentEditPage } from "./pages/TalentEditPage";
 import { FigurinoListPage } from "./pages/FigurinoListPage";
 import { FigurinoFormPage } from "./pages/FigurinoFormPage";
 import { VendasPipelinePage } from "./pages/VendasPipelinePage";
+import { FinanceiroDashboardPage } from "./pages/FinanceiroDashboardPage";
 
 export function App() {
   return (
@@ -102,6 +103,14 @@ export function App() {
           element={
             <RequireAuth>
               <VendasPipelinePage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/financeiro"
+          element={
+            <RequireAuth>
+              <FinanceiroDashboardPage />
             </RequireAuth>
           }
         />
