@@ -64,6 +64,11 @@ export function DashboardPage() {
           <Button asChild variant="outline" size="sm">
             <Link to="/vendas">Vendas</Link>
           </Button>
+          {(user?.is_superadmin || user?.roles.includes("FINANCEIRO")) && (
+            <Button asChild variant="outline" size="sm">
+              <Link to="/financeiro">Financeiro</Link>
+            </Button>
+          )}
           <Button variant="outline" size="sm" loading={logout.isPending} onClick={() => logout.mutate()}>
             Sair
           </Button>

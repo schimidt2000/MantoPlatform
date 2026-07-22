@@ -1,0 +1,152 @@
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@manto/api-client";
+
+export type PeriodFilter = "este_mes" | "30d" | "mes_anterior" | "custom";
+
+/** Uma das 3 visões do DRE gerencial (feature 157). */
+export interface DreView {
+  receita_bruta: number;
+  impostos: number;
+  receita_liquida: number;
+  cpv: number;
+  lucro_bruto: number;
+  margem_bruta: number;
+  marketing: number;
+  comissoes: number;
+  pessoal: number;
+  ebitda: number;
+  margem_ebitda: number;
+  gastos_extras: number;
+  gastos_recorrentes: number;
+  resultado_liquido: number;
+  n_eventos: number;
+  n_normais: number;
+  n_permutas: number;
+}
+
+export interface FinanceiroKpis {
+  ticket_medio: number;
+  ratio_custo_talento: number;
+  breakeven_pct: number;
+  breakeven_atingido: boolean;
+  fixed_cost: number;
+  fator_r_pct: number;
+  fator_r_threshold: number;
+  fator_r_protegido: boolean;
+}
+
+export interface TopSeller {
+  user_id: number;
+  user_name: string;
+  receita: number;
+  lucro: number;
+}
+
+export interface MonthlyTrendItem {
+  label: string;
+  receita: number;
+  custo: number;
+  lucro: number;
+  margem: number;
+  n_eventos: number;
+}
+
+export interface AuditoriaItem {
+  event_id: number;
+  title: string;
+  start_at: string | null;
+}
+
+export interface FinanceiroPaineis {
+  a_receber_clientes: number;
+  pagamentos_pendentes: number;
+  pagamentos_realizados: number;
+  receita_por_tipo: Record<string, number>;
+  receita_tipo_max: number;
+  top_sellers: TopSeller[];
+  monthly_trend: MonthlyTrendItem[];
+  auditoria: AuditoriaItem[];
+}
+
+export type EventoStatus = "permuta" | "sem_valor" | "pago_total" | "parcial" | "pendente";
+
+export interface FinanceiroEvento {
+  event_id: number;
+  title: string;
+  group_label: string | null;
+  start_at: string | null;
+  custo: number;
+  lucro: number;
+  comissao: number;
+  rate: number;
+  is_projetado: boolean;
+  status: EventoStatus;
+}
+
+export interface RecebimentoPrevisto {
+  date: string | null;
+  event_id: number;
+  event_title: string;
+  amount: number;
+}
+
+export interface NotaFiscalPendente {
+  id: number;
+  date: string | null;
+  event_id: number;
+  event_title: string;
+  amount: number;
+}
+
+export interface CustoNotaItem {
+  event_id: number;
+  event_title: string;
+  amount: number;
+  date: string | null;
+  status: string;
+  custo: number;
+}
+
+export interface FinanceiroPendencias {
+  recebimentos_previstos: RecebimentoPrevisto[];
+  recebimentos_previstos_total: number;
+  nf_a_emitir: NotaFiscalPendente[];
+  nf_a_emitir_total: number;
+  custo_nota_itens: CustoNotaItem[];
+  custo_nota_total: number;
+}
+
+export interface FinanceiroDashboard {
+  period: PeriodFilter;
+  period_label: string;
+  start: string;
+  end: string;
+  is_full_month: boolean;
+  dre: { realizado: DreView; projetado: DreView; total: DreView };
+  kpis: FinanceiroKpis;
+  paineis: FinanceiroPaineis;
+  eventos: FinanceiroEvento[];
+  pendencias: FinanceiroPendencias;
+}
+
+export interface PeriodParams {
+  period: PeriodFilter;
+  start?: string;
+  end?: string;
+  /** Desativa a busca (ex.: período "custom" ainda sem datas aplicadas). */
+  enabled?: boolean;
+}
+
+/** Dashboard financeiro (DRE), feature 157 — Financeiro/Superadmin. */
+export function useFinanceiroDashboard({ period, start, end, enabled = true }: PeriodParams) {
+  const params = new URLSearchParams({ period });
+  if (period === "custom" && start && end) {
+    params.set("start", start);
+    params.set("end", end);
+  }
+  return useQuery<FinanceiroDashboard>({
+    queryKey: ["financeiro-dashboard", period, start, end],
+    queryFn: () => apiFetch<FinanceiroDashboard>(`/api/financeiro/dashboard?${params.toString()}`),
+    enabled: enabled && (period !== "custom" || Boolean(start && end)),
+  });
+}
