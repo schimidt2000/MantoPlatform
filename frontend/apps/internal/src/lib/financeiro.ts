@@ -150,3 +150,41 @@ export function useFinanceiroDashboard({ period, start, end, enabled = true }: P
     enabled: enabled && (period !== "custom" || Boolean(start && end)),
   });
 }
+
+export type CommissionStatus = "a_pagar" | "pago" | "cancelado";
+
+/** Uma linha de comissão (`CommissionPayment`), feature 158. */
+export interface CommissionEntry {
+  id: number;
+  seller_id: number;
+  seller_name: string;
+  event_id: number | null;
+  event_title: string;
+  sale_date: string | null;
+  amount: number;
+  status: CommissionStatus;
+  status_label: string;
+  paid_at: string | null;
+}
+
+export interface CommissionSeller {
+  id: number;
+  name: string;
+}
+
+export interface ComissoesResponse {
+  month: string;
+  can_manage: boolean;
+  total_a_pagar: number;
+  entries: CommissionEntry[];
+  estornos: CommissionEntry[];
+  sellers?: CommissionSeller[];
+}
+
+/** Comissões do mês (leitura), feature 158 — Comercial/Financeiro/Superadmin/resp. EducaManto. */
+export function useComissoes(month: string) {
+  return useQuery<ComissoesResponse>({
+    queryKey: ["financeiro-comissoes", month],
+    queryFn: () => apiFetch<ComissoesResponse>(`/api/financeiro/comissoes?month=${month}`),
+  });
+}
