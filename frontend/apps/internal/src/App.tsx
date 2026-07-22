@@ -12,6 +12,7 @@ import { FigurinoListPage } from "./pages/FigurinoListPage";
 import { FigurinoFormPage } from "./pages/FigurinoFormPage";
 import { VendasPipelinePage } from "./pages/VendasPipelinePage";
 import { FinanceiroDashboardPage } from "./pages/FinanceiroDashboardPage";
+import { ComissoesPage } from "./pages/ComissoesPage";
 
 export function App() {
   return (
@@ -111,6 +112,14 @@ export function App() {
           element={
             <RequireAuth>
               <FinanceiroDashboardPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/financeiro/comissoes"
+          element={
+            <RequireAuth>
+              <ComissoesPage />
             </RequireAuth>
           }
         />

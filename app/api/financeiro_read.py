@@ -1,4 +1,5 @@
-"""Endpoints de LEITURA de Financeiro/Vendas (feature 156, abre a US4; 157, dashboard DRE).
+"""Endpoints de LEITURA de Financeiro/Vendas (feature 156, abre a US4; 157, dashboard DRE;
+158, comissões).
 
 Reusa os cálculos já existentes em `app/financeiro/routes.py` (`_group_cost`/`_event_cost`/
 `_event_commission`/`_resolve_period`/`_compute_drg`/etc.) — não duplica lógica de negócio, só
@@ -7,18 +8,26 @@ simples porque os decorators originais são específicos de view Flask.
 """
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from flask import jsonify
+from flask import jsonify, request
 from flask_login import current_user
 
 from app.api import api_bp
 from app.api_utils import api_login_required
 from app.constants import EDUCAMANTO_TITLE_PREFIX, RoleName
-from app.models import CalendarEvent, EventInstallment, EventInvoice, SiteSetting, User
+from app.models import (
+    CalendarEvent,
+    CommissionPayment,
+    EventInstallment,
+    EventInvoice,
+    Role,
+    SiteSetting,
+    User,
+)
 
 TZ_SP = ZoneInfo("America/Sao_Paulo")
 
@@ -417,3 +426,106 @@ def api_financeiro_dashboard() -> Any:
             "custo_nota_total": custo_nota_total,
         },
     })
+
+
+def _serialize_commission(cp: CommissionPayment, status_labels: dict) -> dict:
+    """Serializa uma linha de `CommissionPayment` para o payload da API (feature 158)."""
+    return {
+        "id": cp.id,
+        "seller_id": cp.seller_id,
+        "seller_name": cp.seller.name if cp.seller else "—",
+        "event_id": cp.event_id,
+        "event_title": cp.event_title,
+        "sale_date": cp.sale_date.isoformat() if cp.sale_date else None,
+        "amount": float(cp.amount),
+        "status": cp.status,
+        "status_label": status_labels.get(cp.status, cp.status),
+        "paid_at": cp.paid_at.isoformat() if cp.paid_at else None,
+    }
+
+
+@api_bp.route("/financeiro/comissoes")
+@api_login_required
+def api_financeiro_comissoes() -> Any:
+    """Comissões do mês: leitura (feature 158).
+
+    Reaproveita, sem duplicar, os mesmos cálculos de `comissoes()`
+    (`app/financeiro/routes.py:1568`) — só monta a query do mês e serializa.
+    """
+    from app import db
+    from app.financeiro.routes import _COMMISSION_STATUS_LABELS, _resync_pending_commissions
+
+    settings = SiteSetting.query.get(1)
+    if not _can_view_vendas(settings):
+        return jsonify({"error": {"message": "Sem permissão"}}), 403
+
+    _resync_pending_commissions()
+    can_manage = _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN)
+
+    today = datetime.now(TZ_SP).date()
+    month = request.args.get("month", today.strftime("%Y-%m"))
+    try:
+        year, mon = int(month[:4]), int(month[5:7])
+    except (ValueError, IndexError):
+        month = today.strftime("%Y-%m")
+        year, mon = today.year, today.month
+
+    start = date(year, mon, 1)
+    end = date(year + 1, 1, 1) if mon == 12 else date(year, mon + 1, 1)
+
+    entries_q = (
+        CommissionPayment.query
+        .filter(
+            CommissionPayment.status.in_(["a_pagar", "pago"]),
+            db.or_(
+                db.and_(
+                    CommissionPayment.sale_date >= start,
+                    CommissionPayment.sale_date < end,
+                ),
+                db.and_(
+                    CommissionPayment.sale_date.is_(None),
+                    db.func.date(CommissionPayment.created_at) >= start,
+                    db.func.date(CommissionPayment.created_at) < end,
+                ),
+            ),
+        )
+        .order_by(CommissionPayment.sale_date.asc(), CommissionPayment.seller_id.asc())
+    )
+
+    estornos_q = (
+        CommissionPayment.query
+        .filter(
+            CommissionPayment.status == "a_pagar",
+            CommissionPayment.amount < 0,
+        )
+        .order_by(CommissionPayment.created_at.asc())
+    )
+
+    if not can_manage:
+        entries_q = entries_q.filter(CommissionPayment.seller_id == current_user.id)
+        estornos_q = estornos_q.filter(CommissionPayment.seller_id == current_user.id)
+
+    entries = entries_q.all()
+    estornos = estornos_q.all()
+
+    total_a_pagar = float(
+        sum(e.amount for e in entries if e.status == "a_pagar") + sum(e.amount for e in estornos)
+    )
+
+    payload = {
+        "month": month,
+        "can_manage": can_manage,
+        "total_a_pagar": total_a_pagar,
+        "entries": [_serialize_commission(e, _COMMISSION_STATUS_LABELS) for e in entries],
+        "estornos": [_serialize_commission(e, _COMMISSION_STATUS_LABELS) for e in estornos],
+    }
+    if can_manage:
+        sellers = (
+            User.query.join(User.roles)
+            .filter(Role.name == RoleName.COMERCIAL)
+            .order_by(User.name)
+            .all()
+        )
+        payload["sellers"] = [{"id": u.id, "name": u.name} for u in sellers]
+
+    return jsonify(payload)
