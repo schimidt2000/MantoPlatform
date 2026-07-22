@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@manto/api-client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch, apiFetchBlob } from "@manto/api-client";
 
 export type PeriodFilter = "este_mes" | "30d" | "mes_anterior" | "custom";
 
@@ -189,7 +189,7 @@ export function useComissoes(month: string) {
   });
 }
 
-export type PagamentoItemType = "cache" | "salary" | "bv" | "commission" | "recurring";
+export type PagamentoItemType = "cache" | "salary" | "expense" | "bv" | "commission" | "recurring";
 export type PaymentStatus = "nao_pago" | "pago" | "no_banco";
 
 export interface SalaryAdvanceItem {
@@ -240,5 +240,115 @@ export function usePagamentos(month: string) {
   return useQuery<PagamentosResponse>({
     queryKey: ["financeiro-pagamentos", month],
     queryFn: () => apiFetch<PagamentosResponse>(`/api/financeiro/pagamentos?month=${month}`),
+  });
+}
+
+export interface SetPaymentStatusInput {
+  item_type: PagamentoItemType;
+  item_id: number | string;
+  status: PaymentStatus;
+}
+
+/** Marca o status de um item de pagamento (feature 160). */
+export function useSetPaymentStatus(month: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SetPaymentStatusInput) =>
+      apiFetch<{ status: PaymentStatus }>("/api/financeiro/pagamentos/set-status", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos", month] });
+    },
+  });
+}
+
+export type BulkPaymentAction = PaymentStatus | "delete";
+
+export interface BulkPaymentActionInput {
+  action: BulkPaymentAction;
+  role_ids: number[];
+  salary_ids: number[];
+  expense_ids: number[];
+  commission_ids: string[];
+  month: string;
+}
+
+export interface BulkPaymentActionResult {
+  changed: number;
+  skipped: string[];
+}
+
+/** Aplica uma ação em massa (status ou excluir) sobre itens selecionados (feature 160). */
+export function useBulkPaymentAction(month: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: BulkPaymentActionInput) =>
+      apiFetch<BulkPaymentActionResult>("/api/financeiro/pagamentos/bulk-action", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos", month] });
+    },
+  });
+}
+
+export interface AddSalaryAdvanceInput {
+  salaryPaymentId: number;
+  amount: string;
+  advanceDate?: string;
+  proof: File;
+}
+
+/** Registra um adiantamento de salário (valor + comprovante), feature 160. */
+export function useAddSalaryAdvance(month: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ salaryPaymentId, amount, advanceDate, proof }: AddSalaryAdvanceInput) => {
+      const form = new FormData();
+      form.set("amount", amount);
+      if (advanceDate) form.set("advance_date", advanceDate);
+      form.set("advance_proof", proof);
+      return apiFetch<SalaryAdvanceItem>(
+        `/api/financeiro/pagamentos/salary/${salaryPaymentId}/advance`,
+        { method: "POST", body: form },
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos", month] });
+    },
+  });
+}
+
+/** Exclui um adiantamento de salário já registrado (feature 160). */
+export function useDeleteSalaryAdvance(month: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (advanceId: number) =>
+      apiFetch<void>(`/api/financeiro/pagamentos/salary/advance/${advanceId}/delete`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos", month] });
+    },
+  });
+}
+
+/** Baixa o CSV de pagamentos do mês (feature 160) — dispara o download via blob. */
+export function useExportPagamentosCsv() {
+  return useMutation({
+    mutationFn: async (month: string) => {
+      const blob = await apiFetchBlob(`/api/financeiro/pagamentos/export?month=${month}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pagamentos_${month}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
   });
 }

@@ -95,3 +95,27 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   }
   return (await response.json()) as T;
 }
+
+/**
+ * Executa uma requisição contra a API e devolve o corpo como `Blob`, para download binário
+ * (ex.: CSV/PDF) — em vez de `.json()` como `apiFetch`. Primeiro uso: exportação de CSV da
+ * Planilha de Pagamentos (feature 160); reaproveitável pelas fatias futuras de PDF (orçamento,
+ * EducaManto).
+ *
+ * @param path Caminho iniciando em `/api/...`.
+ * @param options Opções do fetch.
+ * @returns O corpo da resposta como `Blob`.
+ * @throws {ApiRequestError} Quando a resposta não é 2xx.
+ */
+export async function apiFetchBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    credentials: "include",
+    ...options,
+  });
+
+  if (!response.ok) {
+    throw new ApiRequestError(response.status, await parseErrorBody(response));
+  }
+
+  return await response.blob();
+}

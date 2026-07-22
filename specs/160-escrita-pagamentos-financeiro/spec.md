@@ -30,8 +30,10 @@ ao recarregar a página.
    **Then** o item passa a exibir "Pago" e o total do mês é recalculado sem recarregar a página.
 2. **Given** uma comissão de um vendedor agrupada por período, **When** o usuário marca o grupo
    inteiro como "pago", **Then** todas as comissões daquele vendedor/mês mudam de status junto.
-3. **Given** um item de conta recorrente ou comissão, **When** o usuário tenta marcar como "no
-   banco", **Then** a ação é rejeitada (esses tipos só têm pago/não pago).
+3. **Given** um item de conta recorrente ou comissão, **When** o sistema recebe "no banco" para
+   esse tipo (a UI não oferece essa opção para eles), **Then** o item cai no mesmo fallback que o
+   fluxo atual já usa para qualquer valor diferente de "pago" — tratado como "não pago" — sem
+   erro e sem introduzir um estado "no banco" que esses tipos nunca tiveram.
 4. **Given** o status enviado não é um dos valores válidos, **When** a requisição é feita (ex.: via
    chamada direta à API), **Then** o servidor responde com erro e nenhum dado é alterado.
 
@@ -138,8 +140,9 @@ confirmar que o arquivo baixado abre com as colunas e linhas esperadas para aque
   salário, gasto, repasse/BV ou grupo de comissões de um vendedor/período) como pago, não pago, ou
   "no banco" quando esse status for válido para o tipo de item, reaproveitando exatamente a mesma
   regra de negócio hoje em `set_payment_status`.
-- **FR-002**: O sistema DEVE rejeitar (sem alterar dados) uma tentativa de marcar status inválido
-  para o tipo de item (ex.: "no banco" para conta recorrente ou comissão).
+- **FR-002**: A interface NÃO DEVE oferecer a opção "no banco" para tipos de item que não a têm
+  (conta recorrente, comissão) — mesma restrição de hoje; se o backend receber esse valor ainda
+  assim, aplica o mesmo fallback que o fluxo atual já usa (trata como "não pago"), sem erro.
 - **FR-003**: O sistema DEVE permitir aplicar uma ação em massa (marcar status ou excluir) sobre uma
   seleção de itens de múltiplos tipos (cachês, salários, gastos, comissões) em uma única chamada,
   reaproveitando exatamente `bulk_payment_action`.
