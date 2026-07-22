@@ -12,8 +12,7 @@ Estende `specs/144-migracao-react-spa/contracts/api-conventions.md`. Ambas as ro
 ## `POST /api/avaliar/<token>`
 
 - Público. Rate limit: `10 per hour` por IP (mesmo limite do Jinja).
-- `Content-Type: application/json` ou `application/x-www-form-urlencoded` — corpo:
-  `{"client_name", "score" (1-5), "tags"?: string[], "comment"?}`.
+- `Content-Type: application/json` — corpo: `{"client_name", "score" (1-5), "tags"?: string[], "comment"?}`.
 - 404 se o token não corresponder a nenhum evento (mesma mensagem do `GET`).
 - 400 se faltar `client_name`: `{"error": {"message": "Informe seu nome antes de enviar a avaliação.", "fields": {"client_name": "..."}}}`.
 - 400 se `score` fora de 1–5: `{"error": {"message": "Selecione uma nota de 1 a 5 estrelas.", "fields": {"score": "..."}}}`.

@@ -8,6 +8,7 @@ import { CadastroPage } from "./pages/CadastroPage";
 import { CadastroSucessoPage } from "./pages/CadastroSucessoPage";
 import { FormularioPage } from "./pages/FormularioPage";
 import { FormularioEnviadoPage } from "./pages/FormularioEnviadoPage";
+import { AvaliarPage } from "./pages/AvaliarPage";
 import { WishlistFloat } from "./components/WishlistFloat";
 
 export function App() {
@@ -23,6 +24,7 @@ export function App() {
         <Route path="/f/pre-contrato" element={<FormularioPage formType="comum" />} />
         <Route path="/f/corporativo" element={<FormularioPage formType="corporativo" />} />
         <Route path="/f/:formType/enviado" element={<FormularioEnviadoPage />} />
+        <Route path="/avaliar/:token" element={<AvaliarPage />} />
         <Route path="/:slug" element={<ProductDetailPage />} />
       </Routes>
       <WishlistFloat />
