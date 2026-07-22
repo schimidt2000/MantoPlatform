@@ -168,7 +168,7 @@
   </header>
 
   <div class="stats">
-    <div class="stat"><div class="stat-value">46</div><div class="stat-label">mudanças no ar</div></div>
+    <div class="stat"><div class="stat-value">47</div><div class="stat-label">mudanças no ar</div></div>
     <div class="stat"><div class="stat-value">11</div><div class="stat-label">dias de trabalho</div></div>
     <div class="stat"><div class="stat-value">6</div><div class="stat-label">áreas do sistema</div></div>
     <div class="stat"><div class="stat-value">0</div><div class="stat-label">quebras no ar</div></div>
@@ -780,11 +780,23 @@
       <div class="entry-bar bar-talentos"></div>
       <div class="entry-body">
         <div class="entry-head">
-          <span class="entry-num">166</span>
+          <span class="entry-num">fix</span>
           <span class="entry-title">Corrige erro de login no portal do talento</span>
           <span class="entry-tag tag-talentos">Talentos</span>
         </div>
         <div class="entry-desc">Corrigido um problema que podia bloquear o acesso de talentos ao portal, mostrando um erro de "cabeçalho muito grande" na tela de login. Era causado pelo acúmulo, com o tempo, de dados de avaliações antigas guardados no navegador. Quem foi afetado precisa limpar os cookies do site (ou usar uma aba anônima) uma única vez para voltar a acessar normalmente.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-qualidade"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">166</span>
+          <span class="entry-title">Painel de RH chega na tela nova e limpeza de código morto</span>
+          <span class="entry-tag tag-qualidade">Qualidade</span>
+        </div>
+        <div class="entry-desc">O painel de RH chega na tela nova, em React. Aproveitamos para remover do sistema uma calculadora de transporte antiga que nunca chegou a ir ao ar e que duplicava, de forma desatualizada, uma conta que já existe corretamente dentro do Orçamento — sem nenhum impacto em quem já usa o sistema.</div>
       </div>
     </div>
   </div>

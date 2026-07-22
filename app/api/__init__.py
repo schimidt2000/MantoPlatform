@@ -25,3 +25,4 @@ from app.api import formularios_write as _formularios_write  # noqa: E402,F401
 from app.api import feedback_write as _feedback_write  # noqa: E402,F401
 from app.api import clientes_read as _clientes_read  # noqa: E402,F401
 from app.api import clientes_write as _clientes_write  # noqa: E402,F401
+from app.api import rh_read as _rh_read  # noqa: E402,F401
