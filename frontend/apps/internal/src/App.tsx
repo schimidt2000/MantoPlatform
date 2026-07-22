@@ -17,6 +17,7 @@ import { PagamentosPage } from "./pages/PagamentosPage";
 import { ClientsListPage } from "./pages/ClientsListPage";
 import { ClientDetailPage } from "./pages/ClientDetailPage";
 import { ClientFeedbackPage } from "./pages/ClientFeedbackPage";
+import { RhDashboardPage } from "./pages/RhDashboardPage";
 
 export function App() {
   return (
@@ -156,6 +157,14 @@ export function App() {
           element={
             <RequireAuth>
               <ClientDetailPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/rh"
+          element={
+            <RequireAuth>
+              <RhDashboardPage />
             </RequireAuth>
           }
         />
