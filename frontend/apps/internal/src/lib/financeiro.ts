@@ -188,3 +188,57 @@ export function useComissoes(month: string) {
     queryFn: () => apiFetch<ComissoesResponse>(`/api/financeiro/comissoes?month=${month}`),
   });
 }
+
+export type PagamentoItemType = "cache" | "salary" | "bv" | "commission" | "recurring";
+export type PaymentStatus = "nao_pago" | "pago" | "no_banco";
+
+export interface SalaryAdvanceItem {
+  id: number;
+  amount: number;
+  date: string | null;
+  proof: string;
+}
+
+/** Um item da planilha de pagamentos (feature 159) — forma varia um pouco por `type`. */
+export interface PagamentoItem {
+  type: PagamentoItemType;
+  id: number | string;
+  date: string | null;
+  event_title: string | null;
+  event_id: number | null;
+  copy_label: string | null;
+  sublabel: string | null;
+  person_name: string | null;
+  amount: number;
+  pix_key: string;
+  pix_key_type: string;
+  status: PaymentStatus;
+  is_future: boolean;
+  gross_amount?: number;
+  advance_amount?: number;
+  advances?: SalaryAdvanceItem[];
+  missing_data?: boolean;
+}
+
+export interface PagamentoTotals {
+  total: number;
+  pago: number;
+  no_banco: number;
+  pendente: number;
+  futuro: number;
+}
+
+export interface PagamentosResponse {
+  month: string;
+  totals: PagamentoTotals;
+  status_labels: Record<PaymentStatus, string>;
+  items: PagamentoItem[];
+}
+
+/** Planilha de pagamentos do mês (leitura), feature 159 — Financeiro/Superadmin. */
+export function usePagamentos(month: string) {
+  return useQuery<PagamentosResponse>({
+    queryKey: ["financeiro-pagamentos", month],
+    queryFn: () => apiFetch<PagamentosResponse>(`/api/financeiro/pagamentos?month=${month}`),
+  });
+}

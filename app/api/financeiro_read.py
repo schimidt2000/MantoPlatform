@@ -1,5 +1,5 @@
 """Endpoints de LEITURA de Financeiro/Vendas (feature 156, abre a US4; 157, dashboard DRE;
-158, comissões).
+158, comissões; 159, planilha de pagamentos — fecha a leitura da US4).
 
 Reusa os cálculos já existentes em `app/financeiro/routes.py` (`_group_cost`/`_event_cost`/
 `_event_commission`/`_resolve_period`/`_compute_drg`/etc.) — não duplica lógica de negócio, só
@@ -529,3 +529,155 @@ def api_financeiro_comissoes() -> Any:
         payload["sellers"] = [{"id": u.id, "name": u.name} for u in sellers]
 
     return jsonify(payload)
+
+
+def _serialize_pagamento_item(item: dict) -> dict:
+    """Serializa um item da planilha de pagamentos para o payload da API (feature 159).
+
+    Reaproveita os campos já montados por ``_build_payment_items``/``_build_bv_items``/
+    ``_build_commission_items``/``_build_recurring_items`` — só converte tipos (data→ISO,
+    ``Decimal``→``float``) e re-lê os adiantamentos de ``SalaryAdvance`` como números, em vez
+    da string já formatada em BRL que aquelas funções montam para o template Jinja.
+    """
+    from app.models import SalaryAdvance
+
+    out: dict[str, Any] = {
+        "type": item["type"],
+        "id": item["id"],
+        "date": item["date"].isoformat() if item.get("date") else None,
+        "event_title": item.get("event_title"),
+        "event_id": item.get("event_id"),
+        "copy_label": item.get("copy_label"),
+        "sublabel": item.get("sublabel"),
+        "person_name": item.get("person_name"),
+        "amount": float(item["amount"] or 0),
+        "pix_key": item.get("pix_key") or "",
+        "pix_key_type": item.get("pix_key_type") or "",
+        "status": item["status"],
+        "is_future": bool(item.get("is_future")),
+    }
+    if item["type"] == "salary":
+        out["gross_amount"] = float(item.get("gross_amount") or 0)
+        out["advance_amount"] = float(item.get("advance_amount") or 0)
+        advances = (
+            SalaryAdvance.query
+            .filter_by(salary_payment_id=item["id"])
+            .order_by(SalaryAdvance.advance_date.asc())
+            .all()
+        )
+        out["advances"] = [
+            {
+                "id": a.id,
+                "amount": float(a.amount or 0),
+                "date": a.advance_date.isoformat() if a.advance_date else None,
+                "proof": a.proof or "",
+            }
+            for a in advances
+        ]
+    if item["type"] == "bv":
+        out["missing_data"] = bool(item.get("missing_data"))
+    return out
+
+
+@api_bp.route("/financeiro/pagamentos")
+@api_login_required
+def api_financeiro_pagamentos() -> Any:
+    """Planilha de pagamentos do mês: leitura (feature 159).
+
+    Reaproveita, sem duplicar, os mesmos itens de ``pagamentos()``
+    (`app/financeiro/routes.py:1088`) — só monta a mesma combinação e serializa.
+    """
+    from app.financeiro.routes import (
+        _STATUS_LABELS,
+        _build_bv_items,
+        _build_commission_items,
+        _build_payment_items,
+        _build_recurring_items,
+        _ensure_salary_payments,
+        _pagamentos_query,
+        _resync_pending_commissions,
+    )
+    from app.gastos.routes import ensure_recurring_entries
+    from app.models import EventAcrescimo, SalaryPayment, SpecialExpense
+
+    if not _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN):
+        return jsonify({"error": {"message": "Sem permissão"}}), 403
+
+    _resync_pending_commissions()
+    now_sp = datetime.now(TZ_SP).replace(tzinfo=None)
+    today = now_sp.date()
+    month = request.args.get("month", today.strftime("%Y-%m"))
+    try:
+        year, mon = int(month[:4]), int(month[5:7])
+    except (ValueError, IndexError):
+        month = today.strftime("%Y-%m")
+        year, mon = today.year, today.month
+
+    _ensure_salary_payments(year, mon)
+
+    roles = _pagamentos_query(month)
+    salary_payments = (
+        SalaryPayment.query.filter_by(month_ref=f"{year:04d}-{mon:02d}")
+        .order_by(SalaryPayment.due_date.asc())
+        .all()
+    )
+
+    m_start = date(year, mon, 1)
+    m_end = date(year + 1, 1, 1) if mon == 12 else date(year, mon + 1, 1)
+    expenses = (
+        SpecialExpense.query
+        .filter(
+            SpecialExpense.status == "aprovado",
+            SpecialExpense.disbursement_type.isnot(None),
+            SpecialExpense.paid_at_creation.is_(False),
+            SpecialExpense.expense_date >= m_start,
+            SpecialExpense.expense_date < m_end,
+        )
+        .order_by(SpecialExpense.expense_date.asc())
+        .all()
+    )
+
+    items = _build_payment_items(roles, salary_payments, today, expenses, now_sp)
+
+    bv_rows = (
+        EventAcrescimo.query.join(CalendarEvent)
+        .filter(
+            EventAcrescimo.is_bv.is_(True),
+            CalendarEvent.start_at >= datetime.combine(m_start, datetime.min.time()),
+            CalendarEvent.start_at < datetime.combine(m_end, datetime.min.time()),
+        )
+        .all()
+    )
+    items += _build_bv_items(bv_rows, today, now_sp)
+
+    prev_year, prev_month = (year - 1, 12) if mon == 1 else (year, mon - 1)
+    prev_start = date(prev_year, prev_month, 1)
+    prev_end = m_start
+    items += _build_commission_items(prev_start, prev_end, date(year, mon, 5), today)
+
+    ensure_recurring_entries(year, mon)
+    items += _build_recurring_items(year, mon, today)
+    items.sort(key=lambda x: x["date"])
+
+    def _amt(item: dict) -> Decimal:
+        v = item["amount"]
+        return Decimal(str(v)) if v else Decimal("0")
+
+    totals = {
+        "total": float(sum(_amt(i) for i in items)),
+        "pago": float(sum(_amt(i) for i in items if i["status"] == "pago")),
+        "no_banco": float(sum(_amt(i) for i in items if i["status"] == "no_banco")),
+        "pendente": float(
+            sum(_amt(i) for i in items if i["status"] == "nao_pago" and not i["is_future"])
+        ),
+        "futuro": float(
+            sum(_amt(i) for i in items if i["status"] == "nao_pago" and i["is_future"])
+        ),
+    }
+
+    return jsonify({
+        "month": month,
+        "totals": totals,
+        "status_labels": _STATUS_LABELS,
+        "items": [_serialize_pagamento_item(i) for i in items],
+    })
