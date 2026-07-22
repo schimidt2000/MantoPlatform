@@ -200,3 +200,22 @@ export function useSaveTalentNotes(id: number) {
     }),
   );
 }
+
+export type TalentPhotoType = "face" | "full" | "doc" | "cnh";
+
+/** Envia/substitui foto ou documento do talento (feature 155). */
+export function useUploadTalentPhoto(id: number) {
+  return useTalentDetailMutation<{ photoType: TalentPhotoType; file: File }>(id, ({ photoType, file }) => {
+    const form = new FormData();
+    form.append("photo_type", photoType);
+    form.append("photo", file);
+    return apiFetch<TalentDetail>(`/api/talents/${id}/photo`, { method: "POST", body: form });
+  });
+}
+
+/** Remove foto ou documento do talento (feature 155). No-op seguro se já vazio. */
+export function useRemoveTalentPhoto(id: number) {
+  return useTalentDetailMutation<TalentPhotoType>(id, (photoType) =>
+    apiFetch<TalentDetail>(`/api/talents/${id}/photo?photo_type=${photoType}`, { method: "DELETE" }),
+  );
+}

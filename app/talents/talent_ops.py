@@ -3,9 +3,8 @@
 Mesmo padrão de `casting_ops.py`/`event_ops.py`/`observation_ops.py`: cada função recebe
 parâmetros explícitos (sem `request.form`, `flash` ou `current_user`), para ser reusada pelos
 dois adaptadores finos — o handler Jinja (`app/talents/routes.py`) e os endpoints JSON
-(`app/api/talents_read.py`/`app/api/talents_write.py`). Upload de foto/documento fica fora do
-núcleo (adiado nesta fatia, mesmo padrão do upload de anexos do evento na 153) — só o wrapper
-Jinja lida com arquivo.
+(`app/api/talents_read.py`/`app/api/talents_write.py`). Upload/remoção de foto e documento
+(feature 155) recebem o `FileStorage`/`photo_type` já extraídos pelo wrapper.
 """
 
 import re
@@ -376,3 +375,70 @@ def save_notes(talent: Talent, *, notes: str | None, warning_level: str | None) 
     talent.notes = (notes or "").strip() or None
     level = (warning_level or "").strip()
     talent.warning_level = level if level in _WARNING_LEVELS and level else None
+
+
+_PHOTO_FIELDS = {
+    "face": "photo_face_path",
+    "full": "photo_full_path",
+    "doc": "doc_photo_path",
+    "cnh": "cnh_file_path",
+}
+_DOC_PHOTO_TYPES = {"doc", "cnh"}
+_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+_DOC_EXTS = _IMAGE_EXTS + (".pdf",)
+
+
+def save_talent_photo(talent: Talent, *, photo_type: str, file_storage) -> str | None:
+    """Salva/substitui a foto ou documento de um talento (feature 155).
+
+    Paridade com `upload_talent_photo`: valida extensão por `photo_type`, apaga o arquivo
+    anterior do mesmo campo antes de salvar o novo (nunca acumula arquivo órfão).
+
+    Returns:
+        Mensagem de erro amigável, ou `None` em caso de sucesso.
+    """
+    import os
+    import uuid as _uuid
+
+    from werkzeug.utils import secure_filename
+
+    from app.storage import delete_file, save_file
+
+    field_name = _PHOTO_FIELDS.get(photo_type)
+    if field_name is None:
+        return "Tipo de foto/documento inválido."
+    if file_storage is None or not file_storage.filename:
+        return "Nenhum arquivo selecionado."
+
+    is_doc = photo_type in _DOC_PHOTO_TYPES
+    ext = os.path.splitext(secure_filename(file_storage.filename))[1].lower()
+    allowed = _DOC_EXTS if is_doc else _IMAGE_EXTS
+    if ext not in allowed:
+        return "Use JPG, PNG, WEBP ou PDF." if is_doc else "Use JPG, PNG ou WEBP."
+
+    subfolder = "talent_docs" if is_doc else "talent_photos"
+    filename = f"talent_{talent.id}_{photo_type}_{_uuid.uuid4().hex[:8]}{ext}"
+    old_path = getattr(talent, field_name)
+    url_path = save_file(file_storage, subfolder, filename)
+    if old_path:
+        delete_file(old_path)
+    setattr(talent, field_name, url_path)
+    return None
+
+
+def remove_talent_photo(talent: Talent, *, photo_type: str) -> str | None:
+    """Remove a foto/documento de um talento (ação nova, feature 155). No-op seguro se vazio.
+
+    Returns:
+        Mensagem de erro se `photo_type` for inválido, senão `None`.
+    """
+    from app.storage import delete_file
+
+    field_name = _PHOTO_FIELDS.get(photo_type)
+    if field_name is None:
+        return "Tipo de foto/documento inválido."
+    old_path = getattr(talent, field_name)
+    if old_path:
+        delete_file(old_path)
+        setattr(talent, field_name, None)
+    return None

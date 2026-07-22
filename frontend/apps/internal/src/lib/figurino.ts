@@ -71,3 +71,43 @@ export function useDeleteFigurinoSheet() {
     onSuccess: invalidate,
   });
 }
+
+function useFigurinoPhotoMutation<TVars>(
+  mutationFn: (vars: TVars) => Promise<FigurinoSheetItem>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation<FigurinoSheetItem, Error, TVars>({
+    mutationFn,
+    onSuccess: (updated) => {
+      queryClient.setQueryData<FigurinoList>(["figurino"], (old) =>
+        old ? { ...old, items: old.items.map((s) => (s.id === updated.id ? updated : s)) } : old,
+      );
+    },
+  });
+}
+
+/** Envia/substitui a foto de uma ficha de figurino (feature 155). */
+export function useUploadFigurinoPhoto() {
+  return useFigurinoPhotoMutation<{ id: number; file: File }>(({ id, file }) => {
+    const form = new FormData();
+    form.append("photo", file);
+    return apiFetch<FigurinoSheetItem>(`/api/figurino/${id}/photo`, { method: "POST", body: form });
+  });
+}
+
+/** Remove a foto de uma ficha de figurino (feature 155). No-op seguro se já vazia. */
+export function useRemoveFigurinoPhoto() {
+  return useFigurinoPhotoMutation<number>((id) =>
+    apiFetch<FigurinoSheetItem>(`/api/figurino/${id}/photo`, { method: "DELETE" }),
+  );
+}
+
+/** Gira 90° a foto de uma ficha de figurino (feature 155). */
+export function useRotateFigurinoPhoto() {
+  return useFigurinoPhotoMutation<{ id: number; direction: "cw" | "ccw" }>(({ id, direction }) =>
+    apiFetch<FigurinoSheetItem>(`/api/figurino/${id}/photo/rotate`, {
+      method: "POST",
+      body: JSON.stringify({ direction }),
+    }),
+  );
+}

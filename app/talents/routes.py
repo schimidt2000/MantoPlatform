@@ -755,35 +755,36 @@ def character_suggestions():
 def upload_talent_photo(talent_id: int):
     if not _can_edit_talent():
         abort(403)
-    import uuid as _uuid
-    from werkzeug.utils import secure_filename
-    from app.storage import save_file
+    from app.talents.talent_ops import save_talent_photo
+
     talent = Talent.query.get_or_404(talent_id)
     photo_type = request.form.get("photo_type", "face")  # 'face' | 'full' | 'doc' | 'cnh'
     file = request.files.get("photo")
-    if not file or not file.filename:
-        flash("Nenhum arquivo selecionado.", "error")
+    error = save_talent_photo(talent, photo_type=photo_type, file_storage=file)
+    if error:
+        flash(error, "error")
         return redirect(url_for("talents.talent_detail", talent_id=talent_id))
-    is_doc = photo_type in ("doc", "cnh")  # documentos aceitam PDF além de imagem
-    ext = os.path.splitext(secure_filename(file.filename))[1].lower()
-    allowed = (".jpg", ".jpeg", ".png", ".webp", ".pdf") if is_doc else (".jpg", ".jpeg", ".png", ".webp")
-    if ext not in allowed:
-        msg = "Use JPG, PNG, WEBP ou PDF." if is_doc else "Use JPG, PNG ou WEBP."
-        flash(f"Formato não suportado. {msg}", "error")
-        return redirect(url_for("talents.talent_detail", talent_id=talent_id))
-    subfolder = "talent_docs" if is_doc else "talent_photos"
-    filename = f"talent_{talent_id}_{photo_type}_{_uuid.uuid4().hex[:8]}{ext}"
-    url_path = save_file(file, subfolder, filename)
-    if photo_type == "full":
-        talent.photo_full_path = url_path
-    elif photo_type == "doc":
-        talent.doc_photo_path = url_path
-    elif photo_type == "cnh":
-        talent.cnh_file_path = url_path
-    else:
-        talent.photo_face_path = url_path
     db.session.commit()
+    is_doc = photo_type in ("doc", "cnh")
     flash("Documento atualizado." if is_doc else "Foto atualizada.", "success")
+    return redirect(url_for("talents.talent_detail", talent_id=talent_id))
+
+
+@talents_bp.route("/talents/<int:talent_id>/remove-photo", methods=["POST"])
+@login_required
+def remove_talent_photo_route(talent_id: int):
+    if not _can_edit_talent():
+        abort(403)
+    from app.talents.talent_ops import remove_talent_photo
+
+    talent = Talent.query.get_or_404(talent_id)
+    photo_type = request.form.get("photo_type", "face")
+    error = remove_talent_photo(talent, photo_type=photo_type)
+    if error:
+        flash(error, "error")
+    else:
+        db.session.commit()
+        flash("Removido.", "success")
     return redirect(url_for("talents.talent_detail", talent_id=talent_id))
 
 
