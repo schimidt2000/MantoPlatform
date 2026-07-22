@@ -1,0 +1,144 @@
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { Skeleton } from "@manto/ui";
+import { ApiRequestError } from "@manto/api-client";
+import { useProductDetail } from "../lib/catalogo";
+import { ProductGallery } from "../components/ProductGallery";
+import { WishlistButton } from "../components/WishlistButton";
+import { ProductCard } from "../components/ProductCard";
+
+export function ProductDetailPage() {
+  const { slug } = useParams<{ slug: string }>();
+  const { data, isLoading, error } = useProductDetail(slug);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (data) {
+      document.title = `${data.name} — Catálogo Manto Produções`;
+    }
+    return () => {
+      document.title = "Manto Produções";
+    };
+  }, [data]);
+
+  const notFound = error instanceof ApiRequestError && error.status === 404;
+
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+    } catch {
+      // clipboard indisponível — ignora, o link continua visível na barra do navegador
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  if (notFound) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
+        <div className="mb-3 text-4xl">🎭</div>
+        <p className="mb-6 text-muted">Este personagem não foi encontrado.</p>
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 rounded-full border border-line px-6 py-3 text-sm font-semibold text-accent-dark hover:border-accent"
+        >
+          ← Voltar ao catálogo
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pb-24">
+      <div className="border-b border-line px-6 py-5">
+        <div className="mx-auto max-w-[1180px]">
+          <Link to="/" className="text-[13.5px] font-semibold text-muted hover:text-accent">
+            ← Voltar ao catálogo
+          </Link>
+        </div>
+      </div>
+
+      <main className="mx-auto max-w-[1180px] px-6 py-10">
+        {isLoading && (
+          <div className="grid gap-10 md:grid-cols-[1.1fr_1fr]">
+            <Skeleton className="aspect-[4/5] w-full" />
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-3/4" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          </div>
+        )}
+
+        {data && (
+          <>
+            <div className="grid items-start gap-7 md:grid-cols-[1.1fr_1fr] md:gap-12">
+              <ProductGallery images={data.images} name={data.name} />
+
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.16em] text-gold">
+                  ✦ Manto Produções
+                </div>
+                <h1 className="mt-3 text-balance font-display text-3xl font-medium text-ink sm:text-4xl">
+                  {data.name}
+                </h1>
+                <div className="mb-5 mt-3 flex flex-wrap gap-1.5">
+                  {data.categories.map((category) => (
+                    <span
+                      key={category.slug}
+                      className="rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-dark"
+                    >
+                      {category.name}
+                    </span>
+                  ))}
+                </div>
+                {data.description_html && (
+                  <div
+                    className="text-[15.5px] text-ink [&_b]:font-display [&_b]:text-[17px] [&_b]:font-semibold [&_p]:mb-3"
+                    dangerouslySetInnerHTML={{ __html: data.description_html }}
+                  />
+                )}
+
+                <div className="mt-7 flex flex-wrap gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5"
+                  >
+                    {copied ? "✅ Copiado!" : "🔗 Copiar link"}
+                  </button>
+                  <WishlistButton
+                    slug={data.slug}
+                    name={data.name}
+                    cover={data.images[0]?.url ?? null}
+                  />
+                  {data.categories[0] && (
+                    <Link
+                      to={`/categoria/${data.categories[0].slug}`}
+                      className="inline-flex items-center gap-2 rounded-full border border-line px-6 py-3 text-sm font-semibold text-accent-dark hover:border-accent"
+                    >
+                      Ver mais em {data.categories[0].name}
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {data.related.length > 0 && (
+              <div className="mt-16 border-t border-line pt-10">
+                <h2 className="mb-5 text-balance font-display text-2xl font-medium text-ink sm:text-3xl">
+                  Você também pode gostar
+                </h2>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                  {data.related.map((item) => (
+                    <ProductCard key={item.id} item={item} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </main>
+    </div>
+  );
+}

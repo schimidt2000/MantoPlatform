@@ -19,3 +19,4 @@ from app.api import figurino_read as _figurino_read  # noqa: E402,F401
 from app.api import figurino_write as _figurino_write  # noqa: E402,F401
 from app.api import financeiro_read as _financeiro_read  # noqa: E402,F401
 from app.api import financeiro_write as _financeiro_write  # noqa: E402,F401
+from app.api import catalogo_read as _catalogo_read  # noqa: E402,F401

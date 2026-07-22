@@ -1,4 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src", "vite.config.ts"]
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@manto/ui": ["../../packages/ui/src/index.ts"],
+      "@manto/api-client": ["../../packages/api-client/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts", "../../packages/*/src"]
 }

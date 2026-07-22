@@ -17,6 +17,9 @@
     "build:internal": "npm run build --workspace=apps/internal",
     "typecheck": "npm run typecheck --workspace=apps/internal",
     "typecheck:internal": "npm run typecheck --workspace=apps/internal",
+    "dev:public": "npm run dev --workspace=apps/public",
+    "build:public": "npm run build --workspace=apps/public",
+    "typecheck:public": "npm run typecheck --workspace=apps/public",
     "start": "serve --single --no-clipboard apps/internal/dist"
   },
   "dependencies": {
