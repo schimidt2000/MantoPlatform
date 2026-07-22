@@ -61,6 +61,9 @@ export function DashboardPage() {
           <Button asChild variant="outline" size="sm">
             <Link to="/figurinos">Figurino</Link>
           </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/vendas">Vendas</Link>
+          </Button>
           <Button variant="outline" size="sm" loading={logout.isPending} onClick={() => logout.mutate()}>
             Sair
           </Button>
