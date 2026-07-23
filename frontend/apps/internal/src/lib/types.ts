@@ -43,10 +43,36 @@ export interface RecurringExpenseAlert {
   amount: number | null;
 }
 
+/** Cobrança pendente (saldo em aberto) de um evento — feature 174. */
+export interface PendingPayment {
+  event_id: number;
+  event_title: string;
+  start_at: string | null;
+  sale: number;
+  received: number;
+  saldo: number;
+  severity: "atrasado" | "vencido" | "urgent" | "warn" | "info";
+  due_date: string | null;
+}
+
+/** Painel Performance (SUPERADMIN real, nunca durante impersonação) — feature 174. */
+export interface PerformanceSummary {
+  range: "7" | "30" | "custom";
+  start: string | null;
+  end: string | null;
+  casting_total: number;
+  casting_done: number;
+  figurino_total: number;
+  figurino_done: number;
+  money_total: number;
+}
+
 /** Resumo do dashboard — resposta de /api/dashboard. Seções ausentes = sem permissão. */
 export interface DashboardSummary {
   casting: CastingSummary | null;
   figurino: FigurinoSummary | null;
+  comercial: { pending_payments: PendingPayment[] } | null;
   financeiro: { recurring_expense_alerts: RecurringExpenseAlert[] } | null;
+  performance: PerformanceSummary | null;
   dismissed_casting: DashboardTaskRef[];
 }

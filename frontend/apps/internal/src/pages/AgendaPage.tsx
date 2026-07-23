@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { Button, Card, MetricBadge, PageHeader, Skeleton } from "@manto/ui";
-import { useAgenda, type EventoResumo } from "../lib/agenda";
+import { Button, PageHeader, Skeleton } from "@manto/ui";
+import { useAgenda } from "../lib/agenda";
 import { useCurrentUser } from "../lib/useAuth";
+import { CalendarGrid } from "../components/CalendarGrid";
 
 function currentYm(): string {
   const now = new Date();
@@ -25,45 +26,6 @@ function monthLabel(ym: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-function dayLabel(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const label = new Date(y, m - 1, d).toLocaleDateString("pt-BR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "2-digit",
-  });
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-function eventTime(ev: EventoResumo): string {
-  if (!ev.start_at) return "";
-  const dt = new Date(ev.start_at);
-  if (dt.getHours() === 0 && dt.getMinutes() === 0) return "";
-  return dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
-
-function EventCard({ ev }: { ev: EventoResumo }) {
-  return (
-    <Card asChild className="flex flex-col gap-1 p-4 transition-colors hover:bg-surface-2">
-      <Link to={`/events/${ev.id}`}>
-      <div className="flex items-start justify-between gap-3">
-        <span className="font-medium text-ink">{ev.title}</span>
-        {eventTime(ev) && (
-          <span className="shrink-0 text-sm tabular-nums text-muted">{eventTime(ev)}</span>
-        )}
-      </div>
-      {ev.location && <span className="text-sm text-muted">{ev.location}</span>}
-      <div className="mt-1 flex flex-wrap gap-1.5">
-        <MetricBadge>{ev.event_type}</MetricBadge>
-        {ev.confirmed && <MetricBadge tone="green">Confirmado</MetricBadge>}
-        {ev.is_satellite && <MetricBadge tone="blue">Satélite</MetricBadge>}
-        {ev.group_name && <MetricBadge>{ev.group_name}</MetricBadge>}
-      </div>
-      </Link>
-    </Card>
-  );
-}
-
 /** COMERCIAL/SUPERADMIN podem criar evento (`_CAN_CREATE` — paridade com o Jinja). */
 function canCreateEvent(user: { roles: string[]; is_superadmin: boolean } | null | undefined) {
   if (!user) return false;
@@ -76,21 +38,11 @@ export function AgendaPage() {
   const agenda = useAgenda(ym);
   const currentUser = useCurrentUser();
 
-  // Agrupa os eventos por dia de início, em ordem cronológica.
-  const groups = useMemo(() => {
-    const events = agenda.data?.events ?? [];
-    const byDay = new Map<string, EventoResumo[]>();
-    for (const ev of events) {
-      const key = ev.start_at ? ev.start_at.slice(0, 10) : "sem-data";
-      const list = byDay.get(key) ?? [];
-      list.push(ev);
-      byDay.set(key, list);
-    }
-    return [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [agenda.data]);
+  const events = agenda.data?.events ?? [];
+  const semData = events.filter((ev) => !ev.start_at);
 
   return (
-    <div className="mx-auto max-w-3xl p-4 sm:p-6">
+    <div className="mx-auto max-w-5xl p-4 sm:p-6">
       <PageHeader
         title="Agenda"
         className="mb-5"
@@ -130,30 +82,37 @@ export function AgendaPage() {
         </div>
       )}
 
-      {agenda.data && groups.length === 0 && (
+      {agenda.data && events.length === 0 && (
         <p className="py-10 text-center text-muted">Nenhum evento neste mês.</p>
       )}
 
-      {agenda.data && groups.length > 0 && (
+      {agenda.data && events.length > 0 && (
         <motion.div
           key={ym}
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
-          className="space-y-6"
+          className="space-y-4"
         >
-          {groups.map(([day, events]) => (
-            <section key={day} className="space-y-2">
-              <h2 className="text-sm font-semibold text-muted">
-                {day === "sem-data" ? "Sem data" : dayLabel(day)}
-              </h2>
-              <div className="space-y-2">
-                {events.map((ev) => (
-                  <EventCard key={ev.id} ev={ev} />
+          <CalendarGrid ym={ym} events={events} />
+
+          {semData.length > 0 && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold text-muted">Sem data</h2>
+              <ul className="space-y-1">
+                {semData.map((ev) => (
+                  <li key={ev.id}>
+                    <Link
+                      to={`/events/${ev.id}`}
+                      className="text-sm text-ink hover:underline"
+                    >
+                      {ev.title}
+                    </Link>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </section>
-          ))}
+          )}
         </motion.div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { useClientDetail, useDeleteClient, useUpdateClient } from "../lib/clientes";
 import { useCurrentUser } from "../lib/useAuth";
@@ -54,32 +54,30 @@ export function ClientDetailPage() {
 
       {query.data && (
         <>
-          <header className="flex items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-semibold text-ink">{query.data.name}</h1>
-              <p className="text-sm text-muted">
-                {[query.data.phone_display, query.data.company].filter(Boolean).join(" · ")}
-              </p>
-            </div>
-            {canDelete && (
-              <Button
-                variant="outline"
-                size="sm"
-                loading={del.isPending}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Excluir o cliente "${query.data.name}"? Os eventos associados serão desvinculados, não excluídos.`,
-                    )
-                  ) {
-                    del.mutate(id, { onSuccess: () => navigate("/clientes") });
-                  }
-                }}
-              >
-                Excluir
-              </Button>
-            )}
-          </header>
+          <PageHeader
+            title={query.data.name}
+            subtitle={[query.data.phone_display, query.data.company].filter(Boolean).join(" · ")}
+            actions={
+              canDelete && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={del.isPending}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Excluir o cliente "${query.data.name}"? Os eventos associados serão desvinculados, não excluídos.`,
+                      )
+                    ) {
+                      del.mutate(id, { onSuccess: () => navigate("/clientes") });
+                    }
+                  }}
+                >
+                  Excluir
+                </Button>
+              )
+            }
+          />
 
           <Card>
             <CardHeader>

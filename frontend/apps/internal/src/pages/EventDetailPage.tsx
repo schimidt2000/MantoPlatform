@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import { formatBRL, MoneyInput } from "@manto/money";
 import { useEvent, type EventoDetalhe, type RoleItem } from "../lib/agenda";
@@ -1325,19 +1325,21 @@ export function EventDetailPage() {
           transition={{ duration: 0.22, ease: "easeOut" }}
           className="space-y-4"
         >
-          <header>
-            <h1 className="text-2xl font-semibold text-ink">{query.data.event.title}</h1>
-            <p className="text-sm text-muted">
-              {formatDate(query.data.event.start_at)}
-              {query.data.event.location && ` · ${query.data.event.location}`}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-muted">
-                {query.data.event.event_type}
-              </span>
-              <ConfirmControl data={query.data} />
-            </div>
-          </header>
+          <PageHeader
+            title={query.data.event.title}
+            subtitle={
+              formatDate(query.data.event.start_at) +
+              (query.data.event.location ? ` · ${query.data.event.location}` : "")
+            }
+            actions={
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-muted">
+                  {query.data.event.event_type}
+                </span>
+                <ConfirmControl data={query.data} />
+              </div>
+            }
+          />
 
           <Kpi data={query.data} />
           <Elenco data={query.data} />

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { formatBRL } from "@manto/money";
 import { ApiRequestError } from "@manto/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import {
   useAddSalary,
   useAdminUser,
@@ -96,23 +96,25 @@ export function AdminUserEditPage() {
         <Link to="/admin/usuarios">‹ Usuários</Link>
       </Button>
 
-      <header className="flex items-start justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-ink">{user.name}</h1>
-        {isSuperadmin && (
-          <Button
-            variant="outline"
-            size="sm"
-            loading={deleteUser.isPending}
-            onClick={() => {
-              if (window.confirm(`Excluir o usuário "${user.name}"?`)) {
-                deleteUser.mutate(id, { onSuccess: () => navigate("/admin/usuarios") });
-              }
-            }}
-          >
-            Excluir
-          </Button>
-        )}
-      </header>
+      <PageHeader
+        title={user.name}
+        actions={
+          isSuperadmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              loading={deleteUser.isPending}
+              onClick={() => {
+                if (window.confirm(`Excluir o usuário "${user.name}"?`)) {
+                  deleteUser.mutate(id, { onSuccess: () => navigate("/admin/usuarios") });
+                }
+              }}
+            >
+              Excluir
+            </Button>
+          )
+        }
+      />
       {deleteUser.isError && (
         <p className="text-sm text-red">
           {deleteUser.error instanceof ApiRequestError

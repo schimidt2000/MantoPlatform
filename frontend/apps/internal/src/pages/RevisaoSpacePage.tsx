@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import {
   useDeleteRevisaoSpace,
   useRevisaoSpace,
@@ -62,26 +62,26 @@ export function RevisaoSpacePage() {
         <Link to="/revisao">‹ Revisão de mídia</Link>
       </Button>
 
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">{space.title}</h1>
-          {space.description && <p className="text-sm text-muted">{space.description}</p>}
-        </div>
-        {space.can_manage && (
-          <Button
-            variant="outline"
-            size="sm"
-            loading={deleteSpace.isPending}
-            onClick={() => {
-              if (window.confirm(`Excluir o espaço "${space.title}"?`)) {
-                deleteSpace.mutate(space.id, { onSuccess: () => navigate("/revisao") });
-              }
-            }}
-          >
-            Excluir espaço
-          </Button>
-        )}
-      </header>
+      <PageHeader
+        title={space.title}
+        subtitle={space.description}
+        actions={
+          space.can_manage && (
+            <Button
+              variant="outline"
+              size="sm"
+              loading={deleteSpace.isPending}
+              onClick={() => {
+                if (window.confirm(`Excluir o espaço "${space.title}"?`)) {
+                  deleteSpace.mutate(space.id, { onSuccess: () => navigate("/revisao") });
+                }
+              }}
+            >
+              Excluir espaço
+            </Button>
+          )
+        }
+      />
 
       <Card>
         <CardHeader>
