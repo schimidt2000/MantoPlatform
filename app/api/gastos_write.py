@@ -80,9 +80,10 @@ def api_gastos_create() -> Any:
 @api_bp.route("/gastos/<int:expense_id>/aprovar", methods=["POST"])
 @api_login_required
 def api_gastos_aprovar(expense_id: int) -> Any:
-    """Aprova um gasto pendente. Apenas SUPERADMIN."""
-    if not gastos_ops.is_superadmin(current_user):
-        return json_error("Sem permissão", 403)
+    """Aprova um gasto pendente, sem edição. FINANCEIRO/SUPERADMIN (migração 179)."""
+    denied = _require_financeiro()
+    if denied:
+        return denied
     expense = SpecialExpense.query.get(expense_id)
     if expense is None:
         return json_error("Gasto não encontrado", 404)
@@ -96,9 +97,10 @@ def api_gastos_aprovar(expense_id: int) -> Any:
 @api_bp.route("/gastos/<int:expense_id>/rejeitar", methods=["POST"])
 @api_login_required
 def api_gastos_rejeitar(expense_id: int) -> Any:
-    """Rejeita um gasto pendente. Apenas SUPERADMIN."""
-    if not gastos_ops.is_superadmin(current_user):
-        return json_error("Sem permissão", 403)
+    """Rejeita um gasto pendente. FINANCEIRO/SUPERADMIN (migração 179)."""
+    denied = _require_financeiro()
+    if denied:
+        return denied
     expense = SpecialExpense.query.get(expense_id)
     if expense is None:
         return json_error("Gasto não encontrado", 404)
@@ -110,14 +112,56 @@ def api_gastos_rejeitar(expense_id: int) -> Any:
     return jsonify(_expense_dict(expense))
 
 
-@api_bp.route("/gastos/<int:expense_id>", methods=["DELETE"])
+@api_bp.route("/gastos/<int:expense_id>", methods=["PATCH"])
 @api_login_required
-def api_gastos_delete(expense_id: int) -> Any:
-    """Exclui um gasto. Autor pode excluir o próprio enquanto pendente; SUPERADMIN sempre."""
+def api_gastos_editar(expense_id: int) -> Any:
+    """Edita um gasto (qualquer status, exceto rejeitado sem `aprovar`); opcionalmente aprova
+    na mesma operação (`aprovar: true`). FINANCEIRO/SUPERADMIN (migração 179).
+    """
+    denied = _require_financeiro()
+    if denied:
+        return denied
     expense = SpecialExpense.query.get(expense_id)
     if expense is None:
         return json_error("Gasto não encontrado", 404)
-    if not gastos_ops.can_delete_expense(expense, current_user):
+    body = request.get_json(silent=True) or {}
+    data = {
+        "description": body.get("description", ""),
+        "category": body.get("category", "Outros"),
+        "amount": _to_decimal(body.get("amount")),
+        "expense_date": _to_date(body.get("expense_date")),
+        "disbursement_type": body.get("disbursement_type", ""),
+        "reimburse_user_id": body.get("reimburse_user_id"),
+        "supplier_name": body.get("supplier_name", ""),
+        "supplier_pix": body.get("supplier_pix", ""),
+    }
+    event_raw = body.get("event_id")
+    event_id = int(event_raw) if event_raw and CalendarEvent.query.get(int(event_raw)) else None
+    try:
+        expense = gastos_ops.edit_expense(
+            expense, current_user, data, event_id, aprovar=bool(body.get("aprovar"))
+        )
+    except gastos_ops.GastoValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except gastos_ops.GastoStateError as exc:
+        return json_error(str(exc), 409)
+    return jsonify(_expense_dict(expense))
+
+
+@api_bp.route("/gastos/<int:expense_id>", methods=["DELETE"])
+@api_login_required
+def api_gastos_delete(expense_id: int) -> Any:
+    """Exclui um gasto. Autor pode excluir o próprio enquanto pendente; FINANCEIRO/SUPERADMIN
+    sempre (migração 179 — checagem local, não reusa `gastos_ops.can_delete_expense` para não
+    alterar o comportamento da view Jinja legada, que continua só com SUPERADMIN).
+    """
+    expense = SpecialExpense.query.get(expense_id)
+    if expense is None:
+        return json_error("Gasto não encontrado", 404)
+    can_delete = gastos_ops.is_financeiro(current_user) or (
+        expense.created_by_id == current_user.id and expense.status == "pendente"
+    )
+    if not can_delete:
         return json_error("Sem permissão", 403)
     gastos_ops.delete_expense(expense, current_user)
     return "", 204
@@ -126,9 +170,10 @@ def api_gastos_delete(expense_id: int) -> Any:
 @api_bp.route("/gastos/<int:expense_id>/vincular-evento", methods=["POST"])
 @api_login_required
 def api_gastos_vincular_evento(expense_id: int) -> Any:
-    """Vincula/remove o evento de um gasto existente. Apenas SUPERADMIN."""
-    if not gastos_ops.is_superadmin(current_user):
-        return json_error("Sem permissão", 403)
+    """Vincula/remove o evento de um gasto existente. FINANCEIRO/SUPERADMIN (migração 179)."""
+    denied = _require_financeiro()
+    if denied:
+        return denied
     expense = SpecialExpense.query.get(expense_id)
     if expense is None:
         return json_error("Gasto não encontrado", 404)

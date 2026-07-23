@@ -14,7 +14,7 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.gastos import gastos_ops
-from app.models import RecurringExpense, SpecialExpense
+from app.models import RecurringExpense, SpecialExpense, User
 
 
 def _require_financeiro() -> Any:
@@ -35,6 +35,7 @@ def _expense_dict(e) -> dict:
         "amount": _num(e.amount),
         "expense_date": e.expense_date.isoformat(),
         "status": e.status,
+        "approved_with_edits": e.approved_with_edits,
         "notes": e.notes or "",
         "receipt_url": e.receipt_url,
         "disbursement_type": e.disbursement_type,
@@ -54,13 +55,17 @@ def _expense_dict(e) -> dict:
 @api_bp.route("/gastos")
 @api_login_required
 def api_gastos_list() -> Any:
-    """Lista gastos extras: SUPERADMIN vê todos, demais só os próprios."""
-    expenses = gastos_ops.list_expenses(current_user)
-    return jsonify({
+    """Lista gastos extras: FINANCEIRO/SUPERADMIN vê todos (+ totais), demais só os próprios."""
+    can_manage = gastos_ops.is_financeiro(current_user)
+    expenses = gastos_ops.list_expenses_for_admin() if can_manage else gastos_ops.list_expenses(current_user)
+    payload = {
         "expenses": [_expense_dict(e) for e in expenses],
-        "is_superadmin": gastos_ops.is_superadmin(current_user),
+        "can_manage": can_manage,
         "categories": SpecialExpense.CATEGORIES,
-    })
+    }
+    if can_manage:
+        payload["totals"] = gastos_ops.expense_totals(expenses)
+    return jsonify(payload)
 
 
 @api_bp.route("/gastos/eventos")
@@ -79,6 +84,14 @@ def api_gastos_eventos() -> Any:
         label = f"{hora} · {e.title}" if hora else (e.title or f"Evento #{e.id}")
         out.append({"id": e.id, "label": label})
     return jsonify({"events": out})
+
+
+@api_bp.route("/gastos/funcionarios")
+@api_login_required
+def api_gastos_funcionarios() -> Any:
+    """Colaboradores ativos, para o seletor de reembolso (mesma lista da view Jinja legada)."""
+    funcionarios = User.query.filter_by(is_active=True).order_by(User.name.asc()).all()
+    return jsonify({"funcionarios": [{"id": u.id, "name": u.name} for u in funcionarios]})
 
 
 def _entry_dict(entry) -> dict:
