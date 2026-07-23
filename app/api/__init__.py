@@ -40,3 +40,11 @@ from app.api import portal_auth as _portal_auth  # noqa: E402,F401
 from app.api import portal_agenda as _portal_agenda  # noqa: E402,F401
 from app.api import portal_figurino as _portal_figurino  # noqa: E402,F401
 from app.api import portal_profile as _portal_profile  # noqa: E402,F401
+from app.api import gastos_read as _gastos_read  # noqa: E402,F401
+from app.api import gastos_write as _gastos_write  # noqa: E402,F401
+from app.api import orcamento_read as _orcamento_read  # noqa: E402,F401
+from app.api import orcamento_write as _orcamento_write  # noqa: E402,F401
+from app.api import ratings_read as _ratings_read  # noqa: E402,F401
+from app.api import ratings_write as _ratings_write  # noqa: E402,F401
+from app.api import formularios_admin_read as _formularios_admin_read  # noqa: E402,F401
+from app.api import formularios_admin_write as _formularios_admin_write  # noqa: E402,F401

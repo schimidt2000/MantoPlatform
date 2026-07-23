@@ -1,4 +1,9 @@
-"""Quote calculator blueprint — accessible to COMERCIAL and SUPERADMIN."""
+"""Quote calculator blueprint — accessible to COMERCIAL and SUPERADMIN.
+
+Núcleo de negócio em `quote_ops.py` (reusado pela API em `app/api/orcamento_read.py`/
+`orcamento_write.py`) — este módulo só parseia `request`/`flash`/`session`/`redirect` e chama
+`quote_ops`.
+"""
 import json
 from datetime import datetime
 from functools import wraps
@@ -14,17 +19,7 @@ from app.constants import RoleName, ACRESCIMO_TIPO_BV
 from app.money import format_brl, parse_brl
 from app.utils import json_for_script
 from . import settings as _cfg
-from .pricing import (
-    aplicar_markup,
-    calcular_maquiador,
-    compute_show_pricing,
-    get_ator_prices,
-    get_cantor_prices,
-    get_coordenador_prices,
-    get_especial_prices,
-    get_tecnico_prices,
-)
-from .transport import calcular_carro, calcular_van
+from . import quote_ops
 
 orcamento_bp = Blueprint("orcamento", __name__, url_prefix="/orcamento")
 
@@ -111,470 +106,79 @@ def personagens_no_dia():
     """
     from datetime import date as _date
 
-    from sqlalchemy import func, not_
-
-    from app.models import CalendarEvent, EventRole
-
     raw = (request.args.get("date") or "").strip()
     try:
         dia = _date.fromisoformat(raw)
     except ValueError:
         return jsonify({"date": None, "personagens": []})
 
-    rows = (
-        EventRole.query
-        .join(CalendarEvent, EventRole.event_id == CalendarEvent.id)
-        .filter(
-            EventRole.role_type == "character",
-            not_(CalendarEvent.title.like("🟧 ENSAIO%")),
-            func.date(CalendarEvent.start_at) == dia,
-        )
-        .with_entities(EventRole.character_name, CalendarEvent.title)
-        .all()
-    )
-
-    agrupado: dict[str, list[str]] = {}
-    for nome, titulo in rows:
-        if not nome or not nome.strip():
-            continue
-        eventos = agrupado.setdefault(nome.strip(), [])
-        if titulo and titulo not in eventos:
-            eventos.append(titulo)
-
-    personagens = [
-        {"nome": nome, "eventos": eventos}
-        for nome, eventos in sorted(agrupado.items(), key=lambda kv: kv[0].lower())
-    ]
+    personagens = quote_ops.personagens_no_dia(dia)
     return jsonify({"date": dia.isoformat(), "personagens": personagens})
 
 
-_ADICIONAL_NOTURNO = 50.0  # R$ por artista/coordenador, aplicado pré-markup
-
-
-def _is_noturno(raw_time: str) -> bool:
-    """Retorna True se o horário do evento for a partir das 19h."""
-    try:
-        from datetime import datetime as _dt
-        return _dt.strptime(raw_time, "%H:%M").hour >= 19
-    except ValueError:
-        return False
-
-
-def _process_quote():
+def _payload_from_form() -> dict:
+    """Monta o payload aceito por `quote_ops.calculate_quote()` a partir de `request.form`."""
     try:
         performers = json.loads(request.form.get("performers_json", "[]"))
     except (json.JSONDecodeError, TypeError):
         performers = []
 
-    _coord_raw = int(request.form.get("coordenador_qty", 1) or 0)
-    _dj_only   = (len(performers) > 0 and
-                  all(p.get("type") == "especial" and p.get("personagem") == "DJ"
-                      for p in performers))
-    coordenador_qty = max(0 if _dj_only else 1, _coord_raw)
-
-    # Enforce min coordinators for especiais with rules (e.g. Boneco Grande Especial)
-    _regras = _cfg.load().get("especiais_regras", {})
-    for _p in performers:
-        if _p.get("type") == "especial":
-            _min = _regras.get(_p.get("personagem", ""), {}).get("min_coordenadores", 1)
-            coordenador_qty = max(coordenador_qty, _min)
-
-    fora_sp          = "fora_sp" in request.form
-    noturno          = _is_noturno(request.form.get("event_time", ""))
-    # Acréscimos tipados (feature 099): lista de {tipo, descricao, is_percent, value, is_bv}.
-    _acr_tipos    = request.form.getlist("acrescimo_tipo[]")
-    _acr_descr    = request.form.getlist("acrescimo_descricao[]")
-    _acr_values   = request.form.getlist("acrescimo_value[]")
-    _acr_percents = request.form.getlist("acrescimo_is_percent[]")
-    acrescimos: list[dict] = []
-    for _i, _t in enumerate(_acr_tipos):
-        _t = (_t or "").strip()
-        _v = _parse_num(_acr_values[_i]) if _i < len(_acr_values) else 0.0
-        if not _t or not _v:
-            continue
+    acr_tipos = request.form.getlist("acrescimo_tipo[]")
+    acr_descr = request.form.getlist("acrescimo_descricao[]")
+    acr_values = request.form.getlist("acrescimo_value[]")
+    acr_percents = request.form.getlist("acrescimo_is_percent[]")
+    acrescimos = []
+    for i, tipo in enumerate(acr_tipos):
         acrescimos.append({
-            "tipo": _t,
-            "descricao": (_acr_descr[_i].strip() if _i < len(_acr_descr) else ""),
-            "is_percent": (_acr_percents[_i] == "1") if _i < len(_acr_percents) else False,
-            "value": float(_v),
-            "is_bv": _t == ACRESCIMO_TIPO_BV,
+            "tipo": tipo,
+            "descricao": acr_descr[i] if i < len(acr_descr) else "",
+            "value": _parse_num(acr_values[i]) if i < len(acr_values) else 0.0,
+            "is_percent": (acr_percents[i] == "1") if i < len(acr_percents) else False,
         })
-    show_sosia_tipo  = request.form.get("show_sosia_tipo", "predefinido")
-    nota_fiscal      = "nota_fiscal" in request.form
-    modo_duracao     = request.form.get("modo_duracao", "horas")
-    duracao_custom   = int(request.form.get("duracao_custom", 0) or 0)
 
-    event_has_show, sosia_custom_add_per_artist = compute_show_pricing(
-        performers, show_sosia_tipo
-    )
-    event_has_makeup = False
-    num_makes_regular  = 0
-    num_makes_especial = 0
-
-    for p in performers:
-        ptype      = p.get("type", "")
-        makeup     = bool(p.get("makeup", False))
-        makeup_tipo = p.get("makeup_tipo", "comum")
-
-        if makeup and ptype in ("ator", "cantor", "especial"):
-            event_has_makeup = True
-            if makeup_tipo == "especial":
-                num_makes_especial += 1
-            else:
-                num_makes_regular += 1
-
-    cache_totals = [0.0, 0.0, 0.0, 0.0]
-    team_lines   = []
-    num_going    = coordenador_qty
-
-    for p in performers:
-        ptype  = p.get("type", "")
-        show   = bool(p.get("show", False))
-        makeup = bool(p.get("makeup", False))
-        nome   = p.get("nome", "").strip()
-
-        if ptype == "ator":
-            subtipo = p.get("subtipo", "cara_limpa")
-            if subtipo == "cantor":
-                prices = get_cantor_prices(show, makeup)
-                label  = nome or "Cantor"
-            else:
-                prices = get_ator_prices(subtipo, show, makeup)
-                label  = nome or ("Boneco" if subtipo == "boneco" else "Ator")
-        elif ptype == "cantor":
-            # Suporte legado para histórico antigo (cantor era tipo separado)
-            prices = get_cantor_prices(show=True, makeup=makeup)
-            label  = nome or "Cantor"
-        elif ptype == "especial":
-            personagem  = p.get("personagem", "")
-            cantor_flag = bool(p.get("cantor", False))
-            prices = get_especial_prices(personagem, show, cantor_flag)
-            if personagem == "Boneco Grande Especial":
-                bge_sub  = p.get("bge_subtipo", "")
-                bge_nome = p.get("bge_outro_nome", "").strip()
-                if bge_sub == "dinossauro":
-                    label = "BGE Dinossauro"
-                elif bge_sub == "transformers":
-                    label = "BGE Transformers"
-                elif bge_sub == "outro" and bge_nome:
-                    label = f"BGE {bge_nome}"
-                else:
-                    label = nome or personagem
-            else:
-                label = nome or personagem
-        else:
-            prices = (0, 0, 0)
-            label  = nome or "Profissional"
-
-        team_lines.append(label)
-        num_going += 1
-        for i in range(4):
-            cache_totals[i] += prices[i]
-
-    # Show customizado: +R$50 por artista (não conta coord, técnico nem maquiador)
-    if sosia_custom_add_per_artist:
-        custom_add = len(performers) * sosia_custom_add_per_artist
-        for i in range(4):
-            cache_totals[i] += custom_add
-
-    coord_prices = get_coordenador_prices(event_has_show, coordenador_qty)
-    for i in range(4):
-        cache_totals[i] += coord_prices[i]
-
-    # Cachê-base (pré-markup): base do orçamento personalizado por multiplicador.
-    cache_base = [round(v, 2) for v in cache_totals]
-    personalizado = "personalizado_ativo" in request.form
-    criterio_pers = request.form.get("personalizado_criterio", "valor_final")
-    cust_mult = [0.0, 0.0, 0.0, 0.0]
-
-    brinde = 0.0
-    if event_has_show:
-        num_going += 1
-        brinde = float(_cfg.load().get("brinde_show", 100))
-
-    totals = aplicar_markup(cache_totals, event_has_show)
-
-    if brinde:
-        for i in range(4):
-            totals[i] = round(totals[i] + brinde, 2)
-
-    if noturno:
-        adicional_noturno = (len(performers) + coordenador_qty) * _ADICIONAL_NOTURNO
-        for i in range(4):
-            totals[i] = round(totals[i] + adicional_noturno, 2)
-
-    _MARKUP_SERVICE = 1.5
-    if event_has_show:
-        tecnico = get_tecnico_prices()
-        for i in range(4):
-            totals[i] = round(totals[i] + round(tecnico[i] * _MARKUP_SERVICE, 2), 2)
-
-    if event_has_makeup:
-        maquiador_cost = calcular_maquiador(num_makes_regular, num_makes_especial)
-        maq_with_markup = round(maquiador_cost * _MARKUP_SERVICE, 2)
-        for i in range(4):
-            totals[i] = round(totals[i] + maq_with_markup, 2)
-
-    transport_total = 0.0  # acumulador para split apresentação / logística na mensagem
-
-    # Transporte especial pós-markup — uma vez por tipo (e.g. Boneco Grande Especial)
-    _seen_transport: set = set()
-    for p in performers:
-        if p.get("type") == "especial":
-            personagem = p.get("personagem", "")
-            if personagem not in _seen_transport:
-                transport_esp = _regras.get(personagem, {}).get("transporte_especial", 0)
-                if transport_esp:
-                    for i in range(4):
-                        totals[i] = round(totals[i] + transport_esp, 2)
-                    transport_total += transport_esp
-                    _seen_transport.add(personagem)
-
-    # BGE: acréscimo por sub-tipo (por unidade, pós-markup)
-    for p in performers:
-        if p.get("type") == "especial" and p.get("personagem") == "Boneco Grande Especial":
-            bge_sub = p.get("bge_subtipo", "")
-            bge_extra = 130 if bge_sub == "dinossauro" else 70 if bge_sub == "transformers" else 0
-            if bge_extra:
-                for i in range(4):
-                    totals[i] = round(totals[i] + bge_extra, 2)
-
-    transport_breakdown = None
-    if fora_sp:
-        km_ida           = float(request.form.get("km_ida", 0) or 0)
-        transporte_tipo  = request.form.get("transporte_tipo", "van")
-        num_colaboradores = int(request.form.get("num_colaboradores", num_going) or num_going)
-
-        if transporte_tipo == "van":
-            carretinha = "carretinha" in request.form
-            tb = calcular_van(num_colaboradores, km_ida, carretinha, event_has_show)
-        else:
-            num_carros = int(request.form.get("num_carros", 1) or 1)
-            tb = calcular_carro(num_carros, num_colaboradores, km_ida, event_has_show)
-
-        transport_breakdown = tb
-        for i in range(4):
-            totals[i] = round(totals[i] + tb["total"], 2)
-        transport_total += tb["total"]
-
-    # Aplica todos os acréscimos: percentuais incidem sobre o total antes dos acréscimos; R$ somam.
-    if acrescimos:
-        _new_totals = []
-        for _t in totals:
-            _add = 0.0
-            for _a in acrescimos:
-                _add += (_t * _a["value"] / 100.0) if _a["is_percent"] else _a["value"]
-            _new_totals.append(round(_t + _add, 2))
-        totals = _new_totals
-
-    if nota_fiscal:
-        totals = [round(t / 0.84, 2) for t in totals]
-
-    # Duração personalizada: interpola a partir do preço de 4h (índice 3 após incluir 3h — feature 098)
-    total_custom = None
-    if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4):
-        total_custom = round(totals[3] / 4 * duracao_custom, 2)
-
-    # ── Orçamento personalizado ────────────────────────────────────────────────
-    # Sobrescreve os totais: valor final digitado ou cachê-base × multiplicador.
-    # Nada é somado depois (transporte/NF/extras ficam fora — decisão do usuário).
-    if personalizado:
-        if criterio_pers == "multiplicador":
-            cust_mult = [
-                _parse_num(request.form.get(f"cust_mult_{d}")) or 0.0
-                for d in ("1h", "2h", "3h", "4h")
-            ]
-            totals = [round(cache_base[i] * cust_mult[i], 2) for i in range(4)]
-        else:
-            totals = [
-                _parse_num(request.form.get(f"cust_valor_{d}")) or 0.0
-                for d in ("1h", "2h", "3h", "4h")
-            ]
-        transport_breakdown = None
-        transport_total = 0.0
-        total_custom = None
-
-        # Fallback de validação (o cliente já bloqueia): se as durações incluídas
-        # ficarem todas zeradas, não gera orçamento vazio.
-        _incluir_chk = request.form.getlist("incluir_duracao") or ["1h", "2h", "3h", "4h"]
-        _idx = {"1h": 0, "2h": 1, "3h": 2, "4h": 3}
-        if all(totals[_idx[d]] <= 0 for d in _incluir_chk if d in _idx):
-            flash("Informe valores válidos para o orçamento personalizado.", "warning")
-            return redirect(url_for("orcamento.index"))
-
-    raw_date = request.form.get("event_date", "")
-    raw_time = request.form.get("event_time", "")
-    try:
-        fmt_date = datetime.strptime(raw_date, "%Y-%m-%d").strftime("%d/%m/%Y")
-    except ValueError:
-        fmt_date = raw_date
-    try:
-        fmt_time = datetime.strptime(raw_time, "%H:%M").strftime("%Hh%M")
-    except ValueError:
-        fmt_time = raw_time
-
-    client_name    = request.form.get("client_name", "").strip()
-    event_location = request.form.get("event_location", "").strip()
-
-    tipo_evento = "Show com Som" if event_has_show else "Interação / Receptivo"
-    saudacao    = f"Olá, *{client_name}*!" if client_name else "Olá!"
-    team_text   = "\n".join(f"• {line}" for line in team_lines)
-
-    def _dur_block(label: str, total: float) -> str:
-        lines = [label]
-        if transport_total > 0:
-            apres = round(total - transport_total, 2)
-            lines.append(f"  • Valor da Apresentação: {_fmt_brl(apres)}")
-            lines.append(f"  • Logística e Transporte: {_fmt_brl(transport_total)}")
-        lines.append(f"  • *VALOR TOTAL: {_fmt_brl(total)}*")
-        return "\n".join(lines)
-
-    if modo_duracao == "entradas":
-        dur_labels = [
-            "🎭 *1 entrada de 30 minutos*",
-            "🎭 *2 entradas de 30 minutos (2h)*",
-            "🎭 *3 entradas de 30 minutos (3h)*",
-            "🎭 *4 entradas de 30 minutos (4h)*",
-        ]
-    else:
-        dur_labels = ["🕐 *1 hora*", "🕑 *2 horas*", "🕒 *3 horas*", "🕓 *4 horas*"]
-
-    # Quais durações o vendedor escolheu incluir (padrão: todas; vazio → todas, evita orçamento vazio)
-    incluir = request.form.getlist("incluir_duracao")
-    if not incluir:
-        incluir = ["1h", "2h", "3h", "4h"]
-    show = [("1h" in incluir), ("2h" in incluir), ("3h" in incluir), ("4h" in incluir)]
-
-    investimento = "\n\n".join(
-        _dur_block(dur_labels[i], totals[i]) for i in range(4) if show[i]
-    )
-
-    if total_custom:
-        if modo_duracao == "entradas":
-            entradas_custom = duracao_custom * 2
-            custom_label = f"🎭 *{entradas_custom} entradas de 30 min ({duracao_custom}h)*"
-        else:
-            custom_label = f"🕐 *{duracao_custom} horas*"
-        investimento += f"\n\n{_dur_block(custom_label, total_custom)}"
-
-    _pix_durs = [("1h", totals[0]), ("2h", totals[1]), ("3h", totals[2]), ("4h", totals[3])]
-    pix_vista = "\n".join(
-        f"  • {lbl}: *{_fmt_brl(round(tot * 0.95, 2))}*"
-        for i, (lbl, tot) in enumerate(_pix_durs) if show[i]
-    )
-    if total_custom:
-        pix_vista += f"\n  • {duracao_custom}h: *{_fmt_brl(round(total_custom * 0.95, 2))}*"
-
-    nf_header = "\n🧾 _Valores com Nota Fiscal inclusa_" if nota_fiscal else ""
-
-    message = (
-        f"{saudacao} ✨ É um prazer preparar a proposta para o seu evento.\n\n"
-        f"Estamos prontos para levar toda a magia da Manto Produções para o seu dia especial! "
-        f"Confira os detalhes abaixo:\n\n"
-        f"📍 *DETALHES DO EVENTO*\n"
-        f"• Data: {fmt_date}\n"
-        f"• Local: {event_location}\n"
-        f"• Horário: {fmt_time}\n"
-        f"• Modalidade: {tipo_evento}\n\n"
-        f"🎭 *PERSONAGENS E EXPERIÊNCIA*\n"
-        f"{team_text}\n\n"
-        f"💰 *INVESTIMENTO*{nf_header}\n\n"
-        f"{investimento}\n\n"
-        f"💳 *FORMAS DE PAGAMENTO*\n\n"
-        f"1️⃣ *À Vista (PIX):*\n"
-        f"{pix_vista}\n"
-        f"_(desconto especial de 5% aplicado)_\n\n"
-        f"2️⃣ *Reserva Programada (PIX):* 50% no ato do contrato + 50% até 2 dias antes do evento.\n\n"
-        f"3️⃣ *Cartão de Crédito:* Parcelamento disponível (taxas da operadora repassadas ao cliente).\n\n"
-        f"✨ Podemos seguir com a reserva da sua data? "
-        f"Aguardamos sua confirmação para enviarmos o link do contrato digital."
-    )
-
-    # Multiplicador usado (congelado no orçamento): markup do modelo, ou o personalizado.
-    if personalizado:
-        markup_used = cust_mult if criterio_pers == "multiplicador" else None
-    else:
-        markup_used = _cfg.load()["markup"]["show" if event_has_show else "receptivo"]
-
-    session["orcamento_quote"] = {
-        "message":             message,
-        "transport_breakdown": transport_breakdown,
-        "fora_sp":             fora_sp,
-        "markup_used":         markup_used,
-        "total_1h":            totals[0],
-        "total_2h":            totals[1],
-        "total_3h":            totals[2],
-        "total_4h":            totals[3],
-        "total_custom":        total_custom,
-        "duracao_custom":      duracao_custom,
-        # quais durações padrão entram no orçamento (mensagem/tela/PDF)
-        "show_1h":             show[0],
-        "show_2h":             show[1],
-        "show_3h":             show[2],
-        "show_4h":             show[3],
-        # campos extras para geração de PDF
-        "client_name":         client_name,
-        "fmt_date":            fmt_date,
-        "fmt_time":            fmt_time,
-        "event_location":      event_location,
-        "team_lines":          team_lines,
-        "nota_fiscal":         nota_fiscal,
-        "modo_duracao":        modo_duracao,
-        # orçamento personalizado (transparência no resultado)
-        "personalizado":            personalizado,
-        "personalizado_criterio":   criterio_pers if personalizado else None,
-        "cache_base":               cache_base if personalizado else None,
-        "custom_mult":              cust_mult if personalizado else None,
-    }
-
-    # Salvar no histórico persistente
-    from app.models import OrcamentoHistory
-    snapshot = {
-        "performers":       performers,
-        "coordenador_qty":  coordenador_qty,
-        "fora_sp":          fora_sp,
-        "km_ida":           request.form.get("km_ida", "0"),
-        "transporte_tipo":  request.form.get("transporte_tipo", "van"),
-        "carretinha":       "carretinha" in request.form,
-        "num_carros":       request.form.get("num_carros", "1"),
+    return {
+        "performers": performers,
+        "coordenador_qty": request.form.get("coordenador_qty", 1),
+        "fora_sp": "fora_sp" in request.form,
+        "event_time": request.form.get("event_time", ""),
+        "acrescimos": acrescimos,
+        "show_sosia_tipo": request.form.get("show_sosia_tipo", "predefinido"),
+        "nota_fiscal": "nota_fiscal" in request.form,
+        "modo_duracao": request.form.get("modo_duracao", "horas"),
+        "duracao_custom": request.form.get("duracao_custom", 0),
+        "km_ida": request.form.get("km_ida", 0),
+        "transporte_tipo": request.form.get("transporte_tipo", "van"),
         "num_colaboradores": request.form.get("num_colaboradores", ""),
-        "event_date":       raw_date,
-        "event_time":       raw_time,
-        "client_name":      client_name,
-        "event_location":   event_location,
-        "acrescimos":       acrescimos,
-        "show_sosia_tipo":  show_sosia_tipo,
-        "nota_fiscal":      nota_fiscal,
-        "modo_duracao":     modo_duracao,
-        "duracao_custom":   str(duracao_custom),
-        # orçamento personalizado (para reabrir do histórico)
-        "personalizado_ativo":     personalizado,
-        "personalizado_criterio":  criterio_pers,
-        "cust_mult_1h":   request.form.get("cust_mult_1h", ""),
-        "cust_mult_2h":   request.form.get("cust_mult_2h", ""),
-        "cust_mult_3h":   request.form.get("cust_mult_3h", ""),
-        "cust_mult_4h":   request.form.get("cust_mult_4h", ""),
-        "cust_valor_1h":  request.form.get("cust_valor_1h", ""),
-        "cust_valor_2h":  request.form.get("cust_valor_2h", ""),
-        "cust_valor_3h":  request.form.get("cust_valor_3h", ""),
-        "cust_valor_4h":  request.form.get("cust_valor_4h", ""),
+        "carretinha": "carretinha" in request.form,
+        "num_carros": request.form.get("num_carros", 1),
+        "personalizado": "personalizado_ativo" in request.form,
+        "personalizado_criterio": request.form.get("personalizado_criterio", "valor_final"),
+        "cust_mult_1h": request.form.get("cust_mult_1h", ""),
+        "cust_mult_2h": request.form.get("cust_mult_2h", ""),
+        "cust_mult_3h": request.form.get("cust_mult_3h", ""),
+        "cust_mult_4h": request.form.get("cust_mult_4h", ""),
+        "cust_valor_1h": request.form.get("cust_valor_1h", ""),
+        "cust_valor_2h": request.form.get("cust_valor_2h", ""),
+        "cust_valor_3h": request.form.get("cust_valor_3h", ""),
+        "cust_valor_4h": request.form.get("cust_valor_4h", ""),
+        "incluir_duracao": request.form.getlist("incluir_duracao"),
+        "event_date": request.form.get("event_date", ""),
+        "client_name": request.form.get("client_name", ""),
+        "event_location": request.form.get("event_location", ""),
     }
-    entry = OrcamentoHistory(
-        user_id        = current_user.id,
-        client_name    = client_name or None,
-        event_location = event_location or None,
-        event_date     = raw_date or None,
-        total_1h       = totals[0],
-        total_2h       = totals[1],
-        total_3h       = totals[2],
-        total_4h       = totals[3],
-        has_show       = event_has_show,
-        result_snapshot = json.dumps(session["orcamento_quote"], ensure_ascii=False),
-        form_snapshot  = json.dumps(snapshot, ensure_ascii=False),
-    )
-    db.session.add(entry)
-    db.session.commit()
 
+
+def _process_quote():
+    payload = _payload_from_form()
+    try:
+        result = quote_ops.calculate_quote(payload)
+    except quote_ops.QuoteValidationError as exc:
+        flash(exc.message, "warning")
+        return redirect(url_for("orcamento.index"))
+
+    quote, snapshot = result["quote"], result["snapshot"]
+    session["orcamento_quote"] = quote
+    quote_ops.save_quote_history(current_user, quote, snapshot)
     return redirect(url_for("orcamento.resultado"))
 
 
@@ -592,42 +196,6 @@ def resultado():
 
 # ── Ver orçamento congelado (do histórico) ──────────────────────────────────────
 
-def _legacy_quote(entry) -> dict:
-    """Monta um quote mínimo a partir dos totais salvos (orçamentos sem snapshot completo)."""
-    try:
-        fmt_date = datetime.strptime(entry.event_date, "%Y-%m-%d").strftime("%d/%m/%Y") if entry.event_date else ""
-    except ValueError:
-        fmt_date = entry.event_date or ""
-    return {
-        "message": (
-            "_(Mensagem original não registrada — orçamento anterior ao registro completo. "
-            "Os valores abaixo são os que foram cotados.)_"
-        ),
-        "transport_breakdown": None,
-        "fora_sp": False,
-        "markup_used": None,
-        "total_1h": float(entry.total_1h or 0),
-        "total_2h": float(entry.total_2h or 0),
-        "total_3h": float(entry.total_3h or 0),
-        "total_4h": float(entry.total_4h or 0),
-        "total_custom": None,
-        "duracao_custom": 0,
-        # 3h só é exibida em orçamentos que a registraram (antigos ficam sem 3h).
-        "show_1h": True, "show_2h": True, "show_3h": entry.total_3h is not None, "show_4h": True,
-        "client_name": entry.client_name or "",
-        "fmt_date": fmt_date,
-        "fmt_time": "",
-        "event_location": entry.event_location or "",
-        "team_lines": [],
-        "nota_fiscal": False,
-        "modo_duracao": "horas",
-        "personalizado": False,
-        "personalizado_criterio": None,
-        "cache_base": None,
-        "custom_mult": None,
-    }
-
-
 @orcamento_bp.route("/historico/<int:entry_id>/ver")
 @login_required
 @_require_vendas
@@ -638,14 +206,7 @@ def ver_historico(entry_id: int):
     """
     from app.models import OrcamentoHistory
     entry = OrcamentoHistory.query.get_or_404(entry_id)
-    if entry.result_snapshot:
-        try:
-            quote = json.loads(entry.result_snapshot)
-        except (json.JSONDecodeError, TypeError):
-            quote = _legacy_quote(entry)
-    else:
-        quote = _legacy_quote(entry)
-    session["orcamento_quote"] = quote
+    session["orcamento_quote"] = quote_ops.quote_for_entry(entry)
     return redirect(url_for("orcamento.resultado"))
 
 

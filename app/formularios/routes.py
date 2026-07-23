@@ -18,7 +18,6 @@ automação não tiver certeza suficiente para decidir sozinha.
 from __future__ import annotations
 
 import json
-import re
 import urllib.parse
 from datetime import date, datetime
 from functools import wraps
@@ -35,7 +34,7 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
-from sqlalchemy import not_, or_
+from sqlalchemy import not_
 
 from app import db, limiter
 from app.clientes.importer import normalize_phone
@@ -48,7 +47,8 @@ from app.models import (
     FormResponse,
     SiteSetting,
 )
-from app.utils import strip_accents_lower
+
+from . import formularios_ops
 
 formularios_bp = Blueprint("formularios", __name__)
 
@@ -67,13 +67,6 @@ FIELD_TYPE_LABELS = {
     "cep": "CEP",
     "sim_nao": "Sim/Não",
 }
-
-# Chaves de campos-sistema usadas pela automação de CPF/CNPJ/endereço do cliente (feature 119)
-# — busca por chave estável, sobrevive a renomeação do rótulo pelo editor (FR-009 da 123).
-SYSTEM_KEY_CPF = "cpf"
-SYSTEM_KEY_CNPJ = "cnpj"
-SYSTEM_KEY_ADDRESS_COMUM = "endereco_contratante"
-SYSTEM_KEY_ADDRESS_CORPORATIVO = "endereco_empresa"
 
 # Campos de endereço acoplados ao autopreenchimento por CEP (só existem no formulário 'comum').
 CEP_TARGET_KEYS = ("logradouro", "bairro", "cidade", "estado")
@@ -186,41 +179,6 @@ def _whatsapp_link(message: str) -> str:
         "https://api.whatsapp.com/send?phone="
         f"{_whatsapp_target()}&text={urllib.parse.quote(message)}"
     )
-
-
-def _field_value_by_key(sections: list[dict], field_key: str) -> str:
-    """Busca o valor de um campo pela chave estável (feature 123 — sobrevive a renomeação de
-    rótulo). Respostas anteriores à feature 123 têm campos com só ``[rótulo, valor]``, sem
-    chave — nesse caso a busca simplesmente não encontra nada (mesmo comportamento best-effort
-    que a automação já tinha antes)."""
-    for section in sections:
-        for campo in section["campos"]:
-            if len(campo) == 3 and campo[0] == field_key:
-                return (campo[2] or "").strip()
-    return ""
-
-
-def _fill_client_from_response(client: Client, response: FormResponse) -> None:
-    """Completa CPF/CNPJ e endereço do cliente com dados da resposta (feature 119).
-
-    Só preenche campos que estiverem vazios no cliente — nunca sobrescreve um valor já
-    existente (manual ou de uma associação anterior).
-    """
-    sections = response.data_sections
-    if response.form_type == "corporativo":
-        cnpj = _field_value_by_key(sections, SYSTEM_KEY_CNPJ)
-        address = _field_value_by_key(sections, SYSTEM_KEY_ADDRESS_CORPORATIVO)
-        if cnpj and not client.cnpj:
-            client.cnpj = cnpj
-        if address and not client.address:
-            client.address = address
-    else:
-        cpf = _field_value_by_key(sections, SYSTEM_KEY_CPF)
-        address = _field_value_by_key(sections, SYSTEM_KEY_ADDRESS_COMUM)
-        if cpf and not client.cpf:
-            client.cpf = cpf
-        if address and not client.address:
-            client.address = address
 
 
 def _save_response(form_type: str, contact_name: str, phone_display: str,
@@ -369,11 +327,7 @@ def retry_auto_link_pending() -> int:
 
 def _load_fields(form_type: str) -> list[FormFieldDefinition]:
     """Campos de um formulário, na ordem de exibição vigente."""
-    return (
-        FormFieldDefinition.query.filter_by(form_type=form_type)
-        .order_by(FormFieldDefinition.order)
-        .all()
-    )
+    return formularios_ops.list_field_definitions(form_type)
 
 
 def _grouped_sections(fields: list[FormFieldDefinition]) -> list[dict]:
@@ -526,7 +480,7 @@ def submit_corporativo():
 @require_vendas
 def index():
     """Seção de formulários: links copiáveis + listagem das respostas."""
-    responses = FormResponse.query.order_by(FormResponse.created_at.desc()).limit(200).all()
+    responses = formularios_ops.list_responses()
     return render_template(
         "formularios/index.html", responses=responses,
         can_edit_structure=_has_role(RoleName.SUPERADMIN))
@@ -549,31 +503,11 @@ def detail(response_id: int):
 def associar(response_id: int):
     """Associa a resposta a um cliente existente ou cria um a partir dos dados dela."""
     response = FormResponse.query.get_or_404(response_id)
-    client_id = request.form.get("client_id")
-    if client_id:
-        client = Client.query.get(client_id)
-        if not client:
-            flash("Cliente não encontrado.", "error")
-            return redirect(url_for("formularios.detail", response_id=response.id))
-    else:
-        # Criar a partir da resposta (dedup por telefone normalizado — FR-008)
-        phone = response.contact_phone
-        if not phone:
-            flash("A resposta não tem telefone válido para criar o cliente.", "error")
-            return redirect(url_for("formularios.detail", response_id=response.id))
-        client = Client.query.filter_by(phone=phone).first()
-        if not client:
-            client = Client(
-                name=response.contact_name,
-                phone=phone,
-                phone_display=response.contact_phone_display,
-                source="manual",
-            )
-            db.session.add(client)
-            db.session.flush()
-    _fill_client_from_response(client, response)
-    response.client_id = client.id
-    db.session.commit()
+    try:
+        client = formularios_ops.associate_client(response, request.form.get("client_id"))
+    except formularios_ops.FormValidationError as exc:
+        flash(exc.message, "error")
+        return redirect(url_for("formularios.detail", response_id=response.id))
     flash(f"Resposta associada ao cliente {client.name}.", "success")
     return redirect(url_for("formularios.detail", response_id=response.id))
 
@@ -583,8 +517,7 @@ def associar(response_id: int):
 def desassociar(response_id: int):
     """Remove a associação da resposta com o cliente."""
     response = FormResponse.query.get_or_404(response_id)
-    response.client_id = None
-    db.session.commit()
+    formularios_ops.dissociate_client(response)
     flash("Associação removida.", "success")
     return redirect(url_for("formularios.detail", response_id=response.id))
 
@@ -602,15 +535,11 @@ def vincular_evento(response_id: int):
     if not raw.isdigit():
         flash("Selecione um evento válido.", "error")
         return redirect(url_for("formularios.detail", response_id=response.id))
-    event = CalendarEvent.query.get(int(raw))
-    if not event:
-        flash("Evento não encontrado.", "error")
+    try:
+        event = formularios_ops.link_event(response, int(raw))
+    except formularios_ops.FormValidationError as exc:
+        flash(exc.message, "error")
         return redirect(url_for("formularios.detail", response_id=response.id))
-    response.event_id = event.id
-    response.event_link_source = "manual"
-    response.event_link_ambiguous = False
-    response.event_link_locked = True
-    db.session.commit()
     flash(f'Resposta vinculada ao evento "{event.title}".', "success")
     return redirect(url_for("formularios.detail", response_id=response.id))
 
@@ -624,11 +553,7 @@ def desvincular_evento(response_id: int):
     automação não pode religar sozinha ao mesmo evento no próximo ciclo de sincronização.
     """
     response = FormResponse.query.get_or_404(response_id)
-    response.event_id = None
-    response.event_link_source = None
-    response.event_link_ambiguous = False
-    response.event_link_locked = True
-    db.session.commit()
+    formularios_ops.unlink_event(response)
     flash("Vínculo de evento removido.", "success")
     return redirect(url_for("formularios.detail", response_id=response.id))
 
@@ -640,8 +565,7 @@ def delete(response_id: int):
     if not _has_role(RoleName.SUPERADMIN):
         abort(403)
     response = FormResponse.query.get_or_404(response_id)
-    db.session.delete(response)
-    db.session.commit()
+    formularios_ops.delete_response(response)
     flash("Resposta excluída.", "success")
     return redirect(url_for("formularios.index"))
 
@@ -650,22 +574,7 @@ def delete(response_id: int):
 @require_vendas
 def search():
     """Busca respostas (JSON) para o buscador de ``/events/new`` — sem acento (FR-010)."""
-    from app.utils import unaccent_lower_sql
-
-    q = (request.args.get("q") or "").strip()
-    if len(q) < 2:
-        return jsonify([])
-    like = f"%{strip_accents_lower(q)}%"
-    digits = _only_digits(q)
-    conditions = [unaccent_lower_sql(FormResponse.contact_name).like(like)]
-    if digits:
-        conditions.append(FormResponse.contact_phone.ilike(f"%{digits}%"))
-    results = (
-        FormResponse.query.filter(or_(*conditions))
-        .order_by(FormResponse.created_at.desc())
-        .limit(10)
-        .all()
-    )
+    results = formularios_ops.search_responses(request.args.get("q") or "")
     return jsonify([
         {
             "id": r.id,
@@ -680,36 +589,6 @@ def search():
 
 
 # ── Editor de estrutura dos formulários (feature 123, SUPERADMIN) ────
-
-
-def _unique_field_key(form_type: str, label: str) -> str:
-    """Gera uma chave estável (slug) a partir do rótulo, única dentro do formulário."""
-    base = re.sub(r"[^a-z0-9]+", "_", strip_accents_lower(label)).strip("_") or "campo"
-    existing = {
-        row[0] for row in
-        db.session.query(FormFieldDefinition.field_key).filter_by(form_type=form_type).all()
-    }
-    key = base
-    suffix = 2
-    while key in existing:
-        key = f"{base}_{suffix}"
-        suffix += 1
-    return key
-
-
-def _next_order(form_type: str) -> int:
-    """Posição no fim da lista global — o agrupamento por seção não depende de contiguidade em
-    ``order`` (ver ``_grouped_sections``), então um campo novo sempre cai no fim da sua seção."""
-    last = (
-        FormFieldDefinition.query.filter_by(form_type=form_type)
-        .order_by(FormFieldDefinition.order.desc())
-        .first()
-    )
-    return (last.order + 1) if last else 0
-
-
-def _parse_options(raw: str) -> list[str]:
-    return [line.strip() for line in (raw or "").splitlines() if line.strip()]
 
 
 @formularios_bp.route("/formularios/editor/<form_type>")
@@ -730,32 +609,19 @@ def editor_novo_campo(form_type: str):
     """Adiciona um campo personalizado ao fim de uma seção (US2 — feature 123)."""
     if form_type not in FORM_META:
         abort(404)
-    label = (request.form.get("label") or "").strip()
-    section_name = (request.form.get("section_name") or "").strip()
-    field_type = request.form.get("field_type") or ""
-    if not label or not section_name:
-        flash("Informe o rótulo e a seção do campo.", "error")
+    try:
+        field = formularios_ops.create_field(form_type, {
+            "label": request.form.get("label"),
+            "section_name": request.form.get("section_name"),
+            "field_type": request.form.get("field_type"),
+            "help_text": request.form.get("help_text"),
+            "required": request.form.get("required") == "on",
+            "options": request.form.get("options"),
+        })
+    except formularios_ops.FormValidationError as exc:
+        flash(exc.message, "error")
         return redirect(url_for("formularios.editor", form_type=form_type))
-    if field_type not in FormFieldDefinition.FIELD_TYPES:
-        flash("Tipo de campo inválido.", "error")
-        return redirect(url_for("formularios.editor", form_type=form_type))
-    options = None
-    if field_type == "selecao":
-        opts = _parse_options(request.form.get("options"))
-        if not opts:
-            flash("Um campo de seleção precisa de pelo menos uma opção.", "error")
-            return redirect(url_for("formularios.editor", form_type=form_type))
-        options = json.dumps(opts, ensure_ascii=False)
-    field = FormFieldDefinition(
-        form_type=form_type, section_name=section_name,
-        field_key=_unique_field_key(form_type, label), field_type=field_type, label=label,
-        help_text=(request.form.get("help_text") or "").strip() or None,
-        required=request.form.get("required") == "on", options=options,
-        order=_next_order(form_type), is_system=False,
-    )
-    db.session.add(field)
-    db.session.commit()
-    flash(f'Campo "{label}" adicionado.', "success")
+    flash(f'Campo "{field.label}" adicionado.', "success")
     return redirect(url_for("formularios.editor", form_type=form_type))
 
 
@@ -768,21 +634,17 @@ def editor_editar_campo(field_id: int):
     formato em respostas já salvas e preserva a busca por chave da feature 119.
     """
     field = FormFieldDefinition.query.get_or_404(field_id)
-    label = (request.form.get("label") or "").strip()
-    if not label:
-        flash("O rótulo não pode ficar vazio.", "error")
+    try:
+        formularios_ops.update_field(field, {
+            "label": request.form.get("label"),
+            "help_text": request.form.get("help_text"),
+            "placeholder": request.form.get("placeholder"),
+            "required": request.form.get("required") == "on",
+            "options": request.form.get("options"),
+        })
+    except formularios_ops.FormValidationError as exc:
+        flash(exc.message, "error")
         return redirect(url_for("formularios.editor", form_type=field.form_type))
-    if field.field_type == "selecao":
-        opts = _parse_options(request.form.get("options"))
-        if not opts:
-            flash("Um campo de seleção precisa de pelo menos uma opção.", "error")
-            return redirect(url_for("formularios.editor", form_type=field.form_type))
-        field.options = json.dumps(opts, ensure_ascii=False)
-    field.label = label
-    field.help_text = (request.form.get("help_text") or "").strip() or None
-    field.placeholder = (request.form.get("placeholder") or "").strip() or None
-    field.required = request.form.get("required") == "on"
-    db.session.commit()
     flash(f'Campo "{field.label}" atualizado.', "success")
     return redirect(url_for("formularios.editor", form_type=field.form_type))
 
@@ -792,19 +654,7 @@ def editor_editar_campo(field_id: int):
 def editor_mover_campo(field_id: int):
     """Reordena um campo dentro da própria seção (US3 — feature 123)."""
     field = FormFieldDefinition.query.get_or_404(field_id)
-    direction = request.form.get("direction")
-    siblings = (
-        FormFieldDefinition.query
-        .filter_by(form_type=field.form_type, section_name=field.section_name)
-        .order_by(FormFieldDefinition.order)
-        .all()
-    )
-    idx = siblings.index(field)
-    swap_idx = idx - 1 if direction == "up" else idx + 1
-    if 0 <= swap_idx < len(siblings):
-        other = siblings[swap_idx]
-        field.order, other.order = other.order, field.order
-        db.session.commit()
+    formularios_ops.move_field(field, request.form.get("direction", ""))
     return redirect(url_for("formularios.editor", form_type=field.form_type))
 
 
@@ -813,13 +663,11 @@ def editor_mover_campo(field_id: int):
 def editor_excluir_campo(field_id: int):
     """Remove um campo personalizado (US3 — feature 123). Campos de sistema são protegidos."""
     field = FormFieldDefinition.query.get_or_404(field_id)
-    if field.is_system:
-        flash(
-            f'"{field.label}" é um campo do sistema (usado por outras telas) e não pode ser '
-            "removido — só o texto e a obrigatoriedade podem ser ajustados.", "error")
-        return redirect(url_for("formularios.editor", form_type=field.form_type))
     form_type = field.form_type
-    db.session.delete(field)
-    db.session.commit()
+    try:
+        formularios_ops.delete_field(field)
+    except formularios_ops.FormValidationError as exc:
+        flash(exc.message, "error")
+        return redirect(url_for("formularios.editor", form_type=form_type))
     flash("Campo removido.", "success")
     return redirect(url_for("formularios.editor", form_type=form_type))

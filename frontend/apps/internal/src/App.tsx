@@ -39,6 +39,13 @@ import { EducaMantoCalculadoraPage } from "./pages/EducaMantoCalculadoraPage";
 import { EducaMantoPackagesPage } from "./pages/EducaMantoPackagesPage";
 import { EducaMantoPackageFormPage } from "./pages/EducaMantoPackageFormPage";
 import { EducaMantoHistoricoPage } from "./pages/EducaMantoHistoricoPage";
+import { GastosExtrasPage } from "./pages/GastosExtrasPage";
+import { GastosRecorrentesPage } from "./pages/GastosRecorrentesPage";
+import { OrcamentoCalculadoraPage } from "./pages/OrcamentoCalculadoraPage";
+import { OrcamentoConfigPrecosPage } from "./pages/OrcamentoConfigPrecosPage";
+import { OrcamentoHistoricoPage } from "./pages/OrcamentoHistoricoPage";
+import { AvaliacaoCastingPage } from "./pages/AvaliacaoCastingPage";
+import { FormulariosAdminPage } from "./pages/FormulariosAdminPage";
 
 export function App() {
   return (
@@ -58,6 +65,8 @@ export function App() {
           <Route path="/events/new" element={<EventCreatePage />} />
           <Route path="/events/:id" element={<EventDetailPage />} />
           <Route path="/talents" element={<TalentsListPage />} />
+          <Route path="/casting/avaliacoes" element={<AvaliacaoCastingPage />} />
+          <Route path="/formularios" element={<FormulariosAdminPage />} />
           <Route path="/talents/:id" element={<TalentDetailPage />} />
           <Route path="/talents/:id/edit" element={<TalentEditPage />} />
           <Route path="/figurinos" element={<FigurinoListPage />} />
@@ -67,6 +76,11 @@ export function App() {
           <Route path="/financeiro" element={<FinanceiroDashboardPage />} />
           <Route path="/financeiro/comissoes" element={<ComissoesPage />} />
           <Route path="/financeiro/pagamentos" element={<PagamentosPage />} />
+          <Route path="/gastos" element={<GastosExtrasPage />} />
+          <Route path="/gastos/recorrentes" element={<GastosRecorrentesPage />} />
+          <Route path="/orcamento" element={<OrcamentoCalculadoraPage />} />
+          <Route path="/orcamento/historico" element={<OrcamentoHistoricoPage />} />
+          <Route path="/orcamento/configuracoes" element={<OrcamentoConfigPrecosPage />} />
           <Route path="/educamanto" element={<EducaMantoCalculadoraPage />} />
           <Route path="/educamanto/pacotes" element={<EducaMantoPackagesPage />} />
           <Route path="/educamanto/pacotes/novo" element={<EducaMantoPackageFormPage />} />
