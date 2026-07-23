@@ -1,6 +1,37 @@
 # Research — Corrigir elenco incompleto ao criar evento a partir de orçamento
 
-## Contexto da investigação
+## Addendum — causa raiz real (encontrada após o primeiro deploy)
+
+O fix original desta feature (`compute_show_pricing`, abaixo) era real e válido, mas o usuário
+testou em produção após o deploy e confirmou que o elenco continuava sem carregar — **em
+qualquer orçamento, não só nos com "show customizado"**. Investigação adicional (renderizando
+`GET /events/new?orcamento_id=<id>` de verdade via Flask test client, em vez de só chamar
+`_build_orcamento_prefill` diretamente) encontrou a causa raiz real:
+
+`app/templates/event_create.html` (linhas 123-124) embutia o JSON do elenco direto num atributo
+HTML delimitado por aspas duplas:
+
+```jinja
+<input type="hidden" ... value="{{ prefill.caches | default([]) | tojson }}">
+```
+
+O filtro `tojson` do Jinja/Flask escapa `<`, `>`, `&` e `'` (seguro para uso dentro de uma tag
+`<script>`), mas **não escapa aspas duplas** — o próprio JSON usa `"` para delimitar chaves e
+strings. Resultado: o atributo HTML terminava no primeiro `"` do JSON (`value="[{"` já fecha o
+atributo), quebrando o parsing da tag e deixando o resto do JSON como lixo dentro do HTML. No
+navegador, `el.value` nunca continha o JSON completo, `JSON.parse` sempre lançava exceção
+(capturada silenciosamente por um `try/catch` que devolve `[]`), e a lista de elenco nunca era
+populada — para NENHUM orçamento, independente de idade ou de "show customizado".
+
+Confirmado que esse é o único lugar do projeto com esse padrão (grep em todo `app/templates/`);
+todo outro uso de `tojson` está dentro de `<script>` (seguro) ou usa atributo com aspas simples
+(`data-x='...'`, também seguro, já que JSON nunca contém aspas simples).
+
+**Fix**: `value="{{ ... | tojson | forceescape }}"` — `forceescape` força o HTML-escape mesmo em
+conteúdo já marcado como seguro pelo `tojson`, convertendo as aspas internas em `&#34;` (o
+navegador decodifica de volta ao ler `el.value`, então o JSON chega intacto ao JS).
+
+## Contexto da investigação (achado original desta feature)
 
 O spec (Assumptions) deixou em aberto onde exatamente a informação de elenco se perde entre o
 orçamento salvo e a tela de criação de evento. Esta fase investigou tecnicamente o caminho

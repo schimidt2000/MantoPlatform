@@ -110,6 +110,15 @@ independente.
   (mesmas chaves de `caches[]`) — só os valores de `cache_1h..4h` mudam quando
   `show_sosia_tipo == "customizado"` — checagem rápida de paridade, sem exigir mudança no
   frontend React.
+- [X] T009 (achado pós-deploy, causa raiz real) Corrigir `value="{{ prefill.caches | tojson }}"`
+  e `value="{{ prefill.acrescimos | tojson }}"` em `app/templates/event_create.html` (linhas
+  123-124) para `value="{{ ... | tojson | forceescape }}"` — o atributo HTML quebrava no
+  primeiro `"` do JSON embutido, e o elenco nunca era pré-preenchido em nenhum orçamento (não
+  só nos com show customizado). Ver Addendum em `research.md`.
+- [X] T010 Adicionar checagem de regressão renderizando `GET /events/new?orcamento_id=<id>` de
+  verdade (Flask test client) e validando que o hidden input `orc-caches-json` produz JSON
+  válido e idêntico a `_build_orcamento_prefill` — em
+  `scripts/db/verify_172_orcamento_elenco.py`.
 
 ---
 

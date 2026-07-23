@@ -120,8 +120,8 @@
   {# Dados do orçamento passados via hidden para o POST #}
   {% if prefill.orcamento_id %}
     <input type="hidden" name="orcamento_history_id" value="{{ prefill.orcamento_id }}">
-    <input type="hidden" name="orc_caches_json" id="orc-caches-json" value="{{ prefill.caches | default([]) | tojson }}">
-    <input type="hidden" name="acrescimos_json" value="{{ prefill.acrescimos | default([]) | tojson }}">
+    <input type="hidden" name="orc_caches_json" id="orc-caches-json" value="{{ prefill.caches | default([]) | tojson | forceescape }}">
+    <input type="hidden" name="acrescimos_json" value="{{ prefill.acrescimos | default([]) | tojson | forceescape }}">
   {% endif %}
 
 {# ══════════════════════════════════════════════════
