@@ -850,6 +850,14 @@ class SpecialExpense(db.Model):
     # (lucro do evento = venda − cachês − gastos extras aprovados)
     event_id          = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
 
+    # True quando um gestor (FINANCEIRO/SUPERADMIN) editou os dados do gasto na mesma operação
+    # em que ele está/ficou "aprovado" (migração 179). Não é um status novo — os cálculos que já
+    # filtram status=="aprovado" (DRE, planilha de pagamentos, custo de evento) continuam
+    # somando esses gastos normalmente; a flag só adiciona transparência visual na tela React.
+    approved_with_edits = db.Column(
+        db.Boolean, default=False, nullable=False, server_default="false"
+    )
+
     created_by     = db.relationship("User", foreign_keys=[created_by_id], lazy=True)
     approved_by    = db.relationship("User", foreign_keys=[approved_by_id], lazy=True)
     reimburse_user = db.relationship("User", foreign_keys=[reimburse_user_id], lazy=True)

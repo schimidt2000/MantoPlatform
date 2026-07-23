@@ -87,6 +87,27 @@ def list_expenses(user: User) -> list[SpecialExpense]:
     return query.order_by(SpecialExpense.expense_date.desc(), SpecialExpense.id.desc()).all()
 
 
+def list_expenses_for_admin() -> list[SpecialExpense]:
+    """Lista todos os gastos, sem filtro por autor (API, para FINANCEIRO/SUPERADMIN)."""
+    return SpecialExpense.query.order_by(
+        SpecialExpense.expense_date.desc(), SpecialExpense.id.desc()
+    ).all()
+
+
+def expense_totals(expenses: list[SpecialExpense]) -> dict[str, dict[str, float | int]]:
+    """Contagem e soma de valor por status, para os cards de resumo (API, visão admin)."""
+    totals = {
+        key: {"count": 0, "total": 0.0}
+        for key in ("todos", "pendente", "aprovado", "rejeitado")
+    }
+    for expense in expenses:
+        amount = float(expense.amount)
+        for key in ("todos", expense.status):
+            totals[key]["count"] += 1
+            totals[key]["total"] += amount
+    return totals
+
+
 def search_events_by_date(day: date) -> list[CalendarEvent]:
     """Eventos de um dia, para o seletor de vínculo de um gasto."""
     from sqlalchemy import func
@@ -111,22 +132,22 @@ def save_receipt(file: FileStorage, upload_dir: str) -> str | None:
     return f"expenses/{unique}"
 
 
-def create_expense(
-    creator: User, data: dict, receipt_path: str | None, event_id: int | None
-) -> SpecialExpense:
-    """Cria um gasto extra pendente. `data` já validado/parseado pelo chamador.
+def _validate_expense_data(data: dict, *, require_receipt: bool) -> dict:
+    """Valida e normaliza os campos comuns de um gasto extra (criação e edição).
 
     Args:
-        creator: usuário autenticado que está registrando o gasto.
-        data: `description`, `category`, `amount` (Decimal), `expense_date` (date), `notes`,
-            `disbursement_type`, `reimburse_user_id`, `supplier_name`, `supplier_pix`,
-            `paid_at_creation` (bool).
-        receipt_path: caminho já salvo do comprovante (via `save_receipt`).
-        event_id: evento a vincular, se houver.
+        data: `description`, `category`, `amount` (Decimal), `expense_date` (date),
+            `disbursement_type`, `reimburse_user_id`, `supplier_name`, `supplier_pix`.
+        require_receipt: se `True`, exige `data["receipt_path"]` preenchido (só na criação —
+            a edição não reenvia nota fiscal).
+
+    Returns:
+        Dict normalizado com `description`, `category`, `amount`, `expense_date`,
+        `disbursement_type`, `reimburse_user_id`, `supplier_name`, `supplier_pix`.
 
     Raises:
-        GastoValidationError: descrição/valor ausente, comprovante ausente ou desembolso
-            incompleto (funcionário não selecionado / fornecedor sem nome).
+        GastoValidationError: descrição/valor ausente, comprovante ausente (quando exigido) ou
+            desembolso incompleto (funcionário não selecionado / fornecedor sem nome).
     """
     description = (data.get("description") or "").strip()
     amount = data.get("amount")
@@ -134,7 +155,7 @@ def create_expense(
         raise GastoValidationError("description", "Informe uma descrição.")
     if amount is None or amount <= 0:
         raise GastoValidationError("amount", "Informe um valor válido (ex.: 1.000,00).")
-    if not receipt_path:
+    if require_receipt and not data.get("receipt_path"):
         raise GastoValidationError(
             "receipt", "Anexe a Nota Fiscal (foto ou PDF que mostre o valor dos produtos)."
         )
@@ -157,24 +178,56 @@ def create_expense(
     else:
         disbursement_type = None
 
-    paid_at_creation = bool(disbursement_type) and bool(data.get("paid_at_creation"))
     category = data.get("category") or "Outros"
     if category not in SpecialExpense.CATEGORIES:
         category = "Outros"
 
+    return {
+        "description": description,
+        "category": category,
+        "amount": amount,
+        "expense_date": data.get("expense_date") or date.today(),
+        "disbursement_type": disbursement_type,
+        "reimburse_user_id": reimburse_user_id,
+        "supplier_name": supplier_name,
+        "supplier_pix": supplier_pix,
+    }
+
+
+def create_expense(
+    creator: User, data: dict, receipt_path: str | None, event_id: int | None
+) -> SpecialExpense:
+    """Cria um gasto extra pendente. `data` já validado/parseado pelo chamador.
+
+    Args:
+        creator: usuário autenticado que está registrando o gasto.
+        data: `description`, `category`, `amount` (Decimal), `expense_date` (date), `notes`,
+            `disbursement_type`, `reimburse_user_id`, `supplier_name`, `supplier_pix`,
+            `paid_at_creation` (bool).
+        receipt_path: caminho já salvo do comprovante (via `save_receipt`).
+        event_id: evento a vincular, se houver.
+
+    Raises:
+        GastoValidationError: descrição/valor ausente, comprovante ausente ou desembolso
+            incompleto (funcionário não selecionado / fornecedor sem nome).
+    """
+    parsed = _validate_expense_data({**data, "receipt_path": receipt_path}, require_receipt=True)
+    disbursement_type = parsed["disbursement_type"]
+    paid_at_creation = bool(disbursement_type) and bool(data.get("paid_at_creation"))
+
     expense = SpecialExpense(
-        description=description,
-        category=category,
-        amount=amount,
-        expense_date=data.get("expense_date") or date.today(),
+        description=parsed["description"],
+        category=parsed["category"],
+        amount=parsed["amount"],
+        expense_date=parsed["expense_date"],
         receipt_path=receipt_path,
         notes=(data.get("notes") or "").strip() or None,
         status="pendente",
         created_by_id=creator.id,
         disbursement_type=disbursement_type,
-        reimburse_user_id=reimburse_user_id,
-        supplier_name=supplier_name,
-        supplier_pix=supplier_pix,
+        reimburse_user_id=parsed["reimburse_user_id"],
+        supplier_name=parsed["supplier_name"],
+        supplier_pix=parsed["supplier_pix"],
         payment_status="pago" if paid_at_creation else "nao_pago",
         paid_at_creation=paid_at_creation,
         event_id=event_id,
@@ -183,7 +236,7 @@ def create_expense(
     db.session.flush()
     _log(
         creator, "gasto", expense.id, expense.description, "create",
-        f"Gasto registrado: R$ {amount:.2f} ({category})",
+        f"Gasto registrado: R$ {parsed['amount']:.2f} ({parsed['category']})",
     )
     db.session.commit()
     return expense
@@ -245,6 +298,70 @@ def link_expense_to_event(
         expense.event_id = event_id
         detail = f"Gasto vinculado ao evento: {event.title}"
     _log(actor, "gasto", expense.id, expense.description, "link_event", detail)
+    db.session.commit()
+    return expense
+
+
+def edit_expense(
+    expense: SpecialExpense, actor: User, data: dict, event_id: int | None, aprovar: bool
+) -> SpecialExpense:
+    """Edita um gasto (qualquer status, exceto 'rejeitado' sem `aprovar`) — API, FINANCEIRO/
+    SUPERADMIN (migração 179).
+
+    Se o gasto resultar em status "aprovado" (já estava, ou virou agora via `aprovar=True`) e
+    algum dado tiver de fato mudado nesta operação, marca `approved_with_edits=True` — não é um
+    status novo, é uma flag adicional (ver `app/models.py::SpecialExpense.approved_with_edits`).
+
+    Args:
+        expense: gasto a editar.
+        actor: usuário FINANCEIRO/SUPERADMIN que está editando.
+        data: mesmos campos de `_validate_expense_data` (sem nota fiscal — edição não reenvia).
+        event_id: evento a vincular, ou `None` para remover o vínculo.
+        aprovar: se `True`, aprova o gasto (ou reconsidera um rejeitado) nesta mesma operação.
+
+    Raises:
+        GastoValidationError: dados inválidos (mesmas regras da criação).
+        GastoStateError: tentativa de editar um gasto "rejeitado" sem `aprovar=True`.
+    """
+    if expense.status == "rejeitado" and not aprovar:
+        raise GastoStateError(
+            "Gasto rejeitado só pode ser editado reconsiderando a aprovação."
+        )
+
+    parsed = _validate_expense_data(data, require_receipt=False)
+    changed = (
+        expense.description != parsed["description"]
+        or expense.category != parsed["category"]
+        or expense.amount != parsed["amount"]
+        or expense.expense_date != parsed["expense_date"]
+        or expense.disbursement_type != parsed["disbursement_type"]
+        or expense.reimburse_user_id != parsed["reimburse_user_id"]
+        or expense.supplier_name != parsed["supplier_name"]
+        or expense.supplier_pix != parsed["supplier_pix"]
+        or expense.event_id != event_id
+    )
+
+    expense.description = parsed["description"]
+    expense.category = parsed["category"]
+    expense.amount = parsed["amount"]
+    expense.expense_date = parsed["expense_date"]
+    expense.disbursement_type = parsed["disbursement_type"]
+    expense.reimburse_user_id = parsed["reimburse_user_id"]
+    expense.supplier_name = parsed["supplier_name"]
+    expense.supplier_pix = parsed["supplier_pix"]
+    expense.event_id = event_id
+
+    if aprovar:
+        expense.status = "aprovado"
+        expense.approved_by_id = actor.id
+        expense.approved_at = datetime.utcnow()
+
+    if expense.status == "aprovado" and changed:
+        expense.approved_with_edits = True
+
+    action = "edit_and_approve" if aprovar else "edit"
+    detail = f"Gasto editado{' e aprovado' if aprovar else ''}: R$ {parsed['amount']:.2f}"
+    _log(actor, "gasto", expense.id, expense.description, action, detail)
     db.session.commit()
     return expense
 

@@ -11,6 +11,7 @@ export interface GastoExtra {
   amount: number;
   expense_date: string;
   status: ExpenseStatus;
+  approved_with_edits: boolean;
   notes: string;
   receipt_url: string | null;
   disbursement_type: DisbursementType;
@@ -26,13 +27,28 @@ export interface GastoExtra {
   approved_at: string | null;
 }
 
-export interface GastosExtrasResponse {
-  expenses: GastoExtra[];
-  is_superadmin: boolean;
-  categories: string[];
+export interface GastosTotal {
+  count: number;
+  total: number;
 }
 
-/** Gastos extras (feature 128/177) — SUPERADMIN vê todos, demais só os próprios. */
+export interface GastosTotals {
+  todos: GastosTotal;
+  pendente: GastosTotal;
+  aprovado: GastosTotal;
+  rejeitado: GastosTotal;
+}
+
+export interface GastosExtrasResponse {
+  expenses: GastoExtra[];
+  /** FINANCEIRO/SUPERADMIN: gestão completa de todos os gastos. Demais: só os próprios. */
+  can_manage: boolean;
+  categories: string[];
+  /** Só presente quando `can_manage` é `true`. */
+  totals?: GastosTotals;
+}
+
+/** Gastos extras (feature 128/177/179) — FINANCEIRO/SUPERADMIN vê todos, demais só os próprios. */
 export function useGastosExtras() {
   return useQuery<GastosExtrasResponse>({
     queryKey: ["gastos-extras"],
@@ -51,6 +67,20 @@ export function useGastosEventos(date: string) {
     queryKey: ["gastos-eventos", date],
     queryFn: () => apiFetch<{ events: GastoEvento[] }>(`/api/gastos/eventos?date=${date}`),
     enabled: Boolean(date),
+  });
+}
+
+export interface GastoFuncionario {
+  id: number;
+  name: string;
+}
+
+/** Colaboradores ativos, para o seletor de "Reembolso a funcionário". */
+export function useGastosFuncionarios() {
+  return useQuery<{ funcionarios: GastoFuncionario[] }>({
+    queryKey: ["gastos-funcionarios"],
+    queryFn: () => apiFetch<{ funcionarios: GastoFuncionario[] }>("/api/gastos/funcionarios"),
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -93,7 +123,35 @@ export function useCreateGasto() {
   });
 }
 
-/** Aprova um gasto pendente (SUPERADMIN). */
+export interface UpdateGastoInput {
+  id: number;
+  description: string;
+  category: string;
+  amount: number;
+  expense_date: string;
+  disbursement_type?: "reembolso" | "fornecedor" | "";
+  reimburse_user_id?: number;
+  supplier_name?: string;
+  supplier_pix?: string;
+  event_id?: number | null;
+  /** Aprova (ou reconsidera, se rejeitado) o gasto nesta mesma edição. */
+  aprovar?: boolean;
+}
+
+/** Edita um gasto (qualquer status, exceto rejeitado sem `aprovar`). FINANCEIRO/SUPERADMIN. */
+export function useUpdateGasto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...input }: UpdateGastoInput) =>
+      apiFetch<GastoExtra>(`/api/gastos/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["gastos-extras"] }),
+  });
+}
+
+/** Aprova um gasto pendente, sem edição (FINANCEIRO/SUPERADMIN). */
 export function useApproveGasto() {
   const queryClient = useQueryClient();
   return useMutation({
