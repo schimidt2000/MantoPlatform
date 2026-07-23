@@ -1,7 +1,8 @@
 # CLAUDE.md — Instruções para o Claude Code
 
 > Este arquivo é lido automaticamente pelo Claude Code ao abrir o projeto.
-> Ele define como o Claude deve trabalhar neste projeto Python.
+> Ele define como o Claude deve trabalhar neste projeto (backend Python/Flask + frontend
+> React/TypeScript).
 
 ---
 
@@ -9,28 +10,46 @@
 
 - **Nome**: Plataforma Manto
 - **Descrição**: Sistema empresarial ERP para gestão de eventos, talentos, figurino, financeiro e agenda. Integrado com Google Calendar e Google Sheets.
-- **Stack (backend)**: Python + Flask + SQLAlchemy
-- **Banco de dados**: SQLite (desenvolvimento) → PostgreSQL/AWS RDS (produção)
+- **Arquitetura**: SPA desacoplada — **Frontend React** (Vite + TypeScript + Tailwind CSS +
+  shadcn/ui + Framer Motion + TanStack Query) consumindo o **Flask como API JSON estrita**
+  (`/api/*`). Banco: SQLite (dev casual) → PostgreSQL (produção, Railway).
 - **Integrações**: Google Calendar API (OAuth 2.0), Google Sheets API (service account)
 
-> ⚠️ **MIGRAÇÃO EM ANDAMENTO (feature 144 — constituição v2.0.0).** O projeto está migrando
-> de Jinja2/vanilla para uma arquitetura desacoplada: **Frontend React (Vite) + TypeScript +
-> Tailwind + shadcn/ui + Framer Motion + TanStack Query** (em `frontend/`, npm workspaces com
-> 3 apps — `internal`, `portal`, `public` — e 3 pacotes compartilhados — `ui`, `api-client`,
-> `money`) consumindo o **Flask como API JSON** (`/api/*`). A migração é **strangler-fig,
-> blueprint por blueprint** — hoje o estado é **híbrido**:
-> - **Já migrado (React + API):** login e dashboard de início (`frontend/apps/internal`,
->   endpoints `/api/auth/*` e `/api/dashboard`). A lógica do dashboard é fonte única em
->   `app/api/dashboard_service.py`, reusada pela view Jinja `home` e pela API.
-> - **Ainda Jinja/vanilla:** todo o resto (agenda/eventos, financeiro, talentos, figurino,
->   catálogo público, portal, etc.) — segue funcionando normalmente e **não deve ser tocado**
->   por esta migração até chegar sua vez (US2→US6 em `specs/144-migracao-react-spa/`).
-> - **Padrões novos a seguir ao criar endpoint/tela:** contrato JSON em
->   `specs/144-migracao-react-spa/contracts/api-conventions.md`; auth por cookie de sessão
->   HttpOnly (Flask-Login) + `credentials:"include"`; máscara monetária BRL via
->   `@manto/money` (nunca reinventar). Rodar `frontend/`: `npm run dev:internal` (proxy Vite
->   `/api`→Flask). Este `CLAUDE.md` será reescrito por completo para o estado final quando a
->   última fatia (US6) concluir.
+> ✅ **MIGRAÇÃO REACT CONCLUÍDA (feature 144, constituição v2.0.0)** — 2026-07-22. As 6 User
+> Stories da spec (`specs/144-migracao-react-spa/spec.md`) estão 100% feitas: Fundação (auth +
+> dashboard) → Agenda/Eventos → Talentos/Figurino → Financeiro/Vendas → Superfícies Públicas
+> (catálogo, `/cadastro`, formulários, feedback) → Cauda Administrativa (usuários, RH,
+> configurações, catálogo admin, revisão de mídia). Todo o sistema dentro desse escopo tem
+> endpoint JSON equivalente e tela em React — ver `specs/144-migracao-react-spa/` e
+> `specs/165..170-*` (fatias da Cauda Administrativa) para o histórico completo.
+>
+> **Escopo real da migração 144 — leia antes de assumir "tudo é React"**:
+> - **Dentro do escopo (React + API, completo)**: tudo que staff autenticado usa —
+>   `frontend/apps/internal` (agenda, talentos, figurino, financeiro, vendas, clientes, admin,
+>   RH, revisão de mídia) e `frontend/apps/public` (catálogo, `/cadastro`, formulários,
+>   feedback por link — visitante anônimo, sem login).
+> - **FORA do escopo desta migração — ainda 100% Jinja2/vanilla**: o **Portal do Artista**
+>   (`app/talent_portal`, sessão própria do talento) nunca foi atribuído a nenhuma das 6 User
+>   Stories, apesar de a spec original (Q2) ter reservado um 3º bundle para ele
+>   (`frontend/apps/portal` — hoje só scaffold vazio, sem telas). Migrá-lo é uma **iniciativa
+>   futura própria, com sua própria spec** — não assuma que está coberto, e não misture
+>   trabalho nele com o padrão desta migração sem uma spec dedicada.
+> - **Código Jinja legado das áreas já migradas**: as views/templates antigos de cada
+>   blueprint migrado (`app/admin`, `app/calendar`, `app/talents`, `app/figurino`,
+>   `app/financeiro`, `app/clientes`, `app/revisao`, `app/catalogo`, `app/cadastro`,
+>   `app/formularios`, `app/feedback`) **continuam existindo em paralelo** no código — cada
+>   fatia manteve a rota Jinja antiga funcionando sem regressão em vez de apagá-la
+>   (strangler-fig). Decomissionar/apagar esse código legado é limpeza futura, fora do escopo
+>   desta migração; ao tocar esses blueprints por outro motivo, não é necessário preservar o
+>   Jinja também — confirme com o usuário antes de apagar uma view antiga.
+>
+> **Padrões obrigatórios em código NOVO** (dentro do escopo migrado): contrato JSON em
+> `specs/144-migracao-react-spa/contracts/api-conventions.md`; auth por cookie de sessão
+> HttpOnly (Flask-Login) + `credentials:"include"`; máscara monetária BRL via `@manto/money`
+> (nunca reinventar); núcleo de negócio em módulo `*_ops.py` reusado por API e (quando ainda
+> presente) pela view Jinja legada — nunca duplicar lógica. Rodar `frontend/`:
+> `npm run dev:internal` (staff) / `npm run dev:public` (visitante anônimo) — proxy Vite
+> `/api`→Flask.
 
 ---
 
@@ -39,31 +58,57 @@
 ```
 Manto_Platform/
 ├── CLAUDE.md
-├── run.py                 ← entrypoint (python run.py)
+├── run.py                 ← entrypoint do Flask (python run.py)
 ├── requirements.txt
-├── migrations/            ← Alembic (Flask-Migrate)
+├── migrations/            ← Alembic (Flask-Migrate) — sempre escritas à mão
 ├── instance/
-│   └── uploads/           ← arquivos enviados (contratos, fotos, figurinos)
-└── app/
-    ├── __init__.py        ← app factory + rota home
-    ├── config.py
-    ├── models.py          ← todos os modelos SQLAlchemy
-    ├── static/            ← CSS, JS, imagens
-    ├── templates/         ← Jinja2 templates
-    ├── auth/              ← login, logout, perfil
-    ├── admin/             ← gestão de usuários, settings, desempenho
-    ├── calendar/          ← agenda, eventos, sync Google Calendar
-    ├── talents/           ← banco de talentos, import Google Sheets
-    ├── figurino/          ← fichas de figurino
-    ├── financeiro/        ← dashboard financeiro, pagamentos, salários
-    ├── rh/                ← RH (em construção)
-    └── tools/             ← calculadora de transporte
-├── .claude/
-│   └── skills/
-│       ├── python-quality.md
-│       ├── ui-ux.md
-│       ├── autonomy.md
-│       └── architecture.md
+│   └── uploads/           ← arquivos locais (dev); produção usa volume/S3 (app/storage.py)
+├── docs/
+│   └── changelog.html     ← changelog do time (republicar no artifact existente)
+├── specs/                 ← spec-kit — uma pasta por feature (spec/plan/tasks/contracts)
+│   └── 144-migracao-react-spa/   ← spec-mãe da migração + fatias 145–170
+│
+├── app/                   ← backend Flask — API JSON (100% do escopo migrado) + Jinja legado
+│   ├── __init__.py        ← app factory, registro de blueprints
+│   ├── config.py
+│   ├── models.py          ← todos os modelos SQLAlchemy
+│   ├── api/                       ← blueprint único `/api/*` — toda rota nova nasce aqui
+│   │   ├── __init__.py            ← api_bp; importa cada módulo de rotas por efeito colateral
+│   │   ├── auth.py, dashboard.py  ← Fundação (144)
+│   │   ├── agenda*.py             ← Agenda/Eventos (145–153)
+│   │   ├── talents_*.py, figurino_*.py    ← Talentos/Figurino (154–155)
+│   │   ├── financeiro_*.py                ← Financeiro/Vendas (156–160)
+│   │   ├── catalogo_read.py, cadastro_write.py, formularios_write.py, feedback_write.py
+│   │   │                                  ← Superfícies Públicas (161–164)
+│   │   ├── clientes_*.py, rh_read.py, admin_*.py, revisao_*.py
+│   │   │                                  ← Cauda Administrativa (165–170)
+│   │   └── (cada rota nova = função pura que só valida RBAC e serializa; a regra de
+│   │       negócio mora em `app/<blueprint>/<nome>_ops.py`, reusada pela view Jinja legada)
+│   ├── admin/, calendar/, talents/, figurino/, financeiro/, clientes/, rh/, revisao/,
+│   │   catalogo/, cadastro/, formularios/, feedback/
+│   │       ← blueprints migrados: `routes.py` (view Jinja legada, mantida) + `*_ops.py`
+│   │         (núcleo de negócio, fonte única, reusado pela API)
+│   ├── talent_portal/     ← ⚠️ Portal do Artista — FORA do escopo da migração 144, 100%
+│   │                         Jinja/vanilla ainda; ver aviso no topo deste arquivo
+│   ├── static/, templates/  ← Jinja2/CSS/JS legado (ainda presente, ver aviso no topo)
+│   └── storage.py          ← abstração de upload (local/S3), usada por API e Jinja legado
+│
+└── frontend/               ← monorepo npm workspaces — interface completa (staff + público)
+    ├── apps/
+    │   ├── internal/        ← staff autenticado — TUDO que existe além do Portal do Artista
+    │   ├── public/          ← visitante anônimo — catálogo, /cadastro, formulários, feedback
+    │   └── portal/          ← ⚠️ scaffold vazio — Portal do Artista NÃO migrado (ver aviso)
+    └── packages/
+        ├── ui/               ← design system (Button, Card, Input, Skeleton, FileUpload…)
+        ├── api-client/       ← apiFetch/apiFetchBlob, ApiRequestError, assetUrl (fonte única)
+        └── money/            ← formatBRL/parseBRL (fonte única, Princípio VII)
+
+.claude/
+└── skills/
+    ├── python-quality.md
+    ├── ui-ux.md
+    ├── autonomy.md
+    └── architecture.md
 ```
 
 ---
@@ -127,31 +172,45 @@ def get_active_users(users: list[User]) -> list[User]:
 
 ---
 
-## 🎨 UI/UX — Quando Houver Interface
+## 🎨 UI/UX — React (Tailwind + shadcn/ui + Framer Motion)
+
+Toda tela nova é um componente React em `frontend/apps/internal` (staff) ou
+`frontend/apps/public` (visitante anônimo) — nunca um template Jinja novo (ver aviso no topo
+sobre o escopo real da migração). Regras completas: Princípios V/VII/VIII/IX da constituição
+(`.specify/memory/constitution.md`).
 
 ### Princípios de design que devem ser seguidos:
 - **Hierarquia visual clara**: o usuário deve saber onde olhar primeiro
-- **Feedback imediato**: toda ação deve ter resposta visual (loading, erro, sucesso)
-- **Consistência**: mesma paleta, mesmos espaçamentos, mesmos componentes
-- **Mobile-first**: comece pelo mobile, expanda para desktop
+- **Feedback imediato**: toda ação tem loading/erro/sucesso via TanStack Query — nenhum botão
+  fica "morto" ao clique (Princípio V, não-negociável)
+- **Consistência**: só Tailwind CSS + componentes de `@manto/ui` (`Button`, `Card`, `Input`,
+  `Skeleton`, `FileUpload`…) — zero CSS solto, zero estilo inline
+- **Mobile-first**: comece pelo mobile, expanda para desktop (obrigatório em superfícies
+  públicas — Princípio VIII)
+- **Movimento com propósito**: transições de Framer Motion (150–350ms), respeitando
+  `useReducedMotion()` (Princípio IX)
 
-### Paleta e tipografia:
-- Use variáveis CSS para todas as cores — zero cores hardcoded no HTML
-- Escolha fontes com personalidade (Google Fonts): evite Inter, Arial, Roboto
-- Espaçamento baseado em múltiplos de 4px (4, 8, 12, 16, 24, 32, 48...)
+### Padrões obrigatórios (fonte única, nunca reinventar):
+- **Valor monetário**: sempre `@manto/money` (`formatBRL`/`parseBRL`) — nunca outra máscara
+- **Chamada à API**: sempre `apiFetch`/`apiFetchBlob` de `@manto/api-client` (trata erro/
+  `ApiRequestError` com `fields` para apontar campo inválido em formulários)
+- **Arquivo servido pelo Flask**: sempre `assetUrl()` de `@manto/api-client` (nunca concatenar
+  URL à mão — production usa origem diferente do frontend)
 
 ### Componentes obrigatórios:
-- Estado de loading para operações assíncronas
-- Mensagens de erro amigáveis (nunca exponha stack traces ao usuário)
-- Confirmação antes de ações destrutivas (deletar, etc.)
+- Estado de loading para toda operação assíncrona (`Skeleton` ou `loading` no `Button`)
+- Mensagens de erro amigáveis em pt-BR (nunca stack trace)
+- Confirmação antes de ações destrutivas — `window.confirm()` é o padrão já usado no projeto
+  (não há `Dialog` no design system compartilhado ainda)
 - Feedback de sucesso após operações importantes
 
 ### Ao criar qualquer tela nova:
-1. Defina o objetivo da tela (o que o usuário precisa fazer aqui?)
-2. Liste os elementos necessários (formulários, tabelas, botões)
-3. Pense no estado vazio (o que aparece quando não há dados?)
-4. Pense nos erros (o que aparece quando algo dá errado?)
-5. Só então escreva o código
+1. Veja se já existe algo parecido em `frontend/apps/internal/src/pages/` — reaproveite o
+   padrão (hooks em `lib/<dominio>.ts`, página em `pages/<Nome>Page.tsx`)
+2. Defina o objetivo da tela e liste os elementos necessários
+3. Pense no estado vazio e nos erros antes de escrever código
+4. Núcleo de negócio novo no backend? Sempre um endpoint em `app/api/<dominio>_read.py`/
+   `_write.py`, chamando um `app/<blueprint>/<dominio>_ops.py` — nunca lógica direto na rota
 
 ---
 
@@ -197,35 +256,38 @@ ruff check app/
 
 ## 🏛️ Arquitetura
 
-### Estrutura de módulos Python:
+### Padrão real do backend (cada blueprint migrado segue isto):
 ```
-src/
-├── __init__.py
-├── config.py          ← configurações e variáveis de ambiente
-├── models/            ← modelos de dados (dataclasses, Pydantic, SQLAlchemy)
-│   └── __init__.py
-├── services/          ← lógica de negócio (pura, sem HTTP)
-│   └── __init__.py
-├── api/ ou views/     ← rotas HTTP (só chama services)
-│   └── __init__.py
-├── repositories/      ← acesso ao banco de dados
-│   └── __init__.py
-└── utils/             ← funções utilitárias genéricas
-    └── __init__.py
+app/<blueprint>/
+├── routes.py          ← views Jinja legadas — hoje só chamam <dominio>_ops, nunca duplicam
+│                         lógica (ver aviso no topo sobre o Jinja legado)
+└── <dominio>_ops.py   ← núcleo de negócio: funções puras (sem `request`/`render_template`),
+                          type hints + docstring, exceções próprias p/ erro de validação
+                          (ex.: `ClientValidationError`) — fonte única, reusada por Jinja e API
+
+app/api/
+├── <dominio>_read.py  ← GET — só valida RBAC (função, não decorator) e serializa
+└── <dominio>_write.py ← POST/PATCH/DELETE — idem; erros viram `json_error(msg, status,
+                          fields=...)` de `app.api_utils`
 ```
 
 ### Regras de arquitetura:
-- **Separação de responsabilidades**: routes não fazem lógica de negócio
-- **Services são puros**: não importam nada de HTTP/web
-- **Repositories abstraem o banco**: o resto do código não faz queries diretas
+- **Routes não fazem lógica de negócio** — só validam RBAC, chamam `*_ops` e serializam/
+  redirecionam
+- **`*_ops.py` são puros**: nunca importam `flask.request`/`render_template`/`flash`
+- **RBAC em endpoint de API é função, não decorator Flask** — os decorators legados
+  (`@require_superadmin` etc.) dependem de sessão de página; a API reimplementa o mesmo check
+  como função chamada no início da view, validada por paridade de comportamento (não por
+  reusar o decorator)
+- **Extrair `*_ops.py` só quando há núcleo de negócio real a duplicar** — se a "lógica" é só
+  checar uma permissão (ex.: `app/rh`), não vale a pena um módulo novo
 - **Config centralizado**: zero strings mágicas espalhadas no código
-- **Injeção de dependência**: prefira receber dependências no construtor
 
-### Dependências entre camadas (só pode depender da camada abaixo):
+### Dependências (só pode depender da camada abaixo):
 ```
-API/Views → Services → Repositories → Models
-              ↓
-           Utils (qualquer camada pode usar)
+API (app/api/*) ──┐
+                   ├──→ <dominio>_ops.py ──→ Models (app/models.py)
+Jinja (routes.py) ─┘
 ```
 
 ### Configuração via variáveis de ambiente:
@@ -252,11 +314,16 @@ config = Config()
       `app_context`. Nunca validar contra o SQLite vazio.
 - [ ] Sem warnings de linting nos arquivos tocados (`ruff check`)
 - [ ] Arquivos novos formatados (`ruff format`); legado segue o estilo circundante
-- [ ] Funções novas têm docstring e type hints
-- [ ] Casos de erro tratados — todo `except` amplo registra em log
+- [ ] Funções novas têm docstring e type hints (Python) / interfaces/types explícitos (TS)
+- [ ] Casos de erro tratados — todo `except` amplo registra em log; React trata erro/loading/
+      sucesso (TanStack Query) em toda tela nova
 - [ ] Sem secrets/senhas hardcoded no código
 - [ ] Variáveis com nomes claros e descritivos
-- [ ] Superfície pública tocada? Conferida em viewport mobile (Princípio VIII da constituição)
+- [ ] **Tela React tocada?** `npx tsc --noEmit` e `npm run build` (em `frontend/apps/<app>`)
+      sem erros antes de declarar pronto
+- [ ] Superfície pública ou tela nova tocada? Conferida em viewport mobile (Princípio VIII da
+      constituição)
+- [ ] `docs/changelog.html` atualizado com a entrega, republicado no mesmo link
 
 ---
 
@@ -308,6 +375,24 @@ ruff check app/
 ruff format <arquivo_novo.py>
 ```
 
+### Frontend (React)
+
+```powershell
+# Instalar dependências (na primeira vez, ou após mudar package.json)
+cd frontend; npm install
+
+# Rodar em dev — staff (proxy Vite /api → Flask local, rode o backend em paralelo)
+npm run dev:internal
+# Rodar em dev — visitante anônimo (catálogo/cadastro/formulários/feedback)
+npm run dev:public
+
+# Checar tipos sem emitir build (rodar sempre que tocar uma tela React)
+npx tsc --noEmit          # dentro de frontend/apps/internal ou frontend/apps/public
+
+# Build de produção (mesmo comando valida tsc + vite build)
+npm run build             # dentro do app específico
+```
+
 ---
 
 ## 📋 Skills Adicionais
@@ -327,5 +412,5 @@ O Claude deve ler os arquivos em `.claude/skills/` quando trabalhar nas áreas c
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/165-clientes-crm-react/plan.md`
+`specs/170-revisao-midia-react/plan.md`
 <!-- SPECKIT END -->
