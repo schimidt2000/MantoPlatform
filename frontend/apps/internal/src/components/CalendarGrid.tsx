@@ -6,6 +6,8 @@ import { eventCategory } from "../lib/eventCategory";
 export interface CalendarGridProps {
   ym: string;
   events: EventoResumo[];
+  /** Clique no número do dia ou em área vazia da célula (fora dos eventos) — abre a visão Dia. */
+  onDayClick?: (dateKey: string) => void;
 }
 
 const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -70,16 +72,25 @@ function eventTime(ev: EventoResumo): string {
   return dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
-function DayCell({ cell }: { cell: CalendarCell }) {
+function DayCell({ cell, onDayClick }: { cell: CalendarCell; onDayClick?: (dateKey: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? cell.events : cell.events.slice(0, MAX_VISIBLE_PER_DAY);
   const hidden = cell.events.length - visible.length;
 
   return (
     <div
+      role={onDayClick ? "button" : undefined}
+      tabIndex={onDayClick ? 0 : undefined}
+      onClick={() => onDayClick?.(cell.key)}
+      onKeyDown={(e) => {
+        if (onDayClick && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onDayClick(cell.key);
+        }
+      }}
       className={`flex min-h-[92px] flex-col gap-1 border-b border-r border-line p-1.5 sm:min-h-[110px] ${
         cell.inCurrentMonth ? "bg-panel" : "bg-surface-2"
-      }`}
+      } ${onDayClick ? "cursor-pointer hover:bg-surface-2" : ""}`}
     >
       <span
         className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
@@ -100,6 +111,7 @@ function DayCell({ cell }: { cell: CalendarCell }) {
               key={ev.id}
               to={`/events/${ev.id}`}
               title={ev.title}
+              onClick={(e) => e.stopPropagation()}
               className={`truncate rounded px-1.5 py-0.5 text-[11px] font-medium ${cat.bg} ${cat.fg} hover:opacity-80`}
             >
               {eventTime(ev) && <span className="tabular-nums">{eventTime(ev)} </span>}
@@ -110,7 +122,10 @@ function DayCell({ cell }: { cell: CalendarCell }) {
         {hidden > 0 && (
           <button
             type="button"
-            onClick={() => setExpanded(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(true);
+            }}
             className="truncate rounded px-1.5 py-0.5 text-left text-[11px] font-medium text-muted hover:underline"
           >
             +{hidden}
@@ -122,7 +137,7 @@ function DayCell({ cell }: { cell: CalendarCell }) {
 }
 
 /** Grade mensal de calendário — feature 174 (substitui a listagem agrupada por dia). */
-export function CalendarGrid({ ym, events }: CalendarGridProps) {
+export function CalendarGrid({ ym, events, onDayClick }: CalendarGridProps) {
   const weeks = useMemo(() => buildWeeks(ym, events), [ym, events]);
 
   return (
@@ -141,7 +156,7 @@ export function CalendarGrid({ ym, events }: CalendarGridProps) {
         {weeks.map((week) => (
           <div key={week[0].key} className="grid grid-cols-7">
             {week.map((cell) => (
-              <DayCell key={cell.key} cell={cell} />
+              <DayCell key={cell.key} cell={cell} onDayClick={onDayClick} />
             ))}
           </div>
         ))}
