@@ -1,9 +1,17 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { LogOut } from "lucide-react";
-import { AppLayout, Skeleton } from "@manto/ui";
+import { AppLayout, Skeleton, cn } from "@manto/ui";
 import { buildNavSections } from "../lib/navigation";
-import { useCurrentUser, useLogout } from "../lib/useAuth";
+import {
+  useCurrentUser,
+  useImpersonate,
+  useImpersonateReset,
+  useLogout,
+} from "../lib/useAuth";
 import type { AuthUser } from "../lib/types";
+
+/** Papéis simuláveis no "Ver como" — paridade com IMPERSONABLE_ROLES do backend. */
+const IMPERSONABLE_ROLES = ["CASTING", "FIGURINO", "COMERCIAL", "FINANCEIRO", "ENSAIO"];
 
 function Brand() {
   return (
@@ -19,12 +27,62 @@ function Brand() {
   );
 }
 
+function RoleSwitcher({ user }: { user: AuthUser }) {
+  const impersonate = useImpersonate();
+  const reset = useImpersonateReset();
+  const pending = impersonate.isPending || reset.isPending;
+
+  if (!user.is_real_superadmin) return null;
+
+  return (
+    <div className="mb-2 border-b border-white/10 pb-2">
+      <div className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/35">
+        Ver como:
+      </div>
+      <div className="flex flex-wrap gap-1 px-2">
+        {IMPERSONABLE_ROLES.map((role) => {
+          const active = user.impersonating === role;
+          return (
+            <button
+              key={role}
+              type="button"
+              disabled={pending || active}
+              onClick={() => impersonate.mutate(role)}
+              title={`Ver o sistema como ${role}`}
+              className={cn(
+                "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors disabled:opacity-60",
+                active
+                  ? "bg-sidebar-accent text-sidebar-bg"
+                  : "bg-white/10 text-white/60 hover:bg-white/20 hover:text-white",
+              )}
+            >
+              {role}
+            </button>
+          );
+        })}
+        {user.impersonating && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => reset.mutate()}
+            title="Voltar ao papel real de administrador"
+            className="rounded-full border border-sidebar-accent/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-sidebar-accent transition-colors hover:bg-sidebar-accent/15 disabled:opacity-60"
+          >
+            {pending ? "..." : "Admin"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SidebarFooter({ user }: { user: AuthUser }) {
   const logout = useLogout();
   const navigate = useNavigate();
 
   return (
     <div className="space-y-2">
+      <RoleSwitcher user={user} />
       <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent/20 text-sm font-semibold text-sidebar-accent">
           {user.name.charAt(0).toUpperCase()}

@@ -13,7 +13,7 @@ from werkzeug.wrappers import Response
 from app import limiter
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
-from app.constants import RoleName
+from app.constants import IMPERSONABLE_ROLES, RoleName
 from app.models import SiteSetting, User
 
 
@@ -77,4 +77,44 @@ def api_logout() -> Response:
 @api_login_required
 def api_me() -> Any:
     """Retorna o usuário autenticado atual."""
+    return jsonify(serialize_user(current_user))
+
+
+def _require_real_superadmin() -> Any | None:
+    """RBAC do "Ver como": só SUPERADMIN real pode simular papéis.
+
+    Retorna a resposta de erro (403) ou ``None`` quando autorizado — padrão de
+    RBAC por função das rotas de API (não reusa decorators de página).
+    """
+    if not any(r.name == RoleName.SUPERADMIN for r in current_user.roles):
+        return json_error("Apenas administradores podem simular papéis", 403)
+    return None
+
+
+@api_bp.route("/auth/impersonate", methods=["POST"])
+@api_login_required
+def api_impersonate() -> Any:
+    """Ativa a simulação de papel (feature 173 — mesmo estado do Jinja)."""
+    denied = _require_real_superadmin()
+    if denied is not None:
+        return denied
+
+    data = request.get_json(silent=True) or {}
+    role = (data.get("role") or "").strip().upper()
+    if role not in IMPERSONABLE_ROLES:
+        return json_error("Papel inválido para simulação", 400)
+
+    session["impersonate_role"] = role
+    return jsonify(serialize_user(current_user))
+
+
+@api_bp.route("/auth/impersonate", methods=["DELETE"])
+@api_login_required
+def api_impersonate_reset() -> Any:
+    """Limpa a simulação de papel (idempotente)."""
+    denied = _require_real_superadmin()
+    if denied is not None:
+        return denied
+
+    session.pop("impersonate_role", None)
     return jsonify(serialize_user(current_user))
