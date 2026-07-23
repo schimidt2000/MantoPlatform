@@ -1,6 +1,47 @@
 """Cache and markup calculation functions for the quote calculator."""
 from . import settings as _cfg
 
+# Acréscimo de "Show customizado" (opção de Sósia): +R$50 por artista, não conta
+# coordenador/técnico/maquiador (feature 172).
+SOSIA_CUSTOM_ADD_PER_ARTIST = 50
+
+
+def compute_show_pricing(performers: list[dict], show_sosia_tipo: str) -> tuple[bool, float]:
+    """Detecta se o evento tem show e o acréscimo de "show customizado" por artista.
+
+    Fonte única reusada tanto pelo cálculo do orçamento (`app/orcamento/routes.py`) quanto pelo
+    recálculo do elenco na criação de evento (`_compute_performer_caches`,
+    `app/calendar/routes.py`) — antes duplicada nos dois lugares (feature 172).
+
+    Args:
+        performers: lista de performers do orçamento (mesmo formato salvo em
+            `OrcamentoHistory.form_snapshot["performers"]`).
+        show_sosia_tipo: `"predefinido"` ou `"customizado"` (snapshot `show_sosia_tipo`).
+
+    Returns:
+        Tupla `(has_show, custom_add_per_artist)` — `custom_add_per_artist` é `0.0` quando
+        `show_sosia_tipo` não é `"customizado"` ou não há performers.
+    """
+    has_show = any(
+        p.get("type") == "cantor"
+        or (p.get("type") == "ator" and p.get("show"))
+        or (
+            p.get("type") == "especial"
+            and (
+                p.get("show")
+                or p.get("cantor")
+                or p.get("personagem", "") in _cfg.ESPECIAIS_SEMPRE_SHOW
+            )
+        )
+        for p in performers
+    )
+    custom_add = (
+        float(SOSIA_CUSTOM_ADD_PER_ARTIST)
+        if show_sosia_tipo == "customizado" and performers
+        else 0.0
+    )
+    return has_show, custom_add
+
 
 def aplicar_markup(totais: list, show: bool) -> list:
     """Apply markup multipliers to a list of [1h, 2h, 3h, 4h] cache totals."""

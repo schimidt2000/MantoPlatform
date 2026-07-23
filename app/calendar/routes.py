@@ -2590,19 +2590,22 @@ def link_ensaio_parent(ensaio_id: int):
 
 def _compute_performer_caches(snapshot: dict) -> list[dict]:
     """Retorna lista de {label, cache_1h, cache_2h, cache_4h, needs_makeup, is_singer}
-    para cada performer + coordenadores + técnico + maquiador do snapshot."""
+    para cada performer + coordenadores + técnico + maquiador do snapshot.
+
+    Inclui o acréscimo de "show customizado" (+R$50/artista) nos cachês de personagem quando
+    aplicável — antes só entrava no total do orçamento, não no cachê individual (feature 172).
+    """
     from app.orcamento.pricing import (
         get_ator_prices, get_cantor_prices, get_especial_prices,
         get_coordenador_prices, get_tecnico_prices, calcular_maquiador,
+        compute_show_pricing,
     )
     from app.orcamento import settings as _orc_cfg
 
     performers     = snapshot.get("performers", [])
     coordenador_qty = int(snapshot.get("coordenador_qty", 1) or 1)
-    has_show       = any(
-        p.get("show") or p.get("cantor") or p.get("type") == "cantor" or
-        (p.get("type") == "especial" and p.get("personagem", "") in _orc_cfg.ESPECIAIS_SEMPRE_SHOW)
-        for p in performers
+    has_show, sosia_custom_add_per_artist = compute_show_pricing(
+        performers, snapshot.get("show_sosia_tipo", "predefinido")
     )
 
     # Adicional noturno (+R$50 por performer/coord se horário >= 19h)
@@ -2666,10 +2669,10 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
 
         result.append({
             "label":       label,
-            "cache_1h":    round(int(prices[0]) + noturno_add + transport_add),
-            "cache_2h":    round(int(prices[1]) + noturno_add + transport_add),
-            "cache_3h":    round(int(prices[2]) + noturno_add + transport_add),
-            "cache_4h":    round(int(prices[3]) + noturno_add + transport_add),
+            "cache_1h":    round(int(prices[0]) + noturno_add + transport_add + sosia_custom_add_per_artist),
+            "cache_2h":    round(int(prices[1]) + noturno_add + transport_add + sosia_custom_add_per_artist),
+            "cache_3h":    round(int(prices[2]) + noturno_add + transport_add + sosia_custom_add_per_artist),
+            "cache_4h":    round(int(prices[3]) + noturno_add + transport_add + sosia_custom_add_per_artist),
             "needs_makeup": makeup,
             "is_singer":    is_singer,
             "role_type":   "character",
