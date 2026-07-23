@@ -59,13 +59,21 @@ export function SectorPanel({ title, count, children, defaultOpen = true }: Sect
   );
 }
 
-/** Badge de urgência a partir de `start_at` — `URGENTE` ≤2 dias, `Nd` ≤7 dias, senão nenhuma. */
-export function urgencyBadge(
-  startAt: string | null,
-): { label: string; tone: "red" | "gold" } | null {
+export interface Urgency {
+  label: string;
+  tone: "red" | "neutral";
+  /** Tinta suave de fundo da linha — paridade com `.task-row` do Jinja clássico. */
+  rowBackground: string;
+}
+
+/**
+ * Urgência a partir de `start_at` — paridade com `home.html`: tag vermelha "URGENTE"
+ * ≤2 dias (fundo vermelho-suave), badge cinza "Nd" ≤7 dias (fundo creme/dourado-suave).
+ */
+export function getUrgency(startAt: string | null): Urgency | null {
   if (!startAt) return null;
   const days = Math.floor((new Date(startAt).getTime() - Date.now()) / 86_400_000);
-  if (days <= 2) return { label: "URGENTE", tone: "red" };
-  if (days <= 7) return { label: `${days}d`, tone: "gold" };
+  if (days <= 2) return { label: "URGENTE", tone: "red", rowBackground: "rgba(228,88,88,0.06)" };
+  if (days <= 7) return { label: `${days}d`, tone: "neutral", rowBackground: "rgba(245,200,66,0.06)" };
   return null;
 }

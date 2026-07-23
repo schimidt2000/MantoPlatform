@@ -2,9 +2,13 @@ import type { ReactNode } from "react";
 import {
   BarChart3,
   BookOpen,
+  Calculator,
   CalendarDays,
   Clapperboard,
+  ClipboardCheck,
   DollarSign,
+  FileSpreadsheet,
+  FileText,
   GraduationCap,
   History,
   Home,
@@ -13,9 +17,12 @@ import {
   Package,
   PenSquare,
   Plus,
+  Receipt,
   RefreshCw,
+  Repeat,
   Settings,
   Shirt,
+  SlidersHorizontal,
   Star,
   Users,
   Wallet,
@@ -27,9 +34,9 @@ import type { AuthUser } from "./types";
 /**
  * Config declarativa da navegação do shell (feature 173), portada de
  * `app/templates/base.html` — mesma ordem, mesmos rótulos e mesmas regras de
- * visibilidade por papel EFETIVO. Só lista rotas que existem na SPA; itens
- * Jinja-only (Gastos, Orçamento, Formulários, Avaliações, Pacotes EducaManto)
- * entram quando suas telas migrarem (FASES B/C).
+ * visibilidade por papel EFETIVO. Itens ainda só em Jinja (Gastos, Orçamento,
+ * Formulários, Avaliação de Casting) apontam para a rota clássica via
+ * `external: true` — mesmo padrão do link "Catálogo" — até ganharem tela em React.
  */
 
 interface NavItemConfig {
@@ -87,6 +94,16 @@ const SECTIONS: NavSectionConfig[] = [
           path === "/agenda" || (path.startsWith("/events/") && path !== "/events/new"),
         isVisible: everyone,
       },
+      {
+        key: "gastos-extras",
+        label: "Gastos Extras",
+        href: "/gastos/",
+        icon: <Receipt />,
+        external: true,
+        hint: "Tela clássica — abre em outra aba",
+        isActive: () => false,
+        isVisible: notRevendedor,
+      },
     ],
   },
   {
@@ -98,6 +115,16 @@ const SECTIONS: NavSectionConfig[] = [
         href: "/talents",
         icon: <Users />,
         isActive: (path) => path.startsWith("/talents"),
+        isVisible: notRevendedor,
+      },
+      {
+        key: "avaliacao-casting",
+        label: "Avaliação de Casting",
+        href: "/talents/avaliacoes",
+        icon: <ClipboardCheck />,
+        external: true,
+        hint: "Tela clássica — abre em outra aba",
+        isActive: () => false,
         isVisible: notRevendedor,
       },
     ],
@@ -194,6 +221,17 @@ const SECTIONS: NavSectionConfig[] = [
           (hasRole(user, "COMERCIAL", "FINANCEIRO", "SUPERADMIN") ||
             user.is_educamanto_responsavel),
       },
+      {
+        key: "formularios",
+        label: "Formulários",
+        href: "/formularios/",
+        icon: <FileText />,
+        external: true,
+        hint: "Tela clássica — abre em outra aba",
+        isActive: () => false,
+        isVisible: (user) =>
+          notRevendedor(user) && hasRole(user, "COMERCIAL", "FINANCEIRO", "SUPERADMIN"),
+      },
     ],
   },
   {
@@ -215,11 +253,51 @@ const SECTIONS: NavSectionConfig[] = [
         isActive: (path) => path === "/financeiro/pagamentos",
         isVisible: (user) => hasRole(user, "FINANCEIRO", "SUPERADMIN"),
       },
+      {
+        key: "gastos-recorrentes",
+        label: "Gastos Recorrentes",
+        href: "/gastos/recorrentes",
+        icon: <Repeat />,
+        external: true,
+        hint: "Tela clássica — abre em outra aba",
+        isActive: () => false,
+        isVisible: (user) => hasRole(user, "FINANCEIRO", "SUPERADMIN"),
+      },
     ],
   },
   {
     label: "Ferramentas",
     items: [
+      {
+        key: "calc-orcamento",
+        label: "Calc. Orçamento",
+        href: "/orcamento/",
+        icon: <Calculator />,
+        external: true,
+        hint: "Tela clássica — abre em outra aba",
+        isActive: () => false,
+        isVisible: (user) => hasRole(user, "COMERCIAL", "SUPERADMIN"),
+      },
+      {
+        key: "config-precos",
+        label: "Config. Preços",
+        href: "/orcamento/settings",
+        icon: <SlidersHorizontal />,
+        external: true,
+        hint: "Tela clássica — abre em outra aba",
+        isActive: () => false,
+        isVisible: (user) => hasRole(user, "SUPERADMIN"),
+      },
+      {
+        key: "orcamentos",
+        label: "Orçamentos",
+        href: "/orcamento/historico",
+        icon: <FileSpreadsheet />,
+        external: true,
+        hint: "Tela clássica — abre em outra aba",
+        isActive: () => false,
+        isVisible: (user) => hasRole(user, "COMERCIAL", "SUPERADMIN"),
+      },
       {
         key: "educamanto",
         label: "EducaManto",
