@@ -168,7 +168,7 @@
   </header>
 
   <div class="stats">
-    <div class="stat"><div class="stat-value">52</div><div class="stat-label">mudanças no ar</div></div>
+    <div class="stat"><div class="stat-value">53</div><div class="stat-label">mudanças no ar</div></div>
     <div class="stat"><div class="stat-value">12</div><div class="stat-label">dias de trabalho</div></div>
     <div class="stat"><div class="stat-value">6</div><div class="stat-label">áreas do sistema</div></div>
     <div class="stat"><div class="stat-value">0</div><div class="stat-label">quebras no ar</div></div>
@@ -861,6 +861,18 @@
           <span class="entry-tag tag-comercial">Comercial</span>
         </div>
         <div class="entry-desc">No EducaManto, o valor de transporte calculado para eventos fora de São Paulo agora é multiplicado pelo número de dias do pacote (antes contava só uma viagem, mesmo em pacotes de vários dias) e aparece detalhado na tela ("valor da viagem × dias = total"). A calculadora do EducaManto também ganhou uma versão nova, em React.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-agenda"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">fix</span>
+          <span class="entry-title">Cachê do elenco vinha errado ao criar evento a partir de um orçamento com "show customizado"</span>
+          <span class="entry-tag tag-agenda">Agenda</span>
+        </div>
+        <div class="entry-desc">Ao criar um evento a partir de um orçamento salvo com a opção "Show customizado" (Sósia, +R$50 por artista), o acréscimo entrava no valor total mas não no cachê de cada personagem — agora os dois batem. Também eliminada uma duplicação de regra de preço entre a calculadora e a criação de evento, para evitar que os dois voltem a divergir no futuro.</div>
       </div>
     </div>
   </div>

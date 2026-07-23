@@ -17,6 +17,7 @@ from . import settings as _cfg
 from .pricing import (
     aplicar_markup,
     calcular_maquiador,
+    compute_show_pricing,
     get_ator_prices,
     get_cantor_prices,
     get_coordenador_prices,
@@ -203,24 +204,18 @@ def _process_quote():
     modo_duracao     = request.form.get("modo_duracao", "horas")
     duracao_custom   = int(request.form.get("duracao_custom", 0) or 0)
 
-    event_has_show   = False
+    event_has_show, sosia_custom_add_per_artist = compute_show_pricing(
+        performers, show_sosia_tipo
+    )
     event_has_makeup = False
     num_makes_regular  = 0
     num_makes_especial = 0
 
     for p in performers:
         ptype      = p.get("type", "")
-        show       = bool(p.get("show", False))
         makeup     = bool(p.get("makeup", False))
         makeup_tipo = p.get("makeup_tipo", "comum")
-        cantor_flag = bool(p.get("cantor", False))
 
-        # show é ativado pelo ator (qualquer subtipo com show marcado),
-        # pelo especial com show/cantor, especiais que sempre têm show (DJ), ou tipo legado "cantor"
-        personagem_esp = p.get("personagem", "") if ptype == "especial" else ""
-        if ptype == "cantor" or (ptype == "ator" and show) or \
-           (ptype == "especial" and (show or cantor_flag or personagem_esp in _cfg.ESPECIAIS_SEMPRE_SHOW)):
-            event_has_show = True
         if makeup and ptype in ("ator", "cantor", "especial"):
             event_has_makeup = True
             if makeup_tipo == "especial":
@@ -277,8 +272,8 @@ def _process_quote():
             cache_totals[i] += prices[i]
 
     # Show customizado: +R$50 por artista (não conta coord, técnico nem maquiador)
-    if show_sosia_tipo == "customizado" and performers:
-        custom_add = len(performers) * 50
+    if sosia_custom_add_per_artist:
+        custom_add = len(performers) * sosia_custom_add_per_artist
         for i in range(4):
             cache_totals[i] += custom_add
 
