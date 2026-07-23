@@ -34,9 +34,10 @@ import type { AuthUser } from "./types";
 /**
  * Config declarativa da navegação do shell (feature 173), portada de
  * `app/templates/base.html` — mesma ordem, mesmos rótulos e mesmas regras de
- * visibilidade por papel EFETIVO. Itens ainda só em Jinja (Gastos, Orçamento,
- * Formulários, Avaliação de Casting) apontam para a rota clássica via
- * `external: true` — mesmo padrão do link "Catálogo" — até ganharem tela em React.
+ * visibilidade por papel EFETIVO. Migração 177 fechou os últimos itens que ainda
+ * apontavam para telas clássicas (Gastos, Orçamento, Formulários, Avaliação de
+ * Casting) — `external: true` só resta no link "Catálogo" (superfície pública,
+ * intencionalmente fora da SPA interna).
  */
 
 interface NavItemConfig {
@@ -97,11 +98,9 @@ const SECTIONS: NavSectionConfig[] = [
       {
         key: "gastos-extras",
         label: "Gastos Extras",
-        href: "/gastos/",
+        href: "/gastos",
         icon: <Receipt />,
-        external: true,
-        hint: "Tela clássica — abre em outra aba",
-        isActive: () => false,
+        isActive: (path) => path === "/gastos",
         isVisible: notRevendedor,
       },
     ],
@@ -120,11 +119,9 @@ const SECTIONS: NavSectionConfig[] = [
       {
         key: "avaliacao-casting",
         label: "Avaliação de Casting",
-        href: "/talents/avaliacoes",
+        href: "/casting/avaliacoes",
         icon: <ClipboardCheck />,
-        external: true,
-        hint: "Tela clássica — abre em outra aba",
-        isActive: () => false,
+        isActive: (path) => path === "/casting/avaliacoes",
         isVisible: notRevendedor,
       },
     ],
@@ -224,11 +221,9 @@ const SECTIONS: NavSectionConfig[] = [
       {
         key: "formularios",
         label: "Formulários",
-        href: "/formularios/",
+        href: "/formularios",
         icon: <FileText />,
-        external: true,
-        hint: "Tela clássica — abre em outra aba",
-        isActive: () => false,
+        isActive: (path) => path === "/formularios",
         isVisible: (user) =>
           notRevendedor(user) && hasRole(user, "COMERCIAL", "FINANCEIRO", "SUPERADMIN"),
       },
@@ -258,9 +253,7 @@ const SECTIONS: NavSectionConfig[] = [
         label: "Gastos Recorrentes",
         href: "/gastos/recorrentes",
         icon: <Repeat />,
-        external: true,
-        hint: "Tela clássica — abre em outra aba",
-        isActive: () => false,
+        isActive: (path) => path === "/gastos/recorrentes",
         isVisible: (user) => hasRole(user, "FINANCEIRO", "SUPERADMIN"),
       },
     ],
@@ -271,21 +264,17 @@ const SECTIONS: NavSectionConfig[] = [
       {
         key: "calc-orcamento",
         label: "Calc. Orçamento",
-        href: "/orcamento/",
+        href: "/orcamento",
         icon: <Calculator />,
-        external: true,
-        hint: "Tela clássica — abre em outra aba",
-        isActive: () => false,
+        isActive: (path) => path === "/orcamento",
         isVisible: (user) => hasRole(user, "COMERCIAL", "SUPERADMIN"),
       },
       {
         key: "config-precos",
         label: "Config. Preços",
-        href: "/orcamento/settings",
+        href: "/orcamento/configuracoes",
         icon: <SlidersHorizontal />,
-        external: true,
-        hint: "Tela clássica — abre em outra aba",
-        isActive: () => false,
+        isActive: (path) => path === "/orcamento/configuracoes",
         isVisible: (user) => hasRole(user, "SUPERADMIN"),
       },
       {
@@ -293,9 +282,7 @@ const SECTIONS: NavSectionConfig[] = [
         label: "Orçamentos",
         href: "/orcamento/historico",
         icon: <FileSpreadsheet />,
-        external: true,
-        hint: "Tela clássica — abre em outra aba",
-        isActive: () => false,
+        isActive: (path) => path === "/orcamento/historico",
         isVisible: (user) => hasRole(user, "COMERCIAL", "SUPERADMIN"),
       },
       {
