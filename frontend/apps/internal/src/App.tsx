@@ -36,6 +36,9 @@ import { RevisaoSpaceCreatePage } from "./pages/RevisaoSpaceCreatePage";
 import { RevisaoSpacePage } from "./pages/RevisaoSpacePage";
 import { RevisaoAssetPage } from "./pages/RevisaoAssetPage";
 import { EducaMantoCalculadoraPage } from "./pages/EducaMantoCalculadoraPage";
+import { EducaMantoPackagesPage } from "./pages/EducaMantoPackagesPage";
+import { EducaMantoPackageFormPage } from "./pages/EducaMantoPackageFormPage";
+import { EducaMantoHistoricoPage } from "./pages/EducaMantoHistoricoPage";
 
 export function App() {
   return (
@@ -65,6 +68,10 @@ export function App() {
           <Route path="/financeiro/comissoes" element={<ComissoesPage />} />
           <Route path="/financeiro/pagamentos" element={<PagamentosPage />} />
           <Route path="/educamanto" element={<EducaMantoCalculadoraPage />} />
+          <Route path="/educamanto/pacotes" element={<EducaMantoPackagesPage />} />
+          <Route path="/educamanto/pacotes/novo" element={<EducaMantoPackageFormPage />} />
+          <Route path="/educamanto/pacotes/:id/editar" element={<EducaMantoPackageFormPage />} />
+          <Route path="/educamanto/historico" element={<EducaMantoHistoricoPage />} />
           <Route path="/clientes" element={<ClientsListPage />} />
           <Route path="/clientes/avaliacoes" element={<ClientFeedbackPage />} />
           <Route path="/clientes/:id" element={<ClientDetailPage />} />

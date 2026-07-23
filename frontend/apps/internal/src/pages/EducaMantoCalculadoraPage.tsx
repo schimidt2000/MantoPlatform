@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { API_BASE, ApiRequestError } from "@manto/api-client";
+import { ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
 import {
   useCalcularPacote,
   useDistanciaEducaManto,
   useEducaMantoPackages,
+  useGerarOrcamento,
   type PacoteItemRow,
 } from "../lib/educamanto";
 
@@ -61,6 +63,7 @@ export function EducaMantoCalculadoraPage() {
   const packagesQuery = useEducaMantoPackages();
   const distancia = useDistanciaEducaManto();
   const calcular = useCalcularPacote();
+  const gerarOrcamento = useGerarOrcamento();
 
   const [packageId, setPackageId] = useState<number | null>(null);
   const [d1, setD1] = useState(0);
@@ -70,6 +73,8 @@ export function EducaMantoCalculadoraPage() {
   const [endereco, setEndereco] = useState("");
   const [enderecoMsg, setEnderecoMsg] = useState<{ text: string; error: boolean } | null>(null);
   const [kmIda, setKmIda] = useState<number | null>(null);
+  const [clientName, setClientName] = useState("");
+  const [gerarMsg, setGerarMsg] = useState<{ text: string; error: boolean } | null>(null);
 
   const packages = packagesQuery.data?.packages ?? [];
 
@@ -127,8 +132,42 @@ export function EducaMantoCalculadoraPage() {
     setEnderecoMsg(null);
   }
 
+  function handleGerarOrcamento() {
+    if (!resultado || !selectedPackage) return;
+    setGerarMsg({ text: "Gerando…", error: false });
+    gerarOrcamento.mutate(
+      {
+        packages: [
+          {
+            id: selectedPackage.id,
+            name: selectedPackage.name,
+            sem_nota: resultado.valor_final_sem_nota,
+            com_nota: resultado.valor_final_com_nota,
+          },
+        ],
+        d1,
+        d2,
+        ensemble,
+        acrescimo,
+        transporte: transporte
+          ? { total: transporte.total, label: transporte.label, kmT: transporte.km_total, pessoas: transporte.pessoas }
+          : undefined,
+        client_name: clientName,
+      },
+      {
+        onSuccess: () => setGerarMsg({ text: "Orçamento gerado e baixado com sucesso.", error: false }),
+        onError: (err) =>
+          setGerarMsg({
+            text: errorMessage(err, "Não foi possível gerar o orçamento."),
+            error: true,
+          }),
+      },
+    );
+  }
+
   const resultado = calcular.data;
   const transporte = resultado?.transporte;
+  const selectedPackage = packages.find((p) => p.id === packageId);
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
@@ -136,9 +175,14 @@ export function EducaMantoCalculadoraPage() {
         title="EducaManto — Calculadora"
         className="mb-0"
         actions={
-          <a href={`${API_BASE}/educamanto/`} className="text-sm text-blue hover:underline">
-            Gerar PDF, ver histórico ou gerenciar pacotes ›
-          </a>
+          <div className="flex gap-3 text-sm">
+            <Link to="/educamanto/pacotes" className="text-blue hover:underline">
+              Gerenciar pacotes
+            </Link>
+            <Link to="/educamanto/historico" className="text-blue hover:underline">
+              Histórico
+            </Link>
+          </div>
         }
       />
 
@@ -346,6 +390,38 @@ export function EducaMantoCalculadoraPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   <DetailTable rows={resultado.item_rows} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Gerar orçamento</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <label className={LABEL} htmlFor="client_name">
+                      Nome do cliente (opcional)
+                    </label>
+                    <input
+                      id="client_name"
+                      type="text"
+                      className={FIELD}
+                      value={clientName}
+                      onChange={(e) => setClientName(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    loading={gerarOrcamento.isPending}
+                    onClick={handleGerarOrcamento}
+                  >
+                    Gerar orçamento (PDF)
+                  </Button>
+                  {gerarMsg && (
+                    <p className={`text-xs ${gerarMsg.error ? "text-red" : "text-muted"}`}>
+                      {gerarMsg.text}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </>

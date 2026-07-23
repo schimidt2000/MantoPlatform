@@ -2,15 +2,23 @@
 from functools import wraps
 
 from flask import (
-    Blueprint, abort, flash, jsonify, redirect,
-    render_template, request, url_for,
+    Blueprint,
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
 )
 from flask_login import current_user, login_required
 
 from app import db
 from app.constants import RoleName
-from app.money import parse_brl
+from app.educamanto import package_ops, quote_ops
+from app.educamanto.package_ops import PackageValidationError
 from app.models import EducaMantoItem, EducaMantoPackage
+from app.money import parse_brl
 from app.utils import json_for_script
 
 educamanto_bp = Blueprint("educamanto", __name__, url_prefix="/educamanto")
@@ -143,30 +151,7 @@ def packages_list():
 @_require_manage
 def duplicate_package(pkg_id: int):
     original = EducaMantoPackage.query.get_or_404(pkg_id)
-    copy = EducaMantoPackage(
-        name=f"Cópia de {original.name}",
-        margin_1s=original.margin_1s,
-        margin_2s=original.margin_2s,
-        margin_1s_days=original.margin_1s_days,
-        margin_2s_days=original.margin_2s_days,
-        discount_days=original.discount_days,
-        discount_pct=original.discount_pct,
-        commission_rate=original.commission_rate,
-    )
-    db.session.add(copy)
-    db.session.flush()
-    for item in original.items:
-        db.session.add(EducaMantoItem(
-            package_id=copy.id,
-            name=item.name,
-            qty=item.qty,
-            cost_1s=item.cost_1s,
-            cost_2s=item.cost_2s,
-            cost_1s_days=item.cost_1s_days,
-            cost_2s_days=item.cost_2s_days,
-            sort_order=item.sort_order,
-        ))
-    db.session.commit()
+    copy = package_ops.duplicate_package(original)
     flash(f'Cópia de "{original.name}" criada. Edite o nome e os parâmetros abaixo.', "success")
     return redirect(url_for("educamanto.edit_package", pkg_id=copy.id))
 
@@ -209,41 +194,6 @@ def api_distancia():
     return jsonify({"km_ida": km_ida})
 
 
-def _build_snapshot(data: dict) -> tuple[dict, str]:
-    """Monta o snapshot do orçamento a partir do JSON do cliente. Retorna (snapshot, label)."""
-    clean_pkgs = []
-    for p in (data.get("packages") or []):
-        clean_pkgs.append({
-            "id": p.get("id"),
-            "name": str(p.get("name") or "Pacote")[:200],
-            "sem_nota": float(p.get("sem_nota") or 0),
-            "com_nota": float(p.get("com_nota") or 0),
-        })
-    try:
-        d1 = int(data.get("d1") or 0)
-        d2 = int(data.get("d2") or 0)
-    except (TypeError, ValueError):
-        d1 = d2 = 0
-    transporte = data.get("transporte") or {}
-    client_name = (data.get("client_name") or "").strip()[:200]
-    snapshot = {
-        "d1": d1,
-        "d2": d2,
-        "ensemble": int(data.get("ensemble") or 0),
-        "acrescimo": float(data.get("acrescimo") or 0),   # comissão do vendedor (feature 078)
-        "transporte": {
-            "total": float(transporte.get("total") or 0),
-            "label": str(transporte.get("label") or ""),
-            "kmT": transporte.get("kmT"),
-            "pessoas": transporte.get("pessoas"),
-        },
-        "client_name": client_name,
-        "packages": clean_pkgs,
-    }
-    label = ", ".join(p["name"] for p in clean_pkgs)[:300]
-    return snapshot, label
-
-
 def _pdf_response(snapshot: dict, quote_id: int, inline: bool = False):
     from flask import make_response
 
@@ -261,25 +211,11 @@ def _pdf_response(snapshot: dict, quote_id: int, inline: bool = False):
 @_require_use
 def gerar_orcamento():
     """Gera o PDF (1 página por pacote), salva no histórico e devolve para download (feature 077)."""
-    import json
-
-    from app.models import EducaMantoQuote
     data = request.get_json(silent=True) or {}
-    if not (data.get("packages") or []):
-        return jsonify({"error": "Selecione ao menos um pacote."}), 400
-
-    snapshot, label = _build_snapshot(data)
-    if snapshot["d1"] + snapshot["d2"] <= 0:
-        return jsonify({"error": "Preencha os dias (1 e/ou 2 sessões) antes de gerar."}), 400
-
-    quote = EducaMantoQuote(
-        user_id=current_user.id,
-        client_name=snapshot["client_name"] or None,
-        packages_label=label,
-        snapshot=json.dumps(snapshot, ensure_ascii=False),
-    )
-    db.session.add(quote)
-    db.session.commit()
+    try:
+        quote, snapshot = quote_ops.generate_quote(current_user.id, data)
+    except quote_ops.QuoteValidationError as exc:
+        return jsonify({"error": exc.message}), 400
     return _pdf_response(snapshot, quote.id)
 
 
@@ -288,11 +224,9 @@ def gerar_orcamento():
 @_require_use
 def orcamento_pdf(quote_id: int):
     """Re-renderiza o PDF de um orçamento do histórico (valores congelados)."""
-    import json
-
     from app.models import EducaMantoQuote
     q = EducaMantoQuote.query.get_or_404(quote_id)
-    snapshot = json.loads(q.snapshot or "{}")
+    snapshot = quote_ops.load_quote_snapshot(q)
     return _pdf_response(snapshot, q.id, inline=True)
 
 
@@ -305,10 +239,6 @@ def historico():
     Busca por texto para todos; filtros de período de geração para todos; coluna e filtro
     "Gerado por" apenas para o super admin (regra idêntica ao histórico da calculadora).
     """
-    from datetime import datetime, timedelta
-
-    from app.models import EducaMantoQuote, User
-
     is_superadmin = bool({r.name.upper() for r in current_user.roles} & {RoleName.SUPERADMIN})
 
     q         = request.args.get("q", "").strip()
@@ -316,39 +246,13 @@ def historico():
     date_to   = request.args.get("date_to", "").strip()
     user_id_f = request.args.get("user_id", "").strip()
 
-    query = EducaMantoQuote.query
-    if q:
-        from sqlalchemy import or_
-        like = f"%{q}%"
-        query = query.filter(
-            or_(EducaMantoQuote.client_name.ilike(like),
-                EducaMantoQuote.packages_label.ilike(like))
-        )
-    if date_from:
-        try:
-            query = query.filter(EducaMantoQuote.created_at >= datetime.fromisoformat(date_from))
-        except ValueError:
-            pass
-    if date_to:
-        try:
-            query = query.filter(
-                EducaMantoQuote.created_at < datetime.fromisoformat(date_to) + timedelta(days=1)
-            )
-        except ValueError:
-            pass
-    if is_superadmin and user_id_f.isdigit():
-        query = query.filter_by(user_id=int(user_id_f))
-
-    entries = query.order_by(EducaMantoQuote.created_at.desc()).limit(300).all()
-
-    users = []
-    if is_superadmin:
-        users = (
-            User.query
-            .filter(User.id.in_(db.session.query(EducaMantoQuote.user_id).distinct()))
-            .order_by(User.name.asc())
-            .all()
-        )
+    entries, users = quote_ops.search_history(
+        query=q,
+        date_from=date_from,
+        date_to=date_to,
+        user_id_filter=user_id_f,
+        is_superadmin=is_superadmin,
+    )
 
     return render_template(
         "educamanto/historico.html",
@@ -361,30 +265,35 @@ def historico():
     )
 
 
+def _package_form_data() -> dict:
+    """Monta o dict de entrada de `package_ops` a partir do form Jinja (percentuais em 0-100)."""
+    return {
+        "name": request.form["name"].strip(),
+        "margin_1s": float(request.form["margin_1s"]),
+        "margin_2s": float(request.form["margin_2s"]),
+        "margin_1s_days": float(request.form["margin_1s_days"]),
+        "margin_2s_days": float(request.form["margin_2s_days"]),
+        "discount_days": int(request.form["discount_days"]),
+        "discount_pct": float(request.form["discount_pct"]) / 100,
+        "commission_rate": float(request.form["commission_rate"]) / 100,
+        "ensemble_1s": _money(request.form.get("ensemble_1s"), 350),
+        "ensemble_2s": _money(request.form.get("ensemble_2s"), 600),
+        "ensemble_1s_days": _money(request.form.get("ensemble_1s_days"), 300),
+        "ensemble_2s_days": _money(request.form.get("ensemble_2s_days"), 550),
+        "items": _parse_items_from_form(),
+    }
+
+
 @educamanto_bp.route("/packages/create", methods=["GET", "POST"])
 @login_required
 @_require_manage
 def create_package():
     if request.method == "POST":
-        pkg = EducaMantoPackage(
-            name=request.form["name"].strip(),
-            margin_1s=float(request.form["margin_1s"]),
-            margin_2s=float(request.form["margin_2s"]),
-            margin_1s_days=float(request.form["margin_1s_days"]),
-            margin_2s_days=float(request.form["margin_2s_days"]),
-            discount_days=int(request.form["discount_days"]),
-            discount_pct=float(request.form["discount_pct"]) / 100,
-            commission_rate=float(request.form["commission_rate"]) / 100,
-            ensemble_1s=_money(request.form.get("ensemble_1s"), 350),
-            ensemble_2s=_money(request.form.get("ensemble_2s"), 600),
-            ensemble_1s_days=_money(request.form.get("ensemble_1s_days"), 300),
-            ensemble_2s_days=_money(request.form.get("ensemble_2s_days"), 550),
-        )
-        db.session.add(pkg)
-        db.session.flush()
-        for item_data in _parse_items_from_form():
-            db.session.add(EducaMantoItem(package_id=pkg.id, **item_data))
-        db.session.commit()
+        try:
+            pkg = package_ops.create_package(_package_form_data())
+        except PackageValidationError as exc:
+            flash(exc.message, "danger")
+            return render_template("educamanto/package_form.html", package=None)
         flash("Pacote criado com sucesso.", "success")
         return redirect(url_for("educamanto.index", pkg=pkg.id))
     return render_template("educamanto/package_form.html", package=None)
@@ -396,24 +305,11 @@ def create_package():
 def edit_package(pkg_id: int):
     pkg = EducaMantoPackage.query.get_or_404(pkg_id)
     if request.method == "POST":
-        pkg.name = request.form["name"].strip()
-        pkg.margin_1s = float(request.form["margin_1s"])
-        pkg.margin_2s = float(request.form["margin_2s"])
-        pkg.margin_1s_days = float(request.form["margin_1s_days"])
-        pkg.margin_2s_days = float(request.form["margin_2s_days"])
-        pkg.discount_days = int(request.form["discount_days"])
-        pkg.discount_pct = float(request.form["discount_pct"]) / 100
-        pkg.commission_rate = float(request.form["commission_rate"]) / 100
-        pkg.ensemble_1s = _money(request.form.get("ensemble_1s"), 350)
-        pkg.ensemble_2s = _money(request.form.get("ensemble_2s"), 600)
-        pkg.ensemble_1s_days = _money(request.form.get("ensemble_1s_days"), 300)
-        pkg.ensemble_2s_days = _money(request.form.get("ensemble_2s_days"), 550)
-        for item in list(pkg.items):
-            db.session.delete(item)
-        db.session.flush()
-        for item_data in _parse_items_from_form():
-            db.session.add(EducaMantoItem(package_id=pkg.id, **item_data))
-        db.session.commit()
+        try:
+            package_ops.update_package(pkg, _package_form_data())
+        except PackageValidationError as exc:
+            flash(exc.message, "danger")
+            return render_template("educamanto/package_form.html", package=pkg)
         flash("Pacote atualizado com sucesso.", "success")
         return redirect(url_for("educamanto.index", pkg=pkg.id))
     return render_template("educamanto/package_form.html", package=pkg)
@@ -424,7 +320,7 @@ def edit_package(pkg_id: int):
 @_require_manage
 def delete_package(pkg_id: int):
     pkg = EducaMantoPackage.query.get_or_404(pkg_id)
-    db.session.delete(pkg)
-    db.session.commit()
-    flash(f'Pacote "{pkg.name}" removido.', "success")
+    name = pkg.name
+    package_ops.delete_package(pkg)
+    flash(f'Pacote "{name}" removido.', "success")
     return redirect(url_for("educamanto.index"))
