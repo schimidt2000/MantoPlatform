@@ -1,5 +1,4 @@
-import { Link } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { useMigrarArquivosStatus, useStartMigrarArquivos } from "../lib/adminConfig";
 
 export function AdminMigrarArquivosPage() {
@@ -8,13 +7,7 @@ export function AdminMigrarArquivosPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-4 p-4 sm:p-6">
-      <Button asChild variant="ghost" size="sm">
-        <Link to="/">‹ Início</Link>
-      </Button>
-
-      <header>
-        <h1 className="text-2xl font-semibold text-ink">Migrar arquivos do Drive</h1>
-      </header>
+<PageHeader title="Migrar arquivos do Drive" className="mb-0" />
 
       {query.isLoading && <Skeleton className="h-40 w-full" />}
       {query.isError && (

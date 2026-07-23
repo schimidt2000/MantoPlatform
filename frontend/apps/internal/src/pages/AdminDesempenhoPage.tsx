@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { formatBRL } from "@manto/money";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { useAdminDesempenho } from "../lib/adminConfig";
 
 function currentMonth(): string {
@@ -15,19 +14,18 @@ export function AdminDesempenhoPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
-      <Button asChild variant="ghost" size="sm">
-        <Link to="/">‹ Início</Link>
-      </Button>
-
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-ink">Desempenho</h1>
-        <input
-          type="month"
-          className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-        />
-      </header>
+      <PageHeader
+        title="Desempenho"
+        className="mb-0"
+        actions={
+          <input
+            type="month"
+            className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+          />
+        }
+      />
 
       {query.isLoading && <Skeleton className="h-64 w-full" />}
       {query.isError && (

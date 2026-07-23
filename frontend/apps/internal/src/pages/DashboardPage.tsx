@@ -1,10 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { apiFetch } from "@manto/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Card, CardContent, CardHeader, CardTitle, DenseCard, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL } from "@manto/money";
-import { useCurrentUser, useLogout } from "../lib/useAuth";
+import { useCurrentUser } from "../lib/useAuth";
 import type { DashboardSummary } from "../lib/types";
 
 function DashboardSkeleton() {
@@ -19,25 +18,19 @@ function DashboardSkeleton() {
 
 function CountCard({ title, done, total }: { title: string; done: number; total: number }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-3xl font-semibold text-ink">
-          {done}
-          <span className="text-lg text-muted"> / {total}</span>
-        </p>
-        <p className="mt-1 text-sm text-muted">concluídos</p>
-      </CardContent>
-    </Card>
+    <DenseCard
+      title={title}
+      stats={[
+        { label: "Concluídos", value: done },
+        { label: "Total", value: total },
+      ]}
+    />
   );
 }
 
 export function DashboardPage() {
   const reduceMotion = useReducedMotion();
   const { data: user } = useCurrentUser();
-  const logout = useLogout();
 
   const dashboard = useQuery<DashboardSummary>({
     queryKey: ["dashboard"],
@@ -46,69 +39,8 @@ export function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-4xl p-6">
-      <header className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">Início</h1>
-          {user && <p className="text-sm text-muted">Olá, {user.name}</p>}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link to="/agenda">Agenda</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/talents">Talentos</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/figurinos">Figurino</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/vendas">Vendas</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/clientes">Clientes</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/rh">RH</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/revisao">Revisão</Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/financeiro/comissoes">Comissões</Link>
-          </Button>
-          {(user?.is_superadmin ||
-            user?.roles.includes("COMERCIAL") ||
-            user?.roles.includes("ENSAIO") ||
-            user?.roles.includes("REVENDEDOR_EDUCAMANTO")) && (
-            <Button asChild variant="outline" size="sm">
-              <Link to="/educamanto">EducaManto</Link>
-            </Button>
-          )}
-          {(user?.is_superadmin || user?.roles.includes("FINANCEIRO")) && (
-            <Button asChild variant="outline" size="sm">
-              <Link to="/financeiro">Financeiro</Link>
-            </Button>
-          )}
-          {(user?.is_superadmin || user?.roles.includes("FINANCEIRO")) && (
-            <Button asChild variant="outline" size="sm">
-              <Link to="/financeiro/pagamentos">Pagamentos</Link>
-            </Button>
-          )}
-          {(user?.is_superadmin || user?.roles.includes("FINANCEIRO")) && (
-            <Button asChild variant="outline" size="sm">
-              <Link to="/admin/usuarios">Usuários</Link>
-            </Button>
-          )}
-          {user?.is_superadmin && (
-            <Button asChild variant="outline" size="sm">
-              <Link to="/admin/configuracoes">Admin</Link>
-            </Button>
-          )}
-          <Button variant="outline" size="sm" loading={logout.isPending} onClick={() => logout.mutate()}>
-            Sair
-          </Button>
-        </div>
-      </header>
+      {/* Navegação e logout vivem na sidebar do shell (feature 173). */}
+      <PageHeader title="Início" subtitle={user ? `Olá, ${user.name}` : undefined} />
 
       {dashboard.isLoading && <DashboardSkeleton />}
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Card, CardContent, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, PageHeader, Skeleton } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import { useFigurinoSheets } from "../lib/figurino";
 import { useCurrentUser } from "../lib/useAuth";
@@ -17,12 +17,8 @@ export function FigurinoListPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
-      <Button asChild variant="ghost" size="sm">
-        <Link to="/">‹ Início</Link>
-      </Button>
-
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-ink">Figurino</h1>
+<header className="flex items-center justify-between">
+        <PageHeader title="Figurino" className="mb-0" />
         {canEdit && (
           <Button asChild size="sm">
             <Link to="/figurinos/new">+ Nova ficha</Link>

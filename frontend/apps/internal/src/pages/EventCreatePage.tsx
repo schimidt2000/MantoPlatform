@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { MoneyInput, formatBRL } from "@manto/money";
 import { ApiRequestError } from "@manto/api-client";
 import { useCurrentUser } from "../lib/useAuth";
@@ -402,7 +402,7 @@ export function EventCreatePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, ease: "easeOut" }}
       >
-        <h1 className="mb-4 text-2xl font-semibold text-ink">Novo evento</h1>
+        <PageHeader title="Novo evento" className="mb-0" />
 
         <form onSubmit={onSubmit} noValidate className="space-y-4">
           <Section title="Dados do evento">

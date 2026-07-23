@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Skeleton } from "@manto/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  DenseCard,
+  Input,
+  PageHeader,
+  Skeleton,
+} from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import {
   useFinanceiroDashboard,
@@ -98,13 +108,9 @@ function DreTable({ dre }: { dre: { realizado: DreView; projetado: DreView; tota
 
 function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-xs uppercase text-muted">{label}</p>
-        <p className="mt-1 text-xl font-semibold text-ink">{value}</p>
-        {sub && <p className="mt-1 text-xs text-muted">{sub}</p>}
-      </CardContent>
-    </Card>
+    <DenseCard stats={[{ label, value }]}>
+      {sub && <p className="text-xs text-muted">{sub}</p>}
+    </DenseCard>
   );
 }
 
@@ -122,7 +128,7 @@ export function FinanceiroDashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
-      <h1 className="text-2xl font-semibold text-ink">Dashboard financeiro</h1>
+      <PageHeader title="Dashboard financeiro" className="mb-0" />
 
       <div className="flex flex-wrap items-center gap-2">
         {PERIOD_OPTIONS.map((opt) => (

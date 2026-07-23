@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, MetricBadge, Skeleton } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import { formatBRL } from "@manto/money";
 import {
@@ -181,11 +181,22 @@ export function TalentDetailPage() {
               <div>
                 <h1 className="text-2xl font-semibold text-ink">{t.full_name}</h1>
                 {t.artistic_name && <p className="text-sm text-muted">{t.artistic_name}</p>}
-                {t.status === "pending" && (
-                  <span className="mt-1 inline-block rounded-md bg-gold-soft px-2 py-0.5 text-xs text-gold">
-                    Pendente de aprovação
-                  </span>
-                )}
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {(t.height_cm || t.clothing_size_top || t.shoe_size) && (
+                    <MetricBadge
+                      items={
+                        [
+                          t.height_cm ? `${t.height_cm}cm` : null,
+                          t.clothing_size_top,
+                          t.shoe_size ? `Calçado ${t.shoe_size}` : null,
+                        ].filter(Boolean) as string[]
+                      }
+                    />
+                  )}
+                  {t.status === "pending" && (
+                    <MetricBadge tone="gold">Pendente de aprovação</MetricBadge>
+                  )}
+                </div>
               </div>
             </div>
             {query.data.can_edit && (

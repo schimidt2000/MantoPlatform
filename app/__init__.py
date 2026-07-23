@@ -782,10 +782,8 @@ def create_app():
         return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
     # ── Impersonação de role (somente SUPERADMIN) ──────────────────
-    _IMPERSONABLE_ROLES = [
-        RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL,
-        RoleName.FINANCEIRO, RoleName.ENSAIO,
-    ]
+    # Feature 173: lista promovida a app/constants.py (fonte única com a API).
+    from app.constants import IMPERSONABLE_ROLES as _IMPERSONABLE_ROLES
 
     @app.route("/impersonate/<role_name>", methods=["POST"])
     @login_required

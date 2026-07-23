@@ -65,3 +65,14 @@ class RoleName:
     REVENDEDOR_EDUCAMANTO = "REVENDEDOR_EDUCAMANTO"
     # Equipe de marketing (feature 088): cria espaços de revisão de mídia.
     MARKETING  = "MARKETING"
+
+
+# Papéis que um SUPERADMIN pode simular no "Ver como" (feature 173 — fonte única,
+# usada pelas rotas Jinja /impersonate/* e pela API /api/auth/impersonate).
+IMPERSONABLE_ROLES = [
+    RoleName.CASTING,
+    RoleName.FIGURINO,
+    RoleName.COMERCIAL,
+    RoleName.FINANCEIRO,
+    RoleName.ENSAIO,
+]

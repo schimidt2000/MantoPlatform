@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Button, Card, CardContent, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, PageHeader, Skeleton } from "@manto/ui";
 import { useAdminLogs } from "../lib/adminConfig";
 
 function formatDate(iso: string): string {
@@ -15,13 +14,7 @@ export function AdminLogsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
-      <Button asChild variant="ghost" size="sm">
-        <Link to="/">‹ Início</Link>
-      </Button>
-
-      <header>
-        <h1 className="text-2xl font-semibold text-ink">Logs de auditoria</h1>
-      </header>
+<PageHeader title="Logs de auditoria" className="mb-0" />
 
       <div className="flex flex-wrap gap-2">
         {query.data && (

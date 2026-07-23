@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader } from "@manto/ui";
 import { useCreateRevisaoSpace, useReviewerOptions } from "../lib/revisao";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
@@ -40,9 +40,7 @@ export function RevisaoSpaceCreatePage() {
         <Link to="/revisao">‹ Revisão de mídia</Link>
       </Button>
 
-      <header>
-        <h1 className="text-2xl font-semibold text-ink">Novo espaço de revisão</h1>
-      </header>
+      <PageHeader title="Novo espaço de revisão" className="mb-0" />
 
       <Card>
         <CardHeader>

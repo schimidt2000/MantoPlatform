@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { Button, Card, Skeleton } from "@manto/ui";
+import { Button, Card, MetricBadge, PageHeader, Skeleton } from "@manto/ui";
 import { useAgenda, type EventoResumo } from "../lib/agenda";
 import { useCurrentUser } from "../lib/useAuth";
 
@@ -54,22 +54,10 @@ function EventCard({ ev }: { ev: EventoResumo }) {
       </div>
       {ev.location && <span className="text-sm text-muted">{ev.location}</span>}
       <div className="mt-1 flex flex-wrap gap-1.5">
-        <span className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-muted">
-          {ev.event_type}
-        </span>
-        {ev.confirmed && (
-          <span className="rounded-md bg-green-soft px-2 py-0.5 text-xs text-green">
-            Confirmado
-          </span>
-        )}
-        {ev.is_satellite && (
-          <span className="rounded-md bg-blue-soft px-2 py-0.5 text-xs text-blue">Satélite</span>
-        )}
-        {ev.group_name && (
-          <span className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-muted">
-            {ev.group_name}
-          </span>
-        )}
+        <MetricBadge>{ev.event_type}</MetricBadge>
+        {ev.confirmed && <MetricBadge tone="green">Confirmado</MetricBadge>}
+        {ev.is_satellite && <MetricBadge tone="blue">Satélite</MetricBadge>}
+        {ev.group_name && <MetricBadge>{ev.group_name}</MetricBadge>}
       </div>
       </Link>
     </Card>
@@ -103,25 +91,30 @@ export function AgendaPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-4 sm:p-6">
-      <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-ink">Agenda</h1>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setYm(shiftYm(ym, -1))}>
-            ‹
-          </Button>
-          <span className="min-w-40 text-center text-sm font-medium text-ink">
-            {monthLabel(ym)}
-          </span>
-          <Button variant="outline" size="sm" onClick={() => setYm(shiftYm(ym, 1))}>
-            ›
-          </Button>
-        </div>
-        {canCreateEvent(currentUser.data) && (
-          <Button asChild size="sm">
-            <Link to="/events/new">Novo evento</Link>
-          </Button>
-        )}
-      </header>
+      <PageHeader
+        title="Agenda"
+        className="mb-5"
+        actions={
+          <>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setYm(shiftYm(ym, -1))}>
+                ‹
+              </Button>
+              <span className="min-w-40 text-center text-sm font-medium text-ink">
+                {monthLabel(ym)}
+              </span>
+              <Button variant="outline" size="sm" onClick={() => setYm(shiftYm(ym, 1))}>
+                ›
+              </Button>
+            </div>
+            {canCreateEvent(currentUser.data) && (
+              <Button asChild size="sm">
+                <Link to="/events/new">Novo evento</Link>
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {agenda.isLoading && (
         <div className="space-y-3">

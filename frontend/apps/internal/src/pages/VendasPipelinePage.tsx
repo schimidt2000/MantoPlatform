@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Card, CardContent, Skeleton } from "@manto/ui";
+import { Card, CardContent, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { useVendasPipeline, type VendasPipelineItem } from "../lib/vendas";
 
@@ -59,7 +59,7 @@ export function VendasPipelinePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
-      <h1 className="text-2xl font-semibold text-ink">Pipeline de vendas</h1>
+      <PageHeader title="Pipeline de vendas" className="mb-0" />
       <p className="text-sm text-muted">Eventos com dados de venda, custo e comissão.</p>
 
       {query.isLoading && (

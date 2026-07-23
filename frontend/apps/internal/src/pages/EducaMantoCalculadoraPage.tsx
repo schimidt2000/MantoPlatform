@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { API_BASE, ApiRequestError } from "@manto/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
 import {
   useCalcularPacote,
@@ -133,19 +132,15 @@ export function EducaMantoCalculadoraPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
-      <div className="flex items-center justify-between">
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/">‹ Início</Link>
-        </Button>
-        <a
-          href={`${API_BASE}/educamanto/`}
-          className="text-sm text-blue hover:underline"
-        >
-          Gerar PDF, ver histórico ou gerenciar pacotes ›
-        </a>
-      </div>
-
-      <h1 className="text-2xl font-semibold text-ink">EducaManto — Calculadora</h1>
+      <PageHeader
+        title="EducaManto — Calculadora"
+        className="mb-0"
+        actions={
+          <a href={`${API_BASE}/educamanto/`} className="text-sm text-blue hover:underline">
+            Gerar PDF, ver histórico ou gerenciar pacotes ›
+          </a>
+        }
+      />
 
       {packagesQuery.isLoading && <Skeleton className="h-40 w-full" />}
 

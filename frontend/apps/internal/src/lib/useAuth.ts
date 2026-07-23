@@ -49,3 +49,35 @@ export function useLogout() {
     },
   });
 }
+
+/**
+ * Ativa o "Ver como" (impersonação de papel — SUPERADMIN real, feature 173).
+ * Invalida TODAS as queries no sucesso: qualquer dado sensível a RBAC refaz o
+ * fetch sob a nova sessão.
+ */
+export function useImpersonate() {
+  const queryClient = useQueryClient();
+  return useMutation<AuthUser, Error, string>({
+    mutationFn: (role) =>
+      apiFetch<AuthUser>("/api/auth/impersonate", {
+        method: "POST",
+        body: JSON.stringify({ role }),
+      }),
+    onSuccess: (user) => {
+      queryClient.setQueryData(ME_KEY, user);
+      void queryClient.invalidateQueries();
+    },
+  });
+}
+
+/** Limpa o "Ver como" e volta ao papel real (idempotente no servidor). */
+export function useImpersonateReset() {
+  const queryClient = useQueryClient();
+  return useMutation<AuthUser, Error, void>({
+    mutationFn: () => apiFetch<AuthUser>("/api/auth/impersonate", { method: "DELETE" }),
+    onSuccess: (user) => {
+      queryClient.setQueryData(ME_KEY, user);
+      void queryClient.invalidateQueries();
+    },
+  });
+}

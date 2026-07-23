@@ -1,5 +1,4 @@
-import { Link } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { useAdminSyncStatus, useRunSync } from "../lib/adminConfig";
 
 export function AdminSyncPage() {
@@ -8,13 +7,7 @@ export function AdminSyncPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
-      <Button asChild variant="ghost" size="sm">
-        <Link to="/">‹ Início</Link>
-      </Button>
-
-      <header>
-        <h1 className="text-2xl font-semibold text-ink">Sync da agenda</h1>
-      </header>
+<PageHeader title="Sync da agenda" className="mb-0" />
 
       <div className="flex flex-wrap gap-2">
         <Button
