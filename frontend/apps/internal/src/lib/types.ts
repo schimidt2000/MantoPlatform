@@ -6,8 +6,13 @@ export interface AuthUser {
   name: string;
   email: string;
   roles: string[];
+  /** SUPERADMIN efetivo (falso enquanto uma impersonação está ativa). */
   is_superadmin: boolean;
+  /** SUPERADMIN real, independente de impersonação — controla o "Ver como". */
+  is_real_superadmin: boolean;
   impersonating: string | null;
+  /** Responsável EducaManto (feature 109) — afeta visibilidade de Pipeline/Comissões. */
+  is_educamanto_responsavel: boolean;
 }
 
 /** Referência enxuta de um evento/cargo dentro do resumo do dashboard. */

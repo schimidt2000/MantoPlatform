@@ -14,14 +14,25 @@ from app import limiter
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
-from app.models import User
+from app.models import SiteSetting, User
+
+
+def _is_educamanto_responsavel(user: User) -> bool:
+    """True se o usuário é o responsável EducaManto (feature 109).
+
+    Mesma regra do context processor `inject_educamanto_responsavel_flag` do app
+    Jinja — controla a visibilidade de Pipeline/Comissões no menu.
+    """
+    settings = SiteSetting.query.get(1)
+    return bool(settings and settings.educamanto_seller_id == user.id)
 
 
 def serialize_user(user: User) -> dict[str, Any]:
     """Serializa o usuário autenticado no formato de `data-model.md`.
 
     O papel efetivo respeita a impersonação de papel do SUPERADMIN (mesma semântica da
-    view `home` e dos context processors do app Jinja).
+    view `home` e dos context processors do app Jinja). `is_real_superadmin` ignora a
+    impersonação (controla a exibição do "Ver como" no shell — feature 173).
     """
     is_real_superadmin = any(r.name == RoleName.SUPERADMIN for r in user.roles)
     impersonate = session.get("impersonate_role") if is_real_superadmin else None
@@ -31,7 +42,9 @@ def serialize_user(user: User) -> dict[str, Any]:
         "email": user.email,
         "roles": [r.name for r in user.roles],
         "is_superadmin": is_real_superadmin and not impersonate,
+        "is_real_superadmin": is_real_superadmin,
         "impersonating": impersonate,
+        "is_educamanto_responsavel": _is_educamanto_responsavel(user),
     }
 
 
