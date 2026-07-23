@@ -34,6 +34,7 @@ import { RevisaoListPage } from "./pages/RevisaoListPage";
 import { RevisaoSpaceCreatePage } from "./pages/RevisaoSpaceCreatePage";
 import { RevisaoSpacePage } from "./pages/RevisaoSpacePage";
 import { RevisaoAssetPage } from "./pages/RevisaoAssetPage";
+import { EducaMantoCalculadoraPage } from "./pages/EducaMantoCalculadoraPage";
 
 export function App() {
   return (
@@ -149,6 +150,14 @@ export function App() {
           element={
             <RequireAuth>
               <PagamentosPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/educamanto"
+          element={
+            <RequireAuth>
+              <EducaMantoCalculadoraPage />
             </RequireAuth>
           }
         />

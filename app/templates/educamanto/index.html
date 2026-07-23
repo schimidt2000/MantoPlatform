@@ -605,15 +605,19 @@
 
   // Reproduz calcular_van / calcular_carro do orçamento: tarifa por km (ida e volta) +
   // adicional por pessoa (rateio fora-SP). Adicional de show não se aplica ao EducaManto.
-  function calcTransporte() {
-    if (!tKmIda || tKmIda <= 0) return { total: 0 };
+  // Feature 171: o valor de uma viagem é multiplicado pelo total de dias do pacote — eventos
+  // fora de São Paulo com múltiplos dias exigem uma ida e volta por dia, não uma só.
+  function calcTransporte(diasTotal) {
+    const dias = Math.max(parseInt(diasTotal, 10) || 0, 1);
+    if (!tKmIda || tKmIda <= 0) return { total: 0, dias };
     const kmT = tKmIda * 2;
     // Transporte sempre van COM carretinha (feature 080); pessoas = catering da apresentação.
     const pessoas = Math.max(0, parseInt(document.getElementById('t-pessoas').value) || 0);
     const vt = kmT * T_CFG.van_com_carretinha;
     const afsp = (pessoas * kmT) / T_CFG.afsp_divisor;
-    const total = Math.round((vt + afsp) * 100) / 100;
-    return { total, kmT, pessoas, label: 'Van c/ carretinha',
+    const valorViagem = Math.round((vt + afsp) * 100) / 100;
+    const total = Math.round(valorViagem * dias * 100) / 100;
+    return { total, valorViagem, dias, kmT, pessoas, label: 'Van c/ carretinha',
              vt: Math.round(vt * 100) / 100, afsp: Math.round(afsp * 100) / 100 };
   }
 
@@ -821,10 +825,11 @@
       discTag.innerHTML = `<svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg> Desconto de ${pct(pkg.discount_pct)} aplicado (−${brl(desconto)})`;
     }
 
-    /* Transporte (076/079): pessoas na van = catering apresentação; somado flat aos dois valores
+    /* Transporte (076/079/171): pessoas na van = catering apresentação; valor de uma viagem
+       multiplicado pelo total de dias do pacote (feature 171); somado flat aos dois valores
        (custo de logística repassado, fora do gross-up da NF). */
     syncPessoasTransporte(E);
-    const tp = calcTransporte();
+    const tp = calcTransporte(total);
     const transporte = tp.total || 0;
     document.getElementById('val-sem-nota').textContent = brl(valorFinalSemNota + transporte);
     document.getElementById('val-com-nota').textContent = brl(valorFinalComNota + transporte);
@@ -832,7 +837,10 @@
     const tLine = document.getElementById('t-result-line');
     if (transporte > 0) {
       tLine.style.display = 'block';
-      tLine.innerHTML = `🚐 <strong>Transporte: ${brl(transporte)}</strong>`
+      const valorLabel = tp.dias > 1
+        ? `${brl(tp.valorViagem)} por viagem × ${tp.dias} dias = ${brl(transporte)}`
+        : `${brl(transporte)} (1 viagem)`;
+      tLine.innerHTML = `🚐 <strong>Transporte: ${valorLabel}</strong>`
         + ` <span style="color:var(--muted)">— ${tp.kmT} km (ida e volta) · ${tp.label}`
         + ` · adicional ${tp.pessoas} pessoa(s). Já somado ao valor final.</span>`;
     } else {
@@ -949,7 +957,7 @@
     if (!ids.length) { msg.style.color = 'var(--red)'; msg.textContent = 'Selecione ao menos um pacote.'; return; }
 
     syncPessoasTransporte(E);
-    const tp = calcTransporte();
+    const tp = calcTransporte(d1 + d2);
     const tTotal = tp.total || 0;
     const acrescimoRaw = acrescimoValor();   // comissão do vendedor (078)
     const packages = ids.map(id => {
