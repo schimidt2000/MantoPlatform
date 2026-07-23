@@ -6,16 +6,25 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 from flask import (
-    Blueprint, render_template, request, redirect, url_for,
-    session, flash, current_app, send_from_directory, abort
+    Blueprint,
+    abort,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    session,
+    url_for,
 )
-from werkzeug.utils import secure_filename
 from sqlalchemy import func, or_
+from werkzeug.utils import secure_filename
 
 from app import db, limiter
-from app.models import Talent, EventRole, CalendarEvent, TalentMedia, EventRating, EventSubRating
+from app.email_service import send_async, send_password_reset_email
+from app.models import CalendarEvent, EventRating, EventRole, EventSubRating, Talent, TalentMedia
+from app.talent_portal import portal_ops
 from app.talents.importer import parse_date
-from app.email_service import send_password_reset_email, send_async
 
 portal_bp = Blueprint("portal", __name__, url_prefix="/portal")
 
@@ -56,27 +65,7 @@ def _current_talent():
     return Talent.query.get(tid)
 
 
-def _talent_by_login(value: str):
-    """Acha um talento por CPF (dígitos) ou e-mail (feature 092).
-
-    Talentos estrangeiros não têm CPF e acessam o portal pelo **e-mail**. Se o valor tiver ``@``, busca por
-    ``email_contact`` (case-insensitive); caso contrário, trata como CPF (apenas dígitos).
-
-    Args:
-        value: O identificador digitado no formulário (CPF ou e-mail).
-
-    Returns:
-        O ``Talent`` correspondente, ou ``None`` se nada casar.
-    """
-    value = (value or "").strip()
-    if not value:
-        return None
-    if "@" in value:
-        return Talent.query.filter(func.lower(Talent.email_contact) == value.lower()).first()
-    digits = "".join(c for c in value if c.isdigit())
-    if not digits:
-        return None
-    return Talent.query.filter_by(cpf=digits).first()
+_talent_by_login = portal_ops.find_talent_by_login
 
 
 def portal_login_required(fn):
@@ -148,6 +137,7 @@ def logout():
 
 import re as _re_pw
 
+
 def _validate_new_password(pw: str):
     if len(pw) < 8:
         return "A senha deve ter pelo menos 8 caracteres."
@@ -172,7 +162,9 @@ def first_access():
     email_hint = None
 
     if request.method == "POST":
-        import secrets as _sec, string as _str
+        import secrets as _sec
+        import string as _str
+
         from app.email_service import send_welcome_email as _send_welcome
 
         talent = _talent_by_login(request.form.get("cpf", ""))
@@ -336,6 +328,7 @@ def _maybe_record_rating_version(event_id: int, rating) -> None:
     slot garante que só uma versão seja criada por sessão de edição. Não faz commit.
     """
     import json as _json
+
     from app.models import EventRatingVersion
 
     edit = session.get("rating_edit")
@@ -446,9 +439,8 @@ def home():
 @portal_login_required
 def accept_invite(role_id: int):
     talent = _current_talent()
-    role = EventRole.query.filter_by(id=role_id, talent_id=talent.id).first_or_404()
-    role.invite_status = "accepted"
-    db.session.commit()
+    if portal_ops.accept_invite(talent, role_id) is None:
+        abort(404)
     flash("Presença confirmada!", "success")
     return redirect(url_for("portal.home"))
 
@@ -459,10 +451,8 @@ def accept_invite(role_id: int):
 @portal_login_required
 def reject_invite(role_id: int):
     talent = _current_talent()
-    role = EventRole.query.filter_by(id=role_id, talent_id=talent.id).first_or_404()
-    # Mantém talent_id para o casting saber quem recusou; status marca a rejeição
-    role.invite_status = "rejected"
-    db.session.commit()
+    if portal_ops.reject_invite(talent, role_id) is None:
+        abort(404)
     flash("Convite recusado. Nossa equipe de casting foi notificada.", "info")
     return redirect(url_for("portal.home"))
 
@@ -605,10 +595,8 @@ def media_delete(media_id: int):
 @portal_login_required
 def ack_event_change(role_id: int):
     talent = _current_talent()
-    role = EventRole.query.filter_by(id=role_id, talent_id=talent.id).first_or_404()
-    role.event_changed_at = None
-    role.change_description = None
-    db.session.commit()
+    if portal_ops.ack_event_change(talent, role_id) is None:
+        abort(404)
     return redirect(url_for("portal.home"))
 
 
@@ -652,41 +640,11 @@ def historico():
 def event_figurino(event_id: int):
     talent = _current_talent()
 
-    # Garante que o talento tem uma vaga neste evento (pendente ou aceita)
-    role = EventRole.query.filter(
-        EventRole.event_id == event_id,
-        EventRole.talent_id == talent.id,
-        EventRole.invite_status.in_(["accepted", "pending"]),
-    ).first_or_404()
+    sheet_items = portal_ops.get_figurino(talent, event_id)
+    if sheet_items is None:
+        abort(404)
 
-    event = role.event
-
-    from app.models import FigurinoSheet
-    from app.figurino.drive_service import normalize_name
-
-    seen_ids: set[int] = set()
-    sheet_items: list[tuple] = []
-
-    for r in [r for r in event.roles if r.talent_id == talent.id]:
-        sheet = r.figurino_sheet
-        if not sheet:
-            norm = normalize_name(r.character_name)
-            sheet = FigurinoSheet.query.filter_by(character_name_norm=norm).first()
-
-        if not sheet or sheet.id in seen_ids:
-            continue
-        seen_ids.add(sheet.id)
-
-        # Converte URL de upload para rota do portal (evita checar Flask-Login)
-        photo_url = None
-        if sheet.photo_filename:
-            if sheet.photo_filename.startswith("/uploads/"):
-                photo_url = "/portal/photo/" + sheet.photo_filename[9:]
-            else:
-                photo_url = sheet.photo_filename
-
-        sheet_items.append((sheet, photo_url))
-
+    event = CalendarEvent.query.get_or_404(event_id)
     return render_template(
         "portal/figurino_viewer.html",
         event=event,
