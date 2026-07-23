@@ -6,3 +6,5 @@ export { Card, CardHeader, CardTitle, CardContent } from "./components/card";
 export { Skeleton } from "./components/skeleton";
 export { FileUpload } from "./components/file-upload";
 export type { FileUploadProps } from "./components/file-upload";
+export { AppLayout } from "./components/app-layout";
+export type { AppLayoutProps, NavItemData, NavSectionData } from "./components/app-layout";
