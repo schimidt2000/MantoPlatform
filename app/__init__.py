@@ -1,13 +1,13 @@
 import os
 from flask import Flask, Response, render_template, request, send_from_directory, session, redirect
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import and_, not_, or_, func
+from sqlalchemy import not_, or_
 from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_login import login_required, current_user
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from datetime import datetime, timedelta, date
+from datetime import datetime, date
 from .config import Config  # se seu config.py está na raiz
 from .constants import RoleName
 
@@ -525,55 +525,27 @@ def create_app():
                 .all()
             )
 
+        # Performance (SUPERADMIN): mesma fonte de verdade usada pelo endpoint JSON
+        # /api/dashboard (feature 174, app/api/dashboard_service.py) — Princípio I.
+        from app.api.dashboard_service import compute_performance, resolve_performance_period
+
         perf_range = request.args.get("perf_range", "7")
         perf_start = request.args.get("perf_start")
         perf_end = request.args.get("perf_end")
-
-        start_dt = None
-        end_dt = None
-        if perf_range == "30":
-            end_dt = datetime.utcnow()
-            start_dt = end_dt - timedelta(days=30)
-        elif perf_range == "custom" and perf_start and perf_end:
-            try:
-                start_dt = datetime.fromisoformat(perf_start)
-                end_dt = datetime.fromisoformat(perf_end) + timedelta(days=1)
-            except ValueError:
-                start_dt = None
-                end_dt = None
-        else:
-            end_dt = datetime.utcnow()
-            start_dt = end_dt - timedelta(days=7)
 
         perf_casting_total = 0
         perf_casting_done = 0
         perf_figurino_total = 0
         perf_figurino_done = 0
         perf_money = 0
-        if is_superadmin and start_dt and end_dt:
-            perf_filter = and_(CalendarEvent.start_at >= start_dt, CalendarEvent.start_at < end_dt, exclude_ensaios)
-            perf_casting_total = (
-                EventRole.query.join(CalendarEvent).filter(perf_filter).count()
-            )
-            perf_casting_done = (
-                EventRole.query.filter(EventRole.assigned_at.isnot(None))
-                .join(CalendarEvent)
-                .filter(perf_filter)
-                .count()
-            )
-            perf_figurino_total = perf_casting_total
-            perf_figurino_done = (
-                EventRole.query.filter(EventRole.figurino_done_at.isnot(None))
-                .join(CalendarEvent)
-                .filter(perf_filter)
-                .count()
-            )
-            perf_money = (
-                db.session.query(func.coalesce(func.sum(EventRole.cache_value), 0))
-                .join(CalendarEvent)
-                .filter(perf_filter, EventRole.assigned_at.isnot(None))
-                .scalar()
-            )
+        if is_superadmin:
+            _start_dt, _end_dt = resolve_performance_period(perf_range, perf_start, perf_end)
+            _perf = compute_performance(_start_dt, _end_dt)
+            perf_casting_total = _perf["casting_total"]
+            perf_casting_done = _perf["casting_done"]
+            perf_figurino_total = _perf["figurino_total"]
+            perf_figurino_done = _perf["figurino_done"]
+            perf_money = _perf["money_total"]
 
         # ── Comercial: cobranças pendentes ──────────────────────────
         # Política: à vista, ou 50% no ato + 50% até 2 dias antes do evento.
@@ -581,71 +553,11 @@ def create_app():
         show_comercial = (
             has_role(RoleName.COMERCIAL) or has_role(RoleName.FINANCEIRO) or is_superadmin
         )
-        pending_payments = []
-        if show_comercial:
-            from zoneinfo import ZoneInfo
+        # Cobranças pendentes: mesma fonte de verdade usada pelo endpoint JSON /api/dashboard
+        # (feature 174, app/api/dashboard_service.py) — Princípio I.
+        from app.api.dashboard_service import compute_comercial_pending
 
-            from app.models import EventPayment
-            today_sp = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
-            sale_events = (
-                CalendarEvent.query
-                .filter(
-                    CalendarEvent.sale_value.isnot(None),
-                    CalendarEvent.sale_value > 0,
-                    CalendarEvent.start_at >= task_cutoff,
-                    exclude_ensaios,
-                )
-                .order_by(CalendarEvent.start_at.asc())
-                .all()
-            )
-            received_by_event = dict(
-                db.session.query(
-                    EventPayment.event_id,
-                    func.coalesce(func.sum(EventPayment.amount), 0),
-                )
-                .filter(EventPayment.event_id.in_([e.id for e in sale_events] or [0]))
-                .group_by(EventPayment.event_id)
-                .all()
-            )
-            for ev in sale_events:
-                sale = float(ev.sale_value)
-                received = float(received_by_event.get(ev.id, 0))
-                saldo = sale - received
-                if saldo <= 0:
-                    continue
-                ev_date = ev.start_at.date() if ev.start_at else None
-                is_past = bool(ev_date and ev_date < today_sp)
-                due_date = None
-                if ev.payment_method in ("futuro", "faturado") and ev.payment_due_date:
-                    due_date = ev.payment_due_date
-                    severity = "vencido" if due_date <= today_sp else "info"
-                elif is_past:
-                    # Evento já aconteceu e segue com saldo em aberto.
-                    severity = "atrasado"
-                else:
-                    days_left = (ev_date - today_sp).days if ev_date else None
-                    if days_left is not None and days_left <= 2:
-                        severity = "urgent"
-                    elif received < sale * 0.5:
-                        severity = "warn"
-                    else:
-                        continue  # ≥50% recebido e falta >2 dias: dentro da política
-                pending_payments.append({
-                    "event": ev,
-                    "sale": sale,
-                    "received": received,
-                    "saldo": saldo,
-                    "severity": severity,
-                    "due_date": due_date,
-                    "is_past": is_past,
-                })
-            _SEVERITY_ORDER = {"atrasado": 0, "vencido": 1, "urgent": 2, "warn": 3, "info": 4}
-            pending_payments.sort(
-                key=lambda p: (
-                    _SEVERITY_ORDER[p["severity"]],
-                    p["event"].start_at or datetime.max,
-                )
-            )
+        pending_payments = compute_comercial_pending(task_cutoff) if show_comercial else []
 
         # ── Comercial: reembolsos pendentes (feature 136) ──────────
         # Sem filtro de data: um reembolso continua pendente até ser cobrado,

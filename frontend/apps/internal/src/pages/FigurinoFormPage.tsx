@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { Button, Card, CardContent } from "@manto/ui";
+import { Button, Card, CardContent, PageHeader } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import {
   useCreateFigurinoSheet,
@@ -139,9 +139,9 @@ export function FigurinoFormPage() {
       <Button asChild variant="ghost" size="sm">
         <Link to="/figurinos">‹ Figurino</Link>
       </Button>
-      <h1 className="text-2xl font-semibold text-ink">
-        {isEdit ? `Editar — ${sheet?.character_name ?? ""}` : "Nova ficha de figurino"}
-      </h1>
+      <PageHeader
+        title={isEdit ? `Editar — ${sheet?.character_name ?? ""}` : "Nova ficha de figurino"}
+      />
 
       <Card>
         <CardContent className="space-y-4 p-4">

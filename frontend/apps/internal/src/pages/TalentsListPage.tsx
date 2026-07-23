@@ -1,101 +1,7 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Button, Card, CardContent, MetricBadge, PageHeader, Skeleton } from "@manto/ui";
-import { assetUrl } from "@manto/api-client";
-import {
-  useApproveTalent,
-  useRejectTalent,
-  useTalentDirectory,
-  type TalentSummary,
-} from "../lib/talents";
-
-const WARNING_COLORS: Record<string, string> = {
-  leve: "bg-gold",
-  moderado: "bg-blue",
-  grave: "bg-red",
-};
-
-function TalentCard({ talent, isPending }: { talent: TalentSummary; isPending: boolean }) {
-  const approve = useApproveTalent();
-  const reject = useRejectTalent();
-  return (
-    <Card>
-      <CardContent className="flex gap-3 p-3">
-        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full bg-surface-2">
-          {talent.photo_face_path ? (
-            <img
-              src={assetUrl(talent.photo_face_path)}
-              alt={talent.full_name}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-2xl text-muted">
-              👤
-            </div>
-          )}
-          {talent.warning_level && (
-            <span
-              className={`absolute right-0 top-0 h-3 w-3 rounded-full ${WARNING_COLORS[talent.warning_level] ?? "bg-muted"}`}
-              title={`Alerta: ${talent.warning_level}`}
-            />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <Link to={`/talents/${talent.id}`} className="font-medium text-ink hover:underline">
-            {talent.full_name}
-          </Link>
-          {talent.artistic_name && (
-            <div className="text-sm text-muted">{talent.artistic_name}</div>
-          )}
-          {(talent.height_cm || talent.clothing_size_top || talent.shoe_size) && (
-            <div className="mt-1">
-              <MetricBadge
-                items={
-                  [
-                    talent.height_cm ? `${talent.height_cm}cm` : null,
-                    talent.clothing_size_top,
-                    talent.shoe_size ? `Calçado ${talent.shoe_size}` : null,
-                  ].filter(Boolean) as string[]
-                }
-              />
-            </div>
-          )}
-          {Object.keys(talent.character_matches).length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {Object.entries(talent.character_matches).map(([name, count]) => (
-                <span
-                  key={name}
-                  className="rounded-md bg-accent-soft px-1.5 py-0.5 text-xs text-accent-dark"
-                >
-                  {name} ({count}x)
-                </span>
-              ))}
-            </div>
-          )}
-          {isPending && (
-            <div className="mt-2 flex gap-2">
-              <Button size="sm" loading={approve.isPending} onClick={() => approve.mutate(talent.id)}>
-                ✓ Aprovar
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                loading={reject.isPending}
-                onClick={() => {
-                  if (window.confirm(`Rejeitar o cadastro de "${talent.full_name}"? Isso exclui o registro.`)) {
-                    reject.mutate(talent.id);
-                  }
-                }}
-              >
-                Rejeitar
-              </Button>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+import { Button, Card, CardContent, PageHeader, Skeleton } from "@manto/ui";
+import { useTalentDirectory } from "../lib/talents";
+import { TalentMosaic } from "../components/TalentMosaic";
 
 function toggleInList(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
@@ -367,11 +273,7 @@ export function TalentsListPage() {
           {query.data.items.length === 0 ? (
             <p className="text-sm text-muted">Nenhum talento encontrado.</p>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {query.data.items.map((t) => (
-                <TalentCard key={t.id} talent={t} isPending={status === "pending"} />
-              ))}
-            </div>
+            <TalentMosaic talents={query.data.items} isPending={status === "pending"} />
           )}
 
           {query.data.pages > 1 && (
