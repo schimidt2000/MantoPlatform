@@ -76,6 +76,14 @@ export function DashboardPage() {
           <Button asChild variant="outline" size="sm">
             <Link to="/financeiro/comissoes">Comissões</Link>
           </Button>
+          {(user?.is_superadmin ||
+            user?.roles.includes("COMERCIAL") ||
+            user?.roles.includes("ENSAIO") ||
+            user?.roles.includes("REVENDEDOR_EDUCAMANTO")) && (
+            <Button asChild variant="outline" size="sm">
+              <Link to="/educamanto">EducaManto</Link>
+            </Button>
+          )}
           {(user?.is_superadmin || user?.roles.includes("FINANCEIRO")) && (
             <Button asChild variant="outline" size="sm">
               <Link to="/financeiro">Financeiro</Link>
