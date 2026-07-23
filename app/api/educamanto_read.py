@@ -13,7 +13,7 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
-from app.educamanto import pricing_ops
+from app.educamanto import pricing_ops, quote_ops
 from app.models import EducaMantoPackage
 
 _CAN_USE = {
@@ -28,6 +28,44 @@ def _require_use() -> Any:
     if not {r.name.upper() for r in current_user.roles} & _CAN_USE:
         return json_error("Sem permissão", 403)
     return None
+
+
+def _is_superadmin() -> bool:
+    return bool({r.name.upper() for r in current_user.roles} & {RoleName.SUPERADMIN})
+
+
+@api_bp.route("/educamanto/historico")
+@api_login_required
+def api_educamanto_historico() -> Any:
+    """Histórico de orçamentos gerados — mesmos filtros da tela Jinja legada (`historico()`)."""
+    denied = _require_use()
+    if denied:
+        return denied
+
+    is_superadmin = _is_superadmin()
+    entries, users = quote_ops.search_history(
+        query=request.args.get("q", "").strip(),
+        date_from=request.args.get("date_from", "").strip(),
+        date_to=request.args.get("date_to", "").strip(),
+        user_id_filter=request.args.get("user_id", "").strip(),
+        is_superadmin=is_superadmin,
+    )
+    entries_json = [
+        {
+            "id": e.id,
+            "created_at": e.created_at.isoformat(),
+            "client_name": e.client_name,
+            "packages_label": e.packages_label,
+            **({"user_name": e.user.name} if is_superadmin else {}),
+        }
+        for e in entries
+    ]
+    return jsonify(
+        {
+            "entries": entries_json,
+            **({"users": [{"id": u.id, "name": u.name} for u in users]} if is_superadmin else {}),
+        }
+    )
 
 
 @api_bp.route("/educamanto/packages")
