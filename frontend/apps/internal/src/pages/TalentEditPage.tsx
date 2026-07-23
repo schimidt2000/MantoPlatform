@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { Button, Card, CardContent } from "@manto/ui";
+import { Button, Card, CardContent, PageHeader } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
 import { useCurrentUser } from "../lib/useAuth";
 import { useTalent, useUpdateTalent, type TalentUpdateInput } from "../lib/talents";
@@ -84,7 +84,7 @@ export function TalentEditPage() {
       <Button asChild variant="ghost" size="sm">
         <Link to={`/talents/${id}`}>‹ Perfil</Link>
       </Button>
-      <h1 className="text-2xl font-semibold text-ink">Editar talento</h1>
+      <PageHeader title="Editar talento" className="mb-0" />
 
       <Card>
         <CardContent className="space-y-4 p-4">

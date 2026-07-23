@@ -1,5 +1,4 @@
-import { Link } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { useImportarCatalogoStatus, useStartImportarCatalogo } from "../lib/adminConfig";
 
 export function AdminImportarCatalogoPage() {
@@ -8,13 +7,7 @@ export function AdminImportarCatalogoPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-4 p-4 sm:p-6">
-      <Button asChild variant="ghost" size="sm">
-        <Link to="/">‹ Início</Link>
-      </Button>
-
-      <header>
-        <h1 className="text-2xl font-semibold text-ink">Importar catálogo</h1>
-      </header>
+<PageHeader title="Importar catálogo" className="mb-0" />
 
       {query.isLoading && <Skeleton className="h-40 w-full" />}
       {query.isError && (

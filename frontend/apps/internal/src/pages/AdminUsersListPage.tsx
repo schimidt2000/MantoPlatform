@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { formatBRL } from "@manto/money";
-import { Button, Card, CardContent, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, PageHeader, Skeleton } from "@manto/ui";
 import { useAdminUsers } from "../lib/adminUsers";
 import { useCurrentUser } from "../lib/useAuth";
 
@@ -10,20 +10,17 @@ export function AdminUsersListPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-4 sm:p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/">‹ Início</Link>
-        </Button>
-        {me?.is_superadmin && (
-          <Button asChild size="sm">
-            <Link to="/admin/usuarios/novo">+ Novo usuário</Link>
-          </Button>
-        )}
-      </div>
-
-      <header className="mb-4">
-        <h1 className="text-2xl font-semibold text-ink">Usuários</h1>
-      </header>
+      <PageHeader
+        title="Usuários"
+        className="mb-4"
+        actions={
+          me?.is_superadmin && (
+            <Button asChild size="sm">
+              <Link to="/admin/usuarios/novo">+ Novo usuário</Link>
+            </Button>
+          )
+        }
+      />
 
       {query.isLoading && (
         <div className="space-y-2">

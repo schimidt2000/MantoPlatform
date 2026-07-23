@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Card, CardContent, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, MetricBadge, PageHeader, Skeleton } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import {
   useApproveTalent,
@@ -47,15 +47,19 @@ function TalentCard({ talent, isPending }: { talent: TalentSummary; isPending: b
           {talent.artistic_name && (
             <div className="text-sm text-muted">{talent.artistic_name}</div>
           )}
-          <div className="mt-1 text-xs text-muted">
-            {[
-              talent.height_cm ? `${talent.height_cm}cm` : null,
-              talent.clothing_size_top,
-              talent.shoe_size ? `calçado ${talent.shoe_size}` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </div>
+          {(talent.height_cm || talent.clothing_size_top || talent.shoe_size) && (
+            <div className="mt-1">
+              <MetricBadge
+                items={
+                  [
+                    talent.height_cm ? `${talent.height_cm}cm` : null,
+                    talent.clothing_size_top,
+                    talent.shoe_size ? `Calçado ${talent.shoe_size}` : null,
+                  ].filter(Boolean) as string[]
+                }
+              />
+            </div>
+          )}
           {Object.keys(talent.character_matches).length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
               {Object.entries(talent.character_matches).map(([name, count]) => (
@@ -172,15 +176,7 @@ export function TalentsListPage() {
 
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/">‹ Início</Link>
-        </Button>
-      </div>
-
-      <header className="mb-4">
-        <h1 className="text-2xl font-semibold text-ink">Talentos</h1>
-      </header>
+      <PageHeader title="Talentos" className="mb-4" />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex rounded-md border border-line">

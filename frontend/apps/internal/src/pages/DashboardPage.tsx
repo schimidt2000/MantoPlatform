@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "framer-motion";
 import { apiFetch } from "@manto/api-client";
-import { Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Card, CardContent, CardHeader, CardTitle, DenseCard, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { useCurrentUser } from "../lib/useAuth";
 import type { DashboardSummary } from "../lib/types";
@@ -18,18 +18,13 @@ function DashboardSkeleton() {
 
 function CountCard({ title, done, total }: { title: string; done: number; total: number }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-3xl font-semibold text-ink">
-          {done}
-          <span className="text-lg text-muted"> / {total}</span>
-        </p>
-        <p className="mt-1 text-sm text-muted">concluídos</p>
-      </CardContent>
-    </Card>
+    <DenseCard
+      title={title}
+      stats={[
+        { label: "Concluídos", value: done },
+        { label: "Total", value: total },
+      ]}
+    />
   );
 }
 
@@ -45,10 +40,7 @@ export function DashboardPage() {
   return (
     <div className="mx-auto max-w-4xl p-6">
       {/* Navegação e logout vivem na sidebar do shell (feature 173). */}
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-ink">Início</h1>
-        {user && <p className="text-sm text-muted">Olá, {user.name}</p>}
-      </header>
+      <PageHeader title="Início" subtitle={user ? `Olá, ${user.name}` : undefined} />
 
       {dashboard.isLoading && <DashboardSkeleton />}
 

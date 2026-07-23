@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle, Input, Skeleton } from "@manto/ui";
+import { Card, CardContent, CardHeader, CardTitle, Input, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import {
   usePagamentos,
@@ -303,7 +303,7 @@ export function PagamentosPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
-      <h1 className="text-2xl font-semibold text-ink">Planilha de Pagamentos</h1>
+      <PageHeader title="Planilha de Pagamentos" className="mb-0" />
 
       <div className="flex flex-wrap items-center gap-2">
         <Input

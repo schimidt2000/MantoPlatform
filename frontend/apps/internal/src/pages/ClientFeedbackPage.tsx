@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { useClientFeedback, type FeedbackPeriod } from "../lib/clientes";
 
 function formatDate(iso: string | null): string {
@@ -32,9 +32,7 @@ export function ClientFeedbackPage() {
         <Link to="/clientes">‹ Clientes</Link>
       </Button>
 
-      <header>
-        <h1 className="text-2xl font-semibold text-ink">Avaliações das clientes</h1>
-      </header>
+      <PageHeader title="Avaliações das clientes" className="mb-0" />
 
       <div className="flex flex-wrap items-center gap-2">
         <select

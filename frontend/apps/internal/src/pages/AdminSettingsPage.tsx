@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { useAdminSettings, useUpdateAdminSettings } from "../lib/adminConfig";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
@@ -36,13 +36,7 @@ export function AdminSettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
-      <Button asChild variant="ghost" size="sm">
-        <Link to="/">‹ Início</Link>
-      </Button>
-
-      <header>
-        <h1 className="text-2xl font-semibold text-ink">Configurações</h1>
-      </header>
+<PageHeader title="Configurações" className="mb-0" />
 
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline" size="sm">

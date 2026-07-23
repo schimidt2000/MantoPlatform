@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Card, CardContent, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, PageHeader, Skeleton } from "@manto/ui";
 import { useClients } from "../lib/clientes";
 
 export function ClientsListPage() {
@@ -9,21 +9,18 @@ export function ClientsListPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-4 sm:p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/">‹ Início</Link>
-        </Button>
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/clientes/avaliacoes">Avaliações ›</Link>
-        </Button>
-      </div>
-
-      <header className="mb-4">
-        <h1 className="text-2xl font-semibold text-ink">Clientes</h1>
-        {query.data && (
-          <p className="text-sm text-muted">{query.data.total_clients} cliente(s) cadastrado(s)</p>
-        )}
-      </header>
+      <PageHeader
+        title="Clientes"
+        className="mb-4"
+        subtitle={
+          query.data ? `${query.data.total_clients} cliente(s) cadastrado(s)` : undefined
+        }
+        actions={
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/clientes/avaliacoes">Avaliações ›</Link>
+          </Button>
+        }
+      />
 
       <input
         className="mb-4 h-11 w-full rounded-md border border-line bg-panel px-3 text-sm text-ink"
