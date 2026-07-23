@@ -36,3 +36,7 @@ from app.api import revisao_read as _revisao_read  # noqa: E402,F401
 from app.api import revisao_write as _revisao_write  # noqa: E402,F401
 from app.api import educamanto_read as _educamanto_read  # noqa: E402,F401
 from app.api import educamanto_write as _educamanto_write  # noqa: E402,F401
+from app.api import portal_auth as _portal_auth  # noqa: E402,F401
+from app.api import portal_agenda as _portal_agenda  # noqa: E402,F401
+from app.api import portal_figurino as _portal_figurino  # noqa: E402,F401
+from app.api import portal_profile as _portal_profile  # noqa: E402,F401
