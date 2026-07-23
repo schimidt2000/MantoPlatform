@@ -61,6 +61,7 @@ export function AgendaPage() {
             onViewChange={(next) => updateParams({ view: next })}
             onNavigate={handleNavigate}
             onToday={() => updateParams({ date: todayYmd() })}
+            onDateChange={(date) => updateParams({ date })}
           />
         }
       />

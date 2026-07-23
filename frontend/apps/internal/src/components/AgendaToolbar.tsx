@@ -1,4 +1,4 @@
-import { Button } from "@manto/ui";
+import { Button, Input } from "@manto/ui";
 import { type AgendaViewMode, dayLabel, monthLabel } from "../lib/agendaDates";
 
 export interface AgendaToolbarProps {
@@ -8,6 +8,8 @@ export interface AgendaToolbarProps {
   onViewChange: (view: AgendaViewMode) => void;
   onNavigate: (delta: -1 | 1) => void;
   onToday: () => void;
+  /** Pula direto para o mês (visão Mês/Lista) ou dia (visão Dia) escolhido. */
+  onDateChange: (date: string) => void;
 }
 
 const VIEW_OPTIONS: { value: AgendaViewMode; label: string }[] = [
@@ -27,6 +29,7 @@ export function AgendaToolbar({
   onViewChange,
   onNavigate,
   onToday,
+  onDateChange,
 }: AgendaToolbarProps) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -52,7 +55,7 @@ export function AgendaToolbar({
         ))}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={() => onNavigate(-1)} aria-label="Período anterior">
           ‹
         </Button>
@@ -62,9 +65,26 @@ export function AgendaToolbar({
         <Button variant="outline" size="sm" onClick={() => onNavigate(1)} aria-label="Próximo período">
           ›
         </Button>
-        <span className="min-w-40 text-center text-sm font-medium text-ink">
+        <span className="text-center text-sm font-medium text-ink sm:min-w-40">
           {periodLabel(view, refDate)}
         </span>
+        {view === "day" ? (
+          <Input
+            type="date"
+            aria-label="Ir para o dia"
+            value={refDate}
+            onChange={(e) => e.target.value && onDateChange(e.target.value)}
+            className="h-9 w-40"
+          />
+        ) : (
+          <Input
+            type="month"
+            aria-label="Ir para o mês"
+            value={refDate.slice(0, 7)}
+            onChange={(e) => e.target.value && onDateChange(`${e.target.value}-01`)}
+            className="h-9 w-36"
+          />
+        )}
       </div>
     </div>
   );
