@@ -97,6 +97,7 @@ def update_character(
     video_url: str | None = None,
     figurino_sheet_id: int | None = ...,
     position: int | None = None,
+    is_active: bool | None = None,
     photo_file=None,
     remove_photo: bool = False,
 ) -> CatalogCharacter:
@@ -117,6 +118,8 @@ def update_character(
         character.figurino_sheet_id = figurino_sheet_id
     if position is not None:
         character.position = position
+    if is_active is not None:
+        character.is_active = is_active
 
     _validate_photo_extension(photo_file)
     if remove_photo and character.photo_url:
@@ -141,3 +144,41 @@ def delete_character(character: CatalogCharacter) -> None:
     db.session.delete(character)
     audit("delete", "CatalogCharacter", character_id, name, "Personagem excluído")
     db.session.commit()
+
+
+def move_characters(character_ids: list[int], target_item: CatalogItem) -> int:
+    """Realoca em massa uma lista de Personagens para serem filhos de `target_item` (feature 186).
+
+    Reatribui `catalog_item_id` numa única transação — ou tudo aplica, ou nada aplica. A posição
+    de cada Personagem movido é recalculada para o final da lista de filhos de `target_item`, na
+    ordem em que os `character_ids` foram informados.
+
+    Args:
+        character_ids: ids dos `CatalogCharacter` a mover.
+        target_item: Tema de destino (já deve estar carregado/validado pelo chamador).
+
+    Returns:
+        Quantidade de Personagens efetivamente movidos.
+
+    Raises:
+        CatalogValidationError: `character_ids` vazio ou contém um id inexistente.
+    """
+    if not character_ids:
+        raise CatalogValidationError("character_ids", "Selecione ao menos um personagem.")
+
+    characters = CatalogCharacter.query.filter(CatalogCharacter.id.in_(character_ids)).all()
+    if len(characters) != len(set(character_ids)):
+        raise CatalogValidationError("character_ids", "Um ou mais personagens não foram encontrados.")
+
+    next_position = len(target_item.characters)
+    by_id = {c.id: c for c in characters}
+    for offset, char_id in enumerate(character_ids):
+        character = by_id[char_id]
+        character.catalog_item_id = target_item.id
+        character.position = next_position + offset
+        audit(
+            "edit", "CatalogCharacter", character.id, character.name,
+            f"Personagem realocado para '{target_item.name}'",
+        )
+    db.session.commit()
+    return len(characters)

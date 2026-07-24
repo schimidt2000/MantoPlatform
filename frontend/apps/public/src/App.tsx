@@ -11,9 +11,14 @@ import { FormularioEnviadoPage } from "./pages/FormularioEnviadoPage";
 import { AvaliarPage } from "./pages/AvaliarPage";
 import { WishlistFloat } from "./components/WishlistFloat";
 
+// Prefixo de rota condicional ao build de produção (feature 186, US6) — mesmo app servido sob
+// `/catalogo/*` no mesmo serviço Railway do app interno (ver `frontend/server.js`); em dev
+// continua em `/`, mesmo comportamento de sempre.
+const BASENAME = import.meta.env.PROD ? "/catalogo" : undefined;
+
 export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={BASENAME}>
       <Routes>
         <Route path="/" element={<CatalogGridPage />} />
         <Route path="/categorias" element={<CategoriesPage />} />

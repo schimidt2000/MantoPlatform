@@ -94,13 +94,22 @@ export function AdminCatalogCharacterPanel({ itemId, characters }: AdminCatalogC
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-ink">{character.name}</p>
-                  <p className="truncate text-xs text-muted">
-                    {character.video_url ? "🎬 com vídeo" : "sem vídeo"} ·{" "}
-                    {character.figurino_sheet_id
-                      ? figurinoSheets.find((f) => f.id === character.figurino_sheet_id)?.character_name ??
-                        "figurino vinculado"
-                      : "sem figurino vinculado"}
-                  </p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-muted">
+                      {character.video_url ? "🎬 com vídeo" : "sem vídeo"}
+                    </span>
+                    {character.figurino_sheet_id ? (
+                      <span className="rounded-full bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
+                        ✓{" "}
+                        {figurinoSheets.find((f) => f.id === character.figurino_sheet_id)?.character_name ??
+                          "figurino vinculado"}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-red-soft px-2 py-0.5 text-xs font-medium text-red">
+                        ⚠ Sem ficha vinculada
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-1">
                   <button

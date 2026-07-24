@@ -18,11 +18,16 @@ export interface WishlistItem {
   parentSlug?: string;
 }
 
+/**
+ * `BASE_URL` reflete o `base` do Vite ("/" em dev, "/catalogo/" em produção — feature 186, US6)
+ * — path relativo bruto (fora do React Router) precisa desse prefixo manualmente.
+ */
 function itemUrl(item: WishlistItem): string {
+  const base = import.meta.env.BASE_URL;
   if (item.kind === "personagem" && item.parentSlug) {
-    return `/${item.parentSlug}?personagem=${item.slug}`;
+    return `${base}${item.parentSlug}?personagem=${item.slug}`;
   }
-  return `/${item.slug}`;
+  return `${base}${item.slug}`;
 }
 
 function getAll(): WishlistItem[] {

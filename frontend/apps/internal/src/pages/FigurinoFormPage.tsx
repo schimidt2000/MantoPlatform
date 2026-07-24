@@ -12,6 +12,58 @@ import {
   useUploadFigurinoPhoto,
   type FigurinoPiece,
 } from "../lib/figurino";
+import { useCatalogElencoBusca } from "../lib/catalogoElenco";
+import { useLinkCharacterFigurino } from "../lib/adminCatalogo";
+import { CharacterAutocomplete } from "../components/CharacterAutocomplete";
+
+/**
+ * Vínculo bidirecional Ficha↔Personagem a partir da tela da Ficha (feature 186, US2) — escreve
+ * na mesma `CatalogCharacter.figurino_sheet_id` que o lado do catálogo já usa (research.md §4),
+ * sem coluna nova.
+ */
+function FigurinoCatalogLinkField({ sheetId }: { sheetId: number }) {
+  const elencoBusca = useCatalogElencoBusca();
+  const link = useLinkCharacterFigurino();
+
+  const linkedCharacter = elencoBusca.data?.temas
+    .flatMap((tema) => tema.characters.map((c) => ({ ...c, temaName: tema.name })))
+    .find((c) => c.figurino_sheet_id === sheetId);
+
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-muted">
+        Vincular a um Personagem do Catálogo
+      </label>
+      {linkedCharacter ? (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm">
+          <span className="text-ink">
+            {linkedCharacter.name}{" "}
+            <span className="text-muted">— {linkedCharacter.temaName}</span>
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={link.isPending}
+            onClick={() => link.mutate({ characterId: linkedCharacter.id, figurinoSheetId: null })}
+          >
+            Desvincular
+          </Button>
+        </div>
+      ) : (
+        <CharacterAutocomplete
+          temas={elencoBusca.data?.temas ?? []}
+          placeholder="Buscar personagem do catálogo…"
+          onSelect={(selection) =>
+            link.mutate({ characterId: selection.character.id, figurinoSheetId: sheetId })
+          }
+        />
+      )}
+      {link.isError && (
+        <p className="mt-1 text-xs text-red">Não foi possível atualizar o vínculo.</p>
+      )}
+    </div>
+  );
+}
 
 /** Foto da ficha de figurino (feature 155) — envio, girar e remover. */
 function FigurinoPhotoField({ sheetId, photoUrl }: { sheetId: number; photoUrl: string | null }) {
@@ -262,6 +314,8 @@ export function FigurinoFormPage() {
           {isEdit && sheetId && (
             <FigurinoPhotoField sheetId={sheetId} photoUrl={sheet?.photo_url ?? null} />
           )}
+
+          {isEdit && sheetId && <FigurinoCatalogLinkField sheetId={sheetId} />}
 
           {mutation.isError && (
             <p className="text-sm text-red">Não foi possível salvar a ficha.</p>

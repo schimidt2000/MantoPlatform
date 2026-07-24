@@ -45,6 +45,7 @@ export function AdminCatalogoFormPage() {
   const [coverPhotoId, setCoverPhotoId] = useState<number | undefined>(undefined);
   const [newPhotoCoverIndex, setNewPhotoCoverIndex] = useState<number | undefined>(undefined);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (itemQuery.data) {
@@ -79,6 +80,22 @@ export function AdminCatalogoFormPage() {
         return p;
       });
       return swapped;
+    });
+  };
+
+  /** Reordenação por arrastar-e-soltar (feature 186, US5) — unifica no mesmo estado das setas. */
+  const reorderExistingPhoto = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    setExistingPhotos((prev) => {
+      const visible = [...prev.filter((p) => !p.markedForRemoval)].sort((a, b) => a.position - b.position);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= visible.length || toIndex >= visible.length) {
+        return prev;
+      }
+      const reordered = [...visible];
+      const [moved] = reordered.splice(fromIndex, 1);
+      reordered.splice(toIndex, 0, moved);
+      const positionById = new Map(reordered.map((p, i) => [p.id, i]));
+      return prev.map((p) => (positionById.has(p.id) ? { ...p, position: positionById.get(p.id)! } : p));
     });
   };
 
@@ -241,27 +258,45 @@ export function AdminCatalogoFormPage() {
               {[...visibleExisting]
                 .sort((a, b) => a.position - b.position)
                 .map((photo, idx) => (
-                  <div key={photo.id} className="space-y-1">
-                    <div className="relative aspect-square overflow-hidden rounded-md bg-surface-2">
+                  <div
+                    key={photo.id}
+                    className={`space-y-1 ${dragIndex === idx ? "opacity-40" : ""}`}
+                    draggable
+                    onDragStart={() => setDragIndex(idx)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (dragIndex !== null) reorderExistingPhoto(dragIndex, idx);
+                      setDragIndex(null);
+                    }}
+                    onDragEnd={() => setDragIndex(null)}
+                  >
+                    <div className="relative aspect-square cursor-grab overflow-hidden rounded-md bg-surface-2 active:cursor-grabbing">
                       <img
                         src={assetUrl(photo.url)}
                         alt=""
                         className="h-full w-full object-cover"
                       />
+                      {coverPhotoId === photo.id && (
+                        <span className="absolute left-1 top-1 rounded-full bg-gold px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                          ⭐ CAPA
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between gap-1 text-xs">
-                      <label className="flex items-center gap-1 text-ink">
-                        <input
-                          type="radio"
-                          name="cover"
-                          checked={coverPhotoId === photo.id}
-                          onChange={() => {
+                      {coverPhotoId === photo.id ? (
+                        <span className="text-[11px] text-muted">capa atual</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="text-[11px] font-medium text-accent-dark hover:underline"
+                          onClick={() => {
                             setCoverPhotoId(photo.id);
                             setNewPhotoCoverIndex(undefined);
                           }}
-                        />
-                        capa
-                      </label>
+                        >
+                          Definir como capa
+                        </button>
+                      )}
                       <div className="flex gap-1">
                         <button
                           type="button"

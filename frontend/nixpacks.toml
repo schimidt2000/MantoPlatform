@@ -1,4 +1,4 @@
-# Serviço estático da SPA interna no Railway.
+# Serviço estático dos DOIS SPAs (interno + público) no Railway (feature 186, US6).
 # Requer "Root Directory = frontend" nas settings do serviço.
 #
 # IMPORTANTE: se houver um "Build Command"/"Start Command" custom nas settings do serviço
@@ -14,12 +14,14 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm ci"]
 
 [phases.build]
-# Compila apps/internal. Os pacotes compartilhados (ui/api-client/money) NÃO têm build
+# Compila apps/internal E apps/public (feature 186 — antes só compilava o interno; o público
+# nunca teve deploy próprio). Os pacotes compartilhados (ui/api-client/money) NÃO têm build
 # próprio: são consumidos direto do TypeScript-fonte via alias do Vite + paths do tsconfig,
-# então o Vite os compila junto com o app. Não há ordem de build a orquestrar.
+# então o Vite os compila junto com cada app. Não há ordem de build a orquestrar entre os dois.
 cmds = ["npm run build"]
 
 [start]
-# SPA com react-router (BrowserRouter): "--single" é obrigatório para que /login e demais
-# rotas profundas devolvam index.html em vez de 404 ao recarregar a página.
+# `server.js` substitui o antigo `serve --single` (que só sabia servir UM SPA): agora
+# apps/internal/dist é servido na raiz e apps/public/dist sob `/catalogo/*`, cada um com seu
+# próprio fallback de SPA (deep link/refresh funciona nos dois — ver `frontend/server.js`).
 cmd = "npm run start"

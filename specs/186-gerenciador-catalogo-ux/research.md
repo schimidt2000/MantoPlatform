@@ -82,14 +82,12 @@ constituição).
 
 **Decision**: Checkbox nativo (`<input type="checkbox">`, mesmo padrão já usado em
 `AdminCatalogoFormPage.tsx` para capa/rádio) por item; barra flutuante fixa
-(`position: fixed; bottom`) quando `selecionados.length > 0`. "Mover para…" é um painel inline
-DENTRO da própria barra (um `<select>` de Temas + botão "Confirmar"), não um modal — não existe
-`Dialog` no design system e a constituição não exige um para esta ação (Princípio V exige
-confirmação para ações destrutivas via `window.confirm()`, que continua valendo para
-inativar/excluir em massa).
-
-**Alternatives considered**: Modal dedicado — rejeitado por exigir criar o primeiro `Dialog` do
-design system só para este fluxo (complexidade não justificada, YAGNI).
+(`position: fixed; bottom`) quando `selecionados.length > 0`. "Mover para…" usa o `Modal` local
+JÁ EXISTENTE em `frontend/apps/internal/src/components/Modal.tsx` (feature 179, já usado por
+`AssociateMissingModal` em `FigurinoListPage.tsx`) — **correção**: uma pesquisa inicial concluiu
+erroneamente que não havia Dialog no app; há um, local ao app (não em `@manto/ui`), e reusá-lo é
+o caminho certo pelo Princípio I. Inativar/excluir em massa continuam via `window.confirm()`
+(Princípio V), sem modal.
 
 ## 9. Endpoint de mover em massa
 
