@@ -19,8 +19,11 @@ import {
   type MissingCharacter,
 } from "../lib/figurino";
 import { useCurrentUser } from "../lib/useAuth";
+import { useCatalogElencoBusca } from "../lib/catalogoElenco";
+import { useLinkCharacterFigurino } from "../lib/adminCatalogo";
 import { SectorPanel } from "../components/SectorPanel";
 import { Modal } from "../components/Modal";
+import { CharacterAutocomplete } from "../components/CharacterAutocomplete";
 
 /** Remove acentos e caixa para comparação de busca (sem dependência nova). */
 function normalizeSearch(text: string): string {
@@ -38,9 +41,12 @@ function formatCardDate(sheet: FigurinoSheetItem): string {
 interface FigurinoCardProps {
   sheet: FigurinoSheetItem;
   canEdit: boolean;
+  /** Nome do Personagem do catálogo vinculado a esta ficha, ou `null` (feature 186, US2). */
+  linkedCharacterName: string | null;
+  onQuickLink: () => void;
 }
 
-function FigurinoCard({ sheet, canEdit }: FigurinoCardProps) {
+function FigurinoCard({ sheet, canEdit, linkedCharacterName, onQuickLink }: FigurinoCardProps) {
   return (
     <Card>
       <CardContent className="space-y-2 p-2">
@@ -64,6 +70,23 @@ function FigurinoCard({ sheet, canEdit }: FigurinoCardProps) {
           <div className="text-xs text-muted">
             {sheet.pieces.length} peça{sheet.pieces.length === 1 ? "" : "s"} · {formatCardDate(sheet)}
           </div>
+          {linkedCharacterName ? (
+            <span className="mt-1 inline-block rounded-full bg-green-soft px-2 py-0.5 text-[11px] font-medium text-green">
+              ✓ {linkedCharacterName}
+            </span>
+          ) : canEdit ? (
+            <button
+              type="button"
+              onClick={onQuickLink}
+              className="mt-1 inline-block rounded-full bg-red-soft px-2 py-0.5 text-[11px] font-medium text-red hover:opacity-80"
+            >
+              ⚠ Sem personagem — + Vincular
+            </button>
+          ) : (
+            <span className="mt-1 inline-block rounded-full bg-red-soft px-2 py-0.5 text-[11px] font-medium text-red">
+              ⚠ Sem personagem vinculado
+            </span>
+          )}
         </div>
         <div className="flex gap-1.5">
           <Button
@@ -206,6 +229,19 @@ export function FigurinoListPage() {
   const canEdit = Boolean(user?.is_superadmin || user?.roles.includes("FIGURINO"));
   const [q, setQ] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [linkingSheet, setLinkingSheet] = useState<FigurinoSheetItem | null>(null);
+
+  const elencoBusca = useCatalogElencoBusca();
+  const linkCharacter = useLinkCharacterFigurino();
+  const linkedNameBySheetId = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const tema of elencoBusca.data?.temas ?? []) {
+      for (const character of tema.characters) {
+        if (character.figurino_sheet_id) map.set(character.figurino_sheet_id, character.name);
+      }
+    }
+    return map;
+  }, [elencoBusca.data]);
 
   const items = query.data?.items ?? [];
 
@@ -286,10 +322,34 @@ export function FigurinoListPage() {
       {filtered.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {filtered.map((sheet) => (
-            <FigurinoCard key={sheet.id} sheet={sheet} canEdit={canEdit} />
+            <FigurinoCard
+              key={sheet.id}
+              sheet={sheet}
+              canEdit={canEdit}
+              linkedCharacterName={linkedNameBySheetId.get(sheet.id) ?? null}
+              onQuickLink={() => setLinkingSheet(sheet)}
+            />
           ))}
         </div>
       )}
+
+      <Modal
+        open={linkingSheet !== null}
+        onClose={() => setLinkingSheet(null)}
+        title={`Vincular "${linkingSheet?.character_name ?? ""}" a um Personagem do Catálogo`}
+      >
+        <CharacterAutocomplete
+          temas={elencoBusca.data?.temas ?? []}
+          placeholder="Buscar personagem do catálogo…"
+          onSelect={(selection) => {
+            if (!linkingSheet) return;
+            linkCharacter.mutate(
+              { characterId: selection.character.id, figurinoSheetId: linkingSheet.id },
+              { onSuccess: () => setLinkingSheet(null) },
+            );
+          }}
+        />
+      </Modal>
     </div>
   );
 }

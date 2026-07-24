@@ -1,6 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 
+/** Resumo de um Personagem dentro da listagem de Temas (feature 186) — sem precisar do detalhe. */
+export interface CatalogCharacterSummary {
+  id: number;
+  name: string;
+  photo_url: string | null;
+  figurino_sheet_id: number | null;
+  is_active: boolean;
+}
+
 export interface CatalogListItem {
   id: number;
   name: string;
@@ -8,6 +17,7 @@ export interface CatalogListItem {
   is_active: boolean;
   cover_url: string | null;
   category_names: string[];
+  characters: CatalogCharacterSummary[];
 }
 
 export interface CatalogCategoryOption {
@@ -170,17 +180,19 @@ export function useCatalogTagSuggestions() {
 }
 
 export interface SaveCharacterInput {
-  name: string;
+  /** Omitido = não altera o nome (ex.: vínculo de figurino feito de fora da tela do Tema). */
+  name?: string;
   videoUrl?: string;
   figurinoSheetId?: number | null;
   photo?: File;
   removePhoto?: boolean;
   position?: number;
+  isActive?: boolean;
 }
 
 function buildCharacterFormData(input: SaveCharacterInput): FormData {
   const form = new FormData();
-  form.set("name", input.name);
+  if (input.name !== undefined) form.set("name", input.name);
   if (input.videoUrl !== undefined) form.set("video_url", input.videoUrl);
   if (input.figurinoSheetId !== undefined) {
     form.set("figurino_sheet_id", input.figurinoSheetId === null ? "" : String(input.figurinoSheetId));
@@ -188,6 +200,7 @@ function buildCharacterFormData(input: SaveCharacterInput): FormData {
   if (input.photo) form.set("photo", input.photo);
   if (input.removePhoto) form.set("remove_photo", "true");
   if (input.position !== undefined) form.set("position", String(input.position));
+  if (input.isActive !== undefined) form.set("is_active", String(input.isActive));
   return form;
 }
 
@@ -226,6 +239,72 @@ export function useDeleteCharacter(itemId: number) {
       apiFetch<void>(`/api/admin/catalogo/personagens/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-catalogo", itemId] });
+    },
+  });
+}
+
+/**
+ * Variantes "standalone" das mutações de Personagem, usadas onde o `itemId` (Tema pai) não é
+ * conhecido de antemão — modo Árvore/ações em massa (feature 186, US4) e vínculo a partir da
+ * Ficha (US2). Invalidam as queries de catálogo de forma ampla.
+ */
+export function useUpdateCharacterActiveStandalone() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
+      apiFetch<CatalogCharacter>(`/api/admin/catalogo/personagens/${id}`, {
+        method: "PATCH",
+        body: buildCharacterFormData({ isActive }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo"] });
+    },
+  });
+}
+
+export function useDeleteCharacterStandalone() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<void>(`/api/admin/catalogo/personagens/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo"] });
+    },
+  });
+}
+
+/**
+ * Vincula/desvincula um Personagem a uma Ficha de Figurino a partir de um contexto que não
+ * conhece o Tema pai de antemão (ex.: a tela da própria Ficha — feature 186, US2). Invalida as
+ * queries de catálogo de forma ampla (não sabemos qual `itemId` foi afetado sem uma segunda
+ * leitura).
+ */
+export function useLinkCharacterFigurino() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ characterId, figurinoSheetId }: { characterId: number; figurinoSheetId: number | null }) =>
+      apiFetch<CatalogCharacter>(`/api/admin/catalogo/personagens/${characterId}`, {
+        method: "PATCH",
+        body: buildCharacterFormData({ figurinoSheetId }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo"] });
+      queryClient.invalidateQueries({ queryKey: ["catalogo-elenco-busca"] });
+    },
+  });
+}
+
+/** Realoca em massa Personagens para um novo Tema pai (feature 186, US4). */
+export function useMoveCharactersBulk() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ characterIds, targetItemId }: { characterIds: number[]; targetItemId: number }) =>
+      apiFetch<{ moved: number }>("/api/admin/catalogo/personagens/mover-em-massa", {
+        method: "POST",
+        body: JSON.stringify({ character_ids: characterIds, target_item_id: targetItemId }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo"] });
     },
   });
 }

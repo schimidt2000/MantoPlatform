@@ -13,16 +13,16 @@
   "scripts": {
     "dev": "npm run dev --workspace=apps/internal",
     "dev:internal": "npm run dev --workspace=apps/internal",
-    "build": "npm run build --workspace=apps/internal",
+    "build": "npm run build --workspace=apps/internal && npm run build --workspace=apps/public",
     "build:internal": "npm run build --workspace=apps/internal",
     "typecheck": "npm run typecheck --workspace=apps/internal",
     "typecheck:internal": "npm run typecheck --workspace=apps/internal",
     "dev:public": "npm run dev --workspace=apps/public",
     "build:public": "npm run build --workspace=apps/public",
     "typecheck:public": "npm run typecheck --workspace=apps/public",
-    "start": "serve --single --no-clipboard apps/internal/dist"
+    "start": "node server.js"
   },
   "dependencies": {
-    "serve": "^14.2.4"
+    "serve-handler": "^6.1.7"
   }
 }

@@ -179,13 +179,15 @@ def _has_role(*names: str) -> bool:
 @api_bp.route("/catalogo/elenco-busca")
 @api_login_required
 def api_catalogo_elenco_busca() -> Any:
-    """Temas ativos + Personagens ativos, para a busca de elenco em Novo Evento (feature 185, US4).
+    """Temas ativos + Personagens ativos, para a busca de elenco em Novo Evento (feature 185, US4)
+    e para a busca visual/vínculo a partir da Ficha de Figurino (feature 186, US1/US2).
 
-    Autenticado (`COMERCIAL`/`SUPERADMIN`) mas fora do gate `require_superadmin` do gerenciador —
-    o time comercial cria eventos sem ser superadmin. Inclui `figurino_sheet_id` (dado interno,
-    por isso não faz parte da grade pública em `api_catalogo_list`/`api_catalogo_detail`).
+    Autenticado (`COMERCIAL`/`FIGURINO`/`SUPERADMIN`) mas fora do gate `require_superadmin` do
+    gerenciador — comercial cria eventos e figurino vincula fichas sem ser superadmin. Inclui
+    `figurino_sheet_id`/`photo_url` (dado interno, por isso não faz parte da grade pública em
+    `api_catalogo_list`/`api_catalogo_detail`).
     """
-    if not _has_role(RoleName.COMERCIAL, RoleName.SUPERADMIN):
+    if not _has_role(RoleName.COMERCIAL, RoleName.FIGURINO, RoleName.SUPERADMIN):
         return json_error("Sem permissão", 403)
 
     items = (
@@ -203,6 +205,7 @@ def api_catalogo_elenco_busca() -> Any:
                             "id": c.id,
                             "name": c.name,
                             "figurino_sheet_id": c.figurino_sheet_id,
+                            "photo_url": c.photo_url,
                         }
                         for c in sorted(item.characters, key=lambda c: c.position)
                         if c.is_active

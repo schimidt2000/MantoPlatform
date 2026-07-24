@@ -2,7 +2,10 @@ import { expect, test } from "@playwright/test";
 
 /**
  * Auto-vínculo de figurino ao escolher um Personagem do catálogo em Novo Evento (feature 185,
- * US4/FR-013): a linha de elenco nasce com o nome e a Ficha de Figurino já preenchidos.
+ * US4/FR-013): a linha de elenco nasce com o nome e a Ficha de Figurino já preenchidos. A busca
+ * virou um autocomplete visual (foto em miniatura) restrito a Personagens Filhos na feature 186,
+ * US1/FR-003 — Temas pai não aparecem mais como opção nesta busca (o teste que cobria "escolher
+ * o Tema completo" foi removido, esse comportamento deixou de existir de propósito).
  */
 test.describe("Novo Evento — escolher personagem do catálogo", () => {
   let itemId: number | null = null;
@@ -52,9 +55,8 @@ test.describe("Novo Evento — escolher personagem do catálogo", () => {
     await page.goto("/events/new");
     await expect(page.locator("#bloco-elenco")).toBeVisible();
 
-    await page
-      .getByLabel("Escolher do catálogo")
-      .selectOption({ label: "Gatuno Playwright Elenco" });
+    await page.getByPlaceholder("🎭 Escolher personagem do catálogo…").fill("Gatuno");
+    await page.getByRole("button", { name: "Gatuno Playwright Elenco" }).click();
 
     const names = page.getByLabel("Nome do personagem");
     await expect(names.last()).toHaveValue("Gatuno Playwright Elenco");
@@ -66,15 +68,12 @@ test.describe("Novo Evento — escolher personagem do catálogo", () => {
     expect(selectedLabel).toBe("Verify185 Figurino Playwright");
   });
 
-  test("escolher o Tema completo (pacote) pré-preenche o nome sem figurino", async ({ page }) => {
+  test("busca de personagem no elenco não lista o Tema pai isoladamente", async ({ page }) => {
     await page.goto("/events/new");
     await expect(page.locator("#bloco-elenco")).toBeVisible();
 
-    await page
-      .getByLabel("Escolher do catálogo")
-      .selectOption({ label: "Verify185 Tema Elenco Playwright (pacote completo)" });
-
-    const names = page.getByLabel("Nome do personagem");
-    await expect(names.last()).toHaveValue("Verify185 Tema Elenco Playwright");
+    await page.getByPlaceholder("🎭 Escolher personagem do catálogo…").fill("Verify185 Tema Elenco Playwright");
+    await expect(page.getByText("(pacote completo)")).toHaveCount(0);
+    await expect(page.getByText("Nenhum personagem encontrado.")).toBeVisible();
   });
 });

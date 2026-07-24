@@ -17,7 +17,7 @@ export function CharacterCard({ character, temaSlug, highlighted = false }: Char
   const [copied, setCopied] = useState(false);
 
   async function handleCopyLink() {
-    const url = `${window.location.origin}/${temaSlug}?personagem=${character.slug}`;
+    const url = `${window.location.origin}${import.meta.env.BASE_URL}${temaSlug}?personagem=${character.slug}`;
     try {
       await navigator.clipboard.writeText(url);
     } catch {

@@ -190,6 +190,9 @@ def api_admin_catalogo_character_update(character_id: int) -> Any:
             video_url=request.form.get("video_url") if "video_url" in request.form else None,
             figurino_sheet_id=figurino_sheet_id,
             position=int(request.form["position"]) if "position" in request.form else None,
+            is_active=(request.form.get("is_active", "").lower() == "true")
+            if "is_active" in request.form
+            else None,
             photo_file=request.files.get("photo"),
             remove_photo=request.form.get("remove_photo", "").lower() == "true",
         )
@@ -210,3 +213,25 @@ def api_admin_catalogo_character_delete(character_id: int) -> Any:
         return json_error("Personagem não encontrado", 404)
     catalog_character_ops.delete_character(character)
     return "", 204
+
+
+@api_bp.route("/admin/catalogo/personagens/mover-em-massa", methods=["POST"])
+@api_login_required
+def api_admin_catalogo_characters_move_bulk() -> Any:
+    """Realoca em massa Personagens para um novo Tema pai (feature 186, US4)."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    character_ids = body.get("character_ids") or []
+    target_item_id = body.get("target_item_id")
+
+    target_item = CatalogItem.query.get(target_item_id) if target_item_id else None
+    if target_item is None or not target_item.is_active:
+        return json_error("Tema de destino não encontrado ou inativo", 404)
+
+    try:
+        moved = catalog_character_ops.move_characters(character_ids, target_item)
+    except catalog_character_ops.CatalogValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify({"moved": moved})

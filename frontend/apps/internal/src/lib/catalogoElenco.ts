@@ -5,6 +5,7 @@ export interface CatalogElencoCharacter {
   id: number;
   name: string;
   figurino_sheet_id: number | null;
+  photo_url: string | null;
 }
 
 export interface CatalogElencoTema {

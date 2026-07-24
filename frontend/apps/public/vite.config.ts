@@ -2,8 +2,15 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 // Scaffolding — catálogo/cadastro/formulários/feedback são escopo da User Story 5.
-export default defineConfig({
+//
+// `base` é condicional ao modo de build (feature 186, US6): em produção este app é servido pelo
+// MESMO serviço Railway do app interno, sob o prefixo `/catalogo/*` (ver `frontend/server.js`) —
+// por isso os bundles/assets precisam ser referenciados com esse prefixo. Em dev (`npm run
+// dev:public`) continua em `/`, preservando o proxy local e os testes Playwright já escritos
+// (research.md §1).
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  base: mode === "production" ? "/catalogo/" : "/",
   server: {
     port: 5175,
     proxy: {
@@ -15,4 +22,4 @@ export default defineConfig({
       "/catalogo/midia": { target: "http://localhost:5000", changeOrigin: true },
     },
   },
-});
+}));

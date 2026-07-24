@@ -34,6 +34,16 @@ def _item_summary(item: CatalogItem) -> dict:
         "is_active": item.is_active,
         "cover_url": item.cover_image.url if item.cover_image else None,
         "category_names": [c.name for c in item.categories],
+        "characters": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "photo_url": c.photo_url,
+                "figurino_sheet_id": c.figurino_sheet_id,
+                "is_active": c.is_active,
+            }
+            for c in sorted(item.characters, key=lambda c: c.position)
+        ],
     }
 
 
