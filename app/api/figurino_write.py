@@ -19,6 +19,10 @@ def _can_edit_figurino() -> bool:
     return any(r.name in (RoleName.SUPERADMIN, RoleName.FIGURINO) for r in current_user.roles)
 
 
+def _is_superadmin() -> bool:
+    return any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
+
+
 @api_bp.route("/figurino", methods=["POST"])
 @api_login_required
 def api_figurino_create() -> Any:
@@ -33,6 +37,7 @@ def api_figurino_create() -> Any:
         character_name=body.get("character_name", ""),
         pieces=body.get("pieces"),
         notes=body.get("notes"),
+        tags=body.get("tags"),
     )
     if sheet is None:
         return json_error(
@@ -48,6 +53,7 @@ def api_figurino_create() -> Any:
             "id": sheet.id,
             "character_name": sheet.character_name,
             "pieces": sheet.pieces_list,
+            "tags": sheet.tags_list,
             "notes": sheet.notes,
             "photo_url": sheet.photo_url,
         }
@@ -72,6 +78,7 @@ def api_figurino_edit(sheet_id: int) -> Any:
         character_name=body.get("character_name", ""),
         pieces=body.get("pieces"),
         notes=body.get("notes"),
+        tags=body.get("tags"),
     )
     if not ok:
         return json_error(
@@ -87,6 +94,7 @@ def api_figurino_edit(sheet_id: int) -> Any:
             "id": sheet.id,
             "character_name": sheet.character_name,
             "pieces": sheet.pieces_list,
+            "tags": sheet.tags_list,
             "notes": sheet.notes,
             "photo_url": sheet.photo_url,
         }
@@ -117,6 +125,7 @@ def _sheet_json(sheet: FigurinoSheet) -> dict:
         "id": sheet.id,
         "character_name": sheet.character_name,
         "pieces": sheet.pieces_list,
+        "tags": sheet.tags_list,
         "notes": sheet.notes,
         "photo_url": sheet.photo_url,
     }
@@ -183,3 +192,68 @@ def api_figurino_rotate_photo(sheet_id: int) -> Any:
 
     db.session.commit()
     return jsonify(_sheet_json(sheet))
+
+
+@api_bp.route("/figurino/faltantes/dispensar", methods=["POST"])
+@api_login_required
+def api_figurino_dismiss_missing() -> Any:
+    """Descarta o alerta de "personagem sem ficha" para as ocorrências atuais (feature 183).
+
+    RBAC: SUPERADMIN apenas — o painel de faltantes é exclusivo desse perfil.
+    """
+    if not _is_superadmin():
+        return json_error("Sem permissão", 403)
+
+    from app.figurino.figurino_ops import dismiss_missing_character
+
+    body = request.get_json(silent=True) or {}
+    character_name_norm = (body.get("character_name_norm") or "").strip()
+    if not character_name_norm:
+        return json_error("character_name_norm é obrigatório.", 400)
+
+    ok = dismiss_missing_character(character_name_norm, dismissed_by=current_user.id)
+    if not ok:
+        return json_error("Nenhum cargo pendente encontrado para esse personagem.", 400)
+
+    from app.utils import audit
+
+    audit("dismiss", "figurino_missing", None, character_name_norm, "Alerta de faltante descartado (API)")
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@api_bp.route("/figurino/faltantes/associar", methods=["POST"])
+@api_login_required
+def api_figurino_associate_missing() -> Any:
+    """Vincula os cargos de evento pendentes de um personagem a uma ficha existente
+    (feature 183). RBAC: SUPERADMIN apenas.
+    """
+    if not _is_superadmin():
+        return json_error("Sem permissão", 403)
+
+    from app.figurino.figurino_ops import associate_missing_character
+
+    body = request.get_json(silent=True) or {}
+    character_name_norm = (body.get("character_name_norm") or "").strip()
+    sheet_id = body.get("sheet_id")
+    if not character_name_norm or not sheet_id:
+        return json_error("character_name_norm e sheet_id são obrigatórios.", 400)
+
+    if FigurinoSheet.query.get(sheet_id) is None:
+        return json_error("Ficha não encontrada", 404)
+
+    updated = associate_missing_character(character_name_norm, sheet_id=sheet_id)
+    if not updated:
+        return json_error("Nenhum cargo pendente encontrado para esse personagem.", 400)
+
+    from app.utils import audit
+
+    audit(
+        "associate",
+        "figurino_missing",
+        sheet_id,
+        character_name_norm,
+        f"Faltante associado a ficha {sheet_id} ({updated} cargo(s)) (API)",
+    )
+    db.session.commit()
+    return jsonify({"ok": True, "updated_role_count": updated, "sheet_id": sheet_id})
