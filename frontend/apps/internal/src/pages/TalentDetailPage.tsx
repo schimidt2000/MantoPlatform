@@ -314,7 +314,7 @@ export function TalentDetailPage() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[380px_1fr]">
-        {/* Coluna esquerda — destaque visual & histórico */}
+        {/* Coluna esquerda — destaque visual */}
         <div className="space-y-4">
           <Card className="overflow-hidden">
             <div className="aspect-[3/4] bg-surface-2">
@@ -345,6 +345,29 @@ export function TalentDetailPage() {
               </CardContent>
             )}
           </Card>
+
+          <Section title="Foto de corpo inteiro">
+            {mode === "edit" ? (
+              <FileUpload
+                label="Corpo inteiro"
+                accept="image/jpeg,image/png,image/webp"
+                maxSizeBytes={10 * 1024 * 1024}
+                existingUrl={t.photo_full_path ? assetUrl(t.photo_full_path) : null}
+                existingLabel="Foto de corpo inteiro enviada"
+                removingExisting={removePhoto.isPending && removePhoto.variables === "full"}
+                onChange={(file) => file && uploadPhoto.mutate({ photoType: "full", file })}
+                onRemoveExisting={() => removePhoto.mutate("full")}
+              />
+            ) : t.photo_full_path ? (
+              <img
+                src={assetUrl(t.photo_full_path)}
+                alt="Corpo inteiro"
+                className="max-h-[520px] w-full rounded-md object-contain"
+              />
+            ) : (
+              <p className="text-sm text-muted">Nenhuma foto de corpo inteiro cadastrada.</p>
+            )}
+          </Section>
 
           <Section title="Documento com foto (CNH/RG)">
             {mode === "edit" ? (
@@ -387,147 +410,6 @@ export function TalentDetailPage() {
               />
             ) : (
               <p className="text-sm text-muted">Nenhum documento cadastrado.</p>
-            )}
-          </Section>
-
-          <Section title="Histórico de eventos">
-            <div className="mb-3 flex flex-wrap items-end gap-2">
-              <div>
-                <label className="mb-1 block text-xs text-muted">De</label>
-                <input
-                  type="date"
-                  className="h-8 rounded-md border border-line bg-panel px-2 text-xs text-ink"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-muted">Até</label>
-                <input
-                  type="date"
-                  className="h-8 rounded-md border border-line bg-panel px-2 text-xs text-ink"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                />
-              </div>
-              {(dateFrom || dateTo) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setDateFrom("");
-                    setDateTo("");
-                  }}
-                >
-                  Limpar período
-                </Button>
-              )}
-            </div>
-            <DenseCard
-              className="mb-3"
-              stats={[
-                { label: "Eventos", value: query.data.history.total_events },
-                { label: "Personagens", value: query.data.history.characters_done.length },
-                { label: "Total Faturado", value: brl(query.data.history.total_earned) },
-                {
-                  label: "Último Evento",
-                  value: query.data.history.last_event
-                    ? formatDate(query.data.history.last_event.start_at)
-                    : "—",
-                },
-              ]}
-            />
-            {query.data.history.items.length === 0 ? (
-              <p className="text-sm text-muted">Nenhum evento no histórico.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-line text-left text-xs text-muted">
-                      <th className="py-1.5 pr-2 font-medium">Data</th>
-                      <th className="py-1.5 pr-2 font-medium">Evento</th>
-                      <th className="py-1.5 pr-2 font-medium">Personagem</th>
-                      <th className="py-1.5 pr-2 font-medium">Cachê</th>
-                      <th className="py-1.5 font-medium">Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {query.data.history.items.map((h, i) => (
-                      <tr key={i}>
-                        <td className="py-1.5 pr-2 text-muted">{formatDate(h.start_at)}</td>
-                        <td className="py-1.5 pr-2 text-ink">{h.event_title ?? `Evento #${h.event_id}`}</td>
-                        <td className="py-1.5 pr-2">
-                          <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted">
-                            {h.character_name}
-                          </span>
-                        </td>
-                        <td className="py-1.5 pr-2 tabular-nums text-ink">{brl(h.cache_value)}</td>
-                        <td className="py-1.5">
-                          <Link to={`/events/${h.event_id}`} className="text-sm text-blue underline">
-                            Ver evento
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Section>
-
-          <Section title="Avaliações e Notas">
-            {ratingsQuery.isLoading && <Skeleton className="h-20 w-full" />}
-            {ratingsQuery.data && (
-              <div className="space-y-4">
-                {!ratingsQuery.data.show_authors && (
-                  <p className="text-xs text-muted">Avaliações anônimas — autoria não exibida.</p>
-                )}
-                <div>
-                  <h4 className="mb-1.5 text-sm font-medium text-ink">Recebidas dos colegas</h4>
-                  {ratingsQuery.data.received.length === 0 ? (
-                    <p className="text-sm text-muted">Nenhuma avaliação recebida ainda.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {ratingsQuery.data.received.map((r, i) => (
-                        <li key={i} className="rounded-md border border-line p-2 text-sm">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium text-ink">{r.category_label}</span>
-                            <Stars score={r.score} />
-                          </div>
-                          {r.comment && <p className="mt-1 text-ink">{r.comment}</p>}
-                          <p className="mt-1 text-xs text-muted">
-                            {r.author} · {r.event_title ?? `Evento #${r.event_id}`} ·{" "}
-                            {formatDate(r.event_date)}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div>
-                  <h4 className="mb-1.5 text-sm font-medium text-ink">
-                    Avaliações gerais feitas por {t.full_name}
-                  </h4>
-                  {ratingsQuery.data.given.length === 0 ? (
-                    <p className="text-sm text-muted">Nenhuma avaliação dada ainda.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {ratingsQuery.data.given.map((r, i) => (
-                        <li key={i} className="rounded-md border border-line p-2 text-sm">
-                          <div className="flex items-center justify-between gap-2">
-                            <Stars score={r.score} />
-                            {r.edited && <span className="text-xs text-muted">editada</span>}
-                          </div>
-                          {r.comment && <p className="mt-1 text-ink">{r.comment}</p>}
-                          <p className="mt-1 text-xs text-muted">
-                            {r.event_title ?? `Evento #${r.event_id}`} · {formatDate(r.event_date)}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
             )}
           </Section>
         </div>
@@ -742,30 +624,24 @@ export function TalentDetailPage() {
                     value={t.passport_status ? PASSPORT_LABELS[t.passport_status] : null}
                   />
                 </dl>
-                {splitValues(t.skills).length > 0 && (
-                  <div>
-                    <p className="mb-1 text-muted">Habilidades</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {splitValues(t.skills).map((skill) => (
-                        <MetricBadge key={skill} tone="gold">
-                          {skill}
-                        </MetricBadge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {splitValues(t.tags).length > 0 && (
-                  <div>
-                    <p className="mb-1 text-muted">Tags</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {splitValues(t.tags).map((tag) => (
-                        <MetricBadge key={tag} tone="accent">
-                          {tag}
-                        </MetricBadge>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {(() => {
+                  const skills = splitValues(t.skills);
+                  const chips = skills.length > 0 ? skills : splitValues(t.tags);
+                  return (
+                    chips.length > 0 && (
+                      <div>
+                        <p className="mb-1 text-muted">Habilidades</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {chips.map((chip) => (
+                            <MetricBadge key={chip} tone="gold">
+                              {chip}
+                            </MetricBadge>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  );
+                })()}
               </div>
             )}
           </Section>
@@ -810,6 +686,153 @@ export function TalentDetailPage() {
             </Section>
           )}
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Section title="Histórico de eventos">
+          <div className="mb-3 flex flex-wrap items-end gap-2">
+            <div>
+              <label className="mb-1 block text-xs text-muted">De</label>
+              <input
+                type="date"
+                className="h-8 rounded-md border border-line bg-panel px-2 text-xs text-ink"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted">Até</label>
+              <input
+                type="date"
+                className="h-8 rounded-md border border-line bg-panel px-2 text-xs text-ink"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </div>
+            {(dateFrom || dateTo) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setDateFrom("");
+                  setDateTo("");
+                }}
+              >
+                Limpar período
+              </Button>
+            )}
+          </div>
+          <DenseCard
+            className="mb-3"
+            stats={[
+              { label: "Eventos", value: query.data.history.total_events },
+              { label: "Personagens", value: query.data.history.characters_done.length },
+              { label: "Total Faturado", value: brl(query.data.history.total_earned) },
+              {
+                label: "Último Evento",
+                value: query.data.history.last_event
+                  ? formatDate(query.data.history.last_event.start_at)
+                  : "—",
+              },
+            ]}
+          />
+          {query.data.history.items.length === 0 ? (
+            <p className="text-sm text-muted">Nenhum evento no histórico.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-xs text-muted">
+                    <th className="py-1.5 pr-3 font-medium">Data</th>
+                    <th className="py-1.5 pr-3 font-medium">Evento</th>
+                    <th className="py-1.5 pr-3 font-medium">Personagem</th>
+                    <th className="py-1.5 pr-3 font-medium">Cachê</th>
+                    <th className="py-1.5 font-medium">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {query.data.history.items.map((h, i) => (
+                    <tr key={i}>
+                      <td className="whitespace-nowrap py-2 pr-3 text-muted">
+                        {formatDate(h.start_at)}
+                      </td>
+                      <td className="py-2 pr-3 text-ink">{h.event_title ?? `Evento #${h.event_id}`}</td>
+                      <td className="py-2 pr-3">
+                        <span className="inline-block rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted">
+                          {h.character_name}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap py-2 pr-3 tabular-nums text-ink">
+                        {brl(h.cache_value)}
+                      </td>
+                      <td className="whitespace-nowrap py-2">
+                        <Link to={`/events/${h.event_id}`} className="text-sm text-blue underline">
+                          Ver evento
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Section>
+
+        <Section title="Avaliações e Notas">
+          {ratingsQuery.isLoading && <Skeleton className="h-20 w-full" />}
+          {ratingsQuery.data && (
+            <div className="space-y-4">
+              {!ratingsQuery.data.show_authors && (
+                <p className="text-xs text-muted">Avaliações anônimas — autoria não exibida.</p>
+              )}
+              <div>
+                <h4 className="mb-1.5 text-sm font-medium text-ink">Recebidas dos colegas</h4>
+                {ratingsQuery.data.received.length === 0 ? (
+                  <p className="text-sm text-muted">Nenhuma avaliação recebida ainda.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {ratingsQuery.data.received.map((r, i) => (
+                      <li key={i} className="rounded-md border border-line p-2 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-ink">{r.category_label}</span>
+                          <Stars score={r.score} />
+                        </div>
+                        {r.comment && <p className="mt-1 text-ink">{r.comment}</p>}
+                        <p className="mt-1 text-xs text-muted">
+                          {r.author} · {r.event_title ?? `Evento #${r.event_id}`} ·{" "}
+                          {formatDate(r.event_date)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <h4 className="mb-1.5 text-sm font-medium text-ink">
+                  Avaliações gerais feitas por {t.full_name}
+                </h4>
+                {ratingsQuery.data.given.length === 0 ? (
+                  <p className="text-sm text-muted">Nenhuma avaliação dada ainda.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {ratingsQuery.data.given.map((r, i) => (
+                      <li key={i} className="rounded-md border border-line p-2 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <Stars score={r.score} />
+                          {r.edited && <span className="text-xs text-muted">editada</span>}
+                        </div>
+                        {r.comment && <p className="mt-1 text-ink">{r.comment}</p>}
+                        <p className="mt-1 text-xs text-muted">
+                          {r.event_title ?? `Evento #${r.event_id}`} · {formatDate(r.event_date)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </Section>
       </div>
     </div>
   );
