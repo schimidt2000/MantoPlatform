@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Skeleton } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
 import { useProductDetail } from "../lib/catalogo";
 import { ProductGallery } from "../components/ProductGallery";
 import { WishlistButton } from "../components/WishlistButton";
 import { ProductCard } from "../components/ProductCard";
+import { CharacterGrid } from "../components/CharacterGrid";
 
 export function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
+  const highlightedPersonagem = searchParams.get("personagem");
   const { data, isLoading, error } = useProductDetail(slug);
   const [copied, setCopied] = useState(false);
 
@@ -20,6 +23,12 @@ export function ProductDetailPage() {
       document.title = "Manto Produções";
     };
   }, [data]);
+
+  useEffect(() => {
+    if (!data || !highlightedPersonagem) return;
+    const el = document.getElementById(`personagem-${highlightedPersonagem}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [data, highlightedPersonagem]);
 
   const notFound = error instanceof ApiRequestError && error.status === 404;
 
@@ -73,7 +82,12 @@ export function ProductDetailPage() {
         {data && (
           <>
             <div className="grid items-start gap-7 md:grid-cols-[1.1fr_1fr] md:gap-12">
-              <ProductGallery images={data.images} name={data.name} />
+              <ProductGallery
+                images={data.images}
+                name={data.name}
+                videoUrl={data.video_url}
+                videoKind={data.video_kind}
+              />
 
               <div>
                 <div className="text-xs font-bold uppercase tracking-[0.16em] text-gold">
@@ -123,6 +137,12 @@ export function ProductDetailPage() {
                 </div>
               </div>
             </div>
+
+            <CharacterGrid
+              characters={data.characters}
+              temaSlug={data.slug}
+              highlightedSlug={highlightedPersonagem}
+            />
 
             {data.related.length > 0 && (
               <div className="mt-16 border-t border-line pt-10">

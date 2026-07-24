@@ -8,11 +8,11 @@ from typing import Any
 from flask import jsonify, request
 from flask_login import current_user
 
-from app.admin import catalog_ops
+from app.admin import catalog_character_ops, catalog_ops
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
-from app.models import CatalogItem
+from app.models import CatalogCharacter, CatalogItem
 
 
 def _has_role(*names: str) -> bool:
@@ -68,6 +68,7 @@ def api_admin_catalogo_create() -> Any:
             category_ids=category_ids,
             form=request.form,
             files=request.files,
+            video_url=request.form.get("video_url", ""),
         )
     except catalog_ops.CatalogValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
@@ -94,6 +95,7 @@ def api_admin_catalogo_update(item_id: int) -> Any:
             category_ids=category_ids,
             form=request.form,
             files=request.files,
+            video_url=request.form.get("video_url", ""),
         )
     except catalog_ops.CatalogValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
@@ -125,4 +127,86 @@ def api_admin_catalogo_delete(item_id: int) -> Any:
     if item is None:
         return json_error("Produto não encontrado", 404)
     catalog_ops.delete_product(item)
+    return "", 204
+
+
+def _character_summary(character: CatalogCharacter) -> dict:
+    return {
+        "id": character.id,
+        "name": character.name,
+        "slug": character.slug,
+        "photo_url": character.photo_url,
+        "video_url": character.video_url,
+        "figurino_sheet_id": character.figurino_sheet_id,
+        "position": character.position,
+        "is_active": character.is_active,
+    }
+
+
+@api_bp.route("/admin/catalogo/<int:item_id>/personagens", methods=["POST"])
+@api_login_required
+def api_admin_catalogo_character_create(item_id: int) -> Any:
+    """Cria um Personagem filho de um Tema (feature 185)."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    item = CatalogItem.query.get(item_id)
+    if item is None:
+        return json_error("Produto não encontrado", 404)
+    figurino_sheet_id_raw = request.form.get("figurino_sheet_id", "")
+    try:
+        character = catalog_character_ops.create_character(
+            item,
+            name=request.form.get("name", ""),
+            video_url=request.form.get("video_url", ""),
+            figurino_sheet_id=int(figurino_sheet_id_raw) if figurino_sheet_id_raw.isdigit() else None,
+            photo_file=request.files.get("photo"),
+        )
+    except catalog_character_ops.CatalogValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(_character_summary(character)), 201
+
+
+@api_bp.route("/admin/catalogo/personagens/<int:character_id>", methods=["PATCH"])
+@api_login_required
+def api_admin_catalogo_character_update(character_id: int) -> Any:
+    """Edita um Personagem existente (feature 185)."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    character = CatalogCharacter.query.get(character_id)
+    if character is None:
+        return json_error("Personagem não encontrado", 404)
+
+    figurino_sheet_id = ...  # sentinela "não alterar" — ver catalog_character_ops.update_character
+    if "figurino_sheet_id" in request.form:
+        raw = request.form.get("figurino_sheet_id", "")
+        figurino_sheet_id = int(raw) if raw.isdigit() else None
+
+    try:
+        catalog_character_ops.update_character(
+            character,
+            name=request.form.get("name") if "name" in request.form else None,
+            video_url=request.form.get("video_url") if "video_url" in request.form else None,
+            figurino_sheet_id=figurino_sheet_id,
+            position=int(request.form["position"]) if "position" in request.form else None,
+            photo_file=request.files.get("photo"),
+            remove_photo=request.form.get("remove_photo", "").lower() == "true",
+        )
+    except catalog_character_ops.CatalogValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(_character_summary(character))
+
+
+@api_bp.route("/admin/catalogo/personagens/<int:character_id>", methods=["DELETE"])
+@api_login_required
+def api_admin_catalogo_character_delete(character_id: int) -> Any:
+    """Exclui definitivamente um Personagem (feature 185)."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    character = CatalogCharacter.query.get(character_id)
+    if character is None:
+        return json_error("Personagem não encontrado", 404)
+    catalog_character_ops.delete_character(character)
     return "", 204

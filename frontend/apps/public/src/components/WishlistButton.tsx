@@ -5,12 +5,23 @@ interface WishlistButtonProps {
   slug: string;
   name: string;
   cover: string | null;
+  /** "tema" (default) | "personagem" (feature 185) — distingue o item na lista de interesse. */
+  kind?: "tema" | "personagem";
+  /** Slug do Tema pai — obrigatório quando `kind === "personagem"`. */
+  parentSlug?: string;
   /** Botão circular só com ícone (sobreposto ao card) em vez do botão de texto completo. */
   compact?: boolean;
 }
 
-/** Botão de favoritar — usado no card do produto e na página de detalhe (feature 140/161). */
-export function WishlistButton({ slug, name, cover, compact = false }: WishlistButtonProps) {
+/** Botão de favoritar — usado no card do produto, no card de Personagem e no detalhe (feature 140/161/185). */
+export function WishlistButton({
+  slug,
+  name,
+  cover,
+  kind = "tema",
+  parentSlug,
+  compact = false,
+}: WishlistButtonProps) {
   const [added, setAdded] = useState(false);
 
   useEffect(() => {
@@ -20,7 +31,7 @@ export function WishlistButton({ slug, name, cover, compact = false }: WishlistB
   function handleClick(event: React.MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
-    wishlist.toggle({ slug, name, cover: cover ?? "" });
+    wishlist.toggle({ slug, name, cover: cover ?? "", kind, parentSlug });
     setAdded(wishlist.has(slug));
   }
 

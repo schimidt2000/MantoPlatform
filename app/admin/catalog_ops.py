@@ -11,6 +11,7 @@ import json
 
 from app import db
 from app.catalogo.importer import _rewrite_public_url, _slugify
+from app.catalogo.media import classify_video_url
 from app.models import CatalogCategory, CatalogItem, CatalogItemImage
 from app.storage import delete_file, save_file
 from app.utils import audit
@@ -156,8 +157,23 @@ def apply_photos(item: CatalogItem, form, files) -> None:
             im.position = i
 
 
+def validate_video_url(video_url: str | None) -> None:
+    """Recusa uma `video_url` preenchida mas em formato não reconhecido (feature 185)."""
+    if video_url and classify_video_url(video_url) is None:
+        raise CatalogValidationError(
+            "video_url", "URL de vídeo não reconhecida (use Google Drive, MP4 ou Vimeo)."
+        )
+
+
 def create_product(
-    *, name: str, description: str | None, tags_raw: str, category_ids: list[int], form, files
+    *,
+    name: str,
+    description: str | None,
+    tags_raw: str,
+    category_ids: list[int],
+    form,
+    files,
+    video_url: str | None = None,
 ) -> CatalogItem:
     """Cria um novo produto do catálogo nativamente (feature 139)."""
     clean_name = (name or "").strip()
@@ -167,12 +183,14 @@ def create_product(
     if not new_photos:
         raise CatalogValidationError("photos", "Envie ao menos uma foto.")
     validate_photo_extensions(files)
+    validate_video_url(video_url)
 
     item = CatalogItem(
         name=clean_name,
         slug=unique_catalog_slug(clean_name),
         short_description_html=(description or "").strip() or None,
         tags=None,
+        video_url=(video_url or "").strip() or None,
     )
     tags = _normalize_tags([t.strip() for t in tags_raw.split(",") if t.strip()], all_tags())
     if tags:
@@ -198,6 +216,7 @@ def update_product(
     category_ids: list[int],
     form,
     files,
+    video_url: str | None = None,
 ) -> CatalogItem:
     """Edita um produto existente do catálogo (feature 139)."""
     clean_name = (name or "").strip()
@@ -209,8 +228,10 @@ def update_product(
     if remaining_count + len(new_photos) == 0:
         raise CatalogValidationError("photos", "O produto precisa de ao menos uma foto.")
     validate_photo_extensions(files)
+    validate_video_url(video_url)
 
     item.name = clean_name
+    item.video_url = (video_url or "").strip() or None
     item.short_description_html = (description or "").strip() or None
     tags = _normalize_tags([t.strip() for t in tags_raw.split(",") if t.strip()], all_tags())
     item.tags = json.dumps(tags, ensure_ascii=False) if tags else None

@@ -4,6 +4,7 @@ import { Button } from "@manto/ui";
 import { MoneyInput } from "@manto/money";
 import type { EventFormValues } from "../../lib/eventFormSchema";
 import type { CharacterInput } from "../../lib/eventCreate";
+import { useCatalogElencoBusca } from "../../lib/catalogoElenco";
 import { FIELD, FIELD_ERROR, LABEL, HELP, FieldError, BlockCard } from "./shared";
 
 interface CharacterRowProps {
@@ -118,6 +119,7 @@ export function ElencoBlock({
   } = useFormContext<EventFormValues>();
   const [titleEdited, setTitleEdited] = useState(false);
   const eventType = watch("event_type");
+  const catalogElenco = useCatalogElencoBusca();
 
   const addCharacter = () =>
     onCharactersChange([
@@ -132,6 +134,33 @@ export function ElencoBlock({
         talent_id: null,
       },
     ]);
+
+  /**
+   * Escolher do catálogo (feature 185, US4): adiciona uma linha de elenco já preenchida com o
+   * nome do Tema/Personagem e a `figurino_sheet_id` vinculada — é um prefill único, não um
+   * vínculo persistente (FR-014: remover manualmente depois não é reaplicado).
+   */
+  const addCharacterFromCatalog = (value: string) => {
+    if (!value) return;
+    const [temaId, characterId] = value.split(":");
+    const tema = catalogElenco.data?.temas.find((t) => String(t.id) === temaId);
+    if (!tema) return;
+    const character = characterId
+      ? tema.characters.find((c) => String(c.id) === characterId)
+      : undefined;
+    onCharactersChange([
+      ...characters,
+      {
+        role_id: null,
+        name: character ? character.name : tema.name,
+        figurino_sheet_id: character?.figurino_sheet_id ?? null,
+        cache_value: null,
+        needs_makeup: false,
+        is_singer: false,
+        talent_id: null,
+      },
+    ]);
+  };
 
   const generateTitle = () => {
     const names = characters
@@ -157,9 +186,29 @@ export function ElencoBlock({
           />
         ))}
       </ul>
-      <Button type="button" variant="outline" size="sm" onClick={addCharacter}>
-        + Adicionar personagem / equipe
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={addCharacter}>
+          + Adicionar personagem / equipe
+        </Button>
+        <select
+          className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          value=""
+          onChange={(e) => addCharacterFromCatalog(e.target.value)}
+          aria-label="Escolher do catálogo"
+        >
+          <option value="">🎭 Escolher do catálogo…</option>
+          {catalogElenco.data?.temas.map((tema) => (
+            <optgroup key={tema.id} label={tema.name}>
+              <option value={`${tema.id}:`}>{tema.name} (pacote completo)</option>
+              {tema.characters.map((character) => (
+                <option key={character.id} value={`${tema.id}:${character.id}`}>
+                  {character.name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
 
       <div className="border-t border-line pt-3">
         <label className={LABEL} htmlFor="coordinator">

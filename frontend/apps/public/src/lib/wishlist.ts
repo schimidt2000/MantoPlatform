@@ -12,6 +12,17 @@ export interface WishlistItem {
   slug: string;
   name: string;
   cover: string;
+  /** "tema" (default implícito para itens salvos antes da feature 185) | "personagem". */
+  kind?: "tema" | "personagem";
+  /** Slug do Tema pai — só preenchido quando `kind === "personagem"` (feature 185). */
+  parentSlug?: string;
+}
+
+function itemUrl(item: WishlistItem): string {
+  if (item.kind === "personagem" && item.parentSlug) {
+    return `/${item.parentSlug}?personagem=${item.slug}`;
+  }
+  return `/${item.slug}`;
 }
 
 function getAll(): WishlistItem[] {
@@ -66,7 +77,7 @@ function buildMessage(): string {
   const lines = ["Olá! Vi esses personagens no catálogo e gostaria de saber mais:", ""];
   const baseUrl = window.location.origin;
   for (const item of list) {
-    lines.push(`• ${item.name} — ${baseUrl}/${item.slug}`);
+    lines.push(`• ${item.name} — ${baseUrl}${itemUrl(item)}`);
   }
   return lines.join("\n");
 }

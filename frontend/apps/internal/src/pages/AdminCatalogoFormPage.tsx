@@ -5,11 +5,14 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@man
 import {
   useAdminCatalogo,
   useAdminCatalogoItem,
+  useCatalogTagSuggestions,
   useCreateCatalogItem,
   useCreateCategory,
   useUpdateCatalogItem,
   type CatalogImage,
 } from "../lib/adminCatalogo";
+import { ChipInput } from "../components/ChipInput";
+import { AdminCatalogCharacterPanel } from "../components/AdminCatalogCharacterPanel";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
@@ -26,13 +29,15 @@ export function AdminCatalogoFormPage() {
 
   const categoriesQuery = useAdminCatalogo({});
   const itemQuery = useAdminCatalogoItem(id);
+  const tagSuggestionsQuery = useCatalogTagSuggestions();
   const createItem = useCreateCatalogItem();
   const updateItem = useUpdateCatalogItem(id ?? 0);
   const createCategory = useCreateCategory();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [tags, setTags] = useState("");
+  const [tagsList, setTagsList] = useState<string[]>([]);
+  const [videoUrl, setVideoUrl] = useState("");
   const [categoryIds, setCategoryIds] = useState<number[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [existingPhotos, setExistingPhotos] = useState<ExistingPhoto[]>([]);
@@ -45,7 +50,8 @@ export function AdminCatalogoFormPage() {
     if (itemQuery.data) {
       setName(itemQuery.data.name);
       setDescription(itemQuery.data.description);
-      setTags(itemQuery.data.tags.join(", "));
+      setTagsList(itemQuery.data.tags);
+      setVideoUrl(itemQuery.data.video_url ?? "");
       setCategoryIds(itemQuery.data.category_ids);
       setExistingPhotos(
         itemQuery.data.images.map((img) => ({ ...img, markedForRemoval: false })),
@@ -87,7 +93,8 @@ export function AdminCatalogoFormPage() {
     const input = {
       name,
       description,
-      tags,
+      tags: tagsList.join(", "),
+      videoUrl,
       categoryIds,
       newPhotos,
       removePhotoIds: existingPhotos.filter((p) => p.markedForRemoval).map((p) => p.id),
@@ -133,8 +140,15 @@ export function AdminCatalogoFormPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <label className={LABEL}>Nome</label>
-            <input className={INPUT} value={name} onChange={(e) => setName(e.target.value)} />
+            <label className={LABEL} htmlFor="catalog-item-name">
+              Nome
+            </label>
+            <input
+              id="catalog-item-name"
+              className={INPUT}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
             {fieldErrors.name && <p className="mt-1 text-xs text-red">{fieldErrors.name}</p>}
           </div>
           <div>
@@ -146,8 +160,26 @@ export function AdminCatalogoFormPage() {
             />
           </div>
           <div>
-            <label className={LABEL}>Tags (separadas por vírgula)</label>
-            <input className={INPUT} value={tags} onChange={(e) => setTags(e.target.value)} />
+            <label className={LABEL}>Tags</label>
+            <ChipInput
+              value={tagsList}
+              onChange={setTagsList}
+              suggestions={tagSuggestionsQuery.data?.tags ?? []}
+              placeholder="Digite e pressione Enter ou vírgula…"
+              ariaLabel="Tags"
+            />
+          </div>
+          <div>
+            <label className={LABEL}>URL de vídeo (Drive/MP4/Vimeo)</label>
+            <input
+              className={INPUT}
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              placeholder="https://..."
+            />
+            {fieldErrors.video_url && (
+              <p className="mt-1 text-xs text-red">{fieldErrors.video_url}</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -301,6 +333,10 @@ export function AdminCatalogoFormPage() {
           )}
         </CardContent>
       </Card>
+
+      {isEdit && id !== undefined && (
+        <AdminCatalogCharacterPanel itemId={id} characters={itemQuery.data?.characters ?? []} />
+      )}
 
       <Button loading={saving} onClick={handleSubmit}>
         {isEdit ? "Salvar alterações" : "Criar produto"}

@@ -40,13 +40,29 @@ export interface CatalogItemImage {
   position: number;
 }
 
+/** "mp4"/"drive"/"vimeo" — provedor reconhecido de vídeo, ou null se ausente/inválido. */
+export type VideoKind = "mp4" | "drive" | "vimeo" | null;
+
+/** Personagem filho de um Tema (feature 185) — forma pública, sem `figurino_sheet_id`. */
+export interface CatalogCharacter {
+  id: number;
+  name: string;
+  slug: string;
+  photo_url: string | null;
+  video_url: string | null;
+  video_kind: VideoKind;
+}
+
 export interface CatalogItemDetail {
   id: number;
   name: string;
   slug: string;
   description_html: string | null;
+  video_url: string | null;
+  video_kind: VideoKind;
   categories: { name: string; slug: string }[];
   images: CatalogItemImage[];
+  characters: CatalogCharacter[];
   related: CatalogItemSummary[];
 }
 

@@ -10,10 +10,26 @@ paralelo (a de detalhe é a fonte da prévia Open Graph em links compartilhados 
 from typing import Any
 
 from flask import jsonify
+from flask_login import current_user
 
 from app.api import api_bp
-from app.api_utils import json_error
-from app.models import CatalogCategory, CatalogItem
+from app.api_utils import api_login_required, json_error
+from app.catalogo.media import classify_video_url, normalize_video_url
+from app.constants import RoleName
+from app.models import CatalogCategory, CatalogCharacter, CatalogItem
+
+
+def _character_summary(character: CatalogCharacter) -> dict[str, Any]:
+    """Forma pública de um Personagem — sem `figurino_sheet_id` (dado interno)."""
+    video_url = normalize_video_url(character.video_url)
+    return {
+        "id": character.id,
+        "name": character.name,
+        "slug": character.slug,
+        "photo_url": character.photo_url,
+        "video_url": video_url,
+        "video_kind": classify_video_url(character.video_url),
+    }
 
 
 def _item_summary(item: CatalogItem) -> dict[str, Any]:
@@ -135,14 +151,64 @@ def api_catalogo_detail(slug: str) -> Any:
             .all()
         )
 
+    active_characters = sorted(
+        (c for c in item.characters if c.is_active), key=lambda c: c.position
+    )
+
     return jsonify(
         {
             "id": item.id,
             "name": item.name,
             "slug": item.slug,
             "description_html": item.short_description_html,
+            "video_url": normalize_video_url(item.video_url),
+            "video_kind": classify_video_url(item.video_url),
             "categories": [{"name": c.name, "slug": c.slug} for c in item.categories],
             "images": [{"url": img.url, "position": img.position} for img in item.images],
+            "characters": [_character_summary(c) for c in active_characters],
             "related": [_item_summary(r) for r in related],
+        }
+    )
+
+
+def _has_role(*names: str) -> bool:
+    upper = [n.upper() for n in names]
+    return any(r.name.upper() in upper for r in current_user.roles)
+
+
+@api_bp.route("/catalogo/elenco-busca")
+@api_login_required
+def api_catalogo_elenco_busca() -> Any:
+    """Temas ativos + Personagens ativos, para a busca de elenco em Novo Evento (feature 185, US4).
+
+    Autenticado (`COMERCIAL`/`SUPERADMIN`) mas fora do gate `require_superadmin` do gerenciador —
+    o time comercial cria eventos sem ser superadmin. Inclui `figurino_sheet_id` (dado interno,
+    por isso não faz parte da grade pública em `api_catalogo_list`/`api_catalogo_detail`).
+    """
+    if not _has_role(RoleName.COMERCIAL, RoleName.SUPERADMIN):
+        return json_error("Sem permissão", 403)
+
+    items = (
+        CatalogItem.query.filter_by(is_active=True).order_by(CatalogItem.name.asc()).all()
+    )
+    return jsonify(
+        {
+            "temas": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "slug": item.slug,
+                    "characters": [
+                        {
+                            "id": c.id,
+                            "name": c.name,
+                            "figurino_sheet_id": c.figurino_sheet_id,
+                        }
+                        for c in sorted(item.characters, key=lambda c: c.position)
+                        if c.is_active
+                    ],
+                }
+                for item in items
+            ]
         }
     )

@@ -1813,11 +1813,16 @@ class CatalogItem(db.Model):
     tags                    = db.Column(db.Text, nullable=True)  # JSON: lista de strings, só para busca
     is_active               = db.Column(db.Boolean, default=True, nullable=False)
     imported_at             = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    video_url               = db.Column(db.String(500), nullable=True)  # feature 185 — Drive/MP4/Vimeo
 
     categories = db.relationship("CatalogCategory", secondary=catalog_item_categories, lazy=True)
     images     = db.relationship(
         "CatalogItemImage", backref="item", lazy=True,
         cascade="all, delete-orphan", order_by="CatalogItemImage.position",
+    )
+    characters = db.relationship(
+        "CatalogCharacter", backref="tema", lazy=True,
+        cascade="all, delete-orphan", order_by="CatalogCharacter.position",
     )
 
     @property
@@ -1846,3 +1851,33 @@ class CatalogItemImage(db.Model):
     original_url     = db.Column(db.String(500), nullable=True)
     position         = db.Column(db.Integer, default=0, nullable=False)
     file_size_bytes  = db.Column(db.Integer, nullable=True)
+
+
+class CatalogCharacter(db.Model):
+    """Personagem filho de um Tema do catálogo (feature 185).
+
+    Entidade vendável independente do Tema pai: tem foto, vídeo e link direto opcionais, e pode
+    ser vinculada a uma ``FigurinoSheet`` para auto-preencher o elenco de um evento (ver
+    ``app/admin/catalog_character_ops.py`` e ``specs/185-catalogo-vitrine-completo/``).
+    """
+    __tablename__ = "catalog_characters"
+    __table_args__ = (
+        db.Index("ix_catalog_characters_catalog_item_id", "catalog_item_id"),
+    )
+
+    id                 = db.Column(db.Integer, primary_key=True)
+    catalog_item_id    = db.Column(
+        db.Integer, db.ForeignKey("catalog_items.id", ondelete="CASCADE"), nullable=False
+    )
+    name               = db.Column(db.String(200), nullable=False)
+    slug               = db.Column(db.String(240), nullable=False, unique=True)
+    photo_url          = db.Column(db.String(500), nullable=True)
+    video_url          = db.Column(db.String(500), nullable=True)
+    figurino_sheet_id  = db.Column(
+        db.Integer, db.ForeignKey("figurino_sheets.id", ondelete="SET NULL"), nullable=True
+    )
+    position           = db.Column(db.Integer, default=0, nullable=False)
+    is_active          = db.Column(db.Boolean, default=True, nullable=False)
+    created_at         = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    figurino_sheet = db.relationship("FigurinoSheet", lazy=True)
