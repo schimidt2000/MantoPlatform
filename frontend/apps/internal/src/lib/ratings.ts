@@ -76,13 +76,15 @@ export interface RatingsOverview {
   is_superadmin: boolean;
 }
 
+export type RatingsPeriod = "all" | "7d" | "30d" | "90d" | "365d" | "custom";
+
 export interface RatingsFilters {
   event_id?: string;
   cat?: string;
-  period?: string;
+  period?: RatingsPeriod;
   from?: string;
   to?: string;
-  date_mode?: string;
+  date_mode?: "evento" | "avaliacao";
 }
 
 /** Panorama de avaliações de casting (feature 177, US6). */
