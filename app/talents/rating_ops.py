@@ -25,8 +25,9 @@ RATING_CATEGORIES = [
 ]
 RATING_CATEGORY_LABELS = dict(RATING_CATEGORIES)
 
-_PERIOD_PRESETS = {"30d": 30, "90d": 90, "365d": 365}
+_PERIOD_PRESETS = {"7d": 7, "30d": 30, "90d": 90, "365d": 365}
 PERIOD_LABELS = {
+    "7d": "última semana",
     "30d": "últimos 30 dias",
     "90d": "últimos 3 meses",
     "365d": "últimos 12 meses",
@@ -58,7 +59,7 @@ def parse_period(period: str, from_raw: str, to_raw: str) -> tuple:
     """Resolve o filtro de período em (início, fim) — fim exclusivo; None = aberto.
 
     Args:
-        period: "30d" | "90d" | "365d" | "custom" | "all".
+        period: "7d" | "30d" | "90d" | "365d" | "custom" | "all".
         from_raw: data ISO inicial (apenas period=custom).
         to_raw: data ISO final (apenas period=custom).
 
@@ -111,7 +112,7 @@ def build_overview(args: dict, viewer_is_superadmin: bool) -> dict[str, Any]:
         cat = ""
 
     period = str(args.get("period", "all")).strip().lower()
-    if period not in ("30d", "90d", "365d", "custom", "all"):
+    if period not in ("7d", "30d", "90d", "365d", "custom", "all"):
         period = "all"
     from_raw = str(args.get("from", "")).strip()
     to_raw = str(args.get("to", "")).strip()
