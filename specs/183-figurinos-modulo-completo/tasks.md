@@ -38,7 +38,7 @@ independentes de cada uma.
 
 **Purpose**: Confirmar ambiente pronto antes de tocar código.
 
-- [ ] T001 Atualizar/confirmar `manto_local` no head das migrations (`python -m flask db heads`
+- [X] T001 Atualizar/confirmar `manto_local` no head das migrations (`python -m flask db heads`
   com `DATABASE_URL` apontando para `manto_local`, via `.\scripts\db\run-local.ps1`)
 
 ---
@@ -65,17 +65,17 @@ enquadramento e rodapé — não depende de nenhuma outra user story ou de mudan
 
 ### Implementation for User Story 1
 
-- [ ] T002 [US1] Reescrever o wrapper da grade em
+- [X] T002 [US1] Reescrever o wrapper da grade em
   `frontend/apps/internal/src/pages/FigurinoListPage.tsx` para
   `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3`
-- [ ] T003 [US1] Reescrever o card em `frontend/apps/internal/src/pages/FigurinoListPage.tsx`:
+- [X] T003 [US1] Reescrever o card em `frontend/apps/internal/src/pages/FigurinoListPage.tsx`:
   quadro de foto `aspect-[3/4] w-full overflow-hidden rounded-md bg-surface-2`, `<img>` com
   `object-cover object-top h-full w-full`, placeholder (📷) ocupando o mesmo quadro quando
   `photo_url` for nulo
-- [ ] T004 [US1] Adicionar rodapé do card em
+- [X] T004 [US1] Adicionar rodapé do card em
   `frontend/apps/internal/src/pages/FigurinoListPage.tsx`: nome do personagem, `{n} peça(s)`,
   data de edição (`updated_at` → fallback `created_at` → `"—"`, formatada em pt-BR)
-- [ ] T005 [US1] Verificar em preview: desktop widescreen (5-6 colunas), breakpoints menores
+- [X] T005 [US1] Verificar em preview: desktop widescreen (5-6 colunas), breakpoints menores
   (degradação sem quebra), card sem foto mantendo o grid alinhado — itens 1-4 de `quickstart.md`
 
 **Checkpoint**: Grade e enquadramento funcionais e testáveis isoladamente (MVP visual).
@@ -93,13 +93,13 @@ backend.
 
 ### Implementation for User Story 2
 
-- [ ] T006 [US2] Adicionar botão primário "Imprimir" no card em
+- [X] T006 [US2] Adicionar botão primário "Imprimir" no card em
   `frontend/apps/internal/src/pages/FigurinoListPage.tsx` que chama
   `window.open(\`/figurinos/${sheet.id}/print\`, "_blank")`
-- [ ] T007 [US2] Adicionar ícone/botão "Editar" (lápis) no card em
+- [X] T007 [US2] Adicionar ícone/botão "Editar" (lápis) no card em
   `frontend/apps/internal/src/pages/FigurinoListPage.tsx`, linkando para
   `/figurinos/${sheet.id}/edit`, visível apenas quando `canEdit` (FIGURINO/SUPERADMIN)
-- [ ] T008 [US2] Verificar: "Imprimir" abre a rota Jinja legada existente sem alterar
+- [X] T008 [US2] Verificar: "Imprimir" abre a rota Jinja legada existente sem alterar
   `app/figurino/routes.py`/`app/templates/figurino_print.html`; usuário sem permissão de edição
   não vê o ícone de lápis — itens 5-6 de `quickstart.md`
 
@@ -119,55 +119,55 @@ uma ficha; logar como não-SUPERADMIN e confirmar que o painel não aparece — 
 
 ### Backend for User Story 3
 
-- [ ] T009 [US3] Adicionar modelo `FigurinoMissingDismissal` em `app/models.py` (`id`,
+- [X] T009 [US3] Adicionar modelo `FigurinoMissingDismissal` em `app/models.py` (`id`,
   `character_name_norm` indexado, `event_role_ids` Text/JSON, `dismissed_at`,
   `dismissed_by` FK `users.id`) — ver `data-model.md`
-- [ ] T010 [US3] Criar migration manual em `migrations/versions/` para a tabela
+- [X] T010 [US3] Criar migration manual em `migrations/versions/` para a tabela
   `figurino_missing_dismissals` (upgrade/downgrade completos, `down_revision` = head atual)
-- [ ] T011 [US3] Reescrever `list_sheets()` em `app/figurino/figurino_ops.py`: um cargo de evento
+- [X] T011 [US3] Reescrever `list_sheets()` em `app/figurino/figurino_ops.py`: um cargo de evento
   é "coberto" quando `figurino_sheet_id IS NOT NULL` OU nome normalizado bate com alguma ficha;
   `chars_without_sheet` passa a retornar `[{character_name, character_name_norm}]`, excluindo
   personagens cujos `EventRole.id` pendentes estejam todos contidos em algum descarte vigente
   (ver `research.md` §6-7)
-- [ ] T012 [US3] Implementar `dismiss_missing_character(character_name_norm, dismissed_by)` em
+- [X] T012 [US3] Implementar `dismiss_missing_character(character_name_norm, dismissed_by)` em
   `app/figurino/figurino_ops.py`: cria ou mescla o registro `FigurinoMissingDismissal` com os
   `EventRole.id` pendentes atuais daquele nome; retorna `False` se não houver nenhum pendente
-- [ ] T013 [US3] Implementar `associate_missing_character(character_name_norm, sheet_id)` em
+- [X] T013 [US3] Implementar `associate_missing_character(character_name_norm, sheet_id)` em
   `app/figurino/figurino_ops.py`: seta `figurino_sheet_id = sheet_id` em todo `EventRole` pendente
   com aquele nome normalizado; retorna a contagem atualizada (`0` se a ficha não existir ou não
   houver pendentes)
-- [ ] T014 [US3] Adicionar endpoint `POST /api/figurino/faltantes/dispensar` em
+- [X] T014 [US3] Adicionar endpoint `POST /api/figurino/faltantes/dispensar` em
   `app/api/figurino_write.py` (RBAC: SUPERADMIN apenas; 403 caso contrário; 400 se nada a
   descartar) — ver `contracts/api-figurino.md`
-- [ ] T015 [US3] Adicionar endpoint `POST /api/figurino/faltantes/associar` em
+- [X] T015 [US3] Adicionar endpoint `POST /api/figurino/faltantes/associar` em
   `app/api/figurino_write.py` (RBAC: SUPERADMIN apenas; 404 se ficha não existir; 400 se nada
   pendente) — ver `contracts/api-figurino.md`
 
 ### Frontend for User Story 3
 
-- [ ] T016 [US3] Atualizar `frontend/apps/internal/src/lib/figurino.ts`: tipo `MissingCharacter`
+- [X] T016 [US3] Atualizar `frontend/apps/internal/src/lib/figurino.ts`: tipo `MissingCharacter`
   (`character_name`, `character_name_norm`), `FigurinoList.chars_without_sheet` como
   `MissingCharacter[]`, hooks `useDismissMissingCharacter()` e
   `useAssociateMissingCharacter()` (invalidando a query `["figurino"]`)
-- [ ] T017 [US3] Substituir o bloco fixo de faltantes por `SectorPanel`
+- [X] T017 [US3] Substituir o bloco fixo de faltantes por `SectorPanel`
   (`defaultOpen={false}`, título `` `⚠️ Figurinos solicitados/faltantes (${n} itens)` ``) em
   `frontend/apps/internal/src/pages/FigurinoListPage.tsx`, renderizado apenas quando
   `user?.is_superadmin`
-- [ ] T018 [US3] Implementar ação "Excluir" por item (confirmação via `window.confirm()`,
+- [X] T018 [US3] Implementar ação "Excluir" por item (confirmação via `window.confirm()`,
   `loading`/`disabled` no botão durante a mutation) dentro do painel em
   `frontend/apps/internal/src/pages/FigurinoListPage.tsx`
-- [ ] T019 [US3] Implementar ação "Associar a uma ficha existente" por item (select nativo
+- [X] T019 [US3] Implementar ação "Associar a uma ficha existente" por item (select nativo
   populado por `useFigurinoSheets().data.items`, botão "Confirmar" desabilitado até uma ficha ser
   escolhida, `loading` durante a mutation) dentro do painel em
   `frontend/apps/internal/src/pages/FigurinoListPage.tsx`
 
 ### Verification for User Story 3
 
-- [ ] T020 [US3] Escrever `scripts/db/verify_183_figurinos_modulo_completo.py` (test client Flask,
+- [X] T020 [US3] Escrever `scripts/db/verify_183_figurinos_modulo_completo.py` (test client Flask,
   requests fora de `app_context`, contra `manto_local`) cobrindo: listar com faltantes, dispensar
   (200 e 400 sem pendente), associar (200, 404 ficha inexistente, 400 sem pendente), 403 para
   usuário sem papel SUPERADMIN nos dois endpoints novos
-- [ ] T021 [US3] Rodar a verificação funcional contra `manto_local` e confirmar 100% de sucesso
+- [X] T021 [US3] Rodar a verificação funcional contra `manto_local` e confirmar 100% de sucesso
 
 **Checkpoint**: Painel de faltantes funcional, restrito a SUPERADMIN, com ações persistentes.
 
@@ -183,24 +183,24 @@ combinar os dois — testável isoladamente (não depende de US1/US2/US3 para fu
 
 ### Backend for User Story 4
 
-- [ ] T022 [US4] Adicionar coluna `tags` (Text, JSON de `list[str]`, nullable) em
+- [X] T022 [US4] Adicionar coluna `tags` (Text, JSON de `list[str]`, nullable) em
   `FigurinoSheet` (`app/models.py`) + property `tags_list` (paridade com `pieces_list`)
-- [ ] T023 [US4] Criar migration manual em `migrations/versions/` para a coluna `tags` em
+- [X] T023 [US4] Criar migration manual em `migrations/versions/` para a coluna `tags` em
   `figurino_sheets` (upgrade/downgrade completos)
-- [ ] T024 [US4] Adicionar `_clean_tags()` e aceitar `tags` em `create_sheet`/`edit_sheet` em
+- [X] T024 [US4] Adicionar `_clean_tags()` e aceitar `tags` em `create_sheet`/`edit_sheet` em
   `app/figurino/figurino_ops.py`; incluir `tags` no JSON retornado por `list_sheets()`
-- [ ] T025 [US4] Aceitar campo opcional `tags: string[]` no body de `POST /api/figurino` e
+- [X] T025 [US4] Aceitar campo opcional `tags: string[]` no body de `POST /api/figurino` e
   `PATCH /api/figurino/<id>` em `app/api/figurino_write.py`
 
 ### Frontend for User Story 4
 
-- [ ] T026 [US4] Atualizar `frontend/apps/internal/src/lib/figurino.ts`: `tags: string[]` em
+- [X] T026 [US4] Atualizar `frontend/apps/internal/src/lib/figurino.ts`: `tags: string[]` em
   `FigurinoSheetItem` e `FigurinoSheetInput`
-- [ ] T027 [US4] Adicionar editor de tags (chips: adicionar via Enter/vírgula, remover com ✕) em
+- [X] T027 [US4] Adicionar editor de tags (chips: adicionar via Enter/vírgula, remover com ✕) em
   `frontend/apps/internal/src/pages/FigurinoFormPage.tsx`
-- [ ] T028 [US4] Adicionar campo de busca por nome (client-side, case-insensitive, sem acento) em
+- [X] T028 [US4] Adicionar campo de busca por nome (client-side, case-insensitive, sem acento) em
   `frontend/apps/internal/src/pages/FigurinoListPage.tsx`
-- [ ] T029 [US4] Adicionar filtro de tags com `FilterDropdown` + `CheckboxList` (`@manto/ui`),
+- [X] T029 [US4] Adicionar filtro de tags com `FilterDropdown` + `CheckboxList` (`@manto/ui`),
   opções derivadas da união das tags carregadas, combinando com a busca por interseção, em
   `frontend/apps/internal/src/pages/FigurinoListPage.tsx`
 
@@ -212,13 +212,13 @@ combinar os dois — testável isoladamente (não depende de US1/US2/US3 para fu
 
 **Purpose**: Portões de qualidade da constituição, validação end-to-end e entrega.
 
-- [ ] T030 Rodar `npx tsc --noEmit` em `frontend/apps/internal` e corrigir quaisquer erros de tipo
-- [ ] T031 Rodar `npm run build` (`vite build`) em `frontend/apps/internal` e corrigir quaisquer
+- [X] T030 Rodar `npx tsc --noEmit` em `frontend/apps/internal` e corrigir quaisquer erros de tipo
+- [X] T031 Rodar `npm run build` (`vite build`) em `frontend/apps/internal` e corrigir quaisquer
   erros
-- [ ] T032 [P] Escrever `frontend/apps/internal/e2e/figurinos.spec.ts` (Playwright): grade/
+- [X] T032 [P] Escrever `frontend/apps/internal/e2e/figurinos.spec.ts` (Playwright): grade/
   enquadramento, ações do card, painel de faltantes (RBAC + descartar + associar), busca/filtro
-- [ ] T033 Rodar a suíte Playwright contra `manto_local` e corrigir falhas
-- [ ] T034 [P] Adicionar entrada em `docs/changelog.html` descrevendo a entrega (linguagem
+- [X] T033 Rodar a suíte Playwright contra `manto_local` e corrigir falhas
+- [X] T034 [P] Adicionar entrada em `docs/changelog.html` descrevendo a entrega (linguagem
   simples) e republicar no link já existente
 - [ ] T035 Commit atômico final, merge em `main` e push para `origin` (após todos os portões de
   qualidade passarem)

@@ -42,16 +42,22 @@ de selecionados); nova lib de multi-select (rejeitado — dependência desnecess
 
 ## 4. Seletor de ficha para "Associar a uma ficha existente"
 
-**Decision**: `<select>` nativo estilizado, mesmo padrão do seletor de ficha de figurino já usado em
-`EventCreatePage.tsx` (`CharacterRow`), populado com `useFigurinoSheets().data.items`.
+**Decision**: `Modal` local (`frontend/apps/internal/src/components/Modal.tsx`, já existente desde
+a feature 179) contendo um `<select>` nativo populado com `useFigurinoSheets().data.items` — mesmo
+padrão de seletor já usado em `EventCreatePage.tsx` (`CharacterRow`).
 
-**Rationale**: Não há componente `Dialog`/`Combobox` no design system compartilhado (confirmado em
-`CLAUDE.md`: "não há Dialog no design system compartilhado ainda"); o `<select>` nativo já é o
-padrão estabelecido para esse exato caso de uso (escolher uma ficha entre as cadastradas).
+**Rationale**: `@manto/ui` (design system compartilhado) não tem `Dialog`, mas
+`apps/internal/src/components/Modal.tsx` já é um componente local reutilizável (overlay + painel,
+Framer Motion, `Esc`/clique fora fecha, `useReducedMotion()`), criado na feature 179 exatamente
+para casos como este. Reaproveitá-lo evita tanto criar um novo componente de design system quanto
+usar um `<select>` solto sem contexto — a ação de associar merece confirmação explícita, não
+mudar registros ao simplesmente trocar um valor de select inline.
 
-**Alternatives considered**: Introduzir um componente `Dialog`/`Combobox` novo (rejeitado — fora do
-escopo desta feature, é uma decisão de design system maior que não deve ser tomada de forma
-isolada por uma feature de produto).
+**Alternatives considered**: `<select>` inline sem modal (rejeitado — associar reescreve
+`figurino_sheet_id` de cargos de evento reais; merece um passo de confirmação explícito, não uma
+mudança "silenciosa" ao trocar um select); novo componente `Dialog` em `@manto/ui` (rejeitado —
+`Modal` local já resolve, decisão de promover ao design system compartilhado é maior que esta
+feature).
 
 ## 5. Fluxo de impressão
 
@@ -67,6 +73,20 @@ Jinja legado — é só um link para uma rota já pública ao usuário autentica
 **Alternatives considered**: Gerar um PDF novo no backend (nova dependência, rejeitado — não
 agrega valor sobre o fluxo já existente); renderizar a ficha de impressão em React
 (rejeitado — duplicaria lógica de impressão já madura no Jinja, violando Princípio I).
+
+**Detalhe de implementação**: a URL usada é `${API_BASE}/figurinos/<id>/print` (mesmo prefixo já
+usado por `assetUrl()`), nunca um path relativo cru — em produção o Flask pode estar em origem
+diferente do SPA. Em dev, `API_BASE` é vazio (path puro), então foi necessário adicionar uma
+entrada ao proxy do Vite (`frontend/apps/internal/vite.config.ts`), mesmo padrão já usado para
+`/uploads` (feature 182) — sem isso o botão abriria o `index.html` do SPA em vez da ficha.
+
+**Armadilha encontrada e corrigida durante a implementação**: a primeira tentativa proxyou
+`/figurinos` inteiro, o que quebrou a própria rota React Router `/figurinos` (Banco de
+Figurinos) — um deep link ou F5 na tela passou a ser roubado pelo proxy e servido pela view Jinja
+legada (`app/figurino/routes.py::figurinos()`) em vez do `index.html` da SPA, já que o path
+prefixa igual. A correção usa uma chave de proxy em regex restrita a
+`^/figurinos/\d+/print$` — só a sub-rota de impressão é redirecionada ao Flask; `/figurinos` puro
+continua caindo no fallback de SPA do Vite.
 
 ## 6. Cobertura de "personagem sem ficha" (associar vs. apenas nome)
 

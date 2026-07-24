@@ -10,15 +10,21 @@ export interface FigurinoSheetItem {
   id: number;
   character_name: string;
   pieces: FigurinoPiece[];
+  tags: string[];
   notes: string | null;
   photo_url: string | null;
   updated_at: string | null;
   created_at: string | null;
 }
 
+export interface MissingCharacter {
+  character_name: string;
+  character_name_norm: string;
+}
+
 export interface FigurinoList {
   items: FigurinoSheetItem[];
-  chars_without_sheet: string[];
+  chars_without_sheet: MissingCharacter[];
 }
 
 /** Lista as fichas de figurino (feature 154). Leitura aberta a qualquer autenticado. */
@@ -33,6 +39,7 @@ export interface FigurinoSheetInput {
   character_name: string;
   pieces: FigurinoPiece[];
   notes?: string;
+  tags?: string[];
 }
 
 function useInvalidateFigurino() {
@@ -110,4 +117,36 @@ export function useRotateFigurinoPhoto() {
       body: JSON.stringify({ direction }),
     }),
   );
+}
+
+/** Descarta o alerta de "personagem sem ficha" para as ocorrências atuais (feature 183,
+ * SUPERADMIN apenas — RBAC validado no backend). */
+export function useDismissMissingCharacter() {
+  const invalidate = useInvalidateFigurino();
+  return useMutation<{ ok: boolean }, Error, string>({
+    mutationFn: (characterNameNorm) =>
+      apiFetch<{ ok: boolean }>("/api/figurino/faltantes/dispensar", {
+        method: "POST",
+        body: JSON.stringify({ character_name_norm: characterNameNorm }),
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+/** Vincula os cargos de evento pendentes de um personagem a uma ficha existente (feature 183,
+ * SUPERADMIN apenas). */
+export function useAssociateMissingCharacter() {
+  const invalidate = useInvalidateFigurino();
+  return useMutation<
+    { ok: boolean; updated_role_count: number; sheet_id: number },
+    Error,
+    { characterNameNorm: string; sheetId: number }
+  >({
+    mutationFn: ({ characterNameNorm, sheetId }) =>
+      apiFetch("/api/figurino/faltantes/associar", {
+        method: "POST",
+        body: JSON.stringify({ character_name_norm: characterNameNorm, sheet_id: sheetId }),
+      }),
+    onSuccess: invalidate,
+  });
 }

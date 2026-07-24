@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { Button, Card, CardContent, PageHeader } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
@@ -85,6 +85,60 @@ function FigurinoPhotoField({ sheetId, photoUrl }: { sheetId: number; photoUrl: 
   );
 }
 
+/** Editor de tags em chips (feature 183) — adicionar via Enter/vírgula, remover com ✕. */
+function TagsField({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+
+  const addTag = () => {
+    const name = draft.trim();
+    if (!name) return;
+    if (!tags.some((t) => t.toLowerCase() === name.toLowerCase())) {
+      onChange([...tags, name]);
+    }
+    setDraft("");
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addTag();
+    }
+  };
+
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-muted">Tags</label>
+      <div className="flex flex-wrap gap-1.5">
+        {tags.map((tag) => (
+          <span
+            key={tag}
+            className="flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent-dark"
+          >
+            {tag}
+            <button
+              type="button"
+              onClick={() => onChange(tags.filter((t) => t !== tag))}
+              aria-label={`Remover tag ${tag}`}
+              className="hover:opacity-70"
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+      </div>
+      <input
+        className="mt-1.5 h-9 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink"
+        placeholder="Digite e pressione Enter…"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={addTag}
+        aria-label="Adicionar tag"
+      />
+    </div>
+  );
+}
+
 export function FigurinoFormPage() {
   const params = useParams<{ id: string }>();
   const isEdit = Boolean(params.id);
@@ -100,6 +154,7 @@ export function FigurinoFormPage() {
 
   const [characterName, setCharacterName] = useState("");
   const [pieces, setPieces] = useState<FigurinoPiece[]>([{ name: "", qty: 1 }]);
+  const [tags, setTags] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [loaded, setLoaded] = useState(false);
 
@@ -107,6 +162,7 @@ export function FigurinoFormPage() {
     if (isEdit && sheet && !loaded) {
       setCharacterName(sheet.character_name);
       setPieces(sheet.pieces.length > 0 ? sheet.pieces : [{ name: "", qty: 1 }]);
+      setTags(sheet.tags);
       setNotes(sheet.notes ?? "");
       setLoaded(true);
     }
@@ -122,7 +178,7 @@ export function FigurinoFormPage() {
   const submit = () => {
     if (!characterName.trim()) return;
     const cleanPieces = pieces.filter((p) => p.name.trim());
-    const body = { character_name: characterName.trim(), pieces: cleanPieces, notes };
+    const body = { character_name: characterName.trim(), pieces: cleanPieces, notes, tags };
     if (isEdit && sheetId) {
       edit.mutate({ id: sheetId, ...body }, { onSuccess: () => navigate("/figurinos") });
     } else {
@@ -191,6 +247,8 @@ export function FigurinoFormPage() {
               ))}
             </div>
           </div>
+
+          <TagsField tags={tags} onChange={setTags} />
 
           <div>
             <label className="mb-1 block text-xs font-medium text-muted">Notas</label>

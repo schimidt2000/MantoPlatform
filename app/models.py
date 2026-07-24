@@ -359,6 +359,7 @@ class FigurinoSheet(db.Model):
     # Native fields (created inside the platform)
     photo_filename = db.Column(db.String(300), nullable=True)
     pieces = db.Column(db.Text, nullable=True)       # JSON: ["Blazer azul", "Calça preta"]
+    tags = db.Column(db.Text, nullable=True)         # JSON: ["anjo", "natal"] (feature 183)
     notes = db.Column(db.Text, nullable=True)
     updated_at = db.Column(db.DateTime, nullable=True)
 
@@ -398,6 +399,19 @@ class FigurinoSheet(db.Model):
         return len(self.pieces_list)
 
     @property
+    def tags_list(self):
+        """Returns list of tag strings (feature 183). Corrupted/empty JSON returns []."""
+        import json as _json
+        if not self.tags:
+            return []
+        try:
+            data = _json.loads(self.tags)
+            return [str(t) for t in data if str(t).strip()]
+        except Exception as exc:  # noqa: BLE001 — JSON de tags corrompido não pode quebrar a tela
+            logger.warning("tags JSON inválido na FigurinoSheet %s: %s", self.id, exc)
+            return []
+
+    @property
     def photo_url(self):
         if self.photo_filename:
             # Novo formato: URL completa (local ou S3)
@@ -406,6 +420,28 @@ class FigurinoSheet(db.Model):
             # Legado: só o nome do arquivo
             return f"/uploads/figurino_photos/{self.photo_filename}"
         return self.thumbnail_url  # Drive sync fallback
+
+
+class FigurinoMissingDismissal(db.Model):
+    """Descarte de alerta de "personagem sem ficha" (feature 183).
+
+    Guarda os `EventRole.id` cobertos pelo descarte no momento em que ele foi feito — um
+    `EventRole` novo criado depois (id fora deste conjunto) faz o personagem reaparecer na
+    lista de faltantes (ver `app/figurino/figurino_ops.py::list_sheets`).
+    """
+
+    __tablename__ = "figurino_missing_dismissals"
+    __table_args__ = (
+        db.Index("ix_figurino_missing_dismissals_norm", "character_name_norm"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    character_name_norm = db.Column(db.String(200), nullable=False)
+    event_role_ids = db.Column(db.Text, nullable=False)  # JSON: [101, 102]
+    dismissed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    dismissed_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    dismisser = db.relationship("User", lazy=True, foreign_keys=[dismissed_by])
 
 
 class EventRole(db.Model):

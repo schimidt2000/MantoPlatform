@@ -10,26 +10,59 @@ dois adaptadores finos — o handler Jinja (`app/figurino/routes.py`) e os endpo
 import json
 import logging
 
-from app.models import EventRole, FigurinoSheet
+from app.models import EventRole, FigurinoMissingDismissal, FigurinoSheet
 
 logger = logging.getLogger(__name__)
 
 
 def list_sheets() -> dict:
-    """Lista as fichas de figurino + personagens já usados em eventos sem ficha correspondente.
+    """Lista as fichas de figurino + personagens já usados em eventos sem ficha correspondente
+    (feature 154; cobertura por `figurino_sheet_id` e descarte de alertas, feature 183).
 
-    Mesma lógica de `figurinos()` (Jinja).
+    Um cargo de evento (`EventRole`) é considerado "coberto" quando já aponta para uma ficha
+    (`figurino_sheet_id`) OU quando seu nome normalizado bate com alguma ficha cadastrada. Um
+    personagem sem cobertura só aparece em `chars_without_sheet` se ainda tiver algum
+    `EventRole.id` fora de um descarte vigente (`FigurinoMissingDismissal`) — ver
+    `dismiss_missing_character`/`associate_missing_character`.
+
+    Não usa a mesma query de `figurinos()` (Jinja) — aquela view tem sua própria lógica inline,
+    puramente por nome, mantida intacta (feature 183, FR-015).
     """
-    from .. import db
     from .drive_service import normalize_name
 
     sheets = FigurinoSheet.query.order_by(FigurinoSheet.character_name.asc()).all()
     sheet_norms = {s.character_name_norm for s in sheets if s.character_name_norm}
 
-    all_chars = db.session.query(EventRole.character_name).distinct().all()
-    chars_without_sheet = sorted(
-        {c[0] for c in all_chars if c[0] and normalize_name(c[0]) not in sheet_norms}
+    roles = (
+        EventRole.query.with_entities(
+            EventRole.id, EventRole.character_name, EventRole.figurino_sheet_id
+        )
+        .filter(EventRole.character_name.isnot(None))
+        .all()
     )
+
+    missing_by_norm: dict[str, dict] = {}
+    for role_id, char_name, sheet_id in roles:
+        if not char_name or sheet_id is not None:
+            continue
+        norm = normalize_name(char_name)
+        if norm in sheet_norms:
+            continue
+        entry = missing_by_norm.setdefault(norm, {"character_name": char_name, "role_ids": []})
+        entry["role_ids"].append(role_id)
+
+    dismissals = {
+        d.character_name_norm: set(json.loads(d.event_role_ids))
+        for d in FigurinoMissingDismissal.query.all()
+    }
+
+    chars_without_sheet = []
+    for norm, entry in missing_by_norm.items():
+        dismissed_ids = dismissals.get(norm)
+        if dismissed_ids is not None and set(entry["role_ids"]).issubset(dismissed_ids):
+            continue
+        chars_without_sheet.append({"character_name": entry["character_name"], "character_name_norm": norm})
+    chars_without_sheet.sort(key=lambda c: c["character_name"])
 
     return {
         "items": [
@@ -37,6 +70,7 @@ def list_sheets() -> dict:
                 "id": s.id,
                 "character_name": s.character_name,
                 "pieces": s.pieces_list,
+                "tags": s.tags_list,
                 "notes": s.notes,
                 "photo_url": s.photo_url,
                 "updated_at": s.updated_at.isoformat() if s.updated_at else None,
@@ -62,8 +96,29 @@ def _clean_pieces(pieces: list[dict] | None) -> list[dict]:
     return result
 
 
+def _clean_tags(tags: list[str] | None) -> list[str]:
+    """Normaliza tags: `strip()`, descarta vazias, dedup case-insensitive preservando a primeira
+    grafia usada (feature 183)."""
+    seen: set[str] = set()
+    result = []
+    for tag in tags or []:
+        name = (tag or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(name)
+    return result
+
+
 def create_sheet(
-    *, character_name: str, pieces: list[dict] | None, notes: str | None
+    *,
+    character_name: str,
+    pieces: list[dict] | None,
+    notes: str | None,
+    tags: list[str] | None = None,
 ) -> FigurinoSheet | None:
     """Cria uma ficha de figurino sem foto (upload fora desta fatia). Paridade com
     `new_sheet` — recusa (devolve None) se `character_name` vier vazio."""
@@ -75,10 +130,12 @@ def create_sheet(
         return None
 
     clean_pieces = _clean_pieces(pieces)
+    clean_tags = _clean_tags(tags)
     sheet = FigurinoSheet(
         character_name=character_name,
         character_name_norm=normalize_name(character_name),
         pieces=json.dumps(clean_pieces, ensure_ascii=False) if clean_pieces else None,
+        tags=json.dumps(clean_tags, ensure_ascii=False) if clean_tags else None,
         notes=(notes or "").strip() or None,
     )
     db.session.add(sheet)
@@ -86,9 +143,14 @@ def create_sheet(
 
 
 def edit_sheet(
-    sheet: FigurinoSheet, *, character_name: str, pieces: list[dict] | None, notes: str | None
+    sheet: FigurinoSheet,
+    *,
+    character_name: str,
+    pieces: list[dict] | None,
+    notes: str | None,
+    tags: list[str] | None = None,
 ) -> bool:
-    """Edita nome/peças/notas de uma ficha existente (sem tocar na foto). Paridade com
+    """Edita nome/peças/notas/tags de uma ficha existente (sem tocar na foto). Paridade com
     `edit_sheet` — recusa (devolve False) se `character_name` vier vazio."""
     from datetime import datetime
 
@@ -99,9 +161,11 @@ def edit_sheet(
         return False
 
     clean_pieces = _clean_pieces(pieces)
+    clean_tags = _clean_tags(tags)
     sheet.character_name = character_name
     sheet.character_name_norm = normalize_name(character_name)
     sheet.pieces = json.dumps(clean_pieces, ensure_ascii=False) if clean_pieces else None
+    sheet.tags = json.dumps(clean_tags, ensure_ascii=False) if clean_tags else None
     sheet.notes = (notes or "").strip() or None
     sheet.updated_at = datetime.utcnow()
     return True
@@ -117,6 +181,83 @@ def delete_sheet(sheet: FigurinoSheet) -> None:
     delete_file(sheet.photo_filename)
     EventRole.query.filter_by(figurino_sheet_id=sheet.id).update({"figurino_sheet_id": None})
     db.session.delete(sheet)
+
+
+def _pending_role_ids_for_norm(character_name_norm: str) -> list[int]:
+    """IDs de `EventRole` atualmente sem ficha (`figurino_sheet_id` nulo) cujo nome normalizado
+    bate com `character_name_norm` (feature 183)."""
+    from .drive_service import normalize_name
+
+    roles = (
+        EventRole.query.with_entities(EventRole.id, EventRole.character_name)
+        .filter(EventRole.figurino_sheet_id.is_(None))
+        .filter(EventRole.character_name.isnot(None))
+        .all()
+    )
+    return [role_id for role_id, name in roles if normalize_name(name) == character_name_norm]
+
+
+def dismiss_missing_character(character_name_norm: str, *, dismissed_by: int | None) -> bool:
+    """Descarta o alerta de "personagem sem ficha" para as ocorrências atuais daquele nome
+    (feature 183). Um `EventRole` novo criado depois do descarte faz o personagem reaparecer.
+
+    Returns:
+        `False` se não houver nenhum cargo pendente para esse nome (nada a descartar).
+    """
+    from datetime import datetime
+
+    from .. import db
+
+    role_ids = _pending_role_ids_for_norm(character_name_norm)
+    if not role_ids:
+        return False
+
+    existing = FigurinoMissingDismissal.query.filter_by(
+        character_name_norm=character_name_norm
+    ).first()
+    if existing:
+        merged = sorted(set(json.loads(existing.event_role_ids)) | set(role_ids))
+        existing.event_role_ids = json.dumps(merged)
+        existing.dismissed_at = datetime.utcnow()
+        existing.dismissed_by = dismissed_by
+    else:
+        db.session.add(
+            FigurinoMissingDismissal(
+                character_name_norm=character_name_norm,
+                event_role_ids=json.dumps(role_ids),
+                dismissed_by=dismissed_by,
+            )
+        )
+    return True
+
+
+def associate_missing_character(character_name_norm: str, *, sheet_id: int) -> int:
+    """Vincula todos os cargos de evento pendentes daquele personagem à ficha escolhida
+    (feature 183) — seta `EventRole.figurino_sheet_id`.
+
+    Returns:
+        Quantos cargos foram atualizados (`0` se a ficha não existir ou não houver pendentes).
+    """
+    from .. import db
+    from .drive_service import normalize_name
+
+    sheet = FigurinoSheet.query.get(sheet_id)
+    if sheet is None:
+        return 0
+
+    roles = (
+        EventRole.query.filter(EventRole.figurino_sheet_id.is_(None))
+        .filter(EventRole.character_name.isnot(None))
+        .all()
+    )
+    updated = 0
+    for role in roles:
+        if normalize_name(role.character_name) == character_name_norm:
+            role.figurino_sheet_id = sheet_id
+            updated += 1
+    if updated:
+        db.session.flush()
+    return updated
 
 
 _IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
