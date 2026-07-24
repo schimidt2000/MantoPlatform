@@ -194,12 +194,13 @@ confirmar prefill da ficha na linha do elenco.
 
 **Independent Test**: inspecionar `<head>` renderizado de ambas as rotas.
 
-- [ ] T038 [P] [US5] Criar `useNoIndex()` em `frontend/apps/public/src/lib/seo.ts` (novo arquivo) —
-      injeta/remove `<meta name="robots" content="noindex, nofollow">` em `document.head`, mesmo
-      padrão de manipulação de `<head>` já usado para `document.title` em `ProductDetailPage.tsx`
-- [ ] T039 [US5] Chamar `useNoIndex()` em `CatalogGridPage.tsx`
-      (`frontend/apps/public/src/pages/CatalogGridPage.tsx`)
-- [ ] T040 [US5] Chamar `useNoIndex()` em `ProductDetailPage.tsx`
+- [x] T038 [P] [US5] ~~Criar `useNoIndex()`~~ — **descoberto durante implementação**:
+      `frontend/apps/public/index.html` já tem `<meta name="robots" content="noindex, nofollow">`
+      estático desde a feature 161 (commit `813c73e`, 2026-07-22), cobrindo 100% das rotas do app
+      público. Um hook novo duplicaria a tag (confirmado por e2e — 2 `<meta>` na página). Tarefa
+      fechada sem código novo (Princípio I).
+- [x] T039 [US5] ~~Chamar `useNoIndex()` em `CatalogGridPage.tsx`~~ — não necessário, ver T038.
+- [x] T040 [US5] ~~Chamar `useNoIndex()` em `ProductDetailPage.tsx`~~ — não necessário, ver T038.
 
 **Checkpoint**: US5 completa e testável de forma independente.
 

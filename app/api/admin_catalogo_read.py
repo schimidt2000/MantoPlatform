@@ -8,6 +8,7 @@ from typing import Any
 from flask import jsonify, request
 from flask_login import current_user
 
+from app.admin import catalog_ops
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
@@ -85,8 +86,32 @@ def api_admin_catalogo_detail(item_id: int) -> Any:
             "tags": item.tags_list,
             "is_active": item.is_active,
             "category_ids": [c.id for c in item.categories],
+            "video_url": item.video_url,
             "images": [
                 {"id": img.id, "url": img.url, "position": img.position} for img in item.images
             ],
+            "characters": [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "slug": c.slug,
+                    "photo_url": c.photo_url,
+                    "video_url": c.video_url,
+                    "figurino_sheet_id": c.figurino_sheet_id,
+                    "position": c.position,
+                    "is_active": c.is_active,
+                }
+                for c in sorted(item.characters, key=lambda c: c.position)
+            ],
         }
     )
+
+
+@api_bp.route("/admin/catalogo/tags")
+@api_login_required
+def api_admin_catalogo_tags() -> Any:
+    """Todas as tags já usadas em algum produto do catálogo — para autocomplete do chip input."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    return jsonify({"tags": catalog_ops.all_tags()})

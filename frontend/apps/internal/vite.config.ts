@@ -37,6 +37,14 @@ export default defineConfig({
         target: "http://localhost:5000",
         changeOrigin: true,
       },
+      // Fotos do catálogo (Temas e Personagens, feature 185) são servidas por uma rota pública
+      // separada de `/uploads` (`/catalogo/midia/*`, sem login — ver
+      // `app/catalogo/importer.py:_rewrite_public_url`); mesmo gap do `/uploads` acima, mesma
+      // correção.
+      "/catalogo/midia": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+      },
       "^/figurinos/\\d+/print$": {
         target: "http://localhost:5000",
         changeOrigin: true,
