@@ -37,6 +37,7 @@ def _asset_summary(asset: ReviewAsset) -> dict:
         "days_left": asset.days_left,
         "finalized_at": asset.finalized_at.isoformat() if asset.finalized_at else None,
         "file_url": asset.file_path if asset.is_available else None,
+        "status": asset.status,
     }
 
 

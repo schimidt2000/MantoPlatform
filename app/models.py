@@ -1410,6 +1410,9 @@ class ReviewAsset(db.Model):
     version      = db.Column(db.Integer, default=1, nullable=False, server_default="1")
     # Quem enviou a versão ATUAL do arquivo (feature 104) — copiado para o snapshot na substituição.
     uploaded_by  = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    # Status de aprovação (feature 182): 'em_revisao' | 'aprovado' | 'precisa_ajustes' | 'rejeitado'.
+    # Redefinido para 'em_revisao' a cada nova versão enviada (ver review_ops.replace_asset).
+    status = db.Column(db.String(20), nullable=False, default="em_revisao", server_default="em_revisao")
 
     uploader = db.relationship("User", lazy=True, foreign_keys=[uploaded_by])
     comments = db.relationship(

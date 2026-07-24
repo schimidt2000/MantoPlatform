@@ -140,6 +140,23 @@ def api_revisao_finalize_asset(asset_id: int) -> Any:
     return jsonify({"finalized_at": asset.finalized_at.isoformat()})
 
 
+@api_bp.route("/revisao/asset/<int:asset_id>/status", methods=["PATCH"])
+@api_login_required
+def api_revisao_set_status(asset_id: int) -> Any:
+    """Altera o status de aprovação de um material (feature 182)."""
+    asset = ReviewAsset.query.get(asset_id)
+    if asset is None:
+        return json_error("Material não encontrado", 404)
+    if not review_ops.can_manage(asset.space, current_user):
+        return json_error("Sem permissão", 403)
+    body = request.get_json(silent=True) or {}
+    try:
+        review_ops.set_asset_status(asset, body.get("status") or "")
+    except review_ops.ReviewValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify({"status": asset.status})
+
+
 @api_bp.route("/revisao/asset/<int:asset_id>/comment", methods=["POST"])
 @api_login_required
 def api_revisao_add_comment(asset_id: int) -> Any:
