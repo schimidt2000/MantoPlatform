@@ -65,7 +65,8 @@ export function CharacterCard({ character, temaSlug, highlighted = false }: Char
           <button
             type="button"
             onClick={handleCopyLink}
-            className="inline-flex items-center gap-1 rounded-full border border-line px-3 py-2 text-xs font-semibold text-accent-dark hover:border-accent"
+            aria-label="Copiar link do personagem"
+            className="inline-flex h-11 w-11 flex-none items-center justify-center rounded-full border border-line text-sm font-semibold text-accent-dark hover:border-accent"
           >
             {copied ? "✅" : "🔗"}
           </button>
