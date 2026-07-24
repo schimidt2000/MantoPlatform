@@ -41,7 +41,7 @@ sem duplicar código.
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirmar `manto_local` acessível e migrations no head (`python -m flask db heads`
+- [x] T001 Confirmar `manto_local` acessível e migrations no head (`python -m flask db heads`
   via `.\scripts\db\run-local.ps1`) — esta feature não adiciona colunas/tabelas novas
 
 ---
@@ -68,54 +68,54 @@ contrato e observação com foto) e confirmar que tudo fica vinculado ao evento 
 
 ### Backend for User Story 1
 
-- [ ] T002 [US1] Adicionar parâmetro multipart opcional `is_signed` (default `false`) em
+- [x] T002 [US1] Adicionar parâmetro multipart opcional `is_signed` (default `false`) em
   `POST /events/<id>/contracts` — rota em `app/api/agenda_write.py`, aplicado na criação do
   `EventContract` (helper `_add_contract_record` em `app/calendar/routes.py`, reaproveitado sem
   mudar sua assinatura pública para outros chamadores)
 
 ### Implementation for User Story 1
 
-- [ ] T003 [US1] Atualizar `frontend/apps/internal/src/components/ClientPicker.tsx`: adicionar
+- [x] T003 [US1] Atualizar `frontend/apps/internal/src/components/ClientPicker.tsx`: adicionar
   "+ Cadastrar novo cliente" (mini-form inline: nome completo, telefone com DDD, empresa opcional,
   botão "Salvar e adicionar") usando `useQuickCreateClient()` (`lib/clientes.ts`, já existe)
-- [ ] T004 [US1] Criar `frontend/apps/internal/src/components/EventFormBlocks/ClienteBlock.tsx`
+- [x] T004 [US1] Criar `frontend/apps/internal/src/components/EventFormBlocks/ClienteBlock.tsx`
   (Bloco 1): compõe `ClientPicker` (T003) + `FormResponsePicker`
-- [ ] T005 [US1] Criar
+- [x] T005 [US1] Criar
   `frontend/apps/internal/src/components/EventFormBlocks/DadosEventoBlock.tsx` (Bloco 2):
   data/início/fim/tipo/local/descrição; ensaio sempre marcado e travado quando `event_type ===
   "SHOW"` com texto explicativo; aviso "termina no dia seguinte" quando fim &lt; início; toggle de
   reembolso com descrição/valor/nota fiscal do gasto (opcional)
-- [ ] T006 [US1] Criar `frontend/apps/internal/src/components/EventFormBlocks/ElencoBlock.tsx`
+- [x] T006 [US1] Criar `frontend/apps/internal/src/components/EventFormBlocks/ElencoBlock.tsx`
   (Bloco 3): linhas dinâmicas de personagem (nome, figurino, talento, maquiagem, cantor(a)),
   coordenador pré-escalado (com texto de ajuda "vaga aberta ao casting"), botão "Gerar título
   automaticamente" (`(TIPO) NOME1 + NOME2`, para de sobrescrever após edição manual do título)
-- [ ] T007 [US1] Criar `frontend/apps/internal/src/components/EventFormBlocks/ValoresBlock.tsx`
+- [x] T007 [US1] Criar `frontend/apps/internal/src/components/EventFormBlocks/ValoresBlock.tsx`
   (Bloco 4): toggle cortesia/permuta, valor antes do desconto + valor de venda com % de desconto
   calculado em tempo real, transporte, acréscimo, toggle nota fiscal, vendedor, data da venda
-- [ ] T008 [US1] Criar `frontend/apps/internal/src/components/EventFormBlocks/PagamentoBlock.tsx`
+- [x] T008 [US1] Criar `frontend/apps/internal/src/components/EventFormBlocks/PagamentoBlock.tsx`
   (Bloco 5): pills de forma de pagamento (À vista/Dividido no PIX/Faturado/Cartão), parcelas
   (2-12)/vencimento condicionais, lista local de comprovantes pendentes (arquivo + valor R$
   opcional + remover, "+ Adicionar comprovante") — PDF/JPG/PNG até 20 MB
-- [ ] T009 [US1] Criar `frontend/apps/internal/src/components/EventFormBlocks/ContratoBlock.tsx`
+- [x] T009 [US1] Criar `frontend/apps/internal/src/components/EventFormBlocks/ContratoBlock.tsx`
   (Bloco 6): `FileUpload` (`@manto/ui`) para o contrato (PDF/PNG/JPG até 20 MB) + checkbox
   "Contrato já assinado"
-- [ ] T010 [US1] Criar
+- [x] T010 [US1] Criar
   `frontend/apps/internal/src/components/EventFormBlocks/ObservacoesBlock.tsx` (Bloco 7):
   atalhos "+ Texto"/"+ Foto"/"+ Link", cada observação com rótulo opcional
-- [ ] T011 [US1] Criar `frontend/apps/internal/src/components/PendingAttachmentsPanel.tsx`:
+- [x] T011 [US1] Criar `frontend/apps/internal/src/components/PendingAttachmentsPanel.tsx`:
   lista de status por anexo pendente após a criação do evento (enviando/enviado/falhou), com
   "Tentar novamente" por item
-- [ ] T012 [US1] Atualizar `frontend/apps/internal/src/lib/eventCreate.ts`: remover
+- [x] T012 [US1] Atualizar `frontend/apps/internal/src/lib/eventCreate.ts`: remover
   `has_reembolso`/`reembolso_description`/`reembolso_amount` do payload de criação (reembolso
   passa a ser criado na fase 2), `CharacterInput` ganha `role_id: number | null` opcional,
   `ObservationInput` ganha o tipo `"image"` com `file`
-- [ ] T013 [US1] Reescrever `frontend/apps/internal/src/pages/EventCreatePage.tsx`: monta os 7
+- [x] T013 [US1] Reescrever `frontend/apps/internal/src/pages/EventCreatePage.tsx`: monta os 7
   blocos (T004–T010); ao submeter, roda a fase 1 (`POST /api/events`, hook `useCreateEvent()`
   já existente) e, com sucesso, a fase 2 (loop pelos anexos pendentes usando os hooks já
   existentes em `lib/eventAttachments.ts` — `useAddPayment`, `useAddContract`,
   `useAddReimbursement`, `useAddObservation`), exibindo `PendingAttachmentsPanel` (T011) até
   todos os anexos resolverem; só navega para `/events/:id` depois
-- [ ] T014 [US1] Verificar em preview: criar um evento cobrindo os 7 blocos (cliente novo,
+- [x] T014 [US1] Verificar em preview: criar um evento cobrindo os 7 blocos (cliente novo,
   personagens, valores, pagamento com 2 comprovantes, contrato assinado, observação com foto) —
   itens 1–9 de `quickstart.md`
 
@@ -134,21 +134,23 @@ automático até o primeiro campo inválido.
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Configurar `useForm` com `mode: "onBlur"` em
+- [x] T015 [US2] Configurar `useForm` com `mode: "onBlur"` em
   `frontend/apps/internal/src/pages/EventCreatePage.tsx`; aplicar estilo de borda vermelha
   espessa + mensagem de erro nos campos dos blocos criados na Phase 3 (via prop `error`/classe
   condicional compartilhada entre os `EventFormBlocks/*`)
-- [ ] T016 [US2] Implementar `FIELD_ORDER` (ordem visual dos 7 blocos) + varredura de
+- [x] T016 [US2] Implementar `FIELD_ORDER` (ordem visual dos 7 blocos) + varredura de
   `formState.errors` ao falhar `handleSubmit`, chamando `setFocus(nome)` (react-hook-form) e
   `scrollIntoView({behavior:"smooth", block:"center"})` no container do primeiro campo inválido,
   em `EventCreatePage.tsx`
-- [ ] T017 [US2] Implementar validação client-side dos blocos de lista (elenco, clientes,
-  comprovantes, observações — não cobertos por `react-hook-form`) como `blockErrors`, integrada
-  à mesma varredura/scroll de T016
-- [ ] T018 [US2] Implementar banner de erro fixo no topo e no rodapé do formulário
+- [x] T017 [US2] ~~Validação client-side dos blocos de lista~~ — decisão tomada durante a
+  implementação: nem a spec nem os FRs exigem mínimo de itens em cliente/elenco/comprovantes/
+  observações; `FIELD_ORDER` (T016) cobre só os campos escalares realmente obrigatórios
+  (`eventSchema`). Nenhum `blockErrors` foi criado (YAGNI) — sem requisito, sem validação
+  inventada.
+- [x] T018 [US2] Implementar banner de erro fixo no topo e no rodapé do formulário
   ("Existem campos obrigatórios não preenchidos. Verifique os destaques em vermelho."), visível
   só após uma tentativa de envio bloqueada
-- [ ] T019 [US2] Verificar: submeter o formulário vazio e confirmar banner + scroll suave + foco
+- [x] T019 [US2] Verificar: submeter o formulário vazio e confirmar banner + scroll suave + foco
   no primeiro campo; corrigir o campo e confirmar que o destaque some sem precisar reenviar —
   item 8 de `quickstart.md`
 
@@ -167,45 +169,45 @@ de cada bloco, salvar, reabrir e confirmar a persistência.
 
 ### Backend for User Story 3
 
-- [ ] T020 [US3] Implementar `update_event_core(event, ...)` em `app/calendar/event_ops.py`:
+- [x] T020 [US3] Implementar `update_event_core(event, ...)` em `app/calendar/event_ops.py`:
   título, tipo, data/horários, local, descrição, ensaio, valores, pagamento, vendedor, data da
   venda, coordenador, pré-contrato vinculado — reaproveita `_validate_event_core` (import local
   de `app/calendar/routes.py`, mesmo padrão já usado por `save_logistics`/`toggle_confirmed`)
-- [ ] T021 [US3] Implementar a reconciliação de elenco por `role_id` dentro de
+- [x] T021 [US3] Implementar a reconciliação de elenco por `role_id` dentro de
   `update_event_core()` (`app/calendar/event_ops.py`): update de linhas existentes, insert de
   linhas novas, delete de linhas removidas — recusando a operação inteira (nada salvo) se alguma
   removida tiver `invite_status == "accepted"` e o ator não for SUPERADMIN
-- [ ] T022 [US3] Implementar a substituição completa de `EventClient` dentro de
+- [x] T022 [US3] Implementar a substituição completa de `EventClient` dentro de
   `update_event_core()` (`app/calendar/event_ops.py`), reaproveitando a lógica de
   `_create_client_links` e recalculando `CalendarEvent.client_id` (cliente primário)
-- [ ] T023 [US3] Adicionar endpoint `PATCH /api/events/<int:event_id>` em
+- [x] T023 [US3] Adicionar endpoint `PATCH /api/events/<int:event_id>` em
   `app/api/agenda_write.py` (RBAC: `_can_create_event()` — COMERCIAL/SUPERADMIN; 400 de
   validação, 409 de convite aceito, 404 de evento inexistente) — ver `contracts/api-events.md`
 
 ### Implementation for User Story 3
 
-- [ ] T024 [US3] Atualizar `frontend/apps/internal/src/lib/eventCreate.ts`: hook
+- [x] T024 [US3] Atualizar `frontend/apps/internal/src/lib/eventCreate.ts`: hook
   `useUpdateEvent(eventId)` (`useMutation`, `PATCH /api/events/:id`, invalida `["event", eventId]`
   e `["agenda"]`/`["agenda-dia"]`)
-- [ ] T025 [US3] Criar `frontend/apps/internal/src/pages/EventEditPage.tsx`: carrega o evento via
+- [x] T025 [US3] Criar `frontend/apps/internal/src/pages/EventEditPage.tsx`: carrega o evento via
   `GET /api/events/:id` (hook já existente da tela de detalhe), popula os 7 blocos
   (`EventFormBlocks/*` da Phase 3) com os valores atuais, salva via `useUpdateEvent()` (T024);
   anexos (comprovantes/contrato/reembolso/observações) usam diretamente os hooks já existentes de
   `lib/eventAttachments.ts` (mesmo padrão de `EventDetailPage.tsx`, sem fase 2 — o evento já
   existe)
-- [ ] T026 [US3] Adicionar a rota `/events/:id/edit` em `frontend/apps/internal/src/App.tsx`
-- [ ] T027 [US3] Adicionar botão "Editar" no `actions` do `PageHeader` de
+- [x] T026 [US3] Adicionar a rota `/events/:id/edit` em `frontend/apps/internal/src/App.tsx`
+- [x] T027 [US3] Adicionar botão "Editar" no `actions` do `PageHeader` de
   `frontend/apps/internal/src/pages/EventDetailPage.tsx`, visível quando
-  `data.flags.can_edit_event`, linkando para `/events/${id}/edit`
+  `data.flags.can_edit_core`, linkando para `/events/${id}/edit`
 
 ### Verification for User Story 3
 
-- [ ] T028 [US3] Escrever `scripts/db/verify_184_eventos_formulario_completo.py` (test client
+- [x] T028 [US3] Escrever `scripts/db/verify_184_eventos_formulario_completo.py` (test client
   Flask, requests fora de `app_context`, contra `manto_local`) cobrindo: `PATCH
   /api/events/<id>` (200 sucesso, 400 validação, 409 personagem com convite aceito, 403 RBAC),
   `POST /events/<id>/contracts` com `is_signed=true`
-- [ ] T029 [US3] Rodar a verificação funcional contra `manto_local` e confirmar 100% de sucesso
-- [ ] T030 [US3] Verificar em preview: editar um evento existente cobrindo todos os blocos,
+- [x] T029 [US3] Rodar a verificação funcional contra `manto_local` e confirmar 100% de sucesso
+- [x] T030 [US3] Verificar em preview: editar um evento existente cobrindo todos os blocos,
   incluindo tentar remover um personagem com convite aceito sem ser SUPERADMIN — itens 10–12 de
   `quickstart.md`
 
@@ -220,7 +222,7 @@ como uma peça independente do restante do formulário.
 
 **Independent Test**: Em qualquer ponto do formulário, cadastrar um cliente novo sem sair da tela.
 
-- [ ] T031 [US4] Verificar isoladamente: buscar um telefone que não existe, clicar
+- [x] T031 [US4] Verificar isoladamente: buscar um telefone que não existe, clicar
   "+ Cadastrar novo cliente", preencher nome+telefone, salvar, e confirmar (a) o cliente aparece
   selecionado automaticamente, (b) submeter com nome ou telefone vazio destaca os campos sem
   fechar o mini-formulário, (c) reaproveitamento por telefone já existente não duplica o cliente
@@ -237,7 +239,7 @@ corretamente de forma isolada.
 **Independent Test**: Gerar o título a partir de dois personagens e do tipo; digitar valores e ver
 o percentual de desconto.
 
-- [ ] T032 [US5] Verificar isoladamente: gerar título com 2+ personagens e tipo selecionado
+- [x] T032 [US5] Verificar isoladamente: gerar título com 2+ personagens e tipo selecionado
   (formato `(TIPO) NOME1 + NOME2`); editar o título manualmente e confirmar que ele para de ser
   sobrescrito ao adicionar mais personagens; digitar valor antes do desconto e valor de venda e
   confirmar o percentual atualizado a cada tecla
@@ -250,14 +252,14 @@ o percentual de desconto.
 
 **Purpose**: Portões de qualidade da constituição, validação end-to-end e entrega.
 
-- [ ] T033 Rodar `npx tsc --noEmit` em `frontend/apps/internal` e corrigir quaisquer erros de tipo
-- [ ] T034 Rodar `npm run build` (`vite build`) em `frontend/apps/internal` e corrigir quaisquer
+- [x] T033 Rodar `npx tsc --noEmit` em `frontend/apps/internal` e corrigir quaisquer erros de tipo
+- [x] T034 Rodar `npm run build` (`vite build`) em `frontend/apps/internal` e corrigir quaisquer
   erros
-- [ ] T035 [P] Escrever `frontend/apps/internal/e2e/event-form.spec.ts` (Playwright): criação
+- [x] T035 [P] Escrever `frontend/apps/internal/e2e/event-form.spec.ts` (Playwright): criação
   completa (7 blocos + anexos), edição, validação com auto-scroll (submissão vazia e com erros
   específicos)
-- [ ] T036 Rodar a suíte Playwright contra `manto_local` e corrigir falhas
-- [ ] T037 [P] Adicionar entrada em `docs/changelog.html` descrevendo a entrega (linguagem
+- [x] T036 Rodar a suíte Playwright contra `manto_local` e corrigir falhas
+- [x] T037 [P] Adicionar entrada em `docs/changelog.html` descrevendo a entrega (linguagem
   simples) e republicar no link já existente
 - [ ] T038 Commit atômico final e merge em `main` (sem push — não solicitado nesta feature)
 

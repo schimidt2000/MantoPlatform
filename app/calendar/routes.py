@@ -1249,12 +1249,18 @@ def _handle_toggle_contract_signed(event: CalendarEvent, tz_sp: ZoneInfo) -> Non
     flash("Status do contrato atualizado.", "success")
 
 
-def _add_contract_record(event: CalendarEvent, *, file_storage) -> EventContract | None:
+def _add_contract_record(
+    event: CalendarEvent, *, file_storage, is_signed: bool = False
+) -> EventContract | None:
     """Adiciona um contrato ao evento (feature 153). Paridade com `_handle_add_contract`.
 
     Args:
         event: evento ao qual o contrato pertence.
         file_storage: arquivo do contrato (``FileStorage``).
+        is_signed: se o contrato já vem assinado no momento do envio (feature 184) — paridade
+            com o checkbox "Contrato já assinado" do formulário de evento. Não usa o mesmo
+            caminho de `_toggle_contract_signed` (restrito a superadmin): aqui é só o estado
+            inicial do registro, informado por quem está subindo o arquivo.
 
     Returns:
         O ``EventContract`` criado, ou None se não houver arquivo válido (ausente ou > 10 MB).
@@ -1264,7 +1270,9 @@ def _add_contract_record(event: CalendarEvent, *, file_storage) -> EventContract
     )
     if not file_path:
         return None
-    contract = EventContract(event_id=event.id, file_path=file_path, amount=None)
+    contract = EventContract(
+        event_id=event.id, file_path=file_path, amount=None, is_signed=is_signed
+    )
     db.session.add(contract)
     return contract
 

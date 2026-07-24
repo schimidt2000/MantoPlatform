@@ -40,10 +40,18 @@ export function useAddInvoice(eventId: number) {
 
 // ── Contrato ──────────────────────────────────────────────────────────────────
 
+export interface AddContractInput {
+  file: File;
+  /** Feature 184 — marca o contrato como já assinado no momento do envio (distinto do toggle
+   * pós-criação, restrito a superadmin). */
+  is_signed?: boolean;
+}
+
 export function useAddContract(eventId: number) {
-  return useEventMutation<File>(eventId, (file) => {
+  return useEventMutation<AddContractInput>(eventId, ({ file, is_signed }) => {
     const form = new FormData();
     form.append("file", file);
+    if (is_signed) form.append("is_signed", "true");
     return apiFetch<EventoDetalhe>(`/api/events/${eventId}/contracts`, { method: "POST", body: form });
   });
 }

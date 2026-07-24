@@ -1,10 +1,88 @@
 import { useState } from "react";
 import { Button } from "@manto/ui";
-import { useClientSearch, type ClientSummary } from "../lib/clientes";
+import { useClientSearch, useQuickCreateClient, type ClientSummary } from "../lib/clientes";
 import type { ClientLinkInput } from "../lib/eventCreate";
 
 interface SelectedClient extends ClientLinkInput {
   name: string;
+}
+
+const FIELD = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
+
+/** Cadastro rápido de cliente inline (feature 184) — nome/telefone/empresa, sem sair do
+ * formulário de evento. Reaproveita `useQuickCreateClient()` (feature 165): cria ou aproveita um
+ * cliente já existente pelo telefone informado. */
+function QuickCreateClientForm({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (client: ClientSummary) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [company, setCompany] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; phone?: string }>({});
+  const create = useQuickCreateClient();
+
+  const submit = () => {
+    const errors: { name?: string; phone?: string } = {};
+    if (!name.trim()) errors.name = "Nome completo é obrigatório.";
+    if (!phone.trim()) errors.phone = "Telefone é obrigatório.";
+    setFieldErrors(errors);
+    if (errors.name || errors.phone) return;
+
+    create.mutate(
+      { name: name.trim(), phone: phone.trim(), company: company.trim() || undefined },
+      { onSuccess: (result) => onCreated(result) },
+    );
+  };
+
+  return (
+    <div className="space-y-2 rounded-md border border-line bg-surface-2 p-3">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div>
+          <label className="mb-1 block text-xs text-muted">Nome completo *</label>
+          <input
+            className={FIELD}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-label="Nome completo"
+          />
+          {fieldErrors.name && <p className="mt-1 text-xs text-red">{fieldErrors.name}</p>}
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted">Telefone com DDD *</label>
+          <input
+            className={FIELD}
+            placeholder="(11) 98765-4321"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            aria-label="Telefone com DDD"
+          />
+          {fieldErrors.phone && <p className="mt-1 text-xs text-red">{fieldErrors.phone}</p>}
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted">Empresa (opcional)</label>
+          <input
+            className={FIELD}
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            aria-label="Empresa"
+          />
+        </div>
+      </div>
+      {create.isError && <p className="text-xs text-red">Não foi possível cadastrar o cliente.</p>}
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancelar
+        </Button>
+        <Button type="button" size="sm" loading={create.isPending} onClick={submit}>
+          Salvar e adicionar
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -22,6 +100,7 @@ export function ClientPicker({
   relationOptions: string[];
 }) {
   const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
   const search = useClientSearch(query);
   const results = search.data ?? [];
   const selectedIds = new Set(value.map((c) => c.client_id));
@@ -69,33 +148,49 @@ export function ClientPicker({
           ))}
         </ul>
       )}
-      <div className="relative">
-        <input
-          className="h-11 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink"
-          placeholder="Buscar cliente por nome ou telefone…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Buscar cliente"
+      {!creating && (
+        <div className="relative">
+          <input
+            className="h-11 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink"
+            placeholder="Buscar cliente por nome ou telefone…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Buscar cliente"
+          />
+          {results.length > 0 && (
+            <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-line bg-panel shadow-md">
+              {results.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2"
+                    onClick={() => addClient(c)}
+                  >
+                    {c.name}
+                    {c.phone_display && (
+                      <span className="ml-2 text-xs text-muted">{c.phone_display}</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {creating ? (
+        <QuickCreateClientForm
+          onCreated={(client) => {
+            addClient(client);
+            setCreating(false);
+          }}
+          onCancel={() => setCreating(false)}
         />
-        {results.length > 0 && (
-          <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-line bg-panel shadow-md">
-            {results.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface-2"
-                  onClick={() => addClient(c)}
-                >
-                  {c.name}
-                  {c.phone_display && (
-                    <span className="ml-2 text-xs text-muted">{c.phone_display}</span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      ) : (
+        <Button type="button" variant="outline" size="sm" onClick={() => setCreating(true)}>
+          + Cadastrar novo cliente
+        </Button>
+      )}
     </div>
   );
 }

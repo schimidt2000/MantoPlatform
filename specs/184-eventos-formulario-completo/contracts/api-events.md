@@ -18,14 +18,15 @@ Request body: ver `data-model.md` (forma completa).
 Response `200`: `serialize_event_detail(event, current_user, impersonate)` — mesmo formato usado
 por todo o resto da API de eventos.
 
-Response `400` — mesma validação de `_validate_event_core` reaproveitada da criação:
+Response `400` — mesma validação de `_validate_event_core` reaproveitada da criação (envelope
+padrão de erro, `app/api_utils.py::json_error`):
 ```json
-{ "error": "Informe o valor de venda.", "fields": { "sale_value": "Informe o valor de venda." } }
+{ "error": { "message": "Corrija os campos destacados", "fields": { "sale_value": "Informe o valor de venda." } } }
 ```
 
 Response `409` — remoção de personagem com convite aceito por ator não-SUPERADMIN:
 ```json
-{ "error": "Não é possível remover \"Mickey\": o talento já aceitou o convite.", "fields": {} }
+{ "error": { "message": "Não é possível remover \"Mickey\": o talento já aceitou o convite." } }
 ```
 
 Response `403` — ator sem papel COMERCIAL/SUPERADMIN. Response `404` — evento não encontrado.

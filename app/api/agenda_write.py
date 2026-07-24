@@ -576,6 +576,95 @@ def api_create_event() -> Any:
     return jsonify(result), 201
 
 
+def _build_update_event_data(body: dict) -> dict:
+    """Converte o corpo JSON de `PATCH /api/events/<id>` no `data` esperado por
+    `event_ops.update_event_core()` (feature 184). Mesmo formato de `_build_create_event_data`,
+    sem os campos exclusivos de criação (`orcamento_history_id`, `duracao`, `orc_caches`,
+    `acrescimos`, reembolso, observações) e com `role_id` por personagem, usado para reconciliar
+    o elenco em vez de substituí-lo.
+    """
+    characters = [
+        {
+            "role_id": c.get("role_id"),
+            "name": (c.get("name") or "").strip(),
+            "figurino_sheet_id": c.get("figurino_sheet_id"),
+            "cache_value": c.get("cache_value"),
+            "needs_makeup": bool(c.get("needs_makeup")),
+            "is_singer": bool(c.get("is_singer")),
+            "talent_id": c.get("talent_id"),
+        }
+        for c in body.get("characters") or []
+    ]
+    sale_date_raw = body.get("sale_date")
+    payment_due_raw = body.get("payment_due_date")
+
+    return {
+        "title": (body.get("title") or "").strip(),
+        "event_type": (body.get("event_type") or "").strip(),
+        "date_str": body.get("date") or "",
+        "start_str": body.get("start") or "",
+        "end_str": body.get("end") or "",
+        "location": (body.get("location") or "").strip(),
+        "description": (body.get("description") or "").strip(),
+        "needs_rehearsal": bool(body.get("needs_rehearsal")),
+        "sale_value": body.get("sale_value"),
+        "sale_value_gross": body.get("sale_value_gross"),
+        "transport_value": body.get("transport_value"),
+        "acrescimo_value": body.get("acrescimo_value"),
+        "with_invoice": bool(body.get("with_invoice")),
+        "is_cortesia_permuta": bool(body.get("is_cortesia_permuta")),
+        "seller_id": body.get("seller_id"),
+        "sale_date": date.fromisoformat(sale_date_raw) if sale_date_raw else None,
+        "payment_method": body.get("payment_method") or None,
+        "payment_installments": body.get("payment_installments"),
+        "payment_due_date": date.fromisoformat(payment_due_raw) if payment_due_raw else None,
+        "characters": characters,
+        "coordinator_talent_id": body.get("coordinator_talent_id"),
+        "client_pairs": _client_pairs_from_json(body.get("clients") or []),
+        "form_response_id": body.get("form_response_id"),
+    }
+
+
+@api_bp.route("/events/<int:event_id>", methods=["PATCH"])
+@api_login_required
+def api_update_event(event_id: int) -> Any:
+    """Atualiza em bloco os campos centrais de um evento existente (feature 184). RBAC: mesmo
+    nível de `_can_create_event()` (Comercial/Superadmin) — o corpo cobre os mesmos campos
+    financeiros sensíveis da criação. Núcleo em `event_ops.update_event_core()`.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_create_event():
+        return json_error("Sem permissão", 403)
+
+    body = request.get_json(silent=True) or {}
+    data = _build_update_event_data(body)
+
+    from app.calendar.routes import _validate_event_core
+
+    errors = _validate_event_core(data)
+    if errors:
+        return json_error("Corrija os campos destacados", 400, fields=errors)
+
+    from app.calendar.event_ops import EventCoreUpdateBlocked, update_event_core
+
+    try:
+        warnings = update_event_core(
+            event,
+            data,
+            is_superadmin=_is_superadmin(),
+            actor_name=current_user.name,
+            tz=_TZ_SP,
+        )
+    except EventCoreUpdateBlocked as exc:
+        return json_error(exc.message, 409)
+
+    result = _event_detail_json(event).get_json()
+    result["warnings"] = warnings
+    return jsonify(result)
+
+
 # ── Upload e gestão de anexos do evento (feature 153) ────────────────────────
 # Convenção multipart: specs/144-migracao-react-spa/contracts/api-conventions.md.
 
@@ -626,10 +715,11 @@ def api_add_contract(event_id: int) -> Any:
         return json_error("Sem permissão", 403)
 
     file_storage = request.files.get("file")
+    is_signed = request.form.get("is_signed", "false").lower() == "true"
 
     from app.calendar.routes import _add_contract_record
 
-    contract = _add_contract_record(event, file_storage=file_storage)
+    contract = _add_contract_record(event, file_storage=file_storage, is_signed=is_signed)
     if contract is None:
         return json_error(
             "Selecione o arquivo do contrato (até 10 MB).", 400, {"file": "Obrigatório"}

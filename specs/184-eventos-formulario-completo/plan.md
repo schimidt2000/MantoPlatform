@@ -144,7 +144,7 @@ frontend/apps/internal/src/
 │                                   #   fase 2 (loop de anexos)
 │   ├── EventEditPage.tsx           # NOVO (/events/:id/edit): mesmos blocos, pré-preenchidos,
 │                                   #   PATCH /api/events/:id + anexos via hooks já existentes
-│   └── EventDetailPage.tsx         # + botão "Editar" (gated por flags.can_edit_event) no
+│   └── EventDetailPage.tsx         # + botão "Editar" (gated por flags.can_edit_core) no
 │                                   #   PageHeader, linkando para /events/:id/edit
 ├── App.tsx                        # + rota /events/:id/edit
 └── e2e/

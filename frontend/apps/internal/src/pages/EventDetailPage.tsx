@@ -389,12 +389,15 @@ function Contratos({ data }: { data: EventoDetalhe }) {
 
   const submit = () => {
     if (!file) return;
-    add.mutate(file, {
-      onSuccess: () => {
-        setFile(null);
-        if (inputRef.current) inputRef.current.value = "";
+    add.mutate(
+      { file },
+      {
+        onSuccess: () => {
+          setFile(null);
+          if (inputRef.current) inputRef.current.value = "";
+        },
       },
-    });
+    );
   };
 
   return (
@@ -1336,6 +1339,11 @@ export function EventDetailPage() {
                 <span className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-muted">
                   {query.data.event.event_type}
                 </span>
+                {query.data.flags.can_edit_core && (
+                  <Button asChild variant="outline" size="sm">
+                    <Link to={`/events/${query.data.event.id}/edit`}>Editar</Link>
+                  </Button>
+                )}
                 <ConfirmControl data={query.data} />
               </div>
             }

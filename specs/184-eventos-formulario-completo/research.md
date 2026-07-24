@@ -172,10 +172,10 @@ uma ordem fixa de campos (`FIELD_ORDER`, seguindo a ordem visual dos 7 blocos) �
 `formState.errors`; o primeiro nome de campo presente em `errors` recebe `setFocus(nome)` (API
 nativa do `react-hook-form`, já move o foco) e o container do campo recebe
 `scrollIntoView({behavior: "smooth", block: "center"})` explicitamente, para garantir a rolagem
-suave pedida mesmo em campos que o navegador já traria para a viewport de forma abrupta. Campos
-fora do `react-hook-form` (blocos de lista — elenco, clientes, comprovantes, observações) entram
-na mesma varredura via um estado de erro próprio (`blockErrors: Record&lt;string, string&gt;`),
-populado por uma função de validação client-side chamada junto do `handleSubmit`.
+suave pedida mesmo em campos que o navegador já traria para a viewport de forma abrupta. Os
+blocos de lista (cliente, elenco, comprovantes, contrato, observações) não entram nessa varredura:
+nem a spec nem os requisitos funcionais exigem um mínimo de itens neles — inventar uma validação
+sem requisito real violaria YAGNI.
 
 **Rationale**: `react-hook-form` já é a base do formulário atual — `setFocus` é a forma
 suportada de focar um campo por nome sem manipular refs manualmente, e complementa (não substitui)
@@ -185,11 +185,44 @@ o `scrollIntoView` pedido explicitamente no requisito.
 `react-hook-form` já tem `setFocus` e `scrollIntoView` nativo do browser resolve o resto sem nova
 dependência).
 
-## 10. Ponto de entrada para editar
+## 10. Edição em bloco também sincroniza com o Google Agenda (best-effort)
+
+**Decision**: Quando `update_event_core()` altera título, data/horário, local ou descrição, ele
+chama a função já existente `app/calendar/service.py::update_event()` (mesma usada há tempos pelo
+fluxo de edição de ensaio) para refletir a mudança no evento correspondente do Google Agenda,
+via `google_event_id` já salvo. Diferente da criação (`insert_event`, que bloqueia a criação do
+evento no Manto se o Google falhar), a edição salva as mudanças no Manto **mesmo se a chamada ao
+Google falhar** — o Google é best-effort aqui, e uma falha vira um aviso (`warnings`, mesmo campo
+já usado pela criação para avisos de conflito de agenda de talento) em vez de um erro que bloqueia
+o salvamento.
+
+**Rationale**: Sem isso, editar a data de um evento pela tela nova deixaria o Google Agenda
+mostrando a data antiga — uma divergência silenciosa que o time de produção usa todo dia para
+saber onde estar. `update_event()` já existe e já é chamado com este exato padrão (calendarId +
+google_event_id + título/datas/local/descrição) por outro fluxo de edição do sistema — é reuso
+direto (Princípio I), não uma integração nova. O tratamento best-effort (não bloqueia o
+salvamento) evita que uma instabilidade do Google impeça o vendedor de salvar uma correção urgente
+no próprio sistema — mesma filosofia já aplicada em `_sync_single_event_flow`/conflitos de
+talento, que também nunca bloqueiam a ação principal.
+
+**Alternatives considered**: Não sincronizar com o Google na edição (rejeitado — geraria
+divergência silenciosa entre Manto e Google Agenda a cada edição de data/horário, o tipo de bug
+que só aparece quando alguém já está no evento errado); bloquear o salvamento se o Google falhar,
+igual à criação (rejeitado — a criação pode dar-se ao luxo de bloquear porque o evento ainda não
+existe em lugar nenhum; a edição está corrigindo um evento que dezenas de pessoas já podem estar
+vendo no Manto, então a prioridade é salvar a correção no sistema que o vendedor está de fato
+usando).
+
+## 11. Ponto de entrada para editar
 
 **Decision**: `EventDetailPage.tsx` ganha um botão "Editar" no `actions` do `PageHeader`, visível
-quando `data.flags.can_edit_event` for verdadeiro, linkando para `/events/${id}/edit`.
+quando `data.flags.can_edit_core` for verdadeiro (novo flag, feature 184 — ver `data-model.md`),
+linkando para `/events/${id}/edit`.
 
-**Rationale**: `flags.can_edit_event` já existe e já é a trava usada por toda ação de edição da
-tela de detalhe — reaproveitá-la para a nova tela de edição é a única forma de manter paridade de
-permissão sem inventar uma regra nova.
+**Rationale**: O flag já existente `can_edit_event` é mais permissivo (CASTING/FIGURINO/COMERCIAL/
+FINANCEIRO/SUPERADMIN) do que o RBAC do novo endpoint `PATCH /api/events/<id>`
+(COMERCIAL/SUPERADMIN apenas, ver research.md §3) — reaproveitá-lo deixaria CASTING/FIGURINO
+verem o botão "Editar" e caírem num 403 ao tentar salvar. Em vez disso, `serialize_event_detail`
+ganha um flag novo, `can_edit_core`, com a mesma expressão já usada por `can_confirm`/
+`can_delete` (`has(COMERCIAL) or is_superadmin`) — mantém a decisão de RBAC no backend (fonte
+única), em vez de o frontend reimplementar a checagem de papel por conta própria.

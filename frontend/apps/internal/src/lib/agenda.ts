@@ -55,6 +55,9 @@ export interface RoleItem {
   invite_status: string | null;
   dismissed: boolean;
   cache_value?: number | null; // só para casting/superadmin
+  figurino_sheet_id: number | null;
+  needs_makeup: boolean;
+  is_singer: boolean;
 }
 
 export interface EventoDetalhe {
@@ -91,11 +94,19 @@ export interface EventoDetalhe {
   venda?: {
     sale_value: number | null;
     sale_value_gross: number | null;
+    transport_value: number | null;
+    acrescimo_value: number | null;
+    is_cortesia_permuta: boolean;
+    with_invoice: boolean;
     seller: string | null;
+    seller_id: number | null;
+    sale_date: string | null;
     commission_rate: number | null;
     payment_method: string | null;
+    payment_installments: number | null;
     payment_due_date: string | null;
-    clients: { name: string | null; relation: string }[];
+    clients: { client_id: number; name: string | null; relation: string }[];
+    form_response: { id: number; name: string; form_type: string } | null;
   };
   contratos?: { id: number; file_path: string; is_signed: boolean; created_at: string | null }[];
   notas_fiscais?: {
