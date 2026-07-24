@@ -220,7 +220,7 @@ combinar os dois — testável isoladamente (não depende de US1/US2/US3 para fu
 - [X] T033 Rodar a suíte Playwright contra `manto_local` e corrigir falhas
 - [X] T034 [P] Adicionar entrada em `docs/changelog.html` descrevendo a entrega (linguagem
   simples) e republicar no link já existente
-- [ ] T035 Commit atômico final, merge em `main` e push para `origin` (após todos os portões de
+- [X] T035 Commit atômico final, merge em `main` e push para `origin` (após todos os portões de
   qualidade passarem)
 
 ---
