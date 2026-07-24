@@ -36,6 +36,8 @@ export function useReviewerOptions() {
 
 export type MediaType = "video" | "audio" | "image" | "pdf";
 
+export type ReviewStatus = "em_revisao" | "aprovado" | "precisa_ajustes" | "rejeitado";
+
 export interface RevisaoAssetSummary {
   id: number;
   media_type: MediaType;
@@ -46,6 +48,7 @@ export interface RevisaoAssetSummary {
   days_left: number | null;
   finalized_at: string | null;
   file_url: string | null;
+  status: ReviewStatus;
 }
 
 export interface RevisaoSpaceDetail extends RevisaoSpaceSummary {
@@ -181,6 +184,20 @@ export function useReplaceRevisaoAsset(assetId: number) {
         body: form,
       });
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["revisao-asset"] });
+    },
+  });
+}
+
+export function useUpdateAssetStatus(assetId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (status: ReviewStatus) =>
+      apiFetch<{ status: ReviewStatus }>(`/api/revisao/asset/${assetId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["revisao-asset"] });
     },

@@ -26,6 +26,8 @@ from app.storage import delete_file, save_file
 
 EXPIRY_DAYS = 7
 
+VALID_ASSET_STATUSES = {"em_revisao", "aprovado", "precisa_ajustes", "rejeitado"}
+
 _MEDIA_EXTS = {
     "video": {".mp4", ".mov", ".webm", ".m4v", ".ogv"},
     "audio": {".mp3", ".wav", ".m4a", ".ogg", ".aac"},
@@ -237,6 +239,17 @@ def replace_asset(asset: ReviewAsset, file: FileStorage, uploader_id: int) -> Re
     asset.file_removed = False
     asset.finalized_at = None
     asset.uploaded_by = uploader_id
+    asset.status = "em_revisao"
+    db.session.commit()
+    return asset
+
+
+def set_asset_status(asset: ReviewAsset, status: str) -> ReviewAsset:
+    """Altera o status de aprovação de um material (feature 182). Só quem tem `can_manage`
+    pode chamar — validado pelo endpoint, não aqui."""
+    if status not in VALID_ASSET_STATUSES:
+        raise ReviewValidationError("status", "Status inválido.")
+    asset.status = status
     db.session.commit()
     return asset
 
