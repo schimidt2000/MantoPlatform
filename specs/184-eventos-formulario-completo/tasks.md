@@ -261,7 +261,7 @@ o percentual de desconto.
 - [x] T036 Rodar a suíte Playwright contra `manto_local` e corrigir falhas
 - [x] T037 [P] Adicionar entrada em `docs/changelog.html` descrevendo a entrega (linguagem
   simples) e republicar no link já existente
-- [ ] T038 Commit atômico final e merge em `main` (sem push — não solicitado nesta feature)
+- [x] T038 Commit atômico final e merge em `main` (sem push — não solicitado nesta feature)
 
 ---
 
