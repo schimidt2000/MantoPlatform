@@ -414,6 +414,66 @@ def serialize_overview(overview: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def get_talent_ratings_overview(talent, *, viewer_is_superadmin: bool) -> dict[str, Any]:
+    """Avaliações de um talento específico (feature 180) — seção "Avaliações e Notas" do perfil.
+
+    Não confundir com `build_overview()` (panorama agregado de todos os eventos/talentos, usado
+    em `/casting/avaliacoes`) — aqui o recorte é por `talent.id`, reusando a mesma regra de
+    visibilidade de autoria (`show_authors`/`fully_anonymous`) já usada lá.
+
+    Args:
+        talent: o talento cujo perfil está sendo visto.
+        viewer_is_superadmin: se o requisitante é SUPERADMIN (controla se o nome de quem avaliou
+            aparece em `received`, mesma regra de `build_overview`).
+
+    Returns:
+        Dict com `received` (EventSubRating em que `talent` é o avaliado), `given` (EventRating
+        submetido pelo próprio `talent`) e `show_authors`.
+    """
+    settings = SiteSetting.query.get(1)
+    fully_anonymous = bool(settings and settings.ratings_fully_anonymous)
+    show_authors = viewer_is_superadmin and not fully_anonymous
+
+    received_q = (
+        EventSubRating.query.join(EventRating, EventSubRating.rating_id == EventRating.id)
+        .filter(EventSubRating.subject_talent_id == talent.id, EventSubRating.score.isnot(None))
+        .order_by(EventRating.submitted_at.desc())
+    )
+    received = [
+        {
+            "category": sub.category,
+            "category_label": RATING_CATEGORY_LABELS.get(sub.category, "Geral"),
+            "score": sub.score,
+            "comment": sub.comment or None,
+            "author": sub.rating.talent.full_name if show_authors and sub.rating.talent else "Anônimo",
+            "event_id": sub.rating.event_id,
+            "event_title": sub.rating.event.title if sub.rating.event else None,
+            "event_date": _iso(sub.rating.event.start_at) if sub.rating.event else None,
+        }
+        for sub in received_q.all()
+    ]
+
+    given_q = (
+        EventRating.query.filter(EventRating.talent_id == talent.id, EventRating.score.isnot(None))
+        .order_by(EventRating.submitted_at.desc())
+    )
+    given = [
+        {
+            "score": r.score,
+            "comment": r.comment or None,
+            "event_id": r.event_id,
+            "event_title": r.event.title if r.event else None,
+            "event_date": _iso(r.event.start_at) if r.event else None,
+            "submitted_at": _iso(r.submitted_at),
+            "edited": (r.edit_count or 0) > 0,
+            "edit_count": r.edit_count or 0,
+        }
+        for r in given_q.all()
+    ]
+
+    return {"received": received, "given": given, "show_authors": show_authors}
+
+
 def set_anonymous_mode(enabled: bool, actor: User) -> None:
     """Liga/desliga o modo anônimo total das avaliações (feature 056)."""
     from app.models import AuditLog

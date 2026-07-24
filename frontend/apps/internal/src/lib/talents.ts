@@ -43,7 +43,7 @@ export interface TalentDirectoryParams {
   top?: string[];
   bottom?: string[];
   shoe?: string[];
-  height_op?: "gte" | "lte";
+  height_op?: "gte" | "lte" | "eq";
   height_value?: string;
   passport?: string[];
   tag?: string[];
@@ -76,6 +76,24 @@ export function useTalentDirectory(params: TalentDirectoryParams) {
   return useQuery<TalentDirectory>({
     queryKey: ["talents-directory", params],
     queryFn: () => apiFetch<TalentDirectory>(`/api/talents/directory?${qs}`),
+  });
+}
+
+export interface CharacterSuggestion {
+  name: string;
+  count: number;
+}
+
+/** Sugestões de personagem para o filtro (feature 180) — mín. 2 caracteres. */
+export function useCharacterSuggestions(q: string) {
+  const query = q.trim();
+  return useQuery<CharacterSuggestion[]>({
+    queryKey: ["talent-character-suggestions", query],
+    queryFn: () =>
+      apiFetch<CharacterSuggestion[]>(
+        `/api/talents/character-suggestions?q=${encodeURIComponent(query)}`,
+      ),
+    enabled: query.length >= 2,
   });
 }
 
@@ -126,6 +144,13 @@ export interface TalentHistoryItem {
   start_at: string | null;
 }
 
+export interface TalentLastEvent {
+  event_id: number;
+  event_title: string | null;
+  character_name: string;
+  start_at: string | null;
+}
+
 export interface TalentDetail {
   talent: TalentProfile;
   history: {
@@ -133,15 +158,66 @@ export interface TalentDetail {
     total_events: number;
     total_earned: number;
     characters_done: string[];
+    last_event: TalentLastEvent | null;
   };
   can_edit: boolean;
 }
 
-/** Perfil completo de um talento (feature 154). */
-export function useTalent(id: number) {
+export interface TalentDetailParams {
+  date_from?: string;
+  date_to?: string;
+}
+
+function buildDetailQuery(params: TalentDetailParams): string {
+  const sp = new URLSearchParams();
+  if (params.date_from) sp.set("date_from", params.date_from);
+  if (params.date_to) sp.set("date_to", params.date_to);
+  return sp.toString();
+}
+
+/** Perfil completo de um talento, com histórico filtrável por período (feature 154/180). */
+export function useTalent(id: number, params: TalentDetailParams = {}) {
+  const qs = buildDetailQuery(params);
   return useQuery<TalentDetail>({
-    queryKey: ["talent", id],
-    queryFn: () => apiFetch<TalentDetail>(`/api/talents/${id}`),
+    queryKey: ["talent", id, params],
+    queryFn: () => apiFetch<TalentDetail>(`/api/talents/${id}${qs ? `?${qs}` : ""}`),
+    enabled: Number.isFinite(id),
+  });
+}
+
+export interface TalentReceivedRating {
+  category: string;
+  category_label: string;
+  score: number;
+  comment: string | null;
+  author: string;
+  event_id: number;
+  event_title: string | null;
+  event_date: string | null;
+}
+
+export interface TalentGivenRating {
+  score: number;
+  comment: string | null;
+  event_id: number;
+  event_title: string | null;
+  event_date: string | null;
+  submitted_at: string | null;
+  edited: boolean;
+  edit_count: number;
+}
+
+export interface TalentRatingsOverview {
+  received: TalentReceivedRating[];
+  given: TalentGivenRating[];
+  show_authors: boolean;
+}
+
+/** Avaliações recebidas/dadas por um talento — seção "Avaliações e Notas" (feature 180). */
+export function useTalentRatings(id: number) {
+  return useQuery<TalentRatingsOverview>({
+    queryKey: ["talent-ratings", id],
+    queryFn: () => apiFetch<TalentRatingsOverview>(`/api/talents/${id}/ratings`),
     enabled: Number.isFinite(id),
   });
 }

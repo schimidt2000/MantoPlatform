@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { RequireAuth } from "./components/RequireAuth";
 import { AppShell } from "./components/AppShell";
 import { LoginPage } from "./pages/LoginPage";
@@ -8,7 +8,6 @@ import { EventDetailPage } from "./pages/EventDetailPage";
 import { EventCreatePage } from "./pages/EventCreatePage";
 import { TalentsListPage } from "./pages/TalentsListPage";
 import { TalentDetailPage } from "./pages/TalentDetailPage";
-import { TalentEditPage } from "./pages/TalentEditPage";
 import { FigurinoListPage } from "./pages/FigurinoListPage";
 import { FigurinoFormPage } from "./pages/FigurinoFormPage";
 import { VendasPipelinePage } from "./pages/VendasPipelinePage";
@@ -47,6 +46,12 @@ import { OrcamentoHistoricoPage } from "./pages/OrcamentoHistoricoPage";
 import { AvaliacaoCastingPage } from "./pages/AvaliacaoCastingPage";
 import { FormulariosAdminPage } from "./pages/FormulariosAdminPage";
 
+/** Rota antiga `/talents/:id/edit` — redireciona para o modo edição unificado (feature 180). */
+function TalentEditRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/talents/${id}?edit=1`} replace />;
+}
+
 export function App() {
   return (
     <BrowserRouter>
@@ -68,7 +73,7 @@ export function App() {
           <Route path="/casting/avaliacoes" element={<AvaliacaoCastingPage />} />
           <Route path="/formularios" element={<FormulariosAdminPage />} />
           <Route path="/talents/:id" element={<TalentDetailPage />} />
-          <Route path="/talents/:id/edit" element={<TalentEditPage />} />
+          <Route path="/talents/:id/edit" element={<TalentEditRedirect />} />
           <Route path="/figurinos" element={<FigurinoListPage />} />
           <Route path="/figurinos/new" element={<FigurinoFormPage />} />
           <Route path="/figurinos/:id/edit" element={<FigurinoFormPage />} />

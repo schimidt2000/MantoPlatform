@@ -14,3 +14,5 @@ export { DenseCard } from "./components/dense-card";
 export type { DenseCardProps, DenseCardStat } from "./components/dense-card";
 export { MetricBadge } from "./components/metric-badge";
 export type { MetricBadgeProps } from "./components/metric-badge";
+export { FilterDropdown, CheckboxList } from "./components/filter-dropdown";
+export type { FilterDropdownProps, CheckboxOption, CheckboxListProps } from "./components/filter-dropdown";

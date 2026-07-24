@@ -372,23 +372,9 @@ def edit_talent(talent_id: int):
 @talents_bp.route("/talents/character-suggestions")
 @login_required
 def character_suggestions():
-    from sqlalchemy import func as sqlfunc
-    q = request.args.get("q", "").strip()
-    if not q or len(q) < 2:
-        return jsonify([])
-    rows = (
-        db.session.query(EventRole.character_name, sqlfunc.count(EventRole.id).label("cnt"))
-        .filter(
-            EventRole.character_name.ilike(f"%{q}%"),
-            EventRole.assigned_at.isnot(None),
-            EventRole.talent_id.isnot(None),
-        )
-        .group_by(EventRole.character_name)
-        .order_by(sqlfunc.count(EventRole.id).desc())
-        .limit(10)
-        .all()
-    )
-    return jsonify([{"name": r.character_name, "count": r.cnt} for r in rows])
+    from app.talents.talent_ops import suggest_characters
+
+    return jsonify(suggest_characters(request.args.get("q", "")))
 
 
 @talents_bp.route("/talents/<int:talent_id>/upload-photo", methods=["POST"])

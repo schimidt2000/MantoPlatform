@@ -66,7 +66,7 @@ def search_talents(
         ja_trabalhou: filtra só quem já trabalhou com a Manto (aplicável a qualquer status).
         language, race, top, bottom, shoe, passport, tags: filtros de múltipla escolha
             (só considerados quando `status == "active"`, mesma regra de hoje).
-        height_op: `"gte"` ou `"lte"`.
+        height_op: `"gte"`, `"lte"` ou `"eq"` (feature 180).
         height_value: valor de altura em cm (string, convertido internamente).
         character: nome de personagem já interpretado (busca no histórico de `EventRole`).
         page: página (1-based).
@@ -103,6 +103,8 @@ def search_talents(
                 height_num = int(height_value)
                 if height_op == "lte":
                     query = query.filter(Talent.height_cm <= height_num)
+                elif height_op == "eq":
+                    query = query.filter(Talent.height_cm == height_num)
                 else:
                     query = query.filter(Talent.height_cm >= height_num)
             except ValueError:
@@ -241,6 +243,7 @@ def get_talent_profile(talent: Talent, *, date_from=None, date_to=None) -> dict:
         "warning_level": talent.warning_level,
     }
 
+    last = history[0] if history else None
     return {
         "talent": talent_data,
         "history": {
@@ -259,6 +262,18 @@ def get_talent_profile(talent: Talent, *, date_from=None, date_to=None) -> dict:
             "total_events": len({r.event_id for r in history}),
             "total_earned": float(sum(r.cache_value or 0 for r in history)),
             "characters_done": sorted({r.character_name for r in history}),
+            "last_event": (
+                {
+                    "event_id": last.event_id,
+                    "event_title": last.event.title if last.event else None,
+                    "character_name": last.character_name,
+                    "start_at": last.event.start_at.isoformat()
+                    if last.event and last.event.start_at
+                    else None,
+                }
+                if last is not None
+                else None
+            ),
         },
     }
 
@@ -424,6 +439,39 @@ def save_talent_photo(talent: Talent, *, photo_type: str, file_storage) -> str |
         delete_file(old_path)
     setattr(talent, field_name, url_path)
     return None
+
+
+def suggest_characters(q: str) -> list[dict]:
+    """Sugere personagens já interpretados que combinam com `q` (feature 180, extraído de
+    `character_suggestions` do Jinja — mesma query, mesmo formato de resposta, reusada pelos
+    dois adaptadores).
+
+    Args:
+        q: texto buscado no nome do personagem; menos de 2 caracteres retorna lista vazia.
+
+    Returns:
+        Até 10 personagens `{"name": str, "count": int}`, ordenados por frequência decrescente.
+    """
+    from sqlalchemy import func as sqlfunc
+
+    from app import db
+
+    q = (q or "").strip()
+    if not q or len(q) < 2:
+        return []
+    rows = (
+        db.session.query(EventRole.character_name, sqlfunc.count(EventRole.id).label("cnt"))
+        .filter(
+            EventRole.character_name.ilike(f"%{q}%"),
+            EventRole.assigned_at.isnot(None),
+            EventRole.talent_id.isnot(None),
+        )
+        .group_by(EventRole.character_name)
+        .order_by(sqlfunc.count(EventRole.id).desc())
+        .limit(10)
+        .all()
+    )
+    return [{"name": r.character_name, "count": r.cnt} for r in rows]
 
 
 def remove_talent_photo(talent: Talent, *, photo_type: str) -> str | None:

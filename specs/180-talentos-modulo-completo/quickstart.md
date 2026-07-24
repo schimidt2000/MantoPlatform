@@ -59,7 +59,7 @@ Seguir o padrão do projeto — script com Flask test client contra `manto_local
 
 ```powershell
 $env:DATABASE_URL = (Get-Content .local-db-url -Raw).Trim(); $env:PYTHONPATH = (Get-Location).Path
-.venv\Scripts\python.exe scripts\verify_180_talentos.py
+.venv\Scripts\python.exe scripts\db\verify_180_talentos.py
 ```
 
 ## Frontend — tipos e build
@@ -72,12 +72,15 @@ npm run build
 
 ## E2E — Playwright (novo)
 
-Pré-requisito: backend já rodando contra `manto_local` (passo 2 acima) em paralelo.
+Pré-requisitos: backend já rodando contra `manto_local` (passo 2 acima) em paralelo, e um usuário
+CASTING/SUPERADMIN já existente na cópia local informado via variáveis de ambiente:
 
 ```powershell
 cd frontend\apps\internal
 npx playwright install --with-deps chromium   # uma vez
-npx playwright test
+$env:E2E_USER_EMAIL = "seu-usuario-casting@manto.local"
+$env:E2E_USER_PASSWORD = "sua-senha-local"
+npm run e2e
 ```
 
 Specs cobertos (ver `research.md` §8 para a estratégia de dados de teste):

@@ -26,10 +26,10 @@ US3 = P3 modo edição), cada uma independentemente testável.
 **Purpose**: Introduzir Playwright do zero (não existe no monorepo hoje), compartilhado por todas
 as user stories que têm spec e2e.
 
-- [ ] T001 [P] Adicionar `@playwright/test` como devDependency em `frontend/apps/internal/package.json` e instalar browsers (`npx playwright install --with-deps chromium`)
-- [ ] T002 [P] Criar `frontend/apps/internal/playwright.config.ts` (webServer → `npm run dev`, `reuseExistingServer: true`, `baseURL` local)
-- [ ] T003 Criar `frontend/apps/internal/e2e/global-setup.ts` — login via `POST /api/auth/login` com usuário de teste, salva `storageState` para reuso entre specs
-- [ ] T004 [P] Criar esqueleto de `scripts/verify_180_talentos.py` (Flask test client contra `manto_local`, requests fora de `app_context`, sem asserts ainda — cada user story adiciona os seus)
+- [X] T001 [P] Adicionar `@playwright/test` como devDependency em `frontend/apps/internal/package.json` e instalar browsers (`npx playwright install --with-deps chromium`)
+- [X] T002 [P] Criar `frontend/apps/internal/playwright.config.ts` (webServer → `npm run dev`, `reuseExistingServer: true`, `baseURL` local)
+- [X] T003 Criar `frontend/apps/internal/e2e/global-setup.ts` — login via `POST /api/auth/login` com usuário de teste, salva `storageState` para reuso entre specs
+- [X] T004 [P] Criar esqueleto de `scripts/db/verify_180_talentos.py` (Flask test client contra `manto_local`, requests fora de `app_context`, sem asserts ainda — cada user story adiciona os seus)
 
 **Checkpoint**: tooling de teste pronto para uso nas fases seguintes.
 
@@ -41,9 +41,9 @@ as user stories que têm spec e2e.
 (perfil leitura) quanto por US3 (modo edição). **Não bloqueia US1** (listagem/filtros vive em
 arquivos totalmente separados e pode avançar em paralelo).
 
-- [ ] T005 Transformar a rota `/talents/:id/edit` em redirect (`<Navigate to="/talents/:id?edit=1" replace />`) em `frontend/apps/internal/src/App.tsx`
-- [ ] T006 Adicionar estado de modo (`"read" | "edit"` via `useSearchParams` no parâmetro `edit`) ao esqueleto de `frontend/apps/internal/src/pages/TalentDetailPage.tsx`, sem ainda migrar conteúdo
-- [ ] T007 [P] Estender `FileUpload` com props `existingUrl`, `existingLabel`, `onRemoveExisting` em `frontend/packages/ui/src/components/file-upload.tsx`
+- [X] T005 Transformar a rota `/talents/:id/edit` em redirect (`<Navigate to="/talents/:id?edit=1" replace />`) em `frontend/apps/internal/src/App.tsx`
+- [X] T006 Adicionar estado de modo (`"read" | "edit"` via `useSearchParams` no parâmetro `edit`) ao esqueleto de `frontend/apps/internal/src/pages/TalentDetailPage.tsx`, sem ainda migrar conteúdo
+- [X] T007 [P] Estender `FileUpload` com props `existingUrl`, `existingLabel`, `onRemoveExisting` em `frontend/packages/ui/src/components/file-upload.tsx`
 
 **Checkpoint**: fundação pronta — US1 pode já estar em andamento em paralelo; US2 e US3 podem começar.
 
@@ -60,16 +60,16 @@ OU dentro da mesma categoria) — sem depender de nenhuma mudança na tela de pe
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Extrair a query de `character_suggestions()` (`app/talents/routes.py`) para `suggest_characters(q: str) -> list[dict]` em `app/talents/talent_ops.py`; atualizar a rota Jinja para só delegar (mesmo comportamento, zero mudança de resposta)
-- [ ] T009 [US1] Adicionar suporte a `height_op="eq"` em `search_talents()` — `app/talents/talent_ops.py` (mesmo arquivo de T008, sequencial)
-- [ ] T010 [US1] Criar `GET /api/talents/character-suggestions` delegando a `suggest_characters()` — `app/api/talents_read.py` (depende de T008)
-- [ ] T011 [P] [US1] Criar componente compartilhado `FilterDropdown` + `CheckboxList` (popover, busca interna opcional, fecha fora/Esc, Framer Motion) em `frontend/packages/ui/src/components/filter-dropdown.tsx`
-- [ ] T012 [US1] Criar `frontend/apps/internal/src/components/TalentFilterPanel.tsx` — estado pendente vs. aplicado, 8 categorias (Personagem com busca+sugestão, Idioma, Raça fixa de 5 opções, Tamanho com 2 subseções cima/baixo, Calçado, Altura com operador ≥/≤/=, Passaporte, Tags com busca interna, "Já trabalhou com a Manto"), botão "Filtrar" roxo (depende de T011)
-- [ ] T013 [US1] Atualizar `TalentDirectoryParams`/`buildDirectoryQuery` em `frontend/apps/internal/src/lib/talents.ts` para aceitar `height_op: "gte"|"lte"|"eq"`
-- [ ] T014 [US1] Reescrever `frontend/apps/internal/src/pages/TalentsListPage.tsx` para usar `TalentFilterPanel`, remover o checkbox "já trabalhou" da barra principal e os `MultiChoice` antigos (depende de T012, T013)
-- [ ] T015 [US1] Ajustar breakpoints do grid em `frontend/apps/internal/src/components/TalentMosaic.tsx` para garantir 5-6 colunas em telas widescreen e confirmar formato do badge de medidas (`184cm • XGG • Calçado 45`)
-- [ ] T016 [P] [US1] Adicionar casos de verificação funcional (altura `eq`, combinação de filtros, personagem, tags) em `scripts/verify_180_talentos.py`
-- [ ] T017 [P] [US1] Criar `frontend/apps/internal/e2e/talents-list.spec.ts` — login, aplicar filtros combinados via painel, confirmar resultado e contagem de colunas do grid (depende de T001-T004, T014)
+- [X] T008 [US1] Extrair a query de `character_suggestions()` (`app/talents/routes.py`) para `suggest_characters(q: str) -> list[dict]` em `app/talents/talent_ops.py`; atualizar a rota Jinja para só delegar (mesmo comportamento, zero mudança de resposta)
+- [X] T009 [US1] Adicionar suporte a `height_op="eq"` em `search_talents()` — `app/talents/talent_ops.py` (mesmo arquivo de T008, sequencial)
+- [X] T010 [US1] Criar `GET /api/talents/character-suggestions` delegando a `suggest_characters()` — `app/api/talents_read.py` (depende de T008)
+- [X] T011 [P] [US1] Criar componente compartilhado `FilterDropdown` + `CheckboxList` (popover, busca interna opcional, fecha fora/Esc, Framer Motion) em `frontend/packages/ui/src/components/filter-dropdown.tsx`
+- [X] T012 [US1] Criar `frontend/apps/internal/src/components/TalentFilterPanel.tsx` — estado pendente vs. aplicado, 8 categorias (Personagem com busca+sugestão, Idioma, Raça fixa de 5 opções, Tamanho com 2 subseções cima/baixo, Calçado, Altura com operador ≥/≤/=, Passaporte, Tags com busca interna, "Já trabalhou com a Manto"), botão "Filtrar" roxo (depende de T011)
+- [X] T013 [US1] Atualizar `TalentDirectoryParams`/`buildDirectoryQuery` em `frontend/apps/internal/src/lib/talents.ts` para aceitar `height_op: "gte"|"lte"|"eq"`
+- [X] T014 [US1] Reescrever `frontend/apps/internal/src/pages/TalentsListPage.tsx` para usar `TalentFilterPanel`, remover o checkbox "já trabalhou" da barra principal e os `MultiChoice` antigos (depende de T012, T013)
+- [X] T015 [US1] Ajustar breakpoints do grid em `frontend/apps/internal/src/components/TalentMosaic.tsx` para garantir 5-6 colunas em telas widescreen e confirmar formato do badge de medidas (`184cm • XGG • Calçado 45`)
+- [X] T016 [P] [US1] Adicionar casos de verificação funcional (altura `eq`, combinação de filtros, personagem, tags) em `scripts/db/verify_180_talentos.py`
+- [X] T017 [P] [US1] Criar `frontend/apps/internal/e2e/talents-list.spec.ts` — login, aplicar filtros combinados via painel, confirmar resultado e contagem de colunas do grid (depende de T001-T004, T014)
 
 **Checkpoint**: User Story 1 completa e testável isoladamente (independe de US2/US3).
 
@@ -87,13 +87,13 @@ existir de fato.
 
 ### Implementation for User Story 2
 
-- [ ] T018 [P] [US2] Adicionar bloco `last_event` (derivado de `history[0]`) ao retorno de `get_talent_profile()` — `app/talents/talent_ops.py`
-- [ ] T019 [P] [US2] Criar `get_talent_ratings_overview(talent, *, viewer_is_superadmin)` em `app/talents/rating_ops.py` (blocos `received`/`given`, reaproveitando a regra `show_authors`/`fully_anonymous` já existente)
-- [ ] T020 [US2] Criar `GET /api/talents/<id>/ratings` em `app/api/talents_read.py` delegando a `get_talent_ratings_overview()` (depende de T019)
-- [ ] T021 [US2] Adicionar `last_event` a `TalentDetail["history"]`, criar `TalentRatingsOverview` types + `useTalentRatings(id)` em `frontend/apps/internal/src/lib/talents.ts` (depende de T018, T020)
-- [ ] T022 [US2] Reconstruir o modo leitura de `frontend/apps/internal/src/pages/TalentDetailPage.tsx`: layout 2 colunas (coluna esquerda: foto hero, documento com foto, histórico com 4 KPIs + filtro de período + tabela, seção "Avaliações e Notas"; coluna direita: anotações internas read-only, contato, documentos/PIX, aparência com passaporte traduzido e badges de habilidades/tags, veículo com condição corrigida incluindo `cnh_expiration`), painel de aprovação/rejeição quando `status === "pending"`, cabeçalho com link de retorno + botão "Editar" (visível só se `can_edit`, aponta para `?edit=1`) (depende de T006, T021)
-- [ ] T023 [P] [US2] Adicionar casos de verificação funcional (`last_event`, `/ratings` com e sem modo anônimo) em `scripts/verify_180_talentos.py`
-- [ ] T024 [P] [US2] Criar `frontend/apps/internal/e2e/talents-detail.spec.ts` (parte 1 — leitura): abrir perfil, confirmar zero controles de edição, KPIs, seção de avaliações, painel de pendente quando aplicável (depende de T022)
+- [X] T018 [P] [US2] Adicionar bloco `last_event` (derivado de `history[0]`) ao retorno de `get_talent_profile()` — `app/talents/talent_ops.py`
+- [X] T019 [P] [US2] Criar `get_talent_ratings_overview(talent, *, viewer_is_superadmin)` em `app/talents/rating_ops.py` (blocos `received`/`given`, reaproveitando a regra `show_authors`/`fully_anonymous` já existente)
+- [X] T020 [US2] Criar `GET /api/talents/<id>/ratings` em `app/api/talents_read.py` delegando a `get_talent_ratings_overview()` (depende de T019)
+- [X] T021 [US2] Adicionar `last_event` a `TalentDetail["history"]`, criar `TalentRatingsOverview` types + `useTalentRatings(id)` em `frontend/apps/internal/src/lib/talents.ts` (depende de T018, T020)
+- [X] T022 [US2] Reconstruir o modo leitura de `frontend/apps/internal/src/pages/TalentDetailPage.tsx`: layout 2 colunas (coluna esquerda: foto hero, documento com foto, histórico com 4 KPIs + filtro de período + tabela, seção "Avaliações e Notas"; coluna direita: anotações internas read-only, contato, documentos/PIX, aparência com passaporte traduzido e badges de habilidades/tags, veículo com condição corrigida incluindo `cnh_expiration`), painel de aprovação/rejeição quando `status === "pending"`, cabeçalho com link de retorno + botão "Editar" (visível só se `can_edit`, aponta para `?edit=1`) (depende de T006, T021) — implementado junto com o branch de edição completo (T026/T027) no mesmo arquivo, ver notas da Fase 5
+- [X] T023 [P] [US2] Adicionar casos de verificação funcional (`last_event`, `/ratings` com e sem modo anônimo) em `scripts/db/verify_180_talentos.py`
+- [X] T024 [P] [US2] Criar `frontend/apps/internal/e2e/talents-detail.spec.ts` (parte 1 — leitura): abrir perfil, confirmar zero controles de edição, KPIs, seção de avaliações, painel de pendente quando aplicável (depende de T022)
 
 **Checkpoint**: User Story 2 completa e testável isoladamente, mesmo sem o modo de edição (US3) implementado.
 
@@ -110,11 +110,11 @@ confirmar retorno ao modo leitura com os novos valores.
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Remover `frontend/apps/internal/src/pages/TalentEditPage.tsx` e a referência de rota dedicada em `frontend/apps/internal/src/App.tsx` (mantendo só o redirect criado em T005)
-- [ ] T026 [US3] Adicionar o branch de modo edição a `frontend/apps/internal/src/pages/TalentDetailPage.tsx`: campos fechados (select tamanho superior/inferior/calçado, passaporte), CPF bloqueado para não-superadmin, textarea+select de anotações internas editável, 4 campos de foto/documento via `FileUpload` estendido (T007), migrando estado/validação/`fieldErrors` de `TalentEditPage` (depende de T007, T022, T025)
-- [ ] T027 [US3] Ligar o botão "Editar" do cabeçalho à troca de modo e implementar retorno automático ao modo leitura após salvar com sucesso (depende de T026)
-- [ ] T028 [P] [US3] Adicionar caso de verificação funcional de regressão (`PATCH /api/talents/<id>` continua funcionando, CPF restrito a superadmin) em `scripts/verify_180_talentos.py`
-- [ ] T029 [P] [US3] Completar `frontend/apps/internal/e2e/talents-detail.spec.ts` (parte 2 — edição): criar talento de teste via API, alternar leitura→edição, editar campo fechado, salvar, confirmar retorno ao modo leitura, confirmar `/talents/:id/edit` redireciona, remover talento de teste no teardown (depende de T026, T027)
+- [X] T025 [US3] Remover `frontend/apps/internal/src/pages/TalentEditPage.tsx` e a referência de rota dedicada em `frontend/apps/internal/src/App.tsx` (mantendo só o redirect criado em T005)
+- [X] T026 [US3] Adicionar o branch de modo edição a `frontend/apps/internal/src/pages/TalentDetailPage.tsx`: campos fechados (select tamanho superior/inferior/calçado, passaporte), CPF bloqueado para não-superadmin, textarea+select de anotações internas editável, campos de foto/documento via `FileUpload` estendido (T007), migrando estado/validação/`fieldErrors` de `TalentEditPage` (depende de T007, T022, T025) — implementado junto com T022 no mesmo arquivo
+- [X] T027 [US3] Ligar o botão "Editar" do cabeçalho à troca de modo e implementar retorno automático ao modo leitura após salvar com sucesso (depende de T026)
+- [X] T028 [P] [US3] Adicionar caso de verificação funcional de regressão (`PATCH /api/talents/<id>` continua funcionando, CPF restrito a superadmin) em `scripts/db/verify_180_talentos.py`
+- [X] T029 [P] [US3] Completar `frontend/apps/internal/e2e/talents-detail.spec.ts` (parte 2 — edição): alternar leitura→edição, editar campo fechado, salvar, confirmar retorno ao modo leitura, confirmar `/talents/:id/edit` redireciona (sem endpoint de criação de talento para staff — edita e restaura um campo de um talento real em vez de criar/remover, ver research.md §8) (depende de T026, T027)
 
 **Checkpoint**: as 3 user stories funcionam de forma independente e em conjunto.
 
@@ -122,13 +122,13 @@ confirmar retorno ao modo leitura com os novos valores.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T030 [P] `npx tsc --noEmit` em `frontend/apps/internal`
-- [ ] T031 [P] `npm run build` em `frontend/apps/internal`
-- [ ] T032 Rodar `scripts/verify_180_talentos.py` contra `manto_local` (todos os casos acumulados de T016/T023/T028)
-- [ ] T033 Rodar `npx playwright test` (`talents-list.spec.ts` + `talents-detail.spec.ts`) contra `manto_local`
-- [ ] T034 [P] `ruff check` nos arquivos Python tocados (`app/talents/talent_ops.py`, `app/talents/rating_ops.py`, `app/talents/routes.py`, `app/api/talents_read.py`)
-- [ ] T035 Atualizar `docs/changelog.html` com a entrega do módulo de Talentos reestruturado e republicar no link existente
-- [ ] T036 Executar o roteiro manual de `quickstart.md` no app real, incluindo viewport widescreen (≥1440px)
+- [X] T030 [P] `npx tsc --noEmit` em `frontend/apps/internal` — 0 erros
+- [X] T031 [P] `npm run build` em `frontend/apps/internal` — build OK (warning de chunk >500kB pré-existente, não introduzido por esta feature)
+- [~] T032 Rodar `scripts/db/verify_180_talentos.py` contra `manto_local` (todos os casos acumulados de T016/T023/T028) — NÃO EXECUTADO neste ambiente (sem PostgreSQL/manto_local disponível no sandbox); validado apenas `py_compile` + import sanity check (app factory + blueprints carregam, `suggest_characters`/`get_talent_ratings_overview` presentes). **Usuário deve rodar antes do merge.**
+- [~] T033 Rodar `npx playwright test` (`talents-list.spec.ts` + `talents-detail.spec.ts`) contra `manto_local` — NÃO EXECUTADO neste ambiente (sem backend/manto_local rodando). **Usuário deve rodar antes do merge.**
+- [X] T034 [P] `ruff check` nos arquivos Python tocados — limpo em todos, exceto 4 avisos pré-existentes em `app/talents/routes.py` fora das linhas tocadas (imports não ordenados, variável ambígua `l`, import múltiplo) — não corrigidos por instrução do CLAUDE.md ("legado segue o estilo circundante — não reformatar arquivo inteiro")
+- [X] T035 Atualizar `docs/changelog.html` com a entrega do módulo de Talentos reestruturado e republicar no link existente
+- [~] T036 Executar o roteiro manual de `quickstart.md` no app real, incluindo viewport widescreen (≥1440px) — PARCIAL: o dev server (`npm run dev:internal`) sobe limpo, sem erros no log; a checagem visual completa não foi possível neste ambiente (navegação do browser de preview bloqueada por política para a porta dinâmica). **Usuário deve conferir visualmente antes do merge.**
 
 ---
 

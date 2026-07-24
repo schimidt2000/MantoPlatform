@@ -50,6 +50,16 @@ def api_talents_directory() -> Any:
     return jsonify(result)
 
 
+@api_bp.route("/talents/character-suggestions")
+@api_login_required
+def api_talents_character_suggestions() -> Any:
+    """Sugere personagens já interpretados (feature 180) — espelho JSON de
+    `talents.character_suggestions`, mesma função `suggest_characters`."""
+    from app.talents.talent_ops import suggest_characters
+
+    return jsonify(suggest_characters(request.args.get("q", "")))
+
+
 @api_bp.route("/talents/<int:talent_id>")
 @api_login_required
 def api_talent_detail(talent_id: int) -> Any:
@@ -78,3 +88,25 @@ def api_talent_detail(talent_id: int) -> Any:
     result = get_talent_profile(talent, date_from=date_from, date_to=date_to)
     result["can_edit"] = _can_edit_talent()
     return jsonify(result)
+
+
+def _is_superadmin() -> bool:
+    from flask_login import current_user
+
+    from app.constants import RoleName
+
+    return any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
+
+
+@api_bp.route("/talents/<int:talent_id>/ratings")
+@api_login_required
+def api_talent_ratings(talent_id: int) -> Any:
+    """Avaliações recebidas/dadas por um talento (feature 180) — seção "Avaliações e Notas"."""
+    from app.talents.rating_ops import get_talent_ratings_overview
+
+    talent = Talent.query.get(talent_id)
+    if talent is None:
+        return json_error("Talento não encontrado", 404)
+
+    overview = get_talent_ratings_overview(talent, viewer_is_superadmin=_is_superadmin())
+    return jsonify(overview)

@@ -16,6 +16,18 @@ export interface FileUploadProps {
   error?: string;
   /** Chamado com o arquivo escolhido, ou `null` ao remover a seleção. */
   onChange: (file: File | null) => void;
+  /**
+   * URL de um arquivo já salvo no servidor (feature 180) — mostrado como preview/link antes de
+   * qualquer nova seleção. `assetUrl()` já resolvido pelo chamador (o componente não conhece a
+   * origem da API).
+   */
+  existingUrl?: string | null;
+  /** Rótulo do arquivo já salvo (ex.: nome do arquivo), exibido ao lado do preview. */
+  existingLabel?: string;
+  /** Chamado ao remover o arquivo já salvo (sem escolher um novo) — omitido esconde o botão. */
+  onRemoveExisting?: () => void;
+  /** Estado de carregamento da remoção do arquivo já salvo. */
+  removingExisting?: boolean;
 }
 
 /**
@@ -31,6 +43,10 @@ export function FileUpload({
   required = false,
   error,
   onChange,
+  existingUrl,
+  existingLabel,
+  onRemoveExisting,
+  removingExisting = false,
 }: FileUploadProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -81,11 +97,9 @@ export function FileUpload({
         )}
       >
         {previewUrl ? (
-          <img
-            src={previewUrl}
-            alt=""
-            className="h-11 w-11 shrink-0 rounded-sm object-cover"
-          />
+          <img src={previewUrl} alt="" className="h-11 w-11 shrink-0 rounded-sm object-cover" />
+        ) : !fileName && existingUrl && !existingUrl.toLowerCase().endsWith(".pdf") ? (
+          <img src={existingUrl} alt="" className="h-11 w-11 shrink-0 rounded-sm object-cover" />
         ) : null}
         <Button
           type="button"
@@ -95,10 +109,11 @@ export function FileUpload({
           className="shrink-0"
         >
           <Upload className="h-4 w-4" aria-hidden="true" />
-          {fileName ? "Trocar" : "Escolher arquivo"}
+          {fileName || existingUrl ? "Trocar" : "Escolher arquivo"}
         </Button>
         <span className="min-w-0 flex-1 truncate text-sm text-ink">
-          {fileName ?? `Nenhum arquivo (máx. ${maxSizeMb} MB)`}
+          {fileName ??
+            (existingUrl ? (existingLabel ?? "Arquivo já enviado") : `Nenhum arquivo (máx. ${maxSizeMb} MB)`)}
         </span>
         {fileName && (
           <Button
@@ -107,6 +122,19 @@ export function FileUpload({
             size="sm"
             aria-label="Remover arquivo"
             onClick={handleClear}
+            className="shrink-0"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        )}
+        {!fileName && existingUrl && onRemoveExisting && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Remover arquivo enviado"
+            loading={removingExisting}
+            onClick={onRemoveExisting}
             className="shrink-0"
           >
             <X className="h-4 w-4" aria-hidden="true" />
