@@ -109,6 +109,9 @@ def _role_flags(user: Any, impersonate: str | None) -> dict[str, bool]:
         ),
         # Excluir evento (feature 151): _CAN_DELETE = Comercial ou Superadmin.
         "can_delete": has(RoleName.COMERCIAL) or is_superadmin,
+        # Editar campos centrais em bloco (feature 184): mesmo nível de _can_create_event —
+        # mais restrito que can_edit_event porque cobre os mesmos campos financeiros da criação.
+        "can_edit_core": has(RoleName.COMERCIAL) or is_superadmin,
     }
 
 
@@ -147,6 +150,10 @@ def _serialize_role(role: Any, show_casting: bool) -> dict[str, Any]:
         "figurino_done": role.figurino_done_at is not None,
         "invite_status": role.invite_status,
         "dismissed": role.dismissed_at is not None,
+        # feature 184 — necessários para pré-preencher o formulário de edição de evento.
+        "figurino_sheet_id": role.figurino_sheet_id,
+        "needs_makeup": bool(role.needs_makeup),
+        "is_singer": bool(role.is_singer),
     }
     if show_casting:
         data["cache_value"] = _money(role.cache_value)
@@ -291,17 +298,35 @@ def serialize_event_detail(
 
     # Bloco comercial (venda, contratos, cobrança) — COMERCIAL/FINANCEIRO/SUPERADMIN.
     if flags["show_comercial"]:
+        form_response = event.form_responses[0] if event.form_responses else None
         data["venda"] = {
             "sale_value": _money(event.sale_value),
             "sale_value_gross": _money(event.sale_value_gross),
+            "transport_value": _money(event.transport_value),
+            "acrescimo_value": _money(event.acrescimo_value),
+            "is_cortesia_permuta": bool(event.is_cortesia_permuta),
+            "with_invoice": bool(event.with_invoice),
             "seller": event.seller.name if event.seller else None,
+            "seller_id": event.seller_id,
+            "sale_date": event.sale_date.isoformat() if event.sale_date else None,
             "commission_rate": event.commission_rate,
             "payment_method": event.payment_method,
+            "payment_installments": event.payment_installments,
             "payment_due_date": event.payment_due_date.isoformat() if event.payment_due_date else None,
+            # feature 184 — necessários para pré-preencher/salvar o formulário de edição de evento.
             "clients": [
-                {"name": ec.client.name if ec.client else None, "relation": ec.relationship_type}
+                {
+                    "client_id": ec.client_id,
+                    "name": ec.client.name if ec.client else None,
+                    "relation": ec.relationship_type,
+                }
                 for ec in event.event_clients
             ],
+            "form_response": (
+                {"id": form_response.id, "name": form_response.contact_name, "form_type": form_response.form_type}
+                if form_response
+                else None
+            ),
         }
         data["contratos"] = [
             {

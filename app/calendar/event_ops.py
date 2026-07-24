@@ -13,13 +13,26 @@ movidos de `routes.py` (que os reimporta com alias) para manter a dependência u
 `routes` — sem ciclo de import).
 """
 
-from datetime import datetime
+import logging
+from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.constants import RoleName
 from app.email_service import send_async, send_ensaio_alert_email, send_event_changed_email
-from app.models import EventLog, Role, User, db
+from app.models import (
+    EventClient,
+    EventLog,
+    EventRole,
+    FigurinoSheet,
+    FormResponse,
+    Role,
+    Talent,
+    User,
+    db,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def notify_accepted_roles(event: Any, changes: list[str]) -> None:
@@ -150,3 +163,241 @@ def save_logistics(
 
     if event.needs_rehearsal and not old_needs_rehearsal:
         notify_ensaio_team(event)
+
+
+class EventCoreUpdateBlocked(Exception):
+    """Levantado quando a edição em bloco não pode prosseguir sem apagar estado protegido —
+    hoje só o caso de remover um personagem com convite já aceito por um não-superadmin
+    (feature 184, paridade com a trava de `casting_ops.delete_role`). Nada é gravado quando esta
+    exceção é levantada — a checagem roda antes de qualquer `db.session.add`/`delete`.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(message)
+
+
+def _reconcile_characters(
+    event: Any,
+    characters: list[dict],
+    *,
+    coordinator_talent_id: int | None,
+    is_superadmin: bool,
+    start: datetime,
+    end: datetime,
+) -> list[str]:
+    """Reconcilia o elenco (`role_type="character"`) por `role_id` em vez de substituir tudo
+    (feature 184, research.md §4): atualiza linhas existentes, insere linhas novas, remove linhas
+    que saíram do conjunto enviado — recusando a remoção (levanta `EventCoreUpdateBlocked`) se
+    alguma tiver convite aceito e quem edita não for superadmin. O coordenador (`role_type="extra"`,
+    `character_name="Coordenador"`) é tratado à parte, mesma vaga sentinela de
+    `routes._ensure_coordinator`. Devolve avisos não-bloqueantes de conflito de agenda (mesma
+    lógica de `_check_talent_conflicts`).
+    """
+    from app.calendar.routes import _talent_time_conflict
+
+    existing = {
+        r.id: r
+        for r in EventRole.query.filter_by(event_id=event.id, role_type="character").all()
+    }
+    submitted_ids = {c.get("role_id") for c in characters if c.get("role_id")}
+    to_remove = [r for rid, r in existing.items() if rid not in submitted_ids]
+
+    for role in to_remove:
+        if role.invite_status == "accepted" and not is_superadmin:
+            raise EventCoreUpdateBlocked(
+                f'Não é possível remover "{role.character_name}": o talento já aceitou o convite.'
+            )
+
+    figurino_by_name = {s.character_name.lower(): s.id for s in FigurinoSheet.query.all()}
+    valid_talent_ids = {t.id for t in Talent.query.filter_by(status="active").all()}
+    used_talent_ids: set[int] = set()
+    assigned_now: list[tuple[int, str]] = []
+
+    for char_data in characters:
+        name = (char_data.get("name") or "").strip()
+        if not name:
+            continue
+        role_id = char_data.get("role_id")
+        sheet_id = char_data.get("figurino_sheet_id") or figurino_by_name.get(name.lower())
+        talent_id = char_data.get("talent_id")
+        pre_tid = (
+            talent_id
+            if talent_id is not None and talent_id in valid_talent_ids and talent_id not in used_talent_ids
+            else None
+        )
+
+        if role_id and role_id in existing:
+            role = existing[role_id]
+            role.character_name = name
+            role.figurino_sheet_id = sheet_id
+            role.cache_value = char_data.get("cache_value")
+            role.needs_makeup = bool(char_data.get("needs_makeup")) or None
+            role.is_singer = bool(char_data.get("is_singer")) or None
+            if pre_tid and role.talent_id != pre_tid:
+                role.talent_id = pre_tid
+                role.assigned_at = datetime.now(tz=start.tzinfo)
+                used_talent_ids.add(pre_tid)
+                assigned_now.append((pre_tid, name))
+        else:
+            db.session.add(EventRole(
+                event_id=event.id,
+                character_name=name,
+                role_type="character",
+                figurino_sheet_id=sheet_id,
+                cache_value=char_data.get("cache_value"),
+                needs_makeup=bool(char_data.get("needs_makeup")) or None,
+                is_singer=bool(char_data.get("is_singer")) or None,
+                talent_id=pre_tid,
+                assigned_at=datetime.now(tz=start.tzinfo) if pre_tid else None,
+            ))
+            if pre_tid:
+                used_talent_ids.add(pre_tid)
+                assigned_now.append((pre_tid, name))
+
+    for role in to_remove:
+        db.session.delete(role)
+
+    coordinator = EventRole.query.filter_by(
+        event_id=event.id, character_name="Coordenador", role_type="extra"
+    ).first()
+    if (
+        coordinator_talent_id is not None
+        and coordinator_talent_id in valid_talent_ids
+        and coordinator_talent_id not in used_talent_ids
+    ):
+        if coordinator:
+            if coordinator.talent_id != coordinator_talent_id:
+                coordinator.talent_id = coordinator_talent_id
+                coordinator.assigned_at = datetime.now(tz=start.tzinfo)
+                assigned_now.append((coordinator_talent_id, "Coordenador"))
+        else:
+            db.session.add(EventRole(
+                event_id=event.id,
+                character_name="Coordenador",
+                role_type="extra",
+                talent_id=coordinator_talent_id,
+                assigned_at=datetime.now(tz=start.tzinfo),
+            ))
+            assigned_now.append((coordinator_talent_id, "Coordenador"))
+
+    warnings: list[str] = []
+    for tid, char_name in assigned_now:
+        other = _talent_time_conflict(tid, start, end, exclude_event_id=event.id)
+        if other:
+            talent = Talent.query.get(tid)
+            tname = (talent.artistic_name or talent.full_name) if talent else f"Talento {tid}"
+            warnings.append(f'{tname} ({char_name}) — já em "{other.title}"')
+    return warnings
+
+
+def update_event_core(
+    event: Any,
+    data: dict,
+    *,
+    is_superadmin: bool,
+    actor_name: str,
+    tz: ZoneInfo,
+) -> list[str]:
+    """Atualiza em bloco os campos centrais de um evento existente (feature 184) — título, tipo,
+    data/horário, local, descrição, ensaio, valores, pagamento, vendedor, elenco (reconciliado),
+    clientes (substituídos) e pré-contrato vinculado. Núcleo de `PATCH /api/events/<id>`.
+
+    `data` segue o mesmo shape de `_build_create_event_data` (routes.py/agenda_write.py), sem os
+    campos exclusivos de criação (`orcamento_history_id`, `duracao`, `orc_caches`, `acrescimos`,
+    reembolso, observações — esses não fazem parte da edição em bloco).
+
+    Sincroniza título/data/horário/local/descrição com o Google Agenda quando mudam
+    (best-effort — ver research.md §10): uma falha do Google não impede salvar no Manto, só vira
+    um aviso na lista devolvida.
+
+    Raises:
+        EventCoreUpdateBlocked: se a reconciliação de elenco tentar remover um personagem com
+            convite aceito e quem edita não for superadmin — nada é gravado nesse caso.
+
+    Returns:
+        Lista de avisos não-bloqueantes (conflito de agenda de talento pré-escalado, falha de
+        sincronização com o Google).
+    """
+    from app.calendar.routes import CALENDAR_ID, _build_start_end, _create_client_links
+    from app.calendar.service import update_event as google_update_event
+
+    d = date.fromisoformat(data["date_str"])
+    st, et = _build_start_end(d, data["start_str"], data["end_str"])
+
+    old_title, old_start, old_end = event.title, event.start_at, event.end_at
+    old_location, old_description = event.location, event.description
+
+    # Reconciliação do elenco ANTES de qualquer outra escrita — se bloquear (convite aceito),
+    # nada mais deste método deve ter efeito colateral.
+    warnings = _reconcile_characters(
+        event,
+        data.get("characters") or [],
+        coordinator_talent_id=data.get("coordinator_talent_id"),
+        is_superadmin=is_superadmin,
+        start=st,
+        end=et,
+    )
+
+    event.title = data["title"]
+    event.event_type = data["event_type"] or None
+    event.start_at = st
+    event.end_at = et
+    event.location = data["location"] or None
+    event.description = data["description"] or None
+    event.needs_rehearsal = bool(data.get("needs_rehearsal"))
+
+    is_cortesia = bool(data.get("is_cortesia_permuta"))
+    event.is_cortesia_permuta = is_cortesia
+    event.sale_value = 0 if is_cortesia else data.get("sale_value")
+    event.sale_value_gross = 0 if is_cortesia else data.get("sale_value_gross")
+    event.transport_value = data.get("transport_value")
+    event.acrescimo_value = data.get("acrescimo_value")
+    event.with_invoice = bool(data.get("with_invoice"))
+    event.seller_id = data.get("seller_id")
+    event.sale_date = data.get("sale_date")
+    event.payment_method = data.get("payment_method")
+    event.payment_installments = data.get("payment_installments")
+    event.payment_due_date = data.get("payment_due_date")
+
+    EventClient.query.filter_by(event_id=event.id).delete()
+    _create_client_links(event, data.get("client_pairs") or [])
+
+    form_response_id = data.get("form_response_id")
+    if form_response_id is not None:
+        fr = FormResponse.query.get(form_response_id)
+        if fr and fr.event_id is None:
+            fr.event_id = event.id
+
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Comercial",
+        message="Editou os dados do evento",
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.commit()
+
+    changed_core = (
+        event.title != old_title
+        or st != old_start
+        or et != old_end
+        or event.location != old_location
+        or event.description != old_description
+    )
+    if changed_core and event.google_event_id:
+        try:
+            google_update_event(
+                CALENDAR_ID,
+                event.google_event_id,
+                event.title,
+                st,
+                et,
+                description=event.description or "",
+                location=event.location or "",
+            )
+        except Exception as exc:  # noqa: BLE001 — Google fora do ar não pode bloquear a edição
+            logger.warning("falha ao sincronizar evento %s com o Google Agenda: %s", event.id, exc)
+            warnings.append("Não foi possível sincronizar a mudança com o Google Agenda.")
+
+    return warnings

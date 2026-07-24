@@ -61,6 +61,9 @@ export function useOrcamentoPrefill(orcamentoId: number | null) {
 }
 
 export interface CharacterInput {
+  /** Presente ao carregar um evento existente para edição (feature 184); `null` para uma linha
+   * nova. Usado pelo backend para reconciliar o elenco por identidade em vez de substituir tudo. */
+  role_id?: number | null;
   name: string;
   figurino_sheet_id: number | null;
   cache_value: number | null;
@@ -70,9 +73,12 @@ export interface CharacterInput {
 }
 
 export interface ObservationInput {
-  obs_type: "text" | "link";
+  obs_type: "text" | "link" | "image";
   content: string;
   label: string;
+  /** Só para `obs_type === "image"` (feature 184) — enviado na fase 2, via
+   * `POST /events/<id>/observations` multipart. */
+  file?: File | null;
 }
 
 export interface ClientLinkInput {
@@ -80,7 +86,17 @@ export interface ClientLinkInput {
   relation: string;
 }
 
-/** Corpo de `POST /api/events` (feature 152) — sem nenhum campo de arquivo. */
+/** Comprovante de pagamento pendente de envio (feature 184) — vive só no estado local do
+ * formulário até o evento existir; então é enviado via `POST /events/<id>/payments`. */
+export interface PendingPaymentProof {
+  file: File;
+  amount: number;
+}
+
+/** Corpo de `POST /api/events` (feature 152) — sem nenhum campo de arquivo. O reembolso (feature
+ * 184) deixou de ser enviado aqui — vira uma chamada separada em
+ * `POST /events/<id>/reimbursements` depois que o evento existe (ver `EventCreatePage.tsx`,
+ * fase 2 de anexos). Observações do tipo "image" também não entram aqui — só texto/link. */
 export interface EventCreateInput {
   title: string;
   event_type: string;
@@ -109,10 +125,36 @@ export interface EventCreateInput {
   coordinator_talent_id: number | null;
   clients: ClientLinkInput[];
   form_response_id: number | null;
-  has_reembolso: boolean;
-  reembolso_description: string;
-  reembolso_amount: number;
-  observations: ObservationInput[];
+  observations: Array<Omit<ObservationInput, "obs_type" | "file"> & { obs_type: "text" | "link" }>;
+}
+
+/** Corpo de `PATCH /api/events/<id>` (feature 184) — atualização em bloco dos campos centrais.
+ * Anexos (comprovantes/contrato/reembolso/observação com foto) NÃO passam por aqui — usam os
+ * endpoints já existentes de `lib/eventAttachments.ts`, igual à tela de detalhe. */
+export interface EventUpdateInput {
+  title: string;
+  event_type: string;
+  date: string;
+  start: string;
+  end: string;
+  location: string;
+  description: string;
+  needs_rehearsal: boolean;
+  sale_value: number;
+  sale_value_gross: number;
+  transport_value: number;
+  acrescimo_value: number;
+  with_invoice: boolean;
+  is_cortesia_permuta: boolean;
+  seller_id: number | null;
+  sale_date: string | null;
+  payment_method: string | null;
+  payment_installments: number | null;
+  payment_due_date: string | null;
+  coordinator_talent_id: number | null;
+  form_response_id: number | null;
+  characters: CharacterInput[];
+  clients: ClientLinkInput[];
 }
 
 export interface EventCreateResult extends EventoDetalhe {
@@ -126,6 +168,24 @@ export function useCreateEvent() {
     mutationFn: (body) =>
       apiFetch<EventCreateResult>("/api/events", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agenda"] });
+      queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+    },
+  });
+}
+
+/** Atualiza os campos centrais de um evento existente (feature 184). RBAC no servidor: mesmo
+ * nível de criação (Comercial/Superadmin) — o payload cobre os mesmos campos financeiros. */
+export function useUpdateEvent(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, EventUpdateInput>({
+    mutationFn: (body) =>
+      apiFetch<EventoDetalhe>(`/api/events/${eventId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["event", eventId], updated);
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
     },

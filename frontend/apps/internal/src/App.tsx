@@ -6,6 +6,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { AgendaPage } from "./pages/AgendaPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
 import { EventCreatePage } from "./pages/EventCreatePage";
+import { EventEditPage } from "./pages/EventEditPage";
 import { TalentsListPage } from "./pages/TalentsListPage";
 import { TalentDetailPage } from "./pages/TalentDetailPage";
 import { FigurinoListPage } from "./pages/FigurinoListPage";
@@ -68,6 +69,7 @@ export function App() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/agenda" element={<AgendaPage />} />
           <Route path="/events/new" element={<EventCreatePage />} />
+          <Route path="/events/:id/edit" element={<EventEditPage />} />
           <Route path="/events/:id" element={<EventDetailPage />} />
           <Route path="/talents" element={<TalentsListPage />} />
           <Route path="/casting/avaliacoes" element={<AvaliacaoCastingPage />} />
