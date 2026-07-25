@@ -334,6 +334,40 @@ def api_bulk_payment_action() -> Any:
     return jsonify({"changed": changed, "skipped": skipped})
 
 
+@api_bp.route("/financeiro/comissoes/pagar-mes", methods=["POST"])
+@api_login_required
+def api_comissoes_pagar_mes() -> Any:
+    """Liquidação em lote atômica de um vendedor/mês (feature 187).
+
+    Gate de RBAC no servidor: exige Financeiro/Superadmin — um vendedor comum recebe 403 mesmo
+    tentando liquidar o próprio `seller_id`, nunca só ocultado no cliente. Regra de negócio
+    (transação atômica, idempotência) mora inteira em `comissoes_ops.pay_seller_month`.
+    """
+    denied = _require_financeiro()
+    if denied:
+        return denied
+
+    from app.financeiro import comissoes_ops
+
+    body = request.get_json(silent=True) or {}
+    seller_id = body.get("seller_id")
+    month = body.get("month")
+
+    try:
+        seller_id = int(seller_id)
+    except (TypeError, ValueError):
+        return json_error("Vendedor inválido", 400, {"seller_id": "Obrigatório"})
+
+    try:
+        result = comissoes_ops.pay_seller_month(seller_id, month, current_user)
+    except comissoes_ops.InvalidMonthError:
+        return json_error("Mês inválido", 400, {"month": "Use o formato AAAA-MM"})
+    except comissoes_ops.SellerNotFoundError:
+        return json_error("Vendedor não encontrado", 404)
+
+    return jsonify(result.to_dict())
+
+
 @api_bp.route("/financeiro/pagamentos/salary/<int:sp_id>/advance", methods=["POST"])
 @api_login_required
 def api_salary_advance(sp_id: int) -> Any:

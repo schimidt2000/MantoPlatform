@@ -168,7 +168,7 @@
   </header>
 
   <div class="stats">
-    <div class="stat"><div class="stat-value">67</div><div class="stat-label">mudanças no ar</div></div>
+    <div class="stat"><div class="stat-value">68</div><div class="stat-label">mudanças no ar</div></div>
     <div class="stat"><div class="stat-value">13</div><div class="stat-label">dias de trabalho</div></div>
     <div class="stat"><div class="stat-value">6</div><div class="stat-label">áreas do sistema</div></div>
     <div class="stat"><div class="stat-value">0</div><div class="stat-label">quebras no ar</div></div>
@@ -1106,6 +1106,18 @@
           <span class="entry-tag tag-comercial">Comercial</span>
         </div>
         <div class="entry-desc">O Catálogo (`/admin/catalogo`) ganhou um alternador entre o modo Cards de sempre e um novo modo Árvore, que mostra cada Tema com seus Personagens recuados embaixo, foto e nome, e um selo mostrando se já tem ficha de figurino vinculada ou não. Quem edita uma ficha de figurino agora também consegue vincular ela a um Personagem do catálogo diretamente por lá (antes só dava pelo lado do catálogo) — e tanto o catálogo quanto a lista de fichas mostram um aviso claro de "sem vínculo", com um atalho de vincular em 2 cliques sem precisar abrir a tela inteira. Os botões "Inativar"/"Excluir" saíram do corpo dos cards e foram para um menu de 3 pontinhos, e agora dá para marcar vários itens de uma vez (checkbox) e mover, inativar ou excluir todos juntos numa barra que aparece embaixo da tela. Na edição de um produto, a foto que é capa ganhou um selo "⭐ Capa" visível, trocar de capa é 1 clique, e as fotos podem ser reordenadas arrastando. Na busca de personagem do elenco de um evento, agora aparece a foto de cada um ao lado do nome, e só personagens individuais aparecem (não o pacote completo). Por fim, o link "Catálogo" do menu lateral passou a abrir de verdade a vitrine pública — ela ganhou seu primeiro deploy junto do painel interno.</div>
+      </div>
+    </div>
+
+    <div class="entry">
+      <div class="entry-bar bar-financeiro"></div>
+      <div class="entry-body">
+        <div class="entry-head">
+          <span class="entry-num">187</span>
+          <span class="entry-title">Comissões reestruturada: visão por vendedor, pagamento em lote e "Minhas Comissões"</span>
+          <span class="entry-tag tag-financeiro">Financeiro</span>
+        </div>
+        <div class="entry-desc">A tela de Comissões ganhou 3 cards de resumo do mês (total, pago e a pagar) e duas visões alternáveis: "Resumo por Vendedor" (agrupado, com o total de cada um e um clique para expandir e ver os eventos por trás daquele valor) e "Detalhamento de Vendas" (evento a evento, com busca por nome e filtro por status). A grande mudança é o botão "Pagar Mês": ao confirmar num aviso com o valor e o vendedor exatos, todas as comissões pendentes daquele vendedor no mês são marcadas como pagas de uma só vez, de forma segura — sem risco de ficar parte paga e parte não caso algo dê errado no meio do caminho, e sem duplicar pagamento se o botão for clicado mais de uma vez. Quem não é do Financeiro/Superadmin (vendedor comum) passa a ver a tela como "Minhas Comissões", só com os próprios números e sem nenhum botão de pagamento — essa regra agora vale também no servidor, não só escondendo botão na tela. Por fim, um botão novo exporta o resumo do mês em CSV para conferência com a contabilidade.</div>
       </div>
     </div>
   </div>

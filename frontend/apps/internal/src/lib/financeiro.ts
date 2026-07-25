@@ -152,8 +152,9 @@ export function useFinanceiroDashboard({ period, start, end, enabled = true }: P
 }
 
 export type CommissionStatus = "a_pagar" | "pago" | "cancelado";
+export type CommissionMonthStatus = "pendente" | "pago";
 
-/** Uma linha de comissão (`CommissionPayment`), feature 158. */
+/** Uma linha de comissão (`CommissionPayment`), feature 158 (payload evoluído na 187). */
 export interface CommissionEntry {
   id: number;
   seller_id: number;
@@ -172,21 +173,104 @@ export interface CommissionSeller {
   name: string;
 }
 
+/** Os 3 KPIs do topo da tela de Comissões (feature 187). */
+export interface CommissionKpis {
+  total_month: number;
+  total_paid: number;
+  total_pending: number;
+}
+
+/** Uma linha agregada por vendedor — visão "Resumo por Vendedor" (feature 187). */
+export interface CommissionMonthSummaryRow {
+  seller_id: number;
+  seller_name: string;
+  sale_count: number;
+  total_amount: number;
+  pending_amount: number;
+  month_status: CommissionMonthStatus;
+  entries: CommissionEntry[];
+}
+
 export interface ComissoesResponse {
   month: string;
   can_manage: boolean;
-  total_a_pagar: number;
+  title: string;
+  kpis: CommissionKpis;
+  by_seller: CommissionMonthSummaryRow[];
   entries: CommissionEntry[];
-  estornos: CommissionEntry[];
   sellers?: CommissionSeller[];
 }
 
-/** Comissões do mês (leitura), feature 158 — Comercial/Financeiro/Superadmin/resp. EducaManto. */
-export function useComissoes(month: string) {
+/**
+ * Comissões do mês (leitura), feature 158 — reestruturada na 187.
+ * `sellerId` só tem efeito para Financeiro/Superadmin (`can_manage`); o servidor ignora/força
+ * ao próprio usuário caso contrário — o filtro aqui é só conveniência de UI, nunca a fonte de
+ * verdade do RBAC.
+ */
+export function useComissoes(month: string, sellerId?: number | null) {
+  const params = new URLSearchParams({ month });
+  if (sellerId != null) params.set("seller_id", String(sellerId));
   return useQuery<ComissoesResponse>({
-    queryKey: ["financeiro-comissoes", month],
-    queryFn: () => apiFetch<ComissoesResponse>(`/api/financeiro/comissoes?month=${month}`),
+    queryKey: ["financeiro-comissoes", month, sellerId ?? null],
+    queryFn: () => apiFetch<ComissoesResponse>(`/api/financeiro/comissoes?${params.toString()}`),
   });
+}
+
+export interface PagarMesComissaoInput {
+  seller_id: number;
+  month: string;
+}
+
+export interface PagarMesComissaoResult {
+  seller_id: number;
+  month: string;
+  changed_count: number;
+  paid_total: number;
+  summary: CommissionMonthSummaryRow | null;
+}
+
+/**
+ * Liquidação em lote atômica de um vendedor/mês (feature 187) — Financeiro/Superadmin.
+ * Invalida a query de leitura no sucesso para refletir KPIs/status sem F5 (FR-013).
+ */
+export function usePagarMesComissao() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PagarMesComissaoInput) =>
+      apiFetch<PagarMesComissaoResult>("/api/financeiro/comissoes/pagar-mes", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
+    },
+  });
+}
+
+/** Gera e baixa um CSV do resumo por vendedor do mês selecionado (feature 187) — client-side,
+ * a partir dos mesmos dados já carregados na tela (garante que bate com os KPIs exibidos). */
+export function exportComissoesCsv(rows: CommissionMonthSummaryRow[], month: string): void {
+  const header = ["Vendedor", "Qtd de Vendas", "Valor Total (R$)", "Status"];
+  const lines = rows.map((r) =>
+    [
+      r.seller_name,
+      String(r.sale_count),
+      r.total_amount.toFixed(2).replace(".", ","),
+      r.month_status === "pago" ? "Pago" : "Pendente",
+    ]
+      .map((cell) => `"${cell.replace(/"/g, '""')}"`)
+      .join(";"),
+  );
+  const csv = [header.join(";"), ...lines].join("\r\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `comissoes_${month}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export type PagamentoItemType = "cache" | "salary" | "expense" | "bv" | "commission" | "recurring";
