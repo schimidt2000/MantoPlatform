@@ -11,6 +11,7 @@ import {
   useRotateFigurinoPhoto,
   useUploadFigurinoPhoto,
   type FigurinoPiece,
+  type FigurinoSheetItem,
 } from "../lib/figurino";
 import { useCatalogElencoBusca } from "../lib/catalogoElenco";
 import { useLinkCharacterFigurino } from "../lib/adminCatalogo";
@@ -61,6 +62,47 @@ function FigurinoCatalogLinkField({ sheetId }: { sheetId: number }) {
       {link.isError && (
         <p className="mt-1 text-xs text-red">Não foi possível atualizar o vínculo.</p>
       )}
+    </div>
+  );
+}
+
+/** Foto ainda não enviada, escolhida durante a criação de uma ficha nova — só sobe ao servidor
+ * depois que a ficha existe (o endpoint de foto precisa de um `sheetId`), no submit do
+ * formulário. */
+function NewFigurinoPhotoField({
+  file,
+  onChange,
+}: {
+  file: File | null;
+  onChange: (file: File | null) => void;
+}) {
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const handleFile = (f: File | null) => {
+    onChange(f);
+    setPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return f ? URL.createObjectURL(f) : null;
+    });
+  };
+
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-muted">Foto do figurino</label>
+      {preview && (
+        <img src={preview} alt="Prévia da foto do figurino" className="mb-2 h-32 w-32 rounded-md object-cover" />
+      )}
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="max-w-[220px] text-xs text-ink"
+        onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+        aria-label="Foto do figurino"
+      />
+      <p className="mt-1 text-xs text-muted">
+        JPG, PNG ou WebP. Recomendado: foto do traje completo.
+      </p>
+      {file && !preview && <p className="mt-1 text-xs text-muted">{file.name}</p>}
     </div>
   );
 }
@@ -203,11 +245,13 @@ export function FigurinoFormPage() {
   const create = useCreateFigurinoSheet();
   const edit = useEditFigurinoSheet();
   const del = useDeleteFigurinoSheet();
+  const uploadPhoto = useUploadFigurinoPhoto();
 
   const [characterName, setCharacterName] = useState("");
   const [pieces, setPieces] = useState<FigurinoPiece[]>([{ name: "", qty: 1 }]);
   const [tags, setTags] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  const [newPhoto, setNewPhoto] = useState<File | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -234,7 +278,20 @@ export function FigurinoFormPage() {
     if (isEdit && sheetId) {
       edit.mutate({ id: sheetId, ...body }, { onSuccess: () => navigate("/figurinos") });
     } else {
-      create.mutate(body, { onSuccess: () => navigate("/figurinos") });
+      create.mutate(body, {
+        onSuccess: (created: FigurinoSheetItem) => {
+          if (newPhoto) {
+            // Endpoint de foto exige uma ficha já existente — sobe logo após criar, e leva
+            // para a edição (não a lista) para o usuário confirmar que a foto foi salva.
+            uploadPhoto.mutate(
+              { id: created.id, file: newPhoto },
+              { onSettled: () => navigate(`/figurinos/${created.id}/edit`) },
+            );
+          } else {
+            navigate("/figurinos");
+          }
+        },
+      });
     }
   };
 
@@ -254,18 +311,27 @@ export function FigurinoFormPage() {
       <Card>
         <CardContent className="space-y-4 p-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Nome do personagem</label>
+            <label className="mb-1 block text-xs font-medium text-muted">
+              Nome do personagem <span className="text-red">*</span>
+            </label>
             <input
               className="h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink"
+              placeholder="Ex: Palhaço, Fada, Cantor, DJ"
               value={characterName}
               onChange={(e) => setCharacterName(e.target.value)}
               aria-label="Nome do personagem"
             />
           </div>
 
+          {isEdit && sheetId ? (
+            <FigurinoPhotoField sheetId={sheetId} photoUrl={sheet?.photo_url ?? null} />
+          ) : (
+            <NewFigurinoPhotoField file={newPhoto} onChange={setNewPhoto} />
+          )}
+
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <label className="text-xs font-medium text-muted">Peças</label>
+              <label className="text-xs font-medium text-muted">Peças do figurino</label>
               <Button
                 variant="ghost"
                 size="sm"
@@ -274,23 +340,31 @@ export function FigurinoFormPage() {
                 + Adicionar peça
               </Button>
             </div>
+            <p className="mb-2 text-xs text-muted">
+              Cada peça vira um item da checklist de retirada/devolução.
+            </p>
+            <div className="mb-1 flex items-center gap-2 text-[11px] font-medium uppercase text-muted">
+              <span className="w-16 text-center">Qtd</span>
+              <span className="flex-1">Descrição da peça</span>
+              <span className="w-9" aria-hidden="true" />
+            </div>
             <div className="space-y-2">
               {pieces.map((p, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <input
                     type="number"
                     min={1}
-                    className="h-9 w-16 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+                    className="h-9 w-16 rounded-md border border-line bg-panel px-2 text-center text-sm text-ink"
                     value={p.qty}
                     onChange={(e) => updatePiece(i, { qty: Math.max(1, Number(e.target.value) || 1) })}
                     aria-label="Quantidade"
                   />
                   <input
                     className="h-9 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink"
-                    placeholder="Nome da peça"
+                    placeholder="Ex: Blazer azul, Calça preta, Sapato Oxford..."
                     value={p.name}
                     onChange={(e) => updatePiece(i, { name: e.target.value })}
-                    aria-label="Nome da peça"
+                    aria-label="Descrição da peça"
                   />
                   <Button variant="ghost" size="sm" onClick={() => removePiece(i)} aria-label="Remover peça">
                     ✕
@@ -303,17 +377,14 @@ export function FigurinoFormPage() {
           <TagsField tags={tags} onChange={setTags} />
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Notas</label>
+            <label className="mb-1 block text-xs font-medium text-muted">Observações</label>
             <textarea
               className="min-h-20 w-full rounded-md border border-line bg-panel p-2 text-sm text-ink"
+              placeholder="Instruções especiais, cuidados com as peças, etc."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
-
-          {isEdit && sheetId && (
-            <FigurinoPhotoField sheetId={sheetId} photoUrl={sheet?.photo_url ?? null} />
-          )}
 
           {isEdit && sheetId && <FigurinoCatalogLinkField sheetId={sheetId} />}
 
@@ -323,7 +394,11 @@ export function FigurinoFormPage() {
 
           <div className="flex items-center justify-between gap-2 border-t border-line pt-4">
             <div className="flex gap-2">
-              <Button loading={mutation.isPending} disabled={!characterName.trim()} onClick={submit}>
+              <Button
+                loading={mutation.isPending || uploadPhoto.isPending}
+                disabled={!characterName.trim()}
+                onClick={submit}
+              >
                 {isEdit ? "Salvar" : "Criar ficha"}
               </Button>
               <Button asChild variant="outline">
