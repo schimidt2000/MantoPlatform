@@ -21,7 +21,6 @@ from app.api_utils import api_login_required
 from app.constants import EDUCAMANTO_TITLE_PREFIX, RoleName
 from app.models import (
     CalendarEvent,
-    CommissionPayment,
     EventInstallment,
     EventInvoice,
     Role,
@@ -428,32 +427,19 @@ def api_financeiro_dashboard() -> Any:
     })
 
 
-def _serialize_commission(cp: CommissionPayment, status_labels: dict) -> dict:
-    """Serializa uma linha de `CommissionPayment` para o payload da API (feature 158)."""
-    return {
-        "id": cp.id,
-        "seller_id": cp.seller_id,
-        "seller_name": cp.seller.name if cp.seller else "—",
-        "event_id": cp.event_id,
-        "event_title": cp.event_title,
-        "sale_date": cp.sale_date.isoformat() if cp.sale_date else None,
-        "amount": float(cp.amount),
-        "status": cp.status,
-        "status_label": status_labels.get(cp.status, cp.status),
-        "paid_at": cp.paid_at.isoformat() if cp.paid_at else None,
-    }
-
-
 @api_bp.route("/financeiro/comissoes")
 @api_login_required
 def api_financeiro_comissoes() -> Any:
-    """Comissões do mês: leitura (feature 158).
+    """Comissões do mês: leitura (feature 158, reestruturada na feature 187).
 
-    Reaproveita, sem duplicar, os mesmos cálculos de `comissoes()`
-    (`app/financeiro/routes.py:1568`) — só monta a query do mês e serializa.
+    RBAC aplicado no servidor: vendedor comum (sem Financeiro/Superadmin) só recebe os
+    próprios dados, independente do que for passado em `seller_id` — nunca confia no cliente
+    para restringir o escopo. Reaproveita `comissoes_ops` (fonte única com a view Jinja
+    legada não tocando este módulo) e `_resync_pending_commissions` (mesma reconciliação de
+    `app/financeiro/routes.py`, sem duplicar).
     """
-    from app import db
-    from app.financeiro.routes import _COMMISSION_STATUS_LABELS, _resync_pending_commissions
+    from app.financeiro import comissoes_ops
+    from app.financeiro.routes import _resync_pending_commissions
 
     settings = SiteSetting.query.get(1)
     if not _can_view_vendas(settings):
@@ -462,62 +448,22 @@ def api_financeiro_comissoes() -> Any:
     _resync_pending_commissions()
     can_manage = _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN)
 
-    today = datetime.now(TZ_SP).date()
-    month = request.args.get("month", today.strftime("%Y-%m"))
-    try:
-        year, mon = int(month[:4]), int(month[5:7])
-    except (ValueError, IndexError):
-        month = today.strftime("%Y-%m")
-        year, mon = today.year, today.month
+    month_param = request.args.get("month")
+    requested_seller_id = request.args.get("seller_id", type=int)
+    seller_filter = requested_seller_id if can_manage else current_user.id
 
-    start = date(year, mon, 1)
-    end = date(year + 1, 1, 1) if mon == 12 else date(year, mon + 1, 1)
+    month, _start, _end = comissoes_ops.resolve_month(month_param)
+    kpis = comissoes_ops.get_month_kpis(month, seller_filter)
+    by_seller = comissoes_ops.get_month_summary_by_seller(month, seller_filter)
+    entries = comissoes_ops.get_month_entries(month, seller_filter)
 
-    entries_q = (
-        CommissionPayment.query
-        .filter(
-            CommissionPayment.status.in_(["a_pagar", "pago"]),
-            db.or_(
-                db.and_(
-                    CommissionPayment.sale_date >= start,
-                    CommissionPayment.sale_date < end,
-                ),
-                db.and_(
-                    CommissionPayment.sale_date.is_(None),
-                    db.func.date(CommissionPayment.created_at) >= start,
-                    db.func.date(CommissionPayment.created_at) < end,
-                ),
-            ),
-        )
-        .order_by(CommissionPayment.sale_date.asc(), CommissionPayment.seller_id.asc())
-    )
-
-    estornos_q = (
-        CommissionPayment.query
-        .filter(
-            CommissionPayment.status == "a_pagar",
-            CommissionPayment.amount < 0,
-        )
-        .order_by(CommissionPayment.created_at.asc())
-    )
-
-    if not can_manage:
-        entries_q = entries_q.filter(CommissionPayment.seller_id == current_user.id)
-        estornos_q = estornos_q.filter(CommissionPayment.seller_id == current_user.id)
-
-    entries = entries_q.all()
-    estornos = estornos_q.all()
-
-    total_a_pagar = float(
-        sum(e.amount for e in entries if e.status == "a_pagar") + sum(e.amount for e in estornos)
-    )
-
-    payload = {
+    payload: dict[str, Any] = {
         "month": month,
         "can_manage": can_manage,
-        "total_a_pagar": total_a_pagar,
-        "entries": [_serialize_commission(e, _COMMISSION_STATUS_LABELS) for e in entries],
-        "estornos": [_serialize_commission(e, _COMMISSION_STATUS_LABELS) for e in estornos],
+        "title": "Comissões" if can_manage else "Minhas Comissões",
+        "kpis": kpis.to_dict(),
+        "by_seller": [row.to_dict() for row in by_seller],
+        "entries": [e.to_dict() for e in entries],
     }
     if can_manage:
         sellers = (

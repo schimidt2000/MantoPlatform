@@ -2,9 +2,9 @@
 
 ## 1. Confirmação de pagamento em lote: `window.confirm()` vs. `Dialog` novo
 
-**Decision**: construir um componente `Dialog` mínimo em `@manto/ui` (baseado em
-`<dialog>`/portal + Framer Motion, sem dependência nova de pacote) e usá-lo na confirmação de
-"Pagar Mês".
+**Decision**: construir `Dialog` e `Tabs` em `@manto/ui` sobre `@radix-ui/react-dialog` e
+`@radix-ui/react-tabs` (primitivos headless individuais, com Tailwind + Framer Motion por
+cima), e usá-los na confirmação de "Pagar Mês" e no alternador de abas.
 
 **Rationale**: a Constituição v2.0.0, Princípio V, é explícita — "Ações destrutivas (deletar,
 remover) exigem confirmação via modal/dialog do `shadcn/ui`" — e a liquidação em lote é uma
@@ -17,10 +17,13 @@ em negrito — a spec (FR-011) pede uma mensagem estruturada.
 **Alternatives considered**:
 - Manter `window.confirm()`: rejeitado — viola Princípio V e a UX pedida na spec (FR-011) não é
   atingível com uma caixa de texto puro do navegador.
-- Instalar Radix UI/shadcn CLI completo: rejeitado por ora — nenhum outro componente do design
-  system usa Radix hoje; adicionar a dependência só para um `Dialog` é desproporcional. Um
-  `Dialog` local (foco preso, `Escape` fecha, clique fora fecha, animação de entrada/saída via
-  Framer Motion) cobre o que a spec pede sem nova dependência de build.
+- Instalar o CLI/pacote completo do shadcn/ui: rejeitado — desproporcional para o que a feature
+  precisa.
+- `Dialog` 100% hand-rolled (sem Radix): reconsiderado durante a implementação — `@manto/ui` já
+  depende de `@radix-ui/react-slot` (usado por `Button`/`Card` via `asChild`), então adicionar
+  `@radix-ui/react-dialog` e `@radix-ui/react-tabs` como primitivos headless individuais é a
+  MESMA abordagem já aceita no projeto (é literalmente como o shadcn/ui é construído por baixo),
+  e evita reimplementar foco preso/ARIA/portal à mão, que é fácil de fazer errado.
 
 ## 2. Onde extrair a lógica de negócio (evitar 3ª duplicação)
 
