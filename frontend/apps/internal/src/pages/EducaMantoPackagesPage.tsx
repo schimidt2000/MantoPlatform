@@ -1,14 +1,94 @@
 import { Link } from "react-router-dom";
-import { Button, Card, CardContent, PageHeader, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { useCurrentUser } from "../lib/useAuth";
 import {
   useDeletePackage,
   useDuplicatePackage,
   useEducaMantoPackages,
+  type EducaMantoPackage,
 } from "../lib/educamanto";
 
 const CAN_VIEW_PACKAGES = ["COMERCIAL", "SUPERADMIN"];
+
+function brl(v: number): string {
+  return `R$ ${formatBRL(v)}`;
+}
+
+function PackageCard({
+  pkg,
+  canManage,
+  onDuplicate,
+  duplicating,
+  onDelete,
+  deleting,
+}: {
+  pkg: EducaMantoPackage;
+  canManage: boolean;
+  onDuplicate: () => void;
+  duplicating: boolean;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
+  return (
+    <Card className="flex flex-col">
+      <CardHeader>
+        <CardTitle className="text-base">{pkg.name}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-1 flex-col gap-3">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-ink">
+          <p>
+            <span className="text-muted">1 sessão:</span> {pkg.margin_1s.toFixed(2)}×
+          </p>
+          <p>
+            <span className="text-muted">2 sessões:</span> {pkg.margin_2s.toFixed(2)}×
+          </p>
+          <p>
+            <span className="text-muted">1S/dia (multi):</span> {pkg.margin_1s_days.toFixed(2)}×
+          </p>
+          <p>
+            <span className="text-muted">2S/dia (multi):</span> {pkg.margin_2s_days.toFixed(2)}×
+          </p>
+        </div>
+
+        <p className="text-xs text-gold">
+          {(pkg.discount_pct * 100).toFixed(0)}% de desconto após {pkg.discount_days}{" "}
+          {pkg.discount_days === 1 ? "dia" : "dias"}
+        </p>
+
+        <div className="rounded-md bg-surface-2 p-2 text-xs text-ink">
+          <p className="mb-1 font-semibold uppercase text-muted">Matriz de custos</p>
+          <p>
+            {pkg.items.length} {pkg.items.length === 1 ? "item" : "itens"} · comissão{" "}
+            {(pkg.commission_rate * 100).toFixed(0)}%
+          </p>
+          <p className="text-muted">
+            Ensemble: {brl(pkg.ensemble_1s)} (1S) · {brl(pkg.ensemble_2s)} (2S)
+          </p>
+        </div>
+
+        <div className="mt-auto flex flex-wrap justify-center gap-2 pt-2">
+          <Button asChild size="sm">
+            <Link to={`/educamanto?package_id=${pkg.id}`}>Usar</Link>
+          </Button>
+          {canManage && (
+            <>
+              <Button asChild variant="outline" size="sm">
+                <Link to={`/educamanto/pacotes/${pkg.id}/editar`}>Editar</Link>
+              </Button>
+              <Button variant="outline" size="sm" loading={duplicating} onClick={onDuplicate}>
+                Criar cópia
+              </Button>
+              <Button variant="ghost" size="sm" loading={deleting} onClick={onDelete}>
+                Excluir
+              </Button>
+            </>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function EducaMantoPackagesPage() {
   const user = useCurrentUser();
@@ -35,7 +115,7 @@ export function EducaMantoPackagesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
+    <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
       <PageHeader
         title="EducaManto — Pacotes"
         className="mb-0"
@@ -54,9 +134,9 @@ export function EducaMantoPackagesPage() {
       />
 
       {packagesQuery.isLoading && (
-        <div className="space-y-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-20 w-full" />
+            <Skeleton key={i} className="h-52 w-full" />
           ))}
         </div>
       )}
@@ -73,46 +153,21 @@ export function EducaMantoPackagesPage() {
       )}
 
       {packages.length > 0 && (
-        <div className="space-y-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {packages.map((pkg) => (
-            <Card key={pkg.id}>
-              <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                <div>
-                  <p className="font-medium text-ink">{pkg.name}</p>
-                  <p className="text-xs text-muted">
-                    {pkg.items.length} {pkg.items.length === 1 ? "item" : "itens"} · comissão{" "}
-                    {formatBRL(pkg.commission_rate * 100)}%
-                  </p>
-                </div>
-                {canManage && (
-                  <div className="flex gap-2">
-                    <Button asChild variant="outline" size="sm">
-                      <Link to={`/educamanto/pacotes/${pkg.id}/editar`}>Editar</Link>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      loading={duplicatePackage.isPending}
-                      onClick={() => duplicatePackage.mutate(pkg.id)}
-                    >
-                      Duplicar
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      loading={deletePackage.isPending}
-                      onClick={() => {
-                        if (window.confirm(`Excluir o pacote "${pkg.name}" definitivamente?`)) {
-                          deletePackage.mutate(pkg.id);
-                        }
-                      }}
-                    >
-                      Excluir
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <PackageCard
+              key={pkg.id}
+              pkg={pkg}
+              canManage={canManage}
+              duplicating={duplicatePackage.isPending}
+              onDuplicate={() => duplicatePackage.mutate(pkg.id)}
+              deleting={deletePackage.isPending}
+              onDelete={() => {
+                if (window.confirm(`Excluir o pacote "${pkg.name}" definitivamente?`)) {
+                  deletePackage.mutate(pkg.id);
+                }
+              }}
+            />
           ))}
         </div>
       )}

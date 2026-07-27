@@ -14,7 +14,7 @@ from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
 from app.educamanto import pricing_ops, quote_ops
-from app.models import EducaMantoPackage
+from app.models import EducaMantoPackage, EducaMantoQuote
 
 _CAN_USE = {
     RoleName.COMERCIAL,
@@ -66,6 +66,23 @@ def api_educamanto_historico() -> Any:
             **({"users": [{"id": u.id, "name": u.name} for u in users]} if is_superadmin else {}),
         }
     )
+
+
+@api_bp.route("/educamanto/historico/<int:quote_id>")
+@api_login_required
+def api_educamanto_historico_detail(quote_id: int) -> Any:
+    """Snapshot bruto de um orçamento EducaManto salvo — usado por "Ver" e "Recalcular".
+
+    Mesmo dado que já alimenta a regeração do PDF (`load_quote_snapshot`), só exposto em JSON.
+    Sem restrição de dono (mesma regra já aplicada ao endpoint de PDF por id).
+    """
+    denied = _require_use()
+    if denied:
+        return denied
+    quote = EducaMantoQuote.query.get(quote_id)
+    if quote is None:
+        return json_error("Orçamento não encontrado.", 404)
+    return jsonify(quote_ops.load_quote_snapshot(quote))
 
 
 @api_bp.route("/educamanto/packages")

@@ -3,8 +3,8 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **189**
-> (`formularios-paridade-listagem`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
+> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **190**
+> (`paridade-orcamento-educamanto`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
 
 ---
 
@@ -329,10 +329,17 @@ Orçamento: `GET /api/orcamento/{opcoes,personagens-no-dia,distancia,settings,hi
 `POST /api/orcamento/{calcular,salvar,settings,settings/especiais}` ·
 `GET /api/orcamento/historico/<id>/pdf` · `POST .../enviar-email` · `DELETE .../historico/<id>` e
 `/settings/especiais/<nome>`.
+`GET /api/orcamento/historico/<id>` retorna, desde a feature 190, também `form_snapshot` (estado
+bruto de entrada do formulário) além do `quote` congelado — usado pela tela de histórico para a
+ação "Recalcular" (mudança aditiva, retrocompatível).
 
 EducaManto: `GET /api/educamanto/{historico,packages,distancia}` ·
 `POST /api/educamanto/calcular`, `/packages`, `/packages/<id>/duplicate`, `/orcamento/gerar` ·
 `PATCH|DELETE /api/educamanto/packages/<id>` · `GET /api/educamanto/orcamento/<id>/pdf`.
+**Novo na feature 190**: `GET /api/educamanto/historico/<id>` — snapshot bruto (`d1`, `d2`,
+`ensemble`, `acrescimo`, `transporte`, `client_name`, `packages`) de um orçamento salvo em JSON
+(mesmo dado já usado para regerar o PDF, agora também exposto para "Ver" e "Recalcular"); mesmo
+RBAC de uso do EducaManto (`_require_use`), sem restrição por dono.
 
 ### 3.14 Superfícies públicas (sem login)
 `GET /api/cadastro/check-cpf` · `POST /api/cadastro` ·

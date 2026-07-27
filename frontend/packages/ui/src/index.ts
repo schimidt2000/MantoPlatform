@@ -29,3 +29,9 @@ export {
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/tabs";
 export { AccordionRow } from "./components/accordion-row";
 export type { AccordionRowProps } from "./components/accordion-row";
+export { Table, TableRow, TableCell } from "./components/table";
+export type { TableProps, TableRowProps, TableCellProps } from "./components/table";
+export { Badge } from "./components/badge";
+export type { BadgeProps } from "./components/badge";
+export { CopyButton } from "./components/copy-button";
+export type { CopyButtonProps } from "./components/copy-button";

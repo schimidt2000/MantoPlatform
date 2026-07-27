@@ -1,5 +1,17 @@
 import { useEffect, useState } from "react";
-import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
+import { Link } from "react-router-dom";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  PageHeader,
+  Skeleton,
+  Table,
+  TableCell,
+  TableRow,
+} from "@manto/ui";
 import { MoneyInput } from "@manto/money";
 import {
   useAddEspecial,
@@ -13,29 +25,40 @@ const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-9 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
 const DUR_LABELS = ["1h", "2h", "3h", "4h"];
 
-function PriceRow({
-  label,
-  values,
-  onChange,
+function PriceTable({
+  rows,
 }: {
-  label: string;
-  values: number[];
-  onChange: (values: number[]) => void;
+  rows: { label: string; values: number[]; onChange: (values: number[]) => void }[];
 }) {
   return (
-    <div className="grid grid-cols-[1fr_repeat(4,80px)] items-center gap-2">
-      <span className="truncate text-sm text-ink" title={label}>
-        {label}
-      </span>
-      {DUR_LABELS.map((d, i) => (
-        <MoneyInput
-          key={d}
-          className={INPUT}
-          value={values[i] ?? 0}
-          onValueChange={(v) => onChange(values.map((x, idx) => (idx === i ? v : x)))}
-        />
-      ))}
-    </div>
+    <Table>
+      <thead>
+        <TableRow head>
+          <TableCell as="th">Item</TableCell>
+          {DUR_LABELS.map((d) => (
+            <TableCell as="th" align="right" key={d}>
+              {d}
+            </TableCell>
+          ))}
+        </TableRow>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <TableRow key={row.label}>
+            <TableCell className="font-medium text-ink">{row.label}</TableCell>
+            {DUR_LABELS.map((d, i) => (
+              <TableCell key={d} align="right">
+                <MoneyInput
+                  className={`${INPUT} text-right`}
+                  value={row.values[i] ?? 0}
+                  onValueChange={(v) => row.onChange(row.values.map((x, idx) => (idx === i ? v : x)))}
+                />
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </tbody>
+    </Table>
   );
 }
 
@@ -55,7 +78,7 @@ export function OrcamentoConfigPrecosPage() {
 
   if (query.isLoading || !settings) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
+      <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
         <PageHeader title="Configuração de Preços" className="mb-0" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -64,7 +87,7 @@ export function OrcamentoConfigPrecosPage() {
 
   if (query.isError) {
     return (
-      <div className="mx-auto max-w-3xl p-4 sm:p-6">
+      <div className="mx-auto max-w-4xl p-4 sm:p-6">
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
           Não foi possível carregar a configuração de preços.
         </div>
@@ -77,140 +100,199 @@ export function OrcamentoConfigPrecosPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
+    <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Configuração de Preços"
         subtitle="Valores de referência da Calculadora de Orçamento"
         className="mb-0"
+        actions={
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/orcamento">‹ Voltar à calculadora</Link>
+          </Button>
+        }
       />
 
       <Card>
         <CardHeader>
-          <CardTitle>Markup</CardTitle>
+          <CardTitle>Markup (Coeficiente de Venda)</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <PriceRow
-            label="Receptivo"
-            values={settings.markup.receptivo}
-            onChange={(v) => setSettings({ ...settings, markup: { ...settings.markup, receptivo: v } })}
-          />
-          <PriceRow
-            label="Show"
-            values={settings.markup.show}
-            onChange={(v) => setSettings({ ...settings, markup: { ...settings.markup, show: v } })}
+        <CardContent className="p-0">
+          <PriceTable
+            rows={[
+              {
+                label: "Receptivo / Interativo",
+                values: settings.markup.receptivo,
+                onChange: (v) => setSettings({ ...settings, markup: { ...settings.markup, receptivo: v } }),
+              },
+              {
+                label: "Show",
+                values: settings.markup.show,
+                onChange: (v) => setSettings({ ...settings, markup: { ...settings.markup, show: v } }),
+              },
+            ]}
           />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Ator</CardTitle>
+          <CardTitle>Cachê — Atores</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {Object.entries(settings.ator).map(([key, values]) => (
-            <PriceRow
-              key={key}
-              label={key}
-              values={values}
-              onChange={(v) => setSettings({ ...settings, ator: { ...settings.ator, [key]: v } })}
-            />
-          ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Cantor</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <PriceRow
-            label="Base"
-            values={settings.cantor.base}
-            onChange={(v) => setSettings({ ...settings, cantor: { ...settings.cantor, base: v } })}
-          />
-          <PriceRow
-            label="Acréscimo show"
-            values={settings.cantor.show_extra}
-            onChange={(v) => setSettings({ ...settings, cantor: { ...settings.cantor, show_extra: v } })}
-          />
-          <PriceRow
-            label="Acréscimo maquiagem"
-            values={settings.cantor.make_extra}
-            onChange={(v) => setSettings({ ...settings, cantor: { ...settings.cantor, make_extra: v } })}
+        <CardContent className="p-0">
+          <PriceTable
+            rows={Object.entries(settings.ator).map(([key, values]) => ({
+              label: key,
+              values,
+              onChange: (v: number[]) => setSettings({ ...settings, ator: { ...settings.ator, [key]: v } }),
+            }))}
           />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Técnico de som e Coordenador</CardTitle>
+          <CardTitle>Cachê — Cantores</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <PriceRow
-            label="Técnico de som"
-            values={settings.tecnico_som}
-            onChange={(v) => setSettings({ ...settings, tecnico_som: v })}
-          />
-          <PriceRow
-            label="Coordenador (sem show)"
-            values={settings.coordenador.false}
-            onChange={(v) => setSettings({ ...settings, coordenador: { ...settings.coordenador, false: v } })}
-          />
-          <PriceRow
-            label="Coordenador (com show)"
-            values={settings.coordenador.true}
-            onChange={(v) => setSettings({ ...settings, coordenador: { ...settings.coordenador, true: v } })}
+        <CardContent className="p-0">
+          <PriceTable
+            rows={[
+              {
+                label: "Base",
+                values: settings.cantor.base,
+                onChange: (v) => setSettings({ ...settings, cantor: { ...settings.cantor, base: v } }),
+              },
+              {
+                label: "Adicional por show",
+                values: settings.cantor.show_extra,
+                onChange: (v) => setSettings({ ...settings, cantor: { ...settings.cantor, show_extra: v } }),
+              },
+              {
+                label: "Adicional por maquiagem",
+                values: settings.cantor.make_extra,
+                onChange: (v) => setSettings({ ...settings, cantor: { ...settings.cantor, make_extra: v } }),
+              },
+            ]}
           />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Especiais</CardTitle>
+          <CardTitle>Técnico de Som e Coordenadores</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {Object.entries(settings.especiais).map(([nome, val]) => (
-            <div key={nome} className="space-y-1 border-b border-line pb-2 last:border-0">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-ink">{nome}</span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  loading={removeEspecial.isPending}
-                  onClick={() => {
-                    if (!window.confirm(`Remover "${nome}" da tabela de preços?`)) return;
-                    removeEspecial.mutate(nome);
-                    const { [nome]: _removed, ...rest } = settings.especiais;
-                    setSettings({ ...settings, especiais: rest });
-                  }}
-                >
-                  Remover
-                </Button>
-              </div>
-              {Array.isArray(val) ? (
-                <PriceRow
-                  label="Valor"
-                  values={val}
-                  onChange={(v) => setSettings({ ...settings, especiais: { ...settings.especiais, [nome]: v } })}
-                />
-              ) : (
-                Object.entries(val).map(([variant, values]) => (
-                  <PriceRow
-                    key={variant}
-                    label={variant}
-                    values={values}
-                    onChange={(v) =>
-                      setSettings({
-                        ...settings,
-                        especiais: { ...settings.especiais, [nome]: { ...val, [variant]: v } },
-                      })
-                    }
-                  />
-                ))
-              )}
-            </div>
-          ))}
-          <div className="flex gap-2">
+        <CardContent className="p-0">
+          <PriceTable
+            rows={[
+              {
+                label: "Técnico de som",
+                values: settings.tecnico_som,
+                onChange: (v) => setSettings({ ...settings, tecnico_som: v }),
+              },
+              {
+                label: "Coordenador (sem show)",
+                values: settings.coordenador.false,
+                onChange: (v) => setSettings({ ...settings, coordenador: { ...settings.coordenador, false: v } }),
+              },
+              {
+                label: "Coordenador (com show)",
+                values: settings.coordenador.true,
+                onChange: (v) => setSettings({ ...settings, coordenador: { ...settings.coordenador, true: v } }),
+              },
+            ]}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Itens Especiais (Customizados)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 p-0">
+          <Table>
+            <thead>
+              <TableRow head>
+                <TableCell as="th">Personagem / Variante</TableCell>
+                {DUR_LABELS.map((d) => (
+                  <TableCell as="th" align="right" key={d}>
+                    {d}
+                  </TableCell>
+                ))}
+                <TableCell as="th" align="right">
+                  Ações
+                </TableCell>
+              </TableRow>
+            </thead>
+            <tbody>
+              {Object.entries(settings.especiais).flatMap(([nome, val]) => {
+                const remover = (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={removeEspecial.isPending}
+                    onClick={() => {
+                      if (!window.confirm(`Remover "${nome}" da tabela de preços?`)) return;
+                      removeEspecial.mutate(nome);
+                      const { [nome]: _removed, ...rest } = settings.especiais;
+                      setSettings({ ...settings, especiais: rest });
+                    }}
+                  >
+                    Remover
+                  </Button>
+                );
+                if (Array.isArray(val)) {
+                  return (
+                    <TableRow key={nome}>
+                      <TableCell className="font-medium text-ink">{nome}</TableCell>
+                      {DUR_LABELS.map((d, i) => (
+                        <TableCell key={d} align="right">
+                          <MoneyInput
+                            className={`${INPUT} text-right`}
+                            value={val[i] ?? 0}
+                            onValueChange={(v) =>
+                              setSettings({
+                                ...settings,
+                                especiais: {
+                                  ...settings.especiais,
+                                  [nome]: val.map((x, idx) => (idx === i ? v : x)),
+                                },
+                              })
+                            }
+                          />
+                        </TableCell>
+                      ))}
+                      <TableCell align="right">{remover}</TableCell>
+                    </TableRow>
+                  );
+                }
+                return Object.entries(val).map(([variant, values]) => (
+                  <TableRow key={`${nome}-${variant}`}>
+                    <TableCell className="text-ink">
+                      {nome} <span className="text-muted">— {variant}</span>
+                    </TableCell>
+                    {DUR_LABELS.map((d, i) => (
+                      <TableCell key={d} align="right">
+                        <MoneyInput
+                          className={`${INPUT} text-right`}
+                          value={values[i] ?? 0}
+                          onValueChange={(v) =>
+                            setSettings({
+                              ...settings,
+                              especiais: {
+                                ...settings.especiais,
+                                [nome]: { ...val, [variant]: values.map((x, idx) => (idx === i ? v : x)) },
+                              },
+                            })
+                          }
+                        />
+                      </TableCell>
+                    ))}
+                    <TableCell align="right">{remover}</TableCell>
+                  </TableRow>
+                ));
+              })}
+            </tbody>
+          </Table>
+          <div className="flex gap-2 p-3">
             <input
               className={INPUT}
               placeholder="Nome do novo item especial"
