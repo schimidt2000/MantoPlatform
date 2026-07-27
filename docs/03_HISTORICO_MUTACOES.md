@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **188**
+> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **189**
 
 Formato de cada entrada:
 
@@ -17,6 +17,99 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 189 — Módulo Financeiro de Alta Fidelidade e Consistência (React)
+`189-financeiro-alta-fidelidade` · **2026-07-27** · **sem migration**
+
+**Motivação.** As três telas financeiras em React (`/financeiro`, `/financeiro/pagamentos`,
+`/gastos/recorrentes`) haviam perdido densidade de informação e fluxos operacionais frente à
+versão Jinja congelada. Especificamente: o painel financeiro virou uma pilha vertical de cards
+(sem grid 2/3 + 1/3, sem termômetro de break-even, sem barra do Fator R, com a DRE achatada e
+sem hierarquia); a planilha de pagamentos perdeu a **cópia rápida de PIX/valor/descrição**, a
+ordem de colunas clássica e — bug operacional principal — **não tinha ação em lote para "No
+banco"**, embora o backend sempre tenha suportado; e `/gastos/recorrentes` era uma lista de
+cards indiferenciados, sem as três seções por tipo, sem a coluna de status do mês de referência
+e sem o botão `[Preencher]` proeminente que gera o `RecurringExpenseEntry`.
+
+**Backend.** Nenhum endpoint novo de escrita; só enriquecimento de leitura (aditivo,
+retrocompatível) e uma extração para não duplicar regra de negócio.
+- `app/gastos/gastos_ops.py`: **duas funções novas** — `estimate_monthly_cost(conta)` (custo
+  mensal estimado, normalizando frequência: semanal ×4, quinzenal ×2, anual ÷12; variável usa o
+  teto da faixa) e `recurring_summary(contas)` (`somas` por tipo + `programado_pendente_total`).
+  Ambas foram **extraídas de dentro da view Jinja** `app/gastos/routes.py::recorrentes` (onde
+  viviam como `_estimate`/somas inline) — a view passou a chamá-las, fonte única com a API
+  (Princípio I).
+- `app/api/gastos_read.py`: `_recurring_dict` ganhou parâmetros opcionais `ref_year`/`ref_month`
+  e passou a serializar os rótulos derivados do model (`expected_label`, `dia_label`,
+  `vigencia_label`, `parcelas_summary`), além de `estimated_monthly`, `has_entries`,
+  `occurrences` (0 = "fora do ciclo") e `entries` (só para `programado`). O payload da listagem
+  ganhou `ref_year`, `ref_month`, `weekday_labels`, `somas` e `programado_pendente_total`.
+- `app/api/financeiro_read.py`: `kpis` ganhou `margem_bruta`, `margem_ebitda`, `tax_rate`
+  (alíquota do `SiteSetting`, para o rótulo "Impostos Provisionados (16% · eventos com nota)")
+  e as faixas do Fator R (`fator_r_rate_low`/`fator_r_rate_high`); cada linha de `eventos[]`
+  ganhou `receita` e `event_type` (a tabela React não tinha como exibir a coluna Receita).
+
+**Banco.** Sem migration — nenhuma coluna nova. `RecurringExpense`/`RecurringExpenseEntry` e
+`SpecialExpense` seguem inalterados; toda a informação nova é derivada.
+
+**Frontend.**
+- `FinanceiroDashboardPage.tsx` **reconstruída** no layout clássico em grid: coluna principal
+  (2/3) com 4 KPIs (Ticket Médio, Custo Talento/Receita, Margem Bruta, EBITDA), **termômetro de
+  break-even** e **alerta fiscal do Fator R** — ambos com barra de progresso Tailwind
+  (`role="progressbar"` + `aria-valuenow`) e badge de proteção tributária —, a **DRE Gerencial
+  com identação hierárquica** (linhas `(–)` recuadas, subtotais `=` em faixa destacada, EBITDA e
+  Resultado Líquido com régua superior) e os 3 cards de A Receber/A Pagar/Pago. Coluna analítica
+  (1/3) com Receita por Tipo (barras horizontais), Top Vendedores ranqueados, Auditoria de Input,
+  Notas a Emitir, Tendência de 6 meses e Recebimentos Previstos. Tabela de Eventos no Período em
+  largura total, agora com Receita e Tipo.
+- `PagamentosPage.tsx`: ordem de colunas do Jinja restaurada (checkbox · vencimento · descrição
+  detalhada com badge de tipo · favorecido em **bold** · valor · chave PIX com tipo · situação);
+  **botão compacto de cópia** ao lado da descrição, do valor (formato cru `1234,56`) e da chave
+  PIX, com feedback "✓" temporário e `aria-live`; **checkbox "selecionar tudo"**; ação em lote
+  **"Marcar como no banco"** (o backend já aceitava `no_banco` em `bulk-action`); seletor de
+  situação colorido por estado, com as opções que cada tipo realmente suporta.
+- `GastosRecorrentesPage.tsx` **refeita** em três seções tabulares (Contas Variáveis, Débito
+  Automático, Assinaturas/Cartão) + Pagamentos Programados, com resumo mensal no topo, seletor
+  de mês de referência e formulário de criação completo (tipo, frequência, dia/dia-da-semana,
+  vigência, faixa **ou** valor exato, cartão, PIX padrão, observações). Cada linha traz
+  `[Preencher]` (Dialog de `@manto/ui` com `MoneyInput`), `[Pular mês]`, `[Pagar]`/`[Reabrir]`,
+  `[Histórico]` (Dialog consumindo o endpoint novo), `[Editar]` (Dialog) e
+  `[Desativar]`/`[Excluir]` com confirmação em Dialog.
+- `lib/financeiro.ts` e `lib/gastos.ts`: tipos estendidos (zero `any`) + hook novo
+  `useRecorrenteHistorico`.
+
+**Rotas e endpoints.**
+- **Novo:** `GET /api/gastos/recorrentes/<conta_id>/historico` — todos os lançamentos da conta,
+  do mais recente para o mais antigo (equivale ao painel `?conta=<id>` da tela Jinja).
+- **Alterados (aditivos):** `GET /api/financeiro/dashboard` e `GET /api/gastos/recorrentes`.
+- Rotas de página inalteradas.
+
+**RBAC e regras de negócio.** Sem mudança. O endpoint novo usa o mesmo gate
+`gastos_ops.is_financeiro` (FINANCEIRO/SUPERADMIN) dos demais de recorrentes; a página Jinja
+legada segue funcionando (`/gastos/recorrentes` e `/financeiro/` verificados em 200 após a
+extração para `gastos_ops`).
+
+**Riscos e pegadinhas.**
+- **Os status de pagamento do backend são exatamente três**: `nao_pago` ("Não pago"), `pago` e
+  `no_banco` (`_VALID_PAYMENT_STATUS` em `app/api/financeiro_write.py` e `_STATUS_LABELS` em
+  `app/financeiro/routes.py`). Não existem `pendente` nem `agendado` — "pendente" é o rótulo de
+  UI de `nao_pago`. `commission` e `recurring` **não têm** `no_banco`: em lote o backend
+  devolve o item em `skipped`, e a UI já nem oferece a opção.
+- **`text-amber`/`bg-amber-soft` não existem** no preset do design system
+  (`@manto/ui/tailwind-preset` tem `green`, `red`, `blue`, `gold`, `accent` — não `amber`). A
+  versão anterior de `GastosRecorrentesPage` usava essas classes no alerta do topo e elas nunca
+  renderizaram cor nenhuma. Estados de atenção agora usam `gold`.
+- `occurrences === 0` significa **"fora do ciclo"** (fora da vigência ou da frequência no mês),
+  não "sem lançamento" — sem esse campo no payload a UI teria que reimplementar
+  `RecurringExpense.occurrences_in_month`, que é regra de negócio real.
+- O botão `[Excluir]` da conta só aparece com `has_entries === false`; com histórico o caminho é
+  desativar (`delete_recurring` levanta `GastoStateError` → 409).
+- Verificação funcional: `scripts/db/verify_189_financeiro_alta_fidelidade.py` (**51/51** contra
+  `manto_local`) — novos campos do dashboard, `no_banco` individual **e** em lote com persistência
+  conferida no banco, resumo/rótulos/`occurrences` das recorrentes, `preencher` gerando o
+  `RecurringExpenseEntry` que aparece na planilha de pagamentos, e o histórico (200/404/403).
+  Fluxo completo também exercitado no navegador contra `manto_local` (criar conta → `[Preencher]`
+  com máscara BRL → linha vira "a pagar R$ 512,30" → item aparece na planilha de pagamentos).
 
 ### 188 — Refatoração e Paridade do Módulo de Formulários
 `188-formularios-paridade-listagem` · **2026-07-27** · **sem migration**

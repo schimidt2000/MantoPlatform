@@ -231,7 +231,23 @@ export interface RecurringExpenseItem {
   card_name: string | null;
   notes: string | null;
   is_active: boolean;
+  /** Rótulo da faixa/valor esperado — só conta variável (feature 189). */
+  expected_label: string | null;
+  /** "dia 10" / "toda semana (terça)" — rótulo do vencimento. */
+  dia_label: string;
+  /** "desde 01/2026" / "01/2026 – 12/2026" — vigência da conta. */
+  vigencia_label: string;
+  /** "3 parcelas · R$ 4.500,00 no total" — só pagamento programado. */
+  parcelas_summary: string | null;
+  /** Custo mensal estimado (frequência normalizada para mês). */
+  estimated_monthly: number;
+  /** True se a conta já tem lançamentos — bloqueia exclusão (o caminho é desativar). */
+  has_entries: boolean;
+  /** Cobranças no mês de referência; `0` = fora do ciclo/vigência. `null` fora da listagem. */
+  occurrences: number | null;
   entry: RecurringEntry | null;
+  /** Todas as parcelas — preenchido só para `programado`. */
+  entries: RecurringEntry[] | null;
 }
 
 export interface RecurringAlert {
@@ -244,9 +260,16 @@ export interface RecurringAlert {
 export interface GastosRecorrentesResponse {
   grupos: Record<RecurringType, RecurringExpenseItem[]>;
   month_ref: string;
+  ref_year: number;
+  ref_month: number;
   is_current_month: boolean;
   type_labels: Record<RecurringType, string>;
   frequency_labels: Record<RecurringFrequency, string>;
+  weekday_labels: string[];
+  /** Estimativa mensal por tipo (só contas ativas) — feature 189. */
+  somas: Record<RecurringType, number>;
+  /** Total ainda a pagar das parcelas de pagamentos programados ativos. */
+  programado_pendente_total: number;
   alerts: RecurringAlert[];
 }
 
@@ -258,6 +281,24 @@ export function useGastosRecorrentes(monthRef?: string) {
       apiFetch<GastosRecorrentesResponse>(
         `/api/gastos/recorrentes${monthRef ? `?month=${monthRef}` : ""}`,
       ),
+  });
+}
+
+export interface RecorrenteHistorico {
+  conta_id: number;
+  conta_name: string;
+  entries: RecurringEntry[];
+}
+
+/**
+ * Histórico completo de lançamentos de uma conta (feature 189) — equivale ao painel
+ * `?conta=<id>` da tela Jinja legada. Só busca quando `contaId` está definido (Dialog aberto).
+ */
+export function useRecorrenteHistorico(contaId: number | null) {
+  return useQuery<RecorrenteHistorico>({
+    queryKey: ["gastos-recorrentes-historico", contaId],
+    queryFn: () => apiFetch<RecorrenteHistorico>(`/api/gastos/recorrentes/${contaId}/historico`),
+    enabled: contaId != null,
   });
 }
 

@@ -510,6 +510,67 @@ def list_recurring(month_ref: str | None = None) -> dict:
     }
 
 
+def estimate_monthly_cost(conta: RecurringExpense) -> Decimal:
+    """Custo mensal estimado de uma conta recorrente (feature 110/112).
+
+    Normaliza a frequência para "por mês": semanal ×4, quinzenal ×2, anual ÷12, mensal ×1.
+    Conta variável usa o teto da faixa (`amount_max`) como estimativa; pagamento programado
+    não entra na estimativa recorrente (tem parcelas explícitas).
+
+    Args:
+        conta: A conta recorrente a estimar.
+
+    Returns:
+        Estimativa mensal em `Decimal` (0 para pagamento programado).
+    """
+    if conta.expense_type == "programado":
+        return Decimal("0")
+    base_raw = (conta.amount or 0) if conta.is_fixed else (
+        conta.amount or conta.amount_max or conta.amount_min or 0
+    )
+    base = Decimal(str(base_raw))
+    freq = conta.frequency or "mensal"
+    if freq == "semanal":
+        return base * 4
+    if freq == "quinzenal":
+        return base * 2
+    if freq == "anual":
+        return (base / 12).quantize(Decimal("0.01"))
+    return base
+
+
+def recurring_summary(contas: list[RecurringExpense]) -> dict:
+    """Totais estimados por tipo + total a pagar dos pagamentos programados (feature 110/121).
+
+    Fonte única do resumo do topo da tela de Gastos Recorrentes, reusada pela view Jinja
+    legada e pelo endpoint `GET /api/gastos/recorrentes`.
+
+    Args:
+        contas: Todas as contas recorrentes (ativas e inativas); só as ativas somam.
+
+    Returns:
+        `{"somas": {tipo: Decimal}, "programado_pendente_total": Decimal}`.
+    """
+    somas = {
+        t: sum(
+            (estimate_monthly_cost(c) for c in contas if c.expense_type == t and c.is_active),
+            Decimal("0"),
+        )
+        for t in RecurringExpense.TYPES
+    }
+    programado_pendente_total = sum(
+        (
+            e.amount or Decimal("0")
+            for c in contas
+            if c.expense_type == "programado" and c.is_active
+            for e in c.entries
+            if e.status == "a_pagar"
+        ),
+        Decimal("0"),
+    )
+    return {"somas": somas, "programado_pendente_total": programado_pendente_total}
+
+
 def _log_recorrente(actor: User, conta: RecurringExpense, action: str, detail: str = "") -> None:
     _log(actor, "gasto_recorrente", conta.id, conta.name, action, detail)
 

@@ -114,6 +114,8 @@ def api_financeiro_dashboard() -> Any:
     """
     from app import db
     from app.financeiro.routes import (
+        FATOR_R_RATE_HIGH,
+        FATOR_R_RATE_LOW,
         _compute_drg,
         _event_commission,
         _event_cost,
@@ -307,6 +309,8 @@ def api_financeiro_dashboard() -> Any:
                 if e.is_group_leader else None
             ),
             "start_at": e.start_at.isoformat() if e.start_at else None,
+            "event_type": e.event_type or None,
+            "receita": venda,
             "custo": custo,
             "lucro": (0 if _is_permuta(e) else venda) - custo,
             "comissao": comissao,
@@ -398,12 +402,19 @@ def api_financeiro_dashboard() -> Any:
         "kpis": {
             "ticket_medio": float(ticket_medio),
             "ratio_custo_talento": float(ratio_custo_talento),
+            "margem_bruta": float(drg_total["margem_bruta"]),
+            "margem_ebitda": float(drg_total["margem_ebitda"]),
             "breakeven_pct": float(breakeven_pct),
             "breakeven_atingido": breakeven_atingido,
             "fixed_cost": float(fixed_cost),
             "fator_r_pct": float(fator_r_pct),
             "fator_r_threshold": float(fator_r_threshold),
             "fator_r_protegido": fator_r_protegido,
+            # Rótulos fiscais (feature 189): alíquota de imposto provisionado sobre eventos com
+            # nota e as duas faixas do Fator R — mesma fonte da tela Jinja legada.
+            "tax_rate": float(tax_rate_nf),
+            "fator_r_rate_low": FATOR_R_RATE_LOW,
+            "fator_r_rate_high": FATOR_R_RATE_HIGH,
         },
         "paineis": {
             "a_receber_clientes": a_receber_clientes,

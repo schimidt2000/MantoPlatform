@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **188**
+> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **189**
 > (`formularios-paridade-listagem`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
 
 ---
@@ -242,11 +242,11 @@ Avaliações: `GET /api/ratings` · `POST /api/ratings/modo-anonimo`.
 | Método | Rota | Nota |
 |---|---|---|
 | GET | `/api/vendas/pipeline` | pipeline de vendas |
-| GET | `/api/financeiro/dashboard` | DRE / KPIs |
+| GET | `/api/financeiro/dashboard` | DRE / KPIs — **feature 189**: `kpis` inclui `margem_bruta`, `margem_ebitda`, `tax_rate` (alíquota do `SiteSetting`, rótulo dos impostos provisionados) e as faixas do Fator R (`fator_r_rate_low`/`fator_r_rate_high`); cada item de `eventos[]` inclui `receita` e `event_type` |
 | GET | `/api/financeiro/comissoes` | **feature 187** — KPIs + `by_seller` + `entries` + `can_manage` + `sellers` |
 | GET | `/api/financeiro/pagamentos` | planilha de pagamentos |
 | POST | `/api/financeiro/comissoes/pagar-mes` | **feature 187** — liquidação em lote atômica |
-| POST | `/api/financeiro/pagamentos/set-status`, `/bulk-action` | |
+| POST | `/api/financeiro/pagamentos/set-status`, `/bulk-action` | Status válidos: **`nao_pago` \| `pago` \| `no_banco`** (`_VALID_PAYMENT_STATUS`) — não existem `pendente`/`agendado`. `bulk-action` aceita os 3 + `delete`; itens `commission` não têm `no_banco` e voltam em `skipped` |
 | POST | `/api/financeiro/pagamentos/salary/<sp_id>/advance`, `/salary/advance/<adv_id>/delete` | |
 | GET | `/api/financeiro/pagamentos/export` | CSV |
 
@@ -257,9 +257,31 @@ Núcleo de negócio de comissões: `app/financeiro/comissoes_ops.py`
 
 ### 3.7 Gastos — `gastos_read.py` / `gastos_write.py`
 `GET /api/gastos`, `/api/gastos/eventos`, `/api/gastos/funcionarios`, `/api/gastos/recorrentes` ·
+`GET /api/gastos/recorrentes/<id>/historico` (**feature 189**) ·
 `POST /api/gastos` (+ `/<id>/aprovar`, `/rejeitar`, `/vincular-evento`) · `PATCH|DELETE /api/gastos/<id>` ·
 recorrentes: `POST /api/gastos/recorrentes` (+ `/<id>/toggle`, `/preencher`, `/pular`),
+`PATCH|DELETE /api/gastos/recorrentes/<id>`,
 `POST /api/gastos/recorrentes/entry/<id>/{pagar,reabrir}`, `DELETE .../entry/<id>`.
+
+**`GET /api/gastos/recorrentes` (payload, feature 189).** Além de `grupos`/`month_ref`/
+`is_current_month`/`type_labels`/`frequency_labels`/`alerts`, devolve `ref_year`, `ref_month`,
+`weekday_labels`, `somas` (estimativa mensal por tipo, só contas ativas) e
+`programado_pendente_total`. Cada conta em `grupos[<tipo>]` traz, além das colunas do model, os
+rótulos derivados `expected_label`, `dia_label`, `vigencia_label`, `parcelas_summary` (só
+`programado`), `estimated_monthly`, `has_entries` (bloqueia exclusão), `occurrences`
+(cobranças no mês de referência; **`0` = fora do ciclo/vigência**) e `entries` (todas as
+parcelas — só `programado`).
+
+**`GET /api/gastos/recorrentes/<id>/historico` (feature 189).** Todos os
+`RecurringExpenseEntry` da conta, do `month_ref` mais recente para o mais antigo:
+`{conta_id, conta_name, entries[]}`. Gate `gastos_ops.is_financeiro`; 404 para conta inexistente.
+Equivale ao painel `?conta=<id>` da tela Jinja legada.
+
+**Núcleo de negócio (`app/gastos/gastos_ops.py`).** `estimate_monthly_cost(conta)` normaliza a
+frequência para custo mensal (semanal ×4, quinzenal ×2, anual ÷12; conta variável usa o teto da
+faixa; `programado` retorna 0) e `recurring_summary(contas)` monta `somas` +
+`programado_pendente_total`. Fonte única: a view Jinja `app/gastos/routes.py::recorrentes` e o
+endpoint da API chamam as mesmas funções (feature 189 — antes a lógica vivia inline na view).
 
 ### 3.8 Clientes — `clientes_read.py` / `clientes_write.py`
 `GET /api/clientes/`, `/api/clientes/search`, `/api/clientes/<id>`, `/api/clientes/avaliacoes` ·

@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **187**
+> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **189**
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
@@ -287,16 +287,42 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 
 ### A.6 Financeiro
 
-#### `/financeiro` — Painel Financeiro
-- **Acesso**: `FINANCEIRO`, `SUPERADMIN`.
-- **UX**: DRE do período (`este_mes`, `30d`, `mes_anterior`, `custom`), recebimentos previstos,
-  NF a emitir, custo de nota, provisionamento de imposto (`tax_rate`) e Fator R
-  (`fator_r_threshold`).
+#### `/financeiro` — Painel Financeiro *(reconstruído na feature 189)*
+- **Acesso**: `FINANCEIRO`, `SUPERADMIN` (403 no endpoint para os demais).
+- **UX**: filtro de período em pílulas (`este_mes`, `30d`, `mes_anterior`, `custom` com intervalo
+  de datas) e **layout em grid de duas colunas**:
+  - **Coluna principal (2/3)** — 4 KPIs em cards (Ticket Médio, Custo Talento/Receita, Margem
+    Bruta, Margem Operacional/EBITDA, com faixa de cor verde/âmbar/vermelho); **Termômetro de
+    Break-even** (barra de progresso da cobertura do custo fixo `pessoal + comissões` + meta em
+    BRL); **Alerta Fiscal — Fator R** (barra de progresso contra o `fator_r_threshold` + badge
+    "🛡️ Protegido" / "⚠️ Em risco" e a alíquota estimada de cada faixa); **DRE Gerencial** em
+    3 visões (Realizado · Projetado · Total) com **identação hierárquica** — deduções `(–)`
+    recuadas, subtotais `=` em faixa destacada e margem em % ao lado de Lucro Bruto e EBITDA;
+    e os cards A Receber (clientes) / A Pagar / Pago (talentos).
+  - **Coluna analítica (1/3)** — Receita por Tipo de Evento (barras horizontais proporcionais),
+    Top Vendedores ranqueados (receita + lucro gerado), Auditoria de Input (eventos com receita
+    zerada sem marcação de permuta/cortesia, com link para o evento), Notas a Emitir,
+    Tendência dos últimos 6 meses (mês · receita · custo de talento · lucro · margem · nº de
+    eventos) e Recebimentos Previstos.
+  - **Largura total** — tabela de Eventos no Período (data, evento, tipo, status, receita, custo,
+    lucro, comissão, taxa).
+- **API**: `GET /api/financeiro/dashboard`.
+- **Vínculos**: cada linha de evento/auditoria/recebimento leva a `/events/<id>`; a linha de
+  Gastos Recorrentes do DRE reflete os lançamentos de `/gastos/recorrentes`.
 
-#### `/financeiro/pagamentos` — Planilha de Pagamentos
-- **UX**: itens de salário, BV, comissão e contas recorrentes em uma planilha única, com chave PIX
-  copiável, **ações em lote**, adiantamentos de salário (N por pagamento, com comprovante) e
-  **export CSV**.
+#### `/financeiro/pagamentos` — Planilha de Pagamentos *(paridade restaurada na feature 189)*
+- **Acesso**: `FINANCEIRO`, `SUPERADMIN`.
+- **UX**: itens de cachê, salário, gasto, BV, comissão e contas recorrentes em uma planilha
+  única, na ordem de colunas clássica — **checkbox** (com "selecionar tudo") · **vencimento** ·
+  **descrição detalhada** (badge do tipo + descrição do item, com botão de cópia) · **favorecido**
+  em negrito · **valor** em BRL (com cópia do valor cru `1234,56`) · **chave PIX** com o tipo
+  (CPF/CNPJ/E-mail/Telefone/Aleatória) e botão de cópia · **situação**. Os botões de cópia dão
+  feedback "✓" temporário e anunciam por `aria-live`. Linha colorida por situação; badge
+  "⏳ Futuro" em pendências com vencimento à frente; adiantamentos de salário (N por pagamento,
+  com comprovante) no próprio valor; **export CSV**.
+- **Situação**: seletor por linha com as opções que o backend suporta — **Não pago · No banco ·
+  Pago** (comissão e conta recorrente não têm "No banco"). **Ações em lote**: marcar como pago,
+  **como no banco**, como não pago, e excluir (com confirmação).
 - **API**: `GET /api/financeiro/pagamentos` · `POST .../set-status`, `.../bulk-action`,
   `.../salary/<id>/advance` · `GET .../export`.
 
@@ -305,9 +331,39 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **UX**: fluxo criar → aprovar/rejeitar → reembolsar, com vínculo opcional a evento (feature 179
   trouxe RBAC e edição).
 
-#### `/gastos/recorrentes` — Gastos Recorrentes
+#### `/gastos/recorrentes` — Gastos Recorrentes *(refeita na feature 189)*
 - **Acesso**: `FINANCEIRO`, `SUPERADMIN`.
-- **UX**: contas recorrentes com parcelas geradas — preencher, pular, pagar, reabrir, excluir.
+- **UX**: seletor de **mês de referência** no topo, cards de resumo (estimativa mensal por tipo +
+  total a pagar dos programados), alerta das contas que precisam de atenção no mês, formulário de
+  criação e **três seções tabulares por tipo**:
+  1. **Contas Variáveis** — colunas Conta · Vencimento · Frequência (com a vigência) · **Faixa de
+     valor esperado** · **Mês MM/AAAA** · Ações. O status do mês mostra "aguardando valor",
+     "a pagar"/"pago"/"pulado" com o valor lançado, "⚠" quando fora da faixa, "vence dd/mm" e
+     "fora do ciclo" quando a conta não é cobrada naquele mês. Enquanto não há valor lançado, o
+     botão **`[Preencher]`** aparece em destaque e abre um **Dialog** (`@manto/ui`) com
+     `MoneyInput` (máscara BRL), PIX e vencimento — ao salvar, chama
+     `POST /api/gastos/recorrentes/<id>/preencher`, gera o `RecurringExpenseEntry` e o item passa
+     a aparecer na Planilha de Pagamentos e na linha "Gastos Recorrentes" do DRE.
+     Demais ações por linha: `[Pular mês]`, `[Pagar]`/`[Reabrir]`, `[Histórico]`, `[Editar]`,
+     `[Desativar]`/`[Reativar]` e `[Excluir]` (só sem lançamentos).
+  2. **Débito Automático** — despesas fixas debitadas em conta, com o lançamento do mês já
+     "registrado" automaticamente.
+  3. **Assinaturas (Cartão)** — inclui a coluna **Cartão** (ex.: "Inter Prime"), valor e status
+     do mês corrente.
+  Abaixo delas, **Pagamentos Programados** lista cada parcela (data, valor, situação) com pagar,
+  reabrir e excluir parcela.
+- **Formulário de criação**: nome, **tipo** (variável / débito automático / assinatura),
+  frequência (mensal/semanal/quinzenal/anual), dia do vencimento **ou** dia da semana, vigência
+  (início/fim, vazio = eterna), **faixa esperada ou valor exato** (variável) / valor fixo,
+  cartão (assinatura), PIX padrão e observações.
+- **Ações destrutivas ou irreversíveis** (pular mês, reabrir, desativar, excluir conta, excluir
+  parcela) passam por Dialog de confirmação — Princípio V.
+- **API**: `GET /api/gastos/recorrentes` · `GET /api/gastos/recorrentes/<id>/historico` ·
+  `POST /api/gastos/recorrentes` (+ `/<id>/preencher`, `/pular`, `/toggle`) ·
+  `PATCH|DELETE /api/gastos/recorrentes/<id>` ·
+  `POST /api/gastos/recorrentes/entry/<id>/{pagar,reabrir}` · `DELETE .../entry/<id>`.
+- **Vínculos**: cada lançamento preenchido/registrado entra em `/financeiro/pagamentos` (tipo
+  "Recorrente") e no DRE de `/financeiro` pelo mês de referência.
 
 ---
 

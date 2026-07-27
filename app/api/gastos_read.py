@@ -108,7 +108,30 @@ def _entry_dict(entry) -> dict:
     }
 
 
-def _recurring_dict(conta: RecurringExpense, entry) -> dict:
+def _recurring_dict(
+    conta: RecurringExpense,
+    entry,
+    *,
+    ref_year: int | None = None,
+    ref_month: int | None = None,
+) -> dict:
+    """Serializa uma conta recorrente + o lançamento do mês de referência.
+
+    Args:
+        conta: A conta a serializar.
+        entry: `RecurringExpenseEntry` do mês de referência (ou `None`).
+        ref_year: Ano do mês de referência — habilita `occurrences` (feature 189).
+        ref_month: Mês de referência — habilita `occurrences`.
+
+    Returns:
+        Dict JSON-safe. `occurrences` é `None` quando o mês de referência não foi informado
+        (ex.: resposta de escrita, que devolve só a conta); `0` significa "fora do ciclo".
+    """
+    occurrences = (
+        conta.occurrences_in_month(ref_year, ref_month)
+        if ref_year is not None and ref_month is not None
+        else None
+    )
     return {
         "id": conta.id,
         "name": conta.name,
@@ -125,7 +148,22 @@ def _recurring_dict(conta: RecurringExpense, entry) -> dict:
         "card_name": conta.card_name,
         "notes": conta.notes,
         "is_active": conta.is_active,
+        # Rótulos derivados do model (fonte única com o Jinja legado) — feature 189.
+        "expected_label": conta.expected_label,
+        "dia_label": conta.dia_label,
+        "vigencia_label": conta.vigencia_label,
+        "parcelas_summary": conta.parcelas_summary if conta.expense_type == "programado" else None,
+        "estimated_monthly": float(gastos_ops.estimate_monthly_cost(conta)),
+        "has_entries": bool(conta.entries),
+        "occurrences": occurrences,
         "entry": _entry_dict(entry) if entry else None,
+        # Só o pagamento programado expõe todas as parcelas na listagem (as demais usam
+        # `GET /api/gastos/recorrentes/<id>/historico`).
+        "entries": (
+            [_entry_dict(e) for e in sorted(conta.entries, key=lambda x: (x.due_date or date.max))]
+            if conta.expense_type == "programado"
+            else None
+        ),
     }
 
 
@@ -139,17 +177,28 @@ def api_gastos_recorrentes_list() -> Any:
     result = gastos_ops.list_recurring(request.args.get("month", "").strip() or None)
     contas = result["contas"]
     entries = result["entries"]
+    ref_year, ref_month = result["ref_year"], result["ref_month"]
     grupos = {
-        t: [_recurring_dict(c, entries.get(c.id)) for c in contas if c.expense_type == t]
+        t: [
+            _recurring_dict(c, entries.get(c.id), ref_year=ref_year, ref_month=ref_month)
+            for c in contas
+            if c.expense_type == t
+        ]
         for t in RecurringExpense.TYPES
     }
+    resumo = gastos_ops.recurring_summary(contas)
     alerts = gastos_ops.recurring_alerts(date.today())
     return jsonify({
         "grupos": grupos,
         "month_ref": result["month_ref"],
+        "ref_year": ref_year,
+        "ref_month": ref_month,
         "is_current_month": result["is_current_month"],
         "type_labels": RecurringExpense.TYPE_LABELS,
         "frequency_labels": RecurringExpense.FREQUENCY_LABELS,
+        "weekday_labels": RecurringExpense.WEEKDAY_LABELS,
+        "somas": {t: float(v) for t, v in resumo["somas"].items()},
+        "programado_pendente_total": float(resumo["programado_pendente_total"]),
         "alerts": [
             {
                 "recurring_id": a["conta"].id,
@@ -159,4 +208,26 @@ def api_gastos_recorrentes_list() -> Any:
             }
             for a in alerts
         ],
+    })
+
+
+@api_bp.route("/gastos/recorrentes/<int:conta_id>/historico")
+@api_login_required
+def api_gastos_recorrentes_historico(conta_id: int) -> Any:
+    """Histórico completo de lançamentos de uma conta recorrente (feature 189).
+
+    Equivale ao painel `?conta=<id>` da tela Jinja legada — todos os `RecurringExpenseEntry`
+    da conta, do mais recente para o mais antigo.
+    """
+    denied = _require_financeiro()
+    if denied:
+        return denied
+    conta = RecurringExpense.query.get(conta_id)
+    if conta is None:
+        return json_error("Conta não encontrada", 404)
+    entries = sorted(conta.entries, key=lambda e: e.month_ref, reverse=True)
+    return jsonify({
+        "conta_id": conta.id,
+        "conta_name": conta.name,
+        "entries": [_entry_dict(e) for e in entries],
     })

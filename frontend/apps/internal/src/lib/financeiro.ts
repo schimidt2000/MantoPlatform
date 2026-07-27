@@ -27,12 +27,20 @@ export interface DreView {
 export interface FinanceiroKpis {
   ticket_medio: number;
   ratio_custo_talento: number;
+  /** Margem bruta e EBITDA do consolidado (`dre.total`), já em % — feature 189. */
+  margem_bruta: number;
+  margem_ebitda: number;
   breakeven_pct: number;
   breakeven_atingido: boolean;
   fixed_cost: number;
   fator_r_pct: number;
   fator_r_threshold: number;
   fator_r_protegido: boolean;
+  /** Alíquota de imposto provisionado (SiteSetting.tax_rate), em % — feature 189. */
+  tax_rate: number;
+  /** Rótulos das faixas de alíquota do Fator R (strings, ex.: "6" e "15,5"). */
+  fator_r_rate_low: string;
+  fator_r_rate_high: string;
 }
 
 export interface TopSeller {
@@ -75,6 +83,9 @@ export interface FinanceiroEvento {
   title: string;
   group_label: string | null;
   start_at: string | null;
+  /** Tipo do evento (SHOW/CORP/R&I…) e receita bruta da linha — feature 189. */
+  event_type: string | null;
+  receita: number;
   custo: number;
   lucro: number;
   comissao: number;

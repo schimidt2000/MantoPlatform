@@ -274,8 +274,6 @@ def _parse_conta_form() -> dict | None:
 @login_required
 def recorrentes():
     """Tela de gastos recorrentes: contas por tipo + status do mês (FINANCEIRO/SUPERADMIN)."""
-    from decimal import Decimal
-
     _require_financeiro_recorrentes()
     result = gastos_ops.list_recurring(request.args.get("month", "").strip() or None)
     contas = result["contas"]
@@ -287,34 +285,10 @@ def recorrentes():
     if raw_conta.isdigit():
         hist_conta = RecurringExpense.query.get(int(raw_conta))
 
-    def _estimate(c: RecurringExpense):
-        if c.expense_type == "programado":
-            return Decimal("0")
-        base = (c.amount or 0) if c.is_fixed else (c.amount or c.amount_max or c.amount_min or 0)
-        base = Decimal(str(base))
-        freq = c.frequency or "mensal"
-        if freq == "semanal":
-            return base * 4
-        if freq == "quinzenal":
-            return base * 2
-        if freq == "anual":
-            return (base / 12).quantize(Decimal("0.01"))
-        return base
-
-    somas = {
-        t: sum((Decimal(str(_estimate(c))) for c in grupos[t] if c.is_active), Decimal("0"))
-        for t in RecurringExpense.TYPES
-    }
-    programado_pendente_total = sum(
-        (
-            e.amount or Decimal("0")
-            for c in grupos["programado"]
-            if c.is_active
-            for e in c.entries
-            if e.status == "a_pagar"
-        ),
-        Decimal("0"),
-    )
+    # Resumo do topo: fonte única em gastos_ops (reusada pelo endpoint da API, feature 189).
+    resumo = gastos_ops.recurring_summary(contas)
+    somas = resumo["somas"]
+    programado_pendente_total = resumo["programado_pendente_total"]
 
     return render_template(
         "gastos/recorrentes.html",
