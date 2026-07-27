@@ -72,7 +72,7 @@ Toda interface segue o padrão visual moderno (Tailwind + shadcn/ui), fala com o
 
 ### VI. Planejar antes de codar
 Nenhuma mudança grande começa direto no código.
-- Fluxo: ENTUNDER → ESPECIFICAR → PLANEJAR → IMPLEMENTAR → TESTAR → REVISAR.
+- Fluxo: ENTENDER → ESPECIFICAR → PLANEJAR → IMPLEMENTAR → TESTAR → REVISAR.
 - Se um requisito não está claro, PERGUNTE antes de assumir.
 - Para features, use o fluxo spec-kit: `/speckit-specify` → `/speckit-plan` →
   `/speckit-tasks` → `/speckit-implement`.

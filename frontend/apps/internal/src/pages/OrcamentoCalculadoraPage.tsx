@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
 import {
+  Badge,
   Button,
   Card,
   CardContent,
@@ -22,15 +23,20 @@ import { formatBRL, MoneyInput } from "@manto/money";
 import {
   useCalcularOrcamento,
   useOrcamentoDetalhe,
+  useOrcamentoHistorico,
   useOrcamentoOpcoes,
+  usePersonagensNoDia,
   useSalvarOrcamento,
   type Acrescimo,
+  type CalcularOrcamentoInput,
   type CalcularOrcamentoResult,
   type Performer,
 } from "../lib/orcamento";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
+const CALC_DEBOUNCE_MS = 400;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function brl(v: number): string {
   return `R$ ${formatBRL(v)}`;
@@ -41,6 +47,7 @@ function emptyPerformer(type: Performer["type"] = "ator"): Performer {
 }
 
 const DURACOES = ["1h", "2h", "3h", "4h"] as const;
+type Duracao = (typeof DURACOES)[number];
 
 const INITIAL_STATE = {
   performers: [] as Performer[],
@@ -60,6 +67,10 @@ const INITIAL_STATE = {
   duracaoCustom: 0,
   incluirDuracao: ["1h", "2h", "3h", "4h"] as string[],
   acrescimos: [] as Acrescimo[],
+  personalizadoAtivo: false,
+  personalizadoCriterio: "valor_final" as "valor_final" | "multiplicador",
+  custValores: { "1h": 0, "2h": 0, "3h": 0, "4h": 0 } as Record<Duracao, number>,
+  custMult: { "1h": 0, "2h": 0, "3h": 0, "4h": 0 } as Record<Duracao, number>,
 };
 
 function PerformerTableRow({
@@ -198,6 +209,29 @@ function PerformerTableRow({
   );
 }
 
+/** Painel de alerta "Já na agenda neste dia" — evita venda em dobro de um personagem. */
+function AgendaNoDiaAlert({ date }: { date: string }) {
+  const dateValida = DATE_RE.test(date);
+  const personagensNoDia = usePersonagensNoDia(dateValida ? date : "");
+  const personagens = personagensNoDia.data?.personagens ?? [];
+
+  if (!dateValida || !personagens.length) return null;
+
+  return (
+    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm" role="alert">
+      <p className="mb-1 font-semibold text-amber-800">⚠️ Já na agenda neste dia — não vender em dobro</p>
+      <ul className="list-disc space-y-0.5 pl-4 text-amber-900">
+        {personagens.map((p) => (
+          <li key={p.nome}>
+            <span className="font-medium">{p.nome}</span>
+            {p.eventos.length > 0 && <span className="text-amber-700"> — {p.eventos.join(" · ")}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function OrcamentoCalculadoraPage() {
   const [searchParams] = useSearchParams();
   const recalcularId = searchParams.get("recalcular_id");
@@ -207,6 +241,7 @@ export function OrcamentoCalculadoraPage() {
   const calcular = useCalcularOrcamento();
   const salvar = useSalvarOrcamento();
   const historicoDetalhe = useOrcamentoDetalhe(recalcularIdNum);
+  const historico = useOrcamentoHistorico({});
 
   const [performers, setPerformers] = useState<Performer[]>(INITIAL_STATE.performers);
   const [coordenadorQty, setCoordenadorQty] = useState(INITIAL_STATE.coordenadorQty);
@@ -225,6 +260,10 @@ export function OrcamentoCalculadoraPage() {
   const [duracaoCustom, setDuracaoCustom] = useState(INITIAL_STATE.duracaoCustom);
   const [incluirDuracao, setIncluirDuracao] = useState<string[]>(INITIAL_STATE.incluirDuracao);
   const [acrescimos, setAcrescimos] = useState<Acrescimo[]>(INITIAL_STATE.acrescimos);
+  const [personalizadoAtivo, setPersonalizadoAtivo] = useState(INITIAL_STATE.personalizadoAtivo);
+  const [personalizadoCriterio, setPersonalizadoCriterio] = useState(INITIAL_STATE.personalizadoCriterio);
+  const [custValores, setCustValores] = useState<Record<Duracao, number>>(INITIAL_STATE.custValores);
+  const [custMult, setCustMult] = useState<Record<Duracao, number>>(INITIAL_STATE.custMult);
   const [result, setResult] = useState<CalcularOrcamentoResult | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
@@ -250,6 +289,7 @@ export function OrcamentoCalculadoraPage() {
     setModoDuracao(snap.modo_duracao ?? "horas");
     setDuracaoCustom(Number(snap.duracao_custom) || 0);
     setAcrescimos(snap.acrescimos ?? []);
+    setPersonalizadoAtivo(Boolean(snap.personalizado_ativo));
     setResult(null);
     setSaved(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,6 +313,10 @@ export function OrcamentoCalculadoraPage() {
     setDuracaoCustom(INITIAL_STATE.duracaoCustom);
     setIncluirDuracao(INITIAL_STATE.incluirDuracao);
     setAcrescimos(INITIAL_STATE.acrescimos);
+    setPersonalizadoAtivo(INITIAL_STATE.personalizadoAtivo);
+    setPersonalizadoCriterio(INITIAL_STATE.personalizadoCriterio);
+    setCustValores(INITIAL_STATE.custValores);
+    setCustMult(INITIAL_STATE.custMult);
     setResult(null);
     setFieldErrors({});
     setSaved(false);
@@ -284,37 +328,78 @@ export function OrcamentoCalculadoraPage() {
   const addAcrescimo = () =>
     setAcrescimos((prev) => [...prev, { tipo: opcoes.data?.acrescimo_tipos[0] ?? "", value: 0, is_percent: false }]);
 
-  const handleCalcular = () => {
+  const payload: CalcularOrcamentoInput = useMemo(
+    () => ({
+      performers,
+      coordenador_qty: coordenadorQty,
+      event_date: eventDate,
+      event_time: eventTime,
+      client_name: clientName,
+      event_location: eventLocation,
+      fora_sp: foraSp,
+      transporte_tipo: transporteTipo,
+      km_ida: kmIda,
+      carretinha,
+      num_carros: numCarros,
+      num_colaboradores: numColaboradores || undefined,
+      nota_fiscal: notaFiscal,
+      modo_duracao: modoDuracao,
+      duracao_custom: duracaoCustom || undefined,
+      incluir_duracao: incluirDuracao,
+      acrescimos,
+      personalizado: personalizadoAtivo,
+      personalizado_criterio: personalizadoAtivo ? personalizadoCriterio : undefined,
+      cust_valor_1h: personalizadoAtivo && personalizadoCriterio === "valor_final" ? String(custValores["1h"]) : undefined,
+      cust_valor_2h: personalizadoAtivo && personalizadoCriterio === "valor_final" ? String(custValores["2h"]) : undefined,
+      cust_valor_3h: personalizadoAtivo && personalizadoCriterio === "valor_final" ? String(custValores["3h"]) : undefined,
+      cust_valor_4h: personalizadoAtivo && personalizadoCriterio === "valor_final" ? String(custValores["4h"]) : undefined,
+      cust_mult_1h: personalizadoAtivo && personalizadoCriterio === "multiplicador" ? String(custMult["1h"]) : undefined,
+      cust_mult_2h: personalizadoAtivo && personalizadoCriterio === "multiplicador" ? String(custMult["2h"]) : undefined,
+      cust_mult_3h: personalizadoAtivo && personalizadoCriterio === "multiplicador" ? String(custMult["3h"]) : undefined,
+      cust_mult_4h: personalizadoAtivo && personalizadoCriterio === "multiplicador" ? String(custMult["4h"]) : undefined,
+    }),
+    [
+      performers,
+      coordenadorQty,
+      eventDate,
+      eventTime,
+      clientName,
+      eventLocation,
+      foraSp,
+      transporteTipo,
+      kmIda,
+      carretinha,
+      numCarros,
+      numColaboradores,
+      notaFiscal,
+      modoDuracao,
+      duracaoCustom,
+      incluirDuracao,
+      acrescimos,
+      personalizadoAtivo,
+      personalizadoCriterio,
+      custValores,
+      custMult,
+    ],
+  );
+
+  // Cálculo 100% reativo — qualquer alteração no payload dispara o recálculo (com pequeno
+  // debounce para não bombardear a API a cada tecla digitada). Sem botão manual.
+  useEffect(() => {
+    if (!opcoes.data) return;
     setFieldErrors({});
     setSaved(false);
-    calcular.mutate(
-      {
-        performers,
-        coordenador_qty: coordenadorQty,
-        event_date: eventDate,
-        event_time: eventTime,
-        client_name: clientName,
-        event_location: eventLocation,
-        fora_sp: foraSp,
-        transporte_tipo: transporteTipo,
-        km_ida: kmIda,
-        carretinha,
-        num_carros: numCarros,
-        num_colaboradores: numColaboradores || undefined,
-        nota_fiscal: notaFiscal,
-        modo_duracao: modoDuracao,
-        duracao_custom: duracaoCustom || undefined,
-        incluir_duracao: incluirDuracao,
-        acrescimos,
-      },
-      {
+    const timer = setTimeout(() => {
+      calcular.mutate(payload, {
         onSuccess: (data) => setResult(data),
         onError: (err) => {
           if (err instanceof ApiRequestError && err.fields) setFieldErrors(err.fields);
         },
-      },
-    );
-  };
+      });
+    }, CALC_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payload, opcoes.data]);
 
   const handleSalvar = () => {
     if (!result) return;
@@ -322,20 +407,15 @@ export function OrcamentoCalculadoraPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
+    <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Calculadora de Orçamento"
         subtitle="Monte o elenco e calcule o orçamento do evento"
         className="mb-0"
         actions={
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={resetAll}>
-              Limpar tudo
-            </Button>
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/orcamento/historico">Histórico ›</Link>
-            </Button>
-          </div>
+          <Button variant="ghost" size="sm" onClick={resetAll}>
+            Limpar tudo
+          </Button>
         }
       />
 
@@ -351,37 +431,44 @@ export function OrcamentoCalculadoraPage() {
       )}
 
       {opcoes.data && (
-        <>
-          <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
+          {/* ── Coluna esquerda — Dados e Segurança (1/3) ────────────────────── */}
+          <div className="space-y-4 lg:col-span-1">
             <Card>
               <CardHeader>
                 <CardTitle>Dados do Evento</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-2">
+              <CardContent className="space-y-3">
                 <div>
                   <label className={LABEL}>Cliente</label>
                   <Input value={clientName} onChange={(e) => setClientName(e.target.value)} />
                 </div>
                 <div>
-                  <label className={LABEL}>Local/Endereço</label>
+                  <label className={LABEL}>Local/Endereço do evento</label>
                   <Input value={eventLocation} onChange={(e) => setEventLocation(e.target.value)} />
                 </div>
-                <div>
-                  <label className={LABEL}>Data</label>
-                  <Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
+                <label className="flex items-center gap-2 text-sm text-ink">
+                  <input type="checkbox" checked={foraSp} onChange={(e) => setForaSp(e.target.checked)} />
+                  Evento Fora de São Paulo
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={LABEL}>Data</label>
+                    <Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Horário</label>
+                    <Input type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} />
+                  </div>
                 </div>
-                <div>
-                  <label className={LABEL}>Horário</label>
-                  <Input type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="flex items-center gap-2 text-sm text-ink">
-                    <input type="checkbox" checked={foraSp} onChange={(e) => setForaSp(e.target.checked)} />
-                    Evento fora de São Paulo (capital)
-                  </label>
-                </div>
+
+                {eventDate && <AgendaNoDiaAlert date={eventDate} />}
+
                 {foraSp && (
-                  <>
+                  <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                      Transporte — Fora de SP
+                    </p>
                     <div>
                       <label className={LABEL}>Tipo de transporte</label>
                       <select
@@ -395,11 +482,7 @@ export function OrcamentoCalculadoraPage() {
                     </div>
                     <div>
                       <label className={LABEL}>Km (ida)</label>
-                      <Input
-                        type="number"
-                        value={kmIda}
-                        onChange={(e) => setKmIda(Number(e.target.value))}
-                      />
+                      <Input type="number" value={kmIda} onChange={(e) => setKmIda(Number(e.target.value))} />
                     </div>
                     {transporteTipo === "van" ? (
                       <label className="flex items-center gap-2 text-sm text-ink">
@@ -425,30 +508,194 @@ export function OrcamentoCalculadoraPage() {
                         onChange={(e) => setNumColaboradores(Number(e.target.value))}
                       />
                     </div>
-                  </>
+                  </div>
                 )}
+              </CardContent>
+            </Card>
+
+            <Link to="/orcamento/historico" className="flex items-center gap-2 text-sm text-accent hover:underline">
+              Histórico de Orçamentos
+              {historico.data && (
+                <Badge tone="accent">{historico.data.entries.length}</Badge>
+              )}
+            </Link>
+          </div>
+
+          {/* ── Coluna direita — Equipe, Customização e Resultados (2/3) ─────── */}
+          <div className="space-y-4 lg:col-span-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Equipe</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table className="min-w-[720px]">
+                  <thead>
+                    <TableRow head>
+                      <TableCell as="th">Tipo / Subtipo</TableCell>
+                      <TableCell as="th">Personagem/Nome</TableCell>
+                      <TableCell as="th">Flags</TableCell>
+                      <TableCell as="th">Maquiagem</TableCell>
+                      <TableCell as="th" align="right">
+                        Ações
+                      </TableCell>
+                    </TableRow>
+                  </thead>
+                  <tbody>
+                    <TableRow>
+                      <TableCell className="font-medium text-ink">Coordenador</TableCell>
+                      <TableCell colSpan={2} className="text-xs text-muted">
+                        Obrigatório — sempre presente na equipe
+                      </TableCell>
+                      <TableCell colSpan={2} align="right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCoordenadorQty((q) => Math.max(0, q - 1))}
+                          >
+                            −
+                          </Button>
+                          <span className="w-6 text-center tabular-nums text-ink">{coordenadorQty}</span>
+                          <Button size="sm" variant="outline" onClick={() => setCoordenadorQty((q) => q + 1)}>
+                            +
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {performers.map((p, i) => (
+                      <PerformerTableRow
+                        key={i}
+                        performer={p}
+                        onChange={(np) => setPerformers((prev) => prev.map((x, idx) => (idx === i ? np : x)))}
+                        onRemove={() => setPerformers((prev) => prev.filter((_, idx) => idx !== i))}
+                        especiais={opcoes.data.especiais}
+                        especiaisComShow={opcoes.data.especiais_com_show}
+                        especiaisComCantor={opcoes.data.especiais_com_cantor}
+                      />
+                    ))}
+                  </tbody>
+                </Table>
+                <div className="flex gap-2 p-3">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setPerformers((prev) => [...prev, emptyPerformer("ator")])}
+                  >
+                    + Ator / Cantor
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setPerformers((prev) => [...prev, emptyPerformer("especial")])}
+                  >
+                    + Especial
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Duração e Nota Fiscal</CardTitle>
+                <CardTitle>Acréscimos</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div>
-                  <label className={LABEL}>Modo de duração</label>
-                  <select
-                    className={`${INPUT} max-w-[220px]`}
-                    value={modoDuracao}
-                    onChange={(e) => setModoDuracao(e.target.value as "horas" | "entradas")}
-                  >
-                    <option value="horas">Horas</option>
-                    <option value="entradas">Entradas de 30 min</option>
-                  </select>
+                <p className="text-xs text-muted">
+                  O BV entra no total, mas é um repasse (não aparece para o cliente) e o PIX de quem
+                  recebe é informado no evento.
+                </p>
+                {acrescimos.map((a, i) => (
+                  <div key={i} className="flex flex-wrap items-center gap-2">
+                    <select
+                      className={`${INPUT} max-w-[160px]`}
+                      value={a.tipo}
+                      onChange={(e) =>
+                        setAcrescimos((prev) => prev.map((x, idx) => (idx === i ? { ...x, tipo: e.target.value } : x)))
+                      }
+                    >
+                      {[...opcoes.data.acrescimo_tipos, opcoes.data.acrescimo_tipo_bv].map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                    <MoneyInput
+                      className={`${INPUT} max-w-[120px]`}
+                      value={a.value}
+                      onValueChange={(v) =>
+                        setAcrescimos((prev) => prev.map((x, idx) => (idx === i ? { ...x, value: v } : x)))
+                      }
+                    />
+                    <label className="flex items-center gap-1 text-xs text-muted">
+                      <input
+                        type="checkbox"
+                        checked={a.is_percent}
+                        onChange={(e) =>
+                          setAcrescimos((prev) =>
+                            prev.map((x, idx) => (idx === i ? { ...x, is_percent: e.target.checked } : x)),
+                          )
+                        }
+                      />
+                      %
+                    </label>
+                    <Button size="sm" variant="ghost" onClick={() => setAcrescimos((prev) => prev.filter((_, idx) => idx !== i))}>
+                      Remover
+                    </Button>
+                  </div>
+                ))}
+                <Button size="sm" variant="ghost" onClick={addAcrescimo}>
+                  + Adicionar acréscimo
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Ajustes Finos</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm text-ink">
+                    <input type="checkbox" checked={notaFiscal} onChange={(e) => setNotaFiscal(e.target.checked)} />
+                    Emitir Nota Fiscal
+                  </label>
+                  <Badge tone="green">0.84 — valores ajustados para NF</Badge>
                 </div>
+
                 <div>
-                  <label className={LABEL}>Durações a incluir no resultado</label>
-                  <div className="flex gap-3">
+                  <label className={LABEL}>Duração extra</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    className="max-w-[140px]"
+                    value={duracaoCustom}
+                    onChange={(e) => setDuracaoCustom(Number(e.target.value))}
+                  />
+                  <p className="mt-1 text-xs text-muted">(preço = 4h + N × 4h × markup × 4h)</p>
+                </div>
+
+                <div>
+                  <label className={LABEL}>Formato do orçamento</label>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant={modoDuracao === "horas" ? "default" : "outline"}
+                      onClick={() => setModoDuracao("horas")}
+                    >
+                      Por horas
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={modoDuracao === "entradas" ? "default" : "outline"}
+                      onClick={() => setModoDuracao("entradas")}
+                    >
+                      Por entradas
+                    </Button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className={LABEL}>Incluir no orçamento</label>
+                  <div className="flex flex-wrap gap-3">
                     {DURACOES.map((d) => (
                       <label key={d} className="flex items-center gap-1 text-sm text-ink">
                         <input type="checkbox" checked={incluirDuracao.includes(d)} onChange={() => toggleDuracao(d)} />
@@ -457,210 +704,120 @@ export function OrcamentoCalculadoraPage() {
                     ))}
                   </div>
                 </div>
-                <div>
-                  <label className={LABEL}>Duração extra (além do padrão de 4h)</label>
-                  <p className="mb-1 text-xs text-muted">
-                    Horas adicionais além de 4h — calculadas como preço + 4h + 4h × markup × horas
-                    extras.
-                  </p>
-                  <Input
-                    type="number"
-                    min={0}
-                    className="max-w-[140px]"
-                    value={duracaoCustom}
-                    onChange={(e) => setDuracaoCustom(Number(e.target.value))}
-                  />
-                </div>
-                <label className="flex items-center gap-2 text-sm text-ink">
-                  <input type="checkbox" checked={notaFiscal} onChange={(e) => setNotaFiscal(e.target.checked)} />
-                  Emitir Nota Fiscal (ajusta os valores para a alíquota vigente)
-                </label>
-              </CardContent>
-            </Card>
-          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Equipe</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table className="min-w-[720px]">
-                <thead>
-                  <TableRow head>
-                    <TableCell as="th">Tipo / Subtipo</TableCell>
-                    <TableCell as="th">Personagem/Nome</TableCell>
-                    <TableCell as="th">Flags</TableCell>
-                    <TableCell as="th">Maquiagem</TableCell>
-                    <TableCell as="th" align="right">
-                      Ações
-                    </TableCell>
-                  </TableRow>
-                </thead>
-                <tbody>
-                  <TableRow>
-                    <TableCell className="font-medium text-ink">Coordenador</TableCell>
-                    <TableCell colSpan={2} className="text-xs text-muted">
-                      Obrigatório — sempre presente na equipe
-                    </TableCell>
-                    <TableCell colSpan={2} align="right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setCoordenadorQty((q) => Math.max(0, q - 1))}
-                        >
-                          −
-                        </Button>
-                        <span className="w-6 text-center tabular-nums text-ink">{coordenadorQty}</span>
-                        <Button size="sm" variant="outline" onClick={() => setCoordenadorQty((q) => q + 1)}>
-                          +
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                  {performers.map((p, i) => (
-                    <PerformerTableRow
-                      key={i}
-                      performer={p}
-                      onChange={(np) => setPerformers((prev) => prev.map((x, idx) => (idx === i ? np : x)))}
-                      onRemove={() => setPerformers((prev) => prev.filter((_, idx) => idx !== i))}
-                      especiais={opcoes.data.especiais}
-                      especiaisComShow={opcoes.data.especiais_com_show}
-                      especiaisComCantor={opcoes.data.especiais_com_cantor}
-                    />
-                  ))}
-                </tbody>
-              </Table>
-              <div className="flex gap-2 p-3">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setPerformers((prev) => [...prev, emptyPerformer("ator")])}
-                >
-                  + Ator / Cantor
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setPerformers((prev) => [...prev, emptyPerformer("especial")])}
-                >
-                  + Especial
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Acréscimos</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted">
-                O BV entra no total, mas é um repasse (não aparece para o cliente) e o PIX de quem
-                recebe é informado no evento.
-              </p>
-              {acrescimos.map((a, i) => (
-                <div key={i} className="flex flex-wrap items-center gap-2">
-                  <select
-                    className={`${INPUT} max-w-[160px]`}
-                    value={a.tipo}
-                    onChange={(e) =>
-                      setAcrescimos((prev) => prev.map((x, idx) => (idx === i ? { ...x, tipo: e.target.value } : x)))
-                    }
-                  >
-                    {[...opcoes.data.acrescimo_tipos, opcoes.data.acrescimo_tipo_bv].map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                  <MoneyInput
-                    className={`${INPUT} max-w-[120px]`}
-                    value={a.value}
-                    onValueChange={(v) =>
-                      setAcrescimos((prev) => prev.map((x, idx) => (idx === i ? { ...x, value: v } : x)))
-                    }
-                  />
-                  <label className="flex items-center gap-1 text-xs text-muted">
+                <div className="rounded-md border border-line">
+                  <label className="flex items-center gap-2 p-3 text-sm font-medium text-ink">
                     <input
                       type="checkbox"
-                      checked={a.is_percent}
-                      onChange={(e) =>
-                        setAcrescimos((prev) =>
-                          prev.map((x, idx) => (idx === i ? { ...x, is_percent: e.target.checked } : x)),
-                        )
-                      }
+                      checked={personalizadoAtivo}
+                      onChange={(e) => setPersonalizadoAtivo(e.target.checked)}
                     />
-                    %
+                    Personalizar valores
+                    <span className="text-xs font-normal text-muted">
+                      define o valor final do orçamento manualmente
+                    </span>
                   </label>
-                  <Button size="sm" variant="ghost" onClick={() => setAcrescimos((prev) => prev.filter((_, idx) => idx !== i))}>
-                    Remover
-                  </Button>
-                </div>
-              ))}
-              <Button size="sm" variant="ghost" onClick={addAcrescimo}>
-                + Adicionar acréscimo
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Button loading={calcular.isPending} onClick={handleCalcular}>
-            Calcular orçamento
-          </Button>
-          {calcular.isError && !Object.keys(fieldErrors).length && (
-            <p className="text-sm text-red">Não foi possível calcular o orçamento.</p>
-          )}
-          {Object.values(fieldErrors).map((msg) => (
-            <p key={msg} className="text-sm text-red">
-              {msg}
-            </p>
-          ))}
-
-          {result && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Resultado</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {([
-                    ["1 Hora", result.quote.show_1h, result.quote.total_1h],
-                    ["2 Horas", result.quote.show_2h, result.quote.total_2h],
-                    ["3 Horas", result.quote.show_3h, result.quote.total_3h],
-                    ["4 Horas", result.quote.show_4h, result.quote.total_4h],
-                  ] as const)
-                    .filter(([, show]) => show)
-                    .map(([label, , total]) => (
-                      <div key={label} className="rounded-md bg-surface-2 p-3 text-center">
-                        <p className="text-xs uppercase text-muted">{label}</p>
-                        <p className="text-lg font-semibold text-ink">{brl(total)}</p>
+                  {personalizadoAtivo && (
+                    <div className="space-y-3 border-t border-line p-3">
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant={personalizadoCriterio === "valor_final" ? "default" : "outline"}
+                          onClick={() => setPersonalizadoCriterio("valor_final")}
+                        >
+                          Definir valor final
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={personalizadoCriterio === "multiplicador" ? "default" : "outline"}
+                          onClick={() => setPersonalizadoCriterio("multiplicador")}
+                        >
+                          Mudar multiplicador
+                        </Button>
                       </div>
-                    ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button loading={salvar.isPending} onClick={handleSalvar} disabled={saved}>
-                    {saved ? "Orçamento salvo" : "Gerar Orçamento"}
-                  </Button>
-                  <Button variant="outline" onClick={() => setMemoriaOpen(true)}>
-                    Ver memória de cálculo
-                  </Button>
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        {DURACOES.map((d) => (
+                          <div key={d}>
+                            <label className={LABEL}>{d}</label>
+                            {personalizadoCriterio === "valor_final" ? (
+                              <MoneyInput
+                                className={INPUT}
+                                value={custValores[d]}
+                                onValueChange={(v) => setCustValores((prev) => ({ ...prev, [d]: v }))}
+                              />
+                            ) : (
+                              <Input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={custMult[d]}
+                                onChange={(e) => setCustMult((prev) => ({ ...prev, [d]: Number(e.target.value) }))}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
-          )}
 
-          <Dialog open={memoriaOpen} onOpenChange={setMemoriaOpen}>
-            <DialogContent open={memoriaOpen} className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Memória de cálculo</DialogTitle>
-              </DialogHeader>
-              <pre className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-md bg-surface-2 p-3 text-xs text-ink">
-                {result?.quote.message}
-              </pre>
-            </DialogContent>
-          </Dialog>
-        </>
+            {calcular.isError && !Object.keys(fieldErrors).length && (
+              <p className="text-sm text-red">Não foi possível calcular o orçamento.</p>
+            )}
+            {Object.values(fieldErrors).map((msg) => (
+              <p key={msg} className="text-sm text-red">
+                {msg}
+              </p>
+            ))}
+
+            {result && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Resultado</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className={`grid grid-cols-2 gap-3 sm:grid-cols-4 transition-opacity ${calcular.isPending ? "opacity-50" : ""}`}>
+                    {([
+                      ["1 Hora", result.quote.show_1h, result.quote.total_1h],
+                      ["2 Horas", result.quote.show_2h, result.quote.total_2h],
+                      ["3 Horas", result.quote.show_3h, result.quote.total_3h],
+                      ["4 Horas", result.quote.show_4h, result.quote.total_4h],
+                    ] as const)
+                      .filter(([, show]) => show)
+                      .map(([label, , total]) => (
+                        <div key={label} className="rounded-md bg-surface-2 p-3 text-center">
+                          <p className="text-xs uppercase text-muted">{label}</p>
+                          <p className="text-lg font-semibold text-ink">{brl(total)}</p>
+                        </div>
+                      ))}
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <Button variant="outline" onClick={() => setMemoriaOpen(true)}>
+                      Ver memória de cálculo
+                    </Button>
+                    <Button loading={salvar.isPending} onClick={handleSalvar} disabled={saved}>
+                      {saved ? "Orçamento salvo" : "Gerar Orçamento"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
       )}
+
+      <Dialog open={memoriaOpen} onOpenChange={setMemoriaOpen}>
+        <DialogContent open={memoriaOpen} className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Memória de cálculo</DialogTitle>
+          </DialogHeader>
+          <pre className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-md bg-surface-2 p-3 text-xs text-ink">
+            {result?.quote.message}
+          </pre>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

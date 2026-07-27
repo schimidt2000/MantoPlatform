@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **190**
+> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **191**
 
 Formato de cada entrada:
 
@@ -17,6 +17,64 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 191 — Calculadora de Orçamento: paridade de layout clássico + cálculo reativo
+`main` (ajuste direto, sem branch de feature dedicada) · **2026-07-27** · **sem migration**
+
+**Motivação.** A versão React de `/orcamento` (feature 190) portou a calculadora para duas
+colunas de largura igual com um botão manual "Calcular orçamento" — isso dispersou os campos em
+relação à tela clássica Jinja (`app/templates/orcamento/index.html`, ainda em produção em
+paralelo) e tornou o fluxo do comercial mais lento (clicar em "Calcular" a cada ajuste). Dois
+recursos da tela clássica nunca foram portados: o alerta de segurança "já agendado neste dia"
+(evita vender o mesmo personagem duas vezes no mesmo dia) e o painel "Personalizar valores"
+(definir o total final manualmente, por valor ou por multiplicador) — a infraestrutura de API
+para ambos já existia (`usePersonagensNoDia`, campos `personalizado*` em
+`CalcularOrcamentoInput`), só nunca tinha sido usada na tela.
+
+**Backend.** Nenhuma mudança — nenhum endpoint, RBAC ou model tocado. Todo o trabalho reusou
+`GET /api/orcamento/personagens-no-dia`, `GET /api/orcamento/historico` e
+`POST /api/orcamento/calcular`, já existentes desde a feature 177/190.
+
+**Banco.** Sem migration.
+
+**Frontend.** Reescrita completa de `OrcamentoCalculadoraPage.tsx` (mesmo arquivo,
+`PerformerTableRow` reaproveitado sem mudanças):
+- Layout `lg:grid-cols-3`: coluna esquerda (1/3) = Dados do Evento + transporte condicional
+  (Fora de SP) + alerta de agenda + link "Histórico de Orçamentos" com contador dinâmico
+  (`useOrcamentoHistorico({}).data.entries.length`); coluna direita (2/3) = Equipe, Acréscimos,
+  card "Ajustes Finos" (Nota Fiscal, duração extra, formato do orçamento, durações incluídas,
+  "Personalizar valores") e o card de Resultado.
+- **Cálculo reativo**: removido o botão "Calcular orçamento"; um `useEffect` observa um
+  `payload` memoizado com todo o estado do formulário e dispara `calcular.mutate` com debounce
+  de ~400ms a cada alteração — sem exigir clique. Os cards de resultado ficam com opacidade
+  reduzida (`opacity-50`) enquanto uma requisição está em voo, em vez de somem, preservando o
+  último valor visível (Princípio V — feedback visual obrigatório).
+- **Alerta "Já na agenda neste dia"**: novo componente `AgendaNoDiaAlert`, usa
+  `usePersonagensNoDia(eventDate)` (existia no hook, nunca usado em nenhuma página); valida a
+  data com regex antes de habilitar a query, para não disparar a API com data parcial/inválida;
+  renderiza abaixo do campo Data.
+- **Painel "Personalizar valores"** (novo na UI — só o tipo já existia): checkbox que abre um
+  toggle "Definir valor final" / "Mudar multiplicador" e 4 campos (1h–4h), `MoneyInput` no modo
+  valor final, `Input` numérico no modo multiplicador.
+- Substituído o `<select>` de "Formato do orçamento" por um toggle de dois `Button`
+  (`variant="default"`/`"outline"` conforme seleção), mesmo padrão visual dos botões +/- do
+  Coordenador — sem componente novo no design system.
+
+**Impacto em RBAC e regras de negócio.** Nenhum — mesma tela, mesmo RBAC (`COMERCIAL`,
+`SUPERADMIN`), nenhuma regra de cálculo mudou no backend.
+
+**Riscos e pegadinhas.**
+- O alerta de agenda e o contador do histórico dependem de dados existentes em `manto_local` —
+  verificado manualmente logado como SUPERADMIN contra um evento real do dia (BLUEY + BINGO,
+  27/07/2026): o alerta apareceu corretamente com os dois personagens.
+- O modo "Personalizar valores" retorna erro de campo do backend quando os 4 valores ficam em
+  zero ("Informe valores válidos para o orçamento personalizado.") — comportamento esperado do
+  endpoint, não um bug novo; confirmado que o erro aparece e some corretamente ao preencher um
+  valor.
+- Sem verificação funcional automatizada de backend nesta entrada (nenhum endpoint mudou) — só
+  `npx tsc --noEmit` (limpo) e verificação manual na UI real via preview.
+
+---
 
 ### 190 — Paridade e Unificação do Módulo de Orçamentos e EducaManto (React)
 `190-paridade-orcamento-educamanto` · **2026-07-27** · **sem migration**

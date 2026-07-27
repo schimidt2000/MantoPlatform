@@ -3,8 +3,8 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **190**
-> (`paridade-orcamento-educamanto`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
+> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **191**
+> (`refatoracao-calculadora-orcamento`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
 
 ---
 

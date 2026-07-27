@@ -63,8 +63,11 @@ Manto_Platform/
 ├── migrations/            ← Alembic (Flask-Migrate) — sempre escritas à mão
 ├── instance/
 │   └── uploads/           ← arquivos locais (dev); produção usa volume/S3 (app/storage.py)
-├── docs/
-│   └── changelog.html     ← changelog do time (republicar no artifact existente)
+├── docs/                  ← DOCUMENTAÇÃO VIVA (obrigatória — ver regra no fim deste arquivo)
+│   ├── 01_SISTEMA_E_BANCO.md        ← arquitetura, schema/models, APIs, RBAC, build/deploy
+│   ├── 02_MAPA_DE_PAGINAS_E_UX.md   ← rota a rota: objetivo, quem acessa, UX, vínculos
+│   ├── 03_HISTORICO_MUTACOES.md     ← append-only: uma entrada por feature concluída
+│   └── changelog.html               ← legado, congelado (não atualizar mais)
 ├── specs/                 ← spec-kit — uma pasta por feature (spec/plan/tasks/contracts)
 │   └── 144-migracao-react-spa/   ← spec-mãe da migração + fatias 145–170
 │
@@ -231,10 +234,9 @@ sobre o escopo real da migração). Regras completas: Princípios V/VII/VIII/IX 
 - **Pequenos commits**: cada funcionalidade = um commit atômico
 - **Não quebre o que funciona**: rode os testes antes de cada commit
 - **Relate o progresso**: informe o que foi feito e o que falta
-- **Mantenha o changelog do time atualizado**: ao concluir uma feature/mudança visível ao
-  usuário, adicione uma entrada em `docs/changelog.html` (linguagem simples, o que mudou —
-  não como) e republique no mesmo link já existente (nunca crie um link novo). É a página
-  que o usuário usa para acompanhar e apresentar as entregas ao time.
+- **Mantenha a documentação viva atualizada**: ao concluir o ciclo de uma tarefa/feature,
+  atualize os arquivos em `docs/` conforme a "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA" no fim
+  deste arquivo. O `docs/changelog.html` está **congelado** — não atualizar mais.
 
 ### Quando travar:
 1. Tente 2 abordagens diferentes
@@ -323,7 +325,9 @@ config = Config()
       sem erros antes de declarar pronto
 - [ ] Superfície pública ou tela nova tocada? Conferida em viewport mobile (Princípio VIII da
       constituição)
-- [ ] `docs/changelog.html` atualizado com a entrega, republicado no mesmo link
+- [ ] **Documentação viva atualizada** — `docs/01_SISTEMA_E_BANCO.md`,
+      `docs/02_MAPA_DE_PAGINAS_E_UX.md` e nova entrada em `docs/03_HISTORICO_MUTACOES.md`
+      (ver regra obrigatória no fim deste arquivo)
 
 ---
 
@@ -403,6 +407,33 @@ O Claude deve ler os arquivos em `.claude/skills/` quando trabalhar nas áreas c
 - **`.claude/skills/ui-ux.md`** → ao criar ou modificar interfaces
 - **`.claude/skills/autonomy.md`** → ao planejar tarefas complexas
 - **`.claude/skills/architecture.md`** → ao criar novos módulos/estruturas
+
+---
+
+## REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA (GEMINI NOTEBOOK INTEGRATION)
+
+Sempre que concluir o ciclo de uma tarefa/feature (esteira SpecKit):
+1. Atualize obrigatoriamente os arquivos em `docs/` (`docs/01_SISTEMA_E_BANCO.md`, `docs/02_MAPA_DE_PAGINAS_E_UX.md` e append em `docs/03_HISTORICO_MUTACOES.md`).
+2. Garanta que a atualização descreva:
+   - Novas rotas, telas ou alterações visuais/UX.
+   - Tabelas, colunas ou endpoints de API criados/modificados.
+   - Impactos nas regras de negócio e permissões de usuários.
+
+Não há mais necessidade da atualização do artefact changelog — `docs/changelog.html` está
+congelado; paramos com isso para economizar tokens.
+
+### Como aplicar na prática
+- **`docs/01_SISTEMA_E_BANCO.md`** — atualizar as seções afetadas: §2 (schema/models, incluindo a
+  migration e o novo head), §3 (endpoints), §4 (RBAC), §5 (build/deploy). Atualizar também a data
+  e o "estado do repositório" no cabeçalho.
+- **`docs/02_MAPA_DE_PAGINAS_E_UX.md`** — para cada rota nova ou alterada: rota, objetivo da tela,
+  quem acessa (RBAC de servidor), funcionalidades/componentes/interações de UX e vínculos com
+  outros módulos. Rota removida sai do mapa.
+- **`docs/03_HISTORICO_MUTACOES.md`** — **append no topo** da seção "Registro", no formato já
+  usado: branch, data do merge, migration (ou "sem migration", explicitamente), motivação,
+  Backend/Banco/Frontend, impacto em RBAC e regras de negócio, e as pegadinhas descobertas.
+- Estes três arquivos são a fonte que alimenta o **Gemini Notebook** do projeto — devem ser
+  auto-suficientes, sem exigir leitura do código para serem entendidos.
 
 ---
 
