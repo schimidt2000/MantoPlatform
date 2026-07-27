@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **189**
+> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **190**
 
 Formato de cada entrada:
 
@@ -17,6 +17,95 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 190 — Paridade e Unificação do Módulo de Orçamentos e EducaManto (React)
+`190-paridade-orcamento-educamanto` · **2026-07-27** · **sem migration**
+
+**Motivação.** As 6 telas do módulo de Ferramentas (Calculadora de Orçamento, Config. de Preços,
+Histórico de Orçamentos, Calculadora EducaManto, Pacotes EducaManto, Histórico EducaManto) já
+existiam e funcionavam, mas haviam perdido densidade visual e paridade de recursos frente à
+extinta versão Jinja: listas de `Card` soltos em vez de tabelas gerenciais, filtros avançados já
+suportados pelo backend mas nunca expostos na UI (`date_from`/`date_to`/`min_val`/`max_val`/
+`user_id`/`has_show` no histórico de Orçamento), e — a lacuna mais importante — **nenhum dos dois
+históricos tinha ação "Recalcular"**, apesar do backend já guardar o estado bruto necessário
+(`OrcamentoHistory.form_snapshot`, `EducaMantoQuote.snapshot`) sem nunca expô-lo em JSON. A meta
+de negócio é unificar a experiência do EducaManto com a Calculadora de Orçamento normal como
+ferramentas irmãs do mesmo ecossistema, incluindo paridade de "reabrir, editar e recalcular".
+
+**Backend.** Dois endpoints de leitura, ambos aditivos/retrocompatíveis — nenhum endpoint
+existente mudou de contrato, nenhuma lógica de negócio nova (reuso de `quote_ops` já existente).
+- `app/api/orcamento_read.py`: `GET /orcamento/historico/<id>` passou a incluir também
+  `form_snapshot` (estado bruto de entrada, já persistido, nunca antes exposto) ao lado do
+  `quote` congelado que já existia.
+- `app/api/educamanto_read.py`: **novo** `GET /educamanto/historico/<id>` — retorna
+  `quote_ops.load_quote_snapshot(quote)` em JSON (mesmo dado já usado internamente para regerar o
+  PDF), mesmo RBAC (`_require_use`) da listagem, sem restrição por dono (paridade com o endpoint
+  de PDF por id, que também não restringe por dono).
+
+**Banco.** Sem migration — nenhuma coluna nova, nenhum model alterado.
+
+**Frontend.**
+- Fundação em `@manto/ui`: `Table`/`TableRow`/`TableCell` (convenção densa extraída de
+  `PagamentosPage`/`GastosRecorrentesPage`, feature 189), `Badge` (rótulo de tom único,
+  complementar ao `MetricBadge` existente) e `CopyButton` (promovido de local em
+  `PagamentosPage.tsx` para fonte única).
+- `OrcamentoCalculadoraPage.tsx`: layout em duas colunas, "Limpar tudo", equipe em tabela
+  (Coordenador com contador +/-, "+ Ator/Cantor"/"+ Especial"), nota informativa de BV, campo de
+  duração extra (`duracao_custom`, já existia no tipo mas não estava exposto na UI), painel de
+  resultados em cards 1h–4h, `Dialog` "Ver memória de cálculo"; lê `?recalcular_id=` e repopula
+  todos os campos a partir de `form_snapshot` (mesmo padrão de pré-fill via query param de
+  `EventCreatePage.tsx`).
+- `OrcamentoConfigPrecosPage.tsx`: os 8 blocos de preço viraram tabelas (`PriceTable`) — Markup,
+  Cachê Atores, Cachê Cantores, Técnico/Coordenador, Especiais (uma linha por variante); "Voltar
+  à calculadora" no `PageHeader`.
+- `OrcamentoHistoricoPage.tsx`: tabela gerencial com todos os filtros que o hook já suportava
+  (texto, data, faixa de valor, vendedor, tipo com/sem show), badge de tipo, `Dialog` "Ver"
+  (substitui a expansão inline anterior), **"Criar evento"** (`/events/new?orcamento_id=` — o
+  pré-fill do lado do `EventCreatePage` já existia, só faltava o link) e **"Recalcular"**
+  (`/orcamento?recalcular_id=`).
+- `EducaMantoCalculadoraPage.tsx`: seletor de pacote virou dropdown (era pills), layout em duas
+  colunas, cards "Sem Nota Fiscal"/"Com Nota Fiscal" recoloridos (verde/azul) com Custo Base e
+  Comissão do Vendedor explícitos, detalhamento de custos dentro de um `AccordionRow`
+  colapsável, atalhos no cabeçalho ("Editar pacote", "+ Novo pacote"); lê `?package_id=` (vindo
+  de "Usar" na tela de Pacotes) e `?recalcular_id=` (repopula a partir do novo endpoint de
+  detalhe — note que o texto do endereço não é persistido no snapshot, só o km calculado, então
+  o campo de endereço fica vazio no recálculo mas o km/transporte já vêm preenchidos).
+- `EducaMantoPackagesPage.tsx`: lista vertical virou grade de 2–3 colunas; cada card ganhou
+  margens (1S/2S/1S-dias/2S-dias), desconto formatado ("5% após N dias") e uma mini matriz de
+  custos; botão novo "Usar" (`/educamanto?package_id=`, disponível a todos que veem pacotes, não
+  só a quem gerencia); "Duplicar" ganhou o rótulo "Criar cópia" pedido (mesma mutation).
+- `EducaMantoHistoricoPage.tsx`: lista virou tabela; "Reabrir PDF" renomeado para "Baixar PDF";
+  **"Ver"** novo (`Dialog` consumindo o endpoint de detalhe novo) e **"Recalcular"** novo
+  (`/educamanto?recalcular_id=`).
+
+**Rotas e endpoints.**
+- **Novo:** `GET /api/educamanto/historico/<id>`.
+- **Alterado (aditivo):** `GET /api/orcamento/historico/<id>` (campo `form_snapshot` a mais).
+- Rotas de página inalteradas.
+
+**RBAC e regras de negócio.** Sem mudança de permissões. "Recalcular" sempre roda o cálculo com
+as configurações de preço **atuais** (não os valores congelados no histórico) — é a mesma
+calculadora reaberta com os campos preenchidos, não uma reconstrução do valor histórico exato;
+para ver o valor exatamente como foi cotado, a ação é "Ver" (mostra o snapshot congelado), não
+"Recalcular".
+
+**Riscos e pegadinhas.**
+- O processo do backend local (`manto-backend-local`) não recarregou a nova rota
+  `/api/educamanto/historico/<id>` automaticamente apesar do reloader do Werkzeug reportar
+  "Restarting with stat" — só passou a responder (401 em vez de 404) após um restart manual do
+  processo. Se uma rota nova parecer "não existir" mesmo com o código correto no disco
+  (confirmado lendo `app.url_map` num processo novo), suspeite do processo de dev desatualizado
+  antes de suspeitar do código.
+- `EducaMantoQuote.snapshot` guarda `transporte.kmT`/`label`/`pessoas`/`total`, mas **não** o
+  texto do endereço digitado — "Recalcular" no EducaManto restaura o km calculado, não o campo
+  de endereço em si.
+- `@manto/ui` não tem um componente `Table`/`Badge` genérico antes desta feature — telas com
+  tabela usavam `<table>` nativo caso a caso; os novos `Table`/`TableRow`/`TableCell`/`Badge`
+  ficam disponíveis para qualquer tela futura que precise de listagem densa.
+- Verificação: `npx tsc --noEmit` limpo em `frontend/apps/internal`; `ruff check` limpo nos dois
+  arquivos Python tocados; fluxo completo Calculadora → Salvar → Histórico → Recalcular → Criar
+  evento exercitado no navegador contra `manto_local` para os dois módulos (Orçamento e
+  EducaManto), incluindo o `Dialog` "Ver" em ambos os históricos.
 
 ### 189 — Módulo Financeiro de Alta Fidelidade e Consistência (React)
 `189-financeiro-alta-fidelidade` · **2026-07-27** · **sem migration**

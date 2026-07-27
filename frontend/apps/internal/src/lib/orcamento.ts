@@ -294,11 +294,39 @@ export function useOrcamentoHistorico(filters: OrcamentoHistoricoFilters) {
   });
 }
 
-/** Detalhe congelado de um orçamento salvo. */
+/**
+ * Estado bruto de entrada gravado junto do orçamento (`OrcamentoHistory.form_snapshot`) —
+ * usado para repopular a calculadora na ação "Recalcular". Note que os campos numéricos aqui
+ * vêm como `string` (é assim que o backend grava o snapshot, ver `quote_ops.calculate_quote`).
+ */
+export interface OrcamentoFormSnapshot {
+  performers: Performer[];
+  coordenador_qty: number;
+  fora_sp: boolean;
+  km_ida: string;
+  transporte_tipo: "van" | "carro";
+  carretinha: boolean;
+  num_carros: string;
+  num_colaboradores: string;
+  event_date: string;
+  event_time: string;
+  client_name: string;
+  event_location: string;
+  acrescimos: Acrescimo[];
+  nota_fiscal: boolean;
+  modo_duracao: "horas" | "entradas";
+  duracao_custom: string;
+  personalizado_ativo: boolean;
+}
+
+/** Detalhe congelado de um orçamento salvo, incluindo o estado bruto para "Recalcular". */
 export function useOrcamentoDetalhe(id: number | null) {
-  return useQuery<{ quote: Quote }>({
+  return useQuery<{ quote: Quote; form_snapshot: OrcamentoFormSnapshot }>({
     queryKey: ["orcamento-historico-detalhe", id],
-    queryFn: () => apiFetch<{ quote: Quote }>(`/api/orcamento/historico/${id}`),
+    queryFn: () =>
+      apiFetch<{ quote: Quote; form_snapshot: OrcamentoFormSnapshot }>(
+        `/api/orcamento/historico/${id}`,
+      ),
     enabled: id != null,
   });
 }

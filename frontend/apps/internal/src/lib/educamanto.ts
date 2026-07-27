@@ -244,6 +244,26 @@ export interface EducaMantoHistoricoFiltros {
   user_id?: string;
 }
 
+/** Snapshot bruto de um orçamento EducaManto salvo — usado por "Ver" e "Recalcular". */
+export interface EducaMantoQuoteSnapshot {
+  d1: number;
+  d2: number;
+  ensemble: number;
+  acrescimo: number;
+  transporte: { total: number; label: string; kmT: number | null; pessoas: number | null };
+  client_name: string;
+  packages: { id: number; name: string; sem_nota: number; com_nota: number }[];
+}
+
+/** Detalhe de um orçamento salvo — mesmo dado usado para regerar o PDF, exposto em JSON. */
+export function useEducaMantoQuoteDetalhe(id: number | null) {
+  return useQuery<EducaMantoQuoteSnapshot>({
+    queryKey: ["educamanto-historico-detalhe", id],
+    queryFn: () => apiFetch<EducaMantoQuoteSnapshot>(`/api/educamanto/historico/${id}`),
+    enabled: id != null,
+  });
+}
+
 /** Histórico de orçamentos gerados, com busca/filtros — "Gerado por" só visível a SuperAdmin. */
 export function useEducaMantoHistorico(filtros: EducaMantoHistoricoFiltros) {
   const params = new URLSearchParams();

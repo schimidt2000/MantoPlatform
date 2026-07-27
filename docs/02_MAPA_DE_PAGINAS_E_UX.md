@@ -371,12 +371,12 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 
 | Rota | Tela | Acesso | Destaques |
 |---|---|---|---|
-| `/orcamento` | Calculadora de Orçamento | `COMERCIAL`, `SUPERADMIN` | cálculo por personagens/dia, distância (Google Maps), salvar no histórico |
-| `/orcamento/historico` | Orçamentos | `COMERCIAL`, `SUPERADMIN` | PDF, envio por e-mail, exclusão; vira `orcamento_history_id` do evento |
-| `/orcamento/configuracoes` | Config. Preços | `SUPERADMIN` | `SiteSetting.pricing_config` + personagens especiais |
-| `/educamanto` | Calculadora EducaManto | `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO` | pacotes, transporte, cálculo |
-| `/educamanto/pacotes` · `/novo` · `/:id/editar` | Pacotes EducaManto | `COMERCIAL`, `SUPERADMIN` | CRUD + duplicar |
-| `/educamanto/historico` | Histórico EducaManto | mesmos da calculadora | orçamentos gerados + PDF |
+| `/orcamento` | Calculadora de Orçamento | `COMERCIAL`, `SUPERADMIN` | duas colunas, equipe em tabela, distância (Google Maps), salvar no histórico, "Ver memória de cálculo"; lê `?recalcular_id=` para reabrir um orçamento salvo com os campos preenchidos (feature 190) |
+| `/orcamento/historico` | Orçamentos | `COMERCIAL`, `SUPERADMIN` | tabela densa com filtros avançados (data, valor, vendedor, tipo), PDF, envio por e-mail, exclusão; **Criar evento** (`/events/new?orcamento_id=`) e **Recalcular** (`/orcamento?recalcular_id=`), feature 190 |
+| `/orcamento/configuracoes` | Config. Preços | `SUPERADMIN` | `SiteSetting.pricing_config` + personagens especiais, em tabelas densas (feature 190) |
+| `/educamanto` | Calculadora EducaManto | `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO` | seletor de pacote em dropdown, duas colunas, cards Sem/Com Nota Fiscal, transporte, cálculo; lê `?package_id=` (vindo de "Usar" na tela de Pacotes) e `?recalcular_id=` (feature 190) |
+| `/educamanto/pacotes` · `/novo` · `/:id/editar` | Pacotes EducaManto | `COMERCIAL`, `SUPERADMIN` | grade de cards com margens/desconto/matriz de custos; Usar, CRUD + duplicar (feature 190) |
+| `/educamanto/historico` | Histórico EducaManto | mesmos da calculadora | tabela densa; Ver (Dialog com o snapshot), Baixar PDF e **Recalcular** (`/educamanto?recalcular_id=`), feature 190 |
 
 ---
 

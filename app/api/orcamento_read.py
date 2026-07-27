@@ -5,6 +5,7 @@ Reusa, sem duplicar, o núcleo já extraído em `app/orcamento/quote_ops.py` e o
 `app/orcamento/settings.py`/`pricing.py` — os endpoints aqui só validam RBAC e serializam.
 """
 
+import json
 from datetime import date, datetime
 from typing import Any
 
@@ -209,11 +210,22 @@ def _get_entry_or_none(entry_id: int, is_sa: bool) -> OrcamentoHistory | None:
 @api_bp.route("/orcamento/historico/<int:entry_id>")
 @api_login_required
 def api_orcamento_historico_detail(entry_id: int) -> Any:
-    """Detalhe congelado de um orçamento salvo (com fallback para registros legados)."""
+    """Detalhe congelado de um orçamento salvo (com fallback para registros legados).
+
+    Inclui `form_snapshot` (o estado bruto de entrada do formulário) além do `quote`
+    já congelado — usado pela tela de Recalcular para repopular a calculadora.
+    """
     denied = _require_vendas()
     if denied:
         return denied
     entry = _get_entry_or_none(entry_id, _has_role(RoleName.SUPERADMIN))
     if entry is None:
         return json_error("Orçamento não encontrado", 404)
-    return jsonify({"quote": quote_ops.quote_for_entry(entry)})
+    try:
+        form_snapshot = json.loads(entry.form_snapshot or "{}")
+    except (TypeError, ValueError):
+        form_snapshot = {}
+    return jsonify({
+        "quote": quote_ops.quote_for_entry(entry),
+        "form_snapshot": form_snapshot,
+    })
