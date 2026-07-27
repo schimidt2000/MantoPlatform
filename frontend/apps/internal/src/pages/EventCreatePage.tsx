@@ -27,6 +27,7 @@ import {
 } from "../lib/eventCreate";
 import { useAddPayment, useAddContract, useAddReimbursement } from "../lib/eventAttachments";
 import { useAddImageObservation } from "../lib/observations";
+import { useFormResponseDetail } from "../lib/formulariosAdmin";
 import type { SelectedFormResponse } from "../components/FormResponsePicker";
 import { ClienteBlock } from "../components/EventFormBlocks/ClienteBlock";
 import { DadosEventoBlock } from "../components/EventFormBlocks/DadosEventoBlock";
@@ -51,10 +52,16 @@ export function EventCreatePage() {
   const [searchParams] = useSearchParams();
   const orcamentoIdParam = searchParams.get("orcamento_id");
   const orcamentoId = orcamentoIdParam ? Number(orcamentoIdParam) : null;
+  // Pré-preenchimento a partir de uma resposta de formulário (tela `/formularios` → "Criar
+  // evento com os dados desta resposta"). Reusa o detalhe já exposto pela API, com o mesmo
+  // RBAC (_require_vendas) de quem cria evento — sem endpoint novo.
+  const formResponseIdParam = searchParams.get("form_response_id");
+  const formResponseId = formResponseIdParam ? Number(formResponseIdParam) : null;
 
   const currentUser = useCurrentUser();
   const options = useEventCreateOptions();
   const prefill = useOrcamentoPrefill(orcamentoId);
+  const formResponsePrefill = useFormResponseDetail(formResponseId);
   const createEvent = useCreateEvent();
 
   const [serverError, setServerError] = useState<string | null>(null);
@@ -113,6 +120,30 @@ export function EventCreatePage() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill.data?.orcamento_id]);
+
+  // Pré-fill da resposta de formulário: já deixa o pré-contrato vinculado, a data do evento
+  // preenchida e o cliente associado (quando a resposta já tem um) na lista de clientes.
+  useEffect(() => {
+    const r = formResponsePrefill.data?.response;
+    if (!r) return;
+    setFormResponse({ id: r.id, name: r.contact_name, form_type: r.form_type_label });
+    if (r.event_date) setValue("date", r.event_date.slice(0, 10));
+    if (r.client_id) {
+      setClients((current) =>
+        current.some((c) => c.client_id === r.client_id)
+          ? current
+          : [
+              ...current,
+              {
+                client_id: r.client_id!,
+                name: r.client_name ?? r.contact_name,
+                relation: "Contratante",
+              },
+            ],
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formResponsePrefill.data?.response?.id]);
 
   // Default do vendedor: o próprio usuário, se ele estiver na lista de vendedores.
   useEffect(() => {

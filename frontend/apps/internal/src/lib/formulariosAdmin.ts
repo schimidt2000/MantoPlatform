@@ -9,6 +9,8 @@ export interface FormResponseSummary {
   contact_phone_display: string;
   event_date: string | null;
   client_id: number | null;
+  /** Nome do cliente vinculado — vem já na listagem, alimenta o badge "Cliente: <nome>". */
+  client_name: string | null;
   event_id: number | null;
   event_link_source: string | null;
   event_link_ambiguous: boolean;
@@ -19,7 +21,6 @@ export interface FormResponseSummary {
 export interface FormResponseDetail extends FormResponseSummary {
   data_sections: { secao: string; campos: [string, string, string][] }[];
   event_title: string | null;
-  client_name: string | null;
 }
 
 /** Lista as respostas de formulário mais recentes (feature 177, US7). */
@@ -144,14 +145,58 @@ function invalidateEditor(queryClient: ReturnType<typeof useQueryClient>, formTy
   queryClient.invalidateQueries({ queryKey: ["formularios-editor", formType] });
 }
 
+/** Tipos de campo aceitos pelo backend (`FormFieldDefinition.FIELD_TYPES`). */
+export const FIELD_TYPES = [
+  { value: "texto_curto", label: "Texto curto" },
+  { value: "texto_longo", label: "Texto longo" },
+  { value: "selecao", label: "Seleção (lista de opções)" },
+  { value: "data", label: "Data" },
+  { value: "hora", label: "Hora" },
+  { value: "telefone", label: "Telefone" },
+  { value: "email", label: "E-mail" },
+  { value: "cpf", label: "CPF" },
+  { value: "cnpj", label: "CNPJ" },
+  { value: "cep", label: "CEP" },
+  { value: "sim_nao", label: "Sim/Não" },
+] as const;
+
+/**
+ * Converte o `options` do backend (string JSON `list[str]`) no texto do editor — uma opção
+ * por linha, que é o formato que `create_field`/`update_field` esperam de volta.
+ */
+export function optionsToText(options: string | null): string {
+  if (!options) return "";
+  try {
+    const parsed: unknown = JSON.parse(options);
+    return Array.isArray(parsed) ? parsed.join("\n") : "";
+  } catch {
+    return "";
+  }
+}
+
 export interface CreateFieldInput {
   label: string;
   section_name: string;
   field_type: string;
   help_text?: string;
+  placeholder?: string;
   required?: boolean;
   options?: string;
 }
+
+/**
+ * Corpo do PATCH de um campo. `update_field` no backend **substitui** todos estes atributos:
+ * omitir `help_text`/`placeholder`/`required` os apaga. Por isso o payload é sempre completo
+ * (menos `field_type`/`section_name`, que são imutáveis após a criação).
+ */
+export type UpdateFieldInput = {
+  id: number;
+  label: string;
+  help_text?: string;
+  placeholder?: string;
+  required: boolean;
+  options?: string;
+};
 
 /** Adiciona um campo personalizado ao fim de uma seção. */
 export function useCreateField(formType: "comum" | "corporativo") {
@@ -166,11 +211,11 @@ export function useCreateField(formType: "comum" | "corporativo") {
   });
 }
 
-/** Edita rótulo/texto de ajuda/obrigatoriedade/opções de um campo. */
+/** Edita rótulo/texto de ajuda/obrigatoriedade/opções de um campo (payload completo). */
 export function useUpdateField(formType: "comum" | "corporativo") {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...input }: Partial<CreateFieldInput> & { id: number }) =>
+    mutationFn: ({ id, ...input }: UpdateFieldInput) =>
       apiFetch<FormFieldDefinition>(`/api/formularios/editor/campo/${id}`, {
         method: "PATCH",
         body: JSON.stringify(input),

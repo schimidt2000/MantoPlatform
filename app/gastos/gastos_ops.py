@@ -109,11 +109,17 @@ def expense_totals(expenses: list[SpecialExpense]) -> dict[str, dict[str, float 
 
 
 def search_events_by_date(day: date) -> list[CalendarEvent]:
-    """Eventos de um dia, para o seletor de vínculo de um gasto."""
+    """Eventos de um dia, para o seletor de vínculo de um gasto.
+
+    Compara com o próprio `date`, NUNCA com `day.isoformat()`: `func.date(...)` devolve um
+    `date` no Postgres e comparar com string quebra com
+    `operador não existe: date = character varying`. O SQLite de dev aceitava (tipagem
+    dinâmica), então o bug só aparecia em produção.
+    """
     from sqlalchemy import func
 
     return (
-        CalendarEvent.query.filter(func.date(CalendarEvent.start_at) == day.isoformat())
+        CalendarEvent.query.filter(func.date(CalendarEvent.start_at) == day)
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )

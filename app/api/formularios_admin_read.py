@@ -42,6 +42,9 @@ def _response_summary(r: FormResponse) -> dict:
         "contact_phone_display": r.contact_phone_display or "",
         "event_date": r.event_date.isoformat() if r.event_date else None,
         "client_id": r.client_id,
+        # Nome do cliente já na listagem: a coluna "Situação" mostra o badge "Cliente: <nome>"
+        # sem exigir que a tela abra o detalhe de cada resposta (`list_responses` faz joinedload).
+        "client_name": r.client.name if r.client else None,
         "event_id": r.event_id,
         "event_link_source": r.event_link_source,
         "event_link_ambiguous": r.event_link_ambiguous,
@@ -55,7 +58,6 @@ def _response_detail(r: FormResponse) -> dict:
         **_response_summary(r),
         "data_sections": r.data_sections,
         "event_title": r.event.title if r.event else None,
-        "client_name": r.client.name if r.client else None,
     }
 
 

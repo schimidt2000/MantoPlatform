@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import re
 
+from sqlalchemy.orm import joinedload
+
 from app import db
 from app.models import CalendarEvent, Client, FormFieldDefinition, FormResponse
 from app.utils import strip_accents_lower, unaccent_lower_sql
@@ -80,7 +82,8 @@ def search_responses(q: str) -> list[FormResponse]:
     from sqlalchemy import or_
 
     return (
-        FormResponse.query.filter(or_(*conditions))
+        FormResponse.query.options(joinedload(FormResponse.client))
+        .filter(or_(*conditions))
         .order_by(FormResponse.created_at.desc())
         .limit(10)
         .all()
@@ -88,8 +91,17 @@ def search_responses(q: str) -> list[FormResponse]:
 
 
 def list_responses(limit: int = 200) -> list[FormResponse]:
-    """Lista as respostas mais recentes (tela de índice)."""
-    return FormResponse.query.order_by(FormResponse.created_at.desc()).limit(limit).all()
+    """Lista as respostas mais recentes (tela de índice).
+
+    O cliente vinculado vem em ``joinedload``: a listagem exibe o nome dele em cada linha
+    (badge "Cliente: <nome>"), e sem isso seriam até ``limit`` queries extras (N+1).
+    """
+    return (
+        FormResponse.query.options(joinedload(FormResponse.client))
+        .order_by(FormResponse.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 def associate_client(response: FormResponse, client_id: int | None) -> Client:
