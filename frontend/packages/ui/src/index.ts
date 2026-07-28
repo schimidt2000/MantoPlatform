@@ -35,3 +35,7 @@ export { Badge } from "./components/badge";
 export type { BadgeProps } from "./components/badge";
 export { CopyButton } from "./components/copy-button";
 export type { CopyButtonProps } from "./components/copy-button";
+export { AvatarThumb } from "./components/avatar-thumb";
+export type { AvatarThumbProps, AvatarThumbShape, AvatarThumbSize } from "./components/avatar-thumb";
+export { Combobox } from "./components/combobox";
+export type { ComboboxProps, ComboboxOption } from "./components/combobox";

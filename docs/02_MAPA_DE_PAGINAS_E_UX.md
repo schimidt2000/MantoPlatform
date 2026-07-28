@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **194**
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **195**
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
@@ -64,6 +64,9 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
      Mãe/Pai, Familiar, Outros) e vínculo com resposta de formulário (`FormResponsePicker`).
   2. **Dados do evento** (`DadosEventoBlock`) — tipo, data, horários, local, descrição. Tipo
      `SHOW` exibe o aviso *"Eventos SHOW sempre geram ensaio automaticamente"*.
+     **Local/Endereço do evento** é um **`GoogleAddressInput`** (feature 195): sugestões do Google
+     Places conforme se digita (debounce 350ms, a partir de 3 letras), escolher uma grava o
+     endereço normalizado. Continua aceitando digitação livre para locais que o Google não conhece.
   3. **Elenco** (`ElencoBlock`) — linhas dinâmicas de personagem/equipe com
      **`CharacterAutocomplete`**: busca visual com **miniatura de foto**, restrita a
      **Personagens filhos ativos** do catálogo (Temas pai não aparecem); ao selecionar, preenche
@@ -71,6 +74,12 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
      **"Gerar título automaticamente"** monta `(TIPO) PERSONAGEM 1 + PERSONAGEM 2` e para de
      sobrescrever assim que o título é editado à mão. Flags por linha: `needs_makeup`,
      `is_singer`, cachê e talento.
+     **Feature 195 — os três `<select>` do bloco viraram `Combobox` pesquisáveis com miniatura**
+     (Princípio X.1/X.2): *Buscar figurino* (miniatura **quadrada** da foto da ficha, via
+     `photo_url`), *Pré-escalar talento específico* e *Coordenador específico* (avatar
+     **circular**, via `photo_face_path` + `assetUrl()`). Digitar filtra em tempo real ignorando
+     acentos; setas/Enter/Esc navegam; sem foto salva aparece o placeholder de iniciais (talentos)
+     ou 🎭 (figurinos).
   4. **Valores e comissões** (`ValoresBlock`) — valor cheio × valor de venda com **percentual de
      desconto calculado em tempo real**, transporte, acréscimos, cortesia/permuta, vendedor.
      Máscara BRL sempre via `@manto/money`.
@@ -97,7 +106,10 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **Acesso**: `_can_edit_event()` (`COMERCIAL`, `SUPERADMIN`).
 - **UX**: mesmos 7 blocos; o elenco é **reconciliado** por `role_id` (não substituído);
   novos anexos entram ao lado dos existentes. Agrupamento comercial e sincronização com o Google
-  não são alterados pela edição.
+  não são alterados pela edição. Herda automaticamente os comboboxes visuais e o
+  `GoogleAddressInput` da feature 195 — os blocos são os mesmos componentes da criação. Ao abrir um
+  evento já salvo, o endereço existente aparece no campo **sem** consultar o Google (só o que o
+  usuário digitar dispara busca).
 - **API**: `PATCH /api/events/<id>`.
 
 #### `/events/:id` — Detalhe do Evento
@@ -427,10 +439,10 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 
 | Rota | Tela | Acesso | Destaques |
 |---|---|---|---|
-| `/orcamento` | Calculadora de Orçamento | `COMERCIAL`, `SUPERADMIN` | layout clássico de duas colunas assimétrico (1/3 dados do evento + segurança de agenda, 2/3 equipe/ajustes/resultado); **cálculo 100% reativo** — sem botão "Calcular", qualquer alteração recalcula (debounce ~400ms); alerta "Já na agenda neste dia" abaixo da Data (evita venda em dobro de personagem); painel "Personalizar valores" (valor final ou multiplicador, por duração); contador de itens no link "Histórico de Orçamentos"; distância (Google Maps), salvar no histórico, "Ver memória de cálculo"; lê `?recalcular_id=` para reabrir um orçamento salvo com os campos preenchidos (feature 191, sobre a base da feature 190) |
+| `/orcamento` | Calculadora de Orçamento | `COMERCIAL`, `SUPERADMIN` | layout clássico de duas colunas assimétrico (1/3 dados do evento + segurança de agenda, 2/3 equipe/ajustes/resultado); **cálculo 100% reativo** — sem botão "Calcular", qualquer alteração recalcula (debounce ~400ms); alerta "Já na agenda neste dia" abaixo da Data (evita venda em dobro de personagem); painel "Personalizar valores" (valor final ou multiplicador, por duração); contador de itens no link "Histórico de Orçamentos"; campo **Local/Endereço do evento** com **`GoogleAddressInput`** e botão **"Calcular km (Maps)"** ao lado de *Km (ida)*, que preenche a distância pela Distance Matrix (feature 195 — antes o KM aqui era 100% manual); escolher uma sugestão do Google com "Fora de SP" ligado já dispara o cálculo. Salvar no histórico, "Ver memória de cálculo"; lê `?recalcular_id=` para reabrir um orçamento salvo com os campos preenchidos (feature 191, sobre a base da feature 190) |
 | `/orcamento/historico` | Orçamentos | `COMERCIAL`, `SUPERADMIN` | tabela densa com filtros avançados (data, valor, vendedor, tipo), PDF, envio por e-mail, exclusão; **Criar evento** (`/events/new?orcamento_id=`) e **Recalcular** (`/orcamento?recalcular_id=`), feature 190 |
 | `/orcamento/configuracoes` | Config. Preços | `SUPERADMIN` | `SiteSetting.pricing_config` + personagens especiais, em tabelas densas (feature 190) |
-| `/educamanto` | Calculadora EducaManto | `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO` | seletor de pacote em dropdown, duas colunas, cards Sem/Com Nota Fiscal, transporte, cálculo; lê `?package_id=` (vindo de "Usar" na tela de Pacotes) e `?recalcular_id=` (feature 190) |
+| `/educamanto` | Calculadora EducaManto | `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO` | seletor de pacote em dropdown, duas colunas, cards Sem/Com Nota Fiscal, transporte com **`GoogleAddressInput`** no endereço (feature 195 — escolher a sugestão já recalcula o KM), cálculo; lê `?package_id=` (vindo de "Usar" na tela de Pacotes) e `?recalcular_id=` (feature 190) |
 | `/educamanto/pacotes` · `/novo` · `/:id/editar` | Pacotes EducaManto | `COMERCIAL`, `SUPERADMIN` | grade de cards com margens/desconto/matriz de custos; Usar, CRUD + duplicar (feature 190) |
 | `/educamanto/historico` | Histórico EducaManto | mesmos da calculadora | tabela densa; Ver (Dialog com o snapshot), Baixar PDF e **Recalcular** (`/educamanto?recalcular_id=`), feature 190 |
 

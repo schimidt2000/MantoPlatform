@@ -2,11 +2,25 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import type { EventoDetalhe } from "./agenda";
 
+/** Ficha de figurino selecionável no elenco — `photo_url` alimenta a miniatura quadrada da busca. */
+export interface FigurinoSheetOption {
+  id: number;
+  character_name: string;
+  photo_url: string | null;
+}
+
+/** Talento pré-escalável — `photo_face_path` alimenta o avatar circular da busca (feature 195). */
+export interface AssignableTalent {
+  id: number;
+  name: string;
+  photo_face_path: string | null;
+}
+
 /** Opções do formulário de criação de evento (feature 152) — `GET /api/events/new/options`. */
 export interface EventCreateOptions {
-  figurino_sheets: { id: number; character_name: string; photo_url: string | null }[];
+  figurino_sheets: FigurinoSheetOption[];
   sellers: { id: number; name: string }[];
-  assignable_talents: { id: number; name: string }[];
+  assignable_talents: AssignableTalent[];
   client_relation_tipos: string[];
 }
 

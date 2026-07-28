@@ -49,3 +49,4 @@ from app.api import ratings_read as _ratings_read  # noqa: E402,F401
 from app.api import ratings_write as _ratings_write  # noqa: E402,F401
 from app.api import formularios_admin_read as _formularios_admin_read  # noqa: E402,F401
 from app.api import formularios_admin_write as _formularios_admin_write  # noqa: E402,F401
+from app.api import maps_read as _maps_read  # noqa: E402,F401
