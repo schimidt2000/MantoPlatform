@@ -731,10 +731,42 @@ def write_report() -> None:
     print(f"\nRelatório salvo em {REPORT_PATH}")
 
 
+#: Hosts aceitos no `DATABASE_URL`. A auditoria cria/apaga usuários e alterna a flag de
+#: notificações — rodá-la contra produção mandaria e-mails de verdade e sujaria a base.
+ALLOWED_DB_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def assert_local_database() -> None:
+    """Aborta se o `DATABASE_URL` não apontar para um banco local.
+
+    Raises:
+        SystemExit: Banco remoto — a auditoria é destrutiva demais para rodar fora do local.
+    """
+    from urllib.parse import urlparse
+
+    uri = app.config["SQLALCHEMY_DATABASE_URI"]
+    host = (urlparse(uri).hostname or "").lower()
+
+    # SQLite não tem host; é local por definição, mas a regra do projeto é auditar em Postgres.
+    if uri.startswith("sqlite"):
+        raise SystemExit(
+            "Esta auditoria precisa rodar contra a cópia local em PostgreSQL (manto_local), "
+            "nunca contra o SQLite de dev. Defina DATABASE_URL a partir de .local-db-url."
+        )
+
+    if host not in ALLOWED_DB_HOSTS:
+        raise SystemExit(
+            f"DATABASE_URL aponta para '{host}', que não é um banco local. A auditoria cria e "
+            "apaga usuários e alterna SiteSetting.email_notifications_enabled — rode apenas "
+            "contra manto_local."
+        )
+
+
 def main() -> int:
     print("Auditoria de segurança da Plataforma Manto — feature 191")
     print(f"Banco: {app.config['SQLALCHEMY_DATABASE_URI'].rsplit('@', 1)[-1]}")
 
+    assert_local_database()
     cleanup()
     try:
         make_talent()
