@@ -28,7 +28,19 @@ const mantoPreset: Partial<Config> = {
         green: { DEFAULT: "#1a7f3c", soft: "#d4edda" },
         red: { DEFAULT: "#c0392b", soft: "#fde8e8" },
         blue: { DEFAULT: "#2563eb", soft: "#dbeafe" },
-        gold: { DEFAULT: "#b1793a", soft: "rgba(177,121,58,0.12)" },
+        // `gold` é a cor de atenção/futuro do design system — usamos ela no lugar de
+        // `amber` (a paleta padrão do Tailwind não combina com o dourado da marca).
+        // Os degraus 50/100/500/600 existem para dar a `gold` o mesmo vocabulário
+        // numérico de `green`/`blue`/`red` (fundos sutis + bordas vivas), sem mexer em
+        // `DEFAULT`/`soft`, que continuam sendo os tokens usados nas telas atuais.
+        gold: {
+          50: "#fbf6f0",
+          100: "#f2e4d2",
+          500: "#b1793a",
+          600: "#96632d",
+          DEFAULT: "#b1793a",
+          soft: "rgba(177,121,58,0.12)",
+        },
         sidebar: {
           bg: "#1f1a30",
           accent: "#f7d897",

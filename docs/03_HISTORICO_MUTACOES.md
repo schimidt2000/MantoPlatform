@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **191**
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **194**
 
 Formato de cada entrada:
 
@@ -17,6 +17,216 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 194 — Planilha de Pagamentos: cards-filtro, colorização por faixa e soma da seleção
+`194-pagamentos-ux-cores-filtro` · **2026-07-28** · **sem migration**
+
+**Motivação.** A planilha de `/financeiro/pagamentos` já tinha todos os dados certos, mas o
+financeiro precisava ler linha a linha para saber o que estava pago, no banco, vencido ou por
+vencer — os 5 cards de KPI no topo eram números mortos, sem interação, e as linhas só tinham cor
+para "pago"/"no banco" (pendente e futuro ficavam ambos brancos). Faltava também o número que o
+operador confere antes de disparar um lote no internet banking: **quanto soma o que está
+marcado**.
+
+**O que mudou.**
+
+- **Backend / Banco.** Nada. Zero endpoint, zero migration, zero mudança de contrato JSON — toda
+  a evolução é de apresentação e roda sobre o payload que `GET /api/financeiro/pagamentos` já
+  devolvia desde a feature 159.
+- **Frontend.** `frontend/apps/internal/src/pages/PagamentosPage.tsx` reescrita (typecheck e
+  `npm run build` limpos) e um acréscimo ao design system em
+  `frontend/packages/ui/tailwind-preset.ts`.
+
+**Detalhe do frontend.**
+
+1. **Cards de KPI viraram filtro da tabela.** Os 5 cards do topo agora são `<button>`
+   (`Card asChild`, com `aria-pressed`) que filtram as linhas no cliente: **Pagos** →
+   `status === "pago"`; **No banco** → `"no_banco"`; **Pendentes** → `"nao_pago"` já vencido;
+   **Futuro** → `"nao_pago"` a vencer; **Total no período** (ou reclicar o card ativo) limpa o
+   filtro. Cada card mostra também a contagem de itens da faixa e o rótulo "· filtro ativo".
+   O card ativo ganha borda de 2px na cor do status + `ring` + fundo colorido e sombra; os
+   demais ficam com `opacity-60 grayscale-[35%]` (volta ao normal no hover), então nunca há
+   dúvida sobre qual filtro está ligado. Um `aria-live` anuncia "Filtro X ativo: N de M itens",
+   e o cabeçalho da tabela vira "Itens do mês (N de M)" com um botão "Limpar filtro".
+2. **A classificação das 4 faixas é a MESMA do backend.** `bucketOf()` deriva "pendente" e
+   "futuro" do campo `is_future` que a API já manda (`_pagamentos` em
+   `app/api/financeiro_read.py` soma `totals.pendente` como `nao_pago && !is_future` e
+   `totals.futuro` como `nao_pago && is_future`) — **não** recomparando datas no cliente. Assim
+   o filtro do card sempre bate com o valor exibido nele; se a regra de vencimento mudar no
+   backend, a tela acompanha sozinha.
+3. **Colorização da tabela por faixa.** Cada linha recebe uma nuance de fundo pela sua situação:
+   `bg-green-50` (pago), `bg-blue-50` (no banco), `bg-rose-50` (pendente), `bg-gold-50` (futuro).
+   O seletor de situação e o badge "⏳ Futuro" saem da mesma paleta (`BUCKET_TONE`), então a cor
+   que o operador clica no card é exatamente a cor das linhas que aparecem. Descrição, favorecido
+   e valor subiram para `font-bold text-ink` (#1a1a1a) — contraste ≥ 15:1 sobre os quatro fundos.
+4. **Barra de ações em lote no topo da tabela, com a soma da seleção.** Nova
+   `PagamentoBulkBar` (mesmo padrão de movimento do `CatalogBulkActionBar` da feature 186:
+   `AnimatePresence` + `useReducedMotion`), renderizada dentro do `CardContent` acima da tabela.
+   Texto à esquerda: **`"X selecionados • R$ Y.YYY,YY"`**, com a soma calculada por `reduce`
+   sobre os itens marcados no estado do React e formatada por `formatBRL` de `@manto/money`
+   (Princípio VII — fonte única).
+5. **Spinner individual por ação em lote (Princípio V).** Antes, `bulkAction.isPending` fazia os
+   4 botões girarem juntos. Agora a ação em voo é lida de `bulkAction.variables?.action`
+   (TanStack Query v5) — só o botão clicado mostra spinner; os outros ficam `disabled` enquanto
+   o lote roda, o que também impede disparar dois lotes concorrentes.
+6. **Seleção.** "Selecionar tudo" passou a operar sobre as linhas **visíveis**: com um filtro
+   ligado, marcar tudo marca só aquela faixa e não mexe no que já estava selecionado fora dela.
+   A linha marcada ganha uma barra lateral roxa (`border-l-4 border-l-accent` no primeiro `td`,
+   com `border-l-transparent` quando não marcada, para a linha não "pular" 4px). Trocar o mês
+   limpa seleção e filtro.
+
+**Design system.** `gold` ganhou os degraus **50 / 100 / 500 / 600** em
+`frontend/packages/ui/tailwind-preset.ts` (`DEFAULT` e `soft` intactos — mudança puramente
+aditiva). Motivo: `green`/`blue`/`red`/`rose` herdam a escala numérica padrão do Tailwind, mas
+`gold` só tinha `DEFAULT`/`soft`, então `bg-gold-50` e `border-gold-500` não existiam. `gold`
+continua sendo a cor de atenção/futuro do sistema — **não usar `amber`**, que não combina com o
+dourado da marca.
+
+**Impacto em RBAC e regras de negócio.** Nenhum. Acesso segue `FINANCEIRO`/`SUPERADMIN` pelo
+endpoint; o filtro é 100% visual e não altera o que a ação em lote envia (ela continua mandando
+os IDs selecionados, estejam visíveis ou não).
+
+**Riscos e pegadinhas descobertas.**
+
+- **`Card asChild` não desempata classe Tailwind.** O `Slot` do Radix apenas **concatena** o
+  `className` do filho ao do pai — não passa por `twMerge`. Com as classes do card no `<button>`
+  filho, `border` (do `Card`) e `border-2` (do card ativo) sobrevivem os dois e quem vence é a
+  ordem no CSS gerado, não a ordem no atributo. Correção: passar **todas** as classes no
+  `className` do próprio `<Card>` (que roda `cn`/`twMerge`) e deixar o `<button>` filho sem
+  `className`.
+- **`shadow-[inset_3px_0_0_theme(colors.accent.DEFAULT)]` é silenciosamente descartado.** O
+  Tailwind 3.4 não gerou nenhuma regra para esse valor arbitrário com `theme()` dentro — e não
+  emite erro: nem `tsc` nem `vite build` reclamam, a classe simplesmente não existe no CSS
+  final. Só se pega conferindo o `dist/assets/*.css`. Trocado por `border-l-4 border-l-accent`.
+  **Ao usar valor arbitrário do Tailwind, confirme no CSS buildado que a regra saiu.**
+- **`vite build` falha com `EPERM ... dist/assets` se algum shell estiver com o `cwd` dentro de
+  `dist/assets`** (o Windows trava a pasta e o `emptyDir` do Vite não consegue apagá-la). Sair da
+  pasta antes de rebuildar.
+
+### 193 — Importação Histórica do WhatsForm (One-time Migration)
+`193-import-whatsform-history` · **2026-07-28** · **sem migration**
+
+**Motivação.** O formulário de pré-contrato do Manto (features 118/119/123) substituiu o
+WhatsForm em produção, mas os **1.445 preenchimentos de 2023-09 a 2026-07** continuavam presos
+nos CSVs exportados da ferramenta antiga. A vendedora não tinha como buscar no Manto uma cliente
+que já havia preenchido o formulário lá atrás, e a base de leads (até então só Kommo) ignorava
+todo esse histórico de intenção de compra — o dado comercial mais quente que a empresa tinha.
+
+**O que mudou.**
+
+- **Backend.** Nenhum endpoint, rota ou tela nova — é uma **carga única por CLI**, por decisão
+  explícita: um botão no sistema para algo que roda uma vez seria superfície morta. Todo o
+  trabalho está em `scripts/db/import_whatsform_history.py` (novo, ~600 linhas, `ruff
+  check`/`ruff format` limpos), que lê `instance/import_whatsform/*.csv` e grava via
+  `db.session`. Reusa, sem duplicar (Princípio I): `normalize_phone` de
+  `app/clientes/importer.py` e as chaves-sistema `SYSTEM_KEY_CPF`/`SYSTEM_KEY_CNPJ`/
+  `SYSTEM_KEY_ADDRESS_*` de `app/formularios/formularios_ops.py`.
+- **Banco (sem DDL).** Em **produção**: `form_responses` 28 → **1.473** linhas (+1.445);
+  `clients` 5.533 → **6.198** (+665 criados, 767 reutilizados, 415 completados em colunas que
+  estavam nulas). Antes disso a mesma carga rodou em `manto_local` (+693 criados, 739
+  reutilizados) — a produção tinha mais clientes cadastrados que a cópia local, então 28 linhas
+  a mais casaram em vez de duplicar. Valor novo em `clients.source`: **`whatsform_import`** (ao
+  lado de `kommo_import` e `manual`) — coluna é texto livre, não há enum/constraint para alterar.
+- **Frontend.** Zero mudança de código. As respostas importadas aparecem nas telas que já
+  existiam (`/formularios`, buscador de resposta em `/events/new`, ficha do cliente) porque o
+  script grava `form_type` em `comum`/`corporativo` e monta `FormResponse.data` no formato da
+  feature 123 — `[{"secao", "campos": [[chave, rótulo, valor], …]}]`, com campos de 3 posições,
+  que é o que `FormulariosAdminPage.tsx` destrutura.
+
+**Regras de negócio implementadas.**
+
+- **Deduplicação em 2 níveis**: telefone normalizado (dígitos, DDI `55` acrescentado em números
+  de 10–11 dígitos) e, se não achar, CPF/CNPJ limpo. Cliente encontrado é **reaproveitado** e
+  só tem preenchidas as colunas nulas (`email`, `cpf`, `cnpj`, `company`, `address`,
+  `phone_display`) — `name` nunca é sobrescrito.
+- **Lógica B2B premium** (3 planilhas corporativas): `name` = `"Nome do Responsável (Empresa)"`
+  e telefone = **WhatsApp de quem preencheu**, não o fixo da empresa — em venda corporativa quem
+  responde no WhatsApp é a pessoa. A razão social completa vai para `clients.company`.
+- **CPF vs CNPJ**: o WhatsForm tinha campo único "CNPJ ou CPF"; o roteamento é por comprimento
+  (14 dígitos → `clients.cnpj`, demais → `clients.cpf`), aproveitando as duas colunas que o
+  model já tem.
+- **`iNFORMACOES PARA PRE CONTRATO CORPORATIVO.csv`** não tem coluna de responsável: o nome sai
+  da parte local do e-mail + tema, no padrão `"Contato (Tema: Halloween)"`.
+- **`created_at` histórico** em respostas e nos clientes criados pela carga — a base reflete a
+  linha do tempo real de captação, não a data do import.
+
+**Impacto em RBAC.** Nenhum. Não há rota nova; quem já via `/formularios` (COMERCIAL,
+FINANCEIRO, SUPERADMIN) passa a ver mais linhas.
+
+**Rotas e endpoints novos/alterados.** Nenhum.
+
+**Riscos e pegadinhas descobertas.**
+
+- **`clients.phone` é `NOT NULL UNIQUE`** — linha sem telefone normalizável não pode virar
+  cliente. Em vez de descartar a resposta, o script grava a `FormResponse` com `client_id`
+  nulo (13 casos) para o comercial associar à mão depois. Não invente telefone-placeholder aqui:
+  a unicidade do telefone é a identidade da base inteira.
+- **`form_type` só aceita `comum`/`corporativo` na prática** — não é enum no banco, mas
+  `frontend/apps/internal/src/lib/formulariosAdmin.ts` tipa assim e `FormulariosAdminPage`
+  filtra por igualdade. Um valor como `"pre-contrato"` gravaria sem erro e **sumiria dos
+  filtros** da tela. Mesma armadilha vale para qualquer carga futura.
+- **Documento não confiável não deduplica.** Valores como `"2222222222"` (10 dígitos) aparecem
+  nas planilhas; se entrassem na busca por CPF fundiriam clientes diferentes. Só documentos com
+  11 ou 14 dígitos participam da deduplicação — os demais são gravados, mas ignorados na busca.
+- **Console do Windows é cp1252**: `print` com glifos como `▶`/`═`/`✔` derruba o script com
+  `UnicodeEncodeError` antes de qualquer linha ser gravada. A saída usa só ASCII (`>>`, `[OK]`,
+  `[ERRO]`) — acentos pt-BR passam normalmente, os símbolos é que não.
+- **`strptime` com `%a`/`%b` depende do locale da máquina.** O carimbo do WhatsForm
+  (`"Wed, Jul 8, 2026 12:06 PM"`) é parseado por regex + tabela de meses própria, para a carga
+  não mudar de comportamento conforme o computador que a roda.
+- **Rodar duas vezes duplicaria tudo** — não há chave natural de resposta no banco para
+  `upsert`. O script detecta respostas já importadas (mesmo `contact_name` + `created_at`) e
+  **aborta o arquivo** com rollback, a menos que se passe `--force`. Verificado: a segunda
+  execução não gravou nada.
+- **Transação por arquivo**: erro em qualquer linha faz `rollback()` do CSV inteiro e loga
+  arquivo + linha + contato. `--dry-run` processa tudo numa transação única e desfaz no fim —
+  o resumo simulado bate número a número com o da carga real (foi assim que a carga foi
+  validada antes de gravar).
+
+**Como rodar (uma vez por ambiente).**
+
+```powershell
+# 1. Backup fresco ANTES de qualquer escrita
+.\scripts\db\backup-railway.ps1
+
+# 2. Cópia local (manto_local)
+$env:DATABASE_URL = (Get-Content .local-db-url -Raw).Trim(); $env:PYTHONPATH = (Get-Location).Path
+
+# 2'. OU produção (Railway) — trocar o driver para psycopg3, ver pegadinha abaixo
+$env:DATABASE_URL = (Get-Content .railway-db-url -Raw).Trim() -replace '^postgresql://', 'postgresql+psycopg://'
+$env:PYTHONPATH = (Get-Location).Path
+
+# 3. Ensaio e carga
+.venv\Scripts\python.exe scripts\db\import_whatsform_history.py --dry-run   # ensaio
+.venv\Scripts\python.exe scripts\db\import_whatsform_history.py             # carga
+```
+
+> **Status: concluído nos dois ambientes em 2026-07-28** — `manto_local` primeiro, produção
+> (Railway) em seguida, ambas precedidas de ensaio limpo. Backup da produção imediatamente antes
+> da carga: `backups/manto_2026-07-28_1119.dump`.
+
+**Pegadinhas descobertas ao apontar para a produção** (valem para qualquer script CLI futuro):
+
+- **`create_app()` sobe três workers de background** — `talent-sync`, `calendar-sync` e
+  `review-cleanup`. Apontados para a produção, o `calendar-sync` pode reivindicar o slot de
+  sincronização automática e disparar um sync real com o Google Calendar, e o `review-cleanup`
+  apaga arquivos de revisão vencidos do armazenamento — efeito colateral que nada tem a ver com
+  importar CSV. O script chama `build_app_without_background_workers()`, que ativa a guarda de
+  dev já existente (`FLASK_ENV=development` sem `WERKZEUG_RUN_MAIN`) antes do `create_app()`.
+  Isso **não** muda o banco: a `SQLALCHEMY_DATABASE_URI` vem sempre de `DATABASE_URL`, e nem
+  `DevelopmentConfig` nem `ProductionConfig` a sobrescrevem.
+- **Driver diferente entre a máquina de dev e a produção.** O `requirements.txt` traz
+  `psycopg2-binary` (usado no deploy), mas o venv local tem só o **psycopg3** — por isso
+  `.local-db-url` usa `postgresql+psycopg://`. A URL do Railway vem como `postgresql://`, que o
+  SQLAlchemy resolve para psycopg2 e quebra com `ModuleNotFoundError` na máquina de dev. Reescrever
+  o scheme para `postgresql+psycopg://` resolve — mesmo banco, cliente diferente.
+- **Latência domina a carga remota.** A deduplicação consulta o banco linha a linha: imperceptível
+  no Postgres local, ~100 ms por ida-e-volta contra o Railway → ~20 min para as 1.445 linhas
+  (ensaio + carga = ~40 min). Foi aceito de propósito, para rodar exatamente o código validado em
+  vez de otimizar o caminho crítico em cima de produção. Se algum dia precisar ser rápido, o
+  caminho é carregar o índice de clientes em memória de uma vez, não paralelizar.
+
+---
 
 ### 191 — Migração do Portal do Artista (React) e Auditoria de Segurança
 `191-portal-artista-react-auditoria` · **2026-07-28** · **sem migration**
