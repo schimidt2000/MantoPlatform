@@ -13,13 +13,16 @@
   "scripts": {
     "dev": "npm run dev --workspace=apps/internal",
     "dev:internal": "npm run dev --workspace=apps/internal",
-    "build": "npm run build --workspace=apps/internal && npm run build --workspace=apps/public",
+    "build": "npm run build --workspace=apps/internal && npm run build --workspace=apps/public && npm run build --workspace=apps/portal",
     "build:internal": "npm run build --workspace=apps/internal",
-    "typecheck": "npm run typecheck --workspace=apps/internal",
+    "typecheck": "npm run typecheck --workspace=apps/internal && npm run typecheck --workspace=apps/public && npm run typecheck --workspace=apps/portal",
     "typecheck:internal": "npm run typecheck --workspace=apps/internal",
     "dev:public": "npm run dev --workspace=apps/public",
     "build:public": "npm run build --workspace=apps/public",
     "typecheck:public": "npm run typecheck --workspace=apps/public",
+    "dev:portal": "npm run dev --workspace=apps/portal",
+    "build:portal": "npm run build --workspace=apps/portal",
+    "typecheck:portal": "npm run typecheck --workspace=apps/portal",
     "start": "node server.js"
   },
   "dependencies": {

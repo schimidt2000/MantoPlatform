@@ -3,6 +3,9 @@ import { apiFetch } from "@manto/api-client";
 
 const ME_KEY = ["portal", "auth", "me"] as const;
 
+/** Etapa de onboarding que o talento precisa concluir antes de usar o portal. */
+export type PortalPendingStep = "change_password" | "accept_terms";
+
 /** Talento autenticado atual (`/api/portal/auth/me`). */
 export interface PortalTalent {
   id: number;
@@ -10,6 +13,10 @@ export interface PortalTalent {
   artistic_name: string | null;
   photo_face_url: string | null;
   photo_full_url: string | null;
+  must_change_password: boolean;
+  terms_accepted: boolean;
+  /** Etapas pendentes, na ordem em que devem ser feitas. Vazia = conta em dia. */
+  pending_steps: PortalPendingStep[];
 }
 
 /** Busca o talento autenticado atual. `null` quando não há sessão. */
@@ -32,6 +39,10 @@ interface LoginCredentials {
 }
 
 interface LoginResult extends PortalTalent {
+  /**
+   * Legado da fatia 176, quando troca de senha e termos só existiam no portal Jinja. Desde a
+   * 191 essas etapas são telas React (`pending_steps`) e o backend sempre responde `false`.
+   */
   must_redirect_to_classic: boolean;
 }
 

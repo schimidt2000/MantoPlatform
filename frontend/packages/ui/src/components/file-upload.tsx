@@ -106,7 +106,10 @@ export function FileUpload({
           variant="outline"
           size="sm"
           onClick={() => inputRef.current?.click()}
-          className="shrink-0"
+          // `min-h-[44px]` sobrepõe o h-9 do tamanho `sm`: este é o único controle de toque do
+          // componente, e o Portal do Artista é mobile-only (Princípio VIII, alvo ≥44px). No
+          // desktop o botão só cresce 8px, sem quebrar layout.
+          className="min-h-[44px] shrink-0"
         >
           <Upload className="h-4 w-4" aria-hidden="true" />
           {fileName || existingUrl ? "Trocar" : "Escolher arquivo"}

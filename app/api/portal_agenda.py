@@ -22,6 +22,14 @@ def api_portal_agenda() -> Any:
     return jsonify(portal_ops.get_agenda(talent))
 
 
+@api_bp.route("/portal/historico")
+@portal_api_login_required
+def api_portal_historico() -> Any:
+    """Histórico completo de apresentações passadas, com somatórios de cachê (feature 191)."""
+    talent = current_talent()
+    return jsonify(portal_ops.get_historico(talent))
+
+
 @api_bp.route("/portal/invites/<int:role_id>/accept", methods=["POST"])
 @portal_api_login_required
 def api_portal_accept_invite(role_id: int) -> Any:

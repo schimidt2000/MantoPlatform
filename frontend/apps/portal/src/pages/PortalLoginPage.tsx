@@ -5,6 +5,7 @@ import { z } from "zod";
 import { motion, useReducedMotion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@manto/ui";
+import { AuthLink } from "../components/AuthCard";
 import { usePortalLogin } from "../lib/portalAuth";
 
 const loginSchema = z.object({
@@ -29,15 +30,9 @@ export function PortalLoginPage() {
   const onSubmit = handleSubmit((values) => {
     setFormError(null);
     login.mutate(values, {
-      onSuccess: (talent) => {
-        if (talent.must_redirect_to_classic) {
-          // Troca de senha/termos pendentes: fora do escopo deste app — página inteira,
-          // não navegação SPA, para cair na versão clássica (research.md §2).
-          window.location.href = "/portal/login";
-          return;
-        }
-        navigate("/agenda", { replace: true });
-      },
+      // Troca de senha e aceite de termos agora são telas deste app (feature 191): navega
+      // sempre para a agenda e deixa o `OnboardingGate` interceptar se houver etapa pendente.
+      onSuccess: () => navigate("/agenda", { replace: true }),
       onError: (error) => setFormError(error.message),
     });
   });
@@ -106,6 +101,13 @@ export function PortalLoginPage() {
             </form>
           </CardContent>
         </Card>
+
+        <div className="mt-4 flex flex-col items-center text-sm text-muted">
+          <AuthLink to="/forgot-password">Esqueci minha senha</AuthLink>
+          <span>
+            Primeiro acesso? <AuthLink to="/first-access">Criar minha senha</AuthLink>
+          </span>
+        </div>
       </motion.div>
     </div>
   );
