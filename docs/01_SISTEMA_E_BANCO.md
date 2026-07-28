@@ -3,8 +3,8 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **191**
-> (`191-portal-artista-react-auditoria`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **193**
+> (`193-import-whatsform-history`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
 
 ---
 
@@ -155,11 +155,60 @@ caminho `/uploads/figurino_photos/...` ou fallback para `thumbnail_url` do Drive
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `clients` | `Client` | cadastro comercial | 1:N `events` |
-| `form_responses` | `FormResponse` | respostas dos formulários públicos de pré-contrato (comum/corporativo) | `client_id`, `event_id` (ambos indexados e nullable) |
+| `clients` | `Client` | cadastro comercial; identidade = `phone` normalizado (`NOT NULL UNIQUE`, só dígitos com DDI). `source` ∈ `kommo_import` \| `manual` \| `whatsform_import` (feature 193) | 1:N `events` |
+| `form_responses` | `FormResponse` | respostas dos formulários públicos de pré-contrato (`form_type` ∈ `comum` \| `corporativo`) **e** o histórico do WhatsForm importado na feature 193 | `client_id`, `event_id` (ambos indexados e nullable) |
 | `form_field_definitions` | `FormFieldDefinition` | editor de campos dos formulários (ordem, tipo, obrigatoriedade) | — |
 | `client_feedbacks` | `ClientFeedback` | avaliação pública da cliente via `feedback_token` do evento | `event_id` |
 | `orcamento_history` | `OrcamentoHistory` | histórico da calculadora de orçamento (vira `calendar_events.orcamento_history_id`) | `user_id` |
+
+#### Estado do banco de leads (pós-feature 193)
+
+A base comercial tem **duas origens históricas** consolidadas na mesma tabela `clients`, mais o
+cadastro manual do dia a dia:
+
+Números de **produção**, medidos após a carga de 2026-07-28:
+
+| `clients.source` | Volume | Origem |
+|---|---|---|
+| `kommo_import` | 5.492 | CSV do Kommo CRM (feature 094) |
+| `whatsform_import` | 665 | Histórico do WhatsForm (feature 193) |
+| `manual` | 41 | Cadastro pela ficha do cliente |
+| **Total** | **6.198** | |
+
+`form_responses` foi para **1.473** linhas (1.374 `comum` + 99 `corporativo`): as 28 respostas
+nativas do formulário do Manto mais as **1.445 respostas históricas do WhatsForm**
+(2023-09-04 a 2026-07-09), carregadas pelo script CLI
+`scripts/db/import_whatsform_history.py`.
+
+> A mesma carga rodou antes contra `manto_local` (cópia mais antiga) e criou **693** clientes em
+> vez de 665: a produção já tinha mais clientes cadastrados, então 28 linhas casaram com cliente
+> existente em vez de criar duplicata. Diferença de volume entre os dois ambientes é esperada —
+> o que não muda é o total de 1.445 respostas.
+
+Pontos que valem para quem for ler esses dados:
+
+- **Deduplicação em 2 níveis** — telefone normalizado (`normalize_phone` de
+  `app/clientes/importer.py`, fonte única) e, na sequência, CPF/CNPJ com comprimento válido
+  (11/14 dígitos). Documentos truncados/digitados errado ficam gravados em `cpf` mas **não**
+  deduplicam. Das 1.445 respostas, 767 caíram em cliente que já existia (majoritariamente base
+  Kommo) e 665 criaram cliente novo.
+- **Cliente existente nunca é sobrescrito** — a carga só preenche colunas que estavam nulas
+  (`email`, `cpf`, `cnpj`, `company`, `address`, `phone_display`): 415 clientes foram
+  completados assim. `name` jamais é alterado.
+- **32 respostas ficam com `client_id` nulo** (13 novas da carga + 19 anteriores): a linha não
+  tinha telefone normalizável e `clients.phone` é `NOT NULL UNIQUE`. Elas aparecem normalmente
+  em `/formularios` e podem ser associadas à mão pela tela.
+- **Padrão B2B dos corporativos** — `contact_name`/`clients.name` das planilhas corporativas
+  seguem `"Nome do Responsável (Empresa)"` (ex.: `Priscila da Silva (OCESP)`), com o WhatsApp de
+  quem preencheu, não o telefone fixo da empresa. A razão social completa fica em
+  `clients.company`.
+- **`created_at` é histórico**, não a data da carga — tanto nas respostas quanto nos clientes
+  criados por ela, para a base refletir a linha do tempo real de captação.
+- **`FormResponse.data`** foi montado no mesmo formato da feature 123
+  (`[{"secao", "campos": [[chave, rótulo, valor], …]}]`), com as colunas de controle do
+  WhatsForm (`Response`, `Time`, `Delivered to`) removidas e as chaves-sistema (`cpf`, `cnpj`,
+  `endereco_contratante`, `endereco_empresa`) preservadas — então
+  `formularios_ops.fill_client_from_response` continua funcionando nessas respostas.
 
 ### 2.8 EducaManto
 

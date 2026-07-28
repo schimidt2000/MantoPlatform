@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **191**
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **193**
 
 Formato de cada entrada:
 
@@ -17,6 +17,131 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 193 — Importação Histórica do WhatsForm (One-time Migration)
+`193-import-whatsform-history` · **2026-07-28** · **sem migration**
+
+**Motivação.** O formulário de pré-contrato do Manto (features 118/119/123) substituiu o
+WhatsForm em produção, mas os **1.445 preenchimentos de 2023-09 a 2026-07** continuavam presos
+nos CSVs exportados da ferramenta antiga. A vendedora não tinha como buscar no Manto uma cliente
+que já havia preenchido o formulário lá atrás, e a base de leads (até então só Kommo) ignorava
+todo esse histórico de intenção de compra — o dado comercial mais quente que a empresa tinha.
+
+**O que mudou.**
+
+- **Backend.** Nenhum endpoint, rota ou tela nova — é uma **carga única por CLI**, por decisão
+  explícita: um botão no sistema para algo que roda uma vez seria superfície morta. Todo o
+  trabalho está em `scripts/db/import_whatsform_history.py` (novo, ~600 linhas, `ruff
+  check`/`ruff format` limpos), que lê `instance/import_whatsform/*.csv` e grava via
+  `db.session`. Reusa, sem duplicar (Princípio I): `normalize_phone` de
+  `app/clientes/importer.py` e as chaves-sistema `SYSTEM_KEY_CPF`/`SYSTEM_KEY_CNPJ`/
+  `SYSTEM_KEY_ADDRESS_*` de `app/formularios/formularios_ops.py`.
+- **Banco (sem DDL).** Em **produção**: `form_responses` 28 → **1.473** linhas (+1.445);
+  `clients` 5.533 → **6.198** (+665 criados, 767 reutilizados, 415 completados em colunas que
+  estavam nulas). Antes disso a mesma carga rodou em `manto_local` (+693 criados, 739
+  reutilizados) — a produção tinha mais clientes cadastrados que a cópia local, então 28 linhas
+  a mais casaram em vez de duplicar. Valor novo em `clients.source`: **`whatsform_import`** (ao
+  lado de `kommo_import` e `manual`) — coluna é texto livre, não há enum/constraint para alterar.
+- **Frontend.** Zero mudança de código. As respostas importadas aparecem nas telas que já
+  existiam (`/formularios`, buscador de resposta em `/events/new`, ficha do cliente) porque o
+  script grava `form_type` em `comum`/`corporativo` e monta `FormResponse.data` no formato da
+  feature 123 — `[{"secao", "campos": [[chave, rótulo, valor], …]}]`, com campos de 3 posições,
+  que é o que `FormulariosAdminPage.tsx` destrutura.
+
+**Regras de negócio implementadas.**
+
+- **Deduplicação em 2 níveis**: telefone normalizado (dígitos, DDI `55` acrescentado em números
+  de 10–11 dígitos) e, se não achar, CPF/CNPJ limpo. Cliente encontrado é **reaproveitado** e
+  só tem preenchidas as colunas nulas (`email`, `cpf`, `cnpj`, `company`, `address`,
+  `phone_display`) — `name` nunca é sobrescrito.
+- **Lógica B2B premium** (3 planilhas corporativas): `name` = `"Nome do Responsável (Empresa)"`
+  e telefone = **WhatsApp de quem preencheu**, não o fixo da empresa — em venda corporativa quem
+  responde no WhatsApp é a pessoa. A razão social completa vai para `clients.company`.
+- **CPF vs CNPJ**: o WhatsForm tinha campo único "CNPJ ou CPF"; o roteamento é por comprimento
+  (14 dígitos → `clients.cnpj`, demais → `clients.cpf`), aproveitando as duas colunas que o
+  model já tem.
+- **`iNFORMACOES PARA PRE CONTRATO CORPORATIVO.csv`** não tem coluna de responsável: o nome sai
+  da parte local do e-mail + tema, no padrão `"Contato (Tema: Halloween)"`.
+- **`created_at` histórico** em respostas e nos clientes criados pela carga — a base reflete a
+  linha do tempo real de captação, não a data do import.
+
+**Impacto em RBAC.** Nenhum. Não há rota nova; quem já via `/formularios` (COMERCIAL,
+FINANCEIRO, SUPERADMIN) passa a ver mais linhas.
+
+**Rotas e endpoints novos/alterados.** Nenhum.
+
+**Riscos e pegadinhas descobertas.**
+
+- **`clients.phone` é `NOT NULL UNIQUE`** — linha sem telefone normalizável não pode virar
+  cliente. Em vez de descartar a resposta, o script grava a `FormResponse` com `client_id`
+  nulo (13 casos) para o comercial associar à mão depois. Não invente telefone-placeholder aqui:
+  a unicidade do telefone é a identidade da base inteira.
+- **`form_type` só aceita `comum`/`corporativo` na prática** — não é enum no banco, mas
+  `frontend/apps/internal/src/lib/formulariosAdmin.ts` tipa assim e `FormulariosAdminPage`
+  filtra por igualdade. Um valor como `"pre-contrato"` gravaria sem erro e **sumiria dos
+  filtros** da tela. Mesma armadilha vale para qualquer carga futura.
+- **Documento não confiável não deduplica.** Valores como `"2222222222"` (10 dígitos) aparecem
+  nas planilhas; se entrassem na busca por CPF fundiriam clientes diferentes. Só documentos com
+  11 ou 14 dígitos participam da deduplicação — os demais são gravados, mas ignorados na busca.
+- **Console do Windows é cp1252**: `print` com glifos como `▶`/`═`/`✔` derruba o script com
+  `UnicodeEncodeError` antes de qualquer linha ser gravada. A saída usa só ASCII (`>>`, `[OK]`,
+  `[ERRO]`) — acentos pt-BR passam normalmente, os símbolos é que não.
+- **`strptime` com `%a`/`%b` depende do locale da máquina.** O carimbo do WhatsForm
+  (`"Wed, Jul 8, 2026 12:06 PM"`) é parseado por regex + tabela de meses própria, para a carga
+  não mudar de comportamento conforme o computador que a roda.
+- **Rodar duas vezes duplicaria tudo** — não há chave natural de resposta no banco para
+  `upsert`. O script detecta respostas já importadas (mesmo `contact_name` + `created_at`) e
+  **aborta o arquivo** com rollback, a menos que se passe `--force`. Verificado: a segunda
+  execução não gravou nada.
+- **Transação por arquivo**: erro em qualquer linha faz `rollback()` do CSV inteiro e loga
+  arquivo + linha + contato. `--dry-run` processa tudo numa transação única e desfaz no fim —
+  o resumo simulado bate número a número com o da carga real (foi assim que a carga foi
+  validada antes de gravar).
+
+**Como rodar (uma vez por ambiente).**
+
+```powershell
+# 1. Backup fresco ANTES de qualquer escrita
+.\scripts\db\backup-railway.ps1
+
+# 2. Cópia local (manto_local)
+$env:DATABASE_URL = (Get-Content .local-db-url -Raw).Trim(); $env:PYTHONPATH = (Get-Location).Path
+
+# 2'. OU produção (Railway) — trocar o driver para psycopg3, ver pegadinha abaixo
+$env:DATABASE_URL = (Get-Content .railway-db-url -Raw).Trim() -replace '^postgresql://', 'postgresql+psycopg://'
+$env:PYTHONPATH = (Get-Location).Path
+
+# 3. Ensaio e carga
+.venv\Scripts\python.exe scripts\db\import_whatsform_history.py --dry-run   # ensaio
+.venv\Scripts\python.exe scripts\db\import_whatsform_history.py             # carga
+```
+
+> **Status: concluído nos dois ambientes em 2026-07-28** — `manto_local` primeiro, produção
+> (Railway) em seguida, ambas precedidas de ensaio limpo. Backup da produção imediatamente antes
+> da carga: `backups/manto_2026-07-28_1119.dump`.
+
+**Pegadinhas descobertas ao apontar para a produção** (valem para qualquer script CLI futuro):
+
+- **`create_app()` sobe três workers de background** — `talent-sync`, `calendar-sync` e
+  `review-cleanup`. Apontados para a produção, o `calendar-sync` pode reivindicar o slot de
+  sincronização automática e disparar um sync real com o Google Calendar, e o `review-cleanup`
+  apaga arquivos de revisão vencidos do armazenamento — efeito colateral que nada tem a ver com
+  importar CSV. O script chama `build_app_without_background_workers()`, que ativa a guarda de
+  dev já existente (`FLASK_ENV=development` sem `WERKZEUG_RUN_MAIN`) antes do `create_app()`.
+  Isso **não** muda o banco: a `SQLALCHEMY_DATABASE_URI` vem sempre de `DATABASE_URL`, e nem
+  `DevelopmentConfig` nem `ProductionConfig` a sobrescrevem.
+- **Driver diferente entre a máquina de dev e a produção.** O `requirements.txt` traz
+  `psycopg2-binary` (usado no deploy), mas o venv local tem só o **psycopg3** — por isso
+  `.local-db-url` usa `postgresql+psycopg://`. A URL do Railway vem como `postgresql://`, que o
+  SQLAlchemy resolve para psycopg2 e quebra com `ModuleNotFoundError` na máquina de dev. Reescrever
+  o scheme para `postgresql+psycopg://` resolve — mesmo banco, cliente diferente.
+- **Latência domina a carga remota.** A deduplicação consulta o banco linha a linha: imperceptível
+  no Postgres local, ~100 ms por ida-e-volta contra o Railway → ~20 min para as 1.445 linhas
+  (ensaio + carga = ~40 min). Foi aceito de propósito, para rodar exatamente o código validado em
+  vez de otimizar o caminho crítico em cima de produção. Se algum dia precisar ser rápido, o
+  caminho é carregar o índice de clientes em memória de uma vez, não paralelizar.
+
+---
 
 ### 191 — Migração do Portal do Artista (React) e Auditoria de Segurança
 `191-portal-artista-react-auditoria` · **2026-07-28** · **sem migration**
