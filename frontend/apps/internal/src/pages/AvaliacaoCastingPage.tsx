@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Button, Card, CardContent, Input, PageHeader, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, Input, PageHeader, Skeleton, StarRating } from "@manto/ui";
 import {
   useRatingsOverview,
   useToggleAnonymousMode,
@@ -28,29 +28,9 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 
-/** Estrelas para uma nota inteira (1-5) — comentários e pontos de atenção. */
-function StarsInt({ score, className = "" }: { score: number; className?: string }) {
-  return (
-    <span className={`tabular-nums text-gold ${className}`} aria-label={`${score} de 5`}>
-      {"★".repeat(score)}
-      <span className="text-line">{"★".repeat(Math.max(0, 5 - score))}</span>
-    </span>
-  );
-}
-
-/** Estrelas para uma média fracionária (ex.: 4.3) — KPI geral e média por categoria. */
-function StarsAvg({ value, className = "" }: { value: number; className?: string }) {
-  const full = Math.floor(value);
-  const half = value - full >= 0.5 ? 1 : 0;
-  const empty = Math.max(0, 5 - full - half);
-  return (
-    <span className={`tabular-nums text-gold ${className}`} title={`${value.toFixed(1)} de 5`}>
-      {"★".repeat(full)}
-      {half === 1 && "⯨"}
-      <span className="text-line">{"★".repeat(empty)}</span>
-    </span>
-  );
-}
+// Os antigos `StarsInt`/`StarsAvg` desta tela viraram o `StarRating` de `@manto/ui` na feature
+// 197 — mesma exibição de nota inteira e de média fracionária, agora compartilhada com o
+// dashboard de satisfação das clientes (Princípio I).
 
 function catChip(c: RatingComment): string {
   return c.subject_name ? `${c.cat_label} — ${c.subject_name}` : c.cat_label;
@@ -81,7 +61,7 @@ function CommentRow({ item, showEventLink, onFocusEvent }: {
   return (
     <div className="space-y-1 border-b border-line py-3 last:border-0">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <StarsInt score={item.score} className="text-sm" />
+        <StarRating value={item.score} size="sm" />
         <span className="rounded-full bg-surface-2 px-2 py-0.5 font-medium text-ink">
           {catChip(item)}
         </span>
@@ -359,7 +339,7 @@ export function AvaliacaoCastingPage() {
                 </p>
                 <p className="mt-1 flex items-center gap-2 text-2xl font-semibold text-ink">
                   {data.avg_overall.toFixed(1)}
-                  <StarsAvg value={data.avg_overall} className="text-lg" />
+                  <StarRating value={data.avg_overall} size="lg" />
                 </p>
               </CardContent>
             </Card>
@@ -450,7 +430,7 @@ export function AvaliacaoCastingPage() {
                               {c.label}
                             </button>
                             <span className="text-muted">
-                              <StarsAvg value={c.avg} /> {c.avg.toFixed(1)}{" "}
+                              <StarRating value={c.avg} /> {c.avg.toFixed(1)}{" "}
                               <span className="text-xs">({c.count})</span>
                             </span>
                           </div>
@@ -485,7 +465,7 @@ export function AvaliacaoCastingPage() {
                             <span className="text-xs text-muted">{formatDate(e.start_at)}</span> {e.title}
                           </span>
                           <span className="whitespace-nowrap">
-                            <StarsAvg value={e.avg} /> <strong>{e.avg.toFixed(1)}</strong>{" "}
+                            <StarRating value={e.avg} /> <strong>{e.avg.toFixed(1)}</strong>{" "}
                             <span className="text-xs text-muted">({e.count})</span>
                           </span>
                         </button>
@@ -504,7 +484,7 @@ export function AvaliacaoCastingPage() {
                                 <span className="text-xs text-muted">{formatDate(e.start_at)}</span> {e.title}
                               </span>
                               <span className="whitespace-nowrap">
-                                <StarsAvg value={e.avg} /> <strong>{e.avg.toFixed(1)}</strong>{" "}
+                                <StarRating value={e.avg} /> <strong>{e.avg.toFixed(1)}</strong>{" "}
                                 <span className="text-xs text-muted">({e.count})</span>
                               </span>
                             </button>

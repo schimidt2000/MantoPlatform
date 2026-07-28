@@ -92,6 +92,42 @@ def api_clientes_detail(client_id: int) -> Any:
     )
 
 
+def _feedback_item(feedback) -> dict:
+    """Serializa uma avaliação com o evento e a cliente aninhados (feature 197).
+
+    O relacionamento vem pré-carregado por `client_ops.summarize_feedback` (joinedload), então
+    aqui não há consulta extra. `client.full_name` cai para `ClientFeedback.client_name` — o
+    nome digitado por quem respondeu (feature 132) — quando o evento não tem cliente vinculada.
+
+    Args:
+        feedback: Linha de `ClientFeedback` já carregada.
+
+    Returns:
+        Dicionário pronto para `jsonify`, com `event` e `client` aninhados (nulos quando o
+        evento foi apagado ou não tem cliente/nome de quem respondeu).
+    """
+    event = feedback.event
+    client = event.client if event else None
+    full_name = (client.name if client else "") or (feedback.client_name or "")
+    return {
+        "id": feedback.id,
+        "score": feedback.score,
+        "comment": feedback.comment or "",
+        "tags": feedback.tags_list,
+        "submitted_at": feedback.submitted_at.isoformat() if feedback.submitted_at else None,
+        "event": (
+            {
+                "id": event.id,
+                "title": event.title,
+                "event_date": event.start_at.isoformat() if event.start_at else None,
+            }
+            if event
+            else None
+        ),
+        "client": {"id": client.id if client else None, "full_name": full_name} if full_name else None,
+    }
+
+
 @api_bp.route("/clientes/avaliacoes")
 @api_login_required
 def api_clientes_avaliacoes() -> Any:
@@ -120,33 +156,18 @@ def api_clientes_avaliacoes() -> Any:
 
     return jsonify(
         {
-            "feedbacks": [
-                {
-                    "id": f.id,
-                    "score": f.score,
-                    "tags": f.tags_list,
-                    "submitted_at": f.submitted_at.isoformat() if f.submitted_at else None,
-                    "event_title": f.event.title if f.event else "",
-                    "client_name": (f.event.client.name if f.event and f.event.client else ""),
-                }
-                for f in summary.feedbacks
-            ],
+            "feedbacks": [_feedback_item(f) for f in summary.feedbacks],
+            "kpis": {
+                "media_geral": summary.avg_overall,
+                "total_avaliacoes": summary.total,
+                "percentual_5_estrelas": summary.pct_five,
+            },
             "total": summary.total,
             "avg_overall": summary.avg_overall,
             "clients_rated": summary.clients_rated,
             "dist": summary.dist,
             "dist_max": summary.dist_max,
-            "attention": [
-                {
-                    "id": f.id,
-                    "score": f.score,
-                    "tags": f.tags_list,
-                    "submitted_at": f.submitted_at.isoformat() if f.submitted_at else None,
-                    "event_title": f.event.title if f.event else "",
-                    "client_name": (f.event.client.name if f.event and f.event.client else ""),
-                }
-                for f in summary.attention
-            ],
+            "attention": [_feedback_item(f) for f in summary.attention],
             "clients_with_feedback": [
                 {"id": cid, "name": name} for cid, name in summary.clients_with_feedback
             ],

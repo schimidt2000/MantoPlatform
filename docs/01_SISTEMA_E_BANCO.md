@@ -3,8 +3,8 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **195**
-> (`195-autocomplete-enderecos-comboboxes`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **197**
+> (`197-dashboard-avaliacoes-clientes`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
 
 ---
 
@@ -305,7 +305,7 @@ Avaliações: `GET /api/ratings` · `POST /api/ratings/modo-anonimo`.
 ### 3.6 Financeiro — `financeiro_read.py` / `financeiro_write.py`
 | Método | Rota | Nota |
 |---|---|---|
-| GET | `/api/vendas/pipeline` | pipeline de vendas |
+| GET | `/api/vendas/pipeline` | **Dashboard Comercial** (feature 196 — o payload plano do "pipeline" da 156 deixou de existir). Aceita `period` (`este_mes`/`mes_anterior`/`30d`/`custom`+`start`/`end`) e `seller_id`. Devolve `kpis` (`total_vendido`, `ticket_medio`, `eventos_fechados`, `comissao_prevista`, `desconto_concedido`), `eventos[]` (venda, cliente, contrato, cobrança, vendedor — **sem custo e sem lucro**), `can_filter_seller`, `scope_label` e `sellers` (só gestor). Núcleo em `app/financeiro/vendas_ops.py` |
 | GET | `/api/financeiro/dashboard` | DRE / KPIs — **feature 189**: `kpis` inclui `margem_bruta`, `margem_ebitda`, `tax_rate` (alíquota do `SiteSetting`, rótulo dos impostos provisionados) e as faixas do Fator R (`fator_r_rate_low`/`fator_r_rate_high`); cada item de `eventos[]` inclui `receita` e `event_type` |
 | GET | `/api/financeiro/comissoes` | **feature 187** — KPIs + `by_seller` + `entries` + `can_manage` + `sellers` |
 | GET | `/api/financeiro/pagamentos` | planilha de pagamentos |
@@ -350,6 +350,16 @@ endpoint da API chamam as mesmas funções (feature 189 — antes a lógica vivi
 ### 3.8 Clientes — `clientes_read.py` / `clientes_write.py`
 `GET /api/clientes/`, `/api/clientes/search`, `/api/clientes/<id>`, `/api/clientes/avaliacoes` ·
 `POST /api/clientes/quick-create` · `PATCH|DELETE /api/clientes/<id>`.
+
+**`GET /api/clientes/avaliacoes`** (feature 197) — cada item de `feedbacks[]` e `attention[]` vem
+com o relacionamento aninhado: `{id, score, comment, tags[], submitted_at, event: {id, title,
+event_date} | null, client: {id, full_name} | null}`, mais o bloco `kpis: {media_geral,
+total_avaliacoes, percentual_5_estrelas}` calculado sobre o recorte filtrado. `client.full_name`
+cai para `ClientFeedback.client_name` (nome digitado no formulário público) quando o evento não
+tem cliente vinculada — nesse caso `client.id` é `null`. O núcleo continua em
+`client_ops.summarize_feedback`, que carrega evento+cliente com `joinedload` (evita N+1) e casa a
+tag pelas **duas** formas do JSON (escapada e literal) com `ESCAPE '!'` — o `LIKE` do PostgreSQL
+consome a barra invertida de `\uXXXX` como escape, e por isso o filtro por tag não funcionava.
 
 ### 3.9 Catálogo público (anônimo) — `catalogo_read.py`
 `GET /api/catalogo`, `/api/catalogo/categorias`, `/api/catalogo/categoria/<slug>`,
@@ -559,6 +569,15 @@ Em `GET /api/financeiro/comissoes`, `seller_filter = requested_seller_id if can_
 current_user.id` — um vendedor comum recebe apenas os próprios dados, independentemente do
 `seller_id` enviado na querystring. `POST /api/financeiro/comissoes/pagar-mes` responde **403**
 para quem não é `FINANCEIRO`/`SUPERADMIN`, inclusive para o próprio ID.
+
+A feature **196** replicou o padrão em `GET /api/vendas/pipeline` (Dashboard Comercial), com três
+escopos resolvidos por `_resolve_vendas_scope()` em `app/api/financeiro_read.py`:
+
+| Quem | O que enxerga | `commission_target_id` |
+|---|---|---|
+| `FINANCEIRO`/`SUPERADMIN` | Empresa toda; pode filtrar por `seller_id` | o vendedor filtrado, ou `None` (= comissão da equipe) |
+| `COMERCIAL` sem papel de gestão | **Só as próprias vendas** — o `seller_id` da querystring é ignorado | ele mesmo |
+| Responsável EducaManto sem papel comercial | Só eventos EducaManto (`(EDU…`) | ele mesmo |
 
 ### 4.5 RBAC no frontend
 `frontend/apps/internal/src/lib/navigation.tsx` é a config declarativa da navegação, portada de

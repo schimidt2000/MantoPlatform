@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **195**
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **197**
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
@@ -228,18 +228,81 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 
 ### A.5 Comercial
 
-#### `/vendas` — Pipeline de Vendas
-- **Acesso**: `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` ou responsável EducaManto.
-- **UX**: eventos com venda, custo e comissão calculados; agrupamento comercial considerado.
-- **API**: `GET /api/vendas/pipeline`.
+#### `/vendas` — Dashboard Comercial *(pivot na feature 196; era "Pipeline de Vendas")*
+- **Acesso**: `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` ou responsável EducaManto
+  (`_can_view_vendas()`).
+- **Objetivo**: é a tela de metas e performance de quem vende. O papel `COMERCIAL` **não** acessa
+  o Painel Financeiro, então esta é a única superfície onde ele acompanha o próprio resultado.
+  Até a 195 era uma cópia empobrecida da tabela do Painel Financeiro (venda/custo/lucro/comissão,
+  sem período e sem KPI) — redundante para o gestor e pouco útil para o vendedor.
+- **Duas personalidades, decididas no servidor** (`can_filter_seller` / `scope_label`):
+  - **Vendedor comum** → "Minhas vendas": KPIs e tabela só com as vendas dele, **sem** filtro de
+    vendedor. Passar `seller_id` na URL não muda nada (o servidor ignora). O responsável
+    EducaManto sem papel comercial cai aqui, restrito aos eventos `(EDU…`.
+  - **Financeiro/Superadmin** → "Empresa toda": KPIs consolidados, coluna **Vendedor** na tabela e
+    `<select>` "Todos os vendedores".
+- **Filtros de período** (topo, botões): **Mês atual** · **Mês anterior** · **Últimos 30 dias** —
+  resolvidos por `_resolve_period()`, o mesmo helper do Painel Financeiro. A faixa de datas
+  resolvida aparece ao lado ("01/06/2026 a 30/06/2026").
+- **4 cards de KPI** (grid 1/2/4 colunas), na estética do Painel Financeiro:
+  1. **Total vendido** (R$) — subtítulo mostra o desconto concedido no período, quando houver.
+  2. **Ticket médio** (R$) — total ÷ eventos fechados.
+  3. **Eventos fechados** (quantidade).
+  4. **Comissão prevista** (R$) — **destacado em verde sutil** (borda + fundo `green-soft`) para
+     incentivar o comercial. Para gestor é a comissão projetada da equipe; para o vendedor, a
+     projeção sobre as vendas dele.
+- **Tabela de acompanhamento (funil fechado)**, componentes `Table`/`TableRow`/`TableCell` de
+  `@manto/ui`. Colunas: **Data do evento** · **Cliente** (contratante do `EventClient`, com
+  fallback para o cliente denormalizado) · **Evento** (título ou rótulo do grupo, com badge
+  `GRUPO`/`PERMUTA` e a data em que a venda foi fechada) · **Valor da venda** (com o preço de
+  tabela riscado quando houve desconto) · **Vendedor** (só gestor) · **Contrato**
+  (`Badge` — Assinado/Pendente/Sem contrato) · **Cobrança** (`Badge` — Pago total/Parcial/
+  Pendente/Permuta) · **Ações** ("Ver evento" → `/events/:id`).
+  Rola dentro do próprio contêiner no mobile — o corpo da página nunca rola na horizontal.
+- **Nota de negócio**: as colunas de **Custo** e **Lucro líquido** saíram desta tela e **não
+  existem no payload** — são informação do setor financeiro. O foco aqui é a relação comercial.
+- **O que conta como venda fechada** (`vendas_ops.list_closed_sales`): evento com `sale_value > 0`
+  ou marcado como cortesia/permuta; recortado pela **data de fechamento** (`sale_date`, ou a data
+  do evento quando ninguém preencheu `sale_date` — sem esse resgate some receita real do
+  relatório); satélites de grupo comercial ficam de fora (o principal carrega o valor do grupo).
+  Evento de agenda ainda sem valor **não** aparece — quem cobra esse preenchimento é a auditoria
+  do Painel Financeiro. Permutas entram na lista com badge, mas **não** somam nos KPIs (mesma
+  régua de `eventos_com_venda` do Painel Financeiro).
+- **Estados**: `Skeleton` de 4 cards + tabela no carregamento; alerta em pt-BR no erro; vazio com
+  "Nenhuma venda fechada neste período. Troque o filtro acima para ver outro mês.". Troca de
+  período/vendedor faz o bloco reanimar com Framer Motion (220ms, respeitando
+  `useReducedMotion()`).
+- **API**: `GET /api/vendas/pipeline?period=&seller_id=`.
+- **Vínculos**: `/events/:id` (ação de linha), `/financeiro/comissoes` (a comissão prevista aqui é
+  a mesma base que vira `CommissionPayment` lá) e `/financeiro` (Painel Financeiro — custo, lucro
+  e auditoria de eventos sem valor).
 
 #### `/clientes` · `/clientes/:id` — Clientes
 - **Acesso**: `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (`_require_vendas()`).
 - **UX**: busca, criação rápida (dedupe por telefone), edição, exclusão, histórico de eventos.
 
-#### `/clientes/avaliacoes` — Avaliações de Clientes
-- **UX**: feedback recebido pelo link público `/avaliar/<token>`; o link é gerado sob demanda a
-  partir do evento (token aleatório de 43 chars, nunca o id sequencial).
+#### `/clientes/avaliacoes` — Satisfação das Clientes *(refeita na feature 197)*
+- **Acesso**: `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (`_require_vendas()`).
+- **Objetivo**: painel de satisfação — onde se mede a qualidade percebida do serviço. A origem do
+  dado é o link público `/avaliar/<token>`, gerado sob demanda a partir do evento (token aleatório
+  de 43 chars, nunca o id sequencial).
+- **UX**:
+  - **3 cards de KPI** (calculados no servidor, sempre sobre o recorte filtrado): **Nota Média
+    Geral** (`4.1 / 5.0` + estrelas), **Total de Avaliações** (com "N clientes avaliadas") e
+    **Índice de Excelência** (% de notas 5).
+  - **Distribuição por nota** — barras de 5 a 1 estrela com a contagem.
+  - **Filtros**: busca textual (nome da cliente **ou** título do evento, sem acento), faixa de
+    nota (Todas · 5 · 4 · **3 ou menos (atenção)**), ordenação (Mais recentes · Maior nota · Menor
+    nota), período e tag. Busca, faixa de nota e ordenação rodam **no cliente** (a faixa "3 ou
+    menos" não cabe no parâmetro `score` do servidor, que só aceita nota exata); **período e tag
+    vão ao servidor**. Contador "X de Y avaliação(ões)" e "Limpar filtros".
+  - **Grade de cards** (1 coluna no mobile → 2 → 3): estrelas somente-leitura (`StarRating` de
+    `@manto/ui`) + badge da nota, **nome da cliente em destaque**, título do evento com **link para
+    `/events/:id`** e a data do evento, **comentário** em `blockquote` e as tags marcadas.
+  - **Empty state** com ícone, distinguindo "nenhuma avaliação ainda" de "os filtros não acharam
+    nada".
+- **Vínculos**: cada card leva ao evento (`/events/:id`); a tela é acessada por `/clientes`.
+- **API**: `GET /api/clientes/avaliacoes?period=&from=&to=&score=&tag=&client_id=`.
 
 #### `/financeiro/comissoes` — Comissões *(reestruturada na feature 187)*
 - **Acesso**: `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` ou responsável EducaManto.

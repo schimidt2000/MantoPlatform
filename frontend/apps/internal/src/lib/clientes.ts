@@ -119,13 +119,38 @@ export function useDeleteClient() {
 
 export type FeedbackPeriod = "30d" | "90d" | "365d" | "custom" | "all";
 
+/** Evento avaliado, aninhado na avaliação (feature 197). Nulo se o evento foi apagado. */
+export interface ClientFeedbackEvent {
+  id: number;
+  title: string;
+  /** ISO de `CalendarEvent.start_at` — data em que o evento aconteceu. */
+  event_date: string | null;
+}
+
+/**
+ * Quem foi atendido. `id` é nulo quando o nome veio do próprio formulário público
+ * (`ClientFeedback.client_name`, feature 132) e não de uma cliente cadastrada.
+ */
+export interface ClientFeedbackClient {
+  id: number | null;
+  full_name: string;
+}
+
 export interface ClientFeedbackItem {
   id: number;
   score: number;
+  comment: string;
   tags: string[];
   submitted_at: string | null;
-  event_title: string;
-  client_name: string;
+  event: ClientFeedbackEvent | null;
+  client: ClientFeedbackClient | null;
+}
+
+/** KPIs de satisfação calculados no servidor sobre o recorte filtrado (feature 197). */
+export interface ClientFeedbackKpis {
+  media_geral: number;
+  total_avaliacoes: number;
+  percentual_5_estrelas: number;
 }
 
 export interface ClientFeedbackFilters {
@@ -139,6 +164,7 @@ export interface ClientFeedbackFilters {
 
 export interface ClientFeedbackSummary {
   feedbacks: ClientFeedbackItem[];
+  kpis: ClientFeedbackKpis;
   total: number;
   avg_overall: number;
   clients_rated: number;
