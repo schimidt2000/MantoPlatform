@@ -7,10 +7,12 @@ Funções puras (sem `request`/`render_template`/`flash`), reusadas tanto pelas 
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from decimal import Decimal
 
 from sqlalchemy import func, nullslast, or_
+from sqlalchemy.orm import joinedload
 
 from app import db
 from app.clientes.importer import normalize_phone
@@ -165,6 +167,44 @@ def delete_client(client: Client) -> None:
     db.session.commit()
 
 
+# Caractere de escape do LIKE nas buscas por tag. Precisa ser explícito: o padrão do
+# PostgreSQL é a barra invertida, que aparece dentro do próprio texto procurado (`⏰`).
+_LIKE_ESCAPE_CHAR = "!"
+
+
+def _like_literal(value: str) -> str:
+    """Neutraliza os curingas do LIKE (`%`, `_`) e o próprio caractere de escape."""
+    for char in (_LIKE_ESCAPE_CHAR, "%", "_"):
+        value = value.replace(char, _LIKE_ESCAPE_CHAR + char)
+    return value
+
+
+def _tag_match_conditions(tag: str) -> list:
+    """Condições que casam uma tag dentro do JSON de `ClientFeedback.tags` (feature 197).
+
+    Toda tag do formulário público começa com emoji, e as duas rotas de escrita gravam com
+    `json.dumps(...)` sem `ensure_ascii=False` — o banco guarda a forma escapada
+    (`["\\u23f0 Pontualidade"]`). O filtro antigo procurava o emoji literal com o LIKE padrão,
+    e errava duas vezes: pelo texto (que está escapado no banco) e pela barra invertida, que o
+    PostgreSQL consome como escape. Aqui procuramos as duas formas, com `ESCAPE '!'` para que
+    a barra invertida valha como caractere comum.
+
+    Args:
+        tag: Tag já validada contra `ALL_FEEDBACK_TAGS`.
+
+    Returns:
+        Lista de condições SQL para combinar com `or_`.
+    """
+    as_written = json.dumps(tag)  # já vem com as aspas: '"\\u23f0 Pontualidade"'
+    as_unicode = f'"{tag}"'  # caso alguma linha tenha sido gravada sem escapar
+    return [
+        ClientFeedback.tags.ilike(
+            f"%{_like_literal(pattern)}%", escape=_LIKE_ESCAPE_CHAR
+        )
+        for pattern in (as_written, as_unicode)
+    ]
+
+
 @dataclass
 class FeedbackSummary:
     """Resumo de avaliações das clientes, com os filtros já resolvidos."""
@@ -178,6 +218,8 @@ class FeedbackSummary:
     attention: list[ClientFeedback]
     clients_with_feedback: list[tuple[int, str]]
     selected_client: Client | None
+    # Índice de excelência (feature 197): % das avaliações do recorte que são 5 estrelas.
+    pct_five: float
 
 
 def summarize_feedback(
@@ -196,7 +238,11 @@ def summarize_feedback(
     tag_norm = tag if tag in ALL_FEEDBACK_TAGS else ""
     selected_client = Client.query.get(client_id) if client_id else None
 
-    fb_query = ClientFeedback.query.join(CalendarEvent, ClientFeedback.event_id == CalendarEvent.id)
+    # `joinedload` (feature 197): a serialização lê `f.event.title` e `f.event.client.name` em
+    # cada linha — sem isso o `lazy=True` das relações dispara 2 SELECTs por avaliação (N+1).
+    fb_query = ClientFeedback.query.join(
+        CalendarEvent, ClientFeedback.event_id == CalendarEvent.id
+    ).options(joinedload(ClientFeedback.event).joinedload(CalendarEvent.client))
     if period_start:
         fb_query = fb_query.filter(ClientFeedback.submitted_at >= period_start)
     if period_end:
@@ -204,7 +250,7 @@ def summarize_feedback(
     if score:
         fb_query = fb_query.filter(ClientFeedback.score == score)
     if tag_norm:
-        fb_query = fb_query.filter(ClientFeedback.tags.ilike(f'%"{tag_norm}"%'))
+        fb_query = fb_query.filter(or_(*_tag_match_conditions(tag_norm)))
     if client_id:
         fb_query = fb_query.filter(CalendarEvent.client_id == client_id)
     feedbacks = fb_query.order_by(ClientFeedback.submitted_at.desc()).all()
@@ -218,6 +264,7 @@ def summarize_feedback(
         if 1 <= f.score <= 5:
             dist[f.score] += 1
     dist_max = max(dist.values()) if dist else 0
+    pct_five = round(dist[5] / total * 100, 1) if total else 0.0
 
     attention = [f for f in feedbacks if f.score <= _ATTENTION_SCORE_MAX][:_ATTENTION_LIMIT]
 
@@ -240,4 +287,5 @@ def summarize_feedback(
         attention=attention,
         clients_with_feedback=clients_with_feedback,
         selected_client=selected_client,
+        pct_five=pct_five,
     )

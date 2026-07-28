@@ -1,4 +1,7 @@
 export { cn } from "./lib/cn";
+export { formatRelativeDay, formatShortDate } from "./lib/date";
+export { StarRating } from "./components/star-rating";
+export type { StarRatingProps } from "./components/star-rating";
 export { Button, buttonVariants } from "./components/button";
 export type { ButtonProps } from "./components/button";
 export { Input } from "./components/input";

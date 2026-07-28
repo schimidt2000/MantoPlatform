@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **195**
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **197**
 
 Formato de cada entrada:
 
@@ -17,6 +17,154 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 197 — Refatoração do Dashboard de Avaliações de Clientes
+`197-dashboard-avaliacoes-clientes` · **2026-07-28** · **sem migration**
+
+**Motivação.** `/clientes/avaliacoes` estava quebrada e pobre: **a lista de avaliações nunca era
+renderizada** (a página montava KPIs, distribuição e o bloco "Atenção", mas simplesmente não
+usava `data.feedbacks`), o **comentário escrito pela cliente não era serializado pelo endpoint**
+— ou seja, o texto que dá sentido à nota nunca chegava à tela — e o **filtro por tag não casava
+nenhuma linha**. Como é a tela onde medimos a qualidade do serviço, virou um dashboard de
+satisfação de verdade.
+
+**O que mudou.**
+
+- **Backend.** `app/clientes/client_ops.py`:
+  - `summarize_feedback` ganhou `joinedload(ClientFeedback.event).joinedload(CalendarEvent.client)`
+    — a serialização lê `f.event.title` e `f.event.client.name` por linha e o `lazy=True` fazia
+    2 SELECTs por avaliação (N+1);
+  - novo campo `pct_five` em `FeedbackSummary` (índice de excelência do recorte filtrado);
+  - **correção do filtro por tag**: novo `_tag_match_conditions` + `_like_literal`. As duas rotas
+    de escrita gravam com `json.dumps(...)` sem `ensure_ascii=False`, então o banco guarda a tag
+    **escapada** (`["⏰ Pontualidade"]`); o filtro antigo procurava o emoji literal e ainda
+    caía na barra invertida, que o PostgreSQL consome como escape do `LIKE`. Agora procura as duas
+    formas com `ESCAPE '!'`. **A view Jinja legada de `app/clientes/routes.py` herda a correção.**
+- **Banco.** Nada. Zero migration — `ClientFeedback.comment` e `client_name` já existiam
+  (features 130/132); só não estavam sendo serializados.
+- **Frontend.**
+  - `@manto/ui` ganhou dois membros compartilhados (Princípio I): **`StarRating`**
+    (`components/star-rating.tsx`) — estrelas somente-leitura, aceita nota fracionária,
+    substitui os `StarsInt`/`StarsAvg` que viviam em cópia local dentro de
+    `AvaliacaoCastingPage.tsx` — e **`formatShortDate`/`formatRelativeDay`** (`lib/date.ts`),
+    promovidos de `apps/portal/src/lib/format.ts`, que agora só reexporta.
+  - `lib/clientes.ts`: tipos novos `ClientFeedbackEvent`, `ClientFeedbackClient`,
+    `ClientFeedbackKpis`; `ClientFeedbackItem` passou a ter `comment` e os relacionamentos
+    aninhados no lugar dos antigos `event_title`/`client_name` planos.
+  - `pages/ClientFeedbackPage.tsx` reescrita: 3 cards de KPI (nota média com estrelas, total,
+    índice de excelência), distribuição por nota (mantida), barra de filtros funcional e grade de
+    cards ricos (estrelas, cliente em destaque, evento com link para `/events/:id` + data,
+    comentário em `blockquote`, tags) e empty state com ícone.
+- **Verificação.** Script de test client contra `manto_local` (semeia, exercita e limpa):
+  payload/aninhamento, fallback de nome, KPIs, cada filtro, formato do bloco "Atenção" e RBAC
+  (COMERCIAL 200 · sem papel de vendas 403 · anônimo negado). Filtros, ordenação, empty state e
+  layout mobile conferidos no navegador.
+
+**Rotas e endpoints.**
+
+| Método | Rota | Observação |
+|---|---|---|
+| GET | `/api/clientes/avaliacoes` | **contrato alterado (breaking)** — cada item de `feedbacks[]`/`attention[]` passou de `{id, score, tags, submitted_at, event_title, client_name}` para `{id, score, comment, tags, submitted_at, event: {id, title, event_date} \| null, client: {id, full_name} \| null}`; bloco novo `kpis: {media_geral, total_avaliacoes, percentual_5_estrelas}`. As demais chaves de topo (`total`, `avg_overall`, `clients_rated`, `dist`, `dist_max`, `clients_with_feedback`, `all_tags`, `filters`) seguem iguais. |
+
+**Impacto em RBAC e regras de negócio.**
+
+- RBAC **inalterado**: segue `_require_vendas()` (`COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`).
+- `client.full_name` cai para `ClientFeedback.client_name` (o nome digitado no formulário público,
+  feature 132) quando o evento não tem cliente cadastrada vinculada — nesse caso `client.id` vem
+  `null`. Sem isso a maioria dos cards apareceria sem nome, porque `CalendarEvent.client_id` é
+  opcional e fica vazio na maior parte da base.
+- Nota e ordenação **não** vão ao servidor: a faixa "3 ou menos" não cabe no parâmetro `score`
+  (que só aceita nota exata), então busca textual, faixa de nota e ordenação são aplicadas no
+  cliente sobre a lista já carregada. Período e tag continuam sendo filtros de servidor.
+- O seletor de cliente saiu da tela — a busca textual cobre nome da cliente **e** título do
+  evento. O parâmetro `client_id` do endpoint continua existindo e funcionando.
+
+**Riscos e pegadinhas.**
+
+- **`LIKE` sobre JSON com emoji**: a barra invertida do `\uXXXX` é o caractere de escape padrão do
+  `LIKE` no PostgreSQL. Sem `ESCAPE '!'` explícito o padrão nunca casa. Vale para qualquer filtro
+  futuro sobre `ClientFeedback.tags`.
+- **`grid` sem `grid-cols-1`**: `grid gap-3 md:grid-cols-2` não define coluna no mobile, e a
+  trilha implícita `auto` é dimensionada por `max-content` — o comentário longo esticava o card
+  para ~880px dentro de um viewport de 375px, estourando a rolagem horizontal. Corrigido com
+  `grid-cols-1` explícito (`minmax(0,1fr)`) nas duas grades.
+- **`truncate` dentro de flex** precisa de `min-w-0` no item; sem isso o item não encolhe abaixo
+  do texto e o corte não acontece (título do evento no card).
+- **Sem animação de saída por card.** A transição é do bloco inteiro, com `key` no recorte atual.
+  Animar a saída item a item mantém o card removido no DOM até a animação terminar — a lista
+  exibida discorda do contador enquanto isso.
+- `manto_local` tem **zero** `client_feedbacks` e nenhum `CalendarEvent.client_id` preenchido: para
+  conferir a tela é preciso semear dados (e limpar depois).
+
+### 196 — Pivot do Pipeline de Vendas para Dashboard Comercial
+`196-dashboard-comercial` · **2026-07-28** · **sem migration**
+
+**Motivação.** A tela `/vendas` ("Pipeline de Vendas", feature 156) tinha virado uma cópia
+empobrecida da tabela do Painel Financeiro: mesma lista de eventos com venda/custo/lucro/comissão,
+sem período, sem KPI e sem nada que o Painel Financeiro já não mostrasse melhor. Para o gestor era
+redundante; para o vendedor era quase inútil — e é justamente o `COMERCIAL` quem **não tem acesso
+ao Painel Financeiro**, ou seja, `/vendas` é a única superfície onde ele acompanha o próprio
+resultado. A tela virou um **Dashboard Comercial**: metas, performance e acompanhamento das vendas
+fechadas do período.
+
+**O que mudou.**
+
+- **Backend.** Novo `app/financeiro/vendas_ops.py` — núcleo puro do dashboard: `list_closed_sales`
+  (recorte do funil), `build_kpis`, `serialize_sales`, `closing_date`, `contratante_name`,
+  `contract_status_map`, `received_map` e `event_payment_status`. `api_vendas_pipeline` em
+  `app/api/financeiro_read.py` foi reescrita sobre esse núcleo e ganhou `_resolve_vendas_scope()`
+  (RBAC de servidor) e `_comercial_sellers()`. **Refatoração de reuso**: `api_financeiro_dashboard`
+  passou a chamar `vendas_ops.event_payment_status` no lugar da cadeia `if/elif` inline — o status
+  de cobrança agora tem fonte única e as duas telas mostram o mesmo rótulo.
+- **Banco.** Nada. Zero migration, zero coluna nova — `sale_value_gross`, `sale_date`, `seller_id`,
+  `EventContract.is_signed`, `EventPayment` e `EventClient` já existiam.
+- **Frontend.** `lib/vendas.ts` reescrito (`useDashboardComercial`, tipos `VendaFechada`,
+  `VendasKpis`, `ContractStatus`, `SalePaymentStatus`); `pages/VendasPipelinePage.tsx` reconstruído
+  como layout gerencial em grid: filtros de período, filtro de vendedor (só gestor), 4 cards de KPI
+  e tabela densa com `Table`/`TableRow`/`TableCell` + `Badge` de `@manto/ui`. Nome do arquivo e do
+  componente mantidos (`VendasPipelinePage`) para não mexer na rota em `App.tsx`.
+- **Verificação.** `scripts/db/verify_196_dashboard_comercial.py` — 55 checks contra `manto_local`.
+
+**Rotas e endpoints.**
+
+| Método | Rota | Observação |
+|---|---|---|
+| GET | `/api/vendas/pipeline?period=&seller_id=` | **reescrito (breaking)** — `{items[], is_financeiro}` deu lugar a `{period, start, end, kpis, eventos[], can_filter_seller, scope_label, sellers?}` |
+| GET | `/api/financeiro/dashboard` | **inalterado no contrato** — só passou a derivar `eventos[].status` de `vendas_ops` |
+
+**Impacto em RBAC e regras de negócio.**
+
+- O gate de acesso continua `_can_view_vendas()`. O que mudou é o **escopo de dados**, decidido no
+  servidor por `_resolve_vendas_scope()`: `FINANCEIRO`/`SUPERADMIN` veem a empresa toda e podem
+  filtrar por `seller_id`; `COMERCIAL` sem papel de gestão recebe **só as próprias vendas** e o
+  `seller_id` da querystring é ignorado; responsável EducaManto sem papel comercial segue restrito
+  aos eventos `(EDU…`. Mesmo padrão da feature 187.
+- **Custo e lucro saíram do payload**, não só da tela — informação do setor financeiro.
+- `comissao_prevista` usa `_commission_beneficiary`, não `seller_id`: em evento EducaManto a
+  comissão é do responsável, então ela cai no dashboard **dele**, não no do vendedor do evento.
+
+**Riscos e pegadinhas descobertos.**
+
+1. **`sale_value_gross` não é a receita.** O prompt original pedia somar `sale_value_gross` no
+   "total vendido". Nesta base ele é o **preço de tabela antes do desconto** e fica `NULL` na
+   maioria dos eventos — somar isso daria um total menor que o real e divergente da Receita Bruta
+   do Painel Financeiro, que usa `sale_value`. O KPI usa `sale_value`; `sale_value_gross` virou o
+   preço riscado na linha e o KPI derivado `desconto_concedido`.
+2. **O eixo do período é a data de fechamento, não a data do evento.** Nesta operação a venda é
+   fechada meses antes do evento (evento de julho vendido em janeiro). O Painel Financeiro recorta
+   por `start_at` — correto para DRE; para o comercial o que importa é "o que eu fechei neste mês",
+   que é `sale_date`. **As duas telas não batem por período de propósito**, e não é bug.
+3. **`sale_date` `NULL` existe e vale dinheiro.** Em `manto_local`, 7 vendas com valor estão sem
+   `sale_date` — filtrar só por `sale_date` sumiria com R$ 13.000 reais só em junho/2026. Daí o
+   fallback para `start_at` em `closing_date()`.
+4. **Mas o fallback sozinho polui o funil.** Na primeira versão ele arrastava para a tela todo
+   evento de agenda **sem venda nenhuma** (15 linhas de `R$ 0,00` num mês). O recorte final exige
+   `sale_value > 0` **ou** `is_cortesia_permuta` — evento sem valor não é venda, e quem cobra esse
+   preenchimento é a auditoria do Painel Financeiro.
+5. **Satélite de grupo comercial fica fora por SQL**, não em Python: o principal carrega o valor do
+   grupo (FR-010/FR-011); incluir o satélite contaria a mesma venda duas vezes.
+6. **`_resolve_period()` lê `request.args`** — por isso o período é resolvido na rota e passado
+   pronto para `vendas_ops`, que precisa continuar puro (regra de arquitetura do projeto).
 
 ### 195 — Autocomplete de Endereços com Google Places e Comboboxes com Busca Visual
 `195-autocomplete-enderecos-comboboxes` · **2026-07-28** · **sem migration**
