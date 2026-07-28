@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **191**
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **194**
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
@@ -340,21 +340,47 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **Vínculos**: cada linha de evento/auditoria/recebimento leva a `/events/<id>`; a linha de
   Gastos Recorrentes do DRE reflete os lançamentos de `/gastos/recorrentes`.
 
-#### `/financeiro/pagamentos` — Planilha de Pagamentos *(paridade restaurada na feature 189)*
+#### `/financeiro/pagamentos` — Planilha de Pagamentos *(paridade restaurada na feature 189; visualização e filtro por faixa na feature 194)*
 - **Acesso**: `FINANCEIRO`, `SUPERADMIN`.
 - **UX**: itens de cachê, salário, gasto, BV, comissão e contas recorrentes em uma planilha
   única, na ordem de colunas clássica — **checkbox** (com "selecionar tudo") · **vencimento** ·
   **descrição detalhada** (badge do tipo + descrição do item, com botão de cópia) · **favorecido**
   em negrito · **valor** em BRL (com cópia do valor cru `1234,56`) · **chave PIX** com o tipo
   (CPF/CNPJ/E-mail/Telefone/Aleatória) e botão de cópia · **situação**. Os botões de cópia dão
-  feedback "✓" temporário e anunciam por `aria-live`. Linha colorida por situação; badge
-  "⏳ Futuro" em pendências com vencimento à frente; adiantamentos de salário (N por pagamento,
-  com comprovante) no próprio valor; **export CSV**.
+  feedback "✓" temporário e anunciam por `aria-live`; adiantamentos de salário (N por pagamento,
+  com comprovante) no próprio valor; **export CSV**. Trocar o mês limpa filtro e seleção.
+- **As 4 faixas (fonte única de cor e de filtro)**: **Pago** · **No banco** · **Pendente**
+  (`nao_pago` já vencido) · **Futuro** (`nao_pago` a vencer). A tela deriva "pendente"/"futuro"
+  do campo `is_future` que a API já manda — a mesma regra com que o backend soma os totais —, e
+  não de uma comparação de datas própria, então filtro e KPI nunca divergem.
+- **Cards de KPI = filtro rápido da tabela** *(feature 194)*: os 5 cards do topo (Total no
+  período · Pagos · No banco · Pendentes · Futuro) são botões (`aria-pressed`) que filtram as
+  linhas no cliente. Clicar em "Total no período" — ou reclicar o card já ativo — limpa o filtro.
+  Cada card mostra o valor em BRL, a **contagem de itens** da faixa e "· filtro ativo" quando
+  ligado. O card ativo recebe borda de 2px na cor do status + `ring` + fundo colorido e sombra;
+  os inativos ficam esmaecidos (`opacity-60` + dessaturação, restaurados no hover). O estado do
+  filtro é anunciado por `aria-live` ("Filtro X ativo: N de M itens"), aparece no título da
+  tabela ("Itens do mês (N de M)") e tem um botão "Limpar filtro"; faixa vazia mostra estado
+  vazio com atalho "Ver todos os N itens".
+- **Colorização da tabela** *(feature 194)*: cada linha tem uma nuance de fundo pela sua faixa —
+  verde (pago), azul (no banco), rosa/vermelho (pendente), dourado (futuro, cor `gold` do
+  `@manto/ui`; **`amber` não é usado no sistema**). Descrição, favorecido e valor ficam em
+  `font-bold text-ink` para manter o contraste sobre os quatro fundos. O seletor de situação e o
+  badge "⏳ Futuro" usam a mesma paleta, então a cor do card clicado é a cor das linhas reveladas.
 - **Situação**: seletor por linha com as opções que o backend suporta — **Não pago · No banco ·
-  Pago** (comissão e conta recorrente não têm "No banco"). **Ações em lote**: marcar como pago,
-  **como no banco**, como não pago, e excluir (com confirmação).
+  Pago** (comissão e conta recorrente não têm "No banco").
+- **Ações em lote** *(barra no topo da tabela, feature 194)*: aparece com 1+ itens marcados
+  (animação `AnimatePresence`, respeitando `useReducedMotion`) e some ao voltar a 0. Mostra
+  **`"X selecionados • R$ Y.YYY,YY"`** — a soma dos itens marcados, calculada no estado do React
+  e formatada por `formatBRL` de `@manto/money`. Ações: **Marcar pago · No banco · Não pago ·
+  Excluir** (com confirmação) · **Limpar seleção**. Cada botão tem **spinner individual** — só a
+  ação em voo gira (lida de `mutation.variables`), as outras ficam desabilitadas até a resposta,
+  impedindo dois lotes concorrentes (Princípio V). "Selecionar tudo" opera sobre as linhas
+  **visíveis**: com filtro ligado, marca só aquela faixa sem mexer no resto da seleção; a linha
+  marcada ganha barra lateral roxa.
 - **API**: `GET /api/financeiro/pagamentos` · `POST .../set-status`, `.../bulk-action`,
-  `.../salary/<id>/advance` · `GET .../export`.
+  `.../salary/<id>/advance` · `GET .../export`. A feature 194 não criou nem alterou endpoint —
+  é toda de apresentação sobre o payload existente.
 
 #### `/gastos` — Gastos Extras
 - **Acesso**: staff para lançar; aprovar/rejeitar em `_require_financeiro()`.
