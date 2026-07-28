@@ -46,18 +46,120 @@ export function useAgendaDia(date: string) {
 // ── Detalhe do evento (leitura) ──────────────────────────────────────────────
 // Blocos financeiros são OPCIONAIS: só vêm no JSON conforme o papel (RBAC no servidor).
 
+/** Talento escalado, já com o que o card de casting/figurino mostra (feature 190). */
+export interface RoleTalent {
+  id: number;
+  name: string;
+  artistic_name: string | null;
+  first_name: string;
+  whatsapp: string | null;
+  size_top: string | null;
+  size_bottom: string | null;
+  shoe_size: string | null;
+  height_cm: number | null;
+}
+
+/** Estado da agenda do talento na janela do evento (feature 190). */
+export interface RoleAvailability {
+  status: "free" | "same_day" | "conflict";
+  info: string;
+}
+
+/** Status de pagamento do cachê de um cargo (mesma lista aceita pelo servidor). */
+export type PaymentStatus = "nao_pago" | "pago" | "no_banco" | "fora_do_banco";
+
 export interface RoleItem {
   role_id: number;
   character_name: string;
+  /** "character" = personagem do evento; "extra" = equipe de apoio (coordenador, técnico…). */
   role_type: string;
-  talent: { id: number; name: string } | null;
+  talent: RoleTalent | null;
   figurino_done: boolean;
   invite_status: string | null;
   dismissed: boolean;
   cache_value?: number | null; // só para casting/superadmin
+  travel_cache?: number | null; // idem
+  cache_cap?: number | null; // idem
   figurino_sheet_id: number | null;
+  figurino_sheet_name: string | null;
+  figurino_done_at: string | null;
+  assigned_at: string | null;
+  payment_status: PaymentStatus;
+  availability: RoleAvailability | null;
   needs_makeup: boolean;
   is_singer: boolean;
+}
+
+/** Estimativa de trajeto Manto → local do evento (cache do Google Maps). */
+export interface EventTravel {
+  time_minutes: number | null;
+  distance_km: number | null;
+  is_outside_sp: boolean | null;
+  suggested_departure: string | null;
+  maps_url: string | null;
+}
+
+export interface EventRatingItem {
+  id: number;
+  talent_name: string;
+  score: number;
+  comment: string | null;
+  submitted_at: string | null;
+  sub_ratings: {
+    category: string;
+    subject_name: string | null;
+    score: number;
+    comment: string | null;
+  }[];
+}
+
+export interface ClientFeedbackItem {
+  id: number;
+  score: number;
+  comment: string | null;
+  client_name: string | null;
+  tags: string[];
+  submitted_at: string | null;
+}
+
+export interface EventMaterial {
+  id: number;
+  material_type: "file" | "link";
+  label: string | null;
+  url: string | null;
+  file_path: string | null;
+  created_at: string | null;
+}
+
+export interface EventGasto {
+  id: number;
+  description: string;
+  category: string;
+  amount: number | null;
+  expense_date: string | null;
+  receipt_path: string | null;
+}
+
+export interface EventAcrescimo {
+  id: number;
+  label: string;
+  tipo: string;
+  is_percent: boolean;
+  value: number | null;
+  amount_brl: number | null;
+  is_bv: boolean;
+  bv_recipient: string | null;
+  bv_payment_status: string;
+}
+
+/** Trechos fixos das mensagens de WhatsApp copiadas pela tela (feature 083). */
+export interface EventMensagens {
+  characters: string;
+  date_line: string;
+  location: string;
+  cobranca_amount: string;
+  cobranca_due: string;
+  reembolso_lines: string[];
 }
 
 export interface EventoDetalhe {
@@ -80,10 +182,22 @@ export interface EventoDetalhe {
     departure_time: string | null;
     departure_location: string | null;
     needs_rehearsal: boolean;
+    // Detalhe do evento (feature 190)
+    description: string | null;
+    google_html_link: string | null;
+    travel: EventTravel;
   };
   flags: Record<string, boolean>;
   logs: { ts: string; actor_name: string; actor_role: string; message: string }[];
   elenco?: RoleItem[];
+  materiais?: EventMaterial[];
+  ratings?: { items: EventRatingItem[]; average: number | null; count: number };
+  client_feedbacks?: ClientFeedbackItem[];
+  gastos?: EventGasto[];
+  acrescimos?: EventAcrescimo[];
+  mensagens?: EventMensagens;
+  reembolsos_pendentes_total?: number | null;
+  feedback_link_pendente?: boolean;
   observations?: {
     id: number;
     obs_type: string;

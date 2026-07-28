@@ -14,7 +14,7 @@ movidos de `routes.py` (que os reimporta com alias) para manter a dependência u
 """
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -401,3 +401,252 @@ def update_event_core(
             warnings.append("Não foi possível sincronizar a mudança com o Google Agenda.")
 
     return warnings
+
+
+# ── Detalhe do evento — feature 190 (refatoração da tela /events/:id) ─────────
+# Núcleo das ações e cálculos que a tela de detalhe expõe e que até aqui só existiam
+# inline na view Jinja (`app/calendar/routes.py::event_detail`). Extraídos para cá para
+# que a API JSON os reúse sem duplicar regra (Princípio I).
+
+_VALID_PAYMENT_STATUS = ("nao_pago", "pago", "no_banco", "fora_do_banco")
+
+# Margem padrão de antecedência (min) quando `SiteSetting.departure_margin_minutes` é nulo.
+DEFAULT_DEPARTURE_MARGIN_MINUTES = 60
+
+
+def _naive(value: datetime | None) -> datetime | None:
+    """Remove o fuso de um datetime para comparações seguras entre naive e aware."""
+    if value is None:
+        return None
+    return value.replace(tzinfo=None) if value.tzinfo else value
+
+
+def _conflict_label(other_event: Any, start: datetime, end: datetime, overlaps: bool) -> str:
+    """Texto do indicador de agenda de um talento ("Conflito: ..." ou o evento do mesmo dia)."""
+    janela = f"{start.strftime('%d/%m/%Y %H:%M')} - {end.strftime('%d/%m/%Y %H:%M')}"
+    prefixo = "Conflito: " if overlaps else ""
+    return f"{prefixo}{other_event.title} ({janela})"
+
+
+def talent_availability(event: Any, talent_ids: list[int]) -> dict[int, dict[str, str]]:
+    """Disponibilidade de cada talento na janela do evento (mesma regra da view Jinja).
+
+    Para cada talento devolve ``{"status": "free"|"same_day"|"conflict", "info": str}``:
+    ``same_day`` quando ele tem outro evento no mesmo dia e ``conflict`` quando os horários
+    se sobrepõem. Eventos anteriores ao mês corrente são ignorados — evita "fantasmas" de
+    eventos já apagados no Google Agenda que continuam no banco.
+
+    Args:
+        event: O `CalendarEvent` aberto.
+        talent_ids: Ids dos talentos a avaliar (tipicamente os escalados no evento).
+
+    Returns:
+        Mapa ``talent_id`` → estado da agenda. Vazio se o evento não tem `start_at`.
+    """
+    from app.models import CalendarEvent
+
+    if not event.start_at or not talent_ids:
+        return {}
+
+    event_start = _naive(event.start_at)
+    event_end = _naive(event.end_at) or (event_start + timedelta(hours=2))
+    today = date.today()
+    cutoff = datetime(today.year, today.month, 1)
+
+    others = (
+        EventRole.query.join(CalendarEvent)
+        .filter(
+            EventRole.talent_id.in_(talent_ids),
+            CalendarEvent.id != event.id,
+            CalendarEvent.start_at >= cutoff,
+        )
+        .all()
+    )
+    by_talent: dict[int, list[Any]] = {}
+    for role in others:
+        by_talent.setdefault(role.talent_id, []).append(role)
+
+    availability: dict[int, dict[str, str]] = {}
+    for talent_id in talent_ids:
+        status, info = "free", ""
+        for role in by_talent.get(talent_id, []):
+            if not role.event or not role.event.start_at:
+                continue
+            other_start = _naive(role.event.start_at)
+            other_end = _naive(role.event.end_at) or (other_start + timedelta(hours=2))
+            if other_start.date() != event_start.date():
+                continue
+            overlaps = max(event_start, other_start) < min(event_end, other_end)
+            status = "conflict" if overlaps else "same_day"
+            info = _conflict_label(role.event, other_start, other_end, overlaps)
+            if overlaps:
+                break
+        availability[talent_id] = {"status": status, "info": info}
+    return availability
+
+
+def set_payment_status(event: Any, role: Any, *, status: str) -> bool:
+    """Grava o status de pagamento do cachê de um cargo. Núcleo de `_handle_set_payment_status`.
+
+    Args:
+        event: Evento dono do cargo (usado só para validar o vínculo).
+        role: O `EventRole` a atualizar.
+        status: Um de ``nao_pago``/``pago``/``no_banco``/``fora_do_banco``.
+
+    Returns:
+        True se gravou; False se o status é inválido ou o cargo não é do evento.
+    """
+    if status not in _VALID_PAYMENT_STATUS or role.event_id != event.id:
+        return False
+    role.payment_status = status
+    db.session.commit()
+    return True
+
+
+def link_figurino_sheet(
+    event: Any, role: Any, *, sheet_id: int | None, actor_name: str, tz: ZoneInfo
+) -> bool:
+    """Vincula (ou desvincula, com ``sheet_id=None``) uma ficha de figurino a um cargo.
+
+    Núcleo de `_handle_link_figurino`, com o mesmo `EventLog` dos dois caminhos.
+
+    Returns:
+        True se gravou; False se o cargo não pertence ao evento ou a ficha não existe.
+    """
+    if role.event_id != event.id:
+        return False
+    if sheet_id is not None:
+        sheet = FigurinoSheet.query.get(sheet_id)
+        if sheet is None:
+            return False
+        role.figurino_sheet_id = sheet.id
+        message = f"Vinculou ficha '{sheet.character_name}' ao personagem {role.character_name}"
+    else:
+        role.figurino_sheet_id = None
+        message = f"Removeu ficha de figurino do personagem {role.character_name}"
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Figurino",
+        message=message,
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.commit()
+    return True
+
+
+def clear_figurino_done(event: Any, role: Any, *, actor_name: str, tz: ZoneInfo) -> None:
+    """Desmarca o figurino separado de um cargo (contraparte de `casting_ops.set_figurino_done`).
+
+    A tela nova trata "Separado" como caixa de seleção, então precisa do caminho de volta —
+    o fluxo Jinja só tinha o de ida (botão "Marcar figurino"). Idempotente.
+    """
+    if role.figurino_done_at is None:
+        return
+    role.figurino_done_at = None
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Figurino",
+        message=f"Desmarcou o figurino separado de {role.character_name}",
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.commit()
+
+
+def ensure_feedback_token(event: Any) -> str:
+    """Devolve o token público de avaliação da cliente, gerando-o na primeira chamada.
+
+    Mesma regra de `app/feedback/routes.py::gerar_link` (token aleatório, nunca o id) — a API
+    reusa esta função para não ter uma segunda geração de token.
+    """
+    import secrets
+
+    if not event.feedback_token:
+        event.feedback_token = secrets.token_urlsafe(32)
+        db.session.commit()
+    return event.feedback_token
+
+
+def suggested_departure_time(event: Any, settings: Any) -> str | None:
+    """Horário de saída sugerido: início − (margem + tempo de viagem em cache).
+
+    Returns:
+        "HH:MM" ou None se falta o início do evento ou a estimativa de viagem.
+    """
+    if not event.start_at or event.travel_time_minutes is None:
+        return None
+    margin = DEFAULT_DEPARTURE_MARGIN_MINUTES
+    if settings is not None and settings.departure_margin_minutes is not None:
+        margin = settings.departure_margin_minutes
+    return (event.start_at - timedelta(minutes=margin + event.travel_time_minutes)).strftime("%H:%M")
+
+
+MAX_MATERIAL_MB = 20
+
+
+def add_ensaio_file(
+    event: Any, *, file_storage: Any, label: str, user_id: int | None
+) -> Any | None:
+    """Anexa um arquivo de ensaio ao evento, respeitando o limite de 20 MB.
+
+    Usa `app.storage.save_file` (abstração local/S3) em vez do `file.save()` direto do fluxo
+    Jinja — em produção os uploads não vão para o disco da aplicação.
+
+    Returns:
+        O `EnsaioMaterial` criado, ou None se não veio arquivo ou ele excede o limite.
+    """
+    from app.models import EnsaioMaterial
+    from app.storage import save_file
+
+    if not file_storage or not file_storage.filename:
+        return None
+    file_storage.stream.seek(0, 2)
+    size = file_storage.stream.tell()
+    file_storage.stream.seek(0)
+    if size > MAX_MATERIAL_MB * 1024 * 1024:
+        return None
+
+    stored_path = save_file(file_storage, "ensaio_materials")
+    material = EnsaioMaterial(
+        event_id=event.id,
+        user_id=user_id,
+        material_type="file",
+        label=label or file_storage.filename,
+        file_path=stored_path,
+    )
+    db.session.add(material)
+    db.session.commit()
+    return material
+
+
+def add_ensaio_link(event: Any, *, url: str, label: str, user_id: int | None) -> Any | None:
+    """Anexa um link de referência (Drive, YouTube…) ao evento.
+
+    Returns:
+        O `EnsaioMaterial` criado, ou None se a URL veio vazia.
+    """
+    from app.models import EnsaioMaterial
+
+    if not url:
+        return None
+    material = EnsaioMaterial(
+        event_id=event.id,
+        user_id=user_id,
+        material_type="link",
+        label=label or url[:60],
+        url=url,
+    )
+    db.session.add(material)
+    db.session.commit()
+    return material
+
+
+def delete_ensaio_material(material: Any) -> None:
+    """Remove um material de ensaio e o arquivo correspondente (quando houver)."""
+    from app.storage import delete_file
+
+    if material.file_path:
+        delete_file(material.file_path)
+    db.session.delete(material)
+    db.session.commit()

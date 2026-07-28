@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **191**
+> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **192**
 > (`refatoracao-calculadora-orcamento`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
 
 ---
@@ -223,9 +223,24 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 | GET | `/api/agenda`, `/api/agenda/day/<date_str>`, `/api/talents`, `/api/events/<id>`, `/api/events/new/options`, `/api/events/new/prefill` |
 | POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` |
 | POST | `/api/roles/<id>/assign`, `/api/roles/<id>/invite`, `/api/roles/<id>/figurino-done`, `/api/roles/<id>/dismiss`, `/api/roles/<id>/restore` |
+| POST | `/api/roles/<id>/payment-status`, `/api/roles/<id>/figurino-sheet` *(feature 192)* |
+| POST | `/api/events/<id>/travel-estimate`, `/api/events/<id>/materials`, `/api/events/<id>/feedback-link` *(feature 192)* |
 | POST | `/api/contracts/<id>/toggle-signed`, `/api/reimbursements/<id>/collect` |
 | PATCH | `/api/events/<id>`, `/api/events/<id>/logistics`, `/api/payments/<id>` |
 | DELETE | `/api/events/<id>`, `/api/roles/<id>`, `/api/observations/<id>`, `/api/contracts/<id>`, `/api/payments/<id>`, `/api/reimbursements/<id>` |
+| DELETE | `/api/roles/<id>/figurino-done` (desmarcar), `/api/materials/<id>` *(feature 192)* |
+
+> **`GET /api/events/<id>` é o payload único da tela de detalhe** (feature 192): além dos blocos
+> antigos, traz `event.description`/`google_html_link`/`travel`, `materiais`, `ratings`,
+> `client_feedbacks` e — sob os gates comercial/financeiro já existentes — `acrescimos`,
+> `gastos`, `mensagens`, `reembolsos_pendentes_total` e `feedback_link_pendente`. Cada item de
+> `elenco` inclui `talent` completo (medidas de figurino, WhatsApp com DDI), `role_type`,
+> `payment_status`, `availability` (conflito de agenda) e a ficha de figurino vinculada.
+> Os cargos são ordenados por `id` — `CalendarEvent.roles` não tem `order_by` e o Postgres
+> reordenava a lista a cada UPDATE.
+> **RBAC das escritas novas**: `_CAN_EDIT_EVENT` (payment-status, figurino-sheet,
+> figurino-done DELETE, travel-estimate) · `_CAN_ENSAIO_MATERIAL` (materials) ·
+> Comercial/Superadmin (feedback-link).
 
 ### 3.4 Talentos — `talents_read.py` / `talents_write.py`
 `GET /api/talents/directory`, `/api/talents/character-suggestions`, `/api/talents/<id>`,

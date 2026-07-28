@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **191**
+> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **192**
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
@@ -102,14 +102,44 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 
 #### `/events/:id` — Detalhe do Evento
 - **Objetivo**: painel operacional completo do evento.
-- **Acesso**: todos os autenticados; **ações** gateadas por papel.
+- **Acesso**: todos os autenticados; **ações** gateadas por papel. **O que existe na tela é o
+  que o servidor serializa** — nenhum bloco é escondido por CSS.
+- **Layout (feature 190)**: duas colunas de alta densidade a partir de `xl` (empilha abaixo
+  disso). **Cabeçalho**: título, badge de tipo, faixa horária, badge de confirmação e o menu
+  **"⋯ Ferramentas"** (`KebabMenu` com `triggerLabel`) — Sincronizar · Exportar elenco (modal
+  com seleção de campos e cópia) · Editar no Google Agenda · Confirmar dados do evento ·
+  Cobrança · Cobrar reembolsos · Marcar evento como confirmado · Pedir feedback da cliente ·
+  Excluir evento. Itens indisponíveis ficam desabilitados **com `title` explicando o porquê**.
+  - **Coluna esquerda (operação)**: *Resumo para WhatsApp* (descrição do Google/Kommo
+    convertida de HTML para texto puro, em fonte monoespaçada, com botão copiar) · *Casting* ·
+    *Equipe de apoio* (mesmos cards, `role_type="extra"`) · *Figurino* · *Logística & trajeto* ·
+    *Materiais de ensaio* · *Observações*.
+  - **Coluna direita (comercial/financeiro)**: *Comercial — dados da venda* (clientes com
+    relação, bruto/desconto/final, forma de pagamento, vendedor, acréscimos com marcação de BV) ·
+    *Resultado* (grade de KPI: venda, custo de cachês, gastos extras, comissão e **lucro
+    líquido** em verde/vermelho, + lista dos gastos extras aprovados) · *Contrato assinado* ·
+    *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado" quando recebido ≥ venda) ·
+    *Reembolsos*.
+  - **Rodapé**: *Avaliações dos artistas* (média + notas individuais com tags por critério) ·
+    *Feedback da cliente* · *Log de atividades* (accordion) — **este só existe no DOM para
+    `SUPERADMIN`**.
 - **UX/ações**: escalar talento no cargo (`/roles/<id>/assign`), enviar convite
-  (`invite` → `pending`/`accepted`/`rejected`), marcar figurino pronto, dispensar/restaurar cargo
-  (só `SUPERADMIN`), confirmar evento (`COMERCIAL`/`SUPERADMIN`), editar logística
-  (maquiagem/saída, com estimativa de rota do Google Maps), observações, contratos, comprovantes,
-  notas fiscais, reembolsos, sincronizar com o Google, excluir.
+  (`invite` → `pending`/`accepted`/`rejected`), copiar convite individual / abrir WhatsApp do
+  talento, **status de pagamento do cachê** por cargo, marcar/desmarcar figurino separado,
+  **vincular ficha de figurino** ao personagem, dispensar/restaurar cargo (só `SUPERADMIN`),
+  confirmar evento (`COMERCIAL`/`SUPERADMIN`), editar logística (maquiagem/saída, com estimativa
+  de rota do Google Maps), materiais de ensaio (arquivo e link), observações, contratos,
+  comprovantes, notas fiscais, reembolsos, sincronizar com o Google, excluir. Cada mutação
+  coloca **só o seu próprio controle** em estado de carregamento (Princípio V).
+- **Indicador de agenda**: cada card de casting mostra "Mesmo dia"/"Conflito" quando o talento
+  tem outro evento na mesma data (`talent_availability`), com o evento concorrente no `title`.
+- **API**: `GET /api/events/<id>` (payload único da tela) · `POST /api/roles/<id>/payment-status`
+  · `POST /api/roles/<id>/figurino-sheet` · `POST|DELETE /api/roles/<id>/figurino-done` ·
+  `POST /api/events/<id>/travel-estimate` · `POST /api/events/<id>/materials` ·
+  `DELETE /api/materials/<id>` · `POST /api/events/<id>/feedback-link`.
 - **Vínculos**: Talentos · Figurino (`EventRole.figurino_sheet_id`) · Financeiro (comissões e
-  pagamentos) · Ensaios (`parent_event_id`) · Grupo comercial (`group_leader_id`) · Clientes.
+  pagamentos) · Ensaios (`parent_event_id`) · Grupo comercial (`group_leader_id`) · Clientes ·
+  Gastos Extras (`SpecialExpense.event_id`) · Avaliação pública da cliente (`/avaliar/<token>`).
 
 ---
 

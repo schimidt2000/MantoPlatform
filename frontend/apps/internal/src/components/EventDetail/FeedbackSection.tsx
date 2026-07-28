@@ -1,0 +1,124 @@
+import { Badge } from "@manto/ui";
+import type { EventoDetalhe } from "../../lib/agenda";
+import { Empty, formatDay, Panel, Stars } from "./parts";
+
+/** Rótulo curto de cada critério avaliado pelos artistas no portal. */
+const CATEGORY_LABELS: Record<string, string> = {
+  som: "Som",
+  figurino: "Figurino",
+  texto: "Texto",
+  coordenacao: "Coord.",
+  maquiagem: "Maquiagem",
+  artista: "Artista",
+};
+
+/** Avaliações dos artistas sobre o evento (portal do talento) — média + lista individual. */
+function RatingsPanel({ data }: { data: EventoDetalhe }) {
+  const ratings = data.ratings;
+  if (!ratings) return null;
+
+  return (
+    <Panel
+      title="Avaliações dos artistas"
+      actions={
+        ratings.count > 0 ? (
+          <span className="flex items-center gap-2 text-sm">
+            <span className="text-lg font-semibold text-ink tabular-nums">{ratings.average}</span>
+            <Stars score={Math.round(ratings.average ?? 0)} />
+            <span className="text-xs text-muted">{ratings.count} avaliações</span>
+          </span>
+        ) : null
+      }
+    >
+      {ratings.items.length === 0 ? (
+        <Empty>Nenhuma avaliação recebida ainda.</Empty>
+      ) : (
+        <ul className="divide-y divide-line">
+          {ratings.items.map((rating) => (
+            <li key={rating.id} className="py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-ink">{rating.talent_name}</span>
+                <Stars score={rating.score} />
+                <span className="text-xs text-muted tabular-nums">
+                  {formatDay(rating.submitted_at)}
+                </span>
+              </div>
+              {rating.comment && (
+                <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted">{rating.comment}</p>
+              )}
+              {rating.sub_ratings.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {rating.sub_ratings.map((sub, index) => (
+                    <span key={index} title={sub.comment ?? undefined}>
+                      <Badge className="max-w-full truncate">
+                        {CATEGORY_LABELS[sub.category] ?? sub.category}
+                        {sub.subject_name ? ` · ${sub.subject_name}` : ""} {"★".repeat(sub.score)}
+                      </Badge>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+/** Feedback da cliente (link público `/avaliar/<token>`). */
+function ClientFeedbackPanel({ data }: { data: EventoDetalhe }) {
+  const feedbacks = data.client_feedbacks;
+  if (!feedbacks) return null;
+
+  return (
+    <Panel title="Feedback da cliente">
+      {feedbacks.length === 0 ? (
+        <Empty>
+          Nenhum feedback recebido ainda. Use “Ferramentas” → “Pedir feedback da cliente” para
+          copiar o link e enviar à cliente.
+        </Empty>
+      ) : (
+        <ul className="divide-y divide-line">
+          {feedbacks.map((feedback) => (
+            <li key={feedback.id} className="py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Stars score={feedback.score} />
+                <span className="font-medium text-ink">{feedback.client_name ?? "Cliente"}</span>
+                <span className="text-xs text-muted tabular-nums">
+                  {formatDay(feedback.submitted_at)}
+                </span>
+              </div>
+              {feedback.comment && (
+                <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted">{feedback.comment}</p>
+              )}
+              {feedback.tags.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {feedback.tags.map((tag) => (
+                    <Badge key={tag} tone="green">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+export interface FeedbackSectionProps {
+  data: EventoDetalhe;
+}
+
+/** Avaliações dos artistas + feedback da cliente (rodapé da tela, feature 190). */
+export function FeedbackSection({ data }: FeedbackSectionProps) {
+  return (
+    <>
+      <RatingsPanel data={data} />
+      <ClientFeedbackPanel data={data} />
+    </>
+  );
+}

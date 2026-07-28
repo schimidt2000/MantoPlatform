@@ -918,3 +918,202 @@ def api_delete_reimbursement(reimbursement_id: int) -> Any:
     _delete_reimbursement_record(reimbursement)
     db.session.commit()
     return _event_detail_json(event)
+
+
+# ── Detalhe do evento — feature 190 (refatoração da tela /events/:id) ─────────
+# As ações que a tela nova precisa e que só existiam como `action=` do POST Jinja de
+# `/events/<id>`. Cada uma reusa o núcleo em `app/calendar/event_ops.py` (Princípio I) e
+# devolve o evento serializado, como todas as escritas desta camada.
+
+
+def _can_ensaio_material() -> bool:
+    """Gate dos materiais de ensaio (`_CAN_ENSAIO_MATERIAL` = Ensaio/Casting/Superadmin)."""
+    from app.calendar.routes import _CAN_ENSAIO_MATERIAL
+
+    return any(r.name.upper() in _CAN_ENSAIO_MATERIAL for r in current_user.roles)
+
+
+def _role_of_event(role_id: int) -> tuple[Any, Any] | None:
+    """Carrega o cargo e o evento dono. Devolve None se o cargo não existe."""
+    role = EventRole.query.get(role_id)
+    if role is None:
+        return None
+    return role, CalendarEvent.query.get(role.event_id)
+
+
+@api_bp.route("/roles/<int:role_id>/payment-status", methods=["POST"])
+@api_login_required
+def api_set_role_payment_status(role_id: int) -> Any:
+    """Grava o status de pagamento do cachê de um cargo (feature 190).
+
+    RBAC = `_CAN_EDIT_EVENT`, o gate efetivo do `action=set_payment_status` no Jinja.
+    """
+    found = _role_of_event(role_id)
+    if found is None:
+        return json_error("Cargo não encontrado", 404)
+    role, event = found
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.event_ops import set_payment_status
+
+    status = (request.get_json(silent=True) or {}).get("payment_status", "")
+    if not set_payment_status(event, role, status=status):
+        return json_error(
+            "Status de pagamento inválido.", 400, {"payment_status": "Valor não aceito"}
+        )
+    return _event_detail_json(event)
+
+
+@api_bp.route("/roles/<int:role_id>/figurino-sheet", methods=["POST"])
+@api_login_required
+def api_link_figurino_sheet(role_id: int) -> Any:
+    """Vincula/desvincula a ficha de figurino de um cargo (feature 190).
+
+    Corpo: ``{"sheet_id": <int>}`` para vincular, ``{"sheet_id": null}`` para desvincular.
+    RBAC = `_CAN_EDIT_EVENT`, o gate efetivo do `action=link_figurino` no Jinja.
+    """
+    found = _role_of_event(role_id)
+    if found is None:
+        return json_error("Cargo não encontrado", 404)
+    role, event = found
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.event_ops import link_figurino_sheet
+
+    raw = (request.get_json(silent=True) or {}).get("sheet_id")
+    sheet_id = int(raw) if raw else None
+    ok = link_figurino_sheet(
+        event, role, sheet_id=sheet_id, actor_name=current_user.name, tz=_TZ_SP
+    )
+    if not ok:
+        return json_error("Ficha de figurino não encontrada.", 404)
+    return _event_detail_json(event)
+
+
+@api_bp.route("/roles/<int:role_id>/figurino-done", methods=["DELETE"])
+@api_login_required
+def api_clear_figurino_done(role_id: int) -> Any:
+    """Desmarca o figurino separado de um cargo (feature 190) — volta do `POST` de mesma rota.
+
+    A tela nova trata "Separado" como caixa de seleção; o fluxo Jinja só tinha o caminho de ida.
+    """
+    found = _role_of_event(role_id)
+    if found is None:
+        return json_error("Cargo não encontrado", 404)
+    role, event = found
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.event_ops import clear_figurino_done
+
+    clear_figurino_done(event, role, actor_name=current_user.name, tz=_TZ_SP)
+    return _event_detail_json(event)
+
+
+@api_bp.route("/events/<int:event_id>/travel-estimate", methods=["POST"])
+@api_login_required
+def api_travel_estimate(event_id: int) -> Any:
+    """Recalcula a estimativa de trajeto pelo Google Maps e devolve o evento atualizado.
+
+    Reusa `_fetch_travel_data` (fonte única da chamada à Distance Matrix), que grava
+    `travel_time_minutes`/`travel_distance_km` no evento. RBAC = `_CAN_EDIT_EVENT`.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+    if not event.location:
+        return json_error("Evento sem endereço de destino.", 400, {"location": "Obrigatório"})
+
+    from app.calendar.routes import _fetch_travel_data
+    from app.models import SiteSetting
+
+    if not _fetch_travel_data(event, SiteSetting.query.get(1)):
+        return json_error(
+            "Não foi possível estimar o trajeto — verifique o endereço do evento.", 400
+        )
+    db.session.commit()
+    return _event_detail_json(event)
+
+
+@api_bp.route("/events/<int:event_id>/materials", methods=["POST"])
+@api_login_required
+def api_add_material(event_id: int) -> Any:
+    """Adiciona um material de ensaio ao evento (feature 190).
+
+    Aceita dois content-types, como `api_add_observation`: `multipart/form-data` com `file`
+    (+ `label` opcional) para arquivo, e JSON `{"url", "label"}` para link.
+    RBAC = `_CAN_ENSAIO_MATERIAL` (paridade com as rotas Jinja de ensaio).
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_ensaio_material():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.event_ops import add_ensaio_file, add_ensaio_link
+
+    is_multipart = bool(request.content_type) and request.content_type.startswith("multipart/")
+    if is_multipart:
+        file_storage = request.files.get("file")
+        label = (request.form.get("label") or "").strip()
+        material = add_ensaio_file(
+            event, file_storage=file_storage, label=label, user_id=current_user.id
+        )
+        if material is None:
+            return json_error(
+                "Selecione um arquivo de até 20 MB.", 400, {"file": "Obrigatório"}
+            )
+        return _event_detail_json(event), 201
+
+    body = request.get_json(silent=True) or {}
+    material = add_ensaio_link(
+        event,
+        url=(body.get("url") or "").strip(),
+        label=(body.get("label") or "").strip(),
+        user_id=current_user.id,
+    )
+    if material is None:
+        return json_error("Informe a URL do material.", 400, {"url": "Obrigatório"})
+    return _event_detail_json(event), 201
+
+
+@api_bp.route("/materials/<int:material_id>", methods=["DELETE"])
+@api_login_required
+def api_delete_material(material_id: int) -> Any:
+    """Remove um material de ensaio (arquivo físico incluído). RBAC = `_CAN_ENSAIO_MATERIAL`."""
+    from app.models import EnsaioMaterial
+
+    material = EnsaioMaterial.query.get(material_id)
+    if material is None:
+        return json_error("Material não encontrado", 404)
+    if not _can_ensaio_material():
+        return json_error("Sem permissão", 403)
+    event = CalendarEvent.query.get(material.event_id)
+
+    from app.calendar.event_ops import delete_ensaio_material
+
+    delete_ensaio_material(material)
+    return _event_detail_json(event)
+
+
+@api_bp.route("/events/<int:event_id>/feedback-link", methods=["POST"])
+@api_login_required
+def api_feedback_link(event_id: int) -> Any:
+    """Gera (na primeira vez) e devolve o link público de avaliação da cliente (feature 130).
+
+    RBAC: Comercial ou Superadmin — mesmo gate de `feedback.gerar_link` (`require_comercial`).
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_confirm():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.event_ops import ensure_feedback_token
+
+    token = ensure_feedback_token(event)
+    return jsonify({"url": request.url_root.rstrip("/") + f"/avaliar/{token}"})

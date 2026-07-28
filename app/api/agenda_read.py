@@ -13,10 +13,12 @@ from zoneinfo import ZoneInfo
 from app.constants import RoleName
 from app.models import (
     CalendarEvent,
+    ClientFeedback,
     EventContract,
     EventInvoice,
     EventLog,
     EventPayment,
+    EventRating,
     EventReimbursement,
     SiteSetting,
     SpecialExpense,
@@ -140,13 +142,35 @@ def _serialize_logs(event_id: int) -> list[dict[str, Any]]:
     return logs
 
 
-def _serialize_role(role: Any, show_casting: bool) -> dict[str, Any]:
+def _serialize_talent(talent: Any) -> dict[str, Any]:
+    """Talento escalado, com o que a tela de detalhe mostra no card (feature 190).
+
+    Inclui o número de WhatsApp já pronto (`Talent.whatsapp_number` — fonte única do formato
+    com DDI) e as medidas de figurino, exibidas no card de Figurino do evento.
+    """
+    return {
+        "id": talent.id,
+        "name": talent.full_name,
+        "artistic_name": talent.artistic_name,
+        "first_name": (talent.full_name or "").split(" ")[0],
+        "whatsapp": talent.whatsapp_number or None,
+        "size_top": talent.clothing_size_top or None,
+        "size_bottom": talent.clothing_size_bottom or None,
+        "shoe_size": talent.shoe_size or None,
+        "height_cm": talent.height_cm,
+    }
+
+
+def _serialize_role(
+    role: Any, show_casting: bool, availability: dict[int, dict[str, str]]
+) -> dict[str, Any]:
     """Um cargo do elenco. `cache_value` (cachê) só para casting/superadmin (dado do casting)."""
+    sheet = role.figurino_sheet
     data: dict[str, Any] = {
         "role_id": role.id,
         "character_name": role.character_name,
         "role_type": role.role_type,
-        "talent": {"id": role.talent.id, "name": role.talent.full_name} if role.talent else None,
+        "talent": _serialize_talent(role.talent) if role.talent else None,
         "figurino_done": role.figurino_done_at is not None,
         "invite_status": role.invite_status,
         "dismissed": role.dismissed_at is not None,
@@ -154,9 +178,21 @@ def _serialize_role(role: Any, show_casting: bool) -> dict[str, Any]:
         "figurino_sheet_id": role.figurino_sheet_id,
         "needs_makeup": bool(role.needs_makeup),
         "is_singer": bool(role.is_singer),
+        # feature 190 — densidade do card de casting/figurino da tela de detalhe.
+        "figurino_sheet_name": sheet.character_name if sheet else None,
+        "figurino_done_at": (
+            role.figurino_done_at.isoformat() if role.figurino_done_at else None
+        ),
+        "assigned_at": role.assigned_at.isoformat() if role.assigned_at else None,
+        "payment_status": role.payment_status or "nao_pago",
+        "availability": (
+            availability.get(role.talent_id) if role.talent_id else None
+        ),
     }
     if show_casting:
         data["cache_value"] = _money(role.cache_value)
+        data["travel_cache"] = _money(role.travel_cache)
+        data["cache_cap"] = _money(role.cache_cap)
     return data
 
 
@@ -236,6 +272,187 @@ def _compute_cobranca(
     }
 
 
+def _serialize_ratings(event_id: int) -> dict[str, Any]:
+    """Avaliações dos artistas sobre o evento (portal do talento) + média geral.
+
+    Cada avaliação traz as sub-avaliações por categoria já rotuladas com o nome do avaliado,
+    para a tela montar as tags ("Coord. · Matheus ★★★★★") sem uma segunda consulta.
+    """
+    ratings = (
+        EventRating.query.filter_by(event_id=event_id)
+        .order_by(EventRating.submitted_at.desc())
+        .all()
+    )
+    items = [
+        {
+            "id": r.id,
+            "talent_name": r.talent.full_name if r.talent else "—",
+            "score": r.score,
+            "comment": r.comment,
+            "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+            "sub_ratings": [
+                {
+                    "category": sub.category,
+                    "subject_name": (
+                        sub.subject_talent.full_name if sub.subject_talent else None
+                    ),
+                    "score": sub.score,
+                    "comment": sub.comment,
+                }
+                for sub in r.sub_ratings
+            ],
+        }
+        for r in ratings
+    ]
+    average = round(sum(r.score for r in ratings) / len(ratings), 1) if ratings else None
+    return {"items": items, "average": average, "count": len(ratings)}
+
+
+def _serialize_client_feedbacks(event_id: int) -> list[dict[str, Any]]:
+    """Avaliações da cliente (link público `/avaliar/<token>`), mais recente primeiro."""
+    return [
+        {
+            "id": f.id,
+            "score": f.score,
+            "comment": f.comment,
+            "client_name": f.client_name,
+            "tags": f.tags_list,
+            "submitted_at": f.submitted_at.isoformat() if f.submitted_at else None,
+        }
+        for f in ClientFeedback.query.filter_by(event_id=event_id)
+        .order_by(ClientFeedback.submitted_at.desc())
+        .all()
+    ]
+
+
+def _serialize_gastos(group_ids: list[int]) -> list[dict[str, Any]]:
+    """Gastos extras APROVADOS vinculados a qualquer evento do grupo comercial.
+
+    São os mesmos gastos que já entram como custo em `_compute_kpi` — aqui detalhados para a
+    grade "Gastos extras vinculados" da tela.
+    """
+    return [
+        {
+            "id": e.id,
+            "description": e.description,
+            "category": e.category,
+            "amount": _money(e.amount),
+            "expense_date": e.expense_date.isoformat() if e.expense_date else None,
+            "receipt_path": e.receipt_path,
+        }
+        for e in SpecialExpense.query.filter(
+            SpecialExpense.event_id.in_(group_ids),
+            SpecialExpense.status == "aprovado",
+        )
+        .order_by(SpecialExpense.expense_date.desc(), SpecialExpense.id.desc())
+        .all()
+    ]
+
+
+def _serialize_acrescimos(event: CalendarEvent) -> list[dict[str, Any]]:
+    """Acréscimos tipados do evento (feature 099) — BV marcado para a tela explicar o repasse."""
+    return [
+        {
+            "id": a.id,
+            "label": a.display_label,
+            "tipo": a.tipo,
+            "is_percent": bool(a.is_percent),
+            "value": _money(a.value),
+            "amount_brl": _money(a.amount_brl),
+            "is_bv": bool(a.is_bv),
+            "bv_recipient": a.bv_recipient,
+            "bv_payment_status": a.bv_payment_status,
+        }
+        for a in event.acrescimos
+    ]
+
+
+def _material_url(path: str | None) -> str | None:
+    """Normaliza o caminho de um material: registros antigos guardam o caminho relativo a
+    `UPLOAD_FOLDER` (`ensaio_materials/x.pdf`); os novos, a URL já pronta de `app.storage`
+    (`/uploads/...` local ou `https://...` em S3). O cliente recebe sempre algo servível.
+    """
+    if not path:
+        return None
+    if path.startswith(("http://", "https://", "/")):
+        return path
+    return f"/uploads/{path}"
+
+
+def _serialize_materials(event: CalendarEvent) -> list[dict[str, Any]]:
+    """Materiais de ensaio (arquivos e links) anexados ao evento."""
+    return [
+        {
+            "id": m.id,
+            "material_type": m.material_type,
+            "label": m.label,
+            "url": m.url,
+            "file_path": _material_url(m.file_path),
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in event.ensaio_materials
+    ]
+
+
+def _maps_url(origin: str, destination: str) -> str:
+    """URL de rota do Google Maps entre dois endereços (mesmo formato de `travel_estimate`)."""
+    import urllib.parse
+
+    return (
+        "https://www.google.com/maps/dir/"
+        + urllib.parse.quote(origin)
+        + "/"
+        + urllib.parse.quote(destination)
+    )
+
+
+def _serialize_travel(event: CalendarEvent, settings: Any) -> dict[str, Any]:
+    """Estimativa de trajeto em cache + horário de saída sugerido + link do Maps."""
+    from app.calendar.event_ops import suggested_departure_time
+
+    origin = (
+        settings.manto_address
+        if settings and settings.manto_address
+        else "R. Olga Camelini, 147 - São João Climaco, São Paulo - SP"
+    )
+    return {
+        "time_minutes": event.travel_time_minutes,
+        "distance_km": event.travel_distance_km,
+        "is_outside_sp": event.is_outside_sp,
+        "suggested_departure": suggested_departure_time(event, settings),
+        "maps_url": _maps_url(origin, event.location) if event.location else None,
+    }
+
+
+def _serialize_mensagens(
+    event: CalendarEvent, cobranca: dict[str, Any], reembolsos: list[Any]
+) -> dict[str, Any]:
+    """Dados fixos das mensagens de WhatsApp copiadas pela tela (feature 083).
+
+    A saudação por horário continua sendo montada no cliente (depende da hora de quem copia);
+    aqui vão só os trechos que dependem do evento.
+    """
+    from app.calendar.routes import _format_event_date_ptbr, parse_characters
+    from app.money import format_brl
+
+    return {
+        "characters": " + ".join(parse_characters(event.title)),
+        "date_line": _format_event_date_ptbr(event.start_at, event.end_at),
+        "location": event.location or "",
+        "cobranca_amount": format_brl(cobranca.get("outstanding") or 0, prefix=True),
+        "cobranca_due": (
+            date.fromisoformat(cobranca["due"]).strftime("%d/%m/%Y")
+            if cobranca.get("due")
+            else ""
+        ),
+        "reembolso_lines": [
+            f"{r.description} — {format_brl(r.amount or 0, prefix=True)}"
+            for r in reembolsos
+            if not r.is_collected
+        ],
+    }
+
+
 def serialize_event_detail(
     event: CalendarEvent, user: Any, impersonate: str | None
 ) -> dict[str, Any]:
@@ -246,12 +463,17 @@ def serialize_event_detail(
 
     flags = _role_flags(user, impersonate)
     is_ensaio = event.event_type == "ENSAIO"
+    settings = SiteSetting.query.get(1)
 
     data: dict[str, Any] = {
         "event": {
             "id": event.id,
             "title": event.title,
             "event_type": parse_event_type(event.title),
+            # feature 190 — cabeçalho e bloco de cópia rápida da tela de detalhe.
+            "description": event.description or None,
+            "google_html_link": event.google_html_link or None,
+            "travel": _serialize_travel(event, settings),
             "start_at": event.start_at.isoformat() if event.start_at else None,
             "end_at": event.end_at.isoformat() if event.end_at else None,
             "location": event.location or None,
@@ -276,7 +498,17 @@ def serialize_event_detail(
     if is_ensaio:
         return data
 
-    data["elenco"] = [_serialize_role(r, flags["show_casting"]) for r in event.roles]
+    from app.calendar.event_ops import talent_availability
+
+    # `CalendarEvent.roles` não tem `order_by`, então o Postgres devolve os cargos em ordem
+    # arbitrária — e ela muda depois de um UPDATE. Ordenar por id aqui mantém os cards de
+    # casting/figurino no mesmo lugar entre uma mutação e outra.
+    roles = sorted(event.roles, key=lambda r: r.id)
+    availability = talent_availability(event, [r.talent_id for r in roles if r.talent_id])
+    data["elenco"] = [_serialize_role(r, flags["show_casting"], availability) for r in roles]
+    data["materiais"] = _serialize_materials(event)
+    data["ratings"] = _serialize_ratings(event.id)
+    data["client_feedbacks"] = _serialize_client_feedbacks(event.id)
     data["observations"] = [
         {
             "id": o.id,
@@ -293,6 +525,11 @@ def serialize_event_detail(
     payments = (
         EventPayment.query.filter_by(event_id=event.id)
         .order_by(EventPayment.created_at.desc())
+        .all()
+    )
+    reembolsos = (
+        EventReimbursement.query.filter_by(event_id=event.id)
+        .order_by(EventReimbursement.created_at.desc())
         .all()
     )
 
@@ -352,10 +589,19 @@ def serialize_event_detail(
             .all()
         ]
         data["cobranca"] = _compute_cobranca(event, payments)
+        data["acrescimos"] = _serialize_acrescimos(event)
+        data["feedback_link_pendente"] = not data["client_feedbacks"]
+        data["reembolsos_pendentes_total"] = _money(
+            sum((r.amount or 0 for r in reembolsos if not r.is_collected), Decimal("0"))
+        )
+        data["mensagens"] = _serialize_mensagens(event, data["cobranca"], reembolsos)
 
     # KPIs, pagamentos e reembolsos — FINANCEIRO/SUPERADMIN.
     if flags["show_financeiro"]:
+        from app.calendar.routes import _group_events
+
         data["kpi"] = _compute_kpi(event)
+        data["gastos"] = _serialize_gastos([ge.id for ge in _group_events(event)])
         data["pagamentos"] = {
             "items": [
                 {
@@ -368,11 +614,6 @@ def serialize_event_detail(
             ],
             "received_total": _money(sum((p.amount or 0 for p in payments), Decimal("0"))),
         }
-        reembolsos = (
-            EventReimbursement.query.filter_by(event_id=event.id)
-            .order_by(EventReimbursement.created_at.desc())
-            .all()
-        )
         data["reembolsos"] = {
             "items": [
                 {

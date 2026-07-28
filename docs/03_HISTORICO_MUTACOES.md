@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **191**
+> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **192**
 
 Formato de cada entrada:
 
@@ -17,6 +17,82 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 192 — Detalhe do Evento: layout de duas colunas com paridade total da tela clássica
+`main` (ajuste direto, sem branch de feature dedicada) · **2026-07-27** · **sem migration**
+
+**Motivação.** A `/events/:id` em React era uma coluna única de ~1370 linhas num arquivo só,
+com uma fração do que a tela clássica Jinja (`app/templates/event_detail.html`, 3.201 linhas,
+ainda em produção em paralelo) entrega. Faltavam na versão React: menu "⋯ Ferramentas", bloco de
+cópia rápida para WhatsApp, indicador de conflito de agenda do talento, medidas de figurino,
+vínculo de ficha de figurino ao personagem, status de pagamento do cachê, equipe de apoio
+separada dos personagens, materiais de ensaio, gastos extras vinculados, acréscimos/BV,
+avaliações dos artistas, feedback da cliente e o log de atividades. Boa parte disso já existia
+como cálculo inline na view Jinja — nunca tinha sido exposta pela API.
+
+**Backend.** Nenhum endpoint antigo mudou de contrato; o JSON de leitura **ganhou campos**.
+- `app/calendar/event_ops.py` (+~290 linhas): núcleo novo — `talent_availability` (extraído do
+  loop inline de `event_detail`), `set_payment_status`, `link_figurino_sheet`,
+  `clear_figurino_done`, `ensure_feedback_token`, `suggested_departure_time`,
+  `add_ensaio_file`/`add_ensaio_link`/`delete_ensaio_material`.
+- `app/api/agenda_read.py`: `serialize_event_detail` passou a incluir `event.description`,
+  `event.google_html_link`, `event.travel` (cache do Maps + saída sugerida + `maps_url`),
+  `materiais`, `ratings`, `client_feedbacks`; e, sob os gates já existentes, `acrescimos`,
+  `gastos`, `mensagens`, `reembolsos_pendentes_total`, `feedback_link_pendente`. Cada cargo
+  do `elenco` ganhou `talent` completo (medidas, WhatsApp com DDI, primeiro nome), `role_type`,
+  `assigned_at`, `payment_status`, `availability`, `figurino_sheet_name`, `figurino_done_at`,
+  `travel_cache` e `cache_cap`.
+- `app/api/agenda_write.py`: 7 endpoints novos — `POST /api/roles/<id>/payment-status`,
+  `POST /api/roles/<id>/figurino-sheet`, `DELETE /api/roles/<id>/figurino-done`,
+  `POST /api/events/<id>/travel-estimate`, `POST /api/events/<id>/materials`,
+  `DELETE /api/materials/<id>`, `POST /api/events/<id>/feedback-link`.
+
+**Banco.** Sem migration — nenhuma coluna nova. Tudo já existia em `EventRole`
+(`payment_status`, `figurino_sheet_id`, `assigned_at`), `CalendarEvent` (`description`,
+`google_html_link`, `travel_*`, `feedback_token`), `EnsaioMaterial`, `EventRating`,
+`ClientFeedback`, `SpecialExpense` e `EventAcrescimo`.
+
+**Frontend.** `EventDetailPage.tsx` reescrita (1.367 → ~120 linhas) como composição de
+`components/EventDetail/`: `parts.tsx` (Panel/DataRow/Stars/formatadores), `EventHeader.tsx`
+(cabeçalho + menu Ferramentas + modal de exportar elenco + diálogo de exclusão),
+`CastingSection.tsx`, `FigurinoSection.tsx`, `LogisticaSection.tsx`, `ComercialSection.tsx`,
+`FinanceiroSection.tsx`, `FeedbackSection.tsx`, `ObservacoesSection.tsx` (+ `WhatsAppSummary` e
+`LogsSection`). Hooks novos em `lib/eventDetail.ts` (todos gravam o evento devolvido no cache do
+TanStack Query, como `casting.ts`) e os construtores das mensagens de WhatsApp. `KebabMenu`
+ganhou `triggerLabel` e itens `disabled`/`title` em vez de um segundo componente de dropdown.
+A busca de fichas de figurino reusa `useFigurinoSheets()` (`GET /api/figurino`), sem endpoint
+novo.
+
+**RBAC e regras de negócio.** Sem mudança de política — os gates novos reusam os existentes:
+`_CAN_EDIT_EVENT` (status de pagamento, ficha de figurino, desmarcar figurino, estimar trajeto),
+`_CAN_ENSAIO_MATERIAL` (materiais de ensaio) e Comercial/Superadmin (link de feedback, mesmo
+gate de `feedback.gerar_link`). **Novo requisito de segurança**: a seção "Log de atividades" só
+é renderizada para `SUPERADMIN` — para os demais papéis ela **não existe no DOM**, não é
+escondida por CSS.
+
+**Riscos e pegadinhas descobertas.**
+1. `CalendarEvent.roles` **não tem `order_by`** — o Postgres devolvia os cargos em ordem
+   arbitrária, e a ordem *mudava depois de um UPDATE*. Com os cards densos isso fazia a lista
+   inteira pular de posição a cada mutação. `serialize_event_detail` agora ordena por `id`.
+2. `api_set_payment_status` colidiu com o endpoint de mesmo nome em `financeiro_write.py`
+   (Flask recusa o registro do blueprint com `AssertionError`) — renomeado para
+   `api_set_role_payment_status`.
+3. A descrição do evento vem do Google/Kommo **em HTML** (`<br>`, âncoras de e-mail). Colada
+   crua no WhatsApp vira um paragrafão com tags à mostra; `descriptionToText()` converte para
+   texto puro por regex (sem `innerHTML`/`querySelector`, proibidos pela constituição).
+4. `/api/events/<id>` não é alcançável por `REVENDEDOR_EDUCAMANTO` puro — o guard global de
+   `app/__init__.py` só libera o prefixo `/events/`, não `/api/...`. Comportamento pré-existente,
+   descoberto ao escolher papéis para o script de verificação.
+5. Materiais de ensaio novos vão por `app.storage.save_file` (local/S3) em vez do `file.save()`
+   direto do fluxo Jinja; o serializador normaliza os dois formatos de `file_path`.
+
+**Verificação.** `scripts/db/verify_190_event_detail.py` — 53/53 contra `manto_local`
+(serialização dos blocos novos, RBAC de leitura por papel, e 200/400/403/404/401 dos 7
+endpoints). Frontend: `npm run build` limpo e conferência no app real (evento 286): 16 seções,
+duas colunas em 1280px, sem rolagem horizontal, log ausente do DOM ao impersonar `CASTING`,
+mutações de figurino/pagamento/materiais devolvendo 200 com a lista estável.
+
+---
 
 ### 191 — Calculadora de Orçamento: paridade de layout clássico + cálculo reativo
 `main` (ajuste direto, sem branch de feature dedicada) · **2026-07-27** · **sem migration**
