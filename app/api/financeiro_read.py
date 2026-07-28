@@ -1,10 +1,12 @@
 """Endpoints de LEITURA de Financeiro/Vendas (feature 156, abre a US4; 157, dashboard DRE;
-158, comissões; 159, planilha de pagamentos — fecha a leitura da US4).
+158, comissões; 159, planilha de pagamentos — fecha a leitura da US4; 196, pivot do pipeline de
+vendas para Dashboard Comercial).
 
 Reusa os cálculos já existentes em `app/financeiro/routes.py` (`_group_cost`/`_event_cost`/
-`_event_commission`/`_resolve_period`/`_compute_drg`/etc.) — não duplica lógica de negócio, só
-serializa. Gates (`require_vendas`/`require_financeiro`) reimplementados aqui como funções
-simples porque os decorators originais são específicos de view Flask.
+`_event_commission`/`_resolve_period`/`_compute_drg`/etc.) e o núcleo comercial de
+`app/financeiro/vendas_ops.py` — não duplica lógica de negócio, só serializa. Gates
+(`require_vendas`/`require_financeiro`) reimplementados aqui como funções simples porque os
+decorators originais são específicos de view Flask.
 """
 
 from collections import defaultdict
@@ -18,7 +20,7 @@ from flask_login import current_user
 
 from app.api import api_bp
 from app.api_utils import api_login_required
-from app.constants import EDUCAMANTO_TITLE_PREFIX, RoleName
+from app.constants import RoleName
 from app.models import (
     CalendarEvent,
     EventInstallment,
@@ -53,50 +55,109 @@ def _can_view_vendas(settings: SiteSetting | None) -> bool:
     )
 
 
+class _VendasScope:
+    """Escopo de leitura do Dashboard Comercial, decidido no servidor (feature 196).
+
+    Attributes:
+        can_filter_seller: Gestor (Financeiro/Superadmin) — vê a empresa toda e pode filtrar.
+        seller_id: Vendedor ao qual a lista está restrita (``None`` = sem restrição).
+        educamanto_only: Responsável EducaManto sem papel comercial — só eventos "(EDU…".
+        commission_target_id: De quem é a comissão projetada (``None`` = comissão da empresa).
+    """
+
+    def __init__(
+        self,
+        *,
+        can_filter_seller: bool,
+        seller_id: int | None,
+        educamanto_only: bool,
+        commission_target_id: int | None,
+    ) -> None:
+        self.can_filter_seller = can_filter_seller
+        self.seller_id = seller_id
+        self.educamanto_only = educamanto_only
+        self.commission_target_id = commission_target_id
+
+
+def _resolve_vendas_scope() -> _VendasScope:
+    """Decide no servidor o que o usuário logado enxerga no Dashboard Comercial.
+
+    Nunca confia no cliente: um `COMERCIAL` sem papel de gestão recebe as próprias vendas
+    independentemente do ``seller_id`` que vier na query string (mesma política já usada em
+    ``api_financeiro_comissoes``).
+    """
+    can_filter_seller = _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN)
+    is_comercial = _has_role(RoleName.COMERCIAL)
+    educamanto_only = not (is_comercial or can_filter_seller)
+    requested_seller_id = request.args.get("seller_id", type=int)
+
+    if can_filter_seller:
+        seller_id = requested_seller_id
+    elif educamanto_only:
+        seller_id = None  # o recorte já é o dos eventos EducaManto
+    else:
+        seller_id = current_user.id
+
+    return _VendasScope(
+        can_filter_seller=can_filter_seller,
+        seller_id=seller_id,
+        educamanto_only=educamanto_only,
+        commission_target_id=requested_seller_id if can_filter_seller else current_user.id,
+    )
+
+
+def _comercial_sellers() -> list[dict[str, Any]]:
+    """Vendedores selecionáveis no filtro de gestor — mesma lista de `api_financeiro_comissoes`."""
+    sellers = (
+        User.query.join(User.roles)
+        .filter(Role.name == RoleName.COMERCIAL)
+        .order_by(User.name)
+        .all()
+    )
+    return [{"id": u.id, "name": u.name} for u in sellers]
+
+
 @api_bp.route("/vendas/pipeline")
 @api_login_required
 def api_vendas_pipeline() -> Any:
-    """Pipeline de vendas: eventos com venda/custo/comissão (feature 156)."""
-    from app.financeiro.routes import _event_commission, _event_cost, _group_cost
+    """Dashboard Comercial: KPIs de venda do período + funil fechado (feature 196).
+
+    Substitui o pipeline plano da feature 156. Custo e lucro saíram do payload de propósito —
+    são informação do Painel Financeiro, e o papel `COMERCIAL` não acessa aquele painel.
+    """
+    from app.financeiro import vendas_ops
+    from app.financeiro.routes import _resolve_period
 
     settings = SiteSetting.query.get(1)
     if not _can_view_vendas(settings):
         return jsonify({"error": {"message": "Sem permissão"}}), 403
 
-    is_financeiro = _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN)
+    scope = _resolve_vendas_scope()
+    today = datetime.now(TZ_SP).date()
+    period, start_date, end_date, _is_full_month = _resolve_period(today)
 
-    events_q = CalendarEvent.query.filter(CalendarEvent.event_type != "ENSAIO")
-    if not _has_role(RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN):
-        events_q = events_q.filter(CalendarEvent.title.ilike(EDUCAMANTO_TITLE_PREFIX + "%"))
-    events = events_q.order_by(CalendarEvent.start_at.desc()).all()
+    sales = vendas_ops.list_closed_sales(
+        start_date,
+        end_date,
+        seller_id=scope.seller_id,
+        educamanto_only=scope.educamanto_only,
+    )
 
-    items = []
-    for e in events:
-        if e.is_satellite:
-            continue
-        custo = float(_group_cost(e) if e.is_group_leader else _event_cost(e))
-        comissao = float(_event_commission(e, settings))
-        sale_value = float(e.sale_value or 0)
-        item = {
-            "event_id": e.id,
-            "title": e.title,
-            "group_label": (
-                f"{e.group_display_name} ({len(e.satellites) + 1} eventos)"
-                if e.is_group_leader
-                else None
-            ),
-            "location": e.location,
-            "sale_date": e.sale_date.isoformat() if e.sale_date else None,
-            "sale_value": sale_value,
-            "custo": custo,
-            "comissao": comissao,
-            "with_invoice": bool(e.with_invoice),
-        }
-        if is_financeiro:
-            item["lucro"] = sale_value - custo
-        items.append(item)
+    payload: dict[str, Any] = {
+        "period": period,
+        "period_label": PERIOD_LABELS.get(period, "Este mês"),
+        "start": start_date.isoformat(),
+        "end": end_date.isoformat(),
+        "can_filter_seller": scope.can_filter_seller,
+        "seller_id": scope.seller_id,
+        "scope_label": "Empresa toda" if scope.commission_target_id is None else "Minhas vendas",
+        "kpis": vendas_ops.build_kpis(sales, settings, scope.commission_target_id),
+        "eventos": vendas_ops.serialize_sales(sales, settings),
+    }
+    if scope.can_filter_seller:
+        payload["sellers"] = _comercial_sellers()
 
-    return jsonify({"items": items, "is_financeiro": is_financeiro})
+    return jsonify(payload)
 
 
 def _floatify(d: dict) -> dict:
@@ -113,6 +174,7 @@ def api_financeiro_dashboard() -> Any:
     (`app/financeiro/routes.py:387`) — só monta a query do período e serializa.
     """
     from app import db
+    from app.financeiro import vendas_ops
     from app.financeiro.routes import (
         FATOR_R_RATE_HIGH,
         FATOR_R_RATE_LOW,
@@ -291,16 +353,8 @@ def api_financeiro_dashboard() -> Any:
         comissao = float(_event_commission(e, settings))
         recebido = float(_recebido_por_evento.get(e.id, 0))
         venda = float(e.sale_value or 0)
-        if _is_permuta(e):
-            status = "permuta"
-        elif venda <= 0:
-            status = "sem_valor"
-        elif recebido >= venda:
-            status = "pago_total"
-        elif recebido > 0:
-            status = "parcial"
-        else:
-            status = "pendente"
+        # Mesma regra do Dashboard Comercial (feature 196) — fonte única em `vendas_ops`.
+        status = vendas_ops.event_payment_status(venda, recebido, _is_permuta(e))
         eventos_data.append({
             "event_id": e.id,
             "title": e.title,
