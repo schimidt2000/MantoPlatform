@@ -3,8 +3,8 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **193**
-> (`193-import-whatsform-history`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **195**
+> (`195-autocomplete-enderecos-comboboxes`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
 
 ---
 
@@ -405,6 +405,28 @@ EducaManto: `GET /api/educamanto/{historico,packages,distancia}` ·
 (mesmo dado já usado para regerar o PDF, agora também exposto para "Ver" e "Recalcular"); mesmo
 RBAC de uso do EducaManto (`_require_use`), sem restrição por dono.
 
+### 3.13.1 Google Maps — `maps_read.py` (feature 195)
+`GET /api/maps/address-autocomplete?q=<termo>&session_token=<opcional>` — proxy do **Google Places
+Autocomplete**, restrito ao Brasil (`components={"country": ["br"]}`) e em pt-BR. Devolve
+`{"items": [{"description": "Rua Tuiuti - Tatuapé, São Paulo - SP, Brasil", "place_id": "…"}]}`,
+no máximo 5 itens, descartando predições sem `description`.
+
+- **RBAC**: qualquer usuário autenticado do staff (`api_login_required`). Não expõe nenhum dado do
+  sistema — só o retorno público do Google. As telas que o consomem já têm RBAC próprio.
+- **Segurança da chave (Princípio X.4)**: a `SiteSetting.google_maps_api_key` (com fallback para a
+  env `GOOGLE_MAPS_API_KEY`) **nunca** vai para o navegador — o React só fala com este endpoint.
+- **Economia de quota (Princípio X.5)**: termo com menos de 3 caracteres devolve `{"items": []}`
+  com 200, **sem** chamar o Google; o cliente ainda aplica debounce de 350ms.
+- **Erros**: `503` se a chave não está configurada ("Configure a API Key em Admin →
+  Configurações"), `502` se o Google falha (o erro real vai para o log via `logger.warning`, o
+  usuário vê "Não foi possível buscar endereços no Google Maps agora").
+- A regra vive em `app/maps.py` → `address_autocomplete()`, mesmo módulo de `distance_km_ida()`
+  (feature 076) — fonte única da integração com o Maps.
+
+> **`GET /api/events/new/options` mudou (aditivo)**: cada item de `assignable_talents` passou a
+> incluir `photo_face_path`, que alimenta o avatar circular do combobox de pré-escala e de
+> coordenador. `figurino_sheets` já trazia `photo_url`. O Jinja legado ignora a chave extra.
+
 ### 3.14 Superfícies públicas (sem login)
 `GET /api/cadastro/check-cpf` · `POST /api/cadastro` ·
 `GET /api/formularios/<form_type>/schema` · `POST /api/formularios/<form_type>` ·
@@ -559,6 +581,17 @@ frontend/                       npm workspaces
 
 Os pacotes compartilhados não têm build próprio: são resolvidos por alias do Vite + `paths` do
 `tsconfig.base.json` e compilados junto com cada app — não há ordem de build a orquestrar.
+
+**Novos no design system (feature 195)** — `frontend/packages/ui/src/components/`:
+- `AvatarThumb` — miniatura circular (pessoas) ou quadrada (figurinos/personagens), tamanhos
+  `sm|md|lg`, com placeholder de iniciais ou ícone quando não há foto. Recebe a URL **já
+  resolvida** — quem chama aplica `assetUrl()`, mantendo `@manto/ui` sem dependência de
+  `@manto/api-client`.
+- `Combobox` — campo de seleção pesquisável que substitui `<select>` nativo em qualquer lista com
+  mais de 10 itens (Princípio X.1). Filtro local ignorando acentos (`José` casa com `jose`) ou
+  busca remota via `onQueryChange` + `loading`; navegação por setas/Enter/Esc; miniatura por opção;
+  botão de limpar; modo `freeSolo` (o valor é o texto digitado, as opções são apenas sugestões —
+  usado por endereços). Dropdown animado com Framer Motion respeitando `useReducedMotion()`.
 
 ### 5.2 Três SPAs em um único serviço (feature 186 US6; portal na 191)
 

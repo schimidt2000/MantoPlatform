@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
+import { GoogleAddressInput } from "../components/GoogleAddressInput";
 import {
   useCalcularPacote,
   useDistanciaEducaManto,
@@ -147,13 +148,19 @@ export function EducaMantoCalculadoraPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [packageId, d1, d2, ensemble, acrescimo, kmIda]);
 
-  function handleCalcularDistancia() {
-    if (!endereco.trim()) {
+  /**
+   * Calcula o KM pela Distance Matrix. `override` chega quando o usuário escolhe uma sugestão do
+   * Google (feature 195): o estado `endereco` ainda não refletiu o novo valor nesse tick, então
+   * usamos o texto normalizado direto — sem ele, a primeira consulta iria com o endereço antigo.
+   */
+  function handleCalcularDistancia(override?: string) {
+    const alvo = (override ?? endereco).trim();
+    if (!alvo) {
       setEnderecoMsg({ text: "Informe o endereço primeiro.", error: true });
       return;
     }
     setEnderecoMsg({ text: "Calculando…", error: false });
-    distancia.mutate(endereco, {
+    distancia.mutate(alvo, {
       onSuccess: (data) => {
         setKmIda(data.km_ida);
         setEnderecoMsg({
@@ -334,25 +341,25 @@ export function EducaMantoCalculadoraPage() {
                       Endereço do evento
                     </label>
                     <div className="flex gap-2">
-                      <Input
+                      {/* Autocomplete do Google Places (feature 195, Princípio X.3) — endereço
+                          normalizado é o que faz a Distance Matrix acertar o KM. */}
+                      <GoogleAddressInput
                         id="endereco"
-                        type="text"
+                        aria-label="Endereço do evento"
+                        className="flex-1"
                         placeholder="Rua, número, cidade…"
                         value={endereco}
-                        onChange={(e) => setEndereco(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleCalcularDistancia();
-                          }
-                        }}
+                        onChange={setEndereco}
+                        onSelectSuggestion={(description) =>
+                          handleCalcularDistancia(description)
+                        }
                       />
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         loading={distancia.isPending}
-                        onClick={handleCalcularDistancia}
+                        onClick={() => handleCalcularDistancia()}
                       >
                         Calcular
                       </Button>

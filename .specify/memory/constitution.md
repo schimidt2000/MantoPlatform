@@ -110,6 +110,29 @@ elemento, abrir/fechar modais, filtrar listas — vira um "tranco". Movimento be
 - **Respeita `prefers-reduced-motion` (NÃO-NEGOCIÁVEL)**: componentes animados via Framer Motion DEVEM respeitar as configurações do SO do usuário usando `useReducedMotion()` do Framer Motion ou utilitários CSS correspondentes.
 - Movimento tem propósito: comunica causa e efeito (o que mudou, e por causa de quê). Duração típica de 150–350ms com curvas suaves (`easeOut` / `easeInOut`).
 
+### X. Tratamento de dados complexos, comboboxes e autocomplete (NÃO-NEGOCIÁVEL)
+Listas longas e endereços digitados à mão são as duas maiores fontes de erro operacional do
+sistema: o usuário rola um `<select>` gigante e escolhe o item errado, ou digita um endereço que o
+Google Maps não resolve e o cálculo de transporte sai errado.
+1. **Fim dos dropdowns estáticos grandes**: campo de seleção que possa conter **mais de 10 itens**
+   (Talentos, Personagens, Coordenadores, Clientes, fichas de Figurino) NUNCA é um `<select>`
+   nativo. Usa obrigatoriamente o `Combobox` pesquisável de `@manto/ui` — o usuário digita e a
+   lista filtra em tempo real, com navegação por teclado (setas/Enter/Esc).
+2. **Visualizadores inline (avatares e miniaturas)**: toda busca ou tabela que lista um Talento
+   (casting) ou um Personagem/Ficha (figurino) exibe a miniatura ao lado do nome — **circular**
+   para pessoas, **quadrada** para figurinos/personagens — tanto nas opções da busca quanto no
+   valor já selecionado. Sem foto salva, renderiza o placeholder de iniciais ou o ícone
+   correspondente (`AvatarThumb`), nunca uma imagem quebrada.
+3. **Autocomplete de endereço mandatório**: todo input de endereço ou local de evento do sistema
+   (Criação/Edição de Evento, Calculadora de Orçamento, EducaManto e qualquer tela futura) usa o
+   `GoogleAddressInput`, com preenchimento preditivo do Google Places. Endereço escolhido da
+   sugestão é endereço normalizado — é o que faz a Distance Matrix acertar o KM.
+4. **A chave do Google nunca vai para o navegador**: toda consulta ao Google (Places, Distance
+   Matrix) passa por endpoint próprio do Flask que lê `SiteSetting.google_maps_api_key`. Nenhum
+   componente React monta URL da API do Google nem recebe a chave em payload.
+5. **Economia de quota é regra, não otimização**: busca preditiva é sempre *debounced* e só
+   dispara a partir de um mínimo de caracteres (hoje 3), tanto no cliente quanto no servidor.
+
 ## Stack e Restrições Técnicas
 
 - **Arquitetura**: SPA Desacoplada (Headless / API REST).
@@ -152,9 +175,13 @@ Uma tarefa só está concluída quando:
 - Alterar esta constituição é uma decisão deliberada: registre o que mudou e o
   porquê, e suba a versão abaixo.
 
-**Versão**: 2.0.0 | **Ratificada**: 2026-07-20 | **Última alteração**: 2026-07-20
+**Versão**: 2.1.0 | **Ratificada**: 2026-07-20 | **Última alteração**: 2026-07-28
 
 > **Changelog**
+> - **2.1.0** (2026-07-28): Novo Princípio X — dados complexos, comboboxes e autocomplete.
+>   `<select>` nativo proibido acima de 10 itens (usar `Combobox` de `@manto/ui`), miniatura
+>   obrigatória em busca de talento/personagem, Google Places obrigatório em todo campo de
+>   endereço, chave do Maps sempre atrás de proxy no Flask e busca preditiva sempre debounced.
 > - **2.0.0** (2026-07-20): **MIGRAÇÃO ARQUITETURAL MAJOR.** Transição do Frontend estático Jinja2/Vanilla para uma SPA desacoplada moderna em **React (Vite) + TypeScript + Tailwind CSS + shadcn/ui + Framer Motion**. O Backend Flask foi restrito estritamente a servir respostas API RESTful JSON (`render_template` e CSS/JS Vanilla removidos da constituição). Princípios de UI/UX, Typechecking estrito em TS e animações com Framer Motion integrados aos Princípios V, IX e aos Portões de Qualidade.
 > - **1.6.0** (2026-07-20): Novo Princípio IX — movimento com propósito. Toda mudança de
 >   estado visual perceptível em superfícies voltadas ao público exige transição suave.

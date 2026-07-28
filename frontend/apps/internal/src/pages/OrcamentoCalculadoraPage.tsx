@@ -20,8 +20,10 @@ import {
   TableRow,
 } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
+import { GoogleAddressInput } from "../components/GoogleAddressInput";
 import {
   useCalcularOrcamento,
+  useDistancia,
   useOrcamentoDetalhe,
   useOrcamentoHistorico,
   useOrcamentoOpcoes,
@@ -242,6 +244,7 @@ export function OrcamentoCalculadoraPage() {
   const salvar = useSalvarOrcamento();
   const historicoDetalhe = useOrcamentoDetalhe(recalcularIdNum);
   const historico = useOrcamentoHistorico({});
+  const distancia = useDistancia();
 
   const [performers, setPerformers] = useState<Performer[]>(INITIAL_STATE.performers);
   const [coordenadorQty, setCoordenadorQty] = useState(INITIAL_STATE.coordenadorQty);
@@ -268,6 +271,39 @@ export function OrcamentoCalculadoraPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   const [memoriaOpen, setMemoriaOpen] = useState(false);
+  const [distanciaMsg, setDistanciaMsg] = useState<{ text: string; error: boolean } | null>(null);
+
+  /**
+   * Distância pela Distance Matrix (feature 195) — antes o KM era 100% manual aqui, enquanto o
+   * EducaManto já calculava. `override` chega quando o usuário escolhe uma sugestão do Google: o
+   * estado `eventLocation` ainda não refletiu o novo valor nesse tick.
+   */
+  function handleCalcularDistancia(override?: string) {
+    const alvo = (override ?? eventLocation).trim();
+    if (!alvo) {
+      setDistanciaMsg({ text: "Informe o endereço do evento primeiro.", error: true });
+      return;
+    }
+    setDistanciaMsg({ text: "Calculando…", error: false });
+    distancia.mutate(alvo, {
+      onSuccess: (data) => {
+        setKmIda(data.km_ida);
+        setDistanciaMsg({
+          text: `Distância: ${data.km_ida} km (ida) · ${data.km_ida * 2} km ida e volta`,
+          error: false,
+        });
+      },
+      onError: (err) => {
+        setDistanciaMsg({
+          text:
+            err instanceof ApiRequestError
+              ? err.message
+              : "Não foi possível calcular a distância.",
+          error: true,
+        });
+      },
+    });
+  }
 
   // "Recalcular" — repopula o formulário a partir do form_snapshot de um orçamento salvo.
   useEffect(() => {
@@ -445,7 +481,16 @@ export function OrcamentoCalculadoraPage() {
                 </div>
                 <div>
                   <label className={LABEL}>Local/Endereço do evento</label>
-                  <Input value={eventLocation} onChange={(e) => setEventLocation(e.target.value)} />
+                  {/* Autocomplete do Google Places (feature 195, Princípio X.3) — endereço
+                      normalizado é o que faz o botão "Calcular km (Maps)" acertar a distância. */}
+                  <GoogleAddressInput
+                    aria-label="Local/Endereço do evento"
+                    value={eventLocation}
+                    onChange={setEventLocation}
+                    onSelectSuggestion={(description) => {
+                      if (foraSp) handleCalcularDistancia(description);
+                    }}
+                  />
                 </div>
                 <label className="flex items-center gap-2 text-sm text-ink">
                   <input type="checkbox" checked={foraSp} onChange={(e) => setForaSp(e.target.checked)} />
@@ -482,7 +527,27 @@ export function OrcamentoCalculadoraPage() {
                     </div>
                     <div>
                       <label className={LABEL}>Km (ida)</label>
-                      <Input type="number" value={kmIda} onChange={(e) => setKmIda(Number(e.target.value))} />
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          value={kmIda}
+                          onChange={(e) => setKmIda(Number(e.target.value))}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          loading={distancia.isPending}
+                          onClick={() => handleCalcularDistancia()}
+                        >
+                          Calcular km (Maps)
+                        </Button>
+                      </div>
+                      {distanciaMsg && (
+                        <p className={`mt-1 text-xs ${distanciaMsg.error ? "text-red" : "text-muted"}`}>
+                          {distanciaMsg.text}
+                        </p>
+                      )}
                     </div>
                     {transporteTipo === "van" ? (
                       <label className="flex items-center gap-2 text-sm text-ink">

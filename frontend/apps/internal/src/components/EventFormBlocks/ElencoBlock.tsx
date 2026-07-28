@@ -1,22 +1,45 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useFormContext } from "react-hook-form";
-import { Button } from "@manto/ui";
+import { Button, Combobox, type ComboboxOption } from "@manto/ui";
+import { assetUrl } from "@manto/api-client";
 import { MoneyInput } from "@manto/money";
 import type { EventFormValues } from "../../lib/eventFormSchema";
 import type { CharacterInput } from "../../lib/eventCreate";
+import type { AssignableTalent, FigurinoSheetOption } from "../../lib/eventCreate";
 import { useCatalogElencoBusca } from "../../lib/catalogoElenco";
 import { CharacterAutocomplete, type CharacterSelection } from "../CharacterAutocomplete";
 import { FIELD, FIELD_ERROR, LABEL, HELP, FieldError, BlockCard } from "./shared";
+
+/** Opções de talento com avatar circular (feature 195, Princípio X.1/X.2). */
+function talentOptions(talents: AssignableTalent[]): ComboboxOption[] {
+  return talents.map((t) => ({
+    value: String(t.id),
+    label: t.name,
+    imageUrl: t.photo_face_path ? assetUrl(t.photo_face_path) : null,
+    imageShape: "circle" as const,
+  }));
+}
+
+/** Opções de ficha de figurino com miniatura quadrada (feature 195, Princípio X.2). */
+function figurinoOptions(sheets: FigurinoSheetOption[]): ComboboxOption[] {
+  return sheets.map((s) => ({
+    value: String(s.id),
+    label: s.character_name,
+    imageUrl: s.photo_url ? assetUrl(s.photo_url) : null,
+    imageShape: "square" as const,
+    fallbackIcon: "🎭",
+  }));
+}
 
 interface CharacterRowProps {
   value: CharacterInput;
   onChange: (next: CharacterInput) => void;
   onRemove: () => void;
-  figurinoSheets: { id: number; character_name: string }[];
-  talents: { id: number; name: string }[];
+  figurinoOpts: ComboboxOption[];
+  talentOpts: ComboboxOption[];
 }
 
-function CharacterRow({ value, onChange, onRemove, figurinoSheets, talents }: CharacterRowProps) {
+function CharacterRow({ value, onChange, onRemove, figurinoOpts, talentOpts }: CharacterRowProps) {
   return (
     <li className="space-y-2 border-b border-line pb-3 last:border-none">
       <div className="flex flex-wrap items-center gap-2">
@@ -32,39 +55,26 @@ function CharacterRow({ value, onChange, onRemove, figurinoSheets, talents }: Ch
         </Button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          className="h-10 rounded-md border border-line bg-panel px-2 text-sm text-ink"
-          value={value.figurino_sheet_id ?? ""}
-          onChange={(e) =>
-            onChange({
-              ...value,
-              figurino_sheet_id: e.target.value ? Number(e.target.value) : null,
-            })
-          }
+        <Combobox
+          className="min-w-56 flex-1"
           aria-label="Buscar figurino"
-        >
-          <option value="">🔍 Buscar figurino… (auto-detectar pelo nome)</option>
-          {figurinoSheets.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.character_name}
-            </option>
-          ))}
-        </select>
-        <select
-          className="h-10 rounded-md border border-line bg-panel px-2 text-sm text-ink"
-          value={value.talent_id ?? ""}
-          onChange={(e) =>
-            onChange({ ...value, talent_id: e.target.value ? Number(e.target.value) : null })
+          placeholder="🔍 Buscar figurino… (auto-detectar pelo nome)"
+          emptyMessage="Nenhuma ficha de figurino encontrada."
+          options={figurinoOpts}
+          value={value.figurino_sheet_id != null ? String(value.figurino_sheet_id) : null}
+          onChange={(next) =>
+            onChange({ ...value, figurino_sheet_id: next ? Number(next) : null })
           }
+        />
+        <Combobox
+          className="min-w-56 flex-1"
           aria-label="Pré-escalar talento específico"
-        >
-          <option value="">— pré-escalar talento específico (opcional) —</option>
-          {talents.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+          placeholder="— pré-escalar talento específico (opcional) —"
+          emptyMessage="Nenhum talento encontrado."
+          options={talentOpts}
+          value={value.talent_id != null ? String(value.talent_id) : null}
+          onChange={(next) => onChange({ ...value, talent_id: next ? Number(next) : null })}
+        />
         <MoneyInput
           className="h-10 w-28 rounded-md border border-line bg-panel px-2 text-sm text-ink"
           value={value.cache_value ?? 0}
@@ -99,8 +109,8 @@ export interface ElencoBlockProps {
   onCharactersChange: (next: CharacterInput[]) => void;
   coordinatorTalentId: number | null;
   onCoordinatorTalentIdChange: (id: number | null) => void;
-  figurinoSheets: { id: number; character_name: string }[];
-  talents: { id: number; name: string }[];
+  figurinoSheets: FigurinoSheetOption[];
+  talents: AssignableTalent[];
 }
 
 /** Bloco 3 — Personagens e equipe (elenco dinâmico) + título do evento (feature 184). */
@@ -121,6 +131,8 @@ export function ElencoBlock({
   const [titleEdited, setTitleEdited] = useState(false);
   const eventType = watch("event_type");
   const catalogElenco = useCatalogElencoBusca();
+  const talentOpts = useMemo(() => talentOptions(talents), [talents]);
+  const figurinoOpts = useMemo(() => figurinoOptions(figurinoSheets), [figurinoSheets]);
 
   const addCharacter = () =>
     onCharactersChange([
@@ -177,8 +189,8 @@ export function ElencoBlock({
             value={c}
             onChange={(next) => onCharactersChange(characters.map((p, j) => (j === i ? next : p)))}
             onRemove={() => onCharactersChange(characters.filter((_, j) => j !== i))}
-            figurinoSheets={figurinoSheets}
-            talents={talents}
+            figurinoOpts={figurinoOpts}
+            talentOpts={talentOpts}
           />
         ))}
       </ul>
@@ -199,19 +211,15 @@ export function ElencoBlock({
         <label className={LABEL} htmlFor="coordinator">
           Coordenador específico (opcional)
         </label>
-        <select
+        <Combobox
           id="coordinator"
-          className={FIELD}
-          value={coordinatorTalentId ?? ""}
-          onChange={(e) => onCoordinatorTalentIdChange(e.target.value ? Number(e.target.value) : null)}
-        >
-          <option value="">— sem pré-escala —</option>
-          {talents.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+          aria-label="Coordenador específico"
+          placeholder="— sem pré-escala —"
+          emptyMessage="Nenhum talento encontrado."
+          options={talentOpts}
+          value={coordinatorTalentId != null ? String(coordinatorTalentId) : null}
+          onChange={(next) => onCoordinatorTalentIdChange(next ? Number(next) : null)}
+        />
         <p className={HELP}>
           Pré-escalar um coordenador do banco. Se vazio, a vaga fica aberta para o casting
           designar.

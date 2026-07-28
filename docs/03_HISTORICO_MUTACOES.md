@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **194**
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **195**
 
 Formato de cada entrada:
 
@@ -17,6 +17,92 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 195 — Autocomplete de Endereços com Google Places e Comboboxes com Busca Visual
+`195-autocomplete-enderecos-comboboxes` · **2026-07-28** · **sem migration**
+
+**Motivação.** Duas regressões de usabilidade em relação ao sistema clássico, ambas com custo
+operacional real. (1) O formulário de evento em React usava `<select>` nativos para figurino,
+pré-escala de talento e coordenador — listas de centenas de itens onde o comercial rolava e
+escolhia o nome errado, sem nenhuma foto para conferir. (2) Todo endereço do sistema era texto
+livre: o operador digitava "Av Paulista 1000" e a Distance Matrix devolvia `NOT_FOUND`, quebrando
+o cálculo de transporte no orçamento e no EducaManto. Endereço normalizado pelo Google é o que faz
+o KM sair certo.
+
+**O que mudou.**
+
+- **Backend.** `app/maps.py` ganhou `address_autocomplete()` ao lado do `distance_km_ida()` já
+  existente (feature 076) — fonte única da integração com o Maps — e o helper privado `_api_key()`,
+  agora compartilhado pelas duas funções. Novo módulo `app/api/maps_read.py` com
+  `GET /api/maps/address-autocomplete`, registrado em `app/api/__init__.py`.
+  `_build_event_create_options()` em `app/calendar/routes.py` passou a incluir `photo_face_path`
+  em cada item de `assignable_talents` (mudança aditiva — o Jinja legado ignora a chave).
+- **Banco.** Nada. Zero migration, zero coluna nova — a `SiteSetting.google_maps_api_key` e o
+  `Talent.photo_face_path` já existiam.
+- **Frontend.** Dois componentes novos no design system (`@manto/ui`): `AvatarThumb` e `Combobox`.
+  No app internal: `lib/maps.ts` (hook `useAddressAutocomplete`, debounced) e
+  `components/GoogleAddressInput.tsx`. Telas tocadas: `EventFormBlocks/ElencoBlock.tsx`,
+  `EventFormBlocks/DadosEventoBlock.tsx`, `pages/OrcamentoCalculadoraPage.tsx`,
+  `pages/EducaMantoCalculadoraPage.tsx`. Tipos `FigurinoSheetOption`/`AssignableTalent` extraídos
+  em `lib/eventCreate.ts`.
+- **Constituição.** Novo **Princípio X** (v2.1.0) — dados complexos, comboboxes e autocomplete.
+
+**Rotas e endpoints.**
+
+| Método | Rota | Observação |
+|---|---|---|
+| GET | `/api/maps/address-autocomplete?q=&session_token=` | **novo** — proxy do Google Places |
+| GET | `/api/events/new/options` | **alterado (aditivo)** — `assignable_talents[].photo_face_path` |
+
+**Detalhe do que ficou de pé.**
+
+1. **Proxy do Places, chave no servidor.** O React nunca vê a `google_maps_api_key`: fala só com
+   `/api/maps/address-autocomplete`, que lê a chave de `SiteSetting` (com fallback para a env
+   `GOOGLE_MAPS_API_KEY`) e devolve `{"items": [{description, place_id}]}`, no máximo 5, restrito
+   ao Brasil e em pt-BR. Chave ausente → **503** com "Configure a API Key em Admin →
+   Configurações"; falha do Google → **502** amigável, com o erro real em `logger.warning`.
+2. **Economia de quota em dois níveis.** Termo com menos de 3 caracteres devolve lista vazia com
+   200 **sem chamar o Google** (constante `AUTOCOMPLETE_MIN_CHARS`, espelhada no frontend como
+   `ADDRESS_MIN_CHARS`); o `useAddressAutocomplete` ainda aplica debounce de 350ms e cache de 5min
+   do TanStack Query. O `GoogleAddressInput` inicia com a busca vazia mesmo quando o campo já tem
+   endereço salvo — abrir a edição de um evento **não** consulta o Google.
+3. **`Combobox` é o novo padrão para lista grande.** Filtro local que ignora acentos ("José" casa
+   com "jose"), navegação por setas/Enter/Esc, `aria-activedescendant`, botão de limpar, spinner de
+   loading e dropdown com Framer Motion respeitando `useReducedMotion()`. Tem modo `freeSolo`, em
+   que o valor é o texto digitado e as opções são só sugestões — é o que permite reusar o mesmo
+   componente para endereço (nem todo local existe no Google).
+4. **Miniaturas com forma semântica.** `AvatarThumb` é **circular** para pessoas (talento,
+   coordenador — `photo_face_path`) e **quadrada** para figurino/personagem (`photo_url`). Sem foto
+   salva, renderiza as iniciais do nome ou o ícone passado (🎭 para figurinos, 📍 nas sugestões de
+   endereço). `@manto/ui` continua **sem** depender de `@manto/api-client`: quem chama resolve a
+   URL com `assetUrl()` antes de passar.
+5. **O botão de distância do orçamento passou a existir.** `useDistancia()` estava definido em
+   `lib/orcamento.ts` desde a migração e **nunca era chamado** — o KM em `/orcamento` era 100%
+   digitado à mão, enquanto o EducaManto já calculava. Agora há um "Calcular km (Maps)" ao lado de
+   *Km (ida)*, e escolher uma sugestão do Google com "Fora de SP" ligado já dispara o cálculo.
+
+**Impacto em RBAC e regras de negócio.** Nenhum. O endpoint novo é `api_login_required` puro (não
+expõe dado do sistema, só o retorno público do Google) e as telas que o consomem mantêm o RBAC que
+já tinham. Nenhuma regra de cálculo de orçamento, transporte ou elenco foi alterada — o que mudou
+é *como o dado entra*.
+
+**Riscos e pegadinhas.**
+
+- **`onSelectSuggestion` recebe o texto explicitamente.** Ao escolher uma sugestão, o `onChange` do
+  React ainda não refletiu o novo valor no mesmo tick; por isso `handleCalcularDistancia(override)`
+  aceita o endereço por parâmetro. Sem isso, a primeira consulta iria com o endereço anterior.
+- **`onClick={handleCalcularDistancia}` é armadilha.** Como a função passou a ter um parâmetro
+  opcional `string`, ligar o handler direto no `onClick` passaria o `MouseEvent` como endereço.
+  Sempre `onClick={() => handleCalcularDistancia()}`.
+- **O `activeIndex` do `Combobox` não depende da identidade de `options`.** Um chamador que recria
+  o array a cada render zeraria o item destacado a cada tecla; o reset ficou dividido em "volta ao
+  topo quando a busca muda" + "reancora quando a lista encolhe".
+- **A cópia local `manto_local` tem `manto_address = 'Rua V168 Teste, 123'`** (lixo deixado pelo
+  `verify_168`), o que faz **qualquer** cálculo de distância local retornar 400 "Endereço não
+  encontrado pelo Google Maps" — inclusive com endereço normalizado. Não é bug do código: com uma
+  origem válida a Distance Matrix responde `OK`. Em produção o endereço-base é o real.
+- **Verificação**: `scripts/db/verify_195_maps_autocomplete.py` (20/20) — monkeypatcha
+  `googlemaps.Client` para cobrir sucesso e falha sem gastar quota nem depender de rede.
 
 ### 194 — Planilha de Pagamentos: cards-filtro, colorização por faixa e soma da seleção
 `194-pagamentos-ux-cores-filtro` · **2026-07-28** · **sem migration**

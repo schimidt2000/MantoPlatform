@@ -3,6 +3,7 @@ import { useFormContext } from "react-hook-form";
 import { MoneyInput } from "@manto/money";
 import { FileUpload } from "@manto/ui";
 import type { EventFormValues } from "../../lib/eventFormSchema";
+import { GoogleAddressInput } from "../GoogleAddressInput";
 import { FIELD, FIELD_ERROR, LABEL, HELP, FieldError, BlockCard } from "./shared";
 
 export interface DadosEventoBlockProps {
@@ -33,6 +34,7 @@ export function DadosEventoBlock({
   const {
     register,
     watch,
+    setValue,
     formState: { errors },
   } = useFormContext<EventFormValues>();
 
@@ -100,14 +102,20 @@ export function DadosEventoBlock({
       </div>
       <div>
         <label className={LABEL} htmlFor="location">
-          Local do evento
+          Local/Endereço do evento
         </label>
-        <input
+        {/* Autocomplete do Google Places (feature 195, Princípio X.3) — evita erro de logística e
+            cálculo de distância impreciso. `setValue` no lugar do `register` porque o valor vem do
+            componente, não de um evento nativo de input. */}
+        <GoogleAddressInput
           id="location"
-          className={FIELD}
-          placeholder="Rua, número, bairro, cidade…"
-          {...register("location")}
+          aria-label="Local/Endereço do evento"
+          value={watch("location") ?? ""}
+          onChange={(value) => setValue("location", value, { shouldDirty: true })}
         />
+        <p className={HELP}>
+          Comece a digitar e escolha uma sugestão do Google Maps para gravar o endereço completo.
+        </p>
       </div>
       <div>
         <label className={LABEL} htmlFor="description">

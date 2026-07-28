@@ -2771,8 +2771,14 @@ def _build_event_create_options() -> dict:
         .order_by(User.name.asc())
         .all()
     )
+    # `photo_face_path` (feature 195): o avatar do talento aparece na busca de pré-escala e de
+    # coordenador do formulário de evento. O Jinja legado simplesmente ignora a chave extra.
     assignable_talents = [
-        {"id": t.id, "name": t.artistic_name or t.full_name}
+        {
+            "id": t.id,
+            "name": t.artistic_name or t.full_name,
+            "photo_face_path": t.photo_face_path,
+        }
         for t in Talent.query.filter_by(status="active").order_by(Talent.full_name.asc()).all()
     ]
     return {
