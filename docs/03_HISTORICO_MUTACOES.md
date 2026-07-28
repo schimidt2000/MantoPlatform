@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **192**
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **191**
 
 Formato de cada entrada:
 
@@ -17,6 +17,135 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 191 — Migração do Portal do Artista (React) e Auditoria de Segurança
+`191-portal-artista-react-auditoria` · **2026-07-28** · **sem migration**
+
+> Numeração fora de ordem em relação à 192 logo abaixo: a 192 foi um ajuste direto em `main`,
+> feito enquanto esta fatia estava planejada. A ordem do documento continua sendo por data.
+
+**Motivação.** A fatia **176** entregou 5 telas React do Portal do Artista (login, agenda,
+convites, ficha de figurino, fotos/documentos) e deixou explicitamente de fora todo o resto —
+primeiro acesso, troca de senha obrigatória, aceite de termos, "esqueci minha senha", edição de
+perfil e avaliação de eventos continuaram só no Jinja (`app/talent_portal`). Na prática o
+talento era jogado para a versão clássica no meio do login (`must_redirect_to_classic`), e o
+histórico de cachês não existia em React. Além disso, **o bundle do portal nunca era publicado**:
+`frontend/server.js` só montava `apps/internal` e `apps/public`, e o `build` agregado do
+monorepo não incluía `apps/portal` — o app existia no repositório e nunca chegava a produção.
+
+**Backend.** Nenhum endpoint antigo mudou de contrato. Três módulos de núcleo de negócio, todos
+puros e reusáveis pelo Jinja legado (Princípio I):
+- `app/talent_portal/portal_account_ops.py` (**novo**): `validate_password_strength`,
+  `start_first_access`, `request_password_reset`, `find_talent_by_reset_token`,
+  `reset_password_with_token`, `change_password`, `accept_terms`, `pending_account_steps`.
+  O disparo de e-mail entra por callback injetado pela rota — o módulo não importa `request`.
+- `app/talent_portal/portal_rating_ops.py` (**novo**): extraído de `routes.py` sem mudar a
+  semântica em produção — janela de 7 dias para avaliar e 30 para editar (contadas do mais
+  recente entre o fim do evento e `assigned_at`, feature 085), nota &lt;4 exige comentário,
+  versionamento da avaliação anterior (feature 181) e as categorias de sub-nota.
+- `app/talent_portal/portal_ops.py`: ganhou `get_profile`/`update_profile` (PATCH parcial com
+  validação de altura e data), `add_portfolio_photo`/`add_portfolio_link`/
+  `delete_portfolio_item` e `get_historico` (lista + somatórios pago/pendente).
+
+**Endpoints novos** (12; total de `/api/portal/*` foi de 14 para 26):
+`POST /api/portal/auth/first-access`, `POST /api/portal/auth/forgot-password`,
+`GET /api/portal/auth/reset-password/<token>`, `POST /api/portal/auth/reset-password`,
+`POST /api/portal/auth/change-password`, `POST /api/portal/auth/accept-terms`,
+`GET|PATCH /api/portal/profile`, `POST /api/portal/profile/media/photo`,
+`POST /api/portal/profile/media/link`, `DELETE /api/portal/profile/media/<id>`,
+`GET /api/portal/historico`, `GET /api/portal/ratings/pending`,
+`GET|POST /api/portal/events/<id>/rate`, `POST /api/portal/events/<id>/rate/detail`.
+`GET /api/portal/auth/me` e o login agora devolvem `must_change_password`, `terms_accepted` e
+`pending_steps`; `must_redirect_to_classic` virou sempre `false` (mantido por compatibilidade).
+
+**Banco.** Sem migration — tudo já existia em `Talent` (`must_change_password`,
+`password_reset_token/expires`, `terms_accepted_at`, medidas), `TalentMedia`, `EventRating`,
+`EventSubRating` e `EventRatingVersion`.
+
+**Frontend.** 8 telas novas em `frontend/apps/portal`: `PortalFirstAccessPage`,
+`PortalForgotPasswordPage`, `PortalResetPasswordPage`, `PortalChangePasswordPage`,
+`PortalTermsPage`, `PortalProfilePage`, `PortalHistoricoPage` e `PortalRatePage`. Componentes
+compartilhados novos: `AuthCard`, `FormField`/`FormError`/`FormSuccess`, `PasswordChecklist`,
+`StarRating` (radiogroup real, acessível) e `OnboardingGate`. `lib/format.ts` centraliza
+data/hora amigável (Princípio VII) — `formatDateTime`, `formatWeekday`, `formatRelativeDay`,
+`formatLongDate`, `formatShortDate`; valor monetário continua em `@manto/money`.
+O texto do termo virou `lib/termsContent.ts`, transcrição fiel de `templates/portal/terms.html`
+(o aceite gravado precisa se referir ao mesmo documento antes e depois).
+
+**Deploy (a parte que faltava para o portal existir em produção).**
+- `frontend/server.js`: passou de 2 para 3 SPAs, com uma lista de apps montados por prefixo —
+  `/catalogo/*` → `apps/public/dist` e `/portal/*` → `apps/portal/dist`, raiz → `apps/internal`.
+  Deep link e refresh funcionam nos três (cada um com seu próprio fallback de `index.html`).
+- `frontend/apps/portal/vite.config.ts`: `base: "/portal/"` em produção (mesmo padrão da 186 no
+  `apps/public`), e o React Router recebe `basename={import.meta.env.BASE_URL}`.
+- `frontend/package.json`: `build` e `typecheck` agregados passam a incluir o portal, mais
+  `dev:portal`/`build:portal`/`typecheck:portal`.
+- `app/api/portal_auth.py::_reset_url` monta o link de redefinição a partir de `PORTAL_URL`
+  (mesma base já usada pelos outros e-mails do portal), caindo na rota Jinja se a env não estiver
+  configurada — o link não quebra em ambiente onde o front novo ainda não subiu.
+
+**RBAC e regras de negócio.** Sem mudança de política. O RBAC do portal continua sendo "é o dono
+do recurso": toda consulta parte do `talent_id` da sessão e nenhum endpoint aceita um id de
+talento vindo do cliente (o PATCH de perfil ignora um `id` no corpo, verificado na auditoria).
+A trava de onboarding é servida **no lugar** do app pelo `OnboardingGate`, não por redirect —
+não existe URL de onboarding para pular, e um deep link para `/agenda` com senha pendente cai na
+mesma trava. A API deliberadamente **não** bloqueia por termos pendentes: o gate é de produto,
+não de segurança, e endurecer isso mudaria o comportamento do Jinja legado que ainda usa a mesma
+sessão.
+
+**Auditoria de segurança** (`scripts/security/overnight_security_audit.py`, **novo** — 76
+verificações, saída com código 1 em qualquer falha, relatório em
+`scripts/security/relatorio_seguranca.md`):
+- **Cookies**: `HttpOnly` + `SameSite=Lax` confirmados nas sessões de Staff e de Talento, e
+  `SESSION_COOKIE_SECURE=True` em `ProductionConfig` (em dev fica ausente de propósito, HTTP).
+- **Isolamento de sessão**: as duas sessões são hermeticamente fechadas nos dois sentidos —
+  cookie de talento dá 401 na API de staff e vice-versa, e cada login faz `session.clear()`,
+  encerrando a sessão do outro tipo no mesmo cookie.
+- **RBAC**: talento bloqueado em 13 endpoints internos; anônimo bloqueado; vendedor (COMERCIAL)
+  bloqueado em usuários/RH/pagamentos/configurações/logs/desempenho (403); IDOR no portal
+  (escalação, mídia e figurino de terceiros) devolve 404/403.
+- **E-mails**: os 8 disparadores mapeados; todo caminho de `mail.send()` está sob `try/except`
+  **e** atrás de `SiteSetting.email_notifications_enabled`; com a flag desligada o envio vira log
+  silencioso e a request segue 200; com SMTP fora do ar a resposta continua 200 com mensagem
+  amigável, sem 500; o reset de senha não permite enumeração de conta (mesmo status e mesmo corpo
+  para CPF existente e inexistente).
+
+**Riscos e pegadinhas descobertas.**
+1. **`app/api/__init__.py` importa por efeito colateral em ordem de registro** — o módulo novo
+   `portal_ratings` precisa entrar nessa lista, senão as rotas simplesmente não existem. O
+   `ruff` acusa `I001` no arquivo (pré-existente): a ordem é deliberada, não ordene os imports.
+2. **`query.delete()` em massa não passa pelo ORM** e deixa órfãs as linhas de associação —
+   estourou FK em `user_roles` (auditoria) e em `event_sub_ratings` (verificação). Nos scripts,
+   apagar objeto a objeto com `db.session.delete()` para a cascata do ORM valer.
+3. **`send_quote_email` não usa `_send`** (precisa anexar PDF) e reimplementa o guarda. A
+   auditoria verifica a *propriedade* (todo `mail.send(` sob try/except + gate) em vez de exigir
+   uma função única — contar chamadas dava falso positivo.
+4. **Reset de senha de staff não existe por e-mail**: um SUPERADMIN define a senha temporária à
+   mão em `user_ops.reset_password`. Só o Portal do Artista tem fluxo self-service. Registrado
+   como observação na auditoria, não como falha.
+5. **`FileUpload` do design system tinha alvo de toque de 36px** (`size="sm"`, único controle do
+   componente). Corrigido na origem com `min-h-[44px]` — o portal é mobile-only (Princípio VIII)
+   e no desktop o botão só cresce 8px.
+6. **O baseline de versionamento da avaliação vai e volta pelo cliente** na API (a tela Jinja
+   guarda na sessão, mas o slot único já estourou o tamanho do cookie uma vez). É só um detector
+   de mudança: adulterá-lo no máximo registra — ou deixa de registrar — uma versão no histórico,
+   nunca altera a nota gravada.
+7. **Proxy Vite de `/portal` foi estreitado para `/portal/photo`** — o prefixo largo funcionava
+   quando o app React vivia só na raiz em dev, mas sombrearia as rotas próprias do portal. Mesma
+   pegadinha da feature 183 com `/figurinos`.
+
+**Legado.** As rotas Jinja de `app/talent_portal` **continuam de pé e sem regressão** (paridade
+verificada: login, first-access, forgot-password, `/portal/`, `/portal/historico`,
+`/portal/profile`). Decomissioná-las é limpeza futura, fora do escopo desta entrega — conforme a
+regra de `CLAUDE.md`, não apagar view antiga sem confirmação.
+
+**Verificação.** `scripts/db/verify_191_portal_react.py` — 72/72 contra `manto_local`
+(fluxos de conta, perfil/portfólio, avaliações com janelas e versionamento, histórico com
+somatórios, paridade Jinja). Auditoria: 76/76. `npx tsc --noEmit` e `npm run build` limpos nos
+três apps. Telas conferidas em viewport de 320px e 430px: sem rolagem horizontal, nenhum alvo de
+toque &lt;44px, nenhum texto informativo &lt;12px.
+
+---
 
 ### 192 — Detalhe do Evento: layout de duas colunas com paridade total da tela clássica
 `main` (ajuste direto, sem branch de feature dedicada) · **2026-07-27** · **sem migration**

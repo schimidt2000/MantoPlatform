@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **192**
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **191**
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
@@ -475,23 +475,54 @@ Todas as telas são **mobile-first** (Princípio VIII).
 
 ---
 
-## C. Portal do Artista — Jinja legado (`app/talent_portal`)
+## C. Portal do Artista — React (`frontend/apps/portal`)
 
-⚠️ **Fora do escopo da migração React.** `frontend/apps/portal` é apenas um scaffold vazio.
-Sessão própria do talento (`Talent.password_hash`), separada da sessão de staff.
+SPA mobile-first própria, servida sob `/portal/*`. **Quem acessa:** talento autenticado por
+sessão própria (`Talent.password_hash` → `session["talent_id"]`), separada da sessão de staff —
+não há papéis dentro do portal. **RBAC:** "é o dono do recurso" — toda tela consome apenas dados
+do talento da sessão.
 
-| Rota (Jinja) | Objetivo |
-|---|---|
-| `/portal/login`, `/first-access`, `/change-password`, `/forgot-password`, `/reset-password/<token>`, `/terms`, `/logout` | Autenticação e termos |
-| `/portal/` | Agenda do talento + convites |
-| `/portal/invites/<role_id>/{accept,reject}` | Aceitar/recusar convite de cargo |
-| `/portal/roles/<role_id>/ack-change` | "Ciente" da alteração do evento |
-| `/portal/profile`, `/media/upload-photo`, `/media/add-link`, `/media/<id>/delete` | Perfil e portfólio |
-| `/portal/events/<id>/figurino` | Ficha de figurino do evento |
-| `/portal/events/<id>/rate` e `/rate/detail` | Avaliação do evento pelo talento |
-| `/portal/historico` | Histórico de eventos |
+**Onboarding.** Enquanto houver etapa de conta pendente (`pending_steps` de
+`GET /api/portal/auth/me`), o `OnboardingGate` serve a etapa **no lugar** do app, em qualquer
+rota — não existe URL de onboarding para pular, e um deep link para `/portal/agenda` com senha
+pendente cai na mesma trava.
 
-Já existem endpoints JSON equivalentes (`app/api/portal_*.py`) prontos para a migração futura.
+**Shell.** Header com foto/nome (atalho para o perfil) + botão Sair; navegação inferior fixa de
+4 abas com contador de pendências em Convites (convites a responder) e Histórico (eventos a
+avaliar). Alvos de toque ≥44px, nada abaixo de 12px, sem rolagem horizontal de 320px a 430px
+(Princípio VIII).
+
+| Rota (React) | Objetivo | UX e vínculos |
+|---|---|---|
+| `/portal/login` | Entrar com CPF ou e-mail | Links para primeiro acesso e recuperação; erro genérico, sem dizer qual campo errou |
+| `/portal/first-access` | Receber senha temporária por e-mail | Confirma com o e-mail mascarado (`jo***@dominio.com`) |
+| `/portal/forgot-password` | Pedir link de redefinição | Confirmação neutra — nunca revela se a conta existe |
+| `/portal/reset-password/:token` | Definir nova senha pelo link do e-mail | Valida o token antes de mostrar o formulário; checklist de força ao vivo |
+| *(gate)* Criar senha | Troca obrigatória no primeiro acesso | Servida pelo `OnboardingGate`, não é rota navegável |
+| *(gate)* Termos | Aceite do Termo de Consentimento | Checkbox só libera após rolar o texto até o fim |
+| `/portal/agenda` | Próximos eventos + histórico recente | Dia da semana + "amanhã"/"em 5 dias"; alerta de alteração com botão **Ciente**; link para a ficha de figurino |
+| `/portal/convites` | Convites de casting pendentes | Botões **Aceitar** / **Recusar** (recusa pede confirmação); alimenta o contador da aba |
+| `/portal/historico` | Histórico completo de apresentações | Somatórios recebido / a receber / total; cachê + deslocamento por evento; link para avaliar |
+| `/portal/perfil` | Dados pessoais, **medidas corporais**, PIX e portfólio | Medidas alimentam o módulo de Figurino; até 3 fotos de atuação + links (Vimeo/YouTube) |
+| `/portal/fotos-documentos` | Foto de rosto, corpo inteiro e CNH | Preview do arquivo atual antes de substituir |
+| `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (rota Jinja, mesma sessão) |
+| `/portal/eventos/:id/avaliar` | Avaliar o evento | Etapa 1 nota geral (abaixo de 4 exige comentário); etapa 2 opcional por categoria e por pessoa; janela de 7 dias para avaliar, 30 para editar |
+| `/portal/termos` | Reler o termo já aceito | Modo leitura, sem trava nem botão |
+
+### C.1 Rotas Jinja legadas do portal (ainda registradas)
+
+As rotas de `app/talent_portal` continuam de pé em paralelo (strangler-fig), servidas pelo Flask
+em **outro domínio** — sem colisão com o `/portal/*` do serviço estático. Paridade verificada na
+feature 191; decomissioná-las é limpeza futura.
+
+`/portal/login`, `/first-access`, `/change-password`, `/forgot-password`,
+`/reset-password/<token>`, `/terms`, `/logout`, `/portal/`, `/portal/historico`,
+`/portal/profile`, `/portal/media/*`, `/portal/invites/<id>/{accept,reject}`,
+`/portal/roles/<id>/ack-change`, `/portal/events/<id>/figurino`,
+`/portal/events/<id>/rate[/detail]`.
+
+> `/portal/photo/<file>` **não** é legado a decomissionar: serve as fotos de figurino checando a
+> sessão de talento, e o app React depende dela.
 
 ---
 

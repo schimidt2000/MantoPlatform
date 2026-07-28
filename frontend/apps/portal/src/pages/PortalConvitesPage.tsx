@@ -1,10 +1,6 @@
 import { Button, Card, CardContent, Skeleton } from "@manto/ui";
+import { formatDateTime, formatRelativeDay, formatWeekday } from "../lib/format";
 import { useAcceptInvite, useAgenda, useRejectInvite } from "../lib/portalAgenda";
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "Data a confirmar";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-}
 
 export function PortalConvitesPage() {
   const agendaQuery = useAgenda();
@@ -46,8 +42,11 @@ export function PortalConvitesPage() {
             <div>
               <p className="font-medium text-ink">{role.title}</p>
               <p className="text-xs text-muted">
-                {formatDateTime(role.start_at)}
+                {formatWeekday(role.start_at)}, {formatDateTime(role.start_at)}
                 {role.location ? ` · ${role.location}` : ""}
+              </p>
+              <p className="text-xs font-medium text-accent">
+                {formatRelativeDay(role.start_at)}
               </p>
               <p className="text-xs text-muted">Personagem: {role.character_name}</p>
             </div>

@@ -28,12 +28,14 @@
 >   `frontend/apps/internal` (agenda, talentos, figurino, financeiro, vendas, clientes, admin,
 >   RH, revisão de mídia) e `frontend/apps/public` (catálogo, `/cadastro`, formulários,
 >   feedback por link — visitante anônimo, sem login).
-> - **FORA do escopo desta migração — ainda 100% Jinja2/vanilla**: o **Portal do Artista**
->   (`app/talent_portal`, sessão própria do talento) nunca foi atribuído a nenhuma das 6 User
->   Stories, apesar de a spec original (Q2) ter reservado um 3º bundle para ele
->   (`frontend/apps/portal` — hoje só scaffold vazio, sem telas). Migrá-lo é uma **iniciativa
->   futura própria, com sua própria spec** — não assuma que está coberto, e não misture
->   trabalho nele com o padrão desta migração sem uma spec dedicada.
+> - **Portal do Artista — migrado depois, por specs próprias (176 e 191)**: não fez parte das 6
+>   User Stories da 144, mas hoje **está completo em React** (`frontend/apps/portal`, servido sob
+>   `/portal/*`). A fatia 176 entregou login, agenda, convites, figurino e fotos/documentos; a
+>   **191** fechou os fluxos de conta (primeiro acesso, troca de senha, termos, esqueci minha
+>   senha), perfil/portfólio, avaliações e histórico. A sessão continua sendo própria do talento
+>   (`session["talent_id"]`, separada do Flask-Login do staff). As rotas Jinja de
+>   `app/talent_portal` seguem registradas em paralelo (strangler-fig), como nos demais
+>   blueprints.
 > - **Código Jinja legado das áreas já migradas**: as views/templates antigos de cada
 >   blueprint migrado (`app/admin`, `app/calendar`, `app/talents`, `app/figurino`,
 >   `app/financeiro`, `app/clientes`, `app/revisao`, `app/catalogo`, `app/cadastro`,
@@ -91,8 +93,8 @@ Manto_Platform/
 │   │   catalogo/, cadastro/, formularios/, feedback/
 │   │       ← blueprints migrados: `routes.py` (view Jinja legada, mantida) + `*_ops.py`
 │   │         (núcleo de negócio, fonte única, reusado pela API)
-│   ├── talent_portal/     ← ⚠️ Portal do Artista — FORA do escopo da migração 144, 100%
-│   │                         Jinja/vanilla ainda; ver aviso no topo deste arquivo
+│   ├── talent_portal/     ← Portal do Artista: portal_ops.py + portal_account_ops.py +
+│   │                         portal_rating_ops.py (núcleo) e routes.py (Jinja legado paralelo)
 │   ├── static/, templates/  ← Jinja2/CSS/JS legado (ainda presente, ver aviso no topo)
 │   └── storage.py          ← abstração de upload (local/S3), usada por API e Jinja legado
 │
@@ -100,7 +102,8 @@ Manto_Platform/
     ├── apps/
     │   ├── internal/        ← staff autenticado — TUDO que existe além do Portal do Artista
     │   ├── public/          ← visitante anônimo — catálogo, /cadastro, formulários, feedback
-    │   └── portal/          ← ⚠️ scaffold vazio — Portal do Artista NÃO migrado (ver aviso)
+    │   └── portal/          ← Portal do Artista (talento) — React completo desde a 191
+    ├── server.js            ← serve os 3 bundles: / (internal), /catalogo/* , /portal/*
     └── packages/
         ├── ui/               ← design system (Button, Card, Input, Skeleton, FileUpload…)
         ├── api-client/       ← apiFetch/apiFetchBlob, ApiRequestError, assetUrl (fonte única)
@@ -389,9 +392,12 @@ cd frontend; npm install
 npm run dev:internal
 # Rodar em dev — visitante anônimo (catálogo/cadastro/formulários/feedback)
 npm run dev:public
+# Rodar em dev — Portal do Artista (talento, mobile-first)
+npm run dev:portal
 
 # Checar tipos sem emitir build (rodar sempre que tocar uma tela React)
-npx tsc --noEmit          # dentro de frontend/apps/internal ou frontend/apps/public
+npx tsc --noEmit          # dentro de frontend/apps/{internal,public,portal}
+npm run typecheck         # na raiz de frontend/ — roda os três de uma vez
 
 # Build de produção (mesmo comando valida tsc + vite build)
 npm run build             # dentro do app específico

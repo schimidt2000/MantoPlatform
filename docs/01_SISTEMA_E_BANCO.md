@@ -3,8 +3,8 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-27** · Estado do repositório: pós-feature **192**
-> (`refatoracao-calculadora-orcamento`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
+> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **191**
+> (`191-portal-artista-react-auditoria`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
 
 ---
 
@@ -51,12 +51,12 @@ chamam `*_ops` e serializam.
 
 ### 1.1 Escopo migrado vs. legado
 
-- **React + API (completo)**: tudo que staff autenticado usa (`apps/internal`) e as superfícies
-  públicas anônimas (`apps/public`).
-- **Ainda 100 % Jinja2/vanilla**: o **Portal do Artista** (`app/talent_portal`) — nunca fez parte
-  da migração 144. `frontend/apps/portal` é apenas um scaffold vazio.
+- **React + API (completo)**: tudo que staff autenticado usa (`apps/internal`), as superfícies
+  públicas anônimas (`apps/public`) e o **Portal do Artista** (`apps/portal`) — este último
+  concluído pela feature 191 (fatia 176 entregou 5 telas; a 191 fechou conta, perfil, avaliações
+  e histórico).
 - **Jinja legado paralelo**: os `routes.py` dos blueprints já migrados continuam existindo
-  (padrão strangler-fig). Decomissioná-los é limpeza futura.
+  (padrão strangler-fig), **incluindo `app/talent_portal`**. Decomissioná-los é limpeza futura.
 
 ---
 
@@ -372,12 +372,52 @@ Gastos Extras quanto pelo detalhe de resposta em `/formularios`) respondia **500
 a feature 188 — `gastos_ops.search_events_by_date` comparava `func.date(start_at)` com uma string.
 Corrigido para comparar com o objeto `date`.
 
-### 3.15 Portal do Artista (API parcial, UI ainda Jinja)
-`POST /api/portal/auth/login`, `/logout` · `GET /api/portal/auth/me` ·
+### 3.15 Portal do Artista (API completa, UI em React — feature 191)
+
+O portal é um SPA próprio (`frontend/apps/portal`), servido em produção sob `/portal/*` pelo
+mesmo serviço estático dos demais bundles (`frontend/server.js`). As rotas Jinja de
+`app/talent_portal` continuam registradas em paralelo (strangler-fig, ver §3.16) — a UI React é
+o caminho oficial desde a 191.
+
+**Sessão.** Chave própria `session["talent_id"]`, separada do Flask-Login do staff. Os dois
+logins fazem `session.clear()`, então as sessões são mutuamente exclusivas: um cookie de talento
+não autentica na API de staff e vice-versa (auditado em
+`scripts/security/overnight_security_audit.py`).
+
+**RBAC.** "É o dono do recurso" — toda consulta parte do `talent_id` da sessão; nenhum endpoint
+aceita um id de talento vindo do cliente. Não há papéis dentro do portal.
+
+**Autenticação e conta**
+`POST /api/portal/auth/login`, `/logout` · `GET /api/portal/auth/me` (devolve
+`must_change_password`, `terms_accepted` e `pending_steps`) ·
+`POST /api/portal/auth/first-access` (senha temporária por e-mail) ·
+`POST /api/portal/auth/forgot-password` (silencioso — nunca revela se a conta existe) ·
+`GET /api/portal/auth/reset-password/<token>` (valida o token) ·
+`POST /api/portal/auth/reset-password` · `POST /api/portal/auth/change-password` ·
+`POST /api/portal/auth/accept-terms`.
+
+**Agenda, convites e figurino**
 `GET /api/portal/agenda` · `POST /api/portal/invites/<role_id>/{accept,reject}` ·
 `POST /api/portal/roles/<role_id>/ack-change` ·
-`GET /api/portal/events/<event_id>/figurino` ·
-`POST /api/portal/profile/{photo,document}`.
+`GET /api/portal/events/<event_id>/figurino`.
+
+**Perfil e portfólio**
+`GET|PATCH /api/portal/profile` (PATCH parcial: só as chaves enviadas mudam) ·
+`POST /api/portal/profile/{photo,document}` ·
+`POST /api/portal/profile/media/{photo,link}` · `DELETE /api/portal/profile/media/<media_id>`
+(limite de 3 fotos de atuação, links ilimitados).
+
+**Histórico e avaliações**
+`GET /api/portal/historico` (lista + somatórios pago/pendente/total) ·
+`GET /api/portal/ratings/pending` · `GET|POST /api/portal/events/<event_id>/rate` (nota geral) ·
+`POST /api/portal/events/<event_id>/rate/detail` (sub-notas).
+Janelas: **7 dias** para avaliar e **30 dias** para editar, contadas do mais recente entre o fim
+do evento e `EventRole.assigned_at` (feature 085). Nota abaixo de 4 exige comentário. Toda edição
+que muda conteúdo grava a versão anterior em `EventRatingVersion` (feature 181).
+
+**Núcleo de negócio** (fonte única, reusada pelo Jinja legado): `app/talent_portal/portal_ops.py`
+(agenda, convites, figurino, uploads, perfil, portfólio, histórico),
+`portal_account_ops.py` (credenciais e termos) e `portal_rating_ops.py` (avaliações).
 
 ### 3.16 Rotas Jinja legadas ainda registradas
 `app/__init__.py` registra, além de `api_bp`: `auth_bp` (`/auth`), `rh_bp` (`/rh`),
@@ -461,30 +501,37 @@ a autorização real está sempre no servidor.
 ### 5.1 Monorepo do frontend
 ```
 frontend/                       npm workspaces
-├── apps/internal/              ERP (staff)      → dev: npm run dev:internal  (porta 5174)
-├── apps/public/                Vitrine anônima  → dev: npm run dev:public    (porta 5175)
-├── apps/portal/                scaffold vazio (Portal do Artista NÃO migrado)
+├── apps/internal/              ERP (staff)         → dev: npm run dev:internal (porta 5173)
+├── apps/portal/                Portal do Artista   → dev: npm run dev:portal   (porta 5174)
+├── apps/public/                Vitrine anônima     → dev: npm run dev:public   (porta 5175)
 ├── packages/{ui,api-client,money}   consumidos direto do TS-fonte (sem build próprio)
-└── server.js                   servidor estático único dos DOIS SPAs
+└── server.js                   servidor estático único dos TRÊS SPAs
 ```
 
 Os pacotes compartilhados não têm build próprio: são resolvidos por alias do Vite + `paths` do
 `tsconfig.base.json` e compilados junto com cada app — não há ordem de build a orquestrar.
 
-### 5.2 Dual-SPA em um único serviço (feature 186, US6)
+### 5.2 Três SPAs em um único serviço (feature 186 US6; portal na 191)
 
 `frontend/server.js` substitui o antigo `serve --single` (que só conhece **um** `index.html` de
 fallback). Usa `serve-handler` programaticamente, uma vez por app, cada um com seu próprio
-fallback de SPA — deep link e refresh funcionam nos dois:
+fallback de SPA — deep link e refresh funcionam nos três. Os apps montados sob prefixo são
+avaliados antes do app da raiz, e o prefixo é removido de `req.url` antes de delegar:
 
 | URL pública | Diretório servido | Fallback |
 |---|---|---|
-| `/*` | `frontend/apps/internal/dist` | `index.html` do interno |
-| `/catalogo`, `/catalogo/*`, `/catalogo?*` | `frontend/apps/public/dist` (prefixo removido de `req.url`) | `index.html` do público |
+| `/catalogo`, `/catalogo/*`, `/catalogo?*` | `frontend/apps/public/dist` | `index.html` do público |
+| `/portal`, `/portal/*`, `/portal?*` | `frontend/apps/portal/dist` | `index.html` do portal |
+| `/*` (qualquer outra) | `frontend/apps/internal/dist` | `index.html` do interno |
 
-Coerência de assets: `apps/public/vite.config.ts` usa `base: "/catalogo/"` **apenas em produção**;
-`apps/public/src/App.tsx` usa `basename = import.meta.env.PROD ? "/catalogo" : undefined`. Em dev
-tudo continua na raiz.
+Coerência de assets: cada app montado usa `base` igual ao seu prefixo **apenas em produção** —
+`apps/public/vite.config.ts` (`/catalogo/`) e `apps/portal/vite.config.ts` (`/portal/`) — e passa
+o mesmo valor como `basename` ao React Router (`apps/public/src/App.tsx` usa
+`import.meta.env.PROD ? "/catalogo" : undefined`; `apps/portal/src/App.tsx` usa
+`import.meta.env.BASE_URL`). Em dev tudo continua na raiz.
+
+> O Flask também expõe `/portal/*` (Jinja legado), mas em **outro serviço e outro domínio** — não
+> há colisão. O portal React fala com o backend por `/api/portal/*` via `VITE_API_BASE_URL`.
 
 ### 5.3 Serviços no Railway
 

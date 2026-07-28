@@ -1,6 +1,6 @@
 # Relatório de Auditoria de Segurança — Plataforma Manto
 
-**Gerado em:** 28/07/2026 02:58  
+**Gerado em:** 28/07/2026 03:15  
 **Banco:** `localhost:5432/manto_local`  
 **Resultado:** 76/76 verificações passaram — **tudo OK**
 
@@ -13,7 +13,7 @@ Gerado por `scripts/security/overnight_security_audit.py` (feature 191).
 | --- | --- | --- |
 | ✅ | Portal: login do talento responde 200 | — |
 | ✅ | Portal (Talento): login emite cookie de sessão | — |
-| ✅ | Portal (Talento): cookie tem HttpOnly (bloqueia leitura por XSS) | Expires=Fri, 28 Aug 2026 05:58:19 GMT; HttpOnly; Path=/; SameSite=Lax |
+| ✅ | Portal (Talento): cookie tem HttpOnly (bloqueia leitura por XSS) | Expires=Fri, 28 Aug 2026 06:15:13 GMT; HttpOnly; Path=/; SameSite=Lax |
 | ✅ | Portal (Talento): cookie tem SameSite=Lax ou Strict (bloqueia CSRF cross-site) | SameSite=lax |
 | ✅ | Portal (Talento): flag Secure coerente com o ambiente | Secure=ausente (esperado: False) |
 | ✅ | App interno: login de staff responde 200 | — |

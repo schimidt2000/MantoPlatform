@@ -18,7 +18,7 @@ function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span
-      className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red px-1 text-[10px] font-bold text-white"
+      className="absolute -right-2 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red px-1 text-xs font-bold leading-none text-white"
       aria-label={`${count} ${count === 1 ? "pendência" : "pendências"}`}
     >
       {count > 9 ? "9+" : count}
@@ -41,7 +41,7 @@ export function PortalShell() {
   return (
     <div className="flex min-h-screen flex-col bg-bg">
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-panel px-4 py-3">
-        <Link to="/perfil" className="flex min-w-0 flex-1 items-center gap-3">
+        <Link to="/perfil" className="flex min-h-[44px] min-w-0 flex-1 items-center gap-3">
           {talent?.photo_face_url ? (
             <img
               src={assetUrl(talent.photo_face_url)}

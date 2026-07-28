@@ -1,14 +1,10 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent, Button, Skeleton } from "@manto/ui";
 import { formatBRL } from "@manto/money";
+import { formatDateTime, formatRelativeDay, formatWeekday } from "../lib/format";
 import { useAckEventChange, useAgenda, type PortalRole } from "../lib/portalAgenda";
 
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "Data a confirmar";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-}
-
-function RoleCard({ role }: { role: PortalRole }) {
+function RoleCard({ role, upcoming = false }: { role: PortalRole; upcoming?: boolean }) {
   const ackChange = useAckEventChange();
 
   return (
@@ -23,9 +19,13 @@ function RoleCard({ role }: { role: PortalRole }) {
               {role.title}
             </Link>
             <p className="text-xs text-muted">
-              {formatDateTime(role.start_at)}
+              {formatWeekday(role.start_at)}, {formatDateTime(role.start_at)}
               {role.location ? ` · ${role.location}` : ""}
             </p>
+            {/* "amanhã" / "em 5 dias" só ajuda no que ainda vai acontecer — no histórico vira ruído. */}
+            {upcoming && (
+              <p className="text-xs font-medium text-accent">{formatRelativeDay(role.start_at)}</p>
+            )}
             <p className="text-xs text-muted">Personagem: {role.character_name}</p>
           </div>
         </div>
@@ -37,7 +37,6 @@ function RoleCard({ role }: { role: PortalRole }) {
             </p>
             <Button
               variant="outline"
-              size="sm"
               loading={ackChange.isPending}
               onClick={() => ackChange.mutate(role.role_id)}
             >
@@ -93,7 +92,7 @@ export function PortalAgendaPage() {
         ) : (
           <div className="space-y-3">
             {agenda.upcoming.map((role) => (
-              <RoleCard key={role.role_id} role={role} />
+              <RoleCard key={role.role_id} role={role} upcoming />
             ))}
           </div>
         )}
