@@ -71,6 +71,38 @@ GIFT_3D_STATUSES = [
 ]
 
 
+# Feature 204: ciclo de vida de um `MarketingPost`, na ordem em que a equipe de marketing o
+# percorre — é também a ordem das colunas do Kanban de `/marketing/painel`.
+MARKETING_STATUS_IDEIA     = "ideia"
+MARKETING_STATUS_PRODUCAO  = "producao"
+MARKETING_STATUS_REVISAO   = "revisao"
+MARKETING_STATUS_AGENDADO  = "agendado"
+MARKETING_STATUS_PUBLICADO = "publicado"
+MARKETING_STATUSES = [
+    MARKETING_STATUS_IDEIA,
+    MARKETING_STATUS_PRODUCAO,
+    MARKETING_STATUS_REVISAO,
+    MARKETING_STATUS_AGENDADO,
+    MARKETING_STATUS_PUBLICADO,
+]
+
+# Feature 204: plataformas de publicação aceitas em `MarketingPost.platform`. Lista fixa e curta
+# (7 itens, abaixo do limite de 10 do Princípio X.1 — `<select>` nativo é legítimo na tela).
+MARKETING_PLATFORMS = [
+    "Instagram",
+    "TikTok",
+    "YouTube",
+    "Facebook",
+    "Kwai",
+    "LinkedIn",
+    "Outro",
+]
+
+# Feature 204: intervalo máximo aceito numa meta de frequência (5 anos em dias) — evita meta
+# absurda por dígito digitado errado.
+MARKETING_MAX_INTERVAL_DAYS = 1825
+
+
 class RoleName:
     SUPERADMIN = "SUPERADMIN"
     CASTING    = "CASTING"

@@ -2012,3 +2012,92 @@ class Event3DDismissal(db.Model):
         backref=db.backref("dispensa_3d", uselist=False, cascade="all, delete-orphan"),
     )
     dismisser = db.relationship("User", lazy=True, foreign_keys=[dismissed_by])
+
+
+# ── Gestão de Marketing e Frequência (feature 204) ──────────────────────────
+
+
+class MarketingPost(db.Model):
+    """Postagem planejada pela equipe de marketing — o card do Kanban (feature 204).
+
+    ``status`` percorre ``MARKETING_STATUSES`` (``ideia`` → ``producao`` → ``revisao`` →
+    ``agendado`` → ``publicado``); ``publish_date`` é a data em que o post foi (ou será)
+    publicado e é o que alimenta o cálculo de frequência de ``MarketingFrequencyGoal``.
+
+    Os três vínculos existem para o post não virar uma ilha:
+    - ``catalog_item_id`` — o **Tema** do catálogo de que o post fala (é por ele que a meta de
+      frequência sabe que "15 Anos" foi postado);
+    - ``review_space_id`` — vínculo **1:1** com o módulo de Revisão de Mídia (feature 088): o
+      material do post é aprovado lá, não numa segunda ferramenta paralela;
+    - ``assignee_id`` — quem está com o card na mão.
+
+    ``drive_folder_url`` é só texto de propósito: o acervo bruto (raw de filmagem) continua no
+    Google Drive do time; o sistema guarda o atalho, não o arquivo.
+    """
+
+    __tablename__ = "marketing_posts"
+    __table_args__ = (
+        db.Index("ix_marketing_posts_status", "status"),
+        db.Index("ix_marketing_posts_catalog_item_id", "catalog_item_id"),
+        db.Index("ix_marketing_posts_publish_date", "publish_date"),
+    )
+
+    id               = db.Column(db.Integer, primary_key=True)
+    title            = db.Column(db.String(200), nullable=False)
+    status           = db.Column(
+        db.String(20), nullable=False, default="ideia", server_default="ideia",
+    )
+    deadline_date    = db.Column(db.Date, nullable=True)
+    publish_date     = db.Column(db.Date, nullable=True)
+    platform         = db.Column(db.String(40), nullable=True)
+    drive_folder_url = db.Column(db.Text, nullable=True)
+    notes            = db.Column(db.Text, nullable=True)
+
+    assignee_id      = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    catalog_item_id  = db.Column(
+        db.Integer, db.ForeignKey("catalog_items.id", ondelete="SET NULL"), nullable=True
+    )
+    review_space_id  = db.Column(
+        db.Integer, db.ForeignKey("review_spaces.id", ondelete="SET NULL"),
+        nullable=True, unique=True,
+    )
+
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at       = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    assignee     = db.relationship("User", lazy="joined", foreign_keys=[assignee_id])
+    catalog_item = db.relationship("CatalogItem", lazy="joined")
+    review_space = db.relationship("ReviewSpace", lazy="joined")
+
+
+class MarketingFrequencyGoal(db.Model):
+    """Meta de frequência de postagem — "postar sobre 15 Anos a cada 15 dias" (feature 204).
+
+    O motor de metas não guarda estado de cumprimento: ``last_posted_date`` e o status derivado
+    (``on_track``/``delayed``) são **calculados na leitura** a partir dos ``MarketingPost`` já
+    publicados (ver ``app/marketing/marketing_ops.py``). Assim nada precisa ser recalculado por
+    job noturno, e mover um card para "publicado" já conserta a saúde da meta na hora.
+
+    ``catalog_item_id`` é opcional: com Tema vinculado, o casamento é exato (o post aponta para o
+    mesmo Tema); sem Tema, cai no casamento por ``name`` no título do post — é o caso de assunto
+    que não existe como item do catálogo (ex.: "Bastidores").
+    """
+
+    __tablename__ = "marketing_frequency_goals"
+    __table_args__ = (
+        db.Index("ix_marketing_frequency_goals_catalog_item_id", "catalog_item_id"),
+    )
+
+    id                  = db.Column(db.Integer, primary_key=True)
+    name                = db.Column(db.String(200), nullable=False)
+    target_interval_days = db.Column(db.Integer, nullable=False)
+    catalog_item_id     = db.Column(
+        db.Integer, db.ForeignKey("catalog_items.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at          = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    catalog_item = db.relationship("CatalogItem", lazy="joined")

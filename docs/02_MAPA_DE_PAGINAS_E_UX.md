@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **202**
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **204**
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
@@ -299,6 +299,106 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
   quadrada (`AvatarThumb`)** de cada peça do Acervo para seleção visual rápida, mais quantidade,
   prazo e observações.
 - **API**: `POST|PATCH|DELETE /api/events/<id>/3d-gifts[/<gift_id>]` · `GET /api/3d/acervo?ativos=1`.
+
+---
+
+### A.4.2 Marketing *(seção nova de navegação — feature 204)*
+
+Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), visível apenas para
+`MARKETING` e `SUPERADMIN`.
+
+#### `/marketing/painel` — Painel de Marketing
+- **Acesso**: `MARKETING`, `SUPERADMIN` (gate de servidor em `GET /api/marketing/posts`).
+- **Objetivo**: conduzir a produção de conteúdo do brainstorm ao ar, no mesmo lugar onde já vivem
+  o catálogo (o Tema do post) e a revisão de mídia (a aprovação do material).
+- **UX — alternador de visualização (Tabela ⇄ Kanban)**:
+  - Persistido em `localStorage` (`manto_marketing_painel_view`), **mesmo padrão da tela
+    `/admin/catalogo`** — a visão escolhida sobrevive ao recarregar.
+  - O "trilho" do item ativo é um `motion.span` com `layoutId` que **desliza** entre as duas
+    opções; a troca de visão é um `AnimatePresence mode="wait"` (fade + deslocamento de 8px,
+    220ms). Ambos zerados sob `useReducedMotion()`.
+- **UX — Kanban (Framer Motion)**:
+  - Cinco colunas na ordem do fluxo: 💡 Ideia · 🎬 Produção · 👀 Revisão · 📅 Agendado ·
+    🚀 Publicado, cada uma com contador e um "+" que abre o Dialog **já com aquele status
+    pré-selecionado**.
+  - Cada card tem `layoutId={"marketing-post-<id>"}` dentro de um `LayoutGroup`: ao mudar de
+    coluna, o card **desmonta de uma e monta na outra** e o Framer interpola a posição — o
+    movimento comunica a causa (o gesto) e o efeito (a nova coluna). Entrada/saída via
+    `<AnimatePresence>` (`opacity`+`scale`, 280ms).
+  - **Duas formas de mover, ambas com atualização otimista** (o card sai andando no gesto, não
+    quando a API responde; erro reverte o cache e mostra "Erro ao mover"):
+    - **Arrastar e soltar** (mouse/toque): o card é `drag` do Framer, com `whileDrag` (escala 1.04
+      + sombra), cursor `grab`/`grabbing`, alça visual (`GripVertical`) e `dragConstraints` no
+      próprio quadro — sem isso o `overflow-x-auto` recortaria o card no meio do gesto. A coluna
+      sob o ponteiro **se realça** (borda/anel `accent`) e uma coluna vazia mostra **"Solte aqui"**;
+      a coluna de origem não pisca. Enquanto o card está no ar, o quadro deixa de rolar por toque
+      (`touch-action: none`), senão a rolagem competiria com o gesto.
+      O alvo é resolvido por `elementsFromPoint` em coordenadas de **viewport** (`clientX/clientY`
+      do ponteiro, ou `changedTouches` no toque) — a pilha de elementos alcança a coluna mesmo com
+      o card levantado por cima dela. Soltar **fora de qualquer coluna** ou na mesma coluna não
+      dispara requisição: o card volta sozinho (`dragSnapToOrigin`).
+      Um arraste **não** abre o Dialog: o card guarda em `ref` que houve arraste e ignora o `click`
+      que vem depois do `pointerup` (o `ref` é zerado no `pointerdown` seguinte).
+    - **Setas ◀ ▶** no rodapé do card, para etapa anterior/seguinte — é o caminho de **teclado**
+      (arrastar não é acessível por teclado) e o confortável em tela estreita. Uma linha de ajuda
+      abaixo do quadro explica as duas formas.
+  - O card mostra miniatura **quadrada** do Tema, título, plataforma, selo de urgência do prazo
+    (`Atrasado Xd`/`Hoje` em vermelho, `≤3d` em dourado), situação do espaço de revisão, ícone de
+    pasta quando há acervo no Drive, avatar **circular** do responsável e a data de publicação.
+  - Rolagem horizontal fica **dentro** do quadro (`overflow-x-auto`) — a página nunca rola na
+    horizontal, nem em 375px.
+- **UX — tabela densa**: `Table` de `@manto/ui` (Postagem · Responsável · Plataforma · Status ·
+  Prazo · Publicação · Revisão · Ações), ótima para varrer datas de publicação; o badge de revisão
+  é link direto para `/revisao/:id`.
+- **Estados**: `Skeleton` no carregamento, alerta em pt-BR no erro e vazio explicando que o card
+  nasce na primeira coluna.
+- **API**: `GET /api/marketing/posts` · `POST /api/marketing/posts` ·
+  `PATCH|DELETE /api/marketing/posts/<id>` · `GET /api/marketing/opcoes`.
+
+#### `/marketing/painel` → **Card de Postagem** *(Dialog de edição)*
+- **Vínculo com o catálogo**: o Tema é escolhido no **`Combobox` de `@manto/ui`** com
+  `AvatarThumb` **quadrada** da capa (Princípio X.1/X.2) — seleção visual, não por nome digitado.
+  O responsável usa o mesmo `Combobox`, com avatar **circular** (pessoa).
+- `Status` e `Plataforma` são `<select>` nativos legítimos (5 e 7 opções — abaixo do limite de 10
+  do Princípio X.1); as plataformas vêm do servidor (`MARKETING_PLATFORMS`).
+- **Botão do Google Drive**: com `drive_folder_url` preenchido, aparece um botão visualmente
+  distinto (contorno/fundo dourados + ícone de pasta) — **"Abrir Acervo de Mídia no Drive"** —
+  com `target="_blank"` e `rel="noreferrer noopener"`. O servidor só aceita `http(s)`.
+- **Ponte com a Revisão**: sem espaço vinculado, o botão **"Criar Espaço de Revisão"** cria o
+  espaço com o título do post em um clique; com espaço, o bloco vira um botão grande
+  **"Ir para Revisão →"** (`/revisao/:id`) mais a situação (`SEM MATERIAL`/`EM REVISÃO`/
+  `PRECISA DE AJUSTES`/`APROVADO`) e a contagem de materiais aprovados.
+- **Erro de validação nunca limpa o formulário** (Princípio V): o `fields` do 400 vira mensagem no
+  campo exato; a limpeza só acontece no sucesso (remount por `key`).
+- **Exclusão** com confirmação em duas etapas **dentro do próprio Dialog** ("Excluir
+  definitivamente"), sem `window.confirm` e sem Dialog aninhado.
+- O Dialog lê o post **do cache do TanStack Query** (não de uma cópia em estado): criar o espaço
+  de revisão altera o post pela API, e uma cópia congelada seguiria oferecendo "Criar Espaço de
+  Revisão" depois de o espaço já existir.
+- **API**: `POST /api/marketing/posts/<id>/create-review` · `PATCH|DELETE /api/marketing/posts/<id>`.
+
+#### `/marketing/metas` — Metas de Frequência (*Health Dashboard*)
+- **Acesso**: `MARKETING`, `SUPERADMIN` (gate de servidor em `GET /api/marketing/goals`).
+- **Objetivo**: responder de relance **qual assunto está pedindo post agora**, a partir das regras
+  combinadas em reunião (ex.: "Festa de 15 Anos a cada 15 dias").
+- **UX**:
+  - Faixa de resumo no topo: 🚨 "N assunto(s) precisando de post" (vermelho) ou ✅ "Todos os
+    assuntos em dia" (verde), com "X em dia · Y meta(s) acompanhada(s)".
+  - Um card por meta, **ordenados por urgência** (sem posts → mais atrasados → em dia): miniatura
+    quadrada do Tema (ou ícone de alvo quando a meta não tem Tema), intervalo alvo, selo
+    `SEM POSTS`/`ATRASADO Xd`/`EM DIA` **com ícone** (nada depende só da cor), frase de urgência,
+    barra de consumo do intervalo, "Último post" e "Próximo previsto".
+  - CRUD da meta em `Dialog`: nome, intervalo em dias (com atalhos 7/15/30) e `Combobox` de Tema —
+    com Tema o casamento com os posts é exato, sem Tema cai no casamento pelo nome no título.
+  - Exclusão com confirmação em duas etapas dentro do card.
+  - Entrada dos cards e reordenação com Framer Motion (`layout` + `AnimatePresence`), respeitando
+    `useReducedMotion()`.
+- **Regra de negócio visível na tela**: o status é derivado no servidor a partir dos posts
+  publicados — mover um card do Kanban para "Publicado" conserta a saúde da meta na hora (e um post
+  publicado sem data ganha a data de hoje automaticamente).
+- **API**: `GET|POST /api/marketing/goals` · `PATCH|DELETE /api/marketing/goals/<id>` ·
+  `GET /api/marketing/opcoes`.
+- **Vínculos**: Meta → Tema do catálogo (`CatalogItem`) → postagens publicadas (`MarketingPost`).
 
 ---
 
@@ -729,6 +829,14 @@ feature 191; decomissioná-las é limpeza futura.
    Formulário de pré-contrato (FormResponse.event_id)
              └──► Fila de Impressão 3D: idade e nº de aniversariantes lidos direto das
                   respostas da cliente, cruzados com os Personagens contratados
+
+   Catálogo (Tema) ──── MarketingPost.catalog_item_id ────► Postagem de Marketing
+             │                                                    │ 1:1
+             │                                                    ├──► Espaço de Revisão
+             │                                                    │    (review_space_id)
+             │                                                    └──► Responsável (users)
+             └──── MarketingFrequencyGoal.catalog_item_id ────► Meta de Frequência
+                       (saúde derivada dos posts publicados do mesmo Tema)
 ```
 
 Pontos de atenção recorrentes:
@@ -739,3 +847,9 @@ Pontos de atenção recorrentes:
    em `/figurinos` e o fluxo de associação/dispensa.
 4. **Presente 3D é exclusivo de evento `SHOW`** — a API recusa o vínculo em qualquer outro tipo,
    e a seção nem aparece na tela do evento (feature 200).
+5. **Postagem ↔ Espaço de Revisão é 1:1** (`marketing_posts.review_space_id` é UNIQUE) — a segunda
+   tentativa de criar o espaço devolve 400. Excluir a postagem **não** apaga o espaço: materiais e
+   comentários da revisão têm vida própria (feature 204).
+6. **A meta de frequência não tem estado próprio** — `on_track`/`delayed` é calculado na leitura a
+   partir dos posts publicados. Sem `publish_date` o post não conta, daí a data automática ao mover
+   o card para "Publicado" (feature 204).
