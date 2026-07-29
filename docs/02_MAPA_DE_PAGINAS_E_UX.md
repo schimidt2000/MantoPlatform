@@ -443,7 +443,7 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   `font-bold text-ink` para manter o contraste sobre os quatro fundos. O seletor de situação e o
   badge "⏳ Futuro" usam a mesma paleta, então a cor do card clicado é a cor das linhas reveladas.
 - **Situação**: seletor por linha com as opções que o backend suporta — **Não pago · No banco ·
-  Pago** (comissão e conta recorrente não têm "No banco").
+  Pago** — as 3 valem para todos os tipos, inclusive comissão e conta recorrente (feature 199).
 - **Ações em lote** *(barra no topo da tabela, feature 194)*: aparece com 1+ itens marcados
   (animação `AnimatePresence`, respeitando `useReducedMotion`) e some ao voltar a 0. Mostra
   **`"X selecionados • R$ Y.YYY,YY"`** — a soma dos itens marcados, calculada no estado do React

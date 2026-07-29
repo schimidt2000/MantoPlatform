@@ -77,12 +77,12 @@ def api_set_payment_status() -> Any:
             return json_error("Status inválido para este item", 400)
         p_start = date(py, pm, 1)
         p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
-        target = "pago" if status == "pago" else "a_pagar"
+        target = status if status in ("pago", "no_banco") else "a_pagar"
         rows = CommissionPayment.query.filter(
             CommissionPayment.seller_id == seller_id,
             CommissionPayment.sale_date >= p_start,
             CommissionPayment.sale_date < p_end,
-            CommissionPayment.status.in_(["a_pagar", "pago"]),
+            CommissionPayment.status.in_(["a_pagar", "no_banco", "pago"]),
         ).all()
         for c in rows:
             c.status = target
@@ -95,16 +95,19 @@ def api_set_payment_status() -> Any:
             f"Comissões {period_tag}: → {target} ({len(rows)} itens) (API)",
         )
         db.session.commit()
-        return jsonify({"status": "pago" if target == "pago" else "nao_pago"})
+        return jsonify({"status": target if target != "a_pagar" else "nao_pago"})
 
     if item_type == "recurring":
         entry = RecurringExpenseEntry.query.get(_to_int(item_id))
-        if not entry or entry.status not in ("a_pagar", "pago"):
+        if not entry or entry.status not in ("a_pagar", "no_banco", "pago"):
             return json_error("Status inválido para este item", 400)
         old = entry.status
         if status == "pago":
             entry.status = "pago"
             entry.paid_at = date.today()
+        elif status == "no_banco":
+            entry.status = "no_banco"
+            entry.paid_at = None
         else:
             entry.status = "a_pagar"
             entry.paid_at = None
@@ -117,7 +120,7 @@ def api_set_payment_status() -> Any:
             f"Conta recorrente: {old} → {entry.status} | {entry.month_ref} (API)",
         )
         db.session.commit()
-        return jsonify({"status": "pago" if status == "pago" else "nao_pago"})
+        return jsonify({"status": status if status in ("pago", "no_banco") else "nao_pago"})
 
     if item_type == "salary":
         sp = SalaryPayment.query.get(_to_int(item_id))
@@ -203,12 +206,12 @@ def _bulk_set_commission_period(commission_id: str, action: str) -> bool:
         return False
     p_start = date(py, pm, 1)
     p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
-    target = "pago" if action == "pago" else "a_pagar"
+    target = action if action in ("pago", "no_banco") else "a_pagar"
     rows = CommissionPayment.query.filter(
         CommissionPayment.seller_id == seller_id,
         CommissionPayment.sale_date >= p_start,
         CommissionPayment.sale_date < p_end,
-        CommissionPayment.status.in_(["a_pagar", "pago"]),
+        CommissionPayment.status.in_(["a_pagar", "no_banco", "pago"]),
     ).all()
     for c in rows:
         c.status = target
@@ -320,13 +323,9 @@ def api_bulk_payment_action() -> Any:
                     exp.payee_name,
                     f"Bulk desembolso gasto: {old} → {action} | {exp.description} (API)",
                 )
-        if commission_ids:
-            if action == "no_banco":
-                skipped.append(f"{len(commission_ids)} comissão(ões) — não têm estado 'no banco'")
-            else:
-                for cid in commission_ids:
-                    if _bulk_set_commission_period(cid, action):
-                        changed += 1
+        for cid in commission_ids:
+            if _bulk_set_commission_period(cid, action):
+                changed += 1
         db.session.commit()
     else:
         return json_error("Ação inválida", 400)

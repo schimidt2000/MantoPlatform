@@ -739,8 +739,9 @@ class CommissionPayment(db.Model):
     """Rastreamento individual de comissões de vendedores.
 
     status:
-      a_pagar  — pendente de pagamento no próximo ciclo (dia 5)
-      pago     — marcado como pago pelo financeiro
+      a_pagar   — pendente de pagamento no próximo ciclo (dia 5)
+      no_banco  — enviado ao banco, aguardando confirmação de compensação (feature 199)
+      pago      — marcado como pago pelo financeiro
       cancelado — evento cancelado antes do pagamento; sem movimentação financeira
 
     Para estorno (evento cancelado após pagamento), cria-se uma nova linha com
@@ -1080,10 +1081,11 @@ class RecurringExpense(db.Model):
 class RecurringExpenseEntry(db.Model):
     """Lançamento mensal de um gasto recorrente (feature 110) — um por conta/mês.
 
-    Estados: ``a_pagar`` (variável preenchida, entra na planilha de pagamentos) → ``pago``;
-    ``registrado`` (fixos, criado automaticamente, nunca vira pendência); ``pulado``
-    (variável cujo boleto não veio no mês — sem valor). "Aguardando valor" não é linha no
-    banco: é a ausência de lançamento no mês para conta variável ativa.
+    Estados: ``a_pagar`` (variável preenchida, entra na planilha de pagamentos) → ``no_banco``
+    (enviado ao banco, aguardando compensação — feature 199) → ``pago``; ``registrado`` (fixos,
+    criado automaticamente, nunca vira pendência); ``pulado`` (variável cujo boleto não veio no
+    mês — sem valor). "Aguardando valor" não é linha no banco: é a ausência de lançamento no mês
+    para conta variável ativa.
     """
     __tablename__ = "recurring_expense_entries"
     __table_args__ = (
@@ -1092,7 +1094,7 @@ class RecurringExpenseEntry(db.Model):
         db.Index("ix_recurring_entries_status", "status"),
     )
 
-    STATUSES = ["a_pagar", "pago", "registrado", "pulado"]
+    STATUSES = ["a_pagar", "no_banco", "pago", "registrado", "pulado"]
 
     id           = db.Column(db.Integer, primary_key=True)
     recurring_id = db.Column(db.Integer, db.ForeignKey("recurring_expenses.id"), nullable=False)

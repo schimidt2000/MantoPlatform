@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **197**
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **199**
 
 Formato de cada entrada:
 
@@ -17,6 +17,63 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 199 — Liberação do status 'No banco' para Comissões e Recorrentes
+`199-no-banco-comissoes-recorrentes` · **2026-07-29** · **sem migration**
+
+**Motivação.** A feature 189 restringiu de propósito "No banco" para itens `commission` e
+`recurring` na Planilha de Pagamentos (`/financeiro/pagamentos`): em lote o backend devolvia o
+item em `skipped` e a UI nem oferecia a opção no seletor. A operação do setor financeiro mudou —
+hoje esses dois tipos também passam pelo mesmo fluxo bancário dos demais (cachê, salário, gasto,
+BV) — então a trava intencional virou bloqueio indevido. Passou a ser exigido que os 3 status
+(`nao_pago`/`no_banco`/`pago`) valham para **todos** os tipos de pagamento, sem exceção.
+
+**O que mudou.**
+
+- **Backend.**
+  - `app/models.py`: docstrings de `CommissionPayment.status` e `RecurringExpenseEntry` (+
+    `STATUSES`) passaram a documentar `no_banco` — o campo já era `db.String` livre, sem
+    migration necessária.
+  - **A causa raiz real não estava no endpoint de escrita, e sim na leitura**:
+    `_build_commission_items`/`_build_recurring_items` (`app/financeiro/routes.py`) filtravam a
+    query em `.in_(["a_pagar", "pago"])` — um item marcado `no_banco` **desaparecia da
+    planilha** em vez de só não oferecer a opção. Ambos os filtros agora incluem `no_banco`, e o
+    status do item agregado de comissão passou de binário (`pago`/`nao_pago`) para as 3 faixas
+    (`pago` se todas as linhas do vendedor/período estão pagas, `no_banco` se todas estão no
+    banco, `nao_pago` no resto/misto).
+  - `set_payment_status`/`api_set_payment_status` (`app/financeiro/routes.py` e
+    `app/api/financeiro_write.py`, mantidos em paridade manual — este módulo não usa `*_ops.py`
+    compartilhado): o ramo `commission` calculava `target = "pago" if status == "pago" else
+    "a_pagar"`, colapsando qualquer pedido de `no_banco` em `"a_pagar"` sem persistir nada; agora
+    `target` aceita `pago`/`no_banco`/cai em `a_pagar` só para `nao_pago`. O ramo `recurring`
+    tinha o mesmo colapso binário — ganhou o `elif status == "no_banco"`. Os filtros de status
+    "aceito para reconsulta" (`CommissionPayment.status.in_(...)` /
+    `entry.status not in (...)`) também passaram a incluir `no_banco`, senão um item já marcado
+    não seria reencontrado para sair desse estado.
+  - `_bulk_set_commission_period`/`bulk_payment_action`/`api_bulk_payment_action`: removida a
+    trava explícita que devolvia `commission_ids` em `skipped` com a mensagem "não têm estado
+    'no banco'" quando `action == "no_banco"`; o helper de bulk ganhou a mesma correção de
+    mapeamento/filtro do endpoint individual.
+- **Banco.** Nada — status seguem como string livre nas duas tabelas.
+- **Frontend.** `frontend/apps/internal/src/pages/PagamentosPage.tsx`:
+  `STATUS_OPTIONS_BY_TYPE` para `commission` e `recurring` passou de `["nao_pago", "pago"]` para
+  `["nao_pago", "no_banco", "pago"]`, igual aos demais tipos; comentário que documentava a
+  restrição intencional foi atualizado. `SELECTABLE_TYPES` **não** ganhou `recurring` — contas
+  recorrentes nunca foram selecionáveis para ação em lote (limitação preexistente e
+  independente do bug de `no_banco`; o backend de bulk-action não recebe `recurring_ids`), e
+  estender isso é fora do escopo desta mudança.
+- **Impacto em RBAC**: nenhum — mesmo gate `FINANCEIRO`/`SUPERADMIN` de sempre.
+- **Verificação.** `scripts/db/verify_199_no_banco_comissao_recorrente.py` contra `manto_local`
+  (test client, fora de `app_context`): set-status individual `commission`/`recurring`
+  percorrendo os 3 status e voltando; `GET /api/financeiro/pagamentos` confirmando que um item
+  em `no_banco` continua listado (e soma em `totals.no_banco`) em vez de sumir; bulk-action com
+  `action=no_banco` para `commission_ids` deixando de cair em `skipped`. 16/16 checks.
+- **Pegadinha para quem mexer aqui de novo**: este módulo **duplica** a lógica de
+  `set_payment_status`/`bulk_payment_action` entre a view Jinja legada
+  (`app/financeiro/routes.py`) e a API (`app/api/financeiro_write.py`) — não há um `*_ops.py`
+  compartilhado como nos blueprints mais novos. Qualquer correção de regra de negócio aqui
+  precisa ser replicada nos dois lugares manualmente (como foi feito nesta feature), ou vai
+  divergir de novo.
 
 ### 197 — Refatoração do Dashboard de Avaliações de Clientes
 `197-dashboard-avaliacoes-clientes` · **2026-07-28** · **sem migration**

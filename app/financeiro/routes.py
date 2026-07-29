@@ -1006,7 +1006,7 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
     rows = (
         CommissionPayment.query
         .filter(
-            CommissionPayment.status.in_(["a_pagar", "pago"]),
+            CommissionPayment.status.in_(["a_pagar", "no_banco", "pago"]),
             cycle_date >= period_start,
             cycle_date < period_end,
         )
@@ -1023,7 +1023,12 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
         if total == 0:
             continue
         seller = User.query.get(seller_id)
-        all_paid = all(c.status == "pago" for c in lst)
+        if all(c.status == "pago" for c in lst):
+            status = "pago"
+        elif all(c.status == "no_banco" for c in lst):
+            status = "no_banco"
+        else:
+            status = "nao_pago"
         pix = (seller.pix_key or "").strip() if seller and seller.pix_key else ""
         items.append({
             "type":        "commission",
@@ -1037,7 +1042,7 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
             "amount":      total,
             "pix_key":     pix,
             "pix_key_type": seller.pix_key_type if seller else "",
-            "status":      "pago" if all_paid else "nao_pago",
+            "status":      status,
             "is_future":   due_date > today,
         })
     return items
@@ -1054,7 +1059,7 @@ def _build_recurring_items(year: int, month: int, today: date) -> list:
         RecurringExpenseEntry.query
         .filter(
             RecurringExpenseEntry.month_ref == month_ref,
-            RecurringExpenseEntry.status.in_(["a_pagar", "pago"]),
+            RecurringExpenseEntry.status.in_(["a_pagar", "no_banco", "pago"]),
         )
         .all()
     )
@@ -1079,7 +1084,7 @@ def _build_recurring_items(year: int, month: int, today: date) -> list:
             "amount":      e.amount,
             "pix_key":     (e.pix or "").strip(),
             "pix_key_type": "",
-            "status":      "pago" if e.status == "pago" else "nao_pago",
+            "status":      e.status if e.status in ("pago", "no_banco") else "nao_pago",
             "is_future":   item_date > today,
         })
     return items
@@ -1210,12 +1215,12 @@ def set_payment_status():
             return _bad()
         p_start = date(py, pm, 1)
         p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
-        target = "pago" if status == "pago" else "a_pagar"
+        target = status if status in ("pago", "no_banco") else "a_pagar"
         rows = CommissionPayment.query.filter(
             CommissionPayment.seller_id == seller_id,
             CommissionPayment.sale_date >= p_start,
             CommissionPayment.sale_date < p_end,
-            CommissionPayment.status.in_(["a_pagar", "pago"]),
+            CommissionPayment.status.in_(["a_pagar", "no_banco", "pago"]),
         ).all()
         for c in rows:
             c.status = target
@@ -1223,17 +1228,19 @@ def set_payment_status():
         audit("payment", "commission", seller_id, "",
               f"Comissões {period_tag}: → {target} ({len(rows)} itens)")
         db.session.commit()
-        # Para a UI, comissão só tem "pago" ou "nao_pago".
-        return _done("pago" if target == "pago" else "nao_pago")
+        return _done(target if target != "a_pagar" else "nao_pago")
 
     if item_type == "recurring":
-        # Feature 110: lançamento de conta recorrente — só "pago" / "a pagar" (sem "no banco").
+        # Feature 199: conta recorrente aceita "no banco" como as demais fontes de pagamento.
         entry = RecurringExpenseEntry.query.get(int(item_id))
-        if entry and entry.status in ("a_pagar", "pago"):
+        if entry and entry.status in ("a_pagar", "no_banco", "pago"):
             old = entry.status
             if status == "pago":
                 entry.status = "pago"
                 entry.paid_at = date.today()
+            elif status == "no_banco":
+                entry.status = "no_banco"
+                entry.paid_at = None
             else:
                 entry.status = "a_pagar"
                 entry.paid_at = None
@@ -1241,7 +1248,7 @@ def set_payment_status():
             audit("payment", "recurring_expense", entry.id, conta_nome,
                   f"Conta recorrente: {old} → {entry.status} | {entry.month_ref}")
             db.session.commit()
-        return _done("pago" if status == "pago" else "nao_pago")
+        return _done(status if status in ("pago", "no_banco") else "nao_pago")
 
     if item_type == "salary":
         sp = SalaryPayment.query.get(int(item_id))
@@ -1390,12 +1397,12 @@ def _bulk_set_commission_period(commission_id: str, action: str) -> bool:
         return False
     p_start = date(py, pm, 1)
     p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
-    target = "pago" if action == "pago" else "a_pagar"
+    target = action if action in ("pago", "no_banco") else "a_pagar"
     rows = CommissionPayment.query.filter(
         CommissionPayment.seller_id == seller_id,
         CommissionPayment.sale_date >= p_start,
         CommissionPayment.sale_date < p_end,
-        CommissionPayment.status.in_(["a_pagar", "pago"]),
+        CommissionPayment.status.in_(["a_pagar", "no_banco", "pago"]),
     ).all()
     for c in rows:
         c.status = target
@@ -1479,13 +1486,9 @@ def bulk_payment_action():
                 changed += 1
                 audit("payment", "special_expense", exp.id, exp.payee_name,
                       f"Bulk desembolso gasto: {old} → {action} | {exp.description}")
-        if commission_ids:
-            if action == "no_banco":
-                skipped.append(f"{len(commission_ids)} comissão(ões) — não têm estado 'no banco'")
-            else:
-                for cid in commission_ids:
-                    if _bulk_set_commission_period(cid, action):
-                        changed += 1
+        for cid in commission_ids:
+            if _bulk_set_commission_period(cid, action):
+                changed += 1
         db.session.commit()
         flash(f"{changed} item(ns) atualizado(s).", "success")
 

@@ -310,7 +310,7 @@ Avaliações: `GET /api/ratings` · `POST /api/ratings/modo-anonimo`.
 | GET | `/api/financeiro/comissoes` | **feature 187** — KPIs + `by_seller` + `entries` + `can_manage` + `sellers` |
 | GET | `/api/financeiro/pagamentos` | planilha de pagamentos |
 | POST | `/api/financeiro/comissoes/pagar-mes` | **feature 187** — liquidação em lote atômica |
-| POST | `/api/financeiro/pagamentos/set-status`, `/bulk-action` | Status válidos: **`nao_pago` \| `pago` \| `no_banco`** (`_VALID_PAYMENT_STATUS`) — não existem `pendente`/`agendado`. `bulk-action` aceita os 3 + `delete`; itens `commission` não têm `no_banco` e voltam em `skipped` |
+| POST | `/api/financeiro/pagamentos/set-status`, `/bulk-action` | Status válidos: **`nao_pago` \| `pago` \| `no_banco`** (`_VALID_PAYMENT_STATUS`) — não existem `pendente`/`agendado`. **Feature 199**: os 3 status valem para TODOS os tipos de item (`cache`/`salary`/`expense`/`bv`/`commission`/`recurring`), inclusive `bulk-action`; `_build_commission_items`/`_build_recurring_items` (`app/financeiro/routes.py`) passaram a incluir `no_banco` no filtro de leitura — antes esses itens sumiam da planilha ao virar `no_banco` |
 | POST | `/api/financeiro/pagamentos/salary/<sp_id>/advance`, `/salary/advance/<adv_id>/delete` | |
 | GET | `/api/financeiro/pagamentos/export` | CSV |
 

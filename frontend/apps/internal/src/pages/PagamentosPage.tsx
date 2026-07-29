@@ -50,16 +50,15 @@ const SELECTABLE_TYPES: PagamentoItemType[] = ["cache", "salary", "expense", "co
 
 /**
  * Situações aceitas pelo backend por tipo de item (`_VALID_PAYMENT_STATUS` em
- * `app/api/financeiro_write.py`). Comissão e conta recorrente não têm estado "no banco" — o
- * seletor não oferece a opção nesses casos, em vez de deixar o backend rejeitar.
+ * `app/api/financeiro_write.py`). Todos os tipos aceitam as mesmas 3 situações (feature 199).
  */
 const STATUS_OPTIONS_BY_TYPE: Record<PagamentoItemType, PaymentStatus[]> = {
   cache: ["nao_pago", "no_banco", "pago"],
   salary: ["nao_pago", "no_banco", "pago"],
   expense: ["nao_pago", "no_banco", "pago"],
   bv: ["nao_pago", "no_banco", "pago"],
-  commission: ["nao_pago", "pago"],
-  recurring: ["nao_pago", "pago"],
+  commission: ["nao_pago", "no_banco", "pago"],
+  recurring: ["nao_pago", "no_banco", "pago"],
 };
 
 /**
