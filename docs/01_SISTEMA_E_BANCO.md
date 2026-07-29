@@ -3,9 +3,9 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **202**
-> (`202-fila-3d-por-evento`) · Head de migration: `e4f7b2c9a350`
-> (*pendencia 3d por evento show*)
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **204**
+> (`204-modulo-marketing-frequencia`) · Head de migration: `a3c7e1d59f42`
+> (*modulo de gestao de marketing e frequencia*)
 
 ---
 
@@ -263,6 +263,34 @@ Pontos que valem para quem for ler esses dados:
 | `review_reviewers` | `ReviewReviewer` | revisores atribuídos ao espaço | `space_id`, `user_id` |
 | `review_comments` | `ReviewComment` | comentários com resolução | `asset_id`, `user_id`, `resolved_by` |
 
+### 2.9.1 Gestão de Marketing e Frequência (feature 204)
+
+| Tabela | Model | Destaques | FKs |
+|---|---|---|---|
+| `marketing_posts` | `MarketingPost` | card do Kanban de planejamento: `title`, `status` (`ideia`\|`producao`\|`revisao`\|`agendado`\|`publicado`), `deadline_date`, `publish_date`, `platform` (lista fixa `MARKETING_PLATFORMS`), `drive_folder_url` (texto — o acervo bruto segue no Drive), `notes`, `created_at`/`updated_at`; índices em `status`, `catalog_item_id` e `publish_date` | `assignee_id`→`users`, `catalog_item_id`→`catalog_items`, `review_space_id`→`review_spaces` (**UNIQUE**) — os três **ON DELETE SET NULL** |
+| `marketing_frequency_goals` | `MarketingFrequencyGoal` | regra de frequência ("15 Anos a cada 15 dias"): `name`, `target_interval_days`, `created_at` | `catalog_item_id`→`catalog_items` (**ON DELETE SET NULL**, opcional) |
+
+**Semântica importante**
+- **As três FKs são `SET NULL` de propósito**: apagar um usuário, um Tema do catálogo ou um espaço
+  de revisão **não pode** apagar o planejamento de marketing junto. `review_space_id` é **UNIQUE** —
+  o vínculo com a Revisão de Mídia é 1:1 por definição.
+- **A meta não guarda estado de cumprimento.** `last_posted_date`, `next_due_date`, `days_late` e
+  o status derivado (`on_track`/`delayed`) são **calculados na leitura** por
+  `marketing_ops.goal_health()` a partir dos posts publicados — nada de job noturno, e mover um
+  card para "publicado" conserta a saúde da meta na hora.
+- **Casamento meta ↔ post, em dois modos**: com `catalog_item_id`, casa por Tema (exato); sem
+  Tema, casa pelo `name` da meta contido no título do post (`ILIKE`, com os curingas escapados) —
+  serve para assunto que não existe no catálogo (ex.: "Bastidores"). Só entram posts com
+  `status = 'publicado'` **e** `publish_date` preenchida.
+- Meta **sem nenhum post publicado** é `delayed` com `never_posted = True`: nunca ter postado é o
+  atraso máximo, não "em dia".
+- **Regra de negócio do `publish_date`**: marcar um post como `publicado` sem data preenche a data
+  de hoje automaticamente (`_autofill_publish_date`) — sem isso o post não contaria para a
+  frequência. Sair de "publicado" **não** apaga a data.
+- Excluir um post **não** exclui o `ReviewSpace` vinculado: materiais e comentários da revisão têm
+  vida própria. Núcleo de negócio em `app/marketing/marketing_ops.py`; a criação do espaço reusa
+  `review_ops.create_space` (Princípio I).
+
 ### 2.10 Configuração global
 
 `site_settings` (`SiteSetting`, **linha única id=1**) concentra: identidade visual
@@ -275,14 +303,14 @@ Pontos que valem para quem for ler esses dados:
 ### 2.11 Migrations
 
 - Alembic via Flask-Migrate, **sempre escritas à mão** (`migrations/versions/`).
-- Head atual: **`e4f7b2c9a350`** — *pendencia 3d por evento show* (feature 202).
+- Head atual: **`a3c7e1d59f42`** — *modulo de gestao de marketing e frequencia* (feature 204).
 - Cadeia recente: `27acb021e8d6` → `aa1bb2cc3dd4` (review asset status) → `7c2d9e4f1a3b`
   (figurino_missing_dismissals) → `4e6f8a1c2d5b` (figurino_sheet tags) → `9f1c3a7b5e2d`
   (catalog characters) → `c8d2f4a6b013` (impressões 3D) → `d9e3a5b7c124` (multi-arquivos)
-  → `e4f7b2c9a350`.
-- Features **186**, **187** e **199** não geraram migration (reusaram colunas existentes).
-- O papel `ARTISTA_3D` **não** vem por migration: papéis são linhas de `roles` semeadas por
-  `seed.py` (mesmo tratamento de `MARKETING`/`REVENDEDOR_EDUCAMANTO`), e o Railway roda
+  → `e4f7b2c9a350` (pendência 3D por evento) → `a3c7e1d59f42` (marketing).
+- Features **186**, **187**, **199** e **203** não geraram migration (reusaram colunas existentes).
+- Os papéis `ARTISTA_3D` e `MARKETING` **não** vêm por migration: papéis são linhas de `roles`
+  semeadas por `seed.py` (mesmo tratamento de `REVENDEDOR_EDUCAMANTO`), e o Railway roda
   `flask db upgrade && python seed.py` no start.
 - Produção aplica `flask db upgrade && python seed.py` no start (ver `railway.json`).
 
@@ -510,6 +538,33 @@ no máximo 5 itens, descartando predições sem `description`.
   caminho salvo é um UUID, `Acervo3DFile.original_name` guarda o nome enviado — é o que diz qual
   parte do modelo é qual (`corpo.stl`, `argola.3mf`).
 
+### 3.13.3 Marketing e Frequência — `marketing_read.py` / `marketing_write.py` (feature 204)
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET` | `/api/marketing/posts` | Planejamento completo. `?status=` (validado — status inválido devolve 400) e `?responsavel=<user_id>` filtram. Ordena por prazo mais apertado (sem prazo vai para o fim). Devolve também `statuses` e `plataformas` — a interface monta as colunas do Kanban e o seletor a partir do servidor. |
+| `GET` | `/api/marketing/posts/<id>` | Detalhe de uma postagem (mesmo payload da lista). |
+| `POST` | `/api/marketing/posts` | Cria postagem (JSON). Campos: `title` (obrigatório), `status`, `deadline_date`, `publish_date`, `platform`, `drive_folder_url`, `notes`, `assignee_id`, `catalog_item_id`. |
+| `PATCH` | `/api/marketing/posts/<id>` | Edição **parcial** (campo ausente = não alterar; `null` = limpar). É o endpoint da troca de coluna do Kanban. |
+| `DELETE` | `/api/marketing/posts/<id>` | Exclui a postagem — o `ReviewSpace` vinculado **sobrevive**. |
+| `POST` | `/api/marketing/posts/<id>/create-review` | **Ponte com a Revisão de Mídia**: cria um `ReviewSpace` com o título do post (via `review_ops.create_space`), vincula 1:1 e devolve `{review_space_id, post}` para o frontend redirecionar a `/revisao/<id>`. **400** se já houver espaço vinculado. |
+| `GET` | `/api/marketing/goals` | Metas com a saúde calculada: `last_posted_date`, `last_post_id`, `next_due_date`, `days_since_last_post`, `days_late`, `never_posted` e `status` (`on_track`\|`delayed`), mais `delayed_count` no topo. |
+| `POST` | `/api/marketing/goals` | Cria meta (`name`, `target_interval_days` 1–1825, `catalog_item_id` opcional). |
+| `PATCH` | `/api/marketing/goals/<id>` | Edita a meta; a resposta já vem com a saúde recalculada. |
+| `DELETE` | `/api/marketing/goals/<id>` | Exclui a meta (as postagens seguem intactas). |
+| `GET` | `/api/marketing/opcoes` | Opções dos `Combobox`: `temas` (Temas **ativos** do catálogo com `cover_url`), `usuarios` (ativos e com acesso, com `photo_url`) e `plataformas`. Existe porque `/api/admin/catalogo` é exclusivo de `SUPERADMIN` — `MARKETING` precisa dos Temas sem ganhar acesso à gestão do catálogo. |
+
+- **RBAC**: todos exigem `MARKETING` **ou** `SUPERADMIN` (`require_marketing_access()` em
+  `marketing_read.py`, chamada no início de cada view — função, não decorator, conforme §4.3).
+  Sem sessão → 401; papel errado → 403.
+- **Validação com campo culpado**: `MarketingValidationError(field, message)` vira
+  `json_error(msg, 400, fields={campo: msg})` — o React destaca o campo exato (Princípio V).
+  Casos cobertos: título vazio, status fora do fluxo, plataforma fora da lista fixa,
+  `drive_folder_url` que não começa com `http(s)` (um `javascript:` iria para um `target="_blank"`),
+  data fora de `AAAA-MM-DD`, Tema/responsável inexistentes, intervalo de meta fora de 1–1825.
+- **`publish_date` automática**: `PATCH {"status": "publicado"}` sem data preenche hoje — é o que
+  faz o post contar para as metas de frequência (ver §2.9.1).
+
 ### 3.14 Superfícies públicas (sem login)
 `GET /api/cadastro/check-cpf` · `POST /api/cadastro` ·
 `GET /api/formularios/<form_type>/schema` · `POST /api/formularios/<form_type>` ·
@@ -598,7 +653,7 @@ Rotas legadas que **ainda têm uso real** (não são só resíduo):
 | `CASTING` | Banco de Talentos (aprovar/rejeitar/editar), escalação de elenco, avaliações de casting |
 | `FIGURINO` | Fichas de figurino (CRUD, fotos, vínculo com Personagem do catálogo) |
 | `ENSAIO` | Agenda + EducaManto (leitura/uso) |
-| `MARKETING` | Cria espaços de revisão de mídia |
+| `MARKETING` | Cria espaços de revisão de mídia e opera o **módulo de Marketing** (feature 204): painel de postagens e metas de frequência, com leitura dos Temas ativos do catálogo (via `/api/marketing/opcoes`, sem acesso à gestão do catálogo) |
 | `ARTISTA_3D` | Gestão total do módulo 3D (Acervo + Fila + presentes do evento) e **leitura** dos eventos — precisa do elenco e do formulário de pré-contrato para saber o que imprimir |
 | `REVENDEDOR_EDUCAMANTO` | Perfil restrito: **só** Agenda (visualização) + EducaManto |
 
@@ -635,6 +690,8 @@ Gates por módulo (todos em `app/api/`):
 | `_require_vendas()` | `clientes_*`, `formularios_admin_read`, `orcamento_read` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_has_role(COMERCIAL, FIGURINO, SUPERADMIN)` | `catalogo_read.api_catalogo_elenco_busca` | busca visual de elenco / vínculo de ficha |
 | `_require_use()` / `_require_manage()` | `educamanto_*` | uso: `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO`; gestão: `COMERCIAL`, `SUPERADMIN` |
+| `require_3d_access()` | `impressoes3d_read/write` | `ARTISTA_3D`, `SUPERADMIN` |
+| `require_marketing_access()` | `marketing_read/write` | `MARKETING`, `SUPERADMIN` |
 
 ### 4.4 Escopo de dados no servidor (não confiar no cliente)
 

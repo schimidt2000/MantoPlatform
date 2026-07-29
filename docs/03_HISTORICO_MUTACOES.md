@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **203**
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **204**
 
 Formato de cada entrada:
 
@@ -17,6 +17,132 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 204 — Módulo de Gestão de Marketing e Frequência
+`204-modulo-marketing-frequencia` · **2026-07-29** · migration **`a3c7e1d59f42`** (*modulo de
+gestao de marketing e frequencia*)
+
+> **Sobre o número.** O pedido pediu para registrar como "202", mas 202 (Fila de Impressão dirigida
+> pelo evento) e 203 (Melhorias na Comunicação e Alertas de E-mail) já estavam no histórico. Usei
+> **204** para manter o append-only sem sobrescrever entrada existente — mesma decisão registrada
+> na pegadinha nº 2 da entrada 203.
+
+**Motivação.** O planejamento de conteúdo do marketing vivia fora do ERP (planilha + pastas do
+Drive + mensagens), enquanto as duas informações de que ele mais depende já moravam aqui: o
+**Tema do catálogo** (o que o post divulga) e o **espaço de Revisão de Mídia** (onde o material é
+aprovado, feature 088). Faltava também um jeito de cobrar a **frequência** combinada em reunião
+("postar sobre 15 Anos a cada 15 dias") — sem isso, "faz tempo que não postamos disso" era
+memória, não dado.
+
+**O que mudou.**
+
+- **Banco.** Duas tabelas novas, 100% aditivas.
+  - `marketing_posts` (`MarketingPost`) — o card do Kanban: `title`, `status`
+    (`ideia`→`producao`→`revisao`→`agendado`→`publicado`), `deadline_date`, `publish_date`,
+    `platform`, `drive_folder_url` (texto — o acervo bruto continua no Drive), `notes`,
+    `created_at`/`updated_at`. FKs `assignee_id`→`users`, `catalog_item_id`→`catalog_items` e
+    `review_space_id`→`review_spaces`, **todas `ON DELETE SET NULL`** (apagar usuário/Tema/espaço
+    não pode apagar o planejamento) e `review_space_id` **UNIQUE** (o vínculo é 1:1). Índices em
+    `status`, `catalog_item_id` e `publish_date`.
+  - `marketing_frequency_goals` (`MarketingFrequencyGoal`) — `name`, `target_interval_days`,
+    `catalog_item_id` opcional (`SET NULL`). **Sem coluna de estado de cumprimento**, de propósito.
+  - Constantes novas em `app/constants.py`: `MARKETING_STATUSES`, `MARKETING_PLATFORMS` (7 itens) e
+    `MARKETING_MAX_INTERVAL_DAYS` (1825).
+- **Backend.**
+  - Novo núcleo `app/marketing/marketing_ops.py` (funções puras, fonte única): CRUD de posts e
+    metas com `MarketingValidationError(field, message)`; `goal_health()` e `last_published_post()`
+    (o motor de frequência); serializadores dos payloads; e `attach_review_space()`, que **reusa
+    `review_ops.create_space`** em vez de montar um `ReviewSpace` à mão (Princípio I).
+  - `app/api/marketing_read.py` — `GET /api/marketing/posts` (com `?status=`/`?responsavel=`),
+    `GET /api/marketing/posts/<id>`, `GET /api/marketing/goals` e `GET /api/marketing/opcoes`.
+  - `app/api/marketing_write.py` — `POST /api/marketing/posts`,
+    `PATCH|DELETE /api/marketing/posts/<id>`, `POST /api/marketing/posts/<id>/create-review` e o
+    CRUD de `/api/marketing/goals[/<id>]`.
+  - Gate `require_marketing_access()` (`MARKETING` ou `SUPERADMIN`), função chamada no início de
+    cada view — não decorator, como no resto da camada de API.
+  - **Duas regras de negócio que não estavam no pedido e foram necessárias**: (1) marcar um post
+    como `publicado` sem data **preenche `publish_date` com hoje** — sem data o post não contaria
+    para nenhuma meta e a frequência ficaria eternamente "atrasada"; (2) `drive_folder_url` só
+    aceita `http(s)`, porque o valor vai para um `href` com `target="_blank"`.
+- **Frontend.**
+  - `lib/marketing.ts` — tipos + hooks TanStack (fonte única do contrato). `useMoveMarketingPost`
+    faz **atualização otimista** (com rollback em `onError`): o card precisa começar a andar no
+    clique, senão a animação de `layoutId` não comunica causa e efeito.
+  - `components/MarketingKanban.tsx` — 5 colunas, cards com `layoutId` dentro de um `LayoutGroup` e
+    `<AnimatePresence>`; animações desligadas sob `useReducedMotion()`. **Mover tem dois caminhos**:
+    **arrastar e soltar** (`drag` do Framer com `whileDrag`, `dragSnapToOrigin`, `dragConstraints`
+    no quadro, realce da coluna alvo e "Solte aqui" na coluna vazia) e as **setas ◀ ▶**, que
+    continuam sendo o caminho de teclado e de tela estreita. O alvo do drop sai de
+    `elementsFromPoint` em coordenadas de viewport; soltar fora de uma coluna (ou na mesma) não
+    dispara requisição.
+  - `components/MarketingPostDialog.tsx` — formulário único (criação e edição) com `Combobox` +
+    `AvatarThumb` para Tema (quadrada) e responsável (circular), botão dourado "Abrir Acervo de
+    Mídia no Drive" e a ponte "Criar Espaço de Revisão" ⇄ "Ir para Revisão →".
+  - `components/MarketingGoalDialog.tsx` e `pages/MarketingMetasPage.tsx` — o *Health Dashboard*:
+    faixa de resumo, cards ordenados por urgência com selo + ícone + barra de consumo do intervalo.
+  - `pages/MarketingPainelPage.tsx` — alternador Tabela ⇄ Kanban persistido em `localStorage`
+    (`manto_marketing_painel_view`, mesmo padrão de `/admin/catalogo`), com o "trilho" do item ativo
+    animado por `layoutId` e a troca de visão em `AnimatePresence mode="wait"`.
+  - `App.tsx` (rotas `/marketing/painel` e `/marketing/metas`) e `lib/navigation.tsx` (seção
+    "Marketing" entre "Impressão 3D" e "Comercial", visível para `MARKETING`/`SUPERADMIN`).
+
+**Impacto em RBAC e regras de negócio.** Nenhum papel novo — `MARKETING` (que existia desde a 088
+só para criar espaços de revisão) ganhou um módulo próprio, e `SUPERADMIN` acompanha. `MARKETING`
+passa a **ler** os Temas ativos do catálogo por `GET /api/marketing/opcoes`, sem ganhar acesso ao
+gerenciador de catálogo (que segue exclusivo de `SUPERADMIN`). Regras novas: post publicado sem
+data recebe a data de hoje; a saúde da meta é sempre derivada dos posts publicados (nunca
+armazenada); postagem e espaço de revisão são 1:1; excluir a postagem **não** apaga o espaço.
+
+**Riscos e pegadinhas descobertos.**
+1. **`AnimatePresence mode="popLayout"` quebra com componente de função.** O wrapper `PopChild` do
+   Framer injeta uma `ref` no filho direto; como o filho é `<KanbanCard>` (função, sem
+   `forwardRef`), o console enchia de *"Function components cannot be given refs"*. Resolvido
+   ficando no `mode` padrão (`sync`) — a alternativa seria envolver o card em `forwardRef` só para
+   satisfazer o wrapper.
+2. **Dialog não pode receber uma cópia do registro em `useState`.** A primeira versão guardava o
+   `post` selecionado em estado; depois de `create-review` o servidor mudava o post, o cache era
+   invalidado, mas o Dialog seguia mostrando "Criar Espaço de Revisão" (cópia velha). Corrigido
+   guardando **só o id** e lendo o registro do cache do TanStack Query — vale para qualquer Dialog
+   que sofra efeito colateral de API sobre o item aberto.
+3. **`ILIKE` com o nome da meta precisa escapar curingas.** Uma meta chamada `%` casaria com todo
+   post publicado; `_escape_like` neutraliza `\`, `%` e `_` e o filtro passa `escape="\\"`.
+4. **A verificação visual no Browser pane engana com animações.** Sem o painel visível a página não
+   compõe frames: transições de saída do Framer **não terminam**, então o card "fantasma" fica na
+   coluna antiga e a troca Tabela⇄Kanban (`mode="wait"`) parece travada. Confirmação real veio
+   recarregando a rota com a visão já persistida (tabela renderizou com as 8 colunas e 4 linhas) —
+   é artefato da ferramenta, não da tela.
+5. **Drag do Framer dentro de container com `overflow-x-auto` precisa de `dragConstraints`.** Como
+   um eixo `auto` promove o outro a `auto`, o quadro recorta o card nos dois sentidos durante o
+   gesto (e ganha barra de rolagem). Limitar o arraste ao próprio quadro resolve sem tirar a
+   rolagem horizontal das colunas. E o **`click` chega depois do `pointerup`**: sem a guarda de
+   `ref` ("houve arraste?"), todo drop terminava abrindo o Dialog de edição.
+6. **Hit-test do drop: use `elementsFromPoint`, não `getBoundingClientRect` das colunas.** A pilha
+   de elementos alcança a coluna mesmo com o card levantado por cima dela, e evita remedir 5 colunas
+   a cada quadro. Duas pegadinhas: o ponto tem de estar em coordenadas de **viewport**
+   (`event.clientX/clientY`; `info.point` do Framer é coordenada de **página** e erra o alvo com a
+   janela rolada), e no toque o dedo que soltou está em `changedTouches`, não em `touches`.
+7. **`ruff format` não é neutro nos arquivos vizinhos.** `impressoes3d_ops.py`/`impressoes3d_*.py`
+   não passam `ruff format --check` (o estilo compacto de `audit(...)` em uma linha). Os arquivos
+   novos desta feature foram formatados (regra do `CLAUDE.md` para arquivo novo) e o `ruff check`
+   está limpo; a divergência de estilo com os vizinhos é conhecida e não foi propagada para eles.
+
+**Verificação.** `scripts/db/verify_204_marketing.py` — **62/62 checks** contra `manto_local`
+(Postgres): RBAC (401/403/200), validação campo a campo dos 6 campos rejeitáveis, payload com
+Tema/responsável/espaço aninhados, filtro por status, `publish_date` automática e preservada,
+`PATCH` parcial não zerando o que não foi enviado, `create-review` (título, criador, 1:1 e o 400 do
+segundo), motor de metas (casamento por Tema e por nome, `days_late`, `next_due_date`,
+`never_posted`, `delayed_count`, recálculo no `PATCH`) e as exclusões com o espaço de revisão
+sobrevivendo. Migration aplicada com **round-trip `downgrade`/`upgrade`** no `manto_local`.
+Frontend: `npm run typecheck` (os 3 apps) e `npm run build` do app internal limpos; telas
+conferidas no app real com dados temporários (Kanban movendo card com `PATCH 200`, Dialog com
+Combobox preenchido, ponte de revisão criando `/revisao/33`, tabela persistida, metas passando de
+`ATRASADO 15D` para `EM DIA` ao trocar o intervalo, sem rolagem horizontal em 375px).
+**Drag-and-drop** exercitado com sequência real de `pointerdown`/`pointermove`/`pointerup`: card
+saiu de "Ideia" e chegou em "Agendado" com `PATCH 200`, coluna alvo realçada durante o gesto, drop
+fora de coluna não moveu nada nem gerou requisição, e o arraste não abriu o Dialog (o clique simples
+continua abrindo).
+
+---
 
 ### 203 — Melhorias na Comunicação e Alertas de E-mail
 `203-melhorias-comunicacao-email` · **2026-07-29** · sem migration
