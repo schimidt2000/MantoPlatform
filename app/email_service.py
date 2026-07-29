@@ -330,7 +330,7 @@ def send_portal_announcement_email(talent) -> bool:
 # ── Email de alerta para equipe de ENSAIO ────────────────────────────────────
 
 def send_ensaio_alert_email(event, users: list) -> int:
-    """Notifica usuários ENSAIO sobre evento que precisa de ensaio (email interno — plain text)."""
+    """Notifica usuários ENSAIO sobre evento que precisa de ensaio (email interno)."""
     if not users:
         return 0
 
@@ -340,30 +340,29 @@ def send_ensaio_alert_email(event, users: list) -> int:
     )
     portal_url = _portal_url()
 
+    rows = _info_row("Evento", event.title)
+    rows += _info_row("Data", start_str)
+    if event.location:
+        rows += _info_row("Local", event.location)
+
     sent = 0
     for user in users:
         if not user.email:
             continue
-        lines = [
-            f"Olá, {user.name.split()[0]}!",
-            "",
-            "Um evento marcado como PRECISA DE ENSAIO entrou na agenda:",
-            "",
-            f"Evento: {event.title}",
-            f"Data:   {start_str}",
-        ]
-        if event.location:
-            lines.append(f"Local:  {event.location}")
-        lines += [
-            "",
-            "Você é responsável por agendar o ensaio.",
-            "Abra o evento na plataforma e clique em 'Criar ensaio'.",
-            "",
-            f"Acesse: {portal_url}" if portal_url else "Acesse a plataforma.",
-            "",
-            "Manto Produções",
-        ]
-        if _send(to=user.email, subject=f"[Ensaio necessário] {event.title}", body="\n".join(lines)):
+        first_name = user.name.split()[0]
+        content = (
+            _greeting(first_name)
+            + _paragraph("Um evento marcado como <strong>PRECISA DE ENSAIO</strong> entrou na agenda:")
+            + _info_box(rows)
+            + _alert_box(
+                "Você é responsável por agendar o ensaio. Abra o evento na plataforma e clique em "
+                "<strong>Criar ensaio</strong>.",
+                color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
+            )
+            + (_btn("Acessar a plataforma →", portal_url) if portal_url else "")
+        )
+        html = _html_wrap(content, preheader=f"{event.title} precisa de ensaio — agende pela plataforma.")
+        if _send(to=user.email, subject=f"[Ensaio necessário] {event.title}", html=html):
             sent += 1
     return sent
 
@@ -488,6 +487,46 @@ def send_quote_email(to: str, client_name: str, pdf_bytes: bytes) -> bool:
     except Exception as exc:
         log.error("Falha ao enviar orçamento para %s: %s", to, exc)
         return False
+
+
+# ── Email de alerta de gasto extra para Financeiro/Superadmin ────────────────
+
+def send_new_expense_alert_email(expense, users: list) -> int:
+    """Notifica FINANCEIRO/SUPERADMIN sobre um novo gasto extra pendente de aprovação."""
+    if not users:
+        return 0
+
+    event_title = expense.event.title if expense.event else None
+    amount_str = f"R$ {expense.amount:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+    rows = _info_row("Descrição", expense.description)
+    rows += _info_row("Categoria", expense.category)
+    rows += _info_row("Valor", amount_str)
+    if event_title:
+        rows += _info_row("Evento", event_title)
+
+    subject_target = f"no evento {event_title}" if event_title else "sem evento vinculado"
+    content_paragraph = (
+        f"Um novo gasto extra foi cadastrado {subject_target} e está aguardando aprovação."
+    )
+
+    sent = 0
+    for user in users:
+        if not user.email:
+            continue
+        content = (
+            _greeting(user.name.split()[0])
+            + _paragraph(content_paragraph)
+            + _info_box(rows)
+            + _alert_box(
+                "Acesse o sistema para revisar e aprovar o gasto.",
+                color="#fffbea", border="#f0d060", text="#7a5800",
+            )
+        )
+        html = _html_wrap(content, preheader="Novo gasto extra cadastrado — verifique no sistema para aprovação.")
+        if _send(to=user.email, subject="Novo gasto extra cadastrado — aprovação pendente", html=html):
+            sent += 1
+    return sent
 
 
 # ── Helper interno ─────────────────────────────────────────────────────────────

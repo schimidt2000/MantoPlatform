@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **202**
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **203**
 
 Formato de cada entrada:
 
@@ -17,6 +17,70 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 203 — Melhorias na Comunicação e Alertas de E-mail
+`203-melhorias-comunicacao-email` · **2026-07-29** · sem migration
+
+**Motivação.** A auditoria de e-mails (feature 191) veio o mapeamento dos 8 gatilhos existentes.
+A partir dele, três lacunas de cobertura foram fechadas: o alerta de "evento alterado" não avisava
+o talento quando o evento passava a exigir ensaio (só a equipe interna era avisada); o alerta
+interno de ENSAIO era o único e-mail do sistema em texto plano, destoando da identidade visual dos
+demais; e não havia alerta nenhum para o Financeiro quando um gasto extra era lançado — a
+aprovação dependia de alguém abrir a tela por conta própria.
+
+**O que mudou.**
+
+- **Backend.**
+  - `app/calendar/event_ops.py::save_logistics` — a transição `needs_rehearsal`
+    desligado→ligado agora entra na lista de mudanças de `notify_accepted_roles`
+    (`send_event_changed_email`, ao talento) **além** de continuar disparando
+    `notify_ensaio_team` (`send_ensaio_alert_email`, à equipe interna). Antes, só a equipe
+    de ENSAIO era avisada; o talento com cargo aceito não sabia que o evento passou a exigir
+    ensaio.
+  - `app/email_service.py::send_ensaio_alert_email` — trocado de texto plano para HTML,
+    reusando os mesmos helpers de template (`_html_wrap`/`_greeting`/`_info_box`/`_alert_box`)
+    dos outros 7 e-mails do sistema — mesma identidade visual (cabeçalho "Manto Produções",
+    cores, tipografia). Não foi criado um arquivo `.html` de template à parte: o projeto não tem
+    esse mecanismo para e-mails (todos os 8 já eram — e continuam sendo — montados por funções
+    Python no próprio `email_service.py`); seguir esse padrão evita duas formas paralelas de
+    gerar o mesmo tipo de conteúdo.
+  - **Novo 9º gatilho** — `app/email_service.py::send_new_expense_alert_email(expense, users)`:
+    alerta HTML curto e direto ("novo gasto extra cadastrado... verifique no sistema para
+    aprovação"), com descrição/categoria/valor/evento (quando vinculado) em destaque. Protegido
+    pela mesma `_emails_enabled()`/`SiteSetting.email_notifications_enabled` dos demais 8.
+  - `app/gastos/gastos_ops.py::create_expense` — ao final da criação de um `SpecialExpense`,
+    busca (`_financeiro_and_superadmin_users`) todos os usuários **ativos** com papel FINANCEIRO
+    ou SUPERADMIN e dispara o alerta acima via `send_async` (best-effort, não bloqueia a
+    requisição). Fonte única: dispara para as duas rotas que chamam `create_expense`
+    (`app/api/gastos_write.py` e o Jinja legado de `app/gastos/routes.py`), sem duplicar lógica.
+
+**Impacto em RBAC e regras de negócio.** Nenhuma mudança de RBAC. Regra nova: todo `SpecialExpense`
+criado gera um alerta best-effort para FINANCEIRO/SUPERADMIN ativos (usuários inativos ou de
+outros papéis, incluindo quem criou o gasto, não recebem). O total de gatilhos de e-mail do
+sistema passa de 8 para 9, todos atrás da mesma chave geral.
+
+**Riscos e pegadinhas descobertos.**
+1. **A pergunta "o alerta já verifica data/hora/local do evento?" tem resposta não-óbvia: NÃO.**
+   `send_event_changed_email` hoje só dispara por mudanças de logística (horário/local de
+   saída/maquiagem, em `save_logistics`) e por mudança de cachê (`casting_ops.py`) — a edição em
+   bloco do evento (`event_ops.py::update_core`, título/data/horário/local/descrição, usada pelo
+   `PATCH /api/events/<id>`) **não** chama `notify_accepted_roles`. Ou seja, hoje um talento com
+   cargo aceito **não é avisado** se o horário ou local do próprio evento mudar por essa tela —
+   só se a logística (saída/maquiagem) ou o cachê mudarem. Isso não foi alterado nesta feature
+   (não fazia parte do pedido) — fica registrado como lacuna candidata a uma próxima feature, a
+   confirmar com o usuário antes de mexer (mudaria o comportamento de uma rota já em produção).
+2. **O número desta entrada não é o "201" pedido originalmente** — a numeração já havia avançado
+   para 201 (Acervo 3D multi-arquivos) e 202 (Fila de Impressão 3D) antes desta tarefa; usei 203
+   para manter o append-only sem sobrescrever histórico.
+
+**Verificação.** `scripts/db/verify_203_email_melhorias.py` — 14/14 checks contra `manto_local`
+(Postgres): transição de ensaio disparando os dois alertas (interno + talento) com a mudança
+correta na lista, ausência de disparo duplicado num 2º save sem mudança real, criação de gasto
+via `POST /api/gastos` alertando FINANCEIRO+SUPERADMIN ativos e excluindo quem criou o gasto,
+ENSAIO e FINANCEIRO inativo. Geração de HTML das 3 funções de e-mail tocadas (`send_ensaio_alert_email`,
+`send_new_expense_alert_email` com e sem evento vinculado) exercitada à parte, sem exceções.
+
+---
 
 ### 202 — Fila de Impressão dirigida pelo evento
 `202-fila-3d-por-evento` · **2026-07-29** · migration **`e4f7b2c9a350`** (*pendencia 3d por evento

@@ -22,11 +22,13 @@ from werkzeug.utils import secure_filename
 
 from app import db
 from app.constants import RoleName
+from app.email_service import send_async, send_new_expense_alert_email
 from app.models import (
     AuditLog,
     CalendarEvent,
     RecurringExpense,
     RecurringExpenseEntry,
+    Role,
     SpecialExpense,
     User,
 )
@@ -54,6 +56,19 @@ def is_financeiro(user: User) -> bool:
     """True se `user` tem papel FINANCEIRO ou SUPERADMIN (gastos recorrentes)."""
     return any(
         r.name.upper() in (RoleName.FINANCEIRO, RoleName.SUPERADMIN) for r in user.roles
+    )
+
+
+def _financeiro_and_superadmin_users() -> list[User]:
+    """Usuários ativos com papel FINANCEIRO ou SUPERADMIN (destinatários do alerta de gasto)."""
+    return (
+        User.query.join(User.roles)
+        .filter(
+            Role.name.in_([RoleName.FINANCEIRO, RoleName.SUPERADMIN]),
+            User.is_active.is_(True),
+        )
+        .distinct()
+        .all()
     )
 
 
@@ -205,6 +220,10 @@ def create_expense(
 ) -> SpecialExpense:
     """Cria um gasto extra pendente. `data` já validado/parseado pelo chamador.
 
+    Ao final, alerta por email (async, best-effort) todos os usuários ativos com papel
+    FINANCEIRO/SUPERADMIN — 9º gatilho de email do sistema (feature 203), protegido pela
+    mesma flag `SiteSetting.email_notifications_enabled` dos demais.
+
     Args:
         creator: usuário autenticado que está registrando o gasto.
         data: `description`, `category`, `amount` (Decimal), `expense_date` (date), `notes`,
@@ -245,6 +264,11 @@ def create_expense(
         f"Gasto registrado: R$ {parsed['amount']:.2f} ({parsed['category']})",
     )
     db.session.commit()
+
+    recipients = _financeiro_and_superadmin_users()
+    if recipients:
+        send_async(send_new_expense_alert_email, expense, recipients)
+
     return expense
 
 

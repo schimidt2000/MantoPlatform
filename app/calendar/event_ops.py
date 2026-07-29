@@ -116,7 +116,9 @@ def save_logistics(
     Recebe valores já resolvidos (`makeup_location` já passou por `resolve_makeup_location`).
     Detecta as mesmas quatro mudanças de hoje e dispara as mesmas notificações: aviso aos cargos
     aceitos quando a logística muda (`notify_accepted_roles`) e alerta à equipe de ENSAIO **só**
-    na transição de `needs_rehearsal` desligado→ligado (`notify_ensaio_team`).
+    na transição de `needs_rehearsal` desligado→ligado (`notify_ensaio_team`). Essa mesma transição
+    também entra na lista de mudanças enviada aos cargos aceitos (`send_event_changed_email`) —
+    o talento precisa saber que o evento passou a exigir ensaio, não só a equipe interna.
 
     Args:
         makeup_time: Horário de maquiagem (string "HH:MM" ou vazio → None).
@@ -156,12 +158,15 @@ def save_logistics(
         logistics_changes.append(
             f"Local de maquiagem: {old_makeup_location} → {event.makeup_location or 'não definido'}"
         )
+    rehearsal_just_activated = event.needs_rehearsal and not old_needs_rehearsal
+    if rehearsal_just_activated:
+        logistics_changes.append("Definição de ensaio: este evento agora precisa de ensaio")
     if logistics_changes:
         notify_accepted_roles(event, logistics_changes)
 
     db.session.commit()
 
-    if event.needs_rehearsal and not old_needs_rehearsal:
+    if rehearsal_just_activated:
         notify_ensaio_team(event)
 
 
