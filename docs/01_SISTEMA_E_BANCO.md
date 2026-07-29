@@ -3,9 +3,9 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **201**
-> (`201-acervo-3d-multi-arquivos`) · Head de migration: `d9e3a5b7c124`
-> (*acervo 3d com multiplos arquivos*)
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **202**
+> (`202-fila-3d-por-evento`) · Head de migration: `e4f7b2c9a350`
+> (*pendencia 3d por evento show*)
 
 ---
 
@@ -106,13 +106,14 @@ Fonte única: `app/models.py` (~1.880 linhas). **53 tabelas**, incluindo 3 tabel
 - `event_requires_client(event)` (em `app/constants.py`): eventos com início ≥ **2026-06-29**
   (`CLIENT_REQUIRED_FROM`) exigem cliente para salvar a venda; anteriores são grandfathered.
 
-### 2.2.1 Impressões e Acervo 3D (features 200 e 201)
+### 2.2.1 Impressões e Acervo 3D (features 200, 201 e 202)
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
 | `acervo_3d_items` | `Acervo3DItem` | catálogo de peças base: `name`, `photo_url` (**NOT NULL** — foto JPG/PNG de preview), `is_active`, `created_at` | — |
 | `acervo_3d_files` | `Acervo3DFile` | arquivos 3D da peça (**1:N**, feature 201 — o modelo vem fatiado em partes): `file_path`, `original_name` (nome enviado, ex.: `corpo.stl`), `position`, `created_at` | `item_id`→`acervo_3d_items` (**ON DELETE CASCADE**) |
 | `event_3d_gifts` | `Event3DGift` | presente 3D vinculado a um evento (1:N): `status` (`pendente`\|`imprimindo`\|`finalizado`\|`entregue`), `deadline_date`, `quantity`, `notes`, `created_at`/`updated_at`; índices em `event_id`, `item_id` e `status` | `event_id`→`calendar_events` (**ON DELETE CASCADE**), `item_id`→`acervo_3d_items` |
+| `event_3d_dismissals` | `Event3DDismissal` | dispensa da pendência "show sem presente" (feature 202): `dismissed_at`, `dismissed_by`. `event_id` é **UNIQUE** — uma dispensa por evento | `event_id`→`calendar_events` (**ON DELETE CASCADE**), `dismissed_by`→`users` |
 
 **Semântica importante**
 - **Foto obrigatória** (sem ela a peça não é selecionável visualmente — Princípio X.2) e
@@ -122,6 +123,13 @@ Fonte única: `app/models.py` (~1.880 linhas). **53 tabelas**, incluindo 3 tabel
 - Só evento com `event_type == 'SHOW'` (`EVENT_TYPE_SHOW`, em `app/constants.py`) aceita presente
   3D — a API recusa com 400 em qualquer outro tipo, e o detalhe do evento só serializa a chave
   `presentes_3d` nesse caso.
+- **A pendência nasce do evento (feature 202)**: todo SHOW com `start_at >= hoje` e **nenhum**
+  `Event3DGift` é uma tarefa aberta na Fila de Impressão — um show novo entrando na agenda já
+  aparece lá, sem depender de alguém lembrar de cadastrar. Só olha para frente: show passado não
+  tem mais o que imprimir e afogaria a fila em linhas mortas.
+- `Event3DDismissal` é o "este show não leva presente": tira a tarefa da lista sem inventar um
+  presente fantasma. É reversível (DELETE) e **descartada automaticamente** quando alguém vincula
+  um presente ao evento — se leva presente, a decisão anterior deixou de valer.
 - `GIFT_3D_STATUSES` (`app/constants.py`) é a fonte única do ciclo de vida. `entregue` é estado
   final: sai da Fila de Impressão.
 - `CalendarEvent.presentes_3d` é o backref (`cascade="all, delete-orphan"`) — excluir o evento
@@ -267,10 +275,11 @@ Pontos que valem para quem for ler esses dados:
 ### 2.11 Migrations
 
 - Alembic via Flask-Migrate, **sempre escritas à mão** (`migrations/versions/`).
-- Head atual: **`d9e3a5b7c124`** — *acervo 3d com multiplos arquivos* (feature 201).
+- Head atual: **`e4f7b2c9a350`** — *pendencia 3d por evento show* (feature 202).
 - Cadeia recente: `27acb021e8d6` → `aa1bb2cc3dd4` (review asset status) → `7c2d9e4f1a3b`
   (figurino_missing_dismissals) → `4e6f8a1c2d5b` (figurino_sheet tags) → `9f1c3a7b5e2d`
-  (catalog characters) → `c8d2f4a6b013` (impressões 3D) → `d9e3a5b7c124`.
+  (catalog characters) → `c8d2f4a6b013` (impressões 3D) → `d9e3a5b7c124` (multi-arquivos)
+  → `e4f7b2c9a350`.
 - Features **186**, **187** e **199** não geraram migration (reusaram colunas existentes).
 - O papel `ARTISTA_3D` **não** vem por migration: papéis são linhas de `roles` semeadas por
   `seed.py` (mesmo tratamento de `MARKETING`/`REVENDEDOR_EDUCAMANTO`), e o Railway roda
@@ -476,7 +485,9 @@ no máximo 5 itens, descartando predições sem `description`.
 | `POST` | `/api/3d/acervo` | Cadastra peça (**multipart**): `name`, `photo` (JPG/PNG) e um ou mais `files` (`.stl`/`.3mf`/`.zip`) — **todos obrigatórios**; falta de qualquer um devolve 400 com o campo em `fields` (`name`/`photo`/`files`). |
 | `PATCH` | `/api/3d/acervo/<id>` | Edita nome/`is_active`, troca a foto (upload novo apaga a antiga) e **acrescenta** arquivos via `files` / **remove** via `remove_file_ids[]` (**multipart**). 400 se a operação deixaria a peça sem nenhum arquivo. |
 | `DELETE` | `/api/3d/acervo/<id>` | Exclui a peça e seus arquivos. **400** se houver evento vinculado. |
-| `GET` | `/api/3d/fila` | Fila de Impressão — presentes com `status != 'entregue'` de eventos **SHOW**, ordenados por prazo (sem prazo vai para o fim). |
+| `GET` | `/api/3d/fila` | Fila de Impressão, **dois blocos**: `items` (presentes com `status != 'entregue'` de eventos SHOW, ordenados por prazo — sem prazo vai para o fim) e `sem_presente` (SHOWs futuros ainda sem presente vinculado). `?dispensados=1` inclui os marcados como "não leva presente". |
+| `POST` | `/api/events/<id>/3d-dismissal` | Marca o SHOW como "não leva presente 3D" (idempotente). 400 em evento não-SHOW. |
+| `DELETE` | `/api/events/<id>/3d-dismissal` | Desfaz a dispensa, devolvendo o show às pendências (idempotente). |
 | `POST` | `/api/events/<id>/3d-gifts` | Vincula peça ao evento (JSON: `item_id`, `quantity`, `deadline_date`, `notes`, `status`). **400** em evento não-SHOW. |
 | `PATCH` | `/api/events/<id>/3d-gifts/<gift_id>` | Edita status/quantidade/prazo/observações/peça. É o endpoint do seletor rápido de status da Fila. |
 | `DELETE` | `/api/events/<id>/3d-gifts/<gift_id>` | Remove o vínculo (a peça do Acervo continua existindo). |

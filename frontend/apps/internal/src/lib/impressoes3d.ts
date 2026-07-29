@@ -130,8 +130,21 @@ export interface Fila3DEntry extends Event3DGift {
   form_response: Fila3DFormResponse | null;
 }
 
+/**
+ * Evento SHOW futuro **sem nenhum presente vinculado** — uma tarefa aberta (feature 202).
+ * A pendência nasce do evento, não do presente: um SHOW novo na agenda já aparece aqui.
+ */
+export interface Fila3DPendingEvent extends Fila3DEventRef {
+  /** Marcado como "não leva presente 3D" — só vem quando a busca pede os dispensados. */
+  dismissed: boolean;
+  dismissed_by: string | null;
+  /** Personagens contratados, para o Artista 3D reconhecer o show de relance. */
+  characters: string[];
+}
+
 export interface Fila3DResponse {
   items: Fila3DEntry[];
+  sem_presente: Fila3DPendingEvent[];
 }
 
 /**
@@ -243,11 +256,43 @@ export function useDeleteAcervoItem() {
   });
 }
 
-/** Fila de Impressão — presentes não entregues de eventos SHOW. */
-export function useFila3D() {
+/**
+ * Fila de Impressão — presentes não entregues **e** os shows futuros ainda sem presente.
+ *
+ * `showDismissed` inclui os eventos marcados como "não leva presente", para a tela poder
+ * oferecer o "Reativar".
+ */
+export function useFila3D(showDismissed = false) {
   return useQuery<Fila3DResponse>({
-    queryKey: FILA_KEY,
-    queryFn: () => apiFetch<Fila3DResponse>("/api/3d/fila"),
+    queryKey: [...FILA_KEY, showDismissed],
+    queryFn: () =>
+      apiFetch<Fila3DResponse>(`/api/3d/fila${showDismissed ? "?dispensados=1" : ""}`),
+  });
+}
+
+/** Marca um show como "não leva presente 3D", tirando-o das pendências (feature 202). */
+export function useDismissEvent3D() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (eventId: number) =>
+      apiFetch<{ event_id: number; dismissed: boolean }>(`/api/events/${eventId}/3d-dismissal`, {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: FILA_KEY });
+    },
+  });
+}
+
+/** Desfaz a dispensa, devolvendo o show à lista de pendências. */
+export function useUndismissEvent3D() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (eventId: number) =>
+      apiFetch<void>(`/api/events/${eventId}/3d-dismissal`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: FILA_KEY });
+    },
   });
 }
 

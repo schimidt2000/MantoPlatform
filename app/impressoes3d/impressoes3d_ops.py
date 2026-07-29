@@ -26,6 +26,7 @@ from app.models import (
     Acervo3DFile,
     Acervo3DItem,
     CalendarEvent,
+    Event3DDismissal,
     Event3DGift,
     EventRole,
     FormResponse,
@@ -307,6 +308,9 @@ def add_event_gift(
         status=_validate_status(status) if status else GIFT_3D_STATUS_PENDENTE,
     )
     db.session.add(gift)
+    # O evento passou a levar presente: uma dispensa anterior ("este não leva") deixou de valer.
+    if event.dispensa_3d is not None:
+        db.session.delete(event.dispensa_3d)
     db.session.flush()
     audit(
         "create", "Event3DGift", gift.id, item.name,
@@ -388,6 +392,69 @@ def list_print_queue() -> list[Event3DGift]:
             g.id,
         ),
     )
+
+
+# ── Pendências: SHOW futuro sem presente vinculado (feature 202) ─────────────
+
+
+def list_pending_events(*, include_dismissed: bool = False) -> list[CalendarEvent]:
+    """Eventos SHOW futuros que ainda não têm nenhum presente 3D vinculado.
+
+    É o evento que gera o trabalho: um SHOW novo entrando na agenda vira automaticamente uma
+    tarefa de "vincular presente" para o Artista 3D, sem depender de alguém lembrar de cadastrar.
+
+    Só olha para frente (`start_at >= hoje`): show que já aconteceu não tem mais o que imprimir, e
+    varrer o histórico inteiro afogaria a fila em centenas de linhas mortas.
+
+    Args:
+        include_dismissed: Quando True, inclui também os eventos já marcados como "não leva
+            presente" — usado pelo toggle "Mostrar dispensados" da tela.
+
+    Returns:
+        Eventos ordenados por data (o mais próximo primeiro).
+    """
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    query = (
+        CalendarEvent.query.outerjoin(Event3DGift, Event3DGift.event_id == CalendarEvent.id)
+        .outerjoin(Event3DDismissal, Event3DDismissal.event_id == CalendarEvent.id)
+        .filter(
+            CalendarEvent.event_type == EVENT_TYPE_SHOW,
+            CalendarEvent.start_at >= today_start,
+            Event3DGift.id.is_(None),
+        )
+    )
+    if not include_dismissed:
+        query = query.filter(Event3DDismissal.id.is_(None))
+    return query.order_by(CalendarEvent.start_at.asc()).all()
+
+
+def dismiss_event(event: CalendarEvent, *, dismissed_by: int | None) -> Event3DDismissal:
+    """Marca um evento SHOW como "não leva presente 3D", tirando-o da lista de pendências.
+
+    Idempotente: dispensar duas vezes devolve a dispensa existente em vez de duplicar.
+    """
+    if event.dispensa_3d is not None:
+        return event.dispensa_3d
+    dismissal = Event3DDismissal(event_id=event.id, dismissed_by=dismissed_by)
+    db.session.add(dismissal)
+    audit(
+        "edit", "CalendarEvent", event.id, event.title,
+        "Evento marcado como 'não leva presente 3D'",
+    )
+    db.session.commit()
+    return dismissal
+
+
+def undismiss_event(event: CalendarEvent) -> None:
+    """Desfaz a dispensa, devolvendo o evento à lista de pendências. Idempotente."""
+    if event.dispensa_3d is None:
+        return
+    db.session.delete(event.dispensa_3d)
+    audit(
+        "edit", "CalendarEvent", event.id, event.title,
+        "Dispensa de presente 3D desfeita",
+    )
+    db.session.commit()
 
 
 # ── Serialização (fonte única dos payloads JSON do módulo) ───────────────────

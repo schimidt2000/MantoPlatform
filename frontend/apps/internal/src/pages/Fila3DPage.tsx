@@ -16,6 +16,7 @@ import {
   Table,
   TableCell,
   TableRow,
+  cn,
   formatShortDate,
 } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
@@ -25,11 +26,15 @@ import {
   GIFT_3D_STATUSES,
   GIFT_3D_STATUS_LABELS,
   GIFT_3D_STATUS_TONES,
+  useDismissEvent3D,
   useFila3D,
+  useUndismissEvent3D,
   useUpdateEvent3DGift,
   type Fila3DEntry,
+  type Fila3DPendingEvent,
   type Gift3DStatus,
 } from "../lib/impressoes3d";
+import { AddPresente3DForm } from "../components/AddPresente3DForm";
 
 const INPUT_CLASS = "h-11 rounded-md border border-line bg-panel px-2 text-sm text-ink";
 
@@ -218,23 +223,90 @@ function DetalhesDialog({ entry, onClose }: { entry: Fila3DEntry | null; onClose
   );
 }
 
+/** Linha de um show que ainda não tem presente vinculado. */
+function PendingEventRow({
+  event,
+  onVincular,
+}: {
+  event: Fila3DPendingEvent;
+  onVincular: () => void;
+}) {
+  const dismiss = useDismissEvent3D();
+  const undismiss = useUndismissEvent3D();
+
+  return (
+    <li className="flex flex-wrap items-center gap-2 py-2">
+      <div className="min-w-0 flex-1">
+        <Link
+          to={`/events/${event.id}`}
+          className={cn(
+            "text-sm font-medium text-blue hover:underline",
+            event.dismissed && "text-muted",
+          )}
+        >
+          {event.title}
+        </Link>
+        <div className="text-xs text-muted">
+          {formatShortDate(event.start_at)}
+          {event.characters.length > 0 && ` · ${event.characters.join(", ")}`}
+        </div>
+      </div>
+      <DeadlineBadge deadline={event.start_at ? event.start_at.slice(0, 10) : null} />
+      {event.dismissed ? (
+        <>
+          <Badge tone="neutral">Não leva presente</Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={undismiss.isPending}
+            onClick={() => undismiss.mutate(event.id)}
+          >
+            Reativar
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button size="sm" onClick={onVincular}>
+            Vincular presente
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={dismiss.isPending}
+            onClick={() => dismiss.mutate(event.id)}
+          >
+            Não leva presente
+          </Button>
+        </>
+      )}
+    </li>
+  );
+}
+
 /**
- * Fila de Impressão (`/3d/fila`) — painel operacional do Artista 3D (feature 200).
+ * Fila de Impressão (`/3d/fila`) — painel operacional do Artista 3D (features 200 e 202).
  *
- * Tabela densa ordenada por prazo (mais apertado primeiro), com seletor rápido de status e o
- * Dialog "Ver Detalhes para Impressão", que cruza os personagens contratados com o extrato do
- * formulário de pré-contrato — é lá que estão a idade e a quantidade de aniversariantes.
+ * Dois blocos de trabalho. Em cima, **shows sem presente vinculado**: a pendência nasce do
+ * evento, então um SHOW novo na agenda já aparece aqui como tarefa, sem depender de alguém
+ * lembrar de cadastrar. Embaixo, os presentes já vinculados, do prazo mais apertado ao mais
+ * folgado, com seletor rápido de status e o Dialog "Ver Detalhes para Impressão", que cruza os
+ * personagens contratados com o extrato do formulário de pré-contrato.
  */
 export function Fila3DPage() {
   const reduceMotion = useReducedMotion();
-  const query = useFila3D();
+  const [showDismissed, setShowDismissed] = useState(false);
+  const query = useFila3D(showDismissed);
   const [detalhe, setDetalhe] = useState<Fila3DEntry | null>(null);
+  const [vincular, setVincular] = useState<Fila3DPendingEvent | null>(null);
+
+  const pendentes = query.data?.sem_presente ?? [];
+  const semNada = query.data && query.data.items.length === 0 && pendentes.length === 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Fila de Impressão"
-        subtitle="Presentes 3D pendentes dos eventos SHOW, do prazo mais apertado ao mais folgado."
+        subtitle="Shows a vincular e presentes 3D pendentes, do prazo mais apertado ao mais folgado."
         className="mb-0"
       />
 
@@ -250,10 +322,50 @@ export function Fila3DPage() {
           Não foi possível carregar a fila de impressão.
         </div>
       )}
-      {query.data && query.data.items.length === 0 && (
+      {semNada && (
         <p className="text-sm text-muted">
-          Nenhum presente 3D pendente. Tudo entregue por aqui. 🎉
+          Nenhum show pendente e nenhum presente a imprimir. Tudo em dia por aqui. 🎉
         </p>
+      )}
+
+      {query.data && (pendentes.length > 0 || showDismissed) && (
+        <motion.section
+          className="rounded-lg border border-line bg-panel p-4"
+          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+        >
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.07em] text-muted">
+              Shows sem presente vinculado
+              {pendentes.length > 0 && ` (${pendentes.length})`}
+            </h2>
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={showDismissed}
+                onChange={(e) => setShowDismissed(e.target.checked)}
+              />
+              Mostrar dispensados
+            </label>
+          </div>
+          {pendentes.length === 0 ? (
+            <p className="text-sm text-muted">
+              Nenhum show pendente — todos os shows futuros já têm presente ou foram dispensados.
+            </p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {pendentes.map((event) => (
+                <PendingEventRow
+                  key={event.id}
+                  event={event}
+                  onVincular={() => setVincular(event)}
+                />
+              ))}
+            </ul>
+          )}
+        </motion.section>
       )}
 
       {query.data && query.data.items.length > 0 && (
@@ -330,6 +442,26 @@ export function Fila3DPage() {
       )}
 
       <DetalhesDialog entry={detalhe} onClose={() => setDetalhe(null)} />
+
+      <Dialog open={vincular !== null} onOpenChange={(next) => !next && setVincular(null)}>
+        <DialogContent open={vincular !== null} className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Vincular presente 3D</DialogTitle>
+            <DialogDescription>
+              {vincular?.title} · {formatShortDate(vincular?.start_at)}
+            </DialogDescription>
+          </DialogHeader>
+          {vincular && (
+            <AddPresente3DForm
+              eventId={vincular.id}
+              // Prazo sugerido = data do evento; o Artista 3D ajusta se quiser folga.
+              defaultDeadline={vincular.start_at ? vincular.start_at.slice(0, 10) : ""}
+              submitLabel="Vincular presente"
+              onAdded={() => setVincular(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

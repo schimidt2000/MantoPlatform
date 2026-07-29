@@ -81,11 +81,39 @@ def api_3d_acervo_list() -> Any:
     return jsonify({"items": [ops.serialize_acervo_item(item, count) for item, count in rows]})
 
 
+def serialize_pending_event(event: CalendarEvent) -> dict[str, Any]:
+    """Evento SHOW futuro sem presente vinculado — uma tarefa aberta para o Artista 3D."""
+    entry = _serialize_event(event)
+    dismissal = event.dispensa_3d
+    entry["dismissed"] = dismissal is not None
+    entry["dismissed_by"] = (
+        dismissal.dismisser.name if dismissal and dismissal.dismisser else None
+    )
+    entry["characters"] = [
+        r.character_name for r in sorted(event.roles, key=lambda r: r.id)
+        if r.role_type == "character"
+    ]
+    return entry
+
+
 @api_bp.route("/3d/fila")
 @api_login_required
 def api_3d_fila() -> Any:
-    """Fila de Impressão — presentes não entregues de eventos SHOW, prazo mais apertado primeiro."""
+    """Fila de Impressão do Artista 3D — dois blocos de trabalho.
+
+    `items`: presentes já vinculados e ainda não entregues (o que imprimir).
+    `sem_presente`: eventos SHOW futuros que **ainda não têm presente vinculado** — a pendência
+    nasce do evento, não do presente (feature 202). `?dispensados=1` inclui os já marcados como
+    "não leva presente", para a tela poder oferecer o "Reativar".
+    """
     denied = require_3d_access()
     if denied:
         return denied
-    return jsonify({"items": [serialize_queue_entry(g) for g in ops.list_print_queue()]})
+    include_dismissed = request.args.get("dispensados", "").strip() in ("1", "true")
+    pending = ops.list_pending_events(include_dismissed=include_dismissed)
+    return jsonify(
+        {
+            "items": [serialize_queue_entry(g) for g in ops.list_print_queue()],
+            "sem_presente": [serialize_pending_event(e) for e in pending],
+        }
+    )

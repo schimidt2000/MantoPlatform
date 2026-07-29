@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **201**
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **202**
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
@@ -232,10 +232,20 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
 
 #### `/3d/fila` — Fila de Impressão
 - **Acesso**: `ARTISTA_3D`, `SUPERADMIN` (gate de servidor em `GET /api/3d/fila`).
-- **Objetivo**: painel operacional que responde "o que eu imprimo primeiro". Lista todos os
-  presentes 3D com status ≠ `entregue` de eventos **SHOW**, do prazo mais apertado ao mais
-  folgado (sem prazo cai para o fim).
-- **UX**:
+- **Objetivo**: painel operacional com os **dois** blocos de trabalho do Artista 3D.
+- **UX — bloco 1: "Shows sem presente vinculado" (feature 202)**:
+  - **A pendência nasce do evento, não do presente**: todo SHOW de hoje em diante que ainda não
+    tem presente vinculado aparece aqui automaticamente. Antes da 202 a fila só listava presentes
+    já cadastrados e ficava vazia até alguém lembrar de vincular algo — o trabalho não aparecia.
+  - Cada linha traz título do show (link para `/events/:id`), data, os **personagens contratados**
+    (para reconhecer o show de relance) e o selo de urgência.
+  - **"Vincular presente"** abre um `Dialog` com o mesmo formulário da tela do evento
+    (`AddPresente3DForm`, fonte única), com o **prazo já pré-preenchido com a data do show** — a
+    pendência é resolvida sem sair da fila.
+  - **"Não leva presente"** dispensa a pendência (`Event3DDismissal`), igual ao "dispensar" do
+    personagem sem ficha em `/figurinos`. O checkbox **"Mostrar dispensados"** revela os
+    dispensados com botão **"Reativar"**.
+- **UX — bloco 2: presentes a imprimir**:
   - Tabela densa (`Table` do design system, com `overflow-x-auto` próprio — nada de rolagem
     horizontal na página): miniatura **quadrada** da peça + nome, evento (link para `/events/:id`)
     e local, data do evento, prazo com **selo de urgência** (`Atrasado Xd` / `Hoje` em vermelho,
@@ -250,7 +260,8 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
     Formulário de Pré-Contrato**, mostrando só os campos que a cliente preencheu — é lá que estão
     "Nome do Aniversariante" e "Idade a Completar do Aniversariante", que definem o que imprimir.
   - Estados de carregamento (`Skeleton`), erro e vazio ("Nenhum presente 3D pendente") em pt-BR.
-- **API**: `GET /api/3d/fila` · `PATCH /api/events/<id>/3d-gifts/<gift_id>`.
+- **API**: `GET /api/3d/fila[?dispensados=1]` · `PATCH /api/events/<id>/3d-gifts/<gift_id>` ·
+  `POST /api/events/<id>/3d-gifts` · `POST|DELETE /api/events/<id>/3d-dismissal`.
 - **Vínculos**: Evento (`CalendarEvent`) → Elenco (`EventRole`) → Formulário (`FormResponse`) →
   Acervo 3D (`Acervo3DItem`).
 

@@ -1982,3 +1982,33 @@ class Event3DGift(db.Model):
         ),
     )
     item = db.relationship("Acervo3DItem", lazy="joined", backref=db.backref("gifts", lazy=True))
+
+
+class Event3DDismissal(db.Model):
+    """Dispensa da pendência "show sem presente 3D" de um evento (feature 202).
+
+    Todo evento SHOW futuro sem nenhum ``Event3DGift`` vira uma tarefa na Fila de Impressão —
+    é o evento que gera o trabalho, não o presente. Nem todo show leva presente, então esta
+    tabela registra "este aqui não leva", tirando a tarefa da fila sem inventar um presente
+    fantasma. Mesmo padrão de ``FigurinoMissingDismissal`` (feature 183) e de
+    ``EventRole.dismissed_at`` (feature 108).
+
+    A dispensa é reversível (basta apagar a linha) e é descartada automaticamente quando alguém
+    vincula um presente ao evento — se leva presente, a decisão anterior deixou de valer.
+    """
+
+    __tablename__ = "event_3d_dismissals"
+
+    id           = db.Column(db.Integer, primary_key=True)
+    event_id     = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="CASCADE"),
+        nullable=False, unique=True,
+    )
+    dismissed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    dismissed_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    event     = db.relationship(
+        "CalendarEvent", lazy=True,
+        backref=db.backref("dispensa_3d", uselist=False, cascade="all, delete-orphan"),
+    )
+    dismisser = db.relationship("User", lazy=True, foreign_keys=[dismissed_by])

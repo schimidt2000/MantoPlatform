@@ -8,6 +8,7 @@ presentes vinculados a um evento (`/api/events/<id>/3d-gifts`). Reusa, sem dupli
 from typing import Any
 
 from flask import jsonify, request
+from flask_login import current_user
 
 from app.api import api_bp
 from app.api.impressoes3d_read import require_3d_access
@@ -174,4 +175,37 @@ def api_event_3d_gift_delete(event_id: int, gift_id: int) -> Any:
     if gift is None:
         return json_error("Presente 3D não encontrado", 404)
     ops.delete_event_gift(gift)
+    return "", 204
+
+
+# ── Dispensa da pendência "show sem presente" (feature 202) ──────────────────
+
+
+@api_bp.route("/events/<int:event_id>/3d-dismissal", methods=["POST"])
+@api_login_required
+def api_event_3d_dismiss(event_id: int) -> Any:
+    """Marca o evento como "não leva presente 3D", tirando-o da lista de pendências."""
+    denied = require_3d_access()
+    if denied:
+        return denied
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if event.event_type != EVENT_TYPE_SHOW:
+        return json_error("Só eventos do tipo SHOW geram pendência de presente 3D", 400)
+    ops.dismiss_event(event, dismissed_by=current_user.id)
+    return jsonify({"event_id": event.id, "dismissed": True})
+
+
+@api_bp.route("/events/<int:event_id>/3d-dismissal", methods=["DELETE"])
+@api_login_required
+def api_event_3d_undismiss(event_id: int) -> Any:
+    """Desfaz a dispensa, devolvendo o evento à lista de pendências."""
+    denied = require_3d_access()
+    if denied:
+        return denied
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    ops.undismiss_event(event)
     return "", 204

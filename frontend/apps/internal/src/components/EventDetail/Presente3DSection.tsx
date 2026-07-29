@@ -1,5 +1,4 @@
-import { useMemo, useState } from "react";
-import { AvatarThumb, Badge, Button, Combobox, type ComboboxOption } from "@manto/ui";
+import { AvatarThumb, Badge, Button } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import type { EventoDetalhe } from "../../lib/agenda";
 import {
@@ -7,27 +6,13 @@ import {
   GIFT_3D_STATUSES,
   GIFT_3D_STATUS_LABELS,
   GIFT_3D_STATUS_TONES,
-  useAcervo3D,
-  useAddEvent3DGift,
   useDeleteEvent3DGift,
   useUpdateEvent3DGift,
-  type Acervo3DItem,
   type Event3DGift,
   type Gift3DStatus,
 } from "../../lib/impressoes3d";
+import { AddPresente3DForm } from "../AddPresente3DForm";
 import { Empty, INPUT_CLASS, Panel } from "./parts";
-
-/** Opções do Combobox com miniatura quadrada da peça (Princípio X.1/X.2). */
-function acervoOptions(items: Acervo3DItem[]): ComboboxOption[] {
-  return items.map((item) => ({
-    value: String(item.id),
-    label: item.name,
-    description: item.usage_count > 0 ? `${item.usage_count} uso(s) em eventos` : undefined,
-    imageUrl: assetUrl(item.photo_url) ?? null,
-    imageShape: "square" as const,
-    fallbackIcon: "🧊",
-  }));
-}
 
 interface GiftRowProps {
   gift: Event3DGift;
@@ -102,93 +87,6 @@ function GiftRow({ gift, canManage }: GiftRowProps) {
   );
 }
 
-/** Formulário de vínculo de um presente novo — seleção visual obrigatória via `Combobox`. */
-function AddGiftForm({ eventId }: { eventId: number }) {
-  const acervo = useAcervo3D(true);
-  const add = useAddEvent3DGift(eventId);
-  const [itemId, setItemId] = useState<string | null>(null);
-  const [quantity, setQuantity] = useState("1");
-  const [deadline, setDeadline] = useState("");
-  const [notes, setNotes] = useState("");
-
-  const options = useMemo(() => acervoOptions(acervo.data?.items ?? []), [acervo.data]);
-  const invalidItem = Boolean(add.error && !itemId);
-
-  function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!itemId) return;
-    add.mutate(
-      {
-        item_id: Number(itemId),
-        quantity: Number(quantity) || 1,
-        deadline_date: deadline || null,
-        notes: notes.trim(),
-      },
-      {
-        // Só limpa o formulário quando a API confirma (Princípio V).
-        onSuccess: () => {
-          setItemId(null);
-          setQuantity("1");
-          setDeadline("");
-          setNotes("");
-        },
-      },
-    );
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-2 border-t border-line pt-3">
-      <Combobox
-        aria-label="Buscar peça do Acervo 3D"
-        placeholder="🔍 Buscar peça do Acervo 3D…"
-        emptyMessage="Nenhuma peça encontrada no Acervo."
-        options={options}
-        loading={acervo.isLoading}
-        value={itemId}
-        invalid={invalidItem}
-        onChange={(next) => setItemId(next)}
-      />
-      <div className="grid gap-2 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-xs text-muted">Quantidade</span>
-          <input
-            type="number"
-            min={1}
-            className={INPUT_CLASS}
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-muted">Prazo de entrega</span>
-          <input
-            type="date"
-            className={INPUT_CLASS}
-            value={deadline}
-            onChange={(e) => setDeadline(e.target.value)}
-          />
-        </label>
-      </div>
-      <input
-        className={INPUT_CLASS}
-        placeholder="Observações (opcional)"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        aria-label="Observações do presente 3D"
-      />
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" size="sm" loading={add.isPending} disabled={!itemId}>
-          Adicionar presente
-        </Button>
-        {acervo.isError && (
-          <span className="text-sm text-red">Não foi possível carregar o Acervo 3D.</span>
-        )}
-        {add.isError && <span className="text-sm text-red">{add.error?.message}</span>}
-      </div>
-    </form>
-  );
-}
-
 export interface Presente3DSectionProps {
   data: EventoDetalhe;
 }
@@ -225,7 +123,11 @@ export function Presente3DSection({ data }: Presente3DSectionProps) {
           ))}
         </ul>
       )}
-      {canManage && <AddGiftForm eventId={data.event.id} />}
+      {canManage && (
+        <div className="border-t border-line pt-3">
+          <AddPresente3DForm eventId={data.event.id} />
+        </div>
+      )}
     </Panel>
   );
 }

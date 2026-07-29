@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **201**
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **202**
 
 Formato de cada entrada:
 
@@ -17,6 +17,64 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 202 — Fila de Impressão dirigida pelo evento
+`202-fila-3d-por-evento` · **2026-07-29** · migration **`e4f7b2c9a350`** (*pendencia 3d por evento
+show*)
+
+**Motivação.** Com a 200 no ar, o usuário abriu `/3d/fila` em produção e viu **vazio**, apesar de
+haver 23 shows futuros na agenda. Não era bug: a fila listava apenas presentes **já vinculados**,
+e nenhum tinha sido cadastrado. Mas o diagnóstico do usuário estava certo — *"talvez a lógica
+esteja errada: se um evento SHOW existe, ele gera uma tarefa de vincular algum presente a ele"*.
+Uma fila que só mostra trabalho depois que alguém lembrou de cadastrá-lo não é uma fila de
+trabalho; o Artista 3D não tinha como saber o que estava faltando.
+
+**O que mudou.**
+
+- **Banco.** Nova `event_3d_dismissals` (`event_id` **UNIQUE**, `ON DELETE CASCADE`,
+  `dismissed_at`, `dismissed_by`) — a dispensa "este show não leva presente". Mesmo padrão de
+  `FigurinoMissingDismissal` (183) e `EventRole.dismissed_at` (108): quando a tarefa nasce de uma
+  **ausência**, é preciso um jeito de dizer "esta ausência é intencional".
+- **Backend.**
+  - `list_pending_events()`: SHOWs com `start_at >= hoje`, **zero** `Event3DGift` e sem dispensa.
+    O recorte por data é deliberado — incluir o histórico traria centenas de linhas mortas.
+  - `dismiss_event()` / `undismiss_event()`, ambos idempotentes.
+  - `add_event_gift()` passou a **apagar a dispensa** do evento: se o show leva presente, a
+    decisão anterior deixou de valer.
+  - `GET /api/3d/fila` virou dois blocos (`items` + `sem_presente`) e aceita `?dispensados=1`;
+    novos `POST|DELETE /api/events/<id>/3d-dismissal`.
+- **Frontend.**
+  - O formulário de vínculo saiu de dentro de `Presente3DSection` e virou
+    `components/AddPresente3DForm.tsx` — **fonte única** (Princípio I), usada pela seção do evento
+    e pelo novo Dialog "Vincular presente" da Fila, que pré-preenche o prazo com a data do show.
+  - `Fila3DPage` ganhou o bloco "Shows sem presente vinculado" com contador, personagens
+    contratados, selo de urgência, "Vincular presente", "Não leva presente" e o toggle "Mostrar
+    dispensados" → "Reativar".
+
+**Impacto em RBAC e regras de negócio.** RBAC inalterado (dispensa exige `ARTISTA_3D`/
+`SUPERADMIN`). Regra nova: **todo SHOW futuro sem presente é uma tarefa aberta**, e sai da lista
+de três formas — vinculando um presente, dispensando, ou o show virando passado.
+
+**Riscos e pegadinhas descobertos.**
+1. **O "vazio" que motivou a feature não era bug.** Antes de mudar qualquer coisa, conferi na
+   cópia de produção: 0 peças, 0 presentes, e **23 SHOWs futuros com `event_type` batendo 100%
+   com o prefixo do título** (nenhum divergente). O filtro estava correto — o modelo mental é que
+   estava.
+2. **Dispensa sem "desfazer" seria um beco sem saída.** Se um show fosse dispensado por engano,
+   não haveria como reverter pela tela. Daí o `DELETE` e o toggle "Mostrar dispensados".
+3. **Erros de `<AcervoForm>` no console durante a verificação eram do HMR**, não do código: ao
+   trocar `file_path` por `files[]` (feature 201) com o app aberto, o cache do TanStack Query
+   ainda tinha o formato antigo. Confirmado abrindo o app em aba nova — console limpo. Ao validar
+   no browser depois de mudar o **formato de um payload**, recarregue de verdade antes de acusar
+   um bug.
+
+**Verificação.** `scripts/db/verify_200_impressoes_3d.py` ampliado — **65/65 checks**, com um
+bloco US4.1 dedicado (SHOW futuro com/sem presente, não-SHOW, SHOW passado, dispensa idempotente,
+`?dispensados=1`, reativar, vincular descartando a dispensa e remover o presente devolvendo a
+pendência). Conferido no app real contra a cópia de produção: **23 pendências** listadas por data,
+vínculo pelo Dialog derrubando o contador para 22, dispensa para 21 e "Reativar" de volta para 22.
+
+---
 
 ### 201 — Acervo 3D: uma peça, vários arquivos
 `201-acervo-3d-multi-arquivos` · **2026-07-29** · migration **`d9e3a5b7c124`** (*acervo 3d com
