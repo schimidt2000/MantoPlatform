@@ -46,6 +46,8 @@ import { OrcamentoConfigPrecosPage } from "./pages/OrcamentoConfigPrecosPage";
 import { OrcamentoHistoricoPage } from "./pages/OrcamentoHistoricoPage";
 import { AvaliacaoCastingPage } from "./pages/AvaliacaoCastingPage";
 import { FormulariosAdminPage } from "./pages/FormulariosAdminPage";
+import { Acervo3DPage } from "./pages/Acervo3DPage";
+import { Fila3DPage } from "./pages/Fila3DPage";
 
 /** Rota antiga `/talents/:id/edit` — redireciona para o modo edição unificado (feature 180). */
 function TalentEditRedirect() {
@@ -76,6 +78,8 @@ export function App() {
           <Route path="/formularios" element={<FormulariosAdminPage />} />
           <Route path="/talents/:id" element={<TalentDetailPage />} />
           <Route path="/talents/:id/edit" element={<TalentEditRedirect />} />
+          <Route path="/3d/acervo" element={<Acervo3DPage />} />
+          <Route path="/3d/fila" element={<Fila3DPage />} />
           <Route path="/figurinos" element={<FigurinoListPage />} />
           <Route path="/figurinos/new" element={<FigurinoFormPage />} />
           <Route path="/figurinos/:id/edit" element={<FigurinoFormPage />} />

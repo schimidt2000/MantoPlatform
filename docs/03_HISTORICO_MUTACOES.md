@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **199**
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **200**
 
 Formato de cada entrada:
 
@@ -17,6 +17,108 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 200 — Módulo Core de Impressões 3D
+`200-impressoes-3d` · **2026-07-29** · migration **`c8d2f4a6b013`** (*modulo core de impressoes 3d*)
+
+**Motivação.** A entrega física dos Presentes 3D dos eventos `SHOW` era controlada fora do
+sistema. O Artista 3D não tinha como saber, sem perguntar, **quantas peças imprimir e de que
+idade** — informação que a cliente já preenche no formulário de pré-contrato — nem qual era o
+prazo real de cada evento. O módulo nasce fechando esse ciclo: catálogo de peças com foto,
+vínculo peça↔evento com prazo e status, e um painel operacional que **cruza elenco contratado +
+respostas do formulário** numa tela só.
+
+**O que mudou.**
+
+- **Banco.** Duas tabelas novas, migração 100% aditiva:
+  - `acervo_3d_items` (`Acervo3DItem`): `name`, `photo_url` e `file_path` (`.stl`/`.3mf`/`.zip`)
+    — **os dois arquivos NOT NULL**: sem foto a peça não é selecionável visualmente (Princípio
+    X.2) e sem arquivo ela não é imprimível, então uma entrada incompleta só sujaria o Acervo.
+    Na edição, não enviar um arquivo significa manter o atual — nunca limpar. Mais `is_active`,
+    `created_at`.
+  - `event_3d_gifts` (`Event3DGift`): `event_id` (**ON DELETE CASCADE**), `item_id`, `status`,
+    `deadline_date`, `quantity`, `notes`, `created_at`/`updated_at`; índices em `event_id`,
+    `item_id` e `status`. Backref `CalendarEvent.presentes_3d` com
+    `cascade="all, delete-orphan"`.
+  - Nada de tabela existente foi alterado — eventos antigos seguem funcionando sem presente
+    vinculado.
+- **Backend.**
+  - `app/constants.py`: papel `RoleName.ARTISTA_3D`, `EVENT_TYPE_SHOW` e `GIFT_3D_STATUSES`
+    (`pendente` → `imprimindo` → `finalizado` → `entregue`) como fonte única do ciclo de vida.
+  - `app/impressoes3d/impressoes3d_ops.py` (**novo núcleo de negócio**, funções puras): CRUD do
+    Acervo com validação de extensão e troca de arquivo (upload novo apaga o antigo do storage),
+    vínculo/edição/remoção de presentes, `list_print_queue()` e os serializadores
+    (`serialize_acervo_item`, `serialize_gift`, `serialize_form_response`). Erros de validação
+    viram `Impressao3DValidationError(field, message)` → `json_error(..., fields={campo: msg})`.
+  - `app/api/impressoes3d_read.py` / `impressoes3d_write.py`: `/api/3d/acervo` (CRUD multipart),
+    `/api/3d/fila` e `/api/events/<id>/3d-gifts[/<gift_id>]` (POST/PATCH/DELETE). RBAC como
+    **função** (`require_3d_access()`) chamada no início de cada view, nunca decorator.
+  - `app/api/agenda_read.py`: flag `can_manage_3d` em `_role_flags` e serialização de
+    `presentes_3d` no detalhe do evento **só quando `event_type == 'SHOW'`** — reusando
+    `serialize_gift` do módulo 3D, sem segunda montagem do payload (Princípio I).
+  - `seed.py`: `get_or_create_role("ARTISTA_3D")`.
+- **Frontend.**
+  - `lib/impressoes3d.ts`: contrato JSON tipado + hooks TanStack Query + os helpers
+    `formatDeadline`/`daysUntilDeadline`.
+  - `pages/Acervo3DPage.tsx` (`/3d/acervo`): formulário de upload duplo e grade de cards com a
+    contagem de usos, download do arquivo, edição em `Dialog`, inativar/reativar e exclusão
+    confirmada.
+  - `pages/Fila3DPage.tsx` (`/3d/fila`): tabela densa por prazo, selo de urgência, seletor rápido
+    de status e o `Dialog` "Ver Detalhes para Impressão".
+  - `components/EventDetail/Presente3DSection.tsx`: injetado na **coluna esquerda** de
+    `/events/:id`, entre Logística e Observações; adição via `Combobox` de `@manto/ui` com
+    `AvatarThumb` **quadrado** da peça (Princípio X.1/X.2).
+  - `lib/navigation.tsx`: seção nova **"Impressão 3D"** (Fila + Acervo), visível para
+    `ARTISTA_3D` e `SUPERADMIN`. `App.tsx`: rotas `/3d/fila` e `/3d/acervo`.
+
+**Impacto em RBAC e regras de negócio.**
+- Papel novo `ARTISTA_3D`: gestão total do módulo 3D + **leitura** dos eventos (herda o
+  `api_login_required` de `GET /api/events/<id>`, que não é gated por papel) — é o que dá acesso
+  ao elenco e ao formulário de pré-contrato.
+- `can_manage_3d` = `ARTISTA_3D` ou `SUPERADMIN`. **Quem abre o evento lê a lista de presentes;
+  só o Artista 3D edita.** Decisão consciente de não estender a escrita ao `COMERCIAL` — se a
+  operação pedir, é um `has()` a mais em `_role_flags` e em `require_3d_access`.
+- Presente 3D é **exclusivo de evento `SHOW`** (400 nos demais tipos).
+- Peça com evento vinculado **não pode ser excluída** (400 orientando a inativar) — protege a
+  contagem histórica de usos.
+
+**Rotas e endpoints novos.** `GET|POST /api/3d/acervo` · `PATCH|DELETE /api/3d/acervo/<id>` ·
+`GET /api/3d/fila` · `POST /api/events/<id>/3d-gifts` ·
+`PATCH|DELETE /api/events/<id>/3d-gifts/<gift_id>` · telas `/3d/acervo` e `/3d/fila`.
+**Alterado (aditivo)**: `GET /api/events/<id>` ganhou `presentes_3d` (só SHOW) e
+`flags.can_manage_3d` (sempre).
+
+**Riscos e pegadinhas descobertos.**
+1. **Nome dos módulos Python.** A spec pedia `app/api/3d_read.py` e `app/3d_impressions/3d_ops.py`
+   — impossível: identificador Python não pode começar com dígito, `from app.api import 3d_read`
+   é erro de sintaxe. Ficaram `app/api/impressoes3d_{read,write}.py` e
+   `app/impressoes3d/impressoes3d_ops.py`. **As URLs mantêm o `3d` exatamente como pedido.**
+2. **`event_type` tem duas origens.** A coluna `CalendarEvent.event_type` (preenchida na
+   sincronização a partir do prefixo do título) é o que o backend filtra; o JSON do detalhe expõe
+   `parse_event_type(event.title)`. Hoje concordam porque a sincronização usa a mesma função —
+   mas se algum dia divergirem, a seção some da tela enquanto o backend ainda aceita o vínculo.
+3. **Data pura vs. `new Date()` no JS.** `new Date("2026-08-02")` é interpretado como **UTC**, o
+   que em São Paulo (UTC−3) exibiria 01/08. `deadline_date` é data pura, então o módulo usa
+   `formatDeadline` (split da string), e não `formatShortDate` de `@manto/ui` — este continua
+   correto para os ISO **com hora** (`start_at`).
+4. **Duas formas históricas de `FormResponse.data`.** Campos podem vir como
+   `[chave, rótulo, valor]` (feature 123) ou `[rótulo, valor]` (anteriores).
+   `serialize_form_response` normaliza as duas e **descarta campos vazios** — sem isso o extrato
+   do formulário vira uma parede de rótulos em branco.
+5. **`useAcervo3D` precisa de `enabled`.** O endpoint responde 403 para quem não é Artista 3D; a
+   seção do evento só dispara a busca quando `can_manage_3d` é verdadeiro, senão todo `CASTING`
+   que abrisse um SHOW geraria um 403 no console.
+
+**Verificação.** `scripts/db/verify_200_impressoes_3d.py` contra `manto_local` — **40/40 checks**
+(RBAC 401/403, upload duplo obrigatório com validação de extensão, vínculo recusado em não-SHOW,
+status fora do ciclo de vida, presente de outro evento → 404, exclusão bloqueada de peça em uso,
+elenco + formulário aninhados na fila, `entregue` sumindo da fila, `presentes_3d`/`can_manage_3d`
+no detalhe do evento). `npx tsc --noEmit` limpo nos três apps e `npm run build` do internal OK.
+Conferido no app real (Flask + Vite locais) com um evento SHOW de verdade: fila, dialog de
+detalhes (leu "Rafael e Gabriel · 2 e 3 anos" direto do formulário), seção no evento, combobox
+com miniatura e ausência da seção em evento `R&I`.
+
+---
 
 ### 199 — Liberação do status 'No banco' para Comissões e Recorrentes
 `199-no-banco-comissoes-recorrentes` · **2026-07-29** · **sem migration**

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   BarChart3,
   BookOpen,
+  Boxes,
   Calculator,
   CalendarDays,
   Clapperboard,
@@ -17,6 +18,7 @@ import {
   Package,
   PenSquare,
   Plus,
+  Printer,
   Receipt,
   RefreshCw,
   Repeat,
@@ -144,6 +146,30 @@ const SECTIONS: NavSectionConfig[] = [
         icon: <Shirt />,
         isActive: (path) => path.startsWith("/figurinos"),
         isVisible: notRevendedor,
+      },
+    ],
+  },
+  {
+    // Feature 200 — visível só para quem opera as impressões (Artista 3D) e o Superadmin.
+    label: "Impressão 3D",
+    items: [
+      {
+        key: "3d-fila",
+        label: "Fila de Impressão",
+        href: "/3d/fila",
+        icon: <Printer />,
+        hint: "Presentes 3D pendentes dos eventos SHOW",
+        isActive: (path) => path === "/3d/fila",
+        isVisible: (user) => notRevendedor(user) && hasRole(user, "ARTISTA_3D", "SUPERADMIN"),
+      },
+      {
+        key: "3d-acervo",
+        label: "Acervo 3D",
+        href: "/3d/acervo",
+        icon: <Boxes />,
+        hint: "Catálogo dos modelos base",
+        isActive: (path) => path === "/3d/acervo",
+        isVisible: (user) => notRevendedor(user) && hasRole(user, "ARTISTA_3D", "SUPERADMIN"),
       },
     ],
   },

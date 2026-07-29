@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
+import type { Event3DGift } from "./impressoes3d";
 
 /** Resumo de um evento na agenda (data-model.md: EventoResumo). Sem dado financeiro. */
 export interface EventoResumo {
@@ -191,6 +192,11 @@ export interface EventoDetalhe {
   logs: { ts: string; actor_name: string; actor_role: string; message: string }[];
   elenco?: RoleItem[];
   materiais?: EventMaterial[];
+  /**
+   * Presentes 3D do evento (feature 200) — só vem no payload quando o evento é do tipo SHOW;
+   * a chave ausente é o sinal para não renderizar a seção.
+   */
+  presentes_3d?: Event3DGift[];
   ratings?: { items: EventRatingItem[]; average: number | null; count: number };
   client_feedbacks?: ClientFeedbackItem[];
   gastos?: EventGasto[];

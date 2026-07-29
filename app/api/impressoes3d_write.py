@@ -1,0 +1,162 @@
+"""Endpoints de ESCRITA do módulo de Impressões 3D (feature 200).
+
+CRUD do Acervo (`/api/3d/acervo`, multipart — foto de preview + arquivo 3D) e gestão dos
+presentes vinculados a um evento (`/api/events/<id>/3d-gifts`). Reusa, sem duplicar,
+`app.impressoes3d.impressoes3d_ops`. Gate: `ARTISTA_3D` ou `SUPERADMIN`.
+"""
+
+from typing import Any
+
+from flask import jsonify, request
+
+from app.api import api_bp
+from app.api.impressoes3d_read import require_3d_access
+from app.api_utils import api_login_required, json_error
+from app.constants import EVENT_TYPE_SHOW
+from app.impressoes3d import impressoes3d_ops as ops
+from app.models import Acervo3DItem, CalendarEvent, Event3DGift
+
+
+def _form_flag(field: str) -> bool | None:
+    """Lê um booleano de `request.form`; `None` quando o campo não foi enviado."""
+    if field not in request.form:
+        return None
+    return request.form.get(field, "").strip().lower() in ("1", "true")
+
+
+# ── Acervo 3D ────────────────────────────────────────────────────────────────
+
+
+@api_bp.route("/3d/acervo", methods=["POST"])
+@api_login_required
+def api_3d_acervo_create() -> Any:
+    """Cadastra uma peça no Acervo 3D (multipart: `photo` obrigatória, `file` opcional)."""
+    denied = require_3d_access()
+    if denied:
+        return denied
+    try:
+        item = ops.create_acervo_item(
+            name=request.form.get("name", ""),
+            photo_file=request.files.get("photo"),
+            model_file=request.files.get("file"),
+        )
+    except ops.Impressao3DValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(ops.serialize_acervo_item(item, 0)), 201
+
+
+@api_bp.route("/3d/acervo/<int:item_id>", methods=["PATCH"])
+@api_login_required
+def api_3d_acervo_update(item_id: int) -> Any:
+    """Edita uma peça do Acervo (nome, ativo/inativo, foto e/ou arquivo 3D)."""
+    denied = require_3d_access()
+    if denied:
+        return denied
+    item = Acervo3DItem.query.get(item_id)
+    if item is None:
+        return json_error("Peça do Acervo não encontrada", 404)
+    try:
+        ops.update_acervo_item(
+            item,
+            name=request.form.get("name") if "name" in request.form else None,
+            is_active=_form_flag("is_active"),
+            photo_file=request.files.get("photo"),
+            model_file=request.files.get("file"),
+        )
+    except ops.Impressao3DValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(ops.serialize_acervo_item(item, Event3DGift.query.filter_by(item_id=item.id).count()))
+
+
+@api_bp.route("/3d/acervo/<int:item_id>", methods=["DELETE"])
+@api_login_required
+def api_3d_acervo_delete(item_id: int) -> Any:
+    """Exclui uma peça do Acervo (bloqueado enquanto houver evento vinculado)."""
+    denied = require_3d_access()
+    if denied:
+        return denied
+    item = Acervo3DItem.query.get(item_id)
+    if item is None:
+        return json_error("Peça do Acervo não encontrada", 404)
+    try:
+        ops.delete_acervo_item(item)
+    except ops.Impressao3DValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return "", 204
+
+
+# ── Presentes 3D de um evento ────────────────────────────────────────────────
+
+
+def _load_gift(event_id: int, gift_id: int) -> Event3DGift | None:
+    """Carrega o presente garantindo que ele pertence ao evento da URL."""
+    return Event3DGift.query.filter_by(id=gift_id, event_id=event_id).first()
+
+
+@api_bp.route("/events/<int:event_id>/3d-gifts", methods=["POST"])
+@api_login_required
+def api_event_3d_gift_create(event_id: int) -> Any:
+    """Vincula uma peça do Acervo ao evento como Presente 3D (JSON)."""
+    denied = require_3d_access()
+    if denied:
+        return denied
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if event.event_type != EVENT_TYPE_SHOW:
+        return json_error("Presente 3D só pode ser vinculado a eventos do tipo SHOW", 400)
+
+    body = request.get_json(silent=True) or {}
+    try:
+        gift = ops.add_event_gift(
+            event,
+            item_id=body.get("item_id"),
+            quantity=body.get("quantity", 1),
+            deadline_date=body.get("deadline_date"),
+            notes=body.get("notes"),
+            status=body.get("status"),
+        )
+    except ops.Impressao3DValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(ops.serialize_gift(gift)), 201
+
+
+@api_bp.route("/events/<int:event_id>/3d-gifts/<int:gift_id>", methods=["PATCH"])
+@api_login_required
+def api_event_3d_gift_update(event_id: int, gift_id: int) -> Any:
+    """Edita um Presente 3D do evento — inclui a troca rápida de status na Fila (JSON)."""
+    denied = require_3d_access()
+    if denied:
+        return denied
+    gift = _load_gift(event_id, gift_id)
+    if gift is None:
+        return json_error("Presente 3D não encontrado", 404)
+
+    body = request.get_json(silent=True) or {}
+    try:
+        ops.update_event_gift(
+            gift,
+            status=body.get("status"),
+            quantity=body.get("quantity"),
+            # `...` = "não alterar" (None é válido: limpa o prazo).
+            deadline_date=body["deadline_date"] if "deadline_date" in body else ...,
+            notes=body.get("notes"),
+            item_id=body.get("item_id"),
+        )
+    except ops.Impressao3DValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(ops.serialize_gift(gift))
+
+
+@api_bp.route("/events/<int:event_id>/3d-gifts/<int:gift_id>", methods=["DELETE"])
+@api_login_required
+def api_event_3d_gift_delete(event_id: int, gift_id: int) -> Any:
+    """Remove o vínculo de um Presente 3D com o evento."""
+    denied = require_3d_access()
+    if denied:
+        return denied
+    gift = _load_gift(event_id, gift_id)
+    if gift is None:
+        return json_error("Presente 3D não encontrado", 404)
+    ops.delete_event_gift(gift)
+    return "", 204

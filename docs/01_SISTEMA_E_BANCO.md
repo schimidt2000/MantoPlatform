@@ -3,8 +3,8 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **197**
-> (`197-dashboard-avaliacoes-clientes`) · Head de migration: `9f1c3a7b5e2d` (sem migration nova)
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **200**
+> (`200-impressoes-3d`) · Head de migration: `c8d2f4a6b013` (*modulo core de impressoes 3d*)
 
 ---
 
@@ -104,6 +104,30 @@ Fonte única: `app/models.py` (~1.880 linhas). **53 tabelas**, incluindo 3 tabel
 - `is_educamanto` (property) = título começa com `(EDU` (`EDUCAMANTO_TITLE_PREFIX`).
 - `event_requires_client(event)` (em `app/constants.py`): eventos com início ≥ **2026-06-29**
   (`CLIENT_REQUIRED_FROM`) exigem cliente para salvar a venda; anteriores são grandfathered.
+
+### 2.2.1 Impressões e Acervo 3D (feature 200)
+
+| Tabela | Model | Destaques | FKs |
+|---|---|---|---|
+| `acervo_3d_items` | `Acervo3DItem` | catálogo de peças base: `name`, `photo_url` (**NOT NULL** — foto JPG/PNG de preview) e `file_path` (**NOT NULL** — arquivo bruto `.stl`/`.3mf`/`.zip`), `is_active`, `created_at` | — |
+| `event_3d_gifts` | `Event3DGift` | presente 3D vinculado a um evento (1:N): `status` (`pendente`\|`imprimindo`\|`finalizado`\|`entregue`), `deadline_date`, `quantity`, `notes`, `created_at`/`updated_at`; índices em `event_id`, `item_id` e `status` | `event_id`→`calendar_events` (**ON DELETE CASCADE**), `item_id`→`acervo_3d_items` |
+
+**Semântica importante**
+- **Os dois arquivos da peça são obrigatórios**: sem foto ela não é selecionável visualmente
+  (Princípio X.2), sem arquivo `.stl`/`.3mf`/`.zip` ela não é imprimível. Na **edição**, não
+  enviar um arquivo significa *manter o atual* — nunca limpar.
+- Só evento com `event_type == 'SHOW'` (`EVENT_TYPE_SHOW`, em `app/constants.py`) aceita presente
+  3D — a API recusa com 400 em qualquer outro tipo, e o detalhe do evento só serializa a chave
+  `presentes_3d` nesse caso.
+- `GIFT_3D_STATUSES` (`app/constants.py`) é a fonte única do ciclo de vida. `entregue` é estado
+  final: sai da Fila de Impressão.
+- `CalendarEvent.presentes_3d` é o backref (`cascade="all, delete-orphan"`) — excluir o evento
+  leva junto os vínculos, mas **nunca** as peças do Acervo.
+- Peça do Acervo com evento vinculado **não pode ser excluída** (400 com orientação de inativar):
+  preserva o histórico de quantas vezes o modelo já foi impresso.
+- Núcleo de negócio em `app/impressoes3d/impressoes3d_ops.py`. *(Nomenclatura: a proposta original
+  era `app/3d_impressions/3d_ops.py`, impossível em Python — identificador não pode começar com
+  dígito. As URLs públicas mantêm o `3d`.)*
 
 ### 2.3 Talentos e Casting
 
@@ -240,10 +264,14 @@ Pontos que valem para quem for ler esses dados:
 ### 2.11 Migrations
 
 - Alembic via Flask-Migrate, **sempre escritas à mão** (`migrations/versions/`).
-- Head atual: **`9f1c3a7b5e2d`** — *catalog characters + video url* (feature 185).
+- Head atual: **`c8d2f4a6b013`** — *modulo core de impressoes 3d* (feature 200).
 - Cadeia recente: `27acb021e8d6` → `aa1bb2cc3dd4` (review asset status) → `7c2d9e4f1a3b`
-  (figurino_missing_dismissals) → `4e6f8a1c2d5b` (figurino_sheet tags) → `9f1c3a7b5e2d`.
-- Features **186** e **187** não geraram migration (reusaram colunas existentes).
+  (figurino_missing_dismissals) → `4e6f8a1c2d5b` (figurino_sheet tags) → `9f1c3a7b5e2d`
+  (catalog characters) → `c8d2f4a6b013`.
+- Features **186**, **187** e **199** não geraram migration (reusaram colunas existentes).
+- O papel `ARTISTA_3D` **não** vem por migration: papéis são linhas de `roles` semeadas por
+  `seed.py` (mesmo tratamento de `MARKETING`/`REVENDEDOR_EDUCAMANTO`), e o Railway roda
+  `flask db upgrade && python seed.py` no start.
 - Produção aplica `flask db upgrade && python seed.py` no start (ver `railway.json`).
 
 ---
@@ -437,6 +465,35 @@ no máximo 5 itens, descartando predições sem `description`.
 > incluir `photo_face_path`, que alimenta o avatar circular do combobox de pré-escala e de
 > coordenador. `figurino_sheets` já trazia `photo_url`. O Jinja legado ignora a chave extra.
 
+### 3.13.2 Impressões 3D — `impressoes3d_read.py` / `impressoes3d_write.py` (feature 200)
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET` | `/api/3d/acervo` | Catálogo de peças com `usage_count` (nº de eventos que já usaram a peça). `?ativos=1` esconde as inativas. |
+| `POST` | `/api/3d/acervo` | Cadastra peça (**multipart**): `name`, `photo` (JPG/PNG) e `file` (`.stl`/`.3mf`/`.zip`) — **os três obrigatórios**; falta de qualquer um devolve 400 com o campo em `fields`. |
+| `PATCH` | `/api/3d/acervo/<id>` | Edita nome/`is_active` e troca foto/arquivo (**multipart**); upload novo apaga o antigo do storage. |
+| `DELETE` | `/api/3d/acervo/<id>` | Exclui a peça e seus arquivos. **400** se houver evento vinculado. |
+| `GET` | `/api/3d/fila` | Fila de Impressão — presentes com `status != 'entregue'` de eventos **SHOW**, ordenados por prazo (sem prazo vai para o fim). |
+| `POST` | `/api/events/<id>/3d-gifts` | Vincula peça ao evento (JSON: `item_id`, `quantity`, `deadline_date`, `notes`, `status`). **400** em evento não-SHOW. |
+| `PATCH` | `/api/events/<id>/3d-gifts/<gift_id>` | Edita status/quantidade/prazo/observações/peça. É o endpoint do seletor rápido de status da Fila. |
+| `DELETE` | `/api/events/<id>/3d-gifts/<gift_id>` | Remove o vínculo (a peça do Acervo continua existindo). |
+
+- **RBAC**: todos os endpoints acima exigem `ARTISTA_3D` **ou** `SUPERADMIN`
+  (`require_3d_access()` em `impressoes3d_read.py`, chamada no início de cada view — função, não
+  decorator, conforme §4.3). Sem sessão → 401; papel errado → 403.
+- **Inteligência de negócio da Fila**: cada item traz aninhados o `event`, a lista de `roles`
+  (personagens contratados, com o talento escalado) e `form_response` — o extrato do formulário
+  de pré-contrato **já normalizado** (as duas formas históricas de `FormResponse.data`,
+  `[chave, rótulo, valor]` e `[rótulo, valor]`, viram um formato único) e **filtrado só aos
+  campos preenchidos**. É assim que o Artista 3D lê idade e quantidade de aniversariantes sem
+  abrir evento por evento.
+- **`GET /api/events/<id>` mudou (aditivo)**: eventos SHOW passaram a serializar `presentes_3d`
+  (lista de presentes) e **todo** evento ganhou a flag `can_manage_3d` em `flags`. Quem não é
+  Artista 3D lê a lista, mas a UI de edição não aparece. A chave `presentes_3d` **não existe** em
+  evento não-SHOW — a ausência é o sinal para o React não renderizar a seção.
+- **Uploads**: `app.storage.save_file` nas subpastas `acervo_3d_photos` (a foto passa pela
+  compressão automática do Pillow) e `acervo_3d_files` (arquivo bruto, sem compressão).
+
 ### 3.14 Superfícies públicas (sem login)
 `GET /api/cadastro/check-cpf` · `POST /api/cadastro` ·
 `GET /api/formularios/<form_type>/schema` · `POST /api/formularios/<form_type>` ·
@@ -526,6 +583,7 @@ Rotas legadas que **ainda têm uso real** (não são só resíduo):
 | `FIGURINO` | Fichas de figurino (CRUD, fotos, vínculo com Personagem do catálogo) |
 | `ENSAIO` | Agenda + EducaManto (leitura/uso) |
 | `MARKETING` | Cria espaços de revisão de mídia |
+| `ARTISTA_3D` | Gestão total do módulo 3D (Acervo + Fila + presentes do evento) e **leitura** dos eventos — precisa do elenco e do formulário de pré-contrato para saber o que imprimir |
 | `REVENDEDOR_EDUCAMANTO` | Perfil restrito: **só** Agenda (visualização) + EducaManto |
 
 Regra especial: o **responsável EducaManto** (`SiteSetting.educamanto_seller_id`) ganha acesso de

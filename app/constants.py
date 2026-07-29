@@ -54,6 +54,23 @@ CLIENT_RELATION_TIPOS = [
 ]
 
 
+# Feature 200: tipo de evento que recebe Presente 3D. Só eventos SHOW entram na Fila de Impressão.
+EVENT_TYPE_SHOW = "SHOW"
+
+# Feature 200: ciclo de vida de um `Event3DGift`, na ordem em que o Artista 3D o percorre.
+# 'entregue' é o estado final — some da Fila de Impressão.
+GIFT_3D_STATUS_PENDENTE   = "pendente"
+GIFT_3D_STATUS_IMPRIMINDO = "imprimindo"
+GIFT_3D_STATUS_FINALIZADO = "finalizado"
+GIFT_3D_STATUS_ENTREGUE   = "entregue"
+GIFT_3D_STATUSES = [
+    GIFT_3D_STATUS_PENDENTE,
+    GIFT_3D_STATUS_IMPRIMINDO,
+    GIFT_3D_STATUS_FINALIZADO,
+    GIFT_3D_STATUS_ENTREGUE,
+]
+
+
 class RoleName:
     SUPERADMIN = "SUPERADMIN"
     CASTING    = "CASTING"
@@ -65,6 +82,9 @@ class RoleName:
     REVENDEDOR_EDUCAMANTO = "REVENDEDOR_EDUCAMANTO"
     # Equipe de marketing (feature 088): cria espaços de revisão de mídia.
     MARKETING  = "MARKETING"
+    # Artista 3D (feature 200): gestão total do Acervo/Fila 3D + leitura dos eventos
+    # (precisa do elenco e do formulário de pré-contrato para saber o que imprimir).
+    ARTISTA_3D = "ARTISTA_3D"
 
 
 # Papéis que um SUPERADMIN pode simular no "Ver como" (feature 173 — fonte única,

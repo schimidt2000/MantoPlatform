@@ -9,6 +9,7 @@ import { FeedbackSection } from "../components/EventDetail/FeedbackSection";
 import { FigurinoSection } from "../components/EventDetail/FigurinoSection";
 import { FinanceiroSection } from "../components/EventDetail/FinanceiroSection";
 import { LogisticaSection } from "../components/EventDetail/LogisticaSection";
+import { Presente3DSection } from "../components/EventDetail/Presente3DSection";
 import {
   LogsSection,
   ObservacoesSection,
@@ -100,6 +101,7 @@ export function EventDetailPage() {
                   <CastingSection data={query.data} />
                   <FigurinoSection data={query.data} />
                   <LogisticaSection data={query.data} />
+                  <Presente3DSection data={query.data} />
                   <ObservacoesSection data={query.data} />
                 </div>
                 <div className="space-y-4">

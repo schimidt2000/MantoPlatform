@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-28** · Estado do repositório: pós-feature **197**
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **200**
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
@@ -223,6 +223,65 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **API**: `POST /api/figurino` · `PATCH|DELETE /api/figurino/<id>` ·
   `POST|DELETE /api/figurino/<id>/photo` · `POST /api/figurino/<id>/photo/rotate`.
 - **Vínculos**: Ficha ↔ Personagem do Catálogo ↔ Elenco de Evento (`EventRole`).
+
+---
+
+### A.4.1 Impressão 3D *(seção nova de navegação — feature 200)*
+
+Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPERADMIN`.
+
+#### `/3d/fila` — Fila de Impressão
+- **Acesso**: `ARTISTA_3D`, `SUPERADMIN` (gate de servidor em `GET /api/3d/fila`).
+- **Objetivo**: painel operacional que responde "o que eu imprimo primeiro". Lista todos os
+  presentes 3D com status ≠ `entregue` de eventos **SHOW**, do prazo mais apertado ao mais
+  folgado (sem prazo cai para o fim).
+- **UX**:
+  - Tabela densa (`Table` do design system, com `overflow-x-auto` próprio — nada de rolagem
+    horizontal na página): miniatura **quadrada** da peça + nome, evento (link para `/events/:id`)
+    e local, data do evento, prazo com **selo de urgência** (`Atrasado Xd` / `Hoje` em vermelho,
+    `Em ≤7d` em dourado), quantidade e status.
+  - **Seletor rápido de status** por linha (`pendente` ➔ `imprimindo` ➔ `finalizado` ➔
+    `entregue`) — `<select>` nativo é legítimo aqui: 4 opções, bem abaixo do limite de 10 do
+    Princípio X.1. Salva na hora com feedback "Salvando…"/"Erro ao salvar"; marcar `entregue`
+    tira a linha da fila.
+  - Botão **"Ver Detalhes para Impressão"** abre um `Dialog` que cruza os dados da API:
+    **Personagens contratados** (com miniatura quadrada e talento escalado) e o **extrato do
+    Formulário de Pré-Contrato**, mostrando só os campos que a cliente preencheu — é lá que estão
+    "Nome do Aniversariante" e "Idade a Completar do Aniversariante", que definem o que imprimir.
+  - Estados de carregamento (`Skeleton`), erro e vazio ("Nenhum presente 3D pendente") em pt-BR.
+- **API**: `GET /api/3d/fila` · `PATCH /api/events/<id>/3d-gifts/<gift_id>`.
+- **Vínculos**: Evento (`CalendarEvent`) → Elenco (`EventRole`) → Formulário (`FormResponse`) →
+  Acervo 3D (`Acervo3DItem`).
+
+#### `/3d/acervo` — Acervo 3D
+- **Acesso**: `ARTISTA_3D`, `SUPERADMIN`.
+- **Objetivo**: catálogo dos modelos base que podem virar presente de um evento.
+- **UX**:
+  - **Formulário de upload duplo** no topo — "Foto de Preview (JPG/PNG)" e "Arquivo 3D (.stl,
+    .3mf, .zip)", **ambos obrigatórios no cadastro** — via `FileUpload` do design system, com
+    erro realçado no campo exato devolvido pela API (`fields`) e **sem nunca limpar o que já foi
+    digitado** em caso de falha (Princípio V). Na **edição** os dois viram opcionais: deixar em
+    branco mantém o arquivo já salvo.
+  - **Grade de cards** (4 colunas no desktop, 1 no mobile) com a foto em `aspect-square`, o nome,
+    um badge com **a contagem de quantas vezes o modelo já foi usado em eventos**, badge
+    "Inativa" quando aplicável, e ações: baixar o arquivo 3D, editar (abre `Dialog` com o mesmo
+    formulário), inativar/reativar e excluir.
+  - **Exclusão** pede confirmação em `Dialog`; peça já vinculada a evento é bloqueada pelo
+    servidor com a mensagem orientando a inativar em vez de excluir.
+  - Entrada/saída de cards com Framer Motion respeitando `useReducedMotion()`.
+- **API**: `GET|POST /api/3d/acervo` · `PATCH|DELETE /api/3d/acervo/<id>`.
+
+#### `/events/:id` — bloco **"Presentes 3D"** *(injeção na tela existente)*
+- **Onde**: coluna esquerda (operação/logística), logo abaixo de "Materiais de ensaio".
+- **Quando**: **somente** se `event.event_type === 'SHOW'` — o servidor nem serializa a chave
+  `presentes_3d` nos outros tipos.
+- **Acesso**: qualquer usuário que abre o evento **lê** a lista; só `ARTISTA_3D`/`SUPERADMIN`
+  (flag `can_manage_3d`) vê o formulário de adição, o seletor de status e o botão de remover.
+- **UX**: lista com miniatura quadrada, quantidade, prazo e observações; o formulário de adição
+  usa obrigatoriamente o **`Combobox` de `@manto/ui`** (Princípio X.1) exibindo a **miniatura
+  quadrada (`AvatarThumb`)** de cada peça do Acervo para seleção visual rápida, mais quantidade,
+  prazo e observações.
+- **API**: `POST|PATCH|DELETE /api/events/<id>/3d-gifts[/<gift_id>]` · `GET /api/3d/acervo?ativos=1`.
 
 ---
 
@@ -647,7 +706,12 @@ feature 191; decomissioná-las é limpeza futura.
              │                EventPayment / EventInvoice / EventInstallment
              ├──► Gastos (SpecialExpense.event_id)
              ├──► Ensaio (parent_event_id)  ·  Grupo comercial (group_leader_id)
+             ├──► Presente 3D (Event3DGift.item_id → Acervo3DItem)  [só event_type='SHOW']
              └──► Feedback da cliente (feedback_token → ClientFeedback)
+
+   Formulário de pré-contrato (FormResponse.event_id)
+             └──► Fila de Impressão 3D: idade e nº de aniversariantes lidos direto das
+                  respostas da cliente, cruzados com os Personagens contratados
 ```
 
 Pontos de atenção recorrentes:
@@ -656,3 +720,5 @@ Pontos de atenção recorrentes:
    vendável isoladamente).
 3. **`EventRole.character_name` é texto livre** — daí existir o alerta de "personagem sem ficha"
    em `/figurinos` e o fluxo de associação/dispensa.
+4. **Presente 3D é exclusivo de evento `SHOW`** — a API recusa o vínculo em qualquer outro tipo,
+   e a seção nem aparece na tela do evento (feature 200).

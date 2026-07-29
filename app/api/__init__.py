@@ -50,3 +50,5 @@ from app.api import ratings_write as _ratings_write  # noqa: E402,F401
 from app.api import formularios_admin_read as _formularios_admin_read  # noqa: E402,F401
 from app.api import formularios_admin_write as _formularios_admin_write  # noqa: E402,F401
 from app.api import maps_read as _maps_read  # noqa: E402,F401
+from app.api import impressoes3d_read as _impressoes3d_read  # noqa: E402,F401
+from app.api import impressoes3d_write as _impressoes3d_write  # noqa: E402,F401

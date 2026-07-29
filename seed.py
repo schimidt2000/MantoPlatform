@@ -40,6 +40,7 @@ def main():
         get_or_create_role("ENSAIO")
         get_or_create_role("REVENDEDOR_EDUCAMANTO")  # feature 078
         get_or_create_role("MARKETING")  # feature 088
+        get_or_create_role("ARTISTA_3D")  # feature 200
 
         if p_user_manage not in superadmin.permissions:
             superadmin.permissions.append(p_user_manage)

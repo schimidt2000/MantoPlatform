@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import re as _re
 from . import db, login_manager
 from datetime import datetime, date
-from .constants import RoleName
+from .constants import GIFT_3D_STATUS_PENDENTE, RoleName
 
 user_roles = db.Table(
     "user_roles",
@@ -1883,3 +1883,72 @@ class CatalogCharacter(db.Model):
     created_at         = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     figurino_sheet = db.relationship("FigurinoSheet", lazy=True)
+
+
+# ── Impressões e Acervo 3D (feature 200) ────────────────────────────────────
+
+
+class Acervo3DItem(db.Model):
+    """Modelo 3D base do acervo — o "catálogo de peças" do Artista 3D (feature 200).
+
+    Os dois arquivos são obrigatórios: a foto (``photo_url``) porque toda seleção de peça 3D é
+    visual (Princípio X.2 — miniatura quadrada ao lado do nome, tanto na busca quanto no valor já
+    selecionado), e o arquivo bruto (``file_path``: ``.stl``/``.3mf``/``.zip``) porque uma peça
+    sem arquivo não é imprimível — cadastrá-la só encheria o Acervo de entradas inúteis.
+    """
+
+    __tablename__ = "acervo_3d_items"
+
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(200), nullable=False)
+    # URL pública da foto de preview (JPG/PNG) — sempre presente.
+    photo_url  = db.Column(db.String(500), nullable=False)
+    # URL/caminho do arquivo 3D bruto (.stl/.3mf/.zip) — sempre presente.
+    file_path  = db.Column(db.String(500), nullable=False)
+    is_active  = db.Column(db.Boolean, default=True, nullable=False, server_default="1")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class Event3DGift(db.Model):
+    """Presente 3D vinculado a um evento (relação 1:N com ``CalendarEvent``, feature 200).
+
+    Um evento SHOW pode ter vários presentes; cada linha aponta para uma peça do
+    ``Acervo3DItem`` e carrega a quantidade, o prazo e o estado de produção. ``status`` percorre
+    ``GIFT_3D_STATUSES`` (``pendente`` → ``imprimindo`` → ``finalizado`` → ``entregue``); só o
+    que ainda não está ``entregue`` aparece na Fila de Impressão.
+    """
+
+    __tablename__ = "event_3d_gifts"
+    __table_args__ = (
+        db.Index("ix_event_3d_gifts_event_id", "event_id"),
+        db.Index("ix_event_3d_gifts_item_id",  "item_id"),
+        db.Index("ix_event_3d_gifts_status",   "status"),
+    )
+
+    id            = db.Column(db.Integer, primary_key=True)
+    event_id      = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id       = db.Column(
+        db.Integer, db.ForeignKey("acervo_3d_items.id"), nullable=False
+    )
+    status        = db.Column(
+        db.String(20), nullable=False,
+        default=GIFT_3D_STATUS_PENDENTE, server_default=GIFT_3D_STATUS_PENDENTE,
+    )
+    deadline_date = db.Column(db.Date, nullable=True)
+    quantity      = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+    notes         = db.Column(db.Text, nullable=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at    = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    event = db.relationship(
+        "CalendarEvent", lazy=True,
+        backref=db.backref(
+            "presentes_3d", lazy=True, cascade="all, delete-orphan",
+            order_by="Event3DGift.id",
+        ),
+    )
+    item = db.relationship("Acervo3DItem", lazy="joined", backref=db.backref("gifts", lazy=True))

@@ -10,7 +10,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.constants import RoleName
+from app.constants import EVENT_TYPE_SHOW, RoleName
 from app.models import (
     CalendarEvent,
     ClientFeedback,
@@ -114,6 +114,10 @@ def _role_flags(user: Any, impersonate: str | None) -> dict[str, bool]:
         # Editar campos centrais em bloco (feature 184): mesmo nível de _can_create_event —
         # mais restrito que can_edit_event porque cobre os mesmos campos financeiros da criação.
         "can_edit_core": has(RoleName.COMERCIAL) or is_superadmin,
+        # Presentes 3D (feature 200): todo mundo que abre o evento SHOW LÊ a lista; só o
+        # Artista 3D (e o Superadmin) vincula/edita/remove — mesmo gate dos endpoints
+        # `/api/3d/*` e `/api/events/<id>/3d-gifts`.
+        "can_manage_3d": has(RoleName.ARTISTA_3D) or is_superadmin,
     }
 
 
@@ -507,6 +511,12 @@ def serialize_event_detail(
     availability = talent_availability(event, [r.talent_id for r in roles if r.talent_id])
     data["elenco"] = [_serialize_role(r, flags["show_casting"], availability) for r in roles]
     data["materiais"] = _serialize_materials(event)
+    # Presentes 3D (feature 200) — só evento SHOW tem a seção; a chave ausente é o sinal para o
+    # React não renderizar nada (mesmo padrão dos blocos financeiros: o servidor decide).
+    if event.event_type == EVENT_TYPE_SHOW:
+        from app.impressoes3d.impressoes3d_ops import serialize_gift
+
+        data["presentes_3d"] = [serialize_gift(g) for g in event.presentes_3d]
     data["ratings"] = _serialize_ratings(event.id)
     data["client_feedbacks"] = _serialize_client_feedbacks(event.id)
     data["observations"] = [
