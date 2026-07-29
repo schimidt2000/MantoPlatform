@@ -22,12 +22,20 @@ from app.constants import (
     GIFT_3D_STATUS_PENDENTE,
     GIFT_3D_STATUSES,
 )
-from app.models import Acervo3DItem, CalendarEvent, Event3DGift, EventRole, FormResponse
+from app.models import (
+    Acervo3DFile,
+    Acervo3DItem,
+    CalendarEvent,
+    Event3DGift,
+    EventRole,
+    FormResponse,
+)
 from app.storage import delete_file, save_file
 from app.utils import audit
 
-# Uploads do Acervo: a foto de preview é o que permite a busca visual (Princípio X.2) e o
-# arquivo bruto é o que o Artista 3D manda para a impressora.
+# Uploads do Acervo: a foto de preview é o que permite a busca visual (Princípio X.2) e os
+# arquivos brutos são o que o Artista 3D manda para a impressora (N por peça — o modelo costuma
+# vir fatiado em partes).
 ACERVO_3D_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 ACERVO_3D_MODEL_EXTENSIONS = {".zip", ".stl", ".3mf"}
 ACERVO_3D_PHOTO_SUBFOLDER = "acervo_3d_photos"
@@ -96,38 +104,58 @@ def list_acervo(*, include_inactive: bool = True) -> list[tuple[Acervo3DItem, in
     return [(item, usage_by_item.get(item.id, 0)) for item in items]
 
 
-def create_acervo_item(*, name: str, photo_file: Any, model_file: Any = None) -> Acervo3DItem:
+def _attach_model_files(item: Acervo3DItem, model_files: list[Any], start_position: int) -> None:
+    """Salva no storage e vincula à peça cada arquivo 3D informado, em ordem."""
+    for offset, model_file in enumerate(model_files):
+        db.session.add(
+            Acervo3DFile(
+                item=item,
+                file_path=save_file(model_file, ACERVO_3D_MODEL_SUBFOLDER),
+                original_name=(model_file.filename or "")[:255] or None,
+                position=start_position + offset,
+            )
+        )
+
+
+def create_acervo_item(
+    *, name: str, photo_file: Any, model_files: list[Any] | None = None
+) -> Acervo3DItem:
     """Cadastra uma peça nova no Acervo 3D.
 
     Args:
         name: Nome da peça (obrigatório).
         photo_file: Foto de preview JPG/PNG (obrigatória — a seleção da peça é visual).
-        model_file: Arquivo 3D bruto `.stl`/`.3mf`/`.zip` (obrigatório — peça sem arquivo não é
-            imprimível).
+        model_files: Arquivos 3D `.stl`/`.3mf`/`.zip` — **pelo menos um**. Um mesmo presente
+            costuma vir fatiado em várias partes (corpo, argola, base).
 
     Raises:
-        Impressao3DValidationError: Nome vazio, arquivo ausente ou extensão não suportada.
+        Impressao3DValidationError: Nome vazio, foto/arquivo ausente ou extensão não suportada.
     """
     clean_name = (name or "").strip()
     if not clean_name:
         raise Impressao3DValidationError("name", "Nome da peça é obrigatório.")
     if not _has_upload(photo_file):
         raise Impressao3DValidationError("photo", "A foto de preview (JPG/PNG) é obrigatória.")
-    if not _has_upload(model_file):
+    valid_models = [f for f in (model_files or []) if _has_upload(f)]
+    if not valid_models:
         raise Impressao3DValidationError(
-            "file", "O arquivo 3D (.stl, .3mf ou .zip) é obrigatório."
+            "files", "Envie pelo menos um arquivo 3D (.stl, .3mf ou .zip)."
         )
     _validate_extension(photo_file, "photo", ACERVO_3D_PHOTO_EXTENSIONS, "JPG ou PNG")
-    _validate_extension(model_file, "file", ACERVO_3D_MODEL_EXTENSIONS, "STL, 3MF ou ZIP")
+    for model_file in valid_models:
+        _validate_extension(model_file, "files", ACERVO_3D_MODEL_EXTENSIONS, "STL, 3MF ou ZIP")
 
     item = Acervo3DItem(
         name=clean_name,
         photo_url=save_file(photo_file, ACERVO_3D_PHOTO_SUBFOLDER),
-        file_path=save_file(model_file, ACERVO_3D_MODEL_SUBFOLDER),
     )
     db.session.add(item)
+    _attach_model_files(item, valid_models, 0)
     db.session.flush()
-    audit("create", "Acervo3DItem", item.id, clean_name, "Peça do Acervo 3D criada")
+    audit(
+        "create", "Acervo3DItem", item.id, clean_name,
+        f"Peça do Acervo 3D criada com {len(valid_models)} arquivo(s)",
+    )
     db.session.commit()
     return item
 
@@ -138,13 +166,15 @@ def update_acervo_item(
     name: str | None = None,
     is_active: bool | None = None,
     photo_file: Any = None,
-    model_file: Any = None,
+    model_files: list[Any] | None = None,
+    remove_file_ids: set[int] | None = None,
 ) -> Acervo3DItem:
     """Edita uma peça do Acervo. Só aplica os campos explicitamente informados.
 
-    Um upload novo substitui o anterior e remove o arquivo antigo do storage. Nenhum dos dois
-    arquivos pode ser apagado sem substituição — `photo_url` e `file_path` são NOT NULL, então
-    "não enviar nada" significa manter o que já está salvo, nunca limpar.
+    A foto nova substitui a anterior e remove a antiga do storage (`photo_url` é NOT NULL, então
+    "não enviar nada" significa manter a atual). Os arquivos 3D são **acumulativos**:
+    `model_files` acrescenta, `remove_file_ids` remove — e a peça nunca pode ficar com zero
+    arquivos, senão deixaria de ser imprimível.
     """
     if name is not None:
         clean_name = name.strip()
@@ -155,17 +185,37 @@ def update_acervo_item(
         item.is_active = is_active
 
     _validate_extension(photo_file, "photo", ACERVO_3D_PHOTO_EXTENSIONS, "JPG ou PNG")
-    _validate_extension(model_file, "file", ACERVO_3D_MODEL_EXTENSIONS, "STL, 3MF ou ZIP")
     if _has_upload(photo_file):
         delete_file(item.photo_url)
         item.photo_url = save_file(photo_file, ACERVO_3D_PHOTO_SUBFOLDER)
-    if _has_upload(model_file):
-        delete_file(item.file_path)
-        item.file_path = save_file(model_file, ACERVO_3D_MODEL_SUBFOLDER)
+
+    _apply_file_changes(item, model_files or [], remove_file_ids or set())
 
     audit("edit", "Acervo3DItem", item.id, item.name, "Peça do Acervo 3D editada")
     db.session.commit()
     return item
+
+
+def _apply_file_changes(
+    item: Acervo3DItem, model_files: list[Any], remove_file_ids: set[int]
+) -> None:
+    """Acrescenta e/ou remove arquivos 3D da peça, garantindo que sobre ao menos um."""
+    valid_models = [f for f in model_files if _has_upload(f)]
+    for model_file in valid_models:
+        _validate_extension(model_file, "files", ACERVO_3D_MODEL_EXTENSIONS, "STL, 3MF ou ZIP")
+
+    to_remove = [f for f in item.files if f.id in remove_file_ids]
+    if len(item.files) - len(to_remove) + len(valid_models) < 1:
+        raise Impressao3DValidationError(
+            "files", "A peça precisa manter pelo menos um arquivo 3D."
+        )
+
+    for stale in to_remove:
+        delete_file(stale.file_path)
+        item.files.remove(stale)
+
+    next_position = max((f.position for f in item.files), default=-1) + 1
+    _attach_model_files(item, valid_models, next_position)
 
 
 def delete_acervo_item(item: Acervo3DItem) -> None:
@@ -183,7 +233,8 @@ def delete_acervo_item(item: Acervo3DItem) -> None:
         )
     name, item_id = item.name, item.id
     delete_file(item.photo_url)
-    delete_file(item.file_path)
+    for model_file in item.files:
+        delete_file(model_file.file_path)
     db.session.delete(item)
     audit("delete", "Acervo3DItem", item_id, name, "Peça do Acervo 3D excluída")
     db.session.commit()
@@ -342,13 +393,26 @@ def list_print_queue() -> list[Event3DGift]:
 # ── Serialização (fonte única dos payloads JSON do módulo) ───────────────────
 
 
+def serialize_model_files(item: Acervo3DItem) -> list[dict[str, Any]]:
+    """Arquivos 3D da peça em JSON, na ordem de upload."""
+    return [
+        {
+            "id": model_file.id,
+            "file_path": model_file.file_path,
+            "original_name": model_file.original_name,
+            "position": model_file.position,
+        }
+        for model_file in sorted(item.files, key=lambda f: (f.position, f.id))
+    ]
+
+
 def serialize_acervo_item(item: Acervo3DItem, usage_count: int = 0) -> dict[str, Any]:
-    """Peça do Acervo em JSON, com a contagem de usos em eventos."""
+    """Peça do Acervo em JSON, com os arquivos 3D e a contagem de usos em eventos."""
     return {
         "id": item.id,
         "name": item.name,
         "photo_url": item.photo_url,
-        "file_path": item.file_path,
+        "files": serialize_model_files(item),
         "is_active": bool(item.is_active),
         "created_at": item.created_at.isoformat() if item.created_at else None,
         "usage_count": usage_count,
@@ -371,7 +435,8 @@ def serialize_gift(gift: Event3DGift) -> dict[str, Any]:
                 "id": item.id,
                 "name": item.name,
                 "photo_url": item.photo_url,
-                "file_path": item.file_path,
+                # Os arquivos vêm junto: da Fila o Artista 3D baixa direto, sem passar pelo Acervo.
+                "files": serialize_model_files(item),
                 "is_active": bool(item.is_active),
             }
             if item

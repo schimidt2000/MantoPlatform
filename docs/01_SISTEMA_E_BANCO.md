@@ -3,8 +3,9 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **200**
-> (`200-impressoes-3d`) · Head de migration: `c8d2f4a6b013` (*modulo core de impressoes 3d*)
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **201**
+> (`201-acervo-3d-multi-arquivos`) · Head de migration: `d9e3a5b7c124`
+> (*acervo 3d com multiplos arquivos*)
 
 ---
 
@@ -105,17 +106,19 @@ Fonte única: `app/models.py` (~1.880 linhas). **53 tabelas**, incluindo 3 tabel
 - `event_requires_client(event)` (em `app/constants.py`): eventos com início ≥ **2026-06-29**
   (`CLIENT_REQUIRED_FROM`) exigem cliente para salvar a venda; anteriores são grandfathered.
 
-### 2.2.1 Impressões e Acervo 3D (feature 200)
+### 2.2.1 Impressões e Acervo 3D (features 200 e 201)
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `acervo_3d_items` | `Acervo3DItem` | catálogo de peças base: `name`, `photo_url` (**NOT NULL** — foto JPG/PNG de preview) e `file_path` (**NOT NULL** — arquivo bruto `.stl`/`.3mf`/`.zip`), `is_active`, `created_at` | — |
+| `acervo_3d_items` | `Acervo3DItem` | catálogo de peças base: `name`, `photo_url` (**NOT NULL** — foto JPG/PNG de preview), `is_active`, `created_at` | — |
+| `acervo_3d_files` | `Acervo3DFile` | arquivos 3D da peça (**1:N**, feature 201 — o modelo vem fatiado em partes): `file_path`, `original_name` (nome enviado, ex.: `corpo.stl`), `position`, `created_at` | `item_id`→`acervo_3d_items` (**ON DELETE CASCADE**) |
 | `event_3d_gifts` | `Event3DGift` | presente 3D vinculado a um evento (1:N): `status` (`pendente`\|`imprimindo`\|`finalizado`\|`entregue`), `deadline_date`, `quantity`, `notes`, `created_at`/`updated_at`; índices em `event_id`, `item_id` e `status` | `event_id`→`calendar_events` (**ON DELETE CASCADE**), `item_id`→`acervo_3d_items` |
 
 **Semântica importante**
-- **Os dois arquivos da peça são obrigatórios**: sem foto ela não é selecionável visualmente
-  (Princípio X.2), sem arquivo `.stl`/`.3mf`/`.zip` ela não é imprimível. Na **edição**, não
-  enviar um arquivo significa *manter o atual* — nunca limpar.
+- **Foto obrigatória** (sem ela a peça não é selecionável visualmente — Princípio X.2) e
+  **pelo menos um arquivo 3D** (sem arquivo ela não é imprimível). Na **edição**, não enviar
+  foto significa *manter a atual*; os arquivos 3D são **cumulativos** (`files` acrescenta,
+  `remove_file_ids[]` remove) e o servidor recusa deixar a peça com zero arquivos.
 - Só evento com `event_type == 'SHOW'` (`EVENT_TYPE_SHOW`, em `app/constants.py`) aceita presente
   3D — a API recusa com 400 em qualquer outro tipo, e o detalhe do evento só serializa a chave
   `presentes_3d` nesse caso.
@@ -264,10 +267,10 @@ Pontos que valem para quem for ler esses dados:
 ### 2.11 Migrations
 
 - Alembic via Flask-Migrate, **sempre escritas à mão** (`migrations/versions/`).
-- Head atual: **`c8d2f4a6b013`** — *modulo core de impressoes 3d* (feature 200).
+- Head atual: **`d9e3a5b7c124`** — *acervo 3d com multiplos arquivos* (feature 201).
 - Cadeia recente: `27acb021e8d6` → `aa1bb2cc3dd4` (review asset status) → `7c2d9e4f1a3b`
   (figurino_missing_dismissals) → `4e6f8a1c2d5b` (figurino_sheet tags) → `9f1c3a7b5e2d`
-  (catalog characters) → `c8d2f4a6b013`.
+  (catalog characters) → `c8d2f4a6b013` (impressões 3D) → `d9e3a5b7c124`.
 - Features **186**, **187** e **199** não geraram migration (reusaram colunas existentes).
 - O papel `ARTISTA_3D` **não** vem por migration: papéis são linhas de `roles` semeadas por
   `seed.py` (mesmo tratamento de `MARKETING`/`REVENDEDOR_EDUCAMANTO`), e o Railway roda
@@ -470,8 +473,8 @@ no máximo 5 itens, descartando predições sem `description`.
 | Método | Rota | O que faz |
 |---|---|---|
 | `GET` | `/api/3d/acervo` | Catálogo de peças com `usage_count` (nº de eventos que já usaram a peça). `?ativos=1` esconde as inativas. |
-| `POST` | `/api/3d/acervo` | Cadastra peça (**multipart**): `name`, `photo` (JPG/PNG) e `file` (`.stl`/`.3mf`/`.zip`) — **os três obrigatórios**; falta de qualquer um devolve 400 com o campo em `fields`. |
-| `PATCH` | `/api/3d/acervo/<id>` | Edita nome/`is_active` e troca foto/arquivo (**multipart**); upload novo apaga o antigo do storage. |
+| `POST` | `/api/3d/acervo` | Cadastra peça (**multipart**): `name`, `photo` (JPG/PNG) e um ou mais `files` (`.stl`/`.3mf`/`.zip`) — **todos obrigatórios**; falta de qualquer um devolve 400 com o campo em `fields` (`name`/`photo`/`files`). |
+| `PATCH` | `/api/3d/acervo/<id>` | Edita nome/`is_active`, troca a foto (upload novo apaga a antiga) e **acrescenta** arquivos via `files` / **remove** via `remove_file_ids[]` (**multipart**). 400 se a operação deixaria a peça sem nenhum arquivo. |
 | `DELETE` | `/api/3d/acervo/<id>` | Exclui a peça e seus arquivos. **400** se houver evento vinculado. |
 | `GET` | `/api/3d/fila` | Fila de Impressão — presentes com `status != 'entregue'` de eventos **SHOW**, ordenados por prazo (sem prazo vai para o fim). |
 | `POST` | `/api/events/<id>/3d-gifts` | Vincula peça ao evento (JSON: `item_id`, `quantity`, `deadline_date`, `notes`, `status`). **400** em evento não-SHOW. |
@@ -492,7 +495,9 @@ no máximo 5 itens, descartando predições sem `description`.
   Artista 3D lê a lista, mas a UI de edição não aparece. A chave `presentes_3d` **não existe** em
   evento não-SHOW — a ausência é o sinal para o React não renderizar a seção.
 - **Uploads**: `app.storage.save_file` nas subpastas `acervo_3d_photos` (a foto passa pela
-  compressão automática do Pillow) e `acervo_3d_files` (arquivo bruto, sem compressão).
+  compressão automática do Pillow) e `acervo_3d_files` (arquivos brutos, sem compressão). Como o
+  caminho salvo é um UUID, `Acervo3DFile.original_name` guarda o nome enviado — é o que diz qual
+  parte do modelo é qual (`corpo.stl`, `argola.3mf`).
 
 ### 3.14 Superfícies públicas (sem login)
 `GET /api/cadastro/check-cpf` · `POST /api/cadastro` ·

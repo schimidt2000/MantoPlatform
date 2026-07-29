@@ -34,13 +34,23 @@ export const GIFT_3D_STATUS_TONES: Record<Gift3DStatus, "neutral" | "gold" | "bl
   entregue: "green",
 };
 
+/** Um arquivo 3D bruto de uma peça — o modelo costuma vir fatiado em várias partes. */
+export interface Acervo3DFile {
+  id: number;
+  /** Caminho salvo (UUID); passar por `assetUrl()` antes de usar como href. */
+  file_path: string;
+  /** Nome enviado pelo usuário ("corpo.stl") — é o que diz qual parte é qual. */
+  original_name: string | null;
+  position: number;
+}
+
 export interface Acervo3DItem {
   id: number;
   name: string;
   /** Foto de preview (JPG/PNG) — sempre presente; passar por `assetUrl()` antes de exibir. */
   photo_url: string;
-  /** Arquivo 3D bruto (.stl/.3mf/.zip) — sempre presente (obrigatório no cadastro). */
-  file_path: string;
+  /** Arquivos 3D (.stl/.3mf/.zip) — sempre pelo menos um. */
+  files: Acervo3DFile[];
   is_active: boolean;
   created_at: string | null;
   /** Quantas vezes a peça já foi usada em eventos. */
@@ -56,7 +66,8 @@ export interface Gift3DItemRef {
   id: number;
   name: string;
   photo_url: string;
-  file_path: string;
+  /** Arquivos vêm junto na Fila: o Artista 3D baixa direto, sem passar pelo Acervo. */
+  files: Acervo3DFile[];
   is_active: boolean;
 }
 
@@ -173,8 +184,13 @@ export interface SaveAcervoItemInput {
   name?: string;
   /** Foto JPG/PNG — obrigatória na criação, opcional na edição (mantém a atual). */
   photo?: File | null;
-  /** Arquivo 3D .stl/.3mf/.zip — obrigatório na criação, opcional na edição (mantém o atual). */
-  file?: File | null;
+  /**
+   * Arquivos 3D .stl/.3mf/.zip a **acrescentar**. Pelo menos um na criação; na edição são
+   * cumulativos (não substituem os existentes) e a lista vazia mantém tudo como está.
+   */
+  files?: File[];
+  /** Ids de arquivos já salvos a remover — o servidor recusa deixar a peça com zero. */
+  removeFileIds?: number[];
   isActive?: boolean;
 }
 
@@ -182,7 +198,8 @@ function buildAcervoFormData(input: SaveAcervoItemInput): FormData {
   const form = new FormData();
   if (input.name !== undefined) form.set("name", input.name);
   if (input.photo) form.set("photo", input.photo);
-  if (input.file) form.set("file", input.file);
+  (input.files ?? []).forEach((file) => form.append("files", file));
+  (input.removeFileIds ?? []).forEach((id) => form.append("remove_file_ids[]", String(id)));
   if (input.isActive !== undefined) form.set("is_active", String(input.isActive));
   return form;
 }

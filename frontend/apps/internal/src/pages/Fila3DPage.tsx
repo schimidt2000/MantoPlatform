@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
+import { Download } from "lucide-react";
 import {
   AvatarThumb,
   Badge,
@@ -164,6 +165,23 @@ function DetalhesDialog({ entry, onClose }: { entry: Fila3DEntry | null; onClose
                   {entry.quantity}x · prazo {formatDeadline(entry.deadline_date)} ·{" "}
                   {GIFT_3D_STATUS_LABELS[entry.status]}
                 </div>
+                {/* Download direto: o Artista 3D não precisa passar pelo Acervo para imprimir. */}
+                <ul className="mt-1 space-y-0.5">
+                  {(entry.item?.files ?? []).map((modelFile) => (
+                    <li key={modelFile.id}>
+                      <a
+                        href={assetUrl(modelFile.file_path)}
+                        download
+                        className="flex items-center gap-1.5 truncate text-sm text-blue hover:underline"
+                      >
+                        <Download className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="truncate">
+                          {modelFile.original_name ?? `Arquivo ${modelFile.position + 1}`}
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
 

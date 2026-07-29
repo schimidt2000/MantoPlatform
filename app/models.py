@@ -1891,10 +1891,12 @@ class CatalogCharacter(db.Model):
 class Acervo3DItem(db.Model):
     """Modelo 3D base do acervo — o "catálogo de peças" do Artista 3D (feature 200).
 
-    Os dois arquivos são obrigatórios: a foto (``photo_url``) porque toda seleção de peça 3D é
-    visual (Princípio X.2 — miniatura quadrada ao lado do nome, tanto na busca quanto no valor já
-    selecionado), e o arquivo bruto (``file_path``: ``.stl``/``.3mf``/``.zip``) porque uma peça
-    sem arquivo não é imprimível — cadastrá-la só encheria o Acervo de entradas inúteis.
+    A foto (``photo_url``) é obrigatória porque toda seleção de peça 3D é visual (Princípio X.2 —
+    miniatura quadrada ao lado do nome, tanto na busca quanto no valor já selecionado).
+
+    Os arquivos 3D ficam em ``Acervo3DFile`` (1:N, feature 201): um mesmo presente costuma ser
+    fatiado em várias partes (corpo, argola, base), e cada parte é um arquivo próprio. A regra de
+    negócio exige **pelo menos um** arquivo — uma peça sem arquivo não é imprimível.
     """
 
     __tablename__ = "acervo_3d_items"
@@ -1903,10 +1905,38 @@ class Acervo3DItem(db.Model):
     name       = db.Column(db.String(200), nullable=False)
     # URL pública da foto de preview (JPG/PNG) — sempre presente.
     photo_url  = db.Column(db.String(500), nullable=False)
-    # URL/caminho do arquivo 3D bruto (.stl/.3mf/.zip) — sempre presente.
-    file_path  = db.Column(db.String(500), nullable=False)
     is_active  = db.Column(db.Boolean, default=True, nullable=False, server_default="1")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    files = db.relationship(
+        "Acervo3DFile", back_populates="item", lazy="joined",
+        cascade="all, delete-orphan", order_by="Acervo3DFile.position",
+    )
+
+
+class Acervo3DFile(db.Model):
+    """Um arquivo 3D bruto (``.stl``/``.3mf``/``.zip``) de uma peça do Acervo (feature 201).
+
+    Existe porque um presente raramente é um arquivo só: o modelo vem fatiado em partes, e o
+    Artista 3D precisa baixar todas. ``original_name`` guarda o nome que o usuário enviou — o
+    caminho salvo é um UUID, e "corpo.stl"/"argola.stl" é o que diz qual parte é qual.
+    """
+
+    __tablename__ = "acervo_3d_files"
+    __table_args__ = (
+        db.Index("ix_acervo_3d_files_item_id", "item_id"),
+    )
+
+    id            = db.Column(db.Integer, primary_key=True)
+    item_id       = db.Column(
+        db.Integer, db.ForeignKey("acervo_3d_items.id", ondelete="CASCADE"), nullable=False
+    )
+    file_path     = db.Column(db.String(500), nullable=False)
+    original_name = db.Column(db.String(255), nullable=True)
+    position      = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    item = db.relationship("Acervo3DItem", back_populates="files", lazy=True)
 
 
 class Event3DGift(db.Model):

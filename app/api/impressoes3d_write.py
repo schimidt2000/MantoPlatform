@@ -24,13 +24,27 @@ def _form_flag(field: str) -> bool | None:
     return request.form.get(field, "").strip().lower() in ("1", "true")
 
 
+def _model_files() -> list:
+    """Arquivos 3D enviados no multipart (feature 201 — N por peça).
+
+    Aceita `files` (múltiplos) e o `file` singular da feature 200, para nenhum cliente antigo
+    quebrar ao enviar um arquivo só.
+    """
+    return request.files.getlist("files") + request.files.getlist("file")
+
+
+def _remove_file_ids() -> set[int]:
+    """Ids de arquivos 3D marcados para remoção (`remove_file_ids[]`)."""
+    return {int(x) for x in request.form.getlist("remove_file_ids[]") if x.isdigit()}
+
+
 # ── Acervo 3D ────────────────────────────────────────────────────────────────
 
 
 @api_bp.route("/3d/acervo", methods=["POST"])
 @api_login_required
 def api_3d_acervo_create() -> Any:
-    """Cadastra uma peça no Acervo 3D (multipart: `photo` obrigatória, `file` opcional)."""
+    """Cadastra uma peça no Acervo 3D (multipart: `photo` + um ou mais `files`)."""
     denied = require_3d_access()
     if denied:
         return denied
@@ -38,7 +52,7 @@ def api_3d_acervo_create() -> Any:
         item = ops.create_acervo_item(
             name=request.form.get("name", ""),
             photo_file=request.files.get("photo"),
-            model_file=request.files.get("file"),
+            model_files=_model_files(),
         )
     except ops.Impressao3DValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
@@ -48,7 +62,7 @@ def api_3d_acervo_create() -> Any:
 @api_bp.route("/3d/acervo/<int:item_id>", methods=["PATCH"])
 @api_login_required
 def api_3d_acervo_update(item_id: int) -> Any:
-    """Edita uma peça do Acervo (nome, ativo/inativo, foto e/ou arquivo 3D)."""
+    """Edita uma peça do Acervo (nome, ativo/inativo, foto, e acrescenta/remove arquivos 3D)."""
     denied = require_3d_access()
     if denied:
         return denied
@@ -61,7 +75,8 @@ def api_3d_acervo_update(item_id: int) -> Any:
             name=request.form.get("name") if "name" in request.form else None,
             is_active=_form_flag("is_active"),
             photo_file=request.files.get("photo"),
-            model_file=request.files.get("file"),
+            model_files=_model_files(),
+            remove_file_ids=_remove_file_ids(),
         )
     except ops.Impressao3DValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})

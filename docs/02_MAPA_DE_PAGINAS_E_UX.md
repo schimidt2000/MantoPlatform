@@ -3,7 +3,7 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **200**
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **201**
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
@@ -244,7 +244,8 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
     `entregue`) — `<select>` nativo é legítimo aqui: 4 opções, bem abaixo do limite de 10 do
     Princípio X.1. Salva na hora com feedback "Salvando…"/"Erro ao salvar"; marcar `entregue`
     tira a linha da fila.
-  - Botão **"Ver Detalhes para Impressão"** abre um `Dialog` que cruza os dados da API:
+  - Botão **"Ver Detalhes para Impressão"** abre um `Dialog` com **links de download de cada
+    arquivo 3D da peça** (o Artista 3D imprime sem passar pelo Acervo) e que cruza os dados da API:
     **Personagens contratados** (com miniatura quadrada e talento escalado) e o **extrato do
     Formulário de Pré-Contrato**, mostrando só os campos que a cliente preencheu — é lá que estão
     "Nome do Aniversariante" e "Idade a Completar do Aniversariante", que definem o que imprimir.
@@ -257,15 +258,20 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
 - **Acesso**: `ARTISTA_3D`, `SUPERADMIN`.
 - **Objetivo**: catálogo dos modelos base que podem virar presente de um evento.
 - **UX**:
-  - **Formulário de upload duplo** no topo — "Foto de Preview (JPG/PNG)" e "Arquivo 3D (.stl,
-    .3mf, .zip)", **ambos obrigatórios no cadastro** — via `FileUpload` do design system, com
-    erro realçado no campo exato devolvido pela API (`fields`) e **sem nunca limpar o que já foi
-    digitado** em caso de falha (Princípio V). Na **edição** os dois viram opcionais: deixar em
-    branco mantém o arquivo já salvo.
+  - **Formulário no topo** — "Foto de Preview (JPG/PNG)" (via `FileUpload` do design system) e
+    **"Arquivos 3D (.stl, .3mf, .zip)"**, um input `multiple`: uma mesma peça costuma vir fatiada
+    em várias partes (corpo, argola, base) e todas são enviadas de uma vez (feature 201). Foto e
+    **pelo menos um** arquivo são obrigatórios no cadastro; o erro é realçado no campo exato
+    devolvido pela API (`fields`) e o formulário **nunca é limpo em caso de falha** (Princípio
+    V) — a limpeza só acontece no sucesso, remontando o formulário por `key` (o `FileUpload`
+    guarda o nome do arquivo em estado interno próprio).
+  - Na **edição** os arquivos 3D são **cumulativos**: os já salvos aparecem listados com link de
+    download e um ✕ que os marca para remoção (com "Desfazer"), e o input adiciona novos. O
+    servidor recusa (400) qualquer combinação que deixaria a peça com zero arquivos.
   - **Grade de cards** (4 colunas no desktop, 1 no mobile) com a foto em `aspect-square`, o nome,
-    um badge com **a contagem de quantas vezes o modelo já foi usado em eventos**, badge
-    "Inativa" quando aplicável, e ações: baixar o arquivo 3D, editar (abre `Dialog` com o mesmo
-    formulário), inativar/reativar e excluir.
+    badges com **a contagem de usos em eventos** e o **nº de arquivos 3D**, badge "Inativa"
+    quando aplicável, a lista de arquivos para download (pelo nome original) e ações: editar
+    (abre `Dialog` com o mesmo formulário), inativar/reativar e excluir.
   - **Exclusão** pede confirmação em `Dialog`; peça já vinculada a evento é bloqueada pelo
     servidor com a mensagem orientando a inativar em vez de excluir.
   - Entrada/saída de cards com Framer Motion respeitando `useReducedMotion()`.

@@ -4,7 +4,7 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **200**
+> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **201**
 
 Formato de cada entrada:
 
@@ -17,6 +17,75 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 201 — Acervo 3D: uma peça, vários arquivos
+`201-acervo-3d-multi-arquivos` · **2026-07-29** · migration **`d9e3a5b7c124`** (*acervo 3d com
+multiplos arquivos*)
+
+**Motivação.** A feature 200 modelou a peça do Acervo com **um** arquivo 3D (`file_path`). Na
+prática um mesmo presente quase nunca é um arquivo só: o modelo vem **fatiado em partes** (corpo,
+argola, base), e o `.zip` estava sendo usado como gambiarra para empacotar tudo — o que obriga o
+Artista 3D a baixar, descompactar e adivinhar o que é cada coisa.
+
+**O que mudou.**
+
+- **Banco.** Nova tabela `acervo_3d_files` (1:N com `acervo_3d_items`, `ON DELETE CASCADE`) com
+  `file_path`, `original_name`, `position` e `created_at`. A coluna `acervo_3d_items.file_path`
+  **saiu**. A migration **migra os dados antes de dropar**: um `INSERT ... SELECT` transforma
+  cada peça já cadastrada numa linha de `acervo_3d_files` na posição 0, e só então a coluna é
+  removida.
+  - `original_name` existe porque o caminho salvo é um UUID — sem ele o Artista 3D veria três
+    links indistinguíveis em vez de `corpo.stl` / `argola.3mf` / `base.stl`.
+- **Backend.**
+  - `Acervo3DFile` em `models.py`; `Acervo3DItem.files` com `cascade="all, delete-orphan"` e
+    `order_by=position`.
+  - `impressoes3d_ops.py`: `create_acervo_item` passou a receber `model_files: list` e exigir
+    **pelo menos um**; `update_acervo_item` ganhou `model_files` (acrescenta) + `remove_file_ids`
+    (remove) via `_apply_file_changes`, que **recusa deixar a peça com zero arquivos**;
+    `delete_acervo_item` remove todos os arquivos do storage; novo `serialize_model_files`.
+  - `impressoes3d_write.py`: `_model_files()` lê `request.files.getlist("files")` **e** o `file`
+    singular da 200 (nenhum cliente antigo quebra), `_remove_file_ids()` lê `remove_file_ids[]`.
+  - O payload da **Fila** passou a incluir os arquivos dentro de `item` — o Artista 3D baixa
+    direto da fila, sem abrir o Acervo.
+- **Frontend.**
+  - `Acervo3DItem.file_path: string` virou `files: Acervo3DFile[]`; `SaveAcervoItemInput` ganhou
+    `files: File[]` e `removeFileIds: number[]`.
+  - `Acervo3DPage`: o `FileUpload` único do arquivo 3D virou um input `multiple` com lista dos
+    arquivos já salvos (link de download + ✕/Desfazer para marcar remoção) e prévia dos que serão
+    enviados. O card mostra badge com o nº de arquivos e um link por arquivo.
+  - `Fila3DPage`: o dialog "Ver Detalhes para Impressão" lista os downloads de cada parte.
+
+**Impacto em RBAC e regras de negócio.** RBAC inalterado. Regra nova: **peça do Acervo sempre tem
+≥1 arquivo** — vale no cadastro e na edição.
+
+**Rotas e endpoints.** Nenhuma rota nova. `POST /api/3d/acervo` passou a aceitar `files`
+(múltiplos) em vez de `file`; `PATCH /api/3d/acervo/<id>` ganhou `files` e `remove_file_ids[]`. O
+JSON da peça troca `file_path` por `files[]` — **breaking** para qualquer consumidor externo, mas
+o único consumidor é o próprio frontend, atualizado no mesmo commit.
+
+**Riscos e pegadinhas descobertos.**
+1. **Ordem da migration é o ponto crítico.** O `INSERT ... SELECT` precisa rodar **antes** do
+   `DROP COLUMN` — invertido, os arquivos das peças existentes sumiriam sem erro nenhum.
+   Testado explicitamente: downgrade para `c8d2f4a6b013`, inserção de uma peça no schema antigo,
+   upgrade → o arquivo apareceu em `acervo_3d_files` na posição 0.
+2. **O downgrade perde dados por natureza** (volta a caber um arquivo só, fica o primeiro). Ele
+   **não apaga peças** para satisfazer o NOT NULL: se sobrar alguma sem arquivo, a coluna fica
+   nullable e o log avisa — perder uma peça inteira num rollback seria pior que a divergência.
+3. **`FileUpload` guarda o nome do arquivo em estado interno.** Zerar o estado do formulário no
+   `onSuccess` não limpava o campo: continuava exibindo "preview.png" como se ainda estivesse
+   selecionado. Corrigido remontando o formulário por `key` — a limpeza agora é do chamador, não
+   do próprio formulário. Vale para qualquer tela futura que reutilize o `FileUpload` em
+   formulário de criação repetida.
+4. **`.zip` continua aceito** (decisão do usuário): quem preferir mandar um pacote único segue
+   podendo, e nada já cadastrado quebra.
+
+**Verificação.** `scripts/db/verify_200_impressoes_3d.py` ampliado — **47/47 checks** (inclui
+ordem/posição dos arquivos, PATCH acrescentando sem substituir, remoção individual e o 400 ao
+tentar remover todos). Round-trip da migration testado com dado real. `tsc --noEmit` limpo,
+build do internal OK, e conferido no app real: upload de 3 arquivos de uma vez, card com os 3
+downloads nomeados, dialog de edição com ✕/Desfazer e formulário limpo após o sucesso.
+
+---
 
 ### 200 — Módulo Core de Impressões 3D
 `200-impressoes-3d` · **2026-07-29** · migration **`c8d2f4a6b013`** (*modulo core de impressoes 3d*)

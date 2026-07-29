@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Download, Pencil, Trash2 } from "lucide-react";
 import {
@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   CardContent,
+  cn,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -28,7 +29,8 @@ import {
 
 const PHOTO_ACCEPT = "image/jpeg,image/png";
 const MODEL_ACCEPT = ".zip,.stl,.3mf";
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_UPLOAD_MB = 50;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 /** Mensagem de erro de um campo específico devolvida pela API (400 com `fields`). */
 function fieldError(error: unknown, field: string): string | undefined {
@@ -44,19 +46,25 @@ function generalError(error: unknown): string | undefined {
 interface AcervoFormProps {
   /** Peça em edição; ausente = formulário de cadastro. */
   item?: Acervo3DItem;
-  onDone?: () => void;
+  /** Chamado após a API confirmar o salvamento. */
+  onSaved?: () => void;
+  /** Informe para exibir o botão "Cancelar" (usado no Dialog de edição). */
+  onCancel?: () => void;
 }
 
 /**
- * Formulário de upload duplo — "Foto de Preview (JPG/PNG)" e "Arquivo 3D (.stl, .3mf, .zip)".
- * Serve tanto o cadastro quanto a edição: na edição, os arquivos são opcionais (deixar em branco
- * mantém os atuais).
+ * Formulário da peça — "Foto de Preview (JPG/PNG)" e **um ou mais** "Arquivos 3D".
+ *
+ * Serve cadastro e edição. Na edição os arquivos 3D são **cumulativos**: os novos se somam aos
+ * já salvos, e remover é explícito (o servidor recusa deixar a peça sem nenhum arquivo).
  */
-function AcervoForm({ item, onDone }: AcervoFormProps) {
+function AcervoForm({ item, onSaved, onCancel }: AcervoFormProps) {
   const isEdit = item !== undefined;
   const [name, setName] = useState(item?.name ?? "");
   const [photo, setPhoto] = useState<File | null>(null);
-  const [modelFile, setModelFile] = useState<File | null>(null);
+  const [modelFiles, setModelFiles] = useState<File[]>([]);
+  const [removeFileIds, setRemoveFileIds] = useState<number[]>([]);
+  const modelInputRef = useRef<HTMLInputElement>(null);
   const create = useCreateAcervoItem();
   const update = useUpdateAcervoItem();
   const mutation = isEdit ? update : create;
@@ -64,30 +72,19 @@ function AcervoForm({ item, onDone }: AcervoFormProps) {
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const input = { name: name.trim(), photo, file: modelFile };
-    // O formulário NUNCA é limpo em caso de erro (Princípio V) — só no `onSuccess`.
+    const input = { name: name.trim(), photo, files: modelFiles, removeFileIds };
+    // O formulário NUNCA é limpo em caso de erro (Princípio V) — a limpeza é o `onSaved` do
+    // chamador, que remonta este componente por `key` (o `FileUpload` guarda o nome do arquivo
+    // em estado interno, então zerar o estado daqui não apagaria o que ele mostra).
     if (isEdit) {
-      update.mutate(
-        { id: item.id, input },
-        {
-          onSuccess: () => {
-            setPhoto(null);
-            setModelFile(null);
-            onDone?.();
-          },
-        },
-      );
+      update.mutate({ id: item.id, input }, { onSuccess: () => onSaved?.() });
       return;
     }
-    create.mutate(input, {
-      onSuccess: () => {
-        setName("");
-        setPhoto(null);
-        setModelFile(null);
-        onDone?.();
-      },
-    });
+    create.mutate(input, { onSuccess: () => onSaved?.() });
   }
+
+  /** Arquivos já salvos que sobrariam depois de aplicar as remoções marcadas. */
+  const keptFiles = (item?.files ?? []).filter((f) => !removeFileIds.includes(f.id));
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
@@ -120,36 +117,98 @@ function AcervoForm({ item, onDone }: AcervoFormProps) {
           existingUrl={isEdit ? assetUrl(item.photo_url) : undefined}
           existingLabel="Foto atual"
         />
-        <FileUpload
-          label="Arquivo 3D (.stl, .3mf, .zip)"
-          accept={MODEL_ACCEPT}
-          maxSizeBytes={MAX_UPLOAD_BYTES}
-          required={!isEdit}
-          error={fieldError(error, "file")}
-          onChange={setModelFile}
-          existingUrl={isEdit ? assetUrl(item.file_path) : undefined}
-          existingLabel="Arquivo atual"
-        />
+
+        <div>
+          <span className="mb-1 block text-sm text-muted">
+            Arquivos 3D (.stl, .3mf, .zip){!isEdit && <span className="text-red"> *</span>}
+          </span>
+          <div
+            className={cn(
+              "space-y-2 rounded-md border border-line bg-panel p-2",
+              fieldError(error, "files") && "border-red ring-2 ring-red/30",
+            )}
+          >
+            {isEdit && item.files.length > 0 && (
+              <ul className="divide-y divide-line">
+                {item.files.map((saved) => {
+                  const marked = removeFileIds.includes(saved.id);
+                  return (
+                    <li key={saved.id} className="flex items-center gap-2 py-1.5">
+                      <a
+                        href={assetUrl(saved.file_path)}
+                        download
+                        className={cn(
+                          "min-w-0 flex-1 truncate text-sm text-blue underline",
+                          marked && "text-muted line-through no-underline",
+                        )}
+                      >
+                        {saved.original_name ?? `Arquivo ${saved.position + 1}`}
+                      </a>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-label={
+                          marked
+                            ? `Manter ${saved.original_name ?? "arquivo"}`
+                            : `Remover ${saved.original_name ?? "arquivo"}`
+                        }
+                        onClick={() =>
+                          setRemoveFileIds((prev) =>
+                            marked ? prev.filter((id) => id !== saved.id) : [...prev, saved.id],
+                          )
+                        }
+                      >
+                        {marked ? "Desfazer" : "✕"}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <input
+              ref={modelInputRef}
+              type="file"
+              multiple
+              accept={MODEL_ACCEPT}
+              className="w-full text-sm text-ink"
+              aria-label="Adicionar arquivos 3D"
+              onChange={(e) => setModelFiles(Array.from(e.target.files ?? []))}
+            />
+            <p className="text-xs text-muted">
+              {modelFiles.length > 0
+                ? `${modelFiles.length} arquivo(s) a enviar: ${modelFiles
+                    .map((f) => f.name)
+                    .join(", ")}`
+                : isEdit
+                  ? `${keptFiles.length} arquivo(s) salvos — escolha novos para acrescentar.`
+                  : `Pode enviar vários de uma vez (máx. ${MAX_UPLOAD_MB} MB cada).`}
+            </p>
+          </div>
+          {fieldError(error, "files") && (
+            <p className="mt-1 text-sm text-red" role="alert">
+              {fieldError(error, "files")}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" loading={mutation.isPending}>
           {isEdit ? "Salvar alterações" : "Cadastrar peça"}
         </Button>
-        {onDone && (
-          <Button type="button" variant="ghost" onClick={onDone}>
+        {onCancel && (
+          <Button type="button" variant="ghost" onClick={onCancel}>
             Cancelar
           </Button>
-        )}
-        {mutation.isSuccess && !mutation.isPending && (
-          <span className="text-sm text-green">Peça salva.</span>
         )}
       </div>
       {/* Erro geral só quando NÃO há campo culpado — senão a mensagem apareceria duplicada. */}
       {error &&
         !fieldError(error, "name") &&
         !fieldError(error, "photo") &&
-        !fieldError(error, "file") && (
+        !fieldError(error, "files") && (
           <p className="text-sm text-red" role="alert">
             {generalError(error)}
           </p>
@@ -184,14 +243,27 @@ function AcervoCard({ item, onEdit, onDelete }: AcervoCardProps) {
           <Badge tone={item.usage_count > 0 ? "accent" : "neutral"}>
             {item.usage_count === 1 ? "1 uso em evento" : `${item.usage_count} usos em eventos`}
           </Badge>
+          <Badge tone="neutral">
+            {item.files.length === 1 ? "1 arquivo 3D" : `${item.files.length} arquivos 3D`}
+          </Badge>
         </div>
+        <ul className="space-y-0.5">
+          {item.files.map((modelFile) => (
+            <li key={modelFile.id}>
+              <a
+                href={assetUrl(modelFile.file_path)}
+                download
+                className="flex items-center gap-1.5 truncate text-sm text-blue hover:underline"
+              >
+                <Download className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span className="truncate">
+                  {modelFile.original_name ?? `Arquivo ${modelFile.position + 1}`}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Button asChild variant="outline" size="sm">
-            <a href={assetUrl(item.file_path)} download>
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Arquivo 3D
-            </a>
-          </Button>
           <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Editar ${item.name}`}>
             <Pencil className="h-4 w-4" aria-hidden="true" />
           </Button>
@@ -221,8 +293,8 @@ function AcervoCard({ item, onEdit, onDelete }: AcervoCardProps) {
  * Acervo 3D (`/3d/acervo`) — catálogo dos modelos base do Artista 3D (feature 200).
  *
  * Grade de cards com a foto de preview (é por ela que a peça é escolhida no evento — Princípio
- * X.2), a contagem de quantas vezes o modelo já foi usado em eventos e o download do arquivo
- * bruto. O cadastro usa o formulário de upload duplo (foto + arquivo 3D).
+ * X.2), a contagem de quantas vezes o modelo já foi usado em eventos e o download de cada
+ * arquivo 3D. O cadastro pede a foto e **um ou mais** arquivos (feature 201).
  */
 export function Acervo3DPage() {
   const reduceMotion = useReducedMotion();
@@ -230,6 +302,11 @@ export function Acervo3DPage() {
   const remove = useDeleteAcervoItem();
   const [editing, setEditing] = useState<Acervo3DItem | null>(null);
   const [deleting, setDeleting] = useState<Acervo3DItem | null>(null);
+  // Remonta o formulário de cadastro após cada sucesso: o `FileUpload` do design system guarda o
+  // nome do arquivo escolhido em estado interno, e sem trocar a `key` ele continuaria exibindo o
+  // arquivo da peça anterior como se ainda estivesse selecionado.
+  const [formKey, setFormKey] = useState(0);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
@@ -241,10 +318,19 @@ export function Acervo3DPage() {
 
       <Card>
         <CardContent className="p-4">
-          <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.07em] text-muted">
-            Cadastrar nova peça
-          </h2>
-          <AcervoForm />
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.07em] text-muted">
+              Cadastrar nova peça
+            </h2>
+            {savedAt !== null && <span className="text-sm text-green">Peça salva.</span>}
+          </div>
+          <AcervoForm
+            key={formKey}
+            onSaved={() => {
+              setFormKey((k) => k + 1);
+              setSavedAt(Date.now());
+            }}
+          />
         </CardContent>
       </Card>
 
@@ -301,7 +387,12 @@ export function Acervo3DPage() {
             </DialogDescription>
           </DialogHeader>
           {editing && (
-            <AcervoForm key={editing.id} item={editing} onDone={() => setEditing(null)} />
+            <AcervoForm
+              key={editing.id}
+              item={editing}
+              onSaved={() => setEditing(null)}
+              onCancel={() => setEditing(null)}
+            />
           )}
         </DialogContent>
       </Dialog>
