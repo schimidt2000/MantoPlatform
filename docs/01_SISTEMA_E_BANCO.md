@@ -923,6 +923,39 @@ primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e 
 > gunicorn sobe com `--bind 0.0.0.0` (só IPv4) e a rede privada do Railway é IPv6-only. Para
 > migrar para ela, troque o bind para `[::]:$PORT` em `railway.json` e `nixpacks.toml`.
 
+### 5.2.2 Domínios e roteamento por host (feature 206)
+
+Os **três** domínios customizados apontam para o serviço `manto-frontend-internal` (porta 8080). O
+serviço do Flask não tem domínio próprio: é alcançado só pelo `mantoplatform-production.up.railway.app`
+que o proxy usa como `BACKEND_URL`.
+
+| Domínio | Raiz entrega | Observação |
+|---|---|---|
+| `app.mantoproducoes.com.br` | `apps/internal` (ERP) | URL principal da plataforma |
+| `beta.mantoproducoes.com.br` | `apps/internal` (ERP) | endereço histórico, mesmo conteúdo |
+| `portal.mantoproducoes.com.br` | **302 → `/portal/`** | endereço que os talentos conhecem |
+
+`PORTAL_HOSTS` (env do serviço frontend, default `portal.mantoproducoes.com.br`) marca os hosts em
+que a raiz é o Portal do Artista. Sem essa regra, `portal.*` entregaria `apps/internal/dist` e o
+talento cairia na tela de login do staff — o bundle do portal é compilado com `base: "/portal/"` e
+o React Router usa `basename={import.meta.env.BASE_URL}`, então **precisa** do prefixo na URL.
+
+Dois detalhes que não são negociáveis nessa regra:
+1. É **redirect**, não reescrita de `req.url`. O React Router lê a URL do browser; sem o prefixo
+   visível, o bundle certo seria servido e nenhuma rota casaria — tela em branco.
+2. **Preserva caminho e query.** O link de redefinição de senha que sai por e-mail é
+   `<PORTAL_URL>/reset-password/<token>`; um redirect seco para `/portal/` descartaria o token.
+
+O bloco de proxy roda antes, então `/api` e mídia continuam indo ao Flask também nesse host.
+
+> ⚠️ **Domínio removido do Railway = certificado curinga + HSTS.** Quando `portal.*` deixou de
+> estar cadastrado, a borda passou a apresentar o certificado `*.up.railway.app`, que não cobre o
+> host — e, com HSTS ativo, o browser nem oferece exceção. O diagnóstico rápido é ler o **SAN** do
+> certificado: `*.up.railway.app` significa "o Railway não reconhece este hostname" (cadastro
+> ausente ou CNAME apontando para o alvo antigo), e não "Let's Encrypt ainda emitindo". Cada
+> domínio customizado recebe um alvo de CNAME único — ao recadastrar, o CNAME **precisa** ser
+> atualizado para o novo valor.
+
 Os filtros espelham os `server.proxy` dos três `vite.config.ts`, inclusive `changeOrigin: true` —
 sem ele, um `BACKEND_URL` de domínio público faria o roteador de borda do Railway devolver a
 requisição para o próprio serviço frontend, em laço. `xfwd: true` envia os `X-Forwarded-*`. Falha

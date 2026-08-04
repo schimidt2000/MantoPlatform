@@ -933,6 +933,13 @@ O login do portal não tem mais como cair no Jinja: `must_redirect_to_classic` s
 `POST /api/portal/auth/login` na 206. Quem tem senha temporária ou termo pendente é guiado pelos
 `pending_steps` dentro do próprio React.
 
+**Como o talento chega.** `portal.mantoproducoes.com.br` continua sendo o endereço divulgado, mas
+agora aponta para o serviço do frontend: qualquer caminho fora de `/portal` recebe 302 para
+`/portal` + o caminho original (ver `01_SISTEMA_E_BANCO.md` §5.2.2). Ou seja,
+`portal.mantoproducoes.com.br/` abre a agenda do portal React, e o link de redefinição de senha do
+e-mail (`/reset-password/<token>`) chega inteiro em `/portal/reset-password/<token>`.
+`app.mantoproducoes.com.br/portal/*` também funciona — é a mesma origem.
+
 ---
 
 ## D. Vínculos entre módulos (mapa de relações)

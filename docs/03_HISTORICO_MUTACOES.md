@@ -91,6 +91,19 @@ afirmam a ausência de `must_redirect_to_classic`.
 9. **`/google/*` teve de entrar nos filtros.** O callback do OAuth do Google Calendar é rota Jinja
    com `redirect_uri` fixo registrado no Google Console; apontando para este domínio, o
    consentimento voltava no fallback de SPA e a reconexão da agenda quebrava em silêncio.
+10. **`portal.mantoproducoes.com.br` sumiu junto com a virada.** Antes ele apontava para o Flask,
+    que o tratava em `portal_domain_routing`. Ao sair do Railway, a borda passou a apresentar o
+    certificado curinga `*.up.railway.app` e o browser bloqueou — com HSTS, sem opção de exceção.
+    Diagnóstico rápido para o futuro: leia o **SAN** do certificado. `*.up.railway.app` = o Railway
+    não reconhece o hostname (cadastro ausente ou CNAME velho), **não** é Let's Encrypt emitindo.
+    Cada domínio customizado tem um alvo de CNAME próprio; ao recadastrar, o CNAME muda.
+11. **Recadastrar o domínio sozinho não resolveria.** Sem regra de host, `portal.*` entregaria
+    `apps/internal/dist` — o talento cairia no login do staff, porque o bundle do portal exige o
+    prefixo `/portal` (Vite `base` + `basename` do React Router). Daí o `PORTAL_HOSTS` em
+    `server.js`, com redirect (não reescrita) preservando caminho e query.
+12. **`fetch`/undici descarta o header `Host` silenciosamente.** A primeira versão do teste de
+    roteamento por host passava `headers: { host: ... }` e media outra coisa — os casos falhavam
+    por motivo errado. Teste de roteamento por host precisa de `node:http` cru.
 
 ### 205f — Loja de Interações Virtuais (resiliência a falha de serviço externo)
 `205-loja-interacoes-virtuais` · **2026-08-04** · migration `c17b3ea94f52`
