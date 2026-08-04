@@ -38,13 +38,12 @@ interface LoginCredentials {
   password: string;
 }
 
-interface LoginResult extends PortalTalent {
-  /**
-   * Legado da fatia 176, quando troca de senha e termos só existiam no portal Jinja. Desde a
-   * 191 essas etapas são telas React (`pending_steps`) e o backend sempre responde `false`.
-   */
-  must_redirect_to_classic: boolean;
-}
+/**
+ * Resposta do login. Era `PortalTalent` + `must_redirect_to_classic` (fatia 176, quando troca de
+ * senha e termos só existiam no portal Jinja); esse campo foi removido do backend junto com a
+ * aposentadoria das telas Jinja — o talento sempre entra direto no portal React.
+ */
+type LoginResult = PortalTalent;
 
 /** Mutation de login; ao suceder, popula o cache do talento atual. */
 export function usePortalLogin() {

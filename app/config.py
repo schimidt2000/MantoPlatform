@@ -3,6 +3,12 @@ import secrets
 
 _WEAK_SECRET = "dev-secret-key"
 
+# Endereço único da plataforma. Com o React consolidado como interface primária, `app.*` é o
+# serviço Node (`frontend/server.js`) que serve os três bundles e faz proxy reverso de `/api`,
+# `/uploads`, `/catalogo/midia`, `/portal/photo` e `/figurinos/<id>/print` para este Flask —
+# não existe mais um segundo endereço "do backend" para o usuário final.
+PLATFORM_BASE_URL = "https://app.mantoproducoes.com.br"
+
 
 def _db_url() -> str:
     url = os.getenv("DATABASE_URL", "sqlite:///manto.db")
@@ -81,6 +87,23 @@ class Config:
 
     # URL base do portal (para links nos emails)
     PORTAL_URL = os.getenv("PORTAL_URL", "")
+
+    # URL base pública (feature 205) — usada para montar o `redirect_url` do checkout, o endereço
+    # do webhook que a InfinitePay chama e o destino do 301 da raiz do Flask. Precisa ser
+    # alcançável pela internet: sem ela, a operadora não tem para onde devolver a família nem
+    # para onde avisar o pagamento. Passou a apontar fixo para `PLATFORM_BASE_URL` (antes o
+    # default era vazio, o que gerava URL quebrada em qualquer ambiente sem o env definido);
+    # continua sobrescritível por `PUBLIC_BASE_URL` para dev/staging (ex.: túnel ngrok).
+    PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL") or PLATFORM_BASE_URL
+
+    # Intervalo (segundos) da varredura que expira as reservas virtuais (feature 205, FR-057).
+    VIRTUAL_SWEEP_INTERVAL = int(os.getenv("VIRTUAL_SWEEP_INTERVAL", "60"))
+
+    # Pasta dos vídeos gravados (feature 205, FR-038e). **Fora** de `UPLOAD_FOLDER` de propósito:
+    # `/uploads/<path>` é uma rota servida (ainda que com login de staff) e, com `USE_S3=true`,
+    # `save_file` devolveria uma URL de bucket público. Um vídeo em que o nome da criança é dito em
+    # voz alta não pode depender de o endereço não vazar — ele só sai pelo endpoint que valida.
+    VIRTUAL_VIDEO_FOLDER = os.getenv("VIRTUAL_VIDEO_FOLDER", "")
 
     # Object Storage — AWS S3 ou Cloudflare R2
     USE_S3           = os.getenv("USE_S3", "false").lower() == "true"

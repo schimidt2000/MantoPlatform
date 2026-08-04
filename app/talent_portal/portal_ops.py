@@ -92,11 +92,6 @@ def find_talent_by_login(value: str) -> Talent | None:
     return Talent.query.filter_by(cpf=digits).first()
 
 
-def needs_classic_portal_flow(talent: Talent) -> bool:
-    """True se o login deve ser direcionado à versão clássica (troca de senha/termos pendentes)."""
-    return bool(talent.must_change_password or not talent.terms_accepted_at)
-
-
 def _not_rejected():
     """Cláusula: escalação cujo convite NÃO foi recusado (aceito, pendente ou sem status)."""
     return or_(EventRole.invite_status.is_(None), EventRole.invite_status != "rejected")

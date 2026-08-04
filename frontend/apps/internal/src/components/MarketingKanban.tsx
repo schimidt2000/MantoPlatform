@@ -169,10 +169,10 @@ function KanbanCard({
         className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <div className="flex items-start gap-2">
-          {post.catalog_item && (
+          {post.catalog_items[0] && (
             <AvatarThumb
-              src={assetUrl(post.catalog_item.cover_url)}
-              name={post.catalog_item.name}
+              src={assetUrl(post.catalog_items[0].cover_url)}
+              name={post.catalog_items[0].name}
               shape="square"
               size="md"
               fallbackIcon="🎭"
@@ -180,8 +180,10 @@ function KanbanCard({
           )}
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold leading-snug text-ink">{post.title}</span>
-            {post.catalog_item && (
-              <span className="block truncate text-xs text-muted">{post.catalog_item.name}</span>
+            {post.catalog_items.length > 0 && (
+              <span className="block truncate text-xs text-muted">
+                {post.catalog_items.map((item) => item.name).join(", ")}
+              </span>
             )}
           </span>
           <GripVertical className="h-4 w-4 flex-none text-muted/60" aria-hidden="true" />

@@ -3,6 +3,7 @@ import {
   BarChart3,
   BookOpen,
   Boxes,
+  CircleDollarSign,
   Calculator,
   CalendarDays,
   Clapperboard,
@@ -29,6 +30,7 @@ import {
   Star,
   Target,
   Users,
+  Video,
   Wallet,
   WalletCards,
 } from "lucide-react";
@@ -196,6 +198,36 @@ const SECTIONS: NavSectionConfig[] = [
         hint: "Quais assuntos estão pedindo post",
         isActive: (path) => path === "/marketing/metas",
         isVisible: (user) => notRevendedor(user) && hasRole(user, "MARKETING", "SUPERADMIN"),
+      },
+      {
+        // Feature 205 — o canal de venda self-service é operado pelo Comercial.
+        key: "virtuais-campanhas",
+        label: "Interações Virtuais",
+        href: "/virtuais/campanhas",
+        icon: <Video />,
+        hint: "Campanhas de chamadas ao vivo e vídeos gravados",
+        isActive: (path) => path.startsWith("/virtuais/campanhas"),
+        isVisible: (user) => notRevendedor(user) && hasRole(user, "COMERCIAL", "SUPERADMIN"),
+      },
+      {
+        // Feature 205 US5 — o talento e a produção acompanham daqui o que precisa ser gravado.
+        key: "virtuais-producao",
+        label: "Fila de Produção",
+        href: "/virtuais/producao",
+        icon: <Clapperboard />,
+        hint: "O que precisa ser gravado e entregue",
+        isActive: (path) => path === "/virtuais/producao",
+        isVisible: (user) =>
+          notRevendedor(user) && hasRole(user, "COMERCIAL", "CASTING", "SUPERADMIN"),
+      },
+      {
+        key: "virtuais-devolucoes",
+        label: "Devoluções Virtuais",
+        href: "/virtuais/devolucoes",
+        icon: <CircleDollarSign />,
+        hint: "Pagamentos a devolver por horário indisponível",
+        isActive: (path) => path === "/virtuais/devolucoes",
+        isVisible: (user) => notRevendedor(user) && hasRole(user, "COMERCIAL", "SUPERADMIN"),
       },
     ],
   },

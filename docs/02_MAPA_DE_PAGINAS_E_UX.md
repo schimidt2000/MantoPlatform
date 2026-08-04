@@ -3,7 +3,8 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **204**
+> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **206 (React como
+> interface primária + proxy reverso)**, sobre a 205f
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
@@ -42,6 +43,10 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **Acesso**: todos exceto `REVENDEDOR_EDUCAMANTO` puro.
 - **API**: `GET /api/dashboard` (`dashboard_service.py`).
 - **Vínculos**: cards levam a Agenda, Casting, Figurino e Financeiro.
+- **Desde a 206 é a única `/` da plataforma.** O dashboard Jinja foi aposentado: a raiz do Flask
+  responde 301 para `https://app.mantoproducoes.com.br`. Painéis atuais: Casting, Figurino,
+  Comercial (cobranças), Contas recorrentes, Performance e Cargos dispensados — **menos** blocos
+  do que a home Jinja tinha (ver o aviso em `01_SISTEMA_E_BANCO.md` §3.16).
 
 #### `/agenda` — Agenda
 - **Objetivo**: enxergar os eventos por período.
@@ -356,9 +361,12 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   `PATCH|DELETE /api/marketing/posts/<id>` · `GET /api/marketing/opcoes`.
 
 #### `/marketing/painel` → **Card de Postagem** *(Dialog de edição)*
-- **Vínculo com o catálogo**: o Tema é escolhido no **`Combobox` de `@manto/ui`** com
-  `AvatarThumb` **quadrada** da capa (Princípio X.1/X.2) — seleção visual, não por nome digitado.
-  O responsável usa o mesmo `Combobox`, com avatar **circular** (pessoa).
+- **Vínculo com o catálogo (múltiplos Temas, feature 204b)**: um post pode falar de vários Temas
+  ao mesmo tempo (ex.: Reels que junta "15 Anos" e "Debutante"). A UI compõe o **`Combobox` de
+  `@manto/ui`** (que continua single-select — nenhum componente novo entrou no design system)
+  como "adicionar": cada seleção vira um chip removível abaixo, com `AvatarThumb` **quadrada** da
+  capa (Princípio X.1/X.2); o Tema já escolhido some das opções do `Combobox`. O responsável usa o
+  mesmo `Combobox` (single, como antes), com avatar **circular** (pessoa).
 - `Status` e `Plataforma` são `<select>` nativos legítimos (5 e 7 opções — abaixo do limite de 10
   do Princípio X.1); as plataformas vêm do servidor (`MARKETING_PLATFORMS`).
 - **Botão do Google Drive**: com `drive_folder_url` preenchido, aparece um botão visualmente
@@ -399,6 +407,104 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **API**: `GET|POST /api/marketing/goals` · `PATCH|DELETE /api/marketing/goals/<id>` ·
   `GET /api/marketing/opcoes`.
 - **Vínculos**: Meta → Tema do catálogo (`CatalogItem`) → postagens publicadas (`MarketingPost`).
+
+#### `/virtuais/campanhas` — Interações Virtuais (feature 205, US1)
+- **Acesso**: `COMERCIAL`, `SUPERADMIN` (gate de servidor `require_virtuais_access()`).
+- **Objetivo**: montar e acompanhar as campanhas do canal de venda self-service — chamadas de vídeo
+  de 10 min e vídeos gravados com Personagens do catálogo.
+- **UX**: tabela densa com uma linha por campanha — miniatura **quadrada** do personagem
+  (`AvatarThumb`), situação em `Badge` (`Rascunho`/`Publicada`/`Pausada`), os dois preços, vendidos,
+  faturado, horários disponíveis/total e vídeos consumidos/capacidade. Estado vazio convida a criar
+  a primeira. Entrada da tabela com Framer Motion respeitando `useReducedMotion()`.
+- **Valores**: sempre `R$ {formatBRL(...)}` do `@manto/money` — nenhuma máscara própria
+  (Princípio IX).
+- **API**: `GET /api/virtuais/campanhas`.
+
+#### `/virtuais/campanhas/:id` — Edição da campanha
+- **Acesso**: idem.
+- **UX**: quatro cards.
+  - **Conteúdo público** — título, texto de apresentação, termos de tolerância e WhatsApp de
+    atendimento.
+  - **Preços e estoque** — os três preços em `MoneyInput` (digitação mascarada, valor cru no JSON),
+    capacidade de vídeos com "N de M já vendidos" e prazo de entrega em dias.
+  - **Estoque de horários** — data + janela início/fim geram os slots de 10 min; o retorno diz
+    quantos foram criados e quantos já existiam. Lista os horários com selo de situação; só os
+    livres têm botão de remover.
+  - **Presentes 3D liberados** — `Combobox` pesquisável do Acervo 3D com miniatura **quadrada**
+    (Princípio XII.2); as peças já liberadas viram chips removíveis.
+  - Publicar/Pausar no cabeçalho, ao lado de Salvar. Todo botão mostra estado de carregamento
+    (Princípio V).
+- **Regra de negócio visível na tela**: publicar exige preços, capa, prazo e termos — faltando
+  qualquer um, o erro aparece **no campo culpado** e nada do que foi digitado se perde. Alterar
+  preço **não** afeta pedidos já criados (os valores ficam congelados na reserva).
+- **API**: `GET /api/virtuais/campanhas/<id>/admin` · `PATCH /api/virtuais/campanhas/<id>` ·
+  `POST .../publicar` · `PUT .../acervo` · `POST .../horarios` · `DELETE /api/virtuais/horarios/<id>`.
+- **Vínculos**: Campanha → `CatalogCharacter` → `FigurinoSheet`; Campanha ↔ `Acervo3DItem` (N:N).
+
+#### `/v/:slug` — Landing e checkout da campanha *(app público, feature 205 US2)*
+- **Acesso**: público, sem login. Rascunho → 404; pausada → 410 (a família precisa saber se errou
+  o link ou se a campanha saiu do ar).
+- **Objetivo**: vender a interação sem atendimento — do link do Instagram ao pagamento.
+- **UX (mobile-first, Princípio X)**: coluna única, capa, textos, escolha de modalidade com os dois
+  preços, prazo do vídeo gravado visível **antes** da compra, grade de horários, upsell de presente
+  3D com miniatura, ficha da criança, total e botão de reservar. **FAQ somente no fim da página**
+  (FR-013), seguido do atalho de WhatsApp.
+- **Regras visíveis na tela**: erro de validação destaca o campo, leva o foco e **não apaga nada**
+  do que foi digitado; `409` mostra aviso e recarrega os horários; `429` explica o limite; `502`
+  avisa que o pagamento não abriu — e o horário já voltou ao estoque. O botão nunca fica "morto".
+- **Conferido** em 375px e 320px: sem rolagem horizontal, alvos ≥ 44px, nada abaixo de 12px.
+- **API**: `GET /api/virtuais/campanhas/<slug>` · `GET .../horarios` · `POST .../reservar` ·
+  `GET /api/virtuais/enderecos/autocomplete`.
+
+#### `/v/pedido/:token` — Acompanhamento do pedido *(app público, feature 205 US2)*
+- **Acesso**: público, por endereço não adivinhável. **Nenhum dado de criança aparece aqui** —
+  nome, endereço, sala e vídeo exigem a validação dupla que entra na US5 (FR-044a).
+- **Objetivo**: ser o destino do retorno do checkout. Como a confirmação do pagamento é
+  assíncrona, mostra "aguardando" e **vira "confirmado" sozinha** (FR-035a).
+- **Detalhe que importa**: a consulta continua rodando com a aba em segundo plano e revalida ao
+  voltar o foco — a família vai pagar em outra aba, e sem isso voltaria a uma tela congelada.
+- **API**: `GET /api/virtuais/pedidos/<public_token>`.
+
+#### `/virtuais/devolucoes` — Devoluções pendentes *(feature 205 US3)*
+- **Acesso**: `COMERCIAL`, `SUPERADMIN`.
+- **Objetivo**: garantir que nenhuma devolução se perca. A InfinitePay **não publica API de
+  estorno**, então quando um pagamento cai em horário já vendido o sistema cancela o pedido, abre
+  a devolução aqui e cobra até alguém marcar como concluída.
+- **UX**: tabela com família, valor em BRL, `invoice_slug` e `transaction_nsu` (o que a equipe usa
+  para achar a cobrança no painel da operadora), contato e o botão "Já devolvi" com confirmação em
+  duas etapas.
+
+#### Detalhe do evento — seção **Interação virtual** *(feature 205 US3)*
+- Aparece só em evento `event_type='VIRTUAL'` (mesmo padrão de `Presente3DSection`).
+- Traz o que o talento precisa para executar: nome e idade da criança, **dicas da família em
+  destaque**, contato, endereço do presente (quando houver) e o botão "Entrar na sala".
+- Sala pendente → aviso de que a venda está válida e a sala pode ser gerada de novo.
+
+#### `/virtuais/producao` — Fila de Produção de Mídia *(feature 205 US5)*
+- **Acesso**: `COMERCIAL`, `CASTING`, `SUPERADMIN`.
+- **Objetivo**: responder "o que eu gravo agora". Espelha a arquitetura da Fila 3D (feature 200).
+- **UX**: tabela densa, **uma linha por entrega**, com os quatro blocos na mesma altura —
+  horário/modalidade, criança, **dicas da família** e presente 3D. Prazo vencido tinge a linha;
+  prazo próximo é sinalizado. Filtros de situação e data não recarregam a página (a lista anterior
+  fica visível enquanto a nova chega).
+- **Ações na própria linha**: entrar na sala (ao vivo), enviar/substituir o vídeo (gravado) e o
+  atalho de WhatsApp com a mensagem pronta.
+- **Regra visível**: só existem `pendente`, `gravando` e `finalizado`. Finalizar uma entrega
+  gravada sem vídeo é recusado, com o motivo no campo.
+
+#### `/v/pedido/:token` — incremento de validação dupla e vídeo *(US5)*
+- Antes de validar: só situação, horário, valor e a dica dos 4 últimos dígitos do telefone.
+- Depois de confirmar o telefone: nome e idade da criança, as dicas que a família escreveu, o
+  presente, o endereço e o **player do vídeo** — servido por endpoint validado, nunca por link de
+  arquivo.
+- Cinco erros de telefone bloqueiam por 15 minutos; a sessão expira por 30 min de inatividade.
+- **Vídeo gravado não mostra "entrar na chamada"** — não existe chamada nesse produto.
+
+#### `/v/:slug` — etapa de presente 3D *(US4)*
+- Acima de 10 peças, `Combobox` pesquisável com miniatura quadrada (Princípio XII.1); abaixo,
+  grade visual de `AvatarThumb` — no celular, ver o presente vale mais que ler uma lista.
+- O endereço só é exigido quando há presente selecionado, via `GoogleAddressInput`.
+- Campanha sem acervo liberado não mostra a etapa, e o servidor recusa `gift_item_id`.
 
 ---
 
@@ -448,7 +554,19 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   "Nenhuma venda fechada neste período. Troque o filtro acima para ver outro mês.". Troca de
   período/vendedor faz o bloco reanimar com Framer Motion (220ms, respeitando
   `useReducedMotion()`).
-- **API**: `GET /api/vendas/pipeline?period=&seller_id=`.
+- **Banner de falha de entrega** (feature 205f, `components/AvisosFalhosBanner.tsx`): aparece na
+  Fila de Produção de Mídia e no painel do evento virtual quando um aviso automático não chegou à
+  família ou quando a sala do Meet parou de ser retentada. Distingue "ainda tentando" (a varredura
+  insiste sozinha) de "esgotado" (o sistema desistiu; alguém precisa agir), e traz os botões
+  **Reenviar manualmente** e **Tentar criar a sala de novo**. Falha silenciosa era o pior desfecho:
+  a equipe jurava ter enviado e a família não tinha recebido nada.
+- **Loja de Interações Virtuais fora do funil** (feature 205): venda virtual não tem vendedor —
+  ela se fecha sozinha na loja pública. Deixá-la aqui inflaria metas que ninguém bateu e afundaria
+  a taxa de conversão de quem vende de verdade. Some da tela do vendedor comum e, para gestor,
+  aparece num **card próprio acima do funil** (vendas · receita · ticket do canal) com o botão
+  "Incluir no funil" — opt-in explícito, `?incluir_loja_virtual=1`. O vendedor comum não recebe o
+  bloco nem com o parâmetro: escopo é decisão do servidor.
+- **API**: `GET /api/vendas/pipeline?period=&seller_id=&incluir_loja_virtual=`.
 - **Vínculos**: `/events/:id` (ação de linha), `/financeiro/comissoes` (a comissão prevista aqui é
   a mesma base que vira `CommissionPayment` lá) e `/financeiro` (Painel Financeiro — custo, lucro
   e auditoria de eventos sem valor).
@@ -587,7 +705,15 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
     eventos) e Recebimentos Previstos.
   - **Largura total** — tabela de Eventos no Período (data, evento, tipo, status, receita, custo,
     lucro, comissão, taxa).
-- **API**: `GET /api/financeiro/dashboard`.
+- **Loja de Interações Virtuais** (feature 205): a receita da loja **continua na cascata da DRE** —
+  Fator R, break-even e resultado líquido seguem exatos, porque é dinheiro que entrou. O que sai
+  são os indicadores **de evento** (ticket médio e "A Receber de clientes"): dezenas de microvendas
+  de 10 minutos ao lado de shows completos não distorcem só a média, mudam a leitura que a equipe
+  faz do próprio desempenho. Na coluna analítica a loja aparece como **barra própria** em Receita
+  por Tipo (identificada, nunca diluída dentro de SHOW) e num **card consolidado** com vendas,
+  receita e ticket do canal, mais o botão "Incluir a loja nos indicadores de evento" — opt-in
+  explícito, `?incluir_loja_virtual=1`. Venda virtual **nunca** gera comissão.
+- **API**: `GET /api/financeiro/dashboard?incluir_loja_virtual=`.
 - **Vínculos**: cada linha de evento/auditoria/recebimento leva a `/events/<id>`; a linha de
   Gastos Recorrentes do DRE reflete os lançamentos de `/gastos/recorrentes`.
 
@@ -799,7 +925,13 @@ feature 191; decomissioná-las é limpeza futura.
 `/portal/events/<id>/rate[/detail]`.
 
 > `/portal/photo/<file>` **não** é legado a decomissionar: serve as fotos de figurino checando a
-> sessão de talento, e o app React depende dela.
+> sessão de talento, e o app React depende dela. Por isso ela é um dos filtros do proxy reverso
+> de `frontend/server.js` (feature 206) — casada **antes** do mount `/portal`, senão o fallback
+> do bundle do portal devolveria `index.html` no lugar da imagem.
+
+O login do portal não tem mais como cair no Jinja: `must_redirect_to_classic` saiu do payload de
+`POST /api/portal/auth/login` na 206. Quem tem senha temporária ou termo pendente é guiado pelos
+`pending_steps` dentro do próprio React.
 
 ---
 

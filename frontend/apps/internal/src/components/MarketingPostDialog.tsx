@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ExternalLink, FolderOpen, Trash2 } from "lucide-react";
+import { ExternalLink, FolderOpen, Trash2, X } from "lucide-react";
 import {
   AvatarThumb,
   Badge,
@@ -50,6 +50,89 @@ function temaOptions(temas: MarketingCatalogItemRef[]): ComboboxOption[] {
     imageShape: "square" as const,
     fallbackIcon: "🎭",
   }));
+}
+
+/**
+ * Múltiplos Temas por postagem (ex.: um Reels que junta "15 Anos" e "Debutante" no mesmo vídeo):
+ * o `Combobox` de busca some cada Tema já escolhido de suas próprias opções e devolve a
+ * seleção pra virar um chip removível abaixo — o `Combobox` em si continua single-select, é a
+ * composição que vira multi-select (nenhum componente do design system precisou mudar).
+ */
+function TemasMultiSelect({
+  temas,
+  loading,
+  selectedIds,
+  invalid,
+  onChange,
+}: {
+  temas: MarketingCatalogItemRef[];
+  loading: boolean;
+  selectedIds: string[];
+  invalid: boolean;
+  /**
+   * Recebe um *updater* (como o setter do `useState`), nunca o array final direto: o Combobox
+   * dispara `onChange` mais de uma vez por seleção (StrictMode/dev), e calcular a partir do
+   * `selectedIds` fechado no closure perderia a seleção anterior se as chamadas duplicadas
+   * carregarem um valor desatualizado. Aplicar sobre o estado anterior (`prev`) é imune a isso.
+   */
+  onChange: (updater: (prev: string[]) => string[]) => void;
+}) {
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedTemas = temas.filter((tema) => selectedSet.has(String(tema.id)));
+  const availableOptions = temaOptions(temas.filter((tema) => !selectedSet.has(String(tema.id))));
+
+  return (
+    <div className="space-y-2">
+      <Combobox
+        // Remonta a cada mudança de seleção: o filtro de exclusão troca a *identidade* da lista de
+        // opções (não só o conteúdo), e o Combobox guarda estado interno de navegação por teclado
+        // (`activeIndex`) que precisa zerar junto — mais simples e robusto que depender só do
+        // `useMemo` interno dele reagir à referência nova do array a cada seleção.
+        key={selectedIds.join(",")}
+        aria-label="Buscar Tema do catálogo"
+        placeholder="🔍 Buscar Tema do catálogo…"
+        emptyMessage="Nenhum Tema encontrado."
+        options={availableOptions}
+        loading={loading}
+        value={null}
+        invalid={invalid}
+        onChange={(next) => {
+          if (!next) return;
+          onChange((prev) => (prev.includes(next) ? prev : [...prev, next]));
+        }}
+      />
+      {selectedTemas.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selectedTemas.map((tema) => (
+            <span
+              key={tema.id}
+              className="flex items-center gap-1.5 rounded-full border border-line bg-surface-2 py-1 pl-1 pr-2 text-xs text-ink"
+            >
+              <AvatarThumb
+                src={assetUrl(tema.cover_url)}
+                name={tema.name}
+                shape="square"
+                size="sm"
+                fallbackIcon="🎭"
+              />
+              {tema.name}
+              <button
+                type="button"
+                onClick={() => {
+                  const id = String(tema.id);
+                  onChange((prev) => prev.filter((existing) => existing !== id));
+                }}
+                aria-label={`Remover Tema ${tema.name}`}
+                className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-muted hover:bg-line hover:text-ink"
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** Opções do Combobox de responsáveis — miniatura **circular** de pessoa (Princípio X.2). */
@@ -193,8 +276,8 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
   const [platform, setPlatform] = useState(post?.platform ?? "");
   const [driveUrl, setDriveUrl] = useState(post?.drive_folder_url ?? "");
   const [notes, setNotes] = useState(post?.notes ?? "");
-  const [temaId, setTemaId] = useState<string | null>(
-    post?.catalog_item_id ? String(post.catalog_item_id) : null,
+  const [temaIds, setTemaIds] = useState<string[]>(
+    (post?.catalog_item_ids ?? []).map((id) => String(id)),
   );
   const [assigneeId, setAssigneeId] = useState<string | null>(
     post?.assignee_id ? String(post.assignee_id) : null,
@@ -211,7 +294,7 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
       drive_folder_url: driveUrl.trim() || null,
       notes: notes.trim() || null,
       assignee_id: assigneeId ? Number(assigneeId) : null,
-      catalog_item_id: temaId ? Number(temaId) : null,
+      catalog_item_ids: temaIds.map(Number),
     };
     if (isEdit) {
       update.mutate({ id: post.id, input }, { onSuccess: onSaved });
@@ -232,16 +315,13 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
         />
       </Field>
 
-      <Field label="Tema do catálogo" error={fieldError(error, "catalog_item_id")}>
-        <Combobox
-          aria-label="Buscar Tema do catálogo"
-          placeholder="🔍 Buscar Tema do catálogo…"
-          emptyMessage="Nenhum Tema encontrado."
-          options={temaOptions(options.data?.temas ?? [])}
+      <Field label="Temas do catálogo" error={fieldError(error, "catalog_item_ids")}>
+        <TemasMultiSelect
+          temas={options.data?.temas ?? []}
           loading={options.isLoading}
-          value={temaId}
-          invalid={Boolean(fieldError(error, "catalog_item_id"))}
-          onChange={(next) => setTemaId(next)}
+          selectedIds={temaIds}
+          invalid={Boolean(fieldError(error, "catalog_item_ids"))}
+          onChange={setTemaIds}
         />
       </Field>
 
@@ -388,24 +468,24 @@ export function MarketingPostDialog({
           <DialogDescription>
             {post ? (
               <span className="flex flex-wrap items-center gap-2">
-                {post.catalog_item && (
-                  <span className="flex items-center gap-1.5">
+                {post.catalog_items.map((item) => (
+                  <span key={item.id} className="flex items-center gap-1.5">
                     <AvatarThumb
-                      src={assetUrl(post.catalog_item.cover_url)}
-                      name={post.catalog_item.name}
+                      src={assetUrl(item.cover_url)}
+                      name={item.name}
                       shape="square"
                       size="sm"
                       fallbackIcon="🎭"
                     />
-                    {post.catalog_item.name}
+                    {item.name}
                   </span>
-                )}
+                ))}
                 <span>
                   {MARKETING_STATUS_ICONS[post.status]} {MARKETING_STATUS_LABELS[post.status]}
                 </span>
               </span>
             ) : (
-              "Planeje a postagem e vincule o Tema, o responsável e o espaço de revisão."
+              "Planeje a postagem e vincule os Temas, o responsável e o espaço de revisão."
             )}
           </DialogDescription>
         </DialogHeader>

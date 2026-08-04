@@ -263,6 +263,16 @@ def _cleanup_stale_events(items: list[dict], year: int, month: int) -> list[str]
     removed_titles: list[str] = []
     for ev in stale:
         if ev.google_event_id not in live_ids:
+            # Venda virtual **nunca** é apagada por sumiço no Google (FR-029b). Apagar aqui
+            # destruiria em cascata um pedido já pago — evento, escala e presente 3D — porque
+            # alguém removeu uma linha do calendário. A equipe é sinalizada e decide.
+            if _is_virtual_event(ev):
+                _log_sync(
+                    "virtual_divergente", ev,
+                    details=f"Evento de venda virtual sumiu do Google Calendar "
+                            f"({year}-{month:02d}) — NÃO removido do sistema, pedido segue válido.",
+                )
+                continue
             _log_sync("auto_deleted", ev, details=f"Não encontrado no Google Calendar ({year}-{month:02d})")
             removed_titles.append(ev.title)
             _delete_event(ev)
@@ -2071,10 +2081,61 @@ def _detect_changes(event: CalendarEvent, new_start, new_end, new_location) -> l
 # reimportados com alias no topo deste módulo (dependência unidirecional routes → event_ops).
 
 
+def _sinalizar_divergencia_virtual(event, item: dict) -> None:
+    """Registra que um evento de venda virtual foi mexido direto no Google (FR-029b).
+
+    Só sinaliza — nada é propagado para o pedido. Um pedido pago não pode ser desfeito porque
+    alguém arrastou o evento no calendário; o que a equipe precisa é **saber** que aconteceu.
+
+    Idempotente na prática: só registra quando há divergência real de título ou horário, para a
+    sincronização (que roda a cada 10 min) não encher os logs.
+    """
+    titulo_google = item.get("summary") or ""
+    inicio_google, _ = parse_event_datetime(item)
+
+    mudou_titulo = titulo_google and titulo_google != event.title
+    mudou_horario = inicio_google is not None and inicio_google != event.start_at
+    if not (mudou_titulo or mudou_horario):
+        return
+
+    detalhes = []
+    if mudou_titulo:
+        detalhes.append(f"título no Google: {titulo_google!r} (sistema: {event.title!r})")
+    if mudou_horario:
+        detalhes.append(f"horário no Google: {inicio_google} (sistema: {event.start_at})")
+
+    _log_sync(
+        "virtual_divergente", event,
+        details="Evento de venda virtual alterado no Google — mudança NÃO aplicada. "
+                + "; ".join(detalhes),
+    )
+
+
+def _is_virtual_event(event) -> bool:
+    """True se o evento nasceu de uma venda da Loja de Interações Virtuais (feature 205).
+
+    Esses eventos são criados pela plataforma **e** vivem no Google (é de lá que sai a sala do
+    Meet), então a sincronização os encontra e trataria como qualquer outro. Não pode: a venda é a
+    fonte de verdade deles. Deixar a sincronização reescrevê-los corromperia horário, título ou
+    vínculo de um evento **já pago** (FR-029a).
+    """
+    from app.constants import EVENT_TYPE_VIRTUAL
+
+    return event is not None and event.event_type == EVENT_TYPE_VIRTUAL
+
+
 def sync_events(items: list[dict]) -> None:
     for item in items:
         google_id = item.get("id")
         if not google_id:
+            continue
+
+        # Evento de venda virtual: a sincronização não encosta nele em nenhum caminho —
+        # nem para criar, nem para atualizar (FR-029a). Edição feita direto no Google é
+        # sinalizada, nunca propagada para o pedido (FR-029b).
+        existente = CalendarEvent.query.filter_by(google_event_id=google_id).first()
+        if _is_virtual_event(existente):
+            _sinalizar_divergencia_virtual(existente, item)
             continue
 
         title = item.get("summary") or "Sem título"

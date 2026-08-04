@@ -105,8 +105,8 @@ export interface MarketingPost {
   notes: string | null;
   assignee_id: number | null;
   assignee: MarketingAssigneeRef | null;
-  catalog_item_id: number | null;
-  catalog_item: MarketingCatalogItemRef | null;
+  catalog_item_ids: number[];
+  catalog_items: MarketingCatalogItemRef[];
   review_space_id: number | null;
   review_space: MarketingReviewSpaceRef | null;
   created_at: string | null;
@@ -220,7 +220,7 @@ export interface SaveMarketingPostInput {
   drive_folder_url?: string | null;
   notes?: string | null;
   assignee_id?: number | null;
-  catalog_item_id?: number | null;
+  catalog_item_ids?: number[];
 }
 
 /**

@@ -1,14 +1,13 @@
 import os
 from flask import Flask, Response, render_template, request, send_from_directory, session, redirect
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import not_, or_
 from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_login import login_required, current_user
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from datetime import datetime, date
-from .config import Config  # se seu config.py está na raiz
+from datetime import datetime
+from .config import Config, PLATFORM_BASE_URL  # se seu config.py está na raiz
 from .constants import RoleName
 
 from .email_service import mail
@@ -198,6 +197,55 @@ def _start_review_cleanup(app):
     app.logger.info(f"[review-cleanup] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _start_virtual_sweep(app):
+    """Thread das rotinas periódicas da Loja de Interações Virtuais (feature 205).
+
+    Mesmo padrão de `_start_calendar_sync`: thread daemon, intervalo configurável, `app_context`
+    dentro do laço e `except Exception` que **nunca** deixa a thread morrer (FR-057b).
+
+    Roda as **três** rotinas que o FR-057 nomeia — expiração de reservas, retentativa de sala e
+    alerta de prazo de vídeo —, todas dentro de `virtuais_ops.ciclo_de_varredura()`. Uma thread só
+    porque as três compartilham o mesmo lock de execução única.
+
+    O claim atômico (`virtuais_ops.claim_sweep`) é obrigatório aqui, não opcional: o Railway roda
+    vários workers gunicorn, e dois processos expirando a mesma reserva ao mesmo tempo é a corrida
+    que o soft lock existe para evitar (FR-057a).
+    """
+    import os as _os
+    import threading
+
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    INTERVAL = app.config.get("VIRTUAL_SWEEP_INTERVAL", 60)
+
+    def _loop():
+        import time
+        time.sleep(20)  # aguarda o app estar pronto
+        from app.marketing.virtuais_ops import ciclo_de_varredura, claim_sweep
+        while True:
+            try:
+                with app.app_context():
+                    if claim_sweep(INTERVAL):
+                        resumo = ciclo_de_varredura()
+                        reservas = resumo.get("reservas") or {}
+                        salas = resumo.get("salas") or {}
+                        prazos = resumo.get("prazos") or 0
+                        if any(reservas.values()) or any(salas.values()) or prazos:
+                            app.logger.info(
+                                "[virtual-sweep] reservas=%s salas=%s prazos_alertados=%s",
+                                reservas, salas, prazos,
+                            )
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[virtual-sweep] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_loop, daemon=True, name="virtual-sweep")
+    t.start()
+    app.logger.info(f"[virtual-sweep] thread iniciada (intervalo: {INTERVAL}s)")
+
+
 def create_app():
     from urllib.parse import quote as _url_quote
     app = Flask(__name__)
@@ -217,6 +265,12 @@ def create_app():
     app.config.setdefault("UPLOAD_FIGURINO_PHOTOS",  os.path.join(_instance, "uploads", "figurino_photos"))
     app.config.setdefault("UPLOAD_EVENT_OBS",         os.path.join(_instance, "uploads", "event_obs"))
     app.config.setdefault("UPLOAD_EXPENSES",          os.path.join(_instance, "uploads", "expenses"))
+    # Vídeos da Loja de Interações Virtuais (feature 205): irmão de `uploads`, nunca dentro dele —
+    # a rota `/uploads/<path>` serve qualquer coisa que caia lá, e o vídeo só pode sair pelo
+    # endpoint que valida o acesso a cada requisição (FR-038e).
+    if not app.config.get("VIRTUAL_VIDEO_FOLDER"):
+        app.config["VIRTUAL_VIDEO_FOLDER"] = os.path.join(_instance, "virtual_videos")
+    os.makedirs(app.config["VIRTUAL_VIDEO_FOLDER"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_CONTRACTS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_PAYMENTS"], exist_ok=True)
@@ -418,264 +472,21 @@ def create_app():
         return Response("User-agent: *\nDisallow: /\n", mimetype="text/plain")
 
     @app.route("/")
-    @login_required
     def home():
-        from app.models import CalendarEvent, EventRole
+        """Raiz do Flask: 301 para a plataforma React.
 
-        # to-do list — filtra a partir do release_date (ou hoje se não configurado)
-        from app.models import SiteSetting
-        _settings = SiteSetting.query.get(1)
-        _release = _settings.release_date if _settings and _settings.release_date else date.today()
-        task_cutoff = datetime(_release.year, _release.month, _release.day)
+        O dashboard Jinja que vivia aqui foi aposentado — a interface primária é o bundle
+        `apps/internal` servido por `frontend/server.js` em ``PLATFORM_BASE_URL``, que já faz
+        proxy reverso de `/api`, `/uploads`, `/catalogo/midia`, `/portal/photo` e
+        `/figurinos/<id>/print` de volta para este Flask. Esta rota existe só para capturar
+        acesso residual direto ao serviço do backend (link antigo, favorito, domínio anterior)
+        e devolvê-lo à URL única, de forma permanente para o browser memorizar.
 
-        from app.calendar.routes import PRESENCE_CHARACTER
-        exclude_ensaios = not_(CalendarEvent.title.like("🟧 ENSAIO%"))
-
-        # Tarefas de casting/figurino: mesma fonte de verdade usada pelo endpoint JSON
-        # /api/dashboard (feature 144, app/api/dashboard_service.py) — as consultas não
-        # existem em duas versões paralelas (Princípio I).
-        from app.api.dashboard_service import (
-            compute_casting_tasks,
-            compute_dismissed_casting_tasks,
-            compute_figurino_tasks,
-        )
-
-        _casting = compute_casting_tasks(task_cutoff)
-        pending_casting = _casting["pending"]
-        rejected_invites = _casting["rejected_invites"]
-        total_casting = _casting["total"]
-        done_casting = _casting["done"]
-
-        _figurino = compute_figurino_tasks(task_cutoff)
-        pending_figurino = _figurino["pending"]
-        total_figurino = _figurino["total"]
-        done_figurino = _figurino["done"]
-
-        _is_real_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
-        _impersonate = session.get("impersonate_role") if _is_real_superadmin else None
-
-        def has_role(name: str) -> bool:
-            if _impersonate:
-                return _impersonate.upper() == name.upper()
-            return any(r.name.upper() == name.upper() for r in current_user.roles)
-
-        is_superadmin = _is_real_superadmin and not _impersonate
-
-        # Cargos de casting dispensados (feature 108) — só o super admin vê e pode restaurar.
-        dismissed_casting = (
-            compute_dismissed_casting_tasks(task_cutoff) if is_superadmin else []
-        )
-
-        show_casting = has_role(RoleName.CASTING) or is_superadmin
-        show_figurino = has_role(RoleName.FIGURINO) or is_superadmin
-        show_ensaio = has_role(RoleName.ENSAIO) or is_superadmin
-        show_financeiro = has_role(RoleName.FINANCEIRO) or is_superadmin
-
-        # Contas recorrentes (feature 110): alertas do mês para o time financeiro.
-        recurring_expense_alerts = []
-        if show_financeiro:
-            from app.gastos.routes import ensure_recurring_entries, recurring_alerts
-            _today = date.today()
-            ensure_recurring_entries(_today.year, _today.month)
-            recurring_expense_alerts = recurring_alerts(_today)
-
-        # Ensaio: separa pendentes (sem ensaio) de agendados (com ensaio)
-        pending_ensaio   = []
-        scheduled_ensaio = []
-        orphan_ensaios   = []
-        pending_presence = []
-        if show_ensaio:
-            future_shows = (
-                CalendarEvent.query
-                .filter(
-                    db.or_(
-                        CalendarEvent.needs_rehearsal == True,
-                        CalendarEvent.event_type == "SHOW",
-                    ),
-                    CalendarEvent.event_type != "ENSAIO",
-                    CalendarEvent.start_at >= datetime.utcnow(),
-                )
-                .order_by(CalendarEvent.start_at.asc())
-                .all()
-            )
-            pending_ensaio   = [e for e in future_shows if not e.ensaios]
-            scheduled_ensaio = [e for e in future_shows if e.ensaios]
-
-            # Ensaios órfãos: do tipo ENSAIO cujo show pai não existe mais (feature 057).
-            # parent is None cobre FK nulo e FK apontando para show já removido.
-            # Conta apenas a partir da data de início do sistema (mesmo corte das demais
-            # tarefas) para não poluir a home com órfãos antigos (feature 060).
-            orphan_ensaios = [
-                e for e in CalendarEvent.query
-                .filter(CalendarEvent.event_type == "ENSAIO",
-                        CalendarEvent.start_at >= task_cutoff)
-                .order_by(CalendarEvent.start_at.asc())
-                .all()
-                if e.parent is None
-            ]
-
-            # Presença pendente: shows futuros sem o técnico de presença definido.
-            pending_presence = (
-                EventRole.query
-                .filter(EventRole.talent_id.is_(None),
-                        EventRole.character_name == PRESENCE_CHARACTER)
-                .join(CalendarEvent)
-                .filter(exclude_ensaios, CalendarEvent.start_at >= datetime.utcnow())
-                .order_by(CalendarEvent.start_at.asc())
-                .all()
-            )
-
-        # Performance (SUPERADMIN): mesma fonte de verdade usada pelo endpoint JSON
-        # /api/dashboard (feature 174, app/api/dashboard_service.py) — Princípio I.
-        from app.api.dashboard_service import compute_performance, resolve_performance_period
-
-        perf_range = request.args.get("perf_range", "7")
-        perf_start = request.args.get("perf_start")
-        perf_end = request.args.get("perf_end")
-
-        perf_casting_total = 0
-        perf_casting_done = 0
-        perf_figurino_total = 0
-        perf_figurino_done = 0
-        perf_money = 0
-        if is_superadmin:
-            _start_dt, _end_dt = resolve_performance_period(perf_range, perf_start, perf_end)
-            _perf = compute_performance(_start_dt, _end_dt)
-            perf_casting_total = _perf["casting_total"]
-            perf_casting_done = _perf["casting_done"]
-            perf_figurino_total = _perf["figurino_total"]
-            perf_figurino_done = _perf["figurino_done"]
-            perf_money = _perf["money_total"]
-
-        # ── Comercial: cobranças pendentes ──────────────────────────
-        # Política: à vista, ou 50% no ato + 50% até 2 dias antes do evento.
-        # 'futuro'/'faturado' têm data combinada própria (payment_due_date).
-        show_comercial = (
-            has_role(RoleName.COMERCIAL) or has_role(RoleName.FINANCEIRO) or is_superadmin
-        )
-        # Cobranças pendentes: mesma fonte de verdade usada pelo endpoint JSON /api/dashboard
-        # (feature 174, app/api/dashboard_service.py) — Princípio I.
-        from app.api.dashboard_service import compute_comercial_pending
-
-        pending_payments = compute_comercial_pending(task_cutoff) if show_comercial else []
-
-        # ── Comercial: reembolsos pendentes (feature 136) ──────────
-        # Sem filtro de data: um reembolso continua pendente até ser cobrado,
-        # não importa se o evento já passou (decisão registrada no plan.md).
-        pending_reembolsos: list = []
-        if show_comercial:
-            from app.models import EventReimbursement
-            pending_reembolsos = (
-                EventReimbursement.query
-                .filter(EventReimbursement.collected_at.is_(None))
-                .order_by(EventReimbursement.created_at.asc())
-                .all()
-            )
-
-        events_sem_valor: list = []
-        events_sem_cliente: list = []
-        if show_comercial:
-            events_sem_valor = (
-                CalendarEvent.query
-                .filter(
-                    or_(CalendarEvent.sale_value.is_(None), CalendarEvent.sale_value == 0),
-                    CalendarEvent.start_at >= task_cutoff,
-                    CalendarEvent.group_leader_id.is_(None),  # satélite herda do principal (055)
-                    CalendarEvent.is_cortesia_permuta.is_(False),  # permuta/cortesia não é "sem valor"
-                    exclude_ensaios,
-                )
-                .order_by(CalendarEvent.start_at.asc())
-                .all()
-            )
-
-            # Tarefa "sem cliente" (feature 101): eventos a partir da data de início do sistema, sem
-            # NENHUM cliente associado (feature 100), exceto ENSAIO e satélites. O comercial completa.
-            events_sem_cliente = (
-                CalendarEvent.query
-                .filter(
-                    ~CalendarEvent.event_clients.any(),
-                    CalendarEvent.start_at >= task_cutoff,
-                    CalendarEvent.group_leader_id.is_(None),  # satélite herda do principal
-                    exclude_ensaios,
-                )
-                .order_by(CalendarEvent.start_at.asc())
-                .all()
-            )
-
-        # Pré-contratos preenchidos e ainda sem cliente associado (feature 118)
-        form_responses_sem_cliente: list = []
-        # Pré-contratos cujo vínculo automático de evento ficou ambíguo/conflitante —
-        # precisam de revisão manual (feature 126)
-        form_responses_precisam_revisao: list = []
-        if show_comercial:
-            from app.models import FormResponse
-            form_responses_sem_cliente = (
-                FormResponse.query
-                .filter(FormResponse.client_id.is_(None))
-                .order_by(FormResponse.created_at.desc())
-                .all()
-            )
-            form_responses_precisam_revisao = (
-                FormResponse.query
-                .filter(FormResponse.event_link_ambiguous.is_(True))
-                .order_by(FormResponse.created_at.desc())
-                .all()
-            )
-
-        # Nota fiscal pendente: eventos com nota(s) "a emitir" (feature 069)
-        pending_invoice = []
-        if is_superadmin:
-            from app.models import EventInvoice
-            pending_invoice = (
-                CalendarEvent.query
-                .join(EventInvoice, EventInvoice.event_id == CalendarEvent.id)
-                .filter(
-                    EventInvoice.status == "a_emitir",
-                    CalendarEvent.start_at >= task_cutoff,
-                )
-                .order_by(CalendarEvent.start_at.asc())
-                .distinct()
-                .all()
-            )
-
-        return render_template(
-            "home.html",
-            today=date.today(),
-            pending_casting=pending_casting,
-            dismissed_casting=dismissed_casting,
-            rejected_invites=rejected_invites,
-            pending_figurino=pending_figurino,
-            pending_ensaio=pending_ensaio,
-            scheduled_ensaio=scheduled_ensaio,
-            orphan_ensaios=orphan_ensaios,
-            pending_presence=pending_presence,
-            pending_invoice=pending_invoice,
-            show_comercial=show_comercial,
-            events_sem_valor=events_sem_valor,
-            events_sem_cliente=events_sem_cliente,
-            form_responses_sem_cliente=form_responses_sem_cliente,
-            form_responses_precisam_revisao=form_responses_precisam_revisao,
-            pending_payments=pending_payments,
-            pending_reembolsos=pending_reembolsos,
-            show_casting=show_casting,
-            show_figurino=show_figurino,
-            show_ensaio=show_ensaio,
-            show_financeiro=show_financeiro,
-            recurring_expense_alerts=recurring_expense_alerts,
-            is_superadmin=is_superadmin,
-            total_casting=total_casting,
-            done_casting=done_casting,
-            total_figurino=total_figurino,
-            done_figurino=done_figurino,
-            perf_range=perf_range,
-            perf_start=perf_start,
-            perf_end=perf_end,
-            perf_casting_total=perf_casting_total,
-            perf_casting_done=perf_casting_done,
-            perf_figurino_total=perf_figurino_total,
-            perf_figurino_done=perf_figurino_done,
-            perf_money=perf_money,
-        )
+        Não há laço de redirecionamento: em ``PLATFORM_BASE_URL`` quem responde `/` é o serviço
+        Node, que nunca repassa a raiz para cá. Em desenvolvimento este 301 também joga para
+        produção — use `http://localhost:5173` (Vite) como ponto de entrada local, não `/`.
+        """
+        return redirect(PLATFORM_BASE_URL, code=301)
 
     # ── Auto-import de talentos da planilha ────────────────────────
     _start_talent_sync(app)
@@ -683,6 +494,9 @@ def create_app():
     # ── Sincronização automática da agenda (cron interno) ──────────
     _start_calendar_sync(app)
     _start_review_cleanup(app)
+
+    # ── Expiração das reservas da Loja de Interações Virtuais ──────
+    _start_virtual_sweep(app)
 
     # ── Comandos CLI de manutenção ─────────────────────────────────
     from app.cli import register_commands

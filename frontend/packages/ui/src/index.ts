@@ -42,3 +42,9 @@ export { AvatarThumb } from "./components/avatar-thumb";
 export type { AvatarThumbProps, AvatarThumbShape, AvatarThumbSize } from "./components/avatar-thumb";
 export { Combobox } from "./components/combobox";
 export type { ComboboxProps, ComboboxOption } from "./components/combobox";
+export { GoogleAddressInput } from "./components/google-address-input";
+export type {
+  GoogleAddressInputProps,
+  AddressAutocompleteState,
+  AddressSuggestionLike,
+} from "./components/google-address-input";

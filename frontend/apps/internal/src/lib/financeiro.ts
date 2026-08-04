@@ -65,12 +65,27 @@ export interface AuditoriaItem {
   start_at: string | null;
 }
 
+/**
+ * Consolidado do canal Loja de Interações Virtuais (feature 205, FR-053).
+ *
+ * A receita já está somada na cascata do DRE — este bloco só diz **quanto** dela veio da loja.
+ */
+export interface LojaVirtualResumo {
+  canal: string;
+  vendas: number;
+  receita: number;
+  ticket_medio: number;
+}
+
 export interface FinanceiroPaineis {
   a_receber_clientes: number;
   pagamentos_pendentes: number;
   pagamentos_realizados: number;
   receita_por_tipo: Record<string, number>;
   receita_tipo_max: number;
+  loja_virtual: LojaVirtualResumo;
+  /** Reflete o opt-in explícito do gestor (FR-055) — por padrão `false`. */
+  incluir_loja_virtual: boolean;
   top_sellers: TopSeller[];
   monthly_trend: MonthlyTrendItem[];
   auditoria: AuditoriaItem[];
@@ -146,17 +161,31 @@ export interface PeriodParams {
   end?: string;
   /** Desativa a busca (ex.: período "custom" ainda sem datas aplicadas). */
   enabled?: boolean;
+  /**
+   * Opt-in explícito para somar a Loja Virtual aos indicadores **de evento** (FR-055).
+   *
+   * Fora daqui a receita da loja já entra na cascata do DRE: o que este parâmetro muda é só o
+   * ticket médio e o "a receber", que por padrão contam apenas evento presencial.
+   */
+  incluirLojaVirtual?: boolean;
 }
 
 /** Dashboard financeiro (DRE), feature 157 — Financeiro/Superadmin. */
-export function useFinanceiroDashboard({ period, start, end, enabled = true }: PeriodParams) {
+export function useFinanceiroDashboard({
+  period,
+  start,
+  end,
+  enabled = true,
+  incluirLojaVirtual = false,
+}: PeriodParams) {
   const params = new URLSearchParams({ period });
   if (period === "custom" && start && end) {
     params.set("start", start);
     params.set("end", end);
   }
+  if (incluirLojaVirtual) params.set("incluir_loja_virtual", "1");
   return useQuery<FinanceiroDashboard>({
-    queryKey: ["financeiro-dashboard", period, start, end],
+    queryKey: ["financeiro-dashboard", period, start, end, incluirLojaVirtual],
     queryFn: () => apiFetch<FinanceiroDashboard>(`/api/financeiro/dashboard?${params.toString()}`),
     enabled: enabled && (period !== "custom" || Boolean(start && end)),
   });

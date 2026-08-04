@@ -6,7 +6,8 @@ means a typo becomes an ``AttributeError`` at import time instead of a
 silent authorisation bypass at runtime.
 """
 
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 # Feature 094: a partir desta data, salvar os dados de venda de um evento exige um cliente associado.
 # Eventos com início ANTERIOR a esta data são grandfathered (podem ficar sem cliente).
@@ -103,6 +104,130 @@ MARKETING_PLATFORMS = [
 MARKETING_MAX_INTERVAL_DAYS = 1825
 
 
+# ── Loja de Interações Virtuais (feature 205) ───────────────────────────────
+
+# Fuso do negócio. A Plataforma grava datas de agenda como **naive São Paulo** — convenção que
+# `app/calendar/service.py:parse_event_datetime` estabelece ao converter tudo que vem do Google.
+TZ_SP = ZoneInfo("America/Sao_Paulo")
+
+
+def now_sp() -> datetime:
+    """O "agora" do negócio: horário de São Paulo, sem fuso anexado.
+
+    Toda a feature 205 usa **só** este relógio — horários de slot, soft lock, janela do anti-abuso
+    e carimbos de criação. Misturar com ``datetime.utcnow()`` custaria 3 horas de erro: horários
+    das próximas 3h sumiriam da lista, o contador do soft lock mostraria minutos a mais, e a janela
+    do teto por origem contaria pedidos do intervalo errado.
+
+    Por isso as tabelas ``virtual_*`` usam esta função também em ``created_at``/``updated_at``, e
+    não o ``datetime.utcnow`` do resto do sistema: dentro da feature, um relógio só.
+    """
+    return datetime.now(TZ_SP).replace(tzinfo=None)
+
+# Tipo de evento das vendas do canal virtual. Existe para segregar essas vendas dos KPIs de
+# eventos e do cálculo de comissão (FR-052/054) e para excluí-las da sincronização com o Google
+# Calendar (FR-029a) — a venda é a fonte de verdade desses eventos, não a agenda externa.
+EVENT_TYPE_VIRTUAL = "VIRTUAL"
+
+VIRTUAL_MODALITY_AO_VIVO = "ao_vivo"
+VIRTUAL_MODALITY_GRAVADO = "gravado"
+VIRTUAL_MODALITIES = [VIRTUAL_MODALITY_AO_VIVO, VIRTUAL_MODALITY_GRAVADO]
+
+VIRTUAL_CAMPAIGN_STATUS_RASCUNHO = "rascunho"
+VIRTUAL_CAMPAIGN_STATUS_PUBLICADA = "publicada"
+VIRTUAL_CAMPAIGN_STATUS_PAUSADA = "pausada"
+VIRTUAL_CAMPAIGN_STATUSES = [
+    VIRTUAL_CAMPAIGN_STATUS_RASCUNHO,
+    VIRTUAL_CAMPAIGN_STATUS_PUBLICADA,
+    VIRTUAL_CAMPAIGN_STATUS_PAUSADA,
+]
+
+VIRTUAL_SLOT_STATUS_LIVRE = "livre"
+VIRTUAL_SLOT_STATUS_TRAVADO = "travado"
+VIRTUAL_SLOT_STATUS_VENDIDO = "vendido"
+VIRTUAL_SLOT_STATUSES = [
+    VIRTUAL_SLOT_STATUS_LIVRE,
+    VIRTUAL_SLOT_STATUS_TRAVADO,
+    VIRTUAL_SLOT_STATUS_VENDIDO,
+]
+
+VIRTUAL_ORDER_STATUS_RESERVADO = "reservado"
+VIRTUAL_ORDER_STATUS_AGUARDANDO = "aguardando"
+VIRTUAL_ORDER_STATUS_PAGO = "pago"
+VIRTUAL_ORDER_STATUS_EXPIRADO = "expirado"
+VIRTUAL_ORDER_STATUS_CANCELADO = "cancelado"
+VIRTUAL_ORDER_STATUSES = [
+    VIRTUAL_ORDER_STATUS_RESERVADO,
+    VIRTUAL_ORDER_STATUS_AGUARDANDO,
+    VIRTUAL_ORDER_STATUS_PAGO,
+    VIRTUAL_ORDER_STATUS_EXPIRADO,
+    VIRTUAL_ORDER_STATUS_CANCELADO,
+]
+
+# Ciclo de vida de uma entrega na Fila de Produção de Mídia. São os três únicos estados
+# (FR-048a): enviar o vídeo é a AÇÃO que permite chegar a 'finalizado', nunca um estado próprio.
+VIRTUAL_PRODUCTION_STATUS_PENDENTE = "pendente"
+VIRTUAL_PRODUCTION_STATUS_GRAVANDO = "gravando"
+VIRTUAL_PRODUCTION_STATUS_FINALIZADO = "finalizado"
+VIRTUAL_PRODUCTION_STATUSES = [
+    VIRTUAL_PRODUCTION_STATUS_PENDENTE,
+    VIRTUAL_PRODUCTION_STATUS_GRAVANDO,
+    VIRTUAL_PRODUCTION_STATUS_FINALIZADO,
+]
+
+VIRTUAL_REFUND_STATUS_PENDENTE = "pendente"
+VIRTUAL_REFUND_STATUS_CONCLUIDA = "concluida"
+
+# Origem do conflito que gerou a devolução (FR-018b). São dois casos com culpas opostas, e a
+# equipe precisa saber qual é ao falar com a família: no primeiro a reserva simplesmente venceu; no
+# segundo o sistema liberou o horário **sem conseguir confirmar** se havia pagamento, porque a
+# operadora não respondeu — a família pode ter pago em dia e perdido o horário mesmo assim.
+VIRTUAL_REFUND_REASON_CONFLITO = "conflito_horario"
+VIRTUAL_REFUND_REASON_SEM_CONFIRMACAO = "conflito_sem_confirmacao"
+VIRTUAL_REFUND_REASON_LABELS = {
+    VIRTUAL_REFUND_REASON_CONFLITO: "Horário já vendido a outra família",
+    VIRTUAL_REFUND_REASON_SEM_CONFIRMACAO: (
+        "Horário liberado sem confirmação da operadora — a família pode ter pago no prazo"
+    ),
+}
+
+VIRTUAL_NOTIFICATION_KIND_COMPRA = "compra_confirmada"
+VIRTUAL_NOTIFICATION_KIND_VIDEO = "video_pronto"
+VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO = "cancelamento"
+VIRTUAL_NOTIFICATION_KINDS = [
+    VIRTUAL_NOTIFICATION_KIND_COMPRA,
+    VIRTUAL_NOTIFICATION_KIND_VIDEO,
+    VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO,
+]
+# Rótulos em pt-BR dos avisos, para o painel dizer qual e-mail falhou sem expor o `kind` cru.
+VIRTUAL_NOTIFICATION_LABELS = {
+    VIRTUAL_NOTIFICATION_KIND_COMPRA: "Confirmação de compra",
+    VIRTUAL_NOTIFICATION_KIND_VIDEO: "Vídeo pronto",
+    VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO: "Cancelamento e devolução",
+}
+
+# Duração fixa de uma chamada ao vivo e janela do "soft lock" do horário (FR-017).
+VIRTUAL_SLOT_MINUTES = 10
+VIRTUAL_SOFT_LOCK_MINUTES = 15
+
+# Política única de retry para chamadas externas (FR-056): 3 tentativas nos minutos 0, 1 e 2.
+# O intervalo curto é deliberado — protege contra vender horário já pago sem prender estoque no
+# pico da campanha (pior caso de devolução de um slot: 17 minutos, SC-005).
+VIRTUAL_RETRY_MAX_ATTEMPTS = 3
+VIRTUAL_RETRY_INTERVAL_MIN = 1
+
+# Teto de upload do vídeo gravado (FR-038d).
+VIRTUAL_VIDEO_MAX_BYTES = 250 * 1024 * 1024
+VIRTUAL_VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
+
+# Sessão de acesso da página do pedido, aberta após a validação dupla (FR-044c).
+VIRTUAL_ACCESS_SESSION_MINUTES = 30
+
+# Limites anti-abuso padrão de uma campanha nova (FR-020b/020d) — ajustáveis por campanha.
+VIRTUAL_DEFAULT_MAX_RESERVATIONS_PER_ORIGIN = 5
+VIRTUAL_DEFAULT_RESERVATION_WINDOW_MINUTES = 60
+
+
 class RoleName:
     SUPERADMIN = "SUPERADMIN"
     CASTING    = "CASTING"
@@ -117,6 +242,11 @@ class RoleName:
     # Artista 3D (feature 200): gestão total do Acervo/Fila 3D + leitura dos eventos
     # (precisa do elenco e do formulário de pré-contrato para saber o que imprimir).
     ARTISTA_3D = "ARTISTA_3D"
+
+
+# Papéis que podem gerir campanhas da Loja de Interações Virtuais (feature 205, FR-010).
+# COMERCIAL monta e publica a oferta; SUPERADMIN tem acesso total, como em todo o sistema.
+VIRTUAIS_ADMIN_ROLES = [RoleName.SUPERADMIN, RoleName.COMERCIAL]
 
 
 # Papéis que um SUPERADMIN pode simular no "Ver como" (feature 173 — fonte única,

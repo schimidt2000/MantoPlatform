@@ -221,8 +221,20 @@ def insert_event(
     end_dt: datetime,
     description: str = "",
     location: str = "",
+    conference_request_id: str | None = None,
 ) -> dict:
-    """Cria um evento no Google Calendar. Retorna o dict do evento criado (inclui 'id')."""
+    """Cria um evento no Google Calendar. Retorna o dict do evento criado (inclui 'id').
+
+    Args:
+        conference_request_id: Quando informado, pede ao Google que gere uma **sala do Meet**
+            para o evento (feature 205). Precisa ser único por requisição — o Google usa esse id
+            para não criar duas salas se a mesma chamada for repetida.
+
+    A criação da sala é assíncrona do lado do Google: a resposta pode voltar com
+    ``conferenceData.createRequest.status.statusCode == "pending"`` e **sem** ``hangoutLink``.
+    Quem chama precisa tratar esse caso (ver `virtuais_ops.extrair_meet_url`), não assumir que o
+    link veio.
+    """
     creds = load_credentials()
     if not creds:
         raise RuntimeError("Google não conectado. Acesse /google/connect primeiro.")
@@ -235,7 +247,20 @@ def insert_event(
     }
     if location:
         body["location"] = location
-    return service.events().insert(calendarId=calendar_id, body=body).execute()
+
+    # `conferenceDataVersion=1` é obrigatório para o Google aceitar `conferenceData` — sem ele a
+    # API ignora o pedido em silêncio e devolve um evento sem sala.
+    kwargs: dict = {}
+    if conference_request_id:
+        body["conferenceData"] = {
+            "createRequest": {
+                "requestId": conference_request_id,
+                "conferenceSolutionKey": {"type": "hangoutsMeet"},
+            }
+        }
+        kwargs["conferenceDataVersion"] = 1
+
+    return service.events().insert(calendarId=calendar_id, body=body, **kwargs).execute()
 
 
 def update_event(

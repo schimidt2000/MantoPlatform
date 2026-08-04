@@ -201,11 +201,16 @@ export function FinanceiroDashboardPage() {
   const [startDraft, setStartDraft] = useState("");
   const [endDraft, setEndDraft] = useState("");
   const [appliedRange, setAppliedRange] = useState<{ start: string; end: string } | null>(null);
+  // Opt-in explícito da Loja Virtual nos indicadores de evento (feature 205, FR-055). Começa
+  // desligado: a receita da loja já está no DRE, e o ticket médio de evento presencial é o
+  // número que a operação usa para precificar show.
+  const [incluirLojaVirtual, setIncluirLojaVirtual] = useState(false);
 
   const query = useFinanceiroDashboard({
     period,
     start: appliedRange?.start,
     end: appliedRange?.end,
+    incluirLojaVirtual,
   });
 
   const data = query.data;
@@ -465,6 +470,48 @@ export function FinanceiroDashboardPage() {
                   )}
                 </div>
               </Card>
+
+              {data.paineis.loja_virtual.vendas > 0 && (
+                <Card className="p-4">
+                  <SectionTitle>🎥 Loja de Interações Virtuais</SectionTitle>
+                  <p className="mt-1 text-[11px] leading-snug text-muted">
+                    Canal self-service, sem vendedor. A receita já está somada no resultado
+                    acima; os indicadores de evento (ticket médio, a receber) contam só evento
+                    presencial.
+                  </p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-lg font-semibold tabular-nums text-ink">
+                        {data.paineis.loja_virtual.vendas}
+                      </p>
+                      <p className="text-[11px] text-muted">vendas</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold tabular-nums text-ink">
+                        {brl(data.paineis.loja_virtual.receita)}
+                      </p>
+                      <p className="text-[11px] text-muted">receita</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold tabular-nums text-ink">
+                        {brl(data.paineis.loja_virtual.ticket_medio)}
+                      </p>
+                      <p className="text-[11px] text-muted">ticket do canal</p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={incluirLojaVirtual ? "default" : "outline"}
+                    className="mt-3 w-full"
+                    onClick={() => setIncluirLojaVirtual((v) => !v)}
+                    aria-pressed={incluirLojaVirtual}
+                  >
+                    {incluirLojaVirtual
+                      ? "Voltar aos indicadores só de evento"
+                      : "Incluir a loja nos indicadores de evento"}
+                  </Button>
+                </Card>
+              )}
 
               <Card className="p-4">
                 <SectionTitle>🏆 Top Vendedores</SectionTitle>

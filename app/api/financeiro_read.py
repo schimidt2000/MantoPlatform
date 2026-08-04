@@ -143,6 +143,19 @@ def api_vendas_pipeline() -> Any:
         educamanto_only=scope.educamanto_only,
     )
 
+    # Venda da Loja Virtual não tem vendedor: ela se fecha sozinha. Deixá-la no funil do time
+    # comercial inflaria metas que ninguém bateu e afundaria a taxa de conversão de quem vende de
+    # verdade (FR-054). Some da tela do vendedor; para o gestor, aparece **separada**, com o total
+    # do canal — esconder receita de quem consolida seria o erro oposto (FR-055).
+    presenciais, virtuais = vendas_ops.split_por_canal(sales)
+    # FR-055: gestor pode pedir o funil consolidado com o canal dentro; o vendedor comum não —
+    # para ele a loja simplesmente não existe nesta tela.
+    incluir_virtual = (
+        scope.can_filter_seller
+        and request.args.get("incluir_loja_virtual") in ("1", "true", "sim")
+    )
+    funil = sales if incluir_virtual else presenciais
+
     payload: dict[str, Any] = {
         "period": period,
         "period_label": PERIOD_LABELS.get(period, "Este mês"),
@@ -151,11 +164,13 @@ def api_vendas_pipeline() -> Any:
         "can_filter_seller": scope.can_filter_seller,
         "seller_id": scope.seller_id,
         "scope_label": "Empresa toda" if scope.commission_target_id is None else "Minhas vendas",
-        "kpis": vendas_ops.build_kpis(sales, settings, scope.commission_target_id),
-        "eventos": vendas_ops.serialize_sales(sales, settings),
+        "kpis": vendas_ops.build_kpis(funil, settings, scope.commission_target_id),
+        "eventos": vendas_ops.serialize_sales(funil, settings),
     }
     if scope.can_filter_seller:
         payload["sellers"] = _comercial_sellers()
+        payload["loja_virtual"] = vendas_ops.resumo_loja_virtual(virtuais)
+        payload["incluir_loja_virtual"] = incluir_virtual
 
     return jsonify(payload)
 
@@ -245,12 +260,32 @@ def api_financeiro_dashboard() -> Any:
     drg_projetado = _compute_drg(projetados, settings, Decimal("0"), Decimal("0"))
     drg_total = _compute_drg(events, settings, salary_cost, gastos_extras, gastos_recorrentes)
 
-    eventos_com_venda = [
+    from app.financeiro.vendas_ops import is_loja_virtual, resumo_loja_virtual
+
+    todas_com_venda = [
         e for e in events
         if not _is_permuta(e) and not e.is_satellite and e.sale_value and e.sale_value > 0
     ]
+    # A receita da Loja Virtual **continua** dentro da cascata da DRE — Fator R, break-even e
+    # resultado líquido seguem exatos, porque é dinheiro que entrou de verdade (FR-053).
+    # O que sai são os indicadores **de evento**: ticket médio e "a receber" (FR-054). Dezenas de
+    # microvendas de 10 minutos ao lado de shows completos não distorcem só a média — mudam a
+    # leitura que a equipe faz do próprio desempenho.
+    # FR-055: o gestor pode pedir o consolidado com o canal dentro. É opt-in explícito — o padrão
+    # segrega, porque quem abre a tela sem escolher nada quer os números de evento limpos.
+    incluir_virtual = request.args.get("incluir_loja_virtual") in ("1", "true", "sim")
+    eventos_com_venda = (
+        todas_com_venda
+        if incluir_virtual
+        else [e for e in todas_com_venda if not is_loja_virtual(e)]
+    )
+    loja_virtual = resumo_loja_virtual(todas_com_venda)
+
+    receita_presencial = sum(
+        (Decimal(e.sale_value or 0) for e in eventos_com_venda), Decimal("0")
+    )
     ticket_medio = (
-        (drg_total["receita_bruta"] / Decimal(len(eventos_com_venda))).quantize(
+        (receita_presencial / Decimal(len(eventos_com_venda))).quantize(
             Decimal("1"), rounding=ROUND_HALF_UP
         )
         if eventos_com_venda else Decimal("0")
@@ -288,9 +323,14 @@ def api_financeiro_dashboard() -> Any:
         if r.payment_status in ("pago", "no_banco")
     )
 
+    # A receita por tipo é onde a Loja Virtual **deve** aparecer: é a visão por canal, e omiti-la
+    # aqui esconderia receita real do gestor. Entra como uma barra própria, identificada
+    # (FR-053/FR-055) — o oposto de diluí-la dentro de SHOW.
     receita_por_tipo_dd = defaultdict(int)
     for e in eventos_com_venda:
         receita_por_tipo_dd[e.event_type or "Outros"] += (e.sale_value or 0)
+    if loja_virtual["vendas"]:
+        receita_por_tipo_dd["Loja Virtual"] += Decimal(str(loja_virtual["receita"]))
     receita_por_tipo = {
         k: float(v) for k, v in sorted(receita_por_tipo_dd.items(), key=lambda x: -x[1])
     }
@@ -476,6 +516,10 @@ def api_financeiro_dashboard() -> Any:
             "pagamentos_realizados": pagamentos_realizados,
             "receita_por_tipo": receita_por_tipo,
             "receita_tipo_max": receita_tipo_max,
+            # Consolidado do canal (feature 205, FR-053): a receita já está somada na cascata da
+            # DRE; este bloco existe para o gestor conferir quanto dela veio da loja.
+            "loja_virtual": loja_virtual,
+            "incluir_loja_virtual": incluir_virtual,
             "top_sellers": top_sellers,
             "monthly_trend": monthly_trend,
             "auditoria": auditoria,

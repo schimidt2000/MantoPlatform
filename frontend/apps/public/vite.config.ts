@@ -20,6 +20,10 @@ export default defineConfig(({ mode }) => ({
       // caminho que o Vite dev server não sabe rotear (mesmo gap já corrigido em
       // apps/internal/vite.config.ts para `/uploads`, feature 182).
       "/catalogo/midia": { target: "http://localhost:5000", changeOrigin: true },
+      // Capa das campanhas virtuais e peças do Acervo 3D (feature 205) são salvas por
+      // `app/storage.py`, que devolve `/uploads/...`. Cada app do monorepo precisa da sua própria
+      // entrada de proxy por prefixo de mídia — o mesmo gap já corrigido em apps/internal.
+      "/uploads": { target: "http://localhost:5000", changeOrigin: true },
     },
   },
 }));

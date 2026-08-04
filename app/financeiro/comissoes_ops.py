@@ -18,7 +18,8 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from app import db
-from app.models import CommissionPayment, User
+from app.constants import EVENT_TYPE_VIRTUAL
+from app.models import CalendarEvent, CommissionPayment, User
 
 TZ_SP = ZoneInfo("America/Sao_Paulo")
 
@@ -162,6 +163,23 @@ def resolve_month(month: str | None) -> tuple[str, date, date]:
     return candidate, start, end
 
 
+def _sem_loja_virtual(q):
+    """Remove da query comissões atreladas a vendas da Loja Virtual (feature 205, FR-054).
+
+    `_sync_commission_payment` já impede que essas linhas nasçam; este filtro é a segunda trava,
+    para linhas anteriores à feature ou criadas por outro caminho. Estornos (`event_id IS NULL`)
+    continuam visíveis — o NOT EXISTS só descarta o que tem evento virtual atrelado.
+    """
+    return q.filter(
+        ~db.session.query(CalendarEvent)
+        .filter(
+            CalendarEvent.id == CommissionPayment.event_id,
+            CalendarEvent.event_type == EVENT_TYPE_VIRTUAL,
+        )
+        .exists()
+    )
+
+
 def _month_scoped_query(start: date, end: date, seller_id: int | None = None):
     """Query base: comissões cujo `sale_date` cai no mês, ou sem `sale_date` mas criadas no
     mês (mesma regra de `api_financeiro_comissoes`)."""
@@ -181,6 +199,7 @@ def _month_scoped_query(start: date, end: date, seller_id: int | None = None):
     )
     if seller_id is not None:
         q = q.filter(CommissionPayment.seller_id == seller_id)
+    q = _sem_loja_virtual(q)
     return q.order_by(CommissionPayment.sale_date.asc(), CommissionPayment.seller_id.asc())
 
 
@@ -194,6 +213,7 @@ def _pending_reversals_query(seller_id: int | None = None):
     )
     if seller_id is not None:
         q = q.filter(CommissionPayment.seller_id == seller_id)
+    q = _sem_loja_virtual(q)
     return q.order_by(CommissionPayment.created_at.asc())
 
 

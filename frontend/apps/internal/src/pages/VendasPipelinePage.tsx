@@ -223,8 +223,11 @@ function FunilTable({ eventos, showSeller }: { eventos: VendaFechada[]; showSell
 export function VendasPipelinePage() {
   const [period, setPeriod] = useState<PeriodFilter>("este_mes");
   const [sellerId, setSellerId] = useState<number | null>(null);
+  // Loja Virtual fora do funil por padrão (feature 205, FR-054): são vendas sem vendedor, e
+  // misturá-las aqui inflaria metas que ninguém bateu. O gestor decide trazê-las (FR-055).
+  const [incluirLojaVirtual, setIncluirLojaVirtual] = useState(false);
   const reduceMotion = useReducedMotion();
-  const query = useDashboardComercial({ period, sellerId });
+  const query = useDashboardComercial({ period, sellerId, incluirLojaVirtual });
 
   const data = query.data;
   const isGestor = data?.can_filter_seller ?? false;
@@ -303,6 +306,31 @@ export function VendasPipelinePage() {
           className="space-y-4"
         >
           <KpiGrid kpis={data.kpis} periodLabel={data.period_label} comissaoSub={comissaoSub} />
+
+          {/* Consolidação do canal — só para gestor, e sempre separada do funil da equipe. */}
+          {isGestor && data.loja_virtual && data.loja_virtual.vendas > 0 && (
+            <Card>
+              <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
+                <div>
+                  <CardTitle>🎥 Loja de Interações Virtuais</CardTitle>
+                  <p className="mt-1 text-xs text-muted">
+                    {data.loja_virtual.vendas} venda(s) · {brl(data.loja_virtual.receita)}{" "}
+                    · ticket {brl(data.loja_virtual.ticket_medio)} — canal self-service, sem
+                    vendedor; fora das metas do time por padrão.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant={incluirLojaVirtual ? "default" : "outline"}
+                  onClick={() => setIncluirLojaVirtual((v) => !v)}
+                  aria-pressed={incluirLojaVirtual}
+                  className="shrink-0"
+                >
+                  {incluirLojaVirtual ? "Tirar do funil" : "Incluir no funil"}
+                </Button>
+              </CardHeader>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-2">

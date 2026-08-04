@@ -148,6 +148,27 @@ def _resolve_catalog_item(raw: Any) -> int | None:
     return item.id
 
 
+def _resolve_catalog_items(raw: Any) -> list[CatalogItem]:
+    """Valida a lista de Temas do catálogo de um post e devolve os itens (sem duplicatas).
+
+    `None`/ausente vira lista vazia (post sem Tema é válido — ver docstring de `MarketingPost`).
+    """
+    if raw in (None, ""):
+        return []
+    if not isinstance(raw, list):
+        raise MarketingValidationError("catalog_item_ids", "Envie os Temas como uma lista.")
+    seen: set[int] = set()
+    items: list[CatalogItem] = []
+    for entry in raw:
+        item = CatalogItem.query.get(entry)
+        if item is None:
+            raise MarketingValidationError("catalog_item_ids", "Tema do catálogo não encontrado.")
+        if item.id not in seen:
+            seen.add(item.id)
+            items.append(item)
+    return items
+
+
 def _resolve_assignee(raw: Any) -> int | None:
     """Valida o responsável informado e devolve o id (ou `None` para desatribuir)."""
     if raw in (None, ""):
@@ -199,13 +220,13 @@ def create_post(
     drive_folder_url: Any = None,
     notes: Any = None,
     assignee_id: Any = None,
-    catalog_item_id: Any = None,
+    catalog_item_ids: Any = None,
 ) -> MarketingPost:
     """Cria uma postagem no planejamento.
 
     Raises:
         MarketingValidationError: Título vazio, status/plataforma/data inválidos, link do Drive
-            fora de http(s), Tema ou responsável inexistentes.
+            fora de http(s), Tema(s) ou responsável inexistentes.
     """
     post = MarketingPost(
         title=_clean_title(title),
@@ -216,7 +237,7 @@ def create_post(
         drive_folder_url=_validate_drive_url(drive_folder_url),
         notes=(notes or "").strip() or None,
         assignee_id=_resolve_assignee(assignee_id),
-        catalog_item_id=_resolve_catalog_item(catalog_item_id),
+        temas=_resolve_catalog_items(catalog_item_ids),
     )
     _autofill_publish_date(post)
     db.session.add(post)
@@ -248,12 +269,13 @@ def update_post(
     drive_folder_url: Any = KEEP,
     notes: Any = KEEP,
     assignee_id: Any = KEEP,
-    catalog_item_id: Any = KEEP,
+    catalog_item_ids: Any = KEEP,
 ) -> MarketingPost:
     """Edita uma postagem. Só aplica os campos explicitamente enviados.
 
-    Todo campo usa a sentinela `KEEP` (`...`) para "não alterar", porque `None` é um valor válido
-    em quase todos eles (limpar prazo, desvincular Tema, desatribuir responsável).
+    Todo campo usa a sentinela `KEEP` (`...`) para "não alterar", porque `None`/lista vazia é um
+    valor válido em quase todos eles (limpar prazo, desvincular todos os Temas, desatribuir
+    responsável).
     """
     if title is not KEEP:
         post.title = _clean_title(title)
@@ -271,8 +293,8 @@ def update_post(
         post.notes = (notes or "").strip() or None
     if assignee_id is not KEEP:
         post.assignee_id = _resolve_assignee(assignee_id)
-    if catalog_item_id is not KEEP:
-        post.catalog_item_id = _resolve_catalog_item(catalog_item_id)
+    if catalog_item_ids is not KEEP:
+        post.temas = _resolve_catalog_items(catalog_item_ids)
 
     _autofill_publish_date(post)
     audit("edit", "MarketingPost", post.id, post.title, "Postagem de marketing editada")
@@ -396,7 +418,8 @@ def last_published_post(goal: MarketingFrequencyGoal) -> MarketingPost | None:
     """Postagem publicada mais recente que "bate" com o assunto da meta.
 
     O casamento tem dois modos, na ordem de confiabilidade:
-    1. **Tema do catálogo vinculado** — casa por `catalog_item_id` (exato);
+    1. **Tema do catálogo vinculado** — casa se **qualquer um** dos Temas do post for o Tema da
+       meta (um post pode juntar vários Temas no mesmo vídeo e ainda contar para cada meta);
     2. **Sem Tema** — casa pelo nome da meta contido no título do post (`ILIKE`), para assuntos
        que não existem como item do catálogo (ex.: "Bastidores").
 
@@ -408,7 +431,7 @@ def last_published_post(goal: MarketingFrequencyGoal) -> MarketingPost | None:
         MarketingPost.publish_date.isnot(None),
     )
     if goal.catalog_item_id:
-        query = query.filter(MarketingPost.catalog_item_id == goal.catalog_item_id)
+        query = query.filter(MarketingPost.temas.any(CatalogItem.id == goal.catalog_item_id))
     else:
         query = query.filter(MarketingPost.title.ilike(f"%{_escape_like(goal.name)}%", escape="\\"))
     return query.order_by(MarketingPost.publish_date.desc(), MarketingPost.id.desc()).first()
@@ -509,7 +532,7 @@ def serialize_review_space(space: ReviewSpace | None) -> dict[str, Any] | None:
 
 
 def serialize_post(post: MarketingPost) -> dict[str, Any]:
-    """Postagem em JSON, com responsável, Tema do catálogo e espaço de revisão aninhados."""
+    """Postagem em JSON, com responsável, Temas do catálogo e espaço de revisão aninhados."""
     return {
         "id": post.id,
         "title": post.title,
@@ -521,8 +544,8 @@ def serialize_post(post: MarketingPost) -> dict[str, Any]:
         "notes": post.notes,
         "assignee_id": post.assignee_id,
         "assignee": _serialize_assignee(post.assignee),
-        "catalog_item_id": post.catalog_item_id,
-        "catalog_item": serialize_catalog_item(post.catalog_item),
+        "catalog_item_ids": [item.id for item in post.temas],
+        "catalog_items": [serialize_catalog_item(item) for item in post.temas],
         "review_space_id": post.review_space_id,
         "review_space": serialize_review_space(post.review_space),
         "created_at": post.created_at.isoformat() if post.created_at else None,

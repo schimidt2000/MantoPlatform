@@ -6,7 +6,18 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import re as _re
 from . import db, login_manager
 from datetime import datetime, date
-from .constants import GIFT_3D_STATUS_PENDENTE, RoleName
+from .constants import (
+    GIFT_3D_STATUS_PENDENTE,
+    now_sp,
+    RoleName,
+    VIRTUAL_CAMPAIGN_STATUS_PUBLICADA,
+    VIRTUAL_CAMPAIGN_STATUS_RASCUNHO,
+    VIRTUAL_ORDER_STATUS_RESERVADO,
+    VIRTUAL_PRODUCTION_STATUS_PENDENTE,
+    VIRTUAL_REFUND_STATUS_PENDENTE,
+    VIRTUAL_SLOT_STATUS_LIVRE,
+    VIRTUAL_SLOT_STATUS_TRAVADO,
+)
 
 user_roles = db.Table(
     "user_roles",
@@ -716,6 +727,19 @@ class SiteSetting(db.Model):
     # Número WhatsApp (só dígitos, com DDI) que recebe as respostas dos formulários de
     # pré-contrato (feature 118). NULL = usa o padrão em app/formularios/routes.py.
     whatsapp_form_number = db.Column(db.String(20), nullable=True)
+    # ── Loja de Interações Virtuais (feature 205) ────────────────────────────
+    # "InfiniteTag" da conta InfinitePay — identifica o vendedor em toda chamada da API.
+    infinitepay_handle = db.Column(db.String(100), nullable=True)
+    # Segredo do endereço que recebe as notificações de pagamento
+    # (`/api/webhooks/infinitepay/<token>`). A InfinitePay não assina seus webhooks, então este
+    # token é a única barreira de entrada — e fica no banco justamente para ser revogável sem
+    # deploy: trocar a linha invalida o endereço antigo na hora.
+    infinitepay_webhook_token = db.Column(db.String(64), nullable=True)
+    # Marcador do último ciclo da varredura de reservas virtuais. Serve de "lock" de execução única
+    # entre os workers do gunicorn — mesmo papel de `calendar_auto_sync_at` (FR-057a): dois
+    # processos expirando a mesma reserva ao mesmo tempo é a corrida que o soft lock existe para
+    # evitar.
+    virtual_sweep_at = db.Column(db.DateTime, nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
@@ -2017,6 +2041,26 @@ class Event3DDismissal(db.Model):
 # ── Gestão de Marketing e Frequência (feature 204) ──────────────────────────
 
 
+marketing_post_temas = db.Table(
+    "marketing_post_temas",
+    db.Column(
+        "post_id", db.Integer,
+        db.ForeignKey("marketing_posts.id", ondelete="CASCADE"), primary_key=True,
+    ),
+    db.Column(
+        "catalog_item_id", db.Integer,
+        db.ForeignKey("catalog_items.id", ondelete="CASCADE"), primary_key=True,
+    ),
+    db.Index("ix_marketing_post_temas_catalog_item_id", "catalog_item_id"),
+)
+"""Tabela de associação N:N entre ``MarketingPost`` e ``CatalogItem`` (feature 204+).
+
+Um post pode falar de vários Temas ao mesmo tempo (ex.: um Reels que junta "15 Anos" e "Debutante"
+no mesmo vídeo) — por isso a relação nasceu N:N em vez de uma segunda FK direta em
+``marketing_posts``. ``ondelete="CASCADE"`` dos dois lados: a linha de associação não tem sentido
+sem o post nem sem o Tema."""
+
+
 class MarketingPost(db.Model):
     """Postagem planejada pela equipe de marketing — o card do Kanban (feature 204).
 
@@ -2025,8 +2069,8 @@ class MarketingPost(db.Model):
     publicado e é o que alimenta o cálculo de frequência de ``MarketingFrequencyGoal``.
 
     Os três vínculos existem para o post não virar uma ilha:
-    - ``catalog_item_id`` — o **Tema** do catálogo de que o post fala (é por ele que a meta de
-      frequência sabe que "15 Anos" foi postado);
+    - ``temas`` — os **Temas** do catálogo de que o post fala (N:N — é por eles que a meta de
+      frequência sabe que "15 Anos" foi postado, mesmo quando o post junta vários assuntos);
     - ``review_space_id`` — vínculo **1:1** com o módulo de Revisão de Mídia (feature 088): o
       material do post é aprovado lá, não numa segunda ferramenta paralela;
     - ``assignee_id`` — quem está com o card na mão.
@@ -2038,7 +2082,6 @@ class MarketingPost(db.Model):
     __tablename__ = "marketing_posts"
     __table_args__ = (
         db.Index("ix_marketing_posts_status", "status"),
-        db.Index("ix_marketing_posts_catalog_item_id", "catalog_item_id"),
         db.Index("ix_marketing_posts_publish_date", "publish_date"),
     )
 
@@ -2056,9 +2099,6 @@ class MarketingPost(db.Model):
     assignee_id      = db.Column(
         db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    catalog_item_id  = db.Column(
-        db.Integer, db.ForeignKey("catalog_items.id", ondelete="SET NULL"), nullable=True
-    )
     review_space_id  = db.Column(
         db.Integer, db.ForeignKey("review_spaces.id", ondelete="SET NULL"),
         nullable=True, unique=True,
@@ -2070,7 +2110,7 @@ class MarketingPost(db.Model):
     )
 
     assignee     = db.relationship("User", lazy="joined", foreign_keys=[assignee_id])
-    catalog_item = db.relationship("CatalogItem", lazy="joined")
+    temas        = db.relationship("CatalogItem", secondary=marketing_post_temas, lazy="joined")
     review_space = db.relationship("ReviewSpace", lazy="joined")
 
 
@@ -2101,3 +2141,414 @@ class MarketingFrequencyGoal(db.Model):
     created_at          = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     catalog_item = db.relationship("CatalogItem", lazy="joined")
+
+
+# ── Loja de Interações Virtuais (feature 205) ───────────────────────────────
+#
+# Canal B2C self-service que vende chamadas de vídeo de 10 min e vídeos gravados com Personagens
+# do catálogo. Duas regras atravessam todas as tabelas abaixo:
+#
+# 1. **Dinheiro é sempre Numeric(12, 2)** (Princípio IX). A InfinitePay conta em centavos inteiros,
+#    mas isso é característica do fornecedor: a conversão vive só em
+#    `app/integracoes/infinitepay_client.py`. Nenhuma coluna aqui representa centavos.
+# 2. **Nada é decidido pelo aviso de pagamento.** O webhook da operadora não é assinado, então ele
+#    serve de gatilho; a verdade vem da reconsulta da cobrança. É por isso que existem
+#    `VirtualPaymentNotification` (auditoria + idempotência) e `recheck_attempts`.
+
+
+virtual_campaign_acervo = db.Table(
+    "virtual_campaign_acervo",
+    db.Column(
+        "campaign_id", db.Integer,
+        db.ForeignKey("virtual_campaigns.id", ondelete="CASCADE"), primary_key=True,
+    ),
+    db.Column(
+        "acervo_3d_item_id", db.Integer,
+        db.ForeignKey("acervo_3d_items.id", ondelete="CASCADE"), primary_key=True,
+    ),
+)
+"""Peças do Acervo 3D liberadas para oferta numa campanha (feature 205, FR-006).
+
+``CASCADE`` dos dois lados: a linha de associação não faz sentido sem a campanha nem sem a peça.
+Liberar uma peça é decisão por campanha — o Acervo inteiro nunca é ofertado por padrão."""
+
+
+class VirtualCampaign(db.Model):
+    """A oferta publicada de um Personagem do catálogo (feature 205).
+
+    Guarda tudo que a família lê antes de comprar (textos, capa, FAQ, prazo) e o estoque de vídeos
+    gravados; os horários das chamadas vivem em ``VirtualCampaignSlot``. O vínculo é com
+    ``CatalogCharacter`` — esta feature não cria cadastro paralelo de personagens (Princípio I).
+
+    ``talent_id``/``figurino_sheet_id`` são o que a automação usa para pré-escalar o elenco quando
+    a venda se efetiva; o padrão sugerido vem do figurino já vinculado ao personagem no catálogo.
+    """
+
+    __tablename__ = "virtual_campaigns"
+    __table_args__ = (
+        db.Index("ix_virtual_campaigns_status", "status"),
+    )
+
+    id                   = db.Column(db.Integer, primary_key=True)
+    catalog_character_id = db.Column(
+        db.Integer, db.ForeignKey("catalog_characters.id"), nullable=False
+    )
+    slug                 = db.Column(db.String(160), nullable=False, unique=True)
+    status               = db.Column(
+        db.String(20), nullable=False,
+        default=VIRTUAL_CAMPAIGN_STATUS_RASCUNHO, server_default=VIRTUAL_CAMPAIGN_STATUS_RASCUNHO,
+    )
+    title                = db.Column(db.String(200), nullable=False)
+    intro_html           = db.Column(db.Text, nullable=True)
+    tolerance_terms      = db.Column(db.Text, nullable=True)
+    # JSON: [{"pergunta": ..., "resposta": ...}] — renderizado só no fim da landing (FR-013).
+    faq_json             = db.Column(db.Text, nullable=True)
+    cover_url            = db.Column(db.String(500), nullable=True)
+    whatsapp_phone       = db.Column(db.String(20), nullable=True)
+
+    # Dinheiro em Numeric — ver a nota do bloco (Princípio IX).
+    price_live           = db.Column(db.Numeric(12, 2), nullable=False)
+    price_recorded       = db.Column(db.Numeric(12, 2), nullable=False)
+    price_gift           = db.Column(db.Numeric(12, 2), nullable=False, server_default="0")
+
+    recorded_capacity      = db.Column(db.Integer, nullable=False, server_default="0")
+    recorded_sold          = db.Column(db.Integer, nullable=False, server_default="0")
+    recorded_delivery_days = db.Column(db.Integer, nullable=False, server_default="7")
+
+    talent_id            = db.Column(db.Integer, db.ForeignKey("talents.id"), nullable=True)
+    figurino_sheet_id    = db.Column(
+        db.Integer, db.ForeignKey("figurino_sheets.id", ondelete="SET NULL"), nullable=True
+    )
+
+    max_reservations_per_origin = db.Column(db.Integer, nullable=False, server_default="5")
+    reservation_window_minutes  = db.Column(db.Integer, nullable=False, server_default="60")
+
+    created_at = db.Column(db.DateTime, default=now_sp, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=now_sp, onupdate=now_sp, nullable=False
+    )
+
+    character      = db.relationship("CatalogCharacter", lazy="joined")
+    talent         = db.relationship("Talent", lazy="joined")
+    figurino_sheet = db.relationship("FigurinoSheet", lazy=True)
+    acervo_items   = db.relationship("Acervo3DItem", secondary=virtual_campaign_acervo, lazy=True)
+    slots          = db.relationship(
+        "VirtualCampaignSlot", back_populates="campaign", lazy=True,
+        cascade="all, delete-orphan", order_by="VirtualCampaignSlot.start_at",
+    )
+
+    @property
+    def faq_items(self) -> list:
+        """Itens do FAQ decodificados (lista vazia se o JSON estiver corrompido)."""
+        import json
+
+        try:
+            data = json.loads(self.faq_json or "[]")
+        except (ValueError, TypeError):
+            return []
+        return data if isinstance(data, list) else []
+
+    @property
+    def recorded_available(self) -> int:
+        """Quantos vídeos gravados ainda cabem na campanha (nunca negativo)."""
+        return max((self.recorded_capacity or 0) - (self.recorded_sold or 0), 0)
+
+    @property
+    def is_public(self) -> bool:
+        """True quando a campanha aceita novas reservas (FR-007)."""
+        return self.status == VIRTUAL_CAMPAIGN_STATUS_PUBLICADA
+
+
+class VirtualCampaignSlot(db.Model):
+    """Um horário de 10 minutos vendável de uma campanha (feature 205).
+
+    ``UNIQUE(campaign_id, start_at)`` é o que torna a geração de horários idempotente: reexecutar a
+    mesma janela não duplica nada (FR-004).
+
+    Um slot está disponível quando ``status == 'livre'`` **ou** quando está ``'travado'`` com
+    ``locked_until`` já vencido. A segunda condição é o que faz a expiração funcionar mesmo se a
+    varredura atrasar — quem abre a landing já vê o horário livre, sem depender de job.
+    """
+
+    __tablename__ = "virtual_campaign_slots"
+    __table_args__ = (
+        db.UniqueConstraint("campaign_id", "start_at", name="uq_virtual_slot_campaign_start"),
+        db.Index("ix_virtual_campaign_slots_status", "status"),
+        db.Index("ix_virtual_campaign_slots_start_at", "start_at"),
+    )
+
+    id           = db.Column(db.Integer, primary_key=True)
+    campaign_id  = db.Column(
+        db.Integer, db.ForeignKey("virtual_campaigns.id", ondelete="CASCADE"), nullable=False
+    )
+    start_at     = db.Column(db.DateTime, nullable=False)
+    status       = db.Column(
+        db.String(20), nullable=False,
+        default=VIRTUAL_SLOT_STATUS_LIVRE, server_default=VIRTUAL_SLOT_STATUS_LIVRE,
+    )
+    locked_until = db.Column(db.DateTime, nullable=True)
+    order_id     = db.Column(db.Integer, db.ForeignKey("virtual_orders.id"), nullable=True)
+    created_at   = db.Column(db.DateTime, default=now_sp, nullable=False)
+
+    campaign = db.relationship("VirtualCampaign", back_populates="slots", lazy=True)
+
+    def is_available(self, now=None) -> bool:
+        """True se o horário pode ser reservado agora (livre, ou travado com lock vencido).
+
+        ``now`` deve vir em **naive São Paulo** (use ``virtuais_ops.agora()``), a mesma convenção
+        de ``start_at`` e ``locked_until``. O padrão existe só para chamadas soltas; quem compara
+        contra horário de slot sempre passa o valor explicitamente.
+        """
+        moment = now or now_sp()
+        if self.status == VIRTUAL_SLOT_STATUS_LIVRE:
+            return True
+        if self.status == VIRTUAL_SLOT_STATUS_TRAVADO:
+            return self.locked_until is not None and self.locked_until <= moment
+        return False
+
+
+class VirtualOrder(db.Model):
+    """A intenção de compra de uma família (feature 205).
+
+    ``order_nsu`` é o identificador que viaja até a InfinitePay e volta em todo aviso — é a chave
+    que liga notificação a pedido e a base da idempotência. ``public_token`` é o endereço não
+    adivinhável da página de acompanhamento; sozinho ele só mostra status e horário: qualquer dado
+    da criança exige também o telefone da compradora (FR-044a).
+
+    Os valores são congelados na reserva (FR-022) — alterar o preço da campanha depois não mexe em
+    pedido nenhum. Todos em ``Numeric``, ver a nota do bloco.
+    """
+
+    __tablename__ = "virtual_orders"
+    __table_args__ = (
+        db.Index("ix_virtual_orders_status", "status"),
+        db.Index("ix_virtual_orders_campaign_id", "campaign_id"),
+        db.Index("ix_virtual_orders_contact_phone", "contact_phone"),
+        db.Index("ix_virtual_orders_created_at", "created_at"),
+    )
+
+    id          = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey("virtual_campaigns.id"), nullable=False)
+    slot_id     = db.Column(db.Integer, db.ForeignKey("virtual_campaign_slots.id"), nullable=True)
+    modality    = db.Column(db.String(12), nullable=False)
+    status      = db.Column(
+        db.String(16), nullable=False,
+        default=VIRTUAL_ORDER_STATUS_RESERVADO, server_default=VIRTUAL_ORDER_STATUS_RESERVADO,
+    )
+    order_nsu    = db.Column(db.String(64), nullable=False, unique=True)
+    public_token = db.Column(db.String(43), nullable=False, unique=True)
+
+    # Ficha da criança — dados sensíveis, só saem sob validação dupla (FR-044a).
+    child_name            = db.Column(db.String(120), nullable=False)
+    child_age             = db.Column(db.Integer, nullable=False)
+    behavior_notes        = db.Column(db.Text, nullable=True)
+    contact_phone         = db.Column(db.String(20), nullable=False)
+    contact_phone_display = db.Column(db.String(30), nullable=True)
+    contact_email         = db.Column(db.String(180), nullable=False)
+    delivery_address      = db.Column(db.String(300), nullable=True)
+
+    gift_item_id = db.Column(db.Integer, db.ForeignKey("acervo_3d_items.id"), nullable=True)
+
+    price_interaction = db.Column(db.Numeric(12, 2), nullable=False)
+    price_gift        = db.Column(db.Numeric(12, 2), nullable=False, server_default="0")
+    total_value       = db.Column(db.Numeric(12, 2), nullable=False)
+
+    locked_until    = db.Column(db.DateTime, nullable=True)
+    payment_url     = db.Column(db.String(500), nullable=True)
+    invoice_slug    = db.Column(db.String(120), nullable=True)
+    transaction_nsu = db.Column(db.String(120), nullable=True)
+    paid_at         = db.Column(db.DateTime, nullable=True)
+
+    event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
+    # Link da SALA (Google Meet) — é o que a família recebe. Distinto de
+    # `CalendarEvent.google_html_link`, que abre o Calendar e exige login no calendário.
+    meet_url     = db.Column(db.String(500), nullable=True)
+    meet_pending = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+    # Progresso da política de retry da sala (FR-056/FR-057). `meet_pending` diz *que* falta sala;
+    # estes dois dizem *onde a política parou* — e precisam ser coluna, não memória, porque a
+    # varredura decide num ciclo e volta no seguinte, possivelmente em outro worker.
+    meet_attempts        = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    meet_last_attempt_at = db.Column(db.DateTime, nullable=True)
+
+    origin_hash = db.Column(db.String(64), nullable=True)
+    # Token do navegador que criou a reserva. Existe para o duplo clique devolver o mesmo pedido
+    # em vez de travar um segundo horário (FR-026). Não dá para usar `origin_hash` no lugar: duas
+    # famílias atrás do mesmo NAT compartilham origem, e uma receberia o pedido da outra.
+    client_token = db.Column(db.String(64), nullable=True)
+    # Tolerância quando a operadora não responde na expiração (FR-018a, FR-056).
+    grace_until        = db.Column(db.DateTime, nullable=True)
+    recheck_attempts   = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    expired_unverified = db.Column(
+        db.Boolean, nullable=False, default=False, server_default="0"
+    )
+    # Tentativas de telefone na página do pedido (FR-044b).
+    access_attempts      = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    access_blocked_until = db.Column(db.DateTime, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=now_sp, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=now_sp, onupdate=now_sp, nullable=False
+    )
+
+    campaign  = db.relationship("VirtualCampaign", lazy="joined")
+    slot      = db.relationship("VirtualCampaignSlot", foreign_keys=[slot_id], lazy=True)
+    gift_item = db.relationship("Acervo3DItem", lazy="joined")
+    event     = db.relationship("CalendarEvent", lazy=True)
+
+
+class VirtualPaymentNotification(db.Model):
+    """Cada aviso de pagamento recebido da operadora (feature 205).
+
+    Existe por três motivos inseparáveis:
+
+    * **idempotência** — ``UNIQUE(transaction_nsu)`` faz a reentrega do mesmo aviso falhar na
+      inserção, e é isso que impede evento, escala, presente e baixa de estoque duplicados
+      (FR-028);
+    * **segurança** — registra se o segredo do endereço conferia e o que a reconsulta na operadora
+      respondeu; a decisão nunca vem do corpo do aviso (FR-027a/FR-027b);
+    * **auditoria** — nada é descartado, nem aviso órfão, nem chamada com segredo errado (FR-034).
+    """
+
+    __tablename__ = "virtual_payment_notifications"
+    __table_args__ = (
+        db.Index("ix_virtual_payment_notifications_order_id", "order_id"),
+    )
+
+    id              = db.Column(db.Integer, primary_key=True)
+    order_id        = db.Column(db.Integer, db.ForeignKey("virtual_orders.id"), nullable=True)
+    order_nsu       = db.Column(db.String(64), nullable=True)
+    transaction_nsu = db.Column(db.String(120), nullable=True, unique=True)
+    raw_payload     = db.Column(db.Text, nullable=True)
+    secret_ok       = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+    # 'paid' | 'unpaid' | 'divergent' | 'unavailable' | 'error'
+    recheck_result  = db.Column(db.String(20), nullable=True)
+    recheck_payload = db.Column(db.Text, nullable=True)
+    # 'efetivado' | 'duplicado' | 'recusado' | 'conflito' | 'retido' | 'orfao'
+    outcome         = db.Column(db.String(24), nullable=True)
+    message         = db.Column(db.Text, nullable=True)
+    created_at      = db.Column(db.DateTime, default=now_sp, nullable=False)
+
+    order = db.relationship(
+        "VirtualOrder", lazy=True, backref=db.backref("notifications", lazy=True)
+    )
+
+
+class VirtualMediaDelivery(db.Model):
+    """A unidade de trabalho da Fila de Produção de Mídia (feature 205).
+
+    Nasce de um pedido pago (1:1) e percorre ``pendente`` → ``gravando`` → ``finalizado``, os três
+    únicos estados (FR-048a). Enviar o vídeo é a **ação** que permite chegar a ``finalizado``,
+    nunca um estado próprio.
+
+    ``video_path`` é caminho interno de armazenamento e **não é divulgável**: o vídeo só sai por um
+    endpoint que valida o acesso a cada requisição (FR-038e). Um vídeo em que o nome da criança é
+    dito em voz alta não pode depender de o endereço não vazar.
+    """
+
+    __tablename__ = "virtual_media_deliveries"
+    __table_args__ = (
+        db.Index("ix_virtual_media_deliveries_status", "status"),
+        db.Index("ix_virtual_media_deliveries_due_date", "due_date"),
+    )
+
+    id       = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(
+        db.Integer, db.ForeignKey("virtual_orders.id", ondelete="CASCADE"),
+        nullable=False, unique=True,
+    )
+    status   = db.Column(
+        db.String(16), nullable=False,
+        default=VIRTUAL_PRODUCTION_STATUS_PENDENTE,
+        server_default=VIRTUAL_PRODUCTION_STATUS_PENDENTE,
+    )
+    due_date = db.Column(db.Date, nullable=True)
+
+    video_path         = db.Column(db.String(500), nullable=True)
+    video_mime         = db.Column(db.String(60), nullable=True)
+    video_size_bytes   = db.Column(db.BigInteger, nullable=True)
+    video_published_at = db.Column(db.DateTime, nullable=True)
+    last_upload_error  = db.Column(db.Text, nullable=True)
+    # Quando a equipe foi alertada do prazo se aproximando (FR-057). Marcador de idempotência, não
+    # de status: sem ele a varredura alertaria a cada ciclo, e alerta de minuto em minuto é alerta
+    # que ninguém lê.
+    deadline_alert_at  = db.Column(db.DateTime, nullable=True)
+
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at    = db.Column(db.DateTime, default=now_sp, nullable=False)
+    updated_at    = db.Column(
+        db.DateTime, default=now_sp, onupdate=now_sp, nullable=False
+    )
+
+    order = db.relationship(
+        "VirtualOrder", lazy="joined",
+        backref=db.backref("media_delivery", uselist=False, cascade="all, delete-orphan"),
+    )
+    updated_by = db.relationship("User", lazy=True)
+
+
+class VirtualRefundRequest(db.Model):
+    """Devolução a executar quando um pagamento cai em horário indisponível (feature 205).
+
+    Existe porque a InfinitePay não publica API de estorno: o sistema garante que a devolução seja
+    aberta, rastreada e cobrada até a conclusão, mas quem devolve o dinheiro é uma pessoa, no
+    painel da operadora (FR-042/FR-043). ``invoice_slug`` e ``transaction_nsu`` estão aqui para a
+    equipe achar a cobrança sem sair procurando.
+    """
+
+    __tablename__ = "virtual_refund_requests"
+    __table_args__ = (
+        db.Index("ix_virtual_refund_requests_status", "status"),
+    )
+
+    id              = db.Column(db.Integer, primary_key=True)
+    order_id        = db.Column(db.Integer, db.ForeignKey("virtual_orders.id"), nullable=False)
+    amount          = db.Column(db.Numeric(12, 2), nullable=False)
+    reason          = db.Column(db.String(40), nullable=False, server_default="conflito_horario")
+    status          = db.Column(
+        db.String(16), nullable=False,
+        default=VIRTUAL_REFUND_STATUS_PENDENTE, server_default=VIRTUAL_REFUND_STATUS_PENDENTE,
+    )
+    invoice_slug    = db.Column(db.String(120), nullable=True)
+    transaction_nsu = db.Column(db.String(120), nullable=True)
+    resolved_by_id  = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    resolved_at     = db.Column(db.DateTime, nullable=True)
+    created_at      = db.Column(db.DateTime, default=now_sp, nullable=False)
+
+    order       = db.relationship("VirtualOrder", lazy="joined")
+    resolved_by = db.relationship("User", lazy=True)
+
+
+class VirtualOrderNotification(db.Model):
+    """Registro de cada aviso automático enviado à família (feature 205).
+
+    **É a trava de idempotência do aviso**, não só um log: ``UNIQUE(order_id, kind)`` garante que
+    cada tipo saia no máximo uma vez por pedido (FR-028a). A linha é gravada na mesma transação que
+    decide enviar, **antes** do disparo — a violação de unicidade é o que impede o segundo envio
+    quando a operadora reentrega o mesmo aviso de pagamento (FR-028b).
+
+    Reenvio deliberado pela equipe apaga a linha; nunca burla a restrição.
+    """
+
+    __tablename__ = "virtual_order_notifications"
+    __table_args__ = (
+        db.UniqueConstraint("order_id", "kind", name="uq_virtual_order_notification_kind"),
+    )
+
+    id            = db.Column(db.Integer, primary_key=True)
+    order_id      = db.Column(
+        db.Integer, db.ForeignKey("virtual_orders.id", ondelete="CASCADE"), nullable=False
+    )
+    kind          = db.Column(db.String(24), nullable=False)
+    sent_ok       = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+    error_message = db.Column(db.Text, nullable=True)
+    created_at    = db.Column(db.DateTime, default=now_sp, nullable=False)
+    # Progresso da entrega deste aviso (FR-056). A **trava** é do aviso (`UNIQUE(order_id, kind)`,
+    # um por pedido e tipo); o **retry** é da entrega dele. Separar os dois é o que permite
+    # retentar o envio sem nunca abrir brecha para um segundo e-mail.
+    attempts        = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    last_attempt_at = db.Column(db.DateTime, nullable=True)
+
+    order = db.relationship(
+        "VirtualOrder", lazy=True,
+        backref=db.backref("sent_notifications", lazy=True, cascade="all, delete-orphan"),
+    )

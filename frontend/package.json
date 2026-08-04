@@ -26,6 +26,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "http-proxy": "^1.18.1",
     "serve-handler": "^6.1.7"
   }
 }

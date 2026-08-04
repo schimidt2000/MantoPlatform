@@ -26,7 +26,7 @@ POST_FIELDS = (
     "drive_folder_url",
     "notes",
     "assignee_id",
-    "catalog_item_id",
+    "catalog_item_ids",
 )
 GOAL_FIELDS = ("name", "target_interval_days", "catalog_item_id")
 

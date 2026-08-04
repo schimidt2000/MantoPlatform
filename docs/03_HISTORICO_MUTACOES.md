@@ -4,7 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **204**
+> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **206 (React como
+> interface primária + proxy reverso)**, sobre a 205f
 
 Formato de cada entrada:
 
@@ -17,6 +18,463 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 206 — React como interface primária e proxy reverso em produção
+`205-loja-interacoes-virtuais` · **2026-08-04** · sem migration
+
+**Motivação.** A plataforma vivia em dois endereços: o serviço Node com os três bundles React e o
+Flask com a API mais um resto de Jinja. Isso obrigava o build a carregar `VITE_API_BASE_URL`
+apontando para o outro domínio, transformava todo `fetch` em cross-origin e deixava a raiz do
+Flask servindo um dashboard paralelo ao do React. A 206 fecha isso: `app.mantoproducoes.com.br`
+passa a ser a **única** porta de entrada, e o Flask vira serviço de backend puro.
+
+**O que mudou.**
+
+*Frontend* — `frontend/server.js` deixou de ser só `serve-handler`: agora usa `http-proxy`
+(dependência nova, `^1.18.1`) e repassa ao Flask, **antes** de qualquer fallback de SPA, cinco
+filtros que espelham os `server.proxy` dos três `vite.config.ts`: `/api/*`, `/uploads/*`,
+`/catalogo/midia/*`, `/portal/photo/*` e `/figurinos/<id>/print` (regex). Alvo em `BACKEND_URL`,
+com `changeOrigin: true` e `xfwd: true`; erro de conexão responde 502 sem derrubar os SPAs.
+
+*Backend* — `app/config.py` ganhou a constante `PLATFORM_BASE_URL`
+(`https://app.mantoproducoes.com.br`) e `PUBLIC_BASE_URL` passou a cair nela por padrão (antes:
+string vazia). `GET /` não renderiza mais `home.html` — devolve **301** para `PLATFORM_BASE_URL`,
+e as ~260 linhas do dashboard Jinja saíram de `create_app()`. `must_redirect_to_classic` saiu do
+payload de `POST /api/portal/auth/login`, junto com `portal_ops.needs_classic_portal_flow` (já era
+código morto desde a 191).
+
+*Verificação* — `scripts/db/verify_206_react_primario.py` (20 checagens) e
+`frontend/scripts/verify-proxy.mjs` (22 checagens: sobe um backend falso mais o `server.js` real e
+confere para onde cada URL vai, inclusive com o backend fora do ar). Os quatro scripts que
+afirmavam o comportamento antigo foram reapontados: `verify_136` passou a ler os reembolsos
+pendentes pelo JSON do detalhe do evento, `verify_144` afirma o 301, `verify_176` e `verify_191`
+afirmam a ausência de `must_redirect_to_classic`.
+
+**Riscos e pegadinhas.**
+
+1. **O proxy só entra em ação com `VITE_API_BASE_URL` vazia no build.** Com ela preenchida,
+   `API_BASE` e `assetUrl()` geram URL absoluta do Flask e o browser fura o proxy inteiro —
+   inclusive `/uploads` e a ficha de impressão. Limpar a variável no serviço frontend do Railway
+   é parte do deploy, não detalhe.
+2. **Ordem dos filtros é o bug óbvio que não aconteceu.** `/catalogo/midia` e `/portal/photo` são
+   sub-caminhos de prefixos montados (`/catalogo`, `/portal`). Se o proxy rodasse depois dos
+   mounts, cada imagem viraria o `index.html` do bundle — o mesmo gap de mídia já corrigido duas
+   vezes no Vite. Por isso o bloco de proxy é a primeira coisa no handler.
+3. **`changeOrigin: true` não é cosmético.** Preservar o `Host` original com `BACKEND_URL` num
+   domínio público do Railway faz o roteador de borda devolver a requisição para o próprio serviço
+   frontend, em laço.
+4. **A regra do proxy é `/figurinos/<id>/print`, nunca `/figurinos`.** A SPA interna tem uma rota
+   React Router em `/figurinos` (Banco de Figurinos); um prefixo amplo roubaria deep link e
+   refresh para o Jinja. Note que `/figurinos/print-event/<id>` **não** casa o regex — de
+   propósito: ela só é linkada de dentro de páginas Jinja.
+5. **A home Jinja tinha blocos de tarefa que o `/api/dashboard` não expõe.** Reembolsos pendentes,
+   ensaios pendentes/agendados/órfãos, presença pendente, notas fiscais a emitir, eventos sem
+   valor, eventos sem cliente e pré-contratos sem cliente / que precisam de revisão sumiram com
+   ela. `app/templates/home.html` ficou órfão. Reconstruir isso no React é trabalho em aberto.
+6. **O 301 da raiz também vale em desenvolvimento.** `localhost:5000/` joga para produção. O ponto
+   de entrada local é o Vite (`localhost:5173`), não a raiz do Flask.
+
+### 205f — Loja de Interações Virtuais (resiliência a falha de serviço externo)
+`205-loja-interacoes-virtuais` · **2026-08-04** · migration `c17b3ea94f52`
+
+> Fase de **Convergence** (T129–T133), apurada pelo `/speckit.converge` sobre a 205e.
+
+**Motivação.** Os quatro gaps que a convergência encontrou estavam todos no mesmo ponto cego: o que
+acontece quando um serviço externo cai e **ninguém está olhando**. A venda se efetivava, o pedido
+ficava sem sala, o e-mail não saía — e a única pista disso era uma coluna no banco que nenhuma tela
+lia. Uma família chegava no horário sem link, e a equipe descobria pelo telefone.
+
+**O que mudou.**
+
+*Banco* — `virtual_orders.meet_attempts`/`meet_last_attempt_at`,
+`virtual_order_notifications.attempts`/`last_attempt_at` e
+`virtual_media_deliveries.deadline_alert_at`.
+
+*Backend* — `virtuais_ops` ganhou `ciclo_de_varredura()`, `retentar_salas()`,
+`alertar_prazos_video()`, `_entregar_aviso()`, `reenviar_aviso()`, `_enviadores_de_aviso()` e
+`serialize_avisos_falhos()`. `_criar_evento_google` passou a usar `executar_com_retry`;
+`regerar_sala` passou a cobrir também o caso do evento que nunca chegou a existir no Google.
+`_start_virtual_sweep` roda as três rotinas do FR-057. Novo endpoint
+`POST /api/virtuais/pedidos/<id>/avisos/<kind>/reenviar`.
+
+*Frontend* — `components/AvisosFalhosBanner.tsx`, usado na Fila de Produção e no painel do evento,
+com os hooks `useReenviarAviso` e `useRegerarSala`.
+
+**Riscos e pegadinhas.**
+
+1. **`email_service._send` engole a exceção do SMTP e devolve `False`.** Foi a pegadinha central:
+   embrulhar o envio em `executar_com_retry` não retentava nada, porque a falha mais comum
+   (servidor fora) chegava como retorno falso, sem exceção. `_entregar_aviso` converte o `False`
+   em exceção para a política valer no caso real. O contrato de `_send` não foi tocado — ele é
+   usado pelo sistema inteiro.
+2. **`regerar_sala` só sabia reconsultar.** Havia dois jeitos de ficar sem sala e ela tratava um:
+   o evento existir no Google e a sala não ter materializado. O outro — o evento **nunca** ter sido
+   criado (id local `virtual-local-`) — ficava preso para sempre, consultando um id inexistente.
+   Agora ela cria o evento e reconcilia o id.
+3. **O progresso do retry é coluna, não memória.** Num caminho assíncrono o contador precisa
+   sobreviver a restart de worker; se vivesse no processo, a "3ª tentativa" nunca chegaria e a
+   ordem retentaria para sempre.
+4. **Rollback desfaz o contador.** Quando `regerar_sala` estoura dentro de `retentar_salas`, o
+   rollback apaga o incremento feito antes da falha — por isso ele é regravado no `except`. Sem
+   isso a tentativa não conta e o pedido nunca esgota.
+5. **Reenvio manual nunca cria linha de aviso.** Só reentrega o que já falhou. Um endpoint que
+   criasse a linha seria caminho paralelo ao fluxo automático, e o `UNIQUE(order_id, kind)`
+   deixaria de significar "a família recebe este aviso uma vez". Reenviar aviso já entregue dá 400.
+6. **`deadline_alert_at` é idempotência, não status.** Sem ele o alerta de prazo sairia a cada
+   ciclo de 60s, e alerta de minuto em minuto é alerta que se aprende a ignorar.
+7. **As três rotinas são isoladas entre si** dentro de `ciclo_de_varredura` (FR-057b): uma exceção
+   na expiração não pode impedir o alerta de prazo de rodar.
+
+**Dois bugs que a própria fase revelou** (2ª passagem da convergência):
+
+8. **O e-mail de "vídeo pronto" nunca era enviado.** `send_virtual_video_ready_email` existia em
+   `email_service.py` e **não** estava no mapa de enviadores. `_enviar_aviso` gravava a linha (a
+   trava de idempotência), não achava a função e voltava calado: a família não recebia nada e o
+   sistema constava como tendo avisado. O teste antigo passava porque contava a linha — que é
+   gravada **antes** do disparo. Só apareceu quando o painel passou a mostrar avisos falhados.
+   V5.11b e V5.11c travam a classe inteira do bug.
+9. **`expired_unverified` era gravado e nenhuma tela lia.** Quando o horário é liberado sem o
+   sistema conseguir confirmar o pagamento, a família pode ter pago em dia e perdido o horário
+   assim mesmo — e a devolução resultante era indistinguível de uma reserva que simplesmente
+   venceu. Agora `_abrir_devolucao` grava `conflito_sem_confirmacao` e a tela de Devoluções
+   destaca o caso (FR-018b). Registrar onde ninguém lê é o mesmo que não registrar.
+
+**Verificação.** `verify_205.py` — **136/136 PASS**, re-rodável. O **V10** derruba os serviços com
+as exceções reais (`googleapiclient.errors.HttpError` 503 e `smtplib.SMTPResponseException` 500),
+e prova: a venda se efetiva mesmo assim, a varredura respeita o intervalo de 1 minuto, conta as
+tentativas, desiste na 3ª, a falha aparece nos **dois** painéis, e o retorno dos serviços fecha o
+fluxo de ponta a ponta sem duplicar aviso. `tsc --noEmit` limpo nos dois apps; banner conferido na
+Browser pane com pedido semeado (os dois estados e a mensagem de erro do reenvio).
+
+### 205e — Loja de Interações Virtuais (registro financeiro segregado e fechamento)
+`205-loja-interacoes-virtuais` · **2026-08-04** · sem migration nova
+
+> **Fecha a feature 205.** Cobre a fase de Financeiro segregado (T114–T119) e o Polish
+> (T120–T128). Com esta entrada, as 5 user stories e os 68 requisitos funcionais estão entregues.
+
+**Motivação.** A loja fatura em microvendas de 10 minutos, sem vendedor e sem contrato. Jogar isso
+no mesmo balde dos shows quebraria três coisas ao mesmo tempo: o ticket médio (a régua que a
+operação usa para precificar show), a meta do time comercial (venda que ninguém fechou) e o caixa
+(comissão provisionada para um beneficiário que não existe). Ao mesmo tempo, é receita real — tem
+que somar no DRE, senão o Fator R e o break-even passam a mentir.
+
+**O que mudou.**
+
+*Backend* — `app/financeiro/vendas_ops.py` ganhou `is_loja_virtual()`, `split_por_canal()` e
+`resumo_loja_virtual()`: **fonte única** do recorte de canal. `_sync_commission_payment` e
+`_event_commission` (em `app/financeiro/routes.py`) retornam cedo para venda virtual.
+`app/financeiro/comissoes_ops.py` ganhou `_sem_loja_virtual()`, aplicado nas duas queries-base.
+`GET /api/financeiro/dashboard` separou `todas_com_venda` (alimenta a cascata da DRE) de
+`eventos_com_venda` (alimenta ticket médio e "a receber"), e passou a devolver
+`paineis.loja_virtual`. `GET /api/vendas/pipeline` filtra o funil por canal e devolve
+`loja_virtual` só para gestor. Ambos aceitam `?incluir_loja_virtual=1` (FR-055).
+
+*Frontend* — `FinanceiroDashboardPage` e `VendasPipelinePage` ganharam o card consolidado do canal
+e o botão de opt-in; os hooks aceitam `incluirLojaVirtual`.
+
+**Riscos e pegadinhas.**
+
+1. **A receita da loja NÃO sai da cascata da DRE.** Só sai dos indicadores *de evento*. Foi a
+   decisão mais fácil de errar: filtrar a venda logo na query dos eventos teria "resolvido" o
+   ticket médio e, de quebra, tirado dinheiro real do Fator R e do break-even — que decidem
+   enquadramento tributário. Por isso existem duas listas (`todas_com_venda` e
+   `eventos_com_venda`), e V9.8/V9.18 travam as duas pontas.
+2. **A comissão é cortada na origem, não no relatório.** `_sync_commission_payment` retorna antes
+   de criar a linha. Se a linha nunca nasce, nenhum relatório futuro precisa lembrar de escondê-la.
+   `_sem_loja_virtual()` em `comissoes_ops` é a segunda trava, para linhas anteriores à feature —
+   e usa `NOT EXISTS`, não `JOIN`, para não derrubar estornos (que têm `event_id IS NULL`).
+3. **"Loja Virtual" vira barra própria em `receita_por_tipo`, mas `VIRTUAL` não.** A visão por
+   canal é exatamente onde a loja *deve* aparecer; omiti-la ali esconderia receita do gestor. O que
+   não pode é o tipo cru `VIRTUAL` aparecer diluído entre SHOW/OFICINA (V9.13).
+4. **Vendedor comum nunca recebe o bloco `loja_virtual`,** nem com `?incluir_loja_virtual=1`: o
+   opt-in é ignorado quando `can_filter_seller` é falso. Escopo é decisão do servidor.
+5. **O teste precisa de um evento presencial de controle.** Sem ele, "o indicador não mudou" seria
+   `0 == 0` e passaria com todos os filtros quebrados. V9 cria um SHOW de R$ 1.000 no dia da
+   medição justamente para haver o que distorcer.
+
+**Verificação.** `verify_205.py` — **110/110 PASS** contra `manto_local`, re-rodável e sem resíduo.
+V9 mede volume, ticket médio e base de comissão antes e depois de 10 vendas virtuais (os três
+ficam idênticos; o DRE sobe exatamente R$ 1.500). `tsc --noEmit` limpo em `apps/internal` e
+`apps/public`. Mobile conferido no Browser pane a **320px e 430px** nas duas telas públicas: zero
+scroll horizontal, zero alvo abaixo de 44px, zero texto abaixo de 12px.
+
+### 205d — Loja de Interações Virtuais (presente 3D, fila de produção e entrega do vídeo)
+`205-loja-interacoes-virtuais` · **2026-07-31** · sem migration nova
+
+> **Entrega parcial.** Cobre US4 e US5 (T090–T113). Falta apenas a segregação financeira
+> (T114–T119) e o fechamento (T120–T128).
+
+**Motivação.** Fechar o produto ponta a ponta: o upsell de presente 3D no checkout, a fila que a
+produção usa para saber o que gravar, e a entrega do vídeo com os dados da criança protegidos.
+
+**O que mudou.**
+
+*Backend* — `virtuais_ops` ganhou `verificar_telefone()`, `salvar_video_entrega()`,
+`caminho_video()`, `atualizar_status_entrega()`, `listar_fila_producao()`, `serialize_delivery()`,
+`serialize_order_full()` e `_whatsapp_url()`. Endpoints públicos de verificação, pedido completo e
+vídeo; endpoints internos da fila. `Config.VIRTUAL_VIDEO_FOLDER` novo.
+
+*Frontend* — `FilaProducaoMidiaPage`, validação por telefone + player na `PedidoVirtualPage`, e o
+seletor de presente no checkout.
+
+**Riscos e pegadinhas.**
+
+1. **O vídeo mora fora de `UPLOAD_FOLDER`, e isso não é detalhe.** `/uploads/<path>` é uma rota
+   servida e, com `USE_S3=true`, o `save_file` devolveria uma URL de bucket **público**. Por isso
+   `salvar_video_entrega` grava direto em `VIRTUAL_VIDEO_FOLDER` (irmão de `uploads`) e o arquivo
+   só sai por `GET /api/virtuais/pedidos/<token>/video`, que valida a sessão a cada requisição
+   (FR-038e). `video_path` **nunca** aparece em payload — V6.3 e V6.6 travam isso.
+2. **`send_file(conditional=True)` é o que faz o player funcionar.** Sem `206`/`Range`, arrastar a
+   barra do vídeo baixaria o arquivo inteiro de novo. O teste checa a resposta parcial real, não o
+   cabeçalho `Accept-Ranges` (que o test client não expõe).
+3. **Vídeo gravado não ganha sala do Meet.** Era um bug: a família que comprava um vídeo via
+   "Entrar na chamada" num produto sem chamada. `_criar_evento_google` só pede `conferenceData`
+   quando a modalidade é `ao_vivo`, e `meet_pending` também passou a ser condicionado — senão a
+   fila mostraria "sala pendente" para algo que nunca terá sala. V5.10b trava a regressão.
+4. **A sessão de acesso vive no cookie do Flask** e expira por **inatividade** (30 min), renovando
+   a cada acesso. Cinco erros de telefone bloqueiam por 15 min (FR-044b) — sem isso, o telefone
+   seria adivinhável por quem tropeçasse no link.
+5. **Presente 3D acima de 10 peças usa `Combobox`; abaixo, grade visual.** O Princípio XII.1 exige
+   o combobox pesquisável a partir de 10 itens; com poucas peças, ver o presente é melhor que ler
+   uma lista no celular.
+6. **A fila mostra `pendente`/`gravando`/`finalizado` e nada mais** (FR-048a). Enviar o vídeo é a
+   ação que permite chegar a `finalizado`; finalizar sem vídeo é recusado no servidor (V5.6).
+
+**Verificação.** `verify_205.py` — **90/90 PASS**. V4 (upsell e injeção na Fila 3D), V5 (fila,
+fluxo de status, envio e falha de envio) e V6 (validação dupla, bloqueio por tentativas e varredura
+de vazamento). Mobile conferido em 375px.
+
+### 205c — Loja de Interações Virtuais (efetivação automática da venda)
+`205-loja-interacoes-virtuais` · **2026-07-31** · sem migration nova
+
+> **Entrega parcial.** Cobre a US3 (T059–T089). A venda agora vira operação sozinha. Faltam o
+> upsell 3D no checkout (US4), a fila de produção com entrega de vídeo (US5) e a segregação
+> financeira.
+
+**Motivação.** Fechar a promessa de "atrito zero": pagamento confirmado devia virar evento na
+Agenda, escala de talento, sala de chamada e aviso à família — sem ninguém digitar nada.
+
+**O que mudou.**
+
+*Backend* — `virtuais_ops` ganhou `processar_notificacao_pagamento()`, `efetivar_pedido()`,
+`_abrir_devolucao()`, `_enviar_aviso()`, `extrair_meet_url()` e `regerar_sala()`.
+`calendar/service.insert_event()` passou a aceitar `conference_request_id` (sala do Meet via
+`conferenceData` + `conferenceDataVersion=1`). `calendar/routes` ganhou `_is_virtual_event()` e
+`_sinalizar_divergencia_virtual()`. Três e-mails novos em `email_service`. Webhook, endpoints de
+sala e de devoluções.
+
+*Frontend* — `PedidoVirtualSection` no detalhe do evento (ficha + sala), acesso à chamada na
+página do pedido e a tela `/virtuais/devolucoes`.
+
+**Riscos e pegadinhas.**
+
+1. **A sincronização não encosta em evento virtual.** `sync_events` e `_cleanup_stale_events`
+   pulam `event_type='VIRTUAL'` (FR-029a/029b). Sem isso, editar o evento no Google reescreveria
+   uma venda paga, e apagá-lo lá **deletaria em cascata** o evento, a escala e o presente 3D de um
+   pedido pago. Divergência vira log `virtual_divergente`, nunca propagação.
+2. **`parse_event_type` deriva o tipo do prefixo `(TIPO)` do título.** Eventos virtuais não têm
+   esse prefixo, então o payload da agenda dizia `event_type: ""` e a seção nunca renderizaria.
+   `_event_type_serializado()` faz o fallback **só** para `VIRTUAL`, para não mudar o que a agenda
+   devolve nos demais tipos.
+3. **Idempotência tem duas travas, e as duas são do banco.** `UNIQUE(transaction_nsu)` barra a
+   reentrega do webhook; `UNIQUE(order_id, kind)` barra o segundo e-mail. Ambas gravadas **antes**
+   da ação, para a violação decidir — não a confiança no fluxo.
+4. **Sem id do Google, a venda ainda acontece.** Se a criação do evento externo falhar, o
+   `CalendarEvent` nasce com `google_event_id = "virtual-local-<nsu>"` e `meet_pending=True`. A
+   coluna é NOT NULL e única; a venda não pode cair porque o Google estava fora.
+5. **A sala fica fora da validação dupla, de propósito.** Ela aparece na página do pedido assim
+   que o pagamento confirma — pedir mais uma etapa antes de uma chamada de 10 minutos custaria a
+   experiência inteira. Nome, idade, dicas, endereço e vídeo seguem protegidos (FR-044a).
+6. **`virtual_payment_notifications` sobrevive ao pedido** (a FK é anulada, não cascateada) — é
+   auditoria. Consequência prática: um script de teste que reusa `transaction_nsu` bate em
+   "duplicado" na segunda execução; por isso `verify_205.py` prefixa os ids com um `RUN_ID`.
+
+**Verificação.** `verify_205.py` — **60/60 PASS**, incluindo reentrega quíntupla sem duplicar
+nada, segredo inválido, não pago, valor divergente, operadora indisponível, aviso órfão, conflito
+com devolução e a sincronização completa sem tocar nos eventos virtuais.
+
+### 205b — Loja de Interações Virtuais (checkout público e soft lock)
+`205-loja-interacoes-virtuais` · **2026-07-31** · migration **`a5c81e0cd247`** (*client_token do
+pedido e lock da varredura virtual*)
+
+> **Entrega parcial.** Cobre a US2 (T035–T058). O canal vende até "aguardando pagamento": o
+> webhook ainda não processa nada, então a venda não vira operação sozinha (US3).
+
+**Motivação.** Dar à família o caminho completo de compra sem falar com ninguém — landing,
+checkout, reserva de horário com soft lock e link de pagamento — e um lugar para onde voltar
+depois de pagar.
+
+**O que mudou.**
+
+*Banco* — `virtual_orders.client_token` (idempotência de duplo clique) e
+`site_settings.virtual_sweep_at` (lock de execução única da varredura).
+
+*Backend* — `virtuais_ops` ganhou `reservar()` com `with_for_update()`, os dois limites
+anti-abuso, `expirar_reservas()` com reconsulta antes de liberar, `claim_sweep()` e a política de
+retry. Endpoints públicos de landing, horários, reserva, pedido e autocomplete de endereço.
+Thread `_start_virtual_sweep` em `create_app()`. `Config.PUBLIC_BASE_URL` e
+`Config.VIRTUAL_SWEEP_INTERVAL`.
+
+*Frontend* — `CampanhaVirtualPage` e `PedidoVirtualPage` no app público, rotas `/v/:slug` e
+`/v/pedido/:token`. `GoogleAddressInput` **promovido** para `@manto/ui` e o hook de autocomplete
+para `@manto/api-client` (parametrizado pelo endpoint); cada app ficou com um binding de ~10
+linhas. `apps/internal/src/lib/maps.ts` foi removido. Proxy `/uploads` acrescentado ao
+`vite.config.ts` do app público.
+
+**Riscos e pegadinhas.**
+
+1. **Um relógio só, e ele é São Paulo.** A feature usa `constants.now_sp()` em tudo — horário de
+   slot, soft lock, janela do anti-abuso e os `created_at` das tabelas `virtual_*`. Foi um bug
+   real encontrado na tela: com `datetime.utcnow()` o contador do soft lock mostrava **191
+   minutos** em vez de 12, e horários das próximas 3h sumiam da lista. O resto do sistema segue
+   com `utcnow` nos carimbos de auditoria; **não misture dentro desta feature**.
+2. **FK circular entre `virtual_orders` e `virtual_campaign_slots`.** O slot aponta para o pedido
+   e o pedido aponta para o slot. Para apagar uma campanha é preciso anular `slot.order_id`,
+   apagar os pedidos e só então a campanha — ver `limpar_campanha()` em `verify_205.py`.
+3. **A página do pedido consulta com a aba em segundo plano** (`refetchIntervalInBackground`) e
+   revalida ao voltar o foco. É o caso normal: a família vai pagar em outra aba. Com os padrões
+   globais do app (`staleTime: 30s`, `refetchOnWindowFocus: false`) ela voltaria para uma tela
+   congelada em "aguardando".
+4. **A operadora fica fora da transação do soft lock.** Uma chamada HTTP lenta não pode segurar o
+   lock do slot no banco; se ela falha, a reserva é desfeita e o horário volta ao estoque.
+   Verificado na tela: erro amigável, tudo que a família digitou preservado, slot livre de novo.
+5. **`client_token` ≠ `origin_hash`.** Duas famílias atrás do mesmo NAT compartilham origem; usar
+   a origem como chave de idempotência entregaria o pedido de uma para a outra.
+
+**Verificação.** `verify_205.py` — **35/35 PASS**, incluindo a disputa simultânea com duas
+conexões reais (V2.7/V2.8). Mobile conferido em 375px e 320px: sem rolagem horizontal, nenhum alvo
+abaixo de 44px, nenhum texto abaixo de 12px.
+
+### 205 — Loja de Interações Virtuais (fundação + gestão de campanhas)
+`205-loja-interacoes-virtuais` · **2026-07-31** · migration **`f3a9c72e5d18`** (*loja de
+interacoes virtuais*)
+
+> **Entrega parcial.** Este registro cobre Setup + Foundational + US1 (T001–T034 de
+> `specs/205-loja-interacoes-virtuais/tasks.md`). O checkout público, o webhook de pagamento, a
+> fila de produção e a segregação financeira (US2–US5 + fase Financeiro) ainda não foram
+> implementados — o schema já os contempla, mas o código deles não existe.
+
+**Motivação.** Criar um canal B2C self-service que venda chamadas de vídeo de 10 minutos e vídeos
+gravados com Personagens do catálogo, com atrito comercial zero: a família compra sozinha e a
+entrega operacional (evento na agenda, escala de talento, presente 3D) nasce automática.
+
+**O que mudou.**
+
+*Banco* — sete tabelas novas (`virtual_campaigns`, `virtual_campaign_slots`, `virtual_orders`,
+`virtual_payment_notifications`, `virtual_media_deliveries`, `virtual_refund_requests`,
+`virtual_order_notifications`) mais a associação `virtual_campaign_acervo`. Dois campos novos em
+`site_settings`: `infinitepay_handle` e `infinitepay_webhook_token`. Migration 100% aditiva.
+
+*Backend* — `app/marketing/virtuais_ops.py` (núcleo: CRUD de campanha, geração de horários, acervo
+liberado, serializers); `app/integracoes/infinitepay_client.py` (cliente da operadora);
+`app/api/virtuais_{public,read,write,webhook}.py`. Constantes da feature em `app/constants.py`.
+
+*Frontend* — `frontend/apps/internal/src/lib/virtuais.ts` (tipos + hooks TanStack Query),
+`VirtuaisCampanhasPage.tsx` (listagem) e `VirtuaisCampanhaFormPage.tsx` (edição, geração de
+horários, seleção de acervo via `Combobox` + `AvatarThumb`). Item de menu em `navigation.tsx`.
+
+**Impacto em RBAC.** Novo gate `require_virtuais_access()` — `COMERCIAL` ou `SUPERADMIN`
+(`VIRTUAIS_ADMIN_ROLES` em `constants.py`). Nenhum papel novo foi criado.
+
+**Rotas e endpoints novos.**
+
+| Método | Rota | Acesso |
+|---|---|---|
+| GET | `/api/virtuais/campanhas` | COMERCIAL/SUPERADMIN |
+| POST | `/api/virtuais/campanhas` | COMERCIAL/SUPERADMIN |
+| GET | `/api/virtuais/campanhas/<id>/admin` | COMERCIAL/SUPERADMIN |
+| PATCH | `/api/virtuais/campanhas/<id>` | COMERCIAL/SUPERADMIN |
+| POST | `/api/virtuais/campanhas/<id>/publicar` | COMERCIAL/SUPERADMIN |
+| PUT | `/api/virtuais/campanhas/<id>/acervo` | COMERCIAL/SUPERADMIN |
+| POST | `/api/virtuais/campanhas/<id>/horarios` | COMERCIAL/SUPERADMIN |
+| DELETE | `/api/virtuais/horarios/<id>` | COMERCIAL/SUPERADMIN |
+| GET | `/api/virtuais/campanhas/<slug>` | **público** |
+| GET | `/api/virtuais/campanhas/<slug>/horarios` | **público** |
+| POST | `/api/webhooks/infinitepay/<token>` | **público, com segredo no path** |
+
+Frontend: `/virtuais/campanhas` e `/virtuais/campanhas/:id`.
+
+**Riscos e pegadinhas.**
+
+1. **Dinheiro nunca em centavos fora do cliente da operadora.** A InfinitePay exige centavos
+   inteiros; o resto do sistema é `Numeric(12,2)`/`Decimal` (Princípio IX). A conversão vive
+   exclusivamente em `infinitepay_client.py`, que recusa `float` com `TypeError` de propósito.
+   Nenhuma coluna ou campo de API termina em `_cents`.
+2. **O webhook não decide nada.** A InfinitePay **não assina** seus webhooks e **não publica API
+   de estorno** (levantado na pesquisa da feature). A confiança vem do `payment_check`, não do
+   aviso. O endpoint só valida o segredo do path e responde `404` quando ele falha — `403`
+   confirmaria que o endereço existe.
+3. **Responder `400` no webhook faz a operadora reenviar em loop.** Por isso duplicata, pedido
+   inexistente e conflito respondem `200`; o que precisa de atenção vira registro, não status HTTP.
+4. **Campanha pausada responde `410`, rascunho responde `404`.** A diferença importa para a
+   família saber se errou o endereço ou se a campanha saiu do ar.
+5. **`uq_virtual_slot_campaign_start`** é o que torna a geração de horários idempotente;
+   **`uq_virtual_order_notification_kind`** e o `UNIQUE(transaction_nsu)` são as travas que impedem
+   evento/escala/presente/aviso duplicados quando o webhook é reentregue.
+6. **Eventos virtuais nascerão com `event_type='VIRTUAL'` e `source='platform'`** e a sincronização
+   com o Google Calendar precisa ignorá-los em **todos** os caminhos (importação, atualização,
+   remoção) — ainda **não implementado**, entra na US3. Sem isso, a sincronização corromperia um
+   evento já pago.
+7. **`VirtualOrder.meet_url` ≠ `CalendarEvent.google_html_link`.** O segundo abre o Google Calendar
+   e exige login; o que a família recebe é o link da sala do Meet.
+
+**Verificação.** `specs/205-loja-interacoes-virtuais/verify_205.py` — 18/18 PASS contra
+`manto_local` (V0: fundação monetária; V1: campanha, idempotência de horários, RBAC, 404/410).
+
+### 204b — Múltiplos Temas por postagem de marketing
+`204b-marketing-multiplos-temas` · **2026-07-29** · migration **`b7d4f81a6e0c`** (*marketing
+posts com multiplos temas do catalogo*)
+
+**Motivação.** A feature 204 vinculava cada `MarketingPost` a **um** Tema do catálogo
+(`catalog_item_id`), mas a equipe frequentemente junta vários Temas no mesmo vídeo/post (ex.: um
+Reels que mistura "15 Anos" e "Debutante"). Pedido do usuário para permitir múltiplos Temas por
+postagem.
+
+**O que mudou.**
+
+- **Banco.** `marketing_posts.catalog_item_id` (FK única) virou N:N via a tabela nova
+  `marketing_post_temas` (`post_id`, `catalog_item_id`, FKs `ON DELETE CASCADE` dos dois lados).
+  A migration migra os dados existentes (cada `catalog_item_id` preenchido vira uma linha na
+  tabela nova) antes de remover a coluna antiga — nenhum vínculo se perde. `downgrade()` restaura
+  a coluna, mas com perda: só o Tema de menor id volta quando um post tinha mais de um.
+  `marketing_frequency_goals.catalog_item_id` não muda — a meta continua mirando em **um** Tema.
+- **Backend.** `MarketingPost.temas` (relationship N:N, `lazy="joined"`) substitui
+  `MarketingPost.catalog_item`. `marketing_ops.py`: `_resolve_catalog_items()` (lista, dedup,
+  valida cada id) substitui `_resolve_catalog_item()` para posts; `create_post`/`update_post`
+  recebem `catalog_item_ids` (lista) em vez de `catalog_item_id`; `serialize_post()` devolve
+  `catalog_item_ids`/`catalog_items` (plural). O casamento de `last_published_post()` com a meta
+  de frequência mudou de "post.catalog_item_id == goal.catalog_item_id" para "qualquer um dos
+  Temas do post bate com o da meta" (`MarketingPost.temas.any(...)`) — um post multi-Tema conta
+  para a meta de cada um dos seus Temas.
+- **Frontend.** `MarketingPost.catalog_item_ids`/`catalog_items` (arrays) substituem os campos
+  singulares em `lib/marketing.ts`. `MarketingPostDialog.tsx` ganhou `TemasMultiSelect` — compõe
+  o `Combobox` existente (que continua single-select) como "adicionar" mais uma lista de chips
+  removíveis abaixo, sem precisar de um componente multi-select novo no design system. Kanban e
+  tabela do painel mostram os nomes dos Temas concatenados (`join(", ")`) e a capa do primeiro.
+
+**RBAC.** Sem mudança — mesmo gate (`MARKETING`/`SUPERADMIN`) de antes.
+
+**Pegadinhas.**
+1. **Bug real encontrado e corrigido durante a verificação**: a primeira versão de
+   `TemasMultiSelect` calculava o próximo array de ids a partir do `selectedIds` fechado no
+   closure do `onChange` do `Combobox` (`onChange([...selectedIds, next])`). Em dev, o `Combobox`
+   dispara `onChange` mais de uma vez por seleção (efeito colateral observável do `StrictMode`) —
+   as chamadas duplicadas usavam o mesmo `selectedIds` desatualizado e a seleção anterior era
+   perdida na 2ª escolha. Corrigido trocando para um *updater* funcional
+   (`onChange: (updater: (prev) => prev) => void`, igual ao setter do `useState`) — imune a
+   fechos desatualizados porque sempre aplica sobre o estado mais recente do React, nunca sobre um
+   valor capturado.
+2. O `Combobox` recebe `key={selectedIds.join(",")}` em `TemasMultiSelect`: sem isso, a lista de
+   opções (`options`) já filtrada corretamente não refletia visualmente a exclusão do item recém
+   selecionado — o `useMemo` interno do `Combobox` não invalidava a lista renderizada mesmo com a
+   prop `options` trocando de referência a cada seleção. Forçar o remount por `key` é mais robusto
+   que depender desse `useMemo`.
+3. Verificado por teste funcional (test client Flask contra `manto_local`) e manualmente no
+   Browser pane: criação com 2 Temas, PATCH removendo um, PATCH limpando todos, tema inexistente
+   devolvendo 400 em `catalog_item_ids`, e o fluxo completo criar → aparecer no Kanban com os dois
+   nomes de Tema.
+
+---
 
 ### 204 — Módulo de Gestão de Marketing e Frequência
 `204-modulo-marketing-frequencia` · **2026-07-29** · migration **`a3c7e1d59f42`** (*modulo de

@@ -49,10 +49,10 @@ function PostRow({ post, onOpen }: { post: MarketingPost; onOpen: () => void }) 
     <TableRow>
       <TableCell>
         <div className="flex items-center gap-2">
-          {post.catalog_item && (
+          {post.catalog_items[0] && (
             <AvatarThumb
-              src={assetUrl(post.catalog_item.cover_url)}
-              name={post.catalog_item.name}
+              src={assetUrl(post.catalog_items[0].cover_url)}
+              name={post.catalog_items[0].name}
               shape="square"
               size="md"
               fallbackIcon="🎭"
@@ -60,8 +60,10 @@ function PostRow({ post, onOpen }: { post: MarketingPost; onOpen: () => void }) 
           )}
           <div className="min-w-0">
             <div className="font-medium text-ink">{post.title}</div>
-            {post.catalog_item && (
-              <div className="text-[11px] text-muted">{post.catalog_item.name}</div>
+            {post.catalog_items.length > 0 && (
+              <div className="truncate text-[11px] text-muted">
+                {post.catalog_items.map((item) => item.name).join(", ")}
+              </div>
             )}
           </div>
         </div>

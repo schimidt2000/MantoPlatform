@@ -14,7 +14,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from app import db
-from app.constants import EDUCAMANTO_TITLE_PREFIX
+from app.constants import EDUCAMANTO_TITLE_PREFIX, EVENT_TYPE_VIRTUAL
 from app.models import CalendarEvent, EventContract, EventPayment
 
 # ── Status do contrato do evento (derivado de EventContract) ──────────────────
@@ -187,6 +187,47 @@ def list_closed_sales(
     events = query.all()
     events.sort(key=lambda e: closing_date(e) or date.min, reverse=True)
     return events
+
+
+def is_loja_virtual(event: CalendarEvent) -> bool:
+    """True se a venda veio da Loja de Interações Virtuais (feature 205, FR-052).
+
+    **Fonte única do recorte de canal.** Todo agregador financeiro que precisa separar a loja usa
+    esta função — DRE, KPIs de evento, pipeline comercial e comissões. Espalhar
+    ``event_type == "VIRTUAL"`` pelo código seria a forma garantida de esquecer um ponto, e um
+    ponto esquecido é exatamente como o ticket médio se distorce ou nasce uma comissão fantasma.
+    """
+    return event.event_type == EVENT_TYPE_VIRTUAL
+
+
+def split_por_canal(
+    events: list[CalendarEvent],
+) -> tuple[list[CalendarEvent], list[CalendarEvent]]:
+    """Separa ``(eventos_presenciais, vendas_da_loja_virtual)``.
+
+    A loja é um canal com natureza diferente: dezenas de microvendas de 10 minutos, sem vendedor,
+    fechadas sozinhas. Misturá-las com shows nos mesmos indicadores não é só impreciso — muda a
+    leitura que a equipe faz do próprio desempenho (FR-054).
+    """
+    virtuais = [e for e in events if is_loja_virtual(e)]
+    presenciais = [e for e in events if not is_loja_virtual(e)]
+    return presenciais, virtuais
+
+
+def resumo_loja_virtual(events: list[CalendarEvent]) -> dict[str, Any]:
+    """Consolidado da Loja Virtual para o painel (FR-053).
+
+    A receita **continua** somando no DRE — é dinheiro que entrou. O que muda é que ela aparece
+    identificada, e não diluída dentro dos números de show.
+    """
+    virtuais = [e for e in events if is_loja_virtual(e)]
+    receita = sum((Decimal(e.sale_value or 0) for e in virtuais), Decimal("0"))
+    return {
+        "canal": "Loja Virtual",
+        "vendas": len(virtuais),
+        "receita": float(receita),
+        "ticket_medio": float(receita / len(virtuais)) if virtuais else 0.0,
+    }
 
 
 def billable_sales(sales: list[CalendarEvent]) -> list[CalendarEvent]:

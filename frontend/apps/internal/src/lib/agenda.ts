@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import type { Event3DGift } from "./impressoes3d";
+import type { AvisoFalho } from "./virtuais";
 
 /** Resumo de um evento na agenda (data-model.md: EventoResumo). Sem dado financeiro. */
 export interface EventoResumo {
@@ -197,6 +198,32 @@ export interface EventoDetalhe {
    * a chave ausente é o sinal para não renderizar a seção.
    */
   presentes_3d?: Event3DGift[];
+  /**
+   * Venda da Loja de Interações Virtuais (feature 205) — só vem quando o evento é do tipo
+   * `VIRTUAL`; a chave ausente é o sinal para não renderizar a seção. Traz a ficha que a família
+   * preencheu e o acesso à sala, que é o que o talento escalado precisa para executar.
+   */
+  pedido_virtual?: {
+    order_nsu: string;
+    modality: "ao_vivo" | "gravado";
+    child_name: string;
+    child_age: number;
+    behavior_notes: string | null;
+    contact_phone_display: string | null;
+    contact_email: string;
+    delivery_address: string | null;
+    /** Link da sala do Meet — distinto do link do evento no Google Calendar. */
+    meet_url: string | null;
+    meet_pending: boolean;
+    campaign_title: string | null;
+    /** Id do pedido — endereça as ações de reenvio de aviso e de regeração de sala. */
+    id: number;
+    /** Avisos automáticos que não chegaram à família (FR-039c). */
+    avisos_falhos: AvisoFalho[];
+    /** A política de retry da sala se esgotou: ninguém mais vai tentar sozinho (FR-056a). */
+    meet_retry_esgotado: boolean;
+    meet_attempts: number;
+  };
   ratings?: { items: EventRatingItem[]; average: number | null; count: number };
   client_feedbacks?: ClientFeedbackItem[];
   gastos?: EventGasto[];

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
-import type { PeriodFilter } from "./financeiro";
+import type { LojaVirtualResumo, PeriodFilter } from "./financeiro";
 
 /** Situação do contrato do evento — derivada de `EventContract` no servidor (feature 196). */
 export type ContractStatus = "assinado" | "pendente" | "sem_contrato";
@@ -67,11 +67,25 @@ export interface DashboardComercial {
   eventos: VendaFechada[];
   /** Só chega para gestor. */
   sellers?: VendedorOption[];
+  /**
+   * Consolidado da Loja de Interações Virtuais (feature 205, FR-054/FR-055).
+   *
+   * Só chega para gestor. Vendedor comum não recebe: essas vendas se fecham sozinhas, sem
+   * vendedor, e apareceriam como meta que ninguém bateu no funil de quem vende de verdade.
+   */
+  loja_virtual?: LojaVirtualResumo;
+  /** Reflete o opt-in explícito do gestor (FR-055) — por padrão `false`. */
+  incluir_loja_virtual?: boolean;
 }
 
 export interface DashboardComercialParams {
   period: PeriodFilter;
   sellerId: number | null;
+  /**
+   * Opt-in do gestor para trazer a Loja Virtual para dentro do funil (FR-055). O servidor ignora
+   * o parâmetro para vendedor comum — a decisão de escopo nunca é do cliente.
+   */
+  incluirLojaVirtual?: boolean;
 }
 
 /**
@@ -80,11 +94,16 @@ export interface DashboardComercialParams {
  * O `sellerId` é uma preferência: o servidor ignora o parâmetro para quem não é gestor e
  * devolve sempre as próprias vendas.
  */
-export function useDashboardComercial({ period, sellerId }: DashboardComercialParams) {
+export function useDashboardComercial({
+  period,
+  sellerId,
+  incluirLojaVirtual = false,
+}: DashboardComercialParams) {
   const params = new URLSearchParams({ period });
   if (sellerId !== null) params.set("seller_id", String(sellerId));
+  if (incluirLojaVirtual) params.set("incluir_loja_virtual", "1");
   return useQuery<DashboardComercial>({
-    queryKey: ["vendas-dashboard", period, sellerId],
+    queryKey: ["vendas-dashboard", period, sellerId, incluirLojaVirtual],
     queryFn: () => apiFetch<DashboardComercial>(`/api/vendas/pipeline?${params.toString()}`),
   });
 }

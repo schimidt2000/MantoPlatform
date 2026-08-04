@@ -10,7 +10,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.constants import EVENT_TYPE_SHOW, RoleName
+from app.constants import EVENT_TYPE_SHOW, EVENT_TYPE_VIRTUAL, RoleName
 from app.models import (
     CalendarEvent,
     ClientFeedback,
@@ -30,18 +30,36 @@ def _money(value: Any) -> float | None:
     return float(value) if value is not None else None
 
 
+def _event_type_serializado(event) -> str:
+    """Tipo do evento como o frontend o lê.
+
+    `parse_event_type` extrai o tipo do prefixo `(TIPO)` do título — convenção dos eventos que vêm
+    do Google Calendar. Vendas da Loja de Interações Virtuais (feature 205) nascem na plataforma e
+    **não** carregam esse prefixo: o tipo está na coluna. Sem este fallback, a seção da venda nunca
+    renderizaria, porque o payload diria `event_type: ""`.
+
+    O fallback é deliberadamente estreito (só `VIRTUAL`) para não mudar o que a agenda já devolve
+    para os demais tipos — Princípio IV.
+    """
+    from app.calendar.routes import parse_event_type
+
+    if event.event_type == EVENT_TYPE_VIRTUAL:
+        return EVENT_TYPE_VIRTUAL
+    return parse_event_type(event.title)
+
+
 def serialize_event_summary(event: CalendarEvent) -> dict[str, Any]:
     """Resumo de um evento para a lista/calendário da agenda (data-model.md: EventoResumo).
 
     Sem nenhum dado financeiro — a agenda não expõe valores.
     """
     # Import tardio: parsers vivem no blueprint calendar (evita import circular no boot).
-    from app.calendar.routes import parse_characters, parse_event_type
+    from app.calendar.routes import parse_characters
 
     return {
         "id": event.id,
         "title": event.title,
-        "event_type": parse_event_type(event.title),
+        "event_type": _event_type_serializado(event),
         "start_at": event.start_at.isoformat() if event.start_at else None,
         "end_at": event.end_at.isoformat() if event.end_at else None,
         "location": event.location or None,
@@ -463,7 +481,7 @@ def serialize_event_detail(
     """Detalhe do evento para leitura, com RBAC (data-model.md). Blocos financeiros só
     entram no JSON conforme o papel — nunca serializados para quem não os veria (FR-003).
     """
-    from app.calendar.routes import parse_characters, parse_event_type
+    from app.calendar.routes import parse_characters
 
     flags = _role_flags(user, impersonate)
     is_ensaio = event.event_type == "ENSAIO"
@@ -473,7 +491,7 @@ def serialize_event_detail(
         "event": {
             "id": event.id,
             "title": event.title,
-            "event_type": parse_event_type(event.title),
+            "event_type": _event_type_serializado(event),
             # feature 190 — cabeçalho e bloco de cópia rápida da tela de detalhe.
             "description": event.description or None,
             "google_html_link": event.google_html_link or None,
@@ -517,6 +535,38 @@ def serialize_event_detail(
         from app.impressoes3d.impressoes3d_ops import serialize_gift
 
         data["presentes_3d"] = [serialize_gift(g) for g in event.presentes_3d]
+
+    # Venda da Loja de Interações Virtuais (feature 205) — a ficha que a família preencheu e o
+    # acesso à sala. Mesma convenção dos blocos acima: chave ausente = o React não renderiza nada.
+    # O talento escalado precisa dos dois para executar a chamada (FR-030, FR-036).
+    if event.event_type == EVENT_TYPE_VIRTUAL:
+        from app.marketing import virtuais_ops
+        from app.models import VirtualOrder
+
+        pedido = VirtualOrder.query.filter_by(event_id=event.id).first()
+        if pedido is not None:
+            data["pedido_virtual"] = {
+                "order_nsu": pedido.order_nsu,
+                "modality": pedido.modality,
+                "child_name": pedido.child_name,
+                "child_age": pedido.child_age,
+                "behavior_notes": pedido.behavior_notes,
+                "contact_phone_display": pedido.contact_phone_display or pedido.contact_phone,
+                "contact_email": pedido.contact_email,
+                "delivery_address": pedido.delivery_address,
+                "meet_url": pedido.meet_url,
+                "meet_pending": bool(pedido.meet_pending),
+                "campaign_title": pedido.campaign.title if pedido.campaign else None,
+                # Falhas de aviso e desistência da sala (feature 205, FR-039c/FR-056a). O painel do
+                # evento é onde a equipe abre quando a família liga perguntando — precisa mostrar
+                # que o e-mail não chegou, em vez de deixar a pessoa jurar que enviou.
+                "id": pedido.id,
+                "avisos_falhos": virtuais_ops.serialize_avisos_falhos(pedido),
+                "meet_retry_esgotado": bool(
+                    pedido.meet_pending and virtuais_ops.retry_esgotou(pedido.meet_attempts or 0)
+                ),
+                "meet_attempts": pedido.meet_attempts or 0,
+            }
     data["ratings"] = _serialize_ratings(event.id)
     data["client_feedbacks"] = _serialize_client_feedbacks(event.id)
     data["observations"] = [

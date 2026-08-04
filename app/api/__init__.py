@@ -54,3 +54,7 @@ from app.api import impressoes3d_read as _impressoes3d_read  # noqa: E402,F401
 from app.api import impressoes3d_write as _impressoes3d_write  # noqa: E402,F401
 from app.api import marketing_read as _marketing_read  # noqa: E402,F401
 from app.api import marketing_write as _marketing_write  # noqa: E402,F401
+from app.api import virtuais_public as _virtuais_public  # noqa: E402,F401
+from app.api import virtuais_read as _virtuais_read  # noqa: E402,F401
+from app.api import virtuais_write as _virtuais_write  # noqa: E402,F401
+from app.api import virtuais_webhook as _virtuais_webhook  # noqa: E402,F401

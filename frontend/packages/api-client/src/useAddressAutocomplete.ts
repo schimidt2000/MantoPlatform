@@ -1,13 +1,32 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@manto/api-client";
+import { apiFetch } from "./client";
+
+/**
+ * Autocomplete de endereço do Google Places, via proxy do backend (feature 195; movido para cá na
+ * 205 para o checkout público reusar a mesma implementação).
+ *
+ * A chave do Maps **nunca** chega ao navegador — o hook fala só com o endpoint do Flask
+ * (Princípio XII.4). A busca é debounced e só dispara a partir de `ADDRESS_MIN_CHARS`, para
+ * economizar quota do Places (XII.5).
+ *
+ * O endpoint é parâmetro porque existem dois com o mesmo contrato e gates diferentes:
+ * `/api/maps/address-autocomplete` (staff autenticado) e `/api/virtuais/enderecos/autocomplete`
+ * (checkout público, com teto por origem). A lógica é uma só.
+ */
 
 /** Mesma regra do backend (`AUTOCOMPLETE_MIN_CHARS`) — abaixo disso nem consultamos o Google. */
 export const ADDRESS_MIN_CHARS = 3;
+
 /** Espera depois da última tecla antes de disparar a busca — economiza quota do Places. */
 const DEBOUNCE_MS = 350;
 
-/** Sugestão de endereço devolvida por `GET /api/maps/address-autocomplete` (feature 195). */
+/** Endpoint padrão: o do staff autenticado. */
+export const ADDRESS_ENDPOINT_INTERNAL = "/api/maps/address-autocomplete";
+
+/** Endpoint do checkout público da Loja de Interações Virtuais (feature 205). */
+export const ADDRESS_ENDPOINT_PUBLIC = "/api/virtuais/enderecos/autocomplete";
+
 export interface AddressSuggestion {
   description: string;
   place_id: string;
@@ -23,21 +42,18 @@ function useDebounced<T>(value: T, delayMs: number): T {
   return debounced;
 }
 
-/**
- * Sugestões de endereço do Google Places, via proxy do backend (feature 195).
- *
- * A chave do Maps nunca chega ao navegador: o hook fala só com `/api/maps/address-autocomplete`.
- * A busca é debounced e só dispara a partir de `ADDRESS_MIN_CHARS` caracteres.
- */
-export function useAddressAutocomplete(query: string) {
+export function useAddressAutocomplete(
+  query: string,
+  endpoint: string = ADDRESS_ENDPOINT_INTERNAL,
+) {
   const debouncedQuery = useDebounced(query.trim(), DEBOUNCE_MS);
   const enabled = debouncedQuery.length >= ADDRESS_MIN_CHARS;
 
   const result = useQuery<AddressSuggestion[]>({
-    queryKey: ["maps-address-autocomplete", debouncedQuery],
+    queryKey: ["address-autocomplete", endpoint, debouncedQuery],
     queryFn: async () => {
       const data = await apiFetch<{ items: AddressSuggestion[] }>(
-        `/api/maps/address-autocomplete?q=${encodeURIComponent(debouncedQuery)}`,
+        `${endpoint}?q=${encodeURIComponent(debouncedQuery)}`,
       );
       return data.items;
     },

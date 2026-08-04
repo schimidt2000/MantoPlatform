@@ -3,9 +3,10 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-07-29** · Estado do repositório: pós-feature **204**
-> (`204-modulo-marketing-frequencia`) · Head de migration: `a3c7e1d59f42`
-> (*modulo de gestao de marketing e frequencia*)
+> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **206 (React como
+> interface primária + proxy reverso)**, sobre a 205f (`205-loja-interacoes-virtuais`) ·
+> Head de migration: `c17b3ea94f52` (*progresso persistido das retentativas assíncronas da Loja
+> Virtual* — a 206 não tem migration)
 
 ---
 
@@ -58,6 +59,10 @@ chamam `*_ops` e serializam.
   e histórico).
 - **Jinja legado paralelo**: os `routes.py` dos blueprints já migrados continuam existindo
   (padrão strangler-fig), **incluindo `app/talent_portal`**. Decomissioná-los é limpeza futura.
+- **A raiz não é mais Jinja (feature 206)**: `GET /` no Flask responde 301 para
+  `https://app.mantoproducoes.com.br`, onde o `frontend/server.js` serve os três bundles e faz
+  proxy reverso do que ainda é do backend (§5.2.1). O React é a interface primária de fato — o
+  Flask só é alcançado por `/api`, mídia e a ficha de impressão.
 
 ---
 
@@ -263,25 +268,31 @@ Pontos que valem para quem for ler esses dados:
 | `review_reviewers` | `ReviewReviewer` | revisores atribuídos ao espaço | `space_id`, `user_id` |
 | `review_comments` | `ReviewComment` | comentários com resolução | `asset_id`, `user_id`, `resolved_by` |
 
-### 2.9.1 Gestão de Marketing e Frequência (feature 204)
+### 2.9.1 Gestão de Marketing e Frequência (feature 204, temas múltiplos na 204b)
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `marketing_posts` | `MarketingPost` | card do Kanban de planejamento: `title`, `status` (`ideia`\|`producao`\|`revisao`\|`agendado`\|`publicado`), `deadline_date`, `publish_date`, `platform` (lista fixa `MARKETING_PLATFORMS`), `drive_folder_url` (texto — o acervo bruto segue no Drive), `notes`, `created_at`/`updated_at`; índices em `status`, `catalog_item_id` e `publish_date` | `assignee_id`→`users`, `catalog_item_id`→`catalog_items`, `review_space_id`→`review_spaces` (**UNIQUE**) — os três **ON DELETE SET NULL** |
+| `marketing_posts` | `MarketingPost` | card do Kanban de planejamento: `title`, `status` (`ideia`\|`producao`\|`revisao`\|`agendado`\|`publicado`), `deadline_date`, `publish_date`, `platform` (lista fixa `MARKETING_PLATFORMS`), `drive_folder_url` (texto — o acervo bruto segue no Drive), `notes`, `created_at`/`updated_at`; índices em `status` e `publish_date` | `assignee_id`→`users`, `review_space_id`→`review_spaces` (**UNIQUE**) — **ON DELETE SET NULL** |
+| `marketing_post_temas` | (tabela de associação, sem model próprio) | **N:N** entre post e Tema (feature 204b) — um post pode falar de vários Temas ao mesmo tempo (ex.: Reels que junta "15 Anos" e "Debutante"). PK composta `(post_id, catalog_item_id)` | `post_id`→`marketing_posts`, `catalog_item_id`→`catalog_items` — os dois **ON DELETE CASCADE** |
 | `marketing_frequency_goals` | `MarketingFrequencyGoal` | regra de frequência ("15 Anos a cada 15 dias"): `name`, `target_interval_days`, `created_at` | `catalog_item_id`→`catalog_items` (**ON DELETE SET NULL**, opcional) |
 
 **Semântica importante**
-- **As três FKs são `SET NULL` de propósito**: apagar um usuário, um Tema do catálogo ou um espaço
+- **`assignee_id`/`review_space_id` são `SET NULL` de propósito**: apagar um usuário ou um espaço
   de revisão **não pode** apagar o planejamento de marketing junto. `review_space_id` é **UNIQUE** —
-  o vínculo com a Revisão de Mídia é 1:1 por definição.
+  o vínculo com a Revisão de Mídia é 1:1 por definição. Já `marketing_post_temas` é **CASCADE** dos
+  dois lados: a linha de associação não faz sentido sem o post nem sem o Tema.
+- **Um post pode ter 0, 1 ou vários Temas** (`MarketingPost.temas`, relationship N:N via
+  `marketing_post_temas`, `lazy="joined"`). A API expõe `catalog_item_ids`/`catalog_items`
+  (plural) em vez do antigo `catalog_item_id`/`catalog_item` singular.
 - **A meta não guarda estado de cumprimento.** `last_posted_date`, `next_due_date`, `days_late` e
   o status derivado (`on_track`/`delayed`) são **calculados na leitura** por
   `marketing_ops.goal_health()` a partir dos posts publicados — nada de job noturno, e mover um
   card para "publicado" conserta a saúde da meta na hora.
-- **Casamento meta ↔ post, em dois modos**: com `catalog_item_id`, casa por Tema (exato); sem
-  Tema, casa pelo `name` da meta contido no título do post (`ILIKE`, com os curingas escapados) —
-  serve para assunto que não existe no catálogo (ex.: "Bastidores"). Só entram posts com
-  `status = 'publicado'` **e** `publish_date` preenchida.
+- **Casamento meta ↔ post, em dois modos**: com `catalog_item_id` na meta, casa se **qualquer um**
+  dos Temas do post for o Tema da meta (`MarketingPost.temas.any(...)` — um post multi-Tema conta
+  para cada meta que ele toca); sem Tema na meta, casa pelo `name` da meta contido no título do
+  post (`ILIKE`, com os curingas escapados) — serve para assunto que não existe no catálogo (ex.:
+  "Bastidores"). Só entram posts com `status = 'publicado'` **e** `publish_date` preenchida.
 - Meta **sem nenhum post publicado** é `delayed` com `never_posted = True`: nunca ter postado é o
   atraso máximo, não "em dia".
 - **Regra de negócio do `publish_date`**: marcar um post como `publicado` sem data preenche a data
@@ -303,11 +314,12 @@ Pontos que valem para quem for ler esses dados:
 ### 2.11 Migrations
 
 - Alembic via Flask-Migrate, **sempre escritas à mão** (`migrations/versions/`).
-- Head atual: **`a3c7e1d59f42`** — *modulo de gestao de marketing e frequencia* (feature 204).
+- Head atual: **`b7d4f81a6e0c`** — *marketing posts com multiplos temas do catalogo* (feature 204b).
 - Cadeia recente: `27acb021e8d6` → `aa1bb2cc3dd4` (review asset status) → `7c2d9e4f1a3b`
   (figurino_missing_dismissals) → `4e6f8a1c2d5b` (figurino_sheet tags) → `9f1c3a7b5e2d`
   (catalog characters) → `c8d2f4a6b013` (impressões 3D) → `d9e3a5b7c124` (multi-arquivos)
-  → `e4f7b2c9a350` (pendência 3D por evento) → `a3c7e1d59f42` (marketing).
+  → `e4f7b2c9a350` (pendência 3D por evento) → `a3c7e1d59f42` (marketing) → `b7d4f81a6e0c`
+  (marketing multi-Tema).
 - Features **186**, **187**, **199** e **203** não geraram migration (reusaram colunas existentes).
 - Os papéis `ARTISTA_3D` e `MARKETING` **não** vêm por migration: papéis são linhas de `roles`
   semeadas por `seed.py` (mesmo tratamento de `REVENDEDOR_EDUCAMANTO`), e o Railway roda
@@ -373,8 +385,9 @@ Avaliações: `GET /api/ratings` · `POST /api/ratings/modo-anonimo`.
 ### 3.6 Financeiro — `financeiro_read.py` / `financeiro_write.py`
 | Método | Rota | Nota |
 |---|---|---|
-| GET | `/api/vendas/pipeline` | **Dashboard Comercial** (feature 196 — o payload plano do "pipeline" da 156 deixou de existir). Aceita `period` (`este_mes`/`mes_anterior`/`30d`/`custom`+`start`/`end`) e `seller_id`. Devolve `kpis` (`total_vendido`, `ticket_medio`, `eventos_fechados`, `comissao_prevista`, `desconto_concedido`), `eventos[]` (venda, cliente, contrato, cobrança, vendedor — **sem custo e sem lucro**), `can_filter_seller`, `scope_label` e `sellers` (só gestor). Núcleo em `app/financeiro/vendas_ops.py` |
-| GET | `/api/financeiro/dashboard` | DRE / KPIs — **feature 189**: `kpis` inclui `margem_bruta`, `margem_ebitda`, `tax_rate` (alíquota do `SiteSetting`, rótulo dos impostos provisionados) e as faixas do Fator R (`fator_r_rate_low`/`fator_r_rate_high`); cada item de `eventos[]` inclui `receita` e `event_type` |
+| GET | `/api/vendas/pipeline` | **Dashboard Comercial** (feature 196 — o payload plano do "pipeline" da 156 deixou de existir). Aceita `period` (`este_mes`/`mes_anterior`/`30d`/`custom`+`start`/`end`) e `seller_id`. Devolve `kpis` (`total_vendido`, `ticket_medio`, `eventos_fechados`, `comissao_prevista`, `desconto_concedido`), `eventos[]` (venda, cliente, contrato, cobrança, vendedor — **sem custo e sem lucro**), `can_filter_seller`, `scope_label` e `sellers` (só gestor). Núcleo em `app/financeiro/vendas_ops.py`. **Feature 205**: vendas da Loja Virtual (`event_type='VIRTUAL'`) saem do funil por padrão e voltam com `?incluir_loja_virtual=1`; o consolidado do canal vem em `loja_virtual` **só para gestor** (`can_filter_seller`) |
+| POST | `/api/virtuais/pedidos/<id>/avisos/<kind>/reenviar` | **Feature 205f**: reentrega um aviso automático que falhou (FR-039c). Só age sobre aviso já registrado e **falhado** — reenviar um entregue dá 400, para não mandar um segundo e-mail à família. Gate: `COMERCIAL`/`SUPERADMIN` |
+| GET | `/api/financeiro/dashboard` | DRE / KPIs — **feature 189**: `kpis` inclui `margem_bruta`, `margem_ebitda`, `tax_rate` (alíquota do `SiteSetting`, rótulo dos impostos provisionados) e as faixas do Fator R (`fator_r_rate_low`/`fator_r_rate_high`); cada item de `eventos[]` inclui `receita` e `event_type`. **Feature 205**: a receita virtual continua na cascata da DRE (Fator R e break-even exatos) mas sai de `ticket_medio` e `a_receber_clientes`; `paineis.loja_virtual` traz o consolidado do canal e `?incluir_loja_virtual=1` reincorpora o canal aos indicadores de evento (FR-055) |
 | GET | `/api/financeiro/comissoes` | **feature 187** — KPIs + `by_seller` + `entries` + `can_manage` + `sellers` |
 | GET | `/api/financeiro/pagamentos` | planilha de pagamentos |
 | POST | `/api/financeiro/comissoes/pagar-mes` | **feature 187** — liquidação em lote atômica |
@@ -538,13 +551,13 @@ no máximo 5 itens, descartando predições sem `description`.
   caminho salvo é um UUID, `Acervo3DFile.original_name` guarda o nome enviado — é o que diz qual
   parte do modelo é qual (`corpo.stl`, `argola.3mf`).
 
-### 3.13.3 Marketing e Frequência — `marketing_read.py` / `marketing_write.py` (feature 204)
+### 3.13.3 Marketing e Frequência — `marketing_read.py` / `marketing_write.py` (feature 204, multi-Tema na 204b)
 
 | Método | Rota | O que faz |
 |---|---|---|
 | `GET` | `/api/marketing/posts` | Planejamento completo. `?status=` (validado — status inválido devolve 400) e `?responsavel=<user_id>` filtram. Ordena por prazo mais apertado (sem prazo vai para o fim). Devolve também `statuses` e `plataformas` — a interface monta as colunas do Kanban e o seletor a partir do servidor. |
 | `GET` | `/api/marketing/posts/<id>` | Detalhe de uma postagem (mesmo payload da lista). |
-| `POST` | `/api/marketing/posts` | Cria postagem (JSON). Campos: `title` (obrigatório), `status`, `deadline_date`, `publish_date`, `platform`, `drive_folder_url`, `notes`, `assignee_id`, `catalog_item_id`. |
+| `POST` | `/api/marketing/posts` | Cria postagem (JSON). Campos: `title` (obrigatório), `status`, `deadline_date`, `publish_date`, `platform`, `drive_folder_url`, `notes`, `assignee_id`, `catalog_item_ids` (**lista** de ids do catálogo, feature 204b — ausente/`[]` = sem Tema). |
 | `PATCH` | `/api/marketing/posts/<id>` | Edição **parcial** (campo ausente = não alterar; `null` = limpar). É o endpoint da troca de coluna do Kanban. |
 | `DELETE` | `/api/marketing/posts/<id>` | Exclui a postagem — o `ReviewSpace` vinculado **sobrevive**. |
 | `POST` | `/api/marketing/posts/<id>/create-review` | **Ponte com a Revisão de Mídia**: cria um `ReviewSpace` com o título do post (via `review_ops.create_space`), vincula 1:1 e devolve `{review_space_id, post}` para o frontend redirecionar a `/revisao/<id>`. **400** se já houver espaço vinculado. |
@@ -565,10 +578,107 @@ no máximo 5 itens, descartando predições sem `description`.
 - **`publish_date` automática**: `PATCH {"status": "publicado"}` sem data preenche hoje — é o que
   faz o post contar para as metas de frequência (ver §2.9.1).
 
+### 3.13.4 Loja de Interações Virtuais — `virtuais_*.py` (feature 205, parcial: US1)
+
+Canal B2C que vende chamadas de vídeo de 10 min e vídeos gravados com Personagens do catálogo.
+Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
+`app/integracoes/infinitepay_client.py`.
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET` | `/api/virtuais/campanhas` | Lista campanhas com vendidos, faturado, horários restantes e capacidade de vídeo consumida. |
+| `POST` | `/api/virtuais/campanhas` | Cria campanha (JSON ou multipart com `cover`). Nasce em `rascunho`. |
+| `GET` | `/api/virtuais/campanhas/<id>/admin` | Detalhe completo + `slots` + `available_gift_items` (o Acervo 3D ativo inteiro, para o seletor). |
+| `PATCH` | `/api/virtuais/campanhas/<id>` | Edição parcial (campo ausente = não alterar). |
+| `POST` | `/api/virtuais/campanhas/<id>/publicar` | `{"status": "publicada"\|"pausada"\|"rascunho"}`. Publicar exige preços, capa, prazo e termos — falta de qualquer um vira **400** com o campo culpado. |
+| `PUT` | `/api/virtuais/campanhas/<id>/acervo` | `{"item_ids": [...]}` — substitui a seleção inteira. Peça inativa é recusada. |
+| `POST` | `/api/virtuais/campanhas/<id>/horarios` | `{date, start, end}` → `{created, skipped}`. **Idempotente**: reexecutar a mesma janela devolve tudo em `skipped`. Teto de 500 slots por chamada. |
+| `DELETE` | `/api/virtuais/horarios/<id>` | Remove horário **livre**; reservado/vendido devolve **409**. |
+| `GET` | `/api/virtuais/campanhas/<slug>` | **Público.** Landing. Rascunho → 404; pausada → **410**. |
+| `GET` | `/api/virtuais/campanhas/<slug>/horarios` | **Público.** Só horários disponíveis e futuros; nunca revela quem reservou. |
+| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, com segredo no path** (`SiteSetting.infinitepay_webhook_token`). Só valida o segredo e delega. Segredo errado → **404** (403 confirmaria a existência do endereço). Processamento entra na US3. |
+
+- **RBAC**: os endpoints administrativos exigem `COMERCIAL` **ou** `SUPERADMIN`
+  (`require_virtuais_access()` em `virtuais_read.py`, chamada no início de cada view conforme §4.3).
+- **Dinheiro**: todas as colunas são `Numeric(12,2)` e o JSON trafega **reais decimais**
+  (`"150.00"`), nunca centavos. A InfinitePay exige centavos inteiros, e a conversão vive
+  exclusivamente em `infinitepay_client.py` — que recusa `float` com `TypeError` de propósito
+  (Princípio IX).
+- **Indisponível ≠ não pago**: `consultar_pagamento()` levanta `InfinitePayIndisponivel` em
+  timeout/5xx/resposta ilegível (timeout 10s conexão, 30s leitura). Confundir os dois faria uma
+  queda da operadora liberar produto ou cancelar venda paga.
+**Reserva e soft lock (US2)** — acrescentados na 205b:
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `POST` | `/api/virtuais/campanhas/<slug>/reservar` | **Público.** Cria o pedido, trava o horário por 15 min e devolve o link de pagamento. `400` validação (com campo culpado) · `409` horário/vaga tomada (vem com a lista atualizada) · `429` limite anti-abuso · `502` operadora fora (a reserva já foi desfeita). |
+| `GET` | `/api/virtuais/pedidos/<public_token>` | **Público.** Resumo do pedido: situação, horário, valor e dica do telefone. Nenhum dado de criança. |
+| `GET` | `/api/virtuais/enderecos/autocomplete` | **Público, com teto por origem.** Variante sem login de `/api/maps/address-autocomplete`; reusa `app.maps.address_autocomplete`. |
+
+- **Concorrência**: toda mudança de posse do slot passa por `with_for_update()`. Dois visitantes
+  simultâneos entram em fila no banco; o segundo recebe 409. Coberto por `verify_205.py` V2.7/V2.8
+  com **duas conexões reais**.
+- **Anti-abuso**: uma reserva ativa por telefone (devolve o pedido existente para a família
+  retomar) e teto por origem na janela da campanha. `origin_hash` é SHA-256 com sal de IP +
+  User-Agent — **nunca o IP cru**.
+- **Um relógio só**: `constants.now_sp()` (naive São Paulo) governa horário de slot, soft lock,
+  janela do anti-abuso e os `created_at` das tabelas `virtual_*`. Misturar com `datetime.utcnow()`
+  custa 3 horas de erro — foi bug real, pego na tela.
+- **Varredura**: `_start_virtual_sweep` em `create_app()`, thread daemon no padrão de
+  `_start_calendar_sync`, com claim atômico (`virtual_sweep_at`) para não rodar em dois workers.
+  Antes de liberar um horário vencido, reconsulta a cobrança; se paga, não libera.
+**Efetivação da venda (US3)** — acrescentada na 205c:
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, com segredo no path.** Só valida o segredo e delega a `processar_notificacao_pagamento()`. Segredo errado → `404` (e a tentativa fica registrada). Todos os demais casos → `200`. |
+| `GET` | `/api/virtuais/devolucoes?status=` | Devoluções a executar no painel da operadora. |
+| `PATCH` | `/api/virtuais/devolucoes/<id>` | `{"status": "concluida"}` depois de devolver o dinheiro. |
+| `POST` | `/api/virtuais/pedidos/<id>/sala` | Tenta obter a sala que ficou pendente no Google. |
+
+- **O aviso não decide nada.** `processar_notificacao_pagamento()` registra a notificação (a
+  unicidade de `transaction_nsu` barra a reentrega), trava o slot, **reconsulta a cobrança** e só
+  então decide. Desfechos possíveis: `efetivado`, `duplicado`, `recusado`, `conflito`, `retido`,
+  `orfao` — todos gravados em `virtual_payment_notifications`.
+- **A efetivação é atômica**: evento (`event_type='VIRTUAL'`, `source='platform'`, `sale_value`),
+  ficha, `EventRole` pré-escalado, `VirtualMediaDelivery`, presente 3D na fila existente e baixa de
+  estoque nascem juntos. Falha → rollback e notificação como `retido`.
+- **Sala do Meet** vem da Calendar API (`conferenceData` + `conferenceDataVersion=1`) e fica em
+  `VirtualOrder.meet_url`. **Não confundir** com `CalendarEvent.google_html_link`, que abre o
+  Calendar e exige login. Criação pendente → `meet_pending=True`, venda válida, pendência
+  sinalizada.
+- **Sincronização blindada**: `sync_events` e `_cleanup_stale_events` ignoram eventos `VIRTUAL`.
+  Edição ou remoção feita direto no Google vira log `virtual_divergente`, nunca propagação — um
+  pedido pago não pode ser desfeito por alguém mexendo no calendário.
+**Fila de produção, vídeo e validação dupla (US4/US5)** — acrescentados na 205d:
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `POST` | `/api/virtuais/pedidos/<token>/verificar` | **Público.** Confere o telefone da compra e abre a sessão de acesso. `401` com `attempts_left`; `429` com `blocked_until` após 5 erros. |
+| `GET` | `/api/virtuais/pedidos/<token>/completo` | **Público, sob sessão.** Ficha da criança, presente, endereço e o endereço do vídeo. |
+| `GET` | `/api/virtuais/pedidos/<token>/video` | **Público, sob sessão.** Serve o arquivo com `Range` (`206`). |
+| `GET` | `/api/virtuais/producao` | Fila de Produção, com filtros de campanha, data e status. |
+| `PATCH` | `/api/virtuais/producao/<id>` | `pendente` \| `gravando` \| `finalizado` — nenhum outro. |
+| `POST` | `/api/virtuais/producao/<id>/video` | Recebe o vídeo, finaliza a entrega e avisa a família. |
+
+- **RBAC da fila**: `require_producao_access()` — `COMERCIAL`, `CASTING` ou `SUPERADMIN`.
+- **Onde o vídeo mora**: `Config.VIRTUAL_VIDEO_FOLDER` (padrão `instance/virtual_videos`), **irmão
+  de `uploads`, nunca dentro**. A rota `/uploads/<path>` serve qualquer coisa que caia lá e, com
+  `USE_S3=true`, `save_file` devolveria URL de bucket público. `video_path` é caminho interno e
+  **nunca** sai em payload (FR-038e).
+- **Validação dupla**: o resumo do pedido mostra só situação, horário e valor; nome, idade, dicas,
+  endereço e vídeo exigem o telefone da compra. A sessão vive no cookie e expira por 30 min de
+  inatividade. A **sala** é exceção deliberada — aparece com o pedido pago, porque uma etapa a mais
+  antes de uma chamada de 10 minutos custaria a experiência.
+- **Vídeo gravado não tem sala**: `conferenceData` só é pedido na modalidade `ao_vivo`, e
+  `meet_pending` idem — senão a fila alertaria sobre uma sala que nunca existirá.
+- **Ainda não implementado**: segregação financeira (FR-052–055) e o fechamento do ciclo.
+
 ### 3.14 Superfícies públicas (sem login)
 `GET /api/cadastro/check-cpf` · `POST /api/cadastro` ·
 `GET /api/formularios/<form_type>/schema` · `POST /api/formularios/<form_type>` ·
-`GET|POST /api/avaliar/<token>` (feedback da cliente).
+`GET|POST /api/avaliar/<token>` (feedback da cliente) ·
+`GET /api/virtuais/campanhas/<slug>` e `.../horarios` (feature 205).
 Admin dos formulários: `formularios_admin_read/write.py`
 (`/api/formularios/respostas*`, `/api/formularios/editor/*`). O `_response_summary` de
 `GET /api/formularios/respostas` e `…/respostas/search` inclui **`client_name`** (nome do cliente
@@ -599,6 +709,12 @@ aceita um id de talento vindo do cliente. Não há papéis dentro do portal.
 **Autenticação e conta**
 `POST /api/portal/auth/login`, `/logout` · `GET /api/portal/auth/me` (devolve
 `must_change_password`, `terms_accepted` e `pending_steps`) ·
+
+> `must_redirect_to_classic` **saiu do payload do login na 206**. Virou sempre `false` na 191
+> (troca de senha e aceite de termos passaram a ser telas React, guiadas por `pending_steps`) e
+> foi removido junto com `portal_ops.needs_classic_portal_flow`, que já era código morto — o
+> talento entra sempre no portal React.
+
 `POST /api/portal/auth/first-access` (senha temporária por e-mail) ·
 `POST /api/portal/auth/forgot-password` (silencioso — nunca revela se a conta existe) ·
 `GET /api/portal/auth/reset-password/<token>` (valida o token) ·
@@ -636,8 +752,23 @@ que muda conteúdo grava a versão anterior em `EventRatingVersion` (feature 181
 
 Rotas legadas que **ainda têm uso real** (não são só resíduo):
 - `GET /figurinos/<id>/print` e `GET /figurinos/print-event/<event_id>` — impressão de ficha.
+  Só a **primeira** é linkada pelo React (`FigurinoListPage.tsx`) e, por isso, só ela está no
+  proxy de `server.js`; a `print-event` continua sendo link interno de página Jinja.
 - `GET /catalogo/midia/<path:filename>` — serve as fotos do catálogo público **sem login**.
-- Todo o `app/talent_portal` — Portal do Artista.
+- `GET /portal/photo/<path:filename>` — foto de figurino que `GET /api/portal/events/<id>/figurino`
+  devolve para o portal React; é rota Jinja, mas checa a mesma sessão de talento.
+- Todo o resto do `app/talent_portal` — Portal do Artista Jinja.
+
+**A `home()` Jinja saiu (feature 206).** A rota `/` do Flask não renderiza mais `home.html`:
+devolve **301 para `PLATFORM_BASE_URL`** (`app/config.py`), para capturar acesso residual direto
+ao serviço do backend. Quem serve `/` é o `frontend/server.js`. O `dashboard_service.py` continua
+sendo fonte única — agora com um consumidor só, `/api/dashboard`.
+
+> ⚠️ **Blocos de tarefa que existiam só na home Jinja não têm equivalente em `/api/dashboard`**:
+> reembolsos pendentes, ensaios pendentes/agendados/órfãos, presença pendente, notas fiscais a
+> emitir, eventos sem valor, eventos sem cliente e pré-contratos sem cliente / que precisam de
+> revisão. O template `app/templates/home.html` ficou órfão. Reconstruí-los no React é trabalho
+> em aberto, não coberto pela 206.
 
 ---
 
@@ -763,7 +894,31 @@ o mesmo valor como `basename` ao React Router (`apps/public/src/App.tsx` usa
 `import.meta.env.BASE_URL`). Em dev tudo continua na raiz.
 
 > O Flask também expõe `/portal/*` (Jinja legado), mas em **outro serviço e outro domínio** — não
-> há colisão. O portal React fala com o backend por `/api/portal/*` via `VITE_API_BASE_URL`.
+> há colisão.
+
+### 5.2.1 Proxy reverso para o Flask (feature 206)
+
+`frontend/server.js` deixou de ser só um servidor estático: com o React consolidado como interface
+primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e repassa ao Flask, via
+`http-proxy`, as rotas que ainda são do backend — **antes** de qualquer fallback de SPA. Alvo em
+`BACKEND_URL` (variável do serviço frontend no Railway; default `http://localhost:5000`).
+
+| Filtro | Por que existe |
+|---|---|
+| `/api/*` | toda a API JSON (`@manto/api-client`) |
+| `/uploads/*` | mídia de `app/storage.py`; é o que `assetUrl()` devolve |
+| `/catalogo/midia/*` | fotos públicas do catálogo — casa **antes** do mount `/catalogo` |
+| `/portal/photo/*` | foto de figurino do portal (Jinja, mesma sessão do talento) — **antes** do mount `/portal` |
+| `/figurinos/<id>/print` | única página Jinja que a SPA interna ainda linka; regex restrito ao sub-path |
+
+Os filtros espelham os `server.proxy` dos três `vite.config.ts`, inclusive `changeOrigin: true` —
+sem ele, um `BACKEND_URL` de domínio público faria o roteador de borda do Railway devolver a
+requisição para o próprio serviço frontend, em laço. `xfwd: true` envia os `X-Forwarded-*`. Falha
+de conexão com o backend responde **502**, sem derrubar os SPAs.
+
+> ⚠️ **O proxy só entra em ação com `VITE_API_BASE_URL` vazia no build.** Com ela preenchida,
+> `API_BASE`/`assetUrl()` geram URL absoluta do Flask e o browser fura o proxy — inclusive para
+> `/uploads` e `/figurinos/<id>/print`.
 
 ### 5.3 Serviços no Railway
 
@@ -778,6 +933,7 @@ Healthcheck: `/health`. `sync_worker.py` não roda durante o build da imagem.
 `frontend/nixpacks.toml`):
 - setup: `nodejs_20` · install: `npm ci` · build: `npm run build` (compila **internal e public**)
 - start: `npm run start` → `node server.js`
+- variáveis: `BACKEND_URL` (origem do Flask, ver §5.2.1) e `VITE_API_BASE_URL` **vazia** no build
 
 > ⚠️ Um *Build Command* / *Start Command* customizado no painel do Railway **tem precedência**
 > sobre o `nixpacks.toml`. Os dois campos precisam ficar vazios.

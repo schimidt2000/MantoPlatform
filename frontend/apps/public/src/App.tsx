@@ -9,6 +9,8 @@ import { CadastroSucessoPage } from "./pages/CadastroSucessoPage";
 import { FormularioPage } from "./pages/FormularioPage";
 import { FormularioEnviadoPage } from "./pages/FormularioEnviadoPage";
 import { AvaliarPage } from "./pages/AvaliarPage";
+import { CampanhaVirtualPage } from "./pages/CampanhaVirtualPage";
+import { PedidoVirtualPage } from "./pages/PedidoVirtualPage";
 import { WishlistFloat } from "./components/WishlistFloat";
 
 // Prefixo de rota condicional ao build de produção (feature 186, US6) — mesmo app servido sob
@@ -30,6 +32,10 @@ export function App() {
         <Route path="/f/corporativo" element={<FormularioPage formType="corporativo" />} />
         <Route path="/f/:formType/enviado" element={<FormularioEnviadoPage />} />
         <Route path="/avaliar/:token" element={<AvaliarPage />} />
+        {/* Loja de Interações Virtuais (feature 205). Declaradas antes do catch-all `/:slug`
+            por clareza — são de dois segmentos, então não colidem com ele de qualquer forma. */}
+        <Route path="/v/:slug" element={<CampanhaVirtualPage />} />
+        <Route path="/v/pedido/:token" element={<PedidoVirtualPage />} />
         <Route path="/:slug" element={<ProductDetailPage />} />
       </Routes>
       <WishlistFloat />

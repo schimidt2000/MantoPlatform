@@ -115,6 +115,13 @@ def _commission_beneficiary(event, settings) -> User | None:
 def _event_commission(event, settings) -> Decimal:
     if not event.sale_value:
         return Decimal("0")
+    # Venda da Loja de Interações Virtuais não comissiona (feature 205, FR-054): ela se fecha
+    # sozinha, sem vendedor, e provisionar percentual sobre ela criaria uma despesa que nunca
+    # será paga a ninguém — dinheiro reservado no caixa para um beneficiário que não existe.
+    from app.financeiro.vendas_ops import is_loja_virtual
+
+    if is_loja_virtual(event):
+        return Decimal("0")
     beneficiary = _commission_beneficiary(event, settings)
     if beneficiary and not beneficiary.receives_commission:
         return Decimal("0")
@@ -140,6 +147,13 @@ def _event_commission(event, settings) -> Decimal:
 
 def _sync_commission_payment(event: CalendarEvent) -> None:
     """Cria ou atualiza o CommissionPayment de um evento. Não faz commit."""
+    # Loja Virtual não gera linha de comissão (feature 205, FR-054). O corte é aqui, na origem:
+    # se a linha nunca nasce, nenhum relatório precisa lembrar de escondê-la depois.
+    from app.financeiro.vendas_ops import is_loja_virtual
+
+    if is_loja_virtual(event):
+        return
+
     existing = CommissionPayment.query.filter_by(event_id=event.id).filter(
         CommissionPayment.status != "cancelado"
     ).first()

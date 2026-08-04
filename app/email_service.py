@@ -569,3 +569,133 @@ def _strip_html(html: str) -> str:
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+# ── Loja de Interações Virtuais (feature 205) ────────────────────────────────
+#
+# Os avisos da loja falam com a **família compradora**, não com o time. Por isso o tom é direto e
+# sem jargão, e nenhum deles carrega dado da criança além do primeiro nome: o e-mail leva à página
+# do pedido, onde o acesso exige o telefone da compra (FR-044a).
+#
+# A trava de "no máximo um por pedido e tipo" **não** está aqui: é a restrição
+# `UNIQUE(order_id, kind)` de `virtual_order_notifications`, aplicada em
+# `virtuais_ops._enviar_aviso` antes do disparo (FR-028a/FR-028b).
+
+
+def _virtuais_order_url(order) -> str:
+    """Endereço público de acompanhamento do pedido."""
+    base = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
+    return f"{base}/catalogo/v/pedido/{order.public_token}"
+
+
+def _virtuais_valor(order) -> str:
+    """Valor total no padrão brasileiro (Princípio IX)."""
+    valor = order.total_value or 0
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def send_virtual_order_confirmed_email(order) -> bool:
+    """Confirma a compra de uma interação virtual (FR-035)."""
+    if not order.contact_email:
+        return False
+
+    campanha = order.campaign
+    quando = (
+        order.slot.start_at.strftime("%d/%m/%Y às %H:%M")
+        if order.slot and order.slot.start_at
+        else f"em até {campanha.recorded_delivery_days} dias"
+    )
+    modalidade = (
+        "Chamada de vídeo ao vivo (10 minutos)"
+        if order.modality == "ao_vivo"
+        else "Vídeo gravado"
+    )
+
+    rows = _info_row("Interação", modalidade)
+    rows += _info_row("Para", order.child_name)
+    rows += _info_row("Quando", quando)
+    rows += _info_row("Valor", _virtuais_valor(order))
+
+    url = _virtuais_order_url(order)
+    content = (
+        _greeting(order.child_name.split()[0] if order.child_name else "Olá")
+        + _paragraph(
+            "Recebemos seu pagamento e a interação está garantida! Guarde este e-mail: "
+            "é por ele que você chega à página do pedido."
+        )
+        + _info_box(rows)
+        + _btn("Ver meu pedido →", url)
+        + _paragraph(
+            "Na página do pedido você confirma o telefone da compra e vê o acesso à interação. "
+            "Pedimos o telefone justamente para os dados da sua criança não ficarem abertos a "
+            "quem só tiver o link."
+        )
+    )
+
+    return _send(
+        to=order.contact_email,
+        subject=f"✨ Tudo certo! Sua interação com {campanha.title}",
+        html=_html_wrap(content, preheader=f"Pagamento confirmado — {quando}."),
+    )
+
+
+def send_virtual_order_cancelled_email(order) -> bool:
+    """Avisa o cancelamento por horário indisponível e a devolução em andamento (FR-043a).
+
+    **Não promete prazo** de devolução: quem executa é uma pessoa no painel da operadora, e o
+    sistema não controla esse tempo. Prometer o que não se controla é como a confiança se perde.
+    """
+    if not order.contact_email:
+        return False
+
+    campanha = order.campaign
+    content = (
+        _greeting(order.child_name.split()[0] if order.child_name else "Olá")
+        + _paragraph(
+            "Precisamos te dar uma notícia chata: o horário que você escolheu acabou sendo "
+            "confirmado para outra família antes do seu pagamento chegar até nós."
+        )
+        + _paragraph(
+            f"Seu pedido foi cancelado e a devolução de {_virtuais_valor(order)} já está em "
+            "andamento. Assim que ela for concluída, o valor volta pelo mesmo meio de pagamento."
+        )
+        + _alert_box(
+            "Se quiser tentar outro horário, é só voltar à página da campanha — e qualquer "
+            "dúvida, fale com a gente pelo WhatsApp."
+        )
+        + _btn("Ver outros horários →", f"{(current_app.config.get('PUBLIC_BASE_URL') or '').rstrip('/')}/catalogo/v/{campanha.slug}")
+    )
+
+    return _send(
+        to=order.contact_email,
+        subject="Sobre o seu pedido — precisamos remarcar",
+        html=_html_wrap(content, preheader="O horário foi confirmado para outra família; a devolução está em andamento."),
+    )
+
+
+def send_virtual_video_ready_email(order) -> bool:
+    """Avisa que o vídeo gravado está disponível na página do pedido (FR-039).
+
+    O vídeo **não** vai anexo nem por link direto: o e-mail leva à página do pedido, que exige o
+    telefone da compra. Um vídeo em que o nome da criança é dito em voz alta não pode depender de
+    o link não vazar (FR-038e).
+    """
+    if not order.contact_email:
+        return False
+
+    url = _virtuais_order_url(order)
+    content = (
+        _greeting(order.child_name.split()[0] if order.child_name else "Olá")
+        + _paragraph("O vídeo ficou pronto! É só abrir a página do seu pedido para assistir.")
+        + _btn("Assistir agora →", url)
+        + _paragraph(
+            "Vamos pedir o telefone da compra antes de mostrar o vídeo — é assim que garantimos "
+            "que só você tem acesso."
+        )
+    )
+
+    return _send(
+        to=order.contact_email,
+        subject="🎬 Seu vídeo está pronto!",
+        html=_html_wrap(content, preheader="O vídeo da sua criança já está disponível."),
+    )

@@ -92,11 +92,10 @@ def api_portal_login() -> Any:
     session["talent_id"] = talent.id
     session.permanent = True
 
-    body = _talent_to_dict(talent)
-    # Mantido por compatibilidade com a fatia 176: hoje o próprio React resolve troca de senha e
-    # aceite de termos (`pending_steps`), então nunca mais precisa cair na versão clássica.
-    body["must_redirect_to_classic"] = False
-    return jsonify(body)
+    # `must_redirect_to_classic` (fatia 176) foi removido: troca de senha e aceite de termos são
+    # telas React desde a 191 (`pending_steps`), e o portal Jinja deixou de ser destino de login —
+    # o talento vai sempre para `/portal/*` do bundle React.
+    return jsonify(_talent_to_dict(talent))
 
 
 # ── Fluxos de conta (feature 191) ──────────────────────────────────────────────
