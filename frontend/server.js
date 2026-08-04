@@ -104,6 +104,20 @@ const MOUNTED_APPS = [
 ];
 
 /**
+ * Hosts dedicados ao Portal do Artista, onde a raiz é o portal e não o ERP interno.
+ *
+ * Sem isto, apontar `portal.mantoproducoes.com.br` para este serviço entrega
+ * `apps/internal/dist` — o talento cairia na tela de login do staff. Espelha o
+ * `portal_domain_routing` que o Flask já tinha para o mesmo host.
+ */
+const PORTAL_HOSTS = new Set(
+  (process.env.PORTAL_HOSTS ?? "portal.mantoproducoes.com.br")
+    .split(",")
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+/**
  * Prefixos repassados ao Flask, avaliados antes de qualquer SPA.
  *
  * `/google` é o par connect/callback do OAuth do Google Calendar
@@ -159,6 +173,23 @@ const server = http.createServer((req, res) => {
       badGateway(err);
     }
     return;
+  }
+
+  // Host dedicado ao portal: leva o caminho para dentro de `/portal` antes dos mounts.
+  //
+  // Precisa ser REDIRECT, não reescrita interna: o React Router do portal roda com
+  // `basename="/portal/"` e lê a URL do browser. Reescrevendo só `req.url`, o bundle certo seria
+  // servido mas o roteador não casaria nenhuma rota — tela em branco.
+  //
+  // E preserva o caminho: o link de redefinição de senha que sai por e-mail é
+  // `<PORTAL_URL>/reset-password/<token>`; mandar tudo para `/portal/` descartaria o token.
+  if (req.url && PORTAL_HOSTS.has((req.headers.host ?? "").split(":")[0].toLowerCase())) {
+    if (!matchesPrefix(req.url, "/portal")) {
+      res.statusCode = 302;
+      res.setHeader("location", `/portal${req.url === "/" ? "/" : req.url}`);
+      res.end();
+      return;
+    }
   }
 
   // Fallback existente para os bundles SPA (público, portal, interno).

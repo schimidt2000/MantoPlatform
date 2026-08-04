@@ -86,6 +86,50 @@ for (const [url, expected] of CASES) {
   check(got === expected, `${url.padEnd(34)} → ${got}${got === expected ? "" : ` (esperado ${expected})`}`);
 }
 
+console.log("\n=== Host dedicado do portal ===");
+
+/**
+ * GET com `Host` arbitrário. Precisa ser `node:http` cru: o `fetch` (undici) trata `host` como
+ * header proibido e o descarta silenciosamente — o teste passaria a medir outra coisa.
+ */
+function rawGet(pathname, hostHeader) {
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      { host: "127.0.0.1", port: FRONT_PORT, path: pathname, headers: { Host: hostHeader } },
+      (response) => {
+        let body = "";
+        response.on("data", (chunk) => (body += chunk));
+        response.on("end", () =>
+          resolve({ status: response.statusCode, location: response.headers.location, body }),
+        );
+      },
+    );
+    request.on("error", reject);
+    request.end();
+  });
+}
+
+const PORTAL_HOST = "portal.mantoproducoes.com.br";
+const PORTAL_CASES = [
+  ["/", "/portal/", "raiz vai para o portal, nao para o ERP interno"],
+  ["/reset-password/abc123", "/portal/reset-password/abc123", "token do e-mail preservado"],
+  ["/agenda?x=1", "/portal/agenda?x=1", "query preservada"],
+];
+for (const [url, expected, nota] of PORTAL_CASES) {
+  const r = await rawGet(url, PORTAL_HOST);
+  check(r.status === 302 && r.location === expected, `${url.padEnd(26)} → ${r.status} ${r.location} (${nota})`);
+}
+// Ja dentro de /portal nao pode redirecionar de novo (laco) nem roubar a API.
+const noLoop = await rawGet("/portal/agenda", PORTAL_HOST);
+check(noLoop.status === 200, `/portal/agenda ja prefixado → ${noLoop.status} (sem laco)`);
+check(
+  (await rawGet("/api/auth/me", PORTAL_HOST)).body.startsWith("BACKEND"),
+  "/api no host do portal → ainda vai para o backend",
+);
+// Host normal continua entregando o ERP interno na raiz.
+const internal = await rawGet("/", "app.mantoproducoes.com.br");
+check(internal.status === 200, `/ em app.* → ${internal.status} (ERP interno, sem redirect)`);
+
 console.log("\n=== Cabeçalhos repassados ===");
 const probe = await (await fetch(`http://127.0.0.1:${FRONT_PORT}/api/ping`)).text();
 check(probe.includes(`host=127.0.0.1:${BACKEND_PORT}`), "changeOrigin reescreve o Host para o backend");
