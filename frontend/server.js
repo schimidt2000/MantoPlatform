@@ -42,8 +42,49 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INTERNAL_DIR = path.join(__dirname, "apps/internal/dist");
 const PORT = process.env.PORT || 3000;
 
+/**
+ * Normaliza a origem do Flask vinda de `BACKEND_URL`.
+ *
+ * Sem isto, um valor sem esquema (ex.: `mantoplatform.railway.internal`, que é como o painel do
+ * Railway mostra o domínio privado) **derruba o processo**: `http-proxy` chama `requires-port`
+ * com `protocol === null` e estoura `TypeError` de forma **síncrona**, dentro de `proxy.web` —
+ * antes de qualquer callback de erro. O resultado em produção é o pior possível de diagnosticar:
+ * a página abre normalmente e só as chamadas de API matam o servidor, uma a uma.
+ *
+ * O esquema é deduzido do host: rede privada do Railway, `localhost` e IP falam HTTP; o resto é
+ * domínio público, que fala HTTPS.
+ */
+function resolveBackendUrl(raw) {
+  const value = (raw ?? "").trim();
+  if (!value) return "http://localhost:5000";
+
+  let candidate = value;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(candidate)) {
+    const host = candidate.split("/")[0].split(":")[0];
+    const isLocal =
+      host === "localhost" || host.endsWith(".railway.internal") || /^[\d.]+$/.test(host);
+    candidate = `${isLocal ? "http" : "https"}://${candidate}`;
+    console.warn(
+      `[server] BACKEND_URL="${value}" veio sem esquema — assumindo "${candidate}". ` +
+        `Defina o esquema explicitamente na variável do serviço.`,
+    );
+  }
+
+  try {
+    const parsed = new URL(candidate);
+    if (!parsed.hostname) throw new Error("sem host");
+    return candidate.replace(/\/+$/, "");
+  } catch {
+    console.error(
+      `[server] BACKEND_URL="${value}" é inválida — o proxy vai responder 502. ` +
+        `Use algo como "https://<servico>.up.railway.app".`,
+    );
+    return null;
+  }
+}
+
 /** Origem do Flask. Em produção, definir `BACKEND_URL` nas variáveis do serviço no Railway. */
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
+const BACKEND_URL = resolveBackendUrl(process.env.BACKEND_URL);
 
 /**
  * `changeOrigin: true` reescreve o `Host` para o do backend — mesmo ajuste dos três
@@ -62,8 +103,16 @@ const MOUNTED_APPS = [
   { prefix: "/portal", dir: path.join(__dirname, "apps/portal/dist") },
 ];
 
-/** Prefixos repassados ao Flask, avaliados antes de qualquer SPA. */
-const BACKEND_PREFIXES = ["/api", "/uploads", "/catalogo/midia", "/portal/photo"];
+/**
+ * Prefixos repassados ao Flask, avaliados antes de qualquer SPA.
+ *
+ * `/google` é o par connect/callback do OAuth do Google Calendar
+ * (`app/calendar/routes.py`). Não é mídia nem API, mas precisa estar aqui: o `redirect_uri`
+ * registrado no Google Console é um endereço fixo e, apontando para este domínio, o browser
+ * volta do consentimento direto no fallback de SPA — a reconexão da agenda quebraria em
+ * silêncio. Não há rota `/google` no React Router, então não sombreia nada.
+ */
+const BACKEND_PREFIXES = ["/api", "/uploads", "/catalogo/midia", "/portal/photo", "/google"];
 
 /** Rotas Jinja remanescentes, casadas por regex para não sombrear rotas do React Router. */
 const BACKEND_PATTERNS = [/^\/figurinos\/\d+\/print(?:[/?]|$)/];
@@ -85,15 +134,30 @@ const server = http.createServer((req, res) => {
   // Regras de proxy para o backend Flask — antes dos SPAs, senão o fallback de `/catalogo` e
   // `/portal` devolveria `index.html` no lugar da mídia.
   if (req.url && isBackendRequest(req.url)) {
-    proxy.web(req, res, { target: BACKEND_URL }, (err) => {
-      console.error(`[proxy] ${req.method} ${req.url} → ${BACKEND_URL}:`, err.message);
+    /** Responde 502 sem derrubar o processo. `headersSent` cobre falha no meio do streaming. */
+    const badGateway = (err) => {
+      console.error(`[proxy] ${req.method} ${req.url} → ${BACKEND_URL}: ${err.message}`);
       if (res.headersSent) {
         res.destroy();
         return;
       }
       res.statusCode = 502;
+      res.setHeader("content-type", "text/plain; charset=utf-8");
       res.end("Bad Gateway");
-    });
+    };
+
+    if (!BACKEND_URL) {
+      badGateway(new Error("BACKEND_URL ausente ou inválida"));
+      return;
+    }
+    // O try/catch não é decorativo: `proxy.web` estoura de forma SÍNCRONA para alvo malformado,
+    // fora do callback de erro. Sem ele, a exceção sobe como uncaught e mata o servidor inteiro —
+    // os três SPAs junto com o proxy.
+    try {
+      proxy.web(req, res, { target: BACKEND_URL }, badGateway);
+    } catch (err) {
+      badGateway(err);
+    }
     return;
   }
 
@@ -110,5 +174,9 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   const mounts = MOUNTED_APPS.map(({ prefix }) => `${prefix}/*`).join(", ");
   console.log(`[server] apps/internal em / e apps montados em ${mounts} — porta ${PORT}`);
-  console.log(`[server] proxy para ${BACKEND_URL}: ${BACKEND_PREFIXES.join(", ")}, /figurinos/<id>/print`);
+  console.log(
+    BACKEND_URL
+      ? `[server] proxy para ${BACKEND_URL}: ${BACKEND_PREFIXES.join(", ")}, /figurinos/<id>/print`
+      : `[server] SEM BACKEND_URL válida — ${BACKEND_PREFIXES.join(", ")} e /figurinos/<id>/print responderão 502`,
+  );
 });

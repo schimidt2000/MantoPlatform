@@ -63,6 +63,8 @@ const CASES = [
   ["/portal/photo/ficha.jpg", "backend"],
   ["/portal", "spa:portal"],
   ["/portal/agenda", "spa:portal"],
+  ["/google/callback?code=x", "backend"],
+  ["/google/connect", "backend"],
   ["/figurinos/12/print", "backend"],
   ["/figurinos/12/print?debug=1", "backend"],
   ["/figurinos", "spa:internal"],
