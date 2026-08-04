@@ -73,6 +73,24 @@ afirmam a ausência de `must_redirect_to_classic`.
    ela. `app/templates/home.html` ficou órfão. Reconstruir isso no React é trabalho em aberto.
 6. **O 301 da raiz também vale em desenvolvimento.** `localhost:5000/` joga para produção. O ponto
    de entrada local é o Vite (`localhost:5173`), não a raiz do Flask.
+7. **`BACKEND_URL` sem esquema derrubava o processo — e o sintoma apontava para o lugar errado.**
+   Foi o que causou o incidente no dia da virada. O painel do Railway exibe o domínio privado como
+   `mantoplatform.railway.internal`, e foi assim que a variável entrou. O `http-proxy` repassa o
+   valor ao `requires-port`, que faz `protocol.split(':')` com `protocol` nulo e estoura
+   `TypeError` **de forma síncrona, dentro de `proxy.web`** — antes de qualquer callback de erro.
+   A exceção subia como *uncaught* e matava o Node: a página abria (o SPA era servido antes do
+   crash) e cada chamada de API derrubava o servidor de novo. A borda do Railway devolvia
+   `502 Application failed to respond`, que parece backend fora do ar, não falha de proxy — e
+   custou uma suspeita errada sobre o Flask antes de a causa aparecer.
+   Corrigido em duas camadas: `resolveBackendUrl` normaliza/valida o valor (deduz o esquema pelo
+   host) e `proxy.web` roda em `try/catch`, porque nesse caminho o throw é síncrono. Valor
+   inválido agora responde 502 com os três SPAs de pé.
+8. **A rede privada do Railway não serve como `BACKEND_URL` hoje.** Ela é IPv6-only e o gunicorn
+   sobe com `--bind 0.0.0.0` (IPv4). Usar `mantoplatform.railway.internal` só passa a ser possível
+   trocando o bind para `[::]:$PORT`.
+9. **`/google/*` teve de entrar nos filtros.** O callback do OAuth do Google Calendar é rota Jinja
+   com `redirect_uri` fixo registrado no Google Console; apontando para este domínio, o
+   consentimento voltava no fallback de SPA e a reconexão da agenda quebrava em silêncio.
 
 ### 205f — Loja de Interações Virtuais (resiliência a falha de serviço externo)
 `205-loja-interacoes-virtuais` · **2026-08-04** · migration `c17b3ea94f52`

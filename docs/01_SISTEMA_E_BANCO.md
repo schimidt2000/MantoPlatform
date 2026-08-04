@@ -909,7 +909,19 @@ primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e 
 | `/uploads/*` | mídia de `app/storage.py`; é o que `assetUrl()` devolve |
 | `/catalogo/midia/*` | fotos públicas do catálogo — casa **antes** do mount `/catalogo` |
 | `/portal/photo/*` | foto de figurino do portal (Jinja, mesma sessão do talento) — **antes** do mount `/portal` |
+| `/google/*` | callback do OAuth do Google Calendar (`app/calendar/routes.py`), rota Jinja com `redirect_uri` fixo no Google Console |
 | `/figurinos/<id>/print` | única página Jinja que a SPA interna ainda linka; regex restrito ao sub-path |
+
+> ⚠️ **`BACKEND_URL` precisa do esquema.** `mantoplatform.railway.internal` (como o painel do
+> Railway exibe o domínio privado) fazia o `http-proxy` estourar `TypeError` **síncrono** dentro
+> de `proxy.web`, fora do callback de erro — exceção não capturada que **matava o processo a cada
+> chamada de API**. `resolveBackendUrl` agora normaliza e valida, e `proxy.web` roda em
+> `try/catch`; valor inválido vira 502 com os SPAs de pé. Ainda assim, defina explicitamente:
+> `https://mantoplatform-production.up.railway.app`.
+>
+> A rede privada (`http://mantoplatform.railway.internal:<porta>`) **não funciona hoje**: o
+> gunicorn sobe com `--bind 0.0.0.0` (só IPv4) e a rede privada do Railway é IPv6-only. Para
+> migrar para ela, troque o bind para `[::]:$PORT` em `railway.json` e `nixpacks.toml`.
 
 Os filtros espelham os `server.proxy` dos três `vite.config.ts`, inclusive `changeOrigin: true` —
 sem ele, um `BACKEND_URL` de domínio público faria o roteador de borda do Railway devolver a
