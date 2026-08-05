@@ -1100,6 +1100,162 @@ def api_delete_material(material_id: int) -> Any:
     return _event_detail_json(event)
 
 
+# ── Ensaios: agendamento, edição, exclusão, vínculo e presença (restaurado na 206) ────────
+
+
+def _can_ensaio() -> bool:
+    """Gate das ações de ensaio (`_CAN_ENSAIO` = Ensaio/Casting/Superadmin) — paridade Jinja."""
+    from app.calendar.routes import _CAN_ENSAIO
+
+    return any(r.name.upper() in _CAN_ENSAIO for r in current_user.roles)
+
+
+@api_bp.route("/events/<int:event_id>/ensaios", methods=["POST"])
+@api_login_required
+def api_create_ensaio(event_id: int) -> Any:
+    """Agenda um ensaio para o show (Google Calendar + banco). RBAC = `_CAN_ENSAIO`.
+
+    Corpo JSON: `{"date": "YYYY-MM-DD", "start": "HH:MM", "end": "HH:MM", "description",
+    "location_type": "manto"|"outro", "location"}`.
+    """
+    from app.calendar.event_ops import (
+        EnsaioValidationError,
+        create_ensaio,
+        resolve_ensaio_location,
+    )
+
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if event.event_type == "ENSAIO":
+        return json_error("Um ensaio não pode ter outro ensaio.", 400)
+    if not _can_ensaio():
+        return json_error("Sem permissão", 403)
+
+    body = request.get_json(silent=True) or {}
+    try:
+        create_ensaio(
+            event,
+            date_str=body.get("date") or "",
+            start_str=body.get("start") or "",
+            end_str=body.get("end") or "",
+            description=body.get("description") or "",
+            location=resolve_ensaio_location(
+                body.get("location_type") or "manto", body.get("location") or ""
+            ),
+        )
+    except EnsaioValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except RuntimeError as exc:
+        return json_error(f"Erro ao criar no Google Calendar: {exc}", 502)
+    return _event_detail_json(event), 201
+
+
+@api_bp.route("/ensaios/<int:ensaio_id>", methods=["PATCH"])
+@api_login_required
+def api_update_ensaio(ensaio_id: int) -> Any:
+    """Edita data/hora/descrição/local de um ensaio. RBAC = `_CAN_ENSAIO`."""
+    from app.calendar.event_ops import EnsaioValidationError, update_ensaio
+
+    ensaio = CalendarEvent.query.get(ensaio_id)
+    if ensaio is None or ensaio.event_type != "ENSAIO":
+        return json_error("Ensaio não encontrado", 404)
+    if not _can_ensaio():
+        return json_error("Sem permissão", 403)
+
+    body = request.get_json(silent=True) or {}
+    try:
+        warning = update_ensaio(
+            ensaio,
+            date_str=body.get("date") or "",
+            start_str=body.get("start") or "",
+            end_str=body.get("end") or "",
+            description=body.get("description") or "",
+            location=body.get("location") or "",
+        )
+    except EnsaioValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+
+    # A resposta é o detalhe do SHOW pai quando houver (é a tela que o painel refaz).
+    target = ensaio.parent or ensaio
+    response = serialize_event_detail(target, current_user, session.get("impersonate_role"))
+    if warning:
+        response["warning"] = warning
+    return jsonify(response)
+
+
+@api_bp.route("/ensaios/<int:ensaio_id>", methods=["DELETE"])
+@api_login_required
+def api_delete_ensaio(ensaio_id: int) -> Any:
+    """Cancela um ensaio (Google + banco), sem afetar o show pai. RBAC = `_CAN_ENSAIO`."""
+    from app.calendar.event_ops import delete_ensaio
+
+    ensaio = CalendarEvent.query.get(ensaio_id)
+    if ensaio is None or ensaio.event_type != "ENSAIO":
+        return json_error("Ensaio não encontrado", 404)
+    if not _can_ensaio():
+        return json_error("Sem permissão", 403)
+
+    parent = ensaio.parent
+    warning = delete_ensaio(ensaio)
+    if parent is not None:
+        response = serialize_event_detail(parent, current_user, session.get("impersonate_role"))
+        if warning:
+            response["warning"] = warning
+        return jsonify(response)
+    return jsonify({"ok": True, "warning": warning})
+
+
+@api_bp.route("/ensaios/<int:ensaio_id>/vincular", methods=["POST"])
+@api_login_required
+def api_link_ensaio(ensaio_id: int) -> Any:
+    """Vincula um ensaio órfão a um show (feature 063). Corpo: `{"parent_event_id": int}`."""
+    from app.calendar.event_ops import link_ensaio_to_show
+
+    ensaio = CalendarEvent.query.get(ensaio_id)
+    if ensaio is None or ensaio.event_type != "ENSAIO":
+        return json_error("Ensaio não encontrado", 404)
+    if not _can_ensaio():
+        return json_error("Sem permissão", 403)
+
+    body = request.get_json(silent=True) or {}
+    parent_id = body.get("parent_event_id")
+    parent = CalendarEvent.query.get(parent_id) if parent_id else None
+    if parent is None or parent.event_type == "ENSAIO" or parent.id == ensaio.id:
+        return json_error(
+            "Show inválido para vínculo.", 400, fields={"parent_event_id": "Selecione um show"}
+        )
+
+    link_ensaio_to_show(ensaio, parent, actor_name=current_user.name)
+    return _event_detail_json(ensaio)
+
+
+@api_bp.route("/events/<int:event_id>/presenca", methods=["POST"])
+@api_login_required
+def api_assign_presence(event_id: int) -> Any:
+    """Define (ou limpa) o Técnico de Som (Presença) — tarefa da equipe de ensaio.
+
+    Corpo: `{"talent_id": int | null}`. RBAC = `_CAN_ENSAIO` (paridade com
+    `_handle_assign_tech_presence` do Jinja).
+    """
+    from zoneinfo import ZoneInfo
+
+    from app.calendar.event_ops import assign_tech_presence
+
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_ensaio():
+        return json_error("Sem permissão", 403)
+
+    body = request.get_json(silent=True) or {}
+    raw = body.get("talent_id")
+    talent_id = int(raw) if isinstance(raw, int) or (isinstance(raw, str) and raw.isdigit()) else None
+    if not assign_tech_presence(event, talent_id, tz=ZoneInfo("America/Sao_Paulo")):
+        return json_error("Este evento não tem a vaga de presença.", 400)
+    return _event_detail_json(event)
+
+
 @api_bp.route("/events/<int:event_id>/feedback-link", methods=["POST"])
 @api_login_required
 def api_feedback_link(event_id: int) -> Any:

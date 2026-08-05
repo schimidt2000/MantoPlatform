@@ -723,3 +723,194 @@ def search_events(q: str, limit: int = SEARCH_LIMIT) -> list[Any]:
         .limit(limit)
         .all()
     )
+
+
+# ── Ensaios: agendamento e presença (paridade com as rotas Jinja, pós-206) ─────
+#
+# Núcleo extraído de `create_ensaio`/`edit_ensaio`/`delete_ensaio`/`link_ensaio_parent` e
+# `_handle_assign_tech_presence` de `app/calendar/routes.py`, para os endpoints JSON de
+# `app/api/agenda_write.py` — a equipe de ensaio perdeu essas ações na aposentadoria das
+# páginas Jinja. Algumas dependências (CALENDAR_ID, `_clear_event_side_tables`,
+# PRESENCE_CHARACTER) são importadas EM RUNTIME de `routes` — só dentro das funções, nunca
+# no topo, para não criar ciclo de import no boot (routes → event_ops).
+
+ENSAIO_TITLE_PREFIX = "🟧 ENSAIO — "
+
+
+class EnsaioValidationError(ValueError):
+    """Erro de validação de agendamento de ensaio, com o campo apontado."""
+
+    def __init__(self, field: str, message: str) -> None:
+        super().__init__(message)
+        self.field = field
+        self.message = message
+
+
+def _parse_hhmm(raw: str, field: str) -> Any:
+    """`"HH:MM"` → `datetime.time`; formato inválido vira `EnsaioValidationError`."""
+    from datetime import time as _time
+
+    parts = (raw or "").strip().split(":")
+    try:
+        hour, minute = int(parts[0]), int(parts[1])
+        return _time(hour, minute)
+    except (IndexError, ValueError) as exc:
+        raise EnsaioValidationError(field, "Horário inválido (use HH:MM).") from exc
+
+
+def build_ensaio_times(date_str: str, start_str: str, end_str: str) -> tuple[datetime, datetime]:
+    """Combina data + HH:MM em início/fim, com a regra da meia-noite da `_build_start_end`.
+
+    Fim menor que o início = evento cruza a meia-noite (fim no dia seguinte, feature 071);
+    fim IGUAL ao início é rejeitado.
+    """
+    try:
+        d = date.fromisoformat((date_str or "").strip())
+    except ValueError:
+        raise EnsaioValidationError("date", "Data inválida.")
+
+    start = datetime.combine(d, _parse_hhmm(start_str, "start"))
+    end = datetime.combine(d, _parse_hhmm(end_str, "end"))
+    if end < start:
+        end += timedelta(days=1)
+    if end == start:
+        raise EnsaioValidationError("end", "Horário de fim deve ser diferente do início.")
+    return start, end
+
+
+def resolve_ensaio_location(location_type: str, custom_location: str) -> str:
+    """Local do ensaio: "outro" com endereço preenchido, senão o endereço da Manto."""
+    from app.models import SiteSetting
+
+    custom = (custom_location or "").strip()
+    if (location_type or "").strip() == "outro" and custom:
+        return custom
+    settings = SiteSetting.query.get(1)
+    return (settings.manto_address or "") if settings else ""
+
+
+def create_ensaio(
+    parent: Any,
+    *,
+    date_str: str,
+    start_str: str,
+    end_str: str,
+    description: str,
+    location: str,
+) -> Any:
+    """Cria um ensaio vinculado ao show `parent` (Google Calendar + banco).
+
+    Raises:
+        EnsaioValidationError: data/horário inválidos.
+        RuntimeError: falha na criação no Google Calendar (nada é gravado no banco).
+    """
+    from app.calendar.routes import CALENDAR_ID
+    from app.calendar.service import insert_event
+    from app.models import CalendarEvent
+
+    start, end = build_ensaio_times(date_str, start_str, end_str)
+    title = f"{ENSAIO_TITLE_PREFIX}{parent.title}"
+    desc = (description or "").strip()
+
+    created = insert_event(CALENDAR_ID, title, start, end, description=desc, location=location)
+    ensaio = CalendarEvent(
+        google_event_id=created["id"],
+        title=title,
+        description=desc or None,
+        location=location or None,
+        start_at=start,
+        end_at=end,
+        event_type="ENSAIO",
+        parent_event_id=parent.id,
+    )
+    db.session.add(ensaio)
+    db.session.commit()
+    return ensaio
+
+
+def update_ensaio(
+    ensaio: Any,
+    *,
+    date_str: str,
+    start_str: str,
+    end_str: str,
+    description: str,
+    location: str,
+) -> str | None:
+    """Edita data/hora/descrição/local de um ensaio. Retorna aviso se o Google falhar."""
+    from app.calendar.routes import CALENDAR_ID
+    from app.calendar.service import update_event
+
+    start, end = build_ensaio_times(date_str, start_str, end_str)
+    desc = (description or "").strip()
+    ensaio.start_at = start
+    ensaio.end_at = end
+    ensaio.description = desc or None
+    new_location = (location or "").strip()
+    if new_location:
+        ensaio.location = new_location
+    db.session.commit()
+
+    if ensaio.google_event_id:
+        try:
+            update_event(
+                CALENDAR_ID, ensaio.google_event_id, ensaio.title, start, end,
+                description=desc, location=ensaio.location or "",
+            )
+        except RuntimeError as exc:
+            return f"Salvo no banco, mas erro ao atualizar o Google Calendar: {exc}"
+    return None
+
+
+def delete_ensaio(ensaio: Any) -> str | None:
+    """Cancela um ensaio (Google + banco). Retorna aviso se o Google falhar.
+
+    A limpeza de tabelas satélite (`_clear_event_side_tables`) é a mesma da rota Jinja —
+    sem ela o DELETE viola FK quando o ensaio tem histórico.
+    """
+    from app.calendar.routes import CALENDAR_ID, _clear_event_side_tables
+    from app.calendar.service import delete_event
+
+    warning = None
+    if ensaio.google_event_id:
+        try:
+            delete_event(CALENDAR_ID, ensaio.google_event_id)
+        except Exception as exc:  # noqa: BLE001 — falha do Google não trava a exclusão local
+            logger.exception("Falha ao remover ensaio %s do Google Agenda", ensaio.id)
+            warning = f"Removido do banco, mas erro ao remover do Google Calendar: {exc}"
+
+    _clear_event_side_tables(ensaio.id)
+    db.session.delete(ensaio)
+    db.session.commit()
+    return warning
+
+
+def link_ensaio_to_show(ensaio: Any, parent: Any, actor_name: str) -> None:
+    """Vincula um ensaio órfão a um show (feature 063), com registro no log do ensaio."""
+    ensaio.parent_event_id = parent.id
+    db.session.add(EventLog(
+        event_id=ensaio.id,
+        actor_name=actor_name,
+        actor_role="Ensaio",
+        message=f"Vinculou o ensaio ao show: {parent.title}",
+    ))
+    db.session.commit()
+
+
+def assign_tech_presence(event: Any, talent_id: int | None, tz: ZoneInfo) -> bool:
+    """Define (ou limpa) o talento da vaga 'Técnico de Som (Presença)' — tarefa do ensaio.
+
+    Só toca o `talent_id` da role de presença; cachê e figurino ficam intactos (paridade
+    com `_handle_assign_tech_presence`). Retorna False se o evento não tem a vaga.
+    """
+    from app.calendar.routes import PRESENCE_CHARACTER
+
+    role = EventRole.query.filter_by(
+        event_id=event.id, character_name=PRESENCE_CHARACTER, role_type="extra"
+    ).first()
+    if not role:
+        return False
+    role.talent_id = talent_id
+    role.assigned_at = datetime.now(tz=tz) if talent_id else None
+    db.session.commit()
+    return True

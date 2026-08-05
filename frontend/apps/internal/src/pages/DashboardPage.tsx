@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "framer-motion";
@@ -5,7 +6,13 @@ import { apiFetch } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, MetricBadge, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { useCurrentUser } from "../lib/useAuth";
-import type { DashboardSummary, DashboardTaskRef, PendingPayment } from "../lib/types";
+import type {
+  DashboardSummary,
+  DashboardTaskRef,
+  EnsaioEventRef,
+  EnsaioSummary,
+  PendingPayment,
+} from "../lib/types";
 import { SectorPanel, getUrgency } from "../components/SectorPanel";
 
 function DashboardSkeleton() {
@@ -43,6 +50,107 @@ function TaskRow({ task }: { task: DashboardTaskRef }) {
         <Link to={`/events/${task.event_id}`}>Abrir</Link>
       </Button>
     </div>
+  );
+}
+
+/** Linha de evento do painel de Ensaio (sem cargo — o link é o próprio evento). */
+function EnsaioEventRow({ item, extra }: { item: EnsaioEventRef; extra?: string }) {
+  const urgency = getUrgency(item.start_at);
+  return (
+    <div
+      className="-mx-4 flex items-center justify-between gap-3 border-b border-line px-4 py-2.5 text-sm last:border-b-0"
+      style={urgency ? { background: urgency.rowBackground } : undefined}
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 font-medium text-ink">
+          <Link to={`/events/${item.event_id}`} className="min-w-0 truncate hover:underline">
+            {item.event_title}
+          </Link>
+          {urgency && (
+            <MetricBadge tone={urgency.tone} size="xs">
+              {urgency.label}
+            </MetricBadge>
+          )}
+        </div>
+        <div className="text-muted">
+          {item.start_at && new Date(item.start_at).toLocaleDateString("pt-BR")}
+          {extra && ` — ${extra}`}
+        </div>
+      </div>
+      <Button asChild variant="outline" size="sm" className="shrink-0">
+        <Link to={`/events/${item.event_id}`}>Abrir</Link>
+      </Button>
+    </div>
+  );
+}
+
+/** Sub-lista com título dentro do painel de Ensaio. */
+function EnsaioGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1 pt-2 first:pt-0">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted">{title}</p>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Painel do papel ENSAIO — as quatro listas restauradas da home Jinja (206): shows a
+ * agendar, agendados, ensaios órfãos e a vaga de Técnico de Som (Presença) sem talento.
+ */
+function EnsaioPanel({ summary }: { summary: EnsaioSummary }) {
+  const pendencias =
+    summary.pending.length + summary.orphans.length + summary.pending_presence.length;
+  return (
+    <SectorPanel title="🎭 Ensaio" count={pendencias}>
+      <div className="space-y-3">
+        <EnsaioGroup title={`A agendar (${summary.pending.length})`}>
+          {summary.pending.length === 0 ? (
+            <p className="py-1 text-sm text-muted">Nenhum show esperando ensaio.</p>
+          ) : (
+            summary.pending.map((item) => <EnsaioEventRow key={item.event_id} item={item} />)
+          )}
+        </EnsaioGroup>
+
+        <EnsaioGroup title={`Presença pendente (${summary.pending_presence.length})`}>
+          {summary.pending_presence.length === 0 ? (
+            <p className="py-1 text-sm text-muted">Técnico definido em todos os shows.</p>
+          ) : (
+            summary.pending_presence.map((t) => (
+              <TaskRow key={t.role_id ?? `${t.event_id}-presenca`} task={t} />
+            ))
+          )}
+        </EnsaioGroup>
+
+        {summary.orphans.length > 0 && (
+          <EnsaioGroup title={`Ensaios órfãos (${summary.orphans.length})`}>
+            {summary.orphans.map((item) => (
+              <EnsaioEventRow key={item.event_id} item={item} extra="show original removido" />
+            ))}
+          </EnsaioGroup>
+        )}
+
+        {summary.scheduled.length > 0 && (
+          <EnsaioGroup title={`Agendados (${summary.scheduled.length})`}>
+            {summary.scheduled.map((item) => (
+              <EnsaioEventRow
+                key={item.event_id}
+                item={item}
+                extra={`ensaio: ${item.ensaios
+                  .filter(Boolean)
+                  .map((iso) =>
+                    new Date(iso as string).toLocaleDateString("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                    }),
+                  )
+                  .join(", ")}`}
+              />
+            ))}
+          </EnsaioGroup>
+        )}
+      </div>
+    </SectorPanel>
   );
 }
 
@@ -141,6 +249,8 @@ export function DashboardPage() {
             </SectorPanel>
           )}
 
+          {dashboard.data.ensaio && <EnsaioPanel summary={dashboard.data.ensaio} />}
+
           {dashboard.data.comercial && (
             <SectorPanel title="💼 Comercial" count={dashboard.data.comercial.pending_payments.length}>
               {dashboard.data.comercial.pending_payments.length === 0 ? (
@@ -187,6 +297,7 @@ export function DashboardPage() {
 
           {!dashboard.data.casting &&
             !dashboard.data.figurino &&
+            !dashboard.data.ensaio &&
             !dashboard.data.comercial &&
             !dashboard.data.financeiro && (
               <Card>

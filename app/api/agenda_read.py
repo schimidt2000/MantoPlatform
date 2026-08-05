@@ -544,9 +544,43 @@ def serialize_event_detail(
     if flags["is_superadmin"]:
         data["logs"] = _serialize_logs(event.id)
 
-    # ENSAIO: painel simplificado (sem seções de show).
+    # ENSAIO: painel simplificado (sem seções de show) + vínculo com o show pai — o painel
+    # de ensaio do React usa `ensaio_pai` para mostrar/gerenciar órfãos (feature 057/063).
     if is_ensaio:
+        parent = event.parent
+        data["ensaio_pai"] = {"id": parent.id, "title": parent.title} if parent else None
         return data
+
+    # Ensaios agendados do show + vaga de presença — painel da equipe de ensaio (restaurado
+    # na 206; as ações de escrita são gated por `flags["show_ensaio"]` nos endpoints).
+    data["ensaios"] = [
+        {
+            "id": en.id,
+            "start_at": en.start_at.isoformat() if en.start_at else None,
+            "end_at": en.end_at.isoformat() if en.end_at else None,
+            "description": en.description or None,
+            "location": en.location or None,
+        }
+        for en in sorted(event.ensaios, key=lambda x: (x.start_at is None, x.start_at))
+    ]
+    from app.calendar.routes import PRESENCE_CHARACTER
+
+    presence_role = next(
+        (
+            r for r in event.roles
+            if r.character_name == PRESENCE_CHARACTER and r.role_type == "extra"
+        ),
+        None,
+    )
+    data["presenca"] = (
+        {
+            "role_id": presence_role.id,
+            "talent_id": presence_role.talent_id,
+            "talent_name": presence_role.talent.full_name if presence_role.talent else None,
+        }
+        if presence_role
+        else None
+    )
 
     from app.calendar.event_ops import talent_availability
 

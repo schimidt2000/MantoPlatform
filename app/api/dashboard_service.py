@@ -111,6 +111,90 @@ def compute_dismissed_casting_tasks(cutoff: datetime) -> list[EventRole]:
     )
 
 
+def compute_ensaio_tasks(cutoff: datetime) -> dict[str, Any]:
+    """Pendências da equipe de ensaio — mesmas quatro listas da home Jinja aposentada (206).
+
+    - ``pending``: shows futuros que precisam de ensaio e ainda não têm nenhum agendado;
+    - ``scheduled``: shows futuros com ensaio(s) agendado(s);
+    - ``orphans``: eventos ENSAIO (desde o corte) cujo show pai não existe mais (feature 057);
+    - ``pending_presence``: vaga 'Técnico de Som (Presença)' sem talento em shows futuros.
+    """
+    from app.calendar.routes import PRESENCE_CHARACTER
+
+    exclude_ensaios = not_(CalendarEvent.title.like("🟧 ENSAIO%"))
+    now = datetime.utcnow()
+
+    future_shows = (
+        CalendarEvent.query
+        .filter(
+            db.or_(
+                CalendarEvent.needs_rehearsal == True,  # noqa: E712 — expressão SQLAlchemy
+                CalendarEvent.event_type == "SHOW",
+            ),
+            CalendarEvent.event_type != "ENSAIO",
+            CalendarEvent.start_at >= now,
+        )
+        .order_by(CalendarEvent.start_at.asc())
+        .all()
+    )
+    pending = [e for e in future_shows if not e.ensaios]
+    scheduled = [e for e in future_shows if e.ensaios]
+
+    # `parent is None` cobre FK nulo e FK apontando para show já removido (feature 057);
+    # corte na data de início do sistema para não poluir com órfãos antigos (feature 060).
+    orphans = [
+        e for e in CalendarEvent.query
+        .filter(CalendarEvent.event_type == "ENSAIO", CalendarEvent.start_at >= cutoff)
+        .order_by(CalendarEvent.start_at.asc())
+        .all()
+        if e.parent is None
+    ]
+
+    pending_presence = (
+        EventRole.query
+        .filter(EventRole.talent_id.is_(None), EventRole.character_name == PRESENCE_CHARACTER)
+        .join(CalendarEvent)
+        .filter(exclude_ensaios, CalendarEvent.start_at >= now)
+        .order_by(CalendarEvent.start_at.asc())
+        .all()
+    )
+
+    return {
+        "pending": pending,
+        "scheduled": scheduled,
+        "orphans": orphans,
+        "pending_presence": pending_presence,
+    }
+
+
+def _serialize_event_ref(event: CalendarEvent) -> dict[str, Any]:
+    """Referência enxuta de um evento (sem cargo) para o painel de ensaio."""
+    return {
+        "event_id": event.id,
+        "event_title": event.title,
+        "start_at": event.start_at.isoformat() if event.start_at else None,
+    }
+
+
+def serialize_ensaio_summary(raw: dict[str, Any]) -> dict[str, Any]:
+    """Serializa `compute_ensaio_tasks` para o JSON do dashboard."""
+    return {
+        "pending": [_serialize_event_ref(e) for e in raw["pending"]],
+        "scheduled": [
+            {
+                **_serialize_event_ref(e),
+                "ensaios": [
+                    en.start_at.isoformat() if en.start_at else None
+                    for en in sorted(e.ensaios, key=lambda x: (x.start_at is None, x.start_at))
+                ],
+            }
+            for e in raw["scheduled"]
+        ],
+        "orphans": [_serialize_event_ref(e) for e in raw["orphans"]],
+        "pending_presence": [serialize_task_ref(r) for r in raw["pending_presence"]],
+    }
+
+
 def serialize_task_ref(role: EventRole) -> dict[str, Any]:
     """Referência enxuta de um cargo/evento para o JSON do dashboard (data-model.md)."""
     event = role.event
@@ -362,6 +446,13 @@ def build_dashboard_summary(
             "done": raw_fig["done"],
         }
 
+    # Ensaio (restaurado na 206 — as quatro listas viviam só na home Jinja aposentada).
+    # Mesmo gate da home: ENSAIO ou superadmin (CASTING vê materiais no evento, não o painel).
+    show_ensaio = _effective_has_role(user, impersonate, RoleName.ENSAIO) or is_superadmin
+    ensaio: dict[str, Any] | None = None
+    if show_ensaio:
+        ensaio = serialize_ensaio_summary(compute_ensaio_tasks(cutoff))
+
     financeiro: dict[str, Any] | None = None
     if show_financeiro:
         from app.gastos.routes import ensure_recurring_entries, recurring_alerts
@@ -404,6 +495,7 @@ def build_dashboard_summary(
     return {
         "casting": casting,
         "figurino": figurino,
+        "ensaio": ensaio,
         "comercial": comercial,
         "financeiro": financeiro,
         "performance": performance,

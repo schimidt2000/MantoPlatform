@@ -4,6 +4,7 @@ import { Button, Skeleton } from "@manto/ui";
 import { useEvent, type EventoDetalhe } from "../lib/agenda";
 import { CastingSection } from "../components/EventDetail/CastingSection";
 import { ComercialSection } from "../components/EventDetail/ComercialSection";
+import { EnsaioSection } from "../components/EventDetail/EnsaioSection";
 import { EventHeader } from "../components/EventDetail/EventHeader";
 import { FeedbackSection } from "../components/EventDetail/FeedbackSection";
 import { FigurinoSection } from "../components/EventDetail/FigurinoSection";
@@ -92,6 +93,8 @@ export function EventDetailPage() {
           {query.data.event.is_ensaio ? (
             <div className="space-y-4">
               <EnsaioPanel data={query.data} />
+              {/* Gestão do ensaio (editar/cancelar/vincular órfão) — restaurada na 206. */}
+              <EnsaioSection data={query.data} />
               <LogsSection data={query.data} />
             </div>
           ) : (
@@ -101,6 +104,7 @@ export function EventDetailPage() {
                   <WhatsAppSummary data={query.data} />
                   <CastingSection data={query.data} />
                   <FigurinoSection data={query.data} />
+                  <EnsaioSection data={query.data} />
                   <LogisticaSection data={query.data} />
                   <Presente3DSection data={query.data} />
                   <PedidoVirtualSection data={query.data} />

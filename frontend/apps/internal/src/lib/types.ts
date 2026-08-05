@@ -67,10 +67,29 @@ export interface PerformanceSummary {
   money_total: number;
 }
 
+/** Referência enxuta de um evento (sem cargo) no painel de Ensaio. */
+export interface EnsaioEventRef {
+  event_id: number;
+  event_title: string;
+  start_at: string | null;
+}
+
+/**
+ * Painel da equipe de ensaio — as quatro listas restauradas da home Jinja (pós-206):
+ * shows a agendar, agendados, ensaios órfãos e a vaga de presença sem talento.
+ */
+export interface EnsaioSummary {
+  pending: EnsaioEventRef[];
+  scheduled: (EnsaioEventRef & { ensaios: (string | null)[] })[];
+  orphans: EnsaioEventRef[];
+  pending_presence: DashboardTaskRef[];
+}
+
 /** Resumo do dashboard — resposta de /api/dashboard. Seções ausentes = sem permissão. */
 export interface DashboardSummary {
   casting: CastingSummary | null;
   figurino: FigurinoSummary | null;
+  ensaio: EnsaioSummary | null;
   comercial: { pending_payments: PendingPayment[] } | null;
   financeiro: { recurring_expense_alerts: RecurringExpenseAlert[] } | null;
   performance: PerformanceSummary | null;

@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **207 (pacote de
-> melhorias operacionais)** · Head de migration: `d9f2b3a41c07`
+> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **208 (papel
+> ENSAIO restaurado)** · Head de migration: `d9f2b3a41c07`
 
 Formato de cada entrada:
 
@@ -18,6 +18,49 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 208 — Restauração do papel ENSAIO (dashboard + agendamento + presença)
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** Incidente relatado pela equipe: a home do papel ENSAIO ficou vazia
+("Tudo em dia!") após a 206. A auditoria mostrou que o papel perdeu TRÊS capacidades — o
+dashboard inteiro (ensaios a agendar/agendados/órfãos + presença pendente), o
+**agendamento de ensaios** (create/edit/delete/link eram rotas Jinja sem equivalente
+`/api`) e a **atribuição do Técnico de Som (Presença)** (no React a vaga só era editável
+por casting; no Jinja era tarefa do ensaio).
+
+**O que mudou.**
+
+*Backend* — `event_ops.py` ganhou o núcleo extraído das rotas Jinja: `create_ensaio`,
+`update_ensaio`, `delete_ensaio`, `link_ensaio_to_show`, `assign_tech_presence`,
+`build_ensaio_times` (regra da meia-noite preservada) e `resolve_ensaio_location`
+(dependências de `routes` importadas só em runtime — sem ciclo de boot). Endpoints novos:
+`POST /api/events/<id>/ensaios`, `PATCH/DELETE /api/ensaios/<id>`,
+`POST /api/ensaios/<id>/vincular`, `POST /api/events/<id>/presenca` — todos gated por
+`_CAN_ENSAIO` (Ensaio/Casting/Superadmin). `dashboard_service.compute_ensaio_tasks` +
+seção `ensaio` no `/api/dashboard` (gate: ENSAIO ou superadmin, paridade com a home
+Jinja). `serialize_event_detail` expõe `ensaios`, `presenca` e (em eventos ENSAIO)
+`ensaio_pai`.
+
+*Frontend* — `EnsaioSection` no detalhe do evento: no SHOW lista/agenda/cancela ensaios e
+define a presença (select de talentos); no próprio ENSAIO mostra o pai (ou o estado órfão
+com busca de show para vincular — reusa `useAgendaSearch`), edita horário e cancela.
+Dashboard ganhou o painel "🎭 Ensaio" com as quatro listas.
+
+**Riscos e pegadinhas.**
+
+1. **A resposta do PATCH/DELETE de ensaio é o detalhe do SHOW pai** (a tela que o painel
+   refaz). Na página do próprio ensaio isso corromperia o cache se fosse para
+   `setQueryData(["event", ensaioId])` — os hooks da página do ensaio usam
+   `invalidateQueries` em vez do write-through padrão.
+2. **`verify_208` contra manto_local toca o Google Calendar REAL** (o token vive no banco
+   copiado): o ensaio de teste é criado e excluído de verdade. Transitório, mas visível
+   por segundos na agenda.
+3. **Excluir um show cascateia para os ensaios filhos** — a limpeza de teste precisa
+   limpar as tabelas satélite de TODOS os eventos antes de deletar qualquer um.
+4. O gate do dashboard é ENSAIO/superadmin (como a home antiga); o gate de ESCRITA é
+   `_CAN_ENSAIO` (inclui CASTING). São padrões diferentes de propósito — casting agenda
+   ensaio pelo evento, mas não carrega o painel de pendências.
 
 ### 206b — Hotfix: superfícies públicas por link voltaram a abrir sem login
 `main` · **2026-08-05** · sem migration

@@ -45,6 +45,15 @@ export function useAgendaDia(date: string) {
   });
 }
 
+/** Um ensaio agendado de um show, no painel de Ensaio do detalhe do evento. */
+export interface EnsaioDoEvento {
+  id: number;
+  start_at: string | null;
+  end_at: string | null;
+  description: string | null;
+  location: string | null;
+}
+
 /** Resultado da busca — resumo + cliente (nome/telefone `null` para papéis sem vendas). */
 export interface EventoBusca extends EventoResumo {
   client_name: string | null;
@@ -216,6 +225,15 @@ export interface EventoDetalhe {
     travel: EventTravel;
   };
   flags: Record<string, boolean>;
+  /**
+   * Ensaios agendados do show (pós-206) — presente em eventos não-ENSAIO. As ações de
+   * escrita são gated por `flags.show_ensaio` (Ensaio/Casting/Superadmin).
+   */
+  ensaios?: EnsaioDoEvento[];
+  /** Vaga "Técnico de Som (Presença)" — `null` quando o evento não tem a vaga. */
+  presenca?: { role_id: number; talent_id: number | null; talent_name: string | null } | null;
+  /** Só em eventos ENSAIO: show pai do ensaio (`null` = órfão, feature 057/063). */
+  ensaio_pai?: { id: number; title: string } | null;
   /**
    * Log de atividades — o servidor só serializa a chave para SUPERADMIN (real, sem
    * impersonação); ausente para os demais papéis, mesmo padrão de `kpi?`/`venda?`.

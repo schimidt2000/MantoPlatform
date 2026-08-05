@@ -100,6 +100,97 @@ export function useFeedbackLink(eventId: number) {
   });
 }
 
+// ── Ensaios: agendamento e presença (restaurado na 206) ─────────────────────────
+
+export interface CreateEnsaioInput {
+  date: string;
+  start: string;
+  end: string;
+  description: string;
+  location_type: "manto" | "outro";
+  location: string;
+}
+
+/** Agenda um ensaio para o show — a resposta é o detalhe do próprio show. */
+export function useCreateEnsaio(eventId: number) {
+  return useEventMutation<CreateEnsaioInput>(eventId, (body) =>
+    apiFetch<EventoDetalhe>(`/api/events/${eventId}/ensaios`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+/** Cancela um ensaio a partir da página do SHOW — a resposta é o detalhe do show. */
+export function useDeleteEnsaioFromShow(eventId: number) {
+  return useEventMutation<number>(eventId, (ensaioId) =>
+    apiFetch<EventoDetalhe>(`/api/ensaios/${ensaioId}`, { method: "DELETE" }),
+  );
+}
+
+/** Define/limpa o Técnico de Som (Presença) — tarefa da equipe de ensaio. */
+export function useAssignPresenca(eventId: number) {
+  return useEventMutation<number | null>(eventId, (talentId) =>
+    apiFetch<EventoDetalhe>(`/api/events/${eventId}/presenca`, {
+      method: "POST",
+      body: JSON.stringify({ talent_id: talentId }),
+    }),
+  );
+}
+
+export interface EditEnsaioInput {
+  ensaioId: number;
+  date: string;
+  start: string;
+  end: string;
+  description: string;
+  location: string;
+}
+
+/**
+ * Edita um ensaio a partir da página do PRÓPRIO ensaio. A resposta do PATCH é o detalhe do
+ * show pai — não pode ir para `setQueryData(["event", ensaioId])` (corromperia o cache do
+ * ensaio), então aqui invalida-se os prefixos e o servidor responde os refetches.
+ */
+export function useEditEnsaio() {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, EditEnsaioInput>({
+    mutationFn: ({ ensaioId, ...body }) =>
+      apiFetch<EventoDetalhe>(`/api/ensaios/${ensaioId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["event"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["agenda"] });
+    },
+  });
+}
+
+/** Exclui um ensaio (inclusive órfão) a partir da página do próprio ensaio. */
+export function useDeleteEnsaio() {
+  const queryClient = useQueryClient();
+  return useMutation<unknown, Error, number>({
+    mutationFn: (ensaioId) => apiFetch<unknown>(`/api/ensaios/${ensaioId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["event"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["agenda"] });
+    },
+  });
+}
+
+/** Vincula um ensaio órfão a um show — a resposta é o detalhe do próprio ensaio. */
+export function useVincularEnsaio(ensaioId: number) {
+  return useEventMutation<number>(ensaioId, (parentEventId) =>
+    apiFetch<EventoDetalhe>(`/api/ensaios/${ensaioId}/vincular`, {
+      method: "POST",
+      body: JSON.stringify({ parent_event_id: parentEventId }),
+    }),
+  );
+}
+
 // ── Mensagens de WhatsApp ────────────────────────────────────────────────────
 // A saudação depende da hora de quem copia, então é montada aqui (o servidor manda só os
 // trechos que dependem do evento, em `EventoDetalhe.mensagens`).
