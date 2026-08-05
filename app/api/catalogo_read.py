@@ -22,6 +22,7 @@ from app.models import CatalogCategory, CatalogCharacter, CatalogItem
 def _character_summary(character: CatalogCharacter) -> dict[str, Any]:
     """Forma pública de um Personagem — sem `figurino_sheet_id` (dado interno)."""
     video_url = normalize_video_url(character.video_url)
+    own = character.own_item
     return {
         "id": character.id,
         "name": character.name,
@@ -29,6 +30,8 @@ def _character_summary(character: CatalogCharacter) -> dict[str, Any]:
         "photo_url": character.photo_url,
         "video_url": video_url,
         "video_kind": classify_video_url(character.video_url),
+        # Página própria ativa (feature 209): o tile do elenco vira link para ela.
+        "own_item_slug": own.slug if own and own.is_active else None,
     }
 
 
@@ -41,6 +44,9 @@ def _item_summary(item: CatalogItem) -> dict[str, Any]:
         "slug": item.slug,
         "cover_image_url": cover.url if cover else None,
         "categories": [c.name for c in item.categories],
+        # Tags entram na busca client-side da vitrine (feature 209): é o que faz "alice"
+        # achar o Coelho Branco — as tags já carregam esse vocabulário.
+        "tags": item.tags_list,
     }
 
 
@@ -155,6 +161,17 @@ def api_catalogo_detail(slug: str) -> Any:
         (c for c in item.characters if c.is_active), key=lambda c: c.position
     )
 
+    # Selo "Parte do tema X" (feature 209): quando este item é a página própria de um
+    # personagem, a vitrine mostra o caminho de volta ao tema (caso Coelho → Alice).
+    as_char = item.as_character
+    parte_de_tema = None
+    if as_char and as_char.tema and as_char.tema.is_active:
+        parte_de_tema = {
+            "tema_name": as_char.tema.name,
+            "tema_slug": as_char.tema.slug,
+            "character_slug": as_char.slug,
+        }
+
     return jsonify(
         {
             "id": item.id,
@@ -167,6 +184,7 @@ def api_catalogo_detail(slug: str) -> Any:
             "images": [{"url": img.url, "position": img.position} for img in item.images],
             "characters": [_character_summary(c) for c in active_characters],
             "related": [_item_summary(r) for r in related],
+            "parte_de_tema": parte_de_tema,
         }
     )
 

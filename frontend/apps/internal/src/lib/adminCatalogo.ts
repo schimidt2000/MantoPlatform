@@ -17,6 +17,11 @@ export interface CatalogListItem {
   is_active: boolean;
   cover_url: string | null;
   category_names: string[];
+  /** Termômetro de cobertura de fichas do elenco (feature 209). */
+  characters_total: number;
+  characters_com_ficha: number;
+  /** Quando este item é a página própria de um personagem de outro tema (caso Coelho). */
+  parte_de_tema: { tema_id: number; tema_name: string } | null;
   characters: CatalogCharacterSummary[];
 }
 
@@ -47,6 +52,14 @@ export interface CatalogImage {
   position: number;
 }
 
+/** Página própria de um personagem (feature 209) — o item que é a página/busca dele. */
+export interface CharacterOwnItem {
+  id: number;
+  name: string;
+  slug: string;
+  is_active: boolean;
+}
+
 /** Personagem filho de um Tema (feature 185) — forma completa (admin), com `figurino_sheet_id`. */
 export interface CatalogCharacter {
   id: number;
@@ -57,6 +70,7 @@ export interface CatalogCharacter {
   figurino_sheet_id: number | null;
   position: number;
   is_active: boolean;
+  own_item: CharacterOwnItem | null;
 }
 
 export interface CatalogItemDetail {
@@ -239,6 +253,51 @@ export function useDeleteCharacter(itemId: number) {
       apiFetch<void>(`/api/admin/catalogo/personagens/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-catalogo", itemId] });
+    },
+  });
+}
+
+/** Vincula (item_id) ou remove (null) a página própria de um personagem (feature 209). */
+export function useSetOwnPage(itemId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ characterId, ownItemId }: { characterId: number; ownItemId: number | null }) =>
+      apiFetch<CatalogCharacter>(
+        `/api/admin/catalogo/personagens/${characterId}/pagina-propria`,
+        { method: "POST", body: JSON.stringify({ item_id: ownItemId }) },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo", itemId] });
+    },
+  });
+}
+
+/** Checkbox "Página única": liga/desliga a vitrine/busca do item vinculado (feature 209). */
+export function useToggleOwnPage(itemId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ characterId, enabled }: { characterId: number; enabled: boolean }) =>
+      apiFetch<CatalogCharacter>(
+        `/api/admin/catalogo/personagens/${characterId}/pagina-unica`,
+        { method: "POST", body: JSON.stringify({ enabled }) },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo", itemId] });
+    },
+  });
+}
+
+/** Adota um item existente como personagem deste tema (feature 209, caso Coelho→Alice). */
+export function useAdoptItemAsCharacter(temaId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (itemId: number) =>
+      apiFetch<CatalogCharacter>(`/api/admin/catalogo/${temaId}/adotar-item`, {
+        method: "POST",
+        body: JSON.stringify({ item_id: itemId }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo"] });
     },
   });
 }

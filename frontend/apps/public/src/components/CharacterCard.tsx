@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { assetUrl } from "@manto/api-client";
 import type { CatalogCharacter } from "../lib/catalogo";
 import { WishlistButton } from "./WishlistButton";
@@ -27,6 +28,28 @@ export function CharacterCard({ character, temaSlug, highlighted = false }: Char
     setTimeout(() => setCopied(false), 1500);
   }
 
+  // Página própria (feature 209, caso Coelho): a foto e o nome viram link para ela.
+  const ownPage = character.own_item_slug ? `/${character.own_item_slug}` : null;
+
+  const media = (
+    <div className="aspect-square overflow-hidden bg-bg-alt">
+      {character.photo_url ? (
+        <img
+          src={assetUrl(character.photo_url)}
+          alt={character.name}
+          loading="lazy"
+          className="h-full w-full object-cover"
+        />
+      ) : character.video_url ? (
+        <div className="flex h-full w-full items-center justify-center bg-ink/80 text-3xl text-white">
+          ▶
+        </div>
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-3xl">🎭</div>
+      )}
+    </div>
+  );
+
   return (
     <div
       id={`personagem-${character.slug}`}
@@ -34,26 +57,25 @@ export function CharacterCard({ character, temaSlug, highlighted = false }: Char
         highlighted ? "border-gold ring-2 ring-gold" : "border-line"
       }`}
     >
-      <div className="aspect-square overflow-hidden bg-bg-alt">
-        {character.photo_url ? (
-          <img
-            src={assetUrl(character.photo_url)}
-            alt={character.name}
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
-        ) : character.video_url ? (
-          <div className="flex h-full w-full items-center justify-center bg-ink/80 text-3xl text-white">
-            ▶
-          </div>
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-3xl">🎭</div>
-        )}
-      </div>
+      {ownPage ? <Link to={ownPage}>{media}</Link> : media}
       <div className="space-y-2 p-3">
         <h3 className="text-balance font-display text-base font-medium text-ink">
-          {character.name}
+          {ownPage ? (
+            <Link to={ownPage} className="hover:underline">
+              {character.name}
+            </Link>
+          ) : (
+            character.name
+          )}
         </h3>
+        {ownPage && (
+          <Link
+            to={ownPage}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-accent-dark hover:underline"
+          >
+            Ver página completa →
+          </Link>
+        )}
         <div className="flex flex-wrap gap-1.5">
           <WishlistButton
             slug={character.slug}

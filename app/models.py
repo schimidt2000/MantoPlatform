@@ -1849,8 +1849,12 @@ class CatalogItem(db.Model):
         "CatalogItemImage", backref="item", lazy=True,
         cascade="all, delete-orphan", order_by="CatalogItemImage.position",
     )
+    # `foreign_keys` explícito: CatalogCharacter tem DOIS FKs para catalog_items desde a
+    # feature 209 (o tema pai e a página própria `own_item_id`) — sem isto o mapper falha
+    # com AmbiguousForeignKeysError no boot.
     characters = db.relationship(
         "CatalogCharacter", backref="tema", lazy=True,
+        foreign_keys="CatalogCharacter.catalog_item_id",
         cascade="all, delete-orphan", order_by="CatalogCharacter.position",
     )
 
@@ -1905,11 +1909,27 @@ class CatalogCharacter(db.Model):
     figurino_sheet_id  = db.Column(
         db.Integer, db.ForeignKey("figurino_sheets.id", ondelete="SET NULL"), nullable=True
     )
+    # Página própria do personagem (feature 209, caso "Coelho Branco" dentro do tema Alice):
+    # aponta para o CatalogItem que É a página/busca deste personagem. UNIQUE — um item só
+    # pode ser página de um personagem. NULL = personagem só existe no elenco do tema.
+    own_item_id        = db.Column(
+        db.Integer,
+        db.ForeignKey("catalog_items.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
     position           = db.Column(db.Integer, default=0, nullable=False)
     is_active          = db.Column(db.Boolean, default=True, nullable=False)
     created_at         = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     figurino_sheet = db.relationship("FigurinoSheet", lazy=True)
+    # `as_character` no CatalogItem: o personagem cuja página própria é este item (ou None).
+    own_item = db.relationship(
+        "CatalogItem",
+        foreign_keys=[own_item_id],
+        backref=db.backref("as_character", uselist=False),
+        lazy=True,
+    )
 
 
 # ── Impressões e Acervo 3D (feature 200) ────────────────────────────────────

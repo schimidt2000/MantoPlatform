@@ -70,8 +70,25 @@ export function CatalogCardGrid({
               )}
               <div className="mt-1 text-xs text-muted">{item.category_names.join(", ")}</div>
               {item.characters.length > 0 && (
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                  <span>
+                    {item.characters.length} personagem{item.characters.length === 1 ? "" : "ns"}
+                  </span>
+                  {/* Termômetro de fichas (feature 209): verde = elenco 100% coberto. */}
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 font-medium ${
+                      item.characters_com_ficha === item.characters_total
+                        ? "bg-green-soft text-green"
+                        : "bg-gold/15 text-accent-dark"
+                    }`}
+                  >
+                    👗 {item.characters_com_ficha}/{item.characters_total} fichas
+                  </span>
+                </div>
+              )}
+              {item.parte_de_tema && (
                 <div className="mt-1 text-xs text-muted">
-                  {item.characters.length} personagem{item.characters.length === 1 ? "" : "ns"}
+                  🔗 página única — elenco de <strong>{item.parte_de_tema.tema_name}</strong>
                 </div>
               )}
             </div>

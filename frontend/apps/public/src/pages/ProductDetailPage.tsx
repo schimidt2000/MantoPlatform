@@ -106,6 +106,16 @@ export function ProductDetailPage() {
                     </span>
                   ))}
                 </div>
+                {/* Selo do tema-mãe (feature 209): esta página é a "página única" de um
+                    personagem — o caminho de volta ao tema fica sempre visível. */}
+                {data.parte_de_tema && (
+                  <Link
+                    to={`/${data.parte_de_tema.tema_slug}?personagem=${data.parte_de_tema.character_slug}`}
+                    className="mb-5 -mt-2 inline-flex items-center gap-1.5 rounded-full border border-gold bg-gold/10 px-3 py-1 text-xs font-semibold text-accent-dark hover:bg-gold/20"
+                  >
+                    ✦ Parte do tema {data.parte_de_tema.tema_name} — ver elenco completo
+                  </Link>
+                )}
                 {/* `strong`/`em`/`i` estilizados junto com `b`: o editor rich-text do admin
                     emite `<b>`/`<i>` na maioria dos browsers, mas alguns emitem `<strong>`/`<em>`. */}
                 {data.description_html && (

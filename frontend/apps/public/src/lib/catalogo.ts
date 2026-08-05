@@ -8,6 +8,8 @@ export interface CatalogItemSummary {
   slug: string;
   cover_image_url: string | null;
   categories: string[];
+  /** Tags de marketing — entram no texto da busca da grade (feature 209). */
+  tags: string[];
 }
 
 /** Forma resumida de uma categoria, com contagem e foto de capa. */
@@ -51,6 +53,8 @@ export interface CatalogCharacter {
   photo_url: string | null;
   video_url: string | null;
   video_kind: VideoKind;
+  /** Slug da página própria ATIVA do personagem (feature 209) — o tile vira link para ela. */
+  own_item_slug: string | null;
 }
 
 export interface CatalogItemDetail {
@@ -64,6 +68,8 @@ export interface CatalogItemDetail {
   images: CatalogItemImage[];
   characters: CatalogCharacter[];
   related: CatalogItemSummary[];
+  /** Quando este item é a página própria de um personagem: o caminho de volta ao tema. */
+  parte_de_tema: { tema_name: string; tema_slug: string; character_slug: string } | null;
 }
 
 /** Grade geral do catálogo — itens ativos + categorias com contagem + WhatsApp de destino. */

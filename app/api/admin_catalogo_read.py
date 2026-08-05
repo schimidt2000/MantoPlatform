@@ -27,6 +27,9 @@ def _require_superadmin() -> Any:
 
 
 def _item_summary(item: CatalogItem) -> dict:
+    characters = sorted(item.characters, key=lambda c: c.position)
+    # Reverso da página própria (feature 209): este item é a página de algum personagem?
+    as_char = item.as_character
     return {
         "id": item.id,
         "name": item.name,
@@ -34,6 +37,14 @@ def _item_summary(item: CatalogItem) -> dict:
         "is_active": item.is_active,
         "cover_url": item.cover_image.url if item.cover_image else None,
         "category_names": [c.name for c in item.categories],
+        # Cobertura de fichas do elenco — o "termômetro" do gerenciador.
+        "characters_total": len(characters),
+        "characters_com_ficha": sum(1 for c in characters if c.figurino_sheet_id),
+        "parte_de_tema": (
+            {"tema_id": as_char.catalog_item_id, "tema_name": as_char.tema.name}
+            if as_char
+            else None
+        ),
         "characters": [
             {
                 "id": c.id,
@@ -42,7 +53,7 @@ def _item_summary(item: CatalogItem) -> dict:
                 "figurino_sheet_id": c.figurino_sheet_id,
                 "is_active": c.is_active,
             }
-            for c in sorted(item.characters, key=lambda c: c.position)
+            for c in characters
         ],
     }
 
@@ -116,6 +127,16 @@ def api_admin_catalogo_detail(item_id: int) -> Any:
                     "figurino_sheet_id": c.figurino_sheet_id,
                     "position": c.position,
                     "is_active": c.is_active,
+                    "own_item": (
+                        {
+                            "id": c.own_item.id,
+                            "name": c.own_item.name,
+                            "slug": c.own_item.slug,
+                            "is_active": c.own_item.is_active,
+                        }
+                        if c.own_item
+                        else None
+                    ),
                 }
                 for c in sorted(item.characters, key=lambda c: c.position)
             ],

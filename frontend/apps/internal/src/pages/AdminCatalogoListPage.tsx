@@ -12,7 +12,7 @@ import {
   type CatalogCharacterSummary,
   type CatalogListItem,
 } from "../lib/adminCatalogo";
-import { useFigurinoSheets } from "../lib/figurino";
+import { FigurinoSheetPicker } from "../components/FigurinoSheetPicker";
 import { CatalogCardGrid } from "../components/CatalogCardGrid";
 import { CatalogTreeView } from "../components/CatalogTreeView";
 import { CatalogBulkActionBar } from "../components/CatalogBulkActionBar";
@@ -41,9 +41,8 @@ export function AdminCatalogoListPage() {
   const toggleCharacterActive = useUpdateCharacterActiveStandalone();
   const deleteCharacter = useDeleteCharacterStandalone();
   const moveCharacters = useMoveCharactersBulk();
-  const figurinoSheets = useFigurinoSheets();
   const linkCharacter = useLinkCharacterFigurino();
-  const [linkTargetSheetId, setLinkTargetSheetId] = useState<string>("");
+  const [linkTargetSheetId, setLinkTargetSheetId] = useState<number | null>(null);
 
   function setViewMode(mode: ViewMode) {
     setViewModeState(mode);
@@ -102,6 +101,16 @@ export function AdminCatalogoListPage() {
   }
 
   const items: CatalogListItem[] = query.data?.items ?? [];
+
+  // Termômetro de cobertura de fichas (feature 209): soma sobre o recorte filtrado atual.
+  const fichaTotais = items.reduce(
+    (acc, item) => {
+      acc.personagens += item.characters_total;
+      acc.comFicha += item.characters_com_ficha;
+      return acc;
+    },
+    { personagens: 0, comFicha: 0 },
+  );
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 pb-24 sm:p-6">
@@ -181,6 +190,19 @@ export function AdminCatalogoListPage() {
         <p className="text-sm text-muted">Nenhum produto encontrado.</p>
       )}
 
+      {query.data && fichaTotais.personagens > 0 && (
+        <p className="text-sm text-muted">
+          👗 Fichas de figurino do elenco:{" "}
+          <span className="font-semibold text-ink">
+            {fichaTotais.comFicha} de {fichaTotais.personagens}
+          </span>{" "}
+          personagens com ficha vinculada
+          {fichaTotais.comFicha < fichaTotais.personagens &&
+            ` — faltam ${fichaTotais.personagens - fichaTotais.comFicha}`}
+          .
+        </p>
+      )}
+
       {items.length > 0 && viewMode === "cards" && (
         <CatalogCardGrid
           items={items}
@@ -232,35 +254,28 @@ export function AdminCatalogoListPage() {
         open={linkingCharacter !== null}
         onClose={() => {
           setLinkingCharacter(null);
-          setLinkTargetSheetId("");
+          setLinkTargetSheetId(null);
         }}
         title={`Vincular "${linkingCharacter?.name ?? ""}" a uma Ficha de Figurino`}
       >
         <div className="space-y-3">
-          <select
-            className="h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          <FigurinoSheetPicker
             value={linkTargetSheetId}
-            onChange={(e) => setLinkTargetSheetId(e.target.value)}
-            aria-label="Buscar figurino"
-          >
-            <option value="">🔍 Buscar figurino…</option>
-            {figurinoSheets.data?.items.map((sheet) => (
-              <option key={sheet.id} value={sheet.id}>
-                {sheet.character_name}
-              </option>
-            ))}
-          </select>
+            characterName={linkingCharacter?.name}
+            onChange={setLinkTargetSheetId}
+            ariaLabel="Buscar figurino"
+          />
           <Button
             loading={linkCharacter.isPending}
-            disabled={!linkTargetSheetId}
+            disabled={linkTargetSheetId === null}
             onClick={() => {
-              if (!linkingCharacter || !linkTargetSheetId) return;
+              if (!linkingCharacter || linkTargetSheetId === null) return;
               linkCharacter.mutate(
-                { characterId: linkingCharacter.id, figurinoSheetId: Number(linkTargetSheetId) },
+                { characterId: linkingCharacter.id, figurinoSheetId: linkTargetSheetId },
                 {
                   onSuccess: () => {
                     setLinkingCharacter(null);
-                    setLinkTargetSheetId("");
+                    setLinkTargetSheetId(null);
                   },
                 },
               );

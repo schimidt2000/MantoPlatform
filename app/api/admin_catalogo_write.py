@@ -131,6 +131,7 @@ def api_admin_catalogo_delete(item_id: int) -> Any:
 
 
 def _character_summary(character: CatalogCharacter) -> dict:
+    own = character.own_item
     return {
         "id": character.id,
         "name": character.name,
@@ -140,6 +141,12 @@ def _character_summary(character: CatalogCharacter) -> dict:
         "figurino_sheet_id": character.figurino_sheet_id,
         "position": character.position,
         "is_active": character.is_active,
+        # Página própria (feature 209) — null = personagem só existe no elenco do tema.
+        "own_item": (
+            {"id": own.id, "name": own.name, "slug": own.slug, "is_active": own.is_active}
+            if own
+            else None
+        ),
     }
 
 
@@ -235,6 +242,69 @@ def api_admin_catalogo_character_delete(character_id: int) -> Any:
         return json_error("Personagem não encontrado", 404)
     catalog_character_ops.delete_character(character)
     return "", 204
+
+
+@api_bp.route("/admin/catalogo/personagens/<int:character_id>/pagina-propria", methods=["POST"])
+@api_login_required
+def api_admin_catalogo_character_own_page(character_id: int) -> Any:
+    """Vincula (`{"item_id": int}`) ou remove (`{"item_id": null}`) a página própria."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    character = CatalogCharacter.query.get(character_id)
+    if character is None:
+        return json_error("Personagem não encontrado", 404)
+    body = request.get_json(silent=True) or {}
+    item_id = body.get("item_id")
+    item = None
+    if item_id is not None:
+        item = CatalogItem.query.get(item_id)
+        if item is None:
+            return json_error("Item não encontrado", 404)
+    try:
+        catalog_character_ops.set_own_item(character, item)
+    except catalog_character_ops.CatalogValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(_character_summary(character))
+
+
+@api_bp.route("/admin/catalogo/personagens/<int:character_id>/pagina-unica", methods=["POST"])
+@api_login_required
+def api_admin_catalogo_character_toggle_page(character_id: int) -> Any:
+    """Checkbox "Página única": liga/desliga o `is_active` do item vinculado."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    character = CatalogCharacter.query.get(character_id)
+    if character is None:
+        return json_error("Personagem não encontrado", 404)
+    body = request.get_json(silent=True) or {}
+    try:
+        catalog_character_ops.toggle_own_page(character, bool(body.get("enabled")))
+    except catalog_character_ops.CatalogValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(_character_summary(character))
+
+
+@api_bp.route("/admin/catalogo/<int:tema_id>/adotar-item", methods=["POST"])
+@api_login_required
+def api_admin_catalogo_adopt_item(tema_id: int) -> Any:
+    """Adota um item existente como personagem deste tema (`{"item_id": int}`) — caso Coelho."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    tema = CatalogItem.query.get(tema_id)
+    if tema is None:
+        return json_error("Tema não encontrado", 404)
+    body = request.get_json(silent=True) or {}
+    item = CatalogItem.query.get(body.get("item_id")) if body.get("item_id") else None
+    if item is None:
+        return json_error("Item não encontrado", 404)
+    try:
+        character = catalog_character_ops.adopt_item_as_character(tema, item)
+    except catalog_character_ops.CatalogValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(_character_summary(character)), 201
 
 
 @api_bp.route("/admin/catalogo/personagens/mover-em-massa", methods=["POST"])

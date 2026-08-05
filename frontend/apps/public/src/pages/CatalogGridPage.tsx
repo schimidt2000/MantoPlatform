@@ -20,7 +20,9 @@ export function CatalogGridPage() {
     if (!data) return [];
     const term = normalize(search.trim());
     return data.items.filter((item) => {
-      const searchText = normalize([item.name, ...item.categories].join(" "));
+      // Tags entram na busca (feature 209): "alice" acha o Coelho Branco pela tag, sem
+      // poluir a grade com personagens sem página própria.
+      const searchText = normalize([item.name, ...item.categories, ...item.tags].join(" "));
       const matchesSearch = !term || searchText.includes(term);
       const matchesCategory = !activeCategory || item.categories.includes(activeCategory);
       return matchesSearch && matchesCategory;

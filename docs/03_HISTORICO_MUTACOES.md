@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **208 (papel
-> ENSAIO restaurado)** · Head de migration: `d9f2b3a41c07`
+> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **209 (catálogo
+> organizacional)** · Head de migration: `e7a1c94f20b3`
 
 Formato de cada entrada:
 
@@ -18,6 +18,55 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 209 — Catálogo como espinha organizacional (página própria + fichas + busca)
+`main` · **2026-08-05** · migration `e7a1c94f20b3` (*own_item_id em catalog_characters*)
+
+**Motivação.** O catálogo deixa de ser só vitrine e vira o início da organização: tema com
+elenco embaixo (Abba), personagem com ficha de figurino vinculada (métrica de cobertura),
+personagem que TAMBÉM tem página própria e buscável (Coelho Branco dentro do tema Alice), e
+variação de figurino como personagem separado (Gabby Boneco ✕ Humanizada — decisão do dono:
+a Humanizada mantém página vendável na busca).
+
+**Modelo.** `catalog_characters.own_item_id` (FK catalog_items, UNIQUE, SET NULL): o
+personagem aponta para o item que É a página dele. Hierarquia de UM nível, de propósito —
+tema com elenco não pode virar personagem de outro tema (validação em `set_own_item`/
+`adopt_item_as_character`). O relacionamento `CatalogItem.characters` precisou de
+`foreign_keys` explícito (dois FKs para a mesma tabela = AmbiguousForeignKeysError no boot).
+
+**O que mudou.**
+
+*Ops/API* — `catalog_character_ops`: `set_own_item`, `toggle_own_page` (checkbox "Página
+única" = `is_active` do item vinculado; reversível, nunca apaga), `adopt_item_as_character`
+(foto COPIADA da capa via `storage.copy_file`). Endpoints SUPERADMIN:
+`POST /api/admin/catalogo/personagens/<id>/pagina-propria`, `.../pagina-unica`,
+`POST /api/admin/catalogo/<tema_id>/adotar-item`.
+
+*Vitrine* — `_character_summary` público ganhou `own_item_slug` (só quando a página está
+ATIVA): o tile do elenco vira link para a página própria. Detalhe do item ganhou
+`parte_de_tema` → selo "✦ Parte do tema Alice" com volta ao elenco. `_item_summary` da
+grade ganhou `tags` e a busca client-side passou a incluí-las — "alice" acha o Coelho pela
+tag, sem personagens poluindo os resultados.
+
+*Admin* — `FigurinoSheetPicker` novo (busca realtime sem acento + thumb da ficha; fichas
+com nome batendo com o personagem sobem ao topo) substitui os DOIS `<select>` cegos (painel
+de personagens e vínculo rápido da árvore). Cada personagem ganhou o bloco "Ficha & página"
+(picker + controles de página própria). Painel ganhou "Adotar item existente como
+personagem". Listagem ganhou o termômetro `characters_com_ficha/characters_total` por tema
++ soma no topo, e o rótulo "página única — elenco de X" nos itens adotados.
+
+**Riscos e pegadinhas.**
+
+1. **Adoção COPIA a foto da capa** — nunca referencia (`delete_file` é chamado em 5 pontos
+   sem saber de compartilhamento; mesmo racional do drag de foto da 207).
+2. **Desligar a "página única" usa `is_active` do item** — o mesmo flag do gerenciador.
+   Reativar o item pelo gerenciador religa a página do personagem (comportamento desejado:
+   um flag só, sem estado paralelo).
+3. **manto_local está atrás da produção** (o Abba da assistente não existe na cópia local).
+   Rodar `refresh-local-db.ps1` antes do mutirão de organização.
+4. Regra de modelagem registrada: versão de TEMA inteiro = temas separados (Alice Desenho ✕
+   Live Action); variação de FIGURINO = personagens separados no mesmo tema (Gabby Boneco ✕
+   Humanizada), cada um com sua ficha — a métrica de cobertura conta certo sozinha.
 
 ### 208 — Restauração do papel ENSAIO (dashboard + agendamento + presença)
 `main` · **2026-08-05** · sem migration

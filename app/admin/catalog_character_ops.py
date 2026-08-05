@@ -166,6 +166,103 @@ def adopt_gallery_photo(character: CatalogCharacter, image: CatalogItemImage) ->
     return character
 
 
+def set_own_item(character: CatalogCharacter, item: CatalogItem | None) -> CatalogCharacter:
+    """Define (ou remove, com `None`) a página própria do personagem (feature 209).
+
+    Validações: o item não pode ser o próprio tema pai, não pode já ser página de outro
+    personagem (UNIQUE) e não pode ter elenco próprio (um tema com personagens não vira
+    personagem de outro tema — a hierarquia tem um nível só, de propósito).
+    """
+    if item is not None:
+        if item.id == character.catalog_item_id:
+            raise CatalogValidationError(
+                "item_id", "O tema pai do personagem não pode ser a página dele mesmo."
+            )
+        claimed = CatalogCharacter.query.filter(
+            CatalogCharacter.own_item_id == item.id, CatalogCharacter.id != character.id
+        ).first()
+        if claimed:
+            raise CatalogValidationError(
+                "item_id", f'Este item já é a página do personagem "{claimed.name}".'
+            )
+        if item.characters:
+            raise CatalogValidationError(
+                "item_id", "Um tema com elenco próprio não pode virar página de personagem."
+            )
+    character.own_item_id = item.id if item else None
+    audit(
+        "edit", "CatalogCharacter", character.id, character.name,
+        f'Página própria: {item.name if item else "removida"}',
+    )
+    db.session.commit()
+    return character
+
+
+def toggle_own_page(character: CatalogCharacter, enabled: bool) -> CatalogCharacter:
+    """Liga/desliga a "Página única" do personagem = `is_active` do item vinculado.
+
+    Desligar tira o item da vitrine e da busca (o personagem segue no elenco do tema);
+    ligar devolve. O vínculo `own_item_id` nunca é tocado aqui — é reversível.
+    """
+    if character.own_item is None:
+        raise CatalogValidationError(
+            "enabled", "Este personagem não tem página própria vinculada."
+        )
+    character.own_item.is_active = bool(enabled)
+    audit(
+        "edit", "CatalogItem", character.own_item.id, character.own_item.name,
+        f'Página única do personagem "{character.name}" {"ativada" if enabled else "desativada"}',
+    )
+    db.session.commit()
+    return character
+
+
+def adopt_item_as_character(tema: CatalogItem, item: CatalogItem) -> CatalogCharacter:
+    """Adota um item existente como personagem de um tema (feature 209, caso Coelho→Alice).
+
+    Cria o `CatalogCharacter` no elenco do tema com nome/vídeo do item, foto COPIADA da capa
+    (nunca referência — os fluxos de delete não sabem de compartilhamento) e `own_item_id`
+    apontando para o item — que segue com página e busca próprias.
+    """
+    from app.storage import copy_file
+
+    if item.id == tema.id:
+        raise CatalogValidationError("item_id", "Um tema não pode ser personagem de si mesmo.")
+    if item.characters:
+        raise CatalogValidationError(
+            "item_id", "Este item tem elenco próprio — é um tema, não um personagem."
+        )
+    claimed = CatalogCharacter.query.filter_by(own_item_id=item.id).first()
+    if claimed:
+        raise CatalogValidationError(
+            "item_id", f'Este item já é a página do personagem "{claimed.name}".'
+        )
+
+    photo_url = None
+    cover = item.cover_image
+    if cover:
+        copied = copy_file(cover.url, "catalog_photos")
+        photo_url = _rewrite_public_url(copied) if copied else None
+
+    character = CatalogCharacter(
+        catalog_item_id=tema.id,
+        name=item.name,
+        slug=unique_character_slug(tema.slug, item.name),
+        photo_url=photo_url,
+        video_url=item.video_url,
+        own_item_id=item.id,
+        position=len(tema.characters),
+    )
+    db.session.add(character)
+    db.session.flush()
+    audit(
+        "create", "CatalogCharacter", character.id, character.name,
+        f'Item "{item.name}" adotado como personagem de "{tema.name}"',
+    )
+    db.session.commit()
+    return character
+
+
 def delete_character(character: CatalogCharacter) -> None:
     """Exclui definitivamente um Personagem, removendo sua foto do storage."""
     name = character.name
