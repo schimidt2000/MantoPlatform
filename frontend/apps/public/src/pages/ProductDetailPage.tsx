@@ -106,9 +106,11 @@ export function ProductDetailPage() {
                     </span>
                   ))}
                 </div>
+                {/* `strong`/`em`/`i` estilizados junto com `b`: o editor rich-text do admin
+                    emite `<b>`/`<i>` na maioria dos browsers, mas alguns emitem `<strong>`/`<em>`. */}
                 {data.description_html && (
                   <div
-                    className="text-[15.5px] text-ink [&_b]:font-display [&_b]:text-[17px] [&_b]:font-semibold [&_p]:mb-3"
+                    className="text-[15.5px] text-ink [&_b]:font-display [&_b]:text-[17px] [&_b]:font-semibold [&_strong]:font-display [&_strong]:text-[17px] [&_strong]:font-semibold [&_i]:italic [&_em]:italic [&_p]:mb-3 [&_div]:mb-3"
                     dangerouslySetInnerHTML={{ __html: data.description_html }}
                   />
                 )}

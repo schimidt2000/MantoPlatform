@@ -16,18 +16,46 @@ function eventTimeLabel(ev: EventoResumo): string {
   return dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
-function AgendaListItem({ event }: { event: EventoResumo }) {
+/**
+ * Linha de evento do feed. Exportada para a busca da agenda reusar o mesmo visual
+ * (`AgendaSearchResults`); `subtitle` é a linha extra de cliente nos resultados e
+ * `showDate` prefixa a data — no feed a data vem do cabeçalho do grupo por dia, mas a
+ * busca mistura meses/anos e só a hora deixaria os resultados ilegíveis.
+ */
+export function AgendaListItem({
+  event,
+  subtitle,
+  showDate = false,
+}: {
+  event: EventoResumo;
+  subtitle?: string;
+  showDate?: boolean;
+}) {
   const cat = eventCategory(event.event_type);
   const time = eventTimeLabel(event);
+  const dateLabel =
+    showDate && event.start_at
+      ? new Date(event.start_at).toLocaleDateString("pt-BR", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "2-digit",
+        })
+      : "";
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
+      {dateLabel && (
+        <span className="w-16 shrink-0 text-xs tabular-nums text-muted">{dateLabel}</span>
+      )}
       {time && (
         <span className="w-24 shrink-0 text-xs tabular-nums text-muted">{time}</span>
       )}
       <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${cat.bg} ${cat.fg}`}>
         {cat.label}
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{event.title}</span>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
+        {event.title}
+        {subtitle && <span className="block truncate text-xs font-normal text-muted">{subtitle}</span>}
+      </span>
       {event.location && (
         <span className="hidden max-w-[200px] truncate text-xs text-muted sm:block">
           {event.location}

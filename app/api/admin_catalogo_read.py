@@ -88,11 +88,17 @@ def api_admin_catalogo_detail(item_id: int) -> Any:
     item = CatalogItem.query.get(item_id)
     if item is None:
         return json_error("Produto não encontrado", 404)
+    # Sanitiza TAMBÉM na leitura: o RichTextEditor injeta este valor via innerHTML no app
+    # interno, e descrições legadas (import WooCommerce / textarea antiga) nunca passaram
+    # pelo nh3 — sem isto, HTML sujo no banco executaria na sessão do superadmin ao abrir
+    # a edição. A gravação continua sanitizando (fonte de verdade limpa na primeira edição).
+    from app.admin.catalog_ops import _sanitize_description
+
     return jsonify(
         {
             "id": item.id,
             "name": item.name,
-            "description": item.short_description_html or "",
+            "description": _sanitize_description(item.short_description_html) or "",
             "tags": item.tags_list,
             "is_active": item.is_active,
             "category_ids": [c.id for c in item.categories],

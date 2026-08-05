@@ -156,25 +156,60 @@ def print_sheet(sheet_id: int):
 @figurino_bp.route("/figurinos/print-event/<int:event_id>")
 @login_required
 def print_event_figurinos(event_id: int):
+    """Uma folha A4 por PERSONAGEM do evento.
+
+    Duas regras que não existiam e geravam "páginas em branco" na impressão:
+
+    - Cargos ``role_type == "extra"`` (transporte, maquiador, presença…) ficam de fora —
+      mesmo filtro do painel de Figurino (legado `event_detail.html` e React
+      `FigurinoSection.tsx`). Cada extra virava uma folha quase vazia de "Sem ficha".
+    - Personagem repetido (dois talentos no mesmo personagem) sai UMA vez — mesma
+      deduplicação do portal (`portal_ops.get_figurino`). Sem isso, cada cargo virava
+      uma folha duplicada.
+    """
     from app.models import CalendarEvent
     from .drive_service import normalize_name
 
     event = CalendarEvent.query.get_or_404(event_id)
 
-    items = []
-    for role in event.roles:
+    # Dedup por nome normalizado, preferindo o cargo COM ficha: dois cargos do mesmo
+    # personagem em que só o segundo tem ficha vinculada não podem virar uma folha
+    # "Sem ficha" + uma folha da ficha. `seen_sheets` cobre o caso inverso — a mesma
+    # ficha alcançada por dois nomes (vínculo explícito + lookup por norma).
+    by_norm: dict[str, dict] = {}
+    order: list[str] = []
+    seen_sheets: set[int] = set()
+    for role in sorted(event.roles, key=lambda r: r.id):
+        if role.role_type == "extra":
+            continue
+
         sheet = role.figurino_sheet
+        norm = normalize_name(role.character_name)
         if not sheet:
-            norm = normalize_name(role.character_name)
             sheet = FigurinoSheet.query.filter_by(character_name_norm=norm).first()
 
-        items.append({
+        entry = {
             "role": role,
             "sheet": sheet,
             "pieces": sheet.pieces_list if sheet else [],
             "talent": role.talent,
-        })
+        }
 
+        if norm in by_norm:
+            existing = by_norm[norm]
+            if existing["sheet"] is None and sheet is not None and sheet.id not in seen_sheets:
+                seen_sheets.add(sheet.id)
+                by_norm[norm] = entry
+            continue
+
+        if sheet is not None:
+            if sheet.id in seen_sheets:
+                continue
+            seen_sheets.add(sheet.id)
+        by_norm[norm] = entry
+        order.append(norm)
+
+    items = [by_norm[n] for n in order]
     return render_template("figurino_print.html", items=items, event=event,
                            title=f"Figurinos — {event.title}")
 

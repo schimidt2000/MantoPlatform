@@ -41,6 +41,7 @@ def _settings_summary(settings: SiteSetting) -> dict:
         "google_maps_api_key": settings.google_maps_api_key or "",
         "email_notifications_enabled": settings.email_notifications_enabled,
         "whatsapp_form_number": settings.whatsapp_form_number or "",
+        "google_review_url": settings.google_review_url or "",
         "release_date": settings.release_date.isoformat() if settings.release_date else None,
     }
 

@@ -655,3 +655,71 @@ def delete_ensaio_material(material: Any) -> None:
         delete_file(material.file_path)
     db.session.delete(material)
     db.session.commit()
+
+
+# ── Busca textual de eventos (agenda) ──────────────────────────────────────────
+
+# Mesmo espírito de `client_ops._SEARCH_MIN_CHARS`: menos de 2 caracteres não busca.
+SEARCH_MIN_CHARS = 2
+SEARCH_LIMIT = 30
+
+
+def search_events(q: str, limit: int = SEARCH_LIMIT) -> list[Any]:
+    """Busca eventos por título, nome da cliente ou telefone (fonte única da agenda).
+
+    Estratégia de match (paridade com `client_ops._name_search_conditions`):
+    - título e nome da cliente sem acento, via `unaccent_lower_sql` (app/utils.py);
+    - telefone por só-dígitos com `LIKE %digits%` — `Client.phone` já guarda DDI+DDD+número
+      normalizado, então "(11) 98765-4321" digitado casa por substring.
+
+    O vínculo evento↔cliente tem DUAS origens (feature 100): `event_clients` (fonte de
+    verdade, inclui assessora/mãe) e `CalendarEvent.client_id` (denormalizado, cobre eventos
+    antigos sem linha em `event_clients`). As duas entram em OR via EXISTS — sem duplicar
+    linhas quando o cliente está nos dois caminhos.
+
+    Args:
+        q: Termo digitado (mínimo `SEARCH_MIN_CHARS` após strip).
+        limit: Máximo de eventos devolvidos, mais recentes primeiro.
+
+    Returns:
+        Eventos ordenados por `start_at` decrescente, com `event_clients→client` e `client`
+        pré-carregados (a serialização do resultado não faz N+1).
+    """
+    from sqlalchemy import nullslast, or_
+    from sqlalchemy.orm import selectinload
+
+    from app.models import CalendarEvent, Client
+    from app.utils import strip_accents_lower, unaccent_lower_sql
+
+    q = (q or "").strip()
+    if len(q) < SEARCH_MIN_CHARS:
+        return []
+
+    # Curingas do LIKE escapados: sem isto, digitar "%%" ou "__" casa TODOS os eventos.
+    term = (
+        strip_accents_lower(q).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    )
+    like = f"%{term}%"
+    digits = "".join(c for c in q if c.isdigit())
+
+    client_conditions = [unaccent_lower_sql(Client.name).like(like, escape="\\")]
+    if digits:
+        client_conditions.append(Client.phone.ilike(f"%{digits}%"))
+    client_match = or_(*client_conditions)
+
+    return (
+        CalendarEvent.query.filter(
+            or_(
+                unaccent_lower_sql(CalendarEvent.title).like(like, escape="\\"),
+                CalendarEvent.event_clients.any(EventClient.client.has(client_match)),
+                CalendarEvent.client.has(client_match),
+            )
+        )
+        .options(
+            selectinload(CalendarEvent.event_clients).selectinload(EventClient.client),
+            selectinload(CalendarEvent.client),
+        )
+        .order_by(nullslast(CalendarEvent.start_at.desc()))
+        .limit(limit)
+        .all()
+    )

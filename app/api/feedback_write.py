@@ -16,11 +16,29 @@ from app import db, limiter
 from app.api import api_bp
 from app.api_utils import json_error
 from app.feedback.routes import ATTENTION_TAGS, POSITIVE_TAGS, _tags_for_score
-from app.models import CalendarEvent, ClientFeedback
+from app.models import CalendarEvent, ClientFeedback, SiteSetting
+
+# Fallback do link de review no Google quando `SiteSetting.google_review_url` está vazio.
+DEFAULT_GOOGLE_REVIEW_URL = "https://g.page/r/CUZ_o_N-Ywq8EAE/review"
 
 
 def _event_by_token(token: str) -> CalendarEvent | None:
     return CalendarEvent.query.filter_by(feedback_token=token).first()
+
+
+def google_review_url() -> str:
+    """Link de avaliação no Google mostrado após um feedback 5 estrelas.
+
+    Configurável em `SiteSetting.google_review_url` (Admin → Configurações); vazio cai no
+    default. Compartilhado com a rota Jinja legada (`app/feedback/routes.py`).
+    """
+    settings = SiteSetting.query.get(1)
+    configured = (settings.google_review_url or "").strip() if settings else ""
+    # Cinto-e-suspensório da validação de gravação (config_ops): o valor vira href em página
+    # pública — só http(s) sai daqui.
+    if configured.lower().startswith(("http://", "https://")):
+        return configured
+    return DEFAULT_GOOGLE_REVIEW_URL
 
 
 @api_bp.route("/avaliar/<token>")
@@ -36,6 +54,8 @@ def api_feedback_event(token: str) -> Any:
             "event_date": event.start_at.strftime("%d/%m/%Y") if event.start_at else None,
             "positive_tags": POSITIVE_TAGS,
             "attention_tags": ATTENTION_TAGS,
+            # CTA pós-envio: a tela de agradecimento mostra este link quando score == 5.
+            "google_review_url": google_review_url(),
         }
     )
 

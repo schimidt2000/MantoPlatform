@@ -70,6 +70,28 @@ def serialize_event_summary(event: CalendarEvent) -> dict[str, Any]:
     }
 
 
+def client_of_event(event: CalendarEvent) -> tuple[str | None, str | None]:
+    """(nome, telefone exibível) da cliente principal do evento, para a busca da agenda.
+
+    Preferência: EventClient "Contratante" → primeiro EventClient → `event.client`
+    (denormalizado, eventos pré-feature 100). `(None, None)` quando não há cliente.
+    """
+    chosen = None
+    for event_client in event.event_clients:
+        if event_client.client is None:
+            continue
+        if (event_client.relationship_type or "").lower() == "contratante":
+            chosen = event_client.client
+            break
+        if chosen is None:
+            chosen = event_client.client
+    if chosen is None:
+        chosen = event.client
+    if chosen is None:
+        return None, None
+    return chosen.name, chosen.phone_display or chosen.phone
+
+
 def build_agenda_month(year: int, month: int) -> dict[str, Any]:
     """Monta a resposta da agenda de um mês: eventos + índice por dia (para o calendário).
 
@@ -513,8 +535,14 @@ def serialize_event_detail(
             "needs_rehearsal": bool(event.needs_rehearsal),
         },
         "flags": flags,
-        "logs": _serialize_logs(event.id),
     }
+
+    # Histórico do evento — só SUPERADMIN (real e sem impersonação, mesma semântica de
+    # flags["is_superadmin"]) recebe; chave ausente = o React não renderiza a seção (mesmo
+    # padrão dos blocos financeiros). Precisa vir ANTES do early-return de ENSAIO, senão o
+    # superadmin perderia os logs de ensaios.
+    if flags["is_superadmin"]:
+        data["logs"] = _serialize_logs(event.id)
 
     # ENSAIO: painel simplificado (sem seções de show).
     if is_ensaio:

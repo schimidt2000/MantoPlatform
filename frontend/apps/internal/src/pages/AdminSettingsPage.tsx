@@ -18,6 +18,7 @@ export function AdminSettingsPage() {
   const [mapsKey, setMapsKey] = useState("");
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [googleReviewUrl, setGoogleReviewUrl] = useState("");
   const [releaseDate, setReleaseDate] = useState("");
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export function AdminSettingsPage() {
       setMapsKey(query.data.google_maps_api_key);
       setEmailNotifications(query.data.email_notifications_enabled);
       setWhatsappNumber(query.data.whatsapp_form_number);
+      setGoogleReviewUrl(query.data.google_review_url);
       setReleaseDate(query.data.release_date ?? "");
     }
   }, [query.data]);
@@ -157,6 +159,15 @@ export function AdminSettingsPage() {
                 />
               </div>
               <div>
+                <label className={LABEL}>Link de avaliação no Google (feedback 5 estrelas)</label>
+                <input
+                  className={INPUT}
+                  placeholder="https://g.page/r/…/review — vazio usa o padrão"
+                  value={googleReviewUrl}
+                  onChange={(e) => setGoogleReviewUrl(e.target.value)}
+                />
+              </div>
+              <div>
                 <label className={LABEL}>Data de início do sistema</label>
                 <input
                   type="date"
@@ -197,6 +208,7 @@ export function AdminSettingsPage() {
                 google_maps_api_key: mapsKey,
                 email_notifications_enabled: emailNotifications,
                 whatsapp_form_number: whatsappNumber,
+                google_review_url: googleReviewUrl,
                 release_date: releaseDate || undefined,
               })
             }

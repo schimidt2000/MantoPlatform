@@ -12,7 +12,7 @@ from app.admin import catalog_character_ops, catalog_ops
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
-from app.models import CatalogCharacter, CatalogItem
+from app.models import CatalogCharacter, CatalogItem, CatalogItemImage
 
 
 def _has_role(*names: str) -> bool:
@@ -196,6 +196,28 @@ def api_admin_catalogo_character_update(character_id: int) -> Any:
             photo_file=request.files.get("photo"),
             remove_photo=request.form.get("remove_photo", "").lower() == "true",
         )
+    except catalog_character_ops.CatalogValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(_character_summary(character))
+
+
+@api_bp.route("/admin/catalogo/personagens/<int:character_id>/adotar-foto", methods=["POST"])
+@api_login_required
+def api_admin_catalogo_character_adopt_photo(character_id: int) -> Any:
+    """Adota uma foto da galeria do Tema como foto do Personagem (drag-and-drop)."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    character = CatalogCharacter.query.get(character_id)
+    if character is None:
+        return json_error("Personagem não encontrado", 404)
+    body = request.get_json(silent=True) or {}
+    image_id = body.get("image_id")
+    image = CatalogItemImage.query.get(image_id) if image_id else None
+    if image is None:
+        return json_error("Foto da galeria não encontrada", 404)
+    try:
+        catalog_character_ops.adopt_gallery_photo(character, image)
     except catalog_character_ops.CatalogValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
     return jsonify(_character_summary(character))

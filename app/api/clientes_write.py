@@ -14,6 +14,7 @@ from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.clientes import client_ops
 from app.constants import RoleName
+from app.models import ClientFeedback
 
 
 def _has_role(*names: str) -> bool:
@@ -96,4 +97,18 @@ def api_clientes_delete(client_id: int) -> Any:
     if client is None:
         return json_error("Cliente não encontrado", 404)
     client_ops.delete_client(client)
+    return "", 204
+
+
+@api_bp.route("/clientes/avaliacoes/<int:feedback_id>", methods=["DELETE"])
+@api_login_required
+def api_clientes_avaliacao_delete(feedback_id: int) -> Any:
+    """Exclui uma avaliação recebida incorretamente. Somente SUPERADMIN — mais restrito que
+    o gate de vendas do módulo, por decisão do produto (exclusão manual de dado da cliente)."""
+    if not _has_role(RoleName.SUPERADMIN):
+        return json_error("Sem permissão", 403)
+    feedback = ClientFeedback.query.get(feedback_id)
+    if feedback is None:
+        return json_error("Avaliação não encontrada", 404)
+    client_ops.delete_feedback(feedback)
     return "", 204

@@ -3,8 +3,15 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **206 (React como
-> interface primária + proxy reverso)**, sobre a 205f
+> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **207 (pacote de
+> melhorias operacionais)**
+>
+> UX novas da 207: `/agenda` ganhou campo único de busca (evento/cliente/telefone, param `q`,
+> resultados Próximos/Anteriores no lugar das visões enquanto há termo); detalhe do evento
+> ganhou botão "Imprimir fichas" (1 folha por personagem) e exclusão de feedback p/ SUPERADMIN;
+> `/admin/catalogo/:id` ganhou editor rich-text na descrição e drag de foto da galeria →
+> personagem; `/avaliar/<token>` mostra CTA do Google Review após nota 5; a seção "Log de
+> atividades" do evento agora só existe para SUPERADMIN (o servidor omite a chave).
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.

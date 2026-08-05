@@ -1,5 +1,7 @@
 import { useId, useMemo, useState } from "react";
+import { Printer } from "lucide-react";
 import { Badge, Button } from "@manto/ui";
+import { API_BASE } from "@manto/api-client";
 import type { EventoDetalhe, RoleItem } from "../../lib/agenda";
 import { useLinkFigurinoSheet, useToggleFigurinoDone } from "../../lib/eventDetail";
 import { useFigurinoSheets } from "../../lib/figurino";
@@ -151,6 +153,22 @@ export function FigurinoSection({ data }: FigurinoSectionProps) {
       actions={
         <>
           {semFicha > 0 && <Badge tone="red">{semFicha} sem ficha</Badge>}
+          {personagens.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                window.open(
+                  `${API_BASE}/figurinos/print-event/${data.event.id}`,
+                  "_blank",
+                  "noopener",
+                )
+              }
+            >
+              <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+              Imprimir fichas
+            </Button>
+          )}
           <Button asChild variant="outline" size="sm">
             <a href="/figurinos">Banco de figurinos</a>
           </Button>

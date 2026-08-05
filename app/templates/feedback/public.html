@@ -97,6 +97,13 @@
       <div class="emoji">💜</div>
       <h1>Obrigado pelo seu feedback!</h1>
       <p>Sua opinião ajuda a equipe da Manto Produções a ficar cada vez melhor.</p>
+      {% if google_review_url %}
+        <p style="margin-top: 18px;">Sua avaliação 5 estrelas nos ajuda muito! Que tal deixar também no Google?</p>
+        <a href="{{ google_review_url }}" target="_blank" rel="noopener noreferrer"
+           class="fb-submit" style="display: inline-block; margin-top: 12px; text-decoration: none; width: auto; padding: 12px 24px;">
+          ⭐ Avaliar no Google
+        </a>
+      {% endif %}
     </div>
   {% else %}
 

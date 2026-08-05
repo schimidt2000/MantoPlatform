@@ -727,6 +727,9 @@ class SiteSetting(db.Model):
     # Número WhatsApp (só dígitos, com DDI) que recebe as respostas dos formulários de
     # pré-contrato (feature 118). NULL = usa o padrão em app/formularios/routes.py.
     whatsapp_form_number = db.Column(db.String(20), nullable=True)
+    # Link de avaliação no Google mostrado à cliente que dá 5 estrelas no feedback público.
+    # NULL = usa DEFAULT_GOOGLE_REVIEW_URL em app/api/feedback_write.py.
+    google_review_url = db.Column(db.String(300), nullable=True)
     # ── Loja de Interações Virtuais (feature 205) ────────────────────────────
     # "InfiniteTag" da conta InfinitePay — identifica o vendedor em toda chamada da API.
     infinitepay_handle = db.Column(db.String(100), nullable=True)

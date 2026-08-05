@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
@@ -13,6 +13,10 @@ import {
 } from "../lib/adminCatalogo";
 import { ChipInput } from "../components/ChipInput";
 import { AdminCatalogCharacterPanel } from "../components/AdminCatalogCharacterPanel";
+import { RichTextEditor } from "../components/RichTextEditor";
+
+/** Tipo do payload de drag de uma foto da galeria (cross-container p/ o painel de personagens). */
+export const CATALOG_PHOTO_DRAG_TYPE = "application/x-manto-catalog-photo";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
@@ -47,17 +51,22 @@ export function AdminCatalogoFormPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
+  // Hidrata o formulário UMA vez por produto. Sem o guard, qualquer mutação do painel de
+  // personagens (adotar foto por drag, criar/excluir/reordenar) invalida
+  // ["admin-catalogo", id], o refetch troca `itemQuery.data` e este efeito RESETAVA nome,
+  // descrição, fotos e tags — descartando tudo que o admin tinha editado sem salvar.
+  const hydratedIdRef = useRef<number | null>(null);
   useEffect(() => {
-    if (itemQuery.data) {
-      setName(itemQuery.data.name);
-      setDescription(itemQuery.data.description);
-      setTagsList(itemQuery.data.tags);
-      setVideoUrl(itemQuery.data.video_url ?? "");
-      setCategoryIds(itemQuery.data.category_ids);
-      setExistingPhotos(
-        itemQuery.data.images.map((img) => ({ ...img, markedForRemoval: false })),
-      );
-    }
+    if (!itemQuery.data || hydratedIdRef.current === itemQuery.data.id) return;
+    hydratedIdRef.current = itemQuery.data.id;
+    setName(itemQuery.data.name);
+    setDescription(itemQuery.data.description);
+    setTagsList(itemQuery.data.tags);
+    setVideoUrl(itemQuery.data.video_url ?? "");
+    setCategoryIds(itemQuery.data.category_ids);
+    setExistingPhotos(
+      itemQuery.data.images.map((img) => ({ ...img, markedForRemoval: false })),
+    );
   }, [itemQuery.data]);
 
   const toggleCategory = (catId: number) =>
@@ -170,10 +179,12 @@ export function AdminCatalogoFormPage() {
           </div>
           <div>
             <label className={LABEL}>Descrição</label>
-            <textarea
-              className="min-h-20 w-full rounded-md border border-line bg-panel p-2 text-sm text-ink"
+            {/* Rich-text natural (negrito/itálico/parágrafo); o valor persistido continua
+                HTML em `short_description_html` — o backend sanitiza (nh3). */}
+            <RichTextEditor
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={setDescription}
+              ariaLabel="Descrição do produto"
             />
           </div>
           <div>
@@ -262,7 +273,13 @@ export function AdminCatalogoFormPage() {
                     key={photo.id}
                     className={`space-y-1 ${dragIndex === idx ? "opacity-40" : ""}`}
                     draggable
-                    onDragStart={() => setDragIndex(idx)}
+                    onDragStart={(e) => {
+                      setDragIndex(idx);
+                      // Payload cross-container: arrastar esta foto até um personagem do
+                      // painel abaixo a adota como foto dele (só fotos já salvas têm id).
+                      e.dataTransfer.setData(CATALOG_PHOTO_DRAG_TYPE, String(photo.id));
+                      e.dataTransfer.effectAllowed = "copyMove";
+                    }}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => {
                       if (dragIndex !== null) reorderExistingPhoto(dragIndex, idx);

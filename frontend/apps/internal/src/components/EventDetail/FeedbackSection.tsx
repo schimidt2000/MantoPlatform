@@ -1,5 +1,8 @@
-import { Badge } from "@manto/ui";
+import { useState } from "react";
+import { Trash2 } from "lucide-react";
+import { Badge, Button } from "@manto/ui";
 import type { EventoDetalhe } from "../../lib/agenda";
+import { useDeleteClientFeedback } from "../../lib/clientes";
 import { Empty, formatDay, Panel, Stars } from "./parts";
 
 /** Rótulo curto de cada critério avaliado pelos artistas no portal. */
@@ -69,6 +72,10 @@ function RatingsPanel({ data }: { data: EventoDetalhe }) {
 /** Feedback da cliente (link público `/avaliar/<token>`). */
 function ClientFeedbackPanel({ data }: { data: EventoDetalhe }) {
   const feedbacks = data.client_feedbacks;
+  // Exclusão manual de feedback incorreto — só SUPERADMIN (o endpoint valida de novo).
+  const canDelete = Boolean(data.flags.is_superadmin);
+  const deleteFeedback = useDeleteClientFeedback();
+  const [confirmingId, setConfirmingId] = useState<number | null>(null);
   if (!feedbacks) return null;
 
   return (
@@ -88,7 +95,37 @@ function ClientFeedbackPanel({ data }: { data: EventoDetalhe }) {
                 <span className="text-xs text-muted tabular-nums">
                   {formatDay(feedback.submitted_at)}
                 </span>
+                {canDelete && confirmingId !== feedback.id && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto text-muted hover:text-red"
+                    aria-label="Excluir avaliação"
+                    onClick={() => setConfirmingId(feedback.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Button>
+                )}
               </div>
+              {confirmingId === feedback.id && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-md border border-red bg-red-soft p-2 text-sm">
+                  <span className="text-red">Excluir esta avaliação? A ação não pode ser desfeita.</span>
+                  <Button variant="outline" size="sm" onClick={() => setConfirmingId(null)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    size="sm"
+                    loading={deleteFeedback.isPending}
+                    onClick={() =>
+                      deleteFeedback.mutate(feedback.id, {
+                        onSettled: () => setConfirmingId(null),
+                      })
+                    }
+                  >
+                    Excluir
+                  </Button>
+                </div>
+              )}
               {feedback.comment && (
                 <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted">{feedback.comment}</p>
               )}

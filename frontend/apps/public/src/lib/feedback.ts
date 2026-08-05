@@ -6,6 +6,8 @@ export interface FeedbackEvent {
   event_date: string | null;
   positive_tags: string[];
   attention_tags: string[];
+  /** Link de avaliação no Google — CTA da tela de agradecimento quando a nota é 5. */
+  google_review_url: string;
 }
 
 export interface FeedbackSubmitInput {

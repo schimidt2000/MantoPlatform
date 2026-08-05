@@ -163,6 +163,8 @@ export interface ClientFeedbackFilters {
 }
 
 export interface ClientFeedbackSummary {
+  /** Capacidade de excluir avaliações — o servidor decide (SUPERADMIN), a UI só espelha. */
+  can_delete?: boolean;
   feedbacks: ClientFeedbackItem[];
   kpis: ClientFeedbackKpis;
   total: number;
@@ -174,6 +176,23 @@ export interface ClientFeedbackSummary {
   clients_with_feedback: { id: number; name: string }[];
   all_tags: string[];
   filters: ClientFeedbackFilters;
+}
+
+/**
+ * Exclui uma avaliação recebida incorretamente (SUPERADMIN). Invalida a página de
+ * satisfação E o prefixo ["event"] — o painel de feedback do detalhe do evento usa o mesmo
+ * dado e ficaria com o registro fantasma sem a segunda invalidação.
+ */
+export function useDeleteClientFeedback() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, number>({
+    mutationFn: (feedbackId) =>
+      apiFetch<void>(`/api/clientes/avaliacoes/${feedbackId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["clientes-avaliacoes"] });
+      void queryClient.invalidateQueries({ queryKey: ["event"] });
+    },
+  });
 }
 
 /** Resumo do feedback das clientes (feature 130/131), migrado na 165. */

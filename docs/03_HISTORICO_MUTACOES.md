@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **206 (React como
-> interface primária + proxy reverso)**, sobre a 205f
+> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **207 (pacote de
+> melhorias operacionais)** · Head de migration: `d9f2b3a41c07`
 
 Formato de cada entrada:
 
@@ -18,6 +18,71 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 207 — Pacote de melhorias operacionais (5 frentes)
+`main` · **2026-08-04** · migration `d9f2b3a41c07` (*google_review_url em site_settings*)
+
+**Motivação.** Cinco atritos do dia a dia relatados pelo dono após a virada do React: impressão
+de fichas com páginas em branco (e sem botão na SPA), agenda sem busca, catálogo exigindo HTML
+na mão e sem caminho da galeria para o personagem, avaliação 5 estrelas sem conversão para o
+Google, e o log do evento visível a qualquer papel.
+
+**O que mudou.**
+
+*Impressão de fichas* — `print_event_figurinos` agora filtra `role_type == "extra"` e deduplica
+personagem (ficha quando existe, nome normalizado quando não) — cada extra/duplicata virava uma
+folha. CSS de impressão: `.sheet-page` vira `display: block` no print (flex fragmenta mal no
+Chromium e gerava folhas em branco), `break-inside: avoid` nos blocos, e modo `sheet-compact`
+(>14 peças encolhe linhas/foto e corta linhas vazias para caber em UMA folha). Botão
+"Imprimir fichas" voltou na `FigurinoSection` da SPA; proxies dev (vite) e produção
+(`server.js`) ganharam `^/figurinos/print-event/\d+$`.
+
+*Busca da agenda* — `event_ops.search_events` (núcleo puro): título e nome de cliente sem
+acento (`unaccent_lower_sql`), telefone por só-dígitos `LIKE %digits%`, cobrindo `event_clients`
+E `client_id` legado via EXISTS. `GET /api/agenda/search?q=` (rota separada — contrato do
+`/api/agenda` intocado); nome/telefone da cliente só saem para COMERCIAL/FINANCEIRO/SUPERADMIN
+(demais acham o evento, campos vêm `null`). UI: campo único na toolbar, debounce 300ms para o
+param `q` da URL, resultados agrupados em Próximos/Anteriores/Sem data reusando `AgendaListItem`.
+
+*Catálogo* — `storage.copy_file` (local resolve `/catalogo/midia/*` de volta a `catalog_photos/`;
+S3 usa `copy_object`) + `adopt_gallery_photo` + `POST /api/admin/catalogo/personagens/<id>/adotar-foto`:
+arrastar foto da galeria até um personagem a adota como foto dele (HTML5 dnd, payload
+`application/x-manto-catalog-photo`; confirmação ao sobrescrever). A foto é SEMPRE copiada —
+URL compartilhada quebraria nos 5 pontos que chamam `delete_file`. Descrição: `RichTextEditor`
+(contentEditable + execCommand, B/I/limpar, cola só texto puro — zero dependência nova) no lugar
+do textarea de HTML cru; sanitização server-side nova com **nh3** (`_sanitize_description`,
+tags `b/strong/i/em/p/br/span/div`, zero atributos) nos dois pontos de gravação — antes NÃO
+havia sanitização e o valor é renderizado com `dangerouslySetInnerHTML`/`|safe`.
+
+*Avaliações* — coluna `site_settings.google_review_url` (NULL = `DEFAULT_GOOGLE_REVIEW_URL` em
+`feedback_write.py`), editável em Admin→Configurações; `GET /api/avaliar/<token>` devolve
+`google_review_url` e a tela de agradecimento (React E Jinja legada) mostra o CTA "Avaliar no
+Google" quando a nota é 5. `DELETE /api/clientes/avaliacoes/<id>` (SUPERADMIN-only, auditado,
+`client_ops.delete_feedback`); botão com confirmação inline nas duas telas
+(`ClientFeedbackPage` via flag `can_delete` do payload, `FeedbackSection` via
+`flags.is_superadmin`); o hook invalida `["clientes-avaliacoes"]` e o prefixo `["event"]`.
+
+*Logs do evento* — `serialize_event_detail` só inclui `"logs"` quando `flags["is_superadmin"]`
+(some também em impersonação — convenção de `auth.py`/`dashboard_service.py`); antes o payload
+vazava para todo papel e só a UI escondia. Tipo `logs?:` opcional; `LogsSection` checa presença
+da chave. Inserido ANTES do early-return de ENSAIO.
+
+**Riscos e pegadinhas.**
+
+1. **O dedup do print escolhe o PRIMEIRO cargo (menor id) de cada personagem** — o talento
+   impresso na ficha é o desse cargo; os demais talentos do mesmo personagem não aparecem.
+   Aceitável (a ficha é do figurino, não da escala), mas é uma escolha.
+2. **`copy_file` devolve `None` em falha e a op converte em 400 controlado** — origem sumida do
+   disco/bucket não derruba o request. Testado com arquivo inexistente.
+3. **A sanitização nh3 só roda na GRAVAÇÃO** — descrição legada do WooCommerce continua como
+   está até a primeira edição (na qual perde atributos de `<span>`, comportamento desejado).
+4. **`queryCommandState`/`execCommand` são deprecados** — funcionam em todos os browsers atuais
+   para bold/italic; se um dia quebrarem, o caminho é TipTap (decisão registrada: evitamos a
+   dependência enquanto o escopo é negrito/itálico/parágrafo).
+5. **A busca não usa índice** (translate/lower sobre title/name) — aceitável no volume do ERP,
+   com `LIMIT 30` e mínimo de 2 caracteres obrigatórios.
+6. **`verify_145` ganhou 3 checks de logs; `verify_207_pacote_melhorias.py` cobre o pacote**
+   (23/23 contra manto_local).
 
 ### 206 — React como interface primária e proxy reverso em produção
 `205-loja-interacoes-virtuais` · **2026-08-04** · sem migration

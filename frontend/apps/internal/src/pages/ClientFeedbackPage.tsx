@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { CalendarDays, MessageSquareDashed, Search, Star, TrendingUp } from "lucide-react";
+import { CalendarDays, MessageSquareDashed, Search, Star, Trash2, TrendingUp } from "lucide-react";
 import {
   Badge,
   Button,
@@ -18,6 +18,7 @@ import {
 } from "@manto/ui";
 import {
   useClientFeedback,
+  useDeleteClientFeedback,
   type ClientFeedbackItem,
   type FeedbackPeriod,
 } from "../lib/clientes";
@@ -102,7 +103,11 @@ function KpiCard({
 }
 
 /** Card de uma avaliação: nota em estrelas, cliente, evento (com link) e comentário. */
-function FeedbackCard({ item }: { item: ClientFeedbackItem }) {
+function FeedbackCard({ item, canDelete }: { item: ClientFeedbackItem; canDelete: boolean }) {
+  // Exclusão manual (SUPERADMIN) com confirmação inline em duas etapas — padrão
+  // FormulariosAdminPage; o servidor valida o papel de novo no DELETE.
+  const deleteFeedback = useDeleteClientFeedback();
+  const [confirming, setConfirming] = useState(false);
   return (
     <Card className="flex h-full flex-col">
       <CardContent className="flex flex-1 flex-col gap-3 p-4">
@@ -111,10 +116,41 @@ function FeedbackCard({ item }: { item: ClientFeedbackItem }) {
             <StarRating value={item.score} />
             <Badge tone={scoreTone(item.score)}>{item.score}/5</Badge>
           </div>
-          <span className="shrink-0 text-xs text-muted" title={formatShortDate(item.submitted_at)}>
-            {formatRelativeDay(item.submitted_at) || formatShortDate(item.submitted_at)}
+          <span className="flex shrink-0 items-center gap-1">
+            <span className="text-xs text-muted" title={formatShortDate(item.submitted_at)}>
+              {formatRelativeDay(item.submitted_at) || formatShortDate(item.submitted_at)}
+            </span>
+            {canDelete && !confirming && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-1.5 text-muted hover:text-red"
+                aria-label="Excluir avaliação"
+                onClick={() => setConfirming(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              </Button>
+            )}
           </span>
         </div>
+
+        {confirming && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-red bg-red-soft p-2 text-sm">
+            <span className="text-red">Excluir esta avaliação? A ação não pode ser desfeita.</span>
+            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              loading={deleteFeedback.isPending}
+              onClick={() =>
+                deleteFeedback.mutate(item.id, { onSettled: () => setConfirming(false) })
+              }
+            >
+              Excluir
+            </Button>
+          </div>
+        )}
 
         <div className="min-w-0">
           <p className="truncate font-semibold text-ink">
@@ -388,7 +424,7 @@ export function ClientFeedbackPage() {
             ) : (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {visible.map((item) => (
-                  <FeedbackCard key={item.id} item={item} />
+                  <FeedbackCard key={item.id} item={item} canDelete={Boolean(data?.can_delete)} />
                 ))}
               </div>
             )}

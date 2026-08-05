@@ -167,6 +167,25 @@ def delete_client(client: Client) -> None:
     db.session.commit()
 
 
+def delete_feedback(feedback: ClientFeedback) -> None:
+    """Exclui uma avaliação recebida incorretamente (SUPERADMIN, gate na view).
+
+    Exclusão dura e auditada — não há soft-delete no model; o registro de auditoria é o
+    rastro que sobra.
+    """
+    from app.utils import audit
+
+    audit(
+        "delete",
+        "client_feedback",
+        feedback.id,
+        feedback.client_name or "Cliente",
+        f"Avaliação {feedback.score}/5 do evento #{feedback.event_id} excluída",
+    )
+    db.session.delete(feedback)
+    db.session.commit()
+
+
 # Caractere de escape do LIKE nas buscas por tag. Precisa ser explícito: o padrão do
 # PostgreSQL é a barra invertida, que aparece dentro do próprio texto procurado (`⏰`).
 _LIKE_ESCAPE_CHAR = "!"

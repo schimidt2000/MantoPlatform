@@ -129,7 +129,11 @@ const PORTAL_HOSTS = new Set(
 const BACKEND_PREFIXES = ["/api", "/uploads", "/catalogo/midia", "/portal/photo", "/google"];
 
 /** Rotas Jinja remanescentes, casadas por regex para não sombrear rotas do React Router. */
-const BACKEND_PATTERNS = [/^\/figurinos\/\d+\/print(?:[/?]|$)/];
+const BACKEND_PATTERNS = [
+  /^\/figurinos\/\d+\/print(?:[/?]|$)/,
+  // Impressão de todas as fichas de um evento (1 folha por personagem).
+  /^\/figurinos\/print-event\/\d+(?:[/?]|$)/,
+];
 
 /** True se a URL pertence ao prefixo montado (exato, com `/` ou com query). */
 function matchesPrefix(url, prefix) {

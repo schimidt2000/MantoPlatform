@@ -49,6 +49,12 @@ export default defineConfig({
         target: "http://localhost:5000",
         changeOrigin: true,
       },
+      // Impressão de TODAS as fichas do evento (1 folha por personagem) — mesma regra
+      // regex-restrita: `/figurinos` puro é rota do React Router.
+      "^/figurinos/print-event/\\d+$": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+      },
     },
   },
 });

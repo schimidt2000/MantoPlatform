@@ -3,10 +3,18 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **206 (React como
-> interface primária + proxy reverso)**, sobre a 205f (`205-loja-interacoes-virtuais`) ·
-> Head de migration: `c17b3ea94f52` (*progresso persistido das retentativas assíncronas da Loja
-> Virtual* — a 206 não tem migration)
+> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **207 (pacote de
+> melhorias operacionais)** · Head de migration: `d9f2b3a41c07` (*google_review_url em
+> site_settings*)
+>
+> Rotas novas da 207: `GET /api/agenda/search?q=` (busca textual; nome/telefone da cliente só
+> para vendas), `POST /api/admin/catalogo/personagens/<id>/adotar-foto` (SUPERADMIN),
+> `DELETE /api/clientes/avaliacoes/<id>` (SUPERADMIN, auditado). Mudanças de payload:
+> `GET /api/avaliar/<token>` ganhou `google_review_url`; `GET /api/clientes/avaliacoes` ganhou
+> `can_delete`; `GET /api/admin/settings` ganhou `google_review_url`; no detalhe do evento a
+> chave `logs` passou a ser condicional a SUPERADMIN. Sanitização de descrição do catálogo com
+> `nh3` (novo em requirements.txt). Proxies (vite + server.js) ganharam
+> `/figurinos/print-event/<id>`.
 
 ---
 

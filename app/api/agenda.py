@@ -13,10 +13,12 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api.agenda_read import (
     build_agenda_month,
+    client_of_event,
     serialize_event_detail,
     serialize_event_summary,
 )
 from app.api_utils import api_login_required, json_error
+from app.constants import RoleName
 from app.models import CalendarEvent, Talent
 
 
@@ -38,6 +40,35 @@ def api_agenda() -> Any:
         year, month = now.year, now.month
 
     return jsonify(build_agenda_month(year, month))
+
+
+@api_bp.route("/agenda/search")
+@api_login_required
+def api_agenda_search() -> Any:
+    """Busca textual de eventos (`?q=`) por título, nome ou telefone da cliente.
+
+    Rota separada do `GET /api/agenda` de propósito — o contrato `ym`/`by_day` das três
+    visões fica intocado (Princípio IV). Nome/telefone da cliente só saem no JSON para
+    papéis de vendas (paridade com `_require_vendas` do CRM): os demais ACHAM o evento
+    digitando o telefone, mas recebem os campos como `null`.
+    """
+    from app.calendar.event_ops import SEARCH_LIMIT, search_events
+
+    q = (request.args.get("q") or "").strip()
+    events = search_events(q)
+
+    vendas_roles = {RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN}
+    can_see_client = any(r.name.upper() in vendas_roles for r in current_user.roles)
+
+    items = []
+    for event in events:
+        summary = serialize_event_summary(event)
+        client_name, client_phone = client_of_event(event) if can_see_client else (None, None)
+        summary["client_name"] = client_name
+        summary["client_phone_display"] = client_phone
+        items.append(summary)
+
+    return jsonify({"q": q, "items": items, "total": len(items), "limit": SEARCH_LIMIT})
 
 
 @api_bp.route("/agenda/day/<date_str>")

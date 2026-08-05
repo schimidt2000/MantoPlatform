@@ -84,6 +84,19 @@ def update_settings(settings: SiteSetting, fields: dict[str, Any], logo_file=Non
     wa_form_digits = "".join(c for c in wa_form_raw if c.isdigit())
     settings.whatsapp_form_number = wa_form_digits or None
 
+    # Semântica do whatsapp_form_number (vazio limpa e volta ao default), NÃO a do
+    # manto_address (que ignora vazio) — senão o superadmin nunca conseguiria restaurar o
+    # link padrão do Google Review. Dois cuidados extras:
+    # - só aplica quando a CHAVE veio no payload: o form Jinja legado de /admin/settings não
+    #   tem este campo e, sem o guard, qualquer salvamento por lá zeraria o link;
+    # - só aceita http(s): o valor vira href em página pública (CTA pós-feedback) — uma
+    #   `javascript:` URL colada aqui seria XSS entregue à cliente.
+    if "google_review_url" in fields:
+        review_url_raw = (fields.get("google_review_url") or "").strip()
+        if review_url_raw and not review_url_raw.lower().startswith(("http://", "https://")):
+            review_url_raw = ""
+        settings.google_review_url = review_url_raw or None
+
     release_raw = (fields.get("release_date") or "").strip()
     if release_raw:
         try:

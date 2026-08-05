@@ -151,10 +151,15 @@ def avaliar_submit(token: str):
             error="Não foi possível enviar agora. Tente novamente em instantes.",
         )
 
+    # CTA do Google Review em nota 5 — mesma fonte única da API React
+    # (app/api/feedback_write.py::google_review_url).
+    from app.api.feedback_write import google_review_url
+
     return render_template(
         "feedback/public.html",
         event=event,
         positive_tags=POSITIVE_TAGS,
         attention_tags=ATTENTION_TAGS,
         submitted=True,
+        google_review_url=google_review_url() if score == 5 else None,
     )

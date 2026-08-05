@@ -62,6 +62,7 @@ export function AvaliarPage() {
   }
 
   if (submitted) {
+    const reviewUrl = score === 5 ? feedbackEvent.data?.google_review_url : undefined;
     return (
       <div className="mx-auto flex min-h-[70vh] max-w-md items-center px-4 py-10">
         <Card className="w-full p-4 text-center">
@@ -71,6 +72,23 @@ export function AvaliarPage() {
             <p className="text-sm text-muted">
               Sua opinião ajuda a equipe da Manto Produções a ficar cada vez melhor.
             </p>
+            {reviewUrl && (
+              <motion.div
+                initial={reducedMotion ? undefined : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: 0.15 }}
+                className="mt-2 w-full space-y-2"
+              >
+                <p className="text-sm text-ink">
+                  Sua avaliação 5 estrelas nos ajuda muito! Que tal deixar também no Google?
+                </p>
+                <Button asChild size="lg" className="w-full">
+                  <a href={reviewUrl} target="_blank" rel="noopener noreferrer">
+                    ⭐ Avaliar no Google
+                  </a>
+                </Button>
+              </motion.div>
+            )}
           </CardContent>
         </Card>
       </div>

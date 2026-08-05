@@ -113,6 +113,82 @@ def delete_file(url_or_path: str | None) -> None:
         _delete_local(url_or_path)
 
 
+def copy_file(url_or_path: str, subfolder: str) -> str | None:
+    """Copia um arquivo já salvo para `subfolder`, devolvendo a nova URL.
+
+    Usado quando dois registros precisam da MESMA imagem (ex.: foto da galeria do catálogo
+    adotada como foto de personagem): referenciar a mesma URL quebraria no delete — os
+    fluxos de remoção chamam `delete_file` sem saber que a URL é compartilhada, e em S3 o
+    objeto sumiria para o outro registro. A cópia mantém todos os deletes existentes válidos.
+
+    Sem re-compressão: a origem já passou por `save_file` no upload original.
+
+    Returns:
+        A nova URL (`/uploads/<subfolder>/<uuid>.<ext>` local, ou URL absoluta em S3), ou
+        `None` quando a origem não pôde ser resolvida/copiada.
+    """
+    if not url_or_path:
+        return None
+    ext = os.path.splitext(url_or_path.split("?")[0])[1].lower() or ".jpg"
+    new_name = f"{_uuid.uuid4().hex}{ext}"
+
+    if url_or_path.startswith(("http://", "https://")):
+        return _copy_in_object_storage(url_or_path, subfolder, new_name)
+
+    # Local: resolve o arquivo físico. URLs `/catalogo/midia/<arq>` são reescrita pública de
+    # `catalog_photos` (app/catalogo/importer.py:_rewrite_public_url); `/uploads/<sub>/<arq>`
+    # mapeia direto para UPLOAD_FOLDER.
+    rel = url_or_path.lstrip("/")
+    if rel.startswith("catalogo/midia/"):
+        rel = "catalog_photos/" + rel[len("catalogo/midia/"):]
+    elif rel.startswith("uploads/"):
+        rel = rel[len("uploads/"):]
+    source = os.path.join(current_app.config["UPLOAD_FOLDER"], rel)
+    if not os.path.exists(source):
+        logger.warning("copy_file: origem não encontrada: %s", url_or_path)
+        return None
+
+    dest_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], subfolder)
+    os.makedirs(dest_dir, exist_ok=True)
+    shutil.copyfile(source, os.path.join(dest_dir, new_name))
+    return f"/uploads/{subfolder}/{new_name}"
+
+
+def _copy_in_object_storage(url: str, subfolder: str, new_name: str) -> str | None:
+    """`copy_object` dentro do bucket — mesmo parsing de key do `_delete_from_object_storage`."""
+    cfg = current_app.config
+    bucket = cfg["S3_BUCKET"]
+    public_url = cfg.get("S3_PUBLIC_URL", "").rstrip("/")
+    endpoint = cfg.get("S3_ENDPOINT_URL", "")
+    region = cfg.get("S3_REGION", "us-east-1")
+
+    prefixes = [p for p in [public_url, f"{endpoint}/{bucket}",
+                            f"https://{bucket}.s3.{region}.amazonaws.com"] if p]
+    key = None
+    for prefix in prefixes:
+        if url.startswith(prefix + "/"):
+            key = url[len(prefix) + 1:]
+            break
+    if not key:
+        logger.warning("copy_file: URL fora do bucket configurado: %s", url)
+        return None
+
+    new_key = f"{subfolder}/{new_name}"
+    try:
+        _get_s3_client().copy_object(
+            Bucket=bucket, Key=new_key, CopySource={"Bucket": bucket, "Key": key}
+        )
+    except Exception as exc:  # noqa: BLE001 — falha de cópia não pode derrubar o request
+        logger.warning("copy_file: falha ao copiar objeto S3 %s: %s", key, exc)
+        return None
+
+    if public_url:
+        return f"{public_url}/{new_key}"
+    if endpoint:
+        return f"{endpoint}/{bucket}/{new_key}"
+    return f"https://{bucket}.s3.{region}.amazonaws.com/{new_key}"
+
+
 # ── Local ────────────────────────────────────────────────────────────────────
 
 def _save_local(file_obj: BinaryIO, subfolder: str, filename: str) -> str:

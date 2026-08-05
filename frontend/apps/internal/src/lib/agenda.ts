@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import type { Event3DGift } from "./impressoes3d";
 import type { AvisoFalho } from "./virtuais";
@@ -42,6 +42,32 @@ export function useAgendaDia(date: string) {
     queryKey: ["agenda-dia", date],
     queryFn: () => apiFetch<AgendaDia>(`/api/agenda/day/${date}`),
     enabled: Boolean(date),
+  });
+}
+
+/** Resultado da busca — resumo + cliente (nome/telefone `null` para papéis sem vendas). */
+export interface EventoBusca extends EventoResumo {
+  client_name: string | null;
+  client_phone_display: string | null;
+}
+
+export interface AgendaBusca {
+  q: string;
+  items: EventoBusca[];
+  total: number;
+  limit: number;
+}
+
+/**
+ * Busca textual de eventos (título, cliente, telefone). Só dispara com 2+ caracteres;
+ * `keepPreviousData` evita a lista piscar a cada tecla (espelho de `useClientSearch`).
+ */
+export function useAgendaSearch(q: string) {
+  return useQuery<AgendaBusca>({
+    queryKey: ["agenda-search", q],
+    queryFn: () => apiFetch<AgendaBusca>(`/api/agenda/search?q=${encodeURIComponent(q)}`),
+    enabled: q.trim().length >= 2,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -190,7 +216,11 @@ export interface EventoDetalhe {
     travel: EventTravel;
   };
   flags: Record<string, boolean>;
-  logs: { ts: string; actor_name: string; actor_role: string; message: string }[];
+  /**
+   * Log de atividades — o servidor só serializa a chave para SUPERADMIN (real, sem
+   * impersonação); ausente para os demais papéis, mesmo padrão de `kpi?`/`venda?`.
+   */
+  logs?: { ts: string; actor_name: string; actor_role: string; message: string }[];
   elenco?: RoleItem[];
   materiais?: EventMaterial[];
   /**

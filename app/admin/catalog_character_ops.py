@@ -14,8 +14,8 @@ from app import db
 from app.admin.catalog_ops import CatalogValidationError
 from app.catalogo.importer import _rewrite_public_url, _slugify
 from app.catalogo.media import classify_video_url
-from app.models import CatalogCharacter, CatalogItem
-from app.storage import delete_file, save_file
+from app.models import CatalogCharacter, CatalogItem, CatalogItemImage
+from app.storage import copy_file, delete_file, save_file
 from app.utils import audit
 
 _ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -131,6 +131,37 @@ def update_character(
         character.photo_url = _rewrite_public_url(save_file(photo_file, "catalog_photos"))
 
     audit("edit", "CatalogCharacter", character.id, character.name, "Personagem editado")
+    db.session.commit()
+    return character
+
+
+def adopt_gallery_photo(character: CatalogCharacter, image: CatalogItemImage) -> CatalogCharacter:
+    """Adota uma foto da galeria do Tema como foto do Personagem (drag-and-drop do admin).
+
+    O arquivo é COPIADO (`storage.copy_file`), nunca referenciado: os fluxos de remoção
+    (`update_character`, `delete_character`, `catalog_ops.apply_photos`) chamam `delete_file`
+    sem saber de compartilhamento — em S3, uma URL compartilhada deixaria o outro lado com
+    imagem quebrada. A foto continua na galeria.
+    """
+    if image.item_id != character.catalog_item_id:
+        raise CatalogValidationError(
+            "image_id", "A foto precisa pertencer à galeria do mesmo Tema do personagem."
+        )
+
+    new_url = copy_file(image.url, "catalog_photos")
+    if not new_url:
+        raise CatalogValidationError(
+            "image_id", "Não foi possível copiar a foto da galeria. Tente novamente."
+        )
+
+    if character.photo_url:
+        delete_file(character.photo_url)
+    character.photo_url = _rewrite_public_url(new_url)
+
+    audit(
+        "edit", "CatalogCharacter", character.id, character.name,
+        "Foto adotada da galeria do Tema",
+    )
     db.session.commit()
     return character
 

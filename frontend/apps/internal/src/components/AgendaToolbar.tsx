@@ -10,6 +10,9 @@ export interface AgendaToolbarProps {
   onToday: () => void;
   /** Pula direto para o mês (visão Mês/Lista) ou dia (visão Dia) escolhido. */
   onDateChange: (date: string) => void;
+  /** Campo ÚNICO de busca (evento, cliente ou telefone) — sem filtros extras. */
+  searchValue: string;
+  onSearchChange: (q: string) => void;
 }
 
 const VIEW_OPTIONS: { value: AgendaViewMode; label: string }[] = [
@@ -30,9 +33,19 @@ export function AgendaToolbar({
   onNavigate,
   onToday,
   onDateChange,
+  searchValue,
+  onSearchChange,
 }: AgendaToolbarProps) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+      <Input
+        type="search"
+        aria-label="Buscar eventos"
+        placeholder="Buscar evento, cliente ou telefone…"
+        value={searchValue}
+        onChange={(e) => onSearchChange(e.target.value)}
+        className="h-9 w-full sm:w-64"
+      />
       <div
         role="group"
         aria-label="Visualização da agenda"

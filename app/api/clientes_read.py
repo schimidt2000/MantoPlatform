@@ -156,6 +156,9 @@ def api_clientes_avaliacoes() -> Any:
 
     return jsonify(
         {
+            # Capacidade da UI: só SUPERADMIN exclui avaliações (o servidor decide, o
+            # cliente apenas espelha — mesmo padrão de can_edit_structure dos formulários).
+            "can_delete": _has_role(RoleName.SUPERADMIN),
             "feedbacks": [_feedback_item(f) for f in summary.feedbacks],
             "kpis": {
                 "media_geral": summary.avg_overall,

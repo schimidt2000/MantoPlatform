@@ -228,22 +228,24 @@ export interface LogsSectionProps {
 /**
  * Log de atividades do evento (`EventLog`), em accordion no fim da página.
  *
- * SEGURANÇA: só é renderizado para SUPERADMIN. Para os demais papéis a seção não existe no
- * DOM — não é escondida por CSS.
+ * SEGURANÇA: o servidor só serializa `logs` para SUPERADMIN — para os demais papéis a chave
+ * nem chega na rede (antes o gate era só aqui no cliente e o payload vazava no devtools).
+ * A checagem de presença da chave segue o padrão das seções condicionais (`kpi`, `venda`).
  */
 export function LogsSection({ data }: LogsSectionProps) {
-  if (!data.flags.is_superadmin || data.logs.length === 0) return null;
+  const logs = data.logs;
+  if (!logs || logs.length === 0) return null;
   return (
     <Panel title="Log de atividades">
       <AccordionRow
         summary={
           <span className="text-sm text-ink">
-            {data.logs.length} registro(s) — histórico completo do evento
+            {logs.length} registro(s) — histórico completo do evento
           </span>
         }
       >
         <ul className="space-y-1.5 text-sm">
-          {data.logs.map((log, index) => (
+          {logs.map((log, index) => (
             <li key={index} className="text-muted">
               <span className="tabular-nums">{log.ts}</span> · {log.actor_name}: {log.message}
             </li>

@@ -13,13 +13,21 @@
       .no-print { display: none !important; }
       .sheet-page {
         page-break-after: always;
+        break-after: page;
         box-shadow: none !important;
         margin: 0 !important;
         padding: 0 !important;
         width: 100% !important;
         min-height: auto !important;
+        /* Flex container fragmenta mal na paginação do Chromium (folhas em branco/clipping);
+           no papel a ficha é fluxo normal — o rodapé é posicionado por margem, não por flex. */
+        display: block !important;
       }
-      .sheet-page:last-child { page-break-after: auto; }
+      .sheet-page:last-child { page-break-after: auto; break-after: auto; }
+      /* Nada de ficha "vazando" para a folha seguinte: os blocos internos não podem ser
+         divididos no meio — se não couberem, o conteúdo compacta (ver .sheet-compact). */
+      .sheet-top, .checklist-table tr, .sheet-footer { page-break-inside: avoid; break-inside: avoid; }
+      .sheet-footer { margin-top: 16px; }
       body { background: white !important; }
     }
 
@@ -217,6 +225,18 @@
       font-weight: 600;
     }
 
+    /* ── Modo compacto ───────────────────────────────────────────
+       Ficha com muitas peças precisa continuar cabendo em UMA folha: linhas e foto
+       encolhem em vez de transbordar (o transbordo era a 2ª causa das folhas em branco —
+       a sobra vazava para a página seguinte e o break forçado criava outra). */
+    .sheet-compact .sheet-photo,
+    .sheet-compact .sheet-photo-placeholder { height: 190px; }
+    .sheet-compact .checklist-table tbody td { height: 20px; padding: 2px 4px; font-size: 11px; }
+    .sheet-compact .checklist-table thead th { height: 26px; }
+    .sheet-compact .char-name { font-size: 22px; margin-bottom: 10px; }
+    .sheet-compact .instructions { line-height: 1.4; }
+    .sheet-compact .sheet-footer { padding-top: 16px; }
+
     /* ── No-sheet placeholder ────────────────────────────────── */
     .no-sheet {
       padding: 32px;
@@ -252,8 +272,11 @@
 {% set pieces = item.pieces %}
 {% set role   = item.role %}
 {% set talent = item.talent %}
+{# Acima de ~14 peças a ficha padrão não cabe em 1 folha — compacta e corta linhas vazias. #}
+{% set compact = pieces | length > 14 %}
+{% set empty_rows = 2 if compact else 5 %}
 
-<div class="sheet-page">
+<div class="sheet-page{% if compact %} sheet-compact{% endif %}">
 
   {% if not sheet %}
   {# No sheet assigned #}
@@ -371,8 +394,8 @@
       </tr>
       {% endfor %}
 
-      {# 5 empty rows for manual additions #}
-      {% for i in range(5) %}
+      {# Linhas vazias para adições manuais (menos no modo compacto) #}
+      {% for i in range(empty_rows) %}
       <tr class="empty-row">
         <td></td>
         <td></td>

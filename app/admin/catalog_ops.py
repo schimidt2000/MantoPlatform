@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 
+import nh3
+
 from app import db
 from app.catalogo.importer import _rewrite_public_url, _slugify
 from app.catalogo.media import classify_video_url
@@ -157,6 +159,29 @@ def apply_photos(item: CatalogItem, form, files) -> None:
             im.position = i
 
 
+# Vocabulário do editor rich-text do admin + do acervo importado do WooCommerce
+# (`importer._clean_description` mantém <b>/<span>; browsers emitem <b>/<i> ou <strong>/<em>).
+_DESCRIPTION_TAGS = {"b", "strong", "i", "em", "p", "br", "span", "div"}
+
+
+def _sanitize_description(raw: str | None) -> str | None:
+    """Sanitiza o HTML da descrição antes de persistir.
+
+    Obrigatório: o valor é renderizado com `dangerouslySetInnerHTML` na vitrine pública
+    (apps/public/ProductDetailPage.tsx) e com `|safe` no Jinja legado — sem isto, um script
+    colado na descrição viraria XSS armazenado. Atributos são todos removidos (nenhum é
+    necessário para negrito/itálico/parágrafo).
+
+    Markup sem texto vira `None`: apagar tudo no contentEditable deixa `<br>`/`<div><br></div>`
+    para trás, e persistir isso faria a vitrine renderizar um bloco vazio com margens.
+    """
+    clean = nh3.clean((raw or "").strip(), tags=_DESCRIPTION_TAGS, attributes={})
+    text_only = nh3.clean(clean, tags=set(), attributes={})
+    if not text_only.strip():
+        return None
+    return clean.strip() or None
+
+
 def validate_video_url(video_url: str | None) -> None:
     """Recusa uma `video_url` preenchida mas em formato não reconhecido (feature 185)."""
     if video_url and classify_video_url(video_url) is None:
@@ -188,7 +213,7 @@ def create_product(
     item = CatalogItem(
         name=clean_name,
         slug=unique_catalog_slug(clean_name),
-        short_description_html=(description or "").strip() or None,
+        short_description_html=_sanitize_description(description),
         tags=None,
         video_url=(video_url or "").strip() or None,
     )
@@ -232,7 +257,7 @@ def update_product(
 
     item.name = clean_name
     item.video_url = (video_url or "").strip() or None
-    item.short_description_html = (description or "").strip() or None
+    item.short_description_html = _sanitize_description(description)
     tags = _normalize_tags([t.strip() for t in tags_raw.split(",") if t.strip()], all_tags())
     item.tags = json.dumps(tags, ensure_ascii=False) if tags else None
     item.categories = (

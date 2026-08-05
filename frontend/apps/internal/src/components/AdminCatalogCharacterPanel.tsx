@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, type DragEvent } from "react";
 import { assetUrl, ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@manto/ui";
 import {
+  useAdoptGalleryPhoto,
   useCreateCharacter,
   useDeleteCharacter,
   useUpdateCharacter,
   type CatalogCharacter,
 } from "../lib/adminCatalogo";
 import { useFigurinoSheets } from "../lib/figurino";
+import { CATALOG_PHOTO_DRAG_TYPE } from "../pages/AdminCatalogoFormPage";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
@@ -36,8 +38,48 @@ export function AdminCatalogCharacterPanel({ itemId, characters }: AdminCatalogC
   const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT);
   const [fieldError, setFieldError] = useState<string | null>(null);
 
+  // Drop target do drag-and-drop "foto da galeria → personagem" (feature: adotar foto).
+  const adoptPhoto = useAdoptGalleryPhoto(itemId);
+  const [dropTargetId, setDropTargetId] = useState<number | null>(null);
+
   const sorted = [...characters].sort((a, b) => a.position - b.position);
   const figurinoSheets = figurinoQuery.data?.items ?? [];
+
+  function handlePhotoDragOver(event: DragEvent, characterId: number) {
+    if (!event.dataTransfer.types.includes(CATALOG_PHOTO_DRAG_TYPE)) return;
+    if (adoptPhoto.isPending) return; // drops em rajada intercalam invalidações — um por vez
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDropTargetId(characterId);
+  }
+
+  function handlePhotoDrop(event: DragEvent, character: CatalogCharacter) {
+    const raw = event.dataTransfer.getData(CATALOG_PHOTO_DRAG_TYPE);
+    setDropTargetId(null);
+    if (!raw) return;
+    event.preventDefault();
+    // O confirm sai do handler de drop via setTimeout: um diálogo modal SÍNCRONO aqui
+    // seguraria a sessão de drag aberta (ghost congelado, dragend da origem adiado) e
+    // alguns engines suprimem o diálogo durante drag-and-drop.
+    const imageId = Number(raw);
+    setTimeout(() => {
+      if (
+        character.photo_url &&
+        !window.confirm(`Substituir a foto atual de "${character.name}" pela foto arrastada?`)
+      ) {
+        return;
+      }
+      setFieldError(null);
+      adoptPhoto.mutate(
+        { characterId: character.id, imageId },
+        {
+          onError: (err) => {
+            if (err instanceof ApiRequestError) setFieldError(err.message);
+          },
+        },
+      );
+    }, 0);
+  }
 
   function handleCreate() {
     setFieldError(null);
@@ -80,16 +122,35 @@ export function AdminCatalogCharacterPanel({ itemId, characters }: AdminCatalogC
       </CardHeader>
       <CardContent className="space-y-4">
         {sorted.length > 0 && (
+          <p className="text-xs text-muted">
+            Dica: arraste uma foto <strong>já salva</strong> da galeria acima até um personagem
+            para usá-la como foto dele (fotos recém-adicionadas precisam ser salvas antes).
+          </p>
+        )}
+        {sorted.length > 0 && (
           <ul className="space-y-3">
             {sorted.map((character, idx) => (
-              <li key={character.id} className="flex items-center gap-3 border-b border-line pb-3 last:border-none">
-                <div className="h-12 w-12 flex-none overflow-hidden rounded-md bg-surface-2">
+              <li
+                key={character.id}
+                className={`flex items-center gap-3 rounded-md border-b border-line pb-3 transition-shadow duration-200 last:border-none ${
+                  dropTargetId === character.id ? "ring-2 ring-accent" : ""
+                }`}
+                onDragOver={(e) => handlePhotoDragOver(e, character.id)}
+                onDragLeave={() => setDropTargetId((prev) => (prev === character.id ? null : prev))}
+                onDrop={(e) => handlePhotoDrop(e, character)}
+              >
+                <div className="relative h-12 w-12 flex-none overflow-hidden rounded-md bg-surface-2">
                   {character.photo_url && (
                     <img
                       src={assetUrl(character.photo_url)}
                       alt=""
                       className="h-full w-full object-cover"
                     />
+                  )}
+                  {adoptPhoto.isPending && adoptPhoto.variables?.characterId === character.id && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-panel/70 text-xs">
+                      …
+                    </span>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">

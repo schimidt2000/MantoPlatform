@@ -243,6 +243,21 @@ export function useDeleteCharacter(itemId: number) {
   });
 }
 
+/** Adota uma foto da galeria do Tema como foto do Personagem (drag-and-drop do admin). */
+export function useAdoptGalleryPhoto(itemId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ characterId, imageId }: { characterId: number; imageId: number }) =>
+      apiFetch<CatalogCharacter>(`/api/admin/catalogo/personagens/${characterId}/adotar-foto`, {
+        method: "POST",
+        body: JSON.stringify({ image_id: imageId }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo", itemId] });
+    },
+  });
+}
+
 /**
  * Variantes "standalone" das mutações de Personagem, usadas onde o `itemId` (Tema pai) não é
  * conhecido de antemão — modo Árvore/ações em massa (feature 186, US4) e vínculo a partir da

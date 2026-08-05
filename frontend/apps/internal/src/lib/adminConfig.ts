@@ -12,6 +12,8 @@ export interface AdminSettings {
   google_maps_api_key: string;
   email_notifications_enabled: boolean;
   whatsapp_form_number: string;
+  /** Link de review no Google mostrado à cliente que dá 5 estrelas; vazio = default. */
+  google_review_url: string;
   release_date: string | null;
 }
 
