@@ -65,7 +65,6 @@ const CASES = [
   ["/portal/agenda", "spa:portal"],
   ["/google/callback?code=x", "backend"],
   ["/google/connect", "backend"],
-  ["/f/pre-contrato", "backend"],
   ["/cadastro", "backend"],
   ["/cadastro/check-cpf", "backend"],
   ["/avaliar/token123", "backend"],
@@ -91,6 +90,24 @@ for (const [url, expected] of CASES) {
   const got = classify(response.status, await response.text());
   check(got === expected, `${url.padEnd(34)} → ${got}${got === expected ? "" : ` (esperado ${expected})`}`);
 }
+
+console.log("\n=== Formularios publicos: /f/<slug> canonico -> React da vitrine ===");
+const FORM_CASES = [
+  ["/f/pre-contrato", "/catalogo/f/pre-contrato", "link antigo abre o formulario novo"],
+  ["/f/corporativo?utm_source=bio", "/catalogo/f/corporativo?utm_source=bio", "query preservada"],
+];
+for (const [url, expected, nota] of FORM_CASES) {
+  const r = await fetch(`http://127.0.0.1:${FRONT_PORT}${url}`, { redirect: "manual" });
+  const loc = r.headers.get("location");
+  check(r.status === 302 && loc === expected, `${url.padEnd(34)} → ${r.status} ${loc} (${nota})`);
+}
+// O destino do redirect e servido pela SPA publica (nao pelo Jinja nem pelo ERP)
+const formDest = await fetch(`http://127.0.0.1:${FRONT_PORT}/catalogo/f/pre-contrato`, { redirect: "manual" });
+const formDestBody = await formDest.text();
+check(
+  formDest.status === 200 && formDestBody.includes("/catalogo/assets/"),
+  `/catalogo/f/pre-contrato → ${formDest.status} bundle da SPA publica`,
+);
 
 console.log("\n=== Host dedicado do portal ===");
 

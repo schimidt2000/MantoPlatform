@@ -128,13 +128,18 @@ const PORTAL_HOSTS = new Set(
  *
  * SUPERFÍCIES PÚBLICAS POR LINK (Jinja, sem login) — os links já distribuídos apontam para
  * este domínio e, sem estas entradas, caíam no fallback do ERP interno, que PEDE LOGIN:
- *   - `/f/*`        formulários públicos de pré-contrato/corporativo (`formularios_bp`)
  *   - `/cadastro/*` cadastro público de talentos (`cadastro_bp`)
  *   - `/avaliar/*`  avaliação da cliente por token (`feedback_bp`)
  *   - `/static/*`   CSS/JS que essas páginas Jinja referenciam (os bundles Vite usam
  *                   `/assets`, então não há colisão)
  * Nenhum desses prefixos existe como rota nos três React Routers (`/formularios` do ERP é
  * outra rota — o público é só `/f/*`).
+ *
+ * `/f/*` NÃO vai para o Flask: é o endereço canônico dos formulários públicos — impresso em
+ * bio/integrações — e o formulário atual é o REACT da vitrine (`/catalogo/f/*`). Ver
+ * PUBLIC_FORM_PREFIX abaixo: redirect 302 preservando caminho e query, para o link antigo
+ * continuar sendo o único divulgado e sempre abrir o formulário novo (o Jinja de
+ * `formularios_bp` fica aposentado como superfície).
  */
 const BACKEND_PREFIXES = [
   "/api",
@@ -142,11 +147,13 @@ const BACKEND_PREFIXES = [
   "/catalogo/midia",
   "/portal/photo",
   "/google",
-  "/f",
   "/cadastro",
   "/avaliar",
   "/static",
 ];
+
+/** Endereço canônico curto dos formulários públicos → SPA pública sob /catalogo. */
+const PUBLIC_FORM_PREFIX = "/f";
 
 /** Rotas Jinja remanescentes, casadas por regex para não sombrear rotas do React Router. */
 const BACKEND_PATTERNS = [
@@ -196,6 +203,17 @@ const server = http.createServer((req, res) => {
     } catch (err) {
       badGateway(err);
     }
+    return;
+  }
+
+  // Formulários públicos: o link curto `/f/<slug>` é o canônico (impresso em bio e
+  // conectado em outros softwares) e abre o formulário React da vitrine. Redirect, não
+  // reescrita: o bundle público usa `base`/`basename` = `/catalogo` e precisa ver o
+  // prefixo na URL do browser. Query preservada (UTMs e afins).
+  if (req.url && matchesPrefix(req.url, PUBLIC_FORM_PREFIX)) {
+    res.statusCode = 302;
+    res.setHeader("location", `/catalogo${req.url}`);
+    res.end();
     return;
   }
 

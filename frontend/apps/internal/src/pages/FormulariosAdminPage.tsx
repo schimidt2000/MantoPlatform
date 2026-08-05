@@ -61,13 +61,14 @@ const CONTROL =
   "placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
- * URL pública do formulário. Em produção `apps/public` é servido sob `/catalogo/*` no mesmo
- * domínio (feature 186, `frontend/server.js`), então a origem atual do painel já é a origem
- * correta para a cliente. No dev server do `apps/internal` (:5173) o link aponta para um path
- * que só existe no build de produção — copiar/abrir aqui é para conferência visual.
+ * URL pública do formulário — o link CURTO `/f/<slug>` é o canônico: é o que está impresso
+ * em bio/integrações desde a era Jinja, e `frontend/server.js` o redireciona (302,
+ * preservando query) para o formulário React da vitrine em `/catalogo/f/<slug>`. Copiar
+ * sempre o curto mantém um endereço único em circulação. No dev server do `apps/internal`
+ * (:5173) o redirect não existe — copiar/abrir aqui é para conferência visual.
  */
 function publicFormUrl(slug: string): string {
-  return `${window.location.origin}/catalogo/f/${slug}`;
+  return `${window.location.origin}/f/${slug}`;
 }
 
 /** `dd/mm/aaaa` a partir de uma data ISO (`event_date`, sem hora). */
