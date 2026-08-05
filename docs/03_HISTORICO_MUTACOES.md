@@ -27,9 +27,13 @@ pré-contrato `/f/*`, cadastro de talentos `/cadastro/*`, avaliação da cliente
 caíam no fallback do ERP interno e pediam login. A lista de proxy da 206 cobria API, mídia e
 impressão — mas **superfície pública por link é uma categoria própria** que ninguém enumerou.
 
-**O que mudou.** `frontend/server.js` ganhou `/f`, `/cadastro`, `/avaliar` e `/static` (o CSS
-das páginas Jinja) em `BACKEND_PREFIXES`. E os dois geradores de link de avaliação
-(`api_feedback_link` e `feedback.gerar_link`) trocaram `request.url_root` por
+**O que mudou.** `frontend/server.js` ganhou `/cadastro`, `/avaliar` e `/static` (o CSS das
+páginas Jinja) em `BACKEND_PREFIXES`. Os formulários tiveram tratamento próprio no segundo
+ajuste do dia: **`/f/<slug>` é o endereço canônico** (impresso em bio e conectado a outros
+softwares) e responde **302 → `/catalogo/f/<slug>`** preservando a query — o link antigo
+abre o formulário REACT da vitrine, e o Jinja de `formularios_bp` fica aposentado como
+superfície. O painel de Formulários copia o link curto. E os dois geradores de link de
+avaliação (`api_feedback_link` e `feedback.gerar_link`) trocaram `request.url_root` por
 `PUBLIC_BASE_URL`: atrás do proxy com `changeOrigin`, o Host que chega ao Flask é o do
 serviço backend — link novo sairia com o domínio interno da Railway.
 

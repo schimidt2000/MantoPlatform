@@ -918,7 +918,8 @@ primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e 
 | `/catalogo/midia/*` | fotos públicas do catálogo — casa **antes** do mount `/catalogo` |
 | `/portal/photo/*` | foto de figurino do portal (Jinja, mesma sessão do talento) — **antes** do mount `/portal` |
 | `/google/*` | callback do OAuth do Google Calendar (`app/calendar/routes.py`), rota Jinja com `redirect_uri` fixo no Google Console |
-| `/f/*`, `/cadastro/*`, `/avaliar/*` | superfícies públicas por link já distribuído (pré-contrato, cadastro de talentos, feedback da cliente) — hotfix 206b; sem elas o link caía no login do ERP |
+| `/cadastro/*`, `/avaliar/*` | superfícies públicas por link já distribuído (cadastro de talentos, feedback da cliente) — hotfix 206b; sem elas o link caía no login do ERP |
+| `/f/*` | **não vai ao Flask**: endereço canônico dos formulários públicos, 302 → `/catalogo/f/<slug>` (formulário React da vitrine), query preservada |
 | `/static/*` | CSS/JS das páginas Jinja públicas acima (bundles Vite usam `/assets` — sem colisão) |
 | `/figurinos/<id>/print`, `/figurinos/print-event/<id>` | páginas Jinja de impressão que a SPA interna linka; regex restrito ao sub-path |
 
