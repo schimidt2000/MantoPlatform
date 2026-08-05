@@ -25,6 +25,13 @@ Legenda de acesso — os papéis listados são os do gate **de servidor**; a nav
 
 ---
 
+**`Dialog` do design system (`@manto/ui`, corrigido na 212).** O painel é centralizado por **flex**
+num container `fixed inset-0 overflow-y-auto`, nunca por `translate` de utilitário: o painel é um
+`motion.div` e o Framer Motion escreve `transform` inline, que vencia as classes de centralização —
+o diálogo abria com o canto superior esquerdo no meio da tela e metade dele para fora, em 11 telas.
+Diálogo mais alto que a janela faz o **container rolar**. Regra geral: não centralize com
+`translate` um elemento cujo `transform` é animado.
+
 ## A. App interno — `frontend/apps/internal` (staff autenticado)
 
 Roteador: `apps/internal/src/App.tsx`. Todas as rotas autenticadas ficam dentro de uma *layout

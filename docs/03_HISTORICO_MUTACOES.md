@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **211 (quadro da foto na
-> vitrine)** · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **212 (diálogos fora da
+> tela)** · Head de migration: `e7a1c94f20b3`
 
 Formato de cada entrada:
 
@@ -18,6 +18,39 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 212 — Hotfix: diálogos abrindo pela metade, fora da tela
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** "Em diversas páginas o pop-up fica pela metade e não consigo mexer": o diálogo
+abria com o topo no meio da tela e a metade de baixo para fora, sem rolagem que alcançasse o
+resto. Atingia **11 telas** — todas as que usam o `Dialog` do design system (Novo post de
+marketing, detalhe de resposta de formulário, memória de cálculo do orçamento, gastos
+recorrentes, fila e acervo 3D, comissões, histórico EducaManto, cabeçalho do evento…).
+
+**Causa.** O painel do `DialogContent` era centralizado por `left-1/2 top-1/2` +
+`-translate-x-1/2 -translate-y-1/2` (Tailwind) **e** era um `motion.div` animando `scale`/`y`. O
+Framer Motion escreve `transform` no **estilo inline**, que vence as classes utilitárias — a
+centralização evaporava e sobrava só `left: 50%; top: 50%`, ou seja, o **canto superior esquerdo**
+do diálogo no centro da tela. Confirmado no DOM: `transform: translateY(8px) scale(0.96)`.
+
+**O que mudou.** Centralização por **flex**, não por transform: o `Content` do Radix passou a
+viver dentro de `fixed inset-0 overflow-y-auto` > `flex min-h-full items-center justify-center
+p-4`. Diálogo curto centraliza; diálogo mais alto que a janela faz o **container rolar** em vez de
+vazar pelo rodapé. O Framer Motion continua animando `opacity`/`scale`/`y` — agora o `transform`
+serve só à animação, não ao layout. Fechar clicando fora segue funcionando: quem cuida disso é o
+`onPointerDownOutside` do `Content` do Radix, não o overlay.
+
+**Pegadinha (vale para todo componente animado).** Não centralize com `translate` de utilitário um
+elemento cujo `transform` é animado — a biblioteca de animação sobrescreve. Use flex/grid no
+container. O `Modal` de `apps/internal/src/components/Modal.tsx` já fazia certo (flex + `max-h`),
+o que explica por que só os `Dialog` quebravam.
+
+**Verificação.** No navegador, contra a cópia de produção: "Nova postagem" (1280×720) topo 57 /
+base 679, dentro da tela e centralizado; detalhe de resposta do formulário topo 74 / base 662;
+mobile 375×812 dentro das margens; e o caso estrutural — painel de 1099px numa janela de 420px:
+o container rola (1177px) com topo **e** rodapé alcançáveis. Typecheck e build limpos nos três
+apps.
 
 ### 211 — Vitrine: quadro da foto com teto e piso
 `main` · **2026-08-05** · sem migration
