@@ -8,7 +8,41 @@ import type { EventoDetalhe } from "./agenda";
  * `useMutation` + `onSuccess → queryClient.setQueryData(["event", id], updated)`. As mutações
  * de upload enviam `FormData` (o `apiFetch` detecta e não força `Content-Type`, ver
  * `packages/api-client/src/client.ts`).
+ *
+ * Cada upload existe também como **função solta** (`enviarComprovante`, `enviarContrato`,
+ * `enviarReembolso`), que recebe o `eventId` como argumento. É o que a tela de CRIAÇÃO usa: lá o
+ * evento só ganha id na resposta do `POST /api/events`, e um hook criado com o id do render
+ * anterior ainda estaria preso em `0` quando os anexos sobem — era esse o bug que fazia todo
+ * comprovante falhar logo depois de "evento criado".
  */
+
+export function enviarComprovante(eventId: number, { amount, file }: AddPaymentInput) {
+  const form = new FormData();
+  form.append("amount", String(amount));
+  form.append("file", file);
+  return apiFetch<EventoDetalhe>(`/api/events/${eventId}/payments`, { method: "POST", body: form });
+}
+
+export function enviarContrato(eventId: number, { file, is_signed }: AddContractInput) {
+  const form = new FormData();
+  form.append("file", file);
+  if (is_signed) form.append("is_signed", "true");
+  return apiFetch<EventoDetalhe>(`/api/events/${eventId}/contracts`, { method: "POST", body: form });
+}
+
+export function enviarReembolso(
+  eventId: number,
+  { description, amount, file }: AddReimbursementInput,
+) {
+  const form = new FormData();
+  form.append("description", description);
+  form.append("amount", String(amount));
+  if (file) form.append("file", file);
+  return apiFetch<EventoDetalhe>(`/api/events/${eventId}/reimbursements`, {
+    method: "POST",
+    body: form,
+  });
+}
 
 function useEventMutation<TVars>(eventId: number, mutationFn: (vars: TVars) => Promise<EventoDetalhe>) {
   const queryClient = useQueryClient();
@@ -48,12 +82,7 @@ export interface AddContractInput {
 }
 
 export function useAddContract(eventId: number) {
-  return useEventMutation<AddContractInput>(eventId, ({ file, is_signed }) => {
-    const form = new FormData();
-    form.append("file", file);
-    if (is_signed) form.append("is_signed", "true");
-    return apiFetch<EventoDetalhe>(`/api/events/${eventId}/contracts`, { method: "POST", body: form });
-  });
+  return useEventMutation<AddContractInput>(eventId, (input) => enviarContrato(eventId, input));
 }
 
 export function useDeleteContract(eventId: number) {
@@ -76,12 +105,7 @@ export interface AddPaymentInput {
 }
 
 export function useAddPayment(eventId: number) {
-  return useEventMutation<AddPaymentInput>(eventId, ({ amount, file }) => {
-    const form = new FormData();
-    form.append("amount", String(amount));
-    form.append("file", file);
-    return apiFetch<EventoDetalhe>(`/api/events/${eventId}/payments`, { method: "POST", body: form });
-  });
+  return useEventMutation<AddPaymentInput>(eventId, (input) => enviarComprovante(eventId, input));
 }
 
 export function useEditPayment(eventId: number) {
@@ -108,16 +132,9 @@ export interface AddReimbursementInput {
 }
 
 export function useAddReimbursement(eventId: number) {
-  return useEventMutation<AddReimbursementInput>(eventId, ({ description, amount, file }) => {
-    const form = new FormData();
-    form.append("description", description);
-    form.append("amount", String(amount));
-    if (file) form.append("file", file);
-    return apiFetch<EventoDetalhe>(`/api/events/${eventId}/reimbursements`, {
-      method: "POST",
-      body: form,
-    });
-  });
+  return useEventMutation<AddReimbursementInput>(eventId, (input) =>
+    enviarReembolso(eventId, input),
+  );
 }
 
 export interface CollectReimbursementInput {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,8 +26,8 @@ import {
   type OrcamentoCache,
   type PendingPaymentProof,
 } from "../lib/eventCreate";
-import { useAddPayment, useAddContract, useAddReimbursement } from "../lib/eventAttachments";
-import { useAddImageObservation } from "../lib/observations";
+import { enviarComprovante, enviarContrato, enviarReembolso } from "../lib/eventAttachments";
+import { enviarObservacaoComFoto } from "../lib/observations";
 import { useFormResponseDetail } from "../lib/formulariosAdmin";
 import type { SelectedFormResponse } from "../components/FormResponsePicker";
 import { ClienteBlock } from "../components/EventFormBlocks/ClienteBlock";
@@ -48,6 +49,7 @@ type PendingAttachment =
 
 export function EventCreatePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const reduceMotion = useReducedMotion();
   const [searchParams] = useSearchParams();
   const orcamentoIdParam = searchParams.get("orcamento_id");
@@ -162,43 +164,53 @@ export function EventCreatePage() {
   };
 
   // ── Fase 2: upload de anexos pendentes, depois que o evento já existe ──────────
-  const addPayment = useAddPayment(createdEventId ?? 0);
-  const addContract = useAddContract(createdEventId ?? 0);
-  const addReimbursement = useAddReimbursement(createdEventId ?? 0);
-  const addImageObservation = useAddImageObservation(createdEventId ?? 0);
-
-  const uploadOne = async (item: PendingAttachment) => {
+  //
+  // O `eventId` vem por ARGUMENTO, não de um hook criado no render. `setCreatedEventId` só tem
+  // efeito no render seguinte, e a fase 2 dispara ainda dentro do `onSuccess` da criação — hooks
+  // como `useAddPayment(createdEventId ?? 0)` ficariam presos em `0` e todo anexo iria para
+  // `POST /api/events/0/...` → 404. Era isso que fazia o comprovante "sempre falhar" logo depois
+  // da mensagem de evento criado.
+  const uploadOne = async (item: PendingAttachment, eventId: number) => {
     setAttachmentStatus((s) => ({ ...s, [item.id]: "uploading" }));
     try {
+      let atualizado;
       if (item.kind === "payment") {
-        await addPayment.mutateAsync({ amount: item.proof.amount, file: item.proof.file });
+        atualizado = await enviarComprovante(eventId, {
+          amount: item.proof.amount,
+          file: item.proof.file,
+        });
       } else if (item.kind === "contract") {
-        await addContract.mutateAsync({ file: item.file, is_signed: item.signed });
+        atualizado = await enviarContrato(eventId, { file: item.file, is_signed: item.signed });
       } else if (item.kind === "reimbursement") {
-        await addReimbursement.mutateAsync({
+        atualizado = await enviarReembolso(eventId, {
           description: item.description,
           amount: item.amount,
           file: item.file ?? undefined,
         });
       } else {
-        await addImageObservation.mutateAsync({ file: item.file, label: item.label || undefined });
+        atualizado = await enviarObservacaoComFoto(eventId, {
+          file: item.file,
+          label: item.label || undefined,
+        });
       }
+      // Semeia o cache do detalhe para a navegação seguinte já abrir com o anexo no lugar.
+      queryClient.setQueryData(["event", eventId], atualizado);
       setAttachmentStatus((s) => ({ ...s, [item.id]: "success" }));
     } catch {
       setAttachmentStatus((s) => ({ ...s, [item.id]: "error" }));
     }
   };
 
-  const runUploads = async (items: PendingAttachment[]) => {
+  const runUploads = async (items: PendingAttachment[], eventId: number) => {
     for (const item of items) {
       // eslint-disable-next-line no-await-in-loop
-      await uploadOne(item);
+      await uploadOne(item, eventId);
     }
   };
 
   const retryAttachment = (id: string) => {
     const item = attachments.find((a) => a.id === id);
-    if (item) uploadOne(item);
+    if (item && createdEventId) uploadOne(item, createdEventId);
   };
 
   const allAttachmentsResolved =
@@ -310,7 +322,7 @@ export function EventCreatePage() {
             navigate(`/events/${eventId}`);
             return;
           }
-          runUploads(pending);
+          runUploads(pending, eventId);
         },
         onError: (error) => {
           if (error instanceof ApiRequestError && error.fields) {

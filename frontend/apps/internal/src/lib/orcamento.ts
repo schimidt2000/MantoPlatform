@@ -110,8 +110,27 @@ export interface TransportBreakdown {
   tarifa?: number;
 }
 
+/**
+ * Uma linha da memória de cálculo (`quote_ops.calculate_quote`). `valores` tem sempre 4 posições
+ * — 1h, 2h, 3h e 4h. O `tipo` diz o papel da linha na conta:
+ *
+ * - `cache`    parcela pré-markup (cachê de cada profissional)
+ * - `subtotal` soma acumulada (subtotal do cachê, valor após markup)
+ * - `markup`   multiplicador aplicado — `valores` são fatores, não reais
+ * - `pos`      parcela somada DEPOIS do markup (técnico, maquiador, transporte, NF, acréscimo)
+ * - `total`    total final ao cliente
+ */
+export interface MemoriaLinha {
+  label: string;
+  detalhe: string;
+  valores: number[];
+  tipo: "cache" | "subtotal" | "markup" | "pos" | "total";
+}
+
 export interface Quote {
   message: string;
+  /** Ausente em orçamentos salvos antes desta feature — trate como lista vazia. */
+  memoria?: MemoriaLinha[];
   transport_breakdown: TransportBreakdown | null;
   fora_sp: boolean;
   markup_used: number[] | null;

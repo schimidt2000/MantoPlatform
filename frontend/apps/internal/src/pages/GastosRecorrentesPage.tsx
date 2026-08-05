@@ -16,6 +16,7 @@ import {
   Skeleton,
 } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
+import { hojeYmd } from "../lib/horaLocal";
 import {
   useCreateRecorrente,
   useDeleteEntry,
@@ -161,7 +162,7 @@ function NovaContaForm() {
   const [amount, setAmount] = useState(0);
   const [amountMin, setAmountMin] = useState(0);
   const [amountMax, setAmountMax] = useState(0);
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(hojeYmd());
   const [endDate, setEndDate] = useState("");
   const [defaultPix, setDefaultPix] = useState("");
   const [cardName, setCardName] = useState("");

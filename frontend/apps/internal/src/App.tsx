@@ -44,6 +44,7 @@ import { GastosRecorrentesPage } from "./pages/GastosRecorrentesPage";
 import { OrcamentoCalculadoraPage } from "./pages/OrcamentoCalculadoraPage";
 import { OrcamentoConfigPrecosPage } from "./pages/OrcamentoConfigPrecosPage";
 import { OrcamentoHistoricoPage } from "./pages/OrcamentoHistoricoPage";
+import { OrcamentoResultadoPage } from "./pages/OrcamentoResultadoPage";
 import { AvaliacaoCastingPage } from "./pages/AvaliacaoCastingPage";
 import { FormulariosAdminPage } from "./pages/FormulariosAdminPage";
 import { Acervo3DPage } from "./pages/Acervo3DPage";
@@ -104,6 +105,8 @@ export function App() {
           <Route path="/orcamento" element={<OrcamentoCalculadoraPage />} />
           <Route path="/orcamento/historico" element={<OrcamentoHistoricoPage />} />
           <Route path="/orcamento/configuracoes" element={<OrcamentoConfigPrecosPage />} />
+          {/* Depois das rotas fixas: `/orcamento/:id` casaria "historico" e "configuracoes". */}
+          <Route path="/orcamento/:id" element={<OrcamentoResultadoPage />} />
           <Route path="/educamanto" element={<EducaMantoCalculadoraPage />} />
           <Route path="/educamanto/pacotes" element={<EducaMantoPackagesPage />} />
           <Route path="/educamanto/pacotes/novo" element={<EducaMantoPackageFormPage />} />

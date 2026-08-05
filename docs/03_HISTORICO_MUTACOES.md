@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **209 (catálogo
-> organizacional)** · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210 (horário, anexos e
+> orçamento)** · Head de migration: `e7a1c94f20b3`
 
 Formato de cada entrada:
 
@@ -18,6 +18,79 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 210 — Hotfix: horário deslocado, anexo do evento e orçamento sem saída
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** Três regressões críticas apareceram junto quando a 206 tornou o React a interface
+primária — todas em código que já existia, mas que só virou o caminho real dos usuários agora:
+horários de eventos "mudando sozinhos", comprovante falhando sempre depois de criar o evento, e a
+calculadora de orçamento sem a memória de cálculo nem a tela de apresentação da proposta.
+
+**1. Horário deslocado +3h a cada edição (o mais grave).**
+`start_at`/`end_at` são **horário de parede de São Paulo** — o banco guarda naive (ver
+`service.py::parse_event_datetime`) e a API serializa com `.isoformat()`, sem fuso. O
+`EventEditPage` hidratava o formulário com `new Date(iso).toISOString().slice(...)`: o `Date`
+interpretava a string como horário local do navegador e o `toISOString` convertia para UTC,
+abrindo todo evento com **+3h**. Salvar gravava o horário deslocado no banco **e empurrava para o
+Google Agenda** — por isso os dois "concordavam" no valor errado e não havia divergência para
+comparar. Em evento noturno (≥ 21h) a **data** também pulava um dia, e o fim virava madrugada do
+dia seguinte pela regra da meia-noite do `_build_start_end`.
+
+Correção em `lib/horaLocal.ts` (`dataDeIsoLocal`, `horaDeIsoLocal`, `hojeYmd`): para preencher
+formulário e comparar datas, **recorta a string, nunca passa por `Date`**. `GastosExtrasPage` e
+`GastosRecorrentesPage` usavam `new Date().toISOString().slice(0,10)` como "hoje" — depois das 21h
+isso já dava o dia seguinte; passaram a usar `hojeYmd()`.
+
+No mesmo `reset()`, `description` era hidratada com `""` enquanto o PATCH manda a descrição
+inteira: **toda edição apagava a descrição do evento** (e a do Google Agenda), inclusive os blocos
+com dados da contratante. Passou a hidratar `data.event.description`.
+
+**2. Comprovante "sempre falhou" ao criar evento.** A fase 2 do `EventCreatePage` (anexos) usava
+`useAddPayment(createdEventId ?? 0)`. `setCreatedEventId` só tem efeito no render seguinte e a fase
+2 dispara ainda dentro do `onSuccess` da criação — o hook continuava preso em `0` e o upload ia
+para `POST /api/events/0/payments` → 404. Determinístico: o evento nascia certo e **todo** anexo
+falhava. "Tentar novamente" funcionava, porque aí o estado já tinha atualizado — o que fazia
+parecer instabilidade de rede. Os uploads viraram funções soltas
+(`enviarComprovante`/`enviarContrato`/`enviarReembolso`/`enviarObservacaoComFoto`), que recebem o
+`eventId` por argumento; os hooks passaram a ser casca fina em volta delas.
+
+**3. Memória de cálculo virou a mensagem de WhatsApp.** O diálogo "Ver memória de cálculo" mostrava
+`quote.message`. O painel do Jinja (`orcamento/index.html` + `static/js/orcamento.js`) montava a
+memória **no cliente**, duplicando a conta — motivo de ela ter se perdido na migração.
+`quote_ops.calculate_quote` agora emite a memória junto com o cálculo (chave `memoria`), linha a
+linha e na ordem em que cada parcela entra: cachê por profissional, coordenador, subtotal, markup,
+brinde, adicional noturno, técnico, maquiador, transportes, acréscimos, NF e total. A verify prova
+que a soma das parcelas fecha com os totais — a memória não pode "explicar" um número diferente do
+cobrado. No orçamento personalizado a memória mostra só cachê-base × multiplicador (ou o valor
+digitado), porque transporte/NF/acréscimo realmente não entram ali.
+
+**4. "Gerar Orçamento" não levava a lugar nenhum.** Só salvava e o botão virava "Orçamento salvo".
+Nova rota `/orcamento/:id` (`OrcamentoResultadoPage`), sucessora de
+`app/templates/orcamento/resultado.html`: mensagem de WhatsApp copiável, resumo por duração,
+detalhamento do transporte, memória de cálculo, baixar PDF e enviar por e-mail. O histórico ganhou
+"Abrir orçamento" apontando para ela. Nenhum endpoint novo — `historico/<id>`, `/pdf` e
+`/enviar-email` já existiam sem tela que os usasse.
+
+**Rotas.** React: `/orcamento/:id` (declarada **depois** de `/orcamento/historico` e
+`/orcamento/configuracoes`, senão `:id` casaria com elas). Backend: nenhuma nova; `quote.memoria`
+é chave nova em `POST /api/orcamento/calcular` e no detalhe do histórico (orçamentos salvos antes
+disso não têm a chave — o React trata como "memória não registrada").
+
+**Riscos e pegadinhas.**
+- Nenhum `Date` deve tocar em `start_at`/`end_at` para produzir valor de formulário. O bug
+  sobreviveu meses porque `new Date(iso)` **exibe** certo para quem está em São Paulo — só quebra
+  ao voltar para string via `toISOString()`.
+- Os eventos editados enquanto o bug existiu ficaram com o horário deslocado nos dois lados (banco
+  e Google), então não há como detectá-los por divergência. `scripts/db/relatorio_horarios_
+  deslocados.py` lista os candidatos pelo log "Editou os dados do evento" e sugere o horário
+  original, para conferência humana — não corrige nada sozinho.
+- Ferramenta nova de desenvolvimento: `scripts/db/run-local-sem-google.py` sobe o Flask contra
+  `manto_local` com `insert/update/delete_event` do Google dublados. Sem isso, reproduzir criação
+  de evento no navegador cria lixo no calendário de produção.
+- Verificação: `verify_210_horario_anexo_orcamento.py` 23/23 contra `manto_local` (round-trip do
+  PATCH sem deslocar em evento noturno, descrição preservada, anexo com id real ✕ id 0, memória
+  fechando com os totais, PDF e e-mail). Typecheck e build limpos nos três apps.
 
 ### 209 — Catálogo como espinha organizacional (página própria + fichas + busca)
 `main` · **2026-08-05** · migration `e7a1c94f20b3` (*own_item_id em catalog_characters*)

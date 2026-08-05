@@ -6,6 +6,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Button, PageHeader, Skeleton } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
 import { useEvent } from "../lib/agenda";
+import { dataDeIsoLocal, horaDeIsoLocal } from "../lib/horaLocal";
 import {
   eventSchema,
   DEFAULT_EVENT_FORM_VALUES,
@@ -83,20 +84,20 @@ export function EventEditPage() {
   useEffect(() => {
     if (!eventQuery.data || loaded) return;
     const data = eventQuery.data;
-    const startAt = data.event.start_at ? new Date(data.event.start_at) : null;
-    const endAt = data.event.end_at ? new Date(data.event.end_at) : null;
-    const toDateStr = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
-    const toTimeStr = (d: Date | null) => (d ? d.toISOString().slice(11, 16) : "");
-
     reset({
       ...DEFAULT_EVENT_FORM_VALUES,
       title: data.event.title,
       event_type: data.event.event_type || "",
-      date: toDateStr(startAt),
-      start: toTimeStr(startAt),
-      end: toTimeStr(endAt),
+      // `start_at`/`end_at` são horário de parede de São Paulo, não instante UTC — recortar a
+      // string (ver `lib/horaLocal.ts`). Passar por `new Date(...).toISOString()` deslocava o
+      // formulário em +3h e regravava o evento errado no banco e no Google Agenda.
+      date: dataDeIsoLocal(data.event.start_at),
+      start: horaDeIsoLocal(data.event.start_at),
+      end: horaDeIsoLocal(data.event.end_at),
       location: data.event.location || "",
-      description: "",
+      // A descrição vai inteira no PATCH: hidratar vazio apagava a descrição do evento (e a do
+      // Google Agenda junto) a cada salvamento.
+      description: data.event.description || "",
       needs_rehearsal: data.event.needs_rehearsal,
       is_cortesia_permuta: data.venda?.is_cortesia_permuta ?? false,
       sale_value: data.venda?.sale_value ?? 0,

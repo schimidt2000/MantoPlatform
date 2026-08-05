@@ -3,6 +3,7 @@ import { ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, DenseCard, FileUpload, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
 import { Modal } from "../components/Modal";
+import { hojeYmd } from "../lib/horaLocal";
 import {
   useApproveGasto,
   useCreateGasto,
@@ -129,13 +130,13 @@ function emptyForm(categories: string[]): GastoFormValues {
     description: "",
     category: categories[0] ?? "Outros",
     amount: 0,
-    expenseDate: new Date().toISOString().slice(0, 10),
+    expenseDate: hojeYmd(),
     notes: "",
     disbursementType: "",
     reimburseUserId: "",
     supplierName: "",
     supplierPix: "",
-    eventDate: new Date().toISOString().slice(0, 10),
+    eventDate: hojeYmd(),
     eventId: "",
   };
 }

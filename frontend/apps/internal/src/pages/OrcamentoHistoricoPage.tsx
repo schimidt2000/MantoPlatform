@@ -66,8 +66,12 @@ function VerDialog({ entry, onClose }: { entry: OrcamentoHistoricoEntry; onClose
             </pre>
           )}
           <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" asChild>
+              <Link to={`/orcamento/${entry.id}`}>Abrir orçamento</Link>
+            </Button>
             <Button
               size="sm"
+              variant="outline"
               loading={pdf.isPending}
               onClick={() => pdf.mutate({ id: entry.id, clientName: entry.client_name })}
             >

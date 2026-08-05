@@ -27,6 +27,25 @@ export function useAddObservation(eventId: number) {
 }
 
 /**
+ * Envia uma observação com foto. Versão em função solta (recebe o `eventId`), usada pela tela de
+ * criação, onde o id só existe depois da resposta do `POST /api/events` — ver a nota em
+ * `eventAttachments.ts`.
+ */
+export function enviarObservacaoComFoto(
+  eventId: number,
+  { file, label }: { file: File; label?: string },
+) {
+  const form = new FormData();
+  form.append("obs_type", "image");
+  form.append("image", file);
+  if (label) form.append("label", label);
+  return apiFetch<EventoDetalhe>(`/api/events/${eventId}/observations`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+/**
  * Adiciona uma observação de imagem ao evento (feature 153). Mesmo endpoint de
  * `useAddObservation`, mas com corpo `multipart/form-data` (o `apiFetch` detecta `FormData` e
  * deixa o `fetch` nativo gerar o boundary). Ao suceder, atualiza o cache do evento.
@@ -34,16 +53,7 @@ export function useAddObservation(eventId: number) {
 export function useAddImageObservation(eventId: number) {
   const queryClient = useQueryClient();
   return useMutation<EventoDetalhe, Error, { file: File; label?: string }>({
-    mutationFn: ({ file, label }) => {
-      const form = new FormData();
-      form.append("obs_type", "image");
-      form.append("image", file);
-      if (label) form.append("label", label);
-      return apiFetch<EventoDetalhe>(`/api/events/${eventId}/observations`, {
-        method: "POST",
-        body: form,
-      });
-    },
+    mutationFn: (input) => enviarObservacaoComFoto(eventId, input),
     onSuccess: (updated) => {
       queryClient.setQueryData(["event", eventId], updated);
     },

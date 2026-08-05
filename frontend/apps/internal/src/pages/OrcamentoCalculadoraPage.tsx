@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
 import {
   Badge,
@@ -21,6 +21,7 @@ import {
 } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
 import { GoogleAddressInput } from "../components/GoogleAddressInput";
+import { MemoriaDeCalculo } from "../components/MemoriaDeCalculo";
 import {
   useCalcularOrcamento,
   useDistancia,
@@ -235,6 +236,7 @@ function AgendaNoDiaAlert({ date }: { date: string }) {
 }
 
 export function OrcamentoCalculadoraPage() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const recalcularId = searchParams.get("recalcular_id");
   const recalcularIdNum = recalcularId ? Number(recalcularId) : null;
@@ -437,9 +439,17 @@ export function OrcamentoCalculadoraPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, opcoes.data]);
 
+  // "Gerar Orçamento" salva no histórico e ABRE o orçamento gerado — a tela onde se copia a
+  // mensagem, baixa o PDF e envia por e-mail. Salvar sem levar para lá deixava o comercial sem
+  // saída depois de calcular (era o fluxo do Jinja `orcamento/resultado.html`).
   const handleSalvar = () => {
     if (!result) return;
-    salvar.mutate(result, { onSuccess: () => setSaved(true) });
+    salvar.mutate(result, {
+      onSuccess: ({ id }) => {
+        setSaved(true);
+        navigate(`/orcamento/${id}`);
+      },
+    });
   };
 
   return (
@@ -874,13 +884,13 @@ export function OrcamentoCalculadoraPage() {
       )}
 
       <Dialog open={memoriaOpen} onOpenChange={setMemoriaOpen}>
-        <DialogContent open={memoriaOpen} className="max-w-lg">
+        <DialogContent open={memoriaOpen} className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Memória de cálculo</DialogTitle>
           </DialogHeader>
-          <pre className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-md bg-surface-2 p-3 text-xs text-ink">
-            {result?.quote.message}
-          </pre>
+          <div className="max-h-[65vh] overflow-y-auto">
+            <MemoriaDeCalculo linhas={result?.quote.memoria} />
+          </div>
         </DialogContent>
       </Dialog>
     </div>

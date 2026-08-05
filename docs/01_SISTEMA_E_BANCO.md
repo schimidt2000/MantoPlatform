@@ -3,9 +3,20 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **207 (pacote de
-> melhorias operacionais)** · Head de migration: `d9f2b3a41c07` (*google_review_url em
-> site_settings*)
+> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210 (horário, anexos e
+> orçamento)** · Head de migration: `e7a1c94f20b3` (*own_item_id em catalog_characters*)
+>
+> **Contrato de horário (210, não-negociável).** `CalendarEvent.start_at`/`end_at` são **horário de
+> parede de São Paulo**, gravados naive (`service.py::parse_event_datetime`) e serializados com
+> `.isoformat()` — o ISO que a API devolve **não tem fuso e não é um instante UTC**. No React, para
+> preencher formulário ou comparar datas, use `lib/horaLocal.ts` (recorte de string); passar por
+> `new Date(iso).toISOString()` desloca +3h e regrava o evento errado no banco e no Google Agenda.
+>
+> Hotfix 210: sem migration e sem endpoint novo. `POST /api/orcamento/calcular` e
+> `GET /api/orcamento/historico/<id>` passaram a incluir `quote.memoria` (detalhamento linha a
+> linha do cálculo; ausente em orçamentos salvos antes da 210). Rota React nova:
+> `/orcamento/:id` (orçamento gerado — WhatsApp, PDF, e-mail), declarada depois das rotas fixas
+> de `/orcamento/*`.
 >
 > Rotas novas da 207: `GET /api/agenda/search?q=` (busca textual; nome/telefone da cliente só
 > para vendas), `POST /api/admin/catalogo/personagens/<id>/adotar-foto` (SUPERADMIN),

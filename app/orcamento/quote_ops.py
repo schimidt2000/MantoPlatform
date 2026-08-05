@@ -127,23 +127,50 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     team_lines: list[str] = []
     num_going = coordenador_qty
 
+    # Memória de cálculo: uma linha por parcela que entra na conta, na ordem em que entra.
+    # Existe só para exibição — nenhum valor daqui volta para o cálculo. O `tipo` diz ao React
+    # como pintar a linha: cache (pré-markup), info (não soma no cachê), subtotal, markup,
+    # pos (somado depois do markup) e total.
+    memoria: list[dict[str, Any]] = []
+
+    def _linha(label: str, valores, tipo: str, detalhe: str = "") -> None:
+        memoria.append({
+            "label": label,
+            "detalhe": detalhe,
+            "valores": [round(float(v), 2) for v in valores],
+            "tipo": tipo,
+        })
+
+    def _linha_fixa(label: str, valor: float, tipo: str, detalhe: str = "") -> None:
+        _linha(label, [valor] * 4, tipo, detalhe)
+
     for p in performers:
         ptype = p.get("type", "")
         show = bool(p.get("show", False))
         makeup = bool(p.get("makeup", False))
         nome = (p.get("nome") or "").strip()
 
+        partes: list[str] = []
         if ptype == "ator":
             subtipo = p.get("subtipo", "cara_limpa")
             if subtipo == "cantor":
                 prices = get_cantor_prices(show, makeup)
                 label = nome or "Cantor"
+                partes.append("cantor")
             else:
                 prices = get_ator_prices(subtipo, show, makeup)
                 label = nome or ("Boneco" if subtipo == "boneco" else "Ator")
+                partes.append("boneco" if subtipo == "boneco" else "cara limpa")
+            if show:
+                partes.append("show")
+            if makeup:
+                partes.append(f"make {p.get('makeup_tipo', 'comum')}")
         elif ptype == "cantor":
             prices = get_cantor_prices(show=True, makeup=makeup)
             label = nome or "Cantor"
+            partes.append("cantor")
+            if makeup:
+                partes.append("make")
         elif ptype == "especial":
             personagem = p.get("personagem", "")
             cantor_flag = bool(p.get("cantor", False))
@@ -161,6 +188,10 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
                     label = nome or personagem
             else:
                 label = nome or personagem
+            if cantor_flag:
+                partes.append("cantor")
+            elif show:
+                partes.append("show")
         else:
             prices = (0, 0, 0, 0)
             label = nome or "Profissional"
@@ -169,15 +200,24 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         num_going += 1
         for i in range(4):
             cache_totals[i] += prices[i]
+        _linha(label, prices, "cache", ", ".join(partes))
 
     if sosia_custom_add_per_artist:
         custom_add = len(performers) * sosia_custom_add_per_artist
         for i in range(4):
             cache_totals[i] += custom_add
+        _linha_fixa(
+            "Show customizado", custom_add, "cache",
+            f"{len(performers)} artista(s) × {_fmt_brl(sosia_custom_add_per_artist)}",
+        )
 
     coord_prices = get_coordenador_prices(event_has_show, coordenador_qty)
     for i in range(4):
         cache_totals[i] += coord_prices[i]
+    _linha(
+        f"Coordenador(es) ({coordenador_qty})", coord_prices, "cache",
+        "com show" if event_has_show else "sem show",
+    )
 
     cache_base = [round(v, 2) for v in cache_totals]
     personalizado = bool(payload.get("personalizado"))
@@ -189,27 +229,46 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         num_going += 1
         brinde = float(_cfg.load().get("brinde_show", 100))
 
+    _linha("Subtotal cachê", cache_base, "subtotal")
+
+    markup_aplicado = _cfg.load()["markup"]["show" if event_has_show else "receptivo"]
     totals = aplicar_markup(cache_totals, event_has_show)
+    _linha(
+        "× Markup", markup_aplicado, "markup",
+        "Show" if event_has_show else "Receptivo / Interativo",
+    )
+    _linha("= Após markup", totals, "subtotal")
 
     if brinde:
         for i in range(4):
             totals[i] = round(totals[i] + brinde, 2)
+        _linha_fixa("Brinde do show", brinde, "pos")
 
     if noturno:
         adicional_noturno = (len(performers) + coordenador_qty) * _ADICIONAL_NOTURNO
         for i in range(4):
             totals[i] = round(totals[i] + adicional_noturno, 2)
+        _linha_fixa(
+            "Adicional noturno", adicional_noturno, "pos",
+            f"{len(performers) + coordenador_qty} pessoa(s) × {_fmt_brl(_ADICIONAL_NOTURNO)}",
+        )
 
     if event_has_show:
         tecnico = get_tecnico_prices()
+        tecnico_com_markup = [round(v * _MARKUP_SERVICE, 2) for v in tecnico]
         for i in range(4):
-            totals[i] = round(totals[i] + round(tecnico[i] * _MARKUP_SERVICE, 2), 2)
+            totals[i] = round(totals[i] + tecnico_com_markup[i], 2)
+        _linha("Técnico de som", tecnico_com_markup, "pos", f"markup de serviço {_MARKUP_SERVICE}×")
 
     if event_has_makeup:
         maquiador_cost = calcular_maquiador(num_makes_regular, num_makes_especial)
         maq_with_markup = round(maquiador_cost * _MARKUP_SERVICE, 2)
         for i in range(4):
             totals[i] = round(totals[i] + maq_with_markup, 2)
+        _linha_fixa(
+            "Maquiador", maq_with_markup, "pos",
+            f"{num_makes_regular + num_makes_especial} make(s), markup de serviço {_MARKUP_SERVICE}×",
+        )
 
     transport_total = 0.0
     seen_transport: set = set()
@@ -223,6 +282,9 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
                         totals[i] = round(totals[i] + transport_esp, 2)
                     transport_total += transport_esp
                     seen_transport.add(personagem)
+                    _linha_fixa(
+                        "Transporte especial", transport_esp, "pos", personagem,
+                    )
 
     for p in performers:
         if p.get("type") == "especial" and p.get("personagem") == "Boneco Grande Especial":
@@ -231,6 +293,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             if bge_extra:
                 for i in range(4):
                     totals[i] = round(totals[i] + bge_extra, 2)
+                _linha_fixa("Adicional BGE", bge_extra, "pos", bge_sub)
 
     transport_breakdown = None
     if fora_sp:
@@ -249,8 +312,20 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         for i in range(4):
             totals[i] = round(totals[i] + tb["total"], 2)
         transport_total += tb["total"]
+        _linha_fixa(
+            "Transporte fora de SP", tb["total"], "pos",
+            f"{transporte_tipo} · {num_colaboradores} pessoa(s) · {km_ida:g} km (ida)",
+        )
 
     if acrescimos:
+        for a in acrescimos:
+            valores = [
+                round(t * a["value"] / 100.0, 2) if a["is_percent"] else a["value"]
+                for t in totals
+            ]
+            rotulo = a["tipo"] + (f" — {a['descricao']}" if a["descricao"] else "")
+            sufixo = f"{a['value']:g}%" if a["is_percent"] else _fmt_brl(a["value"])
+            _linha(f"Acréscimo: {rotulo}", valores, "pos", sufixo)
         new_totals = []
         for t in totals:
             add = 0.0
@@ -260,7 +335,12 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         totals = new_totals
 
     if nota_fiscal:
+        antes_nf = list(totals)
         totals = [round(t / 0.84, 2) for t in totals]
+        _linha(
+            "Nota fiscal", [round(totals[i] - antes_nf[i], 2) for i in range(4)], "pos",
+            "valor bruto = líquido ÷ 0,84",
+        )
 
     total_custom = None
     if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4):
@@ -276,12 +356,24 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         transport_total = 0.0
         total_custom = None
 
+        # No personalizado o valor final é digitado (ou vem de um multiplicador sobre o cachê-base):
+        # transporte, NF e acréscimos NÃO são somados. A memória acompanha — mostrar as parcelas
+        # automáticas aqui daria a entender que elas entraram na conta.
+        memoria = [linha for linha in memoria if linha["tipo"] == "cache"]
+        _linha("Subtotal cachê (base)", cache_base, "subtotal")
+        if criterio_pers == "multiplicador":
+            _linha("× Multiplicador personalizado", cust_mult, "markup")
+        else:
+            _linha("Valor final digitado", totals, "markup")
+
         incluir_chk = payload.get("incluir_duracao") or ["1h", "2h", "3h", "4h"]
         idx = {"1h": 0, "2h": 1, "3h": 2, "4h": 3}
         if all(totals[idx[d]] <= 0 for d in incluir_chk if d in idx):
             raise QuoteValidationError(
                 "personalizado", "Informe valores válidos para o orçamento personalizado."
             )
+
+    _linha("TOTAL FINAL AO CLIENTE", totals, "total")
 
     raw_date = payload.get("event_date") or ""
     raw_time = event_time
@@ -396,6 +488,9 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         "personalizado_criterio": criterio_pers if personalizado else None,
         "cache_base": cache_base if personalizado else None,
         "custom_mult": cust_mult if personalizado else None,
+        # Detalhamento linha a linha da conta (só exibição). Vai junto no `form_snapshot` do
+        # histórico, então um orçamento salvo reabre com a mesma memória que foi apresentada.
+        "memoria": memoria,
     }
 
     snapshot = {
@@ -491,6 +586,8 @@ def legacy_quote(entry: OrcamentoHistory) -> dict:
         "personalizado_criterio": None,
         "cache_base": None,
         "custom_mult": None,
+        # Orçamentos antigos não guardaram a memória — lista vazia é o sinal de "não registrada".
+        "memoria": [],
     }
 
 

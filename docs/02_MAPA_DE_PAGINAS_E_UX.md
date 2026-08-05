@@ -3,8 +3,14 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-08-04** · Estado do repositório: pós-feature **207 (pacote de
-> melhorias operacionais)**
+> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210 (horário, anexos e
+> orçamento)**
+>
+> UX do hotfix 210: `/events/:id/edit` voltou a abrir com o horário e a descrição reais do evento
+> (abria +3h e com a descrição em branco, e salvava assim); a fase de anexos de `/events/new` passa
+> o id do evento recém-criado (todo comprovante falhava); "Ver memória de cálculo" mostra o
+> detalhamento linha a linha em vez da mensagem de WhatsApp; **`/orcamento/:id` é nova** — é para
+> onde "Gerar Orçamento" leva agora.
 >
 > UX novas da 207: `/agenda` ganhou campo único de busca (evento/cliente/telefone, param `q`,
 > resultados Próximos/Anteriores no lugar das visões enquanto há termo); detalhe do evento
@@ -812,7 +818,8 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 | Rota | Tela | Acesso | Destaques |
 |---|---|---|---|
 | `/orcamento` | Calculadora de Orçamento | `COMERCIAL`, `SUPERADMIN` | layout clássico de duas colunas assimétrico (1/3 dados do evento + segurança de agenda, 2/3 equipe/ajustes/resultado); **cálculo 100% reativo** — sem botão "Calcular", qualquer alteração recalcula (debounce ~400ms); alerta "Já na agenda neste dia" abaixo da Data (evita venda em dobro de personagem); painel "Personalizar valores" (valor final ou multiplicador, por duração); contador de itens no link "Histórico de Orçamentos"; campo **Local/Endereço do evento** com **`GoogleAddressInput`** e botão **"Calcular km (Maps)"** ao lado de *Km (ida)*, que preenche a distância pela Distance Matrix (feature 195 — antes o KM aqui era 100% manual); escolher uma sugestão do Google com "Fora de SP" ligado já dispara o cálculo. Salvar no histórico, "Ver memória de cálculo"; lê `?recalcular_id=` para reabrir um orçamento salvo com os campos preenchidos (feature 191, sobre a base da feature 190) |
-| `/orcamento/historico` | Orçamentos | `COMERCIAL`, `SUPERADMIN` | tabela densa com filtros avançados (data, valor, vendedor, tipo), PDF, envio por e-mail, exclusão; **Criar evento** (`/events/new?orcamento_id=`) e **Recalcular** (`/orcamento?recalcular_id=`), feature 190 |
+| `/orcamento/:id` | Orçamento gerado | `COMERCIAL`, `SUPERADMIN` | destino de "Gerar Orçamento" e de "Abrir orçamento" no histórico (hotfix 210, sucessora de `orcamento/resultado.html`): mensagem de WhatsApp copiável, resumo por duração, detalhamento do transporte quando fora de SP, memória de cálculo e envio do PDF por e-mail. Rota declarada **depois** de `/orcamento/historico` e `/orcamento/configuracoes` — `:id` casaria com elas |
+| `/orcamento/historico` | Orçamentos | `COMERCIAL`, `SUPERADMIN` | tabela densa com filtros avançados (data, valor, vendedor, tipo), PDF, envio por e-mail, exclusão; **Abrir orçamento** (`/orcamento/:id`), **Criar evento** (`/events/new?orcamento_id=`) e **Recalcular** (`/orcamento?recalcular_id=`), feature 190 |
 | `/orcamento/configuracoes` | Config. Preços | `SUPERADMIN` | `SiteSetting.pricing_config` + personagens especiais, em tabelas densas (feature 190) |
 | `/educamanto` | Calculadora EducaManto | `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO` | seletor de pacote em dropdown, duas colunas, cards Sem/Com Nota Fiscal, transporte com **`GoogleAddressInput`** no endereço (feature 195 — escolher a sugestão já recalcula o KM), cálculo; lê `?package_id=` (vindo de "Usar" na tela de Pacotes) e `?recalcular_id=` (feature 190) |
 | `/educamanto/pacotes` · `/novo` · `/:id/editar` | Pacotes EducaManto | `COMERCIAL`, `SUPERADMIN` | grade de cards com margens/desconto/matriz de custos; Usar, CRUD + duplicar (feature 190) |
