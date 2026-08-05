@@ -19,6 +19,27 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
+### 206b — Hotfix: superfícies públicas por link voltaram a abrir sem login
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** Incidente pós-virada: links públicos já distribuídos (formulário de
+pré-contrato `/f/*`, cadastro de talentos `/cadastro/*`, avaliação da cliente `/avaliar/*`)
+caíam no fallback do ERP interno e pediam login. A lista de proxy da 206 cobria API, mídia e
+impressão — mas **superfície pública por link é uma categoria própria** que ninguém enumerou.
+
+**O que mudou.** `frontend/server.js` ganhou `/f`, `/cadastro`, `/avaliar` e `/static` (o CSS
+das páginas Jinja) em `BACKEND_PREFIXES`. E os dois geradores de link de avaliação
+(`api_feedback_link` e `feedback.gerar_link`) trocaram `request.url_root` por
+`PUBLIC_BASE_URL`: atrás do proxy com `changeOrigin`, o Host que chega ao Flask é o do
+serviço backend — link novo sairia com o domínio interno da Railway.
+
+**Pegadinha para o futuro.** Ao apontar um domínio para o serviço frontend, o checklist do
+proxy tem QUATRO categorias: API (`/api`), mídia (`/uploads`, `/catalogo/midia`,
+`/portal/photo`), páginas internas legadas (`/figurinos/*/print`, `/google`) e **links
+públicos em circulação** (`/f`, `/cadastro`, `/avaliar` + `/static`). Os links do painel
+React de Formulários apontam para `/catalogo/f/<slug>` (SPA pública) e nunca quebraram — o
+que quebra é sempre o link antigo impresso em bio/WhatsApp.
+
 ### 207 — Pacote de melhorias operacionais (5 frentes)
 `main` · **2026-08-04** · migration `d9f2b3a41c07` (*google_review_url em site_settings*)
 

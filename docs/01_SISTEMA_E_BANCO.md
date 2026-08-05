@@ -918,7 +918,9 @@ primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e 
 | `/catalogo/midia/*` | fotos públicas do catálogo — casa **antes** do mount `/catalogo` |
 | `/portal/photo/*` | foto de figurino do portal (Jinja, mesma sessão do talento) — **antes** do mount `/portal` |
 | `/google/*` | callback do OAuth do Google Calendar (`app/calendar/routes.py`), rota Jinja com `redirect_uri` fixo no Google Console |
-| `/figurinos/<id>/print` | única página Jinja que a SPA interna ainda linka; regex restrito ao sub-path |
+| `/f/*`, `/cadastro/*`, `/avaliar/*` | superfícies públicas por link já distribuído (pré-contrato, cadastro de talentos, feedback da cliente) — hotfix 206b; sem elas o link caía no login do ERP |
+| `/static/*` | CSS/JS das páginas Jinja públicas acima (bundles Vite usam `/assets` — sem colisão) |
+| `/figurinos/<id>/print`, `/figurinos/print-event/<id>` | páginas Jinja de impressão que a SPA interna linka; regex restrito ao sub-path |
 
 > ⚠️ **`BACKEND_URL` precisa do esquema.** `mantoplatform.railway.internal` (como o painel do
 > Railway exibe o domínio privado) fazia o `http-proxy` estourar `TypeError` **síncrono** dentro
