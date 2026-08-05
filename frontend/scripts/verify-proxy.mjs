@@ -153,6 +153,30 @@ check(
 const internal = await rawGet("/", "app.mantoproducoes.com.br");
 check(internal.status === 200, `/ em app.* → ${internal.status} (ERP interno, sem redirect)`);
 
+// Sem `Cache-Control`, o navegador guarda o index.html por heurística e continua pedindo o
+// bundle da versão anterior — o deploy sobe, a sondagem em produção passa e o usuário segue no
+// JavaScript velho. Os dois lados do contrato precisam valer.
+console.log("\n=== Cache do navegador ===");
+for (const rota of ["/", "/agenda", "/catalogo", "/portal/"]) {
+  const r = await fetch(`http://127.0.0.1:${FRONT_PORT}${rota}`);
+  check(
+    r.headers.get("cache-control") === "no-cache",
+    `${rota.padEnd(12)} → cache-control: ${r.headers.get("cache-control")} (HTML revalida sempre)`,
+  );
+}
+const htmlRaiz = await (await fetch(`http://127.0.0.1:${FRONT_PORT}/`)).text();
+const assetPath = (htmlRaiz.match(/src="(\/assets\/[^"]+\.js)"/) || [])[1];
+if (assetPath) {
+  const asset = await fetch(`http://127.0.0.1:${FRONT_PORT}${assetPath}`);
+  const cc = asset.headers.get("cache-control") || "";
+  check(
+    cc.includes("immutable") && cc.includes("max-age=31536000"),
+    `${assetPath.slice(0, 24).padEnd(26)} → ${cc} (hash no nome ⇒ imutável)`,
+  );
+} else {
+  check(false, "não achou o bundle no index.html para checar o cache do asset");
+}
+
 console.log("\n=== Cabeçalhos repassados ===");
 const probe = await (await fetch(`http://127.0.0.1:${FRONT_PORT}/api/ping`)).text();
 check(probe.includes(`host=127.0.0.1:${BACKEND_PORT}`), "changeOrigin reescreve o Host para o backend");

@@ -97,6 +97,35 @@ const proxy = httpProxy.createProxyServer({ changeOrigin: true, xfwd: true });
 
 const SPA_REWRITE = [{ source: "**", destination: "/index.html" }];
 
+/**
+ * Cache do navegador — o contrato padrão de SPA com assets versionados por hash.
+ *
+ * Sem isto o `serve-handler` não manda `Cache-Control` nenhum, e aí o navegador aplica cache
+ * heurístico em cima do `Last-Modified`: **o `index.html` fica guardado** e continua apontando
+ * para o bundle da versão anterior. O deploy sobe, a verificação em produção passa (o servidor
+ * já entrega o arquivo novo) e mesmo assim o usuário segue rodando o JavaScript velho até dar
+ * um refresh forçado. Foi assim que uma tela do catálogo apareceu sem um botão que já estava
+ * publicado havia horas.
+ *
+ * - `index.html` (e qualquer HTML): `no-cache` = pode guardar, mas **revalida sempre** antes de
+ *   usar. O arquivo tem menos de 1 KB e vira 304 quando nada mudou.
+ * - `assets/*`: o nome já carrega o hash do conteúdo, então mudou o conteúdo = mudou a URL.
+ *   Pode ser `immutable` por um ano com segurança.
+ *
+ * A regra de `assets` vem DEPOIS de propósito: o `serve-handler` percorre a lista inteira e a
+ * última que casar vence.
+ */
+const CACHE_HEADERS = [
+  { source: "**", headers: [{ key: "Cache-Control", value: "no-cache" }] },
+  {
+    source: "assets/**",
+    headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+  },
+];
+
+/** Opções do `serve-handler` compartilhadas pelos três apps. */
+const SERVE_OPTIONS = { rewrites: SPA_REWRITE, cleanUrls: false, headers: CACHE_HEADERS };
+
 /** Apps montados sob um prefixo de URL, avaliados na ordem antes do app da raiz. */
 const MOUNTED_APPS = [
   { prefix: "/catalogo", dir: path.join(__dirname, "apps/public/dist") },
@@ -238,10 +267,10 @@ const server = http.createServer((req, res) => {
   for (const { prefix, dir } of MOUNTED_APPS) {
     if (req.url && matchesPrefix(req.url, prefix)) {
       req.url = req.url.slice(prefix.length) || "/";
-      return handler(req, res, { public: dir, rewrites: SPA_REWRITE, cleanUrls: false });
+      return handler(req, res, { public: dir, ...SERVE_OPTIONS });
     }
   }
-  return handler(req, res, { public: INTERNAL_DIR, rewrites: SPA_REWRITE, cleanUrls: false });
+  return handler(req, res, { public: INTERNAL_DIR, ...SERVE_OPTIONS });
 });
 
 server.listen(PORT, () => {

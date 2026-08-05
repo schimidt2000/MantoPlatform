@@ -12,6 +12,11 @@
 > preencher formulário ou comparar datas, use `lib/horaLocal.ts` (recorte de string); passar por
 > `new Date(iso).toISOString()` desloca +3h e regrava o evento errado no banco e no Google Agenda.
 >
+> **Cache do frontend (210d).** `frontend/server.js` declara `Cache-Control: no-cache` para HTML e
+> `public, max-age=31536000, immutable` para `assets/*`. Sem isso o `serve-handler` não manda
+> cabeçalho nenhum, o navegador guarda o `index.html` por heurística e o usuário fica no bundle
+> antigo mesmo com o deploy no ar — "verifiquei em produção" ≠ "o usuário está com isso".
+>
 > **RBAC do detalhe do evento (210c).** `pagamentos` e `reembolsos` são do bloco **`show_comercial`**
 > (COMERCIAL/FINANCEIRO/SUPERADMIN) — paridade com o Jinja, onde os painéis ficavam dentro de
 > `{% if show_comercial %}`. Só `kpi` e `gastos` são exclusivos de `show_financeiro`. As ações

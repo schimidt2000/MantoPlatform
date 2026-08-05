@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210c (pagamento visível
-> ao Comercial)** · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210d (cache do bundle)**
+> · Head de migration: `e7a1c94f20b3`
 
 Formato de cada entrada:
 
@@ -18,6 +18,38 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 210d — Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio)
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** Chegou o relato "não dá para vincular ficha depois de criado o personagem", com
+print do painel de Personagens sem o botão. O botão **já estava em produção desde a 209** — o
+print mostrava a versão da 207 (dava para saber pelo rótulo "sem vídeo", que a 209 removeu).
+
+**Causa raiz — deploy que não chega no usuário.** O `serve-handler` não manda `Cache-Control`
+nenhum. Sem esse cabeçalho, o navegador aplica **cache heurístico** em cima do `Last-Modified` e
+guarda o `index.html` — que é justamente quem aponta para o bundle com hash. Resultado: o deploy
+sobe, a sondagem em produção passa (o servidor entrega o arquivo novo para quem pede), e mesmo
+assim o usuário continua rodando o JavaScript velho até dar refresh forçado. Isso vale para
+**todo** deploy do frontend, não só este caso.
+
+`frontend/server.js` passou a declarar o contrato padrão de SPA com assets versionados:
+`Cache-Control: no-cache` para HTML (pode guardar, mas **revalida sempre**; o arquivo tem menos
+de 1 KB e vira 304 quando nada mudou) e `public, max-age=31536000, immutable` para `assets/*`
+(o hash está no nome, então conteúdo novo = URL nova). A regra de `assets` vem depois de
+propósito: o `serve-handler` percorre a lista inteira e a última que casar vence.
+
+**UX.** O selo "⚠ Sem ficha vinculada" virou botão — "⚠ Sem ficha vinculada — vincular" — e abre
+o mesmo painel do botão "Ficha & página". É onde o olho bate ao procurar o que falta; deixar a
+ação só atrás do outro botão dava a impressão de que não dava para vincular depois de criar.
+
+**Riscos e pegadinhas.** "Verifiquei em produção" ≠ "o usuário está com isso": a sondagem busca o
+bundle direto, o navegador dele não. Quando um relato descrever uma tela que não bate com o
+código, procure um texto que só existe na versão antiga antes de sair caçando bug — foi o "sem
+vídeo" que resolveu este. Verificação: `frontend/scripts/verify-proxy.mjs` ganhou a seção "Cache
+do navegador" (HTML das 3 SPAs com `no-cache`, asset com `immutable`) — todos os checks OK; e o
+vínculo de ficha foi exercitado de ponta a ponta no navegador (vincular pelo selo, gravar,
+desvincular pelo ✕).
 
 ### 210c — Hotfix: Comercial voltou a enxergar o pagamento do evento
 `main` · **2026-08-05** · sem migration

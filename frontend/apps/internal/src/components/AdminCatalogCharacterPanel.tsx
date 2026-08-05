@@ -313,17 +313,33 @@ export function AdminCatalogCharacterPanel({ itemId, characters }: AdminCatalogC
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-ink">{character.name}</p>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                      {character.figurino_sheet_id ? (
-                        <span className="rounded-full bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
-                          ✓{" "}
-                          {figurinoSheets.find((f) => f.id === character.figurino_sheet_id)?.character_name ??
-                            "figurino vinculado"}
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-red-soft px-2 py-0.5 text-xs font-medium text-red">
-                          ⚠ Sem ficha vinculada
-                        </span>
-                      )}
+                      {/* O selo é o próprio atalho para vincular: é nele que o olho bate ao
+                          procurar o que está faltando, e sem isso a ação só existe atrás do
+                          botão "Ficha & página" — dá a impressão de que não dá para vincular
+                          depois de criar o personagem. */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedId((prev) => (prev === character.id ? null : character.id))
+                        }
+                        title={
+                          character.figurino_sheet_id
+                            ? "Trocar a ficha de figurino deste personagem"
+                            : "Vincular uma ficha de figurino a este personagem"
+                        }
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium underline-offset-2 hover:underline ${
+                          character.figurino_sheet_id
+                            ? "bg-green-soft text-green"
+                            : "bg-red-soft text-red"
+                        }`}
+                      >
+                        {character.figurino_sheet_id
+                          ? `✓ ${
+                              figurinoSheets.find((f) => f.id === character.figurino_sheet_id)
+                                ?.character_name ?? "figurino vinculado"
+                            }`
+                          : "⚠ Sem ficha vinculada — vincular"}
+                      </button>
                       {character.own_item && (
                         <span
                           className={`rounded-full px-2 py-0.5 text-xs font-medium ${
