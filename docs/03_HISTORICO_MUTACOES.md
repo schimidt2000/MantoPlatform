@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210 (horário, anexos e
-> orçamento)** · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210b (buscador de
+> pré-contrato)** · Head de migration: `e7a1c94f20b3`
 
 Formato de cada entrada:
 
@@ -18,6 +18,41 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 210b — Hotfix: buscador de pré-contrato mudo
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** O campo "Pré-contrato (formulário recebido)" de `/events/new` e
+`/events/:id/edit` não devolvia nada para nenhum termo.
+
+**Causa.** `FormResponsePicker` chamava `${API_BASE}/formularios/respostas/search` — a rota
+**Jinja**, fora de `/api`. `frontend/server.js` só repassa ao Flask os prefixos de
+`BACKEND_PREFIXES`, e `/formularios` não pode entrar lá: é rota do React Router (a tela de
+Formulários). Resultado: a chamada caía no fallback da SPA e recebia o `index.html` **com status
+200** — `r.ok` era verdadeiro, o `JSON.parse` estourava e o `.catch(() => setResults([]))`
+transformava a falha em lista vazia. Ninguém via erro nenhum.
+
+Antes da 206 isso funcionava porque `VITE_API_BASE_URL` apontava para o domínio do Flask e a
+chamada não passava por proxy nenhum. Mesma família dos gaps de proxy da migração — e o único
+caso restante: `/figurinos/<id>/print` e `/figurinos/print-event/<id>` já estavam cobertos por
+`BACKEND_PATTERNS`, e uma varredura em `apps/*/src` não achou outra chamada fora de `/api`.
+
+**O que mudou.** O componente passou a usar `apiFetch("/api/formularios/respostas/search")` — o
+endpoint equivalente já existia em `app/api/formularios_admin_read.py`, sem tela que o usasse. A
+lista agora mostra tipo · telefone · data do evento. Estados de **buscando**, **nenhuma resposta
+encontrada** e **erro** substituíram o silêncio: a lição do bug é que "lista vazia" e "a chamada
+falhou" não podem se parecer.
+
+`formularios_ops.search_responses` ganhou **busca por data do evento** (`dd/mm/aaaa`, `dd/mm/aa`,
+`dd-mm-aaaa`, ISO) — o campo prometia "nome, telefone ou data" e só fazia nome e telefone. O
+casamento por telefone passou a exigir 4+ dígitos: com data no jogo, um "12" digitado no meio de
+`12/08/2026` casava com meio banco de telefones.
+
+**Riscos e pegadinhas.** Ao consumir rota do Flask a partir do React, use **sempre** `/api/*`.
+Fora de `/api`, só com entrada explícita no proxy (`server.js` **e** os `vite.config.ts`), e por
+regex restrito quando o prefixo colide com rota do React Router. Verificação: seção 5 do
+verify_210 (30/30) e os quatro caminhos conferidos no navegador (nome, telefone, data e termo sem
+resultado).
 
 ### 210 — Hotfix: horário deslocado, anexo do evento e orçamento sem saída
 `main` · **2026-08-05** · sem migration

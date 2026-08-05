@@ -12,6 +12,12 @@
 > preencher formulário ou comparar datas, use `lib/horaLocal.ts` (recorte de string); passar por
 > `new Date(iso).toISOString()` desloca +3h e regrava o evento errado no banco e no Google Agenda.
 >
+> **Consumo de rota do Flask pelo React (210b).** Use **sempre** `/api/*`. O servidor do frontend
+> só repassa ao Flask os prefixos de `BACKEND_PREFIXES`/`BACKEND_PATTERNS` (`frontend/server.js`);
+> qualquer outro caminho cai no fallback da SPA e devolve o `index.html` **com status 200** — a
+> chamada "funciona", o JSON estoura e o erro vira lista vazia em silêncio. Prefixo que colide com
+> rota do React Router (`/formularios`, `/figurinos`) só entra por regex restrito ao sub-path.
+>
 > Hotfix 210: sem migration e sem endpoint novo. `POST /api/orcamento/calcular` e
 > `GET /api/orcamento/historico/<id>` passaram a incluir `quote.memoria` (detalhamento linha a
 > linha do cálculo; ausente em orçamentos salvos antes da 210). Rota React nova:

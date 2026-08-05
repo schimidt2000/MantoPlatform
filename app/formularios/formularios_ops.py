@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date, datetime
 
 from sqlalchemy.orm import joinedload
 
@@ -69,16 +70,40 @@ def fill_client_from_response(client: Client, response: FormResponse) -> None:
             client.address = address
 
 
+def _data_do_termo(q: str) -> date | None:
+    """Interpreta o termo como data do evento: `dd/mm/aaaa`, `dd/mm/aa`, `dd-mm-aaaa` ou ISO.
+
+    O buscador de pré-contrato oferece "nome, telefone ou data" — sem isto, digitar a data do
+    evento (o jeito mais natural de achar a resposta de uma cliente cujo nome não se lembra)
+    devolvia lista vazia.
+    """
+    termo = q.strip()
+    for formato in ("%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(termo, formato).date()
+        except ValueError:
+            continue
+    return None
+
+
 def search_responses(q: str) -> list[FormResponse]:
-    """Busca respostas por nome/telefone (sem acentos) — usado pelo buscador de `/events/new`."""
+    """Busca respostas por nome, telefone ou data do evento (sem acentos).
+
+    Usado pelo buscador de pré-contrato de `/events/new` e `/events/<id>/edit`.
+    """
     q = (q or "").strip()
     if len(q) < 2:
         return []
     like = f"%{strip_accents_lower(q)}%"
+    # Só conta como telefone o que tem dígito suficiente para não casar com tudo: "12" (de uma
+    # data digitada pela metade) traria meio banco.
     digits = "".join(c for c in q if c.isdigit())
     conditions = [unaccent_lower_sql(FormResponse.contact_name).like(like)]
-    if digits:
+    if len(digits) >= 4:
         conditions.append(FormResponse.contact_phone.ilike(f"%{digits}%"))
+    data = _data_do_termo(q)
+    if data is not None:
+        conditions.append(FormResponse.event_date == data)
     from sqlalchemy import or_
 
     return (
