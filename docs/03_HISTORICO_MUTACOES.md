@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210b (buscador de
-> pré-contrato)** · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210c (pagamento visível
+> ao Comercial)** · Head de migration: `e7a1c94f20b3`
 
 Formato de cada entrada:
 
@@ -18,6 +18,35 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 210c — Hotfix: Comercial voltou a enxergar o pagamento do evento
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** O Comercial criava o evento e subia o comprovante, mas não via se a cliente já
+havia pagado — sumiram o painel "Comprovantes de pagamento" (com o "Recebido X de Y" e o selo
+"Quitado ✓") e o de "Reembolsos".
+
+**Causa.** Na API, `data["pagamentos"]` e `data["reembolsos"]` foram colocados no bloco
+`show_financeiro` (FINANCEIRO/SUPERADMIN). No Jinja os dois painéis ficavam dentro de
+`{% if show_comercial %}` (`event_detail.html` 1982-2196) — quem vende sempre viu. Incoerência
+visível: `reembolsos_pendentes_total` já ia para o Comercial, então ele lia "há R$ X pendente"
+sem poder ver do que se tratava.
+
+**O que mudou.** As duas chaves passaram para o bloco `show_comercial`. Nada mudou no React: os
+painéis já apareciam por presença de chave (o servidor decide), e o `PagamentosPanel` já trazia o
+"Recebido/Quitado", a lista e o formulário de novo comprovante.
+
+**RBAC — o que NÃO mudou.** Subir comprovante e registrar/cobrar reembolso sempre foram
+`_CAN_EDIT_EVENT` (inclui Comercial) nos endpoints; editar valor e excluir comprovante/reembolso
+seguem restritos a SUPERADMIN, checados no endpoint e escondidos no React por
+`flags.is_superadmin`. `kpi` e `gastos` (lucro, cachês, despesas) continuam só no bloco
+financeiro — foi só isso que sobrou lá.
+
+**Pegadinha.** Ao migrar um bloco do Jinja para a API, o gate tem de ser o do **template**, não o
+do "parece financeiro". Verificação: seção 6 do verify_210 (43/43) com usuários de papel puro
+(Comercial vê pagamentos e não vê KPI; Comercial sobe comprovante → 201, mas edita/exclui → 403;
+Financeiro segue com tudo; Casting segue sem ver venda nem pagamentos) e conferência na tela com
+"Ver o sistema como COMERCIAL".
 
 ### 210b — Hotfix: buscador de pré-contrato mudo
 `main` · **2026-08-05** · sem migration

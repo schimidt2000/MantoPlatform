@@ -717,13 +717,12 @@ def serialize_event_detail(
             sum((r.amount or 0 for r in reembolsos if not r.is_collected), Decimal("0"))
         )
         data["mensagens"] = _serialize_mensagens(event, data["cobranca"], reembolsos)
-
-    # KPIs, pagamentos e reembolsos — FINANCEIRO/SUPERADMIN.
-    if flags["show_financeiro"]:
-        from app.calendar.routes import _group_events
-
-        data["kpi"] = _compute_kpi(event)
-        data["gastos"] = _serialize_gastos([ge.id for ge in _group_events(event)])
+        # Comprovantes de pagamento e reembolsos são do bloco COMERCIAL, não do financeiro: no
+        # Jinja os dois painéis ficavam dentro de `{% if show_comercial %}` (event_detail.html,
+        # linhas 1982-2196). Quem vende precisa saber se a cliente já pagou — e é quem sobe o
+        # comprovante (`POST /events/<id>/payments` sempre foi `_CAN_EDIT_EVENT`, que inclui
+        # Comercial). As ações destrutivas continuam restritas: editar valor e excluir são
+        # superadmin, checado no endpoint e escondido pelo React via `flags.is_superadmin`.
         data["pagamentos"] = {
             "items": [
                 {
@@ -754,5 +753,12 @@ def serialize_event_detail(
                 sum((r.amount or 0 for r in reembolsos if not r.is_collected), Decimal("0"))
             ),
         }
+
+    # KPIs e gastos do evento (lucro, cachês, despesas) — FINANCEIRO/SUPERADMIN.
+    if flags["show_financeiro"]:
+        from app.calendar.routes import _group_events
+
+        data["kpi"] = _compute_kpi(event)
+        data["gastos"] = _serialize_gastos([ge.id for ge in _group_events(event)])
 
     return data

@@ -12,6 +12,11 @@
 > preencher formulário ou comparar datas, use `lib/horaLocal.ts` (recorte de string); passar por
 > `new Date(iso).toISOString()` desloca +3h e regrava o evento errado no banco e no Google Agenda.
 >
+> **RBAC do detalhe do evento (210c).** `pagamentos` e `reembolsos` são do bloco **`show_comercial`**
+> (COMERCIAL/FINANCEIRO/SUPERADMIN) — paridade com o Jinja, onde os painéis ficavam dentro de
+> `{% if show_comercial %}`. Só `kpi` e `gastos` são exclusivos de `show_financeiro`. As ações
+> destrutivas (editar valor/excluir comprovante e reembolso) continuam SUPERADMIN, no endpoint.
+>
 > **Consumo de rota do Flask pelo React (210b).** Use **sempre** `/api/*`. O servidor do frontend
 > só repassa ao Flask os prefixos de `BACKEND_PREFIXES`/`BACKEND_PATTERNS` (`frontend/server.js`);
 > qualquer outro caminho cai no fallback da SPA e devolve o `index.html` **com status 200** — a

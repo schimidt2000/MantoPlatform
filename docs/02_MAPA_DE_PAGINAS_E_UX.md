@@ -161,6 +161,10 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   de rota do Google Maps), materiais de ensaio (arquivo e link), observações, contratos,
   comprovantes, notas fiscais, reembolsos, sincronizar com o Google, excluir. Cada mutação
   coloca **só o seu próprio controle** em estado de carregamento (Princípio V).
+- **Visibilidade financeira (210c)**: "Comprovantes de pagamento" (com *Recebido X de Y* e o selo
+  *Quitado ✓*) e "Reembolsos" aparecem para **`COMERCIAL`** também, não só Financeiro — paridade
+  com o Jinja. Só os KPIs de lucro/cachês/gastos ficam restritos a `FINANCEIRO`/`SUPERADMIN`.
+  Editar valor e excluir comprovante/reembolso continuam só `SUPERADMIN`.
 - **Indicador de agenda**: cada card de casting mostra "Mesmo dia"/"Conflito" quando o talento
   tem outro evento na mesma data (`talent_availability`), com o evento concorrente no `title`.
 - **API**: `GET /api/events/<id>` (payload único da tela) · `POST /api/roles/<id>/payment-status`
