@@ -1116,4 +1116,8 @@ def api_feedback_link(event_id: int) -> Any:
     from app.calendar.event_ops import ensure_feedback_token
 
     token = ensure_feedback_token(event)
-    return jsonify({"url": request.url_root.rstrip("/") + f"/avaliar/{token}"})
+    # PUBLIC_BASE_URL, não request.url_root: atrás do proxy reverso (206) o Host que chega
+    # aqui é o do serviço backend (changeOrigin) — url_root geraria um link com o domínio
+    # interno da Railway em vez do endereço público da plataforma.
+    base = (current_app.config.get("PUBLIC_BASE_URL") or request.url_root).rstrip("/")
+    return jsonify({"url": f"{base}/avaliar/{token}"})

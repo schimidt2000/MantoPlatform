@@ -125,8 +125,28 @@ const PORTAL_HOSTS = new Set(
  * registrado no Google Console é um endereço fixo e, apontando para este domínio, o browser
  * volta do consentimento direto no fallback de SPA — a reconexão da agenda quebraria em
  * silêncio. Não há rota `/google` no React Router, então não sombreia nada.
+ *
+ * SUPERFÍCIES PÚBLICAS POR LINK (Jinja, sem login) — os links já distribuídos apontam para
+ * este domínio e, sem estas entradas, caíam no fallback do ERP interno, que PEDE LOGIN:
+ *   - `/f/*`        formulários públicos de pré-contrato/corporativo (`formularios_bp`)
+ *   - `/cadastro/*` cadastro público de talentos (`cadastro_bp`)
+ *   - `/avaliar/*`  avaliação da cliente por token (`feedback_bp`)
+ *   - `/static/*`   CSS/JS que essas páginas Jinja referenciam (os bundles Vite usam
+ *                   `/assets`, então não há colisão)
+ * Nenhum desses prefixos existe como rota nos três React Routers (`/formularios` do ERP é
+ * outra rota — o público é só `/f/*`).
  */
-const BACKEND_PREFIXES = ["/api", "/uploads", "/catalogo/midia", "/portal/photo", "/google"];
+const BACKEND_PREFIXES = [
+  "/api",
+  "/uploads",
+  "/catalogo/midia",
+  "/portal/photo",
+  "/google",
+  "/f",
+  "/cadastro",
+  "/avaliar",
+  "/static",
+];
 
 /** Rotas Jinja remanescentes, casadas por regex para não sombrear rotas do React Router. */
 const BACKEND_PATTERNS = [

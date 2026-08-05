@@ -69,7 +69,9 @@ def gerar_link(event_id: int):
     if not event.feedback_token:
         event.feedback_token = secrets.token_urlsafe(32)
         db.session.commit()
-    url = request.url_root.rstrip("/") + f"/avaliar/{event.feedback_token}"
+    # PUBLIC_BASE_URL, não url_root: atrás do proxy (206) o Host aqui é o do backend.
+    base = (current_app.config.get("PUBLIC_BASE_URL") or request.url_root).rstrip("/")
+    url = f"{base}/avaliar/{event.feedback_token}"
     return jsonify({"url": url})
 
 
