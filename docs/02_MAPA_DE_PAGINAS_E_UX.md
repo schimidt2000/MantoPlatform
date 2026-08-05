@@ -868,6 +868,12 @@ Todas as telas são **mobile-first** (Princípio VIII).
     reinicia o vídeo) e **tela cheia**. A troca entre foto horizontal e vídeo vertical (9:16)
     **anima a altura do container**, sem salto. Vídeo inválido é **ignorado silenciosamente** na
     vitrine (e sinalizado no gerenciador interno).
+  - **Quadro da mídia com teto e piso (feature 211)**: o palco vive entre **380px** e
+    **`min(62vh, 620px)`**, garantido em CSS (`min-height`/`max-height`), com a foto inteira por
+    `object-contain`. Antes só havia teto: retrato alto tomava a tela e paisagem larga virava uma
+    tira, cada produto abrindo de um jeito. As duas colunas do grid usam **`min-w-0`** — sem
+    isso, `min-width: auto` do item de grid deixava uma foto de arquivo grande espremer a coluna
+    do texto (título quebrado, tags empilhadas, botões virando bolinhas).
   - Seção **"Elenco Individual"** (`CharacterGrid` + `CharacterCard`): um card por Personagem
     filho ativo, com foto/preview, nome e **"+ Adicionar à lista"** próprio. Tema sem Personagens
     → a seção **não é renderizada** (sem espaço vazio).

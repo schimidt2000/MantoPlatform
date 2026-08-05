@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210d (cache do bundle)**
-> · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **211 (quadro da foto na
+> vitrine)** · Head de migration: `e7a1c94f20b3`
 
 Formato de cada entrada:
 
@@ -18,6 +18,41 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 211 — Vitrine: quadro da foto com teto e piso
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** Na página do produto, o tamanho da foto mandava no layout inteiro. "Às de Copas"
+(retrato alto e de arquivo grande) tomava a tela e **espremia a coluna do texto até virar uma
+tira**: título quebrado em duas linhas, tags empilhadas uma por linha e botões virando bolinhas.
+"80's Neon", com foto menor, ficava correto. Cada produto abria de um jeito.
+
+**Duas causas, não uma.**
+
+1. **Coluna espremida** — a culpa não era da altura, era da largura. O `grid-cols-[1.1fr_1fr]`
+   parece garantir a proporção, mas item de grid nasce com `min-width: auto`: a coluna **não
+   encolhe abaixo da largura natural do conteúdo**. Uma foto de arquivo grande empurrava a
+   coluna da direita para fora da sua fração. `min-w-0` nas duas colunas devolve o controle ao
+   `1.1fr/1fr` (medido depois: 568px / 516px, como esperado).
+2. **Quadro sem limites** — a galeria só tinha teto (70vh) e nenhum piso, então retrato alto
+   virava parede e paisagem larga virava tira. O palco agora vive numa faixa: piso de 380px,
+   teto de `min(62vh, 620px)`. A foto continua inteira (`object-contain`), o que sobra é o fundo
+   do quadro.
+
+**Onde a garantia mora.** Teto e piso são **CSS** (`min-height`/`max-height`) no elemento do
+palco, não só conta em JavaScript. Assim valem antes de a foto carregar, quando ela falha, e
+depois de o usuário redimensionar a janela — a altura calculada no `onLoad` é um pixel fixo que
+envelhece, e não havia listener de resize. O cálculo em JS continua, para o quadro já nascer no
+tamanho certo em vez de crescer na frente do cliente.
+
+**Pegadinha.** A altura do palco saiu do `animate` do Framer Motion e virou `style` + transição
+CSS. Tamanho de quadro precisa valer no primeiro quadro renderizado; entregá-lo à biblioteca de
+animação deixava o palco com 24px quando a imagem falhava.
+
+**Verificação.** Typecheck e build limpos nos três apps; proporção das colunas e a faixa aplicada
+(`min-height: 380px`, `max-height: 446.4px` numa janela de 720px) conferidas no DOM. A cópia
+local não tem os arquivos de mídia (só o banco vem de produção), então a conferência visual com
+fotos reais foi feita na página publicada.
 
 ### 210d — Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio)
 `main` · **2026-08-05** · sem migration

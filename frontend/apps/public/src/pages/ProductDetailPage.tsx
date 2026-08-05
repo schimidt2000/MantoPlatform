@@ -70,7 +70,9 @@ export function ProductDetailPage() {
       <main className="mx-auto max-w-[1180px] px-6 py-10">
         {isLoading && (
           <div className="grid gap-10 md:grid-cols-[1.1fr_1fr]">
-            <Skeleton className="aspect-[4/5] w-full" />
+            {/* Mesma altura mínima do palco da galeria — o esqueleto não pode ter um tamanho
+                que a foto real nunca vai ter, senão a página salta ao carregar. */}
+            <Skeleton className="h-[380px] w-full" />
             <div className="space-y-3">
               <Skeleton className="h-10 w-3/4" />
               <Skeleton className="h-4 w-full" />
@@ -89,7 +91,10 @@ export function ProductDetailPage() {
                 videoKind={data.video_kind}
               />
 
-              <div>
+              {/* `min-w-0` nas duas colunas: sem isso o conteúdo intrínseco (foto grande de um
+                  lado, palavra longa do outro) rouba a largura da outra e o layout deixa de
+                  seguir a proporção 1.1fr/1fr. */}
+              <div className="min-w-0">
                 <div className="text-xs font-bold uppercase tracking-[0.16em] text-gold">
                   ✦ Manto Produções
                 </div>
