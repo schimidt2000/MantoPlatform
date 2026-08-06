@@ -27,6 +27,17 @@ export interface ClientEvent {
   relation: string;
 }
 
+/** Festa registrada em formulário — inclui as anteriores à agenda de 2026. */
+export interface ClientFormHistoryItem {
+  id: number;
+  form_type_label: string;
+  event_date: string | null;
+  created_at: string;
+  /** Preenchidos quando a festa também existe como evento no calendário. */
+  event_id: number | null;
+  event_title: string | null;
+}
+
 export interface ClientDetail extends ClientSummary {
   cpf: string;
   cnpj: string;
@@ -34,6 +45,30 @@ export interface ClientDetail extends ClientSummary {
   events: ClientEvent[];
   event_count: number;
   total_sales: number;
+  form_history: ClientFormHistoryItem[];
+}
+
+/** Um mês do gráfico de novos clientes (origem agregada no servidor). */
+export interface ClientsMonthMetric {
+  month: string;
+  total: number;
+  formulario: number;
+  kommo: number;
+  manual: number;
+}
+
+export interface ClientsMetrics {
+  new_by_month: ClientsMonthMetric[];
+  recurring_clients: number;
+  clients_with_event: number;
+}
+
+/** Métricas da página de clientes: novos por mês e recorrentes. */
+export function useClientsMetrics() {
+  return useQuery<ClientsMetrics>({
+    queryKey: ["clientes-metricas"],
+    queryFn: () => apiFetch<ClientsMetrics>("/api/clientes/metricas"),
+  });
 }
 
 /** Busca clientes por nome/telefone (sem acentos), feature 165 — usado pelo `ClientPicker`. */

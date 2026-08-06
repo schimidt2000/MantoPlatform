@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 
 export interface FormResponseSummary {
@@ -23,11 +23,27 @@ export interface FormResponseDetail extends FormResponseSummary {
   event_title: string | null;
 }
 
-/** Lista as respostas de formulário mais recentes (feature 177, US7). */
-export function useFormResponses() {
-  return useQuery<{ responses: FormResponseSummary[] }>({
-    queryKey: ["formularios-respostas"],
-    queryFn: () => apiFetch<{ responses: FormResponseSummary[] }>("/api/formularios/respostas"),
+/** Filtros de situação aceitos pelo backend (`formularios_ops.STATUS_FILTERS`). */
+export type StatusFilter = "" | "sem_evento" | "sem_cliente" | "ambiguos" | "futuros_sem_evento";
+
+export interface StatusCounts {
+  total: number;
+  sem_evento: number;
+  sem_cliente: number;
+  ambiguos: number;
+  futuros_sem_evento: number;
+}
+
+/** Lista as respostas de formulário mais recentes + contadores dos cartões de situação. */
+export function useFormResponses(filtro: StatusFilter = "") {
+  return useQuery<{ responses: FormResponseSummary[]; counts: StatusCounts }>({
+    queryKey: ["formularios-respostas", filtro],
+    queryFn: () =>
+      apiFetch<{ responses: FormResponseSummary[]; counts: StatusCounts }>(
+        `/api/formularios/respostas${filtro ? `?filtro=${filtro}` : ""}`,
+      ),
+    // Trocar de cartão não pisca a tela: mantém lista+contadores anteriores até chegar o novo.
+    placeholderData: keepPreviousData,
   });
 }
 

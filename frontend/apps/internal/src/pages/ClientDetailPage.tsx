@@ -7,7 +7,11 @@ import { useCurrentUser } from "../lib/useAuth";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("pt-BR");
+  // Pelo texto, nunca por `new Date()`: data-só ("2025-12-20") interpretada como UTC
+  // deslocaria um dia para trás no fuso de São Paulo; start_at é horário de parede naive.
+  const [year, month, day] = iso.slice(0, 10).split("-");
+  if (!year || !month || !day) return "";
+  return `${day}/${month}/${year}`;
 }
 
 export function ClientDetailPage() {
@@ -151,6 +155,7 @@ export function ClientDetailPage() {
           </Card>
           </div>
 
+          <div className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Eventos</CardTitle>
@@ -186,6 +191,45 @@ export function ClientDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Festas registradas em formulário — inclui as anteriores à agenda de 2026, que
+              não existem como evento. É o histórico usado para marketing de recompra. */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Festas anteriores (formulários)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {query.data.form_history.length === 0 ? (
+                <p className="text-sm text-muted">Nenhum formulário preenchido por esta cliente.</p>
+              ) : (
+                <ul className="divide-y divide-line">
+                  {query.data.form_history.map((f) => (
+                    <li
+                      key={f.id}
+                      className="flex items-center justify-between gap-3 py-1.5 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-muted">
+                          {f.event_date ? formatDate(f.event_date) : "sem data"}
+                        </span>{" "}
+                        {f.event_id && f.event_title ? (
+                          <Link to={`/events/${f.event_id}`} className="text-ink hover:underline">
+                            {f.event_title}
+                          </Link>
+                        ) : (
+                          <span className="text-ink">{f.form_type_label}</span>
+                        )}
+                      </div>
+                      <span className="shrink-0 rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted">
+                        {f.event_id ? "na agenda" : "só formulário"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+          </div>
           </div>
         </>
       )}

@@ -35,6 +35,8 @@ import {
   useSearchFormResponses,
   useUnlinkEvent,
   type FormResponseSummary,
+  type StatusCounts,
+  type StatusFilter,
 } from "../lib/formulariosAdmin";
 
 type FormType = "comum" | "corporativo";
@@ -156,11 +158,72 @@ function PublicFormCard({ nome, descricao, url, canEditStructure, onEditFields }
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  Tabela de respostas
+//  Cartões de situação + tabela de respostas
 // ══════════════════════════════════════════════════════════════════
 
-/** Badges coloridos de vínculo — verde quando resolvido, âmbar quando pendente. */
+/** `true` quando a festa é hoje/futura e a resposta ainda não tem evento — o caso que não
+ * pode passar despercebido (a cliente acha que está fechado e o evento não existe). */
+function isFutureWithoutEvent(r: FormResponseSummary): boolean {
+  if (r.event_id || !r.event_date) return false;
+  return r.event_date.slice(0, 10) >= new Date().toISOString().slice(0, 10);
+}
+
+const STATUS_CARDS: { key: StatusFilter; label: string; urgent?: boolean }[] = [
+  { key: "", label: "Todas" },
+  { key: "futuros_sem_evento", label: "Festa futura sem evento", urgent: true },
+  { key: "sem_evento", label: "Sem evento" },
+  { key: "sem_cliente", label: "Sem cliente" },
+  { key: "ambiguos", label: "Vínculo ambíguo" },
+];
+
+function StatusCards({
+  counts,
+  active,
+  onSelect,
+}: {
+  counts: StatusCounts | undefined;
+  active: StatusFilter;
+  onSelect: (next: StatusFilter) => void;
+}) {
+  const countFor = (key: StatusFilter): number | undefined => {
+    if (!counts) return undefined;
+    return key === "" ? counts.total : counts[key];
+  };
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      {STATUS_CARDS.map(({ key, label, urgent }) => {
+        const count = countFor(key);
+        const isActive = active === key;
+        const alarming = urgent && (count ?? 0) > 0;
+        return (
+          <button
+            key={key || "todas"}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => onSelect(key)}
+            className={[
+              "rounded-lg border p-3 text-left transition-colors",
+              isActive ? "border-accent bg-accent-soft" : "border-line bg-panel hover:bg-surface-2",
+              alarming && !isActive ? "border-red" : "",
+            ].join(" ")}
+          >
+            <p
+              className={`text-2xl font-semibold tabular-nums ${alarming ? "text-red" : "text-ink"}`}
+            >
+              {count ?? "…"}
+            </p>
+            <p className="mt-0.5 text-xs text-muted">{label}</p>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Badges coloridos de vínculo — verde quando resolvido, âmbar quando pendente, vermelho
+ * quando é festa futura sem evento (urgência real para o comercial). */
 function SituacaoBadges({ response }: { response: FormResponseSummary }) {
+  const urgent = isFutureWithoutEvent(response);
   return (
     <div className="flex flex-wrap gap-1">
       {response.client_id ? (
@@ -169,9 +232,16 @@ function SituacaoBadges({ response }: { response: FormResponseSummary }) {
         <MetricBadge tone="gold">Sem cliente</MetricBadge>
       )}
       {response.event_id ? (
-        <MetricBadge tone="green">Evento vinculado</MetricBadge>
+        <MetricBadge tone="green">
+          Evento vinculado · {response.event_link_source === "manual" ? "manual" : "auto"}
+        </MetricBadge>
+      ) : urgent ? (
+        <MetricBadge tone="red">⚠ Sem evento — festa {formatDate(response.event_date)}</MetricBadge>
       ) : (
         <MetricBadge tone="gold">Sem evento</MetricBadge>
+      )}
+      {!response.event_id && response.event_link_ambiguous && (
+        <MetricBadge tone="gold">Revisar vínculo</MetricBadge>
       )}
     </div>
   );
@@ -199,7 +269,12 @@ function ResponsesTable({
         </thead>
         <tbody>
           {responses.map((r) => (
-            <tr key={r.id} className="border-b border-line last:border-0 hover:bg-surface-2">
+            <tr
+              key={r.id}
+              className={`border-b border-line last:border-0 hover:bg-surface-2 ${
+                isFutureWithoutEvent(r) ? "bg-red-50" : ""
+              }`}
+            >
               <td className="px-3 py-2">
                 <button
                   type="button"
@@ -589,11 +664,12 @@ export function FormulariosAdminPage() {
 
   const [q, setQ] = useState("");
   const [formFilter, setFormFilter] = useState<FormFilter>("todos");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
   const [selected, setSelected] = useState<number | null>(null);
   const [editorFormType, setEditorFormType] = useState<FormType | null>(null);
 
   const isSearching = q.trim().length >= 2;
-  const list = useFormResponses();
+  const list = useFormResponses(statusFilter);
   const search = useSearchFormResponses(q);
   const source = isSearching ? search : list;
 
@@ -630,6 +706,16 @@ export function FormulariosAdminPage() {
           />
         ))}
       </div>
+
+      {/* ── Situação das respostas (cartões-filtro) ──────────────────── */}
+      <StatusCards
+        counts={list.data?.counts}
+        active={statusFilter}
+        onSelect={(next) => {
+          setStatusFilter(next);
+          setQ(""); // cartão é um recorte da base inteira — busca ativa confundiria o resultado
+        }}
+      />
 
       {/* ── Respostas ────────────────────────────────────────────────── */}
       <Card>
