@@ -702,6 +702,13 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 #### `/clientes` · `/clientes/:id` — Clientes
 - **Acesso**: `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (`_require_vendas()`).
 - **UX**: busca, criação rápida (dedupe por telefone), edição, exclusão, histórico de eventos.
+- **Métricas no topo da lista (feature 220)**: KPIs **Novos este mês**, **Com evento** e
+  **Recorrentes (2+ eventos)** + barras de **novos clientes por mês** (12 meses; tooltip com a
+  quebra formulário/Kommo/manual). `GET /api/clientes/metricas`.
+- **Ficha (`/clientes/:id`, feature 220)**: além do card **Eventos** (agenda 2026+), o card
+  **"Festas anteriores (formulários)"** lista os formulários preenchidos pela cliente — data da
+  festa, link para o evento quando existe ("na agenda") ou marcação "só formulário" (histórico
+  pré-2026, que não é materializado no calendário). É a base do marketing de recompra.
 
 #### `/clientes/avaliacoes` — Satisfação das Clientes *(refeita na feature 197)*
 - **Acesso**: `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (`_require_vendas()`).
@@ -756,11 +763,19 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   `/catalogo/f/corporativo`, servidas por `apps/public` sob `/catalogo/*`), **"Copiar link"** com
   confirmação inline "✓ Copiado" (+ `aria-live`), **"Abrir"** em nova aba e, só para SUPERADMIN,
   **"✎ Editar campos deste formulário"**.
+- **Cartões de situação (feature 220)**: cinco cartões-filtro clicáveis entre os links e a
+  tabela — **Todas · Festa futura sem evento (vermelho quando > 0) · Sem evento · Sem cliente ·
+  Vínculo ambíguo** — com contagem grande (`counts` do próprio `GET /api/formularios/respostas`).
+  Clicar filtra a tabela no servidor (`?filtro=`) e limpa a busca; "Festa futura sem evento"
+  ordena pela data da festa (mais urgente primeiro) — é o caso "a cliente acha que está fechado
+  e o evento não existe".
 - **Tabela densa de respostas** (colunas): **Contratante** (nome + telefone), **Formulário**
   (badge), **Data do evento** (`event_date`), **Recebida em** (`created_at` com **data e hora**,
-  `DD/MM/AAAA HH:mm`), **Situação** (dois badges coloridos — verde "Cliente: `<nome>`" /
-  âmbar "Sem cliente"; verde "Evento vinculado" / âmbar "Sem evento") e **Ver**. Rola dentro do
-  próprio contêiner no mobile.
+  `DD/MM/AAAA HH:mm`), **Situação** (badges — verde "Cliente: `<nome>`" / âmbar "Sem cliente";
+  verde "Evento vinculado · auto|manual" / âmbar "Sem evento" / **vermelho "⚠ Sem evento — festa
+  dd/mm/aaaa"** quando a festa é futura, com a linha inteira em `bg-red-50`; âmbar "Revisar
+  vínculo" quando a automação marcou ambíguo) e **Ver**. Rola dentro do próprio contêiner no
+  mobile.
 - **Filtros**: busca persistente por nome do contratante ou telefone (usa `…/respostas/search`
   a partir de 2 caracteres) combinada com abas **Todos / Pré-contrato / Corporativo**.
 - **Detalhe (`Dialog`)**: todos os campos preenchidos agrupados por seção; associar a cliente

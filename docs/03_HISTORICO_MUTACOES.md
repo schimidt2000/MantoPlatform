@@ -4,8 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **219 (confirmação de
-> email no cadastro e fila de devoluções)** · Head de migration: `c5d92fa16e34`
+> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **220 (vínculo
+> formulário↔evento endurecido, fila de revisão e histórico da cliente)** · Head de migration:
+> `c5d92fa16e34`
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -37,21 +38,22 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 130 |
-| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 205 |
-| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 280 |
-| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 349 |
-| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 407 |
-| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 484 |
-| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 519 |
-| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 551 |
-| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 584 |
-| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 619 |
-| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 651 |
-| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 680 |
-| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 715 |
-| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 788 |
-| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 837 |
+| **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 132 |
+| **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 193 |
+| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 268 |
+| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 343 |
+| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 412 |
+| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 470 |
+| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 547 |
+| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 582 |
+| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 614 |
+| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 647 |
+| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 682 |
+| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 714 |
+| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 743 |
+| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 778 |
+| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 851 |
+| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 900 |
 | **206b** | Hotfix: superfícies públicas por link voltaram a abrir sem login | 2026-08-05 | `—` | H2 | 11 |
 | **207** | Pacote de melhorias operacionais (5 frentes) | 2026-08-04 | `d9f2b3a41c07` | H2 | 36 |
 | **206** | React como interface primária e proxy reverso em produção | 2026-08-04 | `—` | H2 | 101 |
@@ -127,6 +129,67 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 220 — Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente
+`main` · **2026-08-06** · sem migration (correção de dados direto na produção, com dump prévio)
+
+**Motivação.** Um formulário apareceu vinculado ao evento errado, e a auditoria completa da base
+(1.495 respostas) explicou o porquê. A heurística nível 3 da feature 126 — "sem evento na data
+informada, mas o telefone tem exatamente 1 evento futuro → vincula" — ignorava a data que a
+cliente escreveu: **25 formulários históricos de 2023–2025 (importados na 193) foram grudados em
+eventos de 2026 das mesmas clientes recorrentes**. Além disso, 88% das respostas não tinham evento
+(a agenda só existe desde 02/01/2026), e mesmo respostas com cliente E evento não apareciam na
+ficha da cliente, porque **nenhum caminho de vínculo criava a linha em `event_clients`**.
+
+**Correção de dados (produção, 06/08 ~15h).** Script SQL transacional, ensaiado na cópia local:
+(A) desfez os 25 vínculos `auto_client`/`auto_date` com divergência resposta×evento > 30 dias,
+marcando `event_link_locked` (a automação nunca religa) e `event_link_ambiguous` (aparece na fila
+de revisão); datas com ano < 2000 ficaram de fora do critério (lixo de digitação, ex. `0006-08-22`
+com vínculo correto). (B) criou 20 associações `event_clients` em 18 eventos que tinham resposta
+com cliente mas nenhum cliente associado — mais recente vira `Contratante`, demais `Outros`.
+(C) restaurou o denormalizado `calendar_events.client_id` nesses 18. Rollback disponível:
+`backups/manto_2026-08-06_1449.dump`.
+
+**Backend.**
+- `_attempt_auto_link` (formularios/routes.py) reescrito: vincula **só com data+telefone
+  confirmados** — evento real na data informada cujo cliente associado tem o telefone da resposta.
+  Evento na data sem confirmação → `ambiguous` (fila de revisão). Sem evento na data → nada.
+  A heurística de "evento futuro" morreu; `auto_client` não é mais gerado (linhas antigas seguem
+  válidas para leitura).
+- `formularios_ops.ensure_event_client` (novo): todo vínculo com cliente conhecido garante a linha
+  em `event_clients` (primeiro = Contratante + denormalizado; demais = Outros). Chamado por
+  `link_event`, `associate_client` (quando a resposta já tem evento) e implícito no fluxo de criar
+  evento a partir da resposta (que agora também marca `manual` + `locked` — antes deixava o
+  vínculo "anônimo" e religável).
+- `formularios_ops.count_status`/`STATUS_FILTERS` + `list_responses(filtro=)`: contadores e filtro
+  server-side (`sem_evento`, `sem_cliente`, `ambiguos`, `futuros_sem_evento` — este ordenado por
+  urgência).
+- `client_ops.list_client_form_history` (novo): festas registradas em formulário por cliente —
+  decisão de produto: **histórico pré-2026 vem dos formulários; eventos passados NÃO são
+  materializados na agenda**.
+- `client_ops.client_metrics` (novo): novos clientes por mês (12m, origem agregada; Kommo usa
+  `kommo_created_at`, senão a carga viraria pico falso) + recorrentes (2+ eventos).
+
+**Endpoints.** `GET /api/formularios/respostas` ganhou `?filtro=` e devolve `counts` junto (uma
+chamada só); `GET /api/clientes/<id>` ganhou `form_history`; novo `GET /api/clientes/metricas`.
+
+**Frontend (apps/internal).** FormulariosAdminPage: 5 cartões-filtro clicáveis no topo, linha
+vermelha (`bg-red-50`) e badge `⚠ Sem evento — festa dd/mm/aaaa` para festa futura sem evento,
+badge de origem `auto`/`manual`, badge `Revisar vínculo` nos ambíguos. ClientDetailPage: card
+"Festas anteriores (formulários)" com marcação "na agenda"/"só formulário". ClientsListPage: KPIs
+(novos este mês, com evento, recorrentes) + barras de novos por mês.
+
+**Riscos e pegadinhas.**
+- O primeiro ciclo do `retry_auto_link_pending` pós-deploy vai reprocessar ~1.300 respostas sem
+  evento e marcar `event_link_ambiguous` nas ~130 que têm evento na data sem telefone confirmado —
+  é o comportamento desejado (fila de revisão), não um bug.
+- `formatDate` do ClientDetailPage formatava com `new Date(iso)`: data-só (`event_date`) desloca
+  um dia no fuso de São Paulo. Agora fatia a string. Mesma armadilha da 210/`relatorio_horarios`.
+- Kommo trouxe milhares de clientes de nome genérico ("Fernanda" ×34, "." ×41) — duplicata de
+  verdade se detecta por CPF/e-mail (8 pares por CPF, 18 por e-mail na auditoria), não por nome.
+  Ferramenta de mesclagem ficou para uma próxima feature.
+- Verificação: `scripts/db/verify_220_vinculos_formularios.py` (15 checagens, roda contra
+  `manto_local`).
 
 ### 219 — Email errado do talento: confirmação no cadastro e fila de devoluções
 `main` · **2026-08-06** · migrations `b4c81ef07d29` (email_bounces) e `c5d92fa16e34` (confirmação)

@@ -500,8 +500,15 @@ faixa; `programado` retorna 0) e `recurring_summary(contas)` monta `somas` +
 endpoint da API chamam as mesmas funções (feature 189 — antes a lógica vivia inline na view).
 
 ### 3.8 Clientes — `clientes_read.py` / `clientes_write.py`
-`GET /api/clientes/`, `/api/clientes/search`, `/api/clientes/<id>`, `/api/clientes/avaliacoes` ·
-`POST /api/clientes/quick-create` · `PATCH|DELETE /api/clientes/<id>`.
+`GET /api/clientes/`, `/api/clientes/search`, `/api/clientes/<id>`, `/api/clientes/avaliacoes`,
+`/api/clientes/metricas` · `POST /api/clientes/quick-create` · `PATCH|DELETE /api/clientes/<id>`.
+
+**Feature 220**: `GET /api/clientes/<id>` inclui `form_history[]` (`{id, form_type_label,
+event_date, created_at, event_id, event_title}`) — festas registradas em formulário, inclusive as
+anteriores à agenda de 2026 (fonte: `client_ops.list_client_form_history`). Novo
+`GET /api/clientes/metricas` → `{new_by_month: [{month, total, formulario, kommo, manual}] (12m,
+cronológico; Kommo conta por kommo_created_at), recurring_clients, clients_with_event}`
+(`client_ops.client_metrics`).
 
 **`GET /api/clientes/avaliacoes`** (feature 197) — cada item de `feedbacks[]` e `attention[]` vem
 com o relacionamento aninhado: `{id, score, comment, tags[], submitted_at, event: {id, title,
@@ -766,6 +773,13 @@ Admin dos formulários: `formularios_admin_read/write.py`
 vinculado ou `null`) — a coluna "Situação" da tela `/formularios` mostra o badge
 "Cliente: `<nome>`" sem abrir o detalhe; `list_responses`/`search_responses` fazem `joinedload`
 do cliente para não gerar N+1.
+
+**Feature 220**: `GET /api/formularios/respostas` aceita `?filtro=sem_evento|sem_cliente|
+ambiguos|futuros_sem_evento` (`formularios_ops.STATUS_FILTERS`; `futuros_sem_evento` ordena por
+`event_date` asc) e devolve sempre `counts` (`formularios_ops.count_status`, 1 query com `FILTER`)
+para os cartões da tela. O vínculo automático (`_attempt_auto_link`) só vincula com **data +
+telefone confirmados**; `formularios_ops.ensure_event_client` garante a linha em `event_clients`
+(e o `client_id` denormalizado) em todo vínculo manual/associação com cliente conhecido.
 
 `GET /api/gastos/eventos?date=YYYY-MM-DD` (seletor de vínculo de evento, consumido tanto por
 Gastos Extras quanto pelo detalhe de resposta em `/formularios`) respondia **500 no Postgres** até
