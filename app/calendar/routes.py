@@ -6,6 +6,7 @@ import os
 import re
 import urllib.parse
 import urllib.request
+import uuid
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, redirect, request, session, url_for, render_template, current_app, abort, flash
@@ -613,8 +614,12 @@ def _save_bounded_upload(
     if size > max_mb * 1024 * 1024:
         return None
     fname = secure_filename(file_storage.filename)
-    file_storage.save(os.path.join(upload_dir, fname))
-    return f"/uploads/{subpath}/{fname}"
+    # Prefixo único obrigatório: `secure_filename` puro fazia uploads homônimos ("comprovante.pdf")
+    # sobrescreverem o binário anterior em silêncio — dois EventPayment apontando para o mesmo
+    # arquivo e o original do primeiro perdido, sem rastro para auditoria.
+    unique = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}_{fname}"
+    file_storage.save(os.path.join(upload_dir, unique))
+    return f"/uploads/{subpath}/{unique}"
 
 
 def _save_nf_file(file_storage) -> str | None:
