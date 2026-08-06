@@ -64,12 +64,21 @@ def _response_detail(r: FormResponse) -> dict:
 @api_bp.route("/formularios/respostas")
 @api_login_required
 def api_formularios_respostas_list() -> Any:
-    """Lista as respostas mais recentes (tela de índice)."""
+    """Lista as respostas mais recentes + contadores de situação (cartões da tela).
+
+    ``?filtro=`` aceita as chaves de `formularios_ops.STATUS_FILTERS`; valor desconhecido
+    ou ausente lista tudo. Os contadores vêm sempre no payload — a tela pinta os cartões
+    sem uma segunda chamada.
+    """
     denied = _require_vendas()
     if denied:
         return denied
-    responses = formularios_ops.list_responses()
-    return jsonify({"responses": [_response_summary(r) for r in responses]})
+    filtro = (request.args.get("filtro") or "").strip()
+    responses = formularios_ops.list_responses(filtro=filtro)
+    return jsonify({
+        "responses": [_response_summary(r) for r in responses],
+        "counts": formularios_ops.count_status(),
+    })
 
 
 @api_bp.route("/formularios/respostas/search")

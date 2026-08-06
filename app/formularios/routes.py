@@ -213,28 +213,6 @@ def _real_event_candidates(event_date: date) -> list[CalendarEvent]:
     )
 
 
-def _client_by_phone(phone: str | None) -> Client | None:
-    if not phone:
-        return None
-    return Client.query.filter_by(phone=phone).first()
-
-
-def _client_real_event_ids(client_id: int, future_only: bool = False) -> set[int]:
-    """Ids de eventos reais (não ensaio/satélite) já associados a um cliente."""
-    q = (
-        db.session.query(CalendarEvent.id)
-        .join(EventClient, EventClient.event_id == CalendarEvent.id)
-        .filter(
-            EventClient.client_id == client_id,
-            not_(CalendarEvent.title.like("🟧 ENSAIO%")),
-            CalendarEvent.group_leader_id.is_(None),
-        )
-    )
-    if future_only:
-        q = q.filter(CalendarEvent.start_at >= datetime.utcnow())
-    return {row[0] for row in q.all()}
-
-
 def _event_client_phones(event_id: int) -> set[str]:
     """Telefones dos clientes já associados a um evento (para checar contradição)."""
     return {
@@ -244,54 +222,33 @@ def _event_client_phones(event_id: int) -> set[str]:
 
 
 def _attempt_auto_link(response: FormResponse) -> str | None:
-    """Tenta vincular a resposta a um evento real da agenda (feature 126).
+    """Tenta vincular a resposta a um evento real da agenda (endurecido pós-feature 126).
 
-    Critério, do mais para o menos confiável: (1) exatamente um evento real na data
-    informada, sem contradição de cliente; (2) telefone da resposta já associado a um
-    cliente que resolve o empate entre vários candidatos da mesma data, ou aponta para um
-    único evento futuro quando nenhum candidato bate por data. Nunca força um vínculo
-    quando os sinais são ambíguos ou se contradizem — nesse caso sinaliza para revisão
-    manual em vez de adivinhar.
+    Só vincula sozinho quando os DOIS sinais confirmam: existe evento real na data
+    informada E o telefone da resposta pertence a um cliente associado a exatamente um
+    desses eventos. Qualquer coisa a menos vira revisão manual (``"ambiguous"``) — a
+    Manto costuma ter vários eventos no mesmo dia e clientes recorrentes, então data
+    sozinha ou identidade sozinha já vincularam resposta errada em evento errado
+    (correção de dados de 06/08/2026: 25 vínculos desfeitos).
 
-    Retorna ``"auto_date"``/``"auto_client"`` se vinculou (já persiste ``response.
-    event_id`` no objeto, sem commit — quem chama decide quando salvar), ``"ambiguous"``
-    se precisa de revisão manual, ou ``None`` se não havia nada a tentar.
+    Retorna ``"auto_date"`` se vinculou (persiste ``response.event_id`` no objeto, sem
+    commit — quem chama decide quando salvar), ``"ambiguous"`` se há candidato na data
+    mas sem confirmação pelo telefone, ou ``None`` se não havia evento na data.
     """
     if response.event_id is not None or response.event_link_locked or not response.event_date:
         return None
 
     candidates = _real_event_candidates(response.event_date)
-    client = _client_by_phone(response.contact_phone)
-
-    if len(candidates) == 1:
-        event = candidates[0]
-        if response.contact_phone:
-            existing_phones = _event_client_phones(event.id)
-            if existing_phones and response.contact_phone not in existing_phones:
-                return "ambiguous"  # evento já tem outra cliente — contradição, não força
-        response.event_id = event.id
-        return "auto_date"
-
-    if len(candidates) > 1:
-        if client:
-            client_event_ids = _client_real_event_ids(client.id)
-            matched = [e for e in candidates if e.id in client_event_ids]
-            if len(matched) == 1:
-                response.event_id = matched[0].id
-                return "auto_client"
+    if not candidates:
+        return None
+    if not response.contact_phone:
         return "ambiguous"
 
-    # Nenhum candidato na data informada: só resolve se a identidade da cliente apontar
-    # para um único evento futuro (a data digitada pode estar errada/desatualizada).
-    if client:
-        future_ids = _client_real_event_ids(client.id, future_only=True)
-        if len(future_ids) == 1:
-            response.event_id = next(iter(future_ids))
-            return "auto_client"
-        if len(future_ids) > 1:
-            return "ambiguous"
-
-    return None
+    matched = [e for e in candidates if response.contact_phone in _event_client_phones(e.id)]
+    if len(matched) == 1:
+        response.event_id = matched[0].id
+        return "auto_date"
+    return "ambiguous"
 
 
 def retry_auto_link_pending() -> int:

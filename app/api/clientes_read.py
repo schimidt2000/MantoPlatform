@@ -71,6 +71,7 @@ def api_clientes_detail(client_id: int) -> Any:
     client, events, rel_by_event, total_sales = client_ops.get_client_detail(client_id)
     if client is None:
         return json_error("Cliente não encontrado", 404)
+    history = client_ops.list_client_form_history(client_id)
     return jsonify(
         {
             **_client_summary(client),
@@ -88,8 +89,31 @@ def api_clientes_detail(client_id: int) -> Any:
             ],
             "event_count": len(events),
             "total_sales": float(total_sales),
+            # Festas registradas em formulário (inclui as anteriores à agenda de 2026) —
+            # o `event` aninhado marca as que também viraram evento no calendário.
+            "form_history": [
+                {
+                    "id": r.id,
+                    "form_type_label": r.form_type_label,
+                    "event_date": r.event_date.isoformat() if r.event_date else None,
+                    "created_at": r.created_at.isoformat(),
+                    "event_id": r.event_id,
+                    "event_title": r.event.title if r.event else None,
+                }
+                for r in history
+            ],
         }
     )
+
+
+@api_bp.route("/clientes/metricas")
+@api_login_required
+def api_clientes_metricas() -> Any:
+    """Métricas da página de clientes: novos por mês (com origem) e recorrentes."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    return jsonify(client_ops.client_metrics())
 
 
 def _feedback_item(feedback) -> dict:

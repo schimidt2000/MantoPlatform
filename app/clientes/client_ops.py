@@ -17,7 +17,7 @@ from sqlalchemy.orm import joinedload
 from app import db
 from app.clientes.importer import normalize_phone
 from app.feedback.routes import ATTENTION_TAGS, POSITIVE_TAGS
-from app.models import CalendarEvent, Client, ClientFeedback, EventClient
+from app.models import CalendarEvent, Client, ClientFeedback, EventClient, FormResponse
 from app.talents.routes import _parse_period
 from app.utils import strip_accents_lower, unaccent_lower_sql
 
@@ -147,6 +147,66 @@ def get_client_detail(
         rel_by_event[a.event_id] = a.relationship_type
     total_sales = sum((Decimal(e.sale_value) for e in events if e.sale_value), Decimal("0"))
     return client, events, rel_by_event, total_sales
+
+
+def list_client_form_history(client_id: int, limit: int = 100) -> list[FormResponse]:
+    """Formulários preenchidos pela cliente — o registro das festas dela.
+
+    É a fonte do "que ela já fechou" para marketing, inclusive as festas anteriores a
+    2026 que não existem na agenda (decisão de 06/08/2026: o histórico vem dos
+    formulários; eventos passados não são materializados no calendário). Ordena pela
+    data da festa (mais recente primeiro; sem data vai para o fim).
+    """
+    return (
+        FormResponse.query.options(joinedload(FormResponse.event))
+        .filter(FormResponse.client_id == client_id)
+        .order_by(nullslast(FormResponse.event_date.desc()), FormResponse.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+# Meses exibidos no gráfico de novos clientes da página de clientes.
+_METRICS_MONTHS = 12
+
+
+def client_metrics() -> dict:
+    """Métricas da página de clientes (decisão de 06/08/2026).
+
+    * ``new_by_month``: clientes novos por mês (últimos ``_METRICS_MONTHS``), com origem
+      agregada. Para importados do Kommo vale ``kommo_created_at`` (quando o lead entrou
+      de fato), não a data da carga — senão a importação viraria um pico falso num mês só.
+    * ``recurring_clients``: clientes com 2+ eventos distintos — alvo de recompra.
+    * ``clients_with_event``: clientes com pelo menos 1 evento associado.
+    """
+    entered_at = db.func.coalesce(Client.kommo_created_at, Client.created_at)
+    month_expr = db.func.to_char(entered_at, "YYYY-MM")
+    rows = (
+        db.session.query(month_expr, Client.source, func.count(Client.id))
+        .group_by(month_expr, Client.source)
+        .all()
+    )
+    by_month: dict[str, dict] = {}
+    source_keys = {"whatsform_import": "formulario", "kommo_import": "kommo"}
+    for month, source, count in rows:
+        entry = by_month.setdefault(
+            month, {"month": month, "total": 0, "formulario": 0, "kommo": 0, "manual": 0}
+        )
+        entry["total"] += count
+        entry[source_keys.get(source, "manual")] += count
+    months = sorted(by_month.values(), key=lambda m: m["month"], reverse=True)
+    months = list(reversed(months[:_METRICS_MONTHS]))  # cronológico, do mais antigo ao atual
+
+    event_counts = (
+        db.session.query(EventClient.client_id, func.count(func.distinct(EventClient.event_id)))
+        .group_by(EventClient.client_id)
+        .all()
+    )
+    return {
+        "new_by_month": months,
+        "recurring_clients": sum(1 for _cid, n in event_counts if n >= 2),
+        "clients_with_event": len(event_counts),
+    }
 
 
 def update_client_fields(

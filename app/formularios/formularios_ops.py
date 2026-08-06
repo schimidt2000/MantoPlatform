@@ -15,7 +15,7 @@ from datetime import date, datetime
 from sqlalchemy.orm import joinedload
 
 from app import db
-from app.models import CalendarEvent, Client, FormFieldDefinition, FormResponse
+from app.models import CalendarEvent, Client, EventClient, FormFieldDefinition, FormResponse
 from app.utils import strip_accents_lower, unaccent_lower_sql
 
 # Chaves de campos-sistema usadas pela automação de CPF/CNPJ/endereço do cliente (feature 119)
@@ -115,22 +115,91 @@ def search_responses(q: str) -> list[FormResponse]:
     )
 
 
-def list_responses(limit: int = 200) -> list[FormResponse]:
-    """Lista as respostas mais recentes (tela de índice).
+# Filtros de situação da listagem de respostas — chaves estáveis usadas pela API e pela tela.
+STATUS_FILTERS = ("sem_evento", "sem_cliente", "ambiguos", "futuros_sem_evento")
+
+
+def _status_condition(filtro: str):
+    """Condição SQL de um filtro de situação (``None`` para filtro desconhecido/vazio)."""
+    if filtro == "sem_evento":
+        return FormResponse.event_id.is_(None)
+    if filtro == "sem_cliente":
+        return FormResponse.client_id.is_(None)
+    if filtro == "ambiguos":
+        # Ambíguo só interessa enquanto não resolvido — resposta já vinculada sai da fila.
+        return db.and_(
+            FormResponse.event_link_ambiguous.is_(True), FormResponse.event_id.is_(None)
+        )
+    if filtro == "futuros_sem_evento":
+        return db.and_(
+            FormResponse.event_id.is_(None), FormResponse.event_date >= date.today()
+        )
+    return None
+
+
+def count_status() -> dict[str, int]:
+    """Contadores dos cartões-resumo da tela de formulários (1 query, sem N+1)."""
+    row = db.session.query(
+        db.func.count(FormResponse.id),
+        *[
+            db.func.count(FormResponse.id).filter(_status_condition(f))
+            for f in STATUS_FILTERS
+        ],
+    ).one()
+    return {"total": row[0], **{f: row[i + 1] for i, f in enumerate(STATUS_FILTERS)}}
+
+
+def list_responses(limit: int = 200, filtro: str = "") -> list[FormResponse]:
+    """Lista as respostas mais recentes (tela de índice), com filtro de situação opcional.
 
     O cliente vinculado vem em ``joinedload``: a listagem exibe o nome dele em cada linha
     (badge "Cliente: <nome>"), e sem isso seriam até ``limit`` queries extras (N+1).
+    ``futuros_sem_evento`` ordena pela data do evento (o mais urgente primeiro) — é a fila
+    de "festa chegando sem evento na agenda"; os demais mantêm o mais recente primeiro.
     """
-    return (
-        FormResponse.query.options(joinedload(FormResponse.client))
-        .order_by(FormResponse.created_at.desc())
-        .limit(limit)
-        .all()
+    query = FormResponse.query.options(joinedload(FormResponse.client))
+    condition = _status_condition(filtro)
+    if condition is not None:
+        query = query.filter(condition)
+    if filtro == "futuros_sem_evento":
+        query = query.order_by(FormResponse.event_date.asc())
+    else:
+        query = query.order_by(FormResponse.created_at.desc())
+    return query.limit(limit).all()
+
+
+def ensure_event_client(event: CalendarEvent, client_id: int | None) -> None:
+    """Garante o cliente na associação evento↔cliente (``event_clients``), sem commit.
+
+    É o elo que faltava entre o vínculo de formulário e a ficha da cliente: sem uma linha
+    em ``event_clients``, o evento não aparece no perfil dela (correção de dados de
+    06/08/2026 preencheu o retroativo; daqui em diante todo vínculo passa por aqui).
+    Primeiro cliente do evento entra como Contratante (e assume o ``client_id``
+    denormalizado); demais entram como Outros — o comercial ajusta a relação na tela do
+    evento se for o caso.
+    """
+    if not client_id:
+        return
+    already = EventClient.query.filter_by(event_id=event.id, client_id=client_id).first()
+    if already:
+        return
+    has_any = EventClient.query.filter_by(event_id=event.id).first() is not None
+    db.session.add(
+        EventClient(
+            event_id=event.id,
+            client_id=client_id,
+            relationship_type="Outros" if has_any else "Contratante",
+        )
     )
+    if not has_any and event.client_id is None:
+        event.client_id = client_id
 
 
 def associate_client(response: FormResponse, client_id: int | None) -> Client:
     """Associa a resposta a um cliente existente ou cria um a partir dos dados dela.
+
+    Se a resposta já estiver vinculada a um evento, o cliente também entra na associação
+    evento↔cliente — é isso que faz o evento aparecer na ficha dela.
 
     Raises:
         FormValidationError: cliente informado não encontrado, ou resposta sem telefone
@@ -158,6 +227,8 @@ def associate_client(response: FormResponse, client_id: int | None) -> Client:
             db.session.flush()
     fill_client_from_response(client, response)
     response.client_id = client.id
+    if response.event_id is not None and response.event is not None:
+        ensure_event_client(response.event, client.id)
     db.session.commit()
     return client
 
@@ -184,6 +255,7 @@ def link_event(response: FormResponse, event_id: int) -> CalendarEvent:
     response.event_link_source = "manual"
     response.event_link_ambiguous = False
     response.event_link_locked = True
+    ensure_event_client(event, response.client_id)
     db.session.commit()
     return event
 

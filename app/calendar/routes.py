@@ -3220,7 +3220,11 @@ def _create_client_links(event: CalendarEvent, client_pairs: list[tuple[int, str
 
 
 def _link_form_response(form_response_id: int | None, event_id: int) -> None:
-    """Vincula uma resposta de pré-contrato já recebida ao evento novo (feature 118/152)."""
+    """Vincula uma resposta de pré-contrato já recebida ao evento novo (feature 118/152).
+
+    Marca o vínculo como decisão humana (``manual`` + ``locked``): o evento foi criado a
+    partir desta resposta, então a automação nunca deve religá-la em outro lugar.
+    """
     if form_response_id is None:
         return
     from app.models import FormResponse
@@ -3228,6 +3232,9 @@ def _link_form_response(form_response_id: int | None, event_id: int) -> None:
     fr = FormResponse.query.get(form_response_id)
     if fr and fr.event_id is None:
         fr.event_id = event_id
+        fr.event_link_source = "manual"
+        fr.event_link_ambiguous = False
+        fr.event_link_locked = True
 
 
 def _create_reembolso_entry(
