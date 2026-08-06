@@ -35,6 +35,12 @@ backups/
 # Ferramentas locais de banco (caminhos/setup pessoais) — remova esta linha para versionar
 /scripts/db/
 
+# Agente auditor financeiro (feature 221): token e artefatos de rodada — NUNCA versionar
+# (runs/ contém comprovantes baixados; data/ tem a memória com extrações)
+.audit-agent-token
+/scripts/auditor/data/
+/scripts/auditor/runs/
+
 # Exportações do Kommo CRM (dados reais de clientes — nome/telefone) — NUNCA versionar (feature 094)
 kommo_export_*.csv
 
