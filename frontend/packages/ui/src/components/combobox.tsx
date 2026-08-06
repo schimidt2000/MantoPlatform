@@ -25,6 +25,11 @@ export interface ComboboxOption {
   imageShape?: AvatarThumbShape;
   /** Placeholder alternativo às iniciais quando não há foto (ex.: `🎭`). */
   fallbackIcon?: ReactNode;
+  /**
+   * Selo à direita da opção (feature 215) — o estado que precisa ser visto ANTES de escolher,
+   * não depois: um talento com evento no mesmo dia, uma ficha já usada. Some quando ausente.
+   */
+  badge?: ReactNode;
   disabled?: boolean;
 }
 
@@ -341,6 +346,7 @@ export function Combobox({
                           <span className="block truncate text-xs text-muted">{option.description}</span>
                         )}
                       </span>
+                      {option.badge && <span className="flex-none">{option.badge}</span>}
                     </button>
                   </li>
                 );

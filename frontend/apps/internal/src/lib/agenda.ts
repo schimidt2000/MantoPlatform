@@ -88,6 +88,8 @@ export interface RoleTalent {
   id: number;
   name: string;
   artistic_name: string | null;
+  /** Rosto do talento (feature 215) — mesmo caminho que a busca de casting usa. */
+  photo_url: string | null;
   first_name: string;
   whatsapp: string | null;
   size_top: string | null;

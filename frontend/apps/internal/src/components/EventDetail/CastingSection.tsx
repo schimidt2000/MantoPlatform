@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Badge, Button } from "@manto/ui";
+import { AvatarThumb, Badge, Button } from "@manto/ui";
+import { assetUrl } from "@manto/api-client";
 import { formatBRL, MoneyInput } from "@manto/money";
 import type { EventoDetalhe, PaymentStatus, RoleItem } from "../../lib/agenda";
 import {
@@ -9,11 +10,10 @@ import {
   useDismissRole,
   useRestoreRole,
   useSendInvite,
-  useTalents,
-  type TalentoOption,
 } from "../../lib/casting";
 import { buildConviteMsg, useSetPaymentStatus } from "../../lib/eventDetail";
 import { brl, Empty, formatDay, formatTime, INPUT_CLASS, Panel } from "./parts";
+import { TalentPicker } from "./TalentPicker";
 
 const PAYMENT_LABELS: Record<PaymentStatus, string> = {
   nao_pago: "A pagar",
@@ -125,7 +125,6 @@ function CopyInviteButton({ role, data }: { role: RoleItem; data: EventoDetalhe 
 interface RoleCardProps {
   role: RoleItem;
   data: EventoDetalhe;
-  talents: TalentoOption[];
   canEdit: boolean;
 }
 
@@ -133,8 +132,12 @@ interface RoleCardProps {
  * Card de um cargo escalado — nome do personagem, talento, cachê e as ações inline
  * (convite, WhatsApp, status de pagamento, remover). Cada mutação coloca só o seu botão em
  * "Salvando…", nunca a tela inteira (Princípio V).
+ *
+ * No mobile o card vira uma pilha de linhas inteiras (`sm:` reabre em linha); a busca de
+ * talento ocupa a largura toda e o cachê fica ao lado do botão Salvar — nada de campo de
+ * 40px espremido entre botões.
  */
-function RoleCard({ role, data, talents, canEdit }: RoleCardProps) {
+function RoleCard({ role, data, canEdit }: RoleCardProps) {
   const eventId = data.event.id;
   const assign = useAssignRole(eventId);
   const remove = useDeleteRole(eventId);
@@ -146,6 +149,20 @@ function RoleCard({ role, data, talents, canEdit }: RoleCardProps) {
 
   const inviteInfo = role.invite_status ? INVITE_LABELS[role.invite_status] : undefined;
   const alerta = role.availability && role.availability.status !== "free";
+  const cacheAlterado = cache !== (role.cache_value ?? 0);
+  const sujo = talentId !== (role.talent?.id ?? null) || cacheAlterado;
+
+  /**
+   * Teto de cachê do orçamento (`cache_cap`, gravado na criação quando o evento nasce da
+   * calculadora). O **valor** do teto é deliberadamente invisível — o casting não negocia
+   * contra um número exposto na tela; o que ele precisa saber é só que passou dele.
+   *
+   * Sem este aviso, `assign_casting_role` rebaixava o valor para o teto em silêncio: quem
+   * digitava acima via "✓ Salvo" e o número voltava sozinho, sem explicação (a tela Jinja
+   * antiga avisava; a migração para o React perdeu isso).
+   */
+  const acimaDoTeto = role.cache_cap != null && cache > role.cache_cap;
+  const podeUltrapassar = Boolean(data.flags.is_superadmin);
 
   return (
     <li
@@ -153,16 +170,30 @@ function RoleCard({ role, data, talents, canEdit }: RoleCardProps) {
         alerta ? "border-gold bg-gold-soft/20" : "border-line bg-surface-2/40"
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-start gap-2.5">
+        <AvatarThumb
+          src={role.talent?.photo_url ? assetUrl(role.talent.photo_url) : null}
+          name={role.talent?.name}
+          shape="circle"
+          size="lg"
+          fallbackIcon="🎭"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-sm font-bold uppercase tracking-wide text-ink">
               {role.character_name}
             </span>
             {role.dismissed && <Badge>dispensado</Badge>}
             <AvailabilityBadge role={role} />
+            {inviteInfo && (
+              <Badge tone={inviteInfo.tone} className="sm:ml-auto">
+                {inviteInfo.text}
+              </Badge>
+            )}
           </div>
-          <div className="text-sm text-muted">{role.talent ? role.talent.name : "— sem talento —"}</div>
+          <div className="text-sm text-muted">
+            {role.talent ? role.talent.name : "— sem talento —"}
+          </div>
           <div className="text-xs text-muted">
             {role.assigned_at && <span>Atribuído em {formatDay(role.assigned_at)}</span>}
             {role.cache_value != null && (
@@ -170,42 +201,69 @@ function RoleCard({ role, data, talents, canEdit }: RoleCardProps) {
             )}
           </div>
         </div>
-        {inviteInfo && <Badge tone={inviteInfo.tone}>{inviteInfo.text}</Badge>}
       </div>
 
       {canEdit && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <label className="min-w-40 flex-1">
-            <span className="sr-only">Talento de {role.character_name}</span>
-            <select
-              className={INPUT_CLASS}
-              value={talentId ?? ""}
-              onChange={(e) => setTalentId(e.target.value ? Number(e.target.value) : null)}
-            >
-              <option value="">— sem talento —</option>
-              {talents.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <MoneyInput
-            className="h-11 w-28 rounded-md border border-line bg-panel px-2 text-sm text-ink"
-            value={cache}
-            onValueChange={setCache}
-            aria-label={`Cachê de ${role.character_name}`}
+        <div className="mt-2 space-y-2 sm:flex sm:items-center sm:gap-2 sm:space-y-0">
+          <TalentPicker
+            className="sm:min-w-48 sm:flex-1"
+            eventId={eventId}
+            value={talentId}
+            onChange={setTalentId}
+            ariaLabel={`Talento de ${role.character_name}`}
           />
-          <Button
-            size="sm"
-            loading={assign.isPending}
-            onClick={() =>
-              assign.mutate({ roleId: role.role_id, talent_id: talentId, cache_value: cache })
-            }
-          >
-            Salvar
-          </Button>
+          <div className="flex items-center gap-2">
+            <MoneyInput
+              // Vermelho só enquanto o valor está pendente de decisão: um cachê acima do teto
+              // que já foi gravado (autorizado pelo admin) é um estado legítimo, não um erro
+              // — quem abre o card depois não pode ver o campo em alerta permanente.
+              className={`h-11 w-28 rounded-md border bg-panel px-2 text-sm text-ink ${
+                acimaDoTeto && cacheAlterado ? "border-red" : "border-line"
+              }`}
+              value={cache}
+              onValueChange={setCache}
+              aria-label={`Cachê de ${role.character_name}`}
+              aria-invalid={(acimaDoTeto && cacheAlterado) || undefined}
+            />
+            <Button
+              className="h-11 flex-1 sm:h-9 sm:flex-none"
+              size="sm"
+              variant={sujo ? "default" : "outline"}
+              loading={assign.isPending}
+              onClick={() =>
+                assign.mutate(
+                  { roleId: role.role_id, talent_id: talentId, cache_value: cache },
+                  {
+                    // O servidor rebaixa o cachê ao teto quando quem salva não é superadmin.
+                    // Sem reespelhar o valor devolvido, o campo continuaria exibindo o número
+                    // recusado — a tela diria uma coisa e o banco teria outra.
+                    onSuccess: (atualizado) => {
+                      const salvo = (atualizado.elenco ?? []).find(
+                        (r) => r.role_id === role.role_id,
+                      );
+                      if (salvo) setCache(salvo.cache_value ?? 0);
+                    },
+                  },
+                )
+              }
+            >
+              {assign.isSuccess && !sujo ? "✓ Salvo" : "Salvar"}
+            </Button>
+          </div>
         </div>
+      )}
+
+      {canEdit && acimaDoTeto && (
+        <p
+          role="status"
+          className={`mt-1.5 text-sm ${cacheAlterado ? "text-red" : "text-muted"}`}
+        >
+          {!cacheAlterado
+            ? "Cachê autorizado acima do limite deste evento."
+            : podeUltrapassar
+              ? "Acima do limite deste evento. Como superadmin você pode salvar assim mesmo — fica registrado no log."
+              : "Acima do limite deste evento. Ao salvar, o valor volta para o limite."}
+        </p>
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -278,12 +336,10 @@ function RoleCard({ role, data, talents, canEdit }: RoleCardProps) {
 /** Formulário de adicionar cargo (personagem ou apoio, conforme `roleType`). */
 function AddRoleForm({
   eventId,
-  talents,
   roleType,
   label,
 }: {
   eventId: number;
-  talents: TalentoOption[];
   roleType: "character" | "extra";
   label: string;
 }) {
@@ -322,44 +378,49 @@ function AddRoleForm({
   };
 
   return (
-    <div className="mt-3 rounded-md border border-line bg-surface-2/60 p-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="mt-3 space-y-2 rounded-md border border-line bg-surface-2/60 p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <input
-          className={`${INPUT_CLASS} min-w-40 flex-1`}
+          className={`${INPUT_CLASS} sm:min-w-40 sm:flex-1`}
           placeholder={roleType === "character" ? "Personagem" : "Função (ex.: Coordenador)"}
           value={name}
           onChange={(e) => setName(e.target.value)}
           aria-label="Nome do cargo"
         />
-        <label>
-          <span className="sr-only">Talento</span>
-          <select
-            className={INPUT_CLASS}
-            value={talentId ?? ""}
-            onChange={(e) => setTalentId(e.target.value ? Number(e.target.value) : null)}
-          >
-            <option value="">— sem talento —</option>
-            {talents.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <TalentPicker
+          className="sm:min-w-48 sm:flex-1"
+          eventId={eventId}
+          value={talentId}
+          onChange={setTalentId}
+          ariaLabel="Talento do novo cargo"
+        />
+      </div>
+      <div className="flex items-center gap-2">
         <MoneyInput
           className="h-11 w-28 rounded-md border border-line bg-panel px-2 text-sm text-ink"
           value={cache}
           onValueChange={setCache}
           aria-label="Cachê"
         />
-        <Button size="sm" loading={add.isPending} disabled={!name.trim()} onClick={submit}>
+        <Button
+          className="h-11 flex-1 sm:h-9 sm:flex-none"
+          size="sm"
+          loading={add.isPending}
+          disabled={!name.trim()}
+          onClick={submit}
+        >
           Adicionar
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+        <Button
+          className="h-11 sm:h-9"
+          variant="ghost"
+          size="sm"
+          onClick={() => setOpen(false)}
+        >
           Cancelar
         </Button>
       </div>
-      {add.isError && <p className="mt-1 text-sm text-red">Não foi possível adicionar.</p>}
+      {add.isError && <p className="text-sm text-red">Não foi possível adicionar.</p>}
     </div>
   );
 }
@@ -374,9 +435,7 @@ export interface CastingSectionProps {
  * (`extra` — coordenação, técnico de som, maquiagem).
  */
 export function CastingSection({ data }: CastingSectionProps) {
-  const talentsQuery = useTalents();
-  const canEdit = Boolean(data.flags.show_casting) && Boolean(talentsQuery.data);
-  const talents = talentsQuery.data?.items ?? [];
+  const canEdit = Boolean(data.flags.show_casting);
   const roles = data.elenco ?? [];
   const personagens = roles.filter((r) => r.role_type !== "extra");
   const apoio = roles.filter((r) => r.role_type === "extra");
@@ -388,13 +447,7 @@ export function CastingSection({ data }: CastingSectionProps) {
     ) : (
       <ul className="space-y-2">
         {items.map((role) => (
-          <RoleCard
-            key={role.role_id}
-            role={role}
-            data={data}
-            talents={talents}
-            canEdit={canEdit}
-          />
+          <RoleCard key={role.role_id} role={role} data={data} canEdit={canEdit} />
         ))}
       </ul>
     );
@@ -415,7 +468,6 @@ export function CastingSection({ data }: CastingSectionProps) {
         {canEdit && (
           <AddRoleForm
             eventId={data.event.id}
-            talents={talents}
             roleType="character"
             label="Adicionar personagem"
           />
@@ -425,12 +477,7 @@ export function CastingSection({ data }: CastingSectionProps) {
       <Panel title="Equipe de apoio">
         {renderList(apoio)}
         {canEdit && (
-          <AddRoleForm
-            eventId={data.event.id}
-            talents={talents}
-            roleType="extra"
-            label="Adicionar pessoa"
-          />
+          <AddRoleForm eventId={data.event.id} roleType="extra" label="Adicionar pessoa" />
         )}
       </Panel>
     </>

@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **214 (acesso do
-> Revendedor EducaManto)** · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **216 (cachê no portal,
+> prévia de link, contraste e endurecimento de segurança)** · Head de migration: `e7a1c94f20b3`
 
 Formato de cada entrada:
 
@@ -18,6 +18,141 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 216 — Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** Cinco frentes pedidas de uma vez: (1) um artista relatou que o **valor do cachê não
+aparecia** no portal; (2) link de catálogo compartilhado no WhatsApp saía **sem miniatura**; (3) ao
+abrir uma avaliação já enviada, não dava para **ver o que tinha sido escrito**; (4) contraste da
+agenda difícil de ler; (5) auditoria de segurança (vazamento, ataque, RBAC).
+
+**O que mudou.**
+
+*Cachê (backend + portal).* `_role_summary` (`app/talent_portal/portal_ops.py`) passou a serializar
+`cache_value`, `travel_cache`, `cache_total`, `cache_defined` e `payment_status`. Antes o cachê era
+enxertado **só** no laço de `history`, então `pending_invites` e `upcoming` saíam da API sem o campo
+e a tela os omitia em silêncio — regressão em relação ao portal Jinja, que exibia o valor no convite
+(`app/templates/portal/home.html:170`). Novo componente `CacheLine` é a fonte única das três telas;
+`PortalConvitesPage`, que não tinha **nenhuma** referência a cachê, ganhou o valor em destaque.
+
+*Prévia de link.* `frontend/server.js` injeta Open Graph no `index.html` da vitrine para página de
+produto **e de tema** (`/catalogo/categoria/<slug>`), com miniatura reencodada por
+`app/catalogo/og_ops.py` (teto de bytes — arquivo grande faz o WhatsApp entregar o link sem imagem).
+A injeção só roda para **crawler de prévia**: visitante humano não ganha nada com meta tag e pagaria
+a latência de uma ida ao Flask em cache frio.
+
+*Avaliação.* O Histórico só linkava a avaliação enquanto a janela de edição de 30 dias estivesse
+aberta. Depois disso a avaliação continuava existindo, o backend continuava servindo e a tela sabia
+se apresentar em modo leitura — mas **nada apontava para lá**. Passou a usar `rated_event_ids` e
+mostrar "Ver minha avaliação".
+
+*Contraste e UX mobile.* Correções de razão WCAG nos chips de categoria da agenda e em textos
+pequenos (`tailwind-preset.ts` e `apps/portal/tailwind.config.ts`); `text-xs` virou `text-sm` onde
+carregava dado operacional. `/fotos-documentos` e `/termos` **não tinham link em lugar nenhum** —
+o artista não conseguia enviar foto nem CNH pelo celular; agora saem do Perfil.
+
+**Impacto em RBAC e segurança.**
+- `/uploads/<path>` servia a árvore inteira só com `@login_required`: contrato, comprovante, nota
+  fiscal e RG/CNH eram baixáveis por qualquer papel. Passou a despachar por subpasta com papel
+  próprio; `expenses` é checado por **dono**, porque qualquer colaborador registra gasto.
+- `/portal/photo/<path>` dava a qualquer talento logado alcance a todo o `UPLOAD_FOLDER`. Restrito
+  às subpastas que o portal realmente usa.
+- `GET /api/talents/<id>` devolvia CPF, RG, PIX e CNH a qualquer autenticado. Campos sensíveis
+  passaram a ser redigidos por padrão (`include_sensitive=False`), preservando o shape do payload.
+- Upload sem allowlist de extensão (XSS armazenado no mesmo origin): allowlists por finalidade em
+  `app/storage.py`; o que não é seguro inline sai como anexo com `nosniff`.
+- **Trava de e-mail por ambiente** (`MAIL_SUPPRESS_SEND`): a única trava era uma `SiteSetting`, que
+  mora no banco — o espelho local herda ela ligada da produção e um processo de desenvolvimento
+  conseguia escrever para o endereço real dos artistas. Confirmado na prática nesta rodada.
+
+**Riscos e pegadinhas.**
+- `.xml` de nota fiscal quase foi recusado: a allowlist inicial era imagem + PDF, mas quatro telas
+  oferecem `.xml`. Existe `ALLOWED_INVOICE_EXTENSIONS` separada — e `.xml` **nunca** é inline.
+- `.svg` saiu do logo: com `nosniff` + `Content-Disposition: attachment` o navegador se recusa a
+  desenhá-lo; aceitá-lo produziria um logo invisível.
+- A `og:image` **não pôde ser verificada localmente**: nenhuma das 458 capas ativas existe em
+  `instance/uploads/catalog_photos` (o espelho do banco referencia arquivos que não foram baixados).
+  O encoder foi verificado isolado (JPEG de 193 KB, dentro do teto). **Conferir em produção.**
+- Ao criar fixture de teste local, não invente `character_name`: o sync do Google Calendar reconcilia
+  o casting e **apaga** escalação com personagem inexistente — disparando e-mail de cancelamento.
+
+### 215 — Tela de evento em abas, com edição inline e buscas visuais
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** A tela `/events/:id` da feature 190 entrega **todos** os blocos de uma vez. Para o
+`SUPERADMIN`, que recebe o payload inteiro, isso são **16 painéis** empilhados em duas colunas sem
+hierarquia — e no mobile uma coluna só, interminável. Três defeitos concretos: (1) o mesmo
+personagem aparece **duas vezes** (uma no *Casting*, outra no *Figurino*), dobrando a altura;
+(2) nada na tela responde "o que falta neste evento?"; (3) para mudar título, data ou valor era
+preciso **sair** para `/events/:id/edit` — uma tela que nem existia antes da migração React e que
+edita exatamente o que a tela de detalhe já mostra.
+
+**O que mudou.**
+
+*Frontend.* `EventDetailPage` virou um **shell de abas** — Resumo · Produção · Comercial ·
+Histórico — com a aba ativa na querystring (`?aba=`), régua sticky e rolagem horizontal no mobile.
+A aba só é montada se o payload trouxe algum bloco dela, então o RBAC continua sendo do servidor.
+Novos: `ResumoSection` (painel *Dados do evento* editável + `PendenciasStrip`), `TalentPicker` e
+`FigurinoPicker`. `ComercialSection` ganhou os painéis *Clientes* e *Pré-contrato* e edição inline
+dos valores. `CastingSection` trocou o `<select>` de talentos pelo `TalentPicker`;
+`FigurinoSection` trocou o `<datalist>` pelo `FigurinoPicker`. O botão "Editar" saiu da barra do
+cabeçalho e virou o item **"Editar tudo (formulário completo)"** no menu Ferramentas.
+`ComboboxOption` (design system) ganhou o campo opcional `badge`, renderizado à direita da opção.
+
+*Backend.* Cinco endpoints novos em `agenda.py`/`agenda_write.py`, com núcleo em `event_ops.py`
+(`update_event_basics`, `update_event_comercial`, `set_event_clients`, `set_event_form_response`,
+`assignable_talents_for_event`). `_serialize_talent` passou a incluir `photo_url`.
+
+**Regras de negócio e RBAC.** Os quatro endpoints de escrita usam `_can_create_event()` — o mesmo
+gate do `PATCH /api/events/<id>` (`COMERCIAL`/`SUPERADMIN`), porque cobrem os mesmos campos
+sensíveis; mudar a data de um evento tem o peso de criá-lo. Nenhum gate foi afrouxado: quem já não
+podia editar em bloco continua sem editar inline, com os painéis em leitura. `casting-options` é
+leitura para qualquer autenticado, igual a `/api/talents`. `update_event_basics` mantém a
+sincronização best-effort com o Google Agenda de `update_event_core` (falha vira aviso, não
+bloqueio). Cortesia/permuta continua zerando a venda no servidor.
+
+**Rotas e endpoints novos.**
+- `GET /api/events/<id>/casting-options` — talentos ativos com `photo_url` e `availability`
+  calculada contra a janela **deste** evento (uma consulta para todos, via `talent_availability`).
+- `PATCH /api/events/<id>/basico` — título, tipo, data/horário, local, descrição.
+- `PATCH /api/events/<id>/comercial` — valores, pagamento, vendedor, comissão.
+- `PUT /api/events/<id>/clients` — substitui a lista (corpo é a lista inteira; `[]` desvincula).
+- `PATCH /api/events/<id>/form-response` — vincula/desvincula o pré-contrato (409 se preso a
+  outro evento — nunca roubamos o pré-contrato de outra venda).
+
+**Riscos e pegadinhas.**
+1. **Isolamento é a razão de existirem endpoints estreitos.** O `PATCH /api/events/<id>` da 184
+   reescreve elenco e clientes junto: usá-lo para salvar só o horário destruiria escalas. Por isso
+   cada função nova toca apenas o seu recorte — e o `verify_215` testa exatamente isso (elenco e
+   clientes intactos depois de salvar cabeçalho e valores).
+2. **Descrição é HTML do Google Agenda.** O textarea do Resumo mostra a versão em texto puro
+   (`descriptionToText`), mas enviar essa conversão de volta achataria `<br>` e âncoras — e o
+   achatamento iria para o Google no próximo sync. O formulário só manda o texto digitado se o
+   usuário **realmente tocou** no campo; e `PATCH /basico` trata `description` **ausente** como
+   "não mexa". Mesma armadilha que o hotfix 210 já tinha documentado para `/events/:id/edit`.
+3. **Data/hora continuam sendo horário de parede.** O formulário inline usa `dataDeIsoLocal` /
+   `horaDeIsoLocal` (recorte de string), nunca `Date` — o caminho que na 210 gravava +3h.
+4. `?aba=` inexistente (link antigo, ou papel sem aquele bloco) cai no Resumo em vez de renderizar
+   tela vazia. A troca de aba usa `replace` e **preserva os demais parâmetros** da URL.
+5. `casting-options` tem chave por evento e sem `staleTime`: escalar alguém muda a agenda dos
+   outros, e salvar data/hora invalida a lista (a disponibilidade é relativa à janela).
+
+**Aviso de teto de cachê (mesma feature).** `EventRole.cache_cap` é gravado na criação quando o
+evento vem da calculadora (`routes.py::_create_roles_from_input`, `cache_cap=cache_val if
+from_orc`), e `assign_casting_role` **rebaixa** ao teto qualquer cachê maior salvo por não-
+superadmin. O campo era serializado desde a 190 mas **nenhuma tela React o usava**: quem digitava
+acima via "✓ Salvo" e o número voltava sozinho, sem explicação (a tela Jinja avisava; a migração
+perdeu isso). Agora o card mostra o aviso — **sem nunca exibir o valor do teto**, por decisão de
+produto — e reespelha o `cache_value` da resposta, para a tela não continuar exibindo o número
+recusado. Só ~20% dos cargos têm cap (266/1353 no banco local): evento criado à mão não tem teto,
+e aí nada muda.
+
+**Verificação.** `scripts/db/verify_215_evento_abas_edicao_inline.py` contra `manto_local` —
+49/49, incluindo o isolamento dos recortes, o 403 do casting no cabeçalho, o 409 do pré-contrato
+alheio, a hora de parede preservada, o `conflict` aparecendo na busca de talento e o contrato do
+teto (casting salvando 500 sobre cap 200 recebe 200 de volta na resposta e no banco; superadmin
+ultrapassa).
 
 ### 214 — Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída)
 `main` · **2026-08-05** · sem migration

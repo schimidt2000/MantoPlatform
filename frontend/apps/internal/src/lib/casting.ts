@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
-import type { EventoDetalhe } from "./agenda";
+import type { EventoDetalhe, RoleAvailability } from "./agenda";
 
 export interface TalentoOption {
   id: number;
@@ -14,6 +14,28 @@ export function useTalents() {
     queryKey: ["talents"],
     queryFn: () => apiFetch<{ items: TalentoOption[] }>("/api/talents"),
     staleTime: 5 * 60_000,
+  });
+}
+
+/** Talento escalável neste evento — com rosto e agenda do dia (feature 215). */
+export interface TalentoEscalavel extends TalentoOption {
+  photo_url: string | null;
+  availability: RoleAvailability;
+}
+
+/**
+ * Talentos escaláveis com foto e disponibilidade calculada contra a janela DESTE evento
+ * (feature 215) — é o que a busca de casting precisa mostrar antes de escalar alguém.
+ *
+ * Chave por evento (a disponibilidade muda com a data) e sem `staleTime`: escalar alguém
+ * muda a agenda dos outros, então a lista é revalidada ao voltar para a tela.
+ */
+export function useCastingOptions(eventId: number) {
+  return useQuery<{ items: TalentoEscalavel[] }>({
+    queryKey: ["casting-options", eventId],
+    queryFn: () =>
+      apiFetch<{ items: TalentoEscalavel[] }>(`/api/events/${eventId}/casting-options`),
+    enabled: Number.isFinite(eventId),
   });
 }
 

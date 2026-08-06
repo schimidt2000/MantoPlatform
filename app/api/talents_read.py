@@ -1,7 +1,9 @@
 """Endpoints de LEITURA de Talentos (feature 154).
 
-Reusa o núcleo em `app/talents/talent_ops.py` (mesma lógica dos handlers Jinja). Leitura aberta
-a qualquer usuário autenticado, sem gate de papel — paridade com `list_talents`/`talent_detail`.
+Reusa o núcleo em `app/talents/talent_ops.py` (mesma lógica dos handlers Jinja). A leitura segue
+aberta a qualquer usuário autenticado — paridade com `list_talents`/`talent_detail` —, mas o
+PAYLOAD é redigido: dado pessoal sensível, chave PIX, documento e anotação interna só saem sob
+`_can_edit_talent()` (ver `TALENT_SENSITIVE_FIELDS` em `talent_ops`).
 """
 
 from datetime import datetime, timedelta
@@ -85,8 +87,13 @@ def api_talent_detail(talent_id: int) -> Any:
     except ValueError:
         pass
 
-    result = get_talent_profile(talent, date_from=date_from, date_to=date_to)
-    result["can_edit"] = _can_edit_talent()
+    # O bloco sensível (CPF, RG, PIX, CNH, placa e anotações internas) só sai para quem gere
+    # talento. A ficha continua abrindo para os demais papéis — sem esses campos.
+    can_edit = _can_edit_talent()
+    result = get_talent_profile(
+        talent, date_from=date_from, date_to=date_to, include_sensitive=can_edit
+    )
+    result["can_edit"] = can_edit
     return jsonify(result)
 
 

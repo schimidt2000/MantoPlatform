@@ -10,7 +10,7 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
-from flask import jsonify, request, session, url_for
+from flask import jsonify, request, session
 from werkzeug.wrappers import Response
 
 from app import limiter
@@ -19,6 +19,7 @@ from app.api_utils import json_error
 from app.email_service import send_async, send_password_reset_email, send_welcome_email
 from app.models import Talent
 from app.talent_portal import portal_account_ops, portal_ops
+from app.talent_portal.portal_links import portal_reset_url
 from app.talent_portal.portal_account_ops import PortalAccountError
 
 
@@ -68,13 +69,12 @@ def _reset_url(token: str) -> str:
     Prefere o portal React (`PORTAL_URL`, mesma base já usada pelos demais e-mails do portal);
     sem essa variável configurada, cai na rota Jinja legada — que continua funcionando, para o
     link não quebrar em ambientes onde o front novo ainda não foi publicado.
-    """
-    from flask import current_app
 
-    base = (current_app.config.get("PORTAL_URL") or "").rstrip("/")
-    if base:
-        return f"{base}/reset-password/{token}"
-    return url_for("portal.reset_password", token=token, _external=True)
+    O fallback usa `PUBLIC_BASE_URL` (valor fixo de config) e NÃO `url_for(_external=True)`:
+    esse derivava o host do header `Host` da requisição, permitindo envenenar o link de
+    redefinição enviado por e-mail.
+    """
+    return portal_reset_url(token)
 
 
 @api_bp.route("/portal/auth/login", methods=["POST"])

@@ -186,7 +186,7 @@ export function AdminSettingsPage() {
             <CardContent>
               <input
                 type="file"
-                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                accept="image/png,image/jpeg,image/webp"
                 className="text-sm text-ink"
                 onChange={(e) => {
                   const file = e.target.files?.[0];

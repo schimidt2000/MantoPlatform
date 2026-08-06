@@ -21,6 +21,7 @@ from werkzeug.utils import secure_filename
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
+from app.storage import ALLOWED_DOCUMENT_EXTENSIONS, is_allowed_extension
 from app.models import (
     CommissionPayment,
     EventAcrescimo,
@@ -409,6 +410,14 @@ def api_salary_advance(sp_id: int) -> Any:
     if not (proof and proof.filename):
         return json_error(
             "Anexe o comprovante do adiantamento.", 400, {"advance_proof": "Obrigatório"}
+        )
+
+    # Allowlist antes de gravar: o comprovante sai por `/uploads`, no mesmo origin das SPAs.
+    if not is_allowed_extension(proof.filename, ALLOWED_DOCUMENT_EXTENSIONS):
+        return json_error(
+            "Envie o comprovante em PDF ou imagem (JPG, PNG, WEBP).",
+            400,
+            {"advance_proof": "Formato não permitido"},
         )
 
     proof.stream.seek(0, 2)

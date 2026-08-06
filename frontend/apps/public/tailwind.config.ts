@@ -20,6 +20,12 @@ const config: Config = {
         ink: "#241c2e",
         muted: "#7d7188",
         line: "#e7ddcd",
+        // Espelha `line-strong` do preset do design system (com o marrom do catálogo no lugar
+        // do roxo): `line` é divisória decorativa (1.2:1) e não serve de contorno de campo/
+        // botão, onde a WCAG 1.4.11 exige 3:1. Aqui dá 4.09:1 sobre panel e 3.39:1 sobre
+        // surface-2. Precisa existir neste config porque `content` inclui packages/ui/src —
+        // sem o token, Input e Button variant="outline" sairiam SEM borda no catálogo.
+        "line-strong": "#8f7a64",
         surface: "#faf6ef",
         "surface-2": "#f1e9db",
         accent: {
@@ -27,10 +33,17 @@ const config: Config = {
           dark: "#2f1d47",
           soft: "rgba(74,47,107,0.08)",
         },
-        ring: "rgba(74,47,107,0.30)",
+        // Sólido, não translúcido: os componentes de `@manto/ui` passaram a desenhar o foco com
+        // `ring-offset`, e um anel a 30% de opacidade sobre o creme do catálogo praticamente
+        // some — quem navega por teclado perde a referência de onde está. Mesmo raciocínio do
+        // preset; aqui precisa ser repetido porque o app público não consome o preset.
+        ring: "#4a2f6b",
         gold: {
           DEFAULT: "#b1793a",
           soft: "rgba(177,121,58,0.12)",
+          // Mesmo degrau de texto do preset: `DEFAULT` sobre `gold-soft` dá 3.25:1 e reprova
+          // AA. `ink` dá 5.32:1 sobre gold-soft e 5.46:1 sobre o creme do catálogo.
+          ink: "#8a5a28",
         },
         red: {
           DEFAULT: "#c0392b",

@@ -13,6 +13,14 @@ export interface DayTimelineViewProps {
 const HOUR_ROW_PX = 56;
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
+// A altura do bloco é proporcional à DURAÇÃO (24 * 56px = 1344px de pista). As quatro linhas
+// (categoria/título/horário/local) a 12px com leading-tight ocupam ~64px, ou seja ~4.8% da
+// pista: num evento de 30 min (2.08% ≈ 28px) o `overflow-hidden` cortava o título no meio e
+// engolia o horário. Abaixo do limite mostramos só título + horário e o resto vai para o
+// `title` (tooltip); `BLOCK_MIN_HEIGHT_PX` garante que essas duas linhas sempre caibam.
+const FULL_DETAIL_MIN_PCT = 4.8;
+const BLOCK_MIN_HEIGHT_PX = 36;
+
 function eventTimeRange(ev: EventoResumo): string {
   if (!ev.start_at) return "";
   const start = new Date(ev.start_at).toLocaleTimeString("pt-BR", {
@@ -68,7 +76,7 @@ export function DayTimelineView({ date }: DayTimelineViewProps) {
                 <li key={ev.id}>
                   <Link
                     to={`/events/${ev.id}`}
-                    className={`inline-flex items-center gap-2 truncate rounded px-2 py-1 text-sm font-medium ${cat.bg} ${cat.fg} hover:opacity-80`}
+                    className={`inline-flex items-center gap-2 truncate rounded px-2 py-1 text-sm font-medium ${cat.bg} ${cat.fg} ${cat.border} hover:opacity-80`}
                   >
                     <span>{cat.label}</span>
                     <span>{ev.title}</span>
@@ -80,12 +88,15 @@ export function DayTimelineView({ date }: DayTimelineViewProps) {
         </section>
       )}
 
-      <div className="flex overflow-x-auto rounded-lg border border-line">
+      {/* A régua de horas é a estrutura da visão Dia, não um enfeite: com o `line`
+          decorativo (1.27:1 sobre branco) as faixas de hora sumiam e os blocos flutuavam
+          sem referência. `line-strong` atende os 3:1 da WCAG 1.4.11. */}
+      <div className="flex overflow-x-auto rounded-lg border border-line-strong">
         <div className="w-12 shrink-0 sm:w-14">
           {HOURS.map((hour) => (
             <div
               key={hour}
-              className="border-b border-line px-1 text-right text-[11px] text-muted"
+              className="border-b border-line-strong px-1 text-right text-[11px] text-muted"
               style={{ height: HOUR_ROW_PX }}
             >
               {String(hour).padStart(2, "0")}:00
@@ -99,29 +110,35 @@ export function DayTimelineView({ date }: DayTimelineViewProps) {
           {HOURS.map((hour) => (
             <div
               key={hour}
-              className="absolute inset-x-0 border-b border-line"
+              className="absolute inset-x-0 border-b border-line-strong"
               style={{ top: hour * HOUR_ROW_PX }}
             />
           ))}
           {blocks.map(({ event, topPct, heightPct, column, columnCount }) => {
             const cat = eventCategory(event.event_type);
+            const detailed = heightPct >= FULL_DETAIL_MIN_PCT;
             return (
               <Link
                 key={event.id}
                 to={`/events/${event.id}`}
-                title={event.title}
-                className={`absolute overflow-hidden rounded px-1.5 py-1 text-[11px] leading-tight shadow-sm ${cat.bg} ${cat.fg} hover:opacity-90`}
+                title={`${cat.label} · ${event.title} · ${eventTimeRange(event)}${
+                  event.location ? ` · ${event.location}` : ""
+                }`}
+                className={`absolute overflow-hidden rounded px-1.5 py-1 text-xs leading-tight shadow-sm ${cat.bg} ${cat.fg} ${cat.border} hover:opacity-90`}
                 style={{
                   top: `${topPct}%`,
                   height: `${heightPct}%`,
+                  minHeight: BLOCK_MIN_HEIGHT_PX,
                   left: `${(column / columnCount) * 100}%`,
                   width: `${100 / columnCount}%`,
                 }}
               >
-                <span className="block font-semibold">{cat.label}</span>
-                <span className="block truncate">{event.title}</span>
+                {detailed && <span className="block font-semibold">{cat.label}</span>}
+                <span className="block truncate font-medium">{event.title}</span>
                 <span className="block tabular-nums">{eventTimeRange(event)}</span>
-                {event.location && <span className="block truncate">{event.location}</span>}
+                {detailed && event.location && (
+                  <span className="block truncate">{event.location}</span>
+                )}
               </Link>
             );
           })}

@@ -3,8 +3,14 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210 (horário, anexos e
-> orçamento)** · Head de migration: `e7a1c94f20b3` (*own_item_id em catalog_characters*)
+> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **215 (evento em abas
+> com edição inline)** · Head de migration: `e7a1c94f20b3` (*own_item_id em catalog_characters*)
+>
+> **Edição por recorte (215).** `PATCH /api/events/<id>` (feature 184) é **edição em bloco**: ele
+> reconcilia elenco e **substitui** os clientes. Para editar um dado isolado use os endpoints
+> estreitos da 215 (`/basico`, `/comercial`, `/clients`, `/form-response`) — cada um grava só o seu
+> conjunto de campos. Nunca reaproveite o PATCH em bloco para salvar um campo solto: o corpo
+> incompleto apaga o elenco e os clientes que não vieram nele.
 >
 > **Contrato de horário (210, não-negociável).** `CalendarEvent.start_at`/`end_at` são **horário de
 > parede de São Paulo**, gravados naive (`service.py::parse_event_datetime`) e serializados com
@@ -385,12 +391,15 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 | Método | Rota |
 |---|---|
 | GET | `/api/agenda`, `/api/agenda/day/<date_str>`, `/api/talents`, `/api/events/<id>`, `/api/events/new/options`, `/api/events/new/prefill` |
+| GET | `/api/events/<id>/casting-options` *(feature 215)* |
 | POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` |
 | POST | `/api/roles/<id>/assign`, `/api/roles/<id>/invite`, `/api/roles/<id>/figurino-done`, `/api/roles/<id>/dismiss`, `/api/roles/<id>/restore` |
 | POST | `/api/roles/<id>/payment-status`, `/api/roles/<id>/figurino-sheet` *(feature 192)* |
 | POST | `/api/events/<id>/travel-estimate`, `/api/events/<id>/materials`, `/api/events/<id>/feedback-link` *(feature 192)* |
 | POST | `/api/contracts/<id>/toggle-signed`, `/api/reimbursements/<id>/collect` |
 | PATCH | `/api/events/<id>`, `/api/events/<id>/logistics`, `/api/payments/<id>` |
+| PATCH | `/api/events/<id>/basico`, `/api/events/<id>/comercial`, `/api/events/<id>/form-response` *(feature 215)* |
+| PUT | `/api/events/<id>/clients` *(feature 215)* |
 | DELETE | `/api/events/<id>`, `/api/roles/<id>`, `/api/observations/<id>`, `/api/contracts/<id>`, `/api/payments/<id>`, `/api/reimbursements/<id>` |
 | DELETE | `/api/roles/<id>/figurino-done` (desmarcar), `/api/materials/<id>` *(feature 192)* |
 

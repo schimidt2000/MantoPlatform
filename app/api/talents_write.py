@@ -48,7 +48,8 @@ def api_update_talent(talent_id: int) -> Any:
 
     audit("edit", "talent", talent.id, talent.full_name, "Perfil editado (API)")
     db.session.commit()
-    result = get_talent_profile(talent)
+    # `include_sensitive=True`: a view já barrou quem não é CASTING/SUPERADMIN acima.
+    result = get_talent_profile(talent, include_sensitive=True)
     result["can_edit"] = True
     return jsonify(result)
 
@@ -103,7 +104,8 @@ def api_save_talent_notes(talent_id: int) -> Any:
     body = request.get_json(silent=True) or {}
     save_notes(talent, notes=body.get("notes"), warning_level=body.get("warning_level"))
     db.session.commit()
-    result = get_talent_profile(talent)
+    # `include_sensitive=True`: a view já barrou quem não é CASTING/SUPERADMIN acima.
+    result = get_talent_profile(talent, include_sensitive=True)
     result["can_edit"] = True
     return jsonify(result)
 
@@ -129,7 +131,8 @@ def api_upload_talent_photo(talent_id: int) -> Any:
 
     audit("edit", "talent", talent.id, talent.full_name, f"Foto/documento enviado ({photo_type}, API)")
     db.session.commit()
-    result = get_talent_profile(talent)
+    # `include_sensitive=True`: a view já barrou quem não é CASTING/SUPERADMIN acima.
+    result = get_talent_profile(talent, include_sensitive=True)
     result["can_edit"] = True
     return jsonify(result)
 
@@ -155,6 +158,7 @@ def api_remove_talent_photo(talent_id: int) -> Any:
 
     audit("edit", "talent", talent.id, talent.full_name, f"Foto/documento removido ({photo_type}, API)")
     db.session.commit()
-    result = get_talent_profile(talent)
+    # `include_sensitive=True`: a view já barrou quem não é CASTING/SUPERADMIN acima.
+    result = get_talent_profile(talent, include_sensitive=True)
     result["can_edit"] = True
     return jsonify(result)

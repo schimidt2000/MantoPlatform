@@ -88,7 +88,7 @@ function DayCell({ cell, onDayClick }: { cell: CalendarCell; onDayClick?: (dateK
           onDayClick(cell.key);
         }
       }}
-      className={`flex min-h-[92px] flex-col gap-1 border-b border-r border-line p-1.5 sm:min-h-[110px] ${
+      className={`flex min-h-[92px] flex-col gap-1 border-b border-r border-line-strong p-1.5 sm:min-h-[110px] ${
         cell.inCurrentMonth ? "bg-panel" : "bg-surface-2"
       } ${onDayClick ? "cursor-pointer hover:bg-surface-2" : ""}`}
     >
@@ -112,7 +112,7 @@ function DayCell({ cell, onDayClick }: { cell: CalendarCell; onDayClick?: (dateK
               to={`/events/${ev.id}`}
               title={ev.title}
               onClick={(e) => e.stopPropagation()}
-              className={`truncate rounded px-1.5 py-0.5 text-[11px] font-medium ${cat.bg} ${cat.fg} hover:opacity-80`}
+              className={`truncate rounded px-1.5 py-0.5 text-xs font-medium ${cat.bg} ${cat.fg} ${cat.border} hover:opacity-80`}
             >
               {eventTime(ev) && <span className="tabular-nums">{eventTime(ev)} </span>}
               {ev.title}
@@ -126,7 +126,7 @@ function DayCell({ cell, onDayClick }: { cell: CalendarCell; onDayClick?: (dateK
               e.stopPropagation();
               setExpanded(true);
             }}
-            className="truncate rounded px-1.5 py-0.5 text-left text-[11px] font-medium text-muted hover:underline"
+            className="truncate rounded px-1.5 py-0.5 text-left text-xs font-medium text-muted hover:underline"
           >
             +{hidden}
           </button>
@@ -142,12 +142,15 @@ export function CalendarGrid({ ym, events, onDayClick }: CalendarGridProps) {
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[560px] overflow-hidden rounded-lg border-l border-t border-line">
+      {/* `line-strong` e não `line`: a grade é a ÚNICA estrutura do mês, então precisa dos
+          3:1 da WCAG 1.4.11 — com o cinza decorativo (1.27:1) o calendário lia como uma
+          mancha branca com textinhos soltos. */}
+      <div className="min-w-[560px] overflow-hidden rounded-lg border-l border-t border-line-strong">
         <div className="grid grid-cols-7">
           {WEEKDAY_LABELS.map((label) => (
             <div
               key={label}
-              className="border-b border-r border-line bg-surface-2 px-1.5 py-1 text-center text-xs font-medium text-muted"
+              className="border-b border-r border-line-strong bg-surface-2 px-1.5 py-1 text-center text-xs font-medium text-muted"
             >
               {label}
             </div>

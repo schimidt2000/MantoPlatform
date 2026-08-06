@@ -21,7 +21,8 @@ function Brand() {
       </div>
       <div>
         <div className="text-base font-bold leading-tight text-white">Manto</div>
-        <div className="text-[11px] uppercase tracking-widest text-white/40">Plataforma</div>
+        {/* white/40 dava 3.79:1 a 11px sobre a sidebar #1f1a30; /60 sobe para 6.75:1. */}
+        <div className="text-[11px] uppercase tracking-widest text-white/60">Plataforma</div>
       </div>
     </div>
   );
@@ -36,7 +37,7 @@ function RoleSwitcher({ user }: { user: AuthUser }) {
 
   return (
     <div className="mb-2 border-b border-white/10 pb-2">
-      <div className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/35">
+      <div className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/60">
         Ver como:
       </div>
       <div className="flex flex-wrap gap-1 px-2">
@@ -89,7 +90,8 @@ function SidebarFooter({ user }: { user: AuthUser }) {
         </div>
         <div className="min-w-0">
           <div className="truncate text-sm font-medium text-white">{user.name}</div>
-          <div className="truncate text-[11px] text-white/45">
+          {/* white/45 = 4.41:1 a 11px (reprova AA); /70 sobe para 8.75:1. */}
+          <div className="truncate text-[11px] text-white/70">
             {user.impersonating ? (
               <span className="font-semibold text-sidebar-accent">{user.impersonating}</span>
             ) : (

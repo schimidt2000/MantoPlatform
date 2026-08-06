@@ -1,7 +1,19 @@
-import { Badge } from "@manto/ui";
+import { useState } from "react";
+import { Pencil } from "lucide-react";
+import { Badge, Button } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
+import { MoneyInput } from "@manto/money";
 import type { EventoDetalhe } from "../../lib/agenda";
-import { brl, DataRow, Empty, formatDay, Panel } from "./parts";
+import { useEventCreateOptions } from "../../lib/eventCreate";
+import {
+  useSetEventClients,
+  useSetEventFormResponse,
+  useUpdateEventComercial,
+  type EventComercialInput,
+} from "../../lib/eventInline";
+import { ClientPicker, type SelectedClient } from "../ClientPicker";
+import { FormResponsePicker, type SelectedFormResponse } from "../FormResponsePicker";
+import { brl, DataRow, Empty, formatDay, INPUT_CLASS, Panel } from "./parts";
 
 /** Rótulos legíveis das formas de pagamento gravadas no evento. */
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
@@ -12,6 +24,9 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   futuro: "Pagamento futuro",
   parcelado: "Parcelado (datas)",
 };
+
+const LABEL_CLASS = "mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted";
+const MONEY_CLASS = "h-11 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
 
 /** Um card da grade de resultado. `emphasis` destaca o lucro líquido. */
 function KpiCard({
@@ -111,38 +126,358 @@ function KpiGrid({ data }: { data: EventoDetalhe }) {
   );
 }
 
-/** Dados da venda: clientes, valores, acréscimos e responsável. */
+/**
+ * Formulário dos valores da venda, aberto no lugar da leitura (feature 215).
+ *
+ * Grava por `PATCH /events/<id>/comercial` — recorte estreito que não encosta em elenco nem
+ * em clientes (que têm o seu próprio painel logo acima). Cortesia/permuta zera a venda no
+ * servidor, então o formulário esconde os valores quando ela está marcada.
+ */
+function VendaForm({ data, onClose }: { data: EventoDetalhe; onClose: () => void }) {
+  const venda = data.venda!;
+  const salvar = useUpdateEventComercial(data.event.id);
+  const options = useEventCreateOptions();
+  const [form, setForm] = useState<EventComercialInput>(() => ({
+    sale_value: venda.sale_value,
+    sale_value_gross: venda.sale_value_gross,
+    transport_value: venda.transport_value,
+    with_invoice: venda.with_invoice,
+    is_cortesia_permuta: venda.is_cortesia_permuta,
+    seller_id: venda.seller_id,
+    sale_date: venda.sale_date ? venda.sale_date.slice(0, 10) : null,
+    commission_rate: venda.commission_rate,
+    payment_method: venda.payment_method,
+    payment_installments: venda.payment_installments,
+    payment_due_date: venda.payment_due_date ? venda.payment_due_date.slice(0, 10) : null,
+  }));
+
+  const set = <K extends keyof EventComercialInput>(key: K, value: EventComercialInput[K]) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+
+  return (
+    <div className="space-y-3">
+      <label className="flex items-center gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          className="h-5 w-5"
+          checked={form.is_cortesia_permuta}
+          onChange={(e) => set("is_cortesia_permuta", e.target.checked)}
+        />
+        Cortesia / permuta (zera o valor de venda)
+      </label>
+
+      {!form.is_cortesia_permuta && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className={LABEL_CLASS}>Valor antes do desconto</label>
+            <MoneyInput
+              className={MONEY_CLASS}
+              value={form.sale_value_gross ?? 0}
+              onValueChange={(v) => set("sale_value_gross", v)}
+              aria-label="Valor antes do desconto"
+            />
+          </div>
+          <div>
+            <label className={LABEL_CLASS}>Valor de venda final</label>
+            <MoneyInput
+              className={MONEY_CLASS}
+              value={form.sale_value ?? 0}
+              onValueChange={(v) => set("sale_value", v)}
+              aria-label="Valor de venda final"
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className={LABEL_CLASS}>Transporte</label>
+          <MoneyInput
+            className={MONEY_CLASS}
+            value={form.transport_value ?? 0}
+            onValueChange={(v) => set("transport_value", v)}
+            aria-label="Valor de transporte"
+          />
+        </div>
+        <div>
+          <label className={LABEL_CLASS} htmlFor="venda-comissao">
+            Taxa de comissão (%)
+          </label>
+          <input
+            id="venda-comissao"
+            type="number"
+            step="0.1"
+            min="0"
+            className={INPUT_CLASS}
+            value={form.commission_rate ?? ""}
+            placeholder="padrão do sistema"
+            onChange={(e) =>
+              set("commission_rate", e.target.value === "" ? null : Number(e.target.value))
+            }
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className={LABEL_CLASS} htmlFor="venda-forma">
+            Forma de pagamento
+          </label>
+          <select
+            id="venda-forma"
+            className={INPUT_CLASS}
+            value={form.payment_method ?? ""}
+            onChange={(e) => set("payment_method", e.target.value || null)}
+          >
+            <option value="">— Selecionar —</option>
+            {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={LABEL_CLASS} htmlFor="venda-parcelas">
+            Parcelas
+          </label>
+          <input
+            id="venda-parcelas"
+            type="number"
+            min="1"
+            className={INPUT_CLASS}
+            value={form.payment_installments ?? ""}
+            onChange={(e) =>
+              set("payment_installments", e.target.value === "" ? null : Number(e.target.value))
+            }
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className={LABEL_CLASS} htmlFor="venda-data">
+            Data da venda
+          </label>
+          <input
+            id="venda-data"
+            type="date"
+            className={INPUT_CLASS}
+            value={form.sale_date ?? ""}
+            onChange={(e) => set("sale_date", e.target.value || null)}
+          />
+        </div>
+        <div>
+          <label className={LABEL_CLASS} htmlFor="venda-vencimento">
+            Vencimento do pagamento
+          </label>
+          <input
+            id="venda-vencimento"
+            type="date"
+            className={INPUT_CLASS}
+            value={form.payment_due_date ?? ""}
+            onChange={(e) => set("payment_due_date", e.target.value || null)}
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className={LABEL_CLASS} htmlFor="venda-vendedor">
+          Vendedor responsável
+        </label>
+        <select
+          id="venda-vendedor"
+          className={INPUT_CLASS}
+          value={form.seller_id ?? ""}
+          onChange={(e) => set("seller_id", e.target.value ? Number(e.target.value) : null)}
+        >
+          <option value="">— sem vendedor —</option>
+          {(options.data?.sellers ?? []).map((seller) => (
+            <option key={seller.id} value={seller.id}>
+              {seller.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          className="h-5 w-5"
+          checked={form.with_invoice}
+          onChange={(e) => set("with_invoice", e.target.checked)}
+        />
+        Cliente solicitou nota fiscal
+      </label>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          loading={salvar.isPending}
+          onClick={() => salvar.mutate(form, { onSuccess: onClose })}
+        >
+          Salvar venda
+        </Button>
+        <Button variant="ghost" onClick={onClose} disabled={salvar.isPending}>
+          Cancelar
+        </Button>
+        {salvar.isError && <span className="text-sm text-red">{salvar.error?.message}</span>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Painel de clientes do evento (feature 215) — vinculação editada onde é exibida.
+ *
+ * `PUT /events/<id>/clients` recebe a lista inteira: a tela mantém o rascunho local enquanto
+ * o usuário mexe e só grava no "Salvar clientes", para não disparar uma escrita por tecla.
+ */
+function ClientesPanel({ data }: { data: EventoDetalhe }) {
+  const venda = data.venda!;
+  const salvar = useSetEventClients(data.event.id);
+  const options = useEventCreateOptions();
+  const [editando, setEditando] = useState(false);
+  const [clientes, setClientes] = useState<SelectedClient[]>([]);
+  const canEdit = Boolean(data.flags.can_edit_core);
+
+  const abrir = () => {
+    setClientes(
+      venda.clients.map((c) => ({
+        client_id: c.client_id,
+        name: c.name ?? "—",
+        relation: c.relation,
+      })),
+    );
+    setEditando(true);
+  };
+
+  return (
+    <Panel
+      title="Clientes"
+      actions={
+        canEdit && !editando ? (
+          <Button variant="outline" size="sm" onClick={abrir}>
+            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+            Editar
+          </Button>
+        ) : null
+      }
+    >
+      {editando ? (
+        <div className="space-y-3">
+          <ClientPicker
+            value={clientes}
+            onChange={setClientes}
+            relationOptions={options.data?.client_relation_tipos ?? []}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              loading={salvar.isPending}
+              onClick={() =>
+                salvar.mutate(
+                  {
+                    clients: clientes.map((c) => ({
+                      client_id: c.client_id,
+                      relation: c.relation,
+                    })),
+                  },
+                  { onSuccess: () => setEditando(false) },
+                )
+              }
+            >
+              Salvar clientes
+            </Button>
+            <Button variant="ghost" onClick={() => setEditando(false)} disabled={salvar.isPending}>
+              Cancelar
+            </Button>
+            {salvar.isError && <span className="text-sm text-red">{salvar.error?.message}</span>}
+          </div>
+        </div>
+      ) : venda.clients.length === 0 ? (
+        <Empty>Nenhum cliente associado.</Empty>
+      ) : (
+        <ul className="space-y-1">
+          {venda.clients.map((client) => (
+            <li
+              key={client.client_id}
+              className="flex items-center justify-between gap-2 rounded-md border border-line bg-surface-2/60 px-2 py-1.5 text-sm"
+            >
+              <span className="truncate text-ink">{client.name ?? "—"}</span>
+              <Badge>{client.relation}</Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+/** Pré-contrato vinculado (feature 215) — vincular/desvincular sem sair da aba. */
+function PreContratoPanel({ data }: { data: EventoDetalhe }) {
+  const venda = data.venda!;
+  const salvar = useSetEventFormResponse(data.event.id);
+  const canEdit = Boolean(data.flags.can_edit_core);
+  const atual = venda.form_response;
+
+  if (!canEdit) {
+    return (
+      <Panel title="Pré-contrato">
+        {atual ? (
+          <DataRow label={atual.form_type}>{atual.name}</DataRow>
+        ) : (
+          <Empty>Nenhum pré-contrato vinculado.</Empty>
+        )}
+      </Panel>
+    );
+  }
+
+  const selecionado: SelectedFormResponse | null = atual
+    ? { id: atual.id, name: atual.name, form_type: atual.form_type }
+    : null;
+
+  return (
+    <Panel title="Pré-contrato">
+      <FormResponsePicker
+        value={selecionado}
+        onChange={(next) => salvar.mutate({ form_response_id: next ? next.id : null })}
+      />
+      {salvar.isPending && <p className="mt-1 text-sm text-muted">Salvando…</p>}
+      {salvar.isError && <p className="mt-1 text-sm text-red">{salvar.error?.message}</p>}
+    </Panel>
+  );
+}
+
+/** Dados da venda: valores, acréscimos e responsável (leitura + edição inline). */
 function VendaPanel({ data }: { data: EventoDetalhe }) {
   const venda = data.venda;
+  const [editando, setEditando] = useState(false);
   if (!venda) return null;
   const acrescimos = data.acrescimos ?? [];
   const bruto = venda.sale_value_gross ?? 0;
   const liquido = venda.sale_value ?? 0;
   const desconto = bruto > liquido ? bruto - liquido : 0;
+  const canEdit = Boolean(data.flags.can_edit_core);
+
+  if (editando) {
+    return (
+      <Panel title="Comercial — dados da venda">
+        <VendaForm data={data} onClose={() => setEditando(false)} />
+      </Panel>
+    );
+  }
 
   return (
-    <Panel title="Comercial — dados da venda">
-      <div className="mb-2">
-        <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-muted">
-          Clientes
-        </div>
-        {venda.clients.length === 0 ? (
-          <Empty>Nenhum cliente associado.</Empty>
-        ) : (
-          <ul className="space-y-1">
-            {venda.clients.map((client) => (
-              <li
-                key={client.client_id}
-                className="flex items-center justify-between gap-2 rounded-md border border-line bg-surface-2/60 px-2 py-1.5 text-sm"
-              >
-                <span className="truncate text-ink">{client.name ?? "—"}</span>
-                <Badge>{client.relation}</Badge>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
+    <Panel
+      title="Comercial — dados da venda"
+      actions={
+        canEdit ? (
+          <Button variant="outline" size="sm" onClick={() => setEditando(true)}>
+            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+            Editar
+          </Button>
+        ) : null
+      }
+    >
       <div className="divide-y divide-line">
         {bruto > 0 && <DataRow label="Valor antes do desconto">{brl(bruto)}</DataRow>}
         {desconto > 0 && (
@@ -214,10 +549,17 @@ export interface ComercialSectionProps {
   data: EventoDetalhe;
 }
 
-/** Bloco comercial + grade de resultado (coluna direita, feature 190). */
+/**
+ * Bloco comercial da aba Comercial (feature 190; edição inline na 215).
+ *
+ * Ordem deliberada: primeiro com quem se vendeu (clientes e pré-contrato), depois quanto e
+ * como, e só então o resultado — cada painel editado onde é exibido.
+ */
 export function ComercialSection({ data }: ComercialSectionProps) {
   return (
     <>
+      {data.venda && <ClientesPanel data={data} />}
+      {data.venda && <PreContratoPanel data={data} />}
       <VendaPanel data={data} />
       <KpiGrid data={data} />
     </>

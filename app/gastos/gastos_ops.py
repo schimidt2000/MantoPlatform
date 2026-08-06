@@ -23,6 +23,7 @@ from werkzeug.utils import secure_filename
 from app import db
 from app.constants import RoleName
 from app.email_service import send_async, send_new_expense_alert_email
+from app.storage import ALLOWED_DOCUMENT_EXTENSIONS, is_allowed_extension
 from app.models import (
     AuditLog,
     CalendarEvent,
@@ -141,8 +142,15 @@ def search_events_by_date(day: date) -> list[CalendarEvent]:
 
 
 def save_receipt(file: FileStorage, upload_dir: str) -> str | None:
-    """Salva o comprovante em `upload_dir`; retorna caminho relativo 'expenses/<arquivo>'."""
+    """Salva o comprovante em `upload_dir`; retorna caminho relativo 'expenses/<arquivo>'.
+
+    Recusa (devolvendo None) qualquer extensão fora de `ALLOWED_DOCUMENT_EXTENSIONS`: a nota
+    fiscal é foto ou PDF, e o arquivo é servido por `/uploads` no mesmo origin das SPAs — um
+    `.html` aceito aqui executaria JavaScript com a sessão de quem abrisse o comprovante.
+    """
     if not file or not file.filename:
+        return None
+    if not is_allowed_extension(file.filename, ALLOWED_DOCUMENT_EXTENSIONS):
         return None
     fname = secure_filename(file.filename)
     if not fname:

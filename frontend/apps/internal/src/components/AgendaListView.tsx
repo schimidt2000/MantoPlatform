@@ -49,7 +49,9 @@ export function AgendaListItem({
       {time && (
         <span className="w-24 shrink-0 text-xs tabular-nums text-muted">{time}</span>
       )}
-      <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${cat.bg} ${cat.fg}`}>
+      <span
+        className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${cat.bg} ${cat.fg} ${cat.border}`}
+      >
         {cat.label}
       </span>
       <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">

@@ -235,6 +235,16 @@ export function EventHeader({ data }: EventHeaderProps) {
         }),
     });
   }
+  // Desde a 210 os dados do evento são editados na própria aba onde aparecem; o formulário em
+  // bloco continua aqui para quem quer mexer em elenco, clientes e valores de uma vez só —
+  // deixou de ser o caminho obrigatório, então saiu da barra e virou item de menu.
+  if (data.flags.can_edit_core) {
+    items.push({
+      label: "✏️ Editar tudo (formulário completo)",
+      title: "Abrir o formulário em bloco — elenco, clientes e valores na mesma tela",
+      onClick: () => navigate(`/events/${event.id}/edit`),
+    });
+  }
   if (data.flags.can_delete) {
     items.push({ label: "🗑 Excluir evento", destructive: true, onClick: () => setDeleteOpen(true) });
   }
@@ -267,13 +277,12 @@ export function EventHeader({ data }: EventHeaderProps) {
           {items.length > 0 && (
             <KebabMenu items={items} label="Ferramentas do evento" triggerLabel="Ferramentas" />
           )}
-          {data.flags.can_edit_core && (
-            <Button asChild variant="outline" size="sm">
-              <Link to={`/events/${event.id}/edit`}>Editar</Link>
-            </Button>
-          )}
           <Button asChild variant="outline" size="sm">
-            <Link to="/agenda">← Voltar para Agenda</Link>
+            <Link to="/agenda">
+              <span aria-hidden="true">←</span>
+              <span className="hidden sm:inline">Voltar para Agenda</span>
+              <span className="sr-only sm:hidden">Voltar para Agenda</span>
+            </Link>
           </Button>
         </div>
       </div>

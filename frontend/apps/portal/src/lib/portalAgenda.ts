@@ -14,8 +14,15 @@ export interface PortalRole {
   character_name: string;
   has_unacknowledged_change: boolean;
   change_description: string | null;
-  cache_total?: number;
-  payment_status?: string;
+  /** Cachê da apresentação, sem o deslocamento. */
+  cache_value: number;
+  /** Ajuda de deslocamento, quando houver. */
+  travel_cache: number;
+  /** `cache_value + travel_cache` — o que o artista recebe por esta escalação. */
+  cache_total: number;
+  /** `false` enquanto a produção ainda não definiu o cachê — distingue de "combinado R$ 0,00". */
+  cache_defined: boolean;
+  payment_status: string;
 }
 
 export interface PortalAgenda {

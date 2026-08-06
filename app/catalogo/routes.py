@@ -11,8 +11,17 @@ from __future__ import annotations
 import os
 import re
 
-from flask import Blueprint, current_app, render_template, request, send_from_directory
+from flask import (
+    Blueprint,
+    current_app,
+    render_template,
+    request,
+    send_file,
+    send_from_directory,
+    url_for,
+)
 
+from app.catalogo.og_ops import resolve_thumbnail
 from app.models import CatalogCategory, CatalogItem
 
 catalogo_bp = Blueprint("catalogo", __name__, url_prefix="/catalogo")
@@ -74,6 +83,62 @@ def midia(filename: str):
     return send_from_directory(folder, filename)
 
 
+def _send_og_thumbnail(cover_url: str | None):
+    """Resposta da miniatura reencodada de uma capa, ou 404 quando não há capa utilizável."""
+    thumb = resolve_thumbnail(cover_url, current_app.config["UPLOAD_FOLDER"])
+    if not thumb:
+        return "", 404
+
+    response = send_file(thumb.path, mimetype="image/jpeg", max_age=86400)
+    # O nome do arquivo em cache já carrega o hash da capa: conteúdo novo = URL de origem nova.
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    # O `after_request` global carimba `noindex, nofollow, noarchive` em TUDO (feature 127), e o
+    # crawler de prévia do WhatsApp (facebookexternalhit) pode recusar renderizar o card nessas
+    # condições. Aqui sobrescrevemos: a imagem segue fora do índice, mas com a prévia liberada.
+    response.headers["X-Robots-Tag"] = "noindex, max-image-preview:large"
+    return response
+
+
+@catalogo_bp.route("/og/<slug>.jpg")
+def og_image(slug: str):
+    """Miniatura da capa de um PRODUTO para a prévia de link compartilhado (WhatsApp e afins).
+
+    A `og:image` das páginas da vitrine aponta para cá, e não para a foto original: o cliente do
+    WhatsApp baixa a imagem inteira só para desenhar um quadrado pequeno e desiste sem prévia
+    quando o arquivo é grande demais (ver `app/catalogo/og_ops.py`). Rota pública, como toda a
+    superfície do catálogo — o `frontend/server.js` repassa `/catalogo/og/*` ao Flask antes de
+    montar a SPA pública, mesmo arranjo de `/catalogo/midia/*`.
+    """
+    item = CatalogItem.query.filter_by(slug=slug, is_active=True).first()
+    cover = item.cover_image if item else None
+    return _send_og_thumbnail(cover.url if cover else None)
+
+
+@catalogo_bp.route("/og/categoria/<slug>.jpg")
+def og_image_categoria(slug: str):
+    """Miniatura de um TEMA (categoria) do catálogo, pela mesma redução de bytes do produto.
+
+    `CatalogCategory` não tem imagem própria no banco, então a capa do tema é a do PRIMEIRO item
+    ativo dele — exatamente a regra que a vitrine já usa para desenhar o card da seção
+    (`_category_summary` em `app/api/catalogo_read.py`). Assim a miniatura do link compartilhado
+    é a mesma foto que a pessoa viu na grade antes de copiar o endereço.
+
+    Não colide com `og_image`: o conversor padrão de `<slug>` não casa `/`, então
+    `/og/categoria/x.jpg` só entra aqui.
+    """
+    category = CatalogCategory.query.filter_by(slug=slug).first()
+    first_item = (
+        CatalogItem.query.filter_by(is_active=True)
+        .filter(CatalogItem.categories.any(CatalogCategory.id == category.id))
+        .order_by(CatalogItem.name.asc())
+        .first()
+        if category
+        else None
+    )
+    cover = first_item.cover_image if first_item else None
+    return _send_og_thumbnail(cover.url if cover else None)
+
+
 @catalogo_bp.route("/categorias")
 def categorias():
     """Grade de categorias do catálogo, cada uma com uma foto representativa (feature 140)."""
@@ -128,12 +193,13 @@ def detail(slug: str):
     if not item:
         return render_template("catalogo/invalid.html"), 404
 
-    cover = item.cover_image
-    og_image = None
-    if cover:
-        og_image = cover.url
-        if og_image.startswith("/"):
-            og_image = request.url_root.rstrip("/") + og_image
+    # Prévia sempre pela miniatura de `/catalogo/og/<slug>.jpg`, nunca pela foto original:
+    # arquivo grande faz o WhatsApp entregar o link sem imagem nenhuma (ver `og_ops.py`).
+    og_image = (
+        request.url_root.rstrip("/") + url_for("catalogo.og_image", slug=item.slug)
+        if item.cover_image
+        else None
+    )
 
     primary_category = item.categories[0] if item.categories else None
 

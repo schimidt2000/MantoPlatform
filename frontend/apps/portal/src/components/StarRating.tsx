@@ -43,8 +43,12 @@ export function StarRating({
                 className="absolute inset-0 cursor-inherit opacity-0"
                 aria-label={`${score} ${score === 1 ? "estrela" : "estrelas"}`}
               />
+              {/* Estrela vazia em `text-line` (1.2:1 sobre o branco do Card) desaparecia: o
+                  artista abria a tela de avaliação e via espaço em branco no lugar do
+                  seletor. `line` é token de borda de 1px, não de ícone de 24px que precisa
+                  ser percebido e tocado — `muted` dá 7.17:1 e mantém o contorno leve. */}
               <Star
-                className={`h-6 w-6 ${active ? "fill-accent text-accent" : "text-line"}`}
+                className={`h-6 w-6 ${active ? "fill-accent text-accent" : "text-muted"}`}
                 aria-hidden="true"
               />
             </label>

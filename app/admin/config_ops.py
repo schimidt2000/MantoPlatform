@@ -13,7 +13,10 @@ from app import db
 from app.models import SiteSetting
 from app.utils import audit
 
-_ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+#: `.svg` saiu de propósito: SVG é XML executável, então `/uploads` passou a servi-lo como anexo
+#: com `X-Content-Type-Options: nosniff` — o navegador se recusa a desenhá-lo num `<img>`. Aceitar
+#: aqui só produziria um logo que não aparece. Servi-lo inline traria de volta o XSS armazenado.
+_ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 def update_settings(settings: SiteSetting, fields: dict[str, Any], logo_file=None) -> SiteSetting:

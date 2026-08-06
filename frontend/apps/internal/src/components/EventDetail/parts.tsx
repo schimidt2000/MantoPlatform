@@ -54,13 +54,19 @@ export interface PanelProps {
   className?: string;
 }
 
-/** Painel de seção com título compacto em caixa-alta. */
+/**
+ * Painel de seção com título compacto em caixa-alta.
+ *
+ * O cabeçalho quebra linha (`flex-wrap`) porque as ações são botões com `whitespace-nowrap`:
+ * sem isso, dois botões ("Imprimir fichas" + "Banco de figurinos") empurravam o painel além da
+ * largura da tela no celular e a página inteira passava a rolar na horizontal.
+ */
 export function Panel({ title, actions, children, className }: PanelProps) {
   return (
     <section className={`rounded-lg border border-line bg-panel p-4 ${className ?? ""}`}>
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[11px] font-bold uppercase tracking-[0.07em] text-muted">{title}</h2>
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
+        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
       {children}
     </section>

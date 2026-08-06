@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, FileUpload, Skeleton } from "@manto/ui";
-import { ExternalLink, Trash2 } from "lucide-react";
+import { Camera, ChevronRight, ExternalLink, FileText, Trash2 } from "lucide-react";
 import { FormError, FormField, FormSuccess } from "../components/FormField";
 import {
   useAddPortfolioLink,
@@ -107,6 +108,64 @@ function MedidasSection({
   );
 }
 
+/** Linha de navegação para uma sub-tela do Perfil — alvo de toque inteiro, com chevron. */
+function ProfileNavRow({
+  to,
+  icon: Icon,
+  title,
+  hint,
+}: {
+  to: string;
+  icon: typeof Camera;
+  title: string;
+  hint: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="flex min-h-[56px] items-center gap-3 px-4 py-3 text-left hover:bg-surface-2"
+    >
+      <Icon className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-ink">{title}</span>
+        <span className="block text-sm text-muted">{hint}</span>
+      </span>
+      <ChevronRight className="h-5 w-5 shrink-0 text-muted" aria-hidden="true" />
+    </Link>
+  );
+}
+
+/**
+ * Índice das sub-telas do cadastro.
+ *
+ * `/fotos-documentos` e `/termos` existiam em App.tsx sem NENHUM link no app inteiro — o
+ * artista simplesmente não tinha como trocar a foto de rosto ou enviar a CNH pelo celular.
+ * Elas entram aqui, e não como 5ª aba da barra inferior: em 360px cinco abas espremem o
+ * alvo de toque e truncam os rótulos, e estas são tarefas pontuais (envio uma vez, releitura
+ * eventual do termo) ao lado de quatro abas de uso diário. O Perfil já é o destino de
+ * "meus dados" — inclusive o avatar do cabeçalho aponta para cá.
+ */
+function ProfileNavCard() {
+  return (
+    <Card>
+      <nav aria-label="Meu cadastro" className="divide-y divide-line">
+        <ProfileNavRow
+          to="/fotos-documentos"
+          icon={Camera}
+          title="Fotos e documentos"
+          hint="Foto de rosto, foto de corpo inteiro e CNH"
+        />
+        <ProfileNavRow
+          to="/termos"
+          icon={FileText}
+          title="Termo de uso de imagem"
+          hint="Reler o termo que você aceitou"
+        />
+      </nav>
+    </Card>
+  );
+}
+
 function PortfolioSection({ profile }: { profile: PortalProfile }) {
   const addPhoto = useAddPortfolioPhoto();
   const addLink = useAddPortfolioLink();
@@ -116,6 +175,9 @@ function PortfolioSection({ profile }: { profile: PortalProfile }) {
   const [linkLabel, setLinkLabel] = useState("");
   const [photoError, setPhotoError] = useState<string | undefined>();
   const [linkError, setLinkError] = useState<string | null>(null);
+  // A remoção não tinha `onError`: quando a API falhava, o item continuava na tela sem uma
+  // linha de explicação e o artista tocava na lixeira de novo achando que não pegou.
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const photos = profile.media.filter((item) => item.media_type === "photo");
   const links = profile.media.filter((item) => item.media_type === "link");
@@ -137,8 +199,15 @@ function PortfolioSection({ profile }: { profile: PortalProfile }) {
 
   function handleDelete(mediaId: number, description: string) {
     if (!window.confirm(`Remover ${description}? Esta ação não pode ser desfeita.`)) return;
-    deleteItem.mutate(mediaId);
+    setDeleteError(null);
+    deleteItem.mutate(mediaId, {
+      onError: (error) => setDeleteError(`Não foi possível remover: ${error.message}`),
+    });
   }
+
+  // `variables` é o id enviado na chamada em curso: sem essa comparação, `isPending` (que é
+  // global à mutation) desabilitava TODAS as lixeiras da lista ao remover um único item.
+  const deletingId = deleteItem.isPending ? deleteItem.variables : undefined;
 
   return (
     <Card>
@@ -149,6 +218,7 @@ function PortfolioSection({ profile }: { profile: PortalProfile }) {
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
+        <FormError>{deleteError}</FormError>
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-ink">
             Fotos de atuação ({photos.length}/{profile.max_photos})
@@ -167,8 +237,10 @@ function PortfolioSection({ profile }: { profile: PortalProfile }) {
                     type="button"
                     aria-label={`Remover ${item.label || "foto de atuação"}`}
                     onClick={() => handleDelete(item.id, item.label || "esta foto")}
-                    disabled={deleteItem.isPending}
-                    className="absolute right-1 top-1 flex h-9 w-9 items-center justify-center rounded-full bg-panel/90 text-red shadow-sm disabled:opacity-50"
+                    disabled={deletingId === item.id}
+                    // h-11: alvo de 44px. A 36px, colada na própria foto, a lixeira era um
+                    // convite a exclusão acidental no toque.
+                    className="absolute right-1 top-1 flex h-11 w-11 items-center justify-center rounded-full bg-panel/90 text-red shadow-sm disabled:opacity-50"
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </button>
@@ -198,11 +270,17 @@ function PortfolioSection({ profile }: { profile: PortalProfile }) {
               }}
             />
           ) : (
-            <p className="text-xs text-muted">
+            <p className="text-sm text-muted">
               Limite de fotos atingido. Remova uma para adicionar outra.
             </p>
           )}
-          {addPhoto.isPending && <p className="text-xs text-muted">Enviando foto…</p>}
+          {/* text-sm: é a explicação de por que o botão de enviar sumiu e o aviso de que o
+              envio está em curso — o artista PRECISA ler isso no celular. */}
+          {addPhoto.isPending && (
+            <p className="text-sm text-muted" role="status">
+              Enviando foto…
+            </p>
+          )}
         </div>
 
         <div className="space-y-3 border-t border-line pt-4">
@@ -228,7 +306,7 @@ function PortfolioSection({ profile }: { profile: PortalProfile }) {
                     type="button"
                     aria-label={`Remover ${item.label || "link"}`}
                     onClick={() => handleDelete(item.id, item.label || "este link")}
-                    disabled={deleteItem.isPending}
+                    disabled={deletingId === item.id}
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-red disabled:opacity-50"
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -289,10 +367,19 @@ export function PortalProfilePage() {
     formState: { errors, isDirty },
   } = useForm<ProfileForm>();
 
-  // O formulário nasce vazio e é preenchido quando o perfil chega — `values` do RHF sobrescreve
-  // o que o usuário digitou a cada refetch, então o preenchimento é feito uma vez, por `reset`.
+  // O formulário nasce vazio e é preenchido quando o perfil chega — mas SÓ na primeira carga.
+  //
+  // Antes a dependência era o objeto `profileQuery.data`, e o portfólio (que vive na MESMA
+  // tela) reescreve o cache do perfil a cada foto/link adicionado, além dos refetch de
+  // reconexão do TanStack Query. O efeito disparava de novo e o `reset` apagava tudo o que o
+  // artista tinha digitado e ainda não salvo — exatamente o que o CLAUDE.md proíbe
+  // ("nunca limpe o que o usuário preencheu"). O ref trava a hidratação em uma única vez; o
+  // único outro `reset` legítimo é o do `onSuccess` de salvar, logo abaixo.
+  const hydrated = useRef(false);
   useEffect(() => {
-    if (profileQuery.data) reset(toFormValues(profileQuery.data));
+    if (hydrated.current || !profileQuery.data) return;
+    hydrated.current = true;
+    reset(toFormValues(profileQuery.data));
   }, [profileQuery.data, reset]);
 
   const onSubmit = handleSubmit((values) => {
@@ -341,6 +428,8 @@ export function PortalProfilePage() {
   return (
     <div className="space-y-4 p-4">
       <h1 className="text-lg font-semibold text-ink">Meu perfil</h1>
+
+      <ProfileNavCard />
 
       <form onSubmit={onSubmit} noValidate className="space-y-4">
         <Card>

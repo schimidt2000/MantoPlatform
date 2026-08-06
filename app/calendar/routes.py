@@ -29,6 +29,13 @@ from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
 from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense, ClientFeedback, EventReimbursement, EventAcrescimo
 from app.email_service import send_removal_email
+from app.storage import (
+    ALLOWED_DOCUMENT_EXTENSIONS,
+    ALLOWED_IMAGE_EXTENSIONS,
+    ALLOWED_INVOICE_EXTENSIONS,
+    ALLOWED_MATERIAL_EXTENSIONS,
+    is_allowed_extension,
+)
 # Notificadores de logística movidos para event_ops (feature 149); reimportados com alias para os
 # call sites existentes (sync inclusive) seguirem inalterados. Dependência unidirecional routes→event_ops.
 from app.calendar.event_ops import (
@@ -550,7 +557,7 @@ def _handle_add_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         file, current_app.config["UPLOAD_CONTRACTS"], "contracts", max_mb=10
     )
     if not fpath:
-        flash("Arquivo do contrato acima de 10 MB — envie um arquivo menor.", "error")
+        flash("Contrato não enviado: use PDF ou imagem de até 10 MB.", "error")
         return
     db.session.add(EventContract(
         event_id=event.id,
@@ -569,25 +576,36 @@ def _handle_add_contract(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 def _save_bounded_upload(
-    file_storage, upload_dir: str, subpath: str, *, max_mb: int = 10
+    file_storage,
+    upload_dir: str,
+    subpath: str,
+    *,
+    max_mb: int = 10,
+    allowed: frozenset[str] = ALLOWED_DOCUMENT_EXTENSIONS,
 ) -> str | None:
-    """Salva um arquivo enviado por form, respeitando um limite de tamanho.
+    """Salva um arquivo enviado por form, respeitando limite de tamanho e allowlist de extensão.
 
     Fonte única para "checar tamanho + secure_filename + salvar", reaproveitada por nota
     fiscal, contrato, comprovante de pagamento e comprovante de reembolso (feature 153) — antes
     duplicada inline em cada handler.
+
+    A allowlist é obrigatória: sem ela um `.html` sobe e é servido inline por `/uploads`, no
+    mesmo origin das SPAs — XSS armazenado com a sessão de quem abrir o link.
 
     Args:
         file_storage: o ``FileStorage`` recebido do form (ou None).
         upload_dir: diretório absoluto onde salvar (ex.: ``current_app.config["UPLOAD_PAYMENTS"]``).
         subpath: segmento usado no caminho público (``/uploads/<subpath>/<nome>``).
         max_mb: limite de tamanho em megabytes.
+        allowed: allowlist de extensões (padrão: documento — imagem ou PDF).
 
     Returns:
-        O caminho público do arquivo ou None se não houve upload válido (sem arquivo ou acima
-        do limite).
+        O caminho público do arquivo ou None se não houve upload válido (sem arquivo, acima do
+        limite ou extensão fora da allowlist).
     """
     if not file_storage or not file_storage.filename:
+        return None
+    if not is_allowed_extension(file_storage.filename, allowed):
         return None
     file_storage.stream.seek(0, 2)
     size = file_storage.stream.tell()
@@ -610,7 +628,11 @@ def _save_nf_file(file_storage) -> str | None:
         upload válido (sem arquivo ou acima de 10 MB).
     """
     return _save_bounded_upload(
-        file_storage, current_app.config["UPLOAD_INVOICES"], "invoices", max_mb=10
+        file_storage,
+        current_app.config["UPLOAD_INVOICES"],
+        "invoices",
+        max_mb=10,
+        allowed=ALLOWED_INVOICE_EXTENSIONS,
     )
 
 
@@ -944,7 +966,7 @@ def _handle_add_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         file, current_app.config["UPLOAD_PAYMENTS"], "payments", max_mb=10
     )
     if not fpath:
-        flash("Comprovante acima de 10 MB — envie um arquivo menor.", "error")
+        flash("Comprovante não enviado: use PDF ou imagem de até 10 MB.", "error")
         return
     db.session.add(EventPayment(
         event_id=event.id,
@@ -1107,7 +1129,7 @@ def _handle_collect_reembolso(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         file, current_app.config["UPLOAD_PAYMENTS"], "payments", max_mb=10
     )
     if not fpath:
-        flash("Comprovante acima de 10 MB — envie um arquivo menor.", "error")
+        flash("Comprovante não enviado: use PDF ou imagem de até 10 MB.", "error")
         return
     reembolso.collected_at = datetime.now(tz=tz_sp)
     reembolso.collected_amount = amount
@@ -2793,9 +2815,31 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
     return result
 
 
-def _save_file_upload(file, upload_dir: str, subpath: str) -> str | None:
-    """Salva um arquivo e retorna o path relativo a /uploads/, ou None."""
+def _save_file_upload(
+    file,
+    upload_dir: str,
+    subpath: str,
+    *,
+    allowed: frozenset[str] = ALLOWED_DOCUMENT_EXTENSIONS,
+) -> str | None:
+    """Salva um arquivo e retorna o path relativo a /uploads/, ou None.
+
+    Args:
+        file: o ``FileStorage`` recebido (ou None).
+        upload_dir: diretório absoluto de destino.
+        subpath: segmento do caminho público (``/uploads/<subpath>/<nome>``).
+        allowed: allowlist de extensões. O padrão (documento) cobre contrato e comprovante;
+            observação de evento passa `ALLOWED_IMAGE_EXTENSIONS`, porque o endpoint que a
+            recebe não tem gate de papel — qualquer usuário logado sobe arquivo por ele.
+
+    Returns:
+        O caminho público, ou None se não houve arquivo, se ele excede 20 MB ou se a extensão
+        está fora da allowlist (o arquivo é servido no mesmo origin das SPAs: extensão livre
+        aqui é XSS armazenado).
+    """
     if not file or not file.filename:
+        return None
+    if not is_allowed_extension(file.filename, allowed):
         return None
     file.stream.seek(0, 2)
     size = file.stream.tell()
@@ -3368,7 +3412,16 @@ def _parse_create_event_form() -> dict:
     # Nota fiscal (arquivo opcional) — fora do núcleo, resolvido aqui em caminho salvo.
     invoice_filename = None
     invoice_file = request.files.get("invoice_file")
+    # "Não veio arquivo" e "formato recusado" são casos diferentes: juntar os dois num único `if`
+    # fazia o evento ser criado em silêncio, sem a nota que a pessoa acabou de anexar.
     if invoice_file and invoice_file.filename:
+        if not is_allowed_extension(invoice_file.filename, ALLOWED_INVOICE_EXTENSIONS):
+            flash("Nota fiscal não anexada: envie PDF, XML ou imagem.", "error")
+            invoice_file = None
+    else:
+        invoice_file = None
+
+    if invoice_file:
         inv_size = invoice_file.stream.seek(0, 2)
         invoice_file.stream.seek(0)
         if inv_size <= 20 * 1024 * 1024:
@@ -3387,7 +3440,10 @@ def _parse_create_event_form() -> dict:
         if otype == "image":
             if img_idx < len(obs_images):
                 file_path = _save_file_upload(
-                    obs_images[img_idx], current_app.config["UPLOAD_EVENT_OBS"], "event_obs"
+                    obs_images[img_idx],
+                    current_app.config["UPLOAD_EVENT_OBS"],
+                    "event_obs",
+                    allowed=ALLOWED_IMAGE_EXTENSIONS,
                 )
                 img_idx += 1
         observations.append({
@@ -3588,6 +3644,11 @@ def ensaio_upload_material(event_id: int):
         flash("Nenhum arquivo selecionado.", "error")
         return redirect(url_for("calendar.event_detail", event_id=event_id))
 
+    # Allowlist antes do disco: o material é servido por `/uploads`, no mesmo origin das SPAs.
+    if not is_allowed_extension(file.filename, ALLOWED_MATERIAL_EXTENSIONS):
+        flash("Formato de arquivo não permitido para material de ensaio.", "error")
+        return redirect(url_for("calendar.event_detail", event_id=event_id))
+
     file.stream.seek(0, 2)
     size = file.stream.tell()
     file.stream.seek(0)
@@ -3746,6 +3807,7 @@ def add_observation(event_id: int):
                 obs_images[img_idx],
                 current_app.config["UPLOAD_EVENT_OBS"],
                 "event_obs",
+                allowed=ALLOWED_IMAGE_EXTENSIONS,
             )
             img_idx += 1
         if _add_observation(

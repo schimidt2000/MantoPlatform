@@ -1,6 +1,7 @@
-import { Link, useParams } from "react-router-dom";
+import { useMemo } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { Button, Skeleton } from "@manto/ui";
+import { Button, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@manto/ui";
 import { useEvent, type EventoDetalhe } from "../lib/agenda";
 import { CastingSection } from "../components/EventDetail/CastingSection";
 import { ComercialSection } from "../components/EventDetail/ComercialSection";
@@ -12,6 +13,7 @@ import { FinanceiroSection } from "../components/EventDetail/FinanceiroSection";
 import { LogisticaSection } from "../components/EventDetail/LogisticaSection";
 import { Presente3DSection } from "../components/EventDetail/Presente3DSection";
 import { PedidoVirtualSection } from "../components/EventDetail/PedidoVirtualSection";
+import { DadosEventoPanel, PendenciasStrip } from "../components/EventDetail/ResumoSection";
 import {
   LogsSection,
   ObservacoesSection,
@@ -20,8 +22,20 @@ import {
 import { Empty, formatRange, Panel } from "../components/EventDetail/parts";
 
 /**
+ * Grade de duas colunas no desktop; no mobile tudo empilha em coluna única.
+ *
+ * `[&>*]:min-w-0` não é enfeite: item de grid nasce com `min-width: auto`, ou seja, se recusa a
+ * encolher abaixo da largura intrínseca do conteúdo. O `minmax(0,1fr)` do template só entra em
+ * cena a partir do `xl` — abaixo disso a coluna única estourava a viewport do celular (o card
+ * de casting empurrava a página para 413px num aparelho de 375) e a tela rolava na horizontal.
+ */
+const DUAS_COLUNAS =
+  "grid items-start gap-4 [&>*]:min-w-0 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]";
+
+/**
  * Painel simplificado de ENSAIO: o servidor não serializa os blocos de show para esse tipo
- * de evento, então a tela mostra só o que existe (dados básicos + histórico).
+ * de evento, então a tela mostra só o que existe (dados básicos + histórico) — sem abas, que
+ * não teriam o que separar.
  */
 function EnsaioPanel({ data }: { data: EventoDetalhe }) {
   return (
@@ -38,7 +52,8 @@ function DetailSkeleton() {
   return (
     <div className="space-y-4">
       <Skeleton className="h-10 w-2/3" />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <Skeleton className="h-9 w-80" />
+      <div className={DUAS_COLUNAS}>
         <div className="space-y-4">
           <Skeleton className="h-56 w-full" />
           <Skeleton className="h-40 w-full" />
@@ -52,22 +67,142 @@ function DetailSkeleton() {
   );
 }
 
+interface AbaDef {
+  value: string;
+  label: string;
+  render: () => JSX.Element;
+}
+
 /**
- * Detalhe do evento (`/events/:id`) — layout de duas colunas de alta densidade (feature 190).
+ * Abas disponíveis para este evento e este usuário (feature 215).
  *
- * Coluna esquerda: operação (casting, equipe de apoio, figurino, logística/trajeto,
- * materiais de ensaio, observações). Coluna direita: comercial e financeiro (venda, grade de
- * resultado, contratos, notas, pagamentos, reembolsos). Abaixo das colunas, avaliações,
- * feedback da cliente e — só para SUPERADMIN — o log de atividades.
+ * A aba só existe se o payload trouxe algum bloco dela: o RBAC do servidor decide o que
+ * existe, e a tela não tenta adivinhar permissão por conta própria (mesma regra que já valia
+ * painel a painel). "Resumo" e "Produção" são universais — todo mundo que abre o evento vê o
+ * cabeçalho e a operação.
+ */
+function montarAbas(data: EventoDetalhe, irPara: (tab: string) => void): AbaDef[] {
+  const abas: AbaDef[] = [
+    {
+      value: "resumo",
+      label: "Resumo",
+      render: () => (
+        <>
+          <PendenciasStrip data={data} onNavigate={irPara} />
+          <div className={DUAS_COLUNAS}>
+            <div className="space-y-4">
+              <DadosEventoPanel data={data} />
+            </div>
+            <div className="space-y-4">
+              <WhatsAppSummary data={data} />
+              <ObservacoesSection data={data} />
+            </div>
+          </div>
+        </>
+      ),
+    },
+    {
+      value: "producao",
+      label: "Produção",
+      render: () => (
+        <div className="space-y-4">
+          <div className={DUAS_COLUNAS}>
+            <div className="space-y-4">
+              <CastingSection data={data} />
+            </div>
+            <div className="space-y-4">
+              <FigurinoSection data={data} />
+              <EnsaioSection data={data} />
+            </div>
+          </div>
+          <LogisticaSection data={data} />
+          <Presente3DSection data={data} />
+          <PedidoVirtualSection data={data} />
+        </div>
+      ),
+    },
+  ];
+
+  const temComercial = Boolean(
+    data.venda ||
+      data.kpi ||
+      data.contratos ||
+      data.notas_fiscais ||
+      data.pagamentos ||
+      data.reembolsos,
+  );
+  if (temComercial) {
+    abas.push({
+      value: "comercial",
+      label: "Comercial",
+      render: () => (
+        <div className={DUAS_COLUNAS}>
+          <div className="space-y-4">
+            <ComercialSection data={data} />
+          </div>
+          <div className="space-y-4">
+            <FinanceiroSection data={data} />
+          </div>
+        </div>
+      ),
+    });
+  }
+
+  const temHistorico = Boolean(data.ratings || data.client_feedbacks || data.logs);
+  if (temHistorico) {
+    abas.push({
+      value: "historico",
+      label: "Histórico",
+      render: () => (
+        <div className="space-y-4">
+          <FeedbackSection data={data} />
+          <LogsSection data={data} />
+        </div>
+      ),
+    });
+  }
+
+  return abas;
+}
+
+/**
+ * Detalhe do evento (`/events/:id`) — tela de abas (feature 215, sucede o mural de duas
+ * colunas da 190).
  *
- * Cada bloco só é renderizado quando o servidor o inclui no JSON: o RBAC decide o que existe
- * no payload, e a tela não tenta adivinhar permissões por conta própria.
+ * A 190 empilhava os 16 painéis de uma vez; para o superadmin, que recebe todos, a tela virava
+ * uma parede de ~4000px sem hierarquia, e no mobile uma coluna só, interminável. Aqui o evento
+ * é lido em quatro atos — **Resumo** (o que é e o que falta), **Produção** (casting, figurino,
+ * logística, ensaios), **Comercial** (venda, resultado e anexos financeiros) e **Histórico** —
+ * e cada bloco é editado onde é exibido, sem desviar para o formulário grande.
+ *
+ * A aba ativa vive na URL (`?aba=producao`): recarregar, voltar no navegador ou mandar o link
+ * para alguém cai na mesma aba. Os chips de pendência do Resumo navegam por aqui.
  */
 export function EventDetailPage() {
   const reduceMotion = useReducedMotion();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const query = useEvent(id);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // `replace` para a troca de aba não encher o histórico de voltas; os demais parâmetros da
+  // URL são preservados (a aba é só mais um deles, não a query inteira).
+  const irPara = (tab: string) =>
+    setSearchParams(
+      (atual) => {
+        const proximo = new URLSearchParams(atual);
+        proximo.set("aba", tab);
+        return proximo;
+      },
+      { replace: true },
+    );
+  const data = query.data;
+  const abas = useMemo(() => (data ? montarAbas(data, irPara) : []), [data]);
+
+  // Uma `?aba=` inexistente (link antigo, papel sem aquele bloco) cai no Resumo em vez de
+  // renderizar uma tela vazia.
+  const pedida = searchParams.get("aba");
+  const abaAtiva = abas.some((a) => a.value === pedida) ? pedida! : "resumo";
 
   return (
     <div className="mx-auto max-w-[1600px] p-4 sm:p-6">
@@ -82,45 +217,46 @@ export function EventDetailPage() {
         </div>
       )}
 
-      {query.data && (
+      {data && (
         <motion.div
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
         >
-          <EventHeader data={query.data} />
+          <EventHeader data={data} />
 
-          {query.data.event.is_ensaio ? (
+          {data.event.is_ensaio ? (
             <div className="space-y-4">
-              <EnsaioPanel data={query.data} />
+              <EnsaioPanel data={data} />
               {/* Gestão do ensaio (editar/cancelar/vincular órfão) — restaurada na 206. */}
-              <EnsaioSection data={query.data} />
-              <LogsSection data={query.data} />
+              <EnsaioSection data={data} />
+              <LogsSection data={data} />
             </div>
           ) : (
-            <>
-              <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                <div className="space-y-4">
-                  <WhatsAppSummary data={query.data} />
-                  <CastingSection data={query.data} />
-                  <FigurinoSection data={query.data} />
-                  <EnsaioSection data={query.data} />
-                  <LogisticaSection data={query.data} />
-                  <Presente3DSection data={query.data} />
-                  <PedidoVirtualSection data={query.data} />
-                  <ObservacoesSection data={query.data} />
-                </div>
-                <div className="space-y-4">
-                  <ComercialSection data={query.data} />
-                  <FinanceiroSection data={query.data} />
-                </div>
+            <Tabs value={abaAtiva} onValueChange={irPara}>
+              {/* Fica colada no topo ao rolar: com painéis longos, trocar de aba não pode
+                  exigir voltar ao começo da página. `top-14` desvia da barra do app, que é
+                  sticky só abaixo de `lg` (`AppLayout`); a partir daí o topo está livre. O
+                  -mx/px devolve a sangria no mobile, onde a régua rola na horizontal em vez
+                  de quebrar em duas linhas. */}
+              <div className="sticky top-14 z-20 -mx-4 mb-4 overflow-x-auto bg-surface/95 px-4 py-2 backdrop-blur sm:mx-0 sm:px-0 lg:top-0">
+                <TabsList className="w-max">
+                  {/* `px-3` no mobile é o que faz as quatro abas caberem em 375px sem rolar
+                      (com `px-4` a régua dava 382px e a última ficava cortada). */}
+                  {abas.map((aba) => (
+                    <TabsTrigger key={aba.value} value={aba.value} className="h-9 px-3 sm:px-4">
+                      {aba.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
               </div>
 
-              <div className="mt-4 space-y-4">
-                <FeedbackSection data={query.data} />
-                <LogsSection data={query.data} />
-              </div>
-            </>
+              {abas.map((aba) => (
+                <TabsContent key={aba.value} value={aba.value} className="mt-0">
+                  {aba.render()}
+                </TabsContent>
+              ))}
+            </Tabs>
           )}
         </motion.div>
       )}

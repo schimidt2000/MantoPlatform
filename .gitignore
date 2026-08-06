@@ -48,3 +48,8 @@ reset_beta.py
 setup_skills.sh
 explicacao
 clean_events.py
+
+# Projeto auxiliar local com credencial de produção em texto puro (Manto_Sales/config.py traz a
+# chave do Google Maps). Nunca foi versionado — esta linha existe para que um `git add -A`
+# distraído não o publique no GitHub.
+Manto_Sales/

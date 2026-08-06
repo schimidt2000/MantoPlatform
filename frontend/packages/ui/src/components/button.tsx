@@ -5,12 +5,16 @@ import { Loader2 } from "lucide-react";
 import { cn } from "../lib/cn";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60",
+  // `ring-offset-2`: o token `ring` deixou de ser translúcido (1.64:1, foco invisível) e virou
+  // o roxo sólido da marca — o respiro branco impede que o anel encoste na borda do botão.
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-panel disabled:pointer-events-none disabled:opacity-60",
   {
     variants: {
       variant: {
         default: "bg-accent text-white hover:bg-accent-dark",
-        outline: "border border-line bg-panel hover:bg-surface-2",
+        // Contorno em `line-strong`: no botão outline a borda é a única pista de que existe
+        // um alvo clicável ali, então vale o mínimo de 3:1 da WCAG 1.4.11.
+        outline: "border border-line-strong bg-panel hover:bg-surface-2",
         ghost: "hover:bg-surface-2",
       },
       size: {

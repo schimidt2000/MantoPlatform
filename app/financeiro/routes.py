@@ -13,6 +13,11 @@ from app import db, _safe_next
 from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SalaryAdvance, SpecialExpense, EventAcrescimo, RecurringExpenseEntry
 from app.money import format_brl
 from app.constants import RoleName, EDUCAMANTO_TITLE_PREFIX
+from app.storage import (
+    ALLOWED_DOCUMENT_EXTENSIONS,
+    ALLOWED_INVOICE_EXTENSIONS,
+    is_allowed_extension,
+)
 
 financeiro_bp = Blueprint("financeiro", __name__)
 
@@ -738,6 +743,11 @@ def nf_emitir(invoice_id: int):
 
     nf_file = request.files.get("nf_file")
     if nf_file and nf_file.filename:
+        # Allowlist antes do disco: a nota é PDF ou foto e sai por `/uploads`, mesmo origin das
+        # SPAs — extensão livre aqui seria XSS armazenado com a sessão de quem abre o arquivo.
+        if not is_allowed_extension(nf_file.filename, ALLOWED_INVOICE_EXTENSIONS):
+            flash("Envie a nota em PDF, XML ou imagem (JPG, PNG, WEBP).", "error")
+            return back
         nf_file.stream.seek(0, 2)
         size = nf_file.stream.tell()
         nf_file.stream.seek(0)
@@ -1343,6 +1353,11 @@ def salary_advance(sp_id: int):
     proof = request.files.get("advance_proof")
     if not (proof and proof.filename):
         flash("Anexe o comprovante do adiantamento.", "error")
+        return back
+
+    # Mesma allowlist do endpoint de API equivalente (`app/api/financeiro_write.py`).
+    if not is_allowed_extension(proof.filename, ALLOWED_DOCUMENT_EXTENSIONS):
+        flash("Envie o comprovante em PDF ou imagem (JPG, PNG, WEBP).", "error")
         return back
 
     proof.stream.seek(0, 2)

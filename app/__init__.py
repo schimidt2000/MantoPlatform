@@ -1,5 +1,14 @@
 import os
-from flask import Flask, Response, render_template, request, send_from_directory, session, redirect
+from flask import (
+    Flask,
+    Response,
+    abort,
+    render_template,
+    request,
+    send_from_directory,
+    session,
+    redirect,
+)
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_login import LoginManager
@@ -41,6 +50,82 @@ _REVENDEDOR_ALLOWED = ("/agenda", "/events/", "/educamanto", "/auth", "/uploads"
 # silêncio para esse perfil (a calculadora EducaManto entre outras coisas). Não amplia acesso:
 # é o espelho exato do que ele já podia abrir quando as telas eram Jinja.
 _REVENDEDOR_ALLOWED_API = ("/api/auth", "/api/agenda", "/api/events", "/api/educamanto")
+
+
+# ── Autorização por subpasta de `/uploads` ────────────────────────────────────
+# `/uploads/<path>` servia a árvore INTEIRA de uploads só com `@login_required`: contrato,
+# comprovante de pagamento, nota fiscal e documento de identidade de talento ficavam ao alcance
+# de QUALQUER papel — inclusive REVENDEDOR_EDUCAMANTO (que tem "/uploads" na allowlist acima) e
+# MARKETING. A única barreira era o nome uuid4 do arquivo, e esse nome vem de bandeja no JSON
+# das telas. Agora o PRIMEIRO SEGMENTO do caminho decide qual papel é exigido.
+#
+# O papel de cada subpasta é o mesmo da tela que exibe o arquivo, para não trancar nada que
+# já funciona: contrato/comprovante/nota fiscal saem no bloco `show_comercial` de
+# `app/api/agenda_read.py::_role_flags` (Comercial/Financeiro/Superadmin) e o documento do
+# talento só aparece na ficha, sob `_can_edit_talent` (Casting/Superadmin).
+UPLOADS_ROLE_BY_SUBFOLDER = {
+    "contracts":   (RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN),
+    "payments":    (RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN),
+    "invoices":    (RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN),
+    "talent_docs": (RoleName.CASTING, RoleName.SUPERADMIN),
+}
+
+# Comprovante de gasto extra: papel NÃO basta como regra. Qualquer colaborador registra um gasto
+# e o próprio `GET /api/gastos` devolve `receipt_url` do gasto dele — exigir FINANCEIRO aqui
+# quebraria a tela de quem enviou. Por isso esta subpasta tem checagem de DONO no banco.
+UPLOADS_OWNER_CHECKED_SUBFOLDER = "expenses"
+
+# Demais subpastas (talent_photos, figurino_photos, figurino_thumbs, catalog_photos,
+# acervo_3d_photos, acervo_3d_files, event_obs, ensaio_materials, review, logos) seguem como
+# antes — mídia operacional, liberada a qualquer usuário autenticado.
+
+
+def _has_any_role(user, roles: tuple[str, ...]) -> bool:
+    """True se `user` tem pelo menos um dos papéis informados.
+
+    Args:
+        user: Usuário autenticado da sessão.
+        roles: Nomes de papel já em MAIÚSCULAS (constantes de `RoleName`).
+    """
+    return any(r.name.upper() in roles for r in user.roles)
+
+
+def _can_read_expense_receipt(user, relative_path: str) -> bool:
+    """True se `user` pode abrir o comprovante de gasto em `relative_path`.
+
+    Passa FINANCEIRO/SUPERADMIN (que veem todos os gastos) ou o autor do gasto. `receipt_path`
+    é gravado exatamente como ``expenses/<arquivo>`` (`gastos_ops.save_receipt`), então a
+    comparação é direta — sem esse casamento, nenhum arquivo é servido.
+    """
+    from app.gastos.gastos_ops import is_financeiro
+    from app.models import SpecialExpense
+
+    if is_financeiro(user):
+        return True
+    expense = SpecialExpense.query.filter_by(receipt_path=relative_path).first()
+    return expense is not None and expense.created_by_id == user.id
+
+
+def _can_read_upload(user, filename: str) -> bool:
+    """Decide se `user` pode baixar `filename` da árvore de uploads.
+
+    Args:
+        user: Usuário autenticado da sessão.
+        filename: Caminho pedido, relativo à raiz de `UPLOAD_FOLDER`.
+
+    Returns:
+        True quando a subpasta é mídia operacional (regra antiga: só login), quando o papel do
+        usuário cobre a subpasta sensível, ou quando ele é o dono do comprovante de gasto.
+    """
+    relative_path = filename.replace("\\", "/").lstrip("/")
+    subfolder = relative_path.split("/", 1)[0].lower()
+
+    required = UPLOADS_ROLE_BY_SUBFOLDER.get(subfolder)
+    if required is not None:
+        return _has_any_role(user, required)
+    if subfolder == UPLOADS_OWNER_CHECKED_SUBFOLDER:
+        return _can_read_expense_receipt(user, relative_path)
+    return True
 
 
 def _safe_next(value, default="/"):
@@ -519,10 +604,36 @@ def create_app():
     from app.cli import register_commands
     register_commands(app)
 
+    # Import local: `app.storage` só depende do `current_app`, mas mantê-lo fora do topo do
+    # pacote evita reintroduzir ciclo de import na inicialização.
+    from app.storage import is_inline_safe
+
     @app.route("/uploads/<path:filename>")
     @login_required
     def uploaded_file(filename: str):
-        return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+        """Serve um arquivo de `instance/uploads/` sem deixá-lo executar no origin da aplicação.
+
+        `/uploads` é proxiado no MESMO domínio das SPAs (`frontend/server.js:BACKEND_PREFIXES`),
+        então um arquivo de tipo perigoso (`.html`, `.svg`, `.xml`) devolvido inline rodaria
+        JavaScript com a sessão de quem abre o link. Imagem, PDF, áudio e vídeo continuam inline
+        (a interface os embute em `<img>`/`<video>`/visualizador de PDF); todo o resto vira
+        download. O `nosniff` impede o browser de reinterpretar o tipo declarado.
+
+        O acesso é despachado por subpasta (`_can_read_upload`): login continua sendo o piso,
+        mas contrato, comprovante, nota fiscal e documento de talento exigem o papel da tela que
+        os exibe. 404 em vez de 403 de propósito — não confirma a existência do arquivo a quem
+        não pode vê-lo, já que o nome é o único segredo que resta.
+        """
+        if not _can_read_upload(current_user, filename):
+            abort(404)
+        inline = is_inline_safe(filename)
+        resp = send_from_directory(
+            app.config["UPLOAD_FOLDER"], filename, as_attachment=not inline
+        )
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        if not inline:
+            resp.headers["Content-Type"] = "application/octet-stream"
+        return resp
 
     # ── Impersonação de role (somente SUPERADMIN) ──────────────────
     # Feature 173: lista promovida a app/constants.py (fonte única com a API).

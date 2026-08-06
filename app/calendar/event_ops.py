@@ -408,6 +408,197 @@ def update_event_core(
     return warnings
 
 
+# ── Edição pontual na própria tela de detalhe — feature 215 ──────────────────
+# A tela de abas edita cada bloco onde ele é exibido, sem desviar para o formulário grande
+# (`PATCH /api/events/<id>`, que reescreve elenco e clientes em bloco). Cada função abaixo
+# toca SÓ o seu conjunto de campos — nada de efeito colateral em elenco/cliente/pré-contrato.
+
+
+def update_event_basics(
+    event: Any,
+    data: dict,
+    *,
+    actor_name: str,
+    tz: ZoneInfo,
+) -> list[str]:
+    """Grava título, tipo, data/horário, local e descrição de um evento existente (feature 215).
+
+    Recorte deliberado de `update_event_core`: os mesmos campos "de cabeçalho" e a mesma
+    sincronização best-effort com o Google Agenda, SEM tocar em elenco, clientes, valores ou
+    pré-contrato — é a edição inline do cabeçalho da aba Resumo.
+
+    Args:
+        event: O `CalendarEvent` a atualizar.
+        data: `title`, `event_type`, `date_str`, `start_str`, `end_str`, `location`,
+            `description` — mesmo shape (parcial) de `_build_update_event_data`.
+        actor_name: Nome de quem editou, para o `EventLog`.
+        tz: Fuso usado no carimbo do log.
+
+    Returns:
+        Avisos não-bloqueantes (hoje só falha de sincronização com o Google).
+    """
+    from app.calendar.routes import CALENDAR_ID, _build_start_end
+    from app.calendar.service import update_event as google_update_event
+
+    d = date.fromisoformat(data["date_str"])
+    st, et = _build_start_end(d, data["start_str"], data["end_str"])
+
+    old_title, old_start, old_end = event.title, event.start_at, event.end_at
+    old_location, old_description = event.location, event.description
+
+    event.title = data["title"]
+    event.event_type = data["event_type"] or None
+    event.start_at = st
+    event.end_at = et
+    event.location = data["location"] or None
+    event.description = data["description"] or None
+
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Comercial",
+        message="Editou os dados do evento",
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.commit()
+
+    warnings: list[str] = []
+    changed_core = (
+        event.title != old_title
+        or st != old_start
+        or et != old_end
+        or event.location != old_location
+        or event.description != old_description
+    )
+    if changed_core and event.google_event_id:
+        try:
+            google_update_event(
+                CALENDAR_ID,
+                event.google_event_id,
+                event.title,
+                st,
+                et,
+                description=event.description or "",
+                location=event.location or "",
+            )
+        except Exception as exc:  # noqa: BLE001 — Google fora do ar não bloqueia a edição
+            logger.warning("falha ao sincronizar evento %s com o Google Agenda: %s", event.id, exc)
+            warnings.append("Não foi possível sincronizar a mudança com o Google Agenda.")
+    return warnings
+
+
+def update_event_comercial(event: Any, data: dict, *, actor_name: str, tz: ZoneInfo) -> None:
+    """Grava os valores comerciais do evento na própria aba Comercial (feature 215).
+
+    Mesmos campos e mesma regra de cortesia/permuta de `update_event_core` (venda zerada
+    quando é cortesia), sem tocar em elenco, clientes ou pré-contrato.
+
+    Args:
+        event: O `CalendarEvent` a atualizar.
+        data: Valores já convertidos (`sale_value`, `sale_value_gross`, `transport_value`,
+            `with_invoice`, `is_cortesia_permuta`, `seller_id`, `sale_date`, `commission_rate`,
+            `payment_method`, `payment_installments`, `payment_due_date`).
+        actor_name: Nome de quem editou, para o `EventLog`.
+        tz: Fuso usado no carimbo do log.
+    """
+    is_cortesia = bool(data.get("is_cortesia_permuta"))
+    event.is_cortesia_permuta = is_cortesia
+    event.sale_value = 0 if is_cortesia else data.get("sale_value")
+    event.sale_value_gross = 0 if is_cortesia else data.get("sale_value_gross")
+    event.transport_value = data.get("transport_value")
+    event.with_invoice = bool(data.get("with_invoice"))
+    event.seller_id = data.get("seller_id")
+    event.sale_date = data.get("sale_date")
+    event.commission_rate = data.get("commission_rate")
+    event.payment_method = data.get("payment_method")
+    event.payment_installments = data.get("payment_installments")
+    event.payment_due_date = data.get("payment_due_date")
+
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Comercial",
+        message="Editou os valores comerciais",
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.commit()
+
+
+def set_event_clients(event: Any, client_pairs: list[tuple[int, str]]) -> None:
+    """Substitui os clientes vinculados ao evento (feature 215).
+
+    Mesmo par (id, relação) e mesma eleição de cliente principal de `update_event_core` —
+    a lista recebida passa a ser a verdade, então mandar `[]` desvincula todo mundo.
+
+    Args:
+        event: O `CalendarEvent` dono dos vínculos.
+        client_pairs: Pares `(client_id, relationship_type)` na ordem de exibição.
+    """
+    from app.calendar.routes import _create_client_links
+
+    EventClient.query.filter_by(event_id=event.id).delete()
+    event.client_id = None
+    _create_client_links(event, client_pairs)
+    db.session.commit()
+
+
+def set_event_form_response(event: Any, form_response_id: int | None) -> bool:
+    """Vincula (ou desvincula) o pré-contrato exibido na aba Comercial (feature 215).
+
+    Uma resposta já vinculada a OUTRO evento não é roubada — mesma guarda de
+    `_link_form_response`. Desvincular só solta a resposta que é deste evento.
+
+    Args:
+        event: O `CalendarEvent` alvo.
+        form_response_id: Id da `FormResponse` a vincular, ou `None` para desvincular.
+
+    Returns:
+        `True` se o vínculo mudou; `False` quando o id não existe ou é de outro evento.
+    """
+    if form_response_id is None:
+        changed = False
+        for fr in FormResponse.query.filter_by(event_id=event.id).all():
+            fr.event_id = None
+            changed = True
+        db.session.commit()
+        return changed
+
+    fr = FormResponse.query.get(form_response_id)
+    if fr is None or (fr.event_id is not None and fr.event_id != event.id):
+        return False
+    fr.event_id = event.id
+    db.session.commit()
+    return True
+
+
+def assignable_talents_for_event(event: Any) -> list[dict[str, Any]]:
+    """Talentos ativos para a busca de casting, com foto e agenda do dia (feature 215).
+
+    A busca de talento da tela de detalhe precisa das mesmas duas informações que o card já
+    mostra depois de escalar: o rosto (`photo_face_path`) e o aviso de agenda. Reusa
+    `talent_availability` — uma consulta só para todos os talentos, não uma por opção.
+
+    Args:
+        event: O `CalendarEvent` aberto (define a janela avaliada).
+
+    Returns:
+        Lista ordenada por nome com `id`, `name`, `artistic_name`, `photo_url` e
+        `availability` (`{"status", "info"}`; `status="free"` quando não há choque).
+    """
+    talents = Talent.query.filter_by(status="active").order_by(Talent.full_name.asc()).all()
+    availability = talent_availability(event, [t.id for t in talents])
+    return [
+        {
+            "id": t.id,
+            "name": t.full_name,
+            "artistic_name": t.artistic_name,
+            "photo_url": t.photo_face_path,
+            "availability": availability.get(t.id) or {"status": "free", "info": ""},
+        }
+        for t in talents
+    ]
+
+
 # ── Detalhe do evento — feature 190 (refatoração da tela /events/:id) ─────────
 # Núcleo das ações e cálculos que a tela de detalhe expõe e que até aqui só existiam
 # inline na view Jinja (`app/calendar/routes.py::event_detail`). Extraídos para cá para
@@ -599,12 +790,16 @@ def add_ensaio_file(
     Jinja — em produção os uploads não vão para o disco da aplicação.
 
     Returns:
-        O `EnsaioMaterial` criado, ou None se não veio arquivo ou ele excede o limite.
+        O `EnsaioMaterial` criado, ou None se não veio arquivo, se ele excede o limite ou se a
+        extensão está fora de `ALLOWED_MATERIAL_EXTENSIONS` — o arquivo é servido por
+        `/uploads`, no mesmo origin das SPAs, e extensão livre ali vira XSS armazenado.
     """
     from app.models import EnsaioMaterial
-    from app.storage import save_file
+    from app.storage import ALLOWED_MATERIAL_EXTENSIONS, is_allowed_extension, save_file
 
     if not file_storage or not file_storage.filename:
+        return None
+    if not is_allowed_extension(file_storage.filename, ALLOWED_MATERIAL_EXTENSIONS):
         return None
     file_storage.stream.seek(0, 2)
     size = file_storage.stream.tell()

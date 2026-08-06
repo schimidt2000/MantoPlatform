@@ -532,6 +532,12 @@ def send_new_expense_alert_email(expense, users: list) -> int:
 # ── Helper interno ─────────────────────────────────────────────────────────────
 
 def _emails_enabled() -> bool:
+    # Trava de ambiente vem ANTES da configuração do banco: `email_notifications_enabled` mora no
+    # próprio banco, então a cópia local herda o valor da produção (ligado) e um processo de
+    # desenvolvimento acaba com permissão de escrever para artista e cliente de verdade.
+    if current_app.config.get("MAIL_SUPPRESS_SEND"):
+        log.info("Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).")
+        return False
     try:
         from app.models import SiteSetting
         settings = SiteSetting.query.first()

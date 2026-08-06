@@ -340,14 +340,26 @@ def api_add_observation(event_id: int) -> Any:
 
     from app.calendar.observation_ops import add_observation
     from app.calendar.routes import _save_file_upload
+    from app.storage import ALLOWED_IMAGE_EXTENSIONS
 
+    # Allowlist estrita de imagem: este endpoint não tem gate de papel, então é o caminho mais
+    # barato para plantar um arquivo executável em `/uploads` (mesmo origin das SPAs).
     file_path = (
-        _save_file_upload(file_storage, current_app.config["UPLOAD_EVENT_OBS"], "event_obs")
+        _save_file_upload(
+            file_storage,
+            current_app.config["UPLOAD_EVENT_OBS"],
+            "event_obs",
+            allowed=ALLOWED_IMAGE_EXTENSIONS,
+        )
         if obs_type == "image"
         else None
     )
     if obs_type == "image" and not file_path:
-        return json_error("Imagem acima de 20 MB — envie um arquivo menor", 400, {"image": "Muito grande"})
+        return json_error(
+            "Imagem inválida: envie JPG, PNG, WEBP ou GIF de até 20 MB",
+            400,
+            {"image": "Formato ou tamanho não aceito"},
+        )
 
     obs = add_observation(
         event,
@@ -663,6 +675,152 @@ def api_update_event(event_id: int) -> Any:
     result = _event_detail_json(event).get_json()
     result["warnings"] = warnings
     return jsonify(result)
+
+
+# ── Edição pontual por bloco da tela de detalhe (feature 215) ────────────────
+# A tela de abas edita cada bloco onde ele é exibido. Estes endpoints são o recorte estreito
+# do PATCH em bloco acima: cada um valida e grava SÓ o seu conjunto de campos, então salvar o
+# cabeçalho nunca mexe no elenco e salvar os valores nunca mexe nos clientes.
+
+
+@api_bp.route("/events/<int:event_id>/basico", methods=["PATCH"])
+@api_login_required
+def api_update_event_basics(event_id: int) -> Any:
+    """Título, tipo, data/horário, local e descrição (feature 215).
+
+    RBAC igual ao PATCH em bloco (`_can_create_event`): mudar a data de um evento tem o mesmo
+    peso comercial de criá-lo. Reusa `_validate_event_core` para o mesmo mapa de erros por
+    campo que o formulário grande devolve.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_create_event():
+        return json_error("Sem permissão", 403)
+
+    body = request.get_json(silent=True) or {}
+    data = {
+        "title": (body.get("title") or "").strip(),
+        "event_type": (body.get("event_type") or "").strip(),
+        "date_str": body.get("date") or "",
+        "start_str": body.get("start") or "",
+        "end_str": body.get("end") or "",
+        "location": (body.get("location") or "").strip(),
+        # Chave ausente = "não mexa na descrição". Ela é o HTML que também vive no Google
+        # Agenda: um corpo sem o campo (ou de um cliente que não edita descrição) não pode
+        # apagá-la de raspão — mesma cautela que a tela de edição em bloco já documenta.
+        "description": (
+            (body.get("description") or "").strip()
+            if "description" in body
+            else (event.description or "")
+        ),
+    }
+
+    from app.calendar.routes import _validate_event_core
+
+    errors = _validate_event_core(data)
+    # `_validate_event_core` também cobre campos financeiros que este endpoint não recebe —
+    # só os erros do recorte de cabeçalho importam aqui.
+    errors = {k: v for k, v in errors.items() if k in ("title", "event_date", "event_time")}
+    if errors:
+        return json_error("Corrija os campos destacados", 400, fields=errors)
+
+    from app.calendar.event_ops import update_event_basics
+
+    warnings = update_event_basics(event, data, actor_name=current_user.name, tz=_TZ_SP)
+    result = _event_detail_json(event).get_json()
+    result["warnings"] = warnings
+    return jsonify(result)
+
+
+@api_bp.route("/events/<int:event_id>/comercial", methods=["PATCH"])
+@api_login_required
+def api_update_event_comercial(event_id: int) -> Any:
+    """Valores da venda, forma de pagamento, vendedor e comissão (feature 215).
+
+    RBAC `_can_create_event()` — mesmos campos financeiros sensíveis do PATCH em bloco.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_create_event():
+        return json_error("Sem permissão", 403)
+
+    body = request.get_json(silent=True) or {}
+    sale_date_raw = body.get("sale_date")
+    payment_due_raw = body.get("payment_due_date")
+    try:
+        data = {
+            "sale_value": body.get("sale_value"),
+            "sale_value_gross": body.get("sale_value_gross"),
+            "transport_value": body.get("transport_value"),
+            "with_invoice": bool(body.get("with_invoice")),
+            "is_cortesia_permuta": bool(body.get("is_cortesia_permuta")),
+            "seller_id": body.get("seller_id"),
+            "sale_date": date.fromisoformat(sale_date_raw) if sale_date_raw else None,
+            "commission_rate": body.get("commission_rate"),
+            "payment_method": body.get("payment_method") or None,
+            "payment_installments": body.get("payment_installments"),
+            "payment_due_date": (
+                date.fromisoformat(payment_due_raw) if payment_due_raw else None
+            ),
+        }
+    except ValueError:
+        return json_error("Data inválida (use AAAA-MM-DD)", 400)
+
+    from app.calendar.event_ops import update_event_comercial
+
+    update_event_comercial(event, data, actor_name=current_user.name, tz=_TZ_SP)
+    return _event_detail_json(event)
+
+
+@api_bp.route("/events/<int:event_id>/clients", methods=["PUT"])
+@api_login_required
+def api_set_event_clients(event_id: int) -> Any:
+    """Substitui os clientes vinculados ao evento (feature 215).
+
+    `PUT` porque o corpo é a lista inteira, não um delta: `{"clients": []}` desvincula todos.
+    Mesma normalização de `_client_pairs_from_json` (dedup, relação fora da lista vira "Outros").
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_create_event():
+        return json_error("Sem permissão", 403)
+
+    body = request.get_json(silent=True) or {}
+    pairs = _client_pairs_from_json(body.get("clients") or [])
+
+    from app.calendar.event_ops import set_event_clients
+
+    set_event_clients(event, pairs)
+    return _event_detail_json(event)
+
+
+@api_bp.route("/events/<int:event_id>/form-response", methods=["PATCH"])
+@api_login_required
+def api_set_event_form_response(event_id: int) -> Any:
+    """Vincula ou desvincula o pré-contrato do evento (feature 215).
+
+    `{"form_response_id": null}` desvincula. Uma resposta já presa a outro evento é recusada
+    com 409 — nunca roubamos o pré-contrato de outra venda.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_create_event():
+        return json_error("Sem permissão", 403)
+
+    body = request.get_json(silent=True) or {}
+    raw = body.get("form_response_id")
+    if raw is not None and not isinstance(raw, int):
+        return json_error("form_response_id inválido", 400)
+
+    from app.calendar.event_ops import set_event_form_response
+
+    if not set_event_form_response(event, raw) and raw is not None:
+        return json_error("Esse pré-contrato já está vinculado a outro evento", 409)
+    return _event_detail_json(event)
 
 
 # ── Upload e gestão de anexos do evento (feature 153) ────────────────────────

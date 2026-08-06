@@ -190,12 +190,14 @@ def _serialize_talent(talent: Any) -> dict[str, Any]:
     """Talento escalado, com o que a tela de detalhe mostra no card (feature 190).
 
     Inclui o número de WhatsApp já pronto (`Talent.whatsapp_number` — fonte única do formato
-    com DDI) e as medidas de figurino, exibidas no card de Figurino do evento.
+    com DDI), as medidas de figurino exibidas no card de Figurino do evento e o rosto
+    (`photo_url`, feature 215) — o mesmo avatar que a busca de casting mostra ao escalar.
     """
     return {
         "id": talent.id,
         "name": talent.full_name,
         "artistic_name": talent.artistic_name,
+        "photo_url": talent.photo_face_path,
         "first_name": (talent.full_name or "").split(" ")[0],
         "whatsapp": talent.whatsapp_number or None,
         "size_top": talent.clothing_size_top or None,

@@ -98,7 +98,19 @@ def _not_rejected():
 
 
 def _role_summary(role: EventRole) -> dict:
+    """Serializa uma escalação do próprio talento — inclui sempre o cachê dele.
+
+    O cachê acompanha *todas* as listagens (convite pendente, evento futuro e histórico), não só
+    o histórico: o artista precisa saber quanto vai receber **antes** de aceitar o convite, que é
+    justamente a decisão que a tela de convites pede. Enquanto isso só era anexado ao histórico,
+    o valor simplesmente não existia no JSON e a tela o omitia em silêncio.
+
+    Não é vazamento: `_role_summary` só é chamado a partir de consultas já filtradas por
+    `talent_id` da sessão, então é sempre o cachê do próprio dono da sessão.
+    """
     event = role.event
+    cache_value = float(role.cache_value or 0)
+    travel_cache = float(role.travel_cache or 0)
     return {
         "role_id": role.id,
         "event_id": event.id,
@@ -109,6 +121,13 @@ def _role_summary(role: EventRole) -> dict:
         "character_name": role.character_name,
         "has_unacknowledged_change": bool(role.event_changed_at),
         "change_description": role.change_description,
+        "cache_value": cache_value,
+        "travel_cache": travel_cache,
+        "cache_total": cache_value + travel_cache,
+        # `None` quando o cachê ainda não foi definido pela produção — a tela precisa distinguir
+        # "combinado R$ 0,00" de "ainda não informado" para não anunciar um valor que não existe.
+        "cache_defined": role.cache_value is not None,
+        "payment_status": role.payment_status,
     }
 
 
@@ -154,12 +173,9 @@ def get_agenda(talent: Talent) -> dict:
         .all()
     )
 
-    history = []
-    for role in past:
-        item = _role_summary(role)
-        item["cache_total"] = float((role.cache_value or 0) + (role.travel_cache or 0))
-        item["payment_status"] = role.payment_status
-        history.append(item)
+    # `cache_total`/`payment_status` já vêm de `_role_summary` — antes eram anexados só aqui, que
+    # era exatamente a razão de o cachê sumir nas outras duas listas.
+    history = [_role_summary(role) for role in past]
 
     return {
         "pending_invites": [_role_summary(r) for r in pending_invites],
@@ -557,17 +573,12 @@ def get_historico(talent: Talent) -> dict[str, Any]:
     total_paid = 0.0
     total_pending = 0.0
     for role in past:
-        cache_total = float((role.cache_value or 0) + (role.travel_cache or 0))
-        if role.payment_status == "pago":
-            total_paid += cache_total
-        else:
-            total_pending += cache_total
-
+        # Campos de cachê vêm de `_role_summary` (fonte única); aqui só somamos os totais.
         item = _role_summary(role)
-        item["cache_value"] = float(role.cache_value or 0)
-        item["travel_cache"] = float(role.travel_cache or 0)
-        item["cache_total"] = cache_total
-        item["payment_status"] = role.payment_status
+        if item["payment_status"] == "pago":
+            total_paid += item["cache_total"]
+        else:
+            total_pending += item["cache_total"]
         items.append(item)
 
     return {

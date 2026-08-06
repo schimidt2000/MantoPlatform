@@ -3,8 +3,14 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **210 (horário, anexos e
-> orçamento)**
+> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **215 (evento em abas
+> com edição inline)**
+>
+> UX nova da 215: **`/events/:id` foi reformulada** — quatro abas (Resumo · Produção · Comercial ·
+> Histórico) com a aba na URL (`?aba=`), faixa de pendências clicável no Resumo, e **edição inline
+> por bloco** (o formulário `/events/:id/edit` virou item do menu Ferramentas, não mais o caminho
+> obrigatório). As buscas de **talento** e **ficha de figurino** da tela ganharam foto/miniatura e
+> filtro em tempo real, e a de talento mostra **quem está ocupado antes de escalar**.
 >
 > UX do hotfix 210: `/events/:id/edit` voltou a abrir com o horário e a descrição reais do evento
 > (abria +3h e com a descrição em branco, e salvava assim); a fase de anexos de `/events/new` passa
@@ -144,25 +150,60 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **Objetivo**: painel operacional completo do evento.
 - **Acesso**: todos os autenticados; **ações** gateadas por papel. **O que existe na tela é o
   que o servidor serializa** — nenhum bloco é escondido por CSS.
-- **Layout (feature 190)**: duas colunas de alta densidade a partir de `xl` (empilha abaixo
-  disso). **Cabeçalho**: título, badge de tipo, faixa horária, badge de confirmação e o menu
-  **"⋯ Ferramentas"** (`KebabMenu` com `triggerLabel`) — Sincronizar · Exportar elenco (modal
-  com seleção de campos e cópia) · Editar no Google Agenda · Confirmar dados do evento ·
-  Cobrança · Cobrar reembolsos · Marcar evento como confirmado · Pedir feedback da cliente ·
-  Excluir evento. Itens indisponíveis ficam desabilitados **com `title` explicando o porquê**.
-  - **Coluna esquerda (operação)**: *Resumo para WhatsApp* (descrição do Google/Kommo
-    convertida de HTML para texto puro, em fonte monoespaçada, com botão copiar) · *Casting* ·
-    *Equipe de apoio* (mesmos cards, `role_type="extra"`) · *Figurino* · *Logística & trajeto* ·
-    *Materiais de ensaio* · *Observações*.
-  - **Coluna direita (comercial/financeiro)**: *Comercial — dados da venda* (clientes com
-    relação, bruto/desconto/final, forma de pagamento, vendedor, acréscimos com marcação de BV) ·
-    *Resultado* (grade de KPI: venda, custo de cachês, gastos extras, comissão e **lucro
-    líquido** em verde/vermelho, + lista dos gastos extras aprovados) · *Contrato assinado* ·
-    *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado" quando recebido ≥ venda) ·
-    *Reembolsos*.
-  - **Rodapé**: *Avaliações dos artistas* (média + notas individuais com tags por critério) ·
-    *Feedback da cliente* · *Log de atividades* (accordion) — **este só existe no DOM para
-    `SUPERADMIN`**.
+- **Layout (feature 215 — substitui o mural de duas colunas da 190)**: **quatro abas**
+  (`Tabs` do design system) com a aba ativa na URL (`?aba=resumo|producao|comercial|historico`),
+  para deep-link e F5 caírem no mesmo lugar. A régua de abas é **sticky no topo** e rola na
+  horizontal no mobile. Uma aba só existe se o payload trouxe algum bloco dela — Comercial e
+  Histórico somem para quem o RBAC não serializou. Dentro de cada aba, duas colunas a partir de
+  `xl`; abaixo disso, coluna única. **Motivação**: para o `SUPERADMIN`, que recebe todos os
+  blocos, a tela da 190 empilhava 16 painéis sem hierarquia (~4000px no desktop, o dobro no
+  mobile), e o mesmo personagem aparecia duas vezes (em *Casting* e em *Figurino*).
+  - **Cabeçalho** (fora das abas): título, badge de tipo, faixa horária, badge de confirmação e
+    o menu **"⋯ Ferramentas"** (`KebabMenu` com `triggerLabel`) — Sincronizar · Exportar elenco
+    (modal com seleção de campos e cópia) · Editar no Google Agenda · Confirmar dados do evento ·
+    Cobrança · Cobrar reembolsos · Marcar evento como confirmado · Pedir feedback da cliente ·
+    **Editar tudo (formulário completo)** · Excluir evento. Itens indisponíveis ficam
+    desabilitados **com `title` explicando o porquê**.
+  - **Aba Resumo**: **faixa de pendências** (chips *Elenco 2/2 escalados*, *Presença*,
+    *Figurino n/m com ficha*, *Agenda n com conflito*, *Contrato*, *Recebimento*, *Evento
+    confirmado* — verde quando resolvido, dourado quando não; **clicar leva para a aba que
+    resolve**) · *Dados do evento* (**editável inline**) · *Resumo para WhatsApp* (descrição do
+    Google/Kommo convertida de HTML para texto puro, monoespaçada, com botão copiar) ·
+    *Observações*.
+  - **Aba Produção**: *Casting* · *Equipe de apoio* (mesmos cards, `role_type="extra"`) ·
+    *Figurino* · *Ensaios* · *Logística & trajeto* · *Materiais de ensaio* · *Presente 3D* ·
+    *Pedido virtual*.
+  - **Aba Comercial**: *Clientes* (**editável inline**) · *Pré-contrato* (**editável inline**) ·
+    *Comercial — dados da venda* (**editável inline**: bruto/desconto/final, transporte, comissão,
+    forma de pagamento, parcelas, datas, vendedor, nota fiscal, cortesia/permuta; acréscimos com
+    marcação de BV seguem em leitura) · *Resultado* (grade de KPI: venda, custo de cachês, gastos
+    extras, comissão e **lucro líquido** em verde/vermelho, + lista dos gastos extras aprovados) ·
+    *Contrato assinado* · *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado" quando
+    recebido ≥ venda) · *Reembolsos*.
+  - **Aba Histórico**: *Avaliações dos artistas* (média + notas individuais com tags por
+    critério) · *Feedback da cliente* · *Log de atividades* (accordion) — **este só existe no DOM
+    para `SUPERADMIN`**.
+  - **Evento de ENSAIO** não usa abas: o servidor não serializa os blocos de show, então a tela
+    segue com os poucos painéis que existem, empilhados.
+- **Edição inline (feature 215)**: o princípio é **"o que a aba mostra, a aba edita"** — a tela
+  `/events/:id/edit` deixou de ser o caminho obrigatório e virou item de menu, para quem quiser
+  mexer em elenco, clientes e valores de uma vez. Cada bloco tem seu botão *Editar*, troca a
+  leitura por um formulário no lugar e grava por um **endpoint estreito** (ver API abaixo):
+  salvar o cabeçalho não toca no elenco, salvar valores não toca nos clientes. Gate: `can_edit_core`
+  (`COMERCIAL`/`SUPERADMIN`) — para os demais, o painel fica só em leitura, sem botão.
+  **Pegadinha da descrição**: o textarea mostra a versão em texto puro, mas o HTML original só é
+  substituído se o usuário realmente digitar no campo — sem isso, o `<br>`/âncoras do Google
+  Agenda seriam achatados a cada salvamento.
+- **Buscas visuais na tela (feature 215)**: *Casting* e *Figurino* passaram a usar o `Combobox`
+  do design system, alinhando-se ao padrão da 195/209.
+  - **Talento**: era um `<select>` nativo com ~260 nomes, sem foto e sem indicar quem já estava
+    comprometido. Agora é busca em tempo real com **avatar circular** e **selo de agenda na
+    própria opção** — `● Ocupado` (vermelho, horários se sobrepõem) ou `● Mesmo dia` (dourado),
+    com o evento concorrente na linha de apoio. O aviso passou a existir **antes** de escalar,
+    não só depois.
+  - **Figurino**: era um `<datalist>`, que no Chrome não renderiza imagem e só vinculava a ficha
+    no `blur` — digitar errado não vinculava nada, sem aviso. Agora é busca com **miniatura
+    quadrada** da ficha, vínculo no clique e as fichas homônimas do personagem no topo da lista.
 - **UX/ações**: escalar talento no cargo (`/roles/<id>/assign`), enviar convite
   (`invite` → `pending`/`accepted`/`rejected`), copiar convite individual / abrir WhatsApp do
   talento, **status de pagamento do cachê** por cargo, marcar/desmarcar figurino separado,
@@ -176,11 +217,28 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   com o Jinja. Só os KPIs de lucro/cachês/gastos ficam restritos a `FINANCEIRO`/`SUPERADMIN`.
   Editar valor e excluir comprovante/reembolso continuam só `SUPERADMIN`.
 - **Indicador de agenda**: cada card de casting mostra "Mesmo dia"/"Conflito" quando o talento
-  tem outro evento na mesma data (`talent_availability`), com o evento concorrente no `title`.
+  tem outro evento na mesma data (`talent_availability`), com o evento concorrente no `title` —
+  e desde a 215 o mesmo indicador aparece na busca, antes de escalar.
+- **Teto de cachê (feature 215)**: quando o evento nasce da calculadora de orçamento, cada cargo
+  guarda um `cache_cap` (= o cachê calculado). **O valor do teto nunca é exibido** — decisão de
+  produto: o casting não negocia contra um número na tela. O que aparece é só o aviso, em três
+  estados no card: *valor digitado acima do teto e ainda não salvo* → aviso vermelho + borda
+  vermelha no campo ("Acima do limite deste evento. Ao salvar, o valor volta para o limite.", ou
+  a variante de superadmin, que pode salvar assim mesmo e fica no log); *valor acima do teto já
+  gravado* → nota discreta "Cachê autorizado acima do limite deste evento.", sem borda vermelha
+  (é estado legítimo, não erro); *sem teto* (evento criado à mão) → nada. Ao salvar, o campo
+  **reespelha o `cache_value` devolvido pelo servidor**: como `assign_casting_role` rebaixa o
+  valor ao teto para não-superadmin, sem isso a tela exibiria o número recusado. A tela Jinja
+  antiga mostrava o valor do cap (`event_detail.html`); a migração React o havia perdido por
+  completo — o servidor rebaixava em silêncio.
 - **API**: `GET /api/events/<id>` (payload único da tela) · `POST /api/roles/<id>/payment-status`
   · `POST /api/roles/<id>/figurino-sheet` · `POST|DELETE /api/roles/<id>/figurino-done` ·
   `POST /api/events/<id>/travel-estimate` · `POST /api/events/<id>/materials` ·
   `DELETE /api/materials/<id>` · `POST /api/events/<id>/feedback-link`.
+  **Feature 215**: `GET /api/events/<id>/casting-options` (talentos com `photo_url` +
+  `availability` desta janela) · `PATCH /api/events/<id>/basico` ·
+  `PATCH /api/events/<id>/comercial` · `PUT /api/events/<id>/clients` ·
+  `PATCH /api/events/<id>/form-response`.
 - **Vínculos**: Talentos · Figurino (`EventRole.figurino_sheet_id`) · Financeiro (comissões e
   pagamentos) · Ensaios (`parent_event_id`) · Grupo comercial (`group_leader_id`) · Clientes ·
   Gastos Extras (`SpecialExpense.event_id`) · Avaliação pública da cliente (`/avaliar/<token>`).

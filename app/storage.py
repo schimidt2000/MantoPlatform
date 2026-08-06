@@ -29,6 +29,92 @@ _COMPRESS_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 _MAX_PX = 1200   # lado máximo em pixels
 _QUALITY = 85    # qualidade JPEG (0-100)
 
+# ── Allowlist de extensões aceitas em upload ─────────────────────────────────
+# Fonte única de "o que pode subir". Todo arquivo enviado por usuário cai em
+# `instance/uploads/` e é devolvido por `/uploads/<path>`, que é o MESMO ORIGIN das SPAs:
+# um `.html`/`.svg` aceito aqui vira XSS armazenado — o JavaScript dele roda com a sessão de
+# quem abrir o link (inclusive superadmin). Por isso a checagem é sempre por EXTENSÃO e nunca
+# pelo `Content-Type` do multipart, que é escolhido pelo cliente. As listas são separadas por
+# finalidade para não afrouxar um caminho por causa do outro (foto de talento não precisa
+# aceitar vídeo; material de ensaio precisa).
+
+#: Imagens exibidas na interface (foto de talento, figurino, observação de evento).
+#: `.heic`/`.heif` entram porque é o formato nativo da câmera do iPhone — em campo de upload
+#: sem `accept`, o Safari envia o arquivo original, e recusá-lo bloquearia foto legítima de
+#: comprovante. Nenhum dos dois é executável pelo browser.
+#: `.bmp`/`.tif`/`.avif` entram pelo mesmo motivo: as telas de gasto e de observação anunciam
+#: `accept="image/*"`, então recusá-los rejeitaria comprovante legítimo. Nenhum é executável.
+ALLOWED_IMAGE_EXTENSIONS: frozenset[str] = frozenset(
+    {".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".bmp", ".tif", ".tiff", ".avif"}
+)
+
+#: Documentos comprobatórios: foto do papel ou PDF (contrato, comprovante).
+ALLOWED_DOCUMENT_EXTENSIONS: frozenset[str] = ALLOWED_IMAGE_EXTENSIONS | {".pdf"}
+
+#: Nota fiscal: documento **mais** `.xml`, que é o formato oficial da NF-e e o que as telas de
+#: nota já oferecem (`accept=".pdf,.xml,..."` em event_detail.html e financeiro/dashboard.html).
+#: Fica numa lista própria porque `.xml` só é seguro por ser servido como anexo — ele não entra
+#: em `INLINE_SAFE_EXTENSIONS`, senão viraria XSS armazenado ao ser navegado direto.
+ALLOWED_INVOICE_EXTENSIONS: frozenset[str] = ALLOWED_DOCUMENT_EXTENSIONS | {".xml"}
+
+#: Áudio e vídeo (Revisão de Mídia e materiais de ensaio). Espelha `_MEDIA_EXTS` da Revisão.
+ALLOWED_AV_EXTENSIONS: frozenset[str] = frozenset({
+    ".mp4", ".mov", ".webm", ".m4v", ".ogv",
+    ".mp3", ".wav", ".m4a", ".ogg", ".aac",
+})
+
+#: Material de apoio de ensaio: documento, mídia, planilha/roteiro ou pacote compactado.
+ALLOWED_MATERIAL_EXTENSIONS: frozenset[str] = (
+    ALLOWED_DOCUMENT_EXTENSIONS
+    | ALLOWED_AV_EXTENSIONS
+    | {".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv", ".zip"}
+)
+
+#: Extensões que podem ser servidas INLINE sem risco de execução no origin da aplicação.
+#: Tudo fora daqui (inclusive `.svg`, que é XML executável quando navegado direto) sai como
+#: anexo — ver `is_inline_safe`.
+INLINE_SAFE_EXTENSIONS: frozenset[str] = (
+    ALLOWED_IMAGE_EXTENSIONS | ALLOWED_AV_EXTENSIONS | {".pdf"}
+)
+
+
+def extension_of(filename: str | None) -> str:
+    """Extensão em minúsculas (com ponto) de um nome de arquivo.
+
+    Args:
+        filename: Nome ou caminho do arquivo (pode vir vazio/None).
+
+    Returns:
+        A extensão normalizada (ex.: ``".pdf"``) ou ``""`` quando não há extensão.
+    """
+    return os.path.splitext((filename or "").split("?")[0])[1].lower()
+
+
+def is_allowed_extension(filename: str | None, allowed: frozenset[str]) -> bool:
+    """Diz se o arquivo pode ser aceito no upload, comparando contra uma allowlist.
+
+    Args:
+        filename: Nome do arquivo enviado pelo cliente.
+        allowed: Uma das constantes ``ALLOWED_*_EXTENSIONS`` deste módulo.
+
+    Returns:
+        `True` se a extensão está na allowlist.
+    """
+    return extension_of(filename) in allowed
+
+
+def is_inline_safe(filename: str | None) -> bool:
+    """Diz se o arquivo pode ser servido inline (sem `Content-Disposition: attachment`).
+
+    Args:
+        filename: Nome ou caminho do arquivo salvo.
+
+    Returns:
+        `True` para imagem, PDF, áudio e vídeo conhecidos; `False` para todo o resto —
+        inclusive arquivos legados que já estavam no disco antes da allowlist existir.
+    """
+    return extension_of(filename) in INLINE_SAFE_EXTENSIONS
+
 
 def _compress_image(file_obj: BinaryIO, ext: str) -> tuple[io.BytesIO, str] | None:
     """Redimensiona e comprime imagem. Retorna (BytesIO, extensão) ou None se não for imagem."""

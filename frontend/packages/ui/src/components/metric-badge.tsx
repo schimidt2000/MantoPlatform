@@ -18,7 +18,8 @@ const TONE_CLASSES: Record<MetricBadgeTone, string> = {
   green: "bg-green-soft text-green",
   red: "bg-red-soft text-red",
   blue: "bg-blue-soft text-blue",
-  gold: "bg-gold-soft text-gold",
+  // `text-gold-ink` (5.15:1 sobre `gold-soft`) — `text-gold` dava 3.25:1 e reprovava AA.
+  gold: "bg-gold-soft text-gold-ink",
 };
 
 /**

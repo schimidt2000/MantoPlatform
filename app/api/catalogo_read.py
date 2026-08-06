@@ -9,14 +9,39 @@ paralelo (a de detalhe é a fonte da prévia Open Graph em links compartilhados 
 
 from typing import Any
 
-from flask import jsonify
+from flask import current_app, jsonify, request
 from flask_login import current_user
 
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.catalogo.media import classify_video_url, normalize_video_url
+from app.catalogo.og_ops import resolve_thumbnail
 from app.constants import RoleName
 from app.models import CatalogCategory, CatalogCharacter, CatalogItem
+
+
+def _wants_og() -> bool:
+    """`?og=1` marca as chamadas feitas pelo servidor de prévia de link (`frontend/server.js`)."""
+    return request.args.get("og") == "1"
+
+
+def _og_image(cover_url: str | None) -> dict[str, int] | None:
+    """Dimensões reais da miniatura de prévia de uma capa (`og:image:width`/`og:image:height`).
+
+    Só é resolvido sob `?og=1`: gerar a miniatura custa download + reencode, e a vitrine no
+    navegador não usa esses campos. Sem width/height o crawler precisa baixar e decodificar a
+    imagem inteira antes de decidir entre card grande e miniatura quadrada — e desiste no meio
+    do caminho, entregando o link sem imagem. Efeito colateral desejado: a chamada AQUECE o
+    cache em disco antes de o crawler pedir a imagem.
+
+    Args:
+        cover_url: URL da capa, ou ``None`` quando não existe foto.
+
+    Returns:
+        ``{"width": int, "height": int}``, ou ``None`` se a miniatura não pôde ser gerada.
+    """
+    thumb = resolve_thumbnail(cover_url, current_app.config["UPLOAD_FOLDER"])
+    return {"width": thumb.width, "height": thumb.height} if thumb else None
 
 
 def _character_summary(character: CatalogCharacter) -> dict[str, Any]:
@@ -111,7 +136,11 @@ def api_catalogo_categorias() -> Any:
 
 @api_bp.route("/catalogo/categoria/<slug>")
 def api_catalogo_categoria_detail(slug: str) -> Any:
-    """Itens ativos de uma categoria por slug (paridade com `catalogo_bp.categoria_detail`)."""
+    """Itens ativos de uma categoria por slug (paridade com `catalogo_bp.categoria_detail`).
+
+    Também alimenta a prévia de link da página de TEMA: sob `?og=1` acrescenta `og_image` com as
+    dimensões da miniatura (capa do primeiro item, mesma regra de `_category_summary`).
+    """
     category = CatalogCategory.query.filter_by(slug=slug).first()
     items = (
         CatalogItem.query.filter_by(is_active=True)
@@ -124,20 +153,24 @@ def api_catalogo_categoria_detail(slug: str) -> Any:
     if not category or not items:
         return json_error("Categoria não encontrada", 404)
 
-    return jsonify(
-        {
-            "category": {"id": category.id, "name": category.name, "slug": category.slug},
-            "items": [_item_summary(item) for item in items],
-        }
-    )
+    payload: dict[str, Any] = {
+        "category": {"id": category.id, "name": category.name, "slug": category.slug},
+        "items": [_item_summary(item) for item in items],
+    }
+    if _wants_og():
+        cover = items[0].cover_image
+        payload["og_image"] = _og_image(cover.url if cover else None)
+    return jsonify(payload)
 
 
 @api_bp.route("/catalogo/<slug>")
 def api_catalogo_detail(slug: str) -> Any:
     """Detalhe de um item, com fotos e relacionados (paridade com `catalogo_bp.detail`).
 
-    Não inclui campos de Open Graph — esses só existem na rota Jinja, que segue sendo a fonte
-    da prévia de link compartilhado (ver `research.md` §4 desta feature).
+    A prévia de link compartilhado deixou de nascer na rota Jinja (que virou inalcançável quando
+    `frontend/server.js` montou a SPA em `/catalogo/*`) e passou a ser montada por esse servidor
+    a partir DESTE payload — por isso, sob `?og=1`, a resposta ganha `og_image` com as dimensões
+    da miniatura.
     """
     item = CatalogItem.query.filter_by(slug=slug, is_active=True).first()
     if not item:
@@ -172,21 +205,23 @@ def api_catalogo_detail(slug: str) -> Any:
             "character_slug": as_char.slug,
         }
 
-    return jsonify(
-        {
-            "id": item.id,
-            "name": item.name,
-            "slug": item.slug,
-            "description_html": item.short_description_html,
-            "video_url": normalize_video_url(item.video_url),
-            "video_kind": classify_video_url(item.video_url),
-            "categories": [{"name": c.name, "slug": c.slug} for c in item.categories],
-            "images": [{"url": img.url, "position": img.position} for img in item.images],
-            "characters": [_character_summary(c) for c in active_characters],
-            "related": [_item_summary(r) for r in related],
-            "parte_de_tema": parte_de_tema,
-        }
-    )
+    payload: dict[str, Any] = {
+        "id": item.id,
+        "name": item.name,
+        "slug": item.slug,
+        "description_html": item.short_description_html,
+        "video_url": normalize_video_url(item.video_url),
+        "video_kind": classify_video_url(item.video_url),
+        "categories": [{"name": c.name, "slug": c.slug} for c in item.categories],
+        "images": [{"url": img.url, "position": img.position} for img in item.images],
+        "characters": [_character_summary(c) for c in active_characters],
+        "related": [_item_summary(r) for r in related],
+        "parte_de_tema": parte_de_tema,
+    }
+    if _wants_og():
+        cover = item.cover_image
+        payload["og_image"] = _og_image(cover.url if cover else None)
+    return jsonify(payload)
 
 
 def _has_role(*names: str) -> bool:

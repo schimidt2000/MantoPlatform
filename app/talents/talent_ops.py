@@ -16,6 +16,30 @@ from app.models import EventRole, Talent
 
 PAGE_SIZE = 60
 
+# Campos do perfil que só saem para quem tem papel de gestão de talento (CASTING/SUPERADMIN):
+# dado pessoal sensível (LGPD), chave PIX, caminho do documento de identidade/CNH, placa do
+# carro e anotação interna. `GET /api/talents/<id>` exigia só autenticação, então MARKETING,
+# ARTISTA_3D, ENSAIO ou FIGURINO liam o CPF do elenco inteiro — e o caminho do RG junto.
+#
+# Os campos são zerados, não removidos: a ficha do React lê essas chaves direto (`t.cpf`,
+# `t.doc_photo_path`), e sumir com elas trocaria "campo vazio" por comportamento indefinido.
+TALENT_SENSITIVE_FIELDS = (
+    "rg",
+    "cpf",
+    "pix_key",
+    "pix_key_secondary",
+    "pix_key_type",
+    "doc_photo_path",
+    "cnh_file_path",
+    "cnh_expiration",
+    "car_plate",
+    "notes",
+)
+# `warning_level` NÃO entra aqui de propósito: `search_talents` já o devolve para todo o elenco a
+# qualquer autenticado, e a grade de talentos desenha o alerta a partir dele. Redigir só no
+# detalhe deixaria a ficha incoerente com a listagem sem esconder nada de fato. É sinalização
+# operacional, não dado pessoal — diferente de `notes`, que é texto livre e continua protegido.
+
 _SIZE_OPTIONS = ["XGG", "GG", "G", "M", "P", "XP"]
 _SHOE_OPTIONS = [str(n) for n in range(33, 48)]
 _PASSPORT_OPTIONS = [
@@ -175,7 +199,9 @@ def search_talents(
     return result
 
 
-def get_talent_profile(talent: Talent, *, date_from=None, date_to=None) -> dict:
+def get_talent_profile(
+    talent: Talent, *, date_from=None, date_to=None, include_sensitive: bool = False
+) -> dict:
     """Monta o perfil completo de um talento — mesma lógica de `talent_detail` (Jinja).
 
     Não inclui avaliações recebidas/dadas (`EventRating`/`EventSubRating`) — ficam fora desta
@@ -186,6 +212,9 @@ def get_talent_profile(talent: Talent, *, date_from=None, date_to=None) -> dict:
         date_from: início do recorte do histórico (inclusive), ou None.
         date_to: fim do recorte do histórico (exclusive — já deve vir com +1 dia aplicado pelo
             chamador, mesma convenção de hoje), ou None.
+        include_sensitive: quando False (padrão **seguro**), zera `TALENT_SENSITIVE_FIELDS`.
+            O chamador só passa True depois de checar o papel de gestão de talento — o padrão
+            é fechado para que um endpoint novo que esqueça o gate vaze nada.
 
     Returns:
         Dict com `talent` (campos completos) e `history` (itens + totais).
@@ -242,6 +271,10 @@ def get_talent_profile(talent: Talent, *, date_from=None, date_to=None) -> dict:
         "notes": talent.notes,
         "warning_level": talent.warning_level,
     }
+
+    if not include_sensitive:
+        for field in TALENT_SENSITIVE_FIELDS:
+            talent_data[field] = None
 
     last = history[0] if history else None
     return {

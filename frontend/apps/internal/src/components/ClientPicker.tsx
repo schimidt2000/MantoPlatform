@@ -3,7 +3,8 @@ import { Button } from "@manto/ui";
 import { useClientSearch, useQuickCreateClient, type ClientSummary } from "../lib/clientes";
 import type { ClientLinkInput } from "../lib/eventCreate";
 
-interface SelectedClient extends ClientLinkInput {
+/** Cliente já escolhido — o vínculo persistido mais o nome, que é só de exibição. */
+export interface SelectedClient extends ClientLinkInput {
   name: string;
 }
 

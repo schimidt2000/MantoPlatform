@@ -1,11 +1,10 @@
-import { useId, useMemo, useState } from "react";
 import { Printer } from "lucide-react";
-import { Badge, Button } from "@manto/ui";
-import { API_BASE } from "@manto/api-client";
+import { AvatarThumb, Badge, Button } from "@manto/ui";
+import { API_BASE, assetUrl } from "@manto/api-client";
 import type { EventoDetalhe, RoleItem } from "../../lib/agenda";
 import { useLinkFigurinoSheet, useToggleFigurinoDone } from "../../lib/eventDetail";
-import { useFigurinoSheets } from "../../lib/figurino";
-import { Empty, formatDay, INPUT_CLASS, Panel } from "./parts";
+import { Empty, formatDay, Panel } from "./parts";
+import { FigurinoPicker } from "./FigurinoPicker";
 
 /** Medidas do talento, na ordem em que a produção usa para separar o figurino. */
 function Medidas({ role }: { role: RoleItem }) {
@@ -39,24 +38,8 @@ interface FigurinoRowProps {
  * alerta "Sem ficha") e a caixa "Separado" que registra a conferência física no acervo.
  */
 function FigurinoRow({ role, eventId, canEdit }: FigurinoRowProps) {
-  const sheetsQuery = useFigurinoSheets();
   const link = useLinkFigurinoSheet(eventId);
   const toggleDone = useToggleFigurinoDone(eventId);
-  const [busca, setBusca] = useState("");
-  const listId = useId();
-
-  const sugestoes = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    const items = sheetsQuery.data?.items ?? [];
-    if (!termo) return items.slice(0, 8);
-    return items.filter((s) => s.character_name.toLowerCase().includes(termo)).slice(0, 8);
-  }, [busca, sheetsQuery.data]);
-
-  const vincular = (name: string) => {
-    const sheet = (sheetsQuery.data?.items ?? []).find((s) => s.character_name === name);
-    if (!sheet) return;
-    link.mutate({ roleId: role.role_id, sheetId: sheet.id }, { onSuccess: () => setBusca("") });
-  };
 
   return (
     <li
@@ -64,56 +47,44 @@ function FigurinoRow({ role, eventId, canEdit }: FigurinoRowProps) {
         role.figurino_done ? "border-green bg-green-soft/20" : "border-line bg-surface-2/40"
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex items-start gap-2.5">
+        <AvatarThumb
+          src={role.talent?.photo_url ? assetUrl(role.talent.photo_url) : null}
+          name={role.talent?.name}
+          shape="circle"
+          size="lg"
+          fallbackIcon="🎭"
+        />
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-bold uppercase tracking-wide text-ink">
             {role.character_name}
           </div>
           <div className="text-sm text-muted">{role.talent?.name ?? "— sem talento —"}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {role.figurino_sheet_name ? (
+              <Badge tone="blue">{role.figurino_sheet_name}</Badge>
+            ) : (
+              <Badge tone="red">Sem ficha</Badge>
+            )}
+            {role.figurino_done && (
+              <Badge tone="green">Separado {formatDay(role.figurino_done_at)}</Badge>
+            )}
+          </div>
         </div>
         <Medidas role={role} />
-        <div className="flex flex-col items-end gap-1">
-          {role.figurino_sheet_name ? (
-            <Badge tone="blue">{role.figurino_sheet_name}</Badge>
-          ) : (
-            <Badge tone="red">Sem ficha</Badge>
-          )}
-          {role.figurino_done && (
-            <Badge tone="green">Separado {formatDay(role.figurino_done_at)}</Badge>
-          )}
-        </div>
       </div>
 
       {canEdit && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <label className="min-w-40 flex-1">
-            <span className="sr-only">Buscar figurino para {role.character_name}</span>
-            <input
-              className={INPUT_CLASS}
-              list={listId}
-              placeholder="Buscar figurino…"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              onBlur={(e) => e.target.value && vincular(e.target.value)}
-              disabled={link.isPending}
-            />
-            <datalist id={listId}>
-              {sugestoes.map((sheet) => (
-                <option key={sheet.id} value={sheet.character_name} />
-              ))}
-            </datalist>
-          </label>
-          {role.figurino_sheet_id && (
-            <Button
-              variant="ghost"
-              size="sm"
-              loading={link.isPending}
-              onClick={() => link.mutate({ roleId: role.role_id, sheetId: null })}
-            >
-              Desvincular
-            </Button>
-          )}
-          <label className="flex items-center gap-2 text-sm text-ink">
+        <div className="mt-2 space-y-2 sm:flex sm:items-center sm:gap-2 sm:space-y-0">
+          <FigurinoPicker
+            className="sm:min-w-48 sm:flex-1"
+            value={role.figurino_sheet_id}
+            characterName={role.character_name}
+            disabled={link.isPending}
+            ariaLabel={`Ficha de figurino de ${role.character_name}`}
+            onChange={(sheetId) => link.mutate({ roleId: role.role_id, sheetId })}
+          />
+          <label className="flex h-11 items-center gap-2 rounded-md border border-line bg-panel px-3 text-sm text-ink sm:h-9 sm:border-0 sm:bg-transparent sm:px-0">
             <input
               type="checkbox"
               className="h-5 w-5"
@@ -124,8 +95,8 @@ function FigurinoRow({ role, eventId, canEdit }: FigurinoRowProps) {
               }
             />
             Separado
+            {toggleDone.isPending && <span className="text-xs text-muted">salvando…</span>}
           </label>
-          {toggleDone.isPending && <span className="text-xs text-muted">Salvando…</span>}
         </div>
       )}
       {link.isError && <p className="mt-1 text-sm text-red">Não foi possível vincular a ficha.</p>}

@@ -15,16 +15,38 @@ function TotalCard({ label, value, tone }: { label: string; value: number; tone:
   );
 }
 
+/**
+ * Rótulo e destino do link de avaliação de uma apresentação.
+ *
+ * O terceiro caso — já avaliado, fora da janela de edição — não existia: o link simplesmente
+ * sumia, e com ele qualquer caminho até o que o artista escreveu. A tela de avaliação já sabe se
+ * apresentar em modo leitura (o backend serve a avaliação sem limite de prazo), então só faltava
+ * alguém apontar para ela.
+ */
+function rotuloAvaliacao(
+  avaliado: boolean,
+  podeAvaliar: boolean,
+  podeEditar: boolean,
+): string | null {
+  if (podeEditar) return "Editar minha avaliação";
+  if (avaliado) return "Ver minha avaliação";
+  if (podeAvaliar) return "Avaliar este evento";
+  return null;
+}
+
 function HistoricoRow({
   item,
   canRate,
   canEditRating,
+  isRated,
 }: {
   item: PortalHistoricoItem;
   canRate: boolean;
   canEditRating: boolean;
+  isRated: boolean;
 }) {
   const paid = item.payment_status === "pago";
+  const rotulo = rotuloAvaliacao(isRated, canRate, canEditRating);
 
   return (
     <Card>
@@ -52,13 +74,18 @@ function HistoricoRow({
           </p>
         )}
 
-        {(canRate || canEditRating) && (
+        {rotulo && (
           <Link
             to={`/eventos/${item.event_id}/avaliar`}
             className="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline"
           >
-            <Star className="h-4 w-4" aria-hidden="true" />
-            {canRate ? "Avaliar este evento" : "Editar minha avaliação"}
+            <Star
+              className="h-4 w-4"
+              aria-hidden="true"
+              // Estrela preenchida sinaliza, já na lista, que esta apresentação tem avaliação.
+              fill={isRated ? "currentColor" : "none"}
+            />
+            {rotulo}
           </Link>
         )}
       </CardContent>
@@ -94,6 +121,7 @@ export function PortalHistoricoPage() {
   const { items, totals } = historicoQuery.data;
   const rateable = new Set(ratingsQuery.data?.rateable_event_ids ?? []);
   const editable = new Set(ratingsQuery.data?.editable_event_ids ?? []);
+  const rated = new Set(ratingsQuery.data?.rated_event_ids ?? []);
 
   return (
     <div className="space-y-4 p-4">
@@ -123,6 +151,7 @@ export function PortalHistoricoPage() {
               item={item}
               canRate={rateable.has(item.event_id)}
               canEditRating={editable.has(item.event_id)}
+              isRated={rated.has(item.event_id)}
             />
           ))}
         </div>

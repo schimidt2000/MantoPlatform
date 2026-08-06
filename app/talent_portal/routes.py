@@ -23,12 +23,22 @@ from werkzeug.utils import secure_filename
 from app import db, limiter
 from app.email_service import send_async, send_password_reset_email
 from app.models import CalendarEvent, EventRating, EventRole, EventSubRating, Talent, TalentMedia
+from app.storage import is_inline_safe
 from app.talent_portal import portal_ops
+from app.talent_portal.portal_links import portal_reset_url
 from app.talents.importer import parse_date
 
 portal_bp = Blueprint("portal", __name__, url_prefix="/portal")
 
 _ALLOWED_PHOTO = {".jpg", ".jpeg", ".png", ".webp"}
+
+# Subpastas de `uploads/` que `/portal/photo/<caminho>` pode servir. A rota só checa se existe
+# uma sessão de talento — sem esta lista ela entregava a árvore INTEIRA de uploads (documento de
+# identidade de OUTRO talento, contrato, comprovante, nota fiscal) ao usuário de menor privilégio
+# do sistema. São exatamente as duas origens que o portal renderiza hoje: a foto da ficha de
+# figurino (`portal_ops.figurino_sheets_for_event` reescreve `/uploads/...` para cá) e a foto
+# oficial do talento nos templates Jinja do portal (`profile.html`, `rate_detail.html`).
+PORTAL_PHOTO_SUBFOLDERS = ("figurino_photos", "figurino_thumbs", "talent_photos")
 
 _PW_RULES = [
     (_re_mod.compile(r'.{8,}'),        "Mínimo 8 caracteres"),
@@ -48,12 +58,44 @@ def _validate_password_strength(pw: str) -> str | None:
 
 # ── Servir uploads de fotos do portal (sem Flask-Login) ────────
 
+def _is_portal_photo_path(filename: str) -> bool:
+    """True se `filename` aponta para uma foto que o portal tem permissão de servir.
+
+    Args:
+        filename: Caminho pedido, relativo à raiz de `UPLOAD_FOLDER`
+            (ex.: ``figurino_photos/abc.jpg``).
+
+    Returns:
+        True apenas para `<subpasta liberada>/<arquivo>`. Rejeita caminho na raiz, travessia
+        (``..``) e qualquer outra subpasta.
+    """
+    parts = [p for p in filename.replace("\\", "/").split("/") if p]
+    if len(parts) != 2 or ".." in parts:
+        return False
+    return parts[0].lower() in PORTAL_PHOTO_SUBFOLDERS
+
+
 @portal_bp.route("/photo/<path:filename>")
 def portal_photo(filename: str):
+    """Serve uma foto de figurino ou do talento para quem tem sessão de talento aberta.
+
+    Args:
+        filename: Caminho relativo à raiz de uploads, restrito a `PORTAL_PHOTO_SUBFOLDERS`.
+    """
     if not session.get("talent_id"):
         abort(403)
+    # 404 (e não 403) para não confirmar a existência de um arquivo fora do escopo do portal.
+    if not _is_portal_photo_path(filename):
+        abort(404)
     upload_dir = current_app.config["UPLOAD_FOLDER"]
-    return send_from_directory(upload_dir, filename)
+    # Mesmo endurecimento de `/uploads` (app/__init__.py): o portal é servido no mesmo domínio
+    # da SPA, então arquivo de tipo perigoso sai como anexo e nunca é renderizado inline.
+    inline = is_inline_safe(filename)
+    resp = send_from_directory(upload_dir, filename, as_attachment=not inline)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    if not inline:
+        resp.headers["Content-Type"] = "application/octet-stream"
+    return resp
 
 
 # ── Auth helpers ───────────────────────────────────────────────
@@ -879,7 +921,10 @@ def forgot_password():
                 talent.password_reset_token = token
                 talent.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
                 db.session.commit()
-                reset_url = url_for("portal.reset_password", token=token, _external=True)
+                # NUNCA `url_for(_external=True)` aqui: o host viria do header `Host` da
+                # requisição, que é do atacante — o e-mail sairia legítimo com o token
+                # apontando para o servidor dele. A base vem da config (`portal_links`).
+                reset_url = portal_reset_url(token)
                 from types import SimpleNamespace
                 _t = SimpleNamespace(email_contact=talent_email,
                                      artistic_name=None, full_name=talent_name)

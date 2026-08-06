@@ -15,7 +15,9 @@ const TONE_CLASSES: Record<BadgeTone, string> = {
   green: "bg-green-soft text-green",
   red: "bg-red-soft text-red",
   blue: "bg-blue-soft text-blue",
-  gold: "bg-gold-soft text-gold",
+  // `text-gold-ink` (5.15:1) e não `text-gold` (3.25:1): o dourado da marca é cor de
+  // preenchimento gráfico, não de texto sobre fundo claro.
+  gold: "bg-gold-soft text-gold-ink",
 };
 
 /**
@@ -27,7 +29,9 @@ function Badge({ tone = "neutral", className, children }: BadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap",
+        // 11px e não 10px: o Badge carrega estado ("Confirmado", "Precisa de Ajustes"), e a
+        // 10px nenhum par de cor do sistema se sustenta como texto normal.
+        "inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap",
         TONE_CLASSES[tone],
         className,
       )}

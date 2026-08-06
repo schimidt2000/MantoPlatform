@@ -110,6 +110,24 @@ def api_talents() -> Any:
     )
 
 
+@api_bp.route("/events/<int:event_id>/casting-options")
+@api_login_required
+def api_event_casting_options(event_id: int) -> Any:
+    """Talentos escaláveis neste evento, com foto e agenda do dia (feature 215).
+
+    Diferente de `/api/talents` (lista chapada usada por telas sem contexto de data), aqui cada
+    talento vem com `photo_url` e `availability` calculados contra a janela DESTE evento — é o
+    que a busca de casting mostra antes de escalar, não só depois.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+
+    from app.calendar.event_ops import assignable_talents_for_event
+
+    return jsonify({"items": assignable_talents_for_event(event)})
+
+
 @api_bp.route("/events/<int:event_id>")
 @api_login_required
 def api_event_detail(event_id: int) -> Any:

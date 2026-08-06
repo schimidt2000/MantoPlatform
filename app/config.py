@@ -18,6 +18,27 @@ def _db_url() -> str:
     return url
 
 
+def _suppress_mail() -> bool:
+    """Decide se este processo está proibido de enviar e-mail de verdade.
+
+    Existe porque a única trava anterior era a `SiteSetting.email_notifications_enabled` — que
+    vive **no banco**. Como a cópia local (`manto_local`) é um espelho fiel da produção, essa
+    flag chega ligada, e qualquer processo de desenvolvimento apontado para o espelho consegue
+    disparar e-mail para o endereço real dos artistas. Não é hipotético: uma reconciliação de
+    casting rodando local chegou a enviar "sua participação foi cancelada".
+
+    Regra: ambiente local (banco em localhost) não envia, a menos que alguém peça explicitamente
+    com ``MAIL_ALLOW_LOCAL_SEND=true``. ``MAIL_SUPPRESS_SEND=true`` cala o envio em qualquer
+    ambiente, útil para staging e para rodar scripts de verificação com segurança.
+    """
+    if os.getenv("MAIL_SUPPRESS_SEND", "").lower() == "true":
+        return True
+    if os.getenv("MAIL_ALLOW_LOCAL_SEND", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
 def _resolve_secret_key() -> str:
     """Resolve a SECRET_KEY de forma segura (feature 074).
 
@@ -84,6 +105,10 @@ class Config:
     MAIL_USERNAME = os.getenv("MAIL_USERNAME", "joao@mantoproducoes.com.br")
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
     MAIL_DEFAULT_SENDER_NAME = os.getenv("MAIL_SENDER_NAME", "Sistema Manto")
+
+    # Trava de ambiente: impede que um processo local/de teste apontado para o espelho da
+    # produção envie e-mail real para artista e cliente. Ver `_suppress_mail`.
+    MAIL_SUPPRESS_SEND = _suppress_mail()
 
     # URL base do portal (para links nos emails)
     PORTAL_URL = os.getenv("PORTAL_URL", "")

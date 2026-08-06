@@ -46,10 +46,12 @@ export function AgendaToolbar({
         onChange={(e) => onSearchChange(e.target.value)}
         className="h-9 w-full sm:w-64"
       />
+      {/* Contorno em `line-strong`: é ele que agrupa Mês/Dia/Lista num controle único —
+          com o `line` decorativo (1.27:1) o grupo se dissolvia no fundo da página. */}
       <div
         role="group"
         aria-label="Visualização da agenda"
-        className="inline-flex w-fit overflow-hidden rounded-md border border-line"
+        className="inline-flex w-fit overflow-hidden rounded-md border border-line-strong"
       >
         {VIEW_OPTIONS.map((opt) => (
           <button

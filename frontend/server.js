@@ -32,6 +32,7 @@
  *                               Regex restrito ao sub-path: `/figurinos` puro é rota do React
  *                               Router (Banco de Figurinos) e um proxy amplo roubaria o deep link.
  */
+import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +41,7 @@ import httpProxy from "http-proxy";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INTERNAL_DIR = path.join(__dirname, "apps/internal/dist");
+const PUBLIC_DIST = path.join(__dirname, "apps/public/dist");
 const PORT = process.env.PORT || 3000;
 
 /**
@@ -128,7 +130,7 @@ const SERVE_OPTIONS = { rewrites: SPA_REWRITE, cleanUrls: false, headers: CACHE_
 
 /** Apps montados sob um prefixo de URL, avaliados na ordem antes do app da raiz. */
 const MOUNTED_APPS = [
-  { prefix: "/catalogo", dir: path.join(__dirname, "apps/public/dist") },
+  { prefix: "/catalogo", dir: PUBLIC_DIST },
   { prefix: "/portal", dir: path.join(__dirname, "apps/portal/dist") },
 ];
 
@@ -174,6 +176,9 @@ const BACKEND_PREFIXES = [
   "/api",
   "/uploads",
   "/catalogo/midia",
+  // Miniatura da prévia de link (`app/catalogo/routes.py:og_image`). Mesmo motivo do `/midia`:
+  // precisa vir ANTES do mount `/catalogo`, senão a SPA pública engole a imagem.
+  "/catalogo/og",
   "/portal/photo",
   "/google",
   "/cadastro",
@@ -190,6 +195,294 @@ const BACKEND_PATTERNS = [
   // Impressão de todas as fichas de um evento (1 folha por personagem).
   /^\/figurinos\/print-event\/\d+(?:[/?]|$)/,
 ];
+
+/* ── Prévia de link (Open Graph) das páginas do catálogo ─────────────────────────────────────
+ *
+ * O link que a equipe manda no WhatsApp é `/catalogo/<slug>` (produto) ou
+ * `/catalogo/categoria/<slug>` (tema) — rotas da SPA pública. O WhatsApp (como todo crawler de
+ * prévia) NÃO executa JavaScript: ele lê o HTML cru e para por aí. Servido do jeito padrão,
+ * esse HTML é o `index.html` do bundle, igual para todas as páginas e sem nenhuma meta tag de
+ * Open Graph — resultado: link cinza, sem miniatura e com o título genérico "Manto Produções".
+ * Era a rota Jinja `/catalogo/<slug>` que gerava a prévia antes; ela continua existindo no
+ * Flask, mas deixou de ser alcançável quando este servidor passou a montar a SPA pública nesse
+ * mesmo endereço (feature 186, US6).
+ *
+ * Então a prévia volta a nascer no servidor: para uma navegação de página de produto ou de tema,
+ * buscamos os dados na API do Flask e injetamos `<title>` + Open Graph no `<head>` do
+ * `index.html` antes de responder. O bundle segue idêntico — a SPA assume normalmente no
+ * navegador de gente de verdade, e o crawler já tem tudo que precisa no HTML inicial.
+ *
+ * Os dois tipos de página compartilham TODO o fluxo (cache, escape, injeção); a única coisa que
+ * varia é qual endpoint responde e como ler o payload — isso mora em `OG_SOURCES`.
+ *
+ * A `og:image` aponta para `/catalogo/og/...` (miniatura reencodada, ver
+ * `app/catalogo/og_ops.py`), nunca para a foto original: arquivo grande faz o WhatsApp entregar
+ * o link sem imagem nenhuma.
+ */
+
+/** TTL do cache de metadados em memória — catálogo muda pouco; evita 1 request ao Flask por acesso. */
+const OG_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/** Teto de entradas do cache, só para o mapa não crescer sem limite em pico de acesso. */
+const OG_CACHE_MAX = 500;
+
+/**
+ * Timeout da chamada de metadados. Mais folgado que uma leitura JSON simples porque `?og=1` faz
+ * o Flask resolver a miniatura (download + reencode) na primeira vez — o custo é pago aqui, uma
+ * vez, em vez de ficar pendurado na requisição que o crawler faz à imagem.
+ */
+const OG_FETCH_TIMEOUT_MS = 8000;
+
+/**
+ * Primeiros segmentos de `/catalogo/*` que NÃO são slug de item — são outras telas da SPA.
+ * Espelha `apps/public/src/App.tsx`; um nome a mais aqui só custa uma prévia genérica, um a
+ * menos custa uma ida inútil à API (que responde 404 e cai no mesmo fallback).
+ */
+const OG_RESERVED_SEGMENTS = new Set([
+  "categorias",
+  "categoria",
+  "lista-desejos",
+  "cadastro",
+  "f",
+  "avaliar",
+  "v",
+  "midia",
+  "og",
+  "assets",
+  "index.html",
+  "favicon.ico",
+]);
+
+/** `"<tipo>:<slug>"` → `{ expires, meta }`. `meta === null` memoriza o 404 e evita martelar o Flask. */
+const ogCache = new Map();
+
+/** `index.html` do bundle público, lido uma vez por processo (deploy reinicia o processo). */
+let publicIndexHtml = null;
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Descrição do item em texto puro e truncada — `short_description_html` vem do WordPress. */
+function plainDescription(html, maxLength = 200) {
+  const text = String(html ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+/**
+ * Página do catálogo que merece prévia: `{ kind, slug }`, ou `null` para qualquer outra URL.
+ *
+ * `kind` é a chave de `OG_SOURCES` — quem adiciona um tipo de página novo mexe só nos dois.
+ */
+/**
+ * User-agents de robô de prévia de link — os que leem `og:*` e desenham o cartãozinho.
+ *
+ * `facebookexternalhit` cobre o WhatsApp em boa parte dos casos (a prévia do WhatsApp nasce na
+ * infraestrutura da Meta), mas o app também busca com o próprio `WhatsApp/...`, então os dois
+ * estão na lista. Um robô fora da lista só perde a miniatura — nunca quebra a página.
+ */
+const PREVIEW_CRAWLER_UA =
+  /facebookexternalhit|whatsapp|twitterbot|slackbot|telegrambot|linkedinbot|discordbot|pinterest|skypeuripreview|googlebot|bingbot|embedly|redditbot|vkshare|applebot/i;
+
+/** `true` quando a requisição veio de um robô de prévia de link. */
+function isPreviewCrawler(userAgent) {
+  return PREVIEW_CRAWLER_UA.test(String(userAgent ?? ""));
+}
+
+function catalogOgTarget(url) {
+  const [pathname] = url.split("?");
+  if (!pathname.startsWith("/catalogo/")) return null;
+  const segments = pathname.slice("/catalogo/".length).split("/").filter(Boolean);
+
+  // O ponto no nome denuncia arquivo do bundle (`index.html`, `favicon.ico`), não slug.
+  const isSlug = (value) => Boolean(value) && !value.includes(".");
+
+  if (segments.length === 1) {
+    const slug = decodeURIComponent(segments[0]);
+    if (!isSlug(slug) || OG_RESERVED_SEGMENTS.has(slug)) return null;
+    return { kind: "item", slug };
+  }
+  // Página de TEMA (a seção do catálogo, `CategoryDetailPage`): dois segmentos, o 1º fixo.
+  if (segments.length === 2 && segments[0] === "categoria") {
+    const slug = decodeURIComponent(segments[1]);
+    return isSlug(slug) ? { kind: "categoria", slug } : null;
+  }
+  return null;
+}
+
+/**
+ * O que muda de um tipo de página para o outro: endpoint da API, endereço público, endereço da
+ * miniatura e como extrair título/descrição/imagem do payload. Tudo o mais (cache, escape,
+ * injeção no `<head>`, fallback para a SPA) é comum aos dois.
+ */
+const OG_SOURCES = {
+  item: {
+    apiPath: (slug) => `/api/catalogo/${encodeURIComponent(slug)}`,
+    pagePath: (slug) => `/catalogo/${encodeURIComponent(slug)}`,
+    imagePath: (slug) => `/catalogo/og/${encodeURIComponent(slug)}.jpg`,
+    toMeta: (payload) => ({
+      title: payload.name,
+      description:
+        plainDescription(payload.description_html) ||
+        `${payload.name} — personagem do catálogo da Manto Produções.`,
+      hasImage: Array.isArray(payload.images) && payload.images.length > 0,
+      imageSize: payload.og_image ?? null,
+    }),
+  },
+  categoria: {
+    apiPath: (slug) => `/api/catalogo/categoria/${encodeURIComponent(slug)}`,
+    pagePath: (slug) => `/catalogo/categoria/${encodeURIComponent(slug)}`,
+    imagePath: (slug) => `/catalogo/og/categoria/${encodeURIComponent(slug)}.jpg`,
+    toMeta: (payload) => {
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      const name = payload.category?.name ?? "";
+      return {
+        title: name,
+        // Espelha o subtítulo da própria página ("N personagens nesta seção"), para a prévia
+        // dizer a mesma coisa que a pessoa vê ao abrir o link.
+        description: `${items.length} ${items.length === 1 ? "personagem" : "personagens"} no tema ${name} — catálogo da Manto Produções.`,
+        // A capa do tema é a do primeiro item, mesma regra do card da grade de categorias.
+        hasImage: Boolean(items[0]?.cover_image_url),
+        imageSize: payload.og_image ?? null,
+      };
+    },
+  },
+};
+
+/** Origem pública desta requisição — a `og:image`/`og:url` precisam ser absolutas. */
+function requestOrigin(req) {
+  const host = (req.headers["x-forwarded-host"] ?? req.headers.host ?? "").split(",")[0].trim();
+  const forwardedProto = (req.headers["x-forwarded-proto"] ?? "").split(",")[0].trim();
+  const isLocal = /^(localhost|127\.0\.0\.1)(:|$)/.test(host);
+  const proto = forwardedProto || (isLocal ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+/** Metadados da página pela API do Flask, com cache curto. `null` = inexistente/inativa. */
+async function fetchOgMeta(target) {
+  const key = `${target.kind}:${target.slug}`;
+  const cached = ogCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.meta;
+
+  const source = OG_SOURCES[target.kind];
+  let meta = null;
+  if (BACKEND_URL) {
+    // `?og=1` pede ao Flask as dimensões reais da miniatura (e, de quebra, aquece o cache dela).
+    const response = await fetch(`${BACKEND_URL}${source.apiPath(target.slug)}?og=1`, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(OG_FETCH_TIMEOUT_MS),
+    });
+    if (response.ok) {
+      meta = source.toMeta(await response.json());
+    } else if (response.status !== 404) {
+      // 5xx é indisponibilidade momentânea: não vale cachear como "não existe".
+      throw new Error(`API respondeu ${response.status}`);
+    }
+  }
+
+  if (ogCache.size >= OG_CACHE_MAX) ogCache.clear();
+  ogCache.set(key, { expires: Date.now() + OG_CACHE_TTL_MS, meta });
+  return meta;
+}
+
+/** Bloco `og:image` + `twitter` — só as dimensões variam entre ter e não ter cache da miniatura. */
+function imageTags(imageUrl, imageSize, alt) {
+  if (!imageUrl) return [`<meta name="twitter:card" content="summary" />`];
+  return [
+    `<meta property="og:image" content="${escapeHtml(imageUrl)}" />`,
+    `<meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}" />`,
+    `<meta property="og:image:type" content="image/jpeg" />`,
+    // Sem width/height o crawler baixa e decodifica a imagem inteira antes de decidir entre card
+    // grande e miniatura quadrada — e às vezes desiste antes, entregando o link sem imagem.
+    ...(imageSize
+      ? [
+          `<meta property="og:image:width" content="${escapeHtml(imageSize.width)}" />`,
+          `<meta property="og:image:height" content="${escapeHtml(imageSize.height)}" />`,
+        ]
+      : []),
+    `<meta property="og:image:alt" content="${escapeHtml(alt)}" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:image" content="${escapeHtml(imageUrl)}" />`,
+  ];
+}
+
+/** `index.html` do bundle público com `<title>` e Open Graph da página injetados no `<head>`. */
+function renderOgHtml(template, target, meta, origin) {
+  const source = OG_SOURCES[target.kind];
+  const pageUrl = `${origin}${source.pagePath(target.slug)}`;
+  const imageUrl = meta.hasImage ? `${origin}${source.imagePath(target.slug)}` : null;
+
+  const tags = [
+    `<title>${escapeHtml(`${meta.title} — Manto Produções`)}</title>`,
+    `<meta name="description" content="${escapeHtml(meta.description)}" />`,
+    // O template traz `noindex, nofollow`, e crawler de prévia do stack do Facebook (que é o do
+    // WhatsApp) pode recusar montar o card com `nofollow`. Segue fora do índice, mas com a
+    // prévia grande liberada. A tag original é removida abaixo para não ficarem duas.
+    `<meta name="robots" content="noindex, follow, max-image-preview:large" />`,
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:site_name" content="Manto Produções" />`,
+    `<meta property="og:locale" content="pt_BR" />`,
+    `<meta property="og:title" content="${escapeHtml(meta.title)}" />`,
+    `<meta property="og:description" content="${escapeHtml(meta.description)}" />`,
+    `<meta property="og:url" content="${escapeHtml(pageUrl)}" />`,
+    ...imageTags(imageUrl, meta.imageSize, meta.title),
+    `<meta name="twitter:title" content="${escapeHtml(meta.title)}" />`,
+    `<meta name="twitter:description" content="${escapeHtml(meta.description)}" />`,
+  ].join("\n    ");
+
+  // `String.replace` com literal não avisa quando não casa: sem esta checagem, um build que
+  // mude o `<head>` faria a prévia voltar a ser genérica em silêncio, sem log nenhum.
+  if (!template.includes("</head>")) {
+    throw new Error("index.html do bundle público sem </head> — prévia não injetada");
+  }
+  // O `<title>` do template sai fora para não ficarem dois — alguns crawlers leem o primeiro.
+  return template
+    .replace(/<title>.*?<\/title>\s*/is, "")
+    .replace(/<meta\s+name=["']robots["'][^>]*>\s*/i, "")
+    .replace("</head>", `  ${tags}\n  </head>`);
+}
+
+/**
+ * Responde a página com a prévia embutida. Qualquer falha (Flask fora do ar, timeout, slug
+ * inexistente) cai no fluxo normal de SPA: pior prévia, nunca página quebrada.
+ */
+async function serveOgHtml(req, res, target, fallback) {
+  try {
+    const [meta, template] = await Promise.all([
+      fetchOgMeta(target),
+      publicIndexHtml ??
+        fs.readFile(path.join(PUBLIC_DIST, "index.html"), "utf8").then((html) => {
+          publicIndexHtml = html;
+          return html;
+        }),
+    ]);
+    if (!meta) return fallback();
+
+    const body = Buffer.from(renderOgHtml(template, target, meta, requestOrigin(req)), "utf8");
+    res.statusCode = 200;
+    res.setHeader("content-type", "text/html; charset=utf-8");
+    res.setHeader("cache-control", "no-cache");
+    res.setHeader("content-length", body.byteLength);
+    res.end(body);
+  } catch (err) {
+    console.error(`[og] ${req.url}: ${err.message}`);
+    fallback();
+  }
+}
 
 /** True se a URL pertence ao prefixo montado (exato, com `/` ou com query). */
 function matchesPrefix(url, prefix) {
@@ -261,6 +554,26 @@ const server = http.createServer((req, res) => {
       res.end();
       return;
     }
+  }
+
+  // Página de produto ou de tema da vitrine: HTML com Open Graph, para o link compartilhado no
+  // WhatsApp abrir com miniatura e nome. Só navegação (GET/HEAD) — o resto segue o fluxo normal.
+  //
+  // A injeção só vale para CRAWLER. Gente de verdade não ganha nada com meta tag (a SPA monta a
+  // página no browser) e pagaria caro por ela: em cache frio a resposta fica pendurada esperando
+  // o Flask responder, e o catálogo é a porta de entrada do cliente. Quem não é crawler recebe o
+  // bundle na hora, como sempre recebeu.
+  const ogTarget =
+    (req.method === "GET" || req.method === "HEAD") && isPreviewCrawler(req.headers["user-agent"])
+      ? catalogOgTarget(req.url)
+      : null;
+  if (ogTarget) {
+    const serveSpa = () => {
+      req.url = req.url.slice("/catalogo".length) || "/";
+      handler(req, res, { public: PUBLIC_DIST, ...SERVE_OPTIONS });
+    };
+    serveOgHtml(req, res, ogTarget, serveSpa);
+    return;
   }
 
   // Fallback existente para os bundles SPA (público, portal, interno).

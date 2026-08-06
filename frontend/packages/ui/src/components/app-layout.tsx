@@ -84,7 +84,10 @@ function SidebarNav({
       {sections.map((section, index) => (
         <div key={section.label ?? `top-${index}`} className="space-y-0.5">
           {section.label && (
-            <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-white/35">
+            // white/35 sobre a sidebar #1f1a30 dava 3.19:1 a 11px — reprovava AA. white/60
+            // dá 6.75:1; o `uppercase`/`tracking-wider` já entrega a discrição que a
+            // opacidade baixa buscava, e a hierarquia se mantém pelo branco puro dos itens.
+            <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-white/60">
               {section.label}
             </div>
           )}
