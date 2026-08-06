@@ -114,6 +114,15 @@ class Talent(db.Model):
     phone = db.Column(db.String(30), nullable=True)
     email_contact = db.Column(db.String(160), nullable=True)
 
+    # Confirmação do email do cadastro público (feature 219). O talento digita o email errado
+    # (`hotmail.con`) e ninguém descobre até um convite voltar; aqui ele confirma logo após enviar
+    # o formulário, com o cadastro **já gravado** — nada do que preencheu depende disso.
+    email_verified_at = db.Column(db.DateTime, nullable=True)
+    # Token do link de confirmação. Serve também de credencial da tela de sucesso para corrigir o
+    # email e reenviar; é zerado ao confirmar, o que fecha os dois caminhos de uma vez.
+    email_verify_token = db.Column(db.String(80), nullable=True, unique=True)
+    email_verify_sent_at = db.Column(db.DateTime, nullable=True)
+
     birth_date = db.Column(db.Date, nullable=True)
     languages = db.Column(db.String(300), nullable=True)
     race = db.Column(db.String(60), nullable=True)
@@ -2575,3 +2584,62 @@ class VirtualOrderNotification(db.Model):
         "VirtualOrder", lazy=True,
         backref=db.backref("sent_notifications", lazy=True, cascade="all, delete-orphan"),
     )
+
+
+class EmailBounce(db.Model):
+    """Uma devolução de email detectada na caixa do remetente (feature 219).
+
+    O talento se cadastra com o email errado (``hotmail.con``) ou com a caixa lotada, e a falha só
+    aparece como um aviso do Mail Delivery Subsystem na caixa de quem enviou — invisível para o
+    sistema. Uma varredura IMAP periódica lê essas devoluções, extrai o destinatário e o motivo do
+    bloco ``message/delivery-status``, e vira fila de contato para o casting.
+
+    **Só grava quando o destinatário casa com um talento ou usuário da plataforma.** Devolução de
+    email pessoal de quem opera a conta não entra no banco — o escopo é a comunicação da Manto.
+
+    Uma linha por mensagem de devolução (``message_id`` único = idempotência: reler a caixa não
+    duplica). O agrupamento por endereço é feito na leitura, em `bounce_ops.pending_queue`.
+    """
+
+    __tablename__ = "email_bounces"
+    __table_args__ = (
+        db.Index("ix_email_bounces_email", "email"),
+        db.Index("ix_email_bounces_talent_id", "talent_id"),
+        db.Index("ix_email_bounces_resolved_at", "resolved_at"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # `Message-Id` da devolução — a trava de idempotência da varredura.
+    message_id = db.Column(db.String(300), nullable=False, unique=True)
+
+    # Endereço que falhou, sempre minúsculo (`Final-Recipient`).
+    email = db.Column(db.String(200), nullable=False)
+    talent_id = db.Column(db.Integer, db.ForeignKey("talents.id", ondelete="CASCADE"), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+
+    # Classificação derivada do código estendido — a ação do casting muda com ela:
+    # caixa_cheia → avisar para liberar espaço; endereco_invalido/dominio_invalido → pegar o
+    # email certo; bloqueado/outro → investigar.
+    kind = db.Column(db.String(24), nullable=False)
+    # `Action:` do DSN — "failed" (definitivo) ou "delayed" (o servidor ainda vai retentar).
+    is_permanent = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
+
+    status_code = db.Column(db.String(12), nullable=True)   # "5.1.2", "4.2.2"…
+    diagnostic = db.Column(db.Text, nullable=True)          # `Diagnostic-Code`, para depurar
+    original_subject = db.Column(db.String(300), nullable=True)  # qual mensagem voltou
+
+    occurred_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # Resolução é por **endereço**, não por mensagem: marcar resolvido carimba todas as linhas
+    # daquele email (ver `bounce_ops.resolve_email`).
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    resolved_by_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    resolution_note = db.Column(db.Text, nullable=True)
+
+    talent = db.relationship("Talent", lazy="joined", foreign_keys=[talent_id])
+    user = db.relationship("User", lazy="joined", foreign_keys=[user_id])
+    resolved_by = db.relationship("User", lazy=True, foreign_keys=[resolved_by_id])

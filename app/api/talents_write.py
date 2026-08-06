@@ -54,6 +54,36 @@ def api_update_talent(talent_id: int) -> Any:
     return jsonify(result)
 
 
+@api_bp.route("/talents/bounces/resolve", methods=["POST"])
+@api_login_required
+def api_resolve_bounce() -> Any:
+    """Tira um endereço da fila de emails devolvidos (feature 219).
+
+    Resolve por **endereço**, não por mensagem: falar uma vez com a pessoa fecha as dez tentativas
+    falhas daquele email de uma vez.
+    """
+    if not _can_edit_talent():
+        return json_error("Sem permissão", 403)
+
+    from app.talents import bounce_ops
+    from app.utils import audit
+
+    body = request.get_json(silent=True) or {}
+    address = (body.get("email") or "").strip()
+    if not address:
+        return json_error("Informe o email", 400, fields={"email": "Obrigatório"})
+
+    resolved = bounce_ops.resolve_email(address, current_user.id, body.get("note"))
+    if not resolved:
+        return json_error("Nada pendente para esse email", 404)
+    audit(
+        "edit", "talent", None, address,
+        f"Devolução de email resolvida ({resolved} registro(s))",
+    )
+    db.session.commit()
+    return jsonify({"resolved": resolved, "pending_count": bounce_ops.pending_count()})
+
+
 @api_bp.route("/talents/<int:talent_id>/approve", methods=["POST"])
 @api_login_required
 def api_approve_talent(talent_id: int) -> Any:

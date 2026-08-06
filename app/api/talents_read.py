@@ -52,6 +52,27 @@ def api_talents_directory() -> Any:
     return jsonify(result)
 
 
+@api_bp.route("/talents/bounces")
+@api_login_required
+def api_talents_bounces() -> Any:
+    """Fila de emails devolvidos, agrupada por endereço (feature 219).
+
+    Mesmo gate da edição de talento (CASTING/SUPERADMIN): a fila expõe telefone e email de quem
+    precisa ser contatado, e quem contata é justamente quem pode editar a ficha.
+    """
+    from app.talents import bounce_ops
+
+    if not _can_edit_talent():
+        return json_error("Sem permissão", 403)
+    include_resolved = request.args.get("resolvidos", "0") == "1"
+    return jsonify(
+        {
+            "items": bounce_ops.pending_queue(include_resolved=include_resolved),
+            "pending_count": bounce_ops.pending_count(),
+        }
+    )
+
+
 @api_bp.route("/talents/character-suggestions")
 @api_login_required
 def api_talents_character_suggestions() -> Any:

@@ -393,6 +393,51 @@ def send_password_reset_email(talent, reset_url: str) -> bool:
     )
 
 
+# ── Confirmação do email do cadastro público ──────────────────────────────────
+
+def send_cadastro_confirmation_email(talent, confirm_url: str) -> bool:
+    """Pede ao talento recém-cadastrado que confirme o próprio email (feature 219).
+
+    É a primeira mensagem que sai para quem se cadastra — antes disso, o primeiro contato só
+    acontecia no convite de um evento, semanas depois, quando o email errado já tinha custado uma
+    escalação. Quando esta mensagem volta, a devolução alimenta a fila de contato do casting.
+    """
+    if not talent or not talent.email_contact:
+        return False
+
+    first_name = (talent.artistic_name or talent.full_name or "").split()[0]
+
+    content = (
+        _greeting(first_name)
+        + _paragraph(
+            "Recebemos seu cadastro no <strong>banco de talentos da Manto Produções</strong> — "
+            "está tudo salvo, você não precisa preencher nada de novo."
+        )
+        + _paragraph(
+            "Falta só confirmar que este é mesmo o seu email. É por ele que enviamos os convites "
+            "de trabalho, então um endereço errado significa perder oportunidade."
+        )
+        + _btn("Confirmar meu email →", confirm_url)
+        + _paragraph(
+            f'Se o botão não funcionar, copie e cole: '
+            f'<a href="{confirm_url}" style="color:#2d1f6e;">{confirm_url}</a>'
+        )
+        + _alert_box(
+            "Não se cadastrou na Manto? Pode ignorar esta mensagem — sem a confirmação, nada "
+            "acontece.",
+            color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
+        )
+    )
+
+    return _send(
+        to=talent.email_contact,
+        subject="✅ Confirme seu email — Cadastro Manto Produções",
+        html=_html_wrap(
+            content, preheader="Um clique para confirmar seu email e receber nossos convites."
+        ),
+    )
+
+
 # ── Email de boas-vindas com senha temporária ──────────────────────────────────
 
 def send_welcome_email(talent, temp_password: str) -> bool:

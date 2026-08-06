@@ -11,6 +11,7 @@ lida com o transporte HTTP (formulário/redirect) específico do Jinja.
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 
 from app import db, limiter
+from app.cadastro import verify_ops
 from app.cadastro.cadastro_ops import check_cpf_exists, process_submission
 
 cadastro_bp = Blueprint("cadastro", __name__, url_prefix="/cadastro")
@@ -49,6 +50,12 @@ def submit():
     if outcome.error:
         return render_template("cadastro/form.html", form=request.form, error=outcome.error), 400
 
+    # Paridade com o endpoint React (feature 219): o talento também confirma o email por aqui.
+    verify_ops.issue_token(outcome.talent)
     db.session.add(outcome.talent)
     db.session.commit()
+
+    from app.api.cadastro_write import _send_confirmation
+
+    _send_confirmation(outcome.talent)
     return redirect(url_for("cadastro.enviado"))

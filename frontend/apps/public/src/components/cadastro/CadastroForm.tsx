@@ -20,6 +20,7 @@ import {
   CLOTHING_SIZE_OPTIONS,
   RACE_OPTIONS,
   SKILL_OPTIONS,
+  suggestEmailCorrection,
   useSubmitCadastro,
   type CadastroFiles,
   type CadastroFormValues,
@@ -141,6 +142,7 @@ export function CadastroForm() {
   const gender = watch("gender");
   const isForeigner = watch("is_foreigner");
   const cpf = watch("cpf");
+  const emailTypo = suggestEmailCorrection(watch("email"));
 
   function validateFiles(): boolean {
     const nextErrors: Partial<Record<keyof CadastroFiles, string>> = {};
@@ -158,7 +160,12 @@ export function CadastroForm() {
     submitCadastro.mutate(
       { values, files },
       {
-        onSuccess: () => navigate("/cadastro/enviado"),
+        // O cadastro já está gravado aqui: `state` só carrega o que a tela de sucesso precisa
+        // para oferecer a correção do email sem refazer nada (feature 219).
+        onSuccess: (result) =>
+          navigate("/cadastro/enviado", {
+            state: { id: result.id, email: result.email, token: result.verify_token },
+          }),
         onError: (error) => {
           if (error instanceof ApiRequestError && error.fields) {
             const messages: string[] = [];
@@ -266,6 +273,20 @@ export function CadastroForm() {
             </label>
             <input className={FIELD} type="email" {...register("email")} />
             <FieldError message={errors.email?.message} />
+            <p className="mt-1 text-xs text-muted">
+              É por aqui que enviamos os convites de trabalho.
+            </p>
+            {/* `hotmail.con` é um email válido para qualquer validador de formato — só um palpite
+                sobre o domínio pega o engano antes do envio (feature 219). */}
+            {emailTypo && (
+              <button
+                type="button"
+                onClick={() => setValue("email", emailTypo, { shouldValidate: true })}
+                className="mt-1 text-xs font-medium text-accent-dark underline"
+              >
+                Você quis dizer <strong>{emailTypo}</strong>?
+              </button>
+            )}
           </div>
         </div>
         <CheckboxGroup

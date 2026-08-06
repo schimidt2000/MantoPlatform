@@ -191,6 +191,100 @@ export interface CadastroFiles {
 
 export interface CadastroSubmitResult {
   id: number | null;
+  /** Endereço gravado — a tela de sucesso mostra para a pessoa reler (feature 219). */
+  email?: string;
+  /** Credencial de "corrigir o email e reenviar" na tela de sucesso; morre ao confirmar. */
+  verify_token?: string;
+}
+
+/** Domínios digitados errado que aparecem no cadastro real — espelha `app/cadastro/verify_ops.py`. */
+const DOMAIN_TYPOS: Record<string, string> = {
+  "gmail.con": "gmail.com",
+  "gmail.co": "gmail.com",
+  "gmial.com": "gmail.com",
+  "gmai.com": "gmail.com",
+  "gamil.com": "gmail.com",
+  "gmail.cm": "gmail.com",
+  "hotmail.con": "hotmail.com",
+  "hotmail.co": "hotmail.com",
+  "hotmial.com": "hotmail.com",
+  "hotmail.cm": "hotmail.com",
+  "outlook.con": "outlook.com",
+  "outlok.com": "outlook.com",
+  "yahoo.con": "yahoo.com",
+  "yaho.com": "yahoo.com",
+  "icloud.con": "icloud.com",
+  "iclod.com": "icloud.com",
+  "bol.com": "bol.com.br",
+  "uol.com": "uol.com.br",
+};
+
+/**
+ * "Você quis dizer…?" para domínio digitado errado (feature 219).
+ *
+ * Não bloqueia nada: `hotmail.con` é um email sintaticamente válido, e barrar formato só rejeita
+ * gente de verdade. É um aviso para a pessoa reler antes de enviar.
+ */
+export function suggestEmailCorrection(email: string): string | null {
+  const clean = (email || "").trim().toLowerCase();
+  const at = clean.lastIndexOf("@");
+  if (at < 1) return null;
+  const fixed = DOMAIN_TYPOS[clean.slice(at + 1)];
+  return fixed ? `${clean.slice(0, at)}@${fixed}` : null;
+}
+
+export interface ResendConfirmationInput {
+  id: number;
+  token: string;
+  /** Quando presente, corrige **só** o email do cadastro antes de reenviar. */
+  email?: string;
+}
+
+export interface ResendConfirmationResult {
+  ok: boolean;
+  email: string;
+  verify_token: string;
+}
+
+/** Corrige o email e/ou reenvia a confirmação, sem refazer o formulário (feature 219). */
+export function useResendConfirmation() {
+  return useMutation<ResendConfirmationResult, Error, ResendConfirmationInput>({
+    mutationFn: (input) =>
+      apiFetch<ResendConfirmationResult>("/api/cadastro/reenviar", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+  });
+}
+
+export interface ConfirmEmailResult {
+  ok: boolean;
+  email: string;
+  name: string;
+}
+
+/**
+ * Confirma o email pelo token do link recebido (feature 219).
+ *
+ * `useQuery` e não `useMutation` de propósito: a confirmação é disparada pelo carregamento da
+ * página, não por um clique. Com `useMutation` seria preciso um `useEffect` para disparar, e o
+ * double-mount do StrictMode deixava o componente preso em "pending" — a chamada da primeira
+ * montagem resolvia contra um observer já descartado. A query desduplica pela chave e sobrevive
+ * ao remonte. O verbo continua POST: confirmar consome o token, não é leitura idempotente.
+ */
+export function useConfirmEmail(token: string | undefined) {
+  return useQuery<ConfirmEmailResult>({
+    queryKey: ["cadastro-confirmar", token],
+    queryFn: () =>
+      apiFetch<ConfirmEmailResult>("/api/cadastro/confirmar", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      }),
+    enabled: Boolean(token),
+    retry: false,
+    staleTime: Infinity,
+    refetchOnMount: false,
+  });
 }
 
 function appendFormData(formData: FormData, values: CadastroFormValues, files: CadastroFiles) {

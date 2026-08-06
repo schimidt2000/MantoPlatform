@@ -338,6 +338,66 @@ def _start_virtual_sweep(app):
     app.logger.info(f"[virtual-sweep] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _start_email_bounce_sweep(app):
+    """Thread que lê as devoluções de email na caixa do remetente (feature 219).
+
+    Quando alguém se cadastra com o email errado (`hotmail.con`) ou com a caixa lotada, a falha só
+    existe como aviso do Mail Delivery Subsystem na caixa de quem enviou — o sistema nunca ficava
+    sabendo. Esta varredura transforma essas devoluções em fila de contato para o casting.
+
+    A leitura é **somente leitura** (`EXAMINE` + `BODY.PEEK`): nada é marcado como lido, movido ou
+    apagado. E, como o Railway roda vários workers gunicorn, o claim atômico é obrigatório aqui —
+    sem ele, cada worker abriria a própria conexão IMAP no mesmo minuto.
+    """
+    import os as _os
+    import threading
+
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    if not app.config.get("EMAIL_BOUNCE_SWEEP_ENABLED", True):
+        app.logger.info("[email-bounce] varredura desativada por configuração")
+        return
+
+    username = app.config.get("MAIL_USERNAME", "")
+    password = app.config.get("MAIL_PASSWORD", "")
+    if not username or not password:
+        app.logger.info("[email-bounce] MAIL_USERNAME/MAIL_PASSWORD ausentes — varredura desativada")
+        return
+
+    INTERVAL = app.config.get("EMAIL_BOUNCE_SWEEP_INTERVAL", 1800)
+    LOOKBACK = app.config.get("EMAIL_BOUNCE_LOOKBACK_DAYS", 90)
+
+    def _loop():
+        import time
+        time.sleep(45)  # depois das demais: a caixa não vai a lugar nenhum
+        from app.integracoes.imap_client import ImapUnavailableError
+        from app.talents import bounce_ops
+        while True:
+            try:
+                with app.app_context():
+                    if bounce_ops.claim_sweep(INTERVAL):
+                        resumo = bounce_ops.sweep(username, password, LOOKBACK)
+                        if resumo["novas"]:
+                            app.logger.info(
+                                "[email-bounce] %s devolução(ões) nova(s) na fila "
+                                "(%s ignorada(s) de endereço desconhecido)",
+                                resumo["novas"], resumo["ignoradas_desconhecidas"],
+                            )
+            except ImapUnavailableError as exc:
+                # Caso esperado: App Password revogada ou IMAP desligado no Workspace. Avisa sem
+                # empilhar traceback a cada 30 minutos.
+                app.logger.warning(f"[email-bounce] caixa indisponível: {exc}")
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[email-bounce] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_loop, daemon=True, name="email-bounce")
+    t.start()
+    app.logger.info(f"[email-bounce] thread iniciada (intervalo: {INTERVAL}s)")
+
+
 def create_app():
     from urllib.parse import quote as _url_quote
     app = Flask(__name__)
@@ -599,6 +659,9 @@ def create_app():
 
     # ── Expiração das reservas da Loja de Interações Virtuais ──────
     _start_virtual_sweep(app)
+
+    # ── Devoluções de email viram fila de contato do casting ───────
+    _start_email_bounce_sweep(app)
 
     # ── Comandos CLI de manutenção ─────────────────────────────────
     from app.cli import register_commands

@@ -7,9 +7,9 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **218 (correção de salário
-> e desempilhamento das telas de administração)** · Head de migration: `e7a1c94f20b3`
-> (*own_item_id em catalog_characters*) — confirme com `flask db heads`; este cabeçalho é a **única**
+> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **219 (confirmação de
+> email no cadastro e fila de devoluções)** · Head de migration: `c5d92fa16e34`
+> (*confirmação de email do talento*) — confirme com `flask db heads`; este cabeçalho é a **única**
 > menção ao head neste documento.
 >
 > **Edição por recorte (215).** `PATCH /api/events/<id>` (feature 184) é **edição em bloco**: ele
@@ -199,7 +199,8 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `talents` | `Talent` | `full_name`, `artistic_name`, `phone`, `email_contact`, `birth_date`, `status` (`pending`\|`active`, indexado), `source`, `tags`, `skills`, medidas (`height_cm`, `clothing_size_top/bottom`, `shoe_size`), `passport_status`, `rg`, `cpf` (unique, nullable — estrangeiro grava `NULL`), `is_foreigner`, `pix_key`/`pix_key_secondary`, fotos (`photo_face_path`, `photo_full_path`, `doc_photo_path`), CNH, dados de carro, `notes`, `warning_level`, credenciais do portal (`password_hash`, `password_reset_token`, `terms_accepted_at`) | 1:N `media_items` |
+| `talents` | `Talent` | `full_name`, `artistic_name`, `phone`, `email_contact`, `birth_date`, `status` (`pending`\|`active`, indexado), `source`, `tags`, `skills`, medidas (`height_cm`, `clothing_size_top/bottom`, `shoe_size`), `passport_status`, `rg`, `cpf` (unique, nullable — estrangeiro grava `NULL`), `is_foreigner`, `pix_key`/`pix_key_secondary`, fotos (`photo_face_path`, `photo_full_path`, `doc_photo_path`), CNH, dados de carro, `notes`, `warning_level`, credenciais do portal (`password_hash`, `password_reset_token`, `terms_accepted_at`), confirmação de email da 219 (`email_verified_at`, `email_verify_token` **unique**, `email_verify_sent_at`) | 1:N `media_items` |
+| `email_bounces` | `EmailBounce` | devoluções de email lidas por IMAP (feature 219). `message_id` **unique** = idempotência da varredura; `email`, `kind` (`caixa_cheia`\|`endereco_invalido`\|`dominio_invalido`\|`bloqueado`\|`outro`), `is_permanent` (`Action: failed` vs `delayed`), `status_code` (RFC 3463), `diagnostic`, `occurred_at`, `resolved_at`/`resolved_by_id`. **Só grava endereço que casa com talento/usuário** — devolução de contato alheio é descartada. Índices em `email`, `talent_id`, `resolved_at` | `talent_id`, `user_id`, `resolved_by_id` |
 | `talent_media` | `TalentMedia` | mídia do portfólio do talento | `talent_id` |
 | `event_ratings` | `EventRating` | avaliação de talento por evento | `event_id`, `talent_id` |
 | `event_sub_ratings` | `EventSubRating` | notas por critério/sujeito | `rating_id`, `subject_talent_id` |
@@ -441,6 +442,11 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 `/api/talents/<id>/ratings` · `PATCH /api/talents/<id>` ·
 `POST /api/talents/<id>/{approve,reject,notes,photo}` · `DELETE /api/talents/<id>/photo`.
 Avaliações: `GET /api/ratings` · `POST /api/ratings/modo-anonimo`.
+Fila de emails devolvidos (feature 219, gate `_can_edit_talent`):
+`GET /api/talents/bounces` (agrupada por endereço, `?resolvidos=1` inclui as fechadas) ·
+`POST /api/talents/bounces/resolve` (resolve **por endereço**, não por mensagem).
+Alimentada pela thread `email-bounce` (30 min, claim atômico em `import_state`), que lê a caixa do
+remetente por IMAP em modo somente leitura — ver `app/integracoes/imap_client.py`.
 
 ### 3.5 Figurino — `figurino_read.py` / `figurino_write.py`
 `GET /api/figurino` · `POST /api/figurino` · `PATCH|DELETE /api/figurino/<id>` ·
@@ -747,7 +753,10 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
   (`:155`, `:172`, `:276`, `:282`, `:332`, `:521`). Ver §3.6.
 
 ### 3.14 Superfícies públicas (sem login)
-`GET /api/cadastro/check-cpf` · `POST /api/cadastro` ·
+`GET /api/cadastro/check-cpf` · `POST /api/cadastro` (devolve `id`, `email` e `verify_token`) ·
+`POST /api/cadastro/confirmar` (token do link; consome o token) ·
+`POST /api/cadastro/reenviar` (autenticado pelo par `id` + `verify_token`; corrige **só** o email
+e reenvia — feature 219) ·
 `GET /api/formularios/<form_type>/schema` · `POST /api/formularios/<form_type>` ·
 `GET|POST /api/avaliar/<token>` (feedback da cliente) ·
 `GET /api/virtuais/campanhas/<slug>` e `.../horarios` (feature 205).

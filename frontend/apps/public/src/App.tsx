@@ -6,6 +6,7 @@ import { ProductDetailPage } from "./pages/ProductDetailPage";
 import { WishlistPage } from "./pages/WishlistPage";
 import { CadastroPage } from "./pages/CadastroPage";
 import { CadastroSucessoPage } from "./pages/CadastroSucessoPage";
+import { CadastroConfirmarPage } from "./pages/CadastroConfirmarPage";
 import { FormularioPage } from "./pages/FormularioPage";
 import { FormularioEnviadoPage } from "./pages/FormularioEnviadoPage";
 import { AvaliarPage } from "./pages/AvaliarPage";
@@ -28,6 +29,7 @@ export function App() {
         <Route path="/lista-desejos" element={<WishlistPage />} />
         <Route path="/cadastro" element={<CadastroPage />} />
         <Route path="/cadastro/enviado" element={<CadastroSucessoPage />} />
+        <Route path="/cadastro/confirmar/:token" element={<CadastroConfirmarPage />} />
         <Route path="/f/pre-contrato" element={<FormularioPage formType="comum" />} />
         <Route path="/f/corporativo" element={<FormularioPage formType="corporativo" />} />
         <Route path="/f/:formType/enviado" element={<FormularioEnviadoPage />} />

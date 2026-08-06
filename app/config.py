@@ -110,6 +110,18 @@ class Config:
     # produção envie e-mail real para artista e cliente. Ver `_suppress_mail`.
     MAIL_SUPPRESS_SEND = _suppress_mail()
 
+    # Varredura das devoluções de email (feature 219). Lê a MESMA conta que envia, por IMAP e em
+    # modo somente leitura, com a App Password já configurada acima — sem credencial nova. Só
+    # roda em produção por padrão: um processo local apontado para o espelho leria a caixa real.
+    EMAIL_BOUNCE_SWEEP_ENABLED = os.getenv(
+        "EMAIL_BOUNCE_SWEEP_ENABLED",
+        "false" if _suppress_mail() else "true",
+    ).lower() == "true"
+    EMAIL_BOUNCE_SWEEP_INTERVAL = int(os.getenv("EMAIL_BOUNCE_SWEEP_INTERVAL", "1800"))
+    # Janela de busca. Reprocessar é inofensivo (`message_id` é único), então a janela pode ser
+    # larga o bastante para o passivo entrar na primeira execução.
+    EMAIL_BOUNCE_LOOKBACK_DAYS = int(os.getenv("EMAIL_BOUNCE_LOOKBACK_DAYS", "90"))
+
     # URL base do portal (para links nos emails)
     PORTAL_URL = os.getenv("PORTAL_URL", "")
 

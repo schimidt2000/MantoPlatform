@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Button, PageHeader, Skeleton } from "@manto/ui";
-import { useTalentDirectory } from "../lib/talents";
+import { useEmailBounces, useTalentDirectory } from "../lib/talents";
+import { useCurrentUser } from "../lib/useAuth";
+import { BounceQueue } from "../components/BounceQueue";
 import { TalentMosaic } from "../components/TalentMosaic";
 import {
   EMPTY_ADVANCED_FILTERS,
@@ -8,12 +10,24 @@ import {
   type TalentAdvancedFilters,
 } from "../components/TalentFilterPanel";
 
+/** Aba visível: as duas do diretório, mais a fila de emails devolvidos (feature 219). */
+type View = "active" | "pending" | "bounces";
+
 export function TalentsListPage() {
   const [status, setStatus] = useState<"active" | "pending">("active");
+  // `view` é separado de `status` de propósito: alternar para a fila não pode refazer a busca do
+  // diretório, senão voltar para "Ativos" perderia página, busca e filtros aplicados.
+  const [view, setView] = useState<View>("active");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<TalentAdvancedFilters>(EMPTY_ADVANCED_FILTERS);
+
+  const { data: me } = useCurrentUser();
+  // A fila expõe telefone e email de quem contatar: mesmo gate do endpoint (CASTING/SUPERADMIN).
+  const canSeeBounces = Boolean(me?.is_superadmin || me?.roles.includes("CASTING"));
+  const bounces = useEmailBounces(canSeeBounces);
+  const bounceCount = bounces.data?.pending_count ?? 0;
 
   const query = useTalentDirectory({
     status,
@@ -47,8 +61,9 @@ export function TalentsListPage() {
             que os dois botões formam um grupo segmentado (WCAG 1.4.11). */}
         <div className="flex rounded-md border border-line-strong">
           <button
-            className={`px-3 py-1.5 text-sm ${status === "active" ? "bg-accent text-on-color" : "text-ink"}`}
+            className={`px-3 py-1.5 text-sm ${view === "active" ? "bg-accent text-on-color" : "text-ink"}`}
             onClick={() => {
+              setView("active");
               setStatus("active");
               setPage(1);
             }}
@@ -56,33 +71,48 @@ export function TalentsListPage() {
             Ativos
           </button>
           <button
-            className={`px-3 py-1.5 text-sm ${status === "pending" ? "bg-accent text-on-color" : "text-ink"}`}
+            className={`px-3 py-1.5 text-sm ${view === "pending" ? "bg-accent text-on-color" : "text-ink"}`}
             onClick={() => {
+              setView("pending");
               setStatus("pending");
               setPage(1);
             }}
           >
             Pendentes {query.data && query.data.pending_count > 0 && `(${query.data.pending_count})`}
           </button>
+          {canSeeBounces && (
+            <button
+              className={`px-3 py-1.5 text-sm ${view === "bounces" ? "bg-accent text-on-color" : "text-ink"}`}
+              onClick={() => setView("bounces")}
+            >
+              Emails com problema {bounceCount > 0 && `(${bounceCount})`}
+            </button>
+          )}
         </div>
-        <input
-          className="h-10 min-w-40 flex-1 rounded-md border border-line bg-panel px-3 text-sm text-ink"
-          placeholder="Buscar por nome ou nome artístico…"
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setPage(1);
-          }}
-          aria-label="Buscar talento"
-        />
-        {status === "active" && (
-          <Button variant="outline" size="sm" onClick={() => setShowFilters((v) => !v)}>
-            Filtros
-          </Button>
+        {view !== "bounces" && (
+          <>
+            <input
+              className="h-10 min-w-40 flex-1 rounded-md border border-line bg-panel px-3 text-sm text-ink"
+              placeholder="Buscar por nome ou nome artístico…"
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Buscar talento"
+            />
+            {view === "active" && (
+              <Button variant="outline" size="sm" onClick={() => setShowFilters((v) => !v)}>
+                Filtros
+              </Button>
+            )}
+          </>
         )}
       </div>
 
-      {status === "active" && showFilters && (
+      {view === "bounces" && <BounceQueue />}
+
+      {view === "active" && showFilters && (
         <div className="mb-4">
           <TalentFilterPanel
             filterOptions={query.data?.filter_options}
@@ -92,7 +122,7 @@ export function TalentsListPage() {
         </div>
       )}
 
-      {query.isLoading && (
+      {view !== "bounces" && query.isLoading && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {Array.from({ length: 12 }, (_, i) => (
             <Skeleton key={i} className="aspect-[3/4] w-full" />
@@ -100,13 +130,13 @@ export function TalentsListPage() {
         </div>
       )}
 
-      {query.isError && (
+      {view !== "bounces" && query.isError && (
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
           Não foi possível carregar os talentos.
         </div>
       )}
 
-      {query.data && (
+      {view !== "bounces" && query.data && (
         <>
           {query.data.items.length === 0 ? (
             <p className="text-sm text-muted">Nenhum talento encontrado.</p>

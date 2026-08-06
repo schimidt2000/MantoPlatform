@@ -499,7 +499,17 @@ export function TalentDetailPage() {
             ) : (
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <Field label="Telefone" value={t.phone} />
-                <Field label="E-mail" value={t.email_contact} />
+                <dt className="text-muted">E-mail</dt>
+                <dd className="text-ink">
+                  {t.email_contact || "—"}
+                  {/* Feature 219: só marca o confirmado. Cadastro antigo nunca recebeu o pedido
+                      de confirmação — avisar "não confirmado" ali seria alarme falso. */}
+                  {t.email_contact && t.email_verified_at && (
+                    <span className="ml-1 text-xs text-green" title="Confirmado pelo talento">
+                      ✓ confirmado
+                    </span>
+                  )}
+                </dd>
                 <Field label="Nascimento" value={formatDate(t.birth_date)} />
                 <Field label="Gênero" value={t.gender} />
                 <Field label="Como conheceu" value={t.how_found_us} />

@@ -245,6 +245,12 @@ def get_talent_profile(
         "is_foreigner": talent.is_foreigner,
         "phone": talent.phone,
         "email_contact": talent.email_contact,
+        # Feature 219: `null` = o talento nunca clicou no link de confirmação. Não é erro por si
+        # só (cadastro antigo nunca recebeu o email), mas junto com uma devolução na fila é o
+        # sinal de que o endereço não presta.
+        "email_verified_at": (
+            talent.email_verified_at.isoformat() if talent.email_verified_at else None
+        ),
         "tags": talent.tags,
         "skills": talent.skills,
         "height_cm": talent.height_cm,
@@ -366,7 +372,15 @@ def update_talent_fields(talent: Talent, data: dict, *, is_superadmin: bool) -> 
     talent.full_name = (data.get("full_name") or "").strip() or talent.full_name
     talent.artistic_name = _str_or_none("artistic_name")
     talent.phone = _str_or_none("phone")
+
+    # Trocar o email é justamente o desfecho de uma pendência da fila de devoluções (feature 219):
+    # as falhas do endereço antigo deixam de ser pendência de alguém e saem da fila sozinhas.
+    email_antigo = talent.email_contact
     talent.email_contact = _str_or_none("email_contact")
+    if email_antigo and email_antigo != talent.email_contact:
+        from app.talents import bounce_ops
+
+        bounce_ops.clear_for_email(email_antigo)
     talent.gender = _str_or_none("gender")
     talent.race = _str_or_none("race")
     talent.languages = _str_or_none("languages")

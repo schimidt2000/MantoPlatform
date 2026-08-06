@@ -109,6 +109,8 @@ export interface TalentProfile {
   is_foreigner: boolean;
   phone: string | null;
   email_contact: string | null;
+  /** `null` = o talento nunca confirmou o email pelo link do cadastro (feature 219). */
+  email_verified_at: string | null;
   tags: string | null;
   skills: string | null;
   height_cm: number | null;
@@ -294,4 +296,70 @@ export function useRemoveTalentPhoto(id: number) {
   return useTalentDetailMutation<TalentPhotoType>(id, (photoType) =>
     apiFetch<TalentDetail>(`/api/talents/${id}/photo?photo_type=${photoType}`, { method: "DELETE" }),
   );
+}
+
+/** Motivo da devolução, derivado do código estendido do DSN (feature 219). */
+export type BounceKind =
+  | "caixa_cheia"
+  | "endereco_invalido"
+  | "dominio_invalido"
+  | "bloqueado"
+  | "outro";
+
+/** Uma pessoa cujo email está devolvendo — a fila é agrupada por endereço, não por mensagem. */
+export interface EmailBounceItem {
+  email: string;
+  kind: BounceKind;
+  kind_label: string;
+  /** O que o casting deve fazer — muda com o motivo (avisar no zap vs. corrigir o cadastro). */
+  action_hint: string;
+  /** `false` = o servidor ainda vai retentar; `true` = desistiu. */
+  is_permanent: boolean;
+  status_code: string | null;
+  occurrences: number;
+  last_seen_at: string;
+  original_subject: string | null;
+  talent_id: number | null;
+  talent_name: string | null;
+  talent_phone: string | null;
+  talent_status: string | null;
+  user_id: number | null;
+  user_name: string | null;
+  resolved_at: string | null;
+}
+
+export interface EmailBounceQueue {
+  items: EmailBounceItem[];
+  pending_count: number;
+}
+
+/** Fila de emails devolvidos aguardando contato do casting (feature 219).
+ *
+ * `enabled` porque o endpoint é gated em CASTING/SUPERADMIN: sem isso, todo mundo que abre a tela
+ * de Talentos dispararia um 403 no console.
+ */
+export function useEmailBounces(enabled = true, includeResolved = false) {
+  return useQuery<EmailBounceQueue>({
+    queryKey: ["talent-bounces", includeResolved],
+    queryFn: () =>
+      apiFetch<EmailBounceQueue>(
+        `/api/talents/bounces${includeResolved ? "?resolvidos=1" : ""}`,
+      ),
+    enabled,
+  });
+}
+
+/** Tira um endereço da fila — resolve todas as devoluções dele de uma vez (feature 219). */
+export function useResolveBounce() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { email: string; note?: string }) =>
+      apiFetch<{ resolved: number; pending_count: number }>("/api/talents/bounces/resolve", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["talent-bounces"] });
+    },
+  });
 }

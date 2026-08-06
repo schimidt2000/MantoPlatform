@@ -4,8 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **218 (correção de salário
-> e desempilhamento das telas de administração)** · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **219 (confirmação de
+> email no cadastro e fila de devoluções)** · Head de migration: `c5d92fa16e34`
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -37,20 +37,21 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 130 |
-| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 205 |
-| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 274 |
-| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 332 |
-| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 409 |
-| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 444 |
-| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 476 |
-| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 509 |
-| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 544 |
-| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 576 |
-| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 605 |
-| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 640 |
-| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 713 |
-| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 762 |
+| **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 130 |
+| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 205 |
+| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 280 |
+| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 349 |
+| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 407 |
+| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 484 |
+| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 519 |
+| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 551 |
+| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 584 |
+| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 619 |
+| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 651 |
+| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 680 |
+| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 715 |
+| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 788 |
+| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 837 |
 | **206b** | Hotfix: superfícies públicas por link voltaram a abrir sem login | 2026-08-05 | `—` | H2 | 11 |
 | **207** | Pacote de melhorias operacionais (5 frentes) | 2026-08-04 | `d9f2b3a41c07` | H2 | 36 |
 | **206** | React como interface primária e proxy reverso em produção | 2026-08-04 | `—` | H2 | 101 |
@@ -126,6 +127,81 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 219 — Email errado do talento: confirmação no cadastro e fila de devoluções
+`main` · **2026-08-06** · migrations `b4c81ef07d29` (email_bounces) e `c5d92fa16e34` (confirmação)
+
+**Motivação.** Gente se cadastra com o email errado (ou com a caixa lotada) e **o sistema nunca
+fica sabendo**: a falha existe apenas como um aviso do Mail Delivery Subsystem na caixa de quem
+enviou. O talento some do radar sem ninguém perceber, e a descoberta só acontece quando um convite
+volta — se alguém reparar.
+
+**Achado que desenhou a solução.** Uma varredura das devoluções reais da conta encontrou 48
+mensagens e 13 endereços distintos. Os códigos estendidos (RFC 3463) separam dois problemas que
+pedem ações opostas: **`4.2.2`/`5.2.2` caixa cheia** (23) — "avisa no WhatsApp para liberar
+espaço" — contra **`5.1.1` usuário inexistente** (8) e **`5.1.2` domínio inexistente** (5) — "o
+cadastro está furado, pega o email certo". Um dos endereços é `gabriella.baleeiro@hotmail.con`:
+`.con`, não `.com`. Nenhum validador de formato pega isso, porque é um email sintaticamente
+perfeito.
+
+**Parte 1 — fila de devoluções (`EmailBounce`).**
+
+`app/integracoes/imap_client.py` lê a caixa por IMAP com a **mesma App Password que o envio já
+usa** — sem credencial nova e sem escopo OAuth novo, o que foi decisivo para a viabilidade. A
+leitura é estritamente passiva: `EXAMINE` (não `SELECT`) e `BODY.PEEK[]`, então nada é marcado como
+lido, movido ou apagado.
+
+`app/talents/bounce_ops.py` interpreta o bloco `message/delivery-status`, classifica pelo código e
+casa o destinatário com `Talent`/`User`. **Devolução de endereço desconhecido é descartada de
+propósito**: a caixa é a pessoal de quem opera a conta, e guardar contato alheio seria coleta que
+ninguém pediu. O total ignorado volta no resultado da varredura para a decisão não ficar invisível
+(17 na primeira execução).
+
+Idempotência pelo `Message-Id` único — reler a caixa não duplica (confirmado: 2ª varredura,
+`novas=0`). Uma mensagem que reporta N destinatários vira N linhas com sufixo `#índice`, sem perder
+a trava. A fila é **agrupada por endereço** na leitura: caixa cheia gera um aviso por tentativa, e
+o casting precisa de uma linha por pessoa com o contador de falhas.
+
+A varredura roda em thread (30 min) com **claim atômico** em `import_state` — obrigatório, não
+opcional: o Railway roda vários workers gunicorn e cada um abriria a própria conexão IMAP.
+Desligada por padrão em ambiente local (`EMAIL_BOUNCE_SWEEP_ENABLED` segue `_suppress_mail`), senão
+um processo de desenvolvimento apontado para o espelho leria a caixa real.
+
+**Parte 2 — confirmação do email no cadastro público.**
+
+A confirmação acontece **depois do envio**, com o `Talent` já gravado. Isso não é detalhe: o
+formulário tem dados, medidas, PIX, duas fotos e um documento — condicionar a gravação a uma caixa
+que talvez nem exista trocaria um problema por outro pior. Na tela de sucesso a pessoa relê o
+endereço, corrige **só ele** e reenvia; nada mais é reenviado nem revalidado.
+
+O `email_verify_token` faz dois papéis de propósito: é o link que confirma **e** a credencial da
+tela de sucesso para corrigir/reenviar. Confirmar zera o token, o que fecha os dois caminhos de uma
+vez — verificado: depois de confirmado, a correção pelo token devolve 404.
+
+As duas partes se reforçam: antes, o primeiro email para um talento novo só saía no convite de um
+evento, semanas depois. Agora todo cadastro dispara um email na hora, e quando ele volta a fila
+avisa em minutos.
+
+Corrigir o email na ficha (ou pela tela de sucesso) **tira o endereço antigo da fila sozinho** —
+`bounce_ops.clear_for_email` roda dentro de `update_talent_fields`, sem commit próprio, para não
+gravar estado parcial no meio da edição.
+
+**Riscos e pegadinhas.**
+- `useMutation` disparada por `useEffect` no carregamento da página **trava em "pending"** com o
+  double-mount do StrictMode: a chamada da primeira montagem resolve contra um observer já
+  descartado, e o `useRef` de trava não salva. A confirmação virou `useQuery` (`enabled`, `retry:
+  false`, `staleTime: Infinity`), que desduplica pela chave e sobrevive ao remonte. O verbo segue
+  POST — confirmar consome o token, não é leitura idempotente. **Regra geral: efeito no load é
+  query, não mutation.**
+- `_salary_for_month` do 218 tem um irmão aqui: `pending_queue` ordena por definitivo-primeiro e
+  recente-primeiro, direções opostas que **não cabem numa chave composta**. São dois `sorted`
+  encadeados, apoiados na estabilidade do sort do Python.
+- O palpite de domínio (`Você quis dizer gmail.com?`) existe nos **dois lados** — `verify_ops` e
+  `lib/cadastro.ts`. É duplicação consciente: o backend precisa dela para o log/diagnóstico e o
+  frontend para avisar antes do envio, e um import cruzado entre Python e TS não existe.
+- Nunca bloquear envio por formato de email: `hotmail.con` passa em qualquer regex, e regex
+  apertada rejeita endereço válido de gente real. Quem separa certo de errado é a confirmação — e,
+  quando ela falha, a fila.
 
 ### 218 — Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas
 `main` · **2026-08-06** · sem migration

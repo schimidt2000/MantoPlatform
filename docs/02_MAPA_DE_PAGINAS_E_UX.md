@@ -6,8 +6,16 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **218 (correção de salário
-> e desempilhamento das telas de administração)**
+> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **219 (confirmação de
+> email no cadastro e fila de devoluções)**
+>
+> UX nova da 219: **`/talents` ganhou uma terceira aba — "Emails com problema"**, com contador, ao
+> lado de Ativos e Pendentes (só `CASTING`/`SUPERADMIN`). Lista quem não está recebendo nossos
+> emails, separando "caixa cheia" (avisar no WhatsApp, com mensagem já pronta no link) de "endereço
+> errado" (pegar o email certo). "Resolver" fecha o endereço inteiro; corrigir o email na ficha
+> também tira da fila. No cadastro público, a tela de sucesso passou a mostrar o email enviado e
+> permite **corrigir só ele e reenviar** — o cadastro já está gravado nesse ponto, nada se perde —,
+> e `/cadastro/confirmar/:token` é o destino do link de confirmação.
 >
 > UX nova da 218: onze telas de administração saíram de coluna única estreita
 > (`max-w-lg`…`max-w-3xl`) para largura de desktop com blocos lado a lado — ficha e criação de
@@ -262,7 +270,13 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **Acesso**: todos exceto `REVENDEDOR_EDUCAMANTO`; **edição** só `CASTING`/`SUPERADMIN`.
 - **UX**: `TalentMosaic` (grade visual com foto) + `TalentFilterPanel` (status, tags, medidas,
   passaporte/visto, idiomas). Estados `pending` × `active`.
-- **API**: `GET /api/talents/directory`.
+- **Aba "Emails com problema"** (feature 219, só `CASTING`/`SUPERADMIN`): fila de quem não está
+  recebendo nossos emails, agrupada por endereço, com o motivo traduzido, o que fazer, contador de
+  falhas e link de WhatsApp com a mensagem já escrita. `Resolver` fecha o endereço inteiro.
+  O `view` da aba é **estado separado** do `status` do diretório de propósito: alternar para a fila
+  e voltar não pode perder página, busca nem filtros aplicados.
+- **API**: `GET /api/talents/directory` · `GET /api/talents/bounces` ·
+  `POST /api/talents/bounces/resolve`.
 
 #### `/talents/:id` — Detalhe / Edição do Talento
 - **UX**: modo edição unificado via `?edit=1`. A rota antiga `/talents/:id/edit` **redireciona**
@@ -988,6 +1002,18 @@ Todas as telas são **mobile-first** (Princípio VIII).
 #### `/catalogo/cadastro` e `/catalogo/cadastro/enviado` — Cadastro de Talento
 - **UX**: formulário público de candidatura; `GET /api/cadastro/check-cpf` valida duplicidade em
   tempo real (estrangeiro grava `cpf = NULL`). Cria `Talent` com `status = "pending"`.
+- **Confirmação de email (feature 219)**: o campo de e-mail avisa "você quis dizer gmail.com?"
+  quando o domínio é um engano conhecido (`hotmail.con` é caso real) — **avisa, não bloqueia**.
+  Depois do envio, a tela de sucesso mostra o endereço para releitura e permite **corrigir só ele
+  e reenviar**, autenticada pelo par `id` + `verify_token` que veio na resposta. A ordem é
+  deliberada: o `Talent` já está gravado quando a confirmação entra em cena, então errar o email
+  nunca custa as fotos, o documento e o formulário inteiro.
+
+#### `/catalogo/cadastro/confirmar/:token` — Confirmação do e-mail
+- **UX**: destino do link do email. Confirma ao carregar e carimba `email_verified_at`; o token é
+  de uso único, então o segundo clique cai em "Link já utilizado" — tratado como sucesso tardio,
+  não como erro. A ficha do talento passa a mostrar "✓ confirmado" ao lado do e-mail.
+- **API**: `POST /api/cadastro/confirmar`.
 
 #### `/catalogo/f/pre-contrato` · `/catalogo/f/corporativo` · `/catalogo/f/:formType/enviado`
 - **UX**: formulários de pré-contrato com **schema dinâmico** vindo do servidor
