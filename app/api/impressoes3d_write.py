@@ -13,7 +13,7 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api.impressoes3d_read import require_3d_access
 from app.api_utils import api_login_required, json_error
-from app.constants import EVENT_TYPE_SHOW
+from app.constants import EVENT_TYPE_SHOW, RoleName
 from app.impressoes3d import impressoes3d_ops as ops
 from app.models import Acervo3DItem, CalendarEvent, Event3DGift
 
@@ -87,15 +87,26 @@ def api_3d_acervo_update(item_id: int) -> Any:
 @api_bp.route("/3d/acervo/<int:item_id>", methods=["DELETE"])
 @api_login_required
 def api_3d_acervo_delete(item_id: int) -> Any:
-    """Exclui uma peça do Acervo (bloqueado enquanto houver evento vinculado)."""
+    """Exclui uma peça do Acervo.
+
+    Por padrão é bloqueado enquanto houver evento vinculado — o caminho é inativar a peça.
+    Com `?force=true` a exclusão acontece mesmo assim, **desvinculando de todos os eventos**:
+    é irreversível e some com o presente da tela dos eventos e da Fila de Impressão, então
+    exige SUPERADMIN (o Artista 3D continua só com o caminho seguro).
+    """
     denied = require_3d_access()
     if denied:
         return denied
     item = Acervo3DItem.query.get(item_id)
     if item is None:
         return json_error("Peça do Acervo não encontrada", 404)
+
+    force = request.args.get("force", "").strip().lower() in ("1", "true")
+    if force and not any(r.name.upper() == RoleName.SUPERADMIN for r in current_user.roles):
+        return json_error("Apenas o super admin pode excluir uma peça já usada em eventos", 403)
+
     try:
-        ops.delete_acervo_item(item)
+        ops.delete_acervo_item(item, force=force)
     except ops.Impressao3DValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
     return "", 204

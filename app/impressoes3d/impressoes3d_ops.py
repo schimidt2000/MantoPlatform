@@ -219,25 +219,40 @@ def _apply_file_changes(
     _attach_model_files(item, valid_models, next_position)
 
 
-def delete_acervo_item(item: Acervo3DItem) -> None:
+def delete_acervo_item(item: Acervo3DItem, *, force: bool = False) -> None:
     """Exclui uma peça do Acervo e seus arquivos do storage.
 
+    Args:
+        item: peça a excluir.
+        force: quando `True`, **desvincula a peça de todos os eventos** antes de apagá-la
+            (apaga os `Event3DGift`), em vez de recusar. Reservado ao SUPERADMIN pelo endpoint:
+            é destrutivo e some com o presente da tela dos eventos e da Fila de Impressão.
+
     Raises:
-        Impressao3DValidationError: A peça ainda está vinculada a algum evento — nesse caso o
-            caminho correto é inativá-la (`is_active=False`), preservando o histórico.
+        Impressao3DValidationError: A peça está vinculada a algum evento e `force` é `False` —
+            o caminho normal é inativá-la (`is_active=False`), preservando o histórico.
     """
     linked = Event3DGift.query.filter_by(item_id=item.id).count()
-    if linked:
+    if linked and not force:
         raise Impressao3DValidationError(
             "id",
             f"Esta peça está vinculada a {linked} evento(s). Inative-a em vez de excluir.",
         )
     name, item_id = item.name, item.id
+    if linked:
+        # Antes de apagar: os presentes somem dos eventos e da Fila de Impressão junto com a
+        # peça. O log guarda quantos eram, porque depois não há como reconstruir.
+        Event3DGift.query.filter_by(item_id=item.id).delete(synchronize_session=False)
     delete_file(item.photo_url)
     for model_file in item.files:
         delete_file(model_file.file_path)
     db.session.delete(item)
-    audit("delete", "Acervo3DItem", item_id, name, "Peça do Acervo 3D excluída")
+    detalhe = (
+        f"Peça do Acervo 3D excluída (desvinculada de {linked} evento(s))"
+        if linked
+        else "Peça do Acervo 3D excluída"
+    )
+    audit("delete", "Acervo3DItem", item_id, name, detalhe)
     db.session.commit()
 
 

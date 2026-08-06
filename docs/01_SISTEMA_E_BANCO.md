@@ -560,7 +560,7 @@ no máximo 5 itens, descartando predições sem `description`.
 | `GET` | `/api/3d/acervo` | Catálogo de peças com `usage_count` (nº de eventos que já usaram a peça). `?ativos=1` esconde as inativas. |
 | `POST` | `/api/3d/acervo` | Cadastra peça (**multipart**): `name`, `photo` (JPG/PNG) e um ou mais `files` (`.stl`/`.3mf`/`.zip`) — **todos obrigatórios**; falta de qualquer um devolve 400 com o campo em `fields` (`name`/`photo`/`files`). |
 | `PATCH` | `/api/3d/acervo/<id>` | Edita nome/`is_active`, troca a foto (upload novo apaga a antiga) e **acrescenta** arquivos via `files` / **remove** via `remove_file_ids[]` (**multipart**). 400 se a operação deixaria a peça sem nenhum arquivo. |
-| `DELETE` | `/api/3d/acervo/<id>` | Exclui a peça e seus arquivos. **400** se houver evento vinculado. |
+| `DELETE` | `/api/3d/acervo/<id>` | Exclui a peça e seus arquivos. **400** se houver evento vinculado. Com **`?force=true`** (só `SUPERADMIN`, senão **403**) apaga mesmo assim, removendo antes os `Event3DGift` da peça — o presente some dos eventos e da Fila de Impressão. A cascata é explícita no ops: `Event3DGift.item_id` não tem `ondelete`. Auditoria registra de quantos eventos desvinculou (feature 213). |
 | `GET` | `/api/3d/fila` | Fila de Impressão, **dois blocos**: `items` (presentes com `status != 'entregue'` de eventos SHOW, ordenados por prazo — sem prazo vai para o fim) e `sem_presente` (SHOWs futuros ainda sem presente vinculado). `?dispensados=1` inclui os marcados como "não leva presente". |
 | `POST` | `/api/events/<id>/3d-dismissal` | Marca o SHOW como "não leva presente 3D" (idempotente). 400 em evento não-SHOW. |
 | `DELETE` | `/api/events/<id>/3d-dismissal` | Desfaz a dispensa, devolvendo o show às pendências (idempotente). |

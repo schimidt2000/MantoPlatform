@@ -314,8 +314,15 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
     (abre `Dialog` com o mesmo formulário), inativar/reativar e excluir.
   - **Exclusão** pede confirmação em `Dialog`; peça já vinculada a evento é bloqueada pelo
     servidor com a mensagem orientando a inativar em vez de excluir.
+  - **Exclusão forçada (feature 213, só `SUPERADMIN`)**: quando a peça está em uso, o diálogo
+    oferece uma caixa de seleção "Excluir mesmo assim, removendo o presente de todos os N
+    evento(s) e da Fila de Impressão. Não dá para desfazer" — o botão fica **desabilitado** até
+    ela ser marcada e vira "Excluir e desvincular" (`DELETE .../<id>?force=true`). Quem não é
+    superadmin continua vendo só a orientação de inativar. A auditoria grava de quantos eventos a
+    peça foi desvinculada.
   - Entrada/saída de cards com Framer Motion respeitando `useReducedMotion()`.
-- **API**: `GET|POST /api/3d/acervo` · `PATCH|DELETE /api/3d/acervo/<id>`.
+- **API**: `GET|POST /api/3d/acervo` · `PATCH|DELETE /api/3d/acervo/<id>` (`?force=true` no DELETE
+  = desvincular de todos os eventos, `SUPERADMIN`).
 
 #### `/events/:id` — bloco **"Presentes 3D"** *(injeção na tela existente)*
 - **Onde**: coluna esquerda (operação/logística), logo abaixo de "Materiais de ensaio".

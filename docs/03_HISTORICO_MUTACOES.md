@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **212 (diálogos fora da
-> tela)** · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **213 (exclusão forçada
+> no Acervo 3D)** · Head de migration: `e7a1c94f20b3`
 
 Formato de cada entrada:
 
@@ -18,6 +18,38 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 213 — Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** Peça do Acervo já usada em evento não podia ser excluída de jeito nenhum — a
+única saída era inativar. O dono do sistema precisa poder apagar de vez (peça duplicada,
+cadastrada errada, arquivo trocado), assumindo que o presente some dos eventos.
+
+**O que mudou.** `DELETE /api/3d/acervo/<id>` aceita `?force=true`: apaga os `Event3DGift`
+daquela peça antes de removê-la. O padrão **não mudou** — sem `force`, peça em uso continua
+recusada com a orientação de inativar, para o Artista 3D não apagar histórico sem querer. O
+`force` exige **SUPERADMIN** (o gate normal do módulo, `require_3d_access`, também aceita
+`ARTISTA_3D`, então há uma checagem extra no endpoint).
+
+`delete_acervo_item(item, *, force=False)` faz a cascata explicitamente: nada no banco apagaria
+os presentes sozinho (`Event3DGift.item_id` não tem `ondelete`), e é justamente por isso que a
+exclusão era barrada. O `AuditLog` grava **de quantos eventos a peça foi desvinculada** — depois
+não há como reconstruir.
+
+**UX.** A confirmação virou uma caixa de seleção própria ("Excluir mesmo assim, removendo o
+presente de todos os N evento(s) e da Fila de Impressão. Não dá para desfazer"), e o botão fica
+**desabilitado** até ela ser marcada; o rótulo muda para "Excluir e desvincular". Não é um segundo
+clique no mesmo botão de propósito — exclusão em cascata não pode acontecer por engano. Quem não
+é superadmin continua vendo só a orientação de inativar.
+
+**Riscos e pegadinhas.** O presente some da tela do evento **e** da Fila de Impressão, então o
+hook invalida as duas caches. Nada mais no banco referencia `Event3DGift`, então não sobra órfão.
+Verificação: `verify_213` 17/17 contra `manto_local` (peça sem uso segue simples; peça em uso
+recusada sem `force` para os dois papéis; `force` do Artista 3D → 403 sem apagar nada; `force` do
+superadmin → 204 com presentes removidos e auditoria contando os vínculos) e o fluxo completo
+exercitado no navegador (checkbox habilita o botão, requisição sai com `?force=true`, peça some da
+lista e o presente some do evento).
 
 ### 212 — Hotfix: diálogos abrindo pela metade, fora da tela
 `main` · **2026-08-05** · sem migration

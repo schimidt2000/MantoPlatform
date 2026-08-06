@@ -19,6 +19,7 @@ import {
   Skeleton,
 } from "@manto/ui";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
+import { useCurrentUser } from "../lib/useAuth";
 import {
   useAcervo3D,
   useCreateAcervoItem,
@@ -302,6 +303,12 @@ export function Acervo3DPage() {
   const remove = useDeleteAcervoItem();
   const [editing, setEditing] = useState<Acervo3DItem | null>(null);
   const [deleting, setDeleting] = useState<Acervo3DItem | null>(null);
+  // Exclusão em cascata de peça já usada: só SUPERADMIN, e sempre com a caixa marcada de novo a
+  // cada diálogo aberto (o reset acontece no `onOpenChange`).
+  const [forcar, setForcar] = useState(false);
+  const usuario = useCurrentUser();
+  const podeForcar = Boolean(usuario.data?.is_superadmin);
+  const vinculada = (deleting?.usage_count ?? 0) > 0;
   // Remonta o formulário de cadastro após cada sucesso: o `FileUpload` do design system guarda o
   // nome do arquivo escolhido em estado interno, e sem trocar a `key` ele continuaria exibindo o
   // arquivo da peça anterior como se ainda estivesse selecionado.
@@ -402,6 +409,7 @@ export function Acervo3DPage() {
         onOpenChange={(open) => {
           if (!open) {
             setDeleting(null);
+            setForcar(false);
             remove.reset();
           }
         }}
@@ -410,10 +418,42 @@ export function Acervo3DPage() {
           <DialogHeader>
             <DialogTitle>Excluir peça do Acervo</DialogTitle>
             <DialogDescription>
-              A peça “{deleting?.name}” e seus arquivos serão apagados definitivamente. Peças já
-              usadas em eventos não podem ser excluídas — inative-as.
+              A peça “{deleting?.name}” e seus arquivos serão apagados definitivamente.
+              {vinculada && !podeForcar && " Peças já usadas em eventos não podem ser excluídas — inative-as."}
             </DialogDescription>
           </DialogHeader>
+
+          {/* Peça em uso: o super admin pode excluir mesmo assim, mas assumindo o efeito por
+              escrito. A confirmação é uma caixa própria, não um segundo clique no mesmo botão —
+              exclusão em cascata não pode acontecer por engano. */}
+          {vinculada && (
+            <div className="mb-4 rounded-md border border-red/40 bg-red-soft/40 p-3 text-sm">
+              <p className="font-medium text-red">
+                Esta peça está vinculada a {deleting?.usage_count} evento(s).
+              </p>
+              {podeForcar ? (
+                <label className="mt-2 flex items-start gap-2 text-ink">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={forcar}
+                    onChange={(e) => setForcar(e.target.checked)}
+                  />
+                  <span>
+                    Excluir mesmo assim, removendo o presente {" "}
+                    <strong>de todos os {deleting?.usage_count} evento(s)</strong> e da Fila de
+                    Impressão. Não dá para desfazer.
+                  </span>
+                </label>
+              ) : (
+                <p className="mt-1 text-muted">
+                  Use “Inativar” para tirá-la de circulação sem perder o histórico. Só o super
+                  admin pode excluir uma peça já usada.
+                </p>
+              )}
+            </div>
+          )}
+
           {remove.isError && (
             <p className="mb-3 text-sm text-red" role="alert">
               {generalError(remove.error)}
@@ -426,12 +466,16 @@ export function Acervo3DPage() {
             <Button
               className="bg-red hover:bg-red/90"
               loading={remove.isPending}
+              disabled={vinculada && (!podeForcar || !forcar)}
               onClick={() =>
                 deleting &&
-                remove.mutate(deleting.id, { onSuccess: () => setDeleting(null) })
+                remove.mutate(
+                  { id: deleting.id, force: forcar },
+                  { onSuccess: () => setDeleting(null) },
+                )
               }
             >
-              Excluir
+              {vinculada && forcar ? "Excluir e desvincular" : "Excluir"}
             </Button>
           </DialogFooter>
         </DialogContent>

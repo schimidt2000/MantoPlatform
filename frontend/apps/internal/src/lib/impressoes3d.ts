@@ -246,12 +246,20 @@ export function useUpdateAcervoItem() {
   });
 }
 
+/**
+ * Exclui uma peça do Acervo. Com `force`, o servidor **desvincula a peça de todos os eventos**
+ * antes de apagá-la — irreversível e restrito a SUPERADMIN no endpoint. Sem `force`, uma peça
+ * já usada é recusada com a orientação de inativar.
+ */
 export function useDeleteAcervoItem() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => apiFetch<void>(`/api/3d/acervo/${id}`, { method: "DELETE" }),
+    mutationFn: ({ id, force }: { id: number; force?: boolean }) =>
+      apiFetch<void>(`/api/3d/acervo/${id}${force ? "?force=true" : ""}`, { method: "DELETE" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ACERVO_KEY });
+      // Os presentes somem dos eventos e da Fila de Impressão junto com a peça.
+      void queryClient.invalidateQueries({ queryKey: FILA_KEY });
     },
   });
 }
