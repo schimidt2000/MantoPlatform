@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { RequireAuth } from "./components/RequireAuth";
+import { isRevendedorOnly, useCurrentUser } from "./lib/useAuth";
 import { AppShell } from "./components/AppShell";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -62,6 +63,17 @@ function TalentEditRedirect() {
   return <Navigate to={`/talents/${id}?edit=1`} replace />;
 }
 
+/**
+ * A Home não faz parte do perfil do Revendedor EducaManto (feature 078) — o servidor recusa os
+ * dados dela. Além do destino pós-login, isto cobre quem chega em "/" por favorito ou clicando na
+ * marca no topo: em vez de um painel vazio de erro, cai na Agenda.
+ */
+function HomeOuAgenda() {
+  const { data, isLoading } = useCurrentUser();
+  if (isLoading) return null;
+  return isRevendedorOnly(data) ? <Navigate to="/agenda" replace /> : <DashboardPage />;
+}
+
 export function App() {
   return (
     <BrowserRouter>
@@ -75,7 +87,7 @@ export function App() {
             </RequireAuth>
           }
         >
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/" element={<HomeOuAgenda />} />
           <Route path="/agenda" element={<AgendaPage />} />
           <Route path="/events/new" element={<EventCreatePage />} />
           <Route path="/events/:id/edit" element={<EventEditPage />} />

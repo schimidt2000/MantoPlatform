@@ -4,8 +4,8 @@
 > seção "Registro". Nunca reescrever entradas antigas (elas são o histórico); correções entram
 > como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **213 (exclusão forçada
-> no Acervo 3D)** · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-05** · Estado do repositório: pós-hotfix **214 (acesso do
+> Revendedor EducaManto)** · Head de migration: `e7a1c94f20b3`
 
 Formato de cada entrada:
 
@@ -18,6 +18,41 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 214 — Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída)
+`main` · **2026-08-05** · sem migration
+
+**Motivação.** Os dois usuários com o papel `REVENDEDOR_EDUCAMANTO` não conseguiam usar a
+calculadora para vender. Na verdade **nada** funcionava para eles: até `/api/auth/me` falhava.
+
+**Causa.** O `_revendedor_guard` (feature 078) roda em `before_request` e redireciona para
+`/agenda` tudo que não estiver na allowlist de páginas — e `/api` nunca esteve nela, porque na
+época o perfil só usava telas Jinja. Com a 206 tornando o React a interface primária, **toda**
+chamada da SPA passou a levar 302. E o sintoma é mudo: o navegador segue o redirect, o servidor do
+frontend responde `/agenda` com o `index.html` (status 200), e o `apiFetch` morre no `JSON.parse`
+sem mensagem. Reproduzido com usuário real: 302 → `/agenda` em `auth/me`, `educamanto/packages`,
+`educamanto/historico`, `agenda` e `educamanto/calcular`.
+
+**O que mudou.** O guard passou a tratar `/api/*` separado: libera `/api/auth`, `/api/agenda`,
+`/api/events` e `/api/educamanto` — o **espelho exato** das páginas que o perfil já podia abrir,
+sem ampliar nada — e devolve **403 JSON** no resto, em vez de redirect. A allowlist de páginas
+continua igual para as superfícies Jinja restantes.
+
+No React, o revendedor passou a **entrar direto na Agenda**: a Home não é do perfil dele e o
+servidor recusa os dados dela. Vale no login e em quem chega a `/` por favorito (`rotaInicial()` e
+o componente de rota `HomeOuAgenda`, ambos apoiados em `isRevendedorOnly` no `useAuth`).
+
+**Pegadinha.** Guard de navegação que responde **redirect** não serve para API: o cliente JSON
+recebe HTML com 200 e falha em silêncio. Sempre que um `before_request` puder alcançar `/api/*`,
+a resposta tem de ser status de erro com corpo JSON. Mesma família dos gaps de proxy da 206 —
+o denominador comum é "HTML com 200 chegando onde se esperava JSON".
+
+**Verificação.** `verify_214` 14/14 contra `manto_local`: as quatro rotas do perfil respondem 200
+em JSON; a calculadora calcula de verdade (pacote real, 2 dias, transporte de 120 km); quatro
+rotas fora do perfil devolvem 403 JSON (não 302); multi-perfil (revendedor + comercial) segue sem
+restrição; e página Jinja fora do perfil continua redirecionando. Na tela, login do revendedor
+cai em `/agenda`, o menu mostra só Agenda/EducaManto/Histórico e a calculadora devolve os valores
+com a comissão.
 
 ### 213 — Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos
 `main` · **2026-08-05** · sem migration

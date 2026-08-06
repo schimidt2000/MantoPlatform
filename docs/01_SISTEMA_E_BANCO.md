@@ -823,6 +823,16 @@ sendo fonte única — agora com um consumidor só, `/api/dashboard`.
 | `ARTISTA_3D` | Gestão total do módulo 3D (Acervo + Fila + presentes do evento) e **leitura** dos eventos — precisa do elenco e do formulário de pré-contrato para saber o que imprimir |
 | `REVENDEDOR_EDUCAMANTO` | Perfil restrito: **só** Agenda (visualização) + EducaManto |
 
+**Guard do perfil restrito (`_revendedor_guard`, feature 078 · corrigido na 214).** Roda em
+`before_request` e vale só para quem tem **apenas** esse papel (multi-perfil não é restrito). Duas
+respostas diferentes por superfície:
+- **`/api/*`** → passa nos prefixos `/api/auth`, `/api/agenda`, `/api/events`, `/api/educamanto`
+  (o espelho exato das páginas permitidas); fora deles devolve **403 JSON**. Nunca redirect: um
+  302 para HTML chega no `apiFetch` como 200 + `index.html` e explode no `JSON.parse` — foi o que
+  derrubou o app inteiro para esse perfil depois da migração 206.
+- **demais caminhos** → allowlist de páginas (`/agenda`, `/events/`, `/educamanto`, `/auth`,
+  `/uploads`, `/static`, `/health`), com `redirect("/agenda")` no resto.
+
 Regra especial: o **responsável EducaManto** (`SiteSetting.educamanto_seller_id`) ganha acesso de
 leitura a Vendas/Comissões mesmo sem papel Financeiro — mas continua tratado como **vendedor
 comum** na tela de comissões (só vê as próprias, sem ações de pagamento).

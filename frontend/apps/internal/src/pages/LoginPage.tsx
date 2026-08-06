@@ -6,7 +6,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
-import { useLogin } from "../lib/useAuth";
+import { rotaInicial, useLogin } from "../lib/useAuth";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Informe o e-mail").email("E-mail inválido"),
@@ -31,7 +31,10 @@ export function LoginPage() {
   const onSubmit = handleSubmit((values) => {
     setFormError(null);
     login.mutate(values, {
-      onSuccess: () => navigate("/", { replace: true }),
+      // O Revendedor EducaManto não tem a Home no perfil dele (feature 078): mandá-lo para "/"
+      // abriria um painel que o servidor recusa. A regra do destino mora no `useAuth`, junto da
+      // definição do perfil.
+      onSuccess: (user) => navigate(rotaInicial(user), { replace: true }),
       onError: (error) => {
         // Erro com campos específicos (400) volta para o campo; senão, mensagem geral.
         if (error instanceof ApiRequestError && error.fields) {

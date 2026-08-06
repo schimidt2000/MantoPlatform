@@ -21,7 +21,10 @@
 
 Legenda de acesso — os papéis listados são os do gate **de servidor**; a navegação lateral
 (`frontend/apps/internal/src/lib/navigation.tsx`) apenas espelha isso na UI.
-`REVENDEDOR_EDUCAMANTO` puro (papel único) vê **somente** Agenda e EducaManto.
+`REVENDEDOR_EDUCAMANTO` puro (papel único) vê **somente** Agenda e EducaManto — e **entra direto
+na Agenda** (feature 214): a Home não é do perfil dele, então `/` redireciona, tanto no login
+quanto ao chegar por favorito. No servidor, o guard do perfil devolve **403 JSON** para a API fora
+do perfil, nunca redirect (ver `docs/01`).
 
 ---
 

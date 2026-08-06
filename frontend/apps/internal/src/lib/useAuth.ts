@@ -9,6 +9,21 @@ interface LoginCredentials {
   password: string;
 }
 
+/** Perfil restrito (feature 078): só REVENDEDOR_EDUCAMANTO — vê apenas Agenda e EducaManto. */
+export function isRevendedorOnly(user: AuthUser | null | undefined): boolean {
+  const roles = user?.roles ?? [];
+  return roles.length === 1 && roles[0] === "REVENDEDOR_EDUCAMANTO";
+}
+
+/**
+ * Para onde mandar o usuário depois do login. A Home não faz parte do perfil do revendedor — o
+ * servidor recusa os dados dela —, então ele entra direto na Agenda, como já acontecia quando as
+ * telas eram Jinja (`_revendedor_guard` redirecionava `/` para `/agenda`).
+ */
+export function rotaInicial(user: AuthUser | null | undefined): string {
+  return isRevendedorOnly(user) ? "/agenda" : "/";
+}
+
 /** Busca o usuário autenticado atual (/api/auth/me). `null` quando não há sessão. */
 export function useCurrentUser() {
   return useQuery<AuthUser | null>({

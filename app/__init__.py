@@ -35,6 +35,13 @@ def _is_revendedor_only(user) -> bool:
 # Páginas que o Revendedor EducaManto pode acessar (prefixos). O resto é redirecionado à agenda.
 _REVENDEDOR_ALLOWED = ("/agenda", "/events/", "/educamanto", "/auth", "/uploads", "/static", "/health")
 
+# Mesma permissão das páginas acima, traduzida para a API que o React consome. SEM isto, todas as
+# chamadas `/api/*` do revendedor caíam no `redirect("/agenda")` — inclusive `/api/auth/me` —, e
+# como o front recebe o HTML da SPA com status 200 no lugar do JSON, o app inteiro morria em
+# silêncio para esse perfil (a calculadora EducaManto entre outras coisas). Não amplia acesso:
+# é o espelho exato do que ele já podia abrir quando as telas eram Jinja.
+_REVENDEDOR_ALLOWED_API = ("/api/auth", "/api/agenda", "/api/events", "/api/educamanto")
+
 
 def _safe_next(value, default="/"):
     """Retorna ``value`` apenas se for um destino interno seguro; senão, ``default`` (feature 074).
@@ -335,6 +342,16 @@ def create_app():
         if not _is_revendedor_only(current_user):
             return None
         path = request.path
+
+        # A API responde JSON, nunca redirect: um 302 para uma página HTML chega no `apiFetch`
+        # como 200 + HTML e explode no `JSON.parse`, virando "não funciona" sem erro nenhum na
+        # tela. Fora do que o perfil pode ver, o certo é um 403 que o front sabe ler.
+        if path.startswith("/api/"):
+            if any(path == p or path.startswith(p + "/") for p in _REVENDEDOR_ALLOWED_API):
+                return None
+            from app.api_utils import json_error
+            return json_error("Sem permissão", 403)
+
         if path == "/":
             return redirect("/agenda")
         if any(path == p or path.startswith(p) for p in _REVENDEDOR_ALLOWED):
