@@ -117,6 +117,21 @@ def record_audited(entity_uid: str, sha256: str, run_id: str, extracted: dict) -
         )
 
 
+def finding_seen_before(code: str, entity_uid: str, current_run_id: str) -> bool:
+    """True se este mesmo achado (código + entidade) já foi reportado numa rodada anterior.
+
+    Usado para não repetir toda semana as anomalias históricas (varreduras all-time como
+    duplicata de arquivo e recebido > venda): elas aparecem UMA vez e depois só voltam se
+    surgir caso novo.
+    """
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM findings WHERE code = ? AND entity_uid = ? AND run_id != ? LIMIT 1",
+            (code, entity_uid, current_run_id),
+        ).fetchone()
+    return row is not None
+
+
 def record_findings(run_id: str, findings: list[dict]) -> None:
     """Persiste os achados de uma rodada."""
     with _connect() as conn:

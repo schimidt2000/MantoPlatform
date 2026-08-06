@@ -279,27 +279,42 @@ def collect_sql_anomalies(cur, win: tuple[datetime, datetime]) -> list[dict]:
     )
     for r in cur.fetchall():
         out.append({
+            "entity_uid": f"file:{r['file_path']}",
             "code": "mesmo_arquivo_dois_pagamentos", "severity": "critico",
             "title": f"Mesmo arquivo usado em {r['n']} recebimentos (ids {r['ids']})",
             "details": {"file_path": r["file_path"], "ids": r["ids"]},
         })
 
+    # Recebido acima do esperado. Esperado = venda + transporte + acréscimos, porque
+    # transporte/acréscimo são cobrados nos mesmos comprovantes mas ficam fora de
+    # `sale_value`. Diferença de até 1% vira "atenção" (juros de parcelamento,
+    # arredondamento); acima disso é crítico (centavos sem vírgula, pagamento duplicado).
     cur.execute(
         """
-        SELECT e.id, e.title, e.sale_value, SUM(p.amount) AS recebido
+        SELECT e.id, e.title, e.sale_value,
+               COALESCE(e.sale_value, 0) + COALESCE(e.transport_value, 0)
+                 + COALESCE(e.acrescimo_value, 0) AS esperado,
+               SUM(p.amount) AS recebido
           FROM calendar_events e
           JOIN event_payments p ON p.event_id = e.id
          WHERE e.sale_value IS NOT NULL AND e.is_cortesia_permuta IS NOT TRUE
-         GROUP BY e.id, e.title, e.sale_value
-        HAVING SUM(p.amount) > e.sale_value
+         GROUP BY e.id, e.title, e.sale_value, esperado
+        HAVING SUM(p.amount) > COALESCE(e.sale_value, 0) + COALESCE(e.transport_value, 0)
+                 + COALESCE(e.acrescimo_value, 0)
         """
     )
     for r in cur.fetchall():
+        esperado, recebido = Decimal(r["esperado"]), Decimal(r["recebido"])
+        excesso = recebido - esperado
+        grave = esperado > 0 and (excesso / esperado) > Decimal("0.01")
         out.append({
-            "code": "recebido_maior_que_venda", "severity": "critico",
-            "title": f"“{r['title']}”: recebido R$ {r['recebido']} > venda R$ {r['sale_value']}",
-            "details": {"event_id": r["id"], "recebido": _dec(r["recebido"]),
-                        "sale_value": _dec(r["sale_value"])},
+            "entity_uid": f"calendar_event:{r['id']}",
+            "code": "recebido_maior_que_venda",
+            "severity": "critico" if grave else "atencao",
+            "title": (f"“{r['title']}”: recebido R$ {recebido} excede em R$ {excesso} o "
+                      f"esperado R$ {esperado} (venda + transporte + acréscimos)"),
+            "details": {"event_id": r["id"], "recebido": str(recebido),
+                        "esperado": str(esperado), "excesso": str(excesso)},
         })
 
     cur.execute(
@@ -317,6 +332,7 @@ def collect_sql_anomalies(cur, win: tuple[datetime, datetime]) -> list[dict]:
     )
     for r in cur.fetchall():
         out.append({
+            "entity_uid": f"calendar_event:{r['id']}",
             "code": "parcela_recebida_sem_comprovante", "severity": "atencao",
             "title": f"“{r['title']}”: parcela marcada como recebida sem nenhum comprovante anexado",
             "details": {"event_id": r["id"], "recebido_parcelas": _dec(r["recebido_parcelas"])},
@@ -389,7 +405,7 @@ def collect_nao_auditaveis(cur, win: tuple[datetime, datetime]) -> list[dict]:
         """,
         (a, b),
     )
-    out += [{"tipo": "recorrente", "quem": r["name"], "referencia": r["paid_at"].date().isoformat(),
+    out += [{"tipo": "recorrente", "quem": r["name"], "referencia": str(r["paid_at"])[:10],
              "amount": _dec(r["amount"])} for r in cur.fetchall()]
 
     cur.execute(

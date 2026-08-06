@@ -169,8 +169,15 @@ def main() -> int:
             store.record_audited(item["entity_uid"], item["sha256"],
                                  manifest["run_id"], extracted)
 
+    suprimidas = 0
     for anomalia in manifest["anomalias_sql"]:
+        uid = anomalia.get("entity_uid")
+        if uid and store.finding_seen_before(anomalia["code"], uid, manifest["run_id"]):
+            suprimidas += 1
+            continue
         findings.append({"entity_uid": None, "sha256": None, **anomalia})
+    if suprimidas:
+        print(f"[batimento] {suprimidas} anomalias históricas já reportadas antes — suprimidas")
 
     for margem in manifest["aggregates"].get("margens_eventos", []):
         if margem["apertada"]:
