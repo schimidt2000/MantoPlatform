@@ -6,9 +6,17 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **216 (cachê no portal,
-> prévia de link, contraste e endurecimento de segurança)**
+> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **218 (correção de salário
+> e desempilhamento das telas de administração)**
 >
+> UX nova da 218: onze telas de administração saíram de coluna única estreita
+> (`max-w-lg`…`max-w-3xl`) para largura de desktop com blocos lado a lado — ficha e criação de
+> usuário, configurações, logs (viraram tabela), desempenho, clientes e ficha do cliente, revisão e
+> espaço de revisão, catálogo admin e seu formulário, ficha de figurino, configuração de preços.
+> Todo grid novo leva **`[&>*]:min-w-0`**: item de grid nasce com `min-width:auto` e sem isso o
+> `overflow-x-auto` das tabelas para de agir e a página estoura no celular.
+>
+
 > UX nova da 215: **`/events/:id` foi reformulada** — quatro abas (Resumo · Produção · Comercial ·
 > Histórico) com a aba na URL (`?aba=`), faixa de pendências clicável no Resumo, e **edição inline
 > por bloco** (o formulário `/events/:id/edit` virou item do menu Ferramentas, não mais o caminho
@@ -924,7 +932,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 
 | Rota | Tela | Acesso | Destaques |
 |---|---|---|---|
-| `/admin/usuarios` · `/novo` · `/:id` | Usuários | `SUPERADMIN`, `FINANCEIRO` | papéis, PIX, salário (`SalaryHistory`), conceder acesso, reset de senha, exclusão; usuários "apenas pagamento" (`has_access=False`) |
+| `/admin/usuarios` · `/novo` · `/:id` | Usuários | `SUPERADMIN`, `FINANCEIRO` | papéis, PIX, salário (`SalaryHistory`), conceder acesso, reset de senha, exclusão; usuários "apenas pagamento" (`has_access=False`). **Feature 218**: a lista virou tabela com busca, filtros combináveis (papel · situação · frequência), ordenação e resumo de folha do mês; a ficha virou duas colunas e cada faixa do histórico salarial tem **corrigir/excluir inline (só SUPERADMIN)**, que realinha a planilha de pagamentos |
 | `/admin/configuracoes` | Administração | `SUPERADMIN` | `SiteSetting`: cores/logo, comissão padrão, responsável EducaManto, imposto, Fator R, endereço base, ClickSign, e-mail, anonimato de avaliações, WhatsApp dos formulários |
 | `/admin/logs` | Logs | `SUPERADMIN` | `AuditLog` |
 | `/rh` | Painel de RH (`RhDashboardPage`, `App.tsx:130`) | **`SUPERADMIN` na prática** | ⚠️ Única tela do sistema cujo endpoint usa o **segundo mecanismo de RBAC** — `current_user.has_permission('rh.view')` (`app/api/rh_read.py:20`), código de permissão, não `RoleName`. E `rh.view` **nunca é semeado** (`seed.py` só cria `user.manage`), então todo mundo que não é SUPERADMIN recebe 403. Ver `docs/01` §4.3 e `docs/05` §7.1 |

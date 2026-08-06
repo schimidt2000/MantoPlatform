@@ -26,7 +26,7 @@ export function CatalogCardGrid({
   onDelete,
 }: CatalogCardGridProps) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {items.map((item) => (
         <Card key={item.id}>
           <CardContent className="flex gap-3 p-3">

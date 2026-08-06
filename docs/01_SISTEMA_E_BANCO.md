@@ -7,8 +7,8 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **216 (cachê no portal,
-> prévia de link, contraste e endurecimento de segurança)** · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **218 (correção de salário
+> e desempilhamento das telas de administração)** · Head de migration: `e7a1c94f20b3`
 > (*own_item_id em catalog_characters*) — confirme com `flask db heads`; este cabeçalho é a **única**
 > menção ao head neste documento.
 >
@@ -530,7 +530,12 @@ Ops: `app/admin/catalog_ops.py`, `app/admin/catalog_character_ops.py`
 ### 3.11 Administração — usuários e configuração
 `admin_users_read/write.py`: `GET /api/admin/users`, `/api/admin/users/<id>` ·
 `POST /api/admin/users` (+ `/<id>/salary`, `/grant-access`, `/reset-password`) ·
-`PATCH /api/admin/users/<id>`, `/<id>/pix` · `DELETE /api/admin/users/<id>`.
+`PATCH /api/admin/users/<id>`, `/<id>/pix` · `DELETE /api/admin/users/<id>` ·
+**`PATCH`/`DELETE /api/admin/users/<id>/salary/<salary_id>`** (feature 218 — corrigir/excluir faixa
+do histórico salarial; **só SUPERADMIN**, enquanto registrar salário é SUPERADMIN ou FINANCEIRO).
+As duas devolvem `payments_resynced`: o núcleo (`user_ops._rechain_salary_history` +
+`_resync_salary_payments`) reencadeia os `end_date` e realinha os `SalaryPayment` **não pagos** ao
+valor corrigido, reatando só a FK dos já pagos e preservando os `SalaryAdvance`.
 
 `admin_config_read/write.py`: `GET /api/admin/settings`, `/logs`, `/desempenho`, `/sync-status`,
 `/migrar-arquivos/status`, `/importar-catalogo/status` · `PATCH /api/admin/settings` ·

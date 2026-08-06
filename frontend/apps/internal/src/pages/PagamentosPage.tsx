@@ -12,6 +12,7 @@ import {
   PageHeader,
   Skeleton,
   cn,
+  formatShortDate,
 } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import {
@@ -145,10 +146,9 @@ function brl(v: number | null | undefined): string {
   return `R$ ${formatBRL(v ?? 0)}`;
 }
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
+// Vencimento e adiantamento chegam como data pura ("2026-08-05"); `formatShortDate` é a fonte
+// única que a monta em horário local — `new Date(iso)` direto lia como UTC e exibia 04/08.
+const formatDate = formatShortDate;
 
 function currentMonth(): string {
   const now = new Date();

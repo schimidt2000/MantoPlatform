@@ -132,15 +132,52 @@ export function useUpdatePix(id: number) {
   });
 }
 
+/** Mexer no histórico salarial muda a planilha de pagamentos — invalida as duas telas. */
+function invalidateSalaryViews(queryClient: ReturnType<typeof useQueryClient>, id: number) {
+  queryClient.invalidateQueries({ queryKey: ["admin-users", id] });
+  queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+  queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
+  queryClient.invalidateQueries({ queryKey: ["financeiro-dashboard"] });
+}
+
 /** Registra um novo salário para o usuário, encerrando o vigente (feature 167). */
 export function useAddSalary(id: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: SalaryInput) =>
       apiFetch(`/api/admin/users/${id}/salary`, { method: "POST", body: JSON.stringify(input) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-users", id] });
-    },
+    onSuccess: () => invalidateSalaryViews(queryClient, id),
+  });
+}
+
+export interface SalaryMutationResult extends SalaryHistoryEntry {
+  /** Lançamentos não pagos da planilha que foram realinhados ao valor corrigido. */
+  payments_resynced: number;
+}
+
+/** Corrige uma faixa do histórico salarial e realinha a planilha (feature 218). Só superadmin. */
+export function useUpdateSalary(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ salaryId, ...input }: SalaryInput & { salaryId: number }) =>
+      apiFetch<SalaryMutationResult>(`/api/admin/users/${id}/salary/${salaryId}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => invalidateSalaryViews(queryClient, id),
+  });
+}
+
+/** Exclui uma faixa do histórico salarial e realinha a planilha (feature 218). Só superadmin. */
+export function useDeleteSalary(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (salaryId: number) =>
+      apiFetch<{ ok: boolean; payments_resynced: number }>(
+        `/api/admin/users/${id}/salary/${salaryId}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => invalidateSalaryViews(queryClient, id),
   });
 }
 

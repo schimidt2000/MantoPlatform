@@ -105,7 +105,7 @@ export function EducaMantoPackagesPage() {
 
   if (user.data && !canViewPackages) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
+      <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
         <PageHeader title="EducaManto — Pacotes" className="mb-0" />
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
           Você não tem permissão para acessar a gestão de pacotes do EducaManto.

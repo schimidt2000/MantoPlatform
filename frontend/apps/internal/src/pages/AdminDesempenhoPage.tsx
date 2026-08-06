@@ -13,7 +13,7 @@ export function AdminDesempenhoPage() {
   const query = useAdminDesempenho(month);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
+    <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Desempenho"
         className="mb-0"
@@ -27,7 +27,13 @@ export function AdminDesempenhoPage() {
         }
       />
 
-      {query.isLoading && <Skeleton className="h-64 w-full" />}
+      {query.isLoading && (
+        <div className="grid gap-4 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-64 w-full" />
+          ))}
+        </div>
+      )}
       {query.isError && (
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
           Não foi possível carregar o desempenho.
@@ -35,7 +41,8 @@ export function AdminDesempenhoPage() {
       )}
 
       {query.data && (
-        <>
+        // Três rankings independentes do mesmo mês: lado a lado dá para comparar sem rolar.
+        <div className="grid items-start gap-4 [&>*]:min-w-0 lg:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle>Casting</CardTitle>
@@ -99,7 +106,7 @@ export function AdminDesempenhoPage() {
               )}
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
     </div>
   );

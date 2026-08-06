@@ -8,7 +8,7 @@ export function ClientsListPage() {
   const query = useClients(q);
 
   return (
-    <div className="mx-auto max-w-3xl p-4 sm:p-6">
+    <div className="mx-auto max-w-[1400px] p-4 sm:p-6">
       <PageHeader
         title="Clientes"
         className="mb-4"
@@ -22,8 +22,10 @@ export function ClientsListPage() {
         }
       />
 
+      {/* Busca não acompanha a largura da página: um campo de 1400px é mais difícil de ler que
+          um de 480px, e a grade abaixo é que deve ocupar o espaço horizontal. */}
       <input
-        className="mb-4 h-11 w-full rounded-md border border-line bg-panel px-3 text-sm text-ink"
+        className="mb-4 h-11 w-full max-w-lg rounded-md border border-line bg-panel px-3 text-sm text-ink"
         placeholder="Buscar por nome ou telefone…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
@@ -31,8 +33,8 @@ export function ClientsListPage() {
       />
 
       {query.isLoading && (
-        <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <Skeleton key={i} className="h-16 w-full" />
           ))}
         </div>
@@ -49,7 +51,7 @@ export function ClientsListPage() {
       )}
 
       {query.data && query.data.items.length > 0 && (
-        <div className="space-y-2">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {query.data.items.map((c) => (
             <Card key={c.id}>
               <CardContent className="flex items-center justify-between gap-3 p-3">

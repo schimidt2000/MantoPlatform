@@ -9,10 +9,21 @@
  * O backend serializa datas em ISO naïve (sem fuso). `new Date("2026-07-28T20:00:00")`
  * interpreta string sem fuso como horário LOCAL do navegador — que é o que queremos: a data
  * é lida como foi cadastrada, sem deslocamento.
+ *
+ * A exceção é a data **pura** (`"2026-08-05"`, sem hora): essa a especificação manda interpretar
+ * como **UTC**, e em São Paulo (UTC−3) ela vira 21h do dia anterior — a tela mostrava 04/08 para
+ * um vencimento em 05/08. Por isso `parse` monta a data pura campo a campo, em horário local.
  */
+
+const DATA_PURA = /^\d{4}-\d{2}-\d{2}$/;
 
 function parse(iso: string | null | undefined): Date | null {
   if (!iso) return null;
+  if (DATA_PURA.test(iso)) {
+    const [year, month, day] = iso.split("-").map(Number);
+    const local = new Date(year, month - 1, day);
+    return Number.isNaN(local.getTime()) ? null : local;
+  }
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? null : date;
 }

@@ -14,7 +14,7 @@ from app.admin import user_ops
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
-from app.models import User
+from app.models import SalaryHistory, User
 
 
 def _has_role(*names: str) -> bool:
@@ -146,14 +146,72 @@ def api_admin_users_add_salary(user_id: int) -> Any:
         entry = user_ops.add_salary(user, salary)
     except user_ops.UserValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
-    return jsonify(
-        {
-            "id": entry.id,
-            "amount": entry.salary,
-            "payment_type": entry.payment_type,
-            "start_date": entry.start_date.isoformat(),
-        }
+    return jsonify(_salary_entry(entry))
+
+
+def _salary_entry(entry: SalaryHistory) -> dict:
+    return {
+        "id": entry.id,
+        "amount": entry.salary,
+        "payment_type": entry.payment_type,
+        "start_date": entry.start_date.isoformat(),
+        "end_date": entry.end_date.isoformat() if entry.end_date else None,
+        "notes": entry.notes or "",
+    }
+
+
+def _load_salary_entry(user_id: int, salary_id: int) -> tuple[User, SalaryHistory] | Any:
+    """Carrega o par (usuário, faixa salarial) ou devolve a resposta de erro pronta."""
+    user = User.query.get(user_id)
+    if user is None:
+        return json_error("Usuário não encontrado", 404)
+    entry = SalaryHistory.query.get(salary_id)
+    if entry is None or entry.user_id != user_id:
+        return json_error("Salário não encontrado", 404)
+    return user, entry
+
+
+@api_bp.route("/admin/users/<int:user_id>/salary/<int:salary_id>", methods=["PATCH"])
+@api_login_required
+def api_admin_users_update_salary(user_id: int, salary_id: int) -> Any:
+    """Corrige uma faixa do histórico salarial e realinha a planilha (feature 218)."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    loaded = _load_salary_entry(user_id, salary_id)
+    if not isinstance(loaded, tuple):
+        return loaded
+    user, entry = loaded
+    body = request.get_json(silent=True) or {}
+    salary = user_ops.SalaryInput(
+        amount=body.get("amount"),
+        payment_type=body.get("payment_type", ""),
+        start_date=body.get("start_date"),
+        notes=body.get("notes"),
     )
+    try:
+        entry, resynced = user_ops.update_salary(user, entry, salary)
+    except user_ops.UserValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify({**_salary_entry(entry), "payments_resynced": resynced})
+
+
+@api_bp.route("/admin/users/<int:user_id>/salary/<int:salary_id>", methods=["DELETE"])
+@api_login_required
+def api_admin_users_delete_salary(user_id: int, salary_id: int) -> Any:
+    """Exclui uma faixa do histórico salarial e realinha a planilha (feature 218)."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    loaded = _load_salary_entry(user_id, salary_id)
+    if not isinstance(loaded, tuple):
+        return loaded
+    user, entry = loaded
+    try:
+        resynced = user_ops.delete_salary(user, entry)
+    except user_ops.UserValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify({"ok": True, "payments_resynced": resynced})
 
 
 @api_bp.route("/admin/users/<int:user_id>/grant-access", methods=["POST"])

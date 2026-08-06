@@ -38,7 +38,7 @@ export function RevisaoSpacePage() {
 
   if (query.isLoading) {
     return (
-      <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
+      <div className="mx-auto max-w-[1200px] space-y-4 p-4 sm:p-6">
         <Skeleton className="h-64 w-full" />
       </div>
     );
@@ -46,7 +46,7 @@ export function RevisaoSpacePage() {
 
   if (query.isError || !query.data) {
     return (
-      <div className="mx-auto max-w-2xl p-4 sm:p-6">
+      <div className="mx-auto max-w-[1200px] p-4 sm:p-6">
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
           Não foi possível carregar o espaço.
         </div>
@@ -57,7 +57,7 @@ export function RevisaoSpacePage() {
   const space = query.data;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
+    <div className="mx-auto max-w-[1200px] space-y-4 p-4 sm:p-6">
       <Button asChild variant="ghost" size="sm">
         <Link to="/revisao">‹ Revisão de mídia</Link>
       </Button>
@@ -83,7 +83,10 @@ export function RevisaoSpacePage() {
         }
       />
 
-      <Card>
+      {/* Materiais ocupam duas frações e revisores uma: a lista de mídia é o conteúdo que cresce,
+          o painel de revisores é uma escolha curta que não precisa de meia tela. */}
+      <div className="grid items-start gap-4 [&>*]:min-w-0 lg:grid-cols-3">
+      <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Materiais</CardTitle>
         </CardHeader>
@@ -168,6 +171,7 @@ export function RevisaoSpacePage() {
           </CardContent>
         </Card>
       )}
+      </div>
     </div>
   );
 }

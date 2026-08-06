@@ -6,8 +6,8 @@ export function RhDashboardPage() {
   const query = useRhDashboard();
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
-<PageHeader title="RH" className="mb-0" />
+    <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
+      <PageHeader title="RH" className="mb-0" />
 
       {query.isLoading && <Skeleton className="h-32 w-full" />}
 

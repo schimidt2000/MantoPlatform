@@ -37,8 +37,8 @@ export function AdminSettingsPage() {
   }, [query.data]);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
-<PageHeader title="Configurações" className="mb-0" />
+    <div className="mx-auto max-w-[1200px] space-y-4 p-4 sm:p-6">
+      <PageHeader title="Configurações" className="mb-0" />
 
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline" size="sm">
@@ -73,6 +73,9 @@ export function AdminSettingsPage() {
 
       {query.data && (
         <>
+          {/* Blocos de configuração são independentes entre si — em duas colunas a página inteira
+              cabe na tela, em vez de virar uma coluna estreita de 2xl com muita rolagem. */}
+          <div className="grid items-start gap-4 [&>*]:min-w-0 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>Financeiro</CardTitle>
@@ -195,6 +198,7 @@ export function AdminSettingsPage() {
               />
             </CardContent>
           </Card>
+          </div>
 
           <Button
             loading={update.isPending}

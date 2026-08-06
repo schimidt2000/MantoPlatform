@@ -4,8 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **217 (tema escuro e
-> reestruturação da documentação)** · Head de migration: `e7a1c94f20b3`
+> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **218 (correção de salário
+> e desempilhamento das telas de administração)** · Head de migration: `e7a1c94f20b3`
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -37,19 +37,20 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 129 |
-| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 198 |
-| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 256 |
-| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 333 |
-| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 368 |
-| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 400 |
-| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 433 |
-| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 468 |
-| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 500 |
-| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 529 |
-| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 564 |
-| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 637 |
-| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 686 |
+| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 130 |
+| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 205 |
+| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 274 |
+| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 332 |
+| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 409 |
+| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 444 |
+| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 476 |
+| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 509 |
+| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 544 |
+| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 576 |
+| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 605 |
+| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 640 |
+| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 713 |
+| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 762 |
 | **206b** | Hotfix: superfícies públicas por link voltaram a abrir sem login | 2026-08-05 | `—` | H2 | 11 |
 | **207** | Pacote de melhorias operacionais (5 frentes) | 2026-08-04 | `d9f2b3a41c07` | H2 | 36 |
 | **206** | React como interface primária e proxy reverso em produção | 2026-08-04 | `—` | H2 | 101 |
@@ -125,6 +126,81 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 218 — Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas
+`main` · **2026-08-06** · sem migration
+
+**Motivação.** Um salário foi digitado errado e registrado. O caminho existente — registrar um
+salário novo por cima — corrige dali para a frente, mas **deixa a faixa errada no histórico e o
+valor errado na planilha de pagamentos**: `_ensure_salary_payments` só recria os lançamentos
+`nao_pago` **sem adiantamento**, então qualquer lançamento já pago ou com adiantamento fica
+congelado no valor errado, para sempre, sem tela que o conserte. Junto vieram dois pedidos de UX:
+a tela de Usuários "bagunçada, sem organização nem filtro", e várias telas empilhando tudo numa
+coluna estreita num monitor largo.
+
+**O que mudou — salário.**
+
+`user_ops` ganhou três funções e uma passou a ser fonte única: **`_rechain_salary_history`**
+recalcula os `end_date` de toda a cadeia (cada faixa termina onde a seguinte começa; a última fica
+vigente), desempatando por `id` quando duas faixas compartilham a mesma `start_date` — que é
+exatamente o caso de "errei e regravei no mesmo dia". `add_salary`, `update_salary` e
+`delete_salary` chamam a mesma função, então nenhuma delas pode deixar duas faixas vigentes.
+
+**`_resync_salary_payments`** realinha a planilha. Regra: lançamento `nao_pago` tem `amount` e
+`salary_history_id` recalculados; lançamento **já pago / "no banco" só tem a FK reatada** — o valor
+é registro do que saiu do caixa e não se reescreve. Os registros são atualizados **no lugar**,
+nunca recriados, e é isso que preserva os adiantamentos (`SalaryAdvance`) — a regeneração do
+`_ensure_salary_payments` os preservava se abstendo de tocar no registro, o que era justamente a
+causa do valor congelado.
+
+**Decisão não óbvia:** `_salary_for_month` resolve a faixa **por mês** (a de maior `start_date`
+ativa no mês), espelhando `app/financeiro/routes.py::_ensure_salary_payments` em vez de resolver
+por data de vencimento — que seria mais preciso. Se as duas regras divergissem, o próximo
+carregamento da tela de Pagamentos desfaria o realinhamento.
+
+Antes de excluir uma faixa, as referências em `salary_payments.salary_history_id` são zeradas: os
+lançamentos já pagos apontam para ela e a FK barraria o `DELETE`. O `_resync` reata cada uma logo
+em seguida.
+
+**Endpoints novos (SUPERADMIN, não FINANCEIRO).** `PATCH` e `DELETE` em
+`/api/admin/users/<uid>/salary/<sid>`, ambos devolvendo `payments_resynced` — a UI usa esse número
+para dizer quantos lançamentos em aberto mudaram. Registrar salário continua SUPERADMIN **ou**
+FINANCEIRO; **corrigir o passado** é só SUPERADMIN.
+
+**O que mudou — telas.**
+
+`/admin/usuarios` foi reescrita: busca por nome/email, três filtros combináveis (papel, situação,
+frequência de pagamento) via `FilterDropdown`/`CheckboxList`, ordenação, quatro contadores e uma
+**tabela** em vez de cards empilhados, com colunas caindo por breakpoint (papéis em `md`,
+frequência em `lg`, PIX em `xl`). Os filtros de situação se somam como **E** ("ativo + sem PIX"
+funciona como se lê); os de papel e frequência somam como **OU** dentro da própria categoria.
+
+A "Folha do mês" replica a cadência do gerador de pagamentos (semanal × segundas-feiras do mês,
+quinzenal × 2) e diz isso na própria legenda — não é uma média inventada.
+
+Onze telas saíram de `max-w-lg/xl/2xl/3xl` em coluna única para largura de desktop com blocos lado
+a lado (ficha e criação de usuário, configurações, logs — que viraram tabela —, desempenho,
+clientes e ficha do cliente, revisão e espaço de revisão, catálogo admin e seu formulário, ficha de
+figurino, configuração de preços). Formulário de evento **não** foi mexido: os blocos já usam
+`sm:grid-cols-2` internamente e 3xl é largura correta para formulário longo.
+
+**Riscos e pegadinhas.**
+- Item de grid nasce com `min-width: auto`. Ao colocar as tabelas de preço dentro de um grid, o
+  `overflow-x-auto` do `Table` parou de agir e a página estourou 14px no celular. Todo grid novo
+  leva `[&>*]:min-w-0` — se aparecer rolagem horizontal numa tela nova, é esse o suspeito.
+- `add_salary` agora também roda o `_resync`: registrar um salário novo passa a **corrigir** os
+  lançamentos em aberto do mês, inclusive os que têm adiantamento. É mudança de comportamento
+  silenciosa em relação ao que existia, e é a metade da correção que o usuário percebe primeiro.
+
+**Achado de brinde — a planilha mostrava toda data um dia antes.** Investigando "o valor está
+errado" apareceu que o vencimento também estava: a tela exibia **04/08** para um quinzenal que vence
+em **05/08**, e segunda-feira de salário semanal caía num domingo. Causa: `new Date("2026-08-05")`
+— data **pura**, sem hora — é interpretada como **UTC** pela especificação, e em São Paulo (UTC−3)
+volta 21h do dia anterior. O comentário de `packages/ui/src/lib/date.ts` afirmava o contrário, o que
+é verdade só para `"2026-08-05T20:00:00"`. `parse` passou a montar a data pura campo a campo em
+horário local, e `PagamentosPage` (que tinha cópia própria de `formatDate`) passou a usar
+`formatShortDate` da fonte única. **Qualquer tela que formate campo `date` puro estava errada pelo
+mesmo motivo** — corrigir na fonte única conserta todas de uma vez. Ver também feature 210.
 
 ### 217 — Tema escuro com switch na sidebar, e reestruturação da documentação
 `main` · **2026-08-06** · sem migration

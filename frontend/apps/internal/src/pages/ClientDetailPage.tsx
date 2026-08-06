@@ -34,7 +34,7 @@ export function ClientDetailPage() {
   const canDelete = Boolean(user?.is_superadmin || user?.roles.includes("FINANCEIRO"));
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
+    <div className="mx-auto max-w-[1200px] space-y-4 p-4 sm:p-6">
       <Button asChild variant="ghost" size="sm">
         <Link to="/clientes">‹ Clientes</Link>
       </Button>
@@ -79,6 +79,10 @@ export function ClientDetailPage() {
             }
           />
 
+          {/* Cadastro à esquerda, histórico de eventos à direita: a lista de eventos cresce sem
+              empurrar os campos de edição para fora da tela. */}
+          <div className="grid items-start gap-4 [&>*]:min-w-0 lg:grid-cols-2">
+          <div className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Contato</CardTitle>
@@ -145,6 +149,7 @@ export function ClientDetailPage() {
               )}
             </CardContent>
           </Card>
+          </div>
 
           <Card>
             <CardHeader>
@@ -181,6 +186,7 @@ export function ClientDetailPage() {
               )}
             </CardContent>
           </Card>
+          </div>
         </>
       )}
     </div>

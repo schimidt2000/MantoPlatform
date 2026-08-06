@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
+import { MoneyInput } from "@manto/money";
 import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader } from "@manto/ui";
 import { useAdminUsers, useCreateAdminUser } from "../lib/adminUsers";
 
@@ -19,7 +20,7 @@ export function AdminUserCreatePage() {
   const [roleIds, setRoleIds] = useState<number[]>([]);
   const [pixKey, setPixKey] = useState("");
   const [pixKeyType, setPixKeyType] = useState("");
-  const [salaryAmount, setSalaryAmount] = useState("");
+  const [salaryAmount, setSalaryAmount] = useState(0);
   const [salaryType, setSalaryType] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -39,7 +40,7 @@ export function AdminUserCreatePage() {
         pix_key_type: pixKeyType || undefined,
         salary:
           salaryAmount || salaryType
-            ? { amount: salaryAmount, payment_type: salaryType }
+            ? { amount: String(salaryAmount), payment_type: salaryType }
             : undefined,
       },
       {
@@ -52,7 +53,7 @@ export function AdminUserCreatePage() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
+    <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
       <Button asChild variant="ghost" size="sm">
         <Link to="/admin/usuarios">‹ Usuários</Link>
       </Button>
@@ -80,25 +81,25 @@ export function AdminUserCreatePage() {
               Só pagamento (sem login)
             </button>
           </div>
-          <div>
-            <label className={LABEL}>Nome</label>
-            <input className={INPUT} value={name} onChange={(e) => setName(e.target.value)} />
-            {fieldErrors.name && <p className="mt-1 text-xs text-red">{fieldErrors.name}</p>}
-          </div>
-          <div>
-            <label className={LABEL}>
-              Email{userType === "access" ? "" : " (opcional)"}
-            </label>
-            <input
-              type="email"
-              className={INPUT}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            {fieldErrors.email && <p className="mt-1 text-xs text-red">{fieldErrors.email}</p>}
-          </div>
-          {userType === "access" && (
-            <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <label className={LABEL}>Nome</label>
+              <input className={INPUT} value={name} onChange={(e) => setName(e.target.value)} />
+              {fieldErrors.name && <p className="mt-1 text-xs text-red">{fieldErrors.name}</p>}
+            </div>
+            <div>
+              <label className={LABEL}>
+                Email{userType === "access" ? "" : " (opcional)"}
+              </label>
+              <input
+                type="email"
+                className={INPUT}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              {fieldErrors.email && <p className="mt-1 text-xs text-red">{fieldErrors.email}</p>}
+            </div>
+            {userType === "access" && (
               <div>
                 <label className={LABEL}>Senha temporária</label>
                 <input
@@ -108,6 +109,10 @@ export function AdminUserCreatePage() {
                   onChange={(e) => setTempPassword(e.target.value)}
                 />
               </div>
+            )}
+          </div>
+          {userType === "access" && (
+            <>
               {rolesQuery.data && rolesQuery.data.all_roles.length > 0 && (
                 <div>
                   <label className={LABEL}>Papéis</label>
@@ -130,6 +135,9 @@ export function AdminUserCreatePage() {
         </CardContent>
       </Card>
 
+      {/* PIX e salário são blocos curtos e independentes — lado a lado no desktop em vez de
+          empilhados, para o formulário inteiro caber sem rolagem. */}
+      <div className="grid items-start gap-4 [&>*]:min-w-0 md:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>PIX (opcional)</CardTitle>
@@ -157,12 +165,7 @@ export function AdminUserCreatePage() {
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className={LABEL}>Valor</label>
-            <input
-              className={INPUT}
-              value={salaryAmount}
-              onChange={(e) => setSalaryAmount(e.target.value)}
-              placeholder="0,00"
-            />
+            <MoneyInput className={INPUT} value={salaryAmount} onValueChange={setSalaryAmount} />
           </div>
           <div>
             <label className={LABEL}>Tipo de pagamento</label>
@@ -182,6 +185,7 @@ export function AdminUserCreatePage() {
           )}
         </CardContent>
       </Card>
+      </div>
 
       <Button loading={create.isPending} onClick={handleSubmit}>
         Criar usuário

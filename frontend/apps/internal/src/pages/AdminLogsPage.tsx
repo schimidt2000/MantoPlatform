@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, CardContent, PageHeader, Skeleton } from "@manto/ui";
+import { Button, PageHeader, Skeleton, Table, TableCell, TableRow } from "@manto/ui";
 import { useAdminLogs } from "../lib/adminConfig";
 
 function formatDate(iso: string): string {
@@ -13,8 +13,8 @@ export function AdminLogsPage() {
   const query = useAdminLogs(entityType, actor, page);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
-<PageHeader title="Logs de auditoria" className="mb-0" />
+    <div className="mx-auto max-w-[1600px] space-y-4 p-4 sm:p-6">
+      <PageHeader title="Logs de auditoria" className="mb-0" />
 
       <div className="flex flex-wrap gap-2">
         {query.data && (
@@ -60,25 +60,43 @@ export function AdminLogsPage() {
 
       {query.data && (
         <>
-          <div className="space-y-2">
-            {query.data.items.map((log) => (
-              <Card key={log.id}>
-                <CardContent className="p-3 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-ink">
-                      {log.actor_name} · {log.action}
-                    </span>
-                    <span className="text-xs text-muted">{formatDate(log.created_at)}</span>
-                  </div>
-                  {log.entity_name && (
-                    <p className="text-muted">
-                      {log.entity_type}: {log.entity_name}
-                    </p>
-                  )}
-                  {log.detail && <p className="text-muted">{log.detail}</p>}
-                </CardContent>
-              </Card>
-            ))}
+          {/* Tabela e não cards empilhados: log é dado tabular — quem/quando/o quê alinhados em
+              colunas dá para varrer de cima a baixo, e a coluna de detalhe usa a largura da tela. */}
+          <div className="rounded-md border border-line bg-panel">
+            <Table>
+              <thead>
+                <TableRow head>
+                  <TableCell as="th" className="w-40">
+                    Quando
+                  </TableCell>
+                  <TableCell as="th" className="w-48">
+                    Quem
+                  </TableCell>
+                  <TableCell as="th" className="w-24">
+                    Ação
+                  </TableCell>
+                  <TableCell as="th" className="hidden w-56 md:table-cell">
+                    Entidade
+                  </TableCell>
+                  <TableCell as="th">Detalhe</TableCell>
+                </TableRow>
+              </thead>
+              <tbody>
+                {query.data.items.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="whitespace-nowrap text-muted">
+                      {formatDate(log.created_at)}
+                    </TableCell>
+                    <TableCell className="font-medium text-ink">{log.actor_name}</TableCell>
+                    <TableCell className="text-ink">{log.action}</TableCell>
+                    <TableCell className="hidden text-muted md:table-cell">
+                      {log.entity_name ? `${log.entity_type}: ${log.entity_name}` : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted">{log.detail || "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </tbody>
+            </Table>
           </div>
           {query.data.pages > 1 && (
             <div className="flex items-center justify-center gap-2">

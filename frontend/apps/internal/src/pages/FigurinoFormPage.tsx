@@ -296,11 +296,11 @@ export function FigurinoFormPage() {
   };
 
   if (isEdit && list.isLoading) {
-    return <div className="mx-auto max-w-xl p-6 text-sm text-muted">Carregando…</div>;
+    return <div className="mx-auto max-w-5xl p-6 text-sm text-muted">Carregando…</div>;
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 p-4 sm:p-6">
+    <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
       <Button asChild variant="ghost" size="sm">
         <Link to="/figurinos">‹ Figurino</Link>
       </Button>
@@ -310,6 +310,10 @@ export function FigurinoFormPage() {
 
       <Card>
         <CardContent className="space-y-4 p-4">
+          {/* Identificação da ficha à esquerda, checklist de peças à direita: a lista de peças
+              cresce sem empurrar foto, tags e observações para baixo da dobra. */}
+          <div className="grid items-start gap-6 [&>*]:min-w-0 lg:grid-cols-2">
+          <div className="space-y-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-muted">
               Nome do personagem <span className="text-red">*</span>
@@ -328,6 +332,21 @@ export function FigurinoFormPage() {
           ) : (
             <NewFigurinoPhotoField file={newPhoto} onChange={setNewPhoto} />
           )}
+
+          <TagsField tags={tags} onChange={setTags} />
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted">Observações</label>
+            <textarea
+              className="min-h-20 w-full rounded-md border border-line bg-panel p-2 text-sm text-ink"
+              placeholder="Instruções especiais, cuidados com as peças, etc."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          {isEdit && sheetId && <FigurinoCatalogLinkField sheetId={sheetId} />}
+          </div>
 
           <div>
             <div className="mb-1 flex items-center justify-between">
@@ -373,20 +392,7 @@ export function FigurinoFormPage() {
               ))}
             </div>
           </div>
-
-          <TagsField tags={tags} onChange={setTags} />
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted">Observações</label>
-            <textarea
-              className="min-h-20 w-full rounded-md border border-line bg-panel p-2 text-sm text-ink"
-              placeholder="Instruções especiais, cuidados com as peças, etc."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
           </div>
-
-          {isEdit && sheetId && <FigurinoCatalogLinkField sheetId={sheetId} />}
 
           {mutation.isError && (
             <p className="text-sm text-red">Não foi possível salvar a ficha.</p>

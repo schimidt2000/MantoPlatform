@@ -10,7 +10,7 @@ export function RevisaoListPage() {
   const query = useRevisaoSpaces();
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
+    <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Revisão de mídia"
         className="mb-0"
@@ -24,8 +24,8 @@ export function RevisaoListPage() {
       />
 
       {query.isLoading && (
-        <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
             <Skeleton key={i} className="h-16 w-full" />
           ))}
         </div>
@@ -41,7 +41,7 @@ export function RevisaoListPage() {
       )}
 
       {query.data && query.data.items.length > 0 && (
-        <div className="space-y-2">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {query.data.items.map((space) => (
             <Card key={space.id}>
               <CardContent className="p-3">

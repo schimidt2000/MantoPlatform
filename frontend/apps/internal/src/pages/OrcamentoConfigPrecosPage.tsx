@@ -78,7 +78,7 @@ export function OrcamentoConfigPrecosPage() {
 
   if (query.isLoading || !settings) {
     return (
-      <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
+      <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
         <PageHeader title="Configuração de Preços" className="mb-0" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -87,7 +87,7 @@ export function OrcamentoConfigPrecosPage() {
 
   if (query.isError) {
     return (
-      <div className="mx-auto max-w-4xl p-4 sm:p-6">
+      <div className="mx-auto max-w-[1400px] p-4 sm:p-6">
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
           Não foi possível carregar a configuração de preços.
         </div>
@@ -100,7 +100,7 @@ export function OrcamentoConfigPrecosPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
+    <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Configuração de Preços"
         subtitle="Valores de referência da Calculadora de Orçamento"
@@ -112,6 +112,11 @@ export function OrcamentoConfigPrecosPage() {
         }
       />
 
+      {/* Oito tabelas de preço independentes: em duas colunas dá para conferir markup e cachês
+          sem rolar oito telas. `items-start` porque as tabelas têm alturas bem diferentes. */}
+      {/* `[&>*]:min-w-0`: item de grid nasce com `min-width:auto`, o que impede o
+          `overflow-x-auto` da tabela de agir e estoura a página no celular. */}
+      <div className="grid items-start gap-4 [&>*]:min-w-0 xl:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>Markup (Coeficiente de Venda)</CardTitle>
@@ -443,6 +448,7 @@ export function OrcamentoConfigPrecosPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
 
       <Button loading={save.isPending} onClick={handleSave}>
         Salvar configurações

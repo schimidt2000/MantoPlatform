@@ -142,14 +142,14 @@ export function AdminCatalogoFormPage() {
 
   if (isEdit && itemQuery.isLoading) {
     return (
-      <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
+      <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
         <Skeleton className="h-64 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
+    <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
       <Button asChild variant="ghost" size="sm">
         <Link to="/admin/catalogo">‹ Catálogo</Link>
       </Button>
@@ -160,7 +160,10 @@ export function AdminCatalogoFormPage() {
         </h1>
       </header>
 
-      <Card>
+      {/* Dados leva o dobro da largura (tem editor de texto rico); categorias é só uma lista de
+          chips, cabe na coluna estreita ao lado em vez de virar mais um bloco na pilha. */}
+      <div className="grid items-start gap-4 [&>*]:min-w-0 lg:grid-cols-3">
+      <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Dados</CardTitle>
         </CardHeader>
@@ -257,6 +260,7 @@ export function AdminCatalogoFormPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
 
       <Card>
         <CardHeader>
@@ -265,7 +269,7 @@ export function AdminCatalogoFormPage() {
         <CardContent className="space-y-3">
           {fieldErrors.photos && <p className="text-xs text-red">{fieldErrors.photos}</p>}
           {visibleExisting.length > 0 && (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
               {[...visibleExisting]
                 .sort((a, b) => a.position - b.position)
                 .map((photo, idx) => (
@@ -359,7 +363,7 @@ export function AdminCatalogoFormPage() {
           </div>
 
           {newPhotos.length > 0 && (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
               {newPhotos.map((file, idx) => (
                 <div key={idx} className="space-y-1">
                   <div className="aspect-square overflow-hidden rounded-md bg-surface-2">

@@ -113,7 +113,7 @@ export function AdminCatalogoListPage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4 pb-24 sm:p-6">
+    <div className="mx-auto max-w-[1400px] space-y-4 p-4 pb-24 sm:p-6">
       <PageHeader
         title="Catálogo"
         className="mb-0"
@@ -143,7 +143,7 @@ export function AdminCatalogoListPage() {
 
       <div className="flex flex-wrap gap-2">
         <input
-          className="h-9 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+          className="h-9 min-w-56 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink sm:max-w-md"
           placeholder="Buscar por nome…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -174,8 +174,8 @@ export function AdminCatalogoListPage() {
       </div>
 
       {query.isLoading && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[0, 1, 2, 3].map((i) => (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
             <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
