@@ -466,6 +466,15 @@ remetente por IMAP em modo somente leitura — ver `app/integracoes/imap_client.
 | POST | `/api/financeiro/pagamentos/salary/<sp_id>/advance`, `/salary/advance/<adv_id>/delete` | |
 | GET | `/api/financeiro/pagamentos/export` | CSV |
 
+**Agente auditor financeiro — `audit_agent.py` (feature 221).** Endpoints para o auditor
+semanal que roda FORA do Railway (Claude Code local): `GET
+/api/audit-agent/<token>/file/<path>` (download read-only de comprovante; escopo
+`payments/expenses/invoices/contracts` + allowlist de extensão; `safe_join`) e `POST
+/api/audit-agent/<token>/report` (envia o relatório por e-mail — destinatários restritos a
+usuários internos ativos). Token via env `AUDIT_AGENT_TOKEN`; inválido/ausente → **404**
+(molde do webhook InfinitePay). Nenhum endpoint escreve no banco. Pipeline do auditor em
+`scripts/auditor/` (ver `specs/221-agente-auditor-financeiro/spec.md`).
+
 Núcleo de negócio de comissões: `app/financeiro/comissoes_ops.py`
 (`resolve_month`, `get_month_entries`, `get_month_summary_by_seller`, `get_month_kpis`,
 `pay_seller_month`). O Jinja legado `app/financeiro/routes.py` **não** importa deste módulo

@@ -37,6 +37,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **221** | Agente auditor financeiro semanal (endpoints + fix de sobrescrita de upload) | 2026-08-06 | `—` | (aqui) | 133 |
 | **220b** | Hotfix: menu "Ferramentas" do evento embaçado no meio | 2026-08-06 | `—` | (aqui) | 133 |
 | **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 156 |
 | **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 217 |
@@ -129,6 +130,34 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 221 — Agente auditor financeiro semanal
+`221-agente-auditor-financeiro` · **2026-08-06** · sem migration
+
+**Motivação.** O dono não revisa todas as movimentações; comprovante falso, duplicado ou
+divergente passava sem verificação nenhuma. Pedido direto: rotina de segunda ~06h que lê os
+comprovantes e cruza com o registrado, usando a assinatura do Claude (zero API paga).
+
+**O que entrou.** (1) **Fix crítico**: `_save_bounded_upload` salvava com `secure_filename`
+puro — uploads homônimos ("Comprovante.pdf") sobrescreviam o binário anterior em silêncio;
+a base de produção tem **11 casos reais** de `file_path` repetido em `event_payments` por
+causa disso. Agora prefixo timestamp+uuid. (2) Endpoints `audit_agent.py` (ver
+`docs/01_SISTEMA_E_BANCO.md` §3.6). (3) Pipeline `scripts/auditor/` (coleta read-only →
+leitura dos comprovantes por visão → batimento → relatório por e-mail), com memória SQLite
+idempotente por (entidade, SHA-256). (4) Skills locais `financeiro-auditor` (rodada) e
+`financeiro` (analista sob demanda) — `.claude/` é gitignored, vivem na máquina do auditor.
+
+**Decisões.** Cachê/comissão/recorrente/BV não têm campo de anexo — ficam listados como
+"não auditáveis" (decisão de produto; reavaliar depois). Job roda na máquina local via
+scheduled task do Claude Code, não como cron do Railway (visão pela API teria custo). Store
+local em vez de tabela nova: ERP intocado.
+
+**Pegadinhas.** `recurring_expense_entries.paid_at` é **DATE**, não timestamp.
+"Recebido > venda" precisa comparar contra venda + `transport_value` + `acrescimo_value`
+(cobrados nos mesmos comprovantes, fora de `sale_value`) e tolerar ~1% (juros de
+parcelamento) — sem isso, 3 falsos positivos e casos reais escondidos no meio (ex.: evento
+186 com R$ 160.550,00 digitado no lugar de R$ 1.605,50). Anomalias de varredura all-time
+precisam de supressão por `entity_uid` no store, senão repetem todo relatório.
 
 ### 220b — Hotfix: menu "Ferramentas" do evento embaçado no meio
 `main` · **2026-08-06** · sem migration
