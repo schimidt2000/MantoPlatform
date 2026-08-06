@@ -4,9 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **220 (vínculo
-> formulário↔evento endurecido, fila de revisão e histórico da cliente)** · Head de migration:
-> `c5d92fa16e34`
+> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **220b (hotfix da
+> camada do menu "Ferramentas")** · Head de migration: `c5d92fa16e34`
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -38,22 +37,23 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 132 |
-| **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 193 |
-| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 268 |
-| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 343 |
-| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 412 |
-| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 470 |
-| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 547 |
-| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 582 |
-| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 614 |
-| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 647 |
-| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 682 |
-| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 714 |
-| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 743 |
-| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 778 |
-| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 851 |
-| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 900 |
+| **220b** | Hotfix: menu "Ferramentas" do evento embaçado no meio | 2026-08-06 | `—` | (aqui) | 133 |
+| **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 156 |
+| **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 217 |
+| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 292 |
+| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 367 |
+| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 436 |
+| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 494 |
+| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 571 |
+| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 606 |
+| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 638 |
+| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 671 |
+| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 706 |
+| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 738 |
+| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 767 |
+| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 802 |
+| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 875 |
+| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 924 |
 | **206b** | Hotfix: superfícies públicas por link voltaram a abrir sem login | 2026-08-05 | `—` | H2 | 11 |
 | **207** | Pacote de melhorias operacionais (5 frentes) | 2026-08-04 | `d9f2b3a41c07` | H2 | 36 |
 | **206** | React como interface primária e proxy reverso em produção | 2026-08-04 | `—` | H2 | 101 |
@@ -129,6 +129,29 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 220b — Hotfix: menu "Ferramentas" do evento embaçado no meio
+`main` · **2026-08-06** · sem migration
+
+**Sintoma.** No detalhe do evento, o menu "⋯ Ferramentas" abria com uma faixa horizontal no meio
+embaçada/apagada, como se o menu estivesse partido em dois pedaços.
+
+**Causa.** Empate de `z-index`. O painel do `KebabMenu` era `z-20` — o mesmo degrau da régua de
+abas (`sticky top-14 z-20` em `EventDetailPage`). Empate de z-index se decide por **ordem no
+DOM**, e a régua vem depois do cabeçalho, então ela ganhava. Como a régua tem
+`backdrop-blur(8px)` + `bg-surface/95`, os 62px do menu que caíam atrás dela apareciam
+embaçados — não era um menu quebrado, era um menu **coberto**.
+
+**Medição (antes/depois).** `elementFromPoint` no centro da faixa devolvia a régua; depois do
+ajuste devolve o próprio item de menu, e nenhum dos 10 itens fica coberto por outro elemento.
+
+**Correção.** Painel do `KebabMenu` sobe para `z-30` — a camada de popover que o `Combobox` de
+`@manto/ui` já usava. Vocabulário de camadas do app, para não regredir: conteúdo `auto` <
+cromo fixo de página `z-20` < **popover `z-30`** < topbar/sidebar do app `z-30/z-40` < diálogo
+`z-40` (véu) / `z-50` (conteúdo).
+
+**Pegadinha.** Comentário `//` solto entre atributos de JSX é erro de sintaxe; por isso a classe
+virou constante nomeada com o comentário acima dela — que é onde a regra de camada é procurada.
 
 ### 220 — Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente
 `main` · **2026-08-06** · sem migration (correção de dados direto na produção, com dump prévio)

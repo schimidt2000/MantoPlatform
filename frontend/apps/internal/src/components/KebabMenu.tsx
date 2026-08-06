@@ -23,6 +23,16 @@ interface KebabMenuProps {
 }
 
 /**
+ * Painel flutuante do menu. `z-30` é a camada de popover do app (a mesma do `Combobox` de
+ * `@manto/ui`) e não pode cair para `z-20`: nesse degrau ele EMPATA com o cromo fixo das
+ * páginas — a régua de abas do detalhe do evento é `sticky z-20` — e empate de z-index se
+ * decide por ordem no DOM, que a régua vence por vir depois. O sintoma era uma faixa de 62px
+ * do menu embaçada pelo `backdrop-blur` da régua. Abaixo de diálogo (z-40/z-50), que cobre tudo.
+ */
+const PAINEL_CLASSES =
+  "absolute right-0 z-30 mt-1 min-w-[13rem] rounded-md border border-line bg-panel py-1 shadow-md";
+
+/**
  * Menu de 3 pontos genérico (feature 186, US4) — não existe `DropdownMenu` em `@manto/ui` ainda;
  * implementação enxuta própria, no mesmo espírito de `FilterDropdown` já existente
  * (research.md §7). Fecha ao clicar fora ou Esc.
@@ -71,7 +81,7 @@ export function KebabMenu({ items, label = "Mais ações", triggerLabel }: Kebab
         <ul
           id={menuId}
           role="menu"
-          className="absolute right-0 z-20 mt-1 min-w-[13rem] rounded-md border border-line bg-panel py-1 shadow-md"
+          className={PAINEL_CLASSES}
         >
           {items.map((item) => (
             <li key={item.label} role="none">
