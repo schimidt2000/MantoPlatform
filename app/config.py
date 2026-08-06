@@ -136,6 +136,10 @@ class Config:
     # Intervalo (segundos) da varredura que expira as reservas virtuais (feature 205, FR-057).
     VIRTUAL_SWEEP_INTERVAL = int(os.getenv("VIRTUAL_SWEEP_INTERVAL", "60"))
 
+    # Token do agente auditor financeiro (feature 221). Sem valor configurado, os endpoints
+    # `/api/audit-agent/*` respondem 404 para tudo — mesmo racional do webhook da InfinitePay.
+    AUDIT_AGENT_TOKEN = os.getenv("AUDIT_AGENT_TOKEN", "")
+
     # Pasta dos vídeos gravados (feature 205, FR-038e). **Fora** de `UPLOAD_FOLDER` de propósito:
     # `/uploads/<path>` é uma rota servida (ainda que com login de staff) e, com `USE_S3=true`,
     # `save_file` devolveria uma URL de bucket público. Um vídeo em que o nome da criança é dito em

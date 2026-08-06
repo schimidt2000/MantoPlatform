@@ -576,6 +576,30 @@ def send_new_expense_alert_email(expense, users: list) -> int:
 
 # ── Helper interno ─────────────────────────────────────────────────────────────
 
+def send_audit_report_email(subject: str, content_html: str, users: list) -> int:
+    """Envia o relatório semanal do agente auditor financeiro (feature 221).
+
+    O corpo já chega montado pelo auditor (tabelas de achados, sumário); aqui ele só ganha a
+    moldura padrão dos e-mails da plataforma.
+
+    Args:
+        subject: Assunto do e-mail.
+        content_html: HTML interno do relatório (vai dentro de ``_html_wrap``).
+        users: Usuários internos destinatários (já validados pelo endpoint).
+
+    Returns:
+        Quantidade de e-mails efetivamente enviados.
+    """
+    sent = 0
+    for user in users:
+        if not user.email:
+            continue
+        html = _html_wrap(content_html, preheader="Relatório semanal da auditoria financeira.")
+        if _send(to=user.email, subject=subject, html=html):
+            sent += 1
+    return sent
+
+
 def _emails_enabled() -> bool:
     # Trava de ambiente vem ANTES da configuração do banco: `email_notifications_enabled` mora no
     # próprio banco, então a cópia local herda o valor da produção (ligado) e um processo de
