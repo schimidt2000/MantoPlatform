@@ -35,12 +35,16 @@ export function StatusBadge({ status, canManage, onChange, isPending }: StatusBa
               type="button"
               disabled={isPending}
               onClick={() => onChange(value)}
+              // No hover o botão vira preenchimento sólido, então a tinta tem que ser a de
+              // "sobre cor" e não branco: no tema escuro as matizes clareiam e o branco cai
+              // para 1.78:1 no verde e 2.23:1 no azul. O dourado leva `on-gold` porque é claro
+              // também no tema claro (branco daria 3.71:1 lá).
               className={cn(
-                "rounded-full border border-line px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:border-transparent hover:text-white disabled:pointer-events-none disabled:opacity-60",
-                value === "aprovado" && "hover:bg-green",
-                value === "precisa_ajustes" && "hover:bg-gold",
-                value === "rejeitado" && "hover:bg-red",
-                value === "em_revisao" && "hover:bg-blue",
+                "rounded-full border border-line-strong px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:border-transparent disabled:pointer-events-none disabled:opacity-60",
+                value === "aprovado" && "hover:bg-green hover:text-on-color",
+                value === "precisa_ajustes" && "hover:bg-gold hover:text-on-gold",
+                value === "rejeitado" && "hover:bg-red hover:text-on-color",
+                value === "em_revisao" && "hover:bg-blue hover:text-on-color",
               )}
             >
               {STATUS_META[value].label}

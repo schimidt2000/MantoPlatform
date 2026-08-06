@@ -59,9 +59,11 @@ export function AgendaToolbar({
             type="button"
             aria-pressed={view === opt.value}
             onClick={() => onViewChange(opt.value)}
+            // `on-color` no estado selecionado: o acento clareia no tema escuro e o `text-white`
+            // que estava aqui reprovava AA (2.72:1) justo no botão que marca a visão ativa.
             className={`px-3 py-1.5 text-sm font-medium transition-colors ${
               view === opt.value
-                ? "bg-accent text-white"
+                ? "bg-accent text-on-color"
                 : "bg-panel text-ink hover:bg-surface-2"
             }`}
           >

@@ -44,6 +44,9 @@ function MosaicCard({ talent, isPending }: { talent: TalentSummary; isPending: b
             title={`Alerta: ${talent.warning_level}`}
           />
         )}
+        {/* O branco e o degradê preto daqui NÃO devem virar token: o fundo é a FOTO do talento,
+            que não muda com o tema. Um texto que invertesse no escuro ficaria preto sobre um
+            degradê preto. */}
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 pt-6">
           <div className="truncate text-sm font-medium text-white">{talent.full_name}</div>
           {badges.length > 0 && (

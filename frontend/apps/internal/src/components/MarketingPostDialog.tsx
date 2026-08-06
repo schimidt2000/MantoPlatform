@@ -514,7 +514,9 @@ export function MarketingPostDialog({
                 </Button>
                 <Button
                   size="sm"
-                  className="bg-red text-white hover:bg-red/90"
+                  // Botão destrutivo: `on-color` porque o vermelho clareia para #ff6b6b no
+                  // tema escuro e o branco por cima cai para 2.78:1.
+                  className="bg-red text-on-color hover:bg-red/90"
                   loading={deletePost.isPending}
                   onClick={handleDelete}
                 >

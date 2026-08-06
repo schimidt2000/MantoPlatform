@@ -221,13 +221,17 @@ function AgendaNoDiaAlert({ date }: { date: string }) {
   if (!dateValida || !personagens.length) return null;
 
   return (
-    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm" role="alert">
-      <p className="mb-1 font-semibold text-amber-800">⚠️ Já na agenda neste dia — não vender em dobro</p>
-      <ul className="list-disc space-y-0.5 pl-4 text-amber-900">
+    // `gold` (cor de atenção do design system) no lugar do `amber` cru do Tailwind: o amber é
+    // sempre claro e não acompanha o tema — este alerta ficaria um retângulo bege berrante no
+    // tema escuro. `gold-ink` no título e `ink` no corpo porque o dourado puro é cor de
+    // preenchimento, não de texto (3.25:1 sobre o próprio fundo).
+    <div className="rounded-md border border-gold/40 bg-gold-soft p-3 text-sm" role="alert">
+      <p className="mb-1 font-semibold text-gold-ink">⚠️ Já na agenda neste dia — não vender em dobro</p>
+      <ul className="list-disc space-y-0.5 pl-4 text-ink">
         {personagens.map((p) => (
           <li key={p.nome}>
             <span className="font-medium">{p.nome}</span>
-            {p.eventos.length > 0 && <span className="text-amber-700"> — {p.eventos.join(" · ")}</span>}
+            {p.eventos.length > 0 && <span className="text-muted"> — {p.eventos.join(" · ")}</span>}
           </li>
         ))}
       </ul>
@@ -520,8 +524,9 @@ export function OrcamentoCalculadoraPage() {
                 {eventDate && <AgendaNoDiaAlert date={eventDate} />}
 
                 {foraSp && (
-                  <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                  // Mesmo motivo do alerta acima: `amber` cru não troca de tema.
+                  <div className="space-y-3 rounded-md border border-gold/40 bg-gold-soft p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gold-ink">
                       Transporte — Fora de SP
                     </p>
                     <div>

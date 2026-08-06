@@ -128,7 +128,8 @@ function GoalCard({ goal, onEdit }: GoalCardProps) {
           </Button>
           <Button
             size="sm"
-            className="bg-red text-white hover:bg-red/90"
+            // `on-color`: o vermelho clareia no tema escuro e o branco cai para 2.78:1.
+            className="bg-red text-on-color hover:bg-red/90"
             loading={deleteGoal.isPending}
             onClick={() => deleteGoal.mutate(goal.id)}
           >

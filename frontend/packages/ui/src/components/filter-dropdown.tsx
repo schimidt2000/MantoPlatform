@@ -58,7 +58,9 @@ export function FilterDropdown({ label, count = 0, children, align = "left", cla
       >
         {label}
         {count > 0 && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
+          // Contador sobre o acento sólido: `on-color` porque a 10px o branco do tema escuro
+          // (2.72:1 sobre #a78bfa) some dentro da bolinha.
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-on-color">
             {count}
           </span>
         )}

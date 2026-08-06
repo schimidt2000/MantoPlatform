@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <title>Plataforma Manto</title>
+    <script>
+      // Carimba o tema no <html> ANTES do primeiro paint. Se isso morasse no React, o browser
+      // já teria pintado a página clara enquanto o bundle carrega — o "flash branco" que dói
+      // justamente em quem escolheu o tema escuro. Por isso é inline e síncrono no <head>.
+      (function () {
+        try {
+          var salvo = localStorage.getItem("manto-tema");
+          var escuro = salvo
+            ? salvo === "escuro"
+            : window.matchMedia("(prefers-color-scheme: dark)").matches;
+          document.documentElement.classList.toggle("dark", escuro);
+          // O HEX está duplicado aqui de propósito: neste instante o CSS (e portanto
+          // `--c-bg`) ainda não chegou, e sem isto o fundo padrão branco do browser aparece.
+          document.documentElement.style.backgroundColor = escuro ? "#121016" : "#f4f5f7";
+        } catch (erro) {
+          // localStorage bloqueado (aba anônima/iframe de terceiro): segue no tema claro.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

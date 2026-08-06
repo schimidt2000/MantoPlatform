@@ -8,7 +8,9 @@ import mantoPreset from "@manto/ui/tailwind-preset";
 // renderizarem sem cor no portal (as classes nem chegavam a existir no CSS gerado).
 //
 // A ÚNICA divergência deliberada é o fundo: o Portal do Artista usa um cinza levemente
-// arroxeado (#f4f3f8) no lugar do neutro do painel staff (#f4f5f7).
+// arroxeado (#f4f3f8) no lugar do neutro do painel staff (#f4f5f7). Desde o dark mode isso
+// NÃO é mais um override de cor aqui — um HEX fixo nesta camada anularia a variável CSS e
+// deixaria o Portal preso no claro. O override virou `--c-bg`/`--c-surface` em `src/index.css`.
 const config: Config = {
   presets: [mantoPreset as Config],
   content: [
@@ -17,12 +19,7 @@ const config: Config = {
     "../../packages/*/src/**/*.{ts,tsx}",
   ],
   theme: {
-    extend: {
-      colors: {
-        bg: "#f4f3f8",
-        surface: "#f4f3f8",
-      },
-    },
+    extend: {},
   },
   plugins: [],
 };

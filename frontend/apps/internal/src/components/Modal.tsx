@@ -37,6 +37,8 @@ export function Modal({ open, onClose, title, children, maxWidth = "max-w-lg" }:
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: reduceMotion ? 0 : 0.2 }}
+            // Véu preto de propósito nos dois temas: ele é sombra, não superfície. Um véu que
+            // clareasse no tema escuro empurraria a página para CIMA do modal.
             className="fixed inset-0 bg-black/50"
             onClick={onClose}
             aria-hidden

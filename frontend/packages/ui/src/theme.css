@@ -1,0 +1,268 @@
+/*
+ * Tokens do design system Manto — fonte ÚNICA dos valores de cor dos dois temas.
+ *
+ * Os nomes de token (bg, panel, ink, accent, gold-soft, ...) continuam exatamente os mesmos:
+ * `tailwind-preset.ts` só troca o HEX fixo por `rgb(var(--c-<token>) / <alpha-value>)`, então
+ * NENHUMA tela precisa trocar de classe para ganhar o tema escuro.
+ *
+ * Formato: canal RGB puro ("84 69 150"), sem `rgb()` em volta — é o que o modificador de
+ * opacidade do Tailwind (`bg-panel/70`, `border-line/60`) exige para conseguir injetar o alfa.
+ *
+ * `:root.dark` (e não `.dark`) é deliberado: o Portal redefine `--c-bg` num `:root` próprio
+ * depois deste arquivo, e `:root` (0,1,0) empata com `.dark` (0,1,0) — quem viesse por último
+ * venceria, e o Portal apagaria o fundo escuro. `:root.dark` (0,2,0) ganha por especificidade,
+ * independente da ordem de importação.
+ *
+ * ATENÇÃO: apps/public NÃO consome este arquivo — o catálogo público tem identidade própria
+ * (creme/dourada) com os MESMOS nomes de token, e adotar estes valores mudaria o visual dele.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Superfícies */
+  --c-bg: 244 245 247;
+  --c-panel: 255 255 255;
+  --c-surface: 244 245 247;
+  --c-surface-2: 238 236 245;
+
+  /* Texto */
+  --c-ink: 26 26 26;
+  --c-muted: 87 87 94;
+
+  /* Divisórias — `line` é decorativa; `line-strong` é a que carrega estrutura (WCAG 1.4.11) */
+  --c-line: 229 227 239;
+  --c-line-strong: 139 127 168;
+
+  /* Acento da marca */
+  --c-accent: 84 69 150;
+  --c-accent-dark: 60 49 107;
+  --c-accent-soft: 84 69 150;
+  --a-accent-soft: 0.1;
+  --c-ring: 84 69 150;
+
+  /*
+   * Tinta sobre PREENCHIMENTO SATURADO (botão `bg-accent`, badge `bg-red`, chip `bg-green`).
+   *
+   * Este token existe porque "texto branco sobre botão colorido" deixou de ser verdade no tema
+   * escuro: lá as matizes CLAREIAM (#544596 -> #a78bfa), e o branco desaba para 2.72:1 no
+   * acento, 2.78:1 no vermelho, 1.78:1 no verde e 2.23:1 no azul — todos reprovando AA. Com a
+   * tinta quase-preta do tema escuro as mesmas superfícies voltam a 6.94 / 6.81 / 10.59 / 8.48:1.
+   * No tema claro o valor é branco puro, então NADA muda visualmente (accent 7.87:1).
+   *
+   * NÃO confundir com `text-white` legítimo: sobre a sidebar, sobre foto e sobre o player de
+   * vídeo o fundo é escuro nos DOIS temas, e lá o branco continua certo.
+   */
+  --c-on-color: 255 255 255;
+  /*
+   * O dourado é a exceção: ele é uma matiz CLARA nos dois temas (#b1793a e #f5a623), então
+   * pede tinta escura sempre. Branco sobre o dourado claro dava só 3.71:1 (reprovava AA no
+   * badge "⭐ CAPA", 10px bold); a tinta escura sobe para 4.70:1 no claro e 9.32:1 no escuro.
+   */
+  --c-on-gold: 26 26 26;
+
+  /* Semânticas */
+  --c-green: 18 102 47;
+  --c-green-soft: 212 237 218;
+  --c-red: 192 57 43;
+  --c-red-soft: 253 232 232;
+  --c-blue: 29 78 216;
+  --c-blue-soft: 219 234 254;
+  /*
+   * Degrau `-50`: fundo de LINHA DE TABELA (a tela de Pagamentos tinge a linha inteira pela
+   * faixa). Precisa ser mais fraco que `soft`, que é fundo de chip. Os valores do tema claro
+   * são exatamente os `green-50`/`blue-50`/`rose-50` crus do Tailwind que estavam no código,
+   * então o tema claro fica idêntico ao que era; o escuro vira tinta escura da própria matiz,
+   * na mesma família do `gold-50` que já existia.
+   */
+  --c-green-50: 240 253 244;
+  --c-red-50: 255 241 242;
+  --c-blue-50: 239 246 255;
+
+  /*
+   * Superfície de MÍDIA — moldura do player de vídeo. É escura nos DOIS temas (convenção de
+   * player: o vídeo tem que ser a coisa mais clara da caixa). Existe como token próprio porque
+   * o player usava `bg-ink`, e `ink` é TEXTO: no tema escuro ele vira #f0eef5 e a moldura do
+   * player virava uma caixa quase branca com os controles brancos por cima, invisíveis.
+   */
+  --c-media: 31 26 48;
+
+  /* Dourado — cor de atenção/futuro; `gold-ink` é o degrau EXCLUSIVO de texto sobre dourado */
+  --c-gold: 177 121 58;
+  --c-gold-50: 251 246 240;
+  --c-gold-100: 242 228 210;
+  --c-gold-600: 150 99 45;
+  --c-gold-soft: 177 121 58;
+  --a-gold-soft: 0.12;
+  --c-gold-ink: 138 90 40;
+
+  /* Sidebar — escura mesmo no tema claro (Manto Dark Purple) */
+  --c-sidebar-bg: 31 26 48;
+  --c-sidebar-accent: 247 216 151;
+  /* No claro a costura some contra a própria sidebar: o contraste com a página já é enorme. */
+  --c-sidebar-line: 31 26 48;
+
+  /* Elevação: no claro a sombra é sutil porque o branco do card já separa do fundo cinza. */
+  --sombra-sm: 0 1px 3px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04);
+  --sombra-md: 0 4px 14px rgb(0 0 0 / 0.07), 0 2px 6px rgb(0 0 0 / 0.04);
+  --sombra-lg: 0 12px 32px rgb(0 0 0 / 0.1), 0 4px 10px rgb(0 0 0 / 0.05);
+}
+
+/*
+ * TEMA ESCURO — "escuro com cores vivas".
+ *
+ * Princípio que gerou cada número: sobre fundo escuro a mesma matiz precisa ficar mais CLARA e
+ * mais SATURADA para continuar legível e não parecer lavada; e os fundos `soft`, que no claro
+ * eram pastéis, viram TINTA ESCURA da própria matiz (verde #d4edda -> #10331f). Por isso o
+ * roxo da marca (#544596, 1.9:1 sobre #121016 — ilegível) dá lugar a #a78bfa no escuro.
+ *
+ * Todas as razões abaixo foram calculadas (WCAG 2.1) e estão anotadas token a token.
+ */
+:root.dark {
+  color-scheme: dark;
+
+  /* #121016 — quase preto com leve tom roxo, para o acento não flutuar sobre cinza neutro. */
+  --c-bg: 18 16 22;
+  /* #1b1823 / #24202f — elevação por clareamento (não há sombra visível sobre fundo escuro). */
+  --c-panel: 27 24 35;
+  --c-surface: 18 16 22;
+  --c-surface-2: 36 32 47;
+
+  /* #f0eef5: 16.42:1 sobre bg, 15.19:1 sobre panel, 13.80:1 sobre surface-2. Branco puro
+     "vibra" sobre preto; este quase-branco levemente roxo cansa menos e sobra contraste. */
+  --c-ink: 240 238 245;
+  /* #a9a3b8: 7.75:1 sobre bg, 7.17:1 sobre panel, 6.52:1 sobre surface-2 — AA com folga
+     inclusive nos 11–12px do cabeçalho da agenda, que foi o ponto crítico do tema claro. */
+  --c-muted: 169 163 184;
+
+  --c-line: 48 43 61;
+  /* #7a6d9e: o #6b5f8a da spec dava 2.74:1 sobre surface-2 e REPROVAVA os 3:1 da WCAG 1.4.11
+     justamente na grade da agenda (o fundo mais claro do tema). Um degrau acima resolve:
+     4.06:1 sobre bg, 3.75:1 sobre panel, 3.41:1 sobre surface-2. */
+  --c-line-strong: 122 109 158;
+
+  /* #a78bfa: 6.94:1 sobre bg, 6.42:1 sobre panel, 5.83:1 sobre surface-2. */
+  --c-accent: 167 139 250;
+  /* `accent-dark` é semanticamente "acento com MAIS ênfase", não "mais escuro" — no tema
+     escuro ênfase significa clarear. #c4b5fd: 10.23:1 sobre bg, 9.47:1 sobre panel. */
+  --c-accent-dark: 196 181 253;
+  /* Tinta roxa a 16% (o claro usa 10%): sobre panel compõe #312a45, onde `ink` dá 11.79:1 e
+     o próprio `accent` ainda dá 4.99:1 — o chip roxo continua legível por dentro. */
+  --c-accent-soft: 167 139 250;
+  /* 0.13 e não 0.16: o chip SHOW da agenda cai sobre DUAS superfícies. Sobre `panel` os 16%
+     estavam ótimos, mas sobre `surface-2` (o dia fora do mês, que é mais claro) o mesmo chip
+     compunha #39314f e o `accent` por dentro dava 4.47:1 — raspava abaixo dos 4.5 da AA num
+     texto de 12px. A 13% ele fica em 4.71:1 fora do mês e 5.24:1 dentro. */
+  --a-accent-soft: 0.13;
+  --c-ring: 167 139 250;
+
+  /* Ver a justificativa longa no bloco `:root`: no escuro as matizes são CLARAS, então a
+     tinta que vai sobre elas é a mais escura do sistema, não o branco. */
+  --c-on-color: 18 16 22;
+  --c-on-gold: 18 16 22;
+
+  /* green #3ddc84 sobre green-soft #10331f: 7.77:1 (9.79:1 sobre panel). */
+  --c-green: 61 220 132;
+  --c-green-soft: 16 51 31;
+  /* red #ff6b6b sobre red-soft #3a1a1a: 5.64:1 (6.30:1 sobre panel, 5.72:1 sobre surface-2) —
+     `text-red` é o token de texto mais usado do sistema, então tinha que sobrar margem. */
+  --c-red: 255 107 107;
+  --c-red-soft: 58 26 26;
+  /* blue #63b3ff sobre blue-soft #12263f: 6.85:1 (7.84:1 sobre panel). */
+  --c-blue: 99 179 255;
+  --c-blue-soft: 18 38 63;
+
+  /* Degraus `-50` (tinta de linha de tabela). Calibrados para ficarem 1.20–1.24:1 ACIMA do
+     `panel`: a matiz sozinha, com a mesma luminância do painel, não separa a linha o
+     suficiente numa tabela longa. `ink` continua com 11.6–12.7:1 sobre eles. */
+  --c-green-50: 18 48 29;
+  --c-red-50: 63 32 34;
+  --c-blue-50: 21 44 74;
+
+  /* gold #f5a623: 8.62:1 sobre panel. Os degraus 50/100 eram fundos claros no tema claro;
+     no escuro viram tinta escura da mesma matiz, e 600 (mais ênfase) clareia em vez de
+     escurecer — 8.39:1 sobre gold-100. */
+  --c-gold: 245 166 35;
+  /* #2e2210 e não o #241a0d original: `gold-50` é fundo de linha de tabela e naquele valor
+     dava 1.02:1 contra o `panel` — a faixa "Futuro" da tela de Pagamentos sumia enquanto as
+     outras três faixas apareciam. Aqui dá 1.13:1, e ainda fica um degrau abaixo de `gold-100`. */
+  --c-gold-50: 46 34 16;
+  --c-gold-100: 58 42 18;
+  --c-gold-600: 255 190 87;
+  --c-gold-soft: 245 166 35;
+  --a-gold-soft: 0.16;
+  /* `gold-ink` clareia junto com o fundo: 8.23:1 sobre gold-soft, 8.86:1 sobre gold-100. */
+  --c-gold-ink: 247 200 115;
+
+  /* Sidebar: ver a justificativa longa em `tailwind-preset.ts` (token `sidebar`).
+     #2a2438 fica ACIMA do fundo da página (1.27:1) em vez de abaixo; o texto branco herdado
+     do tema claro continua válido (white 14.92:1, white/55 5.52:1) e o dourado dá 10.81:1. */
+  --c-sidebar-bg: 42 36 56;
+  --c-sidebar-accent: 247 216 151;
+  /* Costura de 1px que devolve a borda da coluna, já que 1.27:1 sozinho é sutil. */
+  --c-sidebar-line: 74 65 102;
+
+  /* Moldura do player: um degrau ACIMA do fundo da página (1.19:1), pelo mesmo motivo da
+     sidebar — repetir o valor do tema claro a faria encostar no #121016. Branco sobre ela
+     continua em 15.9:1, então os controles do player seguem sendo `text-white`. */
+  --c-media: 36 31 52;
+
+  /* Sombra preta sutil não existe sobre fundo escuro: o alfa sobe para que menu/modal
+     flutuante continue tendo aresta (panel x bg é só 1.08:1, igual ao claro). */
+  --sombra-sm: 0 1px 3px rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.35);
+  --sombra-md: 0 4px 14px rgb(0 0 0 / 0.55), 0 2px 6px rgb(0 0 0 / 0.4);
+  --sombra-lg: 0 12px 32px rgb(0 0 0 / 0.65), 0 4px 10px rgb(0 0 0 / 0.45);
+}
+
+/*
+ * TROCA DE TEMA — o revelar circular do `ThemeSwitch`.
+ *
+ * Esta é a exceção legítima ao "zero CSS solto": `::view-transition-*` são pseudo-elementos de
+ * DOCUMENTO, criados pelo browser fora da árvore do React durante a transição. Nenhuma classe
+ * Tailwind alcança eles — não existe elemento onde pendurar a classe.
+ *
+ * O crossfade padrão do browser é DESLIGADO de propósito: quem anima é o `clip-path` circular
+ * que o JS aplica em `::view-transition-new(root)` (ver `lib/theme.ts`). Se o fade continuasse
+ * ligado, os dois efeitos se somariam e a tela piscaria no meio do caminho. A camada nova fica
+ * ACIMA da antiga, que permanece parada servindo de "tema velho" enquanto o círculo cresce.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 0;
+}
+
+::view-transition-new(root) {
+  z-index: 1;
+}
+
+/*
+ * Fallback para browsers sem `startViewTransition`. Só existe durante os 300ms da troca — o JS
+ * põe e tira a classe —, e é por isso que ela pode alcançar `*` sem custo permanente: fora
+ * desse instante o seletor não casa com nada. Os 300ms espelham `DURACAO_TROCA_MS`.
+ */
+:root.tema-em-transicao,
+:root.tema-em-transicao * {
+  transition: background-color 300ms ease, border-color 300ms ease, color 300ms ease,
+    fill 300ms ease;
+}
+
+/*
+ * Movimento reduzido: a troca é seca. O JS já nem chama `startViewTransition` neste caso, mas
+ * o bloqueio fica aqui também porque a preferência do sistema pode mudar no meio da transição.
+ */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+
+  :root.tema-em-transicao,
+  :root.tema-em-transicao * {
+    transition: none;
+  }
+}

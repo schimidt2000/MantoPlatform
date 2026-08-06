@@ -54,6 +54,9 @@ export interface AppLayoutProps {
 
 const NAV_ITEM_CLASS =
   "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors";
+// Os brancos daqui são LEGÍTIMOS nos dois temas e não devem virar `on-color`: a sidebar é
+// escura no claro (#1f1a30) e no escuro (#2a2438), então o branco dá 14.92:1 e 13.4:1. Trocar
+// por um token que inverte deixaria a coluna com texto preto sobre roxo escuro.
 const NAV_ITEM_IDLE = "text-white/65 hover:bg-white/5 hover:text-white";
 const NAV_ITEM_ACTIVE = "bg-white/10 text-white";
 
@@ -166,7 +169,11 @@ function AppLayout({
   return (
     <div className="min-h-screen bg-bg lg:pl-64">
       {/* Sidebar fixa — desktop */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 bg-sidebar-bg lg:block">
+      {/* A costura da direita só aparece no tema escuro: lá `sidebar-line` é um roxo mais
+          claro que separa a coluna do fundo da página (1.27:1 sozinho é sutil demais); no tema
+          claro o token vale o próprio `sidebar-bg`, então a borda some — a sidebar escura já
+          se destaca sobre a página clara sem ajuda nenhuma. */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-sidebar-line bg-sidebar-bg lg:block">
         {sidebarInner}
       </aside>
 

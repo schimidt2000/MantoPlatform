@@ -194,9 +194,11 @@ function FeedbackCard({ item, canDelete }: { item: ClientFeedbackItem; canDelete
 }
 
 function EmptyState({ filtered }: { filtered: boolean }) {
+  // `line-strong` na moldura tracejada e no ícone: aqui a borda é a única coisa que delimita o
+  // vazio, e com o `line` decorativo (1.28:1) o estado vazio some no tema escuro.
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-line bg-panel px-6 py-14 text-center">
-      <MessageSquareDashed className="h-10 w-10 text-line" aria-hidden="true" />
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-panel px-6 py-14 text-center">
+      <MessageSquareDashed className="h-10 w-10 text-line-strong" aria-hidden="true" />
       <p className="mt-3 font-semibold text-ink">Nenhuma avaliação encontrada</p>
       <p className="mt-1 max-w-sm text-sm text-muted">
         {filtered

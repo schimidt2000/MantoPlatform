@@ -1,3 +1,8 @@
+/* Valores dos tokens (tema claro e escuro) — fonte única em @manto/ui. O caminho é relativo
+   de propósito: o alias `@manto/ui` do Vite aponta direto para `src/index.ts`, então
+   `@manto/ui/theme.css` viraria `src/index.ts/theme.css` e quebraria. */
+@import "../../../packages/ui/src/theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

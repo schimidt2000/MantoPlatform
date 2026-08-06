@@ -92,10 +92,12 @@ function DayCell({ cell, onDayClick }: { cell: CalendarCell; onDayClick?: (dateK
         cell.inCurrentMonth ? "bg-panel" : "bg-surface-2"
       } ${onDayClick ? "cursor-pointer hover:bg-surface-2" : ""}`}
     >
+      {/* Pastilha do dia de hoje: `on-color` e não `text-white` — o acento clareia no tema
+          escuro (#a78bfa) e o branco por cima cairia para 2.72:1, apagando o número do dia. */}
       <span
         className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
           cell.isToday
-            ? "bg-accent text-white"
+            ? "bg-accent text-on-color"
             : cell.inCurrentMonth
               ? "text-ink"
               : "text-muted"

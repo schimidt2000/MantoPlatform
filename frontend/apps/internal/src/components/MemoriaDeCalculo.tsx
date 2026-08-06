@@ -7,12 +7,20 @@ import type { MemoriaLinha } from "../lib/orcamento";
  * (`quote_ops.calculate_quote`), que é quem faz a conta; aqui só se pinta.
  */
 
-/** Cor de fundo por papel da linha na conta — mesma leitura do painel antigo. */
+/**
+ * Cor de fundo por papel da linha na conta — mesma leitura do painel antigo.
+ *
+ * `markup`/`pos` usavam `bg-amber-50 dark:bg-amber-950/30` e `bg-violet-50 dark:bg-violet-950/25`,
+ * cores cruas do Tailwind fora do design system. Pior: como nenhum config declarava `darkMode`,
+ * valia o padrão `media` e essas DUAS linhas já escureciam sozinhas conforme o tema do sistema
+ * operacional, enquanto o resto da tela continuava claro. Agora são tokens (`gold-soft` para o
+ * âmbar do markup, `accent-soft` para o violeta do pós), que trocam de tema junto com a tela.
+ */
 const FUNDO: Record<MemoriaLinha["tipo"], string> = {
   cache: "",
   subtotal: "bg-surface-2 font-semibold",
-  markup: "bg-amber-50 dark:bg-amber-950/30",
-  pos: "bg-violet-50 dark:bg-violet-950/25",
+  markup: "bg-gold-soft",
+  pos: "bg-accent-soft",
   total: "bg-green-soft font-bold",
 };
 

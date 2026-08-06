@@ -3,8 +3,11 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **215 (evento em abas
-> com edição inline)**
+> **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
+> referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
+>
+> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **216 (cachê no portal,
+> prévia de link, contraste e endurecimento de segurança)**
 >
 > UX nova da 215: **`/events/:id` foi reformulada** — quatro abas (Resumo · Produção · Comercial ·
 > Histórico) com a aba na URL (`?aba=`), faixa de pendências clicável no Resumo, e **edição inline
@@ -386,7 +389,9 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
   = desvincular de todos os eventos, `SUPERADMIN`).
 
 #### `/events/:id` — bloco **"Presentes 3D"** *(injeção na tela existente)*
-- **Onde**: coluna esquerda (operação/logística), logo abaixo de "Materiais de ensaio".
+- **Onde**: **Aba Produção** — ver §A.2. *(Corrigido em 2026-08-06: este bloco ainda descrevia o
+  layout pré-215, "coluna esquerda, abaixo de Materiais de ensaio". A feature 215 substituiu o mural
+  de duas colunas por quatro abas.)*
 - **Quando**: **somente** se `event.event_type === 'SHOW'` — o servidor nem serializa a chave
   `presentes_3d` nos outros tipos.
 - **Acesso**: qualquer usuário que abre o evento **lê** a lista; só `ARTISTA_3D`/`SUPERADMIN`
@@ -534,6 +539,15 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **Vínculos**: Campanha → `CatalogCharacter` → `FigurinoSheet`; Campanha ↔ `Acervo3DItem` (N:N).
 
 #### `/v/:slug` — Landing e checkout da campanha *(app público, feature 205 US2)*
+
+> ⚠️ **Rota de produção: `/catalogo/v/:slug`.** Estas telas moram em `frontend/apps/public`
+> (`App.tsx:37-38`), que roda sob o basename `/catalogo` em produção — é assim que o backend gera os
+> links (`app/email_service.py:594` e `:672`, `app/marketing/virtuais_ops.py:919`). Diferente de
+> `/f/*`, **não há redirect curto** para `/v` em `frontend/server.js`. Em dev
+> (`npm run dev:public`) elas ficam na raiz. O mesmo vale para `/v/pedido/:token` abaixo.
+> *(Os blocos `/v/*` estão fisicamente nesta seção A por herança da feature 205, mas pertencem à
+> seção B — app público.)*
+
 - **Acesso**: público, sem login. Rascunho → 404; pausada → 410 (a família precisa saber se errou
   o link ou se a campanha saiu do ar).
 - **Objetivo**: vender a interação sem atendimento — do link do Instagram ao pagamento.
@@ -913,6 +927,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 | `/admin/usuarios` · `/novo` · `/:id` | Usuários | `SUPERADMIN`, `FINANCEIRO` | papéis, PIX, salário (`SalaryHistory`), conceder acesso, reset de senha, exclusão; usuários "apenas pagamento" (`has_access=False`) |
 | `/admin/configuracoes` | Administração | `SUPERADMIN` | `SiteSetting`: cores/logo, comissão padrão, responsável EducaManto, imposto, Fator R, endereço base, ClickSign, e-mail, anonimato de avaliações, WhatsApp dos formulários |
 | `/admin/logs` | Logs | `SUPERADMIN` | `AuditLog` |
+| `/rh` | Painel de RH (`RhDashboardPage`, `App.tsx:130`) | **`SUPERADMIN` na prática** | ⚠️ Única tela do sistema cujo endpoint usa o **segundo mecanismo de RBAC** — `current_user.has_permission('rh.view')` (`app/api/rh_read.py:20`), código de permissão, não `RoleName`. E `rh.view` **nunca é semeado** (`seed.py` só cria `user.manage`), então todo mundo que não é SUPERADMIN recebe 403. Ver `docs/01` §4.3 e `docs/05` §7.1 |
 | `/admin/desempenho` | Desempenho | `SUPERADMIN` | métricas por vendedor/período |
 | `/admin/sync` | Sincronização Agenda | `SUPERADMIN` | status e execução manual do sync com o Google Calendar |
 | `/admin/anuncio-portal` | Anúncio do Portal | `SUPERADMIN` | mensagem exibida no Portal do Artista |
@@ -1068,7 +1083,7 @@ e-mail (`/reset-password/<token>`) chega inteiro em `/portal/reset-password/<tok
              └──► Fila de Impressão 3D: idade e nº de aniversariantes lidos direto das
                   respostas da cliente, cruzados com os Personagens contratados
 
-   Catálogo (Tema) ──── MarketingPost.catalog_item_id ────► Postagem de Marketing
+   Catálogo (Tema) ──── marketing_post_temas (N:N) ────► Postagem de Marketing
              │                                                    │ 1:1
              │                                                    ├──► Espaço de Revisão
              │                                                    │    (review_space_id)

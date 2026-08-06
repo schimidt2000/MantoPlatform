@@ -1,6 +1,22 @@
+/* Valores dos tokens (tema claro e escuro) — fonte única em @manto/ui. O caminho é relativo
+   de propósito: o alias `@manto/ui` do Vite aponta direto para `src/index.ts`, então
+   `@manto/ui/theme.css` viraria `src/index.ts/theme.css` e quebraria. */
+@import "../../../packages/ui/src/theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* A ÚNICA divergência deliberada do Portal em relação ao painel staff: o fundo é um cinza
+   levemente arroxeado (#f4f3f8) no lugar do neutro (#f4f5f7). Isso morava em
+   `tailwind.config.ts` como HEX; agora é override de variável, senão o Portal voltaria a ter
+   um token com valor fixo — sem tema escuro. No escuro NÃO há override: o fundo #121016 já
+   nasce com o mesmo viés roxo, e reescrevê-lo só criaria duas paletas para manter.
+   `:root.dark` (0,2,0) vence este `:root` (0,1,0) por especificidade, não por ordem. */
+:root {
+  --c-bg: 244 243 248;
+  --c-surface: 244 243 248;
+}
 
 @layer base {
   html,

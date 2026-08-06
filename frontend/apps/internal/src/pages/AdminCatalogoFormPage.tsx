@@ -294,7 +294,9 @@ export function AdminCatalogoFormPage() {
                         className="h-full w-full object-cover"
                       />
                       {coverPhotoId === photo.id && (
-                        <span className="absolute left-1 top-1 rounded-full bg-gold px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                        // `on-gold` e não `text-white`: o dourado é claro nos DOIS temas, e o
+                        // branco dava 3.71:1 no claro (reprova AA a 10px) e 2.03:1 no escuro.
+                        <span className="absolute left-1 top-1 rounded-full bg-gold px-2 py-0.5 text-[10px] font-bold text-on-gold shadow-sm">
                           ⭐ CAPA
                         </span>
                       )}

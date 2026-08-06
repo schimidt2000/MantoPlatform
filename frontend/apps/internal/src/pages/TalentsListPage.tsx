@@ -42,9 +42,12 @@ export function TalentsListPage() {
       <PageHeader title="Talentos" className="mb-4" />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex rounded-md border border-line">
+        {/* `on-color` no segmento ativo: o acento clareia no tema escuro e o `text-white` que
+            estava aqui cairia para 2.72:1. `line-strong` porque a moldura é a única pista de
+            que os dois botões formam um grupo segmentado (WCAG 1.4.11). */}
+        <div className="flex rounded-md border border-line-strong">
           <button
-            className={`px-3 py-1.5 text-sm ${status === "active" ? "bg-accent text-white" : "text-ink"}`}
+            className={`px-3 py-1.5 text-sm ${status === "active" ? "bg-accent text-on-color" : "text-ink"}`}
             onClick={() => {
               setStatus("active");
               setPage(1);
@@ -53,7 +56,7 @@ export function TalentsListPage() {
             Ativos
           </button>
           <button
-            className={`px-3 py-1.5 text-sm ${status === "pending" ? "bg-accent text-white" : "text-ink"}`}
+            className={`px-3 py-1.5 text-sm ${status === "pending" ? "bg-accent text-on-color" : "text-ink"}`}
             onClick={() => {
               setStatus("pending");
               setPage(1);

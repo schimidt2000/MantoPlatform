@@ -38,7 +38,10 @@ const STATUS_LABEL: Record<DisplayStatus, string> = {
 };
 
 const STATUS_CLASS: Record<DisplayStatus, string> = {
-  pendente: "bg-amber-soft text-amber",
+  // `bg-amber-soft`/`text-amber` NÃO EXISTEM na paleta (o design system usa `gold` no lugar de
+  // `amber`): o Tailwind nunca gerou essas duas classes, então o badge "Pendente" vinha sem
+  // fundo e herdando a cor do texto ao redor. `gold-soft`/`gold-ink` é o par real.
+  pendente: "bg-gold-soft text-gold-ink",
   aprovado: "bg-green-soft text-green",
   aprovado_com_edicoes: "bg-blue-soft text-blue",
   rejeitado: "bg-red-soft text-red",

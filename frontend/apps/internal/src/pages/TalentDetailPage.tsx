@@ -67,7 +67,9 @@ function Stars({ score }: { score: number }) {
   return (
     <span className="tabular-nums text-gold" aria-label={`${score} de 5 estrelas`}>
       {"★".repeat(score)}
-      <span className="text-line">{"★".repeat(5 - score)}</span>
+      {/* `line-strong`: a estrela vazia informa a nota MÁXIMA, então é estrutura. Com o `line`
+          decorativo ela dava 1.28:1 sobre o painel escuro e a nota lia como "3 de 3". */}
+      <span className="text-line-strong">{"★".repeat(5 - score)}</span>
     </span>
   );
 }

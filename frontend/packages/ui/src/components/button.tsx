@@ -11,7 +11,10 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-accent text-white hover:bg-accent-dark",
+        // `text-on-color` e NÃO `text-white`: no tema escuro o acento clareia para #a78bfa e
+        // o branco cai para 2.72:1 (1.85:1 no hover `accent-dark`). O token vira quase-preto
+        // lá e devolve 6.94:1 / 10.23:1, sem mexer em nada no tema claro (branco, 7.87:1).
+        default: "bg-accent text-on-color hover:bg-accent-dark",
         // Contorno em `line-strong`: no botão outline a borda é a única pista de que existe
         // um alvo clicável ali, então vale o mínimo de 3:1 da WCAG 1.4.11.
         outline: "border border-line-strong bg-panel hover:bg-surface-2",

@@ -41,7 +41,12 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   );
 
   return (
-    <div className="flex flex-col gap-2 rounded-md bg-ink p-2">
+    // `bg-media` e não `bg-ink`: `ink` é o token de TEXTO e inverte com o tema — no escuro ele
+    // vira #f0eef5, então a moldura do player virava uma caixa quase branca com todos os
+    // controles brancos por cima, ilegíveis. `media` é escura nos dois temas, que é a convenção
+    // de player (o vídeo tem que ser a coisa mais clara da caixa); por isso os `text-white`
+    // daqui para baixo estão CERTOS e não devem virar `on-color`.
+    <div className="flex flex-col gap-2 rounded-md bg-media p-2">
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <video
         ref={videoRef}
@@ -79,7 +84,10 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
               className={cn(
                 "rounded px-1.5 py-0.5 text-xs font-medium transition-colors",
                 state.playbackRate === speed
-                  ? "bg-white text-ink"
+                  ? // `text-media` e não `text-ink`: a pastilha de velocidade ativa é branca
+                    // fixa, e `ink` inverte — no tema escuro daria texto quase branco sobre
+                    // branco. `media` é escura nos dois temas, igual à moldura do player.
+                    "bg-white text-media"
                   : "text-white/70 hover:bg-white/10 hover:text-white",
               )}
             >

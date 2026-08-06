@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { LogOut } from "lucide-react";
-import { AppLayout, Skeleton, cn } from "@manto/ui";
+import { AppLayout, Skeleton, ThemeSwitch, cn } from "@manto/ui";
 import { buildNavSections } from "../lib/navigation";
 import {
   useCurrentUser,
@@ -52,6 +52,9 @@ function RoleSwitcher({ user }: { user: AuthUser }) {
               title={`Ver o sistema como ${role}`}
               className={cn(
                 "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors disabled:opacity-60",
+                // Os brancos daqui ficam como estão: a sidebar é escura nos DOIS temas, então
+                // `white/60` sobre o chip `white/10` dá 5.63:1 no claro e 5.09:1 no escuro.
+                // Trocar por `on-color` (que inverte) deixaria o chip preto sobre roxo escuro.
                 active
                   ? "bg-sidebar-accent text-sidebar-bg"
                   : "bg-white/10 text-white/60 hover:bg-white/20 hover:text-white",
@@ -100,6 +103,11 @@ function SidebarFooter({ user }: { user: AuthUser }) {
           </div>
         </div>
       </div>
+      {/* Fica no rodapé (e não numa tela de preferências) porque o `AppLayout` renderiza este
+          bloco DUAS vezes — sidebar do desktop e drawer do mobile —, então o switch aparece nos
+          dois sem nenhuma duplicação de código. As instâncias compartilham estado via `useTheme`,
+          que lê a classe do `<html>` em vez de guardar um `useState` por cópia. */}
+      <ThemeSwitch />
       <button
         type="button"
         onClick={() =>
@@ -128,7 +136,8 @@ export function AppShell() {
     // RequireAuth já cobre o redirect; aqui é só o esqueleto do shell (FR-012).
     return (
       <div className="min-h-screen bg-bg lg:pl-64">
-        <div className="fixed inset-y-0 left-0 hidden w-64 bg-sidebar-bg lg:block" />
+        {/* Mesma costura do AppLayout — o esqueleto tem que nascer com a mesma silhueta. */}
+        <div className="fixed inset-y-0 left-0 hidden w-64 border-r border-sidebar-line bg-sidebar-bg lg:block" />
         <div className="space-y-4 p-6">
           <Skeleton className="h-8 w-1/3" />
           <Skeleton className="h-40 w-full" />

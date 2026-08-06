@@ -3,8 +3,14 @@
 > **Documento vivo.** Atualizado obrigatoriamente ao fim de cada feature (ver regra em
 > `CLAUDE.md` → "REGRA OBRIGATÓRIA DE DOCUMENTAÇÃO VIVA").
 >
-> Última atualização: **2026-08-05** · Estado do repositório: pós-feature **215 (evento em abas
-> com edição inline)** · Head de migration: `e7a1c94f20b3` (*own_item_id em catalog_characters*)
+> **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md` (topologia, RBAC,
+> convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
+> endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
+>
+> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **216 (cachê no portal,
+> prévia de link, contraste e endurecimento de segurança)** · Head de migration: `e7a1c94f20b3`
+> (*own_item_id em catalog_characters*) — confirme com `flask db heads`; este cabeçalho é a **única**
+> menção ao head neste documento.
 >
 > **Edição por recorte (215).** `PATCH /api/events/<id>` (feature 184) é **edição em bloco**: ele
 > reconcilia elenco e **substitui** os clientes. Para editar um dado isolado use os endpoints
@@ -109,7 +115,10 @@ chamam `*_ops` e serializam.
 
 ## 2. Schema e Models (PostgreSQL)
 
-Fonte única: `app/models.py` (~1.880 linhas). **53 tabelas**, incluindo 3 tabelas de associação.
+Fonte única: `app/models.py` (~2,6k linhas). **~68 tabelas** — 63 models + 5 tabelas de associação
+(`user_roles`, `role_permissions`, `catalog_item_categories`, `marketing_post_temas`,
+`virtual_campaign_acervo`). *Números aproximados de propósito: contagem exata em prosa envelhece a
+cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 
 ### 2.1 Identidade, acesso e RBAC
 
@@ -211,10 +220,19 @@ caminho `/uploads/figurino_photos/...` ou fallback para `thumbnail_url` do Drive
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
 | `catalog_items` | `CatalogItem` | **Tema** — `wp_product_id` (unique, dedupe da importação WordPress), `name`, `slug` (unique), `short_description_html`, `tags` (JSON), `is_active`, `imported_at`, **`video_url`** (feature 185 — Drive/MP4/Vimeo) | M:N `categories`; 1:N `images`, `characters` |
-| `catalog_characters` | `CatalogCharacter` | **Personagem filho** (feature 185) — `name`, `slug` (unique, prefixado pelo slug do Tema), `photo_url`, `video_url`, `position`, `is_active` | `catalog_item_id`→`catalog_items` (**ON DELETE CASCADE**), **`figurino_sheet_id`→`figurino_sheets` (ON DELETE SET NULL)** |
+| `catalog_characters` | `CatalogCharacter` | **Personagem filho** (feature 185) — `name`, `slug` (unique, prefixado pelo slug do Tema), `photo_url`, `video_url`, `position`, `is_active` | `catalog_item_id`→`catalog_items` (**ON DELETE CASCADE**), **`figurino_sheet_id`→`figurino_sheets` (ON DELETE SET NULL)**, **`own_item_id`→`catalog_items` (UNIQUE, ON DELETE SET NULL)** |
 | `catalog_item_images` | `CatalogItemImage` | `url`, `original_url`, `position` (**posição 0 = capa**, usada no Open Graph), `file_size_bytes` | `item_id` |
 | `catalog_categories` | `CatalogCategory` | `name` (unique), `slug` (unique) | — |
 | `catalog_item_categories` | *(association)* | PK composta | `item_id`, `category_id` |
+
+> **`catalog_characters.own_item_id` (feature 209, `app/models.py:1915`)** aponta para o `CatalogItem`
+> que **é** a página própria deste personagem (caso "Coelho Branco" dentro do tema Alice). `NULL` = o
+> personagem só existe no elenco do Tema; preenchido = ele tem página própria de catálogo. É UNIQUE —
+> um item só pode ser página de um personagem. Relacionamento `own_item` com backref `as_character`.
+>
+> ⚠️ **Com isso `CatalogItem` passou a ter DOIS FKs vindos de `CatalogCharacter`**
+> (`catalog_item_id` e `own_item_id`). Sem `foreign_keys` explícito nos relacionamentos o mapper
+> quebra no boot com `AmbiguousForeignKeysError` — ver o comentário em `app/models.py:1853`.
 
 > **`catalog_characters.figurino_sheet_id` é a coluna que materializa o vínculo bidirecional
 > Catálogo ↔ Figurino** (feature 186). Não existe coluna espelho do lado de `figurino_sheets` — o
@@ -355,7 +373,10 @@ Pontos que valem para quem for ler esses dados:
 ### 2.11 Migrations
 
 - Alembic via Flask-Migrate, **sempre escritas à mão** (`migrations/versions/`).
-- Head atual: **`b7d4f81a6e0c`** — *marketing posts com multiplos temas do catalogo* (feature 204b).
+- Head atual: **rode `flask db heads`** (115 arquivos em `migrations/versions/`, head único). O head
+  vigente no momento desta revisão está **só no cabeçalho deste documento** — versionar o head em
+  dois lugares foi o que produziu a divergência corrigida em 2026-08-06 (esta seção declarava
+  `b7d4f81a6e0c`, da 204b, enquanto o head real já era `e7a1c94f20b3`, da 209).
 - Cadeia recente: `27acb021e8d6` → `aa1bb2cc3dd4` (review asset status) → `7c2d9e4f1a3b`
   (figurino_missing_dismissals) → `4e6f8a1c2d5b` (figurino_sheet tags) → `9f1c3a7b5e2d`
   (catalog characters) → `c8d2f4a6b013` (impressões 3D) → `d9e3a5b7c124` (multi-arquivos)
@@ -716,7 +737,9 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
   antes de uma chamada de 10 minutos custaria a experiência.
 - **Vídeo gravado não tem sala**: `conferenceData` só é pedido na modalidade `ao_vivo`, e
   `meet_pending` idem — senão a fila alertaria sobre uma sala que nunca existirá.
-- **Ainda não implementado**: segregação financeira (FR-052–055) e o fechamento do ciclo.
+- **Segregação financeira (FR-052–055): implementada** na feature 205e. `app/api/financeiro_read.py`
+  trata `incluir_loja_virtual` e `resumo_loja_virtual` tanto no pipeline de vendas quanto na DRE
+  (`:155`, `:172`, `:276`, `:282`, `:332`, `:521`). Ver §3.6.
 
 ### 3.14 Superfícies públicas (sem login)
 `GET /api/cadastro/check-cpf` · `POST /api/cadastro` ·
@@ -800,8 +823,13 @@ Rotas legadas que **ainda têm uso real** (não são só resíduo):
   proxy de `server.js`; a `print-event` continua sendo link interno de página Jinja.
 - `GET /catalogo/midia/<path:filename>` — serve as fotos do catálogo público **sem login**.
 - `GET /portal/photo/<path:filename>` — foto de figurino que `GET /api/portal/events/<id>/figurino`
-  devolve para o portal React; é rota Jinja, mas checa a mesma sessão de talento.
-- Todo o resto do `app/talent_portal` — Portal do Artista Jinja.
+  devolve para o portal React; é rota Jinja, mas checa a mesma sessão de talento **e**, desde a
+  feature 216, só serve as subpastas de `PORTAL_PHOTO_SUBFOLDERS` (`app/talent_portal/routes.py:41`).
+  Ver §4.3 → *RBAC de arquivo*.
+- Todo o resto do `app/talent_portal` — Portal do Artista Jinja. ⚠️ Das 21 rotas do `portal_bp`,
+  **só `/portal/photo` é alcançável pelo proxy de produção** (`frontend/server.js:175-187`); as
+  outras 20 seguem registradas e continuam acessíveis batendo direto no host do Flask, com validação
+  mais fraca que a da API. Ver `docs/05_DIVIDA_TECNICA.md` §9.3.
 
 **A `home()` Jinja saiu (feature 206).** A rota `/` do Flask não renderiza mais `home.html`:
 devolve **301 para `PLATFORM_BASE_URL`** (`app/config.py`), para capturar acesso residual direto
@@ -827,7 +855,7 @@ sendo fonte única — agora com um consumidor só, `/api/dashboard`.
 | `FINANCEIRO` | Painel financeiro, pagamentos, gastos recorrentes, comissões (visão gerencial e liquidação), usuários |
 | `CASTING` | Banco de Talentos (aprovar/rejeitar/editar), escalação de elenco, avaliações de casting |
 | `FIGURINO` | Fichas de figurino (CRUD, fotos, vínculo com Personagem do catálogo) |
-| `ENSAIO` | Agenda + EducaManto (leitura/uso) |
+| `ENSAIO` | Agenda + EducaManto (leitura/uso) + **bloco de ensaio do evento** (`show_ensaio`, `app/api/agenda_read.py:141`), **painel próprio no dashboard** (`app/api/dashboard_service.py:451`) e **materiais de ensaio** (`_CAN_ENSAIO_MATERIAL`, `app/calendar/routes.py:3627`) — feature 208 |
 | `MARKETING` | Cria espaços de revisão de mídia e opera o **módulo de Marketing** (feature 204): painel de postagens e metas de frequência, com leitura dos Temas ativos do catálogo (via `/api/marketing/opcoes`, sem acesso à gestão do catálogo) |
 | `ARTISTA_3D` | Gestão total do módulo 3D (Acervo + Fila + presentes do evento) e **leitura** dos eventos — precisa do elenco e do formulário de pré-contrato para saber o que imprimir |
 | `REVENDEDOR_EDUCAMANTO` | Perfil restrito: **só** Agenda (visualização) + EducaManto |
@@ -872,11 +900,36 @@ Gates por módulo (todos em `app/api/`):
 | `_can_edit_talent()` | `talents_read/write` | `CASTING`, `SUPERADMIN` |
 | `_can_view_vendas(settings)` | `financeiro_read` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` **ou** responsável EducaManto |
 | `_require_financeiro()` | `financeiro_write`, `gastos_*` | `FINANCEIRO`, `SUPERADMIN` |
-| `_require_vendas()` | `clientes_*`, `formularios_admin_read`, `orcamento_read` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
+| `_require_vendas()` | `clientes_read.py:24`, `clientes_write.py:25`, `formularios_admin_read.py:24` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
+| `_require_vendas()` ⚠️ **homônimo, regra diferente** | `orcamento_read.py:30` (importado por `orcamento_write.py:19`) | `COMERCIAL`, `SUPERADMIN` — **FINANCEIRO leva 403** |
 | `_has_role(COMERCIAL, FIGURINO, SUPERADMIN)` | `catalogo_read.api_catalogo_elenco_busca` | busca visual de elenco / vínculo de ficha |
 | `_require_use()` / `_require_manage()` | `educamanto_*` | uso: `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO`; gestão: `COMERCIAL`, `SUPERADMIN` |
 | `require_3d_access()` | `impressoes3d_read/write` | `ARTISTA_3D`, `SUPERADMIN` |
 | `require_marketing_access()` | `marketing_read/write` | `MARKETING`, `SUPERADMIN` |
+| `_CAN_ENSAIO` (`app/calendar/routes.py:50`) | criar/editar/excluir ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
+| `_CAN_ENSAIO_MATERIAL` (`app/calendar/routes.py:3627`) | materiais de ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
+
+> ⚠️ Estes gates **não cobrem tudo**: 83 das 288 rotas de `app/api/` não têm gate de papel além de
+> `api_login_required` (a maioria por design — leitura aberta a staff autenticado, ou RBAC por posse
+> do recurso). A intenção está declarada na **docstring de topo do módulo**, não na view. E o nome do
+> gate pode mentir: veja as duas linhas de `_require_vendas` acima.
+
+#### RBAC de arquivo — `/uploads/<path>` e `/portal/photo/<path>` (feature 216)
+
+Não é só `@login_required`. `GET /uploads/<path>` (`app/__init__.py:611`) despacha pelo **primeiro
+segmento** do caminho, via `UPLOADS_ROLE_BY_SUBFOLDER` (`app/__init__.py:66-71`):
+
+| Subpasta | Quem lê |
+|---|---|
+| `contracts/`, `payments/`, `invoices/` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
+| `talent_docs/` | `CASTING`, `SUPERADMIN` |
+| `expenses/` | o **dono** do gasto **ou** financeiro (`_can_read_expense_receipt`, `app/__init__.py:94`) |
+| demais subpastas | qualquer usuário autenticado |
+
+Devolve **404, não 403**, para não confirmar a existência do arquivo. `GET /portal/photo/<path>`
+(`app/talent_portal/routes.py:78`) é restrito às subpastas de `PORTAL_PHOTO_SUBFOLDERS`
+(`routes.py:41`) — sem essa allowlist a rota entregava a árvore inteira de `uploads/` ao usuário de
+menor privilégio.
 
 ### 4.4 Escopo de dados no servidor (não confiar no cliente)
 
@@ -962,6 +1015,7 @@ primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e 
 | `/api/*` | toda a API JSON (`@manto/api-client`) |
 | `/uploads/*` | mídia de `app/storage.py`; é o que `assetUrl()` devolve |
 | `/catalogo/midia/*` | fotos públicas do catálogo — casa **antes** do mount `/catalogo` |
+| `/catalogo/og/*` | miniatura da prévia de link (`app/catalogo/routes.py:og_image`) — feature 216 |
 | `/portal/photo/*` | foto de figurino do portal (Jinja, mesma sessão do talento) — **antes** do mount `/portal` |
 | `/google/*` | callback do OAuth do Google Calendar (`app/calendar/routes.py`), rota Jinja com `redirect_uri` fixo no Google Console |
 | `/cadastro/*`, `/avaliar/*` | superfícies públicas por link já distribuído (cadastro de talentos, feedback da cliente) — hotfix 206b; sem elas o link caía no login do ERP |
@@ -1033,7 +1087,8 @@ Healthcheck: `/health`. `sync_worker.py` não roda durante o build da imagem.
 
 **Serviço frontend** (`Root Directory = frontend` — `frontend/railway.json` +
 `frontend/nixpacks.toml`):
-- setup: `nodejs_20` · install: `npm ci` · build: `npm run build` (compila **internal e public**)
+- setup: `nodejs_20` · install: `npm ci` · build: `npm run build` (compila os **três** SPAs —
+  `internal`, `public` e `portal`; ver `frontend/package.json:16`)
 - start: `npm run start` → `node server.js`
 - variáveis: `BACKEND_URL` (origem do Flask, ver §5.2.1) e `VITE_API_BASE_URL` **vazia** no build
 
@@ -1045,16 +1100,19 @@ Healthcheck: `/health`. `sync_worker.py` não roda durante o build da imagem.
 | Alvo | Comando |
 |---|---|
 | Backend (SQLite casual) | `python run.py` |
-| Backend contra a cópia real | `.\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`) |
+| Backend contra a cópia real | `.\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`) — ⚠️ **`/scripts/db/` é gitignored** (`.gitignore:41`): contém caminhos e credenciais locais, e num clone limpo não existe. É lá também que vivem os `verify_<feature>.py`, que fazem as vezes de teste automatizado (não há `tests/` nem pytest) |
 | Frontend staff | `cd frontend && npm run dev:internal` |
 | Frontend público | `cd frontend && npm run dev:public` |
-| Typecheck | `npx tsc --noEmit` dentro de `apps/internal` ou `apps/public` |
+| Frontend portal | `cd frontend && npm run dev:portal` |
+| Typecheck | `cd frontend && npm run typecheck` — **um comando, cobre os três apps**. Não rode `npx tsc --noEmit` app a app: esquece o `apps/portal`, que é buildado em produção |
 
-Proxies do Vite dev:
+Proxies do Vite dev — **cada app do monorepo precisa da sua própria entrada por prefixo de mídia; o
+proxy de um não vale para o outro** (é o gap que se repete a cada app novo):
 - `apps/internal`: `/api` e `/uploads` → `http://localhost:5000`; `^/figurinos/\d+/print$`
   (regex escopada — **nunca** proxiar o prefixo `/figurinos` inteiro, senão a rota SPA homônima
   é sequestrada).
-- `apps/public`: `/api` e `/catalogo/midia` → `http://localhost:5000`.
+- `apps/public` (`vite.config.ts:16-29`): `/api`, `/catalogo/midia`, `/catalogo/og` e `/uploads`.
+- `apps/portal` (`vite.config.ts:32-38`): `/api`, `/portal/photo` e `/uploads`.
 
 > **Regra de teste**: produção é PostgreSQL. Toda verificação funcional roda contra `manto_local`
 > (Postgres), **nunca** contra o SQLite vazio — o SQLite não pega bugs Postgres-only

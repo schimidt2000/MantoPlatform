@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Portal do Artista — Manto</title>
+    <script>
+      // Carimba o tema no <html> ANTES do primeiro paint — mesmo script do painel interno
+      // (ver apps/internal/index.html). Só o HEX do fundo claro muda: o Portal usa o cinza
+      // arroxeado #f4f3f8. A chave do localStorage é a MESMA ("manto-tema"), mas os dois apps
+      // são origens distintas em produção, então cada um guarda a sua preferência.
+      (function () {
+        try {
+          var salvo = localStorage.getItem("manto-tema");
+          var escuro = salvo
+            ? salvo === "escuro"
+            : window.matchMedia("(prefers-color-scheme: dark)").matches;
+          document.documentElement.classList.toggle("dark", escuro);
+          document.documentElement.style.backgroundColor = escuro ? "#121016" : "#f4f3f8";
+        } catch (erro) {
+          // localStorage bloqueado (aba anônima/iframe de terceiro): segue no tema claro.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

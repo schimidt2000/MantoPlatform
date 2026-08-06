@@ -1,7 +1,7 @@
 import { Outlet, NavLink, Link } from "react-router-dom";
 import { CalendarDays, History, MailQuestion, User } from "lucide-react";
 import { assetUrl } from "@manto/api-client";
-import { Button } from "@manto/ui";
+import { Button, ThemeSwitch } from "@manto/ui";
 import { useCurrentTalent, usePortalLogout } from "../lib/portalAuth";
 import { useAgenda } from "../lib/portalAgenda";
 import { usePendingRatings } from "../lib/portalRatings";
@@ -18,7 +18,9 @@ function NavBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span
-      className="absolute -right-2 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red px-1 text-xs font-bold leading-none text-white"
+      // `text-on-color` e não `text-white`: no tema escuro o vermelho clareia para caber no fundo
+      // escuro, e aí o branco perde contraste. O token acompanha a inversão.
+      className="absolute -right-2 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red px-1 text-xs font-bold leading-none text-on-color"
       aria-label={`${count} ${count === 1 ? "pendência" : "pendências"}`}
     >
       {count > 9 ? "9+" : count}
@@ -60,6 +62,10 @@ export function PortalShell() {
             <span className="block text-xs text-muted">Ver meu perfil</span>
           </span>
         </Link>
+        {/* Compacto porque o header do portal é apertado no celular — e obrigatório: o portal
+            também adota o tema escuro, e sem um interruptor quem tem o sistema no escuro ficaria
+            preso nele sem saída. */}
+        <ThemeSwitch tom="claro" compacto />
         <Button
           variant="ghost"
           size="sm"

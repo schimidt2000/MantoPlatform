@@ -43,7 +43,10 @@ export function StarRating({ value, size = "md", label, className }: StarRatingP
     >
       <span className="flex items-center gap-0.5" aria-hidden="true">
         {SCORES.map((score) => (
-          <Star key={score} className={cn(iconSize, "text-line")} />
+          // `line-strong` e não `line`: a estrela VAZIA é o que informa a nota máxima, então
+          // é estrutura e não enfeite. Com `line` ela dava 1.28:1 sobre o painel escuro — a
+          // avaliação lia como "3 estrelas no total" em vez de "3 de 5".
+          <Star key={score} className={cn(iconSize, "text-line-strong")} />
         ))}
       </span>
       <span

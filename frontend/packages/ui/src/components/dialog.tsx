@@ -34,6 +34,9 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(function Di
       {open && (
         <DialogPrimitive.Portal forceMount>
           <DialogPrimitive.Overlay asChild forceMount>
+            {/* `bg-black/50` é intencional nos dois temas e NÃO deve virar token: o véu não é
+                uma superfície, é sombra — a função dele é escurecer o que está atrás. Um véu
+                que clareasse no tema escuro empurraria a página PARA CIMA do modal. */}
             <motion.div
               className="fixed inset-0 z-40 bg-black/50"
               initial={reduceMotion ? undefined : { opacity: 0 }}

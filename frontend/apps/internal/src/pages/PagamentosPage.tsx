@@ -90,29 +90,35 @@ interface BucketTone {
  *
  * "Futuro" usa `gold` (cor de atenção do design system) e não `amber`: a paleta padrão do
  * Tailwind não combina com o dourado da marca — ver `@manto/ui/tailwind-preset`.
+ *
+ * As outras três faixas usavam paleta CRUA do Tailwind (`bg-green-50`, `bg-blue-50`,
+ * `bg-rose-50`, `border-green-500`...), que é sempre clara e não acompanha o tema: no escuro a
+ * tabela ficaria com linhas pastel berrantes sobre o painel escuro, e a faixa "Futuro" seria a
+ * única a escurecer. Agora as quatro saem do mesmo vocabulário de token; os valores do tema
+ * CLARO dos degraus `-50` são exatamente os HEX que estavam aqui, então o claro não mudou.
  */
 const BUCKET_TONE: Record<PagamentoBucket, BucketTone> = {
   pago: {
     row: "bg-green-50",
-    cardActive: "border-green-500 bg-green-50/50 ring-2 ring-green-500/20",
+    cardActive: "border-green bg-green-50/50 ring-2 ring-green/20",
     text: "text-green",
     select: "border-green bg-green-soft text-green",
   },
   no_banco: {
     row: "bg-blue-50",
-    cardActive: "border-blue-500 bg-blue-50/50 ring-2 ring-blue-500/20",
+    cardActive: "border-blue bg-blue-50/50 ring-2 ring-blue/20",
     text: "text-blue",
     select: "border-blue bg-blue-soft text-blue",
   },
   pendente: {
-    row: "bg-rose-50",
-    cardActive: "border-red-500 bg-rose-50/50 ring-2 ring-red-500/20",
+    row: "bg-red-50",
+    cardActive: "border-red bg-red-50/50 ring-2 ring-red/20",
     text: "text-red",
     select: "border-red bg-red-soft text-red",
   },
   futuro: {
     row: "bg-gold-50",
-    cardActive: "border-gold-500 bg-gold-50/50 ring-2 ring-gold-500/20",
+    cardActive: "border-gold bg-gold-50/50 ring-2 ring-gold/20",
     text: "text-gold",
     select: "border-gold bg-gold-soft text-gold",
   },

@@ -38,6 +38,13 @@ const config: Config = {
         // some — quem navega por teclado perde a referência de onde está. Mesmo raciocínio do
         // preset; aqui precisa ser repetido porque o app público não consome o preset.
         ring: "#4a2f6b",
+        // Tinta sobre preenchimento saturado. No painel interno este token existe porque lá o
+        // acento CLAREIA no tema escuro e o branco reprovaria AA; aqui o catálogo não tem tema
+        // escuro, então é branco fixo (7.85:1 sobre o roxo do catálogo). Precisa existir neste
+        // config pelo mesmo motivo de `line-strong`/`ring`: `content` inclui packages/ui/src, e
+        // o `Button` do design system usa `text-on-color` — sem o token o botão primário do
+        // catálogo sairia com o texto herdado, sem cor nenhuma.
+        "on-color": "#ffffff",
         gold: {
           DEFAULT: "#b1793a",
           soft: "rgba(177,121,58,0.12)",
