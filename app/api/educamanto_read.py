@@ -111,6 +111,30 @@ def api_educamanto_distancia() -> Any:
     return jsonify({"km_ida": km_ida})
 
 
+@api_bp.route("/educamanto/personagens-no-dia")
+@api_login_required
+def api_educamanto_personagens_no_dia() -> Any:
+    """Personagens já escalados na data da apresentação — evita vender o mesmo em dobro.
+
+    Mesma consulta do alerta da Calculadora de Orçamento (`orcamento_ops.personagens_no_dia`),
+    exposta atrás do gate do EducaManto: `/api/orcamento/personagens-no-dia` é restrito a
+    Comercial/Superadmin, e Ensaio e Revendedor EducaManto também precisam desse aviso.
+    """
+    denied = _require_use()
+    if denied:
+        return denied
+    from datetime import date
+
+    from app.orcamento.quote_ops import personagens_no_dia
+
+    raw = (request.args.get("date") or "").strip()
+    try:
+        dia = date.fromisoformat(raw)
+    except ValueError:
+        return jsonify({"date": None, "personagens": []})
+    return jsonify({"date": raw, "personagens": personagens_no_dia(dia)})
+
+
 def _int_arg(data: dict, key: str, default: int = 0) -> int:
     try:
         return max(int(data.get(key) or default), 0)

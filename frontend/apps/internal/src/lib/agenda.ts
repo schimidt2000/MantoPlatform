@@ -220,6 +220,16 @@ export interface EventoDetalhe {
     location: string | null;
     confirmed: boolean;
     confirmed_by: string | null;
+    /** Preenchido = evento cancelado (feature 224): sai da agenda e de toda métrica. */
+    cancelled_at: string | null;
+    cancelled_by: string | null;
+    cancellation_reason: string | null;
+    /** Solicitação de exclusão do Comercial ainda não decidida pelo Superadmin. */
+    deletion_request: {
+      requested_at: string;
+      requested_by: string | null;
+      reason: string | null;
+    } | null;
     is_satellite: boolean;
     group_name: string | null;
     characters: string[];

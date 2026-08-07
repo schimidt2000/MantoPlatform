@@ -612,6 +612,9 @@ def personagens_no_dia(day) -> list[dict]:
         .filter(
             EventRole.role_type == "character",
             not_(CalendarEvent.title.like("🟧 ENSAIO%")),
+            # Evento cancelado (feature 224) libera o personagem: alertar sobre ele faria o
+            # comercial recusar uma venda que está de pé.
+            CalendarEvent.cancelled_at.is_(None),
             func.date(CalendarEvent.start_at) == day,
         )
         .with_entities(EventRole.character_name, CalendarEvent.title)

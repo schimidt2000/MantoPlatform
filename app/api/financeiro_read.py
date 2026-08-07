@@ -228,6 +228,9 @@ def api_financeiro_dashboard() -> Any:
             CalendarEvent.start_at >= start_dt,
             CalendarEvent.start_at <= end_dt,
             CalendarEvent.event_type != "ENSAIO",
+            # Evento cancelado não gera receita (feature 224) — a devolução do que a cliente
+            # já tinha pago entra na cascata pelo outro lado, somada em `gastos_extras`.
+            CalendarEvent.cancelled_at.is_(None),
         )
         .order_by(CalendarEvent.start_at.desc())
         .all()

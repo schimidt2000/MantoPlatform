@@ -149,10 +149,14 @@ def get_agenda(talent: Talent) -> dict:
         `payment_status` por item).
     """
     now = now_sp()
+    # Evento cancelado (feature 224) some do portal: o talento não pode receber convite para,
+    # nem se preparar para, um evento que não vai acontecer.
+    nao_cancelado = CalendarEvent.cancelled_at.is_(None)
 
     pending_invites = (
         EventRole.query.filter_by(talent_id=talent.id, invite_status="pending")
         .join(CalendarEvent)
+        .filter(nao_cancelado)
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
@@ -160,7 +164,7 @@ def get_agenda(talent: Talent) -> dict:
     upcoming = (
         EventRole.query.filter_by(talent_id=talent.id, invite_status="accepted")
         .join(CalendarEvent)
-        .filter(CalendarEvent.start_at >= now)
+        .filter(nao_cancelado, CalendarEvent.start_at >= now)
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
@@ -168,7 +172,7 @@ def get_agenda(talent: Talent) -> dict:
     past = (
         EventRole.query.filter_by(talent_id=talent.id, invite_status="accepted")
         .join(CalendarEvent)
-        .filter(CalendarEvent.start_at < now)
+        .filter(nao_cancelado, CalendarEvent.start_at < now)
         .order_by(CalendarEvent.start_at.desc())
         .all()
     )

@@ -52,6 +52,12 @@ class PacoteCalculado:
     transporte: TransporteResultado | None = None
     valor_final_sem_nota: float = 0.0
     valor_final_com_nota: float = 0.0
+    # Comissão do vendedor: o que ele digitou é capado no valor do pacote. Antes o corte era
+    # mudo — a tela seguia exibindo o valor digitado. Estes dois campos existem para a tela
+    # poder avisar em vez de fingir que entrou tudo.
+    acrescimo_efetivo: float = 0.0
+    acrescimo_maximo: float = 0.0
+    acrescimo_capado: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -64,33 +70,40 @@ class PacoteCalculado:
             "transporte": self.transporte.to_dict() if self.transporte else None,
             "valor_final_sem_nota": self.valor_final_sem_nota,
             "valor_final_com_nota": self.valor_final_com_nota,
+            "acrescimo_efetivo": self.acrescimo_efetivo,
+            "acrescimo_maximo": self.acrescimo_maximo,
+            "acrescimo_capado": self.acrescimo_capado,
         }
 
 
 def pessoas_transporte(package: EducaMantoPackage, ensemble: int) -> int:
-    """Deriva o nº de pessoas que viajam a partir do item "Catering apresentação" do pacote.
+    """Deriva o nº de pessoas que viajam, a partir das linhas cobradas POR PESSOA do pacote.
 
-    Mesma regra já usada pela tela Jinja (`cateringApresentacaoQty`/`syncPessoasTransporte`,
-    feature 079): o campo de pessoas do transporte não é digitado pelo usuário, é sempre o
-    headcount do catering da apresentação, crescendo com o ensemble.
+    O campo de pessoas do transporte nunca foi digitado pelo usuário — sai do próprio pacote.
+    A regra original (feature 079) lia só o item "Catering apresentação", e isso quebrou em
+    silêncio: os pacotes Econômicos não têm essa linha (a escola fornece a alimentação do dia),
+    então o headcount caía para zero e o adicional por pessoa do transporte sumia da conta,
+    mesmo com a equipe inteira viajando — a mesma equipe do Master.
+
+    Agora o headcount é o **maior** entre as linhas que crescem com o ensemble
+    (`ensemble_add > 0`): são exatamente as cobradas por cabeça (catering, ajuda de custo), e
+    portanto a quantidade delas *é* o tamanho da equipe. Verificado contra os 22 pacotes de
+    produção: devolve o mesmo número dos 15 pacotes que já funcionavam e corrige os 7
+    Econômicos, que passam a ter o headcount dos seus irmãos Master/Intermediário.
 
     Args:
         package: Pacote EducaManto.
         ensemble: Quantidade de figurantes extras.
 
     Returns:
-        Quantidade de pessoas, ou 0 se o pacote não tiver um item de catering de apresentação.
+        Quantidade de pessoas, ou 0 se o pacote não tiver nenhuma linha por pessoa.
     """
-    import unicodedata
-
-    def _norm(value: str) -> str:
-        decomposed = unicodedata.normalize("NFKD", value or "")
-        return "".join(c for c in decomposed if not unicodedata.combining(c)).lower()
-
-    for item in package.items:
-        if "catering apresenta" in _norm(item.name):
-            return item.qty + (item.ensemble_add or 0) * ensemble
-    return 0
+    por_pessoa = [
+        item.qty + (item.ensemble_add or 0) * ensemble
+        for item in package.items
+        if (item.ensemble_add or 0) > 0
+    ]
+    return max(por_pessoa) if por_pessoa else 0
 
 
 def calcular_transporte(km_ida: float, pessoas: int, dias_total: int) -> TransporteResultado:
@@ -176,8 +189,15 @@ def _valores_pacote(
     d2: int,
     ensemble: int,
     acrescimo: float,
+    transporte: float = 0.0,
 ) -> dict:
-    """Valor final sem/com nota de um pacote — mesma regra da tela Jinja (`valoresPacote`)."""
+    """Valor final sem/com nota de um pacote, com o transporte já dentro da base.
+
+    O transporte entra ANTES do bruteamento da nota (`÷ 0,84`) e antes do arredondamento —
+    mesma ordem da Calculadora de Orçamento. Antes ele era somado depois de tudo, então a Manto
+    absorvia o imposto sobre a parcela de transporte (numa viagem de R$ 3.986 isso era R$ 759
+    de imposto por orçamento).
+    """
     total_dias = d1 + d2
     if total_dias <= 0:
         return {"sem_nota": 0.0, "com_nota": 0.0, "valor_base": 0.0, "sem_exato": 0.0}
@@ -197,10 +217,10 @@ def _valores_pacote(
         if total_dias > package.discount_days
         else valor_base
     )
-    sem_com_acrescimo = sem_exato + acrescimo
+    liquido = sem_exato + acrescimo + transporte
     return {
-        "sem_nota": _ceil100(sem_com_acrescimo),
-        "com_nota": _ceil100(sem_com_acrescimo / 0.84),
+        "sem_nota": _ceil100(liquido),
+        "com_nota": _ceil100(liquido / 0.84),
         "valor_base": valor_base,
         "sem_exato": sem_exato,
     }
@@ -225,7 +245,8 @@ def calcular_pacote(
         d1: Dias de 1 sessão.
         d2: Dias de 2 sessões.
         ensemble: Quantidade de figurantes extras.
-        acrescimo: Comissão do vendedor, somada só no valor "sem nota" (capada ao valor original).
+        acrescimo: Comissão do vendedor, somada aos dois valores e capada no valor do pacote.
+            Quando o teto corta, `acrescimo_capado` sai `True` para a tela poder avisar.
         transporte: Resultado do transporte já calculado (ou `None`/zerado).
 
     Returns:
@@ -236,6 +257,8 @@ def calcular_pacote(
         return PacoteCalculado(scenario="")
 
     items = _effective_items(package, ensemble)
+    # Teto da comissão: o valor do pacote sozinho, sem transporte — o transporte é repasse de
+    # custo, não faz sentido ampliar o quanto o vendedor pode acrescentar.
     original = _valores_pacote(package, d1, d2, ensemble, 0)["sem_nota"]
     acrescimo_efetivo = min(acrescimo, original) if original > 0 else acrescimo
 
@@ -296,11 +319,11 @@ def calcular_pacote(
                 }
             )
 
-    vp = _valores_pacote(package, d1, d2, ensemble, acrescimo_efetivo)
+    transporte_total = transporte.total if transporte else 0.0
+    vp = _valores_pacote(package, d1, d2, ensemble, acrescimo_efetivo, transporte_total)
     desconto_aplicado = total_dias > package.discount_days
     desconto = vp["valor_base"] - vp["sem_exato"]
 
-    transporte_total = transporte.total if transporte else 0.0
     return PacoteCalculado(
         scenario=scenario,
         item_rows=item_rows,
@@ -309,6 +332,9 @@ def calcular_pacote(
         desconto_aplicado=desconto_aplicado,
         desconto=desconto,
         transporte=transporte,
-        valor_final_sem_nota=vp["sem_nota"] + transporte_total,
-        valor_final_com_nota=vp["com_nota"] + transporte_total,
+        valor_final_sem_nota=vp["sem_nota"],
+        valor_final_com_nota=vp["com_nota"],
+        acrescimo_efetivo=acrescimo_efetivo,
+        acrescimo_maximo=original,
+        acrescimo_capado=acrescimo > acrescimo_efetivo,
     )

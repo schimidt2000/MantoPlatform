@@ -34,6 +34,7 @@ def _settings_summary(settings: SiteSetting) -> dict:
         "logo_path": settings.logo_path or "",
         "default_commission_rate": settings.default_commission_rate,
         "educamanto_seller_id": settings.educamanto_seller_id,
+        "educamanto_commission_rate": settings.educamanto_commission_rate,
         "tax_rate": settings.tax_rate,
         "fator_r_threshold": settings.fator_r_threshold,
         "manto_address": settings.manto_address or "",

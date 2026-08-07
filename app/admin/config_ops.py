@@ -40,6 +40,13 @@ def update_settings(settings: SiteSetting, fields: dict[str, Any], logo_file=Non
     edu_raw = str(fields.get("educamanto_seller_id") or "").strip()
     settings.educamanto_seller_id = int(edu_raw) if edu_raw.isdigit() else None
 
+    edu_rate_raw = str(fields.get("educamanto_commission_rate") or "").strip()
+    try:
+        if edu_rate_raw:
+            settings.educamanto_commission_rate = float(edu_rate_raw)
+    except ValueError:
+        pass
+
     tax_raw = str(fields.get("tax_rate") or "").strip()
     try:
         if tax_raw:

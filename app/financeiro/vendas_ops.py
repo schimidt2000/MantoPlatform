@@ -151,6 +151,10 @@ def list_closed_sales(
        ninguém preencheu ``sale_date`` — sem ela, some dinheiro real do relatório.
     3. **Não duplica grupo comercial.** Eventos satélite ficam de fora: o principal carrega o
        valor do grupo inteiro (FR-010/FR-011), então incluí-los contaria a venda duas vezes.
+    4. **Não é venda cancelada.** Evento cancelado (feature 224) sai do funil e do faturamento:
+       o dinheiro está sendo devolvido, e a devolução aparece do outro lado como saída
+       (`SpecialExpense` categoria "Devolução a cliente"). Contá-lo aqui somaria uma receita
+       que a empresa não tem.
 
     Args:
         start_date: Primeiro dia do período (inclusive).
@@ -162,6 +166,7 @@ def list_closed_sales(
     end_dt = datetime.combine(end_date, datetime.max.time())
     query = CalendarEvent.query.filter(
         CalendarEvent.event_type != NON_SALE_EVENT_TYPE,
+        CalendarEvent.cancelled_at.is_(None),
         CalendarEvent.group_leader_id.is_(None),
         db.or_(
             db.and_(CalendarEvent.sale_value.isnot(None), CalendarEvent.sale_value > 0),

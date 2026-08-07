@@ -24,12 +24,14 @@ import {
   useEducaMantoPackages,
   useEducaMantoQuoteDetalhe,
   useGerarOrcamento,
+  usePersonagensNoDiaEducaManto,
   type PacoteItemRow,
 } from "../lib/educamanto";
 
 const FIELD =
   "h-10 w-full rounded-md border border-line bg-panel px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-blue";
 const LABEL = "mb-1 block text-xs font-semibold uppercase text-muted";
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function brl(v: number | null | undefined): string {
   if (v === null || v === undefined) return "—";
@@ -38,6 +40,37 @@ function brl(v: number | null | undefined): string {
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiRequestError ? err.message : fallback;
+}
+
+/**
+ * Painel "Já na agenda neste dia" — mesmo alerta da Calculadora de Orçamento, para não vender
+ * um personagem que já está escalado na data. `gold` do design system (o `amber` cru do Tailwind
+ * não acompanha o tema escuro).
+ */
+function AgendaNoDiaAlert({ date }: { date: string }) {
+  const dateValida = DATE_RE.test(date);
+  const consulta = usePersonagensNoDiaEducaManto(dateValida ? date : "");
+  const personagens = consulta.data?.personagens ?? [];
+
+  if (!dateValida || personagens.length === 0) return null;
+
+  return (
+    <div className="rounded-md border border-gold/40 bg-gold-soft p-3 text-sm" role="alert">
+      <p className="mb-1 font-semibold text-gold-ink">
+        ⚠️ Já na agenda neste dia — não vender em dobro
+      </p>
+      <ul className="list-disc space-y-0.5 pl-4 text-ink">
+        {personagens.map((p) => (
+          <li key={p.nome}>
+            <span className="font-medium">{p.nome}</span>
+            {p.eventos.length > 0 && (
+              <span className="text-muted"> — {p.eventos.join(" · ")}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function DetailTable({ rows }: { rows: PacoteItemRow[] }) {
@@ -97,6 +130,7 @@ export function EducaMantoCalculadoraPage() {
   const [enderecoMsg, setEnderecoMsg] = useState<{ text: string; error: boolean } | null>(null);
   const [kmIda, setKmIda] = useState<number | null>(null);
   const [clientName, setClientName] = useState("");
+  const [eventDate, setEventDate] = useState("");
   const [gerarMsg, setGerarMsg] = useState<{ text: string; error: boolean } | null>(null);
 
   const packages = packagesQuery.data?.packages ?? [];
@@ -119,10 +153,17 @@ export function EducaMantoCalculadoraPage() {
     setEnsemble(snap.ensemble);
     setAcrescimo(snap.acrescimo);
     setClientName(snap.client_name ?? "");
-    setKmIda(snap.transporte?.kmT ?? null);
+    setEventDate(snap.event_date ?? "");
+    // `km_ida` e NÃO `kmT`: o snapshot guarda os dois, e `kmT` é ida e volta. Repopular o campo
+    // de ida com o valor de ida-e-volta dobrava o transporte a cada "Recalcular".
+    const kmSalvo = snap.transporte?.km_ida ?? null;
+    setKmIda(kmSalvo);
     setEnderecoMsg(
-      snap.transporte?.kmT
-        ? { text: `Distância recuperada do orçamento salvo: ${snap.transporte.label}`, error: false }
+      kmSalvo
+        ? {
+            text: `Distância recuperada do orçamento salvo: ${kmSalvo} km (ida) · ${kmSalvo * 2} km ida e volta`,
+            error: false,
+          }
         : null,
     );
     if (snap.packages[0]) setPackageId(snap.packages[0].id);
@@ -185,6 +226,9 @@ export function EducaMantoCalculadoraPage() {
 
   function handleGerarOrcamento() {
     if (!resultado || !selectedPackage) return;
+    // O cálculo é debounced: enquanto ele não volta, `resultado` ainda é o valor ANTERIOR.
+    // Gerar aqui congelaria no PDF um número que já não é o da tela.
+    if (calcular.isPending) return;
     setGerarMsg({ text: "Gerando…", error: false });
     gerarOrcamento.mutate(
       {
@@ -203,7 +247,9 @@ export function EducaMantoCalculadoraPage() {
         transporte: transporte
           ? { total: transporte.total, label: transporte.label, kmT: transporte.km_total, pessoas: transporte.pessoas }
           : undefined,
+        km_ida: kmIda ?? undefined,
         client_name: clientName,
+        event_date: eventDate || undefined,
       },
       {
         onSuccess: () => setGerarMsg({ text: "Orçamento gerado e baixado com sucesso.", error: false }),
@@ -228,7 +274,17 @@ export function EducaMantoCalculadoraPage() {
         actions={
           <div className="flex flex-wrap gap-3 text-sm">
             {resultado && selectedPackage && (
-              <Button size="sm" loading={gerarOrcamento.isPending} onClick={handleGerarOrcamento}>
+              <Button
+                size="sm"
+                loading={gerarOrcamento.isPending}
+                disabled={calcular.isPending}
+                title={
+                  calcular.isPending
+                    ? "Aguarde o recálculo terminar para não congelar um valor antigo no PDF"
+                    : undefined
+                }
+                onClick={handleGerarOrcamento}
+              >
                 Gerar orçamento
               </Button>
             )}
@@ -328,6 +384,26 @@ export function EducaMantoCalculadoraPage() {
                       onChange={(e) => setEnsemble(Math.max(0, Number(e.target.value) || 0))}
                     />
                   </div>
+                  <div className="sm:col-span-3">
+                    <label className={LABEL} htmlFor="event_date">
+                      Data da apresentação
+                    </label>
+                    <Input
+                      id="event_date"
+                      type="date"
+                      className="max-w-[200px]"
+                      value={eventDate}
+                      onChange={(e) => setEventDate(e.target.value)}
+                    />
+                    <p className="mt-1 text-xs text-muted">
+                      Não entra no preço — serve para conferir quem já está escalado no dia.
+                    </p>
+                  </div>
+                  {eventDate && (
+                    <div className="sm:col-span-3">
+                      <AgendaNoDiaAlert date={eventDate} />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -374,6 +450,31 @@ export function EducaMantoCalculadoraPage() {
                     )}
                   </div>
 
+                  {/* O km precisa ser visível e corrigível: antes ele só existia dentro do
+                      estado da tela, então não havia como conferir o que estava sendo cobrado
+                      nem ajustar uma distância que o Maps errou. */}
+                  <div>
+                    <label className={LABEL} htmlFor="km_ida">
+                      Km (ida)
+                    </label>
+                    <Input
+                      id="km_ida"
+                      type="number"
+                      min={0}
+                      step="any"
+                      className="max-w-[160px]"
+                      value={kmIda ?? ""}
+                      onChange={(e) => {
+                        const valor = e.target.value;
+                        setKmIda(valor === "" ? null : Math.max(0, Number(valor) || 0));
+                        setEnderecoMsg(null);
+                      }}
+                    />
+                    <p className="mt-1 text-xs text-muted">
+                      Preenchido pelo botão Calcular, mas editável — o transporte cobra ida e volta.
+                    </p>
+                  </div>
+
                   {transporte && transporte.total > 0 && (
                     <div className="rounded-md bg-surface-2 px-3 py-2 text-sm text-ink">
                       🚐{" "}
@@ -406,6 +507,24 @@ export function EducaMantoCalculadoraPage() {
                     onValueChange={setAcrescimo}
                     aria-label="Acréscimo do vendedor"
                   />
+                  {/* O servidor capa a comissão no valor do pacote. O corte era mudo e a tela
+                      seguia exibindo o valor digitado — dava para achar que 50 mil tinham
+                      entrado quando só entrou o teto. */}
+                  {resultado?.acrescimo_capado && (
+                    <div
+                      className="rounded-md border border-gold/40 bg-gold-soft p-3 text-sm"
+                      role="alert"
+                    >
+                      <p className="font-semibold text-gold-ink">
+                        ⚠️ Acima do máximo — só entrou {brl(resultado.acrescimo_efetivo)}
+                      </p>
+                      <p className="mt-0.5 text-ink">
+                        A comissão não pode passar do valor do pacote, que neste orçamento é{" "}
+                        {brl(resultado.acrescimo_maximo)}. Os {brl(acrescimo)} digitados foram
+                        cortados até esse teto.
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <label className={LABEL} htmlFor="client_name">
                       Nome do cliente (opcional)
@@ -450,7 +569,7 @@ export function EducaMantoCalculadoraPage() {
                       </p>
                       <div className="mt-2 space-y-0.5 text-xs text-ink/80">
                         <p>Custo base: {brl(resultado.raw_cost)}</p>
-                        <p>Comissão do vendedor: {brl(acrescimo)}</p>
+                        <p>Comissão do vendedor: {brl(resultado.acrescimo_efetivo)}</p>
                       </div>
                     </div>
                     <div className="rounded-lg border border-blue bg-blue-soft p-4">
@@ -460,7 +579,17 @@ export function EducaMantoCalculadoraPage() {
                       </p>
                       <div className="mt-2 space-y-0.5 text-xs text-ink/80">
                         <p>Custo base: {brl(resultado.raw_cost)}</p>
-                        <p>Comissão do vendedor: {brl(acrescimo)}</p>
+                        {/* A comissão é bruteada junto com o resto (÷ 0,84), então o cliente paga
+                            mais do que o vendedor recebe — o extra é o imposto sobre ela. */}
+                        <p>
+                          Comissão do vendedor: {brl(resultado.acrescimo_efetivo)}
+                          {resultado.acrescimo_efetivo > 0 && (
+                            <span className="text-muted">
+                              {" "}
+                              (cobrada {brl(resultado.acrescimo_efetivo / 0.84)} com o imposto)
+                            </span>
+                          )}
+                        </p>
                       </div>
                     </div>
                   </div>

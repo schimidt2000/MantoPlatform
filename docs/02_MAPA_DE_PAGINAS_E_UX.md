@@ -184,8 +184,16 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
     chegam no JSON para Casting/Comercial/Superadmin, feature 222) · Editar no Google Agenda ·
     Confirmar dados do evento ·
     Cobrança · Cobrar reembolsos · Marcar evento como confirmado · Pedir feedback da cliente ·
-    **Editar tudo (formulário completo)** · Excluir evento. Itens indisponíveis ficam
-    desabilitados **com `title` explicando o porquê**.
+    **Editar tudo (formulário completo)** · **Excluir ou cancelar** (só `SUPERADMIN`) ou
+    **Solicitar exclusão** (`COMERCIAL`, com motivo obrigatório) — feature 224. Itens
+    indisponíveis ficam desabilitados **com `title` explicando o porquê**.
+  - **Banners** acima das abas (feature 224): evento **cancelado** (motivo, autor, data, e o
+    aviso de que não conta em métrica nenhuma) e **exclusão solicitada** aguardando decisão,
+    esta com os botões "Analisar e decidir" e "Recusar solicitação" para o Superadmin. O
+    diálogo de exclusão abre com o resumo de impacto — venda, quanto a cliente já pagou, elenco
+    escalado e comissão em jogo — e diz qual das duas ações vai acontecer **antes** de
+    confirmar; quando é cancelamento, pede o valor a devolver (pré-preenchido com o recebido),
+    nome e PIX de quem recebe.
   - **Aba Resumo**: **faixa de pendências** (chips *Elenco 2/2 escalados*, *Presença*,
     *Figurino n/m com ficha*, *Agenda n com conflito*, *Contrato*, *Recebimento*, *Evento
     confirmado* — verde quando resolvido, dourado quando não; **clicar leva para a aba que
@@ -951,10 +959,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 | Rota | Tela | Acesso | Destaques |
 |---|---|---|---|
 | `/orcamento` | Calculadora de Orçamento | `COMERCIAL`, `SUPERADMIN` | layout clássico de duas colunas assimétrico (1/3 dados do evento + segurança de agenda, 2/3 equipe/ajustes/resultado); **cálculo 100% reativo** — sem botão "Calcular", qualquer alteração recalcula (debounce ~400ms); alerta "Já na agenda neste dia" abaixo da Data (evita venda em dobro de personagem); painel "Personalizar valores" (valor final ou multiplicador, por duração); contador de itens no link "Histórico de Orçamentos"; campo **Local/Endereço do evento** com **`GoogleAddressInput`** e botão **"Calcular km (Maps)"** ao lado de *Km (ida)*, que preenche a distância pela Distance Matrix (feature 195 — antes o KM aqui era 100% manual); escolher uma sugestão do Google com "Fora de SP" ligado já dispara o cálculo. Salvar no histórico, "Ver memória de cálculo"; lê `?recalcular_id=` para reabrir um orçamento salvo com os campos preenchidos (feature 191, sobre a base da feature 190) |
+| `/events/cancelamentos` | Exclusões e cancelamentos | `SUPERADMIN` | fila com os pedidos de exclusão do Comercial aguardando decisão e o histórico de eventos cancelados, com o valor e a situação da devolução de cada um. É a **única porta de entrada** para um evento cancelado — ele sai da agenda de propósito (feature 224). Declarada **antes** de `/events/:id` no `App.tsx`, senão `:id` casaria com "cancelamentos" |
 | `/orcamento/:id` | Orçamento gerado | `COMERCIAL`, `SUPERADMIN` | destino de "Gerar Orçamento" e de "Abrir orçamento" no histórico (hotfix 210, sucessora de `orcamento/resultado.html`): mensagem de WhatsApp copiável, resumo por duração, detalhamento do transporte quando fora de SP, memória de cálculo e envio do PDF por e-mail. Rota declarada **depois** de `/orcamento/historico` e `/orcamento/configuracoes` — `:id` casaria com elas |
 | `/orcamento/historico` | Orçamentos | `COMERCIAL`, `SUPERADMIN` | tabela densa com filtros avançados (data, valor, vendedor, tipo), PDF, envio por e-mail, exclusão; **Abrir orçamento** (`/orcamento/:id`), **Criar evento** (`/events/new?orcamento_id=`) e **Recalcular** (`/orcamento?recalcular_id=`), feature 190 |
 | `/orcamento/configuracoes` | Config. Preços | `SUPERADMIN` | `SiteSetting.pricing_config` + personagens especiais, em tabelas densas (feature 190) |
-| `/educamanto` | Calculadora EducaManto | `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO` | seletor de pacote em dropdown, duas colunas, cards Sem/Com Nota Fiscal, transporte com **`GoogleAddressInput`** no endereço (feature 195 — escolher a sugestão já recalcula o KM), cálculo; lê `?package_id=` (vindo de "Usar" na tela de Pacotes) e `?recalcular_id=` (feature 190) |
+| `/educamanto` | Calculadora EducaManto | `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO` | seletor de pacote em dropdown, duas colunas, cards Sem/Com Nota Fiscal, transporte com **`GoogleAddressInput`** no endereço (feature 195 — escolher a sugestão já recalcula o KM), cálculo; lê `?package_id=` (vindo de "Usar" na tela de Pacotes) e `?recalcular_id=` (feature 190). Feature 223: campo **Km (ida)** visível e editável (antes o km só existia no estado da tela), **Data da apresentação** com o mesmo alerta de personagens já escalados da Calculadora de Orçamento (`/api/educamanto/personagens-no-dia`, gate do EducaManto), aviso quando a comissão do vendedor estoura o teto do pacote, e "Gerar orçamento" desabilitado enquanto o recálculo não volta |
 | `/educamanto/pacotes` · `/novo` · `/:id/editar` | Pacotes EducaManto | `COMERCIAL`, `SUPERADMIN` | grade de cards com margens/desconto/matriz de custos; Usar, CRUD + duplicar (feature 190) |
 | `/educamanto/historico` | Histórico EducaManto | mesmos da calculadora | tabela densa; Ver (Dialog com o snapshot), Baixar PDF e **Recalcular** (`/educamanto?recalcular_id=`), feature 190 |
 

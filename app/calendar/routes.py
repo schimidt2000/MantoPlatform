@@ -51,7 +51,10 @@ TZ = ZoneInfo("America/Sao_Paulo")
 _CAN_ENSAIO      = {RoleName.ENSAIO, RoleName.CASTING, RoleName.SUPERADMIN}
 _CAN_CREATE      = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
 _CAN_EDIT_EVENT  = {RoleName.CASTING, RoleName.FIGURINO, RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN}
-_CAN_DELETE      = {RoleName.SUPERADMIN, RoleName.COMERCIAL}
+# Excluir/cancelar evento é só do Superadmin (feature 224): a ação mexe em dinheiro já recebido,
+# comissão paga e devolução ao cliente. O Comercial perdeu a permissão e passou a SOLICITAR.
+_CAN_DELETE         = {RoleName.SUPERADMIN}
+_CAN_REQUEST_DELETE = {RoleName.SUPERADMIN, RoleName.COMERCIAL}
 
 # Técnico de Som padrão para eventos SHOW (Nivaldo de Andrade — recebe o PIX)
 SOUND_TECH_TALENT_ID: int = 42
@@ -120,6 +123,10 @@ def _query_month_events(year: int, month: int) -> list["CalendarEvent"]:
 
     Inclui eventos que começam no mês e os que atravessam o mês (fim >= início do mês). Ordena
     por início. Não chama o Google — lê só do banco.
+
+    Evento cancelado (feature 224) fica de fora: ele não acontece mais, e deixá-lo na agenda
+    faria a equipe continuar se organizando para um evento que não existe. Ele segue acessível
+    pela tela de cancelamentos e pelo link direto.
     """
     month_start_dt = datetime(year, month, 1)
     if month == 12:
@@ -129,6 +136,7 @@ def _query_month_events(year: int, month: int) -> list["CalendarEvent"]:
     return (
         CalendarEvent.query
         .filter(
+            CalendarEvent.cancelled_at.is_(None),
             CalendarEvent.start_at < month_end_dt,
             db.or_(
                 CalendarEvent.end_at >= month_start_dt,
@@ -195,52 +203,65 @@ def _clear_event_side_tables(event_id: int) -> None:
     ``CalendarEvent`` — sem esta limpeza, ``db.session.delete(event)`` falha com violação
     de chave estrangeira sempre que existir algum desses registros (ex.: histórico de
     ações do evento).
+
+    ``SpecialExpense`` é o único que **não** é apagado, só desvinculado: o gasto extra é
+    dinheiro que saiu de verdade da empresa e precisa continuar na DRE do mês, mesmo que o
+    evento a que estava preso deixe de existir. Antes ele não era tratado de forma nenhuma, e
+    excluir um evento com gasto vinculado estourava violação de chave estrangeira (feature 224).
     """
+    from app.models import EventSubRating
+
     EventLog.query.filter_by(event_id=event_id).delete()
     EventContract.query.filter_by(event_id=event_id).delete()
     EventPayment.query.filter_by(event_id=event_id).delete()
+    # As sub-avaliações penduram em `EventRating`, não no evento — apagar só o rating estourava
+    # `event_sub_ratings_rating_id_fkey` em qualquer evento que tivesse avaliação detalhada
+    # (feature 224).
+    EventSubRating.query.filter(
+        EventSubRating.rating_id.in_(
+            db.session.query(EventRating.id).filter(EventRating.event_id == event_id)
+        )
+    ).delete(synchronize_session=False)
     EventRating.query.filter_by(event_id=event_id).delete()
     ClientFeedback.query.filter_by(event_id=event_id).delete()
     EventReimbursement.query.filter_by(event_id=event_id).delete()
+    SpecialExpense.query.filter_by(event_id=event_id).update({"event_id": None})
 
 
-def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> None:
+def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> str | None:
     """Deleta um evento do banco removendo manualmente as tabelas sem cascade.
 
     Cascades automáticos: EventRole, EventObservation, ensaios, EnsaioMaterial.
     Sem cascade (deletados manualmente via ``_clear_event_side_tables``): EventLog,
     EventContract, EventPayment, EventRating, ClientFeedback, EventReimbursement.
+
+    Com ``also_from_google``, remove **também do Google Agenda** — excluir só do sistema
+    deixaria o evento vivo no calendário da equipe, e o próximo sync o recriaria do zero.
+
+    Returns:
+        Aviso quando o banco foi limpo mas o Google recusou a remoção (o local nunca é
+        revertido por falha do Google), ou ``None``. Antes esse aviso saía por ``flash``, o que
+        amarrava a função a um request context e sumia inteiro na resposta da API.
     """
     _clear_event_side_tables(event.id)
 
-    # Comissões: se pendente, cancela; se paga, cria estorno
-    for cp in list(CommissionPayment.query.filter_by(event_id=event.id).all()):
-        if cp.status == "a_pagar":
-            cp.status = "cancelado"
-            cp.event_id = None  # desvincula antes do delete do evento
-        elif cp.status == "pago":
-            # cria estorno para descontar no próximo ciclo
-            db.session.add(CommissionPayment(
-                event_id=None,
-                event_title=cp.event_title,
-                seller_id=cp.seller_id,
-                sale_date=cp.sale_date,
-                payable_from=cp.payable_from,
-                amount=-cp.amount,
-                status="a_pagar",
-                original_id=cp.id,
-                notes=f"Estorno automático: evento cancelado",
-            ))
-            cp.event_id = None
+    # Comissões (pendente → cancelada; paga → estorno negativo). A regra mora em `cancel_ops`
+    # para que o cancelamento use exatamente a mesma — ela não pode existir só no caminho que
+    # apaga o evento (feature 224).
+    from app.calendar.cancel_ops import aplicar_estorno_comissao
 
+    aplicar_estorno_comissao(event)
+
+    aviso: str | None = None
     if also_from_google and event.google_event_id:
         try:
             delete_event(CALENDAR_ID, event.google_event_id)
         except Exception as exc:  # noqa: BLE001 — qualquer falha do Google não pode travar a exclusão local
             current_app.logger.exception(
                 "Falha ao remover evento %s do Google Agenda", event.id)
-            flash(f"Salvo no banco, mas erro ao remover do Google Calendar: {exc}", "warning")
+            aviso = f"Excluído do sistema, mas erro ao remover do Google Agenda: {exc}"
     db.session.delete(event)
+    return aviso
 
 
 def _cleanup_stale_events(items: list[dict], year: int, month: int) -> list[str]:
@@ -262,6 +283,10 @@ def _cleanup_stale_events(items: list[dict], year: int, month: int) -> list[str]
             # Seguro porque _cleanup_stale_events só é chamado quando o GCal respondeu
             # com sucesso (fetch não lançou RuntimeError).
             CalendarEvent.google_event_id.isnot(None),
+            # Evento cancelado JÁ foi tirado do Google de propósito — encontrá-lo "faltando"
+            # é o esperado, não sinal de sumiço. Sem este filtro o primeiro ciclo de sync
+            # depois de um cancelamento apagaria o registro que sustenta a devolução (224).
+            CalendarEvent.cancelled_at.is_(None),
             CalendarEvent.start_at >= month_start_dt,
             CalendarEvent.start_at < month_end_dt,
         )
@@ -2165,6 +2190,12 @@ def sync_events(items: list[dict]) -> None:
             _sinalizar_divergencia_virtual(existente, item)
             continue
 
+        # Evento cancelado é intocável pelo sync (feature 224): se alguém recriar a linha no
+        # Google com o mesmo id, atualizá-lo aqui ressuscitaria uma venda cancelada — com a
+        # devolução já registrada — de volta para as métricas.
+        if existente is not None and existente.is_cancelled:
+            continue
+
         title = item.get("summary") or "Sem título"
         description = item.get("description")
         location = item.get("location")
@@ -3752,27 +3783,30 @@ def _sync_single_event_flow(event: CalendarEvent) -> str:
     return "ok"
 
 
-def _delete_event_flow(event: CalendarEvent, *, actor_name: str, actor_role: str) -> bool:
+def _delete_event_flow(
+    event: CalendarEvent, *, actor_name: str, actor_role: str
+) -> tuple[bool, str | None]:
     """Núcleo da exclusão de um evento (feature 151), fonte única.
 
     Reusado pelo wrapper Jinja e pelo endpoint JSON. Recusa a exclusão de um evento líder de grupo
-    (é preciso desagrupar os satélites antes). Registra o log `manual_deleted`, remove do banco e do
-    Google via `_delete_event` e commita.
+    (é preciso desagrupar os satélites antes). Registra o log `manual_deleted`, remove do banco
+    **e do Google Agenda** via `_delete_event` e commita.
 
     Returns:
-        `False` se o evento é líder de grupo (não excluído); `True` quando excluído.
+        `(False, None)` se o evento é líder de grupo (não excluído); `(True, aviso)` quando
+        excluído — `aviso` preenchido só quando o Google recusou a remoção (feature 224).
     """
     if event.is_group_leader:  # FR-004: desagrupar antes
-        return False
+        return False, None
     _log_sync(
         "manual_deleted", event,
         details="Removido do banco e do Google Calendar",
         actor=actor_name,
         actor_role=actor_role,
     )
-    _delete_event(event, also_from_google=True)
+    aviso = _delete_event(event, also_from_google=True)
     db.session.commit()
-    return True
+    return True, aviso
 
 
 @calendar_bp.route("/events/<int:event_id>/sync", methods=["POST"])
@@ -3865,16 +3899,19 @@ def delete_calendar_event(event_id: int):
         abort(403)
     event = CalendarEvent.query.get_or_404(event_id)
     title = event.title  # capturado antes da exclusão
-    if not _delete_event_flow(
+    excluido, aviso = _delete_event_flow(
         event,
         actor_name=current_user.name,
         actor_role=", ".join(r.name for r in current_user.roles),
-    ):
+    )
+    if not excluido:
         flash(
             f'Não é possível excluir "{title}": desagrupe os eventos satélites antes de excluir.',
             "error",
         )
         return redirect(url_for("calendar.event_detail", event_id=event_id))
+    if aviso:
+        flash(aviso, "warning")
     flash(f'Evento "{title}" excluído com sucesso.', "success")
     return redirect(url_for("calendar.agenda"))
 

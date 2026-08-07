@@ -4,8 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **222 (paridade do
-> "Exportar elenco")** · Head de migration: `c5d92fa16e34`
+> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **224 (cancelamento de
+> evento com devolução ao cliente)** · Head de migration: `b8e4d27a91f5`
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -37,7 +37,9 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **222** | Exportar elenco perdeu quatro campos (nascimento/CPF/RG/documento) na migração para o React | 2026-08-07 | `—` | (aqui) | 134 |
+| **224** | Evento com dinheiro vira cancelado (não apagado), com devolução ao cliente; exclusão só para Superadmin | 2026-08-07 | `b8e4d27a91f5` | (aqui) | 134 |
+| **223** | Calculadora EducaManto: transporte dobrado no recalcular, Econômico sem adicional por pessoa, NF sem transporte, comissão configurável | 2026-08-07 | `a3f7c19d5e02` | (aqui) | 196 |
+| **222** | Exportar elenco perdeu quatro campos (nascimento/CPF/RG/documento) na migração para o React | 2026-08-07 | `—` | (aqui) | 186 |
 | **221** | Agente auditor financeiro semanal (endpoints + fix de sobrescrita de upload) | 2026-08-06 | `—` | (aqui) | 161 |
 | **220b** | Hotfix: menu "Ferramentas" do evento embaçado no meio | 2026-08-06 | `—` | (aqui) | 133 |
 | **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 156 |
@@ -131,6 +133,119 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 224 — Evento com dinheiro não é mais apagado: vira cancelado, com devolução ao cliente
+`main` · **2026-08-07** · migration `b8e4d27a91f5`
+
+**Motivação.** Em 07/08 o sync apagou o `(SHOW) PETER PAN…` de novembro depois que ele sumiu do
+Google Agenda — e a cliente já tinha pago R$ 2.500. A comissão foi tratada certo (a paga virou
+estorno de −R$ 170, que desconta no repasse seguinte), mas o **pagamento recebido evaporou**:
+`_clear_event_side_tables` apaga os `EventPayment` junto com o evento, e depois disso não existe
+registro de que o dinheiro entrou nem a que a devolução se refere. Não havia como excluir pela
+tela sem causar o mesmo estrago: o botão existia, escondido no kebab, e só perguntava "tem certeza?".
+
+**A regra nova.** Evento **vazio** (sem venda, sem pagamento, sem contrato, sem elenco escalado)
+continua sendo excluído de verdade — é o criado por engano. Evento com qualquer dessas coisas
+presa é **cancelado**: `cancelled_at` o tira da agenda e de toda métrica, mas o registro fica,
+porque é a ele que a devolução se refere. Quem decide qual das duas acontece é o servidor
+(`cancel_ops.pode_excluir`); a tela mostra o porquê antes de confirmar
+(`cancel_ops.resumo_impacto`).
+
+**RBAC.** `_CAN_DELETE` virou **só Superadmin**. O Comercial ganhou "Solicitar exclusão" com
+motivo obrigatório (`_CAN_REQUEST_DELETE`), e o Superadmin decide pela fila em
+`/events/cancelamentos` ou pelo banner no próprio evento.
+
+**A devolução reusa Gasto Extra**, com `disbursement_type="cliente"` e categoria "Devolução a
+cliente" — sem entidade nova. Nasce aprovada (quem cancela já é Superadmin) e por isso entra
+sozinha na Planilha de Pagamentos e na DRE do mês, que já somam `SpecialExpense` do período.
+Nome e PIX de quem recebe moram nos mesmos campos do fornecedor: a forma do dado é idêntica.
+
+**Onde o cancelado some.** Agenda (`_query_month_events`), vendas (`list_closed_sales`), DRE
+(as duas queries gêmeas), planilha de pagamentos (`_pagamentos_query`), comissão
+(`_sync_commission_payment`), disponibilidade do casting (`talent_availability`), aviso de
+personagem no dia (`personagens_no_dia`), dashboard (`_base_filters`) e portal do talento. No
+sync ele é intocável: nem `_cleanup_stale_events` o apaga (ele saiu do Google de propósito) nem
+`sync_events` o reescreve.
+
+**Dois bugs de exclusão corrigidos no caminho**, ambos da mesma família — FK `NO ACTION` que
+`_clear_event_side_tables` não limpava, fazendo a exclusão estourar 500:
+1. **gasto extra vinculado** (`special_expenses.event_id`) — agora é **desvinculado**, não
+   apagado: o gasto é dinheiro que saiu de verdade e precisa continuar na DRE. Há 57 gastos
+   vinculados a evento na base;
+2. **sub-avaliações** (`event_sub_ratings.rating_id`) — descoberto pelo próprio script de
+   verificação, que tentou apagar um evento com avaliação detalhada.
+
+`_delete_event` também deixou de usar `flash` para o erro do Google: agora devolve o aviso, que
+o adaptador Jinja mostra e a API entrega no corpo. Excluir **continua removendo do Google
+Agenda**; cancelar também.
+
+**Estorno de comissão visível.** `get_month_entries` passou a unir os estornos pendentes, como o
+resumo por vendedor já fazia. Sem isso, a tabela de agosto listava R$ 868,40 em linhas enquanto
+o topo dizia R$ 698,40 — o estorno descontava sem aparecer em lugar nenhum.
+
+**Pegadinhas.** `/events/cancelamentos` precisa ser declarada **antes** de `/events/:id` no
+React Router. O teto da comissão e a devolução são coisas distintas: a devolução não vira custo
+do evento cancelado nas métricas, porque o evento saiu delas — ela entra pela soma de gastos do
+período. E o cancelamento fica **imune ao sync**, senão o primeiro ciclo depois dele apagaria o
+registro que sustenta a devolução.
+
+**Verificação.** `scripts/db/verify_cancelamento_evento.py` — 44/44 contra `manto_local`,
+montando um evento com venda, pagamento recebido, elenco e comissão paga, cancelando e exigindo
+que ele tenha sumido de cada superfície. `verify_151_excluir_sync.py` atualizado para o contrato
+novo (31/31).
+
+### 223 — Calculadora EducaManto: transporte dobrado, transporte não cobrado e comissão muda
+`main` · **2026-08-07** · migration `a3f7c19d5e02`
+
+**Motivação.** Revisão operacional da calculadora EducaManto. Seis defeitos, dois deles cobrando
+errado em produção.
+
+**1. "Recalcular" dobrava o transporte.** O snapshot guardava só `kmT` (ida **e volta**, que é o
+que o PDF mostra) e a tela repopulava com ele o campo de **ida** — o cálculo dobrava de novo.
+Medido nos 18 orçamentos do histórico que têm transporte: **2,00× em todos**. Agora o snapshot
+grava `km_ida` junto, e `load_quote_snapshot` deriva `kmT/2` para os snapshots antigos (os valores
+congelados do PDF seguem intactos; só a entrada do recálculo é normalizada).
+
+**2. Pacote Econômico não cobrava o adicional por pessoa do transporte.** O headcount saía do item
+"Catering apresentação", que os 7 pacotes Econômicos não têm (a escola fornece a alimentação) —
+o transporte caía para só a rodagem, com a equipe inteira viajando. Num evento de 200 km × 2 dias
+eram **R$ 2.933 a menos**. Agora o headcount é o **maior qty entre as linhas que crescem com o
+ensemble** (`ensemble_add > 0`), que são exatamente as cobradas por cabeça. Conferido nos 22
+pacotes: idêntico nos 15 que já funcionavam, corrige os 7 Econômicos.
+
+**3. A comissão do vendedor era capada em silêncio.** O teto (valor do pacote) cortava o valor
+digitado e a tela seguia exibindo o que ele digitou — R$ 20.000, R$ 50.000 e R$ 100.000 produziam
+o mesmo orçamento. `calcular_pacote` agora devolve `acrescimo_efetivo`/`acrescimo_maximo`/
+`acrescimo_capado`, e a tela avisa.
+
+**4. A Nota Fiscal não alcançava o transporte.** Ele era somado depois do `÷ 0,84`, então a Manto
+absorvia o imposto dessa parcela (R$ 813 numa viagem de R$ 3.986) — e era **inconsistente com a
+Calculadora de Orçamento**, onde o transporte entra antes. Agora o transporte entra na base, antes
+do bruteamento e do arredondamento. Pacote sem transporte não muda de valor.
+
+**5. A % da comissão EducaManto saiu do código.** Era a constante `EDUCAMANTO_COMMISSION_RATE = 5`;
+virou `SiteSetting.educamanto_commission_rate`, editável em Configurações → Financeiro. NULL
+mantém 5%, então a migração não altera nenhum cálculo existente. O override por evento
+(`event.commission_rate`) continua ganhando de tudo.
+
+**6. UX.** Campo **Km (ida)** visível e editável (antes não havia como conferir nem corrigir o que
+o Maps trouxe); mensagem de recuperação mostrava o veículo no lugar da distância; "Gerar orçamento"
+desabilitado enquanto o cálculo debounced não volta (dava para congelar no PDF o valor anterior).
+
+**Extra pedido junto.** Campo **Data da apresentação** com o mesmo alerta de personagens já
+escalados no dia da Calculadora de Orçamento. `/api/orcamento/personagens-no-dia` é restrito a
+Comercial/Superadmin, então o endpoint novo `/api/educamanto/personagens-no-dia` reusa
+`orcamento.quote_ops.personagens_no_dia` atrás do gate do EducaManto — Ensaio e Revendedor também
+precisam do aviso. A data não entra no preço.
+
+**Pegadinhas.** O teto da comissão é o valor do pacote **sem** transporte: transporte é repasse de
+custo, ampliar o teto com ele não faz sentido. O PDF (`educamanto/pdf.py`) só imprime os totais e
+a nota "valores já incluem logística/transporte", então a mudança 4 não duplica nada lá. Amarrar
+headcount a uma linha de comida foi a origem do defeito 2 — alguém removeu o catering do Econômico
+e zerou o transporte sem perceber; os orçamentos de julho ainda gravaram 11 pessoas nesses pacotes.
+
+**Verificação.** `scripts/db/verify_educamanto_calculadora.py` — 24/24 contra `manto_local`,
+cobrindo os seis pontos e o RBAC do endpoint novo (Revendedor 200, Figurino 403).
 
 ### 222 — Exportar elenco perdeu quatro campos na migração para o React
 `main` · **2026-08-07** · sem migration

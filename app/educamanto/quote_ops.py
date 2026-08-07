@@ -50,6 +50,13 @@ def build_snapshot(data: dict) -> tuple[dict, str]:
         d1 = d2 = 0
     transporte = data.get("transporte") or {}
     client_name = (data.get("client_name") or "").strip()[:200]
+    # `kmT` é a distância IDA E VOLTA (é o que o PDF mostra). Guardar só ela fazia o
+    # "Recalcular" devolver o dobro do caminho: a tela jogava esse número no campo de ida e o
+    # cálculo dobrava de novo. Agora o snapshot guarda também o `km_ida`, que é a entrada real
+    # do cálculo — snapshots antigos, que só têm `kmT`, são convertidos na leitura.
+    km_ida = data.get("km_ida")
+    if km_ida in (None, "") and transporte.get("kmT"):
+        km_ida = float(transporte["kmT"]) / 2
     snapshot = {
         "d1": d1,
         "d2": d2,
@@ -59,9 +66,11 @@ def build_snapshot(data: dict) -> tuple[dict, str]:
             "total": float(transporte.get("total") or 0),
             "label": str(transporte.get("label") or ""),
             "kmT": transporte.get("kmT"),
+            "km_ida": float(km_ida) if km_ida not in (None, "") else None,
             "pessoas": transporte.get("pessoas"),
         },
         "client_name": client_name,
+        "event_date": (data.get("event_date") or "").strip()[:10] or None,
         "packages": clean_pkgs,
     }
     label = ", ".join(p["name"] for p in clean_pkgs)[:300]
@@ -100,8 +109,21 @@ def generate_quote(user_id: int, data: dict) -> tuple[EducaMantoQuote, dict]:
 
 
 def load_quote_snapshot(quote: EducaMantoQuote) -> dict:
-    """Carrega o snapshot congelado de um orçamento do histórico (nunca recalcula do pacote atual)."""
-    return json.loads(quote.snapshot or "{}")
+    """Carrega o snapshot congelado de um orçamento do histórico (nunca recalcula do pacote atual).
+
+    Preenche `transporte.km_ida` nos snapshots gravados antes dessa chave existir, derivando de
+    `kmT` (ida e volta). Sem isso o "Recalcular" de um orçamento antigo continuaria dobrando a
+    distância — os valores congelados do PDF seguem intactos, só a entrada do recálculo é
+    normalizada.
+    """
+    snapshot = json.loads(quote.snapshot or "{}")
+    transporte = snapshot.get("transporte")
+    if isinstance(transporte, dict) and transporte.get("km_ida") in (None, "") and transporte.get("kmT"):
+        try:
+            transporte["km_ida"] = float(transporte["kmT"]) / 2
+        except (TypeError, ValueError):
+            transporte["km_ida"] = None
+    return snapshot
 
 
 def search_history(

@@ -27,7 +27,15 @@ TZ_SP = ZoneInfo("America/Sao_Paulo")
 DEFAULT_COMMISSION = Decimal("2.5")
 # Comissão EducaManto (feature 109): % sobre o LUCRO do evento (venda − BV − cachês),
 # diferente da comissão comum (% sobre a venda). Override por evento continua valendo.
+# Este é só o piso de fábrica: a taxa vigente é `SiteSetting.educamanto_commission_rate`,
+# editável em Configurações — mudar o acordo com o responsável não deve exigir deploy.
 EDUCAMANTO_COMMISSION_RATE = Decimal("5")
+
+
+def _educamanto_commission_rate(settings) -> Decimal:
+    """% da comissão EducaManto vigente — configuração, com fallback no padrão de 5%."""
+    rate = getattr(settings, "educamanto_commission_rate", None) if settings else None
+    return Decimal(str(rate)) if rate is not None else EDUCAMANTO_COMMISSION_RATE
 
 
 def _has_role(*names):
@@ -135,7 +143,7 @@ def _event_commission(event, settings) -> Decimal:
         rate = (
             Decimal(str(event.commission_rate))
             if event.commission_rate is not None
-            else EDUCAMANTO_COMMISSION_RATE
+            else _educamanto_commission_rate(settings)
         )
         custo = _group_cost(event) if event.is_group_leader else _event_cost(event)
         base = Decimal(event.sale_value) - _event_bv_total(event) - Decimal(custo)
@@ -170,6 +178,9 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
         event.sale_value
         and beneficiary is not None
         and beneficiary.receives_commission
+        # Evento cancelado (feature 224) não comissiona. Sem isto, qualquer escrita posterior
+        # no evento recriaria a comissão que `aplicar_estorno_comissao` acabou de estornar.
+        and not event.is_cancelled
     )
 
     if not should_have:
@@ -423,6 +434,9 @@ def dashboard():
             CalendarEvent.start_at >= start_dt,
             CalendarEvent.start_at <= end_dt,
             CalendarEvent.event_type != "ENSAIO",
+            # Espelha o filtro da API (`app/api/financeiro_read.py`): evento cancelado não
+            # entra na receita (feature 224).
+            CalendarEvent.cancelled_at.is_(None),
         )
         .order_by(CalendarEvent.start_at.desc())
         .all()
@@ -804,7 +818,11 @@ def _month_refs_between(start_date: date, end_date: date) -> list[str]:
 
 
 def _pagamentos_query(month_str: str):
-    """Returns EventRole queryset for roles with talent assigned in the given month (YYYY-MM)."""
+    """Returns EventRole queryset for roles with talent assigned in the given month (YYYY-MM).
+
+    Cachê de evento cancelado (feature 224) fica de fora: o evento não vai acontecer, ninguém
+    trabalhou nele, e deixá-lo na planilha faria o financeiro pagar por um show que não houve.
+    """
     try:
         year, month = int(month_str[:4]), int(month_str[5:7])
     except (ValueError, IndexError):
@@ -822,6 +840,7 @@ def _pagamentos_query(month_str: str):
         .join(CalendarEvent)
         .filter(
             EventRole.talent_id.isnot(None),
+            CalendarEvent.cancelled_at.is_(None),
             CalendarEvent.start_at >= start,
             CalendarEvent.start_at < end,
         )

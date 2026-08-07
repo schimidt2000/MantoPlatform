@@ -654,6 +654,9 @@ def talent_availability(event: Any, talent_ids: list[int]) -> dict[int, dict[str
         .filter(
             EventRole.talent_id.in_(talent_ids),
             CalendarEvent.id != event.id,
+            # Evento cancelado (feature 224) não ocupa a agenda de ninguém — acusá-lo como
+            # conflito impediria escalar o talento para um evento que ele está livre para fazer.
+            CalendarEvent.cancelled_at.is_(None),
             CalendarEvent.start_at >= cutoff,
         )
         .all()

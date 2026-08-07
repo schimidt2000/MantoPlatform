@@ -233,9 +233,23 @@ def _to_entry(cp: CommissionPayment) -> CommissionEntry:
 
 
 def get_month_entries(month: str, seller_id: int | None = None) -> list[CommissionEntry]:
-    """Visão analítica ("Detalhamento de Vendas"): uma linha por comissão do mês selecionado."""
+    """Visão analítica ("Detalhamento de Vendas"): uma linha por comissão do mês selecionado,
+    **mais** os estornos pendentes de qualquer mês.
+
+    Os estornos precisam aparecer aqui porque é isso que o "Pagar Mês" liquida: o resumo por
+    vendedor usa `_seller_payable_rows`, que já os inclui. Sem eles na tabela, o total do topo
+    não fecha com as linhas listadas — foi o que aconteceu com o estorno do
+    `(SHOW) PETER PAN...`, que descontava R$ 170,00 de agosto sem aparecer em lugar nenhum de
+    agosto (a `sale_date` dele é de julho). Feature 224.
+    """
     _, start, end = resolve_month(month)
-    return [_to_entry(cp) for cp in _month_scoped_query(start, end, seller_id).all()]
+    rows = _month_scoped_query(start, end, seller_id).all()
+    seen_ids = {cp.id for cp in rows}
+    for cp in _pending_reversals_query(seller_id).all():
+        if cp.id not in seen_ids:
+            rows.append(cp)
+            seen_ids.add(cp.id)
+    return [_to_entry(cp) for cp in rows]
 
 
 def _seller_payable_rows(month: str, seller_id: int) -> list[CommissionPayment]:

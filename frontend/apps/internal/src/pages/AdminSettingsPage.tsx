@@ -13,6 +13,7 @@ export function AdminSettingsPage() {
   const [commission, setCommission] = useState("");
   const [taxRate, setTaxRate] = useState("");
   const [fatorR, setFatorR] = useState("");
+  const [educamantoCommission, setEducamantoCommission] = useState("");
   const [address, setAddress] = useState("");
   const [margin, setMargin] = useState("");
   const [mapsKey, setMapsKey] = useState("");
@@ -26,6 +27,7 @@ export function AdminSettingsPage() {
       setCommission(String(query.data.default_commission_rate ?? ""));
       setTaxRate(String(query.data.tax_rate ?? ""));
       setFatorR(String(query.data.fator_r_threshold ?? ""));
+      setEducamantoCommission(String(query.data.educamanto_commission_rate ?? ""));
       setAddress(query.data.manto_address);
       setMargin(String(query.data.departure_margin_minutes ?? ""));
       setMapsKey(query.data.google_maps_api_key);
@@ -104,6 +106,18 @@ export function AdminSettingsPage() {
                   value={fatorR}
                   onChange={(e) => setFatorR(e.target.value)}
                 />
+              </div>
+              <div>
+                <label className={LABEL}>Comissão EducaManto (%)</label>
+                <input
+                  className={INPUT}
+                  value={educamantoCommission}
+                  onChange={(e) => setEducamantoCommission(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-muted">
+                  Do responsável EducaManto, sobre o <strong>lucro</strong> do evento (venda −
+                  BV − cachês). Vazio = 5%.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -207,6 +221,9 @@ export function AdminSettingsPage() {
                 default_commission_rate: commission ? Number(commission) : undefined,
                 tax_rate: taxRate ? Number(taxRate) : undefined,
                 fator_r_threshold: fatorR ? Number(fatorR) : undefined,
+                educamanto_commission_rate: educamantoCommission
+                  ? Number(educamantoCommission)
+                  : undefined,
                 manto_address: address,
                 departure_margin_minutes: margin ? Number(margin) : undefined,
                 google_maps_api_key: mapsKey,

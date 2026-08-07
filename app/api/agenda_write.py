@@ -67,10 +67,17 @@ def _can_confirm() -> bool:
 
 
 def _can_delete() -> bool:
-    """Gate de excluir o evento (`_CAN_DELETE` = Comercial ou Superadmin) — paridade com o Jinja."""
+    """Gate de excluir/cancelar o evento (`_CAN_DELETE` = só Superadmin, feature 224)."""
     from app.calendar.routes import _CAN_DELETE
 
     return any(r.name.upper() in _CAN_DELETE for r in current_user.roles)
+
+
+def _can_request_delete() -> bool:
+    """Gate de SOLICITAR a exclusão (`_CAN_REQUEST_DELETE` = Comercial ou Superadmin)."""
+    from app.calendar.routes import _CAN_REQUEST_DELETE
+
+    return any(r.name.upper() in _CAN_REQUEST_DELETE for r in current_user.roles)
 
 
 def _can_create_event() -> bool:
@@ -393,12 +400,14 @@ def api_delete_observation(obs_id: int) -> Any:
 # ── Excluir / sincronizar evento (feature 151) ───────────────────────────────
 
 
-@api_bp.route("/events/<int:event_id>", methods=["DELETE"])
+@api_bp.route("/events/<int:event_id>/impacto-exclusao")
 @api_login_required
-def api_delete_event(event_id: int) -> Any:
-    """Exclui o evento do banco e do Google (feature 151). RBAC: `_CAN_DELETE` (Comercial/SA).
+def api_impacto_exclusao(event_id: int) -> Any:
+    """O que será perdido/afetado ao excluir ou cancelar (feature 224). RBAC: `_CAN_DELETE`.
 
-    Recusa a exclusão de um evento líder de grupo com 409 (desagrupar antes) — paridade com o Jinja.
+    A tela abre o diálogo com isso: qual das duas ações vai acontecer, quanto a cliente já
+    pagou, que comissão está em jogo e quem está escalado. Antes o diálogo só perguntava
+    "tem certeza?", e foi assim que um evento com pagamento recebido foi parar no lixo.
     """
     event = CalendarEvent.query.get(event_id)
     if event is None:
@@ -406,9 +415,37 @@ def api_delete_event(event_id: int) -> Any:
     if not _can_delete():
         return json_error("Sem permissão", 403)
 
+    from app.calendar.cancel_ops import resumo_impacto
+
+    return jsonify(resumo_impacto(event))
+
+
+@api_bp.route("/events/<int:event_id>", methods=["DELETE"])
+@api_login_required
+def api_delete_event(event_id: int) -> Any:
+    """Exclui o evento do banco **e do Google Agenda** (feature 151). RBAC: só Superadmin (224).
+
+    Recusa com 409 o evento líder de grupo (desagrupar antes) e o evento que tem dinheiro preso
+    — esse é caso de cancelamento, não de exclusão: apagar destruiria o pagamento recebido e a
+    comissão, que são justamente o lastro da devolução.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_delete():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.cancel_ops import pode_excluir
     from app.calendar.routes import _delete_event_flow
 
-    deleted = _delete_event_flow(
+    if not pode_excluir(event):
+        return json_error(
+            "Este evento tem venda, pagamento, contrato ou elenco escalado — use o "
+            "cancelamento, que preserva o registro e trata a devolução.",
+            409,
+        )
+
+    deleted, aviso = _delete_event_flow(
         event,
         actor_name=current_user.name,
         actor_role=", ".join(r.name for r in current_user.roles),
@@ -417,7 +454,87 @@ def api_delete_event(event_id: int) -> Any:
         return json_error(
             "Desagrupe os eventos satélites antes de excluir este evento", 409
         )
+    return jsonify({"ok": True, "aviso": aviso})
+
+
+@api_bp.route("/events/<int:event_id>/cancelar", methods=["POST"])
+@api_login_required
+def api_cancelar_evento(event_id: int) -> Any:
+    """Cancela o evento, resolve a comissão e registra a devolução (feature 224).
+
+    RBAC: só Superadmin. Corpo: `{motivo, devolucao: {valor, nome, pix, observacao}}`.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_delete():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.cancel_ops import CancelValidationError, cancelar_evento
+
+    body = request.get_json(silent=True) or {}
+    try:
+        resultado = cancelar_evento(
+            event,
+            motivo=body.get("motivo") or "",
+            devolucao=body.get("devolucao") or {},
+            actor=current_user,
+        )
+    except CancelValidationError as exc:
+        return json_error(exc.message, 400, fields={"motivo": exc.message})
+    return jsonify({"ok": True, **resultado})
+
+
+@api_bp.route("/events/<int:event_id>/solicitar-exclusao", methods=["POST"])
+@api_login_required
+def api_solicitar_exclusao(event_id: int) -> Any:
+    """Comercial pede a exclusão; o Superadmin decide (feature 224). Corpo: `{motivo}`."""
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_request_delete():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.cancel_ops import CancelValidationError, solicitar_exclusao
+
+    body = request.get_json(silent=True) or {}
+    try:
+        solicitar_exclusao(event, motivo=body.get("motivo") or "", actor=current_user)
+    except CancelValidationError as exc:
+        return json_error(exc.message, 400, fields={"motivo": exc.message})
     return jsonify({"ok": True})
+
+
+@api_bp.route("/events/<int:event_id>/solicitar-exclusao", methods=["DELETE"])
+@api_login_required
+def api_recusar_solicitacao(event_id: int) -> Any:
+    """Superadmin recusa a solicitação de exclusão (feature 224)."""
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_delete():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.cancel_ops import CancelValidationError, recusar_solicitacao
+
+    body = request.get_json(silent=True) or {}
+    try:
+        recusar_solicitacao(event, actor=current_user, motivo=body.get("motivo") or "")
+    except CancelValidationError as exc:
+        return json_error(exc.message, 400)
+    return jsonify({"ok": True})
+
+
+@api_bp.route("/events/cancelamentos")
+@api_login_required
+def api_listar_cancelamentos() -> Any:
+    """Fila do Superadmin: solicitações pendentes + eventos cancelados (feature 224)."""
+    if not _can_delete():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar.cancel_ops import listar_cancelamentos
+
+    return jsonify(listar_cancelamentos())
 
 
 @api_bp.route("/events/<int:event_id>/sync", methods=["POST"])

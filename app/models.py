@@ -268,6 +268,20 @@ class CalendarEvent(db.Model):
     # primeira vez que alguém pede o link — nunca o id sequencial, para não ser adivinhável.
     feedback_token = db.Column(db.String(43), unique=True, nullable=True)
 
+    # Cancelamento (feature 224). Evento que já tem dinheiro preso — pagamento recebido,
+    # contrato ou elenco escalado — não é apagado: vira cancelado. Some da agenda e de toda
+    # métrica, mas o registro fica, porque é a ele que a devolução ao cliente se refere.
+    # Excluir de verdade continua valendo para evento vazio (criado por engano).
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    cancelled_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    cancellation_reason = db.Column(db.Text, nullable=True)
+
+    # Solicitação de exclusão (feature 224): o Comercial pede, o Superadmin decide. Os três
+    # campos são zerados quando a solicitação é recusada.
+    deletion_requested_at = db.Column(db.DateTime, nullable=True)
+    deletion_requested_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    deletion_request_reason = db.Column(db.Text, nullable=True)
+
     # ensaios / origem
     parent_event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
     needs_rehearsal = db.Column(db.Boolean, default=False, nullable=False)
@@ -352,6 +366,21 @@ class CalendarEvent(db.Model):
         """
         from app.constants import EDUCAMANTO_TITLE_PREFIX
         return bool(self.title) and self.title.upper().startswith(EDUCAMANTO_TITLE_PREFIX)
+
+    @property
+    def is_cancelled(self) -> bool:
+        """True se o evento foi cancelado (feature 224) — o registro existe, mas não conta.
+
+        Cancelado não aparece na agenda nem em nenhuma métrica (venda, DRE, planilha de
+        pagamentos, disponibilidade do casting). Equivalente SQL:
+        ``CalendarEvent.cancelled_at.isnot(None)``.
+        """
+        return self.cancelled_at is not None
+
+    @property
+    def has_pending_deletion_request(self) -> bool:
+        """True se alguém pediu a exclusão e o Superadmin ainda não decidiu (feature 224)."""
+        return self.deletion_requested_at is not None and self.cancelled_at is None
 
     @property
     def is_satellite(self) -> bool:
@@ -709,6 +738,10 @@ class SiteSetting(db.Model):
     # Responsável EducaManto (feature 109): beneficiário das comissões de eventos "(EDU…".
     # NULL = sem responsável (a comissão EDU segue a regra comum, do vendedor).
     educamanto_seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    # % da comissão do responsável EducaManto sobre o LUCRO do evento (venda − BV − cachês).
+    # Era uma constante no código; virou configuração para não exigir deploy ao mudar o acordo.
+    # NULL = usa o padrão de 5%.
+    educamanto_commission_rate = db.Column(db.Float, nullable=True)
     tax_rate = db.Column(db.Float, nullable=True)            # % provisionamento de imposto (default 16.0)
     fator_r_threshold = db.Column(db.Float, nullable=True)   # % corte do Fator R (default 28.0)
     manto_address = db.Column(db.String(300), nullable=True)       # endereço base para cálculo de rota
@@ -891,9 +924,16 @@ class SpecialExpense(db.Model):
         db.Index("ix_special_expenses_expense_date", "expense_date"),
     )
 
-    CATEGORIES = ["Figurino", "Escritório", "Marketing", "Manutenção", "Outros"]
+    # "Devolução a cliente" (feature 224) é o dinheiro que volta para a cliente quando um evento
+    # já pago é cancelado. Entra aqui, e não numa entidade própria, porque Gasto Extra já carrega
+    # tudo que uma devolução precisa — aprovação, comprovante, PIX do destinatário, status de
+    # pago — e já é somado pela Planilha de Pagamentos e pela DRE do período.
+    CATEGORIES = [
+        "Figurino", "Escritório", "Marketing", "Manutenção", "Devolução a cliente", "Outros",
+    ]
+    CATEGORY_DEVOLUCAO = "Devolução a cliente"
     STATUSES = ["pendente", "aprovado", "rejeitado"]
-    DISBURSEMENT_TYPES = ["reembolso", "fornecedor"]
+    DISBURSEMENT_TYPES = ["reembolso", "fornecedor", "cliente"]
 
     id             = db.Column(db.Integer, primary_key=True)
     description    = db.Column(db.String(200), nullable=False)
@@ -945,10 +985,13 @@ class SpecialExpense(db.Model):
 
     @property
     def payee_name(self):
-        """Nome de quem recebe o desembolso (funcionário reembolsado ou fornecedor)."""
+        """Nome de quem recebe o desembolso (funcionário, fornecedor ou cliente devolvida)."""
         if self.disbursement_type == "reembolso":
             return self.reimburse_user.name if self.reimburse_user else "—"
-        if self.disbursement_type == "fornecedor":
+        # "cliente" (feature 224) guarda nome e PIX nos mesmos campos do fornecedor: a forma do
+        # dado é idêntica (nome livre + chave PIX) e duplicar colunas só para trocar o rótulo
+        # obrigaria a mexer em toda query que já lê `supplier_*`.
+        if self.disbursement_type in ("fornecedor", "cliente"):
             return self.supplier_name or "—"
         return "—"
 
@@ -957,9 +1000,14 @@ class SpecialExpense(db.Model):
         """Chave PIX do destinatário do desembolso, ou ''."""
         if self.disbursement_type == "reembolso":
             return (self.reimburse_user.pix_key or "").strip() if self.reimburse_user else ""
-        if self.disbursement_type == "fornecedor":
+        if self.disbursement_type in ("fornecedor", "cliente"):
             return (self.supplier_pix or "").strip()
         return ""
+
+    @property
+    def is_devolucao_cliente(self) -> bool:
+        """True se este gasto é uma devolução de dinheiro à cliente (feature 224)."""
+        return self.disbursement_type == "cliente"
 
 
 class RecurringExpense(db.Model):

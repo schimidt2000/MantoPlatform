@@ -31,6 +31,9 @@ def _base_filters(cutoff: datetime) -> dict[str, Any]:
         "exclude_ensaios": not_(CalendarEvent.title.like("🟧 ENSAIO%")),
         "future_events": CalendarEvent.start_at >= cutoff,
         "not_dismissed": EventRole.dismissed_at.is_(None),
+        # Evento cancelado (feature 224) não gera tarefa nenhuma: escalar, cobrar ou fechar
+        # figurino de um evento que não vai acontecer é trabalho jogado fora.
+        "not_cancelled": CalendarEvent.cancelled_at.is_(None),
     }
 
 
@@ -40,21 +43,21 @@ def compute_casting_tasks(cutoff: datetime) -> dict[str, Any]:
     pending = (
         EventRole.query.filter(EventRole.talent_id.is_(None), f["not_presence"], f["not_dismissed"])
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"])
+        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
     rejected_invites = (
         EventRole.query.filter(EventRole.invite_status == "rejected")
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"])
+        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
     total = (
         EventRole.query.filter(f["not_presence"], f["not_dismissed"])
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"])
+        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
         .count()
     )
     done = (
@@ -65,7 +68,7 @@ def compute_casting_tasks(cutoff: datetime) -> dict[str, Any]:
             f["not_dismissed"],
         )
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"])
+        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
         .count()
     )
     return {"pending": pending, "rejected_invites": rejected_invites, "total": total, "done": done}
@@ -82,7 +85,7 @@ def compute_figurino_tasks(cutoff: datetime) -> dict[str, Any]:
             EventRole.role_type != "extra",
         )
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"])
+        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
@@ -93,7 +96,7 @@ def compute_figurino_tasks(cutoff: datetime) -> dict[str, Any]:
             EventRole.role_type != "extra",
         )
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"])
+        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
         .count()
     )
     return {"pending": pending, "total": total, "done": total - len(pending)}
@@ -105,7 +108,7 @@ def compute_dismissed_casting_tasks(cutoff: datetime) -> list[EventRole]:
     return (
         EventRole.query.filter(EventRole.dismissed_at.isnot(None), f["not_presence"])
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"])
+        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
         .order_by(EventRole.dismissed_at.desc())
         .all()
     )
@@ -132,6 +135,7 @@ def compute_ensaio_tasks(cutoff: datetime) -> dict[str, Any]:
                 CalendarEvent.event_type == "SHOW",
             ),
             CalendarEvent.event_type != "ENSAIO",
+            CalendarEvent.cancelled_at.is_(None),
             CalendarEvent.start_at >= now,
         )
         .order_by(CalendarEvent.start_at.asc())
@@ -144,7 +148,11 @@ def compute_ensaio_tasks(cutoff: datetime) -> dict[str, Any]:
     # corte na data de início do sistema para não poluir com órfãos antigos (feature 060).
     orphans = [
         e for e in CalendarEvent.query
-        .filter(CalendarEvent.event_type == "ENSAIO", CalendarEvent.start_at >= cutoff)
+        .filter(
+            CalendarEvent.event_type == "ENSAIO",
+            CalendarEvent.cancelled_at.is_(None),
+            CalendarEvent.start_at >= cutoff,
+        )
         .order_by(CalendarEvent.start_at.asc())
         .all()
         if e.parent is None
@@ -234,6 +242,7 @@ def compute_comercial_pending(cutoff: datetime) -> list[dict[str, Any]]:
             CalendarEvent.sale_value > 0,
             f["future_events"],
             f["exclude_ensaios"],
+            f["not_cancelled"],
         )
         .order_by(CalendarEvent.start_at.asc())
         .all()

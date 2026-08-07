@@ -87,6 +87,12 @@ export interface PacoteCalculado {
   transporte: TransporteResultado | null;
   valor_final_sem_nota: number;
   valor_final_com_nota: number;
+  /** Comissão que de fato entrou na conta — pode ser menor que a digitada (teto do pacote). */
+  acrescimo_efetivo: number;
+  /** Teto da comissão: o valor do pacote sem transporte. */
+  acrescimo_maximo: number;
+  /** `true` quando o teto cortou o valor digitado — a tela precisa avisar. */
+  acrescimo_capado: boolean;
 }
 
 export interface CalcularPacoteInput {
@@ -106,6 +112,27 @@ export function useCalcularPacote() {
         method: "POST",
         body: JSON.stringify(input),
       }),
+  });
+}
+
+export interface PersonagemNoDia {
+  nome: string;
+  eventos: string[];
+}
+
+/**
+ * Personagens já escalados na data da apresentação — mesmo aviso da Calculadora de Orçamento,
+ * atrás do gate do EducaManto (o endpoint de `/api/orcamento` é restrito a Comercial/Superadmin
+ * e deixaria Ensaio e Revendedor sem o alerta).
+ */
+export function usePersonagensNoDiaEducaManto(date: string) {
+  return useQuery<{ date: string | null; personagens: PersonagemNoDia[] }>({
+    queryKey: ["educamanto-personagens-no-dia", date],
+    queryFn: () =>
+      apiFetch<{ date: string | null; personagens: PersonagemNoDia[] }>(
+        `/api/educamanto/personagens-no-dia?date=${date}`,
+      ),
+    enabled: Boolean(date),
   });
 }
 
@@ -202,6 +229,10 @@ export interface GerarOrcamentoInput {
   acrescimo: number;
   transporte?: { total: number; label: string; kmT?: number; pessoas?: number };
   client_name?: string;
+  /** Distância de IDA — é a entrada real do cálculo, o `kmT` é ida e volta (só exibição). */
+  km_ida?: number;
+  /** Data da apresentação (ISO), usada pelo alerta de personagens já escalados no dia. */
+  event_date?: string;
 }
 
 /** Gera o PDF do orçamento, salva no histórico e baixa automaticamente (feature 175, US1). */
@@ -250,8 +281,17 @@ export interface EducaMantoQuoteSnapshot {
   d2: number;
   ensemble: number;
   acrescimo: number;
-  transporte: { total: number; label: string; kmT: number | null; pessoas: number | null };
+  transporte: {
+    total: number;
+    label: string;
+    /** Ida e volta — o que o PDF mostra. NÃO use para repopular o campo de km. */
+    kmT: number | null;
+    /** Distância de IDA, a entrada real do cálculo. O servidor deriva de `kmT` nos snapshots antigos. */
+    km_ida: number | null;
+    pessoas: number | null;
+  };
   client_name: string;
+  event_date?: string | null;
   packages: { id: number; name: string; sem_nota: number; com_nota: number }[];
 }
 

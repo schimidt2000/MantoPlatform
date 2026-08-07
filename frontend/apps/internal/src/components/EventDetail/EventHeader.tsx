@@ -19,9 +19,22 @@ import {
   buildFeedbackMsg,
   useFeedbackLink,
 } from "../../lib/eventDetail";
-import { useDeleteEvent, useSyncEvent, useToggleConfirm } from "../../lib/eventOps";
+import {
+  useDeleteEvent,
+  useRecusarSolicitacao,
+  useSyncEvent,
+  useToggleConfirm,
+} from "../../lib/eventOps";
 import { KebabMenu, type KebabMenuItem } from "../KebabMenu";
+import { ExcluirEventoDialog } from "./ExcluirEventoDialog";
+import { SolicitarExclusaoDialog } from "./SolicitarExclusaoDialog";
 import { formatRange } from "./parts";
+
+/** `dd/mm/aaaa` a partir de um ISO, sem passar por `toLocaleDateString` de data pura. */
+function formatDataCurta(iso: string): string {
+  const [ano, mes, dia] = iso.slice(0, 10).split("-");
+  return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
+}
 
 /** Rótulo e cor do badge de tipo do evento (mesmo mapa da tela antiga). */
 const TYPE_LABELS: Record<string, { label: string; tone: "blue" | "gold" | "neutral" | "green" }> = {
@@ -193,10 +206,13 @@ export function EventHeader({ data }: EventHeaderProps) {
   const sync = useSyncEvent(event.id);
   const confirm = useToggleConfirm(event.id);
   const remove = useDeleteEvent(event.id);
+  const recusar = useRecusarSolicitacao(event.id);
   const feedbackLink = useFeedbackLink(event.id);
   const [exportOpen, setExportOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [solicitarOpen, setSolicitarOpen] = useState(false);
   const [aviso, setAviso] = useState("");
+  const cancelado = Boolean(event.cancelled_at);
 
   const anunciar = (mensagem: string) => {
     setAviso(mensagem);
@@ -209,6 +225,7 @@ export function EventHeader({ data }: EventHeaderProps) {
   const mensagens = data.mensagens;
   const canComercial = Boolean(data.flags.can_confirm);
   const canCasting = Boolean(data.flags.show_casting);
+  const canDelete = Boolean(data.flags.can_delete);
   const reembolsosPendentes = data.reembolsos_pendentes_total ?? 0;
   const cobrancaLiberada = Boolean(data.cobranca?.enabled);
 
@@ -279,8 +296,26 @@ export function EventHeader({ data }: EventHeaderProps) {
       onClick: () => navigate(`/events/${event.id}/edit`),
     });
   }
-  if (data.flags.can_delete) {
-    items.push({ label: "🗑 Excluir evento", destructive: true, onClick: () => setDeleteOpen(true) });
+  // Excluir/cancelar é só do Superadmin (feature 224). O Comercial solicita e o Superadmin
+  // decide — a ação mexe em dinheiro recebido, comissão paga e devolução ao cliente.
+  if (!cancelado) {
+    if (data.flags.can_delete) {
+      items.push({
+        label: "🗑 Excluir ou cancelar",
+        destructive: true,
+        onClick: () => setDeleteOpen(true),
+      });
+    } else if (data.flags.can_request_delete) {
+      items.push({
+        label: "🗑 Solicitar exclusão",
+        destructive: true,
+        disabled: Boolean(event.deletion_request),
+        title: event.deletion_request
+          ? "Já existe uma solicitação aguardando o Superadmin"
+          : "Pedir ao Superadmin para excluir ou cancelar este evento",
+        onClick: () => setSolicitarOpen(true),
+      });
+    }
   }
 
   const typeInfo = TYPE_LABELS[event.event_type] ?? {
@@ -321,6 +356,50 @@ export function EventHeader({ data }: EventHeaderProps) {
         </div>
       </div>
 
+      {cancelado && (
+        <div className="mt-3 rounded-md border border-red bg-red-soft p-3 text-sm" role="alert">
+          <p className="font-semibold text-red">Evento cancelado</p>
+          <p className="mt-0.5 text-ink">
+            {event.cancellation_reason || "Sem motivo registrado."}
+            {event.cancelled_by ? ` — por ${event.cancelled_by}` : ""}
+            {event.cancelled_at ? ` em ${formatDataCurta(event.cancelled_at)}` : ""}
+          </p>
+          <p className="mt-1 text-muted">
+            Não conta em nenhuma métrica e sumiu da agenda. Os dados abaixo ficam para consulta.
+          </p>
+        </div>
+      )}
+
+      {event.deletion_request && (
+        <div className="mt-3 rounded-md border border-gold/40 bg-gold-soft p-3 text-sm" role="alert">
+          <p className="font-semibold text-gold-ink">Exclusão solicitada — aguardando decisão</p>
+          <p className="mt-0.5 text-ink">
+            {event.deletion_request.reason || "Sem motivo informado."}
+            {event.deletion_request.requested_by
+              ? ` — por ${event.deletion_request.requested_by}`
+              : ""}
+            {` em ${formatDataCurta(event.deletion_request.requested_at)}`}
+          </p>
+          {canDelete && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => setDeleteOpen(true)}>
+                Analisar e decidir
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                loading={recusar.isPending}
+                onClick={() =>
+                  recusar.mutate({}, { onSuccess: () => anunciar("Solicitação recusada.") })
+                }
+              >
+                Recusar solicitação
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       <p aria-live="polite" className="mt-2 min-h-[1.25rem] text-sm text-green">
         {aviso}
       </p>
@@ -329,35 +408,19 @@ export function EventHeader({ data }: EventHeaderProps) {
 
       <ExportElencoDialog data={data} open={exportOpen} onOpenChange={setExportOpen} />
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent open={deleteOpen}>
-          <DialogHeader>
-            <DialogTitle>Excluir evento</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-ink">
-            Excluir o evento “{event.title}”? Esta ação não pode ser desfeita.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setDeleteOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              size="sm"
-              className="text-red"
-              variant="outline"
-              loading={remove.isPending}
-              onClick={() =>
-                remove.mutate(undefined, {
-                  onSuccess: () => navigate("/agenda"),
-                  onError: () => setDeleteOpen(false),
-                })
-              }
-            >
-              Excluir evento
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ExcluirEventoDialog
+        eventId={event.id}
+        eventTitle={event.title}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+      />
+      <SolicitarExclusaoDialog
+        eventId={event.id}
+        eventTitle={event.title}
+        open={solicitarOpen}
+        onOpenChange={setSolicitarOpen}
+        onEnviado={() => anunciar("Solicitação enviada ao Superadmin.")}
+      />
     </header>
   );
 }

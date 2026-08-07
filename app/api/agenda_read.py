@@ -22,6 +22,7 @@ from app.models import (
     EventReimbursement,
     SiteSetting,
     SpecialExpense,
+    User,
 )
 
 
@@ -68,6 +69,14 @@ def serialize_event_summary(event: CalendarEvent) -> dict[str, Any]:
         "group_name": event.group_name or None,
         "confirmed": event.confirmed_at is not None,
     }
+
+
+def _nome_usuario(user_id: int | None) -> str | None:
+    """Nome do usuário pelo id, ou `None` — para os campos de autoria do cancelamento (224)."""
+    if user_id is None:
+        return None
+    user = User.query.get(user_id)
+    return user.name if user else None
 
 
 def client_of_event(event: CalendarEvent) -> tuple[str | None, str | None]:
@@ -149,8 +158,10 @@ def _role_flags(user: Any, impersonate: str | None) -> dict[str, bool]:
             or has(RoleName.FINANCEIRO)
             or is_superadmin
         ),
-        # Excluir evento (feature 151): _CAN_DELETE = Comercial ou Superadmin.
-        "can_delete": has(RoleName.COMERCIAL) or is_superadmin,
+        # Excluir/cancelar evento: só Superadmin (feature 224 — a ação mexe em dinheiro já
+        # recebido, comissão paga e devolução). O Comercial passou a SOLICITAR.
+        "can_delete": is_superadmin,
+        "can_request_delete": has(RoleName.COMERCIAL) or is_superadmin,
         # Editar campos centrais em bloco (feature 184): mesmo nível de _can_create_event —
         # mais restrito que can_edit_event porque cobre os mesmos campos financeiros da criação.
         "can_edit_core": has(RoleName.COMERCIAL) or is_superadmin,
@@ -536,6 +547,20 @@ def serialize_event_detail(
             "location": event.location or None,
             "confirmed": event.confirmed_at is not None,
             "confirmed_by": event.confirmer.name if event.confirmer else None,
+            # Cancelamento e solicitação de exclusão (feature 224). O evento cancelado continua
+            # abrível pelo link direto — é onde se consulta o que foi vendido e devolvido.
+            "cancelled_at": event.cancelled_at.isoformat() if event.cancelled_at else None,
+            "cancelled_by": _nome_usuario(event.cancelled_by_id),
+            "cancellation_reason": event.cancellation_reason or None,
+            "deletion_request": (
+                {
+                    "requested_at": event.deletion_requested_at.isoformat(),
+                    "requested_by": _nome_usuario(event.deletion_requested_by_id),
+                    "reason": event.deletion_request_reason or None,
+                }
+                if event.has_pending_deletion_request
+                else None
+            ),
             "is_satellite": event.is_satellite,
             "group_name": event.group_name or None,
             "characters": parse_characters(event.title),

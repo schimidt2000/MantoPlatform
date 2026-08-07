@@ -5,6 +5,8 @@ export interface AdminSettings {
   logo_path: string;
   default_commission_rate: number | null;
   educamanto_seller_id: number | null;
+  /** % da comissão do responsável EducaManto sobre o lucro do evento. `null` = padrão de 5%. */
+  educamanto_commission_rate: number | null;
   tax_rate: number | null;
   fator_r_threshold: number | null;
   manto_address: string;

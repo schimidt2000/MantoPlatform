@@ -137,7 +137,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date` | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
+| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e de **toda** métrica, mas o registro fica porque é a ele que a devolução ao cliente se refere; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido do Comercial aguardando o Superadmin; zerados ao recusar ou ao atender) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
 | `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, `travel_cache`, `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at` | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users` |
 | `event_observations` | `EventObservation` | observações de evento (texto/foto) | `event_id` |
 | `event_contracts` | `EventContract` | arquivo + flag assinado | `event_id` |
@@ -365,7 +365,10 @@ Pontos que valem para quem for ler esses dados:
 ### 2.10 Configuração global
 
 `site_settings` (`SiteSetting`, **linha única id=1**) concentra: identidade visual
-(`logo_path`, cores), `default_commission_rate`, `educamanto_seller_id`, `tax_rate`,
+(`logo_path`, cores), `default_commission_rate`, `educamanto_seller_id`,
+`educamanto_commission_rate` (% do responsável EducaManto sobre o **lucro** do evento — feature
+223; `NULL` = 5%, o antigo `EDUCAMANTO_COMMISSION_RATE` do código, que virou só o piso de
+fábrica; `event.commission_rate` continua sobrepondo os dois), `tax_rate`,
 `fator_r_threshold`, `manto_address`, `departure_margin_minutes`, `google_maps_api_key`,
 `clicksign_token`/`clicksign_sandbox`, `email_notifications_enabled`, `ratings_fully_anonymous`,
 `release_date`, `google_token` (OAuth persistido para sobreviver a redeploy), `pricing_config`

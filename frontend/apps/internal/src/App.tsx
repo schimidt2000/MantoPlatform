@@ -8,6 +8,7 @@ import { AgendaPage } from "./pages/AgendaPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
 import { EventCreatePage } from "./pages/EventCreatePage";
 import { EventEditPage } from "./pages/EventEditPage";
+import { EventosCancelamentosPage } from "./pages/EventosCancelamentosPage";
 import { TalentsListPage } from "./pages/TalentsListPage";
 import { TalentDetailPage } from "./pages/TalentDetailPage";
 import { FigurinoListPage } from "./pages/FigurinoListPage";
@@ -90,6 +91,8 @@ export function App() {
           <Route path="/" element={<HomeOuAgenda />} />
           <Route path="/agenda" element={<AgendaPage />} />
           <Route path="/events/new" element={<EventCreatePage />} />
+          {/* Declarada ANTES de `/events/:id` — `:id` casaria com "cancelamentos". */}
+          <Route path="/events/cancelamentos" element={<EventosCancelamentosPage />} />
           <Route path="/events/:id/edit" element={<EventEditPage />} />
           <Route path="/events/:id" element={<EventDetailPage />} />
           <Route path="/talents" element={<TalentsListPage />} />
