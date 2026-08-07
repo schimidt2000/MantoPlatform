@@ -114,6 +114,36 @@ E que **cobre a pessoa responsável**: convite na agenda dela e destaque na tela
   `responsible_id == user.id`, e SUPERADMIN "vendo como FIGURINO" continua vendo os próprios
   pedidos, não os de outra pessoa.
 
+## 225b — Manutenção de figurino
+
+Extensão pedida depois da primeira entrega: boa parte do trabalho da oficina não é produzir peça
+nova, é **mexer no que já existe**. O caso relatado: "recebemos um feedback do evento e a pessoa
+falou que dentro do boneco tem uma peça solta". Hoje isso se combina por voz e some. E o segundo
+caso: "para esse evento nesse dia, fazer esse reparo específico" — trabalho manual, **sem compra
+nenhuma**, que também precisa ficar escrito.
+
+- **FR-060** O pedido ganha um tipo: `producao` (peça nova) ou `manutencao` (conserto, ajuste,
+  adaptação do que já existe).
+- **FR-061** Manutenção **não passa por aprovação**: `solicitado → em_producao → pronto`. Exigir
+  um super admin para liberar uma costura mataria o registro, que é o que se quer ganhar. As
+  transições válidas saem de `FIGURINO_PROD_FLUXOS` e o servidor manda para a tela.
+- **FR-062** Manutenção exige **ficha de figurino** (é sempre sobre uma peça que existe) e
+  **gravidade**: `impede_uso` ou `pode_esperar`.
+- **FR-063** A gravidade é a única informação que muda uma decisão: a peça pode ir para o próximo
+  evento assim como está, ou não pode?
+- **FR-064** Com `impede_uso` aberto, o aviso aparece **na ficha** (lista de Figurinos, sobre a
+  foto) e **no elenco do evento** — onde alguém está prestes a separar aquele boneco. Ali o
+  bloqueio vence o "Separado": marcar como separado uma peça que não pode ir seria exatamente o
+  erro que o aviso existe para impedir.
+- **FR-065** Resolver a manutenção apaga o aviso. Alerta que não some vira ruído e deixa de ser
+  lido.
+- **FR-066** Pedido aberto **sem responsável** avisa o setor de figurino por e-mail e entra num
+  painel próprio da home ("Oficina — sem responsável"). Manutenção quase sempre nasce órfã: quem
+  relata o defeito recebeu o feedback do evento e não é quem vai consertar.
+- **FR-067** Na manutenção, quantidade some do formulário e o painel de dinheiro só aparece se
+  houver custo previsto ou gasto lançado — a maior parte é trabalho manual, e um "R$ 0,00" grande
+  sugeriria que falta lançar alguma coisa.
+
 ## Verificação
 
 `scripts/db/verify_producao_figurinos.py`, contra `manto_local`:

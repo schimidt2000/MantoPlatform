@@ -131,6 +131,16 @@ export interface RoleItem {
   figurino_sheet_id: number | null;
   figurino_sheet_name: string | null;
   figurino_done_at: string | null;
+  /**
+   * Manutenção aberta na ficha deste personagem (feature 225b), ou `null`.
+   * `impede_uso` significa que a peça não pode ir para o evento até o conserto — é o que traz
+   * um defeito relatado numa festa para a hora de separar o figurino da próxima.
+   */
+  figurino_manutencao: {
+    abertas: number;
+    impede_uso: boolean;
+    titulos: string[];
+  } | null;
   assigned_at: string | null;
   payment_status: PaymentStatus;
   availability: RoleAvailability | null;

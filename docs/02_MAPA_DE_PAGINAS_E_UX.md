@@ -385,6 +385,22 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   `POST /api/figurino/producoes/<id>/status` · `.../comentarios` · `.../anexos` ·
   `.../gastos` · `.../gastos-vinculaveis`.
 
+#### Onde a manutenção aparece *(feature 225b)*
+
+O valor da manutenção não está na tarefa, está no **aviso chegar onde a decisão é tomada**:
+
+| Superfície | O que mostra |
+|---|---|
+| `/figurinos` (lista de fichas) | Selo sobre a foto: `⚠ Não pode ir` (vermelho) ou `🪡 N consertos` (dourado). Leva para a oficina já filtrada por aquele figurino (`?ficha=`). |
+| Detalhe do evento → Produção → Figurino | O card do personagem fica com **borda vermelha** e traz o texto do problema + link "ver na oficina". O bloqueio **vence o "Separado"** — marcar como separada uma peça que não pode ir é o erro que o aviso existe para impedir. |
+| Home → "🪡 Oficina — sem responsável" | Pedidos abertos que ninguém assumiu. Gate por **papel** (FIGURINO/SA), ao contrário de "Minhas peças". |
+| `/figurinos/producao` | Abas **Tudo / Produção / Manutenção**; a linha mostra a ficha em vez do evento quando há ficha. |
+
+No formulário, escolher "Consertar / ajustar" troca o resto: exige **qual figurino** e
+**se dá para usar assim**, muda os rótulos, e some com quantidade. O painel de gastos só aparece
+se houver custo previsto ou gasto lançado — a maior parte da manutenção é trabalho manual, e um
+"R$ 0,00" grande sugeriria que falta lançar alguma coisa.
+
 #### Home — painel "🧵 Minhas peças de figurino" *(feature 225)*
 Primeiro painel **pessoal** da home: todos os outros são por papel, este é por identidade
 (`responsible_id == user.id`). Aparece no topo, só para quem tem peça sob sua responsabilidade, e

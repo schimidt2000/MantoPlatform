@@ -7,8 +7,8 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **225 (Produção de
-> Figurinos)** · Head de migration: `c1d5a83b64e7` (*produção de figurinos*) — confirme com
+> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **225b (Manutenção de
+> figurino)** · Head de migration: `d2e6b94c07f1` (*manutenção de figurino*) — confirme com
 > `flask db heads`; este cabeçalho é a **única** menção ao head neste documento.
 >
 > **Edição por recorte (215).** `PATCH /api/events/<id>` (feature 184) é **edição em bloco**: ele
@@ -222,7 +222,7 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `figurino_producoes` | `FigurinoProducao` | `title`, `description`, `status` (`solicitado`\|`aprovado`\|`em_producao`\|`pronto`\|`cancelado`), `quantity`, `due_date`, `estimated_cost`, `approved_at`, `done_at`, `cancelled_at`, `cancellation_reason`, `google_event_id` (o compromisso do prazo na agenda) | `event_id`→`calendar_events` (**SET NULL**), `figurino_sheet_id`→`figurino_sheets` (**SET NULL**), `requested_by_id`→`users`, `responsible_id`/`approved_by_id`→`users` (**SET NULL**) |
+| `figurino_producoes` | `FigurinoProducao` | `title`, `description`, `status` (`solicitado`\|`aprovado`\|`em_producao`\|`pronto`\|`cancelado`), **`kind`** (`producao`\|`manutencao`, 225b), **`severity`** (`impede_uso`\|`pode_esperar`, só em manutenção), `quantity`, `due_date`, `estimated_cost`, `approved_at`, `done_at`, `cancelled_at`, `cancellation_reason`, `google_event_id` (o compromisso do prazo na agenda) | `event_id`→`calendar_events` (**SET NULL**), `figurino_sheet_id`→`figurino_sheets` (**SET NULL**), `requested_by_id`→`users`, `responsible_id`/`approved_by_id`→`users` (**SET NULL**) |
 | `figurino_producao_anexos` | `FigurinoProducaoAnexo` | `kind` (`foto`\|`orcamento`), `file_path`, `original_name`, `caption`; `supplier_name`/`amount` só em `orcamento` (para comparar propostas) | `producao_id`→`figurino_producoes` (**CASCADE**), `uploaded_by_id`→`users` (SET NULL) |
 | `figurino_producao_logs` | `FigurinoProducaoLog` | histórico narrativo no formato de `EventLog` (`actor_name`, `actor_role`, `message`) + `photo_path` e `status_from`/`status_to` | `producao_id`→`figurino_producoes` (**CASCADE**) |
 
@@ -239,6 +239,14 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
   fantasma: o calendário é o mesmo dos shows e o sync importa tudo que encontra.
 - **`CALENDAR_SUPPRESS_INVITES`** (`config._suppress_calendar_invites`) impede um processo local
   de escrever na agenda real — `manto_local` traz o token de produção e o calendário é fixo.
+- **O fluxo depende do tipo** (225b): `FIGURINO_PROD_FLUXOS` define a ordem por `kind` e
+  `producao_ops._transicoes_do_fluxo` **deriva** as transições dela — nunca escrever duas
+  tabelas. Manutenção pula `aprovado`; nem SUPERADMIN consegue aprovar uma.
+- **Manutenção exige `figurino_sheet_id` e `severity`.** É sempre sobre uma peça que existe, e a
+  gravidade é o que decide se ela pode ir para o próximo evento.
+- **`alertas_por_ficha()` é a fonte única do aviso**, consumida por `figurino_ops.list_sheets`
+  (lista de Figurinos) e por `agenda_read` (elenco do evento) — uma consulta por tela, não uma
+  por ficha. Manutenção resolvida sai do dicionário e o aviso some sozinho.
 
 ### 2.5 Catálogo (vitrine pública + gerenciador interno)
 

@@ -8,8 +8,11 @@ from . import db, login_manager
 from datetime import datetime, date
 from .constants import (
     FIGURINO_ANEXO_FOTO,
+    FIGURINO_KIND_MANUTENCAO,
+    FIGURINO_KIND_PRODUCAO,
     FIGURINO_PROD_ABERTOS,
     FIGURINO_PROD_SOLICITADO,
+    FIGURINO_SEV_IMPEDE,
     GIFT_3D_STATUS_PENDENTE,
     now_sp,
     RoleName,
@@ -2739,6 +2742,17 @@ class FigurinoProducao(db.Model):
     )
     quantity    = db.Column(db.Integer, nullable=False, default=1, server_default="1")
 
+    # `producao` cria o que não existe; `manutencao` mexe no que já existe (feature 225b) —
+    # conserto de defeito relatado no evento, ajuste para uma data, adaptação. Boa parte da
+    # manutenção não tem compra nenhuma: é trabalho manual que hoje se combina por voz e some.
+    kind = db.Column(
+        db.String(20), nullable=False,
+        default=FIGURINO_KIND_PRODUCAO, server_default=FIGURINO_KIND_PRODUCAO,
+    )
+    # Só faz sentido em `manutencao`: a peça pode ir para o próximo evento assim, ou não pode?
+    # É a única informação da manutenção que muda uma decisão — a de escalar ou não aquele boneco.
+    severity = db.Column(db.String(20), nullable=True)
+
     # SET NULL, não CASCADE: excluir o evento não pode apagar o pedido — o trabalho existiu e o
     # dinheiro saiu. Mesma regra que a feature 224 teve que aplicar a `special_expenses.event_id`
     # (lá o NO ACTION original quebrava a exclusão do evento com violação de chave estrangeira).
@@ -2794,6 +2808,23 @@ class FigurinoProducao(db.Model):
     def is_open(self) -> bool:
         """True enquanto o pedido ainda dá trabalho a alguém."""
         return self.status in FIGURINO_PROD_ABERTOS
+
+    @property
+    def is_manutencao(self) -> bool:
+        return self.kind == FIGURINO_KIND_MANUTENCAO
+
+    @property
+    def impede_uso(self) -> bool:
+        """True quando a peça **não pode** ir para um evento até isto ser resolvido.
+
+        É o que alimenta o aviso na ficha e no elenco do evento: sem ele, o defeito relatado numa
+        festa vira uma conversa que ninguém lembra na hora de separar o figurino da próxima.
+        """
+        return (
+            self.is_open
+            and self.is_manutencao
+            and self.severity == FIGURINO_SEV_IMPEDE
+        )
 
     @property
     def prazo_efetivo(self):

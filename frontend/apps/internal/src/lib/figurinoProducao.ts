@@ -43,6 +43,28 @@ export const PRODUCAO_STATUS_ABERTOS: ProducaoStatus[] = [
   "em_producao",
 ];
 
+/**
+ * O que a oficina está fazendo com a peça: `producao` cria o que não existe, `manutencao` mexe
+ * no que já existe (conserto de defeito, ajuste para uma data, adaptação).
+ *
+ * A diferença muda o fluxo: manutenção **não passa por aprovação**, porque a maior parte não tem
+ * compra nenhuma — é trabalho manual. Quem manda nas transições é o servidor (`transicoes`).
+ */
+export type ProducaoKind = "producao" | "manutencao";
+
+export const PRODUCAO_KIND_LABELS: Record<ProducaoKind, string> = {
+  producao: "Produção",
+  manutencao: "Manutenção",
+};
+
+/** A peça pode ir para o próximo evento assim como está, ou não? Só vale em `manutencao`. */
+export type ProducaoSeveridade = "impede_uso" | "pode_esperar";
+
+export const PRODUCAO_SEV_LABELS: Record<ProducaoSeveridade, string> = {
+  impede_uso: "Não pode ir para evento",
+  pode_esperar: "Dá para usar assim",
+};
+
 export type AnexoKind = "foto" | "orcamento";
 
 export interface ProducaoAnexo {
@@ -87,6 +109,12 @@ export interface Producao {
   description: string | null;
   status: ProducaoStatus;
   status_label: string;
+  kind: ProducaoKind;
+  kind_label: string;
+  severity: ProducaoSeveridade | null;
+  severity_label: string | null;
+  /** Manutenção aberta que impede a peça de ir para evento — o aviso vermelho. */
+  impede_uso: boolean;
   quantity: number;
   event_id: number | null;
   event_title: string | null;
@@ -159,9 +187,11 @@ export interface ResponsavelOption {
 
 export interface ProducaoFiltros {
   status?: ProducaoStatus | "";
+  tipo?: ProducaoKind | "";
   abertos?: boolean;
   responsavel?: number | null;
   evento?: number | null;
+  ficha?: number | null;
   busca?: string;
 }
 
@@ -183,9 +213,11 @@ export const producaoKeys = {
 function buildQuery(f: ProducaoFiltros): string {
   const p = new URLSearchParams();
   if (f.status) p.set("status", f.status);
+  if (f.tipo) p.set("tipo", f.tipo);
   if (f.abertos) p.set("abertos", "1");
   if (f.responsavel) p.set("responsavel", String(f.responsavel));
   if (f.evento) p.set("evento", String(f.evento));
+  if (f.ficha) p.set("ficha", String(f.ficha));
   if (f.busca?.trim()) p.set("busca", f.busca.trim());
   const qs = p.toString();
   return qs ? `?${qs}` : "";
@@ -243,6 +275,9 @@ function useInvalidate() {
 export interface ProducaoInput {
   title: string;
   description?: string;
+  kind?: ProducaoKind;
+  /** Obrigatório quando `kind: "manutencao"` — é o que decide se a peça pode ir para o evento. */
+  severity?: ProducaoSeveridade | null;
   event_id?: number | null;
   figurino_sheet_id?: number | null;
   responsible_id?: number | null;

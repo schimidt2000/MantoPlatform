@@ -12,9 +12,12 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import (
+    FIGURINO_KIND_LABELS,
+    FIGURINO_KINDS,
     FIGURINO_PROD_ABERTOS,
     FIGURINO_PROD_LABELS,
     FIGURINO_PROD_STATUSES,
+    FIGURINO_SEV_LABELS,
     RoleName,
 )
 from app.figurino import producao_ops as ops
@@ -49,19 +52,28 @@ def api_figurino_producoes_list() -> Any:
     if status and status not in FIGURINO_PROD_STATUSES:
         return json_error("Situação desconhecida.", 400, fields={"status": "Valor inválido"})
 
+    kind = (request.args.get("tipo") or "").strip() or None
+    if kind and kind not in FIGURINO_KINDS:
+        return json_error("Tipo desconhecido.", 400, fields={"tipo": "Valor inválido"})
+
     responsavel = request.args.get("responsavel")
     evento = request.args.get("evento")
+    ficha = request.args.get("ficha")
     itens = ops.list_producoes(
         status=status,
+        kind=kind,
         somente_abertos=request.args.get("abertos", "").lower() in ("1", "true"),
         responsible_id=int(responsavel) if responsavel and responsavel.isdigit() else None,
         event_id=int(evento) if evento and evento.isdigit() else None,
+        figurino_sheet_id=int(ficha) if ficha and ficha.isdigit() else None,
         busca=request.args.get("busca") or None,
     )
     return jsonify({
         "items": [ops.serialize_producao(p) for p in itens],
         "status_labels": FIGURINO_PROD_LABELS,
         "status_abertos": FIGURINO_PROD_ABERTOS,
+        "kind_labels": FIGURINO_KIND_LABELS,
+        "severity_labels": FIGURINO_SEV_LABELS,
         "flags": _flags(),
     })
 
@@ -81,8 +93,11 @@ def api_figurino_producao_detail(producao_id: int) -> Any:
     return jsonify({
         "producao": ops.serialize_producao(producao, detalhado=True),
         "flags": _flags(),
-        "transicoes": sorted(ops.TRANSICOES.get(producao.status, set())),
+        # O servidor manda para onde o pedido pode ir: as transições dependem do TIPO
+        # (manutenção não passa por aprovação) e a tela não pode reimplementar essa regra.
+        "transicoes": sorted(ops.transicoes_de(producao)),
         "status_labels": FIGURINO_PROD_LABELS,
+        "severity_labels": FIGURINO_SEV_LABELS,
     })
 
 

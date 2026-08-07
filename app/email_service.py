@@ -635,6 +635,83 @@ def send_figurino_producao_email(producao, user) -> bool:
     )
 
 
+def send_figurino_pedido_setor_email(producao, users: list) -> int:
+    """Avisa o setor de figurino que entrou um pedido novo (feature 225b).
+
+    Existe por causa da manutenção: quem relata "tem uma peça solta dentro do boneco" é quem
+    recebeu o feedback do evento, não quem vai consertar — o pedido nasce sem dono. Sem este
+    aviso, ele ficaria esperando alguém lembrar de abrir a fila.
+
+    Args:
+        producao: O ``FigurinoProducao`` já commitado.
+        users: Equipe de figurino + super admins (já filtrados por e-mail).
+
+    Returns:
+        Quantidade de e-mails efetivamente enviados.
+    """
+    if not users:
+        return 0
+
+    from app.constants import (
+        FIGURINO_KIND_LABELS,
+        FIGURINO_KIND_MANUTENCAO,
+        FIGURINO_SEV_IMPEDE,
+        FIGURINO_SEV_LABELS,
+    )
+
+    e_manutencao = producao.kind == FIGURINO_KIND_MANUTENCAO
+    rotulo = FIGURINO_KIND_LABELS.get(producao.kind, producao.kind)
+    prazo = producao.prazo_efetivo
+
+    rows = _info_row("Tipo", rotulo)
+    rows += _info_row("O que", producao.title)
+    if producao.figurino_sheet:
+        rows += _info_row("Figurino", producao.figurino_sheet.character_name)
+    if producao.severity:
+        rows += _info_row("Situação da peça", FIGURINO_SEV_LABELS.get(producao.severity, "—"))
+    if producao.event:
+        rows += _info_row("Evento", producao.event.title)
+    if prazo:
+        rows += _info_row("Prazo", prazo.strftime("%d/%m/%Y"))
+    rows += _info_row("Aberto por", producao.requested_by.name if producao.requested_by else "—")
+
+    corpo = _paragraph(
+        f"Entrou um pedido de <strong>{rotulo.lower()}</strong> de figurino e "
+        "ainda não tem ninguém responsável."
+    )
+    if producao.description:
+        corpo += _paragraph(producao.description)
+
+    if e_manutencao and producao.severity == FIGURINO_SEV_IMPEDE:
+        aviso = (
+            "Esta peça está marcada como <strong>não pode ir para evento</strong> até o conserto. "
+            "O aviso aparece na ficha e no elenco de quem escalar este personagem."
+        )
+        cores = {"color": "#fdecec", "border": "#e45858", "text": "#8a1f1f"}
+    else:
+        aviso = "Abra a fila da oficina para assumir o pedido e definir o prazo."
+        cores = {"color": "#fffbea", "border": "#f0d060", "text": "#7a5800"}
+
+    sent = 0
+    for user in users:
+        if not user.email:
+            continue
+        content = (
+            _greeting(user.name.split()[0] if user.name else "Olá")
+            + corpo
+            + _info_box(rows)
+            + _alert_box(aviso, **cores)
+        )
+        html = _html_wrap(content, preheader=f"{rotulo} de figurino: {producao.title}")
+        if _send(
+            to=user.email,
+            subject=f"{rotulo} de figurino: {producao.title}",
+            html=html,
+        ):
+            sent += 1
+    return sent
+
+
 # ── Helper interno ─────────────────────────────────────────────────────────────
 
 def send_audit_report_email(subject: str, content_html: str, users: list) -> int:

@@ -25,14 +25,23 @@ from app import db
 from app.constants import (
     FIGURINO_ANEXO_KINDS,
     FIGURINO_ANEXO_ORCAMENTO,
+    FIGURINO_KIND_LABELS,
+    FIGURINO_KIND_MANUTENCAO,
+    FIGURINO_KIND_PRODUCAO,
+    FIGURINO_KINDS,
     FIGURINO_PROD_ABERTOS,
     FIGURINO_PROD_APROVADO,
     FIGURINO_PROD_CANCELADO,
     FIGURINO_PROD_EM_PRODUCAO,
+    FIGURINO_PROD_FLUXOS,
     FIGURINO_PROD_LABELS,
     FIGURINO_PROD_PRONTO,
     FIGURINO_PROD_SOLICITADO,
     FIGURINO_PROD_STATUSES,
+    FIGURINO_SEV_ESPERA,
+    FIGURINO_SEV_IMPEDE,
+    FIGURINO_SEV_LABELS,
+    FIGURINO_SEVERIDADES,
     GCAL_KIND_FIGURINO_PRODUCAO,
     GCAL_KIND_KEY,
     RoleName,
@@ -62,14 +71,39 @@ FOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 #: Orçamento: imagem **ou** PDF — fornecedor de aviamento manda foto do WhatsApp, ateliê manda PDF.
 ORCAMENTO_EXTENSIONS = FOTO_EXTENSIONS | {".pdf"}
 
-#: Transições permitidas. Cancelar sai de qualquer estado aberto; "pronto" é terminal.
-TRANSICOES: dict[str, set[str]] = {
-    FIGURINO_PROD_SOLICITADO:  {FIGURINO_PROD_APROVADO, FIGURINO_PROD_CANCELADO},
-    FIGURINO_PROD_APROVADO:    {FIGURINO_PROD_EM_PRODUCAO, FIGURINO_PROD_CANCELADO},
-    FIGURINO_PROD_EM_PRODUCAO: {FIGURINO_PROD_PRONTO, FIGURINO_PROD_CANCELADO},
-    FIGURINO_PROD_PRONTO:      {FIGURINO_PROD_EM_PRODUCAO},  # reabrir: ficou pronto e voltou
-    FIGURINO_PROD_CANCELADO:   {FIGURINO_PROD_SOLICITADO},   # reabrir um pedido desistido
+def _transicoes_do_fluxo(fluxo: list[str]) -> dict[str, set[str]]:
+    """Monta as transições válidas a partir da ordem do fluxo daquele tipo.
+
+    Derivar em vez de digitar duas tabelas evita o bug clássico de mudar o fluxo num lugar e
+    esquecer o outro. Regras fixas em cima da ordem: dá para avançar um passo, cancelar de
+    qualquer estado aberto, voltar do último passo (ficou pronto e voltou com problema) e
+    reabrir um pedido cancelado.
+    """
+    saltos: dict[str, set[str]] = {}
+    for i, estado in enumerate(fluxo):
+        destinos: set[str] = set()
+        if i + 1 < len(fluxo):
+            destinos.add(fluxo[i + 1])
+            destinos.add(FIGURINO_PROD_CANCELADO)
+        saltos[estado] = destinos
+    saltos[fluxo[-1]] = {fluxo[-2]} if len(fluxo) > 1 else set()
+    saltos[FIGURINO_PROD_CANCELADO] = {fluxo[0]}
+    return saltos
+
+
+#: Transições permitidas por tipo de pedido. Produção passa por aprovação; manutenção não.
+TRANSICOES_POR_TIPO: dict[str, dict[str, set[str]]] = {
+    kind: _transicoes_do_fluxo(fluxo) for kind, fluxo in FIGURINO_PROD_FLUXOS.items()
 }
+
+#: Compatibilidade: o fluxo de produção continua acessível como `TRANSICOES`.
+TRANSICOES = TRANSICOES_POR_TIPO[FIGURINO_KIND_PRODUCAO]
+
+
+def transicoes_de(producao: FigurinoProducao) -> set[str]:
+    """Para onde este pedido pode ir a partir de onde está, respeitando o tipo dele."""
+    tabela = TRANSICOES_POR_TIPO.get(producao.kind, TRANSICOES)
+    return tabela.get(producao.status, set())
 
 
 class ProducaoValidationError(Exception):
@@ -300,9 +334,11 @@ def _base_query():
 def list_producoes(
     *,
     status: str | None = None,
+    kind: str | None = None,
     somente_abertos: bool = False,
     responsible_id: int | None = None,
     event_id: int | None = None,
+    figurino_sheet_id: int | None = None,
     busca: str | None = None,
 ) -> list[FigurinoProducao]:
     """Lista pedidos com os filtros da tela da oficina.
@@ -313,12 +349,16 @@ def list_producoes(
     q = _base_query()
     if status:
         q = q.filter(FigurinoProducao.status == status)
+    if kind:
+        q = q.filter(FigurinoProducao.kind == kind)
     if somente_abertos:
         q = q.filter(FigurinoProducao.status.in_(FIGURINO_PROD_ABERTOS))
     if responsible_id:
         q = q.filter(FigurinoProducao.responsible_id == responsible_id)
     if event_id:
         q = q.filter(FigurinoProducao.event_id == event_id)
+    if figurino_sheet_id:
+        q = q.filter(FigurinoProducao.figurino_sheet_id == figurino_sheet_id)
     if busca:
         termo = f"%{busca.strip()}%"
         q = q.filter(
@@ -338,6 +378,54 @@ def list_producoes(
 def pedidos_do_responsavel(user: User) -> list[FigurinoProducao]:
     """Pedidos abertos sob responsabilidade da pessoa — o painel pessoal da home (FR-050)."""
     return list_producoes(responsible_id=user.id, somente_abertos=True)
+
+
+def pedidos_sem_dono() -> list[FigurinoProducao]:
+    """Pedidos abertos que ninguém assumiu — a caixa de entrada do setor de figurino.
+
+    Manutenção nasce sem responsável quase sempre: quem relata o defeito é quem recebeu o
+    feedback do evento, não quem vai consertar. Sem esta lista, o pedido ficaria esperando alguém
+    lembrar de abrir a fila.
+    """
+    return [p for p in list_producoes(somente_abertos=True) if p.responsible_id is None]
+
+
+# ── Alerta por ficha ─────────────────────────────────────────────────────────
+
+
+def alertas_por_ficha(sheet_ids: list[int] | None = None) -> dict[int, dict[str, Any]]:
+    """Manutenções abertas por ficha de figurino (feature 225b).
+
+    É o que faz o defeito relatado numa festa chegar em quem vai separar o figurino da próxima:
+    a ficha carrega o aviso, e o elenco do evento também. Sem isto, "tem uma peça solta dentro do
+    boneco" continua sendo uma conversa que ninguém lembra na hora certa.
+
+    Args:
+        sheet_ids: Limita a consulta a estas fichas. ``None`` traz todas — a lista de figurinos
+            precisa de todas de uma vez, e são poucas linhas (só manutenção aberta).
+
+    Returns:
+        ``{sheet_id: {"abertas": int, "impede_uso": bool, "titulos": [str, ...]}}``. Ficha sem
+        manutenção aberta simplesmente não aparece no dicionário.
+    """
+    q = FigurinoProducao.query.filter(
+        FigurinoProducao.kind == FIGURINO_KIND_MANUTENCAO,
+        FigurinoProducao.status.in_(FIGURINO_PROD_ABERTOS),
+        FigurinoProducao.figurino_sheet_id.isnot(None),
+    )
+    if sheet_ids:
+        q = q.filter(FigurinoProducao.figurino_sheet_id.in_(sheet_ids))
+
+    saida: dict[int, dict[str, Any]] = {}
+    for p in q.all():
+        entry = saida.setdefault(
+            p.figurino_sheet_id, {"abertas": 0, "impede_uso": False, "titulos": []}
+        )
+        entry["abertas"] += 1
+        entry["titulos"].append(p.title)
+        if p.severity == FIGURINO_SEV_IMPEDE:
+            entry["impede_uso"] = True
+    return saida
 
 
 def serialize_anexo(anexo: FigurinoProducaoAnexo) -> dict[str, Any]:
@@ -391,6 +479,11 @@ def serialize_producao(
         "description": producao.description,
         "status": producao.status,
         "status_label": FIGURINO_PROD_LABELS.get(producao.status, producao.status),
+        "kind": producao.kind,
+        "kind_label": FIGURINO_KIND_LABELS.get(producao.kind, producao.kind),
+        "severity": producao.severity,
+        "severity_label": FIGURINO_SEV_LABELS.get(producao.severity or ""),
+        "impede_uso": producao.impede_uso,
         "quantity": producao.quantity,
         "event_id": producao.event_id,
         "event_title": producao.event.title if producao.event else None,
@@ -467,6 +560,8 @@ def create_producao(
     title: str,
     actor: User,
     description: str | None = None,
+    kind: str = FIGURINO_KIND_PRODUCAO,
+    severity: str | None = None,
     event_id: Any = None,
     figurino_sheet_id: Any = None,
     responsible_id: Any = None,
@@ -480,21 +575,51 @@ def create_producao(
     e o e-mail ao responsável (disparado pelo endpoint) precisa da PK — `send_async` empacota
     objetos ORM por chave primária e recarrega numa sessão nova.
     """
+    # A ordem das validações segue a ordem dos campos NA TELA, não a ordem em que dá jeito de
+    # escrever: quem esquece dois campos recebe primeiro o erro do de cima e conserta de cima
+    # para baixo. Em manutenção a tela pede ficha e gravidade antes do título.
+    tipo = (kind or FIGURINO_KIND_PRODUCAO).strip()
+    if tipo not in FIGURINO_KINDS:
+        raise ProducaoValidationError("kind", "Tipo de pedido desconhecido.")
+    e_manutencao = tipo == FIGURINO_KIND_MANUTENCAO
+
+    evento = _resolver_evento(event_id)
+    ficha = _resolver_ficha(figurino_sheet_id)
+    gravidade = (severity or "").strip() or None
+
+    if e_manutencao:
+        if ficha is None:
+            raise ProducaoValidationError(
+                "figurino_sheet_id", "Escolha de qual figurino é o conserto."
+            )
+        # A gravidade é obrigatória na manutenção porque é ela que decide se a peça pode ir para
+        # o próximo evento — a informação que faz o registro valer alguma coisa.
+        if gravidade not in FIGURINO_SEVERIDADES:
+            raise ProducaoValidationError(
+                "severity", "Diga se a peça ainda pode ser usada assim como está."
+            )
+    else:
+        gravidade = None
+
     titulo = (title or "").strip()
     if not titulo:
-        raise ProducaoValidationError("title", "Diga o que precisa ser produzido.")
+        raise ProducaoValidationError(
+            "title",
+            "Diga o que precisa ser resolvido." if e_manutencao
+            else "Diga o que precisa ser produzido.",
+        )
 
     try:
         qtd = max(1, int(quantity or 1))
     except (TypeError, ValueError) as exc:
         raise ProducaoValidationError("quantity", "Quantidade inválida.") from exc
 
-    evento = _resolver_evento(event_id)
-    ficha = _resolver_ficha(figurino_sheet_id)
     producao = FigurinoProducao(
         title=titulo,
         description=(description or "").strip() or None,
         status=FIGURINO_PROD_SOLICITADO,
+        kind=tipo,
+        severity=gravidade,
         quantity=qtd,
         event_id=evento.id if evento else None,
         figurino_sheet_id=ficha.id if ficha else None,
@@ -509,15 +634,17 @@ def create_producao(
     db.session.add(producao)
     db.session.flush()
 
+    rotulo_tipo = FIGURINO_KIND_LABELS[tipo].lower()
+    abertura = f"Pedido de {rotulo_tipo} aberto por {actor.name}."
+    if gravidade:
+        abertura += f" Gravidade: {FIGURINO_SEV_LABELS[gravidade].lower()}."
     registrar_log(
-        producao,
-        f"Pedido aberto por {actor.name}.",
-        actor=actor,
-        status_to=FIGURINO_PROD_SOLICITADO,
+        producao, abertura, actor=actor, status_to=FIGURINO_PROD_SOLICITADO
     )
     audit(
         "criou", entity_type="FigurinoProducao", entity_id=producao.id,
-        entity_name=producao.title, detail=f"Pedido de produção de figurino: {producao.title}",
+        entity_name=producao.title,
+        detail=f"Pedido de {rotulo_tipo} de figurino: {producao.title}",
     )
     db.session.commit()
 
@@ -558,7 +685,21 @@ def update_producao(
 
     if "figurino_sheet_id" in campos:
         ficha = _resolver_ficha(campos["figurino_sheet_id"])
+        if producao.is_manutencao and ficha is None:
+            raise ProducaoValidationError(
+                "figurino_sheet_id", "Um conserto precisa dizer de qual figurino é."
+            )
         producao.figurino_sheet_id = ficha.id if ficha else None
+
+    if "severity" in campos and producao.is_manutencao:
+        nova = (campos["severity"] or "").strip() or None
+        if nova not in FIGURINO_SEVERIDADES:
+            raise ProducaoValidationError(
+                "severity", "Diga se a peça ainda pode ser usada assim como está."
+            )
+        if nova != producao.severity:
+            mudancas.append(f"gravidade → {FIGURINO_SEV_LABELS[nova].lower()}")
+            producao.severity = nova
 
     if "due_date" in campos:
         novo_prazo = _parse_date(campos["due_date"], "due_date", "Data do prazo")
@@ -610,10 +751,17 @@ def mudar_status(
     anterior = producao.status
     if novo_status == anterior:
         raise ProducaoValidationError("status", "O pedido já está nessa situação.")
-    if novo_status not in TRANSICOES.get(anterior, set()):
+    if novo_status not in transicoes_de(producao):
         de = FIGURINO_PROD_LABELS.get(anterior, anterior)
         para = FIGURINO_PROD_LABELS.get(novo_status, novo_status)
-        raise ProducaoValidationError("status", f"Não dá para ir de “{de}” para “{para}”.")
+        extra = (
+            " Manutenção não passa por aprovação."
+            if producao.is_manutencao and novo_status == FIGURINO_PROD_APROVADO
+            else ""
+        )
+        raise ProducaoValidationError(
+            "status", f"Não dá para ir de “{de}” para “{para}”.{extra}"
+        )
 
     if novo_status == FIGURINO_PROD_APROVADO and not pode_aprovar(actor):
         raise ProducaoValidationError("status", "Só um super admin aprova um pedido de figurino.")
@@ -822,6 +970,44 @@ def gastos_vinculaveis(producao: FigurinoProducao, *, limite: int = 60) -> list[
 # ── Resumo da home ───────────────────────────────────────────────────────────
 
 
+def _serialize_para_home(p: FigurinoProducao) -> dict[str, Any]:
+    return {
+        "id": p.id,
+        "title": p.title,
+        "status": p.status,
+        "status_label": FIGURINO_PROD_LABELS.get(p.status, p.status),
+        "kind": p.kind,
+        "kind_label": FIGURINO_KIND_LABELS.get(p.kind, p.kind),
+        "impede_uso": p.impede_uso,
+        "figurino_sheet_name": (
+            p.figurino_sheet.character_name if p.figurino_sheet else None
+        ),
+        "event_title": p.event.title if p.event else None,
+        "prazo": p.prazo_efetivo.isoformat() if p.prazo_efetivo else None,
+        "dias_para_prazo": p.dias_para_prazo,
+        "is_late": p.is_late,
+    }
+
+
+def resumo_setor(user: User) -> dict[str, Any] | None:
+    """Caixa de entrada do setor de figurino: pedidos abertos que ninguém assumiu (225b).
+
+    Diferente do painel pessoal, este é por **papel** — é o setor que precisa ver o que chegou.
+    Existe porque manutenção quase sempre nasce órfã: quem relata o defeito é quem recebeu o
+    feedback do evento, não quem vai consertar.
+    """
+    if not pode_executar(user):
+        return None
+    pedidos = pedidos_sem_dono()
+    if not pedidos:
+        return None
+    return {
+        "pending": len(pedidos),
+        "impedem_uso": sum(1 for p in pedidos if p.impede_uso),
+        "items": [_serialize_para_home(p) for p in pedidos],
+    }
+
+
 def resumo_home(user: User) -> dict[str, Any] | None:
     """Painel pessoal "Minhas peças" da tela inicial (FR-050/052).
 
@@ -840,17 +1026,25 @@ def resumo_home(user: User) -> dict[str, Any] | None:
     return {
         "pending": len(pedidos),
         "atrasados": sum(1 for p in pedidos if p.is_late),
-        "items": [
-            {
-                "id": p.id,
-                "title": p.title,
-                "status": p.status,
-                "status_label": FIGURINO_PROD_LABELS.get(p.status, p.status),
-                "event_title": p.event.title if p.event else None,
-                "prazo": p.prazo_efetivo.isoformat() if p.prazo_efetivo else None,
-                "dias_para_prazo": p.dias_para_prazo,
-                "is_late": p.is_late,
-            }
-            for p in pedidos
-        ],
+        "items": [_serialize_para_home(p) for p in pedidos],
     }
+
+
+def equipe_figurino() -> list[User]:
+    """Quem recebe o aviso de pedido novo: equipe de figurino + super admins, com e-mail.
+
+    Mesmo desenho de `gastos_ops._financeiro_and_superadmin_users`: avisa o **setor**, não uma
+    pessoa. O aviso individual só existe quando alguém é designado responsável.
+    """
+    from app.models import Role
+
+    return (
+        User.query.join(User.roles)
+        .filter(
+            Role.name.in_([RoleName.FIGURINO, RoleName.SUPERADMIN]),
+            User.is_active.is_(True),
+            User.email.isnot(None),
+        )
+        .distinct()
+        .all()
+    )

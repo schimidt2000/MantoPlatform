@@ -206,7 +206,8 @@ function PendingPaymentRow({ item }: { item: PendingPayment }) {
  */
 function MinhaPecaRow({ item }: { item: MinhaPecaRef }) {
   const dias = item.dias_para_prazo;
-  const critico = item.is_late || (dias != null && dias <= 2);
+  // "Não pode ir para evento" é crítico mesmo sem prazo apertado: o boneco está fora de uso.
+  const critico = item.impede_uso || item.is_late || (dias != null && dias <= 2);
   const rotulo = item.is_late
     ? `ATRASADO ${Math.abs(dias ?? 0)}d`
     : dias == null
@@ -214,6 +215,7 @@ function MinhaPecaRow({ item }: { item: MinhaPecaRef }) {
       : dias === 0
         ? "HOJE"
         : `${dias}d`;
+  const contexto = item.figurino_sheet_name ?? item.event_title;
 
   return (
     <div
@@ -221,8 +223,13 @@ function MinhaPecaRow({ item }: { item: MinhaPecaRef }) {
       style={critico ? { background: "rgba(228,88,88,0.06)" } : undefined}
     >
       <div className="min-w-0">
-        <div className="flex items-center gap-2 font-medium text-ink">
+        <div className="flex flex-wrap items-center gap-2 font-medium text-ink">
           {item.title}
+          {item.impede_uso && (
+            <MetricBadge tone="red" size="xs">
+              NÃO PODE IR
+            </MetricBadge>
+          )}
           {rotulo && (
             <MetricBadge tone={critico ? "red" : "neutral"} size="xs">
               {rotulo}
@@ -230,8 +237,8 @@ function MinhaPecaRow({ item }: { item: MinhaPecaRef }) {
           )}
         </div>
         <span className="text-muted">
-          {item.status_label}
-          {item.event_title && ` — ${item.event_title}`}
+          {item.kind_label} · {item.status_label}
+          {contexto && ` — ${contexto}`}
         </span>
       </div>
       <Button asChild variant="outline" size="sm" className="shrink-0">
@@ -277,6 +284,19 @@ export function DashboardPage() {
               count={dashboard.data.figurino_producao.pending}
             >
               {dashboard.data.figurino_producao.items.map((item) => (
+                <MinhaPecaRow key={item.id} item={item} />
+              ))}
+            </SectorPanel>
+          )}
+
+          {/* Caixa de entrada do setor (225b): manutenção quase sempre nasce sem dono, porque
+              quem relata o defeito recebeu o feedback do evento e não é quem vai consertar. */}
+          {dashboard.data.figurino_oficina && (
+            <SectorPanel
+              title="🪡 Oficina — sem responsável"
+              count={dashboard.data.figurino_oficina.pending}
+            >
+              {dashboard.data.figurino_oficina.items.map((item) => (
                 <MinhaPecaRow key={item.id} item={item} />
               ))}
             </SectorPanel>

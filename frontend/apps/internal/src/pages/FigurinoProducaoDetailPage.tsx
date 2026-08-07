@@ -628,8 +628,27 @@ export function FigurinoProducaoDetailPage() {
             <span className={className}>{crumb.label}</span>
           )
         }
-        actions={<Badge tone={PRODUCAO_STATUS_TONES[p.status]}>{p.status_label}</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge tone={p.kind === "manutencao" ? "accent" : "neutral"}>{p.kind_label}</Badge>
+            <Badge tone={PRODUCAO_STATUS_TONES[p.status]}>{p.status_label}</Badge>
+          </div>
+        }
       />
+
+      {/* O aviso que justifica o módulo existir: enquanto isto estiver aberto, este boneco não
+          pode ser escalado. Aparece antes de qualquer outra coisa da tela. */}
+      {p.impede_uso && (
+        <Card className="flex items-start gap-3 border-l-4 border-l-red px-4 py-3">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red" />
+          <p className="flex-1 text-sm text-ink">
+            <span className="font-semibold text-red">Este figurino não pode ir para evento</span>{" "}
+            até o conserto. O aviso aparece na ficha
+            {p.figurino_sheet_name ? ` de ${p.figurino_sheet_name}` : ""} e no elenco de quem
+            escalar esse personagem.
+          </p>
+        </Card>
+      )}
 
       {aviso && <AvisoAgenda texto={aviso} onFechar={() => setAviso(undefined)} />}
 
@@ -642,7 +661,11 @@ export function FigurinoProducaoDetailPage() {
         <div className="space-y-4">
           {p.description && (
             <Card className="px-4 py-3">
-              <h3 className="mb-1 text-sm font-semibold text-ink">O que precisa ser feito</h3>
+              <h3 className="mb-1 text-sm font-semibold text-ink">
+                {p.kind === "manutencao"
+                  ? "O que precisa ser resolvido"
+                  : "O que precisa ser feito"}
+              </h3>
               <p className="whitespace-pre-wrap text-sm text-ink">{p.description}</p>
             </Card>
           )}
@@ -673,7 +696,12 @@ export function FigurinoProducaoDetailPage() {
             </Card>
           )}
 
-          <Gastos producao={p} podeEditar={podeEditar} />
+          {/* Manutenção sem custo previsto e sem gasto lançado não mostra o painel de dinheiro:
+              a maior parte é trabalho manual, e um "R$ 0,00" grande sugeriria que falta lançar
+              alguma coisa. Se aparecer gasto ou previsão, o painel volta sozinho. */}
+          {(p.kind !== "manutencao" || p.total_gasto > 0 || p.estimated_cost != null) && (
+            <Gastos producao={p} podeEditar={podeEditar} />
+          )}
           <Historico producaoId={p.id} logs={p.logs ?? []} />
         </div>
 
@@ -714,8 +742,16 @@ export function FigurinoProducaoDetailPage() {
               )}
               {p.figurino_sheet_name && (
                 <div className="flex justify-between">
-                  <span className="text-muted">Personagem</span>
+                  <span className="text-muted">Figurino</span>
                   <span className="text-ink">{p.figurino_sheet_name}</span>
+                </div>
+              )}
+              {p.severity_label && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Situação da peça</span>
+                  <Badge tone={p.severity === "impede_uso" ? "red" : "gold"}>
+                    {p.severity_label}
+                  </Badge>
                 </div>
               )}
               {p.event_id && (

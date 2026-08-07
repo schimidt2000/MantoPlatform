@@ -6,6 +6,14 @@ export interface FigurinoPiece {
   qty: number;
 }
 
+/** Manutenções abertas nesta ficha (feature 225b). `null` quando o figurino está inteiro. */
+export interface FigurinoManutencaoAlerta {
+  abertas: number;
+  /** True quando alguma delas impede a peça de ir para um evento. */
+  impede_uso: boolean;
+  titulos: string[];
+}
+
 export interface FigurinoSheetItem {
   id: number;
   character_name: string;
@@ -15,6 +23,7 @@ export interface FigurinoSheetItem {
   photo_url: string | null;
   updated_at: string | null;
   created_at: string | null;
+  manutencao: FigurinoManutencaoAlerta | null;
 }
 
 export interface MissingCharacter {

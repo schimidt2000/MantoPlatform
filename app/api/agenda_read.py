@@ -230,7 +230,11 @@ def _serialize_talent(talent: Any, show_pii: bool) -> dict[str, Any]:
 
 
 def _serialize_role(
-    role: Any, show_casting: bool, availability: dict[int, dict[str, str]], show_pii: bool
+    role: Any,
+    show_casting: bool,
+    availability: dict[int, dict[str, str]],
+    show_pii: bool,
+    alertas_figurino: dict[int, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Um cargo do elenco. `cache_value` (cachê) só para casting/superadmin (dado do casting)."""
     sheet = role.figurino_sheet
@@ -255,6 +259,13 @@ def _serialize_role(
         "payment_status": role.payment_status or "nao_pago",
         "availability": (
             availability.get(role.talent_id) if role.talent_id else None
+        ),
+        # feature 225b — manutenção aberta na ficha deste personagem, ou None. `impede_uso`
+        # significa que a peça não pode ir para o evento até o conserto.
+        "figurino_manutencao": (
+            (alertas_figurino or {}).get(role.figurino_sheet_id)
+            if role.figurino_sheet_id
+            else None
         ),
     }
     if show_casting:
@@ -630,8 +641,17 @@ def serialize_event_detail(
     # Mesmo público que a tela antiga dava ao "Exportar elenco" (`CASTING`, `COMERCIAL`,
     # `SUPERADMIN`) — `can_confirm` é o flag de Comercial/Superadmin.
     show_pii = flags["show_casting"] or flags["can_confirm"]
+    # Manutenção aberta na ficha de cada personagem (feature 225b). Uma consulta só para o elenco
+    # inteiro: sem isto, "tem uma peça solta dentro do boneco" fica no relato de um evento e
+    # ninguém lembra dele na hora de separar o figurino do próximo.
+    from app.figurino.producao_ops import alertas_por_ficha
+
+    alertas_figurino = alertas_por_ficha(
+        [r.figurino_sheet_id for r in roles if r.figurino_sheet_id]
+    )
     data["elenco"] = [
-        _serialize_role(r, flags["show_casting"], availability, show_pii) for r in roles
+        _serialize_role(r, flags["show_casting"], availability, show_pii, alertas_figurino)
+        for r in roles
     ]
     data["materiais"] = _serialize_materials(event)
     # Presentes 3D (feature 200) — só evento SHOW tem a seção; a chave ausente é o sinal para o

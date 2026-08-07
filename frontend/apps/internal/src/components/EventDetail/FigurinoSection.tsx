@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Printer } from "lucide-react";
 import { AvatarThumb, Badge, Button } from "@manto/ui";
 import { API_BASE, assetUrl } from "@manto/api-client";
@@ -41,10 +42,19 @@ function FigurinoRow({ role, eventId, canEdit }: FigurinoRowProps) {
   const link = useLinkFigurinoSheet(eventId);
   const toggleDone = useToggleFigurinoDone(eventId);
 
+  const manutencao = role.figurino_manutencao;
+  const bloqueado = Boolean(manutencao?.impede_uso);
+
   return (
     <li
       className={`rounded-md border p-3 ${
-        role.figurino_done ? "border-green bg-green-soft/20" : "border-line bg-surface-2/40"
+        // Bloqueio vence o "separado": marcar como separado um boneco que não pode ir seria
+        // exatamente o erro que o aviso existe para impedir.
+        bloqueado
+          ? "border-red bg-red-soft/20"
+          : role.figurino_done
+            ? "border-green bg-green-soft/20"
+            : "border-line bg-surface-2/40"
       }`}
     >
       <div className="flex items-start gap-2.5">
@@ -69,7 +79,27 @@ function FigurinoRow({ role, eventId, canEdit }: FigurinoRowProps) {
             {role.figurino_done && (
               <Badge tone="green">Separado {formatDay(role.figurino_done_at)}</Badge>
             )}
+            {manutencao && (
+              <Badge tone={bloqueado ? "red" : "gold"}>
+                {bloqueado
+                  ? "⚠ Não pode ir para evento"
+                  : `🪡 ${manutencao.abertas} conserto${manutencao.abertas === 1 ? "" : "s"} em aberto`}
+              </Badge>
+            )}
           </div>
+          {/* O relato do defeito, aqui, na hora de separar o figurino — é o único momento em que
+              "tem uma peça solta dentro do boneco" muda alguma decisão. */}
+          {manutencao && (
+            <p className="mt-1 text-xs text-muted">
+              {manutencao.titulos.join(" · ")}{" "}
+              <Link
+                to={`/figurinos/producao?ficha=${role.figurino_sheet_id}`}
+                className="text-accent hover:underline"
+              >
+                ver na oficina
+              </Link>
+            </p>
+          )}
         </div>
         <Medidas role={role} />
       </div>

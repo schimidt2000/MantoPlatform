@@ -50,7 +50,7 @@ function FigurinoCard({ sheet, canEdit, linkedCharacterName, onQuickLink }: Figu
   return (
     <Card>
       <CardContent className="space-y-2 p-2">
-        <div className="aspect-[3/4] w-full overflow-hidden rounded-md bg-surface-2">
+        <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-surface-2">
           {sheet.photo_url ? (
             <img
               src={assetUrl(sheet.photo_url)}
@@ -61,6 +61,23 @@ function FigurinoCard({ sheet, canEdit, linkedCharacterName, onQuickLink }: Figu
             <div className="flex h-full w-full items-center justify-center text-3xl" aria-hidden="true">
               📷
             </div>
+          )}
+          {/* Manutenção aberta (feature 225b) — sobre a foto de propósito: quem separa figurino
+              olha a imagem, não o texto. É o que impede um boneco quebrado de ir para a festa. */}
+          {sheet.manutencao && (
+            <Link
+              to={`/figurinos/producao?ficha=${sheet.id}`}
+              title={sheet.manutencao.titulos.join(" · ")}
+              className={`absolute left-1 top-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${
+                sheet.manutencao.impede_uso
+                  ? "bg-red text-on-color"
+                  : "bg-gold-soft text-gold-ink"
+              }`}
+            >
+              {sheet.manutencao.impede_uso
+                ? "⚠ Não pode ir"
+                : `🪡 ${sheet.manutencao.abertas} conserto${sheet.manutencao.abertas === 1 ? "" : "s"}`}
+            </Link>
           )}
         </div>
         <div>

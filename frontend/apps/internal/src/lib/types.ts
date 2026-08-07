@@ -86,12 +86,18 @@ export interface EnsaioSummary {
 }
 
 /** Resumo do dashboard — resposta de /api/dashboard. Seções ausentes = sem permissão. */
-/** Uma peça de figurino sob responsabilidade do usuário logado (feature 225). */
+/** Uma peça de figurino nos painéis da home (feature 225 / 225b). */
 export interface MinhaPecaRef {
   id: number;
   title: string;
   status: string;
   status_label: string;
+  /** `producao` (peça nova) ou `manutencao` (conserto/ajuste do que já existe). */
+  kind: string;
+  kind_label: string;
+  /** True quando a peça não pode ir para evento até o conserto. */
+  impede_uso: boolean;
+  figurino_sheet_name: string | null;
   event_title: string | null;
   /** Prazo informado, ou a data do evento quando não houve prazo. */
   prazo: string | null;
@@ -106,6 +112,13 @@ export interface MinhasPecasSummary {
   items: MinhaPecaRef[];
 }
 
+/** Caixa de entrada do setor: pedidos abertos que ninguém assumiu (feature 225b). */
+export interface OficinaFilaSummary {
+  pending: number;
+  impedem_uso: number;
+  items: MinhaPecaRef[];
+}
+
 export interface DashboardSummary {
   casting: CastingSummary | null;
   figurino: FigurinoSummary | null;
@@ -114,6 +127,8 @@ export interface DashboardSummary {
    * responsabilidade vê, seja qual for o papel (feature 225).
    */
   figurino_producao: MinhasPecasSummary | null;
+  /** Fila do setor de figurino: pedidos sem dono. Gate por PAPEL (FIGURINO/SA). */
+  figurino_oficina: OficinaFilaSummary | null;
   ensaio: EnsaioSummary | null;
   comercial: { pending_payments: PendingPayment[] } | null;
   financeiro: { recurring_expense_alerts: RecurringExpenseAlert[] } | null;

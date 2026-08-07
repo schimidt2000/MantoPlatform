@@ -4,8 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **225 (Produção de
-> Figurinos)** · Head de migration: `c1d5a83b64e7`
+> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **225b (Manutenção de
+> figurino)** · Head de migration: `d2e6b94c07f1`
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -37,7 +37,8 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 143 |
+| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 143 |
+| **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 186 |
 | **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 134 |
 | **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 152 |
 | **224d** | `alo.mantoproducoes.com.br` como endereço curto da Loja de Interações Virtuais | 2026-08-07 | `—` | (aqui) | 186 |
@@ -139,6 +140,50 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 225b — Manutenção de figurino            (main · 2026-08-07 · `d2e6b94c07f1`)
+
+**Motivação.** Boa parte do trabalho da oficina não é produzir peça nova, é mexer no que já
+existe. O caso relatado pelo cliente: "recebemos um feedback do evento e a pessoa falou que dentro
+do boneco tem uma peça solta" — hoje isso se combina por voz e some. E o segundo: "para esse
+evento nesse dia, fazer esse reparo específico" — trabalho manual, **sem compra nenhuma**, que
+também precisa ficar escrito.
+
+**O que foi feito.** `FigurinoProducao` ganhou `kind` (`producao`|`manutencao`) e `severity`
+(`impede_uso`|`pode_esperar`). Nenhum pedido existente muda: `kind` nasce `producao`.
+
+**Decisões e por quê.**
+
+- **Manutenção não passa por aprovação.** Produção passa porque figurino é 70% do gasto extra;
+  manutenção quase nunca tem compra. Exigir um super admin para liberar uma costura mataria o
+  registro, que é justamente o que se quer ganhar. As transições saem de `FIGURINO_PROD_FLUXOS` e
+  são **derivadas** da ordem do fluxo (`_transicoes_do_fluxo`) — duas tabelas escritas à mão
+  divergiriam na primeira mudança.
+- **Gravidade é obrigatória na manutenção.** É a única informação que muda uma decisão: a peça
+  pode ir para o próximo evento assim, ou não pode? Sem ela o registro seria só um bilhete.
+- **O valor não está na tarefa, está no aviso.** Com `impede_uso` aberto, a ficha e o **elenco do
+  evento** carregam o alerta. É lá que "tem uma peça solta dentro do boneco" muda alguma coisa —
+  na hora de separar o figurino da próxima festa. No card do elenco o bloqueio **vence o
+  "Separado"** (borda vermelha ganha da verde): marcar como separada uma peça que não pode ir é
+  exatamente o erro que o aviso existe para impedir. Verificado na tela, num evento real.
+- **Resolver apaga o aviso.** Alerta que não some vira ruído e deixa de ser lido.
+- **Aviso ao setor, não à pessoa.** Pedido sem responsável manda e-mail para a equipe de figurino
+  + super admins (molde de `gastos_ops.create_expense`) e entra num painel próprio da home,
+  "Oficina — sem responsável". Manutenção nasce órfã quase sempre. Este painel é por **papel** —
+  ao contrário de "Minhas peças", que é por identidade.
+- **A ordem das validações segue a ordem dos campos na tela.** Quem esquece dois campos recebe
+  primeiro o erro do de cima e conserta de cima para baixo. Foi um teste que pegou isso: com ficha
+  e gravidade vazias, o erro que voltava era o do título.
+- **Na manutenção o dinheiro sai da frente:** quantidade some do formulário e o painel de gastos
+  só aparece se houver custo previsto ou gasto lançado. Um "R$ 0,00" grande sugeriria que falta
+  lançar alguma coisa.
+
+**Verificação.** `verify_producao_figurinos` **70/70** (era 50/50). Os 20 novos cobrem: ficha e
+gravidade obrigatórias, manutenção não oferecendo "aprovado" (nem para super admin), o alerta
+chegando na ficha e sumindo quando resolvido, a fila do setor com gate por papel, e os filtros por
+tipo e por figurino. Sem regressão: `verify_cancelamento_evento` 44/44,
+`verify_151_excluir_sync` 31/31, `tsc --noEmit` limpo. (`verify_145_agenda_read` segue 20/21 e
+`verify_154` 57/58 — ambas pré-existentes, confirmadas com `git stash`.)
 
 ### 225 — Produção de Figurinos            (main · 2026-08-07 · `c1d5a83b64e7`)
 

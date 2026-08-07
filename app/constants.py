@@ -72,6 +72,29 @@ GIFT_3D_STATUSES = [
 ]
 
 
+# Feature 225b: o que a oficina está fazendo com a peça. `producao` cria algo que não existe;
+# `manutencao` mexe no que já existe — conserto de defeito, ajuste para um evento, adaptação.
+# A diferença não é cosmética: manutenção **não passa por aprovação** (ver FIGURINO_PROD_FLUXOS),
+# porque a maior parte não tem compra nenhuma, é trabalho manual, e exigir um super admin para
+# liberar uma costura mataria o registro — que é justamente o que se quer ganhar.
+FIGURINO_KIND_PRODUCAO   = "producao"
+FIGURINO_KIND_MANUTENCAO = "manutencao"
+FIGURINO_KINDS = [FIGURINO_KIND_PRODUCAO, FIGURINO_KIND_MANUTENCAO]
+FIGURINO_KIND_LABELS = {
+    FIGURINO_KIND_PRODUCAO:   "Produção",
+    FIGURINO_KIND_MANUTENCAO: "Manutenção",
+}
+
+# Gravidade de uma manutenção. É a única informação que muda uma decisão de verdade: a peça pode
+# ir para o próximo evento assim como está, ou não pode?
+FIGURINO_SEV_IMPEDE  = "impede_uso"
+FIGURINO_SEV_ESPERA  = "pode_esperar"
+FIGURINO_SEVERIDADES = [FIGURINO_SEV_IMPEDE, FIGURINO_SEV_ESPERA]
+FIGURINO_SEV_LABELS = {
+    FIGURINO_SEV_IMPEDE: "Não pode ir para evento",
+    FIGURINO_SEV_ESPERA: "Dá para usar assim",
+}
+
 # Feature 225: ciclo de vida de um `FigurinoProducao`, na ordem em que a oficina o percorre.
 # 'pronto' é o estado final feliz; 'cancelado' é a saída (pedido recusado na aprovação ou
 # abandonado depois) — aprovação sem recusa possível não seria aprovação.
@@ -101,6 +124,23 @@ FIGURINO_PROD_LABELS = {
     FIGURINO_PROD_PRONTO:      "Pronto",
     FIGURINO_PROD_CANCELADO:   "Cancelado",
 }
+#: O fluxo de cada tipo. Produção passa por aprovação (figurino é 70% do gasto extra da empresa);
+#: manutenção não (ver FIGURINO_KIND_MANUTENCAO). Fonte única — o núcleo monta as transições
+#: válidas a partir daqui, e a tela só desenha o que o servidor devolve.
+FIGURINO_PROD_FLUXOS = {
+    FIGURINO_KIND_PRODUCAO: [
+        FIGURINO_PROD_SOLICITADO,
+        FIGURINO_PROD_APROVADO,
+        FIGURINO_PROD_EM_PRODUCAO,
+        FIGURINO_PROD_PRONTO,
+    ],
+    FIGURINO_KIND_MANUTENCAO: [
+        FIGURINO_PROD_SOLICITADO,
+        FIGURINO_PROD_EM_PRODUCAO,
+        FIGURINO_PROD_PRONTO,
+    ],
+}
+
 #: Tipos de anexo de um pedido de produção (feature 225).
 FIGURINO_ANEXO_FOTO      = "foto"
 FIGURINO_ANEXO_ORCAMENTO = "orcamento"

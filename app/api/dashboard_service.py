@@ -507,13 +507,19 @@ def build_dashboard_summary(
     # pessoa não é responsável por nada, e aí o React simplesmente não desenha o painel — mesmo
     # contrato das outras seções.
     from app.figurino.producao_ops import resumo_home as _producao_resumo_home
+    from app.figurino.producao_ops import resumo_setor as _producao_resumo_setor
 
     minhas_pecas = _producao_resumo_home(user)
+    # Caixa de entrada do setor (225b): pedidos abertos que ninguém assumiu. Este é por PAPEL —
+    # manutenção quase sempre nasce órfã, porque quem relata o defeito recebeu o feedback do
+    # evento e não é quem vai consertar.
+    fila_oficina = _producao_resumo_setor(user) if show_figurino else None
 
     return {
         "casting": casting,
         "figurino": figurino,
         "figurino_producao": minhas_pecas,
+        "figurino_oficina": fila_oficina,
         "ensaio": ensaio,
         "comercial": comercial,
         "financeiro": financeiro,

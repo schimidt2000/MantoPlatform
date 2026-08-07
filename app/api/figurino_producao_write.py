@@ -15,7 +15,11 @@ from flask_login import current_user
 
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
-from app.email_service import send_async, send_figurino_producao_email
+from app.email_service import (
+    send_async,
+    send_figurino_pedido_setor_email,
+    send_figurino_producao_email,
+)
 from app.figurino import producao_ops as ops
 from app.models import FigurinoProducao, FigurinoProducaoAnexo, SpecialExpense
 
@@ -77,6 +81,8 @@ def api_figurino_producao_create() -> Any:
             title=dados.get("title", ""),
             actor=current_user,
             description=dados.get("description"),
+            kind=dados.get("kind") or "producao",
+            severity=dados.get("severity"),
             event_id=dados.get("event_id"),
             figurino_sheet_id=dados.get("figurino_sheet_id"),
             responsible_id=dados.get("responsible_id"),
@@ -88,6 +94,10 @@ def api_figurino_producao_create() -> Any:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
 
     _avisar_responsavel(producao, None)
+    # Aviso ao SETOR: o pedido pode ter nascido sem dono (é a regra na manutenção), e nesse caso
+    # ninguém receberia o e-mail individual. Só depois do commit — `send_async` recarrega por PK.
+    if producao.responsible_id is None:
+        send_async(send_figurino_pedido_setor_email, producao, ops.equipe_figurino())
     return _resposta(producao, aviso, status=201)
 
 

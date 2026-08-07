@@ -64,6 +64,12 @@ def list_sheets() -> dict:
         chars_without_sheet.append({"character_name": entry["character_name"], "character_name_norm": norm})
     chars_without_sheet.sort(key=lambda c: c["character_name"])
 
+    # Manutenções abertas por ficha (feature 225b): é o que faz um defeito relatado numa festa
+    # chegar em quem vai separar o figurino da próxima. Uma consulta só para todas as fichas.
+    from app.figurino.producao_ops import alertas_por_ficha
+
+    alertas = alertas_por_ficha()
+
     return {
         "items": [
             {
@@ -75,6 +81,7 @@ def list_sheets() -> dict:
                 "photo_url": s.photo_url,
                 "updated_at": s.updated_at.isoformat() if s.updated_at else None,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
+                "manutencao": alertas.get(s.id),
             }
             for s in sheets
         ],

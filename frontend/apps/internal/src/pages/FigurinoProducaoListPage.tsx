@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Plus, Shirt } from "lucide-react";
 import {
@@ -20,6 +20,7 @@ import {
 } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { useGastosEventos } from "../lib/gastos";
+import { useFigurinoSheets } from "../lib/figurino";
 import {
   PRODUCAO_STATUS_LABELS,
   PRODUCAO_STATUS_TONES,
@@ -28,6 +29,8 @@ import {
   useProducoes,
   useResponsaveis,
   type Producao,
+  type ProducaoKind,
+  type ProducaoSeveridade,
   type ProducaoStatus,
 } from "../lib/figurinoProducao";
 import { useCurrentUser } from "../lib/useAuth";
@@ -85,6 +88,10 @@ function NovoPedidoDialog({
 }) {
   const criar = useCreateProducao();
   const responsaveis = useResponsaveis();
+  const fichas = useFigurinoSheets();
+  const [kind, setKind] = useState<ProducaoKind>("producao");
+  const [severity, setSeverity] = useState<ProducaoSeveridade | "">("");
+  const [fichaId, setFichaId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dataEvento, setDataEvento] = useState("");
@@ -95,8 +102,22 @@ function NovoPedidoDialog({
   const [quantity, setQuantity] = useState("1");
   const eventos = useGastosEventos(dataEvento);
 
+  const eManutencao = kind === "manutencao";
+
+  const fichaOptions = useMemo(
+    () =>
+      (fichas.data?.items ?? []).map((f) => ({
+        value: String(f.id),
+        label: f.character_name,
+      })),
+    [fichas.data],
+  );
+
   function fechar() {
     onOpenChange(false);
+    setKind("producao");
+    setSeverity("");
+    setFichaId("");
     setTitle("");
     setDescription("");
     setDataEvento("");
@@ -113,6 +134,9 @@ function NovoPedidoDialog({
       {
         title,
         description: description || undefined,
+        kind,
+        severity: eManutencao ? (severity || null) : null,
+        figurino_sheet_id: fichaId ? Number(fichaId) : null,
         event_id: eventId ? Number(eventId) : null,
         due_date: dueDate || null,
         responsible_id: responsibleId ? Number(responsibleId) : null,
@@ -123,6 +147,9 @@ function NovoPedidoDialog({
     );
   }
 
+  const podeSalvar =
+    title.trim().length > 0 && (!eManutencao || (Boolean(fichaId) && Boolean(severity)));
+
   const erroCampo = (campo: string) =>
     (criar.error as { fields?: Record<string, string> } | null)?.fields?.[campo];
 
@@ -132,20 +159,105 @@ function NovoPedidoDialog({
         <DialogHeader>
           <DialogTitle>Novo pedido de figurino</DialogTitle>
           <DialogDescription>
-            O que precisa ser produzido. A oficina aprova e assume depois.
+            {eManutencao
+              ? "Conserto, ajuste ou adaptação de um figurino que já existe. A oficina assume direto — não precisa de aprovação."
+              : "Uma peça nova, que ainda não existe. A oficina aprova e assume depois."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
+          {/* O tipo vem primeiro porque muda o resto do formulário — e muda o fluxo. */}
+          <div className="flex gap-2">
+            {(["producao", "manutencao"] as ProducaoKind[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setKind(k)}
+                className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors ${
+                  kind === k
+                    ? "border-accent bg-accent-soft font-medium text-accent"
+                    : "border-line text-muted hover:bg-surface-2"
+                }`}
+              >
+                {k === "producao" ? "Produzir peça nova" : "Consertar / ajustar"}
+              </button>
+            ))}
+          </div>
+
+          {eManutencao && (
+            <>
+              <div>
+                <label className="text-xs text-muted" htmlFor="prod-ficha">
+                  Qual figurino
+                </label>
+                <select
+                  id="prod-ficha"
+                  className={INPUT_CLASS}
+                  value={fichaId}
+                  onChange={(e) => setFichaId(e.target.value)}
+                >
+                  <option value="">Escolha a ficha…</option>
+                  {fichaOptions.map((f) => (
+                    <option key={f.value} value={f.value}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+                {erroCampo("figurino_sheet_id") && (
+                  <p className="mt-1 text-xs text-red">{erroCampo("figurino_sheet_id")}</p>
+                )}
+              </div>
+
+              <div>
+                <span className="text-xs text-muted">Dá para usar assim como está?</span>
+                <div className="mt-1 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSeverity("pode_esperar")}
+                    className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors ${
+                      severity === "pode_esperar"
+                        ? "border-gold bg-gold-soft font-medium text-gold-ink"
+                        : "border-line text-muted hover:bg-surface-2"
+                    }`}
+                  >
+                    Dá para usar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSeverity("impede_uso")}
+                    className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors ${
+                      severity === "impede_uso"
+                        ? "border-red bg-red-soft font-medium text-red"
+                        : "border-line text-muted hover:bg-surface-2"
+                    }`}
+                  >
+                    Não pode ir para evento
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-muted">
+                  Marcado como “não pode ir”, o aviso aparece na ficha e no elenco de quem
+                  escalar esse personagem.
+                </p>
+                {erroCampo("severity") && (
+                  <p className="mt-1 text-xs text-red">{erroCampo("severity")}</p>
+                )}
+              </div>
+            </>
+          )}
+
           <div>
             <label className="text-xs text-muted" htmlFor="prod-title">
-              O que precisa ser feito
+              {eManutencao ? "O que precisa ser resolvido" : "O que precisa ser feito"}
             </label>
             <Input
               id="prod-title"
               value={title}
               autoFocus
-              placeholder="Bermuda do Chapeleiro Maluco"
+              placeholder={
+                eManutencao
+                  ? "Peça solta dentro do boneco"
+                  : "Bermuda do Chapeleiro Maluco"
+              }
               onChange={(e) => setTitle(e.target.value)}
             />
             {erroCampo("title") && <p className="mt-1 text-xs text-red">{erroCampo("title")}</p>}
@@ -153,7 +265,9 @@ function NovoPedidoDialog({
 
           <div>
             <label className="text-xs text-muted" htmlFor="prod-desc">
-              Detalhes (tecido, medida, referência…)
+              {eManutencao
+                ? "Detalhes (onde está, o que a pessoa relatou…)"
+                : "Detalhes (tecido, medida, referência…)"}
             </label>
             <textarea
               id="prod-desc"
@@ -200,7 +314,9 @@ function NovoPedidoDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          {/* Na manutenção, quantidade e custo somem: a maior parte não tem compra nenhuma — é
+              trabalho manual. Custo previsto continua disponível, mas discreto. */}
+          <div className={`grid gap-3 ${eManutencao ? "grid-cols-2" : "grid-cols-3"}`}>
             <div>
               <label className="text-xs text-muted" htmlFor="prod-prazo">
                 Prazo
@@ -213,21 +329,23 @@ function NovoPedidoDialog({
                 onChange={(e) => setDueDate(e.target.value)}
               />
             </div>
-            <div>
-              <label className="text-xs text-muted" htmlFor="prod-qtd">
-                Quantidade
-              </label>
-              <Input
-                id="prod-qtd"
-                type="number"
-                min={1}
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-              />
-            </div>
+            {!eManutencao && (
+              <div>
+                <label className="text-xs text-muted" htmlFor="prod-qtd">
+                  Quantidade
+                </label>
+                <Input
+                  id="prod-qtd"
+                  type="number"
+                  min={1}
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                />
+              </div>
+            )}
             <div>
               <label className="text-xs text-muted" htmlFor="prod-custo">
-                Custo previsto
+                {eManutencao ? "Custo previsto (se houver)" : "Custo previsto"}
               </label>
               <Input
                 id="prod-custo"
@@ -259,7 +377,8 @@ function NovoPedidoDialog({
                 ))}
               </select>
               <p className="mt-1 text-xs text-muted">
-                Quem for designado recebe e-mail e o prazo entra na agenda pessoal.
+                Quem for designado recebe e-mail e o prazo entra na agenda pessoal. Sem
+                responsável, o aviso vai para a equipe de figurino.
               </p>
             </div>
           )}
@@ -273,7 +392,7 @@ function NovoPedidoDialog({
           <Button variant="ghost" onClick={fechar}>
             Cancelar
           </Button>
-          <Button onClick={salvar} loading={criar.isPending} disabled={!title.trim()}>
+          <Button onClick={salvar} loading={criar.isPending} disabled={!podeSalvar}>
             Abrir pedido
           </Button>
         </div>
@@ -290,14 +409,22 @@ function LinhaPedido({ p }: { p: Producao }) {
   return (
     <TableRow>
       <TableCell>
-        <Link
-          to={`/figurinos/producao/${p.id}`}
-          className="font-medium text-ink hover:text-accent"
-        >
-          {p.title}
-        </Link>
-        {p.quantity > 1 && <span className="ml-1 text-xs text-muted">×{p.quantity}</span>}
-        {p.event_title && (
+        <div className="flex items-center gap-2">
+          <Link
+            to={`/figurinos/producao/${p.id}`}
+            className="font-medium text-ink hover:text-accent"
+          >
+            {p.title}
+          </Link>
+          {p.quantity > 1 && <span className="text-xs text-muted">×{p.quantity}</span>}
+          {p.impede_uso && <Badge tone="red">não pode ir</Badge>}
+        </div>
+        {/* Na manutenção o que orienta é a ficha ("de qual boneco é isto"); na produção, o
+            evento. Mostrar os dois em toda linha seria ruído. */}
+        {p.figurino_sheet_name && (
+          <p className="mt-0.5 truncate text-xs text-muted">{p.figurino_sheet_name}</p>
+        )}
+        {p.event_title && !p.figurino_sheet_name && (
           <p className="mt-0.5 truncate text-xs text-muted" title={p.event_title}>
             {p.event_title}
           </p>
@@ -333,9 +460,12 @@ function LinhaPedido({ p }: { p: Producao }) {
         )}
       </TableCell>
       <TableCell>
-        <Badge tone={PRODUCAO_STATUS_TONES[p.status]}>
-          {PRODUCAO_STATUS_LABELS[p.status]}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1">
+          <Badge tone={p.kind === "manutencao" ? "accent" : "neutral"}>{p.kind_label}</Badge>
+          <Badge tone={PRODUCAO_STATUS_TONES[p.status]}>
+            {PRODUCAO_STATUS_LABELS[p.status]}
+          </Badge>
+        </div>
       </TableCell>
     </TableRow>
   );
@@ -351,7 +481,12 @@ function LinhaPedido({ p }: { p: Producao }) {
 export function FigurinoProducaoListPage() {
   const { data: user } = useCurrentUser();
   const reduceMotion = useReducedMotion();
-  const [filtro, setFiltro] = useState("abertos");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // `?ficha=` é o destino dos avisos de manutenção na lista de figurinos e no elenco do evento:
+  // clicar em "não pode ir" tem que cair já filtrado naquele figurino.
+  const fichaFiltro = Number(searchParams.get("ficha")) || null;
+  const [tipo, setTipo] = useState<ProducaoKind | "">(fichaFiltro ? "manutencao" : "");
+  const [filtro, setFiltro] = useState(fichaFiltro ? "" : "abertos");
   const [busca, setBusca] = useState("");
   const [soMeus, setSoMeus] = useState(false);
   const [novoAberto, setNovoAberto] = useState(false);
@@ -360,10 +495,12 @@ export function FigurinoProducaoListPage() {
     () => ({
       abertos: filtro === "abertos",
       status: (filtro === "abertos" ? "" : filtro) as ProducaoStatus | "",
+      tipo,
       busca,
+      ficha: fichaFiltro,
       responsavel: soMeus ? (user?.id ?? null) : null,
     }),
-    [filtro, busca, soMeus, user?.id],
+    [filtro, tipo, busca, fichaFiltro, soMeus, user?.id],
   );
   const { data, isLoading, isError, error } = useProducoes(filtros);
 
@@ -401,7 +538,40 @@ export function FigurinoProducaoListPage() {
           transition={{ duration: 0.25, ease: "easeOut" }}
           className="space-y-4"
         >
+          {fichaFiltro && (
+            <Card className="flex items-center justify-between gap-3 px-4 py-2">
+              <span className="text-sm text-ink">
+                Mostrando só o figurino{" "}
+                <strong>{itens[0]?.figurino_sheet_name ?? `#${fichaFiltro}`}</strong>.
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => setSearchParams({})}>
+                Ver todos
+              </Button>
+            </Card>
+          )}
+
           <Resumo itens={itens} />
+
+          {/* Tipo primeiro: produzir uma peça nova e consertar uma que existe são dois
+              trabalhos diferentes, com fluxos diferentes. */}
+          <div className="flex gap-2 border-b border-line">
+            {([["", "Tudo"], ["producao", "Produção"], ["manutencao", "Manutenção"]] as const).map(
+              ([valor, rotulo]) => (
+                <button
+                  key={valor || "tudo"}
+                  type="button"
+                  onClick={() => setTipo(valor)}
+                  className={`-mb-px border-b-2 px-3 py-2 text-sm transition-colors ${
+                    tipo === valor
+                      ? "border-accent font-medium text-accent"
+                      : "border-transparent text-muted hover:text-ink"
+                  }`}
+                >
+                  {rotulo}
+                </button>
+              ),
+            )}
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {FILTROS.map((f) => (
