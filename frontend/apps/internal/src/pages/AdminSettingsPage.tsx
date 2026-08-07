@@ -14,6 +14,8 @@ export function AdminSettingsPage() {
   const [taxRate, setTaxRate] = useState("");
   const [fatorR, setFatorR] = useState("");
   const [educamantoCommission, setEducamantoCommission] = useState("");
+  const [infinitepayHandle, setInfinitepayHandle] = useState("");
+  const [regenerarToken, setRegenerarToken] = useState(false);
   const [address, setAddress] = useState("");
   const [margin, setMargin] = useState("");
   const [mapsKey, setMapsKey] = useState("");
@@ -28,6 +30,7 @@ export function AdminSettingsPage() {
       setTaxRate(String(query.data.tax_rate ?? ""));
       setFatorR(String(query.data.fator_r_threshold ?? ""));
       setEducamantoCommission(String(query.data.educamanto_commission_rate ?? ""));
+      setInfinitepayHandle(query.data.infinitepay_handle ?? "");
       setAddress(query.data.manto_address);
       setMargin(String(query.data.departure_margin_minutes ?? ""));
       setMapsKey(query.data.google_maps_api_key);
@@ -117,6 +120,54 @@ export function AdminSettingsPage() {
                 <p className="mt-1 text-xs text-muted">
                   Do responsável EducaManto, sobre o <strong>lucro</strong> do evento (venda −
                   BV − cachês). Vazio = 5%.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Sem estes dois campos a Loja de Interações Virtuais não vende: toda reserva morre
+              em "O meio de pagamento ainda não está configurado". As colunas existiam desde a
+              205, mas nenhuma tela as escrevia. */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Pagamento da Loja de Interações Virtuais</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <label className={LABEL}>InfiniteTag (conta que recebe)</label>
+                <input
+                  className={INPUT}
+                  value={infinitepayHandle}
+                  placeholder="mantoproducoes"
+                  onChange={(e) => setInfinitepayHandle(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-muted">
+                  É o seu usuário na InfinitePay — o mesmo que aparece no link de cobrança. Pode
+                  colar com <code>$</code> na frente, que ele é removido.
+                </p>
+              </div>
+              <div>
+                <label className={LABEL}>Aviso de pagamento (webhook)</label>
+                <p className="text-sm text-ink">
+                  {query.data.infinitepay_webhook_configured ? (
+                    <span className="text-green">✓ Configurado</span>
+                  ) : (
+                    <span className="text-red">Ainda não configurado</span>
+                  )}
+                </p>
+                <label className="mt-2 flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={regenerarToken}
+                    onChange={(e) => setRegenerarToken(e.target.checked)}
+                  />
+                  Gerar um segredo novo ao salvar
+                </label>
+                <p className="mt-1 text-xs text-muted">
+                  É o segredo que autentica o aviso de pagamento da operadora — o sistema gera e
+                  guarda sozinho, você não precisa copiar nada. Gerar de novo{" "}
+                  <strong>invalida o anterior</strong>: só faça isso se suspeitar que vazou.
                 </p>
               </div>
             </CardContent>
@@ -224,6 +275,8 @@ export function AdminSettingsPage() {
                 educamanto_commission_rate: educamantoCommission
                   ? Number(educamantoCommission)
                   : undefined,
+                infinitepay_handle: infinitepayHandle || undefined,
+                infinitepay_regenerate_token: regenerarToken || undefined,
                 manto_address: address,
                 departure_margin_minutes: margin ? Number(margin) : undefined,
                 google_maps_api_key: mapsKey,

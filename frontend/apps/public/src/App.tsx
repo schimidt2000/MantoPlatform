@@ -12,6 +12,7 @@ import { FormularioEnviadoPage } from "./pages/FormularioEnviadoPage";
 import { AvaliarPage } from "./pages/AvaliarPage";
 import { CampanhaVirtualPage } from "./pages/CampanhaVirtualPage";
 import { PedidoVirtualPage } from "./pages/PedidoVirtualPage";
+import { VitrineVirtualPage } from "./pages/VitrineVirtualPage";
 import { WishlistFloat } from "./components/WishlistFloat";
 
 // Prefixo de rota condicional ao build de produção (feature 186, US6) — mesmo app servido sob
@@ -35,7 +36,10 @@ export function App() {
         <Route path="/f/:formType/enviado" element={<FormularioEnviadoPage />} />
         <Route path="/avaliar/:token" element={<AvaliarPage />} />
         {/* Loja de Interações Virtuais (feature 205). Declaradas antes do catch-all `/:slug`
-            por clareza — são de dois segmentos, então não colidem com ele de qualquer forma. */}
+            por clareza — são de dois segmentos, então não colidem com ele de qualquer forma.
+            `/v` sozinho é a home da loja (224e): é para onde `alo.mantoproducoes.com.br` manda
+            quem digita só o domínio. */}
+        <Route path="/v" element={<VitrineVirtualPage />} />
         <Route path="/v/:slug" element={<CampanhaVirtualPage />} />
         <Route path="/v/pedido/:token" element={<PedidoVirtualPage />} />
         <Route path="/:slug" element={<ProductDetailPage />} />

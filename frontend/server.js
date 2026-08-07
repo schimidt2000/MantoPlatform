@@ -572,15 +572,19 @@ const server = http.createServer((req, res) => {
   }
 
   // Host da Loja de Interações Virtuais: `alo.mantoproducoes.com.br/<slug>` vira
-  // `/catalogo/v/<slug>`, e `/pedido/<token>` vira `/catalogo/v/pedido/<token>`.
+  // `/catalogo/v/<slug>`, `/pedido/<token>` vira `/catalogo/v/pedido/<token>`, e a **raiz vai
+  // para a home da loja** (`/catalogo/v`).
+  //
+  // A raiz já apontou para `/catalogo/` — o catálogo de eventos —, e isso estava errado: quem
+  // entra pelo endereço da loja de conversas recebia a grade de personagens para festa, que é
+  // outro produto. Agora cai na vitrine das campanhas publicadas (feature 224e).
   //
   // Redirect pelo mesmo motivo do portal: o bundle público roda com `base`/`basename` =
   // `/catalogo` e lê a URL do browser — reescrever só `req.url` serviria o bundle certo com o
-  // roteador sem casar rota nenhuma. A raiz do host vai para a vitrine: quem digita só o
-  // domínio não tem campanha para ver, e uma tela de erro seria pior do que o catálogo.
+  // roteador sem casar rota nenhuma.
   if (req.url && ALO_HOSTS.has((req.headers.host ?? "").split(":")[0].toLowerCase())) {
     if (!matchesPrefix(req.url, "/catalogo")) {
-      const alvo = req.url === "/" ? "/catalogo/" : `/catalogo/v${req.url}`;
+      const alvo = req.url === "/" ? "/catalogo/v" : `/catalogo/v${req.url}`;
       res.statusCode = 302;
       res.setHeader("location", alvo);
       res.end();

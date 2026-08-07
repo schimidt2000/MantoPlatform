@@ -41,6 +41,28 @@ export interface VirtualCampaignPublic {
   gift_items: VirtualGiftItem[];
 }
 
+/** Card da vitrine — o que a home da loja mostra de cada campanha publicada. */
+export interface VirtualVitrineItem {
+  slug: string;
+  title: string;
+  character_name: string | null;
+  cover_url: string | null;
+  price_live: string | null;
+  price_recorded: string | null;
+  /** Ainda há horário livre para chamada ao vivo. */
+  tem_horario: boolean;
+  /** Ainda há vídeo gravado no estoque. */
+  tem_gravado: boolean;
+}
+
+/** Campanhas publicadas — a home de `alo.mantoproducoes.com.br` (feature 224e). */
+export function useVitrineVirtual() {
+  return useQuery<{ campanhas: VirtualVitrineItem[] }>({
+    queryKey: ["virtuais-vitrine"],
+    queryFn: () => apiFetch<{ campanhas: VirtualVitrineItem[] }>("/api/virtuais/vitrine"),
+  });
+}
+
 export interface VirtualSlotPublic {
   id: number;
   start_at: string;

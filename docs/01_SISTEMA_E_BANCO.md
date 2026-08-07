@@ -368,7 +368,11 @@ Pontos que valem para quem for ler esses dados:
 (`logo_path`, cores), `default_commission_rate`, `educamanto_seller_id`,
 `educamanto_commission_rate` (% do responsável EducaManto sobre o **lucro** do evento — feature
 223; `NULL` = 5%, o antigo `EDUCAMANTO_COMMISSION_RATE` do código, que virou só o piso de
-fábrica; `event.commission_rate` continua sobrepondo os dois), `tax_rate`,
+fábrica; `event.commission_rate` continua sobrepondo os dois),
+`infinitepay_handle`/`infinitepay_webhook_token` (conta que recebe as vendas da Loja de
+Interações Virtuais e o segredo que autentica o aviso de pagamento — editáveis em Configurações
+desde a 224f; **nulos, nenhuma reserva passa do checkout**. O token é gerado pelo sistema e
+nunca sai pela API: a leitura devolve só `infinitepay_webhook_configured`), `tax_rate`,
 `fator_r_threshold`, `manto_address`, `departure_margin_minutes`, `google_maps_api_key`,
 `clicksign_token`/`clicksign_sandbox`, `email_notifications_enabled`, `ratings_fully_anonymous`,
 `release_date`, `google_token` (OAuth persistido para sobreviver a redeploy), `pricing_config`
@@ -1091,7 +1095,7 @@ que o proxy usa como `BACKEND_URL`.
 | `app.mantoproducoes.com.br` | `apps/internal` (ERP) | URL principal da plataforma |
 | `beta.mantoproducoes.com.br` | `apps/internal` (ERP) | endereço histórico, mesmo conteúdo |
 | `portal.mantoproducoes.com.br` | **302 → `/portal/`** | endereço que os talentos conhecem |
-| `alo.mantoproducoes.com.br` | **302 → `/catalogo/v/<caminho>`** | Loja de Interações Virtuais (224d) — `alo.…/<slug>` abre a campanha; a raiz cai na vitrine |
+| `alo.mantoproducoes.com.br` | **302 → `/catalogo/v/<caminho>`** | Loja de Interações Virtuais (224d) — `alo.…/<slug>` abre a campanha; a **raiz vai para `/catalogo/v`**, a landing da loja (224e). Já apontou para `/catalogo/`, o catálogo de eventos, e isso entregava outro produto a quem chegava pelo endereço da loja |
 
 `ALO_HOSTS` (env do serviço frontend, default `alo.mantoproducoes.com.br`) faz o mesmo pela loja
 virtual: é o endereço curto que vai em story e link de bio, no lugar de

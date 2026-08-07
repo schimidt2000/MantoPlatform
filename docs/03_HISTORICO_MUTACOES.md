@@ -4,8 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **224d (`alo.` como
-> endereço da Loja de Interações Virtuais)** · Head de migration: `b8e4d27a91f5`
+> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **224f (loja virtual
+> pronta para vender: landing, endereço e conta de recebimento)** · Head de migration:
+> `b8e4d27a91f5`
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -37,7 +38,9 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **224d** | `alo.mantoproducoes.com.br` como endereço curto da Loja de Interações Virtuais | 2026-08-07 | `—` | (aqui) | 134 |
+| **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 134 |
+| **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 152 |
+| **224d** | `alo.mantoproducoes.com.br` como endereço curto da Loja de Interações Virtuais | 2026-08-07 | `—` | (aqui) | 186 |
 | **224c** | Estorno de comissão aparecia e descontava em todos os meses; agora só no mês corrente | 2026-08-07 | `—` | (aqui) | 162 |
 | **224b** | Loja de Interações Virtuais destravada: upload de capa na gestão, capa servida em rota pública, editor de FAQ | 2026-08-07 | `—` | (aqui) | 205 |
 | **224** | Evento com dinheiro vira cancelado (não apagado), com devolução ao cliente; exclusão só para Superadmin | 2026-08-07 | `b8e4d27a91f5` | (aqui) | 186 |
@@ -136,6 +139,49 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 224f — Conta de recebimento da Loja de Interações Virtuais ganhou tela
+`main` · **2026-08-07** · sem migration
+
+**Motivação.** `infinitepay_handle` e `infinitepay_webhook_token` estavam **nulos em produção**, e
+sem eles toda reserva morre em "O meio de pagamento ainda não está configurado" antes mesmo de
+gerar o link. As colunas existiam desde a 205 e o checkout as lia, mas **nenhuma tela as
+escrevia** — só SQL direto. Mesma família dos buracos da 224b: backend pronto, sem superfície.
+
+**O que entrou.** Card "Pagamento da Loja de Interações Virtuais" em Configurações. A InfiniteTag
+é digitada (o `$` inicial é removido — a operadora espera sem). O **token do webhook não se
+digita**: é o segredo que autentica o aviso de pagamento, então a tela só mostra se já existe e
+oferece "gerar um segredo novo ao salvar" (`secrets.token_urlsafe(32)`). Gerar de novo invalida o
+endereço anterior de propósito — é a ação de quem suspeita de vazamento.
+
+**O token nunca sai pela API de leitura**: o payload devolve só `infinitepay_webhook_configured`
+(booleano). Um segredo que trafega para a tela é um segredo no cache do browser.
+
+### 224e — Landing da loja: a raiz do `alo.` caía no catálogo de eventos
+`main` · **2026-08-07** · sem migration
+
+**Motivação.** A 224d mandou a raiz de `alo.mantoproducoes.com.br` para `/catalogo/` com o
+argumento de que "quem digita só o domínio não tem campanha para ver". Estava errado: quem entra
+pelo endereço da loja de conversas recebia a grade de personagens para festa, que é outro produto.
+
+**O que entrou.** `GET /api/virtuais/vitrine` (público) lista as campanhas publicadas, e
+`/v` no app público virou a **landing da loja**: chamada, os três passos de como funciona, os
+cards das campanhas com preço das duas modalidades, e o FAQ no fim — mesma ordem e mesmo motivo
+da landing de campanha (FR-013: quem chega pelo Instagram quer preço primeiro, dúvida depois).
+A raiz do host passou a apontar para `/catalogo/v`.
+
+O caminho é `/vitrine`, e não `/campanhas`, porque `GET /api/virtuais/campanhas` já é a listagem
+**interna** (gated) e `/campanhas/publicadas` colidiria com o `<slug>` da landing.
+
+**Copy no código, de propósito.** É texto de marca, não configuração de campanha — essa fica na
+tela de gestão, por campanha. Mudar exige deploy; se virar rotina, vira campo.
+
+**Uma checagem que mudou a copy:** os avisos ao cliente saem **só por e-mail**
+(`_enviadores_de_aviso`), não por WhatsApp. O texto dos passos diz e-mail — prometer WhatsApp
+seria mentira na primeira venda.
+
+**Campanha esgotada continua listada**, com aviso: sumir da lista faria quem recebeu o link e
+voltou depois achar que errou o endereço.
 
 ### 224d — `alo.mantoproducoes.com.br` como endereço da Loja de Interações Virtuais
 `main` · **2026-08-07** · sem migration

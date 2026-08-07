@@ -47,6 +47,20 @@ def update_settings(settings: SiteSetting, fields: dict[str, Any], logo_file=Non
     except ValueError:
         pass
 
+    # Meio de pagamento da Loja de Interações Virtuais (feature 224f). As duas colunas existiam
+    # desde a 205 e eram lidas pelo checkout, mas nenhuma tela as escrevia — só SQL direto. Sem
+    # elas, toda reserva morre em "O meio de pagamento ainda não está configurado".
+    handle_raw = str(fields.get("infinitepay_handle") or "").strip()
+    if handle_raw:
+        # A InfiniteTag é divulgada com `$` na frente; o cliente da operadora espera sem.
+        settings.infinitepay_handle = handle_raw.lstrip("$")
+    # O token do webhook é SEGREDO e não se digita: é ele que autentica o aviso de pagamento.
+    # A tela só pede "gerar" — e gerar de novo invalida o endereço antigo de propósito.
+    if str(fields.get("infinitepay_regenerate_token") or "").lower() in ("1", "true", "on"):
+        import secrets
+
+        settings.infinitepay_webhook_token = secrets.token_urlsafe(32)
+
     tax_raw = str(fields.get("tax_rate") or "").strip()
     try:
         if tax_raw:

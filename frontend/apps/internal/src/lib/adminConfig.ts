@@ -7,6 +7,12 @@ export interface AdminSettings {
   educamanto_seller_id: number | null;
   /** % da comissão do responsável EducaManto sobre o lucro do evento. `null` = padrão de 5%. */
   educamanto_commission_rate: number | null;
+  /** InfiniteTag da conta que recebe as vendas da Loja de Interações Virtuais (sem o `$`). */
+  infinitepay_handle: string;
+  /** O token do webhook nunca trafega — só se ele já existe. */
+  infinitepay_webhook_configured: boolean;
+  /** Enviar `true` gera um token novo (invalida o endereço anterior). */
+  infinitepay_regenerate_token?: boolean;
   tax_rate: number | null;
   fator_r_threshold: number | null;
   manto_address: string;

@@ -2153,6 +2153,37 @@ def serialize_campaign(campaign: VirtualCampaign) -> dict[str, Any]:
     }
 
 
+def listar_vitrine() -> list[dict[str, Any]]:
+    """Campanhas publicadas, para a vitrine da loja (feature 224e).
+
+    É o que a raiz de `alo.mantoproducoes.com.br` mostra: antes ela caía no catálogo de eventos,
+    que é outro produto. Payload enxuto de card — o resto a landing de cada campanha carrega.
+
+    `tem_horario` diz se ainda há chamada ao vivo para vender, e `tem_gravado` se ainda há vídeo
+    no estoque. Uma campanha sem nenhum dos dois continua listada, mas o card avisa: sumir dela
+    de repente confundiria quem recebeu o link e voltaria depois.
+    """
+    campanhas = (
+        VirtualCampaign.query.filter_by(status=VIRTUAL_CAMPAIGN_STATUS_PUBLICADA)
+        .order_by(VirtualCampaign.created_at.desc())
+        .all()
+    )
+    vitrine = []
+    for campanha in campanhas:
+        character = campanha.character
+        vitrine.append({
+            "slug": campanha.slug,
+            "title": campanha.title,
+            "character_name": character.name if character else None,
+            "cover_url": campanha.cover_url,
+            "price_live": _money(campanha.price_live),
+            "price_recorded": _money(campanha.price_recorded),
+            "tem_horario": len(listar_slots_disponiveis(campanha)) > 0,
+            "tem_gravado": campanha.recorded_available > 0,
+        })
+    return vitrine
+
+
 def serialize_campaign_admin(campaign: VirtualCampaign) -> dict[str, Any]:
     """Payload administrativo — acrescenta configuração, números de venda e as opções de acervo.
 

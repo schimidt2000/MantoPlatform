@@ -35,6 +35,10 @@ def _settings_summary(settings: SiteSetting) -> dict:
         "default_commission_rate": settings.default_commission_rate,
         "educamanto_seller_id": settings.educamanto_seller_id,
         "educamanto_commission_rate": settings.educamanto_commission_rate,
+        # Loja de Interações Virtuais (feature 224f). O token do webhook NUNCA sai daqui — é o
+        # segredo que autentica o aviso de pagamento; a tela só precisa saber se já existe.
+        "infinitepay_handle": settings.infinitepay_handle or "",
+        "infinitepay_webhook_configured": bool(settings.infinitepay_webhook_token),
         "tax_rate": settings.tax_rate,
         "fator_r_threshold": settings.fator_r_threshold,
         "manto_address": settings.manto_address or "",

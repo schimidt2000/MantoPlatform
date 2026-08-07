@@ -45,6 +45,16 @@ def _campanha_publicada_ou_erro(slug: str) -> tuple[Any, Any]:
     return campaign, None
 
 
+@api_bp.route("/virtuais/vitrine", methods=["GET"])
+def api_virtuais_vitrine() -> Any:
+    """Campanhas publicadas — a home da loja (feature 224e).
+
+    O caminho é `/vitrine`, e não `/campanhas`, porque `GET /api/virtuais/campanhas` já é a
+    listagem **interna** (gated) e `/campanhas/publicadas` colidiria com o `<slug>` da landing.
+    """
+    return jsonify({"campanhas": ops.listar_vitrine()})
+
+
 @api_bp.route("/virtuais/campanhas/<slug>", methods=["GET"])
 def api_virtuais_campanha_publica(slug: str) -> Any:
     """Landing pública da campanha (FR-011)."""
