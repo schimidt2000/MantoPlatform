@@ -4,9 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **224f (loja virtual
-> pronta para vender: landing, endereço e conta de recebimento)** · Head de migration:
-> `b8e4d27a91f5`
+> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **225 (Produção de
+> Figurinos)** · Head de migration: `c1d5a83b64e7`
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -38,6 +37,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 143 |
 | **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 134 |
 | **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 152 |
 | **224d** | `alo.mantoproducoes.com.br` como endereço curto da Loja de Interações Virtuais | 2026-08-07 | `—` | (aqui) | 186 |
@@ -139,6 +139,71 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 225 — Produção de Figurinos            (main · 2026-08-07 · `c1d5a83b64e7`)
+
+**Motivação.** Figurino é **70% de todo o gasto extra da empresa**: R$ 47.969,81 de R$ 68.149,66,
+em 40 lançamentos. E era a única parte da operação sem lugar no sistema. `FigurinoSheet` (616
+fichas) descreve o figurino **pronto** de um personagem — a peça é uma string dentro de um JSON,
+sem identidade, sem responsável, sem prazo, sem custo. `SpecialExpense` registra o dinheiro
+**depois** que saiu. No meio, o trabalho de produzir não tinha registro.
+
+O caso que motivou: o figurino das Cartas (Alice/Cuiabá, evento 395) são **dez** lançamentos
+soltos — pedraria, aviamento, bota, lentes, sapato, fitas de gorgurão, a comida de quem virou até
+as 23:00 e a "parte final" de R$ 4.800. Ninguém conseguia responder, a partir do sistema, quanto
+custou, quem estava fazendo, ou se ficou pronto a tempo. Vinculados ao pedido novo, somam
+**R$ 6.310,18** — R$ 1.310,18 acima do previsto.
+
+**Modelo.** Três tabelas: `figurino_producoes` (o pedido), `figurino_producao_anexos` (fotos e
+orçamentos, com `kind` discriminando e `supplier_name`/`amount` só para orçamento) e
+`figurino_producao_logs` (histórico com autor, papel, texto e **foto** — o "mini histórico de
+evolução"). Mais `special_expenses.figurino_producao_id`.
+
+Fluxo: `solicitado → aprovado → em_producao → pronto`, com `cancelado` como saída. Só SUPERADMIN
+aprova (é onde se segura o gasto antes de acontecer); Figurino e Superadmin executam; **qualquer**
+papel interno abre pedido — quem sabe que falta uma bermuda é quem vendeu o evento, não a oficina.
+
+**Decisões e por quê.**
+
+- **Evento e ficha são vínculos opcionais.** Cinco dos 40 gastos de figurino não têm evento
+  ("Mascotes Copa 4/4", "SAPATO GABBY HUMANA"): é produção de acervo, não de show.
+- **`ON DELETE SET NULL` em tudo que aponta para fora.** Excluir o evento não pode apagar o
+  pedido, e apagar o pedido não pode apagar o gasto — o dinheiro saiu de verdade. É a lição que a
+  224 aprendeu apanhando: `special_expenses.event_id` era `NO ACTION` e quebrava a exclusão do
+  evento com violação de chave estrangeira.
+- **Vincular gasto existente, nunca recriar.** Recriar perderia data de competência, comprovante e
+  aprovação. É o que permite organizar os 40 lançamentos que já estão no banco.
+- **O total conta só gasto aprovado** — mesmo recorte da DRE. Um pedido não pode exibir um total
+  que o financeiro ainda não reconheceu.
+- **Painel pessoal na home.** Primeiro do sistema: todos os outros são por **papel**, este é por
+  **identidade** (`responsible_id == user.id`). Por isso não passa por `_effective_has_role`, e o
+  "Ver como" de um super admin não muda de quem são os pedidos.
+
+**A armadilha do evento fantasma.** O prazo do figurino vira um compromisso de dia inteiro no
+Google, com a pessoa responsável **convidada** — e vive no mesmo calendário dos shows, porque
+`CALENDAR_ID = "eventos@mantoproducoes.com.br"` é o único que a conta conectada tem. `sync_events`
+importa **tudo** que encontra: sem guarda, cada prazo viraria um `CalendarEvent` na plataforma,
+inflando agenda, funil e DRE em silêncio.
+
+A marca é `extendedProperties.private.manto_kind` (`_is_manto_task_item`, `calendar/routes.py`),
+não prefixo no título: título é editável dentro do Google, e uma renomeação inocente traria o
+fantasma de volta. `upsert_task_event` é uma função **nova e separada** de `insert_event` — o par
+que serve aos eventos de show não foi tocado, para não arriscar o que já sincroniza.
+
+**Pegadinha nova, e ela mordeu.** Verificando a feature na tela, um compromisso **de verdade** foi
+criado na agenda da empresa e um convite chegou à responsável real (Lucimara). Causa: `manto_local`
+é espelho fiel da produção, então traz `SiteSetting.google_token`, e o calendário de destino é
+fixo — exatamente a armadilha que `_suppress_mail` já documentava para e-mail, por outro caminho.
+Criado `config._suppress_calendar_invites` (`CALENDAR_SUPPRESS_INVITES`), com a mesma regra: banco
+em localhost não escreve na agenda real, a menos que alguém peça com
+`CALENDAR_ALLOW_LOCAL_INVITES=true`. O compromisso foi removido e a agenda varrida.
+
+**Verificação.** `scripts/db/verify_producao_figurinos.py` — 50/50. Cobre o ciclo completo, o RBAC
+da aprovação, o total contando só aprovado, a exclusão do evento com o pedido sobrevivendo, o
+`sync_events` **não** criando fantasma, a trava de ambiente do Google, e o painel pessoal
+aparecendo só para o responsável. Sem regressão: `verify_cancelamento_evento` 44/44,
+`verify_151_excluir_sync` 31/31. (`verify_154_talentos_figurino` segue 57/58 — falha pré-existente,
+confirmada com `git stash`, não relacionada.)
 
 ### 224f — Conta de recebimento da Loja de Interações Virtuais ganhou tela
 `main` · **2026-08-07** · sem migration

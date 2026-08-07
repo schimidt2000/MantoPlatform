@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from google_auth_oauthlib.flow import Flow
@@ -286,6 +286,77 @@ def update_event(
     if location:
         body["location"] = location
     return service.events().patch(calendarId=calendar_id, eventId=google_event_id, body=body).execute()
+
+
+def upsert_task_event(
+    calendar_id: str,
+    title: str,
+    day: "date",
+    *,
+    google_event_id: str | None = None,
+    description: str = "",
+    attendee_emails: list[str] | None = None,
+    extended_private: dict[str, str] | None = None,
+) -> dict:
+    """Cria ou atualiza um compromisso de **dia inteiro** com convidados (feature 225).
+
+    Separado de `insert_event`/`update_event` de propósito: aquele par serve aos eventos de show,
+    que são a fonte de verdade da agenda e passam pelo sincronizador. Este serve a prazos internos
+    de trabalho — dia inteiro, com a pessoa responsável convidada — e **nunca** deve virar um
+    `CalendarEvent` na plataforma. É `extended_private` que garante isso: `sync_events` pula todo
+    item que carregue `extendedProperties.private.manto_kind`.
+
+    Args:
+        day: Dia do prazo. Vira um evento de dia inteiro (`start.date`), porque prazo não tem
+            hora — e evento de dia inteiro aparece na faixa do topo da agenda, onde se lê de
+            relance, em vez de sumir no meio dos horários do dia.
+        google_event_id: Quando informado, atualiza esse compromisso em vez de criar outro.
+        attendee_emails: Convidados. O Google manda o convite por e-mail e o compromisso entra
+            na agenda pessoal de cada um (`sendUpdates="all"`).
+
+    Returns:
+        O dict do evento criado/atualizado (inclui ``id``).
+
+    Raises:
+        RuntimeError: Google não conectado. Quem chama trata como aviso, nunca como falha da
+            operação de negócio.
+    """
+    creds = load_credentials()
+    if not creds:
+        raise RuntimeError("Google não conectado. Acesse /google/connect primeiro.")
+    service = build("calendar", "v3", credentials=creds)
+
+    # `end.date` é EXCLUSIVO na API do Google: um evento de um dia só termina no dia seguinte.
+    body: dict = {
+        "summary": title,
+        "description": description,
+        "start": {"date": day.isoformat()},
+        "end": {"date": (day + timedelta(days=1)).isoformat()},
+        "transparency": "transparent",  # prazo não ocupa a pessoa: ela segue livre para eventos
+        "reminders": {
+            "useDefault": False,
+            "overrides": [{"method": "popup", "minutes": 12 * 60}],  # véspera, meio-dia
+        },
+    }
+    if attendee_emails is not None:
+        body["attendees"] = [{"email": e} for e in attendee_emails if e]
+    if extended_private:
+        body["extendedProperties"] = {"private": dict(extended_private)}
+
+    if google_event_id:
+        return (
+            service.events()
+            .patch(
+                calendarId=calendar_id, eventId=google_event_id,
+                body=body, sendUpdates="all",
+            )
+            .execute()
+        )
+    return (
+        service.events()
+        .insert(calendarId=calendar_id, body=body, sendUpdates="all")
+        .execute()
+    )
 
 
 def delete_event(calendar_id: str, google_event_id: str) -> None:

@@ -574,6 +574,67 @@ def send_new_expense_alert_email(expense, users: list) -> int:
     return sent
 
 
+# ── Email de pedido de figurino designado (feature 225) ──────────────────────
+
+def send_figurino_producao_email(producao, user) -> bool:
+    """Avisa a pessoa que ela ficou responsável por produzir uma peça de figurino.
+
+    O convite do Google Agenda cobre o prazo; este e-mail cobre o *conteúdo* — o que é, para qual
+    evento, quanto está previsto gastar. Os dois são independentes de propósito: o convite pode
+    falhar (conta sem permissão, pessoa sem e-mail no Google) sem que o aviso se perca.
+
+    Args:
+        producao: O ``FigurinoProducao`` já commitado.
+        user: A pessoa responsável.
+
+    Returns:
+        True se o e-mail saiu.
+    """
+    if not user or not user.email:
+        return False
+
+    prazo = producao.prazo_efetivo
+    rows = _info_row("Peça", producao.title)
+    if producao.quantity and producao.quantity > 1:
+        rows += _info_row("Quantidade", str(producao.quantity))
+    if producao.event:
+        rows += _info_row("Evento", producao.event.title)
+        if producao.event.start_at:
+            rows += _info_row("Data do evento", producao.event.start_at.strftime("%d/%m/%Y"))
+    if prazo:
+        rows += _info_row("Prazo", prazo.strftime("%d/%m/%Y"))
+    if producao.estimated_cost is not None:
+        valor = f"R$ {producao.estimated_cost:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+        rows += _info_row("Custo previsto", valor)
+
+    corpo = _paragraph(
+        f"Você ficou responsável por produzir <strong>{producao.title}</strong>."
+    )
+    if producao.description:
+        corpo += _paragraph(producao.description)
+
+    aviso = (
+        "O prazo também foi para a sua agenda — você deve ter recebido o convite."
+        if prazo
+        else "Ainda não há prazo definido para esta peça."
+    )
+
+    content = (
+        _greeting(user.name.split()[0] if user.name else "Olá")
+        + corpo
+        + _info_box(rows)
+        + _alert_box(aviso, color="#fffbea", border="#f0d060", text="#7a5800")
+    )
+    html = _html_wrap(
+        content, preheader=f"Você é responsável por produzir: {producao.title}"
+    )
+    return _send(
+        to=user.email,
+        subject=f"Figurino para produzir: {producao.title}",
+        html=html,
+    )
+
+
 # ── Helper interno ─────────────────────────────────────────────────────────────
 
 def send_audit_report_email(subject: str, content_html: str, users: list) -> int:

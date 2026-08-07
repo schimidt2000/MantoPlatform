@@ -350,6 +350,48 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   `POST|DELETE /api/figurino/<id>/photo` · `POST /api/figurino/<id>/photo/rotate`.
 - **Vínculos**: Ficha ↔ Personagem do Catálogo ↔ Elenco de Evento (`EventRole`).
 
+#### `/figurinos/producao` — Produção de Figurinos *(feature 225)*
+- **Acesso**: qualquer papel interno lê e abre pedido; **Figurino/Superadmin** executam;
+  **só Superadmin aprova**. As flags vêm do servidor em `flags` (`can_create`, `can_execute`,
+  `can_approve`) — a tela não recalcula RBAC.
+- **UX**: quatro números no topo (em aberto, atrasados, previsto, gasto lançado), filtros por
+  situação, **"Só os meus"** e busca. A tabela é ordenada por **prazo**, não por criação: é o
+  prazo que organiza o trabalho do dia. Quem não tem prazo vai para o fim.
+  Badge de prazo em vermelho quando venceu ou vence em ≤2 dias; dourado até 7 dias.
+  Sem prazo próprio, vale a data do evento.
+- **Novo pedido**: título, detalhes, evento (opcional — via data + seletor, mesmo padrão de
+  Gastos Extras), prazo, quantidade, custo previsto. O campo **Responsável** só aparece para
+  quem executa: quem pede não escolhe quem faz.
+- **Rotas declaradas ANTES das dinâmicas** em `App.tsx` — `/figurinos/producao/12` não pode cair
+  em `/figurinos/:id/edit` (mesmo cuidado de `/events/cancelamentos` na 224).
+- **API**: `GET /api/figurino/producoes` · `POST /api/figurino/producoes` ·
+  `GET /api/figurino/producoes/responsaveis`.
+
+#### `/figurinos/producao/:id` — Detalhe do pedido
+- **UX**: coluna esquerda tem o que precisa ser feito, as fotos, os **gastos** e o **histórico**;
+  a direita tem as ações de situação, os dados, o responsável e os anexos.
+  - **Gastos**: soma só o aprovado, compara com o previsto e avisa em vermelho quando estourou.
+    "Vincular" oferece os gastos do mesmo evento e os de categoria Figurino — **vincular não
+    recria nada**, o lançamento continua com data, comprovante e aprovação.
+  - **Orçamentos**: o menor valor vem destacado em verde — a tela existe para comparar propostas.
+  - **Histórico**: mudanças de situação, vínculos e notas livres, do mais novo para o mais antigo.
+    Uma foto do andamento entra **como linha do histórico**, com legenda — é o que faz dele uma
+    evolução e não uma lista.
+  - Trocar o responsável dispara e-mail **e** o convite do Google. Se o Google falhar, aparece
+    uma faixa dourada de aviso: o pedido foi salvo, o que falhou foi a integração.
+- **Os botões de situação vêm do servidor** (`transicoes`) — a tela não decide para onde o pedido
+  pode ir. Cancelar exige motivo.
+- **API**: `GET|PATCH|DELETE /api/figurino/producoes/<id>` ·
+  `POST /api/figurino/producoes/<id>/status` · `.../comentarios` · `.../anexos` ·
+  `.../gastos` · `.../gastos-vinculaveis`.
+
+#### Home — painel "🧵 Minhas peças de figurino" *(feature 225)*
+Primeiro painel **pessoal** da home: todos os outros são por papel, este é por identidade
+(`responsible_id == user.id`). Aparece no topo, só para quem tem peça sob sua responsabilidade, e
+some sozinho quando não há nenhuma. Vermelho para atrasado ou ≤2 dias — mesma linguagem de
+urgência das tarefas de casting, mas medida pelo **prazo do pedido**, que costuma ser bem antes do
+show. Chave `figurino_producao` em `GET /api/dashboard`.
+
 ---
 
 ### A.4.1 Impressão 3D *(seção nova de navegação — feature 200)*

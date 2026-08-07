@@ -25,7 +25,9 @@ from .service import (
     delete_event,
 )
 from .. import db
-from app.constants import RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CLIENT_RELATION_TIPOS
+from app.constants import (
+    RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CLIENT_RELATION_TIPOS, GCAL_KIND_KEY,
+)
 from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
 from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense, ClientFeedback, EventReimbursement, EventAcrescimo
@@ -2176,10 +2178,31 @@ def _is_virtual_event(event) -> bool:
     return event is not None and event.event_type == EVENT_TYPE_VIRTUAL
 
 
+def _is_manto_task_item(item: dict) -> bool:
+    """True se o item do Google é um compromisso interno da plataforma, não um evento de show.
+
+    Hoje só a oficina de figurino cria desses (feature 225): o prazo de uma peça, de dia inteiro,
+    com a pessoa responsável convidada. Ele vive no mesmo calendário dos shows — é o único que a
+    conta conectada tem — e por isso a sincronização o encontraria e o importaria como se fosse
+    uma venda, criando um evento fantasma na agenda, no funil e na DRE.
+
+    A marca é `extendedProperties.private.manto_kind`, escrita por
+    `calendar.service.upsert_task_event`. Não usamos prefixo no título porque título é editável
+    por qualquer pessoa dentro do Google — e uma renomeação inocente traria o fantasma de volta.
+    """
+    private = (item.get("extendedProperties") or {}).get("private") or {}
+    return bool(private.get(GCAL_KIND_KEY))
+
+
 def sync_events(items: list[dict]) -> None:
     for item in items:
         google_id = item.get("id")
         if not google_id:
+            continue
+
+        # Compromisso interno (prazo de figurino): a plataforma criou, a plataforma é dona, e ele
+        # nunca vira CalendarEvent. Ver `_is_manto_task_item`.
+        if _is_manto_task_item(item):
             continue
 
         # Evento de venda virtual: a sincronização não encosta nele em nenhum caminho —

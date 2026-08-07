@@ -7,6 +7,9 @@ import re as _re
 from . import db, login_manager
 from datetime import datetime, date
 from .constants import (
+    FIGURINO_ANEXO_FOTO,
+    FIGURINO_PROD_ABERTOS,
+    FIGURINO_PROD_SOLICITADO,
     GIFT_3D_STATUS_PENDENTE,
     now_sp,
     RoleName,
@@ -963,6 +966,15 @@ class SpecialExpense(db.Model):
     # (lucro do evento = venda − cachês − gastos extras aprovados)
     event_id          = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
 
+    # Vínculo opcional a um pedido de produção de figurino (feature 225). Responde "quanto custou
+    # o figurino das Cartas?", que hoje exige ler oito descrições soltas e adivinhar quais são do
+    # mesmo trabalho. SET NULL: apagar o pedido não pode apagar o lançamento contábil.
+    figurino_producao_id = db.Column(
+        db.Integer,
+        db.ForeignKey("figurino_producoes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # True quando um gestor (FINANCEIRO/SUPERADMIN) editou os dados do gasto na mesma operação
     # em que ele está/ficou "aprovado" (migração 179). Não é um status novo — os cálculos que já
     # filtram status=="aprovado" (DRE, planilha de pagamentos, custo de evento) continuam
@@ -975,6 +987,10 @@ class SpecialExpense(db.Model):
     approved_by    = db.relationship("User", foreign_keys=[approved_by_id], lazy=True)
     reimburse_user = db.relationship("User", foreign_keys=[reimburse_user_id], lazy=True)
     event          = db.relationship("CalendarEvent", foreign_keys=[event_id], lazy=True)
+    figurino_producao = db.relationship(
+        "FigurinoProducao", foreign_keys=[figurino_producao_id], lazy=True,
+        backref=db.backref("gastos", lazy=True, order_by="SpecialExpense.expense_date"),
+    )
 
     @property
     def receipt_url(self):
@@ -2691,3 +2707,190 @@ class EmailBounce(db.Model):
     talent = db.relationship("Talent", lazy="joined", foreign_keys=[talent_id])
     user = db.relationship("User", lazy="joined", foreign_keys=[user_id])
     resolved_by = db.relationship("User", lazy=True, foreign_keys=[resolved_by_id])
+
+
+class FigurinoProducao(db.Model):
+    """Pedido de produção de uma peça de figurino (feature 225).
+
+    É a entidade que faltava entre o catálogo e o caixa. ``FigurinoSheet`` descreve o figurino
+    **pronto** de um personagem (a peça é uma string dentro de um JSON, sem identidade);
+    ``SpecialExpense`` registra o dinheiro **depois** que saiu. No meio — o trabalho de produzir,
+    com responsável, prazo e evolução — não havia nada, e por isso os oito lançamentos do figurino
+    das Cartas (Alice/Cuiabá) ficam soltos, sem nada dizendo que são um trabalho só.
+
+    O vínculo com evento e com ficha é **opcional** de propósito: cinco dos 40 gastos de figurino
+    de hoje são produção de acervo, sem show ("Mascotes Copa 4/4", "SAPATO GABBY HUMANA").
+    """
+
+    __tablename__ = "figurino_producoes"
+    __table_args__ = (
+        db.Index("ix_figurino_producoes_status", "status"),
+        db.Index("ix_figurino_producoes_responsible_id", "responsible_id"),
+        db.Index("ix_figurino_producoes_event_id", "event_id"),
+        db.Index("ix_figurino_producoes_due_date", "due_date"),
+    )
+
+    id          = db.Column(db.Integer, primary_key=True)
+    title       = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    status      = db.Column(
+        db.String(20), nullable=False,
+        default=FIGURINO_PROD_SOLICITADO, server_default=FIGURINO_PROD_SOLICITADO,
+    )
+    quantity    = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+
+    # SET NULL, não CASCADE: excluir o evento não pode apagar o pedido — o trabalho existiu e o
+    # dinheiro saiu. Mesma regra que a feature 224 teve que aplicar a `special_expenses.event_id`
+    # (lá o NO ACTION original quebrava a exclusão do evento com violação de chave estrangeira).
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="SET NULL"), nullable=True
+    )
+    figurino_sheet_id = db.Column(
+        db.Integer, db.ForeignKey("figurino_sheets.id", ondelete="SET NULL"), nullable=True
+    )
+
+    requested_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    responsible_id  = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_by_id  = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at     = db.Column(db.DateTime, nullable=True)
+
+    due_date       = db.Column(db.Date, nullable=True)
+    estimated_cost = db.Column(db.Numeric(10, 2), nullable=True)
+
+    done_at             = db.Column(db.DateTime, nullable=True)
+    cancelled_at        = db.Column(db.DateTime, nullable=True)
+    cancellation_reason = db.Column(db.Text, nullable=True)
+
+    # Compromisso criado na agenda da empresa com a pessoa responsável como convidada (FR-022).
+    # Guardado para poder mover (mudou o prazo), reconvidar (mudou o responsável) e apagar
+    # (pedido pronto ou cancelado) sem depender de busca por título.
+    google_event_id = db.Column(db.String(200), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    event          = db.relationship("CalendarEvent", lazy="joined", foreign_keys=[event_id])
+    figurino_sheet = db.relationship("FigurinoSheet", lazy="joined")
+    requested_by   = db.relationship("User", lazy="joined", foreign_keys=[requested_by_id])
+    responsible    = db.relationship("User", lazy="joined", foreign_keys=[responsible_id])
+    approved_by    = db.relationship("User", lazy=True, foreign_keys=[approved_by_id])
+
+    anexos = db.relationship(
+        "FigurinoProducaoAnexo", back_populates="producao",
+        cascade="all, delete-orphan", order_by="FigurinoProducaoAnexo.created_at",
+    )
+    logs = db.relationship(
+        "FigurinoProducaoLog", back_populates="producao",
+        cascade="all, delete-orphan", order_by="FigurinoProducaoLog.created_at.desc()",
+    )
+
+    @property
+    def is_open(self) -> bool:
+        """True enquanto o pedido ainda dá trabalho a alguém."""
+        return self.status in FIGURINO_PROD_ABERTOS
+
+    @property
+    def prazo_efetivo(self):
+        """Prazo do pedido, caindo na data do evento quando ninguém informou um (FR-004)."""
+        if self.due_date:
+            return self.due_date
+        if self.event and self.event.start_at:
+            return self.event.start_at.date()
+        return None
+
+    @property
+    def dias_para_prazo(self) -> int | None:
+        """Dias até o prazo (negativo se venceu); None quando não há prazo."""
+        prazo = self.prazo_efetivo
+        if not prazo:
+            return None
+        return (prazo - now_sp().date()).days
+
+    @property
+    def is_late(self) -> bool:
+        """True quando o prazo já passou e o pedido continua aberto."""
+        dias = self.dias_para_prazo
+        return self.is_open and dias is not None and dias < 0
+
+    @property
+    def total_gasto(self):
+        """Soma dos gastos extras **aprovados** vinculados ao pedido.
+
+        Só aprovados: é o mesmo recorte da DRE e da planilha de pagamentos, e um pedido não pode
+        exibir um total que o financeiro ainda não reconheceu.
+        """
+        from decimal import Decimal
+
+        return sum(
+            (g.amount or Decimal("0")) for g in self.gastos if g.status == "aprovado"
+        ) or Decimal("0")
+
+
+class FigurinoProducaoAnexo(db.Model):
+    """Foto de evolução ou orçamento de fornecedor anexado a um pedido (feature 225).
+
+    Uma tabela só, com ``kind`` discriminando, porque a forma do dado é a mesma (arquivo + nome
+    original + quem subiu). ``supplier_name``/``amount`` só fazem sentido em ``kind="orcamento"``,
+    e existem para o que o cliente pediu: colocar as propostas lado a lado antes de decidir.
+    """
+
+    __tablename__ = "figurino_producao_anexos"
+    __table_args__ = (
+        db.Index("ix_figurino_producao_anexos_producao_id", "producao_id"),
+    )
+
+    id         = db.Column(db.Integer, primary_key=True)
+    producao_id = db.Column(
+        db.Integer, db.ForeignKey("figurino_producoes.id", ondelete="CASCADE"), nullable=False
+    )
+    kind          = db.Column(db.String(20), nullable=False, default=FIGURINO_ANEXO_FOTO)
+    file_path     = db.Column(db.String(500), nullable=False)
+    original_name = db.Column(db.String(255), nullable=True)
+    caption       = db.Column(db.String(300), nullable=True)
+
+    # Só para kind="orcamento".
+    supplier_name = db.Column(db.String(200), nullable=True)
+    amount        = db.Column(db.Numeric(10, 2), nullable=True)
+
+    uploaded_by_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    producao    = db.relationship("FigurinoProducao", back_populates="anexos")
+    uploaded_by = db.relationship("User", lazy="joined", foreign_keys=[uploaded_by_id])
+
+
+class FigurinoProducaoLog(db.Model):
+    """Uma linha do histórico de evolução de um pedido de produção (feature 225).
+
+    Mesma forma de ``EventLog`` (autor + papel + texto), porque é a mesma coisa: a narrativa que
+    alguém lê depois para entender o que aconteceu. A diferença é ``photo_path`` — aqui a foto faz
+    parte do relato ("ficou assim hoje"), que é exatamente o "mini histórico de evolução" pedido.
+    ``status_from``/``status_to`` ficam preenchidos quando a linha nasceu de uma mudança de estado.
+    """
+
+    __tablename__ = "figurino_producao_logs"
+    __table_args__ = (
+        db.Index("ix_figurino_producao_logs_producao_id", "producao_id"),
+    )
+
+    id          = db.Column(db.Integer, primary_key=True)
+    producao_id = db.Column(
+        db.Integer, db.ForeignKey("figurino_producoes.id", ondelete="CASCADE"), nullable=False
+    )
+    actor_name  = db.Column(db.String(120), nullable=False, default="Sistema")
+    actor_role  = db.Column(db.String(120), nullable=True)
+    message     = db.Column(db.Text, nullable=False)
+    photo_path  = db.Column(db.String(500), nullable=True)
+    status_from = db.Column(db.String(20), nullable=True)
+    status_to   = db.Column(db.String(20), nullable=True)
+    created_at  = db.Column(db.DateTime, default=now_sp, nullable=False)
+
+    producao = db.relationship("FigurinoProducao", back_populates="logs")

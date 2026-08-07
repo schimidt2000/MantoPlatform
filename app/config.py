@@ -39,6 +39,30 @@ def _suppress_mail() -> bool:
     return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
 
 
+def _suppress_calendar_invites() -> bool:
+    """Decide se este processo está proibido de escrever compromissos no Google Agenda real.
+
+    Mesma armadilha do e-mail (`_suppress_mail`), por um caminho diferente: o token do Google
+    também vive **no banco** (``SiteSetting.google_token``) e o calendário de destino é fixo
+    (``eventos@mantoproducoes.com.br``). Um processo de desenvolvimento apontado para a cópia
+    local herda as duas coisas e cria compromisso de verdade na agenda da empresa — com convite
+    de verdade para o e-mail pessoal de quem for designado.
+
+    Não é hipotético: aconteceu ao verificar a feature 225 na tela, e um convite chegou à
+    responsável real antes de ser cancelado.
+
+    Vale só para os compromissos internos criados pela plataforma (prazo de figurino). A
+    sincronização dos eventos de show não passa por aqui — ela precisa continuar funcionando
+    localmente, e não convida ninguém.
+    """
+    if os.getenv("CALENDAR_SUPPRESS_INVITES", "").lower() == "true":
+        return True
+    if os.getenv("CALENDAR_ALLOW_LOCAL_INVITES", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
 def _resolve_secret_key() -> str:
     """Resolve a SECRET_KEY de forma segura (feature 074).
 
@@ -109,6 +133,11 @@ class Config:
     # Trava de ambiente: impede que um processo local/de teste apontado para o espelho da
     # produção envie e-mail real para artista e cliente. Ver `_suppress_mail`.
     MAIL_SUPPRESS_SEND = _suppress_mail()
+
+    # A mesma trava, para o Google Agenda: o token também vem do banco espelhado e o calendário
+    # é fixo, então um processo local cria compromisso — e convite — de verdade. Ver
+    # `_suppress_calendar_invites` (feature 225).
+    CALENDAR_SUPPRESS_INVITES = _suppress_calendar_invites()
 
     # Varredura das devoluções de email (feature 219). Lê a MESMA conta que envia, por IMAP e em
     # modo somente leitura, com a App Password já configurada acima — sem credencial nova. Só

@@ -11,6 +11,7 @@ import type {
   DashboardTaskRef,
   EnsaioEventRef,
   EnsaioSummary,
+  MinhaPecaRef,
   PendingPayment,
 } from "../lib/types";
 import { SectorPanel, getUrgency } from "../components/SectorPanel";
@@ -197,6 +198,49 @@ function PendingPaymentRow({ item }: { item: PendingPayment }) {
   );
 }
 
+/**
+ * Uma peça de figurino sob responsabilidade de quem está logado (feature 225).
+ *
+ * Não reusa `TaskRow` porque a urgência aqui não vem de `start_at` do evento e sim do prazo do
+ * pedido — que pode ser bem antes do show, e é justamente o que se perde de vista hoje.
+ */
+function MinhaPecaRow({ item }: { item: MinhaPecaRef }) {
+  const dias = item.dias_para_prazo;
+  const critico = item.is_late || (dias != null && dias <= 2);
+  const rotulo = item.is_late
+    ? `ATRASADO ${Math.abs(dias ?? 0)}d`
+    : dias == null
+      ? null
+      : dias === 0
+        ? "HOJE"
+        : `${dias}d`;
+
+  return (
+    <div
+      className="-mx-4 flex items-center justify-between gap-3 border-b border-line px-4 py-2.5 text-sm last:border-b-0"
+      style={critico ? { background: "rgba(228,88,88,0.06)" } : undefined}
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 font-medium text-ink">
+          {item.title}
+          {rotulo && (
+            <MetricBadge tone={critico ? "red" : "neutral"} size="xs">
+              {rotulo}
+            </MetricBadge>
+          )}
+        </div>
+        <span className="text-muted">
+          {item.status_label}
+          {item.event_title && ` — ${item.event_title}`}
+        </span>
+      </div>
+      <Button asChild variant="outline" size="sm" className="shrink-0">
+        <Link to={`/figurinos/producao/${item.id}`}>Abrir</Link>
+      </Button>
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const reduceMotion = useReducedMotion();
   const { data: user } = useCurrentUser();
@@ -225,6 +269,19 @@ export function DashboardPage() {
           transition={{ duration: 0.22, ease: "easeOut" }}
           className="space-y-3"
         >
+          {/* Primeiro painel da home de propósito (feature 225): é o único pessoal — o que está
+              nas mãos de quem está lendo. Só aparece para quem tem peça sob sua responsabilidade. */}
+          {dashboard.data.figurino_producao && (
+            <SectorPanel
+              title="🧵 Minhas peças de figurino"
+              count={dashboard.data.figurino_producao.pending}
+            >
+              {dashboard.data.figurino_producao.items.map((item) => (
+                <MinhaPecaRow key={item.id} item={item} />
+              ))}
+            </SectorPanel>
+          )}
+
           {dashboard.data.casting && (
             <SectorPanel title="👥 Casting" count={dashboard.data.casting.pending.length}>
               {dashboard.data.casting.pending.length === 0 ? (

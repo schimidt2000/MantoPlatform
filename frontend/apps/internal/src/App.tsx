@@ -13,6 +13,8 @@ import { TalentsListPage } from "./pages/TalentsListPage";
 import { TalentDetailPage } from "./pages/TalentDetailPage";
 import { FigurinoListPage } from "./pages/FigurinoListPage";
 import { FigurinoFormPage } from "./pages/FigurinoFormPage";
+import { FigurinoProducaoListPage } from "./pages/FigurinoProducaoListPage";
+import { FigurinoProducaoDetailPage } from "./pages/FigurinoProducaoDetailPage";
 import { VendasPipelinePage } from "./pages/VendasPipelinePage";
 import { FinanceiroDashboardPage } from "./pages/FinanceiroDashboardPage";
 import { ComissoesPage } from "./pages/ComissoesPage";
@@ -109,6 +111,10 @@ export function App() {
           <Route path="/marketing/painel" element={<MarketingPainelPage />} />
           <Route path="/marketing/metas" element={<MarketingMetasPage />} />
           <Route path="/figurinos" element={<FigurinoListPage />} />
+          {/* Declaradas ANTES das dinâmicas: "/figurinos/producao/12" não pode cair em
+              "/figurinos/:id/edit" (mesmo cuidado que "/events/cancelamentos" exigiu na 224). */}
+          <Route path="/figurinos/producao" element={<FigurinoProducaoListPage />} />
+          <Route path="/figurinos/producao/:id" element={<FigurinoProducaoDetailPage />} />
           <Route path="/figurinos/new" element={<FigurinoFormPage />} />
           <Route path="/figurinos/:id/edit" element={<FigurinoFormPage />} />
           <Route path="/vendas" element={<VendasPipelinePage />} />

@@ -501,9 +501,19 @@ def build_dashboard_summary(
         else []
     )
 
+    # Painel PESSOAL (feature 225) — o único da home cujo gate é a identidade, não o papel:
+    # quem tem peça de figurino sob sua responsabilidade precisa ver isso, seja qual for o papel,
+    # e o "Ver como" de um super admin não muda de quem são os pedidos. Devolve None quando a
+    # pessoa não é responsável por nada, e aí o React simplesmente não desenha o painel — mesmo
+    # contrato das outras seções.
+    from app.figurino.producao_ops import resumo_home as _producao_resumo_home
+
+    minhas_pecas = _producao_resumo_home(user)
+
     return {
         "casting": casting,
         "figurino": figurino,
+        "figurino_producao": minhas_pecas,
         "ensaio": ensaio,
         "comercial": comercial,
         "financeiro": financeiro,

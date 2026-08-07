@@ -72,6 +72,47 @@ GIFT_3D_STATUSES = [
 ]
 
 
+# Feature 225: ciclo de vida de um `FigurinoProducao`, na ordem em que a oficina o percorre.
+# 'pronto' é o estado final feliz; 'cancelado' é a saída (pedido recusado na aprovação ou
+# abandonado depois) — aprovação sem recusa possível não seria aprovação.
+FIGURINO_PROD_SOLICITADO  = "solicitado"
+FIGURINO_PROD_APROVADO    = "aprovado"
+FIGURINO_PROD_EM_PRODUCAO = "em_producao"
+FIGURINO_PROD_PRONTO      = "pronto"
+FIGURINO_PROD_CANCELADO   = "cancelado"
+FIGURINO_PROD_STATUSES = [
+    FIGURINO_PROD_SOLICITADO,
+    FIGURINO_PROD_APROVADO,
+    FIGURINO_PROD_EM_PRODUCAO,
+    FIGURINO_PROD_PRONTO,
+    FIGURINO_PROD_CANCELADO,
+]
+#: Estados em que o pedido ainda dá trabalho a alguém — os que aparecem na fila e na home.
+FIGURINO_PROD_ABERTOS = [
+    FIGURINO_PROD_SOLICITADO,
+    FIGURINO_PROD_APROVADO,
+    FIGURINO_PROD_EM_PRODUCAO,
+]
+#: Rótulos em pt-BR. Fonte única: o React lê daqui via serialização, não redigita.
+FIGURINO_PROD_LABELS = {
+    FIGURINO_PROD_SOLICITADO:  "Solicitado",
+    FIGURINO_PROD_APROVADO:    "Aprovado",
+    FIGURINO_PROD_EM_PRODUCAO: "Em produção",
+    FIGURINO_PROD_PRONTO:      "Pronto",
+    FIGURINO_PROD_CANCELADO:   "Cancelado",
+}
+#: Tipos de anexo de um pedido de produção (feature 225).
+FIGURINO_ANEXO_FOTO      = "foto"
+FIGURINO_ANEXO_ORCAMENTO = "orcamento"
+FIGURINO_ANEXO_KINDS = [FIGURINO_ANEXO_FOTO, FIGURINO_ANEXO_ORCAMENTO]
+
+#: Chave que marca, no Google Agenda, um compromisso criado pela oficina de figurino
+#: (`extendedProperties.private.manto_kind`). `sync_events` pula tudo que a carrega — sem isso
+#: o prazo do figurino viraria um evento fantasma na plataforma.
+GCAL_KIND_KEY = "manto_kind"
+GCAL_KIND_FIGURINO_PRODUCAO = "figurino_producao"
+
+
 # Feature 204: ciclo de vida de um `MarketingPost`, na ordem em que a equipe de marketing o
 # percorre — é também a ordem das colunas do Kanban de `/marketing/painel`.
 MARKETING_STATUS_IDEIA     = "ideia"
@@ -242,6 +283,12 @@ class RoleName:
     # Artista 3D (feature 200): gestão total do Acervo/Fila 3D + leitura dos eventos
     # (precisa do elenco e do formulário de pré-contrato para saber o que imprimir).
     ARTISTA_3D = "ARTISTA_3D"
+
+
+# Papéis que executam a produção de figurino (feature 225): assumem o pedido, movem o status,
+# anexam foto e orçamento. Abrir pedido é de qualquer papel interno — quem sabe que falta uma
+# bermuda é quem vendeu o evento, não a oficina.
+FIGURINO_PROD_EXEC_ROLES = [RoleName.FIGURINO, RoleName.SUPERADMIN]
 
 
 # Papéis que podem gerir campanhas da Loja de Interações Virtuais (feature 205, FR-010).

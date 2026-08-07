@@ -86,9 +86,34 @@ export interface EnsaioSummary {
 }
 
 /** Resumo do dashboard — resposta de /api/dashboard. Seções ausentes = sem permissão. */
+/** Uma peça de figurino sob responsabilidade do usuário logado (feature 225). */
+export interface MinhaPecaRef {
+  id: number;
+  title: string;
+  status: string;
+  status_label: string;
+  event_title: string | null;
+  /** Prazo informado, ou a data do evento quando não houve prazo. */
+  prazo: string | null;
+  dias_para_prazo: number | null;
+  is_late: boolean;
+}
+
+/** Painel pessoal "Minhas peças" — `null` quando a pessoa não é responsável por nada. */
+export interface MinhasPecasSummary {
+  pending: number;
+  atrasados: number;
+  items: MinhaPecaRef[];
+}
+
 export interface DashboardSummary {
   casting: CastingSummary | null;
   figurino: FigurinoSummary | null;
+  /**
+   * Único painel da home cujo gate é a IDENTIDADE, não o papel: quem tem peça sob sua
+   * responsabilidade vê, seja qual for o papel (feature 225).
+   */
+  figurino_producao: MinhasPecasSummary | null;
   ensaio: EnsaioSummary | null;
   comercial: { pending_payments: PendingPayment[] } | null;
   financeiro: { recurring_expense_alerts: RecurringExpenseAlert[] } | null;

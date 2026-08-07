@@ -7,10 +7,9 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **219 (confirmação de
-> email no cadastro e fila de devoluções)** · Head de migration: `c5d92fa16e34`
-> (*confirmação de email do talento*) — confirme com `flask db heads`; este cabeçalho é a **única**
-> menção ao head neste documento.
+> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **225 (Produção de
+> Figurinos)** · Head de migration: `c1d5a83b64e7` (*produção de figurinos*) — confirme com
+> `flask db heads`; este cabeçalho é a **única** menção ao head neste documento.
 >
 > **Edição por recorte (215).** `PATCH /api/events/<id>` (feature 184) é **edição em bloco**: ele
 > reconcilia elenco e **substitui** os clientes. Para editar um dado isolado use os endpoints
@@ -215,6 +214,31 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 
 Properties úteis: `pieces_list`, `pieces_count`, `tags_list`, `photo_url` (aceita URL absoluta,
 caminho `/uploads/figurino_photos/...` ou fallback para `thumbnail_url` do Drive).
+
+#### 2.4.1 Produção de Figurinos (feature 225)
+
+`figurino_sheets` descreve o figurino **pronto**; `special_expenses` registra o dinheiro **depois**
+que saiu. Estas três tabelas são o que existe no meio — o trabalho de produzir.
+
+| Tabela | Model | Destaques | FKs |
+|---|---|---|---|
+| `figurino_producoes` | `FigurinoProducao` | `title`, `description`, `status` (`solicitado`\|`aprovado`\|`em_producao`\|`pronto`\|`cancelado`), `quantity`, `due_date`, `estimated_cost`, `approved_at`, `done_at`, `cancelled_at`, `cancellation_reason`, `google_event_id` (o compromisso do prazo na agenda) | `event_id`→`calendar_events` (**SET NULL**), `figurino_sheet_id`→`figurino_sheets` (**SET NULL**), `requested_by_id`→`users`, `responsible_id`/`approved_by_id`→`users` (**SET NULL**) |
+| `figurino_producao_anexos` | `FigurinoProducaoAnexo` | `kind` (`foto`\|`orcamento`), `file_path`, `original_name`, `caption`; `supplier_name`/`amount` só em `orcamento` (para comparar propostas) | `producao_id`→`figurino_producoes` (**CASCADE**), `uploaded_by_id`→`users` (SET NULL) |
+| `figurino_producao_logs` | `FigurinoProducaoLog` | histórico narrativo no formato de `EventLog` (`actor_name`, `actor_role`, `message`) + `photo_path` e `status_from`/`status_to` | `producao_id`→`figurino_producoes` (**CASCADE**) |
+
+`special_expenses.figurino_producao_id` (**SET NULL**) é o vínculo com o dinheiro.
+
+**Invariantes.**
+
+- **`SET NULL` para fora, `CASCADE` para dentro.** Excluir o evento não apaga o pedido; apagar o
+  pedido não apaga o gasto (o dinheiro saiu de verdade). Anexos e histórico, sim, vão junto.
+- **`total_gasto` conta só gasto `aprovado`** — mesmo recorte da DRE.
+- **`prazo_efetivo`** cai na data do evento quando ninguém informou `due_date`.
+- **O compromisso no Google carrega `extendedProperties.private.manto_kind`**, e `sync_events`
+  pula todo item que a tenha (`_is_manto_task_item`). Sem isso o prazo viraria um `CalendarEvent`
+  fantasma: o calendário é o mesmo dos shows e o sync importa tudo que encontra.
+- **`CALENDAR_SUPPRESS_INVITES`** (`config._suppress_calendar_invites`) impede um processo local
+  de escrever na agenda real — `manto_local` traz o token de produção e o calendário é fixo.
 
 ### 2.5 Catálogo (vitrine pública + gerenciador interno)
 
@@ -459,6 +483,26 @@ remetente por IMAP em modo somente leitura — ver `app/integracoes/imap_client.
 `GET /api/figurino` · `POST /api/figurino` · `PATCH|DELETE /api/figurino/<id>` ·
 `POST|DELETE /api/figurino/<id>/photo` · `POST /api/figurino/<id>/photo/rotate` ·
 `POST /api/figurino/faltantes/dispensar` · `POST /api/figurino/faltantes/associar`.
+
+### 3.5.1 Produção de Figurinos — `figurino_producao_read.py` / `_write.py` (feature 225)
+
+| Método | Rota | Gate | Nota |
+|---|---|---|---|
+| GET | `/api/figurino/producoes` | interno | Filtros `status`, `abertos`, `responsavel`, `evento`, `busca`. Devolve `flags` (`can_create`/`can_execute`/`can_approve`) |
+| POST | `/api/figurino/producoes` | interno | Abre pedido. `responsible_id` só é aceito de quem executa |
+| GET | `/api/figurino/producoes/<id>` | interno | Detalhe + `anexos`, `logs`, `gastos` e `transicoes` válidas |
+| PATCH | `/api/figurino/producoes/<id>` | FIGURINO/SA, ou quem abriu enquanto ninguém assumiu | — |
+| DELETE | `/api/figurino/producoes/<id>` | FIGURINO/SA | Gastos vinculados sobrevivem |
+| POST | `/api/figurino/producoes/<id>/status` | FIGURINO/SA; **aprovar só SA** | `motivo` obrigatório ao cancelar. Falta de permissão volta **403**, não 400 |
+| POST | `/api/figurino/producoes/<id>/comentarios` | interno | Nota no histórico |
+| POST\|DELETE | `/api/figurino/producoes/<id>/anexos[/<anexo_id>]` | FIGURINO/SA | multipart: `file`, `kind` (`foto`\|`orcamento`), `supplier_name`, `amount` |
+| POST\|DELETE | `/api/figurino/producoes/<id>/gastos[/<gasto_id>]` | FIGURINO/SA | Vincula/desvincula `SpecialExpense` existente |
+| GET | `/api/figurino/producoes/<id>/gastos-vinculaveis` | interno | Gastos do mesmo evento + categoria Figurino |
+| GET | `/api/figurino/producoes/responsaveis` | interno | Usuários FIGURINO/SUPERADMIN, com `tem_email` |
+
+"interno" = qualquer papel menos `REVENDEDOR_EDUCAMANTO` sozinho (`producao_ops.pode_abrir`).
+As mutações devolvem `{producao, warning?}` — `warning` é falha do Google Agenda, **nunca** erro:
+o pedido foi salvo.
 
 ### 3.6 Financeiro — `financeiro_read.py` / `financeiro_write.py`
 | Método | Rota | Nota |
