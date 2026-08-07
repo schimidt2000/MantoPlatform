@@ -186,14 +186,19 @@ def _serialize_logs(event_id: int) -> list[dict[str, Any]]:
     return logs
 
 
-def _serialize_talent(talent: Any) -> dict[str, Any]:
+def _serialize_talent(talent: Any, show_pii: bool) -> dict[str, Any]:
     """Talento escalado, com o que a tela de detalhe mostra no card (feature 190).
 
     Inclui o número de WhatsApp já pronto (`Talent.whatsapp_number` — fonte única do formato
     com DDI), as medidas de figurino exibidas no card de Figurino do evento e o rosto
     (`photo_url`, feature 215) — o mesmo avatar que a busca de casting mostra ao escalar.
+
+    Documento e nascimento (`birth_date`/`cpf`/`rg`/`doc_photo_path`) só saem com `show_pii`:
+    são os campos que o "Exportar elenco" da tela antiga oferecia, e ela só abria para
+    Casting/Comercial/Superadmin. Sem o gate, Figurino/Ensaio/3D — que leem o mesmo detalhe —
+    passariam a receber CPF e RG de todo mundo escalado.
     """
-    return {
+    data = {
         "id": talent.id,
         "name": talent.full_name,
         "artistic_name": talent.artistic_name,
@@ -205,10 +210,16 @@ def _serialize_talent(talent: Any) -> dict[str, Any]:
         "shoe_size": talent.shoe_size or None,
         "height_cm": talent.height_cm,
     }
+    if show_pii:
+        data["birth_date"] = talent.birth_date.isoformat() if talent.birth_date else None
+        data["cpf"] = talent.cpf or None
+        data["rg"] = talent.rg or None
+        data["doc_photo_path"] = talent.doc_photo_path or None
+    return data
 
 
 def _serialize_role(
-    role: Any, show_casting: bool, availability: dict[int, dict[str, str]]
+    role: Any, show_casting: bool, availability: dict[int, dict[str, str]], show_pii: bool
 ) -> dict[str, Any]:
     """Um cargo do elenco. `cache_value` (cachê) só para casting/superadmin (dado do casting)."""
     sheet = role.figurino_sheet
@@ -216,7 +227,7 @@ def _serialize_role(
         "role_id": role.id,
         "character_name": role.character_name,
         "role_type": role.role_type,
-        "talent": _serialize_talent(role.talent) if role.talent else None,
+        "talent": _serialize_talent(role.talent, show_pii) if role.talent else None,
         "figurino_done": role.figurino_done_at is not None,
         "invite_status": role.invite_status,
         "dismissed": role.dismissed_at is not None,
@@ -591,7 +602,12 @@ def serialize_event_detail(
     # casting/figurino no mesmo lugar entre uma mutação e outra.
     roles = sorted(event.roles, key=lambda r: r.id)
     availability = talent_availability(event, [r.talent_id for r in roles if r.talent_id])
-    data["elenco"] = [_serialize_role(r, flags["show_casting"], availability) for r in roles]
+    # Mesmo público que a tela antiga dava ao "Exportar elenco" (`CASTING`, `COMERCIAL`,
+    # `SUPERADMIN`) — `can_confirm` é o flag de Comercial/Superadmin.
+    show_pii = flags["show_casting"] or flags["can_confirm"]
+    data["elenco"] = [
+        _serialize_role(r, flags["show_casting"], availability, show_pii) for r in roles
+    ]
     data["materiais"] = _serialize_materials(event)
     # Presentes 3D (feature 200) — só evento SHOW tem a seção; a chave ausente é o sinal para o
     # React não renderizar nada (mesmo padrão dos blocos financeiros: o servidor decide).

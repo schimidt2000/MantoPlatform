@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@manto/ui";
+import { assetUrl } from "@manto/api-client";
 import { formatBRL } from "@manto/money";
 import type { EventoDetalhe } from "../../lib/agenda";
 import {
@@ -36,6 +37,10 @@ const TYPE_LABELS: Record<string, { label: string; tone: "blue" | "gold" | "neut
 const EXPORT_FIELDS = [
   { key: "personagem", label: "Personagem" },
   { key: "nome", label: "Nome completo" },
+  { key: "birth", label: "Data de nascimento" },
+  { key: "cpf", label: "CPF" },
+  { key: "rg", label: "RG" },
+  { key: "doc", label: "Link documento" },
   { key: "top", label: "Top" },
   { key: "bottom", label: "Bottom" },
   { key: "shoe", label: "Calçado" },
@@ -43,6 +48,27 @@ const EXPORT_FIELDS = [
 ] as const;
 
 type ExportFieldKey = (typeof EXPORT_FIELDS)[number]["key"];
+
+/**
+ * `YYYY-MM-DD` → `DD/MM/YYYY` sem passar por `new Date()`: a data de nascimento é uma data
+ * pura, e `new Date("1998-03-12")` vira meia-noite UTC — que em São Paulo (UTC-3) volta um
+ * dia e exportaria 11/03.
+ */
+function formatBirthDate(iso: string): string {
+  const [ano, mes, dia] = iso.slice(0, 10).split("-");
+  return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
+}
+
+/**
+ * URL clicável do documento. `assetUrl()` já resolve links absolutos legados (Drive) e a base
+ * do Flask em produção; em dev ele devolve o path puro, então a origem entra aqui — o texto
+ * exportado sai da tela (WhatsApp, e-mail) e precisa funcionar fora do navegador.
+ */
+function docLink(path: string): string | null {
+  const url = assetUrl(path);
+  if (!url) return null;
+  return /^https?:\/\//i.test(url) ? url : `${window.location.origin}${url}`;
+}
 
 interface ExportElencoDialogProps {
   data: EventoDetalhe;
@@ -62,6 +88,14 @@ function ExportElencoDialog({ data, open, onOpenChange }: ExportElencoDialogProp
       const partes: string[] = [];
       if (fields.includes("personagem")) partes.push(role.character_name);
       if (fields.includes("nome")) partes.push(talent.name);
+      if (fields.includes("birth") && talent.birth_date)
+        partes.push(`Nasc: ${formatBirthDate(talent.birth_date)}`);
+      if (fields.includes("cpf") && talent.cpf) partes.push(`CPF: ${talent.cpf}`);
+      if (fields.includes("rg") && talent.rg) partes.push(`RG: ${talent.rg}`);
+      if (fields.includes("doc") && talent.doc_photo_path) {
+        const url = docLink(talent.doc_photo_path);
+        if (url) partes.push(`Doc: ${url}`);
+      }
       if (fields.includes("top") && talent.size_top) partes.push(`Top: ${talent.size_top}`);
       if (fields.includes("bottom") && talent.size_bottom)
         partes.push(`Bottom: ${talent.size_bottom}`);

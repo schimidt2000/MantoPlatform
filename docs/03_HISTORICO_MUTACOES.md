@@ -4,8 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **220b (hotfix da
-> camada do menu "Ferramentas")** · Head de migration: `c5d92fa16e34`
+> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **222 (paridade do
+> "Exportar elenco")** · Head de migration: `c5d92fa16e34`
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -37,7 +37,8 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **221** | Agente auditor financeiro semanal (endpoints + fix de sobrescrita de upload) | 2026-08-06 | `—` | (aqui) | 133 |
+| **222** | Exportar elenco perdeu quatro campos (nascimento/CPF/RG/documento) na migração para o React | 2026-08-07 | `—` | (aqui) | 134 |
+| **221** | Agente auditor financeiro semanal (endpoints + fix de sobrescrita de upload) | 2026-08-06 | `—` | (aqui) | 161 |
 | **220b** | Hotfix: menu "Ferramentas" do evento embaçado no meio | 2026-08-06 | `—` | (aqui) | 133 |
 | **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 156 |
 | **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 217 |
@@ -130,6 +131,33 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 222 — Exportar elenco perdeu quatro campos na migração para o React
+`main` · **2026-08-07** · sem migration
+
+**Motivação.** Reclamação direta: "no antigo sistema Flask essa telinha de exportar elenco tinha
+mais informações". O modal Jinja (`app/templates/event_detail.html`) oferecia **dez** campos —
+Personagem, Nome completo, Data de nascimento, CPF, RG, Link documento, Top, Bottom, Calçado e
+Altura. O React ficou com **seis**: a porta esqueceu os quatro de documento/nascimento, porque
+`_serialize_talent` (`app/api/agenda_read.py`) nunca chegou a serializá-los.
+
+**O que mudou.** *Backend*: `_serialize_talent` ganhou `birth_date` (ISO), `cpf`, `rg` e
+`doc_photo_path`, atrás de um novo parâmetro `show_pii`. *Frontend*: `RoleTalent` (`lib/agenda.ts`)
+declara os quatro como **opcionais** — para os outros papéis a chave nem existe no JSON — e o
+`ExportElencoDialog` voltou a ter as dez caixas de seleção, na ordem da tela antiga.
+
+**Impacto em RBAC.** `show_pii = show_casting or can_confirm` — exatamente o público que via o
+botão na tela antiga (`CASTING`, `COMERCIAL`, `SUPERADMIN`). Sem esse gate a mudança seria um
+vazamento: Figurino, Ensaio e Artista 3D leem o **mesmo** `/api/events/<id>` e passariam a receber
+CPF e RG de todo mundo escalado. Verificado em `scripts/db/verify_export_elenco_documentos.py`
+(21/21 contra `manto_local`), que testa os dois lados — quem recebe e quem não recebe.
+
+**Pegadinhas.** (1) `birth_date` é data pura: `new Date("1998-03-12")` vira meia-noite **UTC** e
+em São Paulo volta um dia — o modal formata quebrando a string, sem `Date` (a mesma armadilha da
+210, agora em data sem hora). `TalentDetailPage.formatDate` ainda tem esse bug, não tocado aqui.
+(2) O link do documento tem que sair **absoluto**: `assetUrl()` devolve path puro em dev, e o
+texto exportado é colado no WhatsApp. (3) `doc_photo_path` pode já ser uma URL do Drive (legado da
+154) — daí o teste de `^https?://` antes de prefixar a origem.
 
 ### 221 — Agente auditor financeiro semanal
 `221-agente-auditor-financeiro` · **2026-08-06** · sem migration

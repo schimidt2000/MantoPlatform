@@ -96,6 +96,15 @@ export interface RoleTalent {
   size_bottom: string | null;
   shoe_size: string | null;
   height_cm: number | null;
+  /**
+   * Documento e nascimento do "Exportar elenco". Opcionais de propósito: o servidor só manda
+   * para Casting/Comercial/Superadmin (RBAC em `_serialize_talent`) — para os outros papéis a
+   * chave nem existe no JSON.
+   */
+  birth_date?: string | null;
+  cpf?: string | null;
+  rg?: string | null;
+  doc_photo_path?: string | null;
 }
 
 /** Estado da agenda do talento na janela do evento (feature 190). */

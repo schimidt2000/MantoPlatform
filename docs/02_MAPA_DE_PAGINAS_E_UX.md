@@ -179,7 +179,10 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   mobile), e o mesmo personagem aparecia duas vezes (em *Casting* e em *Figurino*).
   - **Cabeçalho** (fora das abas): título, badge de tipo, faixa horária, badge de confirmação e
     o menu **"⋯ Ferramentas"** (`KebabMenu` com `triggerLabel`) — Sincronizar · Exportar elenco
-    (modal com seleção de campos e cópia) · Editar no Google Agenda · Confirmar dados do evento ·
+    (modal com seleção de campos e cópia: Personagem, Nome completo, Data de nascimento, CPF, RG,
+    Link documento, Top, Bottom, Calçado e Altura — os quatro campos de documento/nascimento só
+    chegam no JSON para Casting/Comercial/Superadmin, feature 222) · Editar no Google Agenda ·
+    Confirmar dados do evento ·
     Cobrança · Cobrar reembolsos · Marcar evento como confirmado · Pedir feedback da cliente ·
     **Editar tudo (formulário completo)** · Excluir evento. Itens indisponíveis ficam
     desabilitados **com `title` explicando o porquê**.
