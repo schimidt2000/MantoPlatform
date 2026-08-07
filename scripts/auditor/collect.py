@@ -113,7 +113,19 @@ class FileFetcher:
         url = f"{self.base}/api/audit-agent/{self.token}/file/{rel}"
         resp = requests.get(url, timeout=60)
         if resp.status_code == 404:
-            return None, "arquivo_ausente"
+            # 404 tem dois significados: arquivo sumido (achado) ou token inválido/env
+            # ausente no Railway (erro de configuração — abortar, nunca reportar como
+            # se todos os comprovantes tivessem sumido).
+            try:
+                msg = resp.json().get("error", {}).get("message")
+            except ValueError:
+                msg = None
+            if msg == "arquivo_ausente":
+                return None, "arquivo_ausente"
+            raise RuntimeError(
+                "Endpoint do auditor respondeu 404 genérico — AUDIT_AGENT_TOKEN não "
+                "configurado no Railway ou token local divergente."
+            )
         resp.raise_for_status()
         dest.write_bytes(resp.content)
         return dest, None
