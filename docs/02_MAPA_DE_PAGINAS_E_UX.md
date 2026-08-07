@@ -553,8 +553,12 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 #### `/virtuais/campanhas/:id` — Edição da campanha
 - **Acesso**: idem.
 - **UX**: quatro cards.
-  - **Conteúdo público** — título, texto de apresentação, termos de tolerância e WhatsApp de
-    atendimento.
+  - **Conteúdo público** — título, **foto de capa** (upload com prévia), texto de apresentação,
+    termos de tolerância, WhatsApp de atendimento e **editor de perguntas frequentes** (feature
+    224b). Capa e FAQ faltavam: a tela só mandava JSON, então a capa nunca chegava — e como ela
+    é pré-requisito de publicação, **nenhuma campanha conseguia sair do rascunho**; o FAQ era
+    carregado e reenviado sem ter editor, então saía sempre vazio na landing. Enviar capa faz a
+    requisição virar `multipart` (`campaignBody` em `lib/virtuais.ts`).
   - **Preços e estoque** — os três preços em `MoneyInput` (digitação mascarada, valor cru no JSON),
     capacidade de vídeos com "N de M já vendidos" e prazo de entrega em dias.
   - **Estoque de horários** — data + janela início/fim geram os slots de 10 min; o retorno diz

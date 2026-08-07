@@ -41,7 +41,14 @@ def _payload() -> dict[str, Any]:
 
 
 def _cover_url() -> str | None:
-    """Salva a capa enviada e devolve a URL, ou ``None`` se não veio arquivo."""
+    """Salva a capa enviada e devolve a URL **pública**, ou ``None`` se não veio arquivo.
+
+    `save_file` devolve `/uploads/virtual_covers/<arquivo>` no modo local — e `/uploads/*` é
+    `login_required`, então a família que abre a landing seria redirecionada para a tela de
+    login do staff e a capa não carregaria. A reescrita aponta para a rota pública
+    (`catalogo.midia_campanha`), mesmo tratamento que o importador do catálogo já faz com as
+    fotos dos produtos. Em S3 a URL já volta absoluta e pública: nada a reescrever.
+    """
     cover = request.files.get("cover")
     if not cover or not cover.filename:
         return None
@@ -52,7 +59,10 @@ def _cover_url() -> str | None:
         raise ops.VirtuaisValidationError(
             "cover", f"Formato de capa não suportado (use JPG, PNG ou WEBP): {cover.filename}"
         )
-    return save_file(cover, CAMPAIGN_COVER_SUBFOLDER)
+    saved = save_file(cover, CAMPAIGN_COVER_SUBFOLDER)
+    if saved.startswith(f"/uploads/{CAMPAIGN_COVER_SUBFOLDER}/"):
+        return f"/catalogo/midia/campanhas/{saved.rsplit('/', 1)[-1]}"
+    return saved
 
 
 @api_bp.route("/virtuais/campanhas", methods=["POST"])

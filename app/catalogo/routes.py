@@ -75,6 +75,25 @@ def index():
     )
 
 
+@catalogo_bp.route("/midia/campanhas/<path:filename>")
+def midia_campanha(filename: str):
+    """Capa das campanhas da Loja de Interações Virtuais — rota **pública** (feature 224b).
+
+    A capa precisa abrir para quem nunca logou: quem vê a landing é a família comprando. Salva
+    em `virtual_covers`, ela caía na rota geral `/uploads/*`, que é `login_required` — o visitante
+    era redirecionado para a tela de login do staff e a landing ficava sem imagem.
+
+    Mora sob `/catalogo/midia/` de propósito: esse prefixo já é repassado ao Flask pelo
+    `frontend/server.js` e proxiado pelos vite configs dos três apps. Um prefixo novo exigiria
+    mexer nos três — o gap de proxy por app que já mordeu antes (feature 182). A pasta em disco
+    continua separada, então nada se mistura com as fotos do catálogo.
+
+    Declarada ANTES da rota genérica: `<path:filename>` engoliria `campanhas/arquivo.jpg`.
+    """
+    folder = os.path.join(current_app.config["UPLOAD_FOLDER"], "virtual_covers")
+    return send_from_directory(folder, filename)
+
+
 @catalogo_bp.route("/midia/<path:filename>")
 def midia(filename: str):
     """Serve fotos do catálogo — só desta subpasta, nunca a `/uploads` geral (login-only,

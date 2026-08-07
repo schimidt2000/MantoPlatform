@@ -90,6 +90,8 @@ export function VirtuaisCampanhaFormPage() {
   const [faq, setFaq] = useState<VirtualFaqItem[]>([]);
   const [acervoIds, setAcervoIds] = useState<number[]>([]);
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [cover, setCover] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
 
   const [slotDate, setSlotDate] = useState("");
   const [slotStart, setSlotStart] = useState("14:00");
@@ -126,8 +128,17 @@ export function VirtuaisCampanhaFormPage() {
         recorded_capacity: recordedCapacity,
         recorded_delivery_days: deliveryDays,
         faq,
+        ...(cover ? { cover } : {}),
       },
-      { onError: (error) => setErrors(extractFieldErrors(error)) },
+      {
+        onSuccess: () => {
+          // A capa já está no servidor; manter o File no estado reenviaria o arquivo a cada
+          // salvamento seguinte. A prévia continua sendo a que veio da resposta.
+          setCover(null);
+          setCoverPreview(null);
+        },
+        onError: (error) => setErrors(extractFieldErrors(error)),
+      },
     );
   };
 
@@ -230,6 +241,41 @@ export function VirtuaisCampanhaFormPage() {
               <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
               <FieldError message={errors.title} />
             </div>
+
+            {/* A capa é obrigatória para publicar. Antes não havia como enviá-la por aqui, o
+                que travava toda campanha no rascunho — o backend já aceitava o arquivo. */}
+            <div>
+              <label className="text-[12px] font-medium text-muted" htmlFor="cover">
+                Foto de capa
+              </label>
+              <div className="flex items-start gap-3">
+                {(coverPreview || campaign.cover_url) && (
+                  <img
+                    src={coverPreview ?? assetUrl(campaign.cover_url ?? undefined)}
+                    alt="Capa da campanha"
+                    className="h-24 w-24 shrink-0 rounded-lg border border-line object-cover"
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <input
+                    id="cover"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="w-full text-[13px] text-ink"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      setCover(file);
+                      setCoverPreview(file ? URL.createObjectURL(file) : null);
+                    }}
+                  />
+                  <p className="mt-1 text-[12px] text-muted">
+                    JPG, PNG ou WEBP. É o que a família vê no topo da página —{" "}
+                    <strong>obrigatória para publicar</strong>.
+                  </p>
+                  <FieldError message={errors.cover ?? errors.cover_url} />
+                </div>
+              </div>
+            </div>
             <div>
               <label className="text-[12px] font-medium text-muted" htmlFor="intro">
                 Texto de apresentação
@@ -263,6 +309,57 @@ export function VirtuaisCampanhaFormPage() {
                 onChange={(e) => setWhatsappPhone(e.target.value)}
                 placeholder="+55 11 99999-8888"
               />
+            </div>
+
+            {/* O FAQ já era carregado e reenviado no salvamento, mas não tinha editor — então
+                ele saía sempre vazio na landing, que tem a seção pronta para exibi-lo. */}
+            <div className="space-y-2">
+              <p className="text-[12px] font-medium text-muted">Perguntas frequentes</p>
+              {faq.length === 0 && (
+                <p className="text-[12px] text-muted">
+                  Nenhuma pergunta ainda — a seção não aparece na página pública.
+                </p>
+              )}
+              {faq.map((item, index) => (
+                <div key={index} className="space-y-1.5 rounded-lg border border-line p-2.5">
+                  <Input
+                    aria-label={`Pergunta ${index + 1}`}
+                    placeholder="Pergunta"
+                    value={item.pergunta}
+                    onChange={(e) =>
+                      setFaq((prev) =>
+                        prev.map((f, i) => (i === index ? { ...f, pergunta: e.target.value } : f)),
+                      )
+                    }
+                  />
+                  <textarea
+                    aria-label={`Resposta ${index + 1}`}
+                    placeholder="Resposta"
+                    className="min-h-16 w-full rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-ink"
+                    value={item.resposta}
+                    onChange={(e) =>
+                      setFaq((prev) =>
+                        prev.map((f, i) => (i === index ? { ...f, resposta: e.target.value } : f)),
+                      )
+                    }
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setFaq((prev) => prev.filter((_, i) => i !== index))}
+                  >
+                    Remover
+                  </Button>
+                </div>
+              ))}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setFaq((prev) => [...prev, { pergunta: "", resposta: "" }])}
+              >
+                + Adicionar pergunta
+              </Button>
+              <FieldError message={errors.faq} />
             </div>
           </CardContent>
         </Card>

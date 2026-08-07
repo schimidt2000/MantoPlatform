@@ -203,10 +203,20 @@ def _month_scoped_query(start: date, end: date, seller_id: int | None = None):
     return q.order_by(CommissionPayment.sale_date.asc(), CommissionPayment.seller_id.asc())
 
 
+def _is_mes_corrente(month: str) -> bool:
+    """True se `month` (`AAAA-MM`) é o mês em que estamos, em horário de Brasília."""
+    return month == datetime.now(TZ_SP).date().strftime("%Y-%m")
+
+
 def _pending_reversals_query(seller_id: int | None = None):
-    """Estornos pendentes (`a_pagar`, valor negativo) — sem filtro de mês: um estorno de um
-    evento cancelado herda o `sale_date` da venda original, então precisa continuar visível
-    mesmo quando o usuário navega para o mês corrente (ver `research.md` da feature 187)."""
+    """Estornos pendentes (`a_pagar`, valor negativo), sem filtro de mês.
+
+    Um estorno herda o `sale_date` da venda original, que costuma cair num mês já quitado — sem
+    esta consulta ele ficaria invisível e nunca seria descontado (feature 187). Quem chama é que
+    decide **onde** exibi-lo: hoje só no mês corrente, via `_estornos_do_mes` — trazê-lo para
+    todos os meses fazia o mesmo estorno reaparecer em cada tela e derrubar o total de meses que
+    não tinham nada com ele.
+    """
     q = CommissionPayment.query.filter(
         CommissionPayment.status == "a_pagar",
         CommissionPayment.amount < 0,
@@ -232,39 +242,56 @@ def _to_entry(cp: CommissionPayment) -> CommissionEntry:
     )
 
 
-def get_month_entries(month: str, seller_id: int | None = None) -> list[CommissionEntry]:
-    """Visão analítica ("Detalhamento de Vendas"): uma linha por comissão do mês selecionado,
-    **mais** os estornos pendentes de qualquer mês.
+def _estornos_do_mes(month: str, seller_id: int | None) -> list[CommissionPayment]:
+    """Estornos pendentes que entram na conta do mês pedido — só no **mês corrente**.
 
-    Os estornos precisam aparecer aqui porque é isso que o "Pagar Mês" liquida: o resumo por
-    vendedor usa `_seller_payable_rows`, que já os inclui. Sem eles na tabela, o total do topo
-    não fecha com as linhas listadas — foi o que aconteceu com o estorno do
-    `(SHOW) PETER PAN...`, que descontava R$ 170,00 de agosto sem aparecer em lugar nenhum de
-    agosto (a `sale_date` dele é de julho). Feature 224.
+    Um estorno é uma dívida do vendedor com a empresa, e ela é abatida no próximo repasse: o
+    lugar dele é o mês que está aberto, não todo mês do histórico. Enquanto ele aparecia em
+    todos, um estorno de julho derrubava também o total de abril — meses que não tinham nada a
+    ver com ele — e a mesma linha reaparecia em cada tela, parecendo comissão ressuscitada.
+
+    O estorno não se perde: fica no mês corrente até ser liquidado. E o mês da venda original
+    continua mostrando-o pela via normal (`_month_scoped_query`), porque a `sale_date` dele é a
+    da venda estornada.
     """
-    _, start, end = resolve_month(month)
-    rows = _month_scoped_query(start, end, seller_id).all()
-    seen_ids = {cp.id for cp in rows}
-    for cp in _pending_reversals_query(seller_id).all():
-        if cp.id not in seen_ids:
-            rows.append(cp)
-            seen_ids.add(cp.id)
-    return [_to_entry(cp) for cp in rows]
+    if not _is_mes_corrente(month):
+        return []
+    return _pending_reversals_query(seller_id).all()
 
 
-def _seller_payable_rows(month: str, seller_id: int) -> list[CommissionPayment]:
-    """Registros `CommissionPayment` elegíveis para o resumo/liquidação de UM vendedor no mês:
-    as comissões do mês (por `sale_date`/`created_at`) mais os estornos pendentes do vendedor
-    (que ficam visíveis em qualquer mês até serem resolvidos). Deduplicado por `id` para não
-    contar duas vezes um estorno cujo `sale_date` cai no próprio mês selecionado."""
-    _, start, end = resolve_month(month)
-    rows = _month_scoped_query(start, end, seller_id).all()
+def _com_estornos(
+    rows: list[CommissionPayment], month: str, seller_id: int | None
+) -> list[CommissionPayment]:
+    """Junta os estornos do mês às linhas já selecionadas, sem duplicar por id."""
     seen_ids = {cp.id for cp in rows}
-    for cp in _pending_reversals_query(seller_id).all():
+    for cp in _estornos_do_mes(month, seller_id):
         if cp.id not in seen_ids:
             rows.append(cp)
             seen_ids.add(cp.id)
     return rows
+
+
+def get_month_entries(month: str, seller_id: int | None = None) -> list[CommissionEntry]:
+    """Visão analítica ("Detalhamento de Vendas"): uma linha por comissão do mês selecionado.
+
+    Usa a MESMA seleção do resumo por vendedor, incluindo os estornos que entram na conta do
+    mês. Sem isso a tabela não fecha com o total do topo nem com o que o "Pagar Mês" liquida —
+    era o caso do estorno do `(SHOW) PETER PAN…`, que descontava R$ 170,00 sem aparecer em
+    linha nenhuma (a `sale_date` dele é de julho, e o desconto acontece no mês corrente).
+    """
+    month_ref, start, end = resolve_month(month)
+    rows = _month_scoped_query(start, end, seller_id).all()
+    return [_to_entry(cp) for cp in _com_estornos(rows, month_ref, seller_id)]
+
+
+def _seller_payable_rows(month: str, seller_id: int) -> list[CommissionPayment]:
+    """Registros `CommissionPayment` elegíveis para o resumo/liquidação de UM vendedor no mês:
+    as comissões do mês (por `sale_date`/`created_at`) mais os estornos pendentes que caem no
+    mês corrente. Deduplicado por `id` para não contar duas vezes um estorno cujo `sale_date`
+    já cai no próprio mês selecionado."""
+    month_ref, start, end = resolve_month(month)
+    rows = _month_scoped_query(start, end, seller_id).all()
+    return _com_estornos(rows, month_ref, seller_id)
 
 
 def get_month_summary_by_seller(

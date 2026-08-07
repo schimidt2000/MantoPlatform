@@ -167,6 +167,35 @@ export interface VirtualCampaignInput {
   figurino_sheet_id?: number | null;
   max_reservations_per_origin?: number;
   reservation_window_minutes?: number;
+  /**
+   * Foto de capa. Quando presente, a requisição vira `multipart` — o servidor lê o arquivo do
+   * campo `cover`. É **obrigatória para publicar**: sem ela a campanha não sai do rascunho.
+   */
+  cover?: File;
+}
+
+/**
+ * Monta o corpo da requisição: `FormData` quando há capa, JSON quando não há.
+ *
+ * O backend sempre aceitou os dois (`_payload` em `app/api/virtuais_write.py`), mas a tela só
+ * mandava JSON — e por isso `cover_url` nunca era preenchido e nenhuma campanha conseguia ser
+ * publicada. Objetos (o FAQ) viajam serializados, que é como o `_payload` os lê do form.
+ */
+function campaignBody(input: VirtualCampaignInput): FormData | string {
+  if (!input.cover) return JSON.stringify(input);
+
+  const form = new FormData();
+  Object.entries(input).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    if (value instanceof File) {
+      form.set(key, value);
+    } else if (typeof value === "object") {
+      form.set(key, JSON.stringify(value));
+    } else {
+      form.set(key, String(value));
+    }
+  });
+  return form;
 }
 
 function useInvalidateCampaigns() {
@@ -185,7 +214,7 @@ export function useCreateVirtualCampaign() {
     mutationFn: (input: VirtualCampaignInput) =>
       apiFetch<VirtualCampaign>("/api/virtuais/campanhas", {
         method: "POST",
-        body: JSON.stringify(input),
+        body: campaignBody(input),
       }),
     onSuccess: () => invalidate(),
   });
@@ -197,7 +226,7 @@ export function useUpdateVirtualCampaign(id: number) {
     mutationFn: (input: VirtualCampaignInput) =>
       apiFetch<VirtualCampaign>(`/api/virtuais/campanhas/${id}`, {
         method: "PATCH",
-        body: JSON.stringify(input),
+        body: campaignBody(input),
       }),
     onSuccess: () => invalidate(id),
   });

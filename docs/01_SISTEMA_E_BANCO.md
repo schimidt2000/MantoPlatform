@@ -861,6 +861,12 @@ Rotas legadas que **ainda têm uso real** (não são só resíduo):
 - `GET /figurinos/<id>/print` e `GET /figurinos/print-event/<event_id>` — impressão de ficha.
   Só a **primeira** é linkada pelo React (`FigurinoListPage.tsx`) e, por isso, só ela está no
   proxy de `server.js`; a `print-event` continua sendo link interno de página Jinja.
+- `GET /catalogo/midia/campanhas/<path:filename>` — capa das campanhas da Loja de Interações
+  Virtuais, **sem login** (feature 224b). Serve só de `virtual_covers`. Existe porque quem abre
+  a landing é a família comprando: pela rota geral `/uploads/*` (que é `login_required`) ela
+  caía na tela de login do staff e a capa não carregava. Fica sob `/catalogo/midia/` porque esse
+  prefixo já é repassado pelo `frontend/server.js` e proxiado pelos três vite configs — e é
+  declarada **antes** da rota abaixo, senão o `<path:filename>` dela engoliria o caminho.
 - `GET /catalogo/midia/<path:filename>` — serve as fotos do catálogo público **sem login**.
 - `GET /portal/photo/<path:filename>` — foto de figurino que `GET /api/portal/events/<id>/figurino`
   devolve para o portal React; é rota Jinja, mas checa a mesma sessão de talento **e**, desde a
@@ -1085,6 +1091,15 @@ que o proxy usa como `BACKEND_URL`.
 | `app.mantoproducoes.com.br` | `apps/internal` (ERP) | URL principal da plataforma |
 | `beta.mantoproducoes.com.br` | `apps/internal` (ERP) | endereço histórico, mesmo conteúdo |
 | `portal.mantoproducoes.com.br` | **302 → `/portal/`** | endereço que os talentos conhecem |
+| `alo.mantoproducoes.com.br` | **302 → `/catalogo/v/<caminho>`** | Loja de Interações Virtuais (224d) — `alo.…/<slug>` abre a campanha; a raiz cai na vitrine |
+
+`ALO_HOSTS` (env do serviço frontend, default `alo.mantoproducoes.com.br`) faz o mesmo pela loja
+virtual: é o endereço curto que vai em story e link de bio, no lugar de
+`app.mantoproducoes.com.br/catalogo/v/<slug>`. Vale a mesma mecânica e as mesmas ressalvas do
+`PORTAL_HOSTS` abaixo — inclusive a de que o prefixo aparece na barra de endereço **depois** do
+redirect; deixar a raiz limpa exigiria um segundo build de `apps/public` com `base: "/"`.
+Infra: nenhum serviço novo — é domínio custom no serviço de frontend que já serve `app.` e
+`portal.`, mais o CNAME.
 
 `PORTAL_HOSTS` (env do serviço frontend, default `portal.mantoproducoes.com.br`) marca os hosts em
 que a raiz é o Portal do Artista. Sem essa regra, `portal.*` entregaria `apps/internal/dist` e o

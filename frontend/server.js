@@ -149,6 +149,21 @@ const PORTAL_HOSTS = new Set(
 );
 
 /**
+ * Hosts dedicados à Loja de Interações Virtuais, onde a raiz é a campanha (feature 224d).
+ *
+ * `alo.mantoproducoes.com.br/<slug>` é o endereço que vai em story e link de bio — sem isto a
+ * família teria que digitar `app.mantoproducoes.com.br/catalogo/v/<slug>`, que além de feio
+ * expõe o ERP. Mesmo arranjo de `PORTAL_HOSTS`: um redirect que leva o caminho para dentro do
+ * mount da SPA pública.
+ */
+const ALO_HOSTS = new Set(
+  (process.env.ALO_HOSTS ?? "alo.mantoproducoes.com.br")
+    .split(",")
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+/**
  * Prefixos repassados ao Flask, avaliados antes de qualquer SPA.
  *
  * `/google` é o par connect/callback do OAuth do Google Calendar
@@ -551,6 +566,23 @@ const server = http.createServer((req, res) => {
     if (!matchesPrefix(req.url, "/portal")) {
       res.statusCode = 302;
       res.setHeader("location", `/portal${req.url === "/" ? "/" : req.url}`);
+      res.end();
+      return;
+    }
+  }
+
+  // Host da Loja de Interações Virtuais: `alo.mantoproducoes.com.br/<slug>` vira
+  // `/catalogo/v/<slug>`, e `/pedido/<token>` vira `/catalogo/v/pedido/<token>`.
+  //
+  // Redirect pelo mesmo motivo do portal: o bundle público roda com `base`/`basename` =
+  // `/catalogo` e lê a URL do browser — reescrever só `req.url` serviria o bundle certo com o
+  // roteador sem casar rota nenhuma. A raiz do host vai para a vitrine: quem digita só o
+  // domínio não tem campanha para ver, e uma tela de erro seria pior do que o catálogo.
+  if (req.url && ALO_HOSTS.has((req.headers.host ?? "").split(":")[0].toLowerCase())) {
+    if (!matchesPrefix(req.url, "/catalogo")) {
+      const alvo = req.url === "/" ? "/catalogo/" : `/catalogo/v${req.url}`;
+      res.statusCode = 302;
+      res.setHeader("location", alvo);
       res.end();
       return;
     }

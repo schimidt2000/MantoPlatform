@@ -4,8 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **224 (cancelamento de
-> evento com devolução ao cliente)** · Head de migration: `b8e4d27a91f5`
+> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **224d (`alo.` como
+> endereço da Loja de Interações Virtuais)** · Head de migration: `b8e4d27a91f5`
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -37,7 +37,10 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **224** | Evento com dinheiro vira cancelado (não apagado), com devolução ao cliente; exclusão só para Superadmin | 2026-08-07 | `b8e4d27a91f5` | (aqui) | 134 |
+| **224d** | `alo.mantoproducoes.com.br` como endereço curto da Loja de Interações Virtuais | 2026-08-07 | `—` | (aqui) | 134 |
+| **224c** | Estorno de comissão aparecia e descontava em todos os meses; agora só no mês corrente | 2026-08-07 | `—` | (aqui) | 162 |
+| **224b** | Loja de Interações Virtuais destravada: upload de capa na gestão, capa servida em rota pública, editor de FAQ | 2026-08-07 | `—` | (aqui) | 205 |
+| **224** | Evento com dinheiro vira cancelado (não apagado), com devolução ao cliente; exclusão só para Superadmin | 2026-08-07 | `b8e4d27a91f5` | (aqui) | 186 |
 | **223** | Calculadora EducaManto: transporte dobrado no recalcular, Econômico sem adicional por pessoa, NF sem transporte, comissão configurável | 2026-08-07 | `a3f7c19d5e02` | (aqui) | 196 |
 | **222** | Exportar elenco perdeu quatro campos (nascimento/CPF/RG/documento) na migração para o React | 2026-08-07 | `—` | (aqui) | 186 |
 | **221** | Agente auditor financeiro semanal (endpoints + fix de sobrescrita de upload) | 2026-08-06 | `—` | (aqui) | 161 |
@@ -133,6 +136,112 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 224d — `alo.mantoproducoes.com.br` como endereço da Loja de Interações Virtuais
+`main` · **2026-08-07** · sem migration
+
+**Motivação.** A landing só era alcançável em `app.mantoproducoes.com.br/catalogo/v/<slug>` —
+endereço longo, com o `/catalogo/` no meio, e apontando para o domínio do ERP. É link de story e
+de bio: precisa ser curto e falável.
+
+**O que mudou.** `ALO_HOSTS` no `frontend/server.js` (padrão
+`alo.mantoproducoes.com.br`, sobrescrevível por env). No host da loja, `/<slug>` vira
+`/catalogo/v/<slug>` e `/pedido/<token>` vira `/catalogo/v/pedido/<token>`; a raiz cai na
+vitrine, porque quem digita só o domínio não tem campanha para ver. Espelha o `PORTAL_HOSTS`
+que já existia para `portal.mantoproducoes.com.br`.
+
+**Redirect, não reescrita** — mesmo motivo do portal: o bundle público roda com
+`base`/`basename` = `/catalogo` e lê a URL do browser; reescrever só `req.url` serviria o bundle
+certo com o roteador sem casar rota nenhuma. Consequência assumida: o link compartilhado é
+curto, mas depois de carregar a barra de endereço mostra o `/catalogo/v/`. Deixar a raiz
+limpa exigiria um segundo build de `apps/public` com `base: "/"` — dist e mount próprios.
+
+**Infra.** Nenhum repositório ou serviço novo: é domínio custom no **serviço de frontend** que
+já serve `app.` e `portal.`, mais o CNAME. `ALO_HOSTS` só precisa ser definido se o domínio for
+outro.
+
+**Pegadinha.** O bloco fica DEPOIS do `isBackendRequest`, senão `/api`, `/uploads` e
+`/catalogo/midia` no host da loja virariam `/catalogo/v/api…`.
+
+### 224c — Estorno de comissão aparecia (e descontava) em todos os meses
+`main` · **2026-08-07** · sem migration
+
+**Motivação.** Incidente relatado: as comissões da vendedora foram pagas em 05/08 (37 linhas,
+R$ 3.529,85, todas de julho — confirmado no banco de produção); em 07/08 o sync apagou o
+`(SHOW) PETER PAN…` porque ele sumiu do Google Agenda, e a exclusão gerou o estorno correto de
+−R$ 170,00 sobre a comissão #105, que tinha sido paga justamente no dia 5. Até aí, certo.
+
+O problema era **onde** o estorno aparecia. `_pending_reversals_query` não tem filtro de mês (de
+propósito: o estorno herda a `sale_date` da venda, que costuma cair em mês já quitado, e sem
+isso ele se perderia). Só que `_seller_payable_rows` o injetava em **todo** mês — então abril,
+que não tinha nada com aquilo, mostrava R$ 1.776,97 no lugar dos seus R$ 1.946,97. E a 224
+tinha acabado de trazer o estorno para a tabela também, então a mesma linha reaparecia em cada
+tela: parecia comissão ressuscitada.
+
+**A regra agora.** Estorno é dívida abatida no **próximo repasse**, então entra na conta do
+**mês corrente** (`_estornos_do_mes`). O mês da venda original continua mostrando-o pela via
+normal, porque a `sale_date` dele é a da venda estornada. Nenhum outro mês é tocado. Ele não se
+perde: fica no mês corrente até ser liquidado.
+
+**Não confundir com o que NÃO era bug.** As 24 comissões pendentes de dez/25 a abr/26
+(R$ 3.843,18) foram criadas em junho, quando os eventos antigos entraram no sistema, e nunca
+foram pagas — os três repasses existentes (08/06, 07/07, 05/08) cobriram maio, junho e julho.
+São dívida real em aberto, não reaparição.
+
+**Achado à parte, não corrigido:** `(R&I) SEREIA BRILHANTE` tem duas comissões de R$ 137,50 —
+#28 (paga, evento 287, sem `sale_value`) e #95 (pendente, evento 288, venda de R$ 5.500). Os
+dois eventos existem, em 20/06 e 21/06, com o mesmo título: cheiro de evento duplicado na
+importação. Decisão de negócio, não de código.
+
+**Verificação.** `scripts/db/verify_estorno_comissao_mes.py` — 17/17, com um estorno em mês
+fechado, um mês antigo intocado, a tabela fechando com o total em todo mês, e a liquidação
+pagando o líquido (300 − 170) sem arrastar a dívida antiga. `verify_187_comissoes.py` (20/20) e
+`verify_199` (16/16) seguem verdes.
+
+### 224b — Loja de Interações Virtuais destravada: capa publicável e visível ao público
+`main` · **2026-08-07** · sem migration
+
+**Motivação.** A feature 205 estava construída inteira — landing, reserva, pagamento,
+efetivação com evento na agenda + sala do Meet + pré-escala, avisos, fila de produção,
+devoluções, 137/137 no `verify_205.py` — e **nunca tinha sido usada**: zero campanhas, zero
+pedidos, zero eventos `VIRTUAL` em produção. O motivo eram dois buracos em "fotos", ambos
+invisíveis para quem lê o código de um lado só.
+
+**1. Nenhuma campanha conseguia ser publicada.** A tela de gestão mandava sempre JSON, então a
+capa nunca chegava — e `cover_url` é pré-requisito de publicação
+(`_campos_faltantes_para_publicar`). O backend já aceitava `multipart` com o campo `cover`
+desde o início; faltava o formulário usar. Reproduzido pela API: criar 201, gerar horários 201,
+publicar **400 "A foto de capa é obrigatória"**.
+
+**2. A capa não apareceria nem depois de enviada.** `save_file` devolve
+`/uploads/virtual_covers/…`, e `/uploads/*` é `login_required` — o visitante da landing era
+redirecionado para a tela de login do staff (302 comprovado). Produção guarda mídia em disco
+local, não em S3 (255 de 259 fotos de talento são `/uploads/…`), então valia lá também.
+
+**O que mudou.** `_cover_url` (`app/api/virtuais_write.py`) reescreve a URL salva para a rota
+pública nova `GET /catalogo/midia/campanhas/<arquivo>`
+(`catalogo.midia_campanha`), que serve **só** de `virtual_covers` — mesma forma do
+`/catalogo/midia` que já servia as fotos do catálogo, e mesma reescrita que o importador já
+fazia. Mora sob `/catalogo/midia/` de propósito: esse prefixo já é repassado pelo
+`frontend/server.js` e proxiado pelos vite configs dos três apps; um prefixo novo exigiria
+mexer nos três (o gap de proxy por app da feature 182). Em S3 a URL já volta pública e nada é
+reescrito. A rota é declarada **antes** da genérica — `<path:filename>` engoliria
+`campanhas/arquivo.jpg`.
+
+No frontend, `campaignBody` (`lib/virtuais.ts`) monta `FormData` quando há capa e JSON quando
+não há, serializando o FAQ como o `_payload` do servidor já o lê. A tela ganhou o campo de capa
+com prévia e o **editor de FAQ** — que também faltava: o FAQ era carregado e reenviado no
+salvamento, mas sem editor saía sempre vazio, com a landing tendo a seção pronta para exibi-lo.
+
+**Pegadinhas.** O `File` sai do estado depois de salvar, senão cada salvamento seguinte
+reenviaria o arquivo. SVG é recusado na capa (`COVER_EXTENSIONS`) — imagem que executa script
+no origin da landing. E a rota pública não aceita travessia de diretório: `send_from_directory`
+barra, e o teste cobre.
+
+**Verificação.** `scripts/db/verify_loja_virtual_publicacao.py` — 18/18 contra `manto_local`,
+subindo um PNG de verdade, publicando e abrindo a landing **sem sessão** para provar que a foto
+responde 200 e não é redirect. `verify_205.py` segue 137/137. Conferido também na tela: capa
+enviada pela gestão, campanha publicada e landing exibindo a foto (`naturalWidth > 0`) e o FAQ.
 
 ### 224 — Evento com dinheiro não é mais apagado: vira cancelado, com devolução ao cliente
 `main` · **2026-08-07** · migration `b8e4d27a91f5`
