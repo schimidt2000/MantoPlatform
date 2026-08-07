@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
@@ -45,19 +46,31 @@ def _load_extraction(run_dir: Path, uid: str) -> dict | None:
 
 
 def _parse_dec(raw) -> Decimal | None:
+    """Aceita '6612.00', '6.612,00', 'R$ 6.612,00' e '6.612' (ponto de milhar pt-BR)."""
     if raw is None:
         return None
+    text = str(raw).replace("R$", "").replace(" ", "").strip()
+    if "," in text:
+        text = text.replace(".", "").replace(",", ".")
+    elif re.fullmatch(r"\d{1,3}(\.\d{3})+", text):
+        # Só pontos, em grupos de milhar ('6.612'): é milhar pt-BR, não decimal.
+        text = text.replace(".", "")
     try:
-        return Decimal(str(raw).replace("R$", "").replace(" ", "").replace(",", "."))
+        return Decimal(text)
     except InvalidOperation:
         return None
 
 
 def _parse_date(raw) -> date | None:
+    """Aceita ISO ('2026-08-05') e pt-BR ('05/08/2026')."""
     if not raw:
         return None
+    text = str(raw).strip()
+    m = re.match(r"^(\d{2})/(\d{2})/(\d{4})", text)
+    if m:
+        text = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
     try:
-        return date.fromisoformat(str(raw)[:10])
+        return date.fromisoformat(text[:10])
     except ValueError:
         return None
 
@@ -101,8 +114,24 @@ def check_item(item: dict, extracted: dict | None) -> list[dict]:
                          "title": f"{item['descricao']}: comprovante anexado sem valor "
                                   "digitado no sistema"})
 
+    flags = item.get("flags", {})
+    if flags.get("payment_status") == "pago" and flags.get("status") == "rejeitado":
+        findings.append({**base, "code": "gasto_pago_porem_rejeitado", "severity": "critico",
+                         "title": f"{item['descricao']}: o dinheiro JÁ SAIU (pago no ato) "
+                                  "mas o gasto foi rejeitado na aprovação"})
+
     esperado = _parse_dec(item.get("amount"))
     lido = _parse_dec(extracted.get("valor"))
+    # Fail-closed: extração existe mas não parseia → achado, nunca silêncio (um comprovante
+    # com valor ilegível não pode sair como "confere").
+    if extracted.get("valor") is not None and lido is None:
+        findings.append({**base, "code": "extracao_ilegivel", "severity": "atencao",
+                         "title": f"{item['descricao']}: valor extraído do comprovante "
+                                  f"(“{extracted.get('valor')}”) não pôde ser interpretado"})
+    if extracted.get("data") is not None and _parse_date(extracted.get("data")) is None:
+        findings.append({**base, "code": "extracao_ilegivel", "severity": "atencao",
+                         "title": f"{item['descricao']}: data extraída do comprovante "
+                                  f"(“{extracted.get('data')}”) não pôde ser interpretada"})
     if esperado is not None and lido is not None and esperado != lido:
         findings.append({**base, "code": "divergencia_valor", "severity": "critico",
                          "title": f"{item['descricao']}: sistema R$ {esperado} × "
@@ -160,14 +189,30 @@ def main() -> int:
 
     run_dir = config.RUNS_DIR / args.run
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    store.set_mode(local=manifest.get("modo") == "local")
+
+    # Achados de estado persistente re-coletados pela margem de 2 dias repetiriam no
+    # relatório seguinte — mesma supressão das anomalias históricas.
+    codigos_persistentes = {"sem_anexo", "gasto_aprovado_sem_comprovante",
+                            "arquivo_ausente", "comprovante_duplicado",
+                            "valor_nao_registrado", "gasto_pago_porem_rejeitado"}
 
     findings: list[dict] = []
+    suprimidos_itens = 0
     for item in manifest["items"]:
         extracted = _load_extraction(run_dir, item["entity_uid"])
-        findings += check_item(item, extracted)
+        for f in check_item(item, extracted):
+            if (f["code"] in codigos_persistentes
+                    and store.finding_seen_before(f["code"], item["entity_uid"],
+                                                  manifest["run_id"])):
+                suprimidos_itens += 1
+                continue
+            findings.append(f)
         if extracted is not None and item.get("sha256"):
             store.record_audited(item["entity_uid"], item["sha256"],
                                  manifest["run_id"], extracted)
+    if suprimidos_itens:
+        print(f"[batimento] {suprimidos_itens} achados de itens já reportados antes — suprimidos")
 
     suprimidas = 0
     for anomalia in manifest["anomalias_sql"]:

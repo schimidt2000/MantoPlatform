@@ -38,7 +38,11 @@ TZ_SP = ZoneInfo("America/Sao_Paulo")
 
 
 def compute_window(args: argparse.Namespace) -> tuple[datetime, datetime]:
-    """Janela da rodada em UTC aware: da última rodada (menos margem) até agora."""
+    """Janela CONTÁBIL da rodada em UTC aware: do fim da última rodada enviada até agora.
+
+    Esta é a janela dos números da semana (sem sobreposição entre relatórios). A coleta de
+    itens usa uma janela estendida (margem de recoleta) derivada dela no `main`.
+    """
     now = datetime.now(timezone.utc)
     if args.desde:
         start_sp = datetime.strptime(args.desde, "%Y-%m-%d").replace(tzinfo=TZ_SP)
@@ -50,7 +54,7 @@ def compute_window(args: argparse.Namespace) -> tuple[datetime, datetime]:
             start = start.replace(tzinfo=timezone.utc)
     else:
         start = now - timedelta(days=7)
-    return start - timedelta(days=config.MARGEM_REACOLETA_DIAS), now
+    return start, now
 
 
 def _naive_utc(dt: datetime) -> datetime:
@@ -163,8 +167,8 @@ def collect_items(cur, win: tuple[datetime, datetime]) -> list[dict]:
         """
         SELECT g.id, g.description, g.category, g.amount, g.expense_date, g.receipt_path,
                g.status, g.disbursement_type, g.supplier_name, g.supplier_pix,
-               g.approved_with_edits, g.event_id, u.name AS reimburse_name,
-               u.pix_key AS reimburse_pix
+               g.approved_with_edits, g.event_id, g.payment_status, g.paid_at_creation,
+               u.name AS reimburse_name, u.pix_key AS reimburse_pix
           FROM special_expenses g
           LEFT JOIN users u ON u.id = g.reimburse_user_id
          WHERE (g.created_at >= %s AND g.created_at < %s)
@@ -187,7 +191,9 @@ def collect_items(cur, win: tuple[datetime, datetime]) -> list[dict]:
             "event_id": r["event_id"],
             "flags": {"status": r["status"],
                       "approved_with_edits": bool(r["approved_with_edits"]),
-                      "receipt_null": r["receipt_path"] is None},
+                      "receipt_null": r["receipt_path"] is None,
+                      "payment_status": r["payment_status"],
+                      "paid_at_creation": bool(r["paid_at_creation"])},
         })
 
     cur.execute(
@@ -317,6 +323,7 @@ def collect_sql_anomalies(cur, win: tuple[datetime, datetime]) -> list[dict]:
                         "esperado": str(esperado), "excesso": str(excesso)},
         })
 
+    # `start_at` é horário de parede de São Paulo (naive) — comparar com janela SP.
     cur.execute(
         """
         SELECT e.id, e.title,
@@ -328,7 +335,7 @@ def collect_sql_anomalies(cur, win: tuple[datetime, datetime]) -> list[dict]:
          GROUP BY e.id, e.title
         HAVING BOOL_OR(i.received)
         """,
-        (a - timedelta(days=90),),
+        (asp - timedelta(days=90),),
     )
     for r in cur.fetchall():
         out.append({
@@ -338,22 +345,34 @@ def collect_sql_anomalies(cur, win: tuple[datetime, datetime]) -> list[dict]:
             "details": {"event_id": r["id"], "recebido_parcelas": _dec(r["recebido_parcelas"])},
         })
 
+    # Espelha RecurringExpenseEntry.out_of_range (app/models.py): conta variável com valor
+    # exato esperado, ou faixa de um lado só — cada referência vale sozinha.
     cur.execute(
         """
-        SELECT ree.id, re.name, ree.amount, re.amount_min, re.amount_max, ree.month_ref
+        SELECT ree.id, re.name, ree.amount, re.amount AS ref_exato,
+               re.amount_min, re.amount_max, re.expense_type, ree.month_ref
           FROM recurring_expense_entries ree
           JOIN recurring_expenses re ON re.id = ree.recurring_id
          WHERE ree.paid_at >= %s AND ree.paid_at < %s
-           AND re.amount_min IS NOT NULL AND re.amount_max IS NOT NULL
-           AND (ree.amount < re.amount_min OR ree.amount > re.amount_max)
+           AND ree.amount IS NOT NULL
+           AND (
+                (re.expense_type = 'variavel' AND re.amount IS NOT NULL
+                 AND ree.amount <> re.amount)
+             OR (re.amount_min IS NOT NULL AND ree.amount < re.amount_min)
+             OR (re.amount_max IS NOT NULL AND ree.amount > re.amount_max)
+           )
         """,
         (a, b),
     )
     for r in cur.fetchall():
+        if r["amount_min"] is not None or r["amount_max"] is not None:
+            faixa = f"faixa R$ {r['amount_min'] or '—'}–{r['amount_max'] or '—'}"
+        else:
+            faixa = f"esperado R$ {r['ref_exato']}"
         out.append({
+            "entity_uid": f"recurring_expense_entry:{r['id']}",
             "code": "recorrente_fora_da_faixa", "severity": "atencao",
-            "title": (f"“{r['name']}” ({r['month_ref']}): R$ {r['amount']} fora da faixa "
-                      f"R$ {r['amount_min']}–{r['amount_max']}"),
+            "title": f"“{r['name']}” ({r['month_ref']}): R$ {r['amount']} fora do previsto ({faixa})",
             "details": {"entry_id": r["id"], "amount": _dec(r["amount"])},
         })
 
@@ -382,6 +401,8 @@ def collect_sql_anomalies(cur, win: tuple[datetime, datetime]) -> list[dict]:
 def collect_nao_auditaveis(cur, win: tuple[datetime, datetime]) -> list[dict]:
     """Pagamentos marcados como pagos que não têm campo de anexo no sistema."""
     a, b = _naive_utc(win[0]), _naive_utc(win[1])
+    # `start_at` (cachês/BV) é horário de parede SP — janela própria.
+    asp, bsp = _naive_sp(win[0]), _naive_sp(win[1])
     out: list[dict] = []
 
     cur.execute(
@@ -430,7 +451,7 @@ def collect_nao_auditaveis(cur, win: tuple[datetime, datetime]) -> list[dict]:
            AND r.payment_status NOT IN ('nao_pago')
            AND r.cache_value IS NOT NULL
         """,
-        (a, b),
+        (asp, bsp),
     )
     out += [{"tipo": "cache", "quem": r["full_name"], "referencia": r["title"],
              "amount": _dec(r["cache_value"])} for r in cur.fetchall()]
@@ -443,7 +464,7 @@ def collect_nao_auditaveis(cur, win: tuple[datetime, datetime]) -> list[dict]:
          WHERE ac.is_bv IS TRUE AND ac.bv_payment_status = 'pago'
            AND e.start_at >= %s AND e.start_at < %s
         """,
-        (a, b),
+        (asp, bsp),
     )
     out += [{"tipo": "bv", "quem": r["bv_recipient"], "referencia": r["title"],
              "amount": _dec(r["amount_brl"])} for r in cur.fetchall()]
@@ -507,22 +528,30 @@ def collect_aggregates(cur, win: tuple[datetime, datetime]) -> dict:
         ),
     }
 
+    # Margem por evento: `start_at` é SP-naive; em grupos a venda fica no líder e os cachês
+    # se espalham nos satélites (regra do próprio app, `_group_cost`) — o custo soma o grupo
+    # inteiro e satélites (sale_value zerado) não entram na lista.
     cur.execute(
         """
         SELECT e.id, e.title, e.start_at, e.sale_value,
                COALESCE((SELECT SUM(COALESCE(r.cache_value, 0) + COALESCE(r.travel_cache, 0))
-                           FROM event_roles r WHERE r.event_id = e.id
+                           FROM event_roles r
+                          WHERE r.event_id IN (SELECT s.id FROM calendar_events s
+                                                WHERE s.id = e.id OR s.group_leader_id = e.id)
                             AND r.dismissed_at IS NULL), 0) AS custo_caches,
                COALESCE((SELECT SUM(g.amount) FROM special_expenses g
-                          WHERE g.event_id = e.id AND g.status = 'aprovado'), 0) AS custo_gastos
+                          WHERE g.event_id IN (SELECT s.id FROM calendar_events s
+                                                WHERE s.id = e.id OR s.group_leader_id = e.id)
+                            AND g.status = 'aprovado'), 0) AS custo_gastos
           FROM calendar_events e
          WHERE e.start_at >= %s AND e.start_at < %s
            AND e.sale_value IS NOT NULL AND e.sale_value > 0
            AND e.is_cortesia_permuta IS NOT TRUE
            AND e.event_type != 'VIRTUAL'
+           AND e.group_leader_id IS NULL
          ORDER BY e.start_at
         """,
-        (a, b),
+        (asp, bsp),
     )
     margens = []
     for r in cur.fetchall():
@@ -552,7 +581,12 @@ def main() -> int:
     args = ap.parse_args()
 
     config.ensure_dirs()
+    store.set_mode(local=args.local)
     win = compute_window(args)
+    # Itens/anomalias usam janela estendida (uploads atrasados são recolhidos; a memória por
+    # hash evita retrabalho). Números da semana usam a janela contábil, sem sobreposição —
+    # senão os 2 dias de margem contariam em dois relatórios seguidos.
+    win_itens = (win[0] - timedelta(days=config.MARGEM_REACOLETA_DIAS), win[1])
     run_id = datetime.now(TZ_SP).strftime("%Y%m%d_%H%M%S")
     run_dir = config.RUNS_DIR / run_id
     run_dir.mkdir(parents=True)
@@ -565,8 +599,8 @@ def main() -> int:
     try:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
             cur.execute("SET default_transaction_read_only = on")
-            items = collect_items(cur, win)
-            anomalias_sql = collect_sql_anomalies(cur, win)
+            items = collect_items(cur, win_itens)
+            anomalias_sql = collect_sql_anomalies(cur, win_itens)
             nao_auditaveis = collect_nao_auditaveis(cur, win)
             aggregates = collect_aggregates(cur, win)
     finally:
@@ -599,6 +633,7 @@ def main() -> int:
         "run_id": run_id,
         "modo": "local" if args.local else "producao",
         "window": [win[0].isoformat(), win[1].isoformat()],
+        "window_coleta": [win_itens[0].isoformat(), win_itens[1].isoformat()],
         "items": items,
         "anomalias_sql": anomalias_sql,
         "nao_auditaveis": nao_auditaveis,

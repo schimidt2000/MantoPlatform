@@ -148,6 +148,7 @@ def main() -> int:
     run_dir = config.RUNS_DIR / args.run
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     findings = json.loads((run_dir / "findings.json").read_text(encoding="utf-8"))
+    store.set_mode(local=manifest.get("modo") == "local")
 
     html = build_html(manifest, findings)
     out = run_dir / "relatorio.html"

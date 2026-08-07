@@ -47,9 +47,24 @@ CREATE INDEX IF NOT EXISTS ix_audited_sha ON audited_files (sha256);
 """
 
 
+# Modo da memória: teste (--local) e produção NUNCA compartilham store — uma rodada de teste
+# contra manto_local (mesmos ids/arquivos da produção) marcaria tudo como já auditado,
+# avançaria a janela e suprimiria anomalias que nunca chegaram a nenhum relatório real.
+_local_mode = False
+
+
+def set_mode(local: bool) -> None:
+    """Define qual memória usar; chame antes de qualquer outra função deste módulo."""
+    global _local_mode
+    _local_mode = local
+
+
 def _connect() -> sqlite3.Connection:
     config.ensure_dirs()
-    conn = sqlite3.connect(config.STORE_PATH)
+    path = config.STORE_PATH
+    if _local_mode:
+        path = path.with_name("audit_store_local.sqlite")
+    conn = sqlite3.connect(path)
     conn.executescript(_SCHEMA)
     return conn
 
@@ -59,10 +74,16 @@ def _now() -> str:
 
 
 def last_window_end() -> str | None:
-    """Fim da última janela coletada (ISO UTC) ou None na primeira rodada."""
+    """Fim da última janela cujo relatório FOI enviado (ISO UTC), ou None.
+
+    A janela só avança quando o relatório chegou a alguém: rodada abortada no meio (coleta
+    feita, sessão caiu antes do envio) é recoberta por inteiro na próxima — a idempotência
+    por (entidade, hash) evita retrabalho de leitura.
+    """
     with _connect() as conn:
         row = conn.execute(
-            "SELECT window_end FROM runs ORDER BY window_end DESC LIMIT 1"
+            "SELECT window_end FROM runs WHERE report_sent = 1"
+            " ORDER BY window_end DESC LIMIT 1"
         ).fetchone()
     return row[0] if row else None
 
@@ -118,23 +139,27 @@ def record_audited(entity_uid: str, sha256: str, run_id: str, extracted: dict) -
 
 
 def finding_seen_before(code: str, entity_uid: str, current_run_id: str) -> bool:
-    """True se este mesmo achado (código + entidade) já foi reportado numa rodada anterior.
+    """True se este achado (código + entidade) já saiu num relatório ENVIADO anterior.
 
-    Usado para não repetir toda semana as anomalias históricas (varreduras all-time como
-    duplicata de arquivo e recebido > venda): elas aparecem UMA vez e depois só voltam se
-    surgir caso novo.
+    Usado para não repetir toda semana achados persistentes (duplicata de arquivo,
+    recebido > venda, sem anexo): aparecem uma vez e só voltam se surgir caso novo. O JOIN
+    com `report_sent = 1` garante que só suprime o que de fato chegou a alguém — achado de
+    rodada abortada ou de teste nunca some sem ter sido visto.
     """
     with _connect() as conn:
         row = conn.execute(
-            "SELECT 1 FROM findings WHERE code = ? AND entity_uid = ? AND run_id != ? LIMIT 1",
+            "SELECT 1 FROM findings f JOIN runs r ON r.run_id = f.run_id"
+            " WHERE f.code = ? AND f.entity_uid = ? AND f.run_id != ? AND r.report_sent = 1"
+            " LIMIT 1",
             (code, entity_uid, current_run_id),
         ).fetchone()
     return row is not None
 
 
 def record_findings(run_id: str, findings: list[dict]) -> None:
-    """Persiste os achados de uma rodada."""
+    """Persiste os achados de uma rodada (idempotente: re-rodar checks substitui, não soma)."""
     with _connect() as conn:
+        conn.execute("DELETE FROM findings WHERE run_id = ?", (run_id,))
         conn.executemany(
             "INSERT INTO findings"
             " (run_id, entity_uid, sha256, code, severity, title, details_json, created_at)"
