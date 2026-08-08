@@ -6,8 +6,14 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-08-06** · Estado do repositório: pós-feature **219 (confirmação de
-> email no cadastro e fila de devoluções)**
+> Última atualização: **2026-08-08** · Estado do repositório: pós-feature **226 (planilha de
+> pagamentos no celular, busca de volta e adiantamentos em janela)**
+>
+> UX nova da 226: **`/financeiro/pagamentos` deixou de ser tabela-única.** Abaixo de `xl` os itens
+> viram cartões empilhados (a tabela de 1040px só cabe a partir de 1280px, porque a sidebar come
+> 256px), a **caixa de busca** que existia na planilha Jinja voltou — agora varrendo o dado, não o
+> DOM —, os adiantamentos de salário saíram do `<details>` da célula para uma **janela sobreposta**,
+> e a barra de ações em lote virou rodapé fixo no celular. Nenhum endpoint mudou.
 >
 > UX nova da 219: **`/talents` ganhou uma terceira aba — "Emails com problema"**, com contador, ao
 > lado de Ativos e Pendentes (só `CASTING`/`SUPERADMIN`). Lista quem não está recebendo nossos
@@ -933,15 +939,45 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **Vínculos**: cada linha de evento/auditoria/recebimento leva a `/events/<id>`; a linha de
   Gastos Recorrentes do DRE reflete os lançamentos de `/gastos/recorrentes`.
 
-#### `/financeiro/pagamentos` — Planilha de Pagamentos *(paridade restaurada na feature 189; visualização e filtro por faixa na feature 194)*
+#### `/financeiro/pagamentos` — Planilha de Pagamentos *(paridade restaurada na feature 189; visualização e filtro por faixa na feature 194; celular, busca e janela de adiantamentos na 226)*
 - **Acesso**: `FINANCEIRO`, `SUPERADMIN`.
 - **UX**: itens de cachê, salário, gasto, BV, comissão e contas recorrentes em uma planilha
   única, na ordem de colunas clássica — **checkbox** (com "selecionar tudo") · **vencimento** ·
   **descrição detalhada** (badge do tipo + descrição do item, com botão de cópia) · **favorecido**
   em negrito · **valor** em BRL (com cópia do valor cru `1234,56`) · **chave PIX** com o tipo
   (CPF/CNPJ/E-mail/Telefone/Aleatória) e botão de cópia · **situação**. Os botões de cópia dão
-  feedback "✓" temporário e anunciam por `aria-live`; adiantamentos de salário (N por pagamento,
-  com comprovante) no próprio valor; **export CSV**. Trocar o mês limpa filtro e seleção.
+  feedback "✓" temporário e anunciam por `aria-live`; **export CSV**. Trocar o mês limpa filtro,
+  busca e seleção.
+- **Duas apresentações do mesmo item** *(feature 226)*: a **tabela** só existe de `xl` (≥1280px)
+  para cima — abaixo disso os itens viram **cartões** (1 coluna no telefone, 2 de `md` para cima),
+  com o mesmo dado empilhado: tipo + vencimento + faixa · descrição (link do evento) · favorecido ·
+  valor grande com cópia · chave PIX em linha própria (`break-all`) · seletor de situação de 44px ·
+  botão de adiantamentos. O corte é em `xl` e não em `lg` porque a partir de `lg` a sidebar de
+  256px deixa só 768px de conteúdo, e a tabela pede 1040px — era exatamente aí que a rolagem
+  lateral escondia favorecido, PIX e situação. `PagamentoRow`/`PagamentoCard` leem faixa, cor e
+  rótulo de `lib/pagamentos.ts` (fonte única), então nunca contam histórias diferentes.
+- **Navegação de mês** *(feature 226)*: setas ‹ › ao lado do seletor de mês (o controle nativo de
+  `input[type=month]` é o alvo mais difícil de acertar com o dedo). O título da lista mostra o mês
+  por extenso — "Itens de agosto de 2026 (N)".
+- **Busca** *(restaurada na feature 226; existia na planilha Jinja e não veio na migração para
+  React)*: campo com lupa, botão de limpar e resumo vivo **"N itens · R$ X"** da seleção
+  visível. Casa sem acento e sem caixa contra evento, favorecido, tipo, função/sublabel, data
+  (`dd/mm/aaaa` e ISO), PIX, situação e valor — este **duas vezes**: formatado (`1.234,56`) e cru
+  (`1234,56`, como se digita conferindo o extrato). Cada palavra é uma restrição que **se soma**
+  (E), então "joao 1500" funciona; a versão Jinja casava a frase inteira e não achava nada. O
+  índice é montado a partir do **dado** (uma vez por resposta da API), não do `textContent` das
+  células como na versão Jinja — por isso a mesma busca vale para a tabela e para os cartões.
+  Combina com o filtro de faixa (E).
+- **Adiantamentos de salário em janela sobreposta** *(feature 226)*: o botão "✎ Adiantamentos" da
+  linha/cartão abre um `Dialog` do `@manto/ui` com bruto · total adiantado · líquido a pagar, a
+  lista do que já foi lançado (data, valor, link do comprovante, remover com confirmação em dois
+  toques — sem `window.confirm`) e o formulário de novo adiantamento (`MoneyInput`, data de hoje,
+  `FileUpload` de comprovante obrigatório). Antes era um `<details>` dentro da célula "Valor":
+  no desktop obrigava a rolar a planilha de lado para achar o formulário e no celular ele nascia
+  com 28px de largura. A janela recebe o item **da query** (não uma cópia em `useState`), então o
+  total se atualiza sozinho depois de gravar; salário 100% adiantado troca o formulário por
+  explicação + o caminho para liberar espaço. Teto de valor validado no cliente com a mesma regra
+  do backend (soma dos adiantamentos ≤ salário bruto).
 - **As 4 faixas (fonte única de cor e de filtro)**: **Pago** · **No banco** · **Pendente**
   (`nao_pago` já vencido) · **Futuro** (`nao_pago` a vencer). A tela deriva "pendente"/"futuro"
   do campo `is_future` que a API já manda — a mesma regra com que o backend soma os totais —, e
@@ -970,10 +1006,14 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   ação em voo gira (lida de `mutation.variables`), as outras ficam desabilitadas até a resposta,
   impedindo dois lotes concorrentes (Princípio V). "Selecionar tudo" opera sobre as linhas
   **visíveis**: com filtro ligado, marca só aquela faixa sem mexer no resto da seleção; a linha
-  marcada ganha barra lateral roxa.
+  marcada ganha barra lateral roxa. Abaixo de `xl` a barra vira **rodapé fixo** com rótulo curto
+  (Pago · Banco · Não pago) e ícone para excluir/limpar — ancorada no topo da lista ela saía da
+  tela no primeiro rolar, e com os rótulos longos comia 146px de um telefone de 812px (feature
+  226). A seleção sobrevive ao filtro/busca **de propósito**, então a barra avisa quando parte
+  dela está escondida: "(N fora do filtro/busca)".
 - **API**: `GET /api/financeiro/pagamentos` · `POST .../set-status`, `.../bulk-action`,
-  `.../salary/<id>/advance` · `GET .../export`. A feature 194 não criou nem alterou endpoint —
-  é toda de apresentação sobre o payload existente.
+  `.../salary/<id>/advance`, `.../salary/advance/<id>/delete` · `GET .../export`. Nem a 194 nem a
+  226 criaram ou alteraram endpoint — as duas são de apresentação sobre o payload existente.
 
 #### `/gastos` — Gastos Extras
 - **Acesso**: staff para lançar; aprovar/rejeitar em `_require_financeiro()`.
