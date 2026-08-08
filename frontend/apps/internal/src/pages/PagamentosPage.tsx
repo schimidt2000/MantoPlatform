@@ -1,443 +1,45 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { ChevronLeft, ChevronRight, Search, Trash2, X } from "lucide-react";
 import {
   Button,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  CopyButton,
   Input,
   PageHeader,
   Skeleton,
   cn,
-  formatShortDate,
 } from "@manto/ui";
-import { formatBRL } from "@manto/money";
 import {
   usePagamentos,
-  useSetPaymentStatus,
   useBulkPaymentAction,
-  useAddSalaryAdvance,
-  useDeleteSalaryAdvance,
   useExportPagamentosCsv,
   type PagamentoItem,
-  type PagamentoItemType,
-  type PaymentStatus,
   type BulkPaymentAction,
 } from "../lib/financeiro";
-
-const TYPE_LABELS: Record<PagamentoItemType, string> = {
-  cache: "Cachê",
-  salary: "Salário",
-  expense: "Gasto",
-  bv: "BV",
-  commission: "Comissão",
-  recurring: "Recorrente",
-};
-
-const TYPE_BADGE_CLASS: Record<PagamentoItemType, string> = {
-  cache: "bg-surface-2 text-muted",
-  salary: "bg-gold-soft text-gold",
-  expense: "bg-blue-soft text-blue",
-  bv: "bg-accent-soft text-accent",
-  commission: "bg-green-soft text-green",
-  recurring: "bg-gold-soft text-gold",
-};
-
-/** Tipos elegíveis para seleção/ação em massa (mesmo escopo de `bulk_payment_action`). */
-const SELECTABLE_TYPES: PagamentoItemType[] = ["cache", "salary", "expense", "commission"];
-
-/**
- * Situações aceitas pelo backend por tipo de item (`_VALID_PAYMENT_STATUS` em
- * `app/api/financeiro_write.py`). Todos os tipos aceitam as mesmas 3 situações (feature 199).
- */
-const STATUS_OPTIONS_BY_TYPE: Record<PagamentoItemType, PaymentStatus[]> = {
-  cache: ["nao_pago", "no_banco", "pago"],
-  salary: ["nao_pago", "no_banco", "pago"],
-  expense: ["nao_pago", "no_banco", "pago"],
-  bv: ["nao_pago", "no_banco", "pago"],
-  commission: ["nao_pago", "no_banco", "pago"],
-  recurring: ["nao_pago", "no_banco", "pago"],
-};
-
-/**
- * As 4 faixas que o financeiro enxerga na planilha. É a MESMA classificação que o backend usa
- * para somar `totals` (`_pagamentos` em `app/api/financeiro_read.py`): "pendente" é o que já
- * venceu (`nao_pago` sem `is_future`) e "futuro" é o que ainda vai vencer. Derivar as duas do
- * `is_future` que a API já manda — em vez de recomparar datas no cliente — garante que o filtro
- * do card sempre bata com o valor exibido nele.
- */
-type PagamentoBucket = "pago" | "no_banco" | "pendente" | "futuro";
-
-/** Filtro ativo dos cards de KPI; `null` = "Total no período" (nenhum filtro). */
-type PagamentoFilter = PagamentoBucket | null;
-
-interface BucketTone {
-  /** Nuance de fundo da linha da tabela — leitura "bate o olho e entende". */
-  row: string;
-  /** Card selecionado: borda grossa viva + fundo colorido. */
-  cardActive: string;
-  /** Cor do valor no card e do seletor de situação. */
-  text: string;
-  /** Seletor de situação da linha. */
-  select: string;
-}
-
-/**
- * Paleta única por faixa — card, linha da tabela e seletor de situação saem daqui, então a cor
- * que o operador clica no card é exatamente a cor das linhas que aparecem.
- *
- * "Futuro" usa `gold` (cor de atenção do design system) e não `amber`: a paleta padrão do
- * Tailwind não combina com o dourado da marca — ver `@manto/ui/tailwind-preset`.
- *
- * As outras três faixas usavam paleta CRUA do Tailwind (`bg-green-50`, `bg-blue-50`,
- * `bg-rose-50`, `border-green-500`...), que é sempre clara e não acompanha o tema: no escuro a
- * tabela ficaria com linhas pastel berrantes sobre o painel escuro, e a faixa "Futuro" seria a
- * única a escurecer. Agora as quatro saem do mesmo vocabulário de token; os valores do tema
- * CLARO dos degraus `-50` são exatamente os HEX que estavam aqui, então o claro não mudou.
- */
-const BUCKET_TONE: Record<PagamentoBucket, BucketTone> = {
-  pago: {
-    row: "bg-green-50",
-    cardActive: "border-green bg-green-50/50 ring-2 ring-green/20",
-    text: "text-green",
-    select: "border-green bg-green-soft text-green",
-  },
-  no_banco: {
-    row: "bg-blue-50",
-    cardActive: "border-blue bg-blue-50/50 ring-2 ring-blue/20",
-    text: "text-blue",
-    select: "border-blue bg-blue-soft text-blue",
-  },
-  pendente: {
-    row: "bg-red-50",
-    cardActive: "border-red bg-red-50/50 ring-2 ring-red/20",
-    text: "text-red",
-    select: "border-red bg-red-soft text-red",
-  },
-  futuro: {
-    row: "bg-gold-50",
-    cardActive: "border-gold bg-gold-50/50 ring-2 ring-gold/20",
-    text: "text-gold",
-    select: "border-gold bg-gold-soft text-gold",
-  },
-};
-
-const BUCKET_LABELS: Record<PagamentoBucket, string> = {
-  pago: "Pagos",
-  no_banco: "No banco",
-  pendente: "Pendentes",
-  futuro: "Futuro",
-};
-
-/** Ordem dos cards de filtro, depois do card neutro "Total no período". */
-const BUCKET_ORDER: PagamentoBucket[] = ["pago", "no_banco", "pendente", "futuro"];
-
-/** Rótulo do botão de cada ação em lote — a barra flutuante lê daqui. */
-const BULK_ACTION_LABELS: Record<Exclude<BulkPaymentAction, "delete">, string> = {
-  pago: "Marcar pago",
-  no_banco: "No banco",
-  nao_pago: "Não pago",
-};
-
-function brl(v: number | null | undefined): string {
-  return `R$ ${formatBRL(v ?? 0)}`;
-}
-
-// Vencimento e adiantamento chegam como data pura ("2026-08-05"); `formatShortDate` é a fonte
-// única que a monta em horário local — `new Date(iso)` direto lia como UTC e exibia 04/08.
-const formatDate = formatShortDate;
-
-function currentMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function itemKey(item: PagamentoItem): string {
-  return `${item.type}-${item.id}`;
-}
-
-/** Faixa a que o item pertence — fonte única do filtro, da cor da linha e do seletor. */
-function bucketOf(item: PagamentoItem): PagamentoBucket {
-  if (item.status === "pago") return "pago";
-  if (item.status === "no_banco") return "no_banco";
-  return item.is_future ? "futuro" : "pendente";
-}
-
-/** Valor cru em formato "1234,56" — o que o operador cola no internet banking. */
-function rawAmount(value: number): string {
-  return value.toFixed(2).replace(".", ",");
-}
-
-interface AdvanceFormProps {
-  salaryPaymentId: number;
-  month: string;
-  onDone: () => void;
-}
-
-function AdvanceForm({ salaryPaymentId, month, onDone }: AdvanceFormProps) {
-  const [amount, setAmount] = useState("");
-  const [advanceDate, setAdvanceDate] = useState("");
-  const [proof, setProof] = useState<File | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const addAdvance = useAddSalaryAdvance(month);
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (!proof) {
-      setError("Anexe o comprovante do adiantamento.");
-      return;
-    }
-    addAdvance.mutate(
-      { salaryPaymentId, amount, advanceDate: advanceDate || undefined, proof },
-      {
-        onSuccess: () => {
-          setAmount("");
-          setAdvanceDate("");
-          setProof(null);
-          onDone();
-        },
-        onError: (err) => {
-          setError(err instanceof Error ? err.message : "Não foi possível registrar o adiantamento.");
-        },
-      },
-    );
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="mt-2 flex flex-wrap items-end gap-2 text-xs">
-      <div>
-        <label className="block text-muted">Valor</label>
-        <Input
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="R$ 0,00"
-          className="h-8 w-28"
-          disabled={addAdvance.isPending}
-        />
-      </div>
-      <div>
-        <label className="block text-muted">Data</label>
-        <Input
-          type="date"
-          value={advanceDate}
-          onChange={(e) => setAdvanceDate(e.target.value)}
-          className="h-8 w-36"
-          disabled={addAdvance.isPending}
-        />
-      </div>
-      <div>
-        <label className="block text-muted">Comprovante</label>
-        <input
-          type="file"
-          onChange={(e) => setProof(e.target.files?.[0] ?? null)}
-          className="text-xs"
-          disabled={addAdvance.isPending}
-        />
-      </div>
-      <Button type="submit" size="sm" loading={addAdvance.isPending}>
-        Adicionar
-      </Button>
-      {error && <p className="w-full text-red">{error}</p>}
-    </form>
-  );
-}
-
-interface PagamentoRowProps {
-  item: PagamentoItem;
-  statusLabels: Record<string, string>;
-  month: string;
-  selected: boolean;
-  selectable: boolean;
-  onToggleSelect: (item: PagamentoItem) => void;
-}
-
-function PagamentoRow({
-  item,
-  statusLabels,
-  month,
-  selected,
-  selectable,
-  onToggleSelect,
-}: PagamentoRowProps) {
-  const bucket = bucketOf(item);
-  const tone = BUCKET_TONE[bucket];
-  const setStatus = useSetPaymentStatus(month);
-  const deleteAdvance = useDeleteSalaryAdvance(month);
-  const [showAdvanceForm, setShowAdvanceForm] = useState(false);
-  const statusOptions = STATUS_OPTIONS_BY_TYPE[item.type];
-  const descricao = item.event_title || item.copy_label || "—";
-
-  return (
-    <tr className={cn("border-b border-line align-top transition-colors last:border-0", tone.row)}>
-      {/* Seleção em lote — barra lateral roxa marca a linha marcada. A borda existe sempre
-          (transparente quando não selecionada) para a linha não "pular" 4px ao marcar. */}
-      <td
-        className={cn(
-          "border-l-4 border-l-transparent px-2 py-2",
-          selected && "border-l-accent bg-accent-soft",
-        )}
-      >
-        {selectable && (
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={() => onToggleSelect(item)}
-            aria-label={`Selecionar ${descricao}`}
-          />
-        )}
-      </td>
-
-      {/* Vencimento */}
-      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted">{formatDate(item.date)}</td>
-
-      {/* Descrição detalhada: tipo + item */}
-      <td className="px-3 py-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span
-            className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${TYPE_BADGE_CLASS[item.type]}`}
-          >
-            {TYPE_LABELS[item.type]}
-          </span>
-          {item.type === "bv" && item.missing_data && (
-            <span
-              className="rounded-md bg-red-soft px-1.5 py-0.5 text-[10px] font-bold text-red"
-              title="Falta o PIX de quem recebe o BV"
-            >
-              ⚠ falta PIX
-            </span>
-          )}
-          {item.event_id ? (
-            <Link to={`/events/${item.event_id}`} className="font-bold text-ink hover:underline">
-              {descricao}
-            </Link>
-          ) : (
-            <span className="font-bold text-ink">{descricao}</span>
-          )}
-          {item.copy_label && (
-            <CopyButton value={item.copy_label} label="Copiar descrição e data" />
-          )}
-        </div>
-        {item.sublabel && <div className="mt-0.5 text-[11px] text-muted">{item.sublabel}</div>}
-      </td>
-
-      {/* Favorecido */}
-      <td className="px-3 py-2 font-bold text-ink">{item.person_name || "—"}</td>
-
-      {/* Valor */}
-      <td className="whitespace-nowrap px-3 py-2 text-right">
-        <div className="flex items-center justify-end gap-1 font-bold tabular-nums text-ink">
-          <span>{brl(item.amount)}</span>
-          <CopyButton value={rawAmount(item.amount)} label="Copiar valor" />
-        </div>
-        {item.type === "salary" && (item.advance_amount ?? 0) > 0 && (
-          <div className="text-[10px] font-semibold text-gold">
-            adiantado {brl(item.advance_amount)}
-            {(item.advances?.length ?? 0) > 1 ? ` (${item.advances?.length}x)` : ""}
-          </div>
-        )}
-        {item.type === "salary" && (
-          <details className="mt-1 text-left" open={showAdvanceForm}>
-            <summary
-              className="cursor-pointer text-[11px] text-blue"
-              onClick={(e) => {
-                e.preventDefault();
-                setShowAdvanceForm((v) => !v);
-              }}
-            >
-              ✎ Adiantamentos
-            </summary>
-            <ul className="mt-1 space-y-0.5 text-[11px] text-muted">
-              <li>Bruto: {brl(item.gross_amount)}</li>
-              {(item.advances ?? []).map((a) => (
-                <li key={a.id} className="flex items-center gap-1">
-                  {formatDate(a.date)} — {brl(a.amount)}
-                  {a.proof ? " (com comprovante)" : ""}
-                  <button
-                    type="button"
-                    onClick={() => deleteAdvance.mutate(a.id)}
-                    disabled={deleteAdvance.isPending}
-                    className="text-red hover:underline disabled:opacity-50"
-                  >
-                    remover
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {typeof item.id === "number" && (
-              <AdvanceForm
-                salaryPaymentId={item.id}
-                month={month}
-                onDone={() => setShowAdvanceForm(true)}
-              />
-            )}
-          </details>
-        )}
-      </td>
-
-      {/* Chave PIX + cópia rápida */}
-      <td className="px-3 py-2 text-[11px]">
-        {item.pix_key ? (
-          <div className="flex items-start gap-1">
-            <div className="min-w-0">
-              <span className="break-all text-ink">{item.pix_key}</span>
-              {item.pix_key_type && (
-                <span className="mt-0.5 block text-[10px] font-semibold uppercase text-muted">
-                  {item.pix_key_type}
-                </span>
-              )}
-            </div>
-            <CopyButton value={item.pix_key} label="Copiar chave PIX" />
-          </div>
-        ) : (
-          <span className="text-muted">—</span>
-        )}
-      </td>
-
-      {/* Situação */}
-      <td className="whitespace-nowrap px-3 py-2">
-        <div className="flex flex-col items-start gap-1">
-          {bucket === "futuro" && (
-            <span className="rounded-md bg-gold-soft px-1.5 py-0.5 text-[10px] font-bold text-gold">
-              ⏳ Futuro
-            </span>
-          )}
-          <select
-            value={item.status}
-            onChange={(e) =>
-              setStatus.mutate({
-                item_type: item.type,
-                item_id: item.id,
-                status: e.target.value as PaymentStatus,
-              })
-            }
-            disabled={setStatus.isPending}
-            aria-label={`Situação de ${descricao}`}
-            className={cn(
-              "rounded-md border px-1.5 py-1 text-[11px] font-bold disabled:opacity-50",
-              tone.select,
-            )}
-          >
-            {statusOptions.map((s) => (
-              <option key={s} value={s}>
-                {statusLabels[s] ?? s}
-              </option>
-            ))}
-          </select>
-          <span aria-live="polite" className="sr-only">
-            {setStatus.isPending ? "Salvando situação…" : ""}
-          </span>
-          {setStatus.isError && (
-            <span className="text-[10px] text-red">Falha ao salvar — tente de novo.</span>
-          )}
-        </div>
-      </td>
-    </tr>
-  );
-}
+import {
+  BULK_ACTION_LABELS,
+  BULK_ACTION_SHORT_LABELS,
+  BUCKET_LABELS,
+  BUCKET_ORDER,
+  BUCKET_TONE,
+  brl,
+  bucketOf,
+  currentMonth,
+  isSelectable,
+  itemKey,
+  matchesSearch,
+  monthLabel,
+  searchIndexOf,
+  searchTerms,
+  shiftMonth,
+  type PagamentoBucket,
+  type PagamentoFilter,
+} from "../lib/pagamentos";
+import { PagamentoCard, PagamentoRow } from "../components/Pagamentos/PagamentoItemViews";
+import { SalaryAdvancesDialog } from "../components/Pagamentos/SalaryAdvancesDialog";
 
 interface TotalCardProps {
   label: string;
@@ -449,6 +51,8 @@ interface TotalCardProps {
   active: boolean;
   /** Há um filtro ativo em OUTRO card — este fica apagado para não competir. */
   dimmed: boolean;
+  /** Ajuste de grade (ex.: o card neutro ocupando a linha inteira no celular). */
+  className?: string;
   onClick: () => void;
 }
 
@@ -457,7 +61,16 @@ interface TotalCardProps {
  * Clicar filtra; clicar de novo no card ativo limpa. Cores e destaque vêm de `BUCKET_TONE`,
  * então o card e as linhas que ele revela têm sempre a mesma cor.
  */
-function TotalCard({ label, value, count, bucket, active, dimmed, onClick }: TotalCardProps) {
+function TotalCard({
+  label,
+  value,
+  count,
+  bucket,
+  active,
+  dimmed,
+  className,
+  onClick,
+}: TotalCardProps) {
   const tone = bucket ? BUCKET_TONE[bucket] : null;
   return (
     // As classes vão TODAS no `Card` (que passa por `cn`/twMerge e resolve `border` vs
@@ -466,26 +79,34 @@ function TotalCard({ label, value, count, bucket, active, dimmed, onClick }: Tot
     <Card
       asChild
       className={cn(
-        "border-2 p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "border-2 p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-4",
         active
           ? tone
             ? `${tone.cardActive} shadow-md`
             : "border-accent bg-accent-soft shadow-md"
           : "border-line bg-panel hover:border-accent/40 hover:shadow-md",
         dimmed && "opacity-60 grayscale-[35%] hover:opacity-100 hover:grayscale-0",
+        className,
       )}
     >
       {/* `span`, não `p`: o conteúdo de um `<button>` só aceita phrasing content. */}
       <button type="button" onClick={onClick} aria-pressed={active}>
-        <span className="block text-[11px] font-bold uppercase tracking-wide text-muted">
+        <span className="block text-[10px] font-bold uppercase tracking-wide text-muted sm:text-[11px]">
           {label}
         </span>
-        <span className={cn("mt-1 block text-lg font-bold tabular-nums", tone?.text ?? "text-ink")}>
+        <span
+          className={cn(
+            "mt-1 block text-base font-bold tabular-nums sm:text-lg",
+            tone?.text ?? "text-ink",
+          )}
+        >
           {brl(value)}
         </span>
         <span className="mt-0.5 block text-[10px] font-semibold text-muted">
           {count} {count === 1 ? "item" : "itens"}
-          {active ? " · filtro ativo" : ""}
+          {/* O card neutro fica "ativo" quando NÃO há filtro — anunciar "filtro ativo" nele
+              dizia o contrário do que acontece. */}
+          {active && bucket ? " · filtro ativo" : ""}
         </span>
       </button>
     </Card>
@@ -496,6 +117,8 @@ interface PagamentoBulkBarProps {
   count: number;
   /** Soma dos itens marcados, formatada com `@manto/money` na exibição. */
   total: number;
+  /** Marcados que a busca/filtro esconderam — a ação em lote os inclui, então precisa avisar. */
+  hiddenCount: number;
   /** Ação em execução agora — só o botão dela mostra spinner (Princípio V). */
   runningAction: BulkPaymentAction | null;
   onAction: (action: BulkPaymentAction) => void;
@@ -503,14 +126,18 @@ interface PagamentoBulkBarProps {
 }
 
 /**
- * Barra flutuante de ações em massa da planilha — aparece no topo da tabela assim que há 1+
- * itens marcados e some ao voltar a 0. Segue o padrão de `CatalogBulkActionBar` (feature 186),
- * com a diferença de mostrar a soma monetária da seleção, que é o número que o financeiro
- * confere antes de disparar o lote no banco.
+ * Barra de ações em massa da planilha — aparece assim que há 1+ itens marcados e some ao voltar
+ * a 0. Segue o padrão de `CatalogBulkActionBar` (feature 186), com a diferença de mostrar a soma
+ * monetária da seleção, que é o número que o financeiro confere antes de disparar o lote.
+ *
+ * No celular ela é **rodapé fixo** (feature 226): ancorada no topo da tabela, a barra saía da
+ * tela no primeiro rolar e o operador marcava itens sem ver o que fazer com eles. No desktop
+ * continua no lugar de sempre, no topo da lista.
  */
 function PagamentoBulkBar({
   count,
   total,
+  hiddenCount,
   runningAction,
   onAction,
   onClear,
@@ -522,33 +149,52 @@ function PagamentoBulkBar({
     <AnimatePresence>
       {count > 0 && (
         <motion.div
-          initial={shouldReduceMotion ? false : { opacity: 0, y: -8 }}
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
+          exit={shouldReduceMotion ? undefined : { opacity: 0, y: 8 }}
           transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: "easeOut" }}
-          className="flex flex-wrap items-center gap-2 border-b-2 border-accent bg-accent-soft px-3 py-2.5"
+          className={cn(
+            "flex flex-wrap items-center gap-2 border-accent px-3 py-2.5",
+            // Rodapé fixo no celular. Fundo OPACO (`bg-panel`): `accent-soft` é translúcido de
+            // propósito e deixaria os cartões passarem por baixo da barra.
+            "fixed inset-x-0 bottom-0 z-30 border-t-2 bg-panel shadow-lg",
+            "pb-[calc(0.625rem+env(safe-area-inset-bottom))]",
+            "xl:static xl:z-auto xl:border-b-2 xl:border-t-0 xl:bg-accent-soft xl:pb-2.5 xl:shadow-none",
+          )}
         >
-          <span className="mr-1 text-sm font-bold tabular-nums text-ink">
-            {count} selecionado{count === 1 ? "" : "s"} • {brl(total)}
-          </span>
+          {/* No celular o resumo ocupa a linha inteira e os botões vêm embaixo, em UMA linha
+              (rótulo curto + ícone) — é o que mantém a barra em ~80px em vez de 146px. */}
+          <div className="flex w-full flex-wrap items-baseline gap-x-2 xl:mr-1 xl:w-auto">
+            <span className="text-sm font-bold tabular-nums text-ink">
+              {count} selecionado{count === 1 ? "" : "s"} • {brl(total)}
+            </span>
+            {hiddenCount > 0 && (
+              <span className="text-[11px] font-semibold text-muted">
+                ({hiddenCount} fora do filtro/busca)
+              </span>
+            )}
+          </div>
           {(Object.keys(BULK_ACTION_LABELS) as Array<keyof typeof BULK_ACTION_LABELS>).map(
             (action) => (
               <Button
                 key={action}
                 size="sm"
+                className="h-11 xl:h-9"
                 variant={action === "pago" ? "default" : "outline"}
                 loading={runningAction === action}
                 disabled={busy && runningAction !== action}
                 onClick={() => onAction(action)}
               >
-                {BULK_ACTION_LABELS[action]}
+                <span className="xl:hidden">{BULK_ACTION_SHORT_LABELS[action]}</span>
+                <span className="hidden xl:inline">{BULK_ACTION_LABELS[action]}</span>
               </Button>
             ),
           )}
           <Button
             size="sm"
             variant="ghost"
-            className="text-red"
+            className="h-11 w-11 px-0 text-red xl:h-9 xl:w-auto xl:px-3"
+            aria-label="Excluir selecionados"
             loading={runningAction === "delete"}
             disabled={busy && runningAction !== "delete"}
             onClick={() => {
@@ -557,10 +203,19 @@ function PagamentoBulkBar({
               }
             }}
           >
-            Excluir
+            <Trash2 className="h-4 w-4 xl:hidden" aria-hidden />
+            <span className="hidden xl:inline">Excluir</span>
           </Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={onClear}>
-            Limpar seleção
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-11 w-11 px-0 xl:h-9 xl:w-auto xl:px-3"
+            aria-label="Limpar seleção"
+            disabled={busy}
+            onClick={onClear}
+          >
+            <X className="h-4 w-4 xl:hidden" aria-hidden />
+            <span className="hidden xl:inline">Limpar seleção</span>
           </Button>
         </motion.div>
       )}
@@ -572,13 +227,32 @@ export function PagamentosPage() {
   const [month, setMonth] = useState(currentMonth());
   const [selected, setSelected] = useState<Record<string, PagamentoItem>>({});
   const [filter, setFilter] = useState<PagamentoFilter>(null);
+  const [search, setSearch] = useState("");
+  /**
+   * Adiantamentos: guardamos só o **id** do lançamento de salário e derivamos o item da query
+   * (nunca uma cópia em estado). O diálogo grava adiantamento e remove adiantamento — com um
+   * instantâneo, ele seguiria mostrando o total anterior depois de gravar. O `open` é separado
+   * do id para a janela poder animar a saída antes de desmontar.
+   */
+  const [advanceSalaryId, setAdvanceSalaryId] = useState<number | null>(null);
+  const [advanceOpen, setAdvanceOpen] = useState(false);
+
   const query = usePagamentos(month);
   const bulkAction = useBulkPaymentAction(month);
   const exportCsv = useExportPagamentosCsv();
 
   const data = query.data;
   const items = useMemo(() => data?.items ?? [], [data]);
-  const isSelectable = (item: PagamentoItem) => SELECTABLE_TYPES.includes(item.type);
+  const statusLabels = data?.status_labels;
+
+  /** Índice de busca por item, montado uma vez por resposta da API (não por tecla digitada). */
+  const searchIndex = useMemo(() => {
+    const index = new Map<string, string>();
+    items.forEach((item) => index.set(itemKey(item), searchIndexOf(item, statusLabels ?? {})));
+    return index;
+  }, [items, statusLabels]);
+
+  const terms = useMemo(() => searchTerms(search), [search]);
 
   /** Quantos itens há em cada faixa — alimenta o subtítulo dos cards de filtro. */
   const counts = useMemo(() => {
@@ -589,11 +263,18 @@ export function PagamentosPage() {
     return acc;
   }, [items]);
 
+  // Faixa (card de KPI) e busca se somam: o card recorta a situação, a busca recorta o texto.
   const visibleItems = useMemo(
-    () => (filter ? items.filter((item) => bucketOf(item) === filter) : items),
-    [items, filter],
+    () =>
+      items.filter((item) => {
+        if (filter && bucketOf(item) !== filter) return false;
+        if (terms.length === 0) return true;
+        return matchesSearch(searchIndex.get(itemKey(item)) ?? "", terms);
+      }),
+    [items, filter, terms, searchIndex],
   );
   const visibleSelectable = visibleItems.filter(isSelectable);
+  const visibleTotal = visibleItems.reduce((sum, item) => sum + item.amount, 0);
 
   const toggleSelect = (item: PagamentoItem) => {
     setSelected((prev) => {
@@ -611,6 +292,8 @@ export function PagamentosPage() {
   const selectedItems = Object.values(selected);
   /** Soma monetária da seleção — exibida na barra em lote via `@manto/money` (Princípio VII). */
   const selectedTotal = selectedItems.reduce((sum, item) => sum + item.amount, 0);
+  const visibleKeys = new Set(visibleItems.map(itemKey));
+  const hiddenSelectedCount = selectedItems.filter((item) => !visibleKeys.has(itemKey(item))).length;
 
   // "Selecionar tudo" opera sobre o que está VISÍVEL: com um filtro ligado, marcar tudo marca
   // só aquela faixa, sem tocar no que já estava selecionado fora dela.
@@ -637,10 +320,26 @@ export function PagamentosPage() {
   };
 
   const handleMonthChange = (nextMonth: string) => {
+    if (!nextMonth) return;
     setMonth(nextMonth);
     setSelected({});
     setFilter(null);
+    setSearch("");
+    setAdvanceOpen(false);
   };
+
+  const openAdvances = (item: PagamentoItem) => {
+    if (typeof item.id !== "number") return;
+    setAdvanceSalaryId(item.id);
+    setAdvanceOpen(true);
+  };
+
+  // O id sobrevive ao fechamento (para a animação de saída rodar), então o item continua
+  // resolvível enquanto a janela desaparece.
+  const advanceItem =
+    advanceSalaryId === null
+      ? undefined
+      : items.find((item) => item.type === "salary" && item.id === advanceSalaryId);
 
   const runBulkAction = (action: BulkPaymentAction) => {
     bulkAction.mutate(
@@ -665,6 +364,16 @@ export function PagamentosPage() {
     ? bulkAction.variables?.action ?? null
     : null;
 
+  const itemViewProps = (item: PagamentoItem) => ({
+    item,
+    statusLabels: statusLabels ?? {},
+    month,
+    selected: Boolean(selected[itemKey(item)]),
+    selectable: isSelectable(item),
+    onToggleSelect: toggleSelect,
+    onOpenAdvances: openAdvances,
+  });
+
   return (
     <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
       <PageHeader
@@ -673,14 +382,36 @@ export function PagamentosPage() {
         className="mb-0"
       />
 
+      {/* Navegação de mês: as setas existem para o celular, onde acertar o seletor nativo de
+          mês com o dedo é a parte mais difícil da tela. */}
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          type="month"
-          value={month}
-          onChange={(e) => handleMonthChange(e.target.value)}
-          className="h-9 w-40"
-          aria-label="Mês de referência"
-        />
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 w-9 p-0"
+            aria-label="Mês anterior"
+            onClick={() => handleMonthChange(shiftMonth(month, -1))}
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden />
+          </Button>
+          <Input
+            type="month"
+            value={month}
+            onChange={(e) => handleMonthChange(e.target.value)}
+            className="h-9 w-[9.5rem]"
+            aria-label="Mês de referência"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 w-9 p-0"
+            aria-label="Mês seguinte"
+            onClick={() => handleMonthChange(shiftMonth(month, 1))}
+          >
+            <ChevronRight className="h-4 w-4" aria-hidden />
+          </Button>
+        </div>
         <Button
           variant="outline"
           size="sm"
@@ -706,7 +437,9 @@ export function PagamentosPage() {
 
       {data && (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          {/* "Total no período" ocupa a linha inteira no celular; as 4 faixas ficam num 2×2
+              embaixo dele, em vez de um card órfão no fim da grade. */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-5">
             <TotalCard
               label="Total no período"
               value={data.totals.total}
@@ -714,6 +447,7 @@ export function PagamentosPage() {
               bucket={null}
               active={filter === null}
               dimmed={false}
+              className="col-span-2 sm:col-span-1"
               onClick={() => handleFilterClick(null)}
             />
             {BUCKET_ORDER.map((bucket) => (
@@ -730,17 +464,53 @@ export function PagamentosPage() {
             ))}
           </div>
 
+          {/* Busca por qualquer dado da linha — a mesma da planilha antiga, agora varrendo o
+              dado (e não o DOM), então ela vale igual para a tabela e para os cartões. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-0 flex-1 sm:max-w-lg">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+                aria-hidden
+              />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por evento, nome, função, valor, PIX, data…"
+                aria-label="Buscar na planilha de pagamentos"
+                autoComplete="off"
+                className="pl-9 pr-10"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  aria-label="Limpar busca"
+                  title="Limpar busca"
+                  className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              )}
+            </div>
+            {terms.length > 0 && (
+              <span className="text-xs font-bold tabular-nums text-ink">
+                {visibleItems.length} {visibleItems.length === 1 ? "item" : "itens"} ·{" "}
+                {brl(visibleTotal)}
+              </span>
+            )}
+          </div>
+
           <p aria-live="polite" className="sr-only">
-            {filter
-              ? `Filtro ${BUCKET_LABELS[filter]} ativo: ${visibleItems.length} de ${items.length} itens.`
+            {filter || terms.length > 0
+              ? `${visibleItems.length} de ${items.length} itens em exibição.`
               : "Nenhum filtro ativo."}
           </p>
 
           <Card>
-            <CardHeader className="flex-row items-center justify-between gap-2 pb-2">
+            <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-2">
               <CardTitle className="text-base">
-                Itens do mês ({visibleItems.length}
-                {filter ? ` de ${items.length}` : ""})
+                Itens de {monthLabel(month)} ({visibleItems.length}
+                {visibleItems.length !== items.length ? ` de ${items.length}` : ""})
               </CardTitle>
               {filter && (
                 <Button variant="ghost" size="sm" onClick={() => setFilter(null)}>
@@ -752,6 +522,7 @@ export function PagamentosPage() {
               <PagamentoBulkBar
                 count={selectedItems.length}
                 total={selectedTotal}
+                hiddenCount={hiddenSelectedCount}
                 runningAction={runningAction}
                 onAction={runBulkAction}
                 onClear={() => setSelected({})}
@@ -780,64 +551,105 @@ export function PagamentosPage() {
               )}
 
               {visibleItems.length === 0 ? (
-                <div className="p-6 text-center text-sm text-muted">
+                <div className="space-y-3 p-6 text-center text-sm text-muted">
                   {items.length === 0 ? (
                     <p>Nenhum item de pagamento neste mês.</p>
                   ) : (
                     <>
-                      <p>Nenhum item na faixa “{filter ? BUCKET_LABELS[filter] : ""}”.</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-3"
-                        onClick={() => setFilter(null)}
-                      >
-                        Ver todos os {items.length} itens
-                      </Button>
+                      <p>
+                        Nenhum item
+                        {terms.length > 0 ? " para esta busca" : ""}
+                        {filter ? ` na faixa “${BUCKET_LABELS[filter]}”` : ""}.
+                      </p>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {terms.length > 0 && (
+                          <Button variant="outline" size="sm" onClick={() => setSearch("")}>
+                            Limpar busca
+                          </Button>
+                        )}
+                        {filter && (
+                          <Button variant="outline" size="sm" onClick={() => setFilter(null)}>
+                            Ver todos os {items.length} itens
+                          </Button>
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1040px] border-collapse text-[13px]">
-                    <thead>
-                      <tr className="border-b-2 border-line text-left text-[11px] font-bold uppercase tracking-wide text-muted">
-                        <th className="w-8 px-2 py-2">
-                          <input
-                            type="checkbox"
-                            checked={allVisibleSelected}
-                            onChange={toggleSelectAll}
-                            aria-label="Selecionar tudo"
-                            disabled={visibleSelectable.length === 0}
-                          />
-                        </th>
-                        <th className="px-3 py-2">Vencimento</th>
-                        <th className="px-3 py-2">Descrição</th>
-                        <th className="px-3 py-2">Favorecido</th>
-                        <th className="px-3 py-2 text-right">Valor</th>
-                        <th className="px-3 py-2">Chave PIX</th>
-                        <th className="w-36 px-3 py-2">Situação</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                <>
+                  {/* Celular e tablet: cartões. Uma coluna no telefone, duas do tablet para
+                      cima — sem isso, no tablet o cartão esticava para ~900px e o valor ficava
+                      a meia tela de distância do nome. `[&>*]:min-w-0` vale em TODOS os
+                      breakpoints de propósito: um item de grade sem isso herda
+                      `min-width: auto` e se recusa a encolher abaixo do conteúdo (o vazamento
+                      lateral que a chave PIX longa causava no telefone). */}
+                  <div className="p-3 xl:hidden">
+                    <label className="flex min-h-11 items-center gap-2 text-xs font-semibold text-muted">
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAll}
+                        disabled={visibleSelectable.length === 0}
+                      />
+                      Selecionar {visibleSelectable.length}{" "}
+                      {visibleSelectable.length === 1 ? "item" : "itens"} em exibição
+                    </label>
+                    <div className="grid gap-2 md:grid-cols-2 [&>*]:min-w-0">
                       {visibleItems.map((item) => (
-                        <PagamentoRow
-                          key={itemKey(item)}
-                          item={item}
-                          statusLabels={data.status_labels}
-                          month={month}
-                          selected={Boolean(selected[itemKey(item)])}
-                          selectable={isSelectable(item)}
-                          onToggleSelect={toggleSelect}
-                        />
+                        <PagamentoCard key={itemKey(item)} {...itemViewProps(item)} />
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </div>
+                    {/* Respiro para o rodapé fixo de ações não cobrir o último cartão (a barra
+                        tem ~94px: resumo numa linha + botões na outra). */}
+                    {selectedItems.length > 0 && <div className="h-28" aria-hidden />}
+                  </div>
+
+                  {/* Desktop: a tabela densa de sempre. */}
+                  <div className="hidden overflow-x-auto xl:block">
+                    <table className="w-full min-w-[1040px] border-collapse text-[13px]">
+                      <thead>
+                        <tr className="border-b-2 border-line text-left text-[11px] font-bold uppercase tracking-wide text-muted">
+                          <th className="w-8 px-2 py-2">
+                            <input
+                              type="checkbox"
+                              checked={allVisibleSelected}
+                              onChange={toggleSelectAll}
+                              aria-label="Selecionar tudo"
+                              disabled={visibleSelectable.length === 0}
+                            />
+                          </th>
+                          <th className="px-3 py-2">Vencimento</th>
+                          <th className="px-3 py-2">Descrição</th>
+                          <th className="px-3 py-2">Favorecido</th>
+                          <th className="px-3 py-2 text-right">Valor</th>
+                          <th className="px-3 py-2">Chave PIX</th>
+                          <th className="w-36 px-3 py-2">Situação</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleItems.map((item) => (
+                          <PagamentoRow key={itemKey(item)} {...itemViewProps(item)} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
         </>
+      )}
+
+      {advanceItem && (
+        <SalaryAdvancesDialog
+          key={advanceItem.id}
+          item={advanceItem}
+          month={month}
+          open={advanceOpen}
+          onClose={() => setAdvanceOpen(false)}
+        />
       )}
     </div>
   );

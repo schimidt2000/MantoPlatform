@@ -7,8 +7,9 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **225b (Manutenção de
-> figurino)** · Head de migration: `d2e6b94c07f1` (*manutenção de figurino*) — confirme com
+> Última atualização: **2026-08-08** · Estado do repositório: pós-feature **226 (Planilha de
+> pagamentos no celular — só frontend: nenhum endpoint, schema ou RBAC mudou)** · Head de
+> migration: `d2e6b94c07f1` (*manutenção de figurino*) — confirme com
 > `flask db heads`; este cabeçalho é a **única** menção ao head neste documento.
 >
 > **Edição por recorte (215).** `PATCH /api/events/<id>` (feature 184) é **edição em bloco**: ele

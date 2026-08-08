@@ -4,8 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-07** · Estado do repositório: pós-feature **225b (Manutenção de
-> figurino)** · Head de migration: `d2e6b94c07f1`
+> Última atualização: **2026-08-08** · Estado do repositório: pós-feature **226 (Planilha de
+> pagamentos no celular)** · Head de migration: `d2e6b94c07f1` (inalterado — a 226 não tem migration)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -37,7 +37,8 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 143 |
+| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 145 |
+| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 217 |
 | **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 186 |
 | **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 134 |
 | **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 152 |
@@ -112,7 +113,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Impressões e Acervo 3D | 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
-| Financeiro, comissões e pagamentos | 210c, 199, 194, 189, 187 |
+| Financeiro, comissões e pagamentos | 226, 210c, 199, 194, 189, 187 |
 | Orçamento e EducaManto | 214, 191 (orçamento), 190 |
 | Portal do Artista | 216, 191 (portal) |
 | Design system, tema e acessibilidade | 217, 216, 212 |
@@ -140,6 +141,78 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 226 — Planilha de pagamentos no celular, busca de volta e adiantamentos em janela            (main · 2026-08-08 · sem migration)
+
+**Motivação.** Relato direto: "a visualização e navegação da planilha de pagamentos no celular está
+horrível". A tela é uma tabela de 7 colunas com `min-w-[1040px]` dentro de um `overflow-x-auto` —
+num telefone de 375px isso são 665px de rolagem lateral, com favorecido, chave PIX e situação
+sempre fora da tela. Junto veio o resto: a **caixa de busca** que a planilha Jinja tinha
+(`#pay-search`, "Buscar por evento, nome, função, valor, PIX, data…") **nunca foi migrada** para o
+React nas features 159/160, e os adiantamentos de salário moravam num `<details>` dentro da célula
+"Valor" — no desktop era preciso rolar a planilha de lado para achar o formulário; no celular ele
+nascia com a largura da coluna.
+
+**O que mudou (só frontend).** Nenhum endpoint criado ou alterado — é tudo apresentação sobre o
+payload que `GET /api/financeiro/pagamentos` já devolvia.
+
+- **`lib/pagamentos.ts` (novo)**: rótulos, paleta por faixa, `bucketOf`, `shiftMonth`,
+  `monthLabel` e o índice de busca saíram de dentro da página. Existem agora **duas** views do
+  mesmo item, e sem fonte única o cartão do telefone e a linha do computador divergiriam na cor e
+  na faixa.
+- **`components/Pagamentos/PagamentoItemViews.tsx` (novo)**: `PagamentoRow` (a tabela de sempre,
+  agora só de `xl` para cima) e `PagamentoCard` (celular/tablet — 1 coluna no telefone, 2 de `md`
+  em diante). `StatusSelect`, `TypeBadge` e o resumo de adiantamento são compartilhados pelos dois.
+- **`components/Pagamentos/SalaryAdvancesDialog.tsx` (novo)**: janela sobreposta com bruto ·
+  adiantado · líquido, lista com link do comprovante e remoção confirmada em dois toques, e
+  formulário com `MoneyInput` + `FileUpload`. Reconstrói o que o `#adv-modal` do Jinja fazia.
+- **`PagamentosPage.tsx`**: busca com resumo vivo, setas ‹ › de mês, KPI em 2/3/5 colunas conforme
+  a largura, e a barra de ações em lote como rodapé fixo abaixo de `xl`.
+
+**Por que `xl` e não `lg` para a tabela.** A partir de `lg` (1024px) a sidebar fixa de 256px entra,
+então o conteúdo tem 768px — e a tabela pede 1040px. Cortar em `lg` deixaria justamente a faixa
+1024–1279px (iPad deitado, janela pela metade) com a rolagem lateral que motivou a feature. Em
+`xl` o conteúdo tem 1024px e a tabela cabe praticamente inteira.
+
+**Busca: índice do dado, não do DOM.** A versão Jinja montava o índice de cada linha lendo o
+`textContent` das células (`buildRowIndex`). Isso amarra a busca ao layout — a coluna que sumisse
+no responsivo sairia do índice junto, e com duas apresentações diferentes o cartão nunca casaria
+por um dado que só a tabela mostra. Agora o índice vem do item serializado, uma vez por resposta da
+API (não por tecla digitada). Duas diferenças de comportamento assumidas, ambas para melhor: o
+valor entra **formatado e cru** (`1.234,56` e `1234,56`, que é como se digita conferindo o
+extrato), e cada palavra é uma restrição que **se soma** — "joao 1500" acha, onde o `indexOf` da
+frase inteira do Jinja não achava nada.
+
+**Diálogo lê da query, nunca de um instantâneo.** `SalaryAdvancesDialog` recebe o item derivado de
+`items.find(...)`, e a página guarda só o **id**. Um `setState(item)` congelaria o total: gravar
+adiantamento muda o próprio item no servidor, o TanStack Query refetch, e a janela seguiria
+mostrando o líquido antigo — a mesma armadilha registrada na feature 204 (card de postagem).
+
+**Pegadinhas encontradas.**
+- A barra de ações em lote com os rótulos longos quebrava em **três linhas** no telefone: 146px de
+  rodapé fixo, mais que um cartão da lista. Rótulo curto (Pago · Banco · Não pago) + ícone para
+  excluir/limpar trouxe para 94px, com todos os alvos em 44px.
+- `bg-accent-soft` é translúcido de propósito; como rodapé **fixo** ele deixava os cartões
+  aparecerem por baixo. No celular a barra usa `bg-panel` opaco e só recupera o `accent-soft` em
+  `xl`, onde está no fluxo, sobre o painel.
+- Os badges de salário/recorrente e o aviso "adiantado" trocaram `text-gold` por **`text-gold-ink`**
+  — o degrau de texto sobre fundo dourado. Sobre `gold-50`/`gold-soft` isso é a diferença entre
+  ~3:1 e 4,8–10:1.
+- A seleção continua sobrevivendo ao filtro e à busca (comportamento da 194, mantido de propósito),
+  mas agora a barra avisa **"(N fora do filtro/busca)"** — sem isso, buscar depois de marcar
+  esconde itens que a ação em lote ainda vai atingir.
+
+**Verificação.** `npx tsc --noEmit` limpo e `vite build` verde em `apps/internal`. Conferência
+visual feita com um entry Vite temporário (`dev-pagamentos.html` + `src/dev/`, **apagados depois**)
+que renderiza a página real com o cache do TanStack Query pré-carregado — assim as medições saíram
+sem depender de sessão no `manto_local`. Medido em 375/768/1024/1280px: zero vazamento horizontal
+(`scrollWidth == clientWidth == 375`), cartão de 317px com a chave PIX longa contida, tabela oculta
+abaixo de `xl` e cartões ocultos acima, rodapé fixo de 94px ancorado em `bottom: 0` com 55px de
+folga para o último cartão, e diálogo de 330px (celular) / 492px (desktop) inteiro dentro da tela.
+Busca conferida em nome, título de evento, valor cru, dois termos, sem acento/maiúscula e sem
+resultado; adiantamento conferido nas três recusas (valor zero, acima do disponível, sem
+comprovante), na remoção em dois toques e no caso de salário 100% adiantado; setas de mês
+conferidas na virada de ano (2026-08 → 2027-01 → volta).
 
 ### 225b — Manutenção de figurino            (main · 2026-08-07 · `d2e6b94c07f1`)
 
