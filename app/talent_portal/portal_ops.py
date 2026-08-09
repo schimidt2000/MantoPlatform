@@ -97,7 +97,63 @@ def _not_rejected():
     return or_(EventRole.invite_status.is_(None), EventRole.invite_status != "rejected")
 
 
-def _role_summary(role: EventRole) -> dict:
+def events_with_visible_figurino(talent: Talent, roles: list[EventRole]) -> set[int]:
+    """Dos eventos dessas escalações, quais têm ficha de figurino **para este talento** ver.
+
+    Existe para a agenda poder esconder o link "Ver ficha de figurino" quando não há nada do outro
+    lado — mandar o artista para uma tela que diz "ainda não há ficha" é o que fazia parecer que o
+    figurino não tinha subido.
+
+    Custa **duas** consultas para a agenda inteira (uma dos cargos, uma das fichas por nome
+    normalizado), e não uma por evento: o histórico de um talento antigo tem centenas de linhas.
+
+    Args:
+        talent: Talento autenticado.
+        roles: Escalações já carregadas (convites, futuros e histórico).
+
+    Returns:
+        Conjunto de `event_id` com ficha visível para ele — como coordenador (elenco inteiro) ou
+        como intérprete (só os personagens dele).
+    """
+    from app.figurino.drive_service import normalize_name
+
+    event_ids = {r.event_id for r in roles}
+    if not event_ids:
+        return set()
+
+    todos = EventRole.query.filter(EventRole.event_id.in_(event_ids)).all()
+    coordena_em = {
+        r.event_id
+        for r in todos
+        if r.talent_id == talent.id
+        and r.role_type == "extra"
+        and (r.character_name or "").strip().casefold() == COORDENADOR_ROLE_NAME.casefold()
+    }
+    relevantes = [
+        r for r in todos if r.event_id in coordena_em or r.talent_id == talent.id
+    ]
+
+    com_ficha = {r.event_id for r in relevantes if r.figurino_sheet_id}
+
+    por_nome = {
+        r.event_id: normalize_name(r.character_name)
+        for r in relevantes
+        if not r.figurino_sheet_id and r.character_name
+    }
+    nomes = set(por_nome.values())
+    if nomes:
+        existentes = {
+            n
+            for (n,) in db.session.query(FigurinoSheet.character_name_norm)
+            .filter(FigurinoSheet.character_name_norm.in_(nomes))
+            .all()
+        }
+        com_ficha |= {eid for eid, norm in por_nome.items() if norm in existentes}
+
+    return com_ficha
+
+
+def _role_summary(role: EventRole, has_figurino: bool = False) -> dict:
     """Serializa uma escalação do próprio talento — inclui sempre o cachê dele.
 
     O cachê acompanha *todas* as listagens (convite pendente, evento futuro e histórico), não só
@@ -128,6 +184,8 @@ def _role_summary(role: EventRole) -> dict:
         # "combinado R$ 0,00" de "ainda não informado" para não anunciar um valor que não existe.
         "cache_defined": role.cache_value is not None,
         "payment_status": role.payment_status,
+        # A agenda só mostra o link do figurino quando há ficha para ESTA pessoa ver.
+        "has_figurino": has_figurino,
     }
 
 
@@ -177,14 +235,18 @@ def get_agenda(talent: Talent) -> dict:
         .all()
     )
 
+    # Uma varredura só para as três listas — ver `events_with_visible_figurino`.
+    com_ficha = events_with_visible_figurino(talent, pending_invites + upcoming + past)
+
     # `cache_total`/`payment_status` já vêm de `_role_summary` — antes eram anexados só aqui, que
     # era exatamente a razão de o cachê sumir nas outras duas listas.
-    history = [_role_summary(role) for role in past]
+    def resumo(role: EventRole) -> dict:
+        return _role_summary(role, has_figurino=role.event_id in com_ficha)
 
     return {
-        "pending_invites": [_role_summary(r) for r in pending_invites],
-        "upcoming": [_role_summary(r) for r in upcoming],
-        "history": history,
+        "pending_invites": [resumo(r) for r in pending_invites],
+        "upcoming": [resumo(r) for r in upcoming],
+        "history": [resumo(r) for r in past],
     }
 
 
@@ -223,19 +285,77 @@ def ack_event_change(talent: Talent, role_id: int) -> EventRole | None:
     return role
 
 
-def get_figurino(talent: Talent, event_id: int) -> list[tuple[FigurinoSheet, str | None]] | None:
-    """Fichas de figurino dos personagens do talento num evento.
+def portal_photo_url(path: str | None) -> str | None:
+    """Converte o caminho guardado de uma imagem na URL que o PORTAL consegue abrir.
+
+    `/uploads/<...>` é servido por uma rota `@login_required` do Flask-Login — ou seja, sessão de
+    **staff**. Quem está no portal tem `session["talent_id"]` e nenhum usuário logado, então o
+    navegador recebe um 302 para a tela de login do staff no lugar da imagem e o `<img>` cai no
+    ícone de quebrado. `/portal/photo/<...>` é a rota equivalente que valida a sessão de talento
+    (`app/talent_portal/routes.py`), restrita às subpastas de imagem por `PORTAL_PHOTO_SUBFOLDERS`.
+
+    URL absoluta (foto herdada do Drive/Sheets) passa intacta: não é nossa para reescrever.
+
+    Args:
+        path: Valor guardado no banco (`/uploads/talent_photos/x.jpg`, `https://…` ou vazio).
+
+    Returns:
+        URL que o portal serve, ou `None` quando não há imagem.
+    """
+    if not path:
+        return None
+    prefixo = "/uploads/"
+    if path.startswith(prefixo):
+        return "/portal/photo/" + path[len(prefixo):]
+    return path
+
+
+#: Nome do cargo sentinela do coordenador — o mesmo literal que `app/calendar/event_ops.py` grava
+#: ao criar o evento e que a tela de edição procura (`role_type="extra"`).
+COORDENADOR_ROLE_NAME = "Coordenador"
+
+
+def is_event_coordinator(talent: Talent, event: CalendarEvent) -> bool:
+    """`True` se o talento está escalado como coordenador do evento (cargo, não personagem)."""
+    return any(
+        r.talent_id == talent.id
+        and r.role_type == "extra"
+        and (r.character_name or "").strip().casefold() == COORDENADOR_ROLE_NAME.casefold()
+        for r in event.roles
+    )
+
+
+def _sheet_of_role(role: EventRole) -> FigurinoSheet | None:
+    """Ficha vinculada ao cargo, ou a que casa pelo nome normalizado do personagem."""
+    from app.figurino.drive_service import normalize_name
+
+    if role.figurino_sheet:
+        return role.figurino_sheet
+    return FigurinoSheet.query.filter_by(
+        character_name_norm=normalize_name(role.character_name)
+    ).first()
+
+
+def get_figurino(
+    talent: Talent, event_id: int
+) -> list[tuple[FigurinoSheet, str | None, str | None]] | None:
+    """Fichas de figurino que o talento pode ver num evento.
+
+    Regra: cada um vê as fichas dos **seus** personagens — exceto o **coordenador**, que vê as do
+    elenco inteiro. Conferir o figurino de todo mundo em campo é o trabalho dele, e como o cargo
+    de coordenador não tem personagem, a consulta por personagem próprio devolvia lista vazia:
+    a tela dizia "ainda não há ficha de figurino para este evento" para um evento com todas as
+    fichas prontas (relatado em 08/08/2026, evento (R&I) MOANA + MAUI).
 
     Args:
         talent: Talento autenticado.
         event_id: Evento consultado.
 
     Returns:
-        Lista de `(sheet, photo_url)` (pode ser vazia — evento escalado sem ficha ainda), ou
-        `None` se o talento não está escalado nesse evento (nem pendente, nem aceito).
+        Lista de `(sheet, photo_url, talent_name)` — `talent_name` é quem interpreta o personagem,
+        e só interessa na visão do coordenador. Lista vazia = escalado, mas sem ficha para mostrar.
+        `None` = o talento não está nesse evento (nem pendente, nem aceito).
     """
-    from app.figurino.drive_service import normalize_name
-
     role = EventRole.query.filter(
         EventRole.event_id == event_id,
         EventRole.talent_id == talent.id,
@@ -245,27 +365,21 @@ def get_figurino(talent: Talent, event_id: int) -> list[tuple[FigurinoSheet, str
         return None
 
     event = role.event
+    coordena = is_event_coordinator(talent, event)
+    # O coordenador varre o elenco inteiro; os demais, só os próprios cargos. Cargo `extra`
+    # (transporte, maquiador, o próprio coordenador) não tem personagem e nunca traz ficha.
+    cargos = [r for r in event.roles if coordena or r.talent_id == talent.id]
+
     seen_ids: set[int] = set()
-    sheet_items: list[tuple[FigurinoSheet, str | None]] = []
+    sheet_items: list[tuple[FigurinoSheet, str | None, str | None]] = []
 
-    for r in [r for r in event.roles if r.talent_id == talent.id]:
-        sheet = r.figurino_sheet
-        if not sheet:
-            norm = normalize_name(r.character_name)
-            sheet = FigurinoSheet.query.filter_by(character_name_norm=norm).first()
-
+    for r in cargos:
+        sheet = _sheet_of_role(r)
         if not sheet or sheet.id in seen_ids:
             continue
         seen_ids.add(sheet.id)
-
-        photo_url = None
-        if sheet.photo_filename:
-            if sheet.photo_filename.startswith("/uploads/"):
-                photo_url = "/portal/photo/" + sheet.photo_filename[9:]
-            else:
-                photo_url = sheet.photo_filename
-
-        sheet_items.append((sheet, photo_url))
+        quem = r.talent.artistic_name or r.talent.full_name if r.talent else None
+        sheet_items.append((sheet, portal_photo_url(sheet.photo_filename), quem))
 
     return sheet_items
 
@@ -316,7 +430,7 @@ def _media_to_dict(item: TalentMedia) -> dict[str, Any]:
         "id": item.id,
         "media_type": item.media_type,
         "label": item.label,
-        "file_url": item.file_path,
+        "file_url": portal_photo_url(item.file_path),
         "url": item.url,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
@@ -355,14 +469,18 @@ def get_profile(talent: Talent) -> dict[str, Any]:
         "has_visa": bool(talent.has_visa),
         "passport_visa_text": talent.passport_visa_text,
         "cnh_expiration": talent.cnh_expiration.isoformat() if talent.cnh_expiration else None,
+        # Sem `portal_photo_url` de propósito: `talent_docs` NÃO está em
+        # `PORTAL_PHOTO_SUBFOLDERS` — documento de talento só sai por `/uploads` com papel
+        # CASTING. Hoje nenhuma tela do portal renderiza este campo; se um dia render, o certo é
+        # uma rota própria que confira a posse do documento, não afrouxar a lista de fotos.
         "cnh_file_url": talent.cnh_file_path,
         "car_brand": talent.car_brand,
         "car_model": talent.car_model,
         "car_year": talent.car_year,
         "car_plate": talent.car_plate,
         # Fotos oficiais
-        "photo_face_url": talent.photo_face_path,
-        "photo_full_url": talent.photo_full_path,
+        "photo_face_url": portal_photo_url(talent.photo_face_path),
+        "photo_full_url": portal_photo_url(talent.photo_full_path),
         # Portfólio
         "media": [_media_to_dict(m) for m in talent.media_items],
         "max_photos": MAX_PORTFOLIO_PHOTOS,
@@ -573,12 +691,14 @@ def get_historico(talent: Talent) -> dict[str, Any]:
         .all()
     )
 
+    com_ficha = events_with_visible_figurino(talent, past)
+
     items = []
     total_paid = 0.0
     total_pending = 0.0
     for role in past:
         # Campos de cachê vêm de `_role_summary` (fonte única); aqui só somamos os totais.
-        item = _role_summary(role)
+        item = _role_summary(role, has_figurino=role.event_id in com_ficha)
         if item["payment_status"] == "pago":
             total_paid += item["cache_total"]
         else:

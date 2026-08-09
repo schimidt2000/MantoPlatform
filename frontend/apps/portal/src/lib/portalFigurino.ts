@@ -4,12 +4,16 @@ import { apiFetch } from "@manto/api-client";
 export interface FigurinoSheet {
   character_name: string;
   photo_url: string | null;
+  /** Quem interpreta o personagem — só interessa na visão do coordenador. */
+  talent_name: string | null;
   notes: string | null;
   pieces: { name: string; qty: number }[];
 }
 
 export interface FigurinoResponse {
   event: { id: number; title: string; start_at: string | null };
+  /** O talento é o coordenador deste evento: recebe as fichas do elenco inteiro. */
+  is_coordinator: boolean;
   sheets: FigurinoSheet[];
 }
 

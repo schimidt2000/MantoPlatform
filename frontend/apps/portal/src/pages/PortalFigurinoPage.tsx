@@ -28,8 +28,20 @@ export function PortalFigurinoPage() {
         </div>
       )}
 
+      {/* Coordenador não tem personagem: a tela precisa dizer por que está mostrando o elenco
+          inteiro, senão a lista parece de outra pessoa. */}
+      {query.data?.is_coordinator && query.data.sheets.length > 0 && (
+        <p className="text-sm text-muted">
+          Você é o coordenador deste evento — abaixo está o figurino de todo o elenco.
+        </p>
+      )}
+
       {query.data && query.data.sheets.length === 0 && (
-        <p className="text-sm text-muted">Ainda não há ficha de figurino para este evento.</p>
+        <p className="text-sm text-muted">
+          {query.data.is_coordinator
+            ? "Nenhum personagem deste evento tem ficha de figurino cadastrada ainda."
+            : "Você não tem personagem neste evento, então não há ficha de figurino para mostrar."}
+        </p>
       )}
 
       {query.data &&
@@ -37,6 +49,9 @@ export function PortalFigurinoPage() {
           <Card key={sheet.character_name}>
             <CardContent className="space-y-3 p-4">
               <p className="font-medium text-ink">{sheet.character_name}</p>
+              {query.data.is_coordinator && sheet.talent_name && (
+                <p className="-mt-2 text-sm text-muted">{sheet.talent_name}</p>
+              )}
               {sheet.photo_url && (
                 <img
                   src={assetUrl(sheet.photo_url)}

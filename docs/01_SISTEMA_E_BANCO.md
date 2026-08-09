@@ -7,8 +7,9 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-08** · Estado do repositório: pós-feature **226 (Planilha de
-> pagamentos no celular — só frontend: nenhum endpoint, schema ou RBAC mudou)** · Head de
+> Última atualização: **2026-08-09** · Estado do repositório: pós-feature **227 (Foto do portal e
+> figurino do coordenador — sem schema e sem migration; `GET /api/portal/events/<id>/figurino`
+> ganhou `is_coordinator` e `talent_name`, e a agenda do portal ganhou `has_figurino`)** · Head de
 > migration: `d2e6b94c07f1` (*manutenção de figurino*) — confirme com
 > `flask db heads`; este cabeçalho é a **única** menção ao head neste documento.
 >

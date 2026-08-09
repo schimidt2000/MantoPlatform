@@ -4,8 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-08** · Estado do repositório: pós-feature **226 (Planilha de
-> pagamentos no celular)** · Head de migration: `d2e6b94c07f1` (inalterado — a 226 não tem migration)
+> Última atualização: **2026-08-09** · Estado do repositório: pós-feature **227 (Foto do portal
+> e figurino do coordenador)** · Head de migration: `d2e6b94c07f1` (inalterado — 226 e 227 não têm
+> migration)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -37,8 +38,9 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 145 |
-| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 217 |
+| **227** | Foto do portal saía por rota de staff (255 talentos com ícone quebrado); coordenador passa a ver o figurino do elenco inteiro | 2026-08-09 | `—` | (aqui) | 146 |
+| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 216 |
+| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 288 |
 | **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 186 |
 | **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 134 |
 | **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 152 |
@@ -115,7 +117,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Catálogo e vitrine | 211, 209, 186, 185 |
 | Financeiro, comissões e pagamentos | 226, 210c, 199, 194, 189, 187 |
 | Orçamento e EducaManto | 214, 191 (orçamento), 190 |
-| Portal do Artista | 216, 191 (portal) |
+| Portal do Artista | 227, 216, 191 (portal) |
 | Design system, tema e acessibilidade | 217, 216, 212 |
 | Documentação e economia de token | 217 |
 | Formulários e pré-contrato | 210b, 188, 193 |
@@ -141,6 +143,76 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 227 — Foto do portal com ícone quebrado, e o coordenador que não via figurino nenhum            (main · 2026-08-09 · sem migration)
+
+**Motivação.** Dois relatos do mesmo artista no mesmo dia: a foto do perfil dele no portal
+aparecia como interrogação, e no evento em que ele era **coordenador** as fichas de figurino não
+apareciam. Pareciam dois problemas de cadastro; não eram nenhum dos dois.
+
+**1. A foto: rota errada, e não era só ele.** O portal React pedia a imagem em
+`/uploads/talent_photos/…`, que é `@login_required` do **Flask-Login** — sessão de *staff*. Quem
+está no portal tem `session["talent_id"]` e nenhum usuário logado, então o navegador recebia um
+302 para `/auth/login` no lugar da imagem e o `<img>` caía no ícone quebrado. Confirmado contra
+produção: `/uploads/talent_photos/<arquivo>` → 302; `/portal/photo/talent_photos/<arquivo>` → 403
+(a rota certa, respondendo sem a minha sessão).
+
+A rota irmã `/portal/photo/<caminho>` existe desde a 176 exatamente para isso, e valida sessão de
+talento. Os templates Jinja usavam-na, e `get_figurino` também — mas as fotos **do próprio
+talento** ficaram devolvendo o caminho cru na migração para React (159/176/191), em quatro
+serializadores diferentes. No banco: **255 dos 259 talentos** têm a foto em `/uploads/…` (todos
+quebrados) e 4 têm URL absoluta do Drive (esses funcionavam). Ou seja, o portal estava sem foto de
+perfil para praticamente todo mundo, e ninguém tinha relatado.
+
+A correção é uma função só, `portal_ops.portal_photo_url()`, aplicada nos cinco pontos que
+serializam imagem para o portal: `_talent_to_dict` (avatar do topo), `get_profile` (perfil e fotos
+& documentos), `_media_to_dict` (portfólio), a resposta do upload de foto e `_person_entry` (tela
+de avaliação). URL absoluta passa intacta. `get_figurino` largou a cópia local da mesma lógica.
+**Nenhum arquivo precisou ser reenviado** — a árvore de uploads está intacta em produção
+(conferido baixando duas mídias públicas do catálogo, 200).
+
+**`cnh_file_url` ficou de fora de propósito.** `talent_docs` não está em
+`PORTAL_PHOTO_SUBFOLDERS` — documento de talento só sai por `/uploads` com papel CASTING.
+Nenhuma tela do portal renderiza esse campo hoje; se um dia renderizar, o certo é uma rota que
+confira a posse do documento, não afrouxar a lista de fotos.
+
+**2. O figurino: o coordenador não tem personagem.** No evento relatado — 424, (R&I) MOANA + MAUI,
+08/08 — o cargo dele é `character_name='Coordenador'`, `role_type='extra'`, convite aceito. E as
+fichas do evento estavam **prontas**: Moana (406) e Maui (407), as duas com foto. `get_figurino`
+só juntava as fichas dos personagens *daquele* talento; cargo `extra` não tem personagem, então a
+lista voltava vazia e a tela imprimia "Ainda não há ficha de figurino para este evento" — que se
+lê como "o figurino não subiu". Pior: a agenda oferecia o link "Ver ficha de figurino" em todo
+evento, sem checar se havia algo do outro lado.
+
+Não era erro de digitação: ninguém modelou o coordenador, que é justamente quem precisa conferir
+o figurino do elenco inteiro em campo. Agora `get_figurino` varre todos os cargos do evento
+quando o talento é o coordenador (`is_event_coordinator`, casando o mesmo literal `"Coordenador"`
++ `role_type="extra"` que `event_ops` grava), e devolve junto **quem interpreta** cada personagem.
+Os demais continuam vendo só os próprios personagens — decisão do usuário entre as três opções
+oferecidas.
+
+**O que a tela diz agora.** `is_coordinator` viaja no payload porque muda o texto, não só a
+lista: com fichas, um aviso explica por que apareceu o elenco inteiro; sem fichas, o coordenador
+lê "nenhum personagem deste evento tem ficha cadastrada ainda" e o intérprete sem personagem lê
+"você não tem personagem neste evento". E o link some da agenda quando não há ficha (`has_figurino`
+por item).
+
+**Pegadinha de custo.** `has_figurino` precisa valer para o histórico inteiro, que num talento
+antigo tem centenas de linhas — uma consulta por evento seria N+1 clássico.
+`events_with_visible_figurino` resolve a agenda toda em **duas** consultas: uma dos cargos dos
+eventos listados, outra das fichas pelos nomes normalizados que faltam FK.
+
+**Compatibilidade.** `get_figurino` passou de 2-upla para 3-upla; a view Jinja legada
+(`/portal/events/<id>/figurino`, ainda de pé como strangler-fig) e o template
+`figurino_viewer.html` foram atualizados junto, e mostram o nome do intérprete na visão do
+coordenador.
+
+**Verificação.** `verify_227_portal_fotos_figurino.py` 19/19 (conversão de caminho nos 4 formatos;
+zero talentos sobrando em `/uploads`; coordenador vendo as 2 fichas com o nome de quem interpreta;
+intérprete vendo exatamente a dele; quem não está no evento seguindo barrado com `None`/403;
+`has_figurino` presente em todo item da agenda). `verify_176_portal_artista.py` segue **41/41**,
+incluindo o RBAC do figurino e o upload de foto. `tsc --noEmit` limpo em `apps/portal`. As três
+mensagens novas conferidas na tela com entry Vite temporária (apagada depois).
 
 ### 226 — Planilha de pagamentos no celular, busca de volta e adiantamentos em janela            (main · 2026-08-08 · sem migration)
 

@@ -6,8 +6,14 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-08-08** · Estado do repositório: pós-feature **226 (planilha de
-> pagamentos no celular, busca de volta e adiantamentos em janela)**
+> Última atualização: **2026-08-09** · Estado do repositório: pós-feature **227 (foto do portal
+> quebrada e figurino do coordenador)**
+>
+> UX nova da 227: **a foto de perfil voltou a aparecer no Portal do Artista** — ela era pedida em
+> `/uploads/…`, rota de staff, e 255 dos 259 talentos viam o ícone de imagem quebrada. E o
+> **coordenador** do evento passou a ver as fichas de figurino do elenco inteiro (antes via a
+> mensagem "ainda não há ficha", porque o cargo dele não tem personagem); o link na agenda agora
+> só aparece quando existe ficha do outro lado.
 >
 > UX nova da 226: **`/financeiro/pagamentos` deixou de ser tabela-única.** Abaixo de `xl` os itens
 > viram cartões empilhados (a tabela de 1040px só cabe a partir de 1280px, porque a sidebar come
@@ -1180,12 +1186,12 @@ avaliar). Alvos de toque ≥44px, nada abaixo de 12px, sem rolagem horizontal de
 | `/portal/reset-password/:token` | Definir nova senha pelo link do e-mail | Valida o token antes de mostrar o formulário; checklist de força ao vivo |
 | *(gate)* Criar senha | Troca obrigatória no primeiro acesso | Servida pelo `OnboardingGate`, não é rota navegável |
 | *(gate)* Termos | Aceite do Termo de Consentimento | Checkbox só libera após rolar o texto até o fim |
-| `/portal/agenda` | Próximos eventos + histórico recente | Dia da semana + "amanhã"/"em 5 dias"; alerta de alteração com botão **Ciente**; link para a ficha de figurino |
+| `/portal/agenda` | Próximos eventos + histórico recente | Dia da semana + "amanhã"/"em 5 dias"; alerta de alteração com botão **Ciente**; link para a ficha de figurino **só quando há ficha para aquela pessoa ver** (`has_figurino`, feature 227) |
 | `/portal/convites` | Convites de casting pendentes | Botões **Aceitar** / **Recusar** (recusa pede confirmação); alimenta o contador da aba |
 | `/portal/historico` | Histórico completo de apresentações | Somatórios recebido / a receber / total; cachê + deslocamento por evento; link para avaliar |
 | `/portal/perfil` | Dados pessoais, **medidas corporais**, PIX e portfólio | Medidas alimentam o módulo de Figurino; até 3 fotos de atuação + links (Vimeo/YouTube) |
 | `/portal/fotos-documentos` | Foto de rosto, corpo inteiro e CNH | Preview do arquivo atual antes de substituir |
-| `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (rota Jinja, mesma sessão) |
+| `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (rota Jinja, mesma sessão). **Coordenador vê o elenco inteiro** com o nome de quem interpreta cada personagem (feature 227) |
 | `/portal/eventos/:id/avaliar` | Avaliar o evento | Etapa 1 nota geral (abaixo de 4 exige comentário); etapa 2 opcional por categoria e por pessoa; janela de 7 dias para avaliar, 30 para editar |
 | `/portal/termos` | Reler o termo já aceito | Modo leitura, sem trava nem botão |
 
@@ -1205,6 +1211,15 @@ feature 191; decomissioná-las é limpeza futura.
 > sessão de talento, e o app React depende dela. Por isso ela é um dos filtros do proxy reverso
 > de `frontend/server.js` (feature 206) — casada **antes** do mount `/portal`, senão o fallback
 > do bundle do portal devolveria `index.html` no lugar da imagem.
+>
+> **Toda** imagem que o portal exibe tem de sair por aqui, não por `/uploads/<file>`: aquela rota
+> é `@login_required` do Flask-Login (sessão de **staff**), e quem está no portal só tem
+> `session["talent_id"]` — o `<img>` recebe um 302 para a tela de login do staff e vira ícone
+> quebrado. Até a feature 227 as fotos **do próprio talento** (avatar, perfil, fotos &
+> documentos, portfólio, tela de avaliação) devolviam o caminho cru e quebravam para 255 dos 259
+> talentos; a ficha de figurino já fazia certo desde a 176. A conversão agora é uma função só —
+> `portal_ops.portal_photo_url()` — usada por todos os serializadores do portal. Documento de
+> talento (`talent_docs`) fica **de fora** de propósito: não está em `PORTAL_PHOTO_SUBFOLDERS`.
 
 O login do portal não tem mais como cair no Jinja: `must_redirect_to_classic` saiu do payload de
 `POST /api/portal/auth/login` na 206. Quem tem senha temporária ou termo pendente é guiado pelos

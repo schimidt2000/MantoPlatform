@@ -141,9 +141,12 @@
   </p>
 
   {% if sheet_items %}
-    {% for sheet, photo_url in sheet_items %}
+    {% for sheet, photo_url, talent_name in sheet_items %}
     <div class="fig-sheet">
       <div class="fig-sheet-title">🎭 {{ sheet.character_name }}</div>
+      {% if is_coordinator and talent_name %}
+      <div style="color: var(--muted); font-size: 13px; margin-bottom: 8px;">{{ talent_name }}</div>
+      {% endif %}
 
       {% if photo_url %}
       <div class="fig-photo-wrap" onclick="openLightbox('{{ photo_url }}')">

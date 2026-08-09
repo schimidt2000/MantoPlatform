@@ -23,6 +23,12 @@ export interface PortalRole {
   /** `false` enquanto a produção ainda não definiu o cachê — distingue de "combinado R$ 0,00". */
   cache_defined: boolean;
   payment_status: string;
+  /**
+   * Há ficha de figurino que ESTA pessoa pode ver neste evento — como intérprete (personagem
+   * dela) ou como coordenadora (elenco inteiro). `false` esconde o link: mandar o artista para
+   * uma tela que diz "ainda não há ficha" é o que fazia parecer que o figurino não subiu.
+   */
+  has_figurino: boolean;
 }
 
 export interface PortalAgenda {

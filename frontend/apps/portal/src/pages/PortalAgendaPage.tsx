@@ -65,14 +65,18 @@ function RoleCard({ role, upcoming = false }: { role: PortalRole; upcoming?: boo
         <CacheLine role={role} payment={!upcoming} />
 
         {/* No celular não existe hover, então o título estilizado como link não anunciava
-            nada — esta linha é o caminho explícito (e com 44px de alvo) para o figurino. */}
-        <Link
-          to={`/eventos/${role.event_id}/figurino`}
-          className="flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent"
-        >
-          <Shirt className="h-4 w-4 shrink-0" aria-hidden="true" />
-          Ver ficha de figurino ›
-        </Link>
+            nada — esta linha é o caminho explícito (e com 44px de alvo) para o figurino.
+            Só aparece quando existe ficha do outro lado: o link para uma tela vazia era lido
+            como "o figurino não subiu". */}
+        {role.has_figurino && (
+          <Link
+            to={`/eventos/${role.event_id}/figurino`}
+            className="flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent"
+          >
+            <Shirt className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Ver ficha de figurino ›
+          </Link>
+        )}
       </CardContent>
     </Card>
   );
