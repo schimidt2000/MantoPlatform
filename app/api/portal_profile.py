@@ -36,7 +36,10 @@ def api_portal_upload_photo() -> Any:
         return json_error(exc.message, 400, fields={"file": exc.message})
 
     return jsonify(
-        {"photo_face_url": talent.photo_face_path, "photo_full_url": talent.photo_full_path}
+        {
+            "photo_face_url": portal_ops.portal_photo_url(talent.photo_face_path),
+            "photo_full_url": portal_ops.portal_photo_url(talent.photo_full_path),
+        }
     )
 
 

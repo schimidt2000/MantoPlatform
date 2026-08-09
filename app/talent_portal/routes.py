@@ -692,6 +692,7 @@ def event_figurino(event_id: int):
         event=event,
         sheet_items=sheet_items,
         talent=talent,
+        is_coordinator=portal_ops.is_event_coordinator(talent, event),
     )
 
 

@@ -31,7 +31,7 @@ from app.models import (
     EventSubRating,
     Talent,
 )
-from app.talent_portal.portal_ops import now_sp
+from app.talent_portal.portal_ops import now_sp, portal_photo_url
 
 #: Prazo para avaliar um evento depois que ele termina.
 RATING_WINDOW = timedelta(days=7)
@@ -390,7 +390,7 @@ def _person_entry(role: EventRole) -> dict[str, Any]:
         "talent_id": role.talent_id,
         "name": role.talent.artistic_name or role.talent.full_name,
         "character_name": role.character_name,
-        "photo_face_url": role.talent.photo_face_path,
+        "photo_face_url": portal_photo_url(role.talent.photo_face_path),
     }
 
 
