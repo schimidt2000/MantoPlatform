@@ -6,8 +6,20 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-08-09** · Estado do repositório: pós-feature **227 (foto do portal
-> quebrada e figurino do coordenador)**
+> Última atualização: **2026-08-09** · Estado do repositório: pós-feature **229 (avaliar direto do
+> histórico da Agenda, no portal)**
+>
+> UX nova da 229: o link **"Avaliar este evento"** passou a aparecer também nos itens do histórico
+> **dentro da Agenda** — antes só existia na aba Histórico, e como as duas listas se chamam
+> "Histórico", quem estava na Agenda concluía que não havia como avaliar (relato de artista em
+> 10/08). O componente virou `components/RatingLink.tsx`, que lê a mesma query do crachá da aba,
+> então botão e contador nunca discordam.
+>
+> UX nova da 228: `ConfirmDialog` saiu de dentro de `GastosRecorrentesPage` e virou componente do
+> `@manto/ui`. A **exclusão em lote de pagamentos** deixou de usar o alerta nativo do navegador e
+> passa pelo diálogo, mostrando quantos itens, **quanto em reais** e quantos estão fora da tela por
+> causa do filtro/busca. Sobram 37 `window.confirm` no repositório — inventariados em
+> `05_DIVIDA_TECNICA.md` §7.4, para trocar por tela.
 >
 > UX nova da 227: **a foto de perfil voltou a aparecer no Portal do Artista** — ela era pedida em
 > `/uploads/…`, rota de staff, e 255 dos 259 talentos viam o ícone de imagem quebrada. E o
@@ -1017,6 +1029,13 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   tela no primeiro rolar, e com os rótulos longos comia 146px de um telefone de 812px (feature
   226). A seleção sobrevive ao filtro/busca **de propósito**, então a barra avisa quando parte
   dela está escondida: "(N fora do filtro/busca)".
+- **Excluir pede confirmação em diálogo** *(feature 228)*: `ConfirmDialog` do `@manto/ui` com a
+  contagem, **a soma em BRL** e o aviso de que não dá para desfazer — e, quando a seleção tem item
+  escondido pelo filtro ou pela busca, uma linha em vermelho dizendo que ele vai junto. Era
+  `window.confirm`, que não mostrava valor nem o que estava fora da tela; virou risco de verdade
+  na 226, quando o botão passou a ser um ícone de lixeira de 44px encostado no "limpar seleção",
+  num rodapé fixo de celular. O erro da API aparece dentro do diálogo, que fica aberto para nova
+  tentativa.
 - **API**: `GET /api/financeiro/pagamentos` · `POST .../set-status`, `.../bulk-action`,
   `.../salary/<id>/advance`, `.../salary/advance/<id>/delete` · `GET .../export`. Nem a 194 nem a
   226 criaram ou alteraram endpoint — as duas são de apresentação sobre o payload existente.
@@ -1186,9 +1205,9 @@ avaliar). Alvos de toque ≥44px, nada abaixo de 12px, sem rolagem horizontal de
 | `/portal/reset-password/:token` | Definir nova senha pelo link do e-mail | Valida o token antes de mostrar o formulário; checklist de força ao vivo |
 | *(gate)* Criar senha | Troca obrigatória no primeiro acesso | Servida pelo `OnboardingGate`, não é rota navegável |
 | *(gate)* Termos | Aceite do Termo de Consentimento | Checkbox só libera após rolar o texto até o fim |
-| `/portal/agenda` | Próximos eventos + histórico recente | Dia da semana + "amanhã"/"em 5 dias"; alerta de alteração com botão **Ciente**; link para a ficha de figurino **só quando há ficha para aquela pessoa ver** (`has_figurino`, feature 227) |
+| `/portal/agenda` | Próximos eventos + histórico recente | Dia da semana + "amanhã"/"em 5 dias"; alerta de alteração com botão **Ciente**; link para a ficha de figurino **só quando há ficha para aquela pessoa ver** (`has_figurino`, feature 227); nos itens do **histórico**, o mesmo link de avaliar da aba Histórico (`RatingLink`, feature 229) |
 | `/portal/convites` | Convites de casting pendentes | Botões **Aceitar** / **Recusar** (recusa pede confirmação); alimenta o contador da aba |
-| `/portal/historico` | Histórico completo de apresentações | Somatórios recebido / a receber / total; cachê + deslocamento por evento; link para avaliar |
+| `/portal/historico` | Histórico completo de apresentações | Somatórios recebido / a receber / total; cachê + deslocamento por evento; link para avaliar via `RatingLink` (o mesmo da Agenda desde a 229) |
 | `/portal/perfil` | Dados pessoais, **medidas corporais**, PIX e portfólio | Medidas alimentam o módulo de Figurino; até 3 fotos de atuação + links (Vimeo/YouTube) |
 | `/portal/fotos-documentos` | Foto de rosto, corpo inteiro e CNH | Preview do arquivo atual antes de substituir |
 | `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (rota Jinja, mesma sessão). **Coordenador vê o elenco inteiro** com o nome de quem interpreta cada personagem (feature 227) |

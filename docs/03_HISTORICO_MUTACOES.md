@@ -4,8 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-09** · Estado do repositório: pós-feature **227 (Foto do portal
-> e figurino do coordenador)** · Head de migration: `d2e6b94c07f1` (inalterado — 226 e 227 não têm
+> Última atualização: **2026-08-09** · Estado do repositório: pós-feature **229 (avaliar direto do
+> histórico da Agenda, no portal)** · Head de migration: `d2e6b94c07f1` (inalterado — 226 e 227 não têm
 > migration)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
@@ -38,9 +38,11 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **227** | Foto do portal saía por rota de staff (255 talentos com ícone quebrado); coordenador passa a ver o figurino do elenco inteiro | 2026-08-09 | `—` | (aqui) | 146 |
-| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 216 |
-| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 288 |
+| **229** | Portal: link de avaliar também no histórico da Agenda (`RatingLink`); diagnóstico do "acesso travado" | 2026-08-09 | `—` | (aqui) | 149 |
+| **228** | `ConfirmDialog` promovido para o `@manto/ui`; exclusão em lote de pagamentos confirma em diálogo, com a soma e o que a busca escondeu | 2026-08-09 | `—` | (aqui) | 202 |
+| **227** | Foto do portal saía por rota de staff (255 talentos com ícone quebrado); coordenador passa a ver o figurino do elenco inteiro | 2026-08-09 | `—` | (aqui) | 238 |
+| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 308 |
+| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 380 |
 | **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 186 |
 | **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 134 |
 | **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 152 |
@@ -115,10 +117,10 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Impressões e Acervo 3D | 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
-| Financeiro, comissões e pagamentos | 226, 210c, 199, 194, 189, 187 |
+| Financeiro, comissões e pagamentos | 228, 226, 210c, 199, 194, 189, 187 |
 | Orçamento e EducaManto | 214, 191 (orçamento), 190 |
-| Portal do Artista | 227, 216, 191 (portal) |
-| Design system, tema e acessibilidade | 217, 216, 212 |
+| Portal do Artista | 229, 227, 216, 191 (portal) |
+| Design system, tema e acessibilidade | 228, 217, 216, 212 |
 | Documentação e economia de token | 217 |
 | Formulários e pré-contrato | 210b, 188, 193 |
 | Avaliações e dashboards | 197, 196 |
@@ -143,6 +145,95 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 229 — "Não consigo avaliar": o botão existia numa aba, e a artista estava olhando a outra            (main · 2026-08-09 · sem migration)
+
+**Motivação.** Relato de uma coordenadora: *"meu acesso ao portal está travado. Não consigo avaliar
+nem ver para aceitar os próximos eventos, nada. Fica só nessa tela e travado."* Com o print da tela
+e os dados dela, nada estava travado no sentido técnico — mas a leitura dela era justa, porque a
+tela não oferecia saída nenhuma onde ela estava olhando.
+
+**O que o print e os dados dizem.** Ela estava na aba **Agenda**, que tem uma seção chamada
+"HISTÓRICO" logo abaixo de "PRÓXIMOS EVENTOS". Nos cartões dessa seção aparecia só "Ver ficha de
+figurino" — o link de avaliar existia **apenas na aba Histórico**, a terceira do rodapé, com o
+crachá vermelho de 3 pendências aceso. Duas listas com o mesmo nome, e a ação só numa delas: não há
+por que procurar a segunda quando você está vendo suas apresentações na primeira.
+
+O resto do relato também fecha sem bug de navegação: os convites dela **não estavam pendentes**
+(por isso a aba Convites está sem crachá no print — não havia o que aceitar), e **todo e-mail do
+portal aponta para a raiz** (`{PORTAL_URL}/`, ver `email_service.py`), nunca para a tela do convite
+ou da avaliação. Ou seja, cada link que ela abria do e-mail ou do WhatsApp a devolvia para a mesma
+Agenda — literalmente "fica só nessa tela".
+
+**O que mudou.** `rotuloAvaliacao` + o link com a estrela saíram de `PortalHistoricoPage` para
+`components/RatingLink.tsx` (fonte única, Princípio I), e a seção histórico da **Agenda** passou a
+renderizá-lo. O componente consulta `usePendingRatings()` por conta própria em vez de receber os
+conjuntos por prop: é a **mesma** query key que o crachá da aba lê, então vem do cache e o botão
+nunca discorda do número em cima do ícone. Evento futuro não recebe link — avaliar só faz sentido
+no que já aconteceu.
+
+Os três estados seguem valendo nos dois lugares: "Avaliar este evento" (na janela de 7 dias),
+"Editar minha avaliação" (30 dias) e "Ver minha avaliação" (fora de prazo, leitura).
+
+**Achado que NÃO foi corrigido, porque muda regra de negócio.** `rateable_event_ids`
+(`portal_rating_ops.py`) conta escalação **não recusada** — aceita, pendente ou sem convite. Já
+`get_historico`/`get_agenda` listam **só `accepted`**. Então um evento passado com convite pendente
+é avaliável (entra no crachá, e a tela de avaliação o aceita, porque `owned_role` também usa
+"não recusado") mas **não aparece em lista nenhuma**: crachá promete, e não há onde clicar. No
+espelho local era exatamente o estado dela — 3 avaliáveis (334, 1188, 1204), todos com convite
+`pending`, nenhum entre as 17 apresentações do histórico. Alinhar isso tem consequência nos dois
+sentidos (incluir não-aceitos no histórico mexe nos **totais de cachê** exibidos; restringir o
+crachá a aceitos tira a cobrança de avaliar de quem nunca respondeu ao convite), então fica
+registrado para decisão, não resolvido no escuro.
+
+**Não verificado.** A consulta ao banco de **produção** segue bloqueada pelo classificador, então os
+dados vêm do espelho local (08/08 17:02). Ele discorda do print em um ponto: lá os quatro convites
+dela estão `pending`, e no print os eventos aparecem em "Próximos"/"Histórico", o que só acontece
+com `accepted` — o filtro é de 176/191, então produção o tem. Conclusão: foram aceitos depois do
+espelho. Isso não muda o diagnóstico do botão, mas a confirmação final de que ela consegue avaliar
+depende de ela abrir o portal.
+
+**Verificação.** `tsc --noEmit` limpo em `apps/portal`. Os cinco casos conferidos na tela a 375px
+com entry Vite temporária (apagada depois), reproduzindo a agenda dela: avaliável dentro da janela →
+"Avaliar este evento"; avaliado e editável → "Editar minha avaliação"; avaliado fora da edição →
+"Ver minha avaliação"; passado fora da janela e nunca avaliado → **sem link**; evento futuro →
+**sem link**. Alvos de 44px, sem sobreposição com o link do figurino, sem vazamento horizontal.
+
+### 228 — Excluir pagamento em lote pedia confirmação num alerta do navegador            (main · 2026-08-09 · sem migration)
+
+**Motivação.** Dívida que a própria 226 agravou. A exclusão em lote é a única ação irreversível da
+Planilha de Pagamentos, e confirmava com `window.confirm("Excluir N item(ns) selecionado(s)?")` —
+contra o Princípio V, que pede diálogo. Enquanto o botão era um "Excluir" escrito por extenso no
+topo da tabela, passava. Na 226 ele virou **ícone de lixeira de 44px encostado no "limpar
+seleção"**, num rodapé fixo de celular: dois ícones vizinhos, um destrutivo e um inofensivo, no
+polegar. E o alerta nativo não diz **quanto** vai sumir nem que parte da seleção está escondida
+pela busca — justamente o que a 226 introduziu ao deixar a seleção sobreviver ao filtro.
+
+**O componente já existia, trancado numa página.** `ConfirmDialog` estava dentro de
+`GastosRecorrentesPage.tsx`, completo: título, descrição em `ReactNode`, botão vermelho opcional,
+`pending` com spinner e `error` renderizado **dentro** do diálogo (que fica aberto para nova
+tentativa). Promovido para `@manto/ui` sem uma linha de comportamento alterada — conferido com
+`diff` do bloco original contra o promovido, ignorando comentários. Mesmo caminho que `CopyButton`
+fez na 189.
+
+**O que o diálogo diz agora.** "Excluir 3 itens selecionados, somando R$ 1.370,50?" · quando há
+marcado fora da tela, uma linha em vermelho: "2 itens marcados não estão na tela (o filtro ou a
+busca escondeu) e serão excluídos também" · "Não dá para desfazer." O erro do lote de exclusão foi
+desviado da faixa de status para dentro do diálogo (`bulkAction.variables?.action === "delete"`
+distingue das outras três ações, que continuam usando a faixa).
+
+**Escopo contido de propósito.** Sobraram **37** `window.confirm` no repositório (36 no painel
+interno, 1 no portal). Trocar todos de uma vez seria uma migração em massa sem pedido, e cada
+troca precisa de `pending`/`error` ligados na mutation certa — não é substituição mecânica. Ficam
+inventariados em `05_DIVIDA_TECNICA.md` §7.4, com a ordem sugerida (o que apaga dinheiro ou
+registro primeiro).
+
+**Verificação.** `tsc --noEmit` limpo e `vite build` verde em `apps/internal`. Diálogo conferido na
+tela a 375px com entry Vite temporária (apagada depois): 343×218 inteiro dentro do viewport, botões
+de 44px, "Excluir" no vermelho do tema (`rgb(192,57,43)`), soma correta, "Cancelar" fechando sem
+excluir e sem perder a seleção, e o aviso de item escondido aparecendo com busca ativa. O
+`data-state="closed"` do Radix confirma que o fechamento funciona — o nó que sobra no DOM é o
+artefato conhecido do painel não-compositado, não bug.
 
 ### 227 — Foto do portal com ícone quebrado, e o coordenador que não via figurino nenhum            (main · 2026-08-09 · sem migration)
 

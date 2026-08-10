@@ -100,6 +100,27 @@ docstring de `App.tsx:66-70` diz que o objetivo era evitar "um painel vazio de e
 
 ## 3. P1 — divergências de regra
 
+### 3.0 Avaliável mas invisível: o crachá promete o que a lista não mostra
+
+Duas definições de "escalação que conta" convivem no Portal do Artista:
+
+| Onde | Cláusula | Consequência |
+|---|---|---|
+| `portal_rating_ops.rateable_event_ids` (crachá da aba Histórico) e `owned_role` (a tela de avaliação) | `_not_rejected()` — **aceito, pendente ou sem convite** | conta e deixa avaliar |
+| `portal_ops.get_historico` e as listas de `get_agenda` | `invite_status="accepted"` | não lista |
+
+Então um evento **passado com convite pendente** dentro da janela de 7 dias entra no contador
+vermelho, a tela de avaliação o aceita — e ele não aparece em nenhuma lista, logo não há onde
+clicar. Encontrado em 09/08/2026 investigando o relato de "não consigo avaliar" (feature 229): no
+espelho local, os 3 avaliáveis da coordenadora (eventos 334, 1188, 1204) eram todos `pending` e
+nenhum estava entre as 17 apresentações do histórico dela.
+
+**Não corrigido de propósito — os dois caminhos mexem em coisa visível:** incluir não-aceitos no
+histórico muda os **totais de cachê** que a tela soma (recebido / a receber / acumulado);
+restringir `rateable_event_ids` a `accepted` tira a cobrança de avaliar de quem nunca respondeu ao
+convite (e mantém o evento sem avaliação para sempre). Decisão de negócio, não de código — mas
+enquanto não for tomada, o crachá pode apontar para uma tela vazia.
+
 ### 3.1 Quatro fórmulas de comissão
 
 A regra completa está em `app/financeiro/routes.py:120` (9 ramos — ver `docs/04` §2). As outras três:
@@ -269,6 +290,7 @@ serializa (já feito em `lib/agenda.ts:5`, ausente em `financeiro.ts`, `gastos.t
 
 | Item | Onde | Ação |
 |---|---|---|
+| **37 `window.confirm()` sobrevivem** (36 no painel interno, 1 no portal) apesar de o Princípio V pedir confirmação em diálogo. O alerta nativo não respeita o tema, não formata valor, não tem estado de carregando nem lugar para o erro da API — e no celular nasce colado no topo, fácil de tocar errado. A trilha já existe desde a 228: `ConfirmDialog` do `@manto/ui` (promovido de `GastosRecorrentesPage`, adotado na exclusão em lote de Pagamentos) | `EventDetail/FinanceiroSection.tsx` (3), `AdminCatalogoListPage.tsx` (6), `TalentDetailPage.tsx`, `RevisaoSpacePage.tsx`, `PortalProfilePage.tsx`… | trocar por `ConfirmDialog` **por tela**, priorizando o que apaga dinheiro ou registro (contrato, comprovante, reembolso, exclusão de personagem/produto). Nenhuma migração em massa: cada troca precisa de `pending` e `error` ligados na mutation certa |
 | `flags: Record<string, boolean>` gateia 26 call sites sem tipagem — `data.flags.can_edit_cor` compila e esconde o botão em silêncio | `frontend/.../lib/agenda.ts:229` | `Record<EventFlag, boolean>` com a união fechada das 11 flags de `app/api/agenda_read.py:136-161` |
 | `@manto/ui` sem README — **não existe um único `.md` em `frontend/`**. Reflexo: `DenseCard` em 2 arquivos, `CopyButton` em 2, `Table` em 11 contra **8 páginas com `<table>` cru** | `packages/ui/src/index.ts` | `frontend/packages/ui/README.md` com uma linha por componente: o que é, quando **não** usar, props obrigatórias. As distinções já existem nas docstrings |
 | Metade dos módulos de `lib/` sem docstring de módulo, incluindo os maiores (`financeiro.ts` 478 l., `gastos.ts` 442, `orcamento.ts` 388, `adminCatalogo.ts` 384) | — | cabeçalho de 4-6 linhas no padrão de `lib/impressoes3d.ts:1`: domínio, endpoints, RBAC do servidor, chaves de cache |
