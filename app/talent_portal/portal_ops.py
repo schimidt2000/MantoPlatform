@@ -92,8 +92,19 @@ def find_talent_by_login(value: str) -> Talent | None:
     return Talent.query.filter_by(cpf=digits).first()
 
 
-def _not_rejected():
-    """Cláusula: escalação cujo convite NÃO foi recusado (aceito, pendente ou sem status)."""
+def nao_recusada():
+    """Cláusula: escalação cujo convite NÃO foi recusado (aceito, pendente ou sem convite).
+
+    É a definição de "esse trabalho é seu" que vale no sistema inteiro (feature 230): a planilha
+    de pagamentos paga por **cargo atribuído** — `_pagamentos_query` não olha `invite_status` —, e
+    a tela de avaliação já aceitava qualquer escalação não recusada. O portal era o único lugar
+    que exigia `accepted`, e por isso escondia do artista evento que ele ia fazer (ou já tinha
+    feito e recebido).
+
+    `invite_status`: `None` = convite nunca enviado · `pending` = enviado, sem resposta ·
+    `accepted` · `rejected`. Só o último tira o cargo da vida do talento — quando alguém recusa, o
+    casting troca a pessoa, e é por isso que não existe cargo recusado sendo pago.
+    """
     return or_(EventRole.invite_status.is_(None), EventRole.invite_status != "rejected")
 
 
@@ -186,6 +197,10 @@ def _role_summary(role: EventRole, has_figurino: bool = False) -> dict:
         "payment_status": role.payment_status,
         # A agenda só mostra o link do figurino quando há ficha para ESTA pessoa ver.
         "has_figurino": has_figurino,
+        # Desde a 230 a lista inclui escalação não aceita, então a tela precisa poder dizer que
+        # ainda falta responder o convite — senão o mesmo evento aparece em "Próximos" e em
+        # "Convites" sem explicação. `None` = convite nunca enviado (nada a responder).
+        "invite_status": role.invite_status,
     }
 
 
@@ -219,8 +234,12 @@ def get_agenda(talent: Talent) -> dict:
         .all()
     )
 
+    # `nao_recusada()` e não `invite_status="accepted"` (feature 230): exigir aceite escondia do
+    # artista o evento que ele ia fazer. Cargo com convite nunca enviado (`NULL`) não entrava nem
+    # em `pending_invites` (que pede `pending`) nem aqui — ficava invisível no portal inteiro,
+    # embora a planilha de pagamentos o pague. Eram 26 cargos futuros e 97 passados assim.
     upcoming = (
-        EventRole.query.filter_by(talent_id=talent.id, invite_status="accepted")
+        EventRole.query.filter(EventRole.talent_id == talent.id, nao_recusada())
         .join(CalendarEvent)
         .filter(nao_cancelado, CalendarEvent.start_at >= now)
         .order_by(CalendarEvent.start_at.asc())
@@ -228,7 +247,7 @@ def get_agenda(talent: Talent) -> dict:
     )
 
     past = (
-        EventRole.query.filter_by(talent_id=talent.id, invite_status="accepted")
+        EventRole.query.filter(EventRole.talent_id == talent.id, nao_recusada())
         .join(CalendarEvent)
         .filter(nao_cancelado, CalendarEvent.start_at < now)
         .order_by(CalendarEvent.start_at.desc())
@@ -683,10 +702,17 @@ def get_historico(talent: Talent) -> dict[str, Any]:
         Dict com `items` (mais recente primeiro) e `totals` (`paid`, `pending`, `overall`,
         `count`). Valores monetários em `float`, formatados no cliente por `@manto/money`.
     """
+    # Mesma regra da agenda (feature 230): escalação não recusada, e não só aceita — é o que a
+    # planilha de pagamentos usa, então os totais daqui passam a bater com o que o financeiro paga.
+    #
+    # `cancelled_at` entra junto porque esta consulta não tinha o filtro que `get_agenda` já tinha
+    # (feature 224): com a regra antiga o furo era pequeno (só evento cancelado com convite já
+    # aceito), e ampliar para "não recusada" sem isso passaria a somar no total de cachê evento que
+    # não aconteceu — e que a planilha de pagamentos também não paga.
     past = (
-        EventRole.query.filter_by(talent_id=talent.id, invite_status="accepted")
+        EventRole.query.filter(EventRole.talent_id == talent.id, nao_recusada())
         .join(CalendarEvent)
-        .filter(CalendarEvent.start_at < now_sp())
+        .filter(CalendarEvent.cancelled_at.is_(None), CalendarEvent.start_at < now_sp())
         .order_by(CalendarEvent.start_at.desc())
         .all()
     )

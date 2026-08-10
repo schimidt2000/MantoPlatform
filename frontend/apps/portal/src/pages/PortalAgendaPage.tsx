@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Shirt } from "lucide-react";
+import { MailQuestion, Shirt } from "lucide-react";
 import { Card, CardContent, Button, Skeleton } from "@manto/ui";
 import { CacheLine } from "../components/CacheLine";
 import { RatingLink } from "../components/RatingLink";
@@ -60,6 +60,20 @@ function RoleCard({ role, upcoming = false }: { role: PortalRole; upcoming?: boo
               </p>
             )}
           </div>
+        )}
+
+        {/* Desde a 230 "Próximos eventos" lista também escalação sem aceite, então o mesmo evento
+            pode estar aqui e na aba Convites. Sem esta linha, a repetição parece defeito. Só
+            `pending` tem o que responder — `null` é convite que o casting nunca enviou, e nesse
+            caso o artista não tem o que fazer além de saber que está escalado. */}
+        {upcoming && role.invite_status === "pending" && (
+          <Link
+            to="/convites"
+            className="flex min-h-[44px] items-center gap-2 text-sm font-medium text-gold-ink"
+          >
+            <MailQuestion className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Falta responder este convite ›
+          </Link>
         )}
 
         {/* Situação de pagamento só no histórico: em evento futuro, "a receber" é óbvio e vira ruído. */}

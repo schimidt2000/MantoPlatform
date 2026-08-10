@@ -4,8 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-09** · Estado do repositório: pós-feature **229 (avaliar direto do
-> histórico da Agenda, no portal)** · Head de migration: `d2e6b94c07f1` (inalterado — 226 e 227 não têm
+> Última atualização: **2026-08-10** · Estado do repositório: pós-feature **230 (portal segue a
+> escala, não o convite)** · Head de migration: `d2e6b94c07f1` (inalterado — 226 e 227 não têm
 > migration)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
@@ -38,11 +38,12 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **229** | Portal: link de avaliar também no histórico da Agenda (`RatingLink`); diagnóstico do "acesso travado" | 2026-08-09 | `—` | (aqui) | 149 |
-| **228** | `ConfirmDialog` promovido para o `@manto/ui`; exclusão em lote de pagamentos confirma em diálogo, com a soma e o que a busca escondeu | 2026-08-09 | `—` | (aqui) | 202 |
-| **227** | Foto do portal saía por rota de staff (255 talentos com ícone quebrado); coordenador passa a ver o figurino do elenco inteiro | 2026-08-09 | `—` | (aqui) | 238 |
-| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 308 |
-| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 380 |
+| **230** | Portal segue a escala e não o convite: escalação não recusada passa a aparecer (26 futuros e 97 passados invisíveis, R$ 36.910), totais batendo com a planilha | 2026-08-10 | `—` | (aqui) | 150 |
+| **229** | Portal: link de avaliar também no histórico da Agenda (`RatingLink`); diagnóstico do "acesso travado" | 2026-08-09 | `—` | (aqui) | 206 |
+| **228** | `ConfirmDialog` promovido para o `@manto/ui`; exclusão em lote de pagamentos confirma em diálogo, com a soma e o que a busca escondeu | 2026-08-09 | `—` | (aqui) | 259 |
+| **227** | Foto do portal saía por rota de staff (255 talentos com ícone quebrado); coordenador passa a ver o figurino do elenco inteiro | 2026-08-09 | `—` | (aqui) | 295 |
+| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 365 |
+| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 437 |
 | **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 186 |
 | **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 134 |
 | **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 152 |
@@ -117,9 +118,9 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Impressões e Acervo 3D | 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
-| Financeiro, comissões e pagamentos | 228, 226, 210c, 199, 194, 189, 187 |
+| Financeiro, comissões e pagamentos | 230, 228, 226, 210c, 199, 194, 189, 187 |
 | Orçamento e EducaManto | 214, 191 (orçamento), 190 |
-| Portal do Artista | 229, 227, 216, 191 (portal) |
+| Portal do Artista | 230, 229, 227, 216, 191 (portal) |
 | Design system, tema e acessibilidade | 228, 217, 216, 212 |
 | Documentação e economia de token | 217 |
 | Formulários e pré-contrato | 210b, 188, 193 |
@@ -145,6 +146,62 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 230 — O portal passa a seguir a escala, não o convite            (main · 2026-08-10 · sem migration)
+
+**Motivação.** Investigando o relato da 229 apareceu um terceiro estado de convite que ninguém
+tinha considerado: `invite_status = NULL`, convite **nunca enviado**. Ele não entrava em lista
+nenhuma do portal — "Convites" exige `pending`, "Próximos eventos" e "Histórico" exigiam
+`accepted`. Resultado: artista escalado que não vê o próprio evento. A reclamação dela, *"não
+consigo ver para aceitar os próximos eventos"*, estava **certa**, e o diagnóstico da 229 (que
+concluiu não haver nada pendente) estava incompleto.
+
+**O fato que decidiu a regra.** A Planilha de Pagamentos **ignora o convite**: `_pagamentos_query`
+(`app/financeiro/routes.py:820`) filtra só talento preenchido + evento não cancelado + mês. Ou
+seja, o dinheiro segue a **escala**. A tela de avaliação já concordava com isso (`owned_role` usa
+"não recusado"). O portal era o único lugar exigindo aceite — e por isso escondia do artista
+evento que ele ia fazer, ou que já tinha feito **e recebido**.
+
+Números do espelho (08/08/2026), antes da correção:
+
+| | cargos | talentos | cachê |
+|---|---|---|---|
+| passados, não aceitos, invisíveis no histórico | 97 | ~39 | R$ 36.910 |
+| futuros com convite nunca enviado, invisíveis em tudo | 26 | 3 | R$ 2.700 |
+| avaliáveis que nenhuma lista mostrava (crachá sem destino) | 11 | 7 | — |
+| recusados sendo pagos | **0** | — | — |
+
+O caso da relatora em agosto: a planilha tinha **8** cargos dela (R$ 3.000) e o portal mostrava
+**2** (R$ 700) — e um dos escondidos já estava marcado como **pago** (R$ 350). Depois da mudança:
+histórico 17 → 20 itens, total R$ 6.180 → R$ 7.180, próximos eventos 0 → 4. O caso mais extremo é
+um colaborador fixo cujos convites nunca são enviados: histórico 3 → 50 itens, R$ 2.450 → R$ 23.230,
+próximos 0 → 23. O portal dele era praticamente vazio.
+
+**O que mudou.** `portal_ops.nao_recusada()` virou a fonte única da cláusula (era duplicada em
+`portal_ops` e `portal_rating_ops`), e as listas de `get_agenda` (`upcoming`/`past`) e de
+`get_historico` passaram a usá-la em vez de `invite_status="accepted"`. Convites continua listando
+só `pending` — é o que precisa de resposta. Cargo **recusado** segue fora de tudo: quando alguém
+recusa, o casting troca a pessoa, e é por isso que não existe cargo recusado sendo pago.
+
+`_role_summary` passou a expor `invite_status`, porque a lista agora inclui escalação não aceita e o
+mesmo evento pode aparecer em "Próximos" **e** em "Convites". Sem explicação isso lê como defeito,
+então o card futuro com convite `pending` ganhou a linha "Falta responder este convite ›" apontando
+para a aba. Convite `NULL` **não** ganha aviso: não há o que o artista responder — quem tem que agir
+é o casting.
+
+**Pegadinha corrigida de carona.** `get_historico` não tinha o filtro de evento cancelado que
+`get_agenda` já tinha desde a 224. Com a regra antiga o furo era pequeno (só cancelado já aceito);
+ampliar para "não recusada" sem isso passaria a **somar no total de cachê** evento que não
+aconteceu — e que a planilha também não paga. O filtro entrou junto.
+
+**Verificação.** `verify_230_portal_segue_escala.py` 10/10: cláusula única nos três lugares; o
+evento não aceito aparecendo no histórico; **portal e planilha fechando com o mesmo número de
+cargos e a mesma soma** (13 cargos, R$ 8.580 no mês testado); cargo futuro sem convite aparecendo
+em "Próximos" e **não** em "Convites", com `invite_status=None`; recusado fora de tudo; e nenhum
+talento (de 120 ativos varridos) com evento avaliável fora do histórico. Sem regressão:
+`verify_176_portal_artista` 41/41 e `verify_227` 19/19. `tsc --noEmit` limpo em `apps/portal`. Os
+três estados do card conferidos na tela (aviso só no `pending`), contraste do aviso 5,88:1 no claro
+e 11,21:1 no escuro.
 
 ### 229 — "Não consigo avaliar": o botão existia numa aba, e a artista estava olhando a outra            (main · 2026-08-09 · sem migration)
 
