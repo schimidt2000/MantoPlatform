@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { ApiRequestError } from "@manto/api-client";
 import {
   Button,
@@ -6,6 +6,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  ConfirmDialog,
   Dialog,
   DialogContent,
   DialogFooter,
@@ -91,61 +92,8 @@ function currentMonthRef(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-// ══════════════════════════════════════════════════════════════════
-//  Confirmação de ação destrutiva/irreversível (Princípio V)
-// ══════════════════════════════════════════════════════════════════
-
-interface ConfirmDialogProps {
-  open: boolean;
-  title: string;
-  description: ReactNode;
-  confirmLabel: string;
-  destructive?: boolean;
-  pending: boolean;
-  error?: string | null;
-  onConfirm: () => void;
-  onOpenChange: (open: boolean) => void;
-}
-
-function ConfirmDialog({
-  open,
-  title,
-  description,
-  confirmLabel,
-  destructive = false,
-  pending,
-  error,
-  onConfirm,
-  onOpenChange,
-}: ConfirmDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent open={open}>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        <div className="text-sm text-muted">{description}</div>
-        {error && (
-          <p className="mt-3 rounded-md bg-red-soft px-3 py-2 text-sm text-red" role="alert">
-            {error}
-          </p>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancelar
-          </Button>
-          <Button
-            className={destructive ? "bg-red hover:bg-red/90" : undefined}
-            loading={pending}
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// `ConfirmDialog` nasceu aqui e foi promovido para `@manto/ui` na feature 228 (fonte única,
+// Princípio I) — a Planilha de Pagamentos precisava do mesmo diálogo para a exclusão em lote.
 
 // ══════════════════════════════════════════════════════════════════
 //  Formulário de criação

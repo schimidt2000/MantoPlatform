@@ -7,6 +7,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  ConfirmDialog,
   Input,
   PageHeader,
   Skeleton,
@@ -122,6 +123,8 @@ interface PagamentoBulkBarProps {
   /** Ação em execução agora — só o botão dela mostra spinner (Princípio V). */
   runningAction: BulkPaymentAction | null;
   onAction: (action: BulkPaymentAction) => void;
+  /** Pede a confirmação da exclusão — quem abre o diálogo é a página, não a barra. */
+  onRequestDelete: () => void;
   onClear: () => void;
 }
 
@@ -140,6 +143,7 @@ function PagamentoBulkBar({
   hiddenCount,
   runningAction,
   onAction,
+  onRequestDelete,
   onClear,
 }: PagamentoBulkBarProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -197,11 +201,7 @@ function PagamentoBulkBar({
             aria-label="Excluir selecionados"
             loading={runningAction === "delete"}
             disabled={busy && runningAction !== "delete"}
-            onClick={() => {
-              if (window.confirm(`Excluir ${count} item(ns) selecionado(s)?`)) {
-                onAction("delete");
-              }
-            }}
+            onClick={onRequestDelete}
           >
             <Trash2 className="h-4 w-4 xl:hidden" aria-hidden />
             <span className="hidden xl:inline">Excluir</span>
@@ -236,6 +236,8 @@ export function PagamentosPage() {
    */
   const [advanceSalaryId, setAdvanceSalaryId] = useState<number | null>(null);
   const [advanceOpen, setAdvanceOpen] = useState(false);
+  /** Confirmação da exclusão em lote — ver `ConfirmDialog` no fim do arquivo. */
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const query = usePagamentos(month);
   const bulkAction = useBulkPaymentAction(month);
@@ -353,7 +355,12 @@ export function PagamentosPage() {
           .map((i) => String(i.id)),
         month,
       },
-      { onSuccess: () => setSelected({}) },
+      {
+        onSuccess: () => {
+          setSelected({});
+          setConfirmDelete(false);
+        },
+      },
     );
   };
 
@@ -363,6 +370,15 @@ export function PagamentosPage() {
   const runningAction: BulkPaymentAction | null = bulkAction.isPending
     ? bulkAction.variables?.action ?? null
     : null;
+
+  // Erro do lote de EXCLUSÃO fica dentro do diálogo (que continua aberto para nova tentativa);
+  // a faixa de status abaixo do cabeçalho cuida das outras três ações.
+  const deleteError =
+    bulkAction.isError && bulkAction.variables?.action === "delete"
+      ? bulkAction.error instanceof Error
+        ? bulkAction.error.message
+        : "Não foi possível excluir os itens selecionados."
+      : null;
 
   const itemViewProps = (item: PagamentoItem) => ({
     item,
@@ -525,6 +541,7 @@ export function PagamentosPage() {
                 hiddenCount={hiddenSelectedCount}
                 runningAction={runningAction}
                 onAction={runBulkAction}
+                onRequestDelete={() => setConfirmDelete(true)}
                 onClear={() => setSelected({})}
               />
 
@@ -641,6 +658,40 @@ export function PagamentosPage() {
           </Card>
         </>
       )}
+
+      {/* Exclusão em lote é a única ação irreversível da tela, e desde a 226 ela é um ícone de
+          lixeira de 44px colado no "limpar seleção", num rodapé fixo de celular — o alerta nativo
+          do `window.confirm` não mostrava o valor em jogo nem o que a busca escondeu. */}
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Excluir itens da planilha"
+        description={
+          <>
+            <p>
+              Excluir <strong className="text-ink">{selectedItems.length}</strong>{" "}
+              {selectedItems.length === 1 ? "item selecionado" : "itens selecionados"}, somando{" "}
+              <strong className="text-ink tabular-nums">{brl(selectedTotal)}</strong>?
+            </p>
+            {hiddenSelectedCount > 0 && (
+              <p className="mt-2 text-red">
+                {hiddenSelectedCount}{" "}
+                {hiddenSelectedCount === 1
+                  ? "item marcado não está na tela"
+                  : "itens marcados não estão na tela"}{" "}
+                (o filtro ou a busca escondeu) e {hiddenSelectedCount === 1 ? "será" : "serão"}{" "}
+                excluído{hiddenSelectedCount === 1 ? "" : "s"} também.
+              </p>
+            )}
+            <p className="mt-2">Não dá para desfazer.</p>
+          </>
+        }
+        confirmLabel="Excluir"
+        destructive
+        pending={runningAction === "delete"}
+        error={deleteError}
+        onConfirm={() => runBulkAction("delete")}
+        onOpenChange={(aberto) => !aberto && setConfirmDelete(false)}
+      />
 
       {advanceItem && (
         <SalaryAdvancesDialog
