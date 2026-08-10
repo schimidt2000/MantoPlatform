@@ -100,26 +100,19 @@ docstring de `App.tsx:66-70` diz que o objetivo era evitar "um painel vazio de e
 
 ## 3. P1 — divergências de regra
 
-### 3.0 Avaliável mas invisível: o crachá promete o que a lista não mostra
+### 3.0 ~~Avaliável mas invisível~~ — RESOLVIDO na feature 230
 
-Duas definições de "escalação que conta" convivem no Portal do Artista:
+O portal exigia `invite_status="accepted"` para listar evento, enquanto a planilha de pagamentos
+paga por **cargo atribuído** (`_pagamentos_query` não olha o convite) e a tela de avaliação já
+aceitava qualquer escalação não recusada. Três definições diferentes de "esse trabalho é seu".
 
-| Onde | Cláusula | Consequência |
-|---|---|---|
-| `portal_rating_ops.rateable_event_ids` (crachá da aba Histórico) e `owned_role` (a tela de avaliação) | `_not_rejected()` — **aceito, pendente ou sem convite** | conta e deixa avaliar |
-| `portal_ops.get_historico` e as listas de `get_agenda` | `invite_status="accepted"` | não lista |
+Consequências medidas antes da correção (espelho de 08/08/2026): 26 cargos **futuros** e 97
+**passados** invisíveis no portal, ~39 talentos, R$ 36.910 que o financeiro paga e o artista não
+via — incluindo cargo já **pago**. E o crachá de avaliar contava 11 eventos que nenhuma lista
+mostrava.
 
-Então um evento **passado com convite pendente** dentro da janela de 7 dias entra no contador
-vermelho, a tela de avaliação o aceita — e ele não aparece em nenhuma lista, logo não há onde
-clicar. Encontrado em 09/08/2026 investigando o relato de "não consigo avaliar" (feature 229): no
-espelho local, os 3 avaliáveis da coordenadora (eventos 334, 1188, 1204) eram todos `pending` e
-nenhum estava entre as 17 apresentações do histórico dela.
-
-**Não corrigido de propósito — os dois caminhos mexem em coisa visível:** incluir não-aceitos no
-histórico muda os **totais de cachê** que a tela soma (recebido / a receber / acumulado);
-restringir `rateable_event_ids` a `accepted` tira a cobrança de avaliar de quem nunca respondeu ao
-convite (e mantém o evento sem avaliação para sempre). Decisão de negócio, não de código — mas
-enquanto não for tomada, o crachá pode apontar para uma tela vazia.
+A 230 fez o portal seguir a escala (`portal_ops.nao_recusada()`, fonte única das três consultas).
+Convites continua listando só `pending`, que é o que precisa de resposta.
 
 ### 3.1 Quatro fórmulas de comissão
 

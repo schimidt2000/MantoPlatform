@@ -7,11 +7,13 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-09** · Estado do repositório: pós-feature **229 (avaliar do
-> histórico da Agenda no portal — só frontend). Antes dela, 228 (`ConfirmDialog` no `@manto/ui`,
+> Última atualização: **2026-08-10** · Estado do repositório: pós-feature **230 (portal segue a
+> escala: `get_agenda`/`get_historico` passaram de `invite_status="accepted"` para
+> `portal_ops.nao_recusada()`, e `_role_summary` expõe `invite_status`; sem schema). Antes dela, 229
+> (avaliar do histórico da Agenda, só frontend). Antes dela, 228 (`ConfirmDialog` no `@manto/ui`,
 > frontend) e 227 (foto do portal e figurino do coordenador: `GET
 > /api/portal/events/<id>/figurino` ganhou `is_coordinator` e `talent_name`, e a agenda do portal
-> ganhou `has_figurino`). Nenhuma das três tem schema ou migration** · Head de
+> ganhou `has_figurino`). Nenhuma das quatro tem schema ou migration** · Head de
 > migration: `d2e6b94c07f1` (*manutenção de figurino*) — confirme com
 > `flask db heads`; este cabeçalho é a **única** menção ao head neste documento.
 >

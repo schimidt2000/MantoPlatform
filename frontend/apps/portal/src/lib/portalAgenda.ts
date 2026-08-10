@@ -29,6 +29,13 @@ export interface PortalRole {
    * uma tela que diz "ainda não há ficha" é o que fazia parecer que o figurino não subiu.
    */
   has_figurino: boolean;
+  /**
+   * `null` = convite nunca enviado · `pending` = enviado, sem resposta · `accepted`.
+   *
+   * A lista passou a incluir escalação não aceita (feature 230), então a tela precisa poder
+   * avisar que falta responder — só `pending` tem o que responder.
+   */
+  invite_status: string | null;
 }
 
 export interface PortalAgenda {

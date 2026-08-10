@@ -31,7 +31,7 @@ from app.models import (
     EventSubRating,
     Talent,
 )
-from app.talent_portal.portal_ops import now_sp, portal_photo_url
+from app.talent_portal.portal_ops import nao_recusada, now_sp, portal_photo_url
 
 #: Prazo para avaliar um evento depois que ele termina.
 RATING_WINDOW = timedelta(days=7)
@@ -65,9 +65,9 @@ class PortalRatingError(Exception):
         self.status = status
 
 
-def _not_rejected():
-    """Cláusula: escalação cujo convite NÃO foi recusado (aceito, pendente ou sem status)."""
-    return or_(EventRole.invite_status.is_(None), EventRole.invite_status != "rejected")
+# A cláusula mora em `portal_ops` (fonte única desde a 230) — as listas da agenda, do histórico e
+# o crachá de avaliar precisam concordar sobre o que conta como escalação do talento.
+_not_rejected = nao_recusada
 
 
 def _event_end_column():

@@ -6,8 +6,15 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-08-09** · Estado do repositório: pós-feature **229 (avaliar direto do
-> histórico da Agenda, no portal)**
+> Última atualização: **2026-08-10** · Estado do repositório: pós-feature **230 (portal segue a
+> escala, não o convite)**
+>
+> UX nova da 230: **"Próximos eventos" e "Histórico" do portal passaram a listar toda escalação não
+> recusada** — aceita, pendente ou **sem convite enviado**. Antes exigiam aceite, e por isso
+> escondiam do artista evento que ele ia fazer (26 cargos futuros invisíveis) ou que já tinha feito e
+> recebido (97 passados, R$ 36.910). Agora os totais de cachê do portal batem com a Planilha de
+> Pagamentos, que sempre pagou por cargo atribuído. Convites continua listando só o que precisa de
+> resposta, e o card futuro com convite pendente ganhou a linha "Falta responder este convite ›".
 >
 > UX nova da 229: o link **"Avaliar este evento"** passou a aparecer também nos itens do histórico
 > **dentro da Agenda** — antes só existia na aba Histórico, e como as duas listas se chamam
@@ -1205,7 +1212,7 @@ avaliar). Alvos de toque ≥44px, nada abaixo de 12px, sem rolagem horizontal de
 | `/portal/reset-password/:token` | Definir nova senha pelo link do e-mail | Valida o token antes de mostrar o formulário; checklist de força ao vivo |
 | *(gate)* Criar senha | Troca obrigatória no primeiro acesso | Servida pelo `OnboardingGate`, não é rota navegável |
 | *(gate)* Termos | Aceite do Termo de Consentimento | Checkbox só libera após rolar o texto até o fim |
-| `/portal/agenda` | Próximos eventos + histórico recente | Dia da semana + "amanhã"/"em 5 dias"; alerta de alteração com botão **Ciente**; link para a ficha de figurino **só quando há ficha para aquela pessoa ver** (`has_figurino`, feature 227); nos itens do **histórico**, o mesmo link de avaliar da aba Histórico (`RatingLink`, feature 229) |
+| `/portal/agenda` | Próximos eventos + histórico recente | Dia da semana + "amanhã"/"em 5 dias"; alerta de alteração com botão **Ciente**; link para a ficha de figurino **só quando há ficha para aquela pessoa ver** (`has_figurino`, feature 227); nos itens do **histórico**, o mesmo link de avaliar da aba Histórico (`RatingLink`, feature 229); lista escalação **não recusada** (aceita, pendente ou sem convite — feature 230) |
 | `/portal/convites` | Convites de casting pendentes | Botões **Aceitar** / **Recusar** (recusa pede confirmação); alimenta o contador da aba |
 | `/portal/historico` | Histórico completo de apresentações | Somatórios recebido / a receber / total; cachê + deslocamento por evento; link para avaliar via `RatingLink` (o mesmo da Agenda desde a 229) |
 | `/portal/perfil` | Dados pessoais, **medidas corporais**, PIX e portfólio | Medidas alimentam o módulo de Figurino; até 3 fotos de atuação + links (Vimeo/YouTube) |
