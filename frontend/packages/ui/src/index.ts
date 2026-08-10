@@ -33,6 +33,8 @@ export {
   DialogDescription,
   DialogFooter,
 } from "./components/dialog";
+export { ConfirmDialog } from "./components/confirm-dialog";
+export type { ConfirmDialogProps } from "./components/confirm-dialog";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/tabs";
 export { AccordionRow } from "./components/accordion-row";
 export type { AccordionRowProps } from "./components/accordion-row";

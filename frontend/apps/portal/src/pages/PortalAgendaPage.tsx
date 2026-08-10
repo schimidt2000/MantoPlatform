@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Shirt } from "lucide-react";
 import { Card, CardContent, Button, Skeleton } from "@manto/ui";
 import { CacheLine } from "../components/CacheLine";
+import { RatingLink } from "../components/RatingLink";
 import { formatDateTime, formatRelativeDay, formatWeekday } from "../lib/format";
 import { useAckEventChange, useAgenda, type PortalRole } from "../lib/portalAgenda";
 
@@ -77,6 +78,11 @@ function RoleCard({ role, upcoming = false }: { role: PortalRole; upcoming?: boo
             Ver ficha de figurino ›
           </Link>
         )}
+
+        {/* Avaliar só faz sentido no que já passou — e é aqui que faltava (feature 229). A aba
+            Histórico tinha o botão, esta seção não; as duas se chamam "Histórico", então quem
+            estava olhando a Agenda concluía que não havia como avaliar. */}
+        {!upcoming && <RatingLink eventId={role.event_id} />}
       </CardContent>
     </Card>
   );
