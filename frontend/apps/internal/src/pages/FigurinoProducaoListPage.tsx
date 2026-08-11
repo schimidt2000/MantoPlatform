@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { Plus, Shirt } from "lucide-react";
+import { Plus, Shirt, ShoppingCart } from "lucide-react";
 import {
   Badge,
   Button,
@@ -22,6 +22,7 @@ import { formatBRL } from "@manto/money";
 import { useGastosEventos } from "../lib/gastos";
 import { useFigurinoSheets } from "../lib/figurino";
 import {
+  PRODUCAO_KIND_TONES,
   PRODUCAO_STATUS_LABELS,
   PRODUCAO_STATUS_TONES,
   prazoInfo,
@@ -37,14 +38,36 @@ import { useCurrentUser } from "../lib/useAuth";
 
 const INPUT_CLASS = "h-11 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
 
-const FILTROS: { key: string; label: string }[] = [
-  { key: "abertos", label: "Em aberto" },
-  { key: "solicitado", label: "Solicitados" },
-  { key: "aprovado", label: "Aprovados" },
-  { key: "em_producao", label: "Em produção" },
-  { key: "pronto", label: "Prontos" },
-  { key: "", label: "Tudo" },
-];
+/**
+ * Os chips de situação dependem do tipo, porque os fluxos são diferentes: compra percorre
+ * `comprado → recebido`, a oficina percorre `em_producao → pronto`. Oferecer "Recebidos" numa
+ * fila de manutenção seria um filtro que nunca traz nada.
+ */
+function filtrosDe(tipo: ProducaoKind | ""): { key: string; label: string }[] {
+  const meio =
+    tipo === "compra"
+      ? [
+          { key: "aprovado", label: "Aprovados" },
+          { key: "comprado", label: "Comprados" },
+          { key: "recebido", label: "Recebidos" },
+        ]
+      : tipo === "manutencao"
+        ? [
+            { key: "em_producao", label: "Em produção" },
+            { key: "pronto", label: "Prontos" },
+          ]
+        : [
+            { key: "aprovado", label: "Aprovados" },
+            { key: "em_producao", label: "Em produção" },
+            { key: "pronto", label: "Prontos" },
+          ];
+  return [
+    { key: "abertos", label: "Em aberto" },
+    { key: "solicitado", label: "Solicitados" },
+    ...meio,
+    { key: "", label: "Tudo" },
+  ];
+}
 
 /** Cabeçalho com os números que respondem "como está a oficina hoje". */
 function Resumo({ itens }: { itens: Producao[] }) {
@@ -81,15 +104,18 @@ function NovoPedidoDialog({
   open,
   onOpenChange,
   podeDesignar,
+  tipoFixo,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   podeDesignar: boolean;
+  /** Na tela de Compras o tipo não é escolha: o seletor some e o pedido já nasce compra. */
+  tipoFixo?: ProducaoKind;
 }) {
   const criar = useCreateProducao();
-  const responsaveis = useResponsaveis();
+  const [kind, setKind] = useState<ProducaoKind>(tipoFixo ?? "producao");
+  const responsaveis = useResponsaveis(kind);
   const fichas = useFigurinoSheets();
-  const [kind, setKind] = useState<ProducaoKind>("producao");
   const [severity, setSeverity] = useState<ProducaoSeveridade | "">("");
   const [fichaId, setFichaId] = useState("");
   const [title, setTitle] = useState("");
@@ -103,6 +129,7 @@ function NovoPedidoDialog({
   const eventos = useGastosEventos(dataEvento);
 
   const eManutencao = kind === "manutencao";
+  const eCompra = kind === "compra";
 
   const fichaOptions = useMemo(
     () =>
@@ -115,7 +142,7 @@ function NovoPedidoDialog({
 
   function fechar() {
     onOpenChange(false);
-    setKind("producao");
+    setKind(tipoFixo ?? "producao");
     setSeverity("");
     setFichaId("");
     setTitle("");
@@ -157,32 +184,64 @@ function NovoPedidoDialog({
     <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(true) : fechar())}>
       <DialogContent open={open} className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Novo pedido de figurino</DialogTitle>
+          <DialogTitle>
+            {eCompra ? "Novo pedido de compra" : "Novo pedido de figurino"}
+          </DialogTitle>
           <DialogDescription>
-            {eManutencao
-              ? "Conserto, ajuste ou adaptação de um figurino que já existe. A oficina assume direto — não precisa de aprovação."
-              : "Uma peça nova, que ainda não existe. A oficina aprova e assume depois."}
+            {eCompra
+              ? "Alguma coisa que precisa ser comprada. Um super admin aprova, e depois quem for responsável marca como comprada e como recebida."
+              : eManutencao
+                ? "Conserto, ajuste ou adaptação de um figurino que já existe. A oficina assume direto — não precisa de aprovação."
+                : "Uma peça nova, que ainda não existe. A oficina aprova e assume depois."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          {/* O tipo vem primeiro porque muda o resto do formulário — e muda o fluxo. */}
-          <div className="flex gap-2">
-            {(["producao", "manutencao"] as ProducaoKind[]).map((k) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setKind(k)}
-                className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors ${
-                  kind === k
-                    ? "border-accent bg-accent-soft font-medium text-accent"
-                    : "border-line text-muted hover:bg-surface-2"
-                }`}
+          {/* O tipo vem primeiro porque muda o resto do formulário — e muda o fluxo. Na tela de
+              Compras ele já está decidido, e um seletor de uma opção só seria ruído. */}
+          {!tipoFixo && (
+            <div className="flex gap-2">
+              {(["producao", "manutencao", "compra"] as ProducaoKind[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setKind(k)}
+                  className={`flex-1 rounded-md border px-2 py-2 text-sm transition-colors ${
+                    kind === k
+                      ? "border-accent bg-accent-soft font-medium text-accent"
+                      : "border-line text-muted hover:bg-surface-2"
+                  }`}
+                >
+                  {k === "producao"
+                    ? "Produzir peça"
+                    : k === "manutencao"
+                      ? "Consertar"
+                      : "Comprar"}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {eCompra && (
+            <div>
+              <label className="text-xs text-muted" htmlFor="prod-ficha-compra">
+                Para qual figurino (opcional)
+              </label>
+              <select
+                id="prod-ficha-compra"
+                className={INPUT_CLASS}
+                value={fichaId}
+                onChange={(e) => setFichaId(e.target.value)}
               >
-                {k === "producao" ? "Produzir peça nova" : "Consertar / ajustar"}
-              </button>
-            ))}
-          </div>
+                <option value="">Não é para um figurino específico</option>
+                {fichaOptions.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {eManutencao && (
             <>
@@ -247,16 +306,22 @@ function NovoPedidoDialog({
 
           <div>
             <label className="text-xs text-muted" htmlFor="prod-title">
-              {eManutencao ? "O que precisa ser resolvido" : "O que precisa ser feito"}
+              {eCompra
+                ? "O que precisa ser comprado"
+                : eManutencao
+                  ? "O que precisa ser resolvido"
+                  : "O que precisa ser feito"}
             </label>
             <Input
               id="prod-title"
               value={title}
               autoFocus
               placeholder={
-                eManutencao
-                  ? "Peça solta dentro do boneco"
-                  : "Bermuda do Chapeleiro Maluco"
+                eCompra
+                  ? "Pedraria vermelha para a Rainha de Copas"
+                  : eManutencao
+                    ? "Peça solta dentro do boneco"
+                    : "Bermuda do Chapeleiro Maluco"
               }
               onChange={(e) => setTitle(e.target.value)}
             />
@@ -265,9 +330,11 @@ function NovoPedidoDialog({
 
           <div>
             <label className="text-xs text-muted" htmlFor="prod-desc">
-              {eManutencao
-                ? "Detalhes (onde está, o que a pessoa relatou…)"
-                : "Detalhes (tecido, medida, referência…)"}
+              {eCompra
+                ? "Detalhes (onde comprar, marca, link, quantidade…)"
+                : eManutencao
+                  ? "Detalhes (onde está, o que a pessoa relatou…)"
+                  : "Detalhes (tecido, medida, referência…)"}
             </label>
             <textarea
               id="prod-desc"
@@ -345,7 +412,11 @@ function NovoPedidoDialog({
             )}
             <div>
               <label className="text-xs text-muted" htmlFor="prod-custo">
-                {eManutencao ? "Custo previsto (se houver)" : "Custo previsto"}
+                {eManutencao
+                  ? "Custo previsto (se houver)"
+                  : eCompra
+                    ? "Quanto deve custar"
+                    : "Custo previsto"}
               </label>
               <Input
                 id="prod-custo"
@@ -357,10 +428,13 @@ function NovoPedidoDialog({
             </div>
           </div>
 
-          {podeDesignar && (
+          {/* Numa compra o responsável é parte do pedido, não uma decisão da oficina — quem
+              precisa da coisa costuma saber quem vai buscá-la. Por isso o campo aparece para
+              qualquer pessoa aqui, e a lista traz a equipe interna inteira. */}
+          {(podeDesignar || eCompra) && (
             <div>
               <label className="text-xs text-muted" htmlFor="prod-resp">
-                Responsável (opcional)
+                {eCompra ? "Quem é o responsável pela compra" : "Responsável (opcional)"}
               </label>
               <select
                 id="prod-resp"
@@ -377,8 +451,9 @@ function NovoPedidoDialog({
                 ))}
               </select>
               <p className="mt-1 text-xs text-muted">
-                Quem for designado recebe e-mail e o prazo entra na agenda pessoal. Sem
-                responsável, o aviso vai para a equipe de figurino.
+                {eCompra
+                  ? "Quem for designado recebe e-mail e o prazo entra na agenda pessoal. Sem responsável, o aviso vai para os super admins."
+                  : "Quem for designado recebe e-mail e o prazo entra na agenda pessoal. Sem responsável, o aviso vai para a equipe de figurino."}
               </p>
             </div>
           )}
@@ -393,7 +468,7 @@ function NovoPedidoDialog({
             Cancelar
           </Button>
           <Button onClick={salvar} loading={criar.isPending} disabled={!podeSalvar}>
-            Abrir pedido
+            {eCompra ? "Pedir compra" : "Abrir pedido"}
           </Button>
         </div>
       </DialogContent>
@@ -461,7 +536,7 @@ function LinhaPedido({ p }: { p: Producao }) {
       </TableCell>
       <TableCell>
         <div className="flex flex-wrap items-center gap-1">
-          <Badge tone={p.kind === "manutencao" ? "accent" : "neutral"}>{p.kind_label}</Badge>
+          <Badge tone={PRODUCAO_KIND_TONES[p.kind]}>{p.kind_label}</Badge>
           <Badge tone={PRODUCAO_STATUS_TONES[p.status]}>
             {PRODUCAO_STATUS_LABELS[p.status]}
           </Badge>
@@ -478,14 +553,17 @@ function LinhaPedido({ p }: { p: Producao }) {
  * lançamentos soltos de gasto extra — oito linhas para uma peça só, sem nada dizendo que eram o
  * mesmo trabalho, nem quem estava fazendo, nem se ficou pronto.
  */
-export function FigurinoProducaoListPage() {
+export function FigurinoProducaoListPage({ tipoFixo }: { tipoFixo?: ProducaoKind } = {}) {
   const { data: user } = useCurrentUser();
   const reduceMotion = useReducedMotion();
   const [searchParams, setSearchParams] = useSearchParams();
   // `?ficha=` é o destino dos avisos de manutenção na lista de figurinos e no elenco do evento:
   // clicar em "não pode ir" tem que cair já filtrado naquele figurino.
   const fichaFiltro = Number(searchParams.get("ficha")) || null;
-  const [tipo, setTipo] = useState<ProducaoKind | "">(fichaFiltro ? "manutencao" : "");
+  const [tipoLivre, setTipoLivre] = useState<ProducaoKind | "">(
+    fichaFiltro ? "manutencao" : "",
+  );
+  const tipo: ProducaoKind | "" = tipoFixo ?? tipoLivre;
   const [filtro, setFiltro] = useState(fichaFiltro ? "" : "abertos");
   const [busca, setBusca] = useState("");
   const [soMeus, setSoMeus] = useState(false);
@@ -506,17 +584,29 @@ export function FigurinoProducaoListPage() {
 
   const itens = data?.items ?? [];
   const flags = data?.flags;
+  const eCompras = tipoFixo === "compra";
+
+  // Trocar de aba pode deixar um filtro órfão ("Recebidos" não existe em produção): voltar para
+  // "Em aberto" evita a tela vazia que parece bug.
+  function trocarTipo(valor: ProducaoKind | "") {
+    setTipoLivre(valor);
+    if (!filtrosDe(valor).some((f) => f.key === filtro)) setFiltro("abertos");
+  }
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Produção de Figurinos"
-        subtitle="O que precisa ser feito, quem está fazendo e quanto já custou"
+        title={eCompras ? "Pedidos de Compra" : "Produção de Figurinos"}
+        subtitle={
+          eCompras
+            ? "O que precisa ser comprado, até quando, por quem — e se já chegou"
+            : "O que precisa ser feito, quem está fazendo e quanto já custou"
+        }
         actions={
           flags?.can_create ? (
             <Button onClick={() => setNovoAberto(true)}>
               <Plus className="mr-1 h-4 w-4" />
-              Novo pedido
+              {eCompras ? "Novo pedido de compra" : "Novo pedido"}
             </Button>
           ) : null
         }
@@ -552,15 +642,22 @@ export function FigurinoProducaoListPage() {
 
           <Resumo itens={itens} />
 
-          {/* Tipo primeiro: produzir uma peça nova e consertar uma que existe são dois
-              trabalhos diferentes, com fluxos diferentes. */}
-          <div className="flex gap-2 border-b border-line">
-            {([["", "Tudo"], ["producao", "Produção"], ["manutencao", "Manutenção"]] as const).map(
-              ([valor, rotulo]) => (
+          {/* Tipo primeiro: produzir peça nova, consertar uma que existe e comprar são três
+              trabalhos diferentes, com fluxos diferentes. Na tela de Compras não há escolha. */}
+          {!tipoFixo && (
+            <div className="flex gap-2 border-b border-line">
+              {(
+                [
+                  ["", "Tudo"],
+                  ["producao", "Produção"],
+                  ["manutencao", "Manutenção"],
+                  ["compra", "Compras"],
+                ] as const
+              ).map(([valor, rotulo]) => (
                 <button
                   key={valor || "tudo"}
                   type="button"
-                  onClick={() => setTipo(valor)}
+                  onClick={() => trocarTipo(valor)}
                   className={`-mb-px border-b-2 px-3 py-2 text-sm transition-colors ${
                     tipo === valor
                       ? "border-accent font-medium text-accent"
@@ -569,12 +666,12 @@ export function FigurinoProducaoListPage() {
                 >
                   {rotulo}
                 </button>
-              ),
-            )}
-          </div>
+              ))}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-2">
-            {FILTROS.map((f) => (
+            {filtrosDe(tipo).map((f) => (
               <button
                 key={f.key || "tudo"}
                 type="button"
@@ -598,7 +695,7 @@ export function FigurinoProducaoListPage() {
             </label>
             <Input
               className="w-full sm:w-56"
-              placeholder="Buscar peça…"
+              placeholder={eCompras ? "Buscar item…" : "Buscar peça…"}
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
             />
@@ -606,19 +703,23 @@ export function FigurinoProducaoListPage() {
 
           {itens.length === 0 ? (
             <Card className="flex flex-col items-center gap-2 px-4 py-12 text-center">
-              <Shirt className="h-8 w-8 text-muted" />
+              {eCompras ? (
+                <ShoppingCart className="h-8 w-8 text-muted" />
+              ) : (
+                <Shirt className="h-8 w-8 text-muted" />
+              )}
               <p className="font-medium text-ink">Nada nesta lista</p>
               <p className="max-w-md text-sm text-muted">
-                Quando alguém precisar de uma peça para um evento — uma bermuda, um sapato, um
-                figurino inteiro — é aqui que o pedido nasce, e é aqui que os gastos dele ficam
-                juntos.
+                {eCompras
+                  ? "Quando faltar alguma coisa que precisa ser comprada — pedraria, tinta, um sapato — é aqui que o pedido nasce, com prazo e responsável, e é aqui que o gasto dele fica junto."
+                  : "Quando alguém precisar de uma peça para um evento — uma bermuda, um sapato, um figurino inteiro — é aqui que o pedido nasce, e é aqui que os gastos dele ficam juntos."}
               </p>
             </Card>
           ) : (
             <Table>
               <thead>
                 <TableRow head>
-                  <TableCell as="th">Peça</TableCell>
+                  <TableCell as="th">{eCompras ? "Item" : "Peça"}</TableCell>
                   <TableCell as="th">Responsável</TableCell>
                   <TableCell as="th">Prazo</TableCell>
                   <TableCell as="th">Gasto</TableCell>
@@ -639,6 +740,7 @@ export function FigurinoProducaoListPage() {
         open={novoAberto}
         onOpenChange={setNovoAberto}
         podeDesignar={Boolean(flags?.can_execute)}
+        tipoFixo={tipoFixo}
       />
     </div>
   );

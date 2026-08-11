@@ -15,6 +15,7 @@ from flask_login import current_user
 
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
+from app.constants import FIGURINO_PROD_SOLICITADO
 from app.email_service import (
     send_async,
     send_figurino_pedido_setor_email,
@@ -32,6 +33,13 @@ def _require_create() -> Any | None:
 
 def _require_execute() -> Any | None:
     if not ops.pode_executar(current_user):
+        return json_error("Sem permissão", 403)
+    return None
+
+
+def _require_execute_pedido(producao: FigurinoProducao) -> Any | None:
+    """Como `_require_execute`, mas contando o responsável pela própria compra (feature 225c)."""
+    if not ops.pode_executar_pedido(current_user, producao):
         return json_error("Sem permissão", 403)
     return None
 
@@ -97,7 +105,9 @@ def api_figurino_producao_create() -> Any:
     # Aviso ao SETOR: o pedido pode ter nascido sem dono (é a regra na manutenção), e nesse caso
     # ninguém receberia o e-mail individual. Só depois do commit — `send_async` recarrega por PK.
     if producao.responsible_id is None:
-        send_async(send_figurino_pedido_setor_email, producao, ops.equipe_figurino())
+        send_async(
+            send_figurino_pedido_setor_email, producao, ops.equipe_figurino(producao.kind)
+        )
     return _resposta(producao, aviso, status=201)
 
 
@@ -109,14 +119,26 @@ def api_figurino_producao_update(producao_id: int) -> Any:
     if not producao:
         return json_error("Pedido não encontrado.", 404)
 
-    dono_do_pedido = producao.requested_by_id == current_user.id and producao.responsible_id is None
-    if not ops.pode_executar(current_user) and not dono_do_pedido:
+    autor = producao.requested_by_id == current_user.id
+    # Numa compra, quem pediu conserta o próprio pedido enquanto ninguém aprovou — corrigir o
+    # prazo ou o item de um pedido recém-aberto não devia exigir a oficina. Depois de aprovado o
+    # pedido já é compromisso de outra pessoa, e sai das mãos de quem pediu.
+    dono_do_pedido = autor and (
+        producao.responsible_id is None
+        or (producao.is_compra and producao.status == FIGURINO_PROD_SOLICITADO)
+    )
+    if not ops.pode_executar_pedido(current_user, producao) and not dono_do_pedido:
         return json_error("Sem permissão", 403)
 
     anterior = producao.responsible_id
     dados = _payload()
-    # Só a oficina designa responsável — quem pede não escolhe quem faz.
-    if "responsible_id" in dados and not ops.pode_executar(current_user):
+    # Só a oficina designa quem PRODUZ — quem pede não escolhe quem faz. Numa compra é o
+    # contrário: dizer quem vai comprar é parte do pedido (é o que o cliente pediu), então quem
+    # abriu também designa.
+    pode_designar = ops.pode_executar_pedido(current_user, producao) or (
+        producao.is_compra and autor
+    )
+    if "responsible_id" in dados and not pode_designar:
         dados.pop("responsible_id")
 
     try:
@@ -204,14 +226,14 @@ def api_figurino_producao_comentar(producao_id: int) -> Any:
 @api_bp.route("/figurino/producoes/<int:producao_id>/anexos", methods=["POST"])
 @api_login_required
 def api_figurino_producao_anexo_create(producao_id: int) -> Any:
-    """Anexa foto de evolução ou orçamento de fornecedor (multipart: `file`)."""
-    denied = _require_execute()
-    if denied:
-        return denied
-
+    """Anexa foto de evolução ou orçamento/nota fiscal (multipart: `file`)."""
     producao = _get_producao(producao_id)
     if not producao:
         return json_error("Pedido não encontrado.", 404)
+
+    denied = _require_execute_pedido(producao)
+    if denied:
+        return denied
 
     try:
         ops.add_anexo(
@@ -235,15 +257,15 @@ def api_figurino_producao_anexo_create(producao_id: int) -> Any:
 @api_login_required
 def api_figurino_producao_anexo_delete(producao_id: int, anexo_id: int) -> Any:
     """Remove um anexo do pedido."""
-    denied = _require_execute()
-    if denied:
-        return denied
-
     anexo = FigurinoProducaoAnexo.query.get(anexo_id)
     if not anexo or anexo.producao_id != producao_id:
         return json_error("Anexo não encontrado.", 404)
 
     producao = anexo.producao
+    denied = _require_execute_pedido(producao)
+    if denied:
+        return denied
+
     ops.remove_anexo(anexo, actor=current_user)
     return _resposta(producao, None)
 
@@ -255,13 +277,13 @@ def api_figurino_producao_anexo_delete(producao_id: int, anexo_id: int) -> Any:
 @api_login_required
 def api_figurino_producao_vincular_gasto(producao_id: int) -> Any:
     """Vincula um gasto extra existente ao pedido (FR-032)."""
-    denied = _require_execute()
-    if denied:
-        return denied
-
     producao = _get_producao(producao_id)
     if not producao:
         return json_error("Pedido não encontrado.", 404)
+
+    denied = _require_execute_pedido(producao)
+    if denied:
+        return denied
 
     gasto_id = _payload().get("gasto_id")
     gasto = SpecialExpense.query.get(int(gasto_id)) if str(gasto_id or "").isdigit() else None
@@ -278,14 +300,14 @@ def api_figurino_producao_vincular_gasto(producao_id: int) -> Any:
 @api_login_required
 def api_figurino_producao_desvincular_gasto(producao_id: int, gasto_id: int) -> Any:
     """Desfaz o vínculo entre um gasto e o pedido."""
-    denied = _require_execute()
-    if denied:
-        return denied
-
     gasto = SpecialExpense.query.get(gasto_id)
     if not gasto or gasto.figurino_producao_id != producao_id:
         return json_error("Gasto não encontrado neste pedido.", 404)
 
     producao = gasto.figurino_producao
+    denied = _require_execute_pedido(producao)
+    if denied:
+        return denied
+
     ops.desvincular_gasto(gasto, actor=current_user)
     return _resposta(producao, None)

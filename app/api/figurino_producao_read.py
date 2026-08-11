@@ -18,10 +18,9 @@ from app.constants import (
     FIGURINO_PROD_LABELS,
     FIGURINO_PROD_STATUSES,
     FIGURINO_SEV_LABELS,
-    RoleName,
 )
 from app.figurino import producao_ops as ops
-from app.models import FigurinoProducao, User
+from app.models import FigurinoProducao
 
 
 def require_producao_access() -> Any | None:
@@ -31,10 +30,18 @@ def require_producao_access() -> Any | None:
     return None
 
 
-def _flags() -> dict[str, bool]:
-    """Permissões que a tela usa para decidir o que desenhar."""
+def _flags(producao: FigurinoProducao | None = None) -> dict[str, bool]:
+    """Permissões que a tela usa para decidir o que desenhar.
+
+    Com um pedido em mãos, ``can_execute`` é avaliado **para aquele pedido** — o responsável por
+    uma compra move a própria compra, mesmo sem ser da oficina (ver `ops.pode_executar_pedido`).
+    """
     return {
-        "can_execute": ops.pode_executar(current_user),
+        "can_execute": (
+            ops.pode_executar_pedido(current_user, producao)
+            if producao is not None
+            else ops.pode_executar(current_user)
+        ),
         "can_approve": ops.pode_aprovar(current_user),
         "can_create": ops.pode_abrir(current_user),
     }
@@ -92,7 +99,7 @@ def api_figurino_producao_detail(producao_id: int) -> Any:
 
     return jsonify({
         "producao": ops.serialize_producao(producao, detalhado=True),
-        "flags": _flags(),
+        "flags": _flags(producao),
         # O servidor manda para onde o pedido pode ir: as transições dependem do TIPO
         # (manutenção não passa por aprovação) e a tela não pode reimplementar essa regra.
         "transicoes": sorted(ops.transicoes_de(producao)),
@@ -132,23 +139,18 @@ def api_figurino_producao_gastos_vinculaveis(producao_id: int) -> Any:
 @api_bp.route("/figurino/producoes/responsaveis", methods=["GET"])
 @api_login_required
 def api_figurino_producao_responsaveis() -> Any:
-    """Quem pode ser designado responsável: equipe de figurino e super admins."""
+    """Quem pode ser designado responsável. `?tipo=compra` abre a lista à equipe interna toda."""
     denied = require_producao_access()
     if denied:
         return denied
 
-    usuarios = (
-        User.query.filter(User.is_active.is_(True))
-        .order_by(User.name.asc())
-        .all()
-    )
-    elegiveis = [
-        u for u in usuarios
-        if any(r.name in (RoleName.FIGURINO, RoleName.SUPERADMIN) for r in u.roles)
-    ]
+    tipo = (request.args.get("tipo") or "").strip() or None
+    if tipo and tipo not in FIGURINO_KINDS:
+        return json_error("Tipo desconhecido.", 400, fields={"tipo": "Valor inválido"})
+
     return jsonify({
         "items": [
             {"id": u.id, "name": u.name, "email": u.email, "tem_email": bool(u.email)}
-            for u in elegiveis
+            for u in ops.responsaveis_elegiveis(tipo)
         ]
     })

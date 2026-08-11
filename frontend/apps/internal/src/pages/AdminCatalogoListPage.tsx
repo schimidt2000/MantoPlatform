@@ -15,15 +15,16 @@ import {
 import { FigurinoSheetPicker } from "../components/FigurinoSheetPicker";
 import { CatalogCardGrid } from "../components/CatalogCardGrid";
 import { CatalogTreeView } from "../components/CatalogTreeView";
+import { CatalogPersonagensView } from "../components/CatalogPersonagensView";
 import { CatalogBulkActionBar } from "../components/CatalogBulkActionBar";
 import { Modal } from "../components/Modal";
 
-type ViewMode = "cards" | "tree";
+type ViewMode = "cards" | "tree" | "personagens";
 const VIEW_MODE_KEY = "manto_admin_catalogo_view";
 
 function loadViewMode(): ViewMode {
   const saved = window.localStorage.getItem(VIEW_MODE_KEY);
-  return saved === "tree" ? "tree" : "cards";
+  return saved === "tree" || saved === "personagens" ? saved : "cards";
 }
 
 export function AdminCatalogoListPage() {
@@ -35,7 +36,11 @@ export function AdminCatalogoListPage() {
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<Set<number>>(new Set());
   const [linkingCharacter, setLinkingCharacter] = useState<CatalogCharacterSummary | null>(null);
 
-  const query = useAdminCatalogo({ q, categoria, status });
+  // No modo Personagens a busca é client-side: a lista de temas precisa vir INTEIRA, porque é
+  // dela que sai o "usar em outro tema" — filtrar no servidor esconderia o tema de destino.
+  const query = useAdminCatalogo(
+    viewMode === "personagens" ? {} : { q, categoria, status },
+  );
   const toggleActive = useToggleCatalogItemActive();
   const deleteItem = useDeleteCatalogItem();
   const toggleCharacterActive = useUpdateCharacterActiveStandalone();
@@ -139,16 +144,27 @@ export function AdminCatalogoListPage() {
         >
           🌳 Árvore
         </button>
+        {/* Cards olha pelo produto, Árvore pela hierarquia — as duas repetem o mesmo personagem
+            uma vez por tema. Esta olha pelo personagem: uma linha por identidade. */}
+        <button
+          type="button"
+          onClick={() => setViewMode("personagens")}
+          className={`rounded px-3 py-1.5 font-medium ${viewMode === "personagens" ? "bg-panel text-ink shadow-sm" : "text-muted"}`}
+        >
+          🎭 Personagens
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-2">
         <input
           className="h-9 min-w-56 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink sm:max-w-md"
-          placeholder="Buscar por nome…"
+          placeholder={
+            viewMode === "personagens" ? "Buscar personagem ou tema…" : "Buscar por nome…"
+          }
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        {query.data && (
+        {query.data && viewMode !== "personagens" && (
           <select
             className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink"
             value={categoria}
@@ -162,15 +178,17 @@ export function AdminCatalogoListPage() {
             ))}
           </select>
         )}
-        <select
-          className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-        >
-          <option value="todos">Todos os status</option>
-          <option value="ativo">Ativos</option>
-          <option value="inativo">Inativos</option>
-        </select>
+        {viewMode !== "personagens" && (
+          <select
+            className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <option value="todos">Todos os status</option>
+            <option value="ativo">Ativos</option>
+            <option value="inativo">Inativos</option>
+          </select>
+        )}
       </div>
 
       {query.isLoading && (
@@ -186,11 +204,12 @@ export function AdminCatalogoListPage() {
         </div>
       )}
 
-      {query.data && items.length === 0 && (
+      {query.data && items.length === 0 && viewMode !== "personagens" && (
         <p className="text-sm text-muted">Nenhum produto encontrado.</p>
       )}
 
-      {query.data && fichaTotais.personagens > 0 && (
+      {/* No modo Personagens quem conta as fichas é o termômetro da própria visão. */}
+      {query.data && viewMode !== "personagens" && fichaTotais.personagens > 0 && (
         <p className="text-sm text-muted">
           👗 Fichas de figurino do elenco:{" "}
           <span className="font-semibold text-ink">
@@ -202,6 +221,8 @@ export function AdminCatalogoListPage() {
           .
         </p>
       )}
+
+      {viewMode === "personagens" && <CatalogPersonagensView temas={items} busca={q} />}
 
       {items.length > 0 && viewMode === "cards" && (
         <CatalogCardGrid

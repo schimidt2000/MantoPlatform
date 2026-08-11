@@ -342,7 +342,7 @@ export function DashboardPage() {
               nas mãos de quem está lendo. Só aparece para quem tem peça sob sua responsabilidade. */}
           {dashboard.data.figurino_producao && (
             <SectorPanel
-              title="🧵 Minhas peças de figurino"
+              title="🧵 Minhas peças e compras"
               count={dashboard.data.figurino_producao.pending}
             >
               {dashboard.data.figurino_producao.items.map((item) => (

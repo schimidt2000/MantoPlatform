@@ -248,6 +248,7 @@ export function FigurinoFormPage() {
   const uploadPhoto = useUploadFigurinoPhoto();
 
   const [characterName, setCharacterName] = useState("");
+  const [quantity, setQuantity] = useState(1);
   const [pieces, setPieces] = useState<FigurinoPiece[]>([{ name: "", qty: 1 }]);
   const [tags, setTags] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
@@ -257,6 +258,7 @@ export function FigurinoFormPage() {
   useEffect(() => {
     if (isEdit && sheet && !loaded) {
       setCharacterName(sheet.character_name);
+      setQuantity(sheet.quantity);
       setPieces(sheet.pieces.length > 0 ? sheet.pieces : [{ name: "", qty: 1 }]);
       setTags(sheet.tags);
       setNotes(sheet.notes ?? "");
@@ -274,7 +276,7 @@ export function FigurinoFormPage() {
   const submit = () => {
     if (!characterName.trim()) return;
     const cleanPieces = pieces.filter((p) => p.name.trim());
-    const body = { character_name: characterName.trim(), pieces: cleanPieces, notes, tags };
+    const body = { character_name: characterName.trim(), pieces: cleanPieces, notes, tags, quantity };
     if (isEdit && sheetId) {
       edit.mutate({ id: sheetId, ...body }, { onSuccess: () => navigate("/figurinos") });
     } else {
@@ -325,6 +327,32 @@ export function FigurinoFormPage() {
               onChange={(e) => setCharacterName(e.target.value)}
               aria-label="Nome do personagem"
             />
+          </div>
+
+          <div>
+            <label
+              className="mb-1 block text-xs font-medium text-muted"
+              htmlFor="figurino-quantity"
+            >
+              Figurinos iguais que temos
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="figurino-quantity"
+                type="number"
+                min={0}
+                className="h-10 w-20 rounded-md border border-line bg-panel px-2 text-center text-sm text-ink"
+                value={quantity}
+                onChange={(e) => setQuantity(Math.max(0, Number(e.target.value) || 0))}
+              />
+              <p className="text-xs text-muted">
+                {quantity === 0
+                  ? "Nenhum pronto — a ficha existe, o figurino ainda não."
+                  : quantity === 1
+                    ? "Um único figurino: dois eventos no mesmo horário não cabem."
+                    : `Dá para escalar este personagem em até ${quantity} eventos ao mesmo tempo.`}
+              </p>
+            </div>
           </div>
 
           {isEdit && sheetId ? (

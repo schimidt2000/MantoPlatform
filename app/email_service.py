@@ -663,10 +663,23 @@ def send_figurino_producao_email(producao, user) -> bool:
     if not user or not user.email:
         return False
 
+    from app.constants import FIGURINO_KIND_COMPRA
+
+    # Feature 225c: o mesmo e-mail serve à compra, e um pedido de compra que chega dizendo
+    # "você ficou responsável por produzir" manda a pessoa fazer a coisa errada.
+    e_compra = producao.kind == FIGURINO_KIND_COMPRA
+    verbo = "comprar" if e_compra else "produzir"
+    assunto = (
+        f"Compra para fazer: {producao.title}" if e_compra
+        else f"Figurino para produzir: {producao.title}"
+    )
+
     prazo = producao.prazo_efetivo
-    rows = _info_row("Peça", producao.title)
+    rows = _info_row("O que comprar" if e_compra else "Peça", producao.title)
     if producao.quantity and producao.quantity > 1:
         rows += _info_row("Quantidade", str(producao.quantity))
+    if producao.figurino_sheet:
+        rows += _info_row("Figurino", producao.figurino_sheet.character_name)
     if producao.event:
         rows += _info_row("Evento", producao.event.title)
         if producao.event.start_at:
@@ -678,7 +691,7 @@ def send_figurino_producao_email(producao, user) -> bool:
         rows += _info_row("Custo previsto", valor)
 
     corpo = _paragraph(
-        f"Você ficou responsável por produzir <strong>{producao.title}</strong>."
+        f"Você ficou responsável por {verbo} <strong>{producao.title}</strong>."
     )
     if producao.description:
         corpo += _paragraph(producao.description)
@@ -686,7 +699,7 @@ def send_figurino_producao_email(producao, user) -> bool:
     aviso = (
         "O prazo também foi para a sua agenda — você deve ter recebido o convite."
         if prazo
-        else "Ainda não há prazo definido para esta peça."
+        else f"Ainda não há prazo definido para {'esta compra' if e_compra else 'esta peça'}."
     )
 
     content = (
@@ -696,13 +709,9 @@ def send_figurino_producao_email(producao, user) -> bool:
         + _alert_box(aviso, color="#fffbea", border="#f0d060", text="#7a5800")
     )
     html = _html_wrap(
-        content, preheader=f"Você é responsável por produzir: {producao.title}"
+        content, preheader=f"Você é responsável por {verbo}: {producao.title}"
     )
-    return _send(
-        to=user.email,
-        subject=f"Figurino para produzir: {producao.title}",
-        html=html,
-    )
+    return _send(to=user.email, subject=assunto, html=html)
 
 
 def send_figurino_pedido_setor_email(producao, users: list) -> int:
@@ -723,6 +732,7 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
         return 0
 
     from app.constants import (
+        FIGURINO_KIND_COMPRA,
         FIGURINO_KIND_LABELS,
         FIGURINO_KIND_MANUTENCAO,
         FIGURINO_SEV_IMPEDE,
@@ -730,7 +740,12 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
     )
 
     e_manutencao = producao.kind == FIGURINO_KIND_MANUTENCAO
+    e_compra = producao.kind == FIGURINO_KIND_COMPRA
     rotulo = FIGURINO_KIND_LABELS.get(producao.kind, producao.kind)
+    # Compra não é "de figurino" — pode ser tinta de cenário ou material de escritório. O
+    # assunto do e-mail é o que a pessoa lê antes de abrir; chamar tudo de figurino faria o
+    # Superadmin arquivar como assunto da oficina.
+    contexto = "" if e_compra else " de figurino"
     prazo = producao.prazo_efetivo
 
     rows = _info_row("Tipo", rotulo)
@@ -746,7 +761,7 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
     rows += _info_row("Aberto por", producao.requested_by.name if producao.requested_by else "—")
 
     corpo = _paragraph(
-        f"Entrou um pedido de <strong>{rotulo.lower()}</strong> de figurino e "
+        f"Entrou um pedido de <strong>{rotulo.lower()}</strong>{contexto} e "
         "ainda não tem ninguém responsável."
     )
     if producao.description:
@@ -758,10 +773,14 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
             "O aviso aparece na ficha e no elenco de quem escalar este personagem."
         )
         cores = {"color": "#fdecec", "border": "#e45858", "text": "#8a1f1f"}
+    elif e_compra:
+        aviso = "Abra os pedidos de compra para aprovar e dizer quem vai comprar."
+        cores = {"color": "#fffbea", "border": "#f0d060", "text": "#7a5800"}
     else:
         aviso = "Abra a fila da oficina para assumir o pedido e definir o prazo."
         cores = {"color": "#fffbea", "border": "#f0d060", "text": "#7a5800"}
 
+    assunto = f"{rotulo}{contexto}: {producao.title}"
     sent = 0
     for user in users:
         if not user.email:
@@ -772,12 +791,8 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
             + _info_box(rows)
             + _alert_box(aviso, **cores)
         )
-        html = _html_wrap(content, preheader=f"{rotulo} de figurino: {producao.title}")
-        if _send(
-            to=user.email,
-            subject=f"{rotulo} de figurino: {producao.title}",
-            html=html,
-        ):
+        html = _html_wrap(content, preheader=assunto)
+        if _send(to=user.email, subject=assunto, html=html):
             sent += 1
     return sent
 

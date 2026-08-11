@@ -144,6 +144,18 @@ def api_admin_catalogo_detail(item_id: int) -> Any:
     )
 
 
+@api_bp.route("/admin/catalogo/personagens")
+@api_login_required
+def api_admin_catalogo_personagens() -> Any:
+    """Personagens do catálogo por identidade (a ficha), com os temas em que cada um aparece."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    from app.admin import catalog_character_ops
+
+    return jsonify(catalog_character_ops.list_catalog_characters())
+
+
 @api_bp.route("/admin/catalogo/tags")
 @api_login_required
 def api_admin_catalogo_tags() -> Any:

@@ -25,6 +25,7 @@ from app import db
 from app.constants import (
     FIGURINO_ANEXO_KINDS,
     FIGURINO_ANEXO_ORCAMENTO,
+    FIGURINO_KIND_COMPRA,
     FIGURINO_KIND_LABELS,
     FIGURINO_KIND_MANUTENCAO,
     FIGURINO_KIND_PRODUCAO,
@@ -32,10 +33,8 @@ from app.constants import (
     FIGURINO_PROD_ABERTOS,
     FIGURINO_PROD_APROVADO,
     FIGURINO_PROD_CANCELADO,
-    FIGURINO_PROD_EM_PRODUCAO,
     FIGURINO_PROD_FLUXOS,
     FIGURINO_PROD_LABELS,
-    FIGURINO_PROD_PRONTO,
     FIGURINO_PROD_SOLICITADO,
     FIGURINO_PROD_STATUSES,
     FIGURINO_SEV_ESPERA,
@@ -137,6 +136,19 @@ def _actor_role(actor: User | None) -> str:
     return ", ".join(r.name for r in actor.roles) if actor else "Sistema"
 
 
+def _erro_titulo(kind: str) -> str:
+    """A pergunta que o campo de título faz muda com o tipo — e o erro tem que fazer a mesma."""
+    return {
+        FIGURINO_KIND_MANUTENCAO: "Diga o que precisa ser resolvido.",
+        FIGURINO_KIND_COMPRA: "Diga o que precisa ser comprado.",
+    }.get(kind, "Diga o que precisa ser produzido.")
+
+
+def _fluxo_de(producao: FigurinoProducao) -> list[str]:
+    """Os estados que este pedido percorre, na ordem, conforme o tipo dele."""
+    return FIGURINO_PROD_FLUXOS.get(producao.kind, FIGURINO_PROD_FLUXOS[FIGURINO_KIND_PRODUCAO])
+
+
 def _tem_papel(user: User | None, *nomes: str) -> bool:
     if not user:
         return False
@@ -159,6 +171,40 @@ def pode_abrir(user: User | None) -> bool:
         return False
     nomes = {r.name for r in user.roles}
     return bool(nomes) and nomes != {RoleName.REVENDEDOR_EDUCAMANTO}
+
+
+def pode_executar_pedido(user: User | None, producao: FigurinoProducao) -> bool:
+    """Quem pode mexer NESTE pedido: a oficina sempre, e o responsável pela própria compra.
+
+    A exceção existe porque uma compra pode (e costuma) ser entregue a quem não é do figurino —
+    quem pediu a tinta do cenário é do comercial. Sem isto, ninguém marcaria "comprei" e "chegou"
+    fora da oficina, e o pedido de compra ficaria parado esperando um papel que não tem nada a ver
+    com ele. Vale só em ``kind="compra"``: produção e manutenção continuam sendo da oficina.
+    """
+    if pode_executar(user):
+        return True
+    return bool(
+        user
+        and producao.kind == FIGURINO_KIND_COMPRA
+        and producao.responsible_id
+        and producao.responsible_id == user.id
+    )
+
+
+def responsaveis_elegiveis(kind: str | None = None) -> list[User]:
+    """Quem pode ser designado responsável, conforme o tipo do pedido.
+
+    Produção e manutenção são trabalho de oficina — a lista é a equipe de figurino. Compra não:
+    qualquer pessoa da equipe interna pode ficar encarregada de comprar alguma coisa, e limitar a
+    lista ao figurino tornaria o campo "responsável" inútil justamente onde ele foi pedido.
+    """
+    usuarios = User.query.filter(User.is_active.is_(True)).order_by(User.name.asc()).all()
+    if kind == FIGURINO_KIND_COMPRA:
+        return [u for u in usuarios if pode_abrir(u)]
+    return [
+        u for u in usuarios
+        if any(r.name in (RoleName.FIGURINO, RoleName.SUPERADMIN) for r in u.roles)
+    ]
 
 
 def _parse_decimal(raw: Any, field: str, label: str) -> Decimal | None:
@@ -235,6 +281,8 @@ def registrar_log(
 
 
 def _titulo_agenda(producao: FigurinoProducao) -> str:
+    if producao.kind == FIGURINO_KIND_COMPRA:
+        return f"🛒 Comprar: {producao.title}"
     return f"🧵 Figurino: {producao.title}"
 
 
@@ -242,10 +290,16 @@ def _descricao_agenda(producao: FigurinoProducao) -> str:
     linhas = [producao.description or ""]
     if producao.event:
         linhas.append(f"Evento: {producao.event.title}")
+    if producao.figurino_sheet:
+        linhas.append(f"Figurino: {producao.figurino_sheet.character_name}")
     if producao.quantity and producao.quantity > 1:
         linhas.append(f"Quantidade: {producao.quantity}")
     linhas.append("")
-    linhas.append("Pedido de produção de figurino — Plataforma Manto.")
+    linhas.append(
+        "Pedido de compra — Plataforma Manto."
+        if producao.kind == FIGURINO_KIND_COMPRA
+        else "Pedido de produção de figurino — Plataforma Manto."
+    )
     return "\n".join(l for l in linhas if l is not None).strip()
 
 
@@ -380,14 +434,20 @@ def pedidos_do_responsavel(user: User) -> list[FigurinoProducao]:
     return list_producoes(responsible_id=user.id, somente_abertos=True)
 
 
-def pedidos_sem_dono() -> list[FigurinoProducao]:
+def pedidos_sem_dono(kinds: list[str] | None = None) -> list[FigurinoProducao]:
     """Pedidos abertos que ninguém assumiu — a caixa de entrada do setor de figurino.
 
     Manutenção nasce sem responsável quase sempre: quem relata o defeito é quem recebeu o
     feedback do evento, não quem vai consertar. Sem esta lista, o pedido ficaria esperando alguém
     lembrar de abrir a fila.
+
+    Args:
+        kinds: Limita aos tipos informados; ``None`` traz todos.
     """
-    return [p for p in list_producoes(somente_abertos=True) if p.responsible_id is None]
+    itens = [p for p in list_producoes(somente_abertos=True) if p.responsible_id is None]
+    if kinds is None:
+        return itens
+    return [p for p in itens if p.kind in kinds]
 
 
 # ── Alerta por ficha ─────────────────────────────────────────────────────────
@@ -603,11 +663,7 @@ def create_producao(
 
     titulo = (title or "").strip()
     if not titulo:
-        raise ProducaoValidationError(
-            "title",
-            "Diga o que precisa ser resolvido." if e_manutencao
-            else "Diga o que precisa ser produzido.",
-        )
+        raise ProducaoValidationError("title", _erro_titulo(tipo))
 
     try:
         qtd = max(1, int(quantity or 1))
@@ -662,7 +718,7 @@ def update_producao(
     if "title" in campos:
         titulo = (campos["title"] or "").strip()
         if not titulo:
-            raise ProducaoValidationError("title", "Diga o que precisa ser produzido.")
+            raise ProducaoValidationError("title", _erro_titulo(producao.kind))
         if titulo != producao.title:
             mudancas.append(f"título → {titulo}")
             producao.title = titulo
@@ -764,8 +820,9 @@ def mudar_status(
         )
 
     if novo_status == FIGURINO_PROD_APROVADO and not pode_aprovar(actor):
-        raise ProducaoValidationError("status", "Só um super admin aprova um pedido de figurino.")
-    if novo_status != FIGURINO_PROD_APROVADO and not pode_executar(actor):
+        rotulo = "de compra" if producao.is_compra else "de figurino"
+        raise ProducaoValidationError("status", f"Só um super admin aprova um pedido {rotulo}.")
+    if novo_status != FIGURINO_PROD_APROVADO and not pode_executar_pedido(actor, producao):
         raise ProducaoValidationError("status", "Sem permissão para mover este pedido.")
 
     if novo_status == FIGURINO_PROD_CANCELADO and not (motivo or "").strip():
@@ -774,17 +831,22 @@ def mudar_status(
     agora = now_sp()
     producao.status = novo_status
 
+    # O estado final feliz é o ÚLTIMO do fluxo do tipo — "pronto" na produção e na manutenção,
+    # "recebido" na compra. Derivar em vez de listar evita o bug de acrescentar um fluxo novo e
+    # esquecer de carimbar `done_at` nele.
+    estado_final = _fluxo_de(producao)[-1]
+
     if novo_status == FIGURINO_PROD_APROVADO:
         producao.approved_by_id = actor.id
         producao.approved_at = agora
         producao.cancelled_at = None
         producao.cancellation_reason = None
-    elif novo_status == FIGURINO_PROD_PRONTO:
+    elif novo_status == estado_final:
         producao.done_at = agora
     elif novo_status == FIGURINO_PROD_CANCELADO:
         producao.cancelled_at = agora
         producao.cancellation_reason = (motivo or "").strip()
-    elif novo_status in (FIGURINO_PROD_EM_PRODUCAO, FIGURINO_PROD_SOLICITADO):
+    else:
         # Reabertura: o pedido volta a dar trabalho, então os carimbos de fim saem de cena.
         producao.done_at = None
         producao.cancelled_at = None
@@ -998,7 +1060,14 @@ def resumo_setor(user: User) -> dict[str, Any] | None:
     """
     if not pode_executar(user):
         return None
-    pedidos = pedidos_sem_dono()
+    # Compra sem dono é assunto de quem aprova, não da oficina: a compra pode não ter nada a ver
+    # com figurino, e enfiar tinta de cenário na caixa de entrada da costureira transformaria o
+    # painel em ruído. Mesmo recorte do e-mail de setor (`equipe_figurino`).
+    kinds = (
+        FIGURINO_KINDS if pode_aprovar(user)
+        else [FIGURINO_KIND_PRODUCAO, FIGURINO_KIND_MANUTENCAO]
+    )
+    pedidos = pedidos_sem_dono(kinds)
     if not pedidos:
         return None
     return {
@@ -1030,18 +1099,27 @@ def resumo_home(user: User) -> dict[str, Any] | None:
     }
 
 
-def equipe_figurino() -> list[User]:
-    """Quem recebe o aviso de pedido novo: equipe de figurino + super admins, com e-mail.
+def equipe_figurino(kind: str | None = None) -> list[User]:
+    """Quem recebe o aviso de pedido novo sem dono: o setor que precisa agir, com e-mail.
 
     Mesmo desenho de `gastos_ops._financeiro_and_superadmin_users`: avisa o **setor**, não uma
     pessoa. O aviso individual só existe quando alguém é designado responsável.
+
+    Em ``kind="compra"`` o setor é só o Superadmin — é ele quem aprova, e a compra pode não ter
+    nada a ver com a oficina (tinta de cenário, material de escritório). Mandar para a equipe de
+    figurino um pedido que não é dela transformaria o aviso em ruído, e aviso ignorado não avisa.
     """
     from app.models import Role
 
+    papeis = (
+        [RoleName.SUPERADMIN]
+        if kind == FIGURINO_KIND_COMPRA
+        else [RoleName.FIGURINO, RoleName.SUPERADMIN]
+    )
     return (
         User.query.join(User.roles)
         .filter(
-            Role.name.in_([RoleName.FIGURINO, RoleName.SUPERADMIN]),
+            Role.name.in_(papeis),
             User.is_active.is_(True),
             User.email.isnot(None),
         )
