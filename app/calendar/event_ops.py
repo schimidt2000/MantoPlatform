@@ -190,7 +190,7 @@ def _reconcile_characters(
     is_superadmin: bool,
     start: datetime,
     end: datetime,
-) -> list[str]:
+) -> tuple[list[str], list[tuple[int, str]]]:
     """Reconcilia o elenco (`role_type="character"`) por `role_id` em vez de substituir tudo
     (feature 184, research.md §4): atualiza linhas existentes, insere linhas novas, remove linhas
     que saíram do conjunto enviado — recusando a remoção (levanta `EventCoreUpdateBlocked`) se
@@ -293,7 +293,10 @@ def _reconcile_characters(
             talent = Talent.query.get(tid)
             tname = (talent.artistic_name or talent.full_name) if talent else f"Talento {tid}"
             warnings.append(f'{tname} ({char_name}) — já em "{other.title}"')
-    return warnings
+    # `assigned_now` sai junto (feature 233): quem acabou de ser escalado precisa receber convite,
+    # e esta é a única lista que sabe QUEM é novo — o cargo já existia antes com outra pessoa, ou
+    # nem existia.
+    return warnings, assigned_now
 
 
 def update_event_core(
@@ -335,7 +338,7 @@ def update_event_core(
 
     # Reconciliação do elenco ANTES de qualquer outra escrita — se bloquear (convite aceito),
     # nada mais deste método deve ter efeito colateral.
-    warnings = _reconcile_characters(
+    warnings, recem_escalados = _reconcile_characters(
         event,
         data.get("characters") or [],
         coordinator_talent_id=data.get("coordinator_talent_id"),
@@ -382,6 +385,12 @@ def update_event_core(
         created_at=datetime.now(tz=tz),
     ))
     db.session.commit()
+
+    # Quem acabou de ser pré-escalado recebe o convite agora (feature 233): antes o cargo nascia
+    # com pessoa e SEM convite, e nenhuma tela pedia para alguém clicar em "Convidar".
+    from app.calendar.casting_ops import convidar_recem_escalados
+
+    convidar_recem_escalados(event, recem_escalados, actor_name=actor_name, tz=tz)
 
     changed_core = (
         event.title != old_title

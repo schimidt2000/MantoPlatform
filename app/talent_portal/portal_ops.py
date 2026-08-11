@@ -375,10 +375,15 @@ def get_figurino(
         e só interessa na visão do coordenador. Lista vazia = escalado, mas sem ficha para mostrar.
         `None` = o talento não está nesse evento (nem pendente, nem aceito).
     """
+    # `nao_recusada()`, a mesma regra da agenda e do histórico (feature 230). Enquanto aqui a trava
+    # era `in_(["accepted","pending"])`, o cargo com convite NUNCA ENVIADO (`NULL`) caía fora: a
+    # 230 passou a mostrar o evento na agenda com o link "Ver ficha de figurino", e o link levava a
+    # um 403 "você não está escalado neste evento". Foi o que a coordenadora do evento 1192
+    # encontrou em 10/08/2026 — ela é a coordenadora, o evento é dela, e a tela dizia que não.
     role = EventRole.query.filter(
         EventRole.event_id == event_id,
         EventRole.talent_id == talent.id,
-        EventRole.invite_status.in_(["accepted", "pending"]),
+        nao_recusada(),
     ).first()
     if role is None:
         return None

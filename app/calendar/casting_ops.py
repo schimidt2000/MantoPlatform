@@ -21,7 +21,7 @@ from app.email_service import (
     send_invite_email,
     send_removal_email,
 )
-from app.models import EventLog, Talent, db
+from app.models import EventLog, EventRole, Talent, db
 from app.money import parse_brl
 
 
@@ -244,6 +244,84 @@ def send_invite(event: Any, role: Any, *, actor_name: str, tz: ZoneInfo) -> bool
     ))
     db.session.commit()
     return send_invite_email(role)
+
+
+def convidar_recem_escalados(
+    event: Any,
+    assigned_now: list[tuple[int, str]],
+    *,
+    actor_name: str,
+    tz: ZoneInfo,
+) -> int:
+    """Convida quem acabou de ser pré-escalado na criação/edição do evento (feature 233).
+
+    A tela de casting já convidava sozinha ao escalar (`assign_talent_to_role`), mas os dois
+    caminhos que montam o elenco **junto com o evento** — `_create_roles_from_input` /
+    `_apply_default_roles` na criação e `_reconcile_characters` na edição — gravavam o
+    `talent_id` e paravam ali. O cargo nascia com pessoa e **sem convite** (`invite_status =
+    NULL`), e nenhuma tela pedia a alguém para clicar em "Convidar".
+
+    O efeito era invisível dos dois lados: para a produção, o cargo parecia resolvido; para a
+    pessoa, o evento não existia (o portal só listava convite aceito ou pendente). Foi assim que
+    uma coordenadora chegou ao evento 1192 sem conseguir abrir as fichas de figurino, e é a origem
+    dos 26 cargos futuros sem convite que a 231 encontrou.
+
+    **Não exige cachê preenchido.** A pré-escala do coordenador não tem campo de cachê — exigir o
+    valor deixaria de fora exatamente o caso que originou isto. É a mesma regra da tela de casting,
+    que também convida sem olhar o cachê; o e-mail de convite simplesmente omite a linha do valor
+    quando ele ainda não existe.
+
+    Args:
+        event: Evento recém-criado ou editado.
+        assigned_now: Pares `(talent_id, character_name)` de quem ACABOU de ser escalado — a mesma
+            lista que os dois caminhos já montavam para avisar de conflito de horário.
+        actor_name: Quem executou (vai para o `EventLog`).
+        tz: Fuso de São Paulo.
+
+    Returns:
+        Quantos convites saíram.
+    """
+    if not assigned_now:
+        return 0
+
+    # Evento que já aconteceu não gera convite: "confirme sua presença" para um show da semana
+    # passada é ruído, e a edição de evento antigo é rotina (ajuste de cachê, troca de ficha).
+    fim = event.end_at or event.start_at
+    if fim and fim < datetime.now(tz=tz).replace(tzinfo=None):
+        return 0
+
+    # Guarda os cargos que ESTE chamada marcou, e só esses recebem e-mail. Reconsultar por
+    # `invite_status == "pending"` depois do commit pegaria também quem já estava convidado antes —
+    # e reenviar convite a cada edição de evento é justamente o spam que não se quer.
+    marcados: list[Any] = []
+    for talent_id, character_name in assigned_now:
+        role = EventRole.query.filter_by(
+            event_id=event.id, talent_id=talent_id, character_name=character_name
+        ).first()
+        # Só o cargo sem convite nenhum: quem já está `pending`, `accepted` ou `rejected` não pode
+        # ser reiniciado por uma edição de evento.
+        if role is None or role.invite_status is not None or not role.talent:
+            continue
+        role.invite_status = "pending"
+        db.session.add(EventLog(
+            event_id=event.id,
+            actor_name=actor_name,
+            actor_role="Casting",
+            message=(
+                f"Convite automático para {role.talent.full_name} ({character_name}) "
+                "ao ser escalado no evento"
+            ),
+            created_at=datetime.now(tz=tz),
+        ))
+        marcados.append(role)
+
+    if marcados:
+        db.session.commit()
+        # `send_async` só depois do commit: e-mail de convite para escalação que não persistiu
+        # seria pior que convite faltando.
+        for role in marcados:
+            send_async(send_invite_email, role)
+    return len(marcados)
 
 
 def set_figurino_done(event: Any, role: Any, *, actor_name: str, tz: ZoneInfo) -> None:

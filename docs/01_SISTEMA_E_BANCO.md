@@ -7,14 +7,20 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-10** · Estado do repositório: pós-feature **230 (portal segue a
+> Última atualização: **2026-08-11** · Estado do repositório: pós-feature **233 (convite
+> automático ao escalar + `get_figurino` na regra `nao_recusada()`; sem schema). Antes dela, 232
+> (avaliação por
+> partes volta a ser o caminho padrão — só frontend, sem endpoint novo). Antes dela, 231 (confirmações
+> pendentes — migration `e3f7c25a8b90`: `event_roles.invite_reminder_at`/`invite_reminder_count`
+> e `site_settings.invite_reminder_run_at`; `GET /api/dashboard` ganhou `casting.unconfirmed`).
+> Antes dela, 230 (portal segue a
 > escala: `get_agenda`/`get_historico` passaram de `invite_status="accepted"` para
 > `portal_ops.nao_recusada()`, e `_role_summary` expõe `invite_status`; sem schema). Antes dela, 229
 > (avaliar do histórico da Agenda, só frontend). Antes dela, 228 (`ConfirmDialog` no `@manto/ui`,
 > frontend) e 227 (foto do portal e figurino do coordenador: `GET
 > /api/portal/events/<id>/figurino` ganhou `is_coordinator` e `talent_name`, e a agenda do portal
 > ganhou `has_figurino`). Nenhuma das quatro tem schema ou migration** · Head de
-> migration: `d2e6b94c07f1` (*manutenção de figurino*) — confirme com
+> migration: **`e3f7c25a8b90`** (*lembrete de confirmação*) — confirme com
 > `flask db heads`; este cabeçalho é a **única** menção ao head neste documento.
 >
 > **Edição por recorte (215).** `PATCH /api/events/<id>` (feature 184) é **edição em bloco**: ele

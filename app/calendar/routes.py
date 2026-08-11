@@ -3420,6 +3420,14 @@ def _create_event_core(
     if event.needs_rehearsal:
         _notify_ensaio_team(event)
 
+    # Convite automático de quem já nasceu escalado no evento (feature 233). Sem isto o cargo
+    # ficava com pessoa e `invite_status = NULL`: a produção via o cargo resolvido e a pessoa não
+    # via o evento no portal. Depois do commit, e nunca para evento que já aconteceu — a regra
+    # inteira está em `casting_ops.convidar_recem_escalados`.
+    from app.calendar.casting_ops import convidar_recem_escalados
+
+    convidar_recem_escalados(event, assigned_now, actor_name=actor_name, tz=TZ)
+
     conflicts = _check_talent_conflicts(
         assigned_now, event.start_at, event.end_at, event.id, assignable_talents
     )

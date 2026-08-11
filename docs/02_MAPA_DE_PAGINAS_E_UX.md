@@ -6,8 +6,27 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-08-10** · Estado do repositório: pós-feature **230 (portal segue a
-> escala, não o convite)**
+> Última atualização: **2026-08-11** · Estado do repositório: pós-feature **233 (convite
+> automático ao escalar)**
+>
+> UX nova da 233: quem é **pré-escalado na criação ou edição do evento** passa a receber o convite
+> na hora — antes o cargo nascia com pessoa e sem convite, e nenhuma tela pedia o clique em
+> "Convidar". E a ficha de figurino do portal deixou de recusar quem está escalado sem convite
+> enviado: desde a 230 o evento aparecia na agenda com o link, e o link caía em 403.
+>
+> UX nova da 232: na avaliação do portal, **detalhar voltou a ser o caminho padrão**. O botão
+> principal virou "Enviar e avaliar em detalhes →" e **rola até o bloco das partes**; "Só enviar a
+> nota geral" é o desvio. Voltaram os rótulos com emoji, o cabeçalho "Avaliação detalhada", o
+> "Enviar avaliação completa ✓" e o "Pular — já enviei o suficiente" — e a categoria `texto`
+> recuperou o nome e a explicação que tinha no Jinja ("🎭 Show no geral — coreografia,
+> posicionamento, texto e interações"), em vez de "Texto / roteiro".
+>
+> UX nova da 231: a **home ganhou o painel "🙋 Confirmações pendentes"** (Casting/Superadmin), com
+> quem ainda não confirmou presença nos eventos de hoje em diante. Cada linha traz a ação certa:
+> **"Cobrar no WhatsApp"** com a mensagem pronta para quem recebeu o convite e não respondeu, e
+> **"Enviar convite"** para quem nunca recebeu. Em paralelo, um lembrete automático por e-mail
+> cobra só quem já foi convidado, só na semana do evento, no máximo 2 vezes por convite e **1
+> e-mail por pessoa por dia** (todos os eventos dela na mesma mensagem).
 >
 > UX nova da 230: **"Próximos eventos" e "Histórico" do portal passaram a listar toda escalação não
 > recusada** — aceita, pendente ou **sem convite enviado**. Antes exigiam aceite, e por isso
@@ -1218,7 +1237,7 @@ avaliar). Alvos de toque ≥44px, nada abaixo de 12px, sem rolagem horizontal de
 | `/portal/perfil` | Dados pessoais, **medidas corporais**, PIX e portfólio | Medidas alimentam o módulo de Figurino; até 3 fotos de atuação + links (Vimeo/YouTube) |
 | `/portal/fotos-documentos` | Foto de rosto, corpo inteiro e CNH | Preview do arquivo atual antes de substituir |
 | `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (rota Jinja, mesma sessão). **Coordenador vê o elenco inteiro** com o nome de quem interpreta cada personagem (feature 227) |
-| `/portal/eventos/:id/avaliar` | Avaliar o evento | Etapa 1 nota geral (abaixo de 4 exige comentário); etapa 2 opcional por categoria e por pessoa; janela de 7 dias para avaliar, 30 para editar |
+| `/portal/eventos/:id/avaliar` | Avaliar o evento | Etapa 1 nota geral (abaixo de 4 exige comentário); etapa 2 opcional por categoria e por pessoa; janela de 7 dias para avaliar, 30 para editar. Etapa 2 é o **destino padrão** da etapa 1 desde a 232 (rolagem até o bloco), com desvio explícito para quem só quer a nota geral |
 | `/portal/termos` | Reler o termo já aceito | Modo leitura, sem trava nem botão |
 
 ### C.1 Rotas Jinja legadas do portal (ainda registradas)
