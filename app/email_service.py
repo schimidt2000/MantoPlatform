@@ -205,6 +205,76 @@ def send_invite_email(role) -> bool:
     )
 
 
+# ── Email de lembrete de confirmação ──────────────────────────────────────────
+
+def send_invite_reminder_email(talent, roles) -> bool:
+    """Cobra a confirmação de convites que o talento recebeu e não respondeu (feature 231).
+
+    **Um e-mail por pessoa**, listando todos os eventos dela sem resposta — nunca um e-mail por
+    evento. Quem tem três convites pendentes recebe uma mensagem com os três; a regra que decide
+    quem entra e quando mora em `app/calendar/invite_reminders.py`.
+
+    Args:
+        talent: Talento que vai receber (precisa ter `email_contact`).
+        roles: Cargos dele sem confirmação, já filtrados pela regra e ordenados por data.
+
+    Returns:
+        `True` se o e-mail saiu.
+    """
+    if not talent or not talent.email_contact or not roles:
+        return False
+
+    first_name = (talent.artistic_name or talent.full_name or "").split()[0]
+    portal_url = _portal_url()
+    um_evento = len(roles) == 1
+
+    linhas = ""
+    for role in roles:
+        event = role.event
+        quando = event.start_at.strftime("%d/%m às %H:%M") if event and event.start_at else "data a confirmar"
+        titulo = event.title if event else "—"
+        linhas += _info_row(quando, f"{titulo} — {role.character_name or 'sem personagem'}")
+
+    chamada = (
+        "Falta a sua confirmação neste evento:"
+        if um_evento
+        else f"Faltam as suas confirmações nestes {len(roles)} eventos:"
+    )
+    content = (
+        _greeting(first_name)
+        + _paragraph(chamada)
+        + _info_box(linhas)
+        + _paragraph(
+            "Confirmar leva um toque: entre no portal, abra <strong>Convites</strong> e responda "
+            "<strong>Aceitar</strong> ou <strong>Recusar</strong>. Se não puder ir, recusar também "
+            "ajuda — é assim que a produção consegue chamar outra pessoa a tempo."
+        )
+        + _btn("Confirmar no portal →", f"{portal_url}/")
+        + _paragraph(
+            f'Se o botão não funcionar, copie e cole: <a href="{portal_url}/" style="color:#2d1f6e;">{portal_url}</a>'
+        )
+    )
+
+    # Título de evento aqui chega com 140 caracteres ("TURMA DO PETER RABBIT - GORRO VERDE +
+    # TURMA DO PETER RABBIT - BLUSA AZUL + ..."), e o cliente de e-mail corta o assunto por volta
+    # de 60 — sem o corte, o que sobra na caixa de entrada é o nome do personagem no meio da
+    # frase, e não o pedido.
+    if um_evento and roles[0].event:
+        titulo = roles[0].event.title or ""
+        curto = titulo if len(titulo) <= 42 else titulo[:41].rstrip() + "…"
+        assunto = f"Confirme sua presença: {curto}"
+    else:
+        assunto = f"Confirme sua presença em {len(roles)} eventos"
+    return _send(
+        to=talent.email_contact,
+        subject=f"🙋 {assunto}",
+        html=_html_wrap(
+            content,
+            preheader="Sua confirmação ainda não chegou — responda pelo portal.",
+        ),
+    )
+
+
 # ── Email de remoção de elenco ────────────────────────────────────────────────
 
 def send_removal_email(talent, event, character_name: str) -> bool:

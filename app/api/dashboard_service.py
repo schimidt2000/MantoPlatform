@@ -71,7 +71,25 @@ def compute_casting_tasks(cutoff: datetime) -> dict[str, Any]:
         .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
         .count()
     )
-    return {"pending": pending, "rejected_invites": rejected_invites, "total": total, "done": done}
+    return {
+        "pending": pending,
+        "rejected_invites": rejected_invites,
+        "unconfirmed": compute_unconfirmed_invites(),
+        "total": total,
+        "done": done,
+    }
+
+
+def compute_unconfirmed_invites() -> list[EventRole]:
+    """Escalações futuras em que a pessoa ainda não confirmou (feature 231).
+
+    Delegado a `app.calendar.invite_reminders` de propósito: a **mesma** lista alimenta este
+    painel e a cobrança automática por e-mail. Se cada um tivesse a sua consulta, o painel
+    mostraria alguém que o robô já cobrou — ou pior, o contrário.
+    """
+    from app.calendar.invite_reminders import escalacoes_sem_confirmacao
+
+    return escalacoes_sem_confirmacao()
 
 
 def compute_figurino_tasks(cutoff: datetime) -> dict[str, Any]:
@@ -212,6 +230,27 @@ def serialize_task_ref(role: EventRole) -> dict[str, Any]:
         "event_title": event.title if event else "",
         "character_name": role.character_name,
         "start_at": event.start_at.isoformat() if event and event.start_at else None,
+    }
+
+
+def serialize_unconfirmed_ref(role: EventRole) -> dict[str, Any]:
+    """Como `serialize_task_ref`, mais o que o casting precisa para **cobrar** (feature 231).
+
+    Vai o nome de quem falta confirmar, a situação do convite (`pending` = enviado e sem resposta;
+    `None` = nunca enviado, e aí quem tem que agir é o casting) e o WhatsApp já no formato com
+    DDI. Sem o telefone o painel seria um relatório; com ele, é um toque até a cobrança — que é o
+    que foi pedido. O número já é visível para casting na tela do evento, então nada de novo é
+    exposto aqui.
+    """
+    talent = role.talent
+    return {
+        **serialize_task_ref(role),
+        "talent_id": role.talent_id,
+        "talent_name": (talent.artistic_name or talent.full_name) if talent else "—",
+        "invite_status": role.invite_status,
+        "whatsapp": (talent.whatsapp_number or None) if talent else None,
+        "reminder_count": role.invite_reminder_count or 0,
+        "reminder_at": role.invite_reminder_at.isoformat() if role.invite_reminder_at else None,
     }
 
 
@@ -442,6 +481,7 @@ def build_dashboard_summary(
         casting = {
             "pending": [serialize_task_ref(r) for r in raw["pending"]],
             "rejected_invites": [serialize_task_ref(r) for r in raw["rejected_invites"]],
+            "unconfirmed": [serialize_unconfirmed_ref(r) for r in raw["unconfirmed"]],
             "total": raw["total"],
             "done": raw["done"],
         }

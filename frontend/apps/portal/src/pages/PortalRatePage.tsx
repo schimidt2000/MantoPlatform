@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useReducedMotion } from "framer-motion";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
 import { CheckCircle2 } from "lucide-react";
@@ -19,16 +20,28 @@ import {
 /** Nota mínima que dispensa comentário — espelha `COMMENT_REQUIRED_BELOW` no backend. */
 const COMMENT_REQUIRED_BELOW = 4;
 
+// Rótulos restaurados da tela Jinja (feature 232). `texto` chamava-se **"Show no geral"** e vinha
+// com a explicação de que cobre coreografia, posicionamento, texto e interações — na migração virou
+// "Texto / roteiro", que é mais estreito do que a coluna significa nos 42 registros históricos.
+//
+// Os mesmos nomes valem do outro lado, onde o casting LÊ: `RATING_CATEGORIES`
+// (`app/talents/rating_ops.py`, fonte única do panorama) e `FeedbackSection.tsx` (ficha do evento).
+// Mexer aqui sem mexer lá é o que fazia a pergunta e a resposta terem nomes diferentes.
 const CATEGORY_LABELS: Record<RatingGeneralCategory, string> = {
-  figurino: "Figurino",
-  som: "Som",
-  texto: "Texto / roteiro",
+  figurino: "👗 Figurino",
+  som: "🎵 Som",
+  texto: "🎭 Show no geral",
+};
+
+/** Explicação que existia embaixo do título da categoria na tela antiga. */
+const CATEGORY_HINTS: Partial<Record<RatingGeneralCategory, string>> = {
+  texto: "Falar sobre coreografia, posicionamento, texto e interações",
 };
 
 const PERSON_GROUP_LABELS: Record<RatingPersonCategory, string> = {
-  artista: "Artistas do elenco",
-  coordenacao: "Coordenação",
-  maquiagem: "Maquiagem",
+  artista: "🎭 Colegas artistas",
+  coordenacao: "🧑‍💼 Coordenação",
+  maquiagem: "💄 Maquiagem",
 };
 
 const PERSON_GROUP_ORDER: RatingPersonCategory[] = ["artista", "coordenacao", "maquiagem"];
@@ -112,9 +125,15 @@ function initialSubs(form: RatingForm | undefined): Record<string, ScoreEntry> {
 /**
  * Avaliação de um evento pelo artista.
  *
- * Duas etapas na mesma tela (a versão Jinja usava duas páginas): a nota geral é o que fecha a
- * avaliação, e o detalhamento por categoria/pessoa é opcional. Cada etapa envia separado, então
- * quem só quer dar a nota geral não precisa rolar até o fim.
+ * Duas etapas na mesma tela — a versão Jinja usava duas páginas, e a migração para React manteve
+ * as duas etapas mas **inverteu qual era o caminho padrão** (feature 232). Lá, o botão principal da
+ * nota geral era "Enviar e avaliar em detalhes →" e levava para uma página dedicada às partes; "Só
+ * enviar a nota geral" era o desvio. Aqui a etapa 2 tinha virado um cartão "(opcional)" anexado
+ * abaixo, depois de um "Avaliação enviada. Obrigado!" que se lê como fim — quem não rolava a tela
+ * nunca via as partes.
+ *
+ * Agora o padrão volta a ser detalhar: o botão principal salva a nota geral **e leva** para as
+ * partes (rolagem até o bloco), e quem quiser parar na nota geral tem um botão próprio para isso.
  */
 export function PortalRatePage() {
   const { eventId: eventIdParam } = useParams<{ eventId: string }>();
@@ -129,6 +148,9 @@ export function PortalRatePage() {
   const [subs, setSubs] = useState<Record<string, ScoreEntry>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [savedStep, setSavedStep] = useState<"general" | "detail" | null>(null);
+  /** Alvo da rolagem depois de salvar a nota geral — as partes viraram destino de novo. */
+  const detalheRef = useRef<HTMLDivElement>(null);
+  const reduzirMovimento = useReducedMotion();
 
   const form = formQuery.data;
 
@@ -177,7 +199,11 @@ export function PortalRatePage() {
 
   // Arrow consts, não `function` — declarações são içadas e o TS perde o estreitamento de
   // `form` (garantido não-nulo pelo early-return acima) dentro delas.
-  const handleSubmitGeneral = () => {
+  /**
+   * Salva a nota geral. `depois` decide o que acontece em seguida — é o que restaura o desenho
+   * antigo: "detalhar" era o caminho principal, "parar aqui" o desvio explícito.
+   */
+  const handleSubmitGeneral = (depois: "detalhar" | "sair") => {
     setFormError(null);
     setSavedStep(null);
     if (general.score == null) {
@@ -192,7 +218,24 @@ export function PortalRatePage() {
         baseline,
       },
       {
-        onSuccess: () => setSavedStep("general"),
+        onSuccess: () => {
+          if (depois === "sair") {
+            navigate("/historico");
+            return;
+          }
+          setSavedStep("general");
+          // O bloco das partes só existe no DOM depois deste sucesso; o rAF duplo espera o React
+          // pintá-lo antes de rolar. Sem isso a rolagem acontece para um elemento que ainda não
+          // está lá e a tela fica parada — exatamente o sintoma que a feature conserta.
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              detalheRef.current?.scrollIntoView({
+                behavior: reduzirMovimento ? "auto" : "smooth",
+                block: "start",
+              }),
+            ),
+          );
+        },
         onError: (error) => setFormError(error.message),
       },
     );
@@ -290,28 +333,55 @@ export function PortalRatePage() {
             </p>
           )}
 
-          {savedStep === "general" && <FormSuccess>Avaliação enviada. Obrigado!</FormSuccess>}
+          {savedStep === "general" && (
+            <FormSuccess>Nota geral salva. Agora conte as partes, logo abaixo.</FormSuccess>
+          )}
 
+          {/* Dois botões, como na tela antiga: o principal salva E leva para as partes; o de baixo
+              é o desvio para quem quer parar na nota geral. Enquanto havia um só, "detalhar"
+              dependia de a pessoa notar um cartão abaixo da dobra. */}
           {!locked && (
-            <Button
-              className="w-full"
-              loading={submitRating.isPending}
-              disabled={general.score == null || commentRequired}
-              onClick={handleSubmitGeneral}
-            >
-              {hasGeneralRating ? "Atualizar avaliação" : "Enviar avaliação"}
-            </Button>
+            <div className="space-y-2">
+              <Button
+                className="w-full"
+                loading={submitRating.isPending}
+                disabled={general.score == null || commentRequired}
+                onClick={() => handleSubmitGeneral("detalhar")}
+              >
+                {hasGeneralRating ? "Atualizar e avaliar em detalhes →" : "Enviar e avaliar em detalhes →"}
+              </Button>
+              {!hasGeneralRating && (
+                <Button
+                  variant="ghost"
+                  className="w-full"
+                  disabled={submitRating.isPending || general.score == null || commentRequired}
+                  onClick={() => handleSubmitGeneral("sair")}
+                >
+                  Só enviar a nota geral
+                </Button>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
 
       {hasGeneralRating && (
-        <Card>
+        // `scroll-mt-4` para o topo do cartão não encostar na borda quando a rolagem para aqui.
+        <Card ref={detalheRef} className="scroll-mt-4">
           <CardHeader>
-            <CardTitle>Detalhar (opcional)</CardTitle>
+            <p className="text-xs uppercase tracking-wide text-muted">Avaliação detalhada</p>
+            <CardTitle>Como foram as partes?</CardTitle>
+            {/* Os dois textos da tela antiga: quantas estrelas a pessoa deu, e que tudo aqui é
+                opcional. O primeiro fecha o ciclo do que ela acabou de enviar. */}
+            {form.rating?.score != null && (
+              <p className="text-sm text-muted">
+                Você deu {form.rating.score} estrela{form.rating.score > 1 ? "s" : ""} para este
+                evento.
+              </p>
+            )}
             <p className="text-sm text-muted">
-              Avalie itens específicos e as pessoas com quem você trabalhou. Deixe em branco o que
-              não quiser avaliar.
+              Agora você pode avaliar aspectos específicos e as pessoas com quem trabalhou. Tudo é
+              opcional — só avalie o que quiser.
             </p>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -323,6 +393,7 @@ export function PortalRatePage() {
                     key={category}
                     name={`sub-${category}`}
                     label={CATEGORY_LABELS[category]}
+                    sublabel={CATEGORY_HINTS[category]}
                     entry={subs[category] ?? EMPTY_ENTRY}
                     onChange={(next) => setSub(category, next)}
                     disabled={locked}
@@ -359,18 +430,24 @@ export function PortalRatePage() {
             })}
 
             {savedStep === "detail" && (
-              <FormSuccess>Detalhamento enviado. Obrigado pelo retorno!</FormSuccess>
+              <FormSuccess>Avaliação completa enviada. Obrigado pelo retorno!</FormSuccess>
             )}
 
             {!locked && (
-              <Button
-                variant="outline"
-                className="w-full"
-                loading={submitDetail.isPending}
-                onClick={handleSubmitDetail}
-              >
-                Enviar detalhamento
-              </Button>
+              <div className="space-y-2">
+                <Button
+                  className="w-full"
+                  loading={submitDetail.isPending}
+                  onClick={handleSubmitDetail}
+                >
+                  Enviar avaliação completa ✓
+                </Button>
+                {/* "Pular — já enviei o suficiente" da tela antiga: a nota geral já está salva
+                    neste ponto, então sair daqui não perde nada. */}
+                <Button variant="ghost" className="w-full" onClick={() => navigate("/historico")}>
+                  Pular — já enviei o suficiente
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -385,9 +462,13 @@ export function PortalRatePage() {
         </p>
       )}
 
-      <Button variant="ghost" className="w-full" onClick={() => navigate("/historico")}>
-        Voltar ao histórico
-      </Button>
+      {/* Escondido quando o bloco das partes está aberto: lá dentro já existe o "Pular — já enviei
+          o suficiente", que vai para o mesmo lugar. Dois botões fantasma colados só dão dúvida. */}
+      {!(hasGeneralRating && !locked) && (
+        <Button variant="ghost" className="w-full" onClick={() => navigate("/historico")}>
+          Voltar ao histórico
+        </Button>
+      )}
     </div>
   );
 }

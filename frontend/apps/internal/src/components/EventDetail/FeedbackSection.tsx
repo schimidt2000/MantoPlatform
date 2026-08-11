@@ -6,10 +6,18 @@ import { useDeleteClientFeedback } from "../../lib/clientes";
 import { Empty, formatDay, Panel, Stars } from "./parts";
 
 /** Rótulo curto de cada critério avaliado pelos artistas no portal. */
+/**
+ * Rótulos das sub-avaliações — precisam bater com `RATING_CATEGORIES`
+ * (`app/talents/rating_ops.py`), que é a fonte única lida pelo panorama de avaliações.
+ *
+ * `texto` é "Show no geral" e não "Texto": é a pergunta que o artista respondeu no portal
+ * (coreografia, posicionamento, texto e interações). "Texto" fazia o leitor entender falas/roteiro
+ * (feature 232). `coordenacao` fica abreviado porque aqui o rótulo vive dentro de um badge.
+ */
 const CATEGORY_LABELS: Record<string, string> = {
   som: "Som",
   figurino: "Figurino",
-  texto: "Texto",
+  texto: "Show no geral",
   coordenacao: "Coord.",
   maquiagem: "Maquiagem",
   artista: "Artista",

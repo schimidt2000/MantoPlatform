@@ -15,11 +15,18 @@ from app import db
 from app.constants import RoleName
 from app.models import CalendarEvent, EventRating, EventRole, EventSubRating, SiteSetting, User
 
+#: Rótulo de cada categoria de sub-avaliação — **fonte única** do nome que o casting lê.
+#:
+#: `texto` chama-se "Show no geral" porque essa é a pergunta que o artista responde no portal
+#: ("Falar sobre coreografia, posicionamento, texto e interações"). Enquanto estas telas diziam
+#: só "Texto", o casting lia como se fosse sobre falas/roteiro, e os 42 registros da coluna
+#: respondiam outra coisa (feature 232). O nome curto fica aqui; a explicação inteira fica no
+#: portal, onde a pergunta é feita.
 RATING_CATEGORIES = [
     ("artista", "Artista"),
     ("som", "Som"),
     ("figurino", "Figurino"),
-    ("texto", "Texto"),
+    ("texto", "Show no geral"),
     ("coordenacao", "Coordenação"),
     ("maquiagem", "Maquiagem"),
 ]

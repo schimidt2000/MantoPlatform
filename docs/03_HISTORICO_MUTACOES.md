@@ -4,9 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-10** · Estado do repositório: pós-feature **230 (portal segue a
-> escala, não o convite)** · Head de migration: `d2e6b94c07f1` (inalterado — 226 e 227 não têm
-> migration)
+> Última atualização: **2026-08-11** · Estado do repositório: pós-feature **233 (figurino do
+> cargo sem convite + convite automático ao escalar)** · Head de migration: **`e3f7c25a8b90`**
+> (*lembrete de confirmação*)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -38,39 +38,42 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **230** | Portal segue a escala e não o convite: escalação não recusada passa a aparecer (26 futuros e 97 passados invisíveis, R$ 36.910), totais batendo com a planilha | 2026-08-10 | `—` | (aqui) | 150 |
-| **229** | Portal: link de avaliar também no histórico da Agenda (`RatingLink`); diagnóstico do "acesso travado" | 2026-08-09 | `—` | (aqui) | 206 |
-| **228** | `ConfirmDialog` promovido para o `@manto/ui`; exclusão em lote de pagamentos confirma em diálogo, com a soma e o que a busca escondeu | 2026-08-09 | `—` | (aqui) | 259 |
-| **227** | Foto do portal saía por rota de staff (255 talentos com ícone quebrado); coordenador passa a ver o figurino do elenco inteiro | 2026-08-09 | `—` | (aqui) | 295 |
-| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 365 |
-| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 437 |
-| **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 186 |
-| **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 134 |
-| **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 152 |
-| **224d** | `alo.mantoproducoes.com.br` como endereço curto da Loja de Interações Virtuais | 2026-08-07 | `—` | (aqui) | 186 |
-| **224c** | Estorno de comissão aparecia e descontava em todos os meses; agora só no mês corrente | 2026-08-07 | `—` | (aqui) | 162 |
-| **224b** | Loja de Interações Virtuais destravada: upload de capa na gestão, capa servida em rota pública, editor de FAQ | 2026-08-07 | `—` | (aqui) | 205 |
-| **224** | Evento com dinheiro vira cancelado (não apagado), com devolução ao cliente; exclusão só para Superadmin | 2026-08-07 | `b8e4d27a91f5` | (aqui) | 186 |
-| **223** | Calculadora EducaManto: transporte dobrado no recalcular, Econômico sem adicional por pessoa, NF sem transporte, comissão configurável | 2026-08-07 | `a3f7c19d5e02` | (aqui) | 196 |
-| **222** | Exportar elenco perdeu quatro campos (nascimento/CPF/RG/documento) na migração para o React | 2026-08-07 | `—` | (aqui) | 186 |
-| **221** | Agente auditor financeiro semanal (endpoints + fix de sobrescrita de upload) | 2026-08-06 | `—` | (aqui) | 161 |
-| **220b** | Hotfix: menu "Ferramentas" do evento embaçado no meio | 2026-08-06 | `—` | (aqui) | 133 |
-| **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 156 |
-| **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 217 |
-| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 292 |
-| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 367 |
-| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 436 |
-| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 494 |
-| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 571 |
-| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 606 |
-| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 638 |
-| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 671 |
-| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 706 |
-| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 738 |
-| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 767 |
-| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 802 |
-| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 875 |
-| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 924 |
+| **233** | Coordenadora sem ver figurino (a 230 deixou o link levando a 403) e convite automático de quem é escalado na criação/edição do evento | 2026-08-11 | `—` | (aqui) | 153 |
+| **232** | Avaliação do portal: detalhar por partes volta a ser o caminho padrão (era cartão opcional abaixo da dobra) e `texto` recupera o sentido de "Show no geral" | 2026-08-10 | `—` | (aqui) | 216 |
+| **231** | Confirmações pendentes: painel na home do casting (com cobrança no WhatsApp) e lembrete automático por e-mail com teto de 2 por convite e 1 por pessoa/dia | 2026-08-10 | `e3f7c25a8b90` | (aqui) | 272 |
+| **230** | Portal segue a escala e não o convite: escalação não recusada passa a aparecer (26 futuros e 97 passados invisíveis, R$ 36.910), totais batendo com a planilha | 2026-08-10 | `—` | (aqui) | 350 |
+| **229** | Portal: link de avaliar também no histórico da Agenda (`RatingLink`); diagnóstico do "acesso travado" | 2026-08-09 | `—` | (aqui) | 406 |
+| **228** | `ConfirmDialog` promovido para o `@manto/ui`; exclusão em lote de pagamentos confirma em diálogo, com a soma e o que a busca escondeu | 2026-08-09 | `—` | (aqui) | 459 |
+| **227** | Foto do portal saía por rota de staff (255 talentos com ícone quebrado); coordenador passa a ver o figurino do elenco inteiro | 2026-08-09 | `—` | (aqui) | 495 |
+| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 565 |
+| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 637 |
+| **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 681 |
+| **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 746 |
+| **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 763 |
+| **224d** | `alo.mantoproducoes.com.br` como endereço curto da Loja de Interações Virtuais | 2026-08-07 | `—` | (aqui) | 789 |
+| **224c** | Estorno de comissão aparecia e descontava em todos os meses; agora só no mês corrente | 2026-08-07 | `—` | (aqui) | 815 |
+| **224b** | Loja de Interações Virtuais destravada: upload de capa na gestão, capa servida em rota pública, editor de FAQ | 2026-08-07 | `—` | (aqui) | 850 |
+| **224** | Evento com dinheiro vira cancelado (não apagado), com devolução ao cliente; exclusão só para Superadmin | 2026-08-07 | `b8e4d27a91f5` | (aqui) | 895 |
+| **223** | Calculadora EducaManto: transporte dobrado no recalcular, Econômico sem adicional por pessoa, NF sem transporte, comissão configurável | 2026-08-07 | `a3f7c19d5e02` | (aqui) | 955 |
+| **222** | Exportar elenco perdeu quatro campos (nascimento/CPF/RG/documento) na migração para o React | 2026-08-07 | `—` | (aqui) | 1008 |
+| **221** | Agente auditor financeiro semanal (endpoints + fix de sobrescrita de upload) | 2026-08-06 | `—` | (aqui) | 1035 |
+| **220b** | Hotfix: menu "Ferramentas" do evento embaçado no meio | 2026-08-06 | `—` | (aqui) | 1063 |
+| **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 1086 |
+| **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 1147 |
+| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 1222 |
+| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 1297 |
+| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 1366 |
+| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 1424 |
+| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 1501 |
+| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 1536 |
+| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 1568 |
+| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 1601 |
+| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 1636 |
+| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 1668 |
+| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 1697 |
+| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 1732 |
+| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 1805 |
+| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 1854 |
 | **206b** | Hotfix: superfícies públicas por link voltaram a abrir sem login | 2026-08-05 | `—` | H2 | 11 |
 | **207** | Pacote de melhorias operacionais (5 frentes) | 2026-08-04 | `d9f2b3a41c07` | H2 | 36 |
 | **206** | React como interface primária e proxy reverso em produção | 2026-08-04 | `—` | H2 | 101 |
@@ -113,18 +116,18 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Agenda / evento / formulário de evento | 215, 210, 208, 192, 184 |
+| Agenda / evento / formulário de evento | 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
 | Financeiro, comissões e pagamentos | 230, 228, 226, 210c, 199, 194, 189, 187 |
 | Orçamento e EducaManto | 214, 191 (orçamento), 190 |
-| Portal do Artista | 230, 229, 227, 216, 191 (portal) |
+| Portal do Artista | 233, 232, 231, 230, 229, 227, 216, 191 (portal) |
 | Design system, tema e acessibilidade | 228, 217, 216, 212 |
 | Documentação e economia de token | 217 |
 | Formulários e pré-contrato | 210b, 188, 193 |
-| Avaliações e dashboards | 197, 196 |
+| Avaliações e dashboards | 232, 197, 196 |
 | Infra, deploy, proxy e cache de bundle | 210d, 206, 206b, 212 |
 | Segurança / RBAC / endurecimento | 216, 214, 206b |
 
@@ -146,6 +149,203 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 233 — Coordenadora sem ver o figurino, e o convite que nunca era enviado            (main · 2026-08-11 · sem migration)
+
+**Motivação.** Relato: a coordenadora do evento 1192 entra nele pelo portal e **não consegue ver os
+figurinos**; e na tela interna o cargo dela não aparece como aceito nem como pendente. A hipótese
+do usuário: *"imagino que tenha faltado o pessoal do casting clicar em convidar — mas acho que
+podemos nos blindar disso. Talvez quando preencherem a pessoa e o valor, automaticamente
+convidar."* A hipótese estava certa na origem e errada no culpado — ninguém esqueceu de clicar,
+porque **nenhuma tela pedia o clique**.
+
+**Duas causas empilhadas.**
+
+**1. Regressão da 230 (minha).** A 230 trocou a regra da agenda e do histórico para
+`nao_recusada()` — mas `get_figurino` ficou com a trava antiga, `invite_status.in_(["accepted",
+"pending"])`. Como o cargo dela tem `invite_status = NULL`, o resultado foi o pior dos dois mundos:
+a 230 passou a mostrar o evento na agenda **com** o link "Ver ficha de figurino", e o link caía em
+403 *"você não está escalado neste evento"*. Antes da 230 o evento não aparecia, então o link
+morto não existia — eu criei o caminho e esqueci de abrir a porta no fim dele. Reproduzido e
+corrigido: agora ela vê as 2 fichas do elenco (Mulher Algodão Doce → Mel Gomes, Mulher Sorvete →
+Iara Oliveira).
+
+**2. O cargo nasce com pessoa e sem convite.** A tela de casting **já** convidava sozinha
+(`assign_talent_to_role` marca `pending` e dispara o e-mail desde sempre). O que não convidava eram
+os dois caminhos que montam o elenco **junto com o evento**: `_create_roles_from_input` /
+`_apply_default_roles` na criação e `_reconcile_characters` na edição. Eles gravavam `talent_id` +
+`assigned_at` e paravam ali. É a origem dos 26 cargos futuros sem convite que a 231 mediu — e o
+efeito era invisível dos dois lados: para a produção o cargo parecia resolvido; para a pessoa, o
+evento não existia.
+
+`casting_ops.convidar_recem_escalados()` passa a ser chamada nos dois caminhos, depois do commit,
+usando a **mesma lista** `assigned_now` que eles já montavam para avisar de conflito de horário —
+ou seja, a lista que sabe quem é realmente novo.
+
+**Não exijo o cachê preenchido, ao contrário do que o pedido dizia ao pé da letra.** A pré-escala do
+**coordenador** não tem campo de cachê (`_apply_default_roles` cria o cargo só com `talent_id`), e
+era exatamente esse o caso que originou o relato: gatilho em "pessoa **e** valor" deixaria a
+Miminha de fora outra vez. A regra virou "pessoa escalada, evento no futuro" — a mesma da tela de
+casting, que também não olha o cachê. O e-mail de convite já omite a linha do valor quando ele
+ainda não existe.
+
+**Travas do convite automático.**
+
+- **Só cargo sem convite nenhum** (`invite_status IS NULL`): quem está `pending`, `accepted` ou
+  `rejected` não pode ser reiniciado por uma edição de evento.
+- **Só evento que ainda vai acontecer**: editar evento antigo (ajuste de cachê, troca de ficha) é
+  rotina, e "confirme sua presença" para um show da semana passada é ruído.
+- **E-mail só depois do commit**, e só para os cargos que **esta** chamada marcou. A primeira versão
+  reconsultava por `invite_status == "pending"` depois do commit — isso pegaria também quem já
+  estava convidado antes, e reenviaria convite a cada edição de evento. Corrigido guardando as
+  linhas marcadas.
+- Registra `EventLog` "Convite automático para X (personagem) ao ser escalado no evento", para o
+  histórico do evento não ter e-mail sem dono.
+
+**Efeito colateral bom.** Com o convite saindo na escalação, o lembrete automático da 231 passa a
+alcançar essas pessoas: ele só cobra quem está `pending`, e antes elas ficavam em `NULL`, fora do
+alcance de qualquer cobrança.
+
+**Verificação.** `verify_233_convite_automatico.py` 15/15, com `send_invite_email` dublado e toda
+escrita desfeita no fim: o caso real do evento 1192 (a coordenadora deixando de receber 403 e vendo
+as fichas, com o link da agenda concordando com a tela); quem recusou seguindo fora; o convite
+marcando `pending`, disparando o e-mail e registrando no log; reexecutar não reenviando; e evento
+passado sendo ignorado sem e-mail e sem alterar o cargo. Sem regressão: `verify_176` 41/41,
+`verify_227` 19/19, `verify_230` 10/10, `verify_231` 19/19, `verify_232` 17/17.
+
+### 232 — Avaliação por partes: a etapa 2 deixou de ser destino e virou cartão abaixo da dobra            (main · 2026-08-10 · sem migration)
+
+**Motivação.** Relato: *"em algum momento da migração deu problema nas avaliações que as pessoas do
+portal fazem. Antes era feita a avaliação, além da geral, por partes."*
+
+**O que os dados dizem — e o que eles NÃO dizem.** A etapa 2 não morreu: as seis categorias
+continuam recebendo nota, e a taxa de conclusão até **subiu** com o React (81% das avaliações
+feitas a partir de 28/07 têm `detail_submitted_at`, contra 71% antes). Última etapa 2 registrada:
+06/08. Então o problema não é o backend nem a gravação — conferido também que `submit_rating`
+(etapa 1) não marca `detail_submitted_at`, ou seja, a métrica mede etapa 2 de verdade.
+
+**O que realmente se perdeu: o caminho.** Comparando tela a tela com o Jinja (`rate.html` e
+`rate_detail.html`):
+
+| | Jinja (antes) | React (depois da 191) |
+|---|---|---|
+| Botão principal da nota geral | **"Enviar e avaliar em detalhes →"** | "Enviar avaliação" |
+| Desvio | "Só enviar a nota geral" (`skip_detail`) | não existia |
+| Depois de salvar | **redirect** para a página das partes | mensagem "Avaliação enviada. Obrigado!" e um cartão "Detalhar (opcional)" anexado **abaixo** |
+| Categoria `texto` | **"🎭 Show no geral"** + "Falar sobre coreografia, posicionamento, texto e interações" | "Texto / roteiro", sem explicação |
+| CTA da etapa 2 | "Enviar avaliação completa ✓" | "Enviar detalhamento" |
+| Saída da etapa 2 | "Pular — já enviei o suficiente" | — |
+
+Ou seja: detalhar era o **padrão** e virou **opcional abaixo da dobra**, atrás de um "Obrigado!"
+que se lê como fim. Quem não rolava a tela nunca via as partes.
+
+**O que mudou.** A etapa 2 volta a ser destino, sem voltar para duas páginas: o botão principal
+salva a nota geral **e rola até o bloco das partes** (`scrollIntoView`, respeitando
+`useReducedMotion`), com "Só enviar a nota geral" como desvio explícito. Restaurados também os
+rótulos com emoji (👗 Figurino · 🎵 Som · 🎭 Show no geral · 🎭 Colegas artistas · 🧑‍💼 Coordenação ·
+💄 Maquiagem), a explicação embaixo de "Show no geral", o cabeçalho "Avaliação detalhada", a linha
+"Você deu N estrelas para este evento", o CTA "Enviar avaliação completa ✓" e o "Pular — já enviei
+o suficiente".
+
+**`texto` é a correção mais silenciosa e a mais importante.** A coluna guarda 42 registros feitos
+sob a pergunta "Show no geral — coreografia, posicionamento, texto e interações". Rebatizá-la de
+"Texto / roteiro" fez as pessoas passarem a responder outra coisa **na mesma coluna** — o dado
+histórico e o novo deixariam de ser comparáveis sem que nada quebrasse.
+
+**Pegadinha do `scrollIntoView`.** O bloco das partes só existe no DOM **depois** do sucesso da
+etapa 1, então a rolagem vai dentro de dois `requestAnimationFrame` — sem isso ela dispara antes do
+React pintar o alvo e a tela fica parada, que é exatamente o sintoma que a feature conserta.
+
+**Verificação.** `tsc --noEmit` limpo e build verde em `apps/portal`. Três estados conferidos na
+tela a 375px com entry Vite temporária (apagada depois), com dublê de rede para o POST da nota
+geral: (1) avaliação nova → dois botões, sem bloco de partes; (2) nota geral enviada → bloco das
+partes aparece com as seis categorias, as quatro pessoas do elenco nos três grupos, "Você deu 4
+estrelas", CTA e "Pular"; (3) fora do prazo → tudo em leitura, sem botão de envio, com
+"Avaliação completa enviada".
+
+**Não verificado.** A **rolagem** não é observável no painel de browser desta sessão: ele não aplica
+scroll nenhum (`window.scrollTo(0, 200)` deixa `scrollY` em 0, com documento de 1703px em viewport
+de 812px). Confirmei o que dá para confirmar — o alvo do `ref` existe, é o cartão certo (único
+`.scroll-mt-4` da página, com `scroll-margin-top: 16px` aplicado) e o `scrollIntoView` roda sem
+erro. O comportamento em si precisa de um olhar no celular.
+
+### 231 — Quem ainda não confirmou: painel para o casting e cobrança automática sem spam            (main · 2026-08-10 · `e3f7c25a8b90`)
+
+**Motivação.** Do relato do usuário: *"o ideal é de fato que todo mundo confirmasse, mas nem todos
+confirmam. Muitos recebem o convite e não estão aceitando no portal."* Os números confirmam: **41
+das 78 escalações futuras estão sem confirmação** — 15 com convite enviado e sem resposta, 26 com
+convite **nunca enviado** (concentrados em 3 colaboradores fixos, que a produção escala direto). E
+do lado de dentro não havia lista: o sistema só mostrava "X/Y confirmadas" **dentro de cada
+evento**, na aba Resumo, então descobrir quem falta na semana exigia abrir evento por evento.
+
+**O painel.** Novo `SectorPanel` "🙋 Confirmações pendentes" na home, ao lado do de Casting, com os
+eventos de hoje em diante. Cada linha diz **quem** falta, **qual** evento, a urgência (o mesmo
+`getUrgency` do resto da home) e — o que torna a lista útil — **a ação certa para cada caso**:
+
+- convite enviado e sem resposta → botão **"Cobrar no WhatsApp"**, com a mensagem já escrita;
+- convite nunca enviado → botão **"Enviar convite"**, que leva ao evento (aqui quem precisa agir é
+  o casting, não a pessoa).
+
+A linha também mostra quantos lembretes automáticos já saíram, para ninguém cobrar de novo quem o
+robô acabou de cobrar.
+
+**A regra do e-mail, e por que ela é assim.** O pedido foi explícito — *"não quero ficar spammando
+as pessoas"*. Cinco travas, todas em `app/calendar/invite_reminders.py`:
+
+1. **Só quem já recebeu o convite** (`invite_status="pending"`). Cargo sem convite (`NULL`) nunca
+   recebe e-mail automático: o primeiro contato é o convite, e mandá-lo é decisão de quem escala.
+2. **Só na semana do evento** — entre 24h e 7 dias. Antes é ruído; depois, e-mail já não resolve.
+3. **No máximo 2 lembretes por convite**, com 3 dias de intervalo.
+4. **No máximo 1 e-mail por pessoa por dia**: quem tem três eventos sem responder recebe **um**
+   e-mail com os três. É a trava que mais importa contra a sensação de spam.
+5. **Só entre 9h e 20h** de Brasília.
+
+Na cópia de hoje isso dá **7 e-mails** para 37 pendências no painel — a desproporção é o ponto.
+
+**Decisões que valem o registro.**
+
+- **Uma consulta só** alimenta o painel e o e-mail (`escalacoes_sem_confirmacao`). Se cada um
+  tivesse a sua, o painel cobraria quem o robô já cobrou — ou o contrário.
+- **Corte de data próprio, não o `dashboard_cutoff()`** dos outros painéis: aquele vale
+  `release_date` (01/06/2026 hoje), e com ele a lista vinha com **59 eventos que já aconteceram**.
+  Ninguém cobra confirmação de evento de junho. Aqui é da meia-noite de hoje para a frente, o que
+  mantém o evento de HOJE ainda não confirmado — o mais urgente que pode existir na tela.
+- **`invite_status` NULL exige `or_` explícito**: em SQL `NULL != 'accepted'` é NULL, não
+  verdadeiro, e o cargo sem convite sumiria justamente da lista feita para encontrá-lo.
+- **A marcação só acontece depois do envio dar certo** — e-mail que não saiu não gasta a cota de
+  lembretes daquele convite.
+- **Trava atômica em `site_settings`** (mesmo `UPDATE` condicional de `_claim_auto_sync`): a
+  produção roda 3 workers do gunicorn e, sem ela, os três mandariam o mesmo lembrete. Num recurso
+  cujo requisito é "não spammar", este é o detalhe que decide.
+- **A thread acorda de hora em hora**, não de 24 em 24: quem decide se hoje já teve rodada é a
+  trava. Um laço diário perderia o dia inteiro se o container reiniciasse no meio dele.
+- **Desligável sem deploy** por `INVITE_REMINDERS_ENABLED=false`, e já nasce **desligada** em
+  ambiente que suprime e-mail — senão um processo local apontado para o espelho cobraria artista de
+  verdade.
+- **Assunto truncado em 42 caracteres**: título de evento aqui chega com 140 ("TURMA DO PETER
+  RABBIT - GORRO VERDE + TURMA DO PETER RABBIT - BLUSA AZUL + ..."), e o que sobraria na caixa de
+  entrada seria o nome do personagem no meio da frase, não o pedido.
+
+**Migration `e3f7c25a8b90`**: `event_roles.invite_reminder_at` + `invite_reminder_count` (memória
+por convite) e `site_settings.invite_reminder_run_at` (a trava). Três colunas, nenhuma obrigatória.
+
+**Verificação.** `verify_231_lembrete_confirmacao.py` 19/19, com o envio **dublado** e as marcações
+desfeitas no fim: painel sem evento passado/cancelado/ensaio/dispensado e sem quem já aceitou ou
+recusou; elegibilidade só com convite enviado, só na janela de 24h–7d, respeitando o teto; um
+e-mail por pessoa; rodar de novo no mesmo dia não cobra ninguém; o segundo worker vê a rodada já
+feita; e o corpo citando o evento, levando ao portal e dizendo que recusar também ajuda. Sem
+regressão: `verify_176_portal_artista` 41/41 e `verify_230` 10/10. `tsc --noEmit` limpo e build
+verde em `apps/internal`. Painel conferido na tela a 375px: sem vazamento horizontal, os três
+estados (sem convite / sem resposta / com lembrete já enviado) com a ação certa em cada um, e o
+link do WhatsApp com a mensagem pronta.
+
+**Achado à parte, não corrigido.** Qualquer script que chame `create_app()` **sobe as threads de
+fundo** — inclusive `calendar-sync`, que fala com o Google Agenda de verdade. O guarda existente
+(`FLASK_ENV == "development"`) não pega scripts, que rodam sem essa variável. Nesta sessão nada
+disparou (`calendar_auto_sync_at` seguia no horário do espelho, 08/08 17:02), porque os scripts
+terminam antes dos 15s de espera da thread — mas isso é sorte de temporização, não proteção. A 231
+não cai nessa armadilha (nasce desligada quando o e-mail está suprimido), e o
+`run-local-sem-google.py` cobre o servidor, não os scripts.
 
 ### 230 — O portal passa a seguir a escala, não o convite            (main · 2026-08-10 · sem migration)
 

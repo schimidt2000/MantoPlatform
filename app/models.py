@@ -521,6 +521,11 @@ class EventRole(db.Model):
     payment_status = db.Column(db.String(20), nullable=False, default="nao_pago", server_default="nao_pago")
     invite_status = db.Column(db.String(20), nullable=True)
     # invite_status: None (não enviado) | 'pending' (enviado) | 'accepted' | 'rejected'
+
+    # Lembrete de confirmação (feature 231): quando saiu o último e quantos já saíram para ESTE
+    # convite. É o que segura o spam — a regra pede 3 dias de intervalo e para no segundo.
+    invite_reminder_at = db.Column(db.DateTime, nullable=True)
+    invite_reminder_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     event_changed_at    = db.Column(db.DateTime, nullable=True)
     change_description  = db.Column(db.Text, nullable=True)
     # event_changed_at/change_description: set when event changes after acceptance; cleared on "Ciente"
@@ -791,6 +796,10 @@ class SiteSetting(db.Model):
     # processos expirando a mesma reserva ao mesmo tempo é a corrida que o soft lock existe para
     # evitar.
     virtual_sweep_at = db.Column(db.DateTime, nullable=True)
+    # Marcador da última rodada de lembrete de confirmação de convite (feature 231). Mesmo papel
+    # de lock dos dois acima — aqui ele é o que impede os 3 workers de mandarem o mesmo e-mail
+    # três vezes, que é exatamente o spam que a feature existe para evitar.
+    invite_reminder_run_at = db.Column(db.DateTime, nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 

@@ -151,6 +151,16 @@ class Config:
     # larga o bastante para o passivo entrar na primeira execução.
     EMAIL_BOUNCE_LOOKBACK_DAYS = int(os.getenv("EMAIL_BOUNCE_LOOKBACK_DAYS", "90"))
 
+    # Cobrança automática de confirmação de convite (feature 231). Mesma guarda do bounce: fica
+    # DESLIGADA quando o ambiente já suprime e-mail (banco local), senão um processo apontado para
+    # o espelho cobraria artista de verdade por evento que já aconteceu. A regra de quem recebe e
+    # quando está em `app/calendar/invite_reminders.py`.
+    INVITE_REMINDERS_ENABLED = os.getenv(
+        "INVITE_REMINDERS_ENABLED",
+        "false" if _suppress_mail() else "true",
+    ).lower() == "true"
+    INVITE_REMINDERS_INTERVAL = int(os.getenv("INVITE_REMINDERS_INTERVAL", "3600"))
+
     # URL base do portal (para links nos emails)
     PORTAL_URL = os.getenv("PORTAL_URL", "")
 
