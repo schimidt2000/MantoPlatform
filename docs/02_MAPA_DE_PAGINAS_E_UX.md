@@ -453,6 +453,8 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **Fluxo**: `Solicitado → Aprovado → Comprado → Recebido`, com `Cancelado` como saída (exige
   motivo). **`Comprado` ainda conta como em aberto** — o dinheiro saiu, a coisa não chegou. Dá
   para voltar de `Recebido` para `Comprado` (chegou errado); voltar limpa o `done_at`.
+- **Escolher ficha é sempre pelo `FigurinoPicker`** (`components/FigurinoPicker.tsx`) — ver
+  "Padrões transversais" no fim deste documento.
 - **Novo pedido de compra**: o que comprar, detalhes, **para qual figurino (opcional)**, evento
   (opcional), prazo, quantidade, quanto deve custar e **quem é o responsável** — este último
   aparece para qualquer pessoa aqui, e a lista traz a **equipe interna inteira**
@@ -1403,3 +1405,48 @@ Pontos de atenção recorrentes:
 6. **A meta de frequência não tem estado próprio** — `on_track`/`delayed` é calculado na leitura a
    partir dos posts publicados. Sem `publish_date` o post não conta, daí a data automática ao mover
    o card para "Publicado" (feature 204).
+
+---
+
+## Padrões transversais do app interno
+
+### Espaçamento da página *(auditado em 2026-08-11)*
+
+`AppLayout` renderiza `<main className="min-h-screen">` **sem padding nenhum** — o espaçamento é
+responsabilidade de cada página. Quem esquece nasce colado na barra lateral de 256px, e foi o que
+aconteceu com seis telas (as duas de Produção de Figurinos e as quatro de Interações Virtuais).
+
+A raiz de toda página é:
+
+```tsx
+<div className="mx-auto max-w-<X> space-y-4 p-4 sm:p-6">
+```
+
+`p-4 sm:p-6` é o padrão em **57/57** páginas. O `max-w` varia com o conteúdo: `max-w-[1400px]` e
+`max-w-6xl` para listas e tabelas, `max-w-5xl` para formulários, `max-w-lg` para telas de um
+campo só. **Os ramos de carregamento e de erro levam o mesmo invólucro** — senão o esqueleto
+aparece deslocado e a tela "pula" quando os dados chegam.
+
+### Escolher uma ficha de figurino
+
+Existe **um** componente: `components/FigurinoPicker.tsx`, sobre o `Combobox` do `@manto/ui`.
+São 616 fichas (612 com foto): uma lista alfabética é inviável e a escolha é visual por natureza,
+então cada resultado traz a miniatura quadrada (Princípio X.2). O `Combobox` já dá filtro
+sem acento, teto de 30 resultados, limpar e navegação por teclado — nada disso se reimplementa.
+
+| Onde | Contexto |
+|---|---|
+| Elenco do evento (`EventDetail/FigurinoSection`) | Vincular a ficha ao cargo |
+| `/admin/catalogo` → vincular figurino | Ligar personagem do catálogo à ficha |
+| Painel de personagens do tema (3 pontos) | Vincular, reaproveitar em outro tema, criar |
+| `/figurinos/producao` → novo pedido | Qual figurino é o conserto (manutenção) |
+| `/compras` → novo pedido | Para qual figurino é a compra (opcional) |
+
+Histórico: a 209 criou o `FigurinoSheetPicker` (lista própria), a 215 criou o `FigurinoPicker`
+(design system) e a **225d unificou nos dois últimos pontos da tabela, que ainda eram `<select>`
+cego**, apagando o `FigurinoSheetPicker`. Duas buscas da mesma coisa com aparências diferentes é
+exatamente o que o princípio de consistência proíbe.
+
+**Pegadinha ao testar por script**: no `Combobox` o `role="option"` fica no `<li>`, mas o
+`onClick` mora no `<button>` de dentro. `document.querySelector('[role=option]').click()` não
+seleciona nada e o campo volta nulo sem erro — use `[role=option] button`.

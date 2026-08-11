@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Combobox, type ComboboxOption } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
-import { useFigurinoSheets } from "../../lib/figurino";
+import { useFigurinoSheets } from "../lib/figurino";
 
 /** Remove acentos e caixa — mesmo espírito do `strip_accents_lower` do backend. */
 function normalize(value: string): string {
@@ -15,22 +15,28 @@ export interface FigurinoPickerProps {
   value: number | null;
   onChange: (sheetId: number | null) => void;
   /**
-   * Nome do personagem do cargo: as fichas cujo nome bate sobem para o topo da lista — mesmo
+   * Nome do personagem: as fichas cujo nome bate sobem para o topo da lista — mesmo
    * match por nome normalizado que a impressão de fichas usa.
    */
   characterName?: string;
   disabled?: boolean;
-  ariaLabel: string;
+  ariaLabel?: string;
   className?: string;
+  placeholder?: string;
 }
 
 /**
- * Busca visual de ficha de figurino (feature 215).
+ * Busca visual de ficha de figurino — **a única porta para escolher uma ficha** no app.
  *
- * Substitui o `<datalist>` do card de figurino, que no Chrome não renderiza imagem nenhuma e
- * só vinculava a ficha no `blur` do campo — digitar errado significava não vincular nada, sem
- * aviso. Aqui é o `Combobox` do design system com a miniatura quadrada da ficha (Princípio
- * X.2), filtro em tempo real e vínculo no clique.
+ * Nasceu na feature 215 para substituir o `<datalist>` do card de figurino (que no Chrome não
+ * renderiza imagem nenhuma e só vinculava no `blur`: digitar errado significava não vincular
+ * nada, sem aviso). Em 225d absorveu o `FigurinoSheetPicker` da 209, que resolvia o mesmo
+ * problema com uma lista própria — duas buscas de ficha com aparências diferentes era
+ * exatamente o que o Princípio de consistência proíbe, e a do design system ganha porque o
+ * `Combobox` já traz filtro sem acento, teto de resultados, limpar e navegação por teclado.
+ *
+ * São 616 fichas: escolher por nome numa lista alfabética é inviável, e a escolha é visual por
+ * natureza — daí a miniatura quadrada em cada resultado (Princípio X.2).
  */
 export function FigurinoPicker({
   value,
@@ -39,6 +45,7 @@ export function FigurinoPicker({
   disabled = false,
   ariaLabel,
   className,
+  placeholder,
 }: FigurinoPickerProps) {
   const query = useFigurinoSheets();
   const items = query.data?.items;
@@ -66,8 +73,8 @@ export function FigurinoPicker({
   return (
     <Combobox
       className={className}
-      aria-label={ariaLabel}
-      placeholder="🔍 Buscar ficha de figurino…"
+      aria-label={ariaLabel ?? "Buscar ficha de figurino"}
+      placeholder={placeholder ?? "🔍 Buscar ficha de figurino…"}
       emptyMessage="Nenhuma ficha encontrada."
       options={options}
       loading={query.isLoading}

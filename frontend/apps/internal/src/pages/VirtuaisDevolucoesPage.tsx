@@ -99,7 +99,7 @@ export function VirtuaisDevolucoesPage() {
   const refunds = data?.refunds ?? [];
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Devoluções — Interações Virtuais"
         subtitle="Pagamentos que chegaram para horários já vendidos. O estorno é feito no painel da InfinitePay; aqui você marca como concluído."

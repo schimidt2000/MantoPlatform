@@ -165,7 +165,7 @@ export function VirtuaisCampanhaFormPage() {
 
   if (isLoading || !campaign) {
     return (
-      <div className="space-y-3">
+      <div className="mx-auto max-w-5xl space-y-3 p-4 sm:p-6">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-48 w-full" />
       </div>
@@ -184,7 +184,7 @@ export function VirtuaisCampanhaFormPage() {
 
   return (
     <motion.div
-      className="space-y-4"
+      className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6"
       initial={reduceMotion ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}

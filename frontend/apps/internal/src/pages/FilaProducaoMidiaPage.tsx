@@ -234,7 +234,7 @@ export function FilaProducaoMidiaPage() {
   const deliveries = data?.deliveries ?? [];
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Fila de Produção de Mídia"
         subtitle="O que precisa ser gravado e entregue — uma linha por interação vendida."

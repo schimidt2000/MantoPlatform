@@ -20,7 +20,7 @@ import {
 } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { useGastosEventos } from "../lib/gastos";
-import { useFigurinoSheets } from "../lib/figurino";
+import { FigurinoPicker } from "../components/FigurinoPicker";
 import {
   PRODUCAO_KIND_TONES,
   PRODUCAO_STATUS_LABELS,
@@ -115,9 +115,8 @@ function NovoPedidoDialog({
   const criar = useCreateProducao();
   const [kind, setKind] = useState<ProducaoKind>(tipoFixo ?? "producao");
   const responsaveis = useResponsaveis(kind);
-  const fichas = useFigurinoSheets();
   const [severity, setSeverity] = useState<ProducaoSeveridade | "">("");
-  const [fichaId, setFichaId] = useState("");
+  const [fichaId, setFichaId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dataEvento, setDataEvento] = useState("");
@@ -131,20 +130,11 @@ function NovoPedidoDialog({
   const eManutencao = kind === "manutencao";
   const eCompra = kind === "compra";
 
-  const fichaOptions = useMemo(
-    () =>
-      (fichas.data?.items ?? []).map((f) => ({
-        value: String(f.id),
-        label: f.character_name,
-      })),
-    [fichas.data],
-  );
-
   function fechar() {
     onOpenChange(false);
     setKind(tipoFixo ?? "producao");
     setSeverity("");
-    setFichaId("");
+    setFichaId(null);
     setTitle("");
     setDescription("");
     setDataEvento("");
@@ -163,7 +153,7 @@ function NovoPedidoDialog({
         description: description || undefined,
         kind,
         severity: eManutencao ? (severity || null) : null,
-        figurino_sheet_id: fichaId ? Number(fichaId) : null,
+        figurino_sheet_id: fichaId,
         event_id: eventId ? Number(eventId) : null,
         due_date: dueDate || null,
         responsible_id: responsibleId ? Number(responsibleId) : null,
@@ -175,7 +165,7 @@ function NovoPedidoDialog({
   }
 
   const podeSalvar =
-    title.trim().length > 0 && (!eManutencao || (Boolean(fichaId) && Boolean(severity)));
+    title.trim().length > 0 && (!eManutencao || (fichaId != null && Boolean(severity)));
 
   const erroCampo = (campo: string) =>
     (criar.error as { fields?: Record<string, string> } | null)?.fields?.[campo];
@@ -224,44 +214,27 @@ function NovoPedidoDialog({
 
           {eCompra && (
             <div>
-              <label className="text-xs text-muted" htmlFor="prod-ficha-compra">
-                Para qual figurino (opcional)
-              </label>
-              <select
-                id="prod-ficha-compra"
-                className={INPUT_CLASS}
+              <span className="text-xs text-muted">Para qual figurino (opcional)</span>
+              <FigurinoPicker
+                className="mt-1"
                 value={fichaId}
-                onChange={(e) => setFichaId(e.target.value)}
-              >
-                <option value="">Não é para um figurino específico</option>
-                {fichaOptions.map((f) => (
-                  <option key={f.value} value={f.value}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
+                onChange={setFichaId}
+                ariaLabel="Buscar a ficha de figurino da compra"
+                placeholder="🔍 Buscar ficha… (ou deixe vazio)"
+              />
             </div>
           )}
 
           {eManutencao && (
             <>
               <div>
-                <label className="text-xs text-muted" htmlFor="prod-ficha">
-                  Qual figurino
-                </label>
-                <select
-                  id="prod-ficha"
-                  className={INPUT_CLASS}
+                <span className="text-xs text-muted">Qual figurino</span>
+                <FigurinoPicker
+                  className="mt-1"
                   value={fichaId}
-                  onChange={(e) => setFichaId(e.target.value)}
-                >
-                  <option value="">Escolha a ficha…</option>
-                  {fichaOptions.map((f) => (
-                    <option key={f.value} value={f.value}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setFichaId}
+                  ariaLabel="Buscar a ficha de figurino do conserto"
+                />
                 {erroCampo("figurino_sheet_id") && (
                   <p className="mt-1 text-xs text-red">{erroCampo("figurino_sheet_id")}</p>
                 )}
@@ -594,7 +567,7 @@ export function FigurinoProducaoListPage({ tipoFixo }: { tipoFixo?: ProducaoKind
   }
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
       <PageHeader
         title={eCompras ? "Pedidos de Compra" : "Produção de Figurinos"}
         subtitle={

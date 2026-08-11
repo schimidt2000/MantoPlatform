@@ -13,7 +13,7 @@ import {
   type CatalogCharacter,
 } from "../lib/adminCatalogo";
 import { useFigurinoSheets } from "../lib/figurino";
-import { FigurinoSheetPicker } from "./FigurinoSheetPicker";
+import { FigurinoPicker } from "./FigurinoPicker";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
@@ -378,7 +378,7 @@ export function AdminCatalogCharacterPanel({
                   <div className="mt-2 space-y-3 rounded-md bg-surface-2/50 p-3">
                     <div>
                       <label className={LABEL}>Ficha de figurino</label>
-                      <FigurinoSheetPicker
+                      <FigurinoPicker
                         value={character.figurino_sheet_id}
                         characterName={character.name}
                         disabled={updateCharacter.isPending}
@@ -410,7 +410,7 @@ export function AdminCatalogCharacterPanel({
             personagem. Ele entra no elenco deste tema com a foto e o nome que já tem, sem
             duplicar nada.
           </p>
-          <FigurinoSheetPicker
+          <FigurinoPicker
             value={null}
             ariaLabel="Buscar ficha para reaproveitar o personagem"
             disabled={reuseCharacter.isPending}
@@ -471,7 +471,7 @@ export function AdminCatalogCharacterPanel({
           </div>
           <div>
             <label className={LABEL}>Ficha de Figurino</label>
-            <FigurinoSheetPicker
+            <FigurinoPicker
               value={draft.figurinoSheetId}
               characterName={draft.name}
               onChange={(sheetId) => setDraft((d) => ({ ...d, figurinoSheetId: sheetId }))}

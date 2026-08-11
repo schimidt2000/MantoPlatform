@@ -5,7 +5,7 @@ import { API_BASE, assetUrl } from "@manto/api-client";
 import type { EventoDetalhe, RoleItem } from "../../lib/agenda";
 import { useLinkFigurinoSheet, useToggleFigurinoDone } from "../../lib/eventDetail";
 import { Empty, formatDay, Panel } from "./parts";
-import { FigurinoPicker } from "./FigurinoPicker";
+import { FigurinoPicker } from "../FigurinoPicker";
 
 /** Medidas do talento, na ordem em que a produção usa para separar o figurino. */
 function Medidas({ role }: { role: RoleItem }) {

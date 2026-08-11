@@ -581,7 +581,7 @@ export function FigurinoProducaoDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-3">
+      <div className="mx-auto max-w-[1400px] space-y-3 p-4 sm:p-6">
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-96 w-full" />
       </div>
@@ -589,7 +589,7 @@ export function FigurinoProducaoDetailPage() {
   }
   if (isError || !data) {
     return (
-      <Card className="px-4 py-6">
+      <Card className="mx-auto mt-4 max-w-[1400px] px-4 py-6 sm:mt-6">
         <p className="text-sm text-red">
           Não foi possível abrir o pedido: {(error as Error)?.message ?? "não encontrado"}
         </p>
@@ -606,7 +606,7 @@ export function FigurinoProducaoDetailPage() {
   const fotos = (p.anexos ?? []).filter((a) => a.kind === "foto");
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
       <PageHeader
         title={p.title}
         subtitle={

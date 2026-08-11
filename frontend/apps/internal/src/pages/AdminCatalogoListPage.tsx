@@ -12,7 +12,7 @@ import {
   type CatalogCharacterSummary,
   type CatalogListItem,
 } from "../lib/adminCatalogo";
-import { FigurinoSheetPicker } from "../components/FigurinoSheetPicker";
+import { FigurinoPicker } from "../components/FigurinoPicker";
 import { CatalogCardGrid } from "../components/CatalogCardGrid";
 import { CatalogTreeView } from "../components/CatalogTreeView";
 import { CatalogPersonagensView } from "../components/CatalogPersonagensView";
@@ -280,7 +280,7 @@ export function AdminCatalogoListPage() {
         title={`Vincular "${linkingCharacter?.name ?? ""}" a uma Ficha de Figurino`}
       >
         <div className="space-y-3">
-          <FigurinoSheetPicker
+          <FigurinoPicker
             value={linkTargetSheetId}
             characterName={linkingCharacter?.name}
             onChange={setLinkTargetSheetId}

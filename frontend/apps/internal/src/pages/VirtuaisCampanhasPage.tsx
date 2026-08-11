@@ -81,7 +81,7 @@ export function VirtuaisCampanhasPage() {
   const campaigns = data?.campaigns ?? [];
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Interações Virtuais"
         subtitle="Campanhas de venda de chamadas ao vivo e vídeos gravados com personagens do catálogo."
