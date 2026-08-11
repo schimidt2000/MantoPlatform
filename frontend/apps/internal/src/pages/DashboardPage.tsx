@@ -13,6 +13,7 @@ import type {
   EnsaioSummary,
   MinhaPecaRef,
   PendingPayment,
+  UnconfirmedInviteRef,
 } from "../lib/types";
 import { SectorPanel, getUrgency } from "../components/SectorPanel";
 
@@ -50,6 +51,67 @@ function TaskRow({ task }: { task: DashboardTaskRef }) {
       <Button asChild variant="outline" size="sm" className="shrink-0">
         <Link to={`/events/${task.event_id}`}>Abrir</Link>
       </Button>
+    </div>
+  );
+}
+
+/**
+ * Linha de "quem ainda não confirmou" (feature 231).
+ *
+ * Mostra a ação certa para cada caso, que é o que a lista existe para responder: convite enviado
+ * e sem resposta vira cobrança no WhatsApp; convite nunca enviado é o casting que precisa mandar,
+ * e aí o caminho é abrir o evento. Também diz quantos lembretes automáticos já saíram, para
+ * ninguém cobrar de novo quem o robô acabou de cobrar.
+ */
+function UnconfirmedRow({ item }: { item: UnconfirmedInviteRef }) {
+  const urgency = getUrgency(item.start_at);
+  const nuncaEnviado = item.invite_status !== "pending";
+  const zap = item.whatsapp
+    ? `https://wa.me/${item.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(
+        `Oi, ${item.talent_name}! Falta você confirmar no portal a sua presença em "${item.event_title}". Consegue responder por lá?`,
+      )}`
+    : null;
+
+  return (
+    <div
+      className="-mx-4 flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5 text-sm last:border-b-0"
+      style={urgency ? { background: urgency.rowBackground } : undefined}
+    >
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2 font-medium text-ink">
+          {item.talent_name}
+          {urgency && (
+            <MetricBadge tone={urgency.tone} size="xs">
+              {urgency.label}
+            </MetricBadge>
+          )}
+          <MetricBadge tone={nuncaEnviado ? "red" : "neutral"} size="xs">
+            {nuncaEnviado ? "convite não enviado" : "sem resposta"}
+          </MetricBadge>
+          {item.reminder_count > 0 && (
+            <span className="text-[11px] text-muted">
+              {item.reminder_count} lembrete{item.reminder_count > 1 ? "s" : ""} enviado
+              {item.reminder_count > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+        <Link to={`/events/${item.event_id}`} className="text-muted hover:underline">
+          {item.character_name} · {item.event_title}
+          {item.start_at && ` — ${new Date(item.start_at).toLocaleDateString("pt-BR")}`}
+        </Link>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {zap && !nuncaEnviado && (
+          <Button asChild variant="outline" size="sm">
+            <a href={zap} target="_blank" rel="noopener">
+              Cobrar no WhatsApp
+            </a>
+          </Button>
+        )}
+        <Button asChild variant={nuncaEnviado ? "default" : "outline"} size="sm">
+          <Link to={`/events/${item.event_id}`}>{nuncaEnviado ? "Enviar convite" : "Abrir"}</Link>
+        </Button>
+      </div>
     </div>
   );
 }
@@ -310,6 +372,31 @@ export function DashboardPage() {
                 dashboard.data.casting.pending.map((t) => (
                   <TaskRow key={t.role_id ?? `${t.event_id}-${t.character_name}`} task={t} />
                 ))
+              )}
+            </SectorPanel>
+          )}
+
+          {dashboard.data.casting && (
+            <SectorPanel
+              title="🙋 Confirmações pendentes"
+              count={dashboard.data.casting.unconfirmed.length}
+            >
+              {dashboard.data.casting.unconfirmed.length === 0 ? (
+                <p className="py-2 text-sm text-muted">Todo mundo confirmado. ✓</p>
+              ) : (
+                <>
+                  {/* O robô só cobra quem JÁ recebeu convite, e só na semana do evento — quem
+                      está com "convite não enviado" depende de alguém aqui. Dizer isso na tela
+                      evita a suposição de que o automático resolve tudo. */}
+                  <p className="py-2 text-xs text-muted">
+                    A cobrança automática por e-mail alcança só quem já recebeu o convite, na
+                    semana do evento, no máximo 2 vezes. Quem está como{" "}
+                    <strong className="text-ink">convite não enviado</strong> depende de você.
+                  </p>
+                  {dashboard.data.casting.unconfirmed.map((item) => (
+                    <UnconfirmedRow key={item.role_id ?? `${item.event_id}-${item.talent_id}`} item={item} />
+                  ))}
+                </>
               )}
             </SectorPanel>
           )}

@@ -398,6 +398,57 @@ def _start_email_bounce_sweep(app):
     app.logger.info(f"[email-bounce] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _start_invite_reminders(app):
+    """Thread que cobra confirmação de convite por e-mail (feature 231).
+
+    O laço acorda de hora em hora, mas quem decide se **hoje** já teve rodada é
+    `invite_reminders.rodar_lembretes()`: ele tem a trava atômica em `site_settings` (os 3 workers
+    do gunicorn acordam juntos) e a trava de horário (9h–20h de Brasília). Acordar de hora em hora
+    e deixar a decisão lá dentro é o que faz a rodada acontecer mesmo que o container reinicie no
+    meio do dia — um laço de 24h dormiria e perderia o dia inteiro.
+
+    Desligável por `INVITE_REMINDERS_ENABLED=false` sem deploy de código.
+    """
+    import os as _os
+    import threading
+
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    if not app.config.get("INVITE_REMINDERS_ENABLED", True):
+        app.logger.info("[invite-reminders] cobrança automática desativada por configuração")
+        return
+
+    INTERVAL = app.config.get("INVITE_REMINDERS_INTERVAL", 3600)
+
+    def _loop():
+        import time
+        time.sleep(60)  # por último: nada aqui é urgente no primeiro minuto do processo
+        from app.calendar import invite_reminders
+        while True:
+            try:
+                with app.app_context():
+                    resultado = invite_reminders.rodar_lembretes()
+                    if resultado["enviados"]:
+                        app.logger.info(
+                            "[invite-reminders] %s e-mail(s) para %s cargo(s) sem confirmação",
+                            resultado["enviados"], resultado["cargos"],
+                        )
+                    if resultado["pulados"].get("falha_no_envio"):
+                        app.logger.warning(
+                            "[invite-reminders] %s envio(s) falharam",
+                            resultado["pulados"]["falha_no_envio"],
+                        )
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[invite-reminders] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_loop, daemon=True, name="invite-reminders")
+    t.start()
+    app.logger.info(f"[invite-reminders] thread iniciada (intervalo: {INTERVAL}s)")
+
+
 def create_app():
     from urllib.parse import quote as _url_quote
     app = Flask(__name__)
@@ -662,6 +713,9 @@ def create_app():
 
     # ── Devoluções de email viram fila de contato do casting ───────
     _start_email_bounce_sweep(app)
+
+    # ── Cobrança de confirmação de convite ─────────────────────────
+    _start_invite_reminders(app)
 
     # ── Comandos CLI de manutenção ─────────────────────────────────
     from app.cli import register_commands

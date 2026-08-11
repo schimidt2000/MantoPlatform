@@ -24,9 +24,28 @@ export interface DashboardTaskRef {
   start_at: string | null;
 }
 
+/**
+ * Escalação futura em que a pessoa ainda não confirmou (feature 231).
+ *
+ * `invite_status`: `"pending"` = convite enviado e sem resposta (cobrar a pessoa) · `null` =
+ * convite **nunca enviado** (quem tem que agir é o casting). São ações diferentes, por isso o
+ * painel separa as duas.
+ */
+export interface UnconfirmedInviteRef extends DashboardTaskRef {
+  talent_id: number | null;
+  talent_name: string;
+  invite_status: string | null;
+  /** Já com DDI — vira link de WhatsApp direto na linha. */
+  whatsapp: string | null;
+  /** Quantos lembretes automáticos já saíram para este convite (teto de 2). */
+  reminder_count: number;
+  reminder_at: string | null;
+}
+
 export interface CastingSummary {
   pending: DashboardTaskRef[];
   rejected_invites: DashboardTaskRef[];
+  unconfirmed: UnconfirmedInviteRef[];
   total: number;
   done: number;
 }
