@@ -75,6 +75,7 @@ def list_sheets() -> dict:
             {
                 "id": s.id,
                 "character_name": s.character_name,
+                "quantity": s.quantity,
                 "pieces": s.pieces_list,
                 "tags": s.tags_list,
                 "notes": s.notes,
@@ -103,6 +104,18 @@ def _clean_pieces(pieces: list[dict] | None) -> list[dict]:
     return result
 
 
+def _clean_quantity(quantity) -> int:
+    """Normaliza a quantidade de figurinos iguais de uma ficha (feature 235).
+
+    Aceita 0 (ficha de figurino que ainda não foi produzido) e recusa negativo; lixo vira 1,
+    que é a leitura de todo o acervo cadastrado antes desta coluna existir.
+    """
+    try:
+        return max(0, int(quantity))
+    except (ValueError, TypeError):
+        return 1
+
+
 def _clean_tags(tags: list[str] | None) -> list[str]:
     """Normaliza tags: `strip()`, descarta vazias, dedup case-insensitive preservando a primeira
     grafia usada (feature 183)."""
@@ -126,6 +139,7 @@ def create_sheet(
     pieces: list[dict] | None,
     notes: str | None,
     tags: list[str] | None = None,
+    quantity: int | None = None,
 ) -> FigurinoSheet | None:
     """Cria uma ficha de figurino sem foto (upload fora desta fatia). Paridade com
     `new_sheet` — recusa (devolve None) se `character_name` vier vazio."""
@@ -144,6 +158,7 @@ def create_sheet(
         pieces=json.dumps(clean_pieces, ensure_ascii=False) if clean_pieces else None,
         tags=json.dumps(clean_tags, ensure_ascii=False) if clean_tags else None,
         notes=(notes or "").strip() or None,
+        quantity=1 if quantity is None else _clean_quantity(quantity),
     )
     db.session.add(sheet)
     return sheet
@@ -156,9 +171,14 @@ def edit_sheet(
     pieces: list[dict] | None,
     notes: str | None,
     tags: list[str] | None = None,
+    quantity: int | None = None,
 ) -> bool:
-    """Edita nome/peças/notas/tags de uma ficha existente (sem tocar na foto). Paridade com
-    `edit_sheet` — recusa (devolve False) se `character_name` vier vazio."""
+    """Edita nome/peças/notas/tags/quantidade de uma ficha (sem tocar na foto). Paridade com
+    `edit_sheet` — recusa (devolve False) se `character_name` vier vazio.
+
+    `quantity=None` significa "não alterar": o formulário Jinja legado não tem esse campo e não
+    pode zerar a quantidade só por não conhecê-la.
+    """
     from datetime import datetime
 
     from .drive_service import normalize_name
@@ -174,6 +194,8 @@ def edit_sheet(
     sheet.pieces = json.dumps(clean_pieces, ensure_ascii=False) if clean_pieces else None
     sheet.tags = json.dumps(clean_tags, ensure_ascii=False) if clean_tags else None
     sheet.notes = (notes or "").strip() or None
+    if quantity is not None:
+        sheet.quantity = _clean_quantity(quantity)
     sheet.updated_at = datetime.utcnow()
     return True
 

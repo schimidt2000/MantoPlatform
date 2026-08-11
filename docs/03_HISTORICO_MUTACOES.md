@@ -4,9 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-11** · Estado do repositório: pós-feature **233 (figurino do
-> cargo sem convite + convite automático ao escalar)** · Head de migration: **`e3f7c25a8b90`**
-> (*lembrete de confirmação*)
+> Última atualização: **2026-08-11** · Estado do repositório: pós-feature **225c (Pedido de
+> Compra + Revisão movida para Marketing — sem migration)**, antes dela 235 (personagem em
+> vários temas + quantidade de figurinos) · Head de migration: **`f4a8d61c9e27`**
+> (*quantidade de figurinos por ficha*)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -38,42 +39,45 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **233** | Coordenadora sem ver figurino (a 230 deixou o link levando a 403) e convite automático de quem é escalado na criação/edição do evento | 2026-08-11 | `—` | (aqui) | 153 |
-| **232** | Avaliação do portal: detalhar por partes volta a ser o caminho padrão (era cartão opcional abaixo da dobra) e `texto` recupera o sentido de "Show no geral" | 2026-08-10 | `—` | (aqui) | 216 |
-| **231** | Confirmações pendentes: painel na home do casting (com cobrança no WhatsApp) e lembrete automático por e-mail com teto de 2 por convite e 1 por pessoa/dia | 2026-08-10 | `e3f7c25a8b90` | (aqui) | 272 |
-| **230** | Portal segue a escala e não o convite: escalação não recusada passa a aparecer (26 futuros e 97 passados invisíveis, R$ 36.910), totais batendo com a planilha | 2026-08-10 | `—` | (aqui) | 350 |
-| **229** | Portal: link de avaliar também no histórico da Agenda (`RatingLink`); diagnóstico do "acesso travado" | 2026-08-09 | `—` | (aqui) | 406 |
-| **228** | `ConfirmDialog` promovido para o `@manto/ui`; exclusão em lote de pagamentos confirma em diálogo, com a soma e o que a busca escondeu | 2026-08-09 | `—` | (aqui) | 459 |
-| **227** | Foto do portal saía por rota de staff (255 talentos com ícone quebrado); coordenador passa a ver o figurino do elenco inteiro | 2026-08-09 | `—` | (aqui) | 495 |
-| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 565 |
-| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 637 |
-| **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 681 |
-| **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 746 |
-| **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 763 |
-| **224d** | `alo.mantoproducoes.com.br` como endereço curto da Loja de Interações Virtuais | 2026-08-07 | `—` | (aqui) | 789 |
-| **224c** | Estorno de comissão aparecia e descontava em todos os meses; agora só no mês corrente | 2026-08-07 | `—` | (aqui) | 815 |
-| **224b** | Loja de Interações Virtuais destravada: upload de capa na gestão, capa servida em rota pública, editor de FAQ | 2026-08-07 | `—` | (aqui) | 850 |
-| **224** | Evento com dinheiro vira cancelado (não apagado), com devolução ao cliente; exclusão só para Superadmin | 2026-08-07 | `b8e4d27a91f5` | (aqui) | 895 |
-| **223** | Calculadora EducaManto: transporte dobrado no recalcular, Econômico sem adicional por pessoa, NF sem transporte, comissão configurável | 2026-08-07 | `a3f7c19d5e02` | (aqui) | 955 |
-| **222** | Exportar elenco perdeu quatro campos (nascimento/CPF/RG/documento) na migração para o React | 2026-08-07 | `—` | (aqui) | 1008 |
-| **221** | Agente auditor financeiro semanal (endpoints + fix de sobrescrita de upload) | 2026-08-06 | `—` | (aqui) | 1035 |
-| **220b** | Hotfix: menu "Ferramentas" do evento embaçado no meio | 2026-08-06 | `—` | (aqui) | 1063 |
-| **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 1086 |
-| **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 1147 |
-| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 1222 |
-| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 1297 |
-| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 1366 |
-| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 1424 |
-| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 1501 |
-| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 1536 |
-| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 1568 |
-| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 1601 |
-| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 1636 |
-| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 1668 |
-| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 1697 |
-| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 1732 |
-| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 1805 |
-| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 1854 |
+| **225c** | Pedido de Compra (3º `kind` de `figurino_producoes`, fluxo `comprado → recebido`, sem migration) + "Revisão" movida de Produção para Marketing no menu | 2026-08-11 | `—` | (aqui) | 157 |
+| **235** | O mesmo personagem em vários temas (identidade = ficha de figurino), aba Personagens com termômetro de progresso, e quantos figurinos iguais existem por ficha | 2026-08-11 | `f4a8d61c9e27` | (aqui) | 228 |
+| **234** | Fotos do catálogo: reordenar e salvar não gravava posição nenhuma; grade refeita (capa = 1ª foto, arraste por ponteiro, `photo_order` com tokens `new:<i>`) | 2026-08-11 | `—` | (aqui) | 288 |
+| **233** | Coordenadora sem ver figurino (a 230 deixou o link levando a 403) e convite automático de quem é escalado na criação/edição do evento | 2026-08-11 | `—` | (aqui) | 347 |
+| **232** | Avaliação do portal: detalhar por partes volta a ser o caminho padrão (era cartão opcional abaixo da dobra) e `texto` recupera o sentido de "Show no geral" | 2026-08-10 | `—` | (aqui) | 410 |
+| **231** | Confirmações pendentes: painel na home do casting (com cobrança no WhatsApp) e lembrete automático por e-mail com teto de 2 por convite e 1 por pessoa/dia | 2026-08-10 | `e3f7c25a8b90` | (aqui) | 466 |
+| **230** | Portal segue a escala e não o convite: escalação não recusada passa a aparecer (26 futuros e 97 passados invisíveis, R$ 36.910), totais batendo com a planilha | 2026-08-10 | `—` | (aqui) | 544 |
+| **229** | Portal: link de avaliar também no histórico da Agenda (`RatingLink`); diagnóstico do "acesso travado" | 2026-08-09 | `—` | (aqui) | 600 |
+| **228** | `ConfirmDialog` promovido para o `@manto/ui`; exclusão em lote de pagamentos confirma em diálogo, com a soma e o que a busca escondeu | 2026-08-09 | `—` | (aqui) | 653 |
+| **227** | Foto do portal saía por rota de staff (255 talentos com ícone quebrado); coordenador passa a ver o figurino do elenco inteiro | 2026-08-09 | `—` | (aqui) | 689 |
+| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 759 |
+| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 831 |
+| **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 875 |
+| **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 940 |
+| **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 957 |
+| **224d** | `alo.mantoproducoes.com.br` como endereço curto da Loja de Interações Virtuais | 2026-08-07 | `—` | (aqui) | 983 |
+| **224c** | Estorno de comissão aparecia e descontava em todos os meses; agora só no mês corrente | 2026-08-07 | `—` | (aqui) | 1009 |
+| **224b** | Loja de Interações Virtuais destravada: upload de capa na gestão, capa servida em rota pública, editor de FAQ | 2026-08-07 | `—` | (aqui) | 1044 |
+| **224** | Evento com dinheiro vira cancelado (não apagado), com devolução ao cliente; exclusão só para Superadmin | 2026-08-07 | `b8e4d27a91f5` | (aqui) | 1089 |
+| **223** | Calculadora EducaManto: transporte dobrado no recalcular, Econômico sem adicional por pessoa, NF sem transporte, comissão configurável | 2026-08-07 | `a3f7c19d5e02` | (aqui) | 1149 |
+| **222** | Exportar elenco perdeu quatro campos (nascimento/CPF/RG/documento) na migração para o React | 2026-08-07 | `—` | (aqui) | 1202 |
+| **221** | Agente auditor financeiro semanal (endpoints + fix de sobrescrita de upload) | 2026-08-06 | `—` | (aqui) | 1229 |
+| **220b** | Hotfix: menu "Ferramentas" do evento embaçado no meio | 2026-08-06 | `—` | (aqui) | 1257 |
+| **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 1280 |
+| **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 1341 |
+| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 1416 |
+| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 1491 |
+| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 1560 |
+| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 1618 |
+| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 1695 |
+| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 1730 |
+| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 1762 |
+| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 1795 |
+| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 1830 |
+| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 1862 |
+| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 1891 |
+| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 1926 |
+| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 1999 |
+| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 2048 |
 | **206b** | Hotfix: superfícies públicas por link voltaram a abrir sem login | 2026-08-05 | `—` | H2 | 11 |
 | **207** | Pacote de melhorias operacionais (5 frentes) | 2026-08-04 | `d9f2b3a41c07` | H2 | 36 |
 | **206** | React como interface primária e proxy reverso em produção | 2026-08-04 | `—` | H2 | 101 |
@@ -149,6 +153,196 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 225c — Pedido de Compra, e a Revisão movida para Marketing            (main · 2026-08-11 · sem migration)
+
+**Motivação.** Três pedidos numa mensagem só: *"essa revisão deve estar em marketing"*; *"a
+produção de figurinos deve ser acessível para o comercial, figurino e casting"*; e *"novo pedido
+de compra — onde a pessoa pede o que precisa ser comprado, coloca o prazo, coloca pra qual
+figurino (ficha) e qual evento está associado (opcionais), e coloca quem é o responsável"*.
+
+**O segundo pedido não virou código.** Conferido antes de mexer: o item "Produção de Figurinos"
+já era `isVisible: notRevendedor` (todo papel interno) e `producao_ops.pode_abrir` já liberava a
+leitura e a abertura de pedido para qualquer papel interno. Comercial, Figurino e Casting já
+tinham acesso — restringir a exatamente esses três tiraria Financeiro, Ensaio, Marketing e
+Artista 3D, que hoje veem. Perguntado, o cliente decidiu **deixar como está**.
+
+**A decisão do Pedido de Compra: terceiro `kind`, não tabela nova.** A alternativa (módulo
+"Compras" próprio) foi oferecida e recusada. O objeto é literalmente o mesmo da 225 — uma coisa a
+fazer, com prazo, responsável, histórico, anexos, vínculo opcional a evento e a ficha, e vínculo
+com Gasto Extra. Reusar deu **zero migration** (`kind` e `status` são `String(20)` sem CHECK) e
+trouxe de graça o convite no Google Agenda, o painel pessoal da home, os orçamentos comparados e
+a soma de gasto aprovado. O preço, explícito: o pedido nasce dentro do módulo de figurino, e é
+por isso que ele ganhou **rota própria** (`/compras`) em vez de viver só como uma aba —
+comprar tinta de cenário não é assunto da oficina, e obrigar a passar pela fila dela para achar
+onde pedir esconderia a porta de entrada.
+
+**O fluxo.** `solicitado → aprovado → comprado → recebido`, com `cancelado` como saída. Entrou
+como mais uma lista em `FIGURINO_PROD_FLUXOS`; as transições continuam **derivadas** dela por
+`_transicoes_do_fluxo`, sem segunda tabela. Duas escolhas que valem registro:
+- **`comprado` é estado ABERTO.** O dinheiro saiu, a coisa não chegou — e é exatamente esse
+  intervalo ("comprei, prometeram para sexta") que hoje se perde. Fechar ali apagaria o que
+  ainda falta acompanhar.
+- **O estado final feliz virou `_fluxo_de(p)[-1]`.** Antes `mudar_status` listava
+  `FIGURINO_PROD_PRONTO` na mão para carimbar `done_at`; com três fluxos isso seria a próxima
+  coisa a esquecer. Derivar do fluxo faz o carimbo seguir sozinho quando um quarto tipo nascer.
+
+**A regra de permissão que a feature obrigou a criar.** `pode_executar` (FIGURINO/SUPERADMIN) não
+serve para compra: quem pede a pedraria e vai buscá-la costuma ser do comercial. Com a regra
+antiga, um pedido entregue ao Comercial travaria em "aprovado" para sempre e a feature não
+serviria para nada. Nasceu `pode_executar_pedido(user, producao)`, que soma **o responsável pela
+própria compra** — e **só em compra**: o teste `verify_pedido_compra.py` §3 existe para provar
+que a exceção não vaza para produção (um responsável de produção fora da oficina continua
+recebendo 403). Consequência de contrato: `flags.can_execute` do endpoint de detalhe passou a ser
+avaliado **para aquele pedido**, não para o usuário em abstrato.
+
+**Aprovar continua sendo só de SUPERADMIN**, inclusive aqui — é o único ponto em que alguém olha
+o dinheiro antes de sair, e foi a decisão do cliente ao escolher "com aprovação".
+
+**Onde o ruído foi cortado.** Compra sem responsável avisa **só o Superadmin**
+(`equipe_figurino(kind)`) e entra na caixa de entrada do setor apenas para quem aprova
+(`resumo_setor`). Mandar "tinta de cenário" para a costureira transformaria o aviso em ruído, e
+aviso ignorado deixa de ser lido — mesma lógica que a 225b já aplicava à gravidade. Pelo mesmo
+motivo os e-mails ficaram cientes do tipo: um pedido de compra que chega dizendo *"você ficou
+responsável por produzir"* manda a pessoa fazer a coisa errada.
+
+**A Revisão em Marketing — e o efeito colateral que se aceitou.** O item saiu da seção "Produção"
+e foi para "Marketing", entre "Metas de Frequência" e as Interações Virtuais. Ele mantém
+`isVisible: notRevendedor`, e **isso muda quem vê a seção**: como os outros cinco itens de
+Marketing são gateados por papel, "Marketing" só existia no menu para
+`MARKETING`/`COMERCIAL`/`CASTING`/`SA`; agora aparece para todo papel interno, com "Revisão"
+dentro. A alternativa — gatear a Revisão por papel — foi descartada porque quebraria o produto:
+`review_ops.can_view` libera qualquer pessoa que esteja em `space.reviewer_ids`, e
+`GET /api/revisao/reviewer-options` oferece **qualquer usuário ativo** como revisor. Um convidado
+do financeiro perderia a única porta de entrada (a rota `/revisao` não tem guard próprio).
+
+**Verificação.** `scripts/db/verify_pedido_compra.py` contra `manto_local` — **64/64**: o ciclo
+inteiro com histórico a cada passo, `comprado` contando como aberto, o retorno de `recebido` para
+`comprado` limpando `done_at`, RBAC dos três recortes (Revendedor não abre; Figurino não aprova;
+nem o responsável aprova a própria compra), a exceção do responsável não vazando para produção,
+`?tipo=compra` na lista de responsáveis, os painéis da home e a trava do Google. Regressão da 225
+rodada junto: `verify_producao_figurinos.py` **70/70**. Na tela, o fluxo de ponta a ponta com o
+banco real: criar pelo formulário → Aprovado → Comprado → Recebido, com o breadcrumb voltando
+para `/compras` e os botões vindo de `transicoes`.
+
+### 235 — O mesmo personagem em vários temas, e quantos figurinos existem dele            (main · 2026-08-11 · `f4a8d61c9e27`)
+
+**Motivação.** Relato: *"foi criado no [tema] normal os personagens Gatuno e Pandy; porém, ao
+tentar adicionar os mesmos personagens no Gabby humanizada, não aparece como uma opção"* — e o
+pedido de uma terceira visão listando os personagens já criados, mostrando se têm ficha e em
+quantos temas são usados, "pra dar uma noção de progressão". Mais: poder marcar na ficha **quantos
+figurinos iguais** existem.
+
+**Por que não aparecia.** `CatalogCharacter` é linha-filha de UM tema (`catalog_item_id NOT NULL`).
+O único reuso que existia — "adotar item existente" (209, caso Coelho→Alice) — exige que o
+personagem seja um **produto com página própria**; Gatuno não é item, é linha de elenco, então a
+busca não tinha o que oferecer. Não era bug: a capacidade nunca existiu.
+
+**A decisão de modelo: a identidade de um personagem é a FICHA DE FIGURINO.** Duas linhas de
+`CatalogCharacter` apontando para a mesma ficha são o mesmo personagem em dois temas. Foi escolha
+consciente contra criar uma entidade "Personagem" nova: a ficha já é a âncora do resto do ERP
+(elenco do evento, alerta de "sem ficha", manutenção, produção), e um terceiro cadastro seria uma
+segunda verdade sobre quem é o personagem — com nome e foto para manter em sincronia. O preço é
+explícito e está na tela: **personagem sem ficha não pode ser reaproveitado**, porque não há o que
+afirme que dois personagens de temas diferentes são o mesmo. Isso vira a pendência que o termômetro
+mostra (10 dos 38 hoje).
+
+Cada aparição continua sendo uma linha própria — nome, foto, vídeo e ordem podem diferir de tema
+para tema, e mexer numa não mexe na outra. Nenhuma coluna nova foi precisa para isso: o `slug` já
+é prefixado pelo tema (`unique_character_slug`), e nada impedia duas linhas com a mesma ficha.
+
+**O que o banco disse antes de eu escrever qualquer coisa.** 39 personagens em 458 temas, 29 com
+ficha, **0** com página própria, **0** reuso — o cadastro está no começo, então dava para escolher
+o modelo certo sem backfill. E **616 fichas cadastradas contra 28 ligadas ao catálogo**: é isso que
+define o desenho da aba nova. Ela **não** lista uma linha por ficha (isso é o Banco de Figurinos,
+que já existe em `/figurinos`); lista os personagens **do catálogo**, e mostra as 588 fichas de
+fora como número de progresso. Quem alcança o acervo inteiro é a busca de reaproveitar.
+
+**Tema ≠ aparição.** Descoberto nos dados durante a verificação: a ficha 488 (Astronauta) é usada
+por "Astronauta 1" e "Astronauta 2" **no mesmo tema** — dois performers do mesmo figurino no mesmo
+show. A primeira versão do agrupamento contava isso como "em 2 temas". A estrutura passou a ser
+`temas: [{tema_id, aparicoes: [...]}]`, o chip do tema mostra `×2`, e daí saiu o alerta que só
+existe porque as duas informações ficaram na mesma linha: *"um tema pede 2 ao mesmo tempo, temos
+1"*.
+
+**Quantidade na ficha** (`figurino_sheets.quantity`, padrão 1). Não confundir com o `qty` de dentro
+de `pieces` — aquele é "2 luvas" DENTRO de um figurino; este é "temos 3 Gatunos". Zero é válido e
+significa ficha cadastrada de figurino ainda não produzido (o pedido vive em `figurino_producoes`).
+`edit_sheet(quantity=None)` é "não alterar", e não "zerar": o formulário Jinja legado não conhece a
+coluna e não pode apagá-la só por não mandá-la.
+
+**Onde ficou.** Terceiro botão 🎭 Personagens ao lado de Cards e Árvore (as duas olham pelo produto
+e pela hierarquia; esta olha pelo personagem). No modo Personagens a busca é client-side de
+propósito — a lista de temas precisa vir inteira, porque é dela que sai o "usar em outro tema".
+Dentro do tema, "Reaproveitar personagem que já existe" vem ANTES de "Novo personagem", reusando o
+`FigurinoSheetPicker` (busca visual nas 616 fichas).
+
+**Verificação.** `scripts/db/verify_235_personagens_reuso.py` contra `manto_local`: quantidade no
+POST/PATCH/listagem (incluindo PATCH sem o campo preservando o valor, e zero aceito), reuso criando
+a segunda aparição com a mesma ficha e slug diferente, recusa com mensagem útil ao repetir no mesmo
+tema, a aba agrupando as duas aparições numa linha só, o caso Astronauta e o personagem sem ficha
+como pendência. Na tela, roteiro Playwright sobre harness temporário com os dados REAIS do banco:
+38 linhas, termômetro, filtros, e o fluxo do pedido de ponta a ponta — buscar "gatuno" → "Usar em
+outro tema" → "A Casa Mágica da Gabby (Humanizada)" → `POST {"figurino_sheet_id": 509}`.
+
+### 234 — Trocar fotos de lugar no catálogo: a ordem que nunca era salva, e a grade refeita            (main · 2026-08-11 · sem migration)
+
+**Motivação.** Relato do usuário: *"o esquema para trocar as fotos de lugar está ruim, preciso de
+um design melhor disso — além de que ao trocar e salvar, não está mudando."* As duas queixas eram
+o mesmo assunto por dois lados: a interação era ruim **e** o resultado dela era descartado.
+
+**A causa do "salvei e não mudou".** `catalog_ops.apply_photos` só gravava `position` **dentro do
+`if cover is not None`**. A capa vinha de `cover_photo_id`/`new_photo_cover_index`, e o formulário
+React nunca mandava nenhum dos dois: `coverPhotoId` nascia `undefined` e não era hidratado do item.
+Então numa edição que **apenas reordenava**, `cover` ficava `None`, a lista `remaining` era
+reordenada só em memória e o commit não escrevia posição nenhuma — 200 na API, nada no banco. O
+formulário Jinja legado escapava por acidente: o radio de capa tem `{% if loop.first %}checked`, ou
+seja, sempre manda `cover_photo_id`. Foi por isso que `verify_142` passava: ele manda a capa
+explicitamente. **Regra nova: a posição é sempre regravada no fim, com ou sem capa explícita.**
+
+**A capa deixou de ser um campo.** O banco já dizia que capa é `images[0]` (`CatalogItem.cover_image`),
+mas a tela pedia as duas coisas em separado — dava para arrastar uma foto para a frente e a capa
+continuar sendo outra. Agora **a primeira foto é a capa**, e "★ Tornar capa" é só um atalho de
+"mover para a 1ª posição". O React não manda mais `cover_photo_id` nem `new_photo_cover_index`; o
+backend continua aceitando os dois (o Jinja legado depende deles).
+
+**`photo_order` virou lista de tokens.** Cada item é o id de uma foto salva **ou** `new:<i>`,
+apontando para o i-ésimo arquivo de `new_photos` — é o que permite uma foto recém-escolhida cair no
+**meio** das antigas (antes toda foto nova ia para o fim, obrigatoriamente). Quando a ordem cobre
+todas as fotos ela é soberana; quando é parcial (o Jinja, que só lista as existentes) a regra antiga
+da 141 continua valendo, inclusive a de promover a primeira foto nova a capa.
+
+**A grade (`CatalogPhotoManager`).** Fotos salvas e novas numa **grade só**, com selo de ordem,
+"CAPA" na primeira e "nova" nas não salvas. O arraste saiu do **HTML5 drag-and-drop** (que não
+funciona no toque, não anima e não mostra onde a foto vai cair) para o **arraste por ponteiro do
+Framer Motion** — o mesmo padrão do quadro de Marketing, com `viewportPoint`/`attributeAtPoint`
+agora extraídos para `lib/pointerDrag.ts`. As vizinhas se reorganizam **ao vivo** por baixo do dedo.
+Também entraram: botões ‹ › ★ ✕ por foto (teclado/toque), remoção pendente com desfazer, soltar
+arquivos do desktop na grade e o selo "alterações não salvas".
+
+**Duas armadilhas do arraste, ambas custaram uma rodada de verificação.**
+
+1. **O card arrastado tapava o próprio alvo.** `elementsFromPoint` devolve a pilha inteira, e o card
+   em arraste está por cima com `z-index` do `whileDrag` — como ele também é uma zona de soltura,
+   o hit-test respondia sempre "ele mesmo" e nada nunca se movia. Correção: `pointer-events: none`
+   no card enquanto ele é arrastado (o gesto sobrevive porque o Framer escuta a `window`).
+2. **`onDrag` dispara a cada quadro, não a cada movimento.** Medir as vizinhas ao vivo lia caixas no
+   meio da animação de troca, e a foto oscilava entre duas posições — soltava um lugar antes do
+   pretendido. Correção: as células da grade são medidas **uma vez**, no `onDragStart`, em
+   coordenadas de página (a grade tem sempre o mesmo número de espaços; o que muda é quem ocupa
+   cada um).
+
+**Adoção de foto por personagem** (arrastar da galeria até o personagem) continua existindo, mas a
+mutação subiu para `AdminCatalogoFormPage`: quem detecta o alvo agora é o card arrastado, e o painel
+só recebe `photoDropTargetId`/`adoptingCharacterId`/`photoDropError` para desenhar realce, spinner e
+erro.
+
+**Verificação.** `scripts/db/verify_catalogo_fotos_ordem.py` contra `manto_local`: criação com
+tokens, **PATCH que só reordena e sem campo de capa** (o bug), foto nova intercalada por `new:0`,
+remover+reordenar no mesmo salvamento e o caminho Jinja legado com capa explícita. Na tela, roteiro
+Playwright sobre um harness temporário (cache do TanStack pré-carregado, sem login): reordenação ao
+vivo, ordem após soltar, ‹ ›, ★, remover/desfazer, realce do personagem, mobile sem rolagem
+horizontal e o corpo do multipart enviado ao salvar.
 
 ### 233 — Coordenadora sem ver o figurino, e o convite que nunca era enviado            (main · 2026-08-11 · sem migration)
 

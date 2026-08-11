@@ -25,6 +25,7 @@ import {
 import { assetUrl } from "@manto/api-client";
 import { formatBRL } from "@manto/money";
 import {
+  PRODUCAO_KIND_TONES,
   PRODUCAO_STATUS_LABELS,
   PRODUCAO_STATUS_TONES,
   prazoInfo,
@@ -167,7 +168,9 @@ function ResponsavelPicker({
   producao: Producao;
   onAviso: (t: string | undefined) => void;
 }) {
-  const responsaveis = useResponsaveis();
+  // A lista depende do tipo: comprar não é trabalho de oficina, e numa compra o responsável
+  // pode ser qualquer pessoa da equipe interna.
+  const responsaveis = useResponsaveis(producao.kind);
   const update = useUpdateProducao(producao.id);
   return (
     <div>
@@ -616,7 +619,10 @@ export function FigurinoProducaoDetailPage() {
           )
         }
         breadcrumbs={[
-          { label: "Produção de Figurinos", href: "/figurinos/producao" },
+          // A volta é para a lista de onde o pedido veio: uma compra não mora na fila da oficina.
+          p.kind === "compra"
+            ? { label: "Pedidos de Compra", href: "/compras" }
+            : { label: "Produção de Figurinos", href: "/figurinos/producao" },
           { label: p.title },
         ]}
         renderCrumb={(crumb, className) =>
@@ -630,7 +636,7 @@ export function FigurinoProducaoDetailPage() {
         }
         actions={
           <div className="flex items-center gap-2">
-            <Badge tone={p.kind === "manutencao" ? "accent" : "neutral"}>{p.kind_label}</Badge>
+            <Badge tone={PRODUCAO_KIND_TONES[p.kind]}>{p.kind_label}</Badge>
             <Badge tone={PRODUCAO_STATUS_TONES[p.status]}>{p.status_label}</Badge>
           </div>
         }
@@ -664,7 +670,9 @@ export function FigurinoProducaoDetailPage() {
               <h3 className="mb-1 text-sm font-semibold text-ink">
                 {p.kind === "manutencao"
                   ? "O que precisa ser resolvido"
-                  : "O que precisa ser feito"}
+                  : p.kind === "compra"
+                    ? "O que precisa ser comprado"
+                    : "O que precisa ser feito"}
               </h3>
               <p className="whitespace-pre-wrap text-sm text-ink">{p.description}</p>
             </Card>
@@ -711,7 +719,9 @@ export function FigurinoProducaoDetailPage() {
               <AcoesStatus producao={p} transicoes={data.transicoes} onAviso={setAviso} />
             ) : (
               <p className="text-sm text-muted">
-                Só a equipe de figurino move este pedido.
+                {p.kind === "compra"
+                  ? "Só quem é responsável por esta compra (ou a equipe de figurino) move o pedido."
+                  : "Só a equipe de figurino move este pedido."}
               </p>
             )}
 

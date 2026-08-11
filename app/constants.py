@@ -77,12 +77,18 @@ GIFT_3D_STATUSES = [
 # A diferença não é cosmética: manutenção **não passa por aprovação** (ver FIGURINO_PROD_FLUXOS),
 # porque a maior parte não tem compra nenhuma, é trabalho manual, e exigir um super admin para
 # liberar uma costura mataria o registro — que é justamente o que se quer ganhar.
+# Feature 225c: `compra` é o terceiro tipo — ninguém produz nem conserta, alguém precisa COMPRAR.
+# Mora aqui, e não numa tabela nova, porque é o mesmo objeto: uma coisa a fazer, com prazo,
+# responsável e vínculo opcional a uma ficha e a um evento. O que muda é o fluxo (ver
+# FIGURINO_PROD_FLUXOS) e o fato de a ficha ser opcional, ao contrário da manutenção.
 FIGURINO_KIND_PRODUCAO   = "producao"
 FIGURINO_KIND_MANUTENCAO = "manutencao"
-FIGURINO_KINDS = [FIGURINO_KIND_PRODUCAO, FIGURINO_KIND_MANUTENCAO]
+FIGURINO_KIND_COMPRA     = "compra"
+FIGURINO_KINDS = [FIGURINO_KIND_PRODUCAO, FIGURINO_KIND_MANUTENCAO, FIGURINO_KIND_COMPRA]
 FIGURINO_KIND_LABELS = {
     FIGURINO_KIND_PRODUCAO:   "Produção",
     FIGURINO_KIND_MANUTENCAO: "Manutenção",
+    FIGURINO_KIND_COMPRA:     "Compra",
 }
 
 # Gravidade de uma manutenção. É a única informação que muda uma decisão de verdade: a peça pode
@@ -102,12 +108,19 @@ FIGURINO_PROD_SOLICITADO  = "solicitado"
 FIGURINO_PROD_APROVADO    = "aprovado"
 FIGURINO_PROD_EM_PRODUCAO = "em_producao"
 FIGURINO_PROD_PRONTO      = "pronto"
+# Feature 225c — os dois estados que só o fluxo de compra percorre. `comprado` continua ABERTO
+# de propósito: o dinheiro saiu, mas a coisa ainda não chegou, e é justamente esse intervalo que
+# hoje se perde ("comprei, prometeram para sexta") — fechar aqui apagaria o que falta acompanhar.
+FIGURINO_PROD_COMPRADO    = "comprado"
+FIGURINO_PROD_RECEBIDO    = "recebido"
 FIGURINO_PROD_CANCELADO   = "cancelado"
 FIGURINO_PROD_STATUSES = [
     FIGURINO_PROD_SOLICITADO,
     FIGURINO_PROD_APROVADO,
     FIGURINO_PROD_EM_PRODUCAO,
+    FIGURINO_PROD_COMPRADO,
     FIGURINO_PROD_PRONTO,
+    FIGURINO_PROD_RECEBIDO,
     FIGURINO_PROD_CANCELADO,
 ]
 #: Estados em que o pedido ainda dá trabalho a alguém — os que aparecem na fila e na home.
@@ -115,13 +128,16 @@ FIGURINO_PROD_ABERTOS = [
     FIGURINO_PROD_SOLICITADO,
     FIGURINO_PROD_APROVADO,
     FIGURINO_PROD_EM_PRODUCAO,
+    FIGURINO_PROD_COMPRADO,
 ]
 #: Rótulos em pt-BR. Fonte única: o React lê daqui via serialização, não redigita.
 FIGURINO_PROD_LABELS = {
     FIGURINO_PROD_SOLICITADO:  "Solicitado",
     FIGURINO_PROD_APROVADO:    "Aprovado",
     FIGURINO_PROD_EM_PRODUCAO: "Em produção",
+    FIGURINO_PROD_COMPRADO:    "Comprado",
     FIGURINO_PROD_PRONTO:      "Pronto",
+    FIGURINO_PROD_RECEBIDO:    "Recebido",
     FIGURINO_PROD_CANCELADO:   "Cancelado",
 }
 #: O fluxo de cada tipo. Produção passa por aprovação (figurino é 70% do gasto extra da empresa);
@@ -138,6 +154,15 @@ FIGURINO_PROD_FLUXOS = {
         FIGURINO_PROD_SOLICITADO,
         FIGURINO_PROD_EM_PRODUCAO,
         FIGURINO_PROD_PRONTO,
+    ],
+    # Compra passa por aprovação pelo mesmo motivo da produção — é dinheiro saindo — mas o
+    # trabalho depois da aprovação não é "produzir": é comprar e depois receber. São dois
+    # momentos distintos e ambos precisam de registro (quem comprou, e se chegou).
+    FIGURINO_KIND_COMPRA: [
+        FIGURINO_PROD_SOLICITADO,
+        FIGURINO_PROD_APROVADO,
+        FIGURINO_PROD_COMPRADO,
+        FIGURINO_PROD_RECEBIDO,
     ],
 }
 

@@ -7,7 +7,19 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-11** · Estado do repositório: pós-feature **233 (convite
+> Última atualização: **2026-08-11** · Estado do repositório: pós-feature **225c (Pedido de
+> Compra — terceiro `kind` de `figurino_producoes`, fluxo `solicitado → aprovado → comprado →
+> recebido`, **sem migration**; nav: "Revisão" saiu de Produção e foi para Marketing, e nasceu
+> `/compras`. Endpoint mudado: `GET /api/figurino/producoes/responsaveis?tipo=compra`)**. Antes
+> dela, **235 (o mesmo
+> personagem em vários temas — a identidade é a ficha de figurino, e duas linhas de
+> `catalog_characters` com o mesmo `figurino_sheet_id` são o mesmo personagem em temas
+> diferentes; migration `f4a8d61c9e27`: `figurino_sheets.quantity`, quantos figurinos iguais
+> existem, 0 válido. Endpoints novos: `GET /api/admin/catalogo/personagens` e
+> `POST /api/admin/catalogo/<id>/personagens/reaproveitar`). Antes dela, 234 (fotos do catálogo:
+> `apply_photos` sempre regrava `position` — antes só regravava quando havia capa explícita, e uma
+> edição que só reordenava era descartada em silêncio; `photo_order` passa a aceitar tokens
+> `new:<i>` para intercalar foto nova entre as antigas; sem schema). Antes dela, 233 (convite
 > automático ao escalar + `get_figurino` na regra `nao_recusada()`; sem schema). Antes dela, 232
 > (avaliação por
 > partes volta a ser o caminho padrão — só frontend, sem endpoint novo). Antes dela, 231 (confirmações
@@ -221,20 +233,20 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `figurino_sheets` | `FigurinoSheet` | `character_name`, `character_name_norm` (lowercase sem acentos), `photo_filename`, `pieces` (JSON `[{name, qty}]`), `tags` (JSON `["anjo","natal"]`, feature 183), `notes`, campos de sync do Drive (`drive_file_id` unique, `drive_url`, `thumbnail_url`, `last_synced_at`) | referenciada por `event_roles.figurino_sheet_id` e `catalog_characters.figurino_sheet_id` |
+| `figurino_sheets` | `FigurinoSheet` | `character_name`, `character_name_norm` (lowercase sem acentos), `photo_filename`, `pieces` (JSON `[{name, qty}]`), **`quantity`** (feature 235 — quantos figurinos IGUAIS existem; padrão 1, 0 = ficha de figurino ainda não produzido; **não confundir com o `qty` de dentro de `pieces`**, que é "2 luvas" dentro de UM figurino), `tags` (JSON `["anjo","natal"]`, feature 183), `notes`, campos de sync do Drive (`drive_file_id` unique, `drive_url`, `thumbnail_url`, `last_synced_at`) | referenciada por `event_roles.figurino_sheet_id` e `catalog_characters.figurino_sheet_id` |
 | `figurino_missing_dismissals` | `FigurinoMissingDismissal` | descarte de alerta "personagem sem ficha"; guarda os `event_role_ids` cobertos (JSON) — um `EventRole` novo faz o alerta reaparecer | `dismissed_by`→`users` |
 
 Properties úteis: `pieces_list`, `pieces_count`, `tags_list`, `photo_url` (aceita URL absoluta,
 caminho `/uploads/figurino_photos/...` ou fallback para `thumbnail_url` do Drive).
 
-#### 2.4.1 Produção de Figurinos (feature 225)
+#### 2.4.1 Produção de Figurinos (feature 225) e Pedido de Compra (225c)
 
 `figurino_sheets` descreve o figurino **pronto**; `special_expenses` registra o dinheiro **depois**
 que saiu. Estas três tabelas são o que existe no meio — o trabalho de produzir.
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `figurino_producoes` | `FigurinoProducao` | `title`, `description`, `status` (`solicitado`\|`aprovado`\|`em_producao`\|`pronto`\|`cancelado`), **`kind`** (`producao`\|`manutencao`, 225b), **`severity`** (`impede_uso`\|`pode_esperar`, só em manutenção), `quantity`, `due_date`, `estimated_cost`, `approved_at`, `done_at`, `cancelled_at`, `cancellation_reason`, `google_event_id` (o compromisso do prazo na agenda) | `event_id`→`calendar_events` (**SET NULL**), `figurino_sheet_id`→`figurino_sheets` (**SET NULL**), `requested_by_id`→`users`, `responsible_id`/`approved_by_id`→`users` (**SET NULL**) |
+| `figurino_producoes` | `FigurinoProducao` | `title`, `description`, `status` (`solicitado`\|`aprovado`\|`em_producao`\|**`comprado`**\|`pronto`\|**`recebido`**\|`cancelado`), **`kind`** (`producao`\|`manutencao`, 225b \| **`compra`**, 225c), **`severity`** (`impede_uso`\|`pode_esperar`, só em manutenção), `quantity`, `due_date`, `estimated_cost`, `approved_at`, `done_at`, `cancelled_at`, `cancellation_reason`, `google_event_id` (o compromisso do prazo na agenda) | `event_id`→`calendar_events` (**SET NULL**), `figurino_sheet_id`→`figurino_sheets` (**SET NULL**), `requested_by_id`→`users`, `responsible_id`/`approved_by_id`→`users` (**SET NULL**) |
 | `figurino_producao_anexos` | `FigurinoProducaoAnexo` | `kind` (`foto`\|`orcamento`), `file_path`, `original_name`, `caption`; `supplier_name`/`amount` só em `orcamento` (para comparar propostas) | `producao_id`→`figurino_producoes` (**CASCADE**), `uploaded_by_id`→`users` (SET NULL) |
 | `figurino_producao_logs` | `FigurinoProducaoLog` | histórico narrativo no formato de `EventLog` (`actor_name`, `actor_role`, `message`) + `photo_path` e `status_from`/`status_to` | `producao_id`→`figurino_producoes` (**CASCADE**) |
 
@@ -259,13 +271,32 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
 - **`alertas_por_ficha()` é a fonte única do aviso**, consumida por `figurino_ops.list_sheets`
   (lista de Figurinos) e por `agenda_read` (elenco do evento) — uma consulta por tela, não uma
   por ficha. Manutenção resolvida sai do dicionário e o aviso some sozinho.
+- **`kind="compra"` é o Pedido de Compra (225c)** — mesma tabela, terceiro fluxo:
+  `solicitado → aprovado → comprado → recebido`. **Sem migration**: `kind` e `status` são
+  `String(20)` sem CHECK, e todo o resto (prazo, responsável, histórico, anexos, vínculo com
+  Gasto Extra, convite na agenda) já existia. Ficha e evento são **opcionais** — a compra pode
+  não ter nada a ver com figurino (tinta de cenário, material de escritório).
+- **`comprado` está em `FIGURINO_PROD_ABERTOS`**: o dinheiro saiu, mas a coisa não chegou, e é
+  esse intervalo que se perde hoje. O estado final feliz de cada tipo é o **último do fluxo**
+  (`_fluxo_de(p)[-1]`) — é dele que sai o carimbo de `done_at`, para não ser preciso listar
+  estados finais em dois lugares.
+- **`pode_executar_pedido(user, p)`** abre a execução ao **responsável pela própria compra**,
+  além de FIGURINO/SA. Sem isso um pedido entregue ao Comercial travaria em "aprovado" para
+  sempre. Vale **só** em `kind="compra"`; produção e manutenção continuam sendo da oficina.
+- **Aprovar continua sendo só de SUPERADMIN**, inclusive na compra — é o único ponto em que
+  alguém olha o dinheiro antes de sair.
+- **`responsaveis_elegiveis(kind)`**: em compra devolve a equipe interna inteira (`pode_abrir`);
+  nos outros tipos, só FIGURINO/SUPERADMIN.
+- **Compra sem dono avisa só o SUPERADMIN** (`equipe_figurino(kind)`) e entra na caixa de
+  entrada do setor apenas para quem aprova (`resumo_setor`) — mandar tinta de cenário para a
+  costureira transformaria o aviso em ruído.
 
 ### 2.5 Catálogo (vitrine pública + gerenciador interno)
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
 | `catalog_items` | `CatalogItem` | **Tema** — `wp_product_id` (unique, dedupe da importação WordPress), `name`, `slug` (unique), `short_description_html`, `tags` (JSON), `is_active`, `imported_at`, **`video_url`** (feature 185 — Drive/MP4/Vimeo) | M:N `categories`; 1:N `images`, `characters` |
-| `catalog_characters` | `CatalogCharacter` | **Personagem filho** (feature 185) — `name`, `slug` (unique, prefixado pelo slug do Tema), `photo_url`, `video_url`, `position`, `is_active` | `catalog_item_id`→`catalog_items` (**ON DELETE CASCADE**), **`figurino_sheet_id`→`figurino_sheets` (ON DELETE SET NULL)**, **`own_item_id`→`catalog_items` (UNIQUE, ON DELETE SET NULL)** |
+| `catalog_characters` | `CatalogCharacter` | **Personagem filho** (feature 185) — `name`, `slug` (unique, prefixado pelo slug do Tema), `photo_url`, `video_url`, `position`, `is_active`. Cada linha é uma **aparição**: duas linhas com o MESMO `figurino_sheet_id` são o mesmo personagem em temas diferentes (feature 235 — a ficha é a identidade), e duas no mesmo tema são dois performers do mesmo figurino (caso "Astronauta 1"/"Astronauta 2"). Sem ficha, o personagem existe só dentro do tema dele | `catalog_item_id`→`catalog_items` (**ON DELETE CASCADE**), **`figurino_sheet_id`→`figurino_sheets` (ON DELETE SET NULL)**, **`own_item_id`→`catalog_items` (UNIQUE, ON DELETE SET NULL)** |
 | `catalog_item_images` | `CatalogItemImage` | `url`, `original_url`, `position` (**posição 0 = capa**, usada no Open Graph), `file_size_bytes` | `item_id` |
 | `catalog_categories` | `CatalogCategory` | `name` (unique), `slug` (unique) | — |
 | `catalog_item_categories` | *(association)* | PK composta | `item_id`, `category_id` |
@@ -504,21 +535,21 @@ remetente por IMAP em modo somente leitura — ver `app/integracoes/imap_client.
 `POST|DELETE /api/figurino/<id>/photo` · `POST /api/figurino/<id>/photo/rotate` ·
 `POST /api/figurino/faltantes/dispensar` · `POST /api/figurino/faltantes/associar`.
 
-### 3.5.1 Produção de Figurinos — `figurino_producao_read.py` / `_write.py` (feature 225)
+### 3.5.1 Produção de Figurinos e Pedido de Compra — `figurino_producao_read.py` / `_write.py` (features 225 e 225c)
 
 | Método | Rota | Gate | Nota |
 |---|---|---|---|
-| GET | `/api/figurino/producoes` | interno | Filtros `status`, `abertos`, `responsavel`, `evento`, `busca`. Devolve `flags` (`can_create`/`can_execute`/`can_approve`) |
-| POST | `/api/figurino/producoes` | interno | Abre pedido. `responsible_id` só é aceito de quem executa |
-| GET | `/api/figurino/producoes/<id>` | interno | Detalhe + `anexos`, `logs`, `gastos` e `transicoes` válidas |
-| PATCH | `/api/figurino/producoes/<id>` | FIGURINO/SA, ou quem abriu enquanto ninguém assumiu | — |
+| GET | `/api/figurino/producoes` | interno | Filtros `status`, **`tipo`**, `abertos`, `responsavel`, `evento`, `ficha`, `busca`. Devolve `flags` (`can_create`/`can_execute`/`can_approve`), `kind_labels`, `status_abertos` |
+| POST | `/api/figurino/producoes` | interno | Abre pedido (`kind`: `producao`\|`manutencao`\|`compra`) |
+| GET | `/api/figurino/producoes/<id>` | interno | Detalhe + `anexos`, `logs`, `gastos` e `transicoes` válidas. **`flags.can_execute` é avaliado PARA ESTE pedido** (o responsável por uma compra recebe `true`) |
+| PATCH | `/api/figurino/producoes/<id>` | `pode_executar_pedido`, ou quem abriu enquanto ninguém assumiu (e, em compra, enquanto está `solicitado`) | `responsible_id` só é aceito de quem executa — **ou de quem abriu, se for compra** |
 | DELETE | `/api/figurino/producoes/<id>` | FIGURINO/SA | Gastos vinculados sobrevivem |
-| POST | `/api/figurino/producoes/<id>/status` | FIGURINO/SA; **aprovar só SA** | `motivo` obrigatório ao cancelar. Falta de permissão volta **403**, não 400 |
+| POST | `/api/figurino/producoes/<id>/status` | `pode_executar_pedido`; **aprovar só SA** | `motivo` obrigatório ao cancelar. Falta de permissão volta **403**, não 400 |
 | POST | `/api/figurino/producoes/<id>/comentarios` | interno | Nota no histórico |
-| POST\|DELETE | `/api/figurino/producoes/<id>/anexos[/<anexo_id>]` | FIGURINO/SA | multipart: `file`, `kind` (`foto`\|`orcamento`), `supplier_name`, `amount` |
-| POST\|DELETE | `/api/figurino/producoes/<id>/gastos[/<gasto_id>]` | FIGURINO/SA | Vincula/desvincula `SpecialExpense` existente |
+| POST\|DELETE | `/api/figurino/producoes/<id>/anexos[/<anexo_id>]` | `pode_executar_pedido` | multipart: `file`, `kind` (`foto`\|`orcamento`), `supplier_name`, `amount` |
+| POST\|DELETE | `/api/figurino/producoes/<id>/gastos[/<gasto_id>]` | `pode_executar_pedido` | Vincula/desvincula `SpecialExpense` existente |
 | GET | `/api/figurino/producoes/<id>/gastos-vinculaveis` | interno | Gastos do mesmo evento + categoria Figurino |
-| GET | `/api/figurino/producoes/responsaveis` | interno | Usuários FIGURINO/SUPERADMIN, com `tem_email` |
+| GET | `/api/figurino/producoes/responsaveis` | interno | Usuários FIGURINO/SUPERADMIN, com `tem_email`. **`?tipo=compra`** devolve a equipe interna inteira |
 
 "interno" = qualquer papel menos `REVENDEDOR_EDUCAMANTO` sozinho (`producao_ops.pode_abrir`).
 As mutações devolvem `{producao, warning?}` — `warning` é falha do Google Agenda, **nunca** erro:
@@ -609,10 +640,10 @@ consome a barra invertida de `\uXXXX` como escape, e por isso o filtro por tag n
 ### 3.10 Gerenciador de catálogo — `admin_catalogo_read.py` / `admin_catalogo_write.py`
 | Método | Rota |
 |---|---|
-| GET | `/api/admin/catalogo`, `/api/admin/catalogo/<item_id>`, `/api/admin/catalogo/tags` |
+| GET | `/api/admin/catalogo`, `/api/admin/catalogo/<item_id>`, `/api/admin/catalogo/tags`, **`/api/admin/catalogo/personagens`** (feature 235 — personagens por identidade, com os temas de cada um) |
 | POST | `/api/admin/catalogo`, `/api/admin/catalogo/categorias`, `/api/admin/catalogo/<item_id>/toggle-ativo` |
 | PATCH/DELETE | `/api/admin/catalogo/<item_id>` |
-| POST | `/api/admin/catalogo/<item_id>/personagens` |
+| POST | `/api/admin/catalogo/<item_id>/personagens` · **`/api/admin/catalogo/<item_id>/personagens/reaproveitar`** (feature 235 — `{"figurino_sheet_id"}`: põe no elenco deste tema um personagem que já existe; 400 se a ficha já estiver no tema) |
 | PATCH/DELETE | `/api/admin/catalogo/personagens/<character_id>` |
 | POST | **`/api/admin/catalogo/personagens/mover-em-massa`** (feature 186) |
 

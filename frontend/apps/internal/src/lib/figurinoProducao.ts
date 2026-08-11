@@ -8,19 +8,26 @@ import { apiFetch } from "@manto/api-client";
  * painel da home consomem daqui; nenhuma monta `fetch` por conta própria.
  */
 
-/** Ciclo de vida do pedido, na ordem em que a oficina o percorre. */
+/**
+ * Ciclo de vida do pedido. Nem todo estado vale para todo tipo: `em_producao`/`pronto` são da
+ * oficina, `comprado`/`recebido` são da compra. Quem decide as transições é sempre o servidor.
+ */
 export type ProducaoStatus =
   | "solicitado"
   | "aprovado"
   | "em_producao"
+  | "comprado"
   | "pronto"
+  | "recebido"
   | "cancelado";
 
 export const PRODUCAO_STATUS_LABELS: Record<ProducaoStatus, string> = {
   solicitado: "Solicitado",
   aprovado: "Aprovado",
   em_producao: "Em produção",
+  comprado: "Comprado",
   pronto: "Pronto",
+  recebido: "Recebido",
   cancelado: "Cancelado",
 };
 
@@ -32,29 +39,48 @@ export const PRODUCAO_STATUS_TONES: Record<
   solicitado: "neutral",
   aprovado: "gold",
   em_producao: "blue",
+  comprado: "blue",
   pronto: "green",
+  recebido: "green",
   cancelado: "red",
 };
 
-/** Situações em que o pedido ainda dá trabalho a alguém. */
+/**
+ * Situações em que o pedido ainda dá trabalho a alguém.
+ *
+ * `comprado` está aqui de propósito: o dinheiro saiu, mas a coisa não chegou — e é exatamente
+ * esse intervalo que se perde hoje ("comprei, prometeram para sexta").
+ */
 export const PRODUCAO_STATUS_ABERTOS: ProducaoStatus[] = [
   "solicitado",
   "aprovado",
   "em_producao",
+  "comprado",
 ];
 
 /**
- * O que a oficina está fazendo com a peça: `producao` cria o que não existe, `manutencao` mexe
- * no que já existe (conserto de defeito, ajuste para uma data, adaptação).
+ * O que o pedido é: `producao` cria o que não existe, `manutencao` mexe no que já existe
+ * (conserto de defeito, ajuste para uma data, adaptação), `compra` é o que ninguém faz — alguém
+ * precisa comprar.
  *
- * A diferença muda o fluxo: manutenção **não passa por aprovação**, porque a maior parte não tem
- * compra nenhuma — é trabalho manual. Quem manda nas transições é o servidor (`transicoes`).
+ * O tipo muda o fluxo: manutenção **não passa por aprovação**, porque a maior parte não tem
+ * compra nenhuma — é trabalho manual; compra passa, e depois de aprovada percorre
+ * `comprado → recebido` em vez de `em_producao → pronto`. Quem manda nas transições é o
+ * servidor (`transicoes`).
  */
-export type ProducaoKind = "producao" | "manutencao";
+export type ProducaoKind = "producao" | "manutencao" | "compra";
 
 export const PRODUCAO_KIND_LABELS: Record<ProducaoKind, string> = {
   producao: "Produção",
   manutencao: "Manutenção",
+  compra: "Compra",
+};
+
+/** Tom do `Badge` de tipo. `producao` fica neutro por ser o caso comum — cor onde há exceção. */
+export const PRODUCAO_KIND_TONES: Record<ProducaoKind, "neutral" | "accent" | "gold"> = {
+  producao: "neutral",
+  manutencao: "accent",
+  compra: "gold",
 };
 
 /** A peça pode ir para o próximo evento assim como está, ou não? Só vale em `manutencao`. */
@@ -207,7 +233,7 @@ export const producaoKeys = {
   list: (f: ProducaoFiltros) => [KEY, "list", f] as const,
   detail: (id: number) => [KEY, "detail", id] as const,
   gastosVinculaveis: (id: number) => [KEY, "gastos-vinculaveis", id] as const,
-  responsaveis: () => [KEY, "responsaveis"] as const,
+  responsaveis: (tipo?: ProducaoKind) => [KEY, "responsaveis", tipo ?? ""] as const,
 };
 
 function buildQuery(f: ProducaoFiltros): string {
@@ -239,11 +265,18 @@ export function useProducao(id: number | null) {
   });
 }
 
-export function useResponsaveis() {
+/**
+ * Quem pode ser designado responsável. Em `compra` a lista é a equipe interna inteira — comprar
+ * não é trabalho de oficina, e restringir ao figurino tornaria o campo inútil justamente onde
+ * ele foi pedido.
+ */
+export function useResponsaveis(tipo?: ProducaoKind) {
   return useQuery({
-    queryKey: producaoKeys.responsaveis(),
+    queryKey: producaoKeys.responsaveis(tipo),
     queryFn: () =>
-      apiFetch<{ items: ResponsavelOption[] }>("/api/figurino/producoes/responsaveis"),
+      apiFetch<{ items: ResponsavelOption[] }>(
+        `/api/figurino/producoes/responsaveis${tipo ? `?tipo=${tipo}` : ""}`,
+      ),
   });
 }
 

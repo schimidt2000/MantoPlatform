@@ -6,10 +6,22 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-08-11** · Estado do repositório: pós-feature **233 (convite
-> automático ao escalar)**
+> Última atualização: **2026-08-11** · Estado do repositório: pós-feature **235 (aba Personagens no
+> gerenciador de catálogo)**
 >
-> UX nova da 233: quem é **pré-escalado na criação ou edição do evento** passa a receber o convite
+> UX nova da 235: `/admin/catalogo` ganhou uma **terceira visão, 🎭 Personagens** — uma linha por
+> personagem (não por tema), com a ficha vinculada, em quantos temas ele aparece e quantos
+> figurinos iguais existem. É por ali, ou pelo bloco "Reaproveitar personagem que já existe" dentro
+> do tema, que o **mesmo** personagem entra em outro tema sem ser recadastrado. A ficha de figurino
+> ganhou o campo **"Figurinos iguais que temos"**.
+>
+> UX da 234: a galeria de `/admin/catalogo/:id/editar` virou **uma grade só** (fotos salvas e
+> novas juntas), **a primeira foto é a capa** (o campo de capa separado deixou de existir), o
+> arraste passou a ser por ponteiro — funciona no toque e reorganiza as vizinhas ao vivo — e a
+> remoção fica pendente com desfazer. E, o principal: **reordenar e salvar agora muda de verdade**
+> (a ordem era aceita pela API e descartada no banco).
+>
+> UX da 233: quem é **pré-escalado na criação ou edição do evento** passa a receber o convite
 > na hora — antes o cargo nascia com pessoa e sem convite, e nenhuma tela pedia o clique em
 > "Convidar". E a ficha de figurino do portal deixou de recusar quem está escalado sem convite
 > enviado: desde a 230 o evento aparecia na agenda com o link, e o link caía em 403.
@@ -358,6 +370,14 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 #### `/revisao` — Revisão de Mídia
 - **Acesso**: staff (criação de espaço também por `MARKETING`).
 - **UX**: lista de espaços com status de aprovação.
+- **No menu, mora em MARKETING** (mudou em 2026-08-11): revisar mídia é etapa do marketing, ao
+  lado do painel que planeja a postagem que essa mídia vai virar — não da produção de figurino.
+  O item continua **aberto a toda a equipe interna** (`notRevendedor`), porque
+  `revisao/review_ops.can_view` libera qualquer pessoa que esteja em `space.reviewer_ids` e
+  `GET /api/revisao/reviewer-options` oferece qualquer usuário ativo como revisor: gatear o item
+  por papel deixaria um convidado do financeiro sem porta de entrada. **Consequência aceita**: a
+  seção "Marketing" do menu, que antes só existia para `MARKETING`/`COMERCIAL`/`CASTING`/`SA`,
+  agora aparece para todo papel interno — com "Revisão" dentro.
 
 #### `/revisao/novo` — Novo Espaço
 - Seleção de revisores (`GET /api/revisao/reviewer-options`).
@@ -390,6 +410,11 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 #### `/figurinos/new` e `/figurinos/:id/edit` — Ficha de Figurino
 - **UX**: nome do personagem (obrigatório), foto (upload, rotação, remoção), **peças** como lista
   `{name, qty}`, **tags** via `ChipInput`, notas.
+  Campo **"Figurinos iguais que temos"** (feature 235): quantos figurinos daquela ficha existem no
+  acervo. **Não é o `qty` da peça** — aquele é "2 luvas" dentro de UM figurino; este é "temos 3
+  Gatunos", e é o que decide se dá para escalar o mesmo personagem em dois eventos ao mesmo tempo.
+  Zero é válido (ficha de figurino ainda não produzido) e aparece como selo vermelho no Banco de
+  Figurinos; acima de 1, o card mostra `N×`.
   Campo **"Vincular a um Personagem do Catálogo"** (`FigurinoCatalogLinkField`): autocomplete de
   Personagens; quando já vinculado, mostra `Personagem — Tema` e botão **Desvincular**. Escreve na
   mesma `CatalogCharacter.figurino_sheet_id` usada pelo lado do catálogo — **vínculo bidirecional
@@ -411,11 +436,34 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   Sem prazo próprio, vale a data do evento.
 - **Novo pedido**: título, detalhes, evento (opcional — via data + seletor, mesmo padrão de
   Gastos Extras), prazo, quantidade, custo previsto. O campo **Responsável** só aparece para
-  quem executa: quem pede não escolhe quem faz.
+  quem executa: quem pede não escolhe quem faz — **exceto em compra** (ver `/compras`).
 - **Rotas declaradas ANTES das dinâmicas** em `App.tsx` — `/figurinos/producao/12` não pode cair
   em `/figurinos/:id/edit` (mesmo cuidado de `/events/cancelamentos` na 224).
 - **API**: `GET /api/figurino/producoes` · `POST /api/figurino/producoes` ·
   `GET /api/figurino/producoes/responsaveis`.
+
+#### `/compras` — Pedidos de Compra *(feature 225c)*
+- **É a mesma tela** (`FigurinoProducaoListPage`) com `tipoFixo="compra"`: as abas de tipo somem,
+  o título vira "Pedidos de Compra" e tudo já nasce `kind="compra"`. Porta de entrada própria
+  porque uma compra pode não ter nada a ver com figurino (tinta de cenário, material de
+  escritório), e quem só precisa pedir alguma coisa não deveria passar pela fila da oficina.
+- **Acesso**: qualquer papel interno vê e abre (menos Revendedor EducaManto). **Só Superadmin
+  aprova.** Depois de aprovada, quem move é o **responsável pela própria compra** (ou a oficina)
+  — é o que faz o pedido entregue ao Comercial não travar em "aprovado".
+- **Fluxo**: `Solicitado → Aprovado → Comprado → Recebido`, com `Cancelado` como saída (exige
+  motivo). **`Comprado` ainda conta como em aberto** — o dinheiro saiu, a coisa não chegou. Dá
+  para voltar de `Recebido` para `Comprado` (chegou errado); voltar limpa o `done_at`.
+- **Novo pedido de compra**: o que comprar, detalhes, **para qual figurino (opcional)**, evento
+  (opcional), prazo, quantidade, quanto deve custar e **quem é o responsável** — este último
+  aparece para qualquer pessoa aqui, e a lista traz a **equipe interna inteira**
+  (`?tipo=compra`), não só o figurino.
+- **Os chips de situação mudam com o tipo** (`filtrosDe`): "Comprados/Recebidos" só na compra,
+  "Em produção/Prontos" só na oficina. Trocar de aba com um filtro órfão volta para "Em aberto".
+- **Onde a compra ainda aparece**: aba **Compras** em `/figurinos/producao`; painel pessoal da
+  home (**"🧵 Minhas peças e compras"**); e, quando nasce sem dono, na caixa de entrada do setor
+  — mas **só para quem aprova**, não para a oficina.
+- O detalhe continua em `/figurinos/producao/:id` (é o mesmo objeto); o breadcrumb é que muda,
+  voltando para `/compras` quando o pedido é uma compra.
 
 #### `/figurinos/producao/:id` — Detalhe do pedido
 - **UX**: coluna esquerda tem o que precisa ser feito, as fotos, os **gastos** e o **histórico**;
@@ -444,7 +492,7 @@ O valor da manutenção não está na tarefa, está no **aviso chegar onde a dec
 | `/figurinos` (lista de fichas) | Selo sobre a foto: `⚠ Não pode ir` (vermelho) ou `🪡 N consertos` (dourado). Leva para a oficina já filtrada por aquele figurino (`?ficha=`). |
 | Detalhe do evento → Produção → Figurino | O card do personagem fica com **borda vermelha** e traz o texto do problema + link "ver na oficina". O bloqueio **vence o "Separado"** — marcar como separada uma peça que não pode ir é o erro que o aviso existe para impedir. |
 | Home → "🪡 Oficina — sem responsável" | Pedidos abertos que ninguém assumiu. Gate por **papel** (FIGURINO/SA), ao contrário de "Minhas peças". |
-| `/figurinos/producao` | Abas **Tudo / Produção / Manutenção**; a linha mostra a ficha em vez do evento quando há ficha. |
+| `/figurinos/producao` | Abas **Tudo / Produção / Manutenção / Compras**; a linha mostra a ficha em vez do evento quando há ficha. |
 
 No formulário, escolher "Consertar / ajustar" troca o resto: exige **qual figurino** e
 **se dá para usar assim**, muda os rótulos, e some com quantidade. O painel de gastos só aparece
@@ -919,7 +967,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 #### `/admin/catalogo` — Gerenciador de Catálogo *(features 185 e 186)*
 - **Acesso**: **`SUPERADMIN`** (`_require_superadmin()`).
 - **UX**:
-  - **Alternador de visualização Cards ⇄ Árvore**, persistido em `localStorage`
+  - **Alternador de visualização Cards ⇄ Árvore ⇄ Personagens**, persistido em `localStorage`
     (`manto_admin_catalogo_view`); trocar o modo limpa a seleção.
   - **Cards** (`CatalogCardGrid`): grade de Temas com capa, status e **kebab menu** (`KebabMenu`)
     de ações por card.
@@ -929,9 +977,25 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   - **Seleção múltipla + barra flutuante de ações em massa** (`CatalogBulkActionBar`): aparece com
     1+ selecionados e some ao zerar. Ações: **Mover para…** (só para Personagens — um Tema não tem
     pai neste modelo), **Inativar**, **Excluir** (com confirmação em `Modal`).
+  - **Personagens** (`CatalogPersonagensView`, feature 235): as outras duas visões olham pelo
+    produto e pela hierarquia e repetem o mesmo personagem uma vez por tema; esta olha **pelo
+    personagem** — uma linha por identidade. Por linha: foto, nome, ficha vinculada (ou o selo
+    vermelho de pendência), chips dos temas em que aparece (`×N` quando o tema tem mais de uma
+    aparição), quantidade de figurinos iguais, manutenção aberta e **"Usar em outro tema"**.
+    - **A identidade é a ficha de figurino**, não o nome — é ela que diz que o Gatuno da Gabby e o
+      da Gabby Humanizada são o mesmo. **Personagem sem ficha não pode ser reaproveitado** (não há
+      o que afirme a igualdade), e é isso que o selo vermelho comunica.
+    - **Termômetro clicável** no topo: personagens · aparições · com ficha · sem ficha · em mais de
+      um tema · **fichas do acervo ainda fora do catálogo** (588 de 616 hoje). Os contadores de
+      "sem ficha" e "em mais de um tema" filtram a lista.
+    - Alerta de logística quando um tema pede mais aparições simultâneas do que existem figurinos
+      (ex.: "Astronauta ×2" com 1 figurino).
+    - Neste modo a busca é **client-side** e os filtros de categoria/status somem: a lista de temas
+      precisa vir inteira, porque é dela que sai o destino do "usar em outro tema".
   - Indicador **"Sem ficha vinculada"** nos Personagens pendentes.
   - Filtros: busca, categoria e status (todos/ativos/inativos).
-- **API**: `GET /api/admin/catalogo` (+ `/tags`) ·
+- **API**: `GET /api/admin/catalogo` (+ `/tags`, `/personagens`) ·
+  `POST /api/admin/catalogo/<id>/personagens/reaproveitar` ·
   `POST /api/admin/catalogo/personagens/mover-em-massa` ·
   `PATCH|DELETE /api/admin/catalogo/personagens/<id>` ·
   `POST /api/admin/catalogo/<id>/toggle-ativo`.
@@ -941,11 +1005,21 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   (Drive/MP4/Vimeo — URL não reconhecida é recusada com erro **no campo**), **tags como
   `ChipInput`** (Enter ou vírgula vira chip removível, com autocomplete das tags já usadas no
   catálogo — `GET /api/admin/catalogo/tags`).
-- **Galeria de fotos**: upload múltiplo, **reordenação** e **seleção de capa** (a foto em
-  `position = 0` é a capa e o Open Graph do link público).
+- **Galeria de fotos** (`CatalogPhotoManager`, refeita na 234): **uma grade só** para fotos
+  salvas e recém-escolhidas (estas com selo "nova"). **A primeira foto é a capa** — não existe
+  mais campo de capa separado; "★" é atalho de "mover para a 1ª posição". Reordena **arrastando
+  por ponteiro** (mouse e toque, as vizinhas se reorganizam ao vivo) ou pelos botões ‹ › de cada
+  foto; remoção fica pendente até salvar, com desfazer. Arrastar arquivos do desktop para a grade
+  adiciona fotos. Selo "alterações não salvas" enquanto houver ordem/remoção pendente.
+- **Arrastar uma foto já salva até um Personagem** faz ele adotá-la como foto — o hit-test é por
+  atributo (`data-catalog-character-drop`), e a mutação mora na página, não no painel.
 - **Painel de Personagens** (`AdminCatalogCharacterPanel`): adicionar/editar/remover Personagem
   filho com nome, foto, URL de vídeo, ordem, ativo e **dropdown de busca da Ficha de Figurino**
   (`figurino_sheet_id`).
+  - **"Reaproveitar personagem que já existe"** vem ANTES de "Novo personagem" (feature 235): busca
+    nas 616 fichas do acervo (`FigurinoSheetPicker`) e traz o personagem com o nome e a foto que ele
+    já tem em outro tema. É o caminho certo para "Gatuno também está na Gabby Humanizada" —
+    recadastrar quebraria a conta de em quantos temas ele é usado.
 - **Vínculos**: Tema → Personagens → Ficha de Figurino → Elenco de Evento.
 
 ---

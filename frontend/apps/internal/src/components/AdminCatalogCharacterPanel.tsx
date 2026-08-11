@@ -1,12 +1,12 @@
-import { useMemo, useState, type DragEvent } from "react";
+import { useMemo, useState } from "react";
 import { assetUrl, ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@manto/ui";
 import {
   useAdminCatalogo,
-  useAdoptGalleryPhoto,
   useAdoptItemAsCharacter,
   useCreateCharacter,
   useDeleteCharacter,
+  useReuseCharacter,
   useSetOwnPage,
   useToggleOwnPage,
   useUpdateCharacter,
@@ -14,7 +14,6 @@ import {
 } from "../lib/adminCatalogo";
 import { useFigurinoSheets } from "../lib/figurino";
 import { FigurinoSheetPicker } from "./FigurinoSheetPicker";
-import { CATALOG_PHOTO_DRAG_TYPE } from "../pages/AdminCatalogoFormPage";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
@@ -22,6 +21,16 @@ const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm t
 interface AdminCatalogCharacterPanelProps {
   itemId: number;
   characters: CatalogCharacter[];
+  /**
+   * Personagem sob o ponteiro enquanto uma foto da galeria está sendo arrastada. Quem detecta
+   * o alvo é o card arrastado (`CatalogPhotoManager`), pelo atributo `data-catalog-character-drop`
+   * marcado aqui; este painel só desenha o realce e mostra o resultado.
+   */
+  photoDropTargetId?: number | null;
+  /** Personagem com adoção de foto em andamento — mostra o spinner sobre a miniatura. */
+  adoptingCharacterId?: number | null;
+  /** Erro da última adoção de foto por arraste. */
+  photoDropError?: string | null;
 }
 
 interface DraftState {
@@ -182,7 +191,13 @@ function OwnPageControls({
 }
 
 /** Painel de gerenciamento de Personagens filhos de um Tema (feature 185, FR-010). */
-export function AdminCatalogCharacterPanel({ itemId, characters }: AdminCatalogCharacterPanelProps) {
+export function AdminCatalogCharacterPanel({
+  itemId,
+  characters,
+  photoDropTargetId = null,
+  adoptingCharacterId = null,
+  photoDropError = null,
+}: AdminCatalogCharacterPanelProps) {
   const figurinoQuery = useFigurinoSheets();
   const createCharacter = useCreateCharacter(itemId);
   const updateCharacter = useUpdateCharacter(itemId);
@@ -193,49 +208,11 @@ export function AdminCatalogCharacterPanel({ itemId, characters }: AdminCatalogC
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showAdopt, setShowAdopt] = useState(false);
   const adoptItem = useAdoptItemAsCharacter(itemId);
-
-  // Drop target do drag-and-drop "foto da galeria → personagem" (feature: adotar foto).
-  const adoptPhoto = useAdoptGalleryPhoto(itemId);
-  const [dropTargetId, setDropTargetId] = useState<number | null>(null);
+  const reuseCharacter = useReuseCharacter();
+  const [reuseError, setReuseError] = useState<string | null>(null);
 
   const sorted = [...characters].sort((a, b) => a.position - b.position);
   const figurinoSheets = figurinoQuery.data?.items ?? [];
-
-  function handlePhotoDragOver(event: DragEvent, characterId: number) {
-    if (!event.dataTransfer.types.includes(CATALOG_PHOTO_DRAG_TYPE)) return;
-    if (adoptPhoto.isPending) return; // drops em rajada intercalam invalidações — um por vez
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-    setDropTargetId(characterId);
-  }
-
-  function handlePhotoDrop(event: DragEvent, character: CatalogCharacter) {
-    const raw = event.dataTransfer.getData(CATALOG_PHOTO_DRAG_TYPE);
-    setDropTargetId(null);
-    if (!raw) return;
-    event.preventDefault();
-    // O confirm sai do handler de drop via setTimeout: um diálogo modal SÍNCRONO aqui
-    // seguraria a sessão de drag aberta (ghost congelado, dragend da origem adiado) e
-    // alguns engines suprimem o diálogo durante drag-and-drop.
-    const imageId = Number(raw);
-    setTimeout(() => {
-      if (
-        character.photo_url &&
-        !window.confirm(`Substituir a foto atual de "${character.name}" pela foto arrastada?`)
-      ) {
-        return;
-      }
-      setFieldError(null);
-      adoptPhoto.mutate(
-        { characterId: character.id, imageId },
-        {
-          onError: (err) => {
-            if (err instanceof ApiRequestError) setFieldError(err.message);
-          },
-        },
-      );
-    }, 0);
-  }
 
   function handleCreate() {
     setFieldError(null);
@@ -283,17 +260,22 @@ export function AdminCatalogCharacterPanel({ itemId, characters }: AdminCatalogC
             para usá-la como foto dele (fotos recém-adicionadas precisam ser salvas antes).
           </p>
         )}
+        {photoDropError && (
+          <p className="text-xs text-red" role="alert">
+            {photoDropError}
+          </p>
+        )}
         {sorted.length > 0 && (
           <ul className="space-y-3">
             {sorted.map((character, idx) => (
               <li
                 key={character.id}
+                // Zona de soltura do arraste de fotos — o atributo é lido pelo hit-test em
+                // `CatalogPhotoManager` (constante `CATALOG_CHARACTER_DROP_ATTR`).
+                data-catalog-character-drop={character.id}
                 className={`rounded-md border-b border-line pb-3 transition-shadow duration-200 last:border-none ${
-                  dropTargetId === character.id ? "ring-2 ring-accent" : ""
+                  photoDropTargetId === character.id ? "ring-2 ring-accent" : ""
                 }`}
-                onDragOver={(e) => handlePhotoDragOver(e, character.id)}
-                onDragLeave={() => setDropTargetId((prev) => (prev === character.id ? null : prev))}
-                onDrop={(e) => handlePhotoDrop(e, character)}
               >
                 <div className="flex items-center gap-3">
                   <div className="relative h-12 w-12 flex-none overflow-hidden rounded-md bg-surface-2">
@@ -304,7 +286,7 @@ export function AdminCatalogCharacterPanel({ itemId, characters }: AdminCatalogC
                         className="h-full w-full object-cover"
                       />
                     )}
-                    {adoptPhoto.isPending && adoptPhoto.variables?.characterId === character.id && (
+                    {adoptingCharacterId === character.id && (
                       <span className="absolute inset-0 flex items-center justify-center bg-panel/70 text-xs">
                         …
                       </span>
@@ -415,6 +397,42 @@ export function AdminCatalogCharacterPanel({ itemId, characters }: AdminCatalogC
             ))}
           </ul>
         )}
+
+        {/* Reaproveitar vem ANTES de "novo personagem" de propósito: o Gatuno que já existe na
+            Gabby não deve ser recadastrado na Gabby Humanizada — é o mesmo figurino físico, e
+            recriá-lo quebraria a conta de "em quantos temas este personagem é usado". */}
+        <div className="space-y-2 rounded-md border border-dashed border-line p-3">
+          <p className="text-xs font-semibold text-muted">
+            Reaproveitar personagem que já existe
+          </p>
+          <p className="text-xs text-muted">
+            Busque pela <strong>ficha de figurino</strong> — é ela que diz que é o mesmo
+            personagem. Ele entra no elenco deste tema com a foto e o nome que já tem, sem
+            duplicar nada.
+          </p>
+          <FigurinoSheetPicker
+            value={null}
+            ariaLabel="Buscar ficha para reaproveitar o personagem"
+            disabled={reuseCharacter.isPending}
+            onChange={(sheetId) => {
+              if (sheetId === null) return;
+              setReuseError(null);
+              reuseCharacter.mutate(
+                { temaId: itemId, figurinoSheetId: sheetId },
+                {
+                  onError: (err) => {
+                    if (err instanceof ApiRequestError) setReuseError(err.message);
+                  },
+                },
+              );
+            }}
+          />
+          {reuseError && (
+            <p className="text-xs text-red" role="alert">
+              {reuseError}
+            </p>
+          )}
+        </div>
 
         <div className="space-y-2 rounded-md border border-dashed border-line p-3">
           <p className="text-xs font-semibold text-muted">Novo personagem</p>

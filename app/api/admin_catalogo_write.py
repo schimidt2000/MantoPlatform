@@ -12,7 +12,7 @@ from app.admin import catalog_character_ops, catalog_ops
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
-from app.models import CatalogCharacter, CatalogItem, CatalogItemImage
+from app.models import CatalogCharacter, CatalogItem, CatalogItemImage, FigurinoSheet
 
 
 def _has_role(*names: str) -> bool:
@@ -206,6 +206,31 @@ def api_admin_catalogo_character_update(character_id: int) -> Any:
     except catalog_character_ops.CatalogValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
     return jsonify(_character_summary(character))
+
+
+@api_bp.route("/admin/catalogo/<int:item_id>/personagens/reaproveitar", methods=["POST"])
+@api_login_required
+def api_admin_catalogo_character_reuse(item_id: int) -> Any:
+    """Põe no elenco deste tema um personagem que já existe (`{"figurino_sheet_id": int}`).
+
+    A ficha é a identidade do personagem (feature 235) — é ela que diz que o Gatuno da Gabby e o
+    Gatuno da Gabby Humanizada são o mesmo.
+    """
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    item = CatalogItem.query.get(item_id)
+    if item is None:
+        return json_error("Tema não encontrado", 404)
+    body = request.get_json(silent=True) or {}
+    sheet = FigurinoSheet.query.get(body.get("figurino_sheet_id"))
+    if sheet is None:
+        return json_error("Ficha de figurino não encontrada", 404)
+    try:
+        character = catalog_character_ops.reuse_character(item, sheet)
+    except catalog_character_ops.CatalogValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(_character_summary(character)), 201
 
 
 @api_bp.route("/admin/catalogo/personagens/<int:character_id>/adotar-foto", methods=["POST"])

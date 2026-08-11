@@ -17,6 +17,11 @@ export interface FigurinoManutencaoAlerta {
 export interface FigurinoSheetItem {
   id: number;
   character_name: string;
+  /**
+   * Quantos figurinos IGUAIS a Manto tem desta ficha (feature 235). Não confundir com o `qty`
+   * de `FigurinoPiece` — aquele é "2 luvas" dentro de um figurino; este é "temos 3 Gatunos".
+   */
+  quantity: number;
   pieces: FigurinoPiece[];
   tags: string[];
   notes: string | null;
@@ -49,6 +54,8 @@ export interface FigurinoSheetInput {
   pieces: FigurinoPiece[];
   notes?: string;
   tags?: string[];
+  /** Omitido numa edição = não altera a quantidade guardada. */
+  quantity?: number;
 }
 
 function useInvalidateFigurino() {

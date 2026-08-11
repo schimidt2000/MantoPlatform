@@ -27,6 +27,7 @@ import {
   Scissors,
   Settings,
   Shirt,
+  ShoppingCart,
   SlidersHorizontal,
   Star,
   Target,
@@ -138,14 +139,6 @@ const SECTIONS: NavSectionConfig[] = [
     label: "Produção",
     items: [
       {
-        key: "revisao",
-        label: "Revisão",
-        href: "/revisao",
-        icon: <Clapperboard />,
-        isActive: (path) => path.startsWith("/revisao"),
-        isVisible: notRevendedor,
-      },
-      {
         key: "figurinos",
         label: "Figurinos",
         href: "/figurinos",
@@ -164,6 +157,18 @@ const SECTIONS: NavSectionConfig[] = [
         hint: "O que precisa ser produzido, por quem e a que custo",
         isVisible: notRevendedor,
         isActive: (path) => path.startsWith("/figurinos/producao"),
+      },
+      {
+        // Feature 225c — porta de entrada própria porque uma compra pode não ter nada a ver com
+        // figurino (tinta de cenário, material de escritório), e quem só precisa pedir alguma
+        // coisa não deveria ter que passar pela fila da oficina para achar onde pedir.
+        key: "compras",
+        label: "Pedidos de Compra",
+        href: "/compras",
+        icon: <ShoppingCart />,
+        hint: "O que precisa ser comprado, até quando e por quem",
+        isVisible: notRevendedor,
+        isActive: (path) => path.startsWith("/compras"),
       },
     ],
   },
@@ -212,6 +217,18 @@ const SECTIONS: NavSectionConfig[] = [
         hint: "Quais assuntos estão pedindo post",
         isActive: (path) => path === "/marketing/metas",
         isVisible: (user) => notRevendedor(user) && hasRole(user, "MARKETING", "SUPERADMIN"),
+      },
+      {
+        // A revisão de mídia é etapa do marketing (feature 088), não da produção de figurino —
+        // mora ao lado do painel que planeja a postagem que essa mídia vai virar. Segue visível
+        // para toda a equipe interna: quem grava e quem aprova nem sempre é do marketing.
+        key: "revisao",
+        label: "Revisão",
+        href: "/revisao",
+        icon: <Clapperboard />,
+        hint: "Espaços de revisão de mídia",
+        isActive: (path) => path.startsWith("/revisao"),
+        isVisible: notRevendedor,
       },
       {
         // Feature 205 — o canal de venda self-service é operado pelo Comercial.

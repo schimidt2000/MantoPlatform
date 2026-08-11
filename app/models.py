@@ -8,6 +8,7 @@ from . import db, login_manager
 from datetime import datetime, date
 from .constants import (
     FIGURINO_ANEXO_FOTO,
+    FIGURINO_KIND_COMPRA,
     FIGURINO_KIND_MANUTENCAO,
     FIGURINO_KIND_PRODUCAO,
     FIGURINO_PROD_ABERTOS,
@@ -410,6 +411,11 @@ class FigurinoSheet(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     character_name = db.Column(db.String(200), nullable=False)
     character_name_norm = db.Column(db.String(200), nullable=True)  # lowercase sem acentos
+
+    # Quantos figurinos IGUAIS a Manto tem desta ficha (feature 235). Não confundir com o `qty`
+    # de dentro de `pieces` — aquele é "2 luvas" DENTRO de um figurino; este é "temos 3 Gatunos".
+    # 0 é válido: ficha de um figurino que ainda não foi produzido (ver `FigurinoProducao`).
+    quantity = db.Column(db.Integer, nullable=False, default=1, server_default="1")
 
     # Native fields (created inside the platform)
     photo_filename = db.Column(db.String(300), nullable=True)
@@ -2821,6 +2827,11 @@ class FigurinoProducao(db.Model):
     @property
     def is_manutencao(self) -> bool:
         return self.kind == FIGURINO_KIND_MANUTENCAO
+
+    @property
+    def is_compra(self) -> bool:
+        """True quando o pedido é de compra (feature 225c) — ninguém produz, alguém compra."""
+        return self.kind == FIGURINO_KIND_COMPRA
 
     @property
     def impede_uso(self) -> bool:

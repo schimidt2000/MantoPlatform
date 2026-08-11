@@ -110,9 +110,12 @@ export interface SaveCatalogItemInput {
   categoryIds: number[];
   newPhotos: File[];
   removePhotoIds?: number[];
-  photoOrder?: number[];
-  coverPhotoId?: number;
-  newPhotoCoverIndex?: number;
+  /**
+   * Ordem final das fotos, item a item: o id de uma foto já salva (`"12"`) ou `"new:<i>"`
+   * apontando para o i-ésimo arquivo de `newPhotos`. O índice 0 é a capa — o backend grava
+   * `position` exatamente nesta ordem, então não existe campo de capa separado.
+   */
+  photoOrder?: string[];
   videoUrl?: string;
 }
 
@@ -127,10 +130,6 @@ function buildCatalogFormData(input: SaveCatalogItemInput): FormData {
   (input.removePhotoIds ?? []).forEach((id) => form.append("remove_photo_ids[]", String(id)));
   if (input.photoOrder && input.photoOrder.length > 0) {
     form.set("photo_order", input.photoOrder.join(","));
-  }
-  if (input.coverPhotoId !== undefined) form.set("cover_photo_id", String(input.coverPhotoId));
-  if (input.newPhotoCoverIndex !== undefined) {
-    form.set("new_photo_cover_index", String(input.newPhotoCoverIndex));
   }
   return form;
 }
@@ -181,6 +180,79 @@ export function useDeleteCatalogItem() {
       apiFetch<void>(`/api/admin/catalogo/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-catalogo"] });
+    },
+  });
+}
+
+/** Uma aparição: a linha do personagem dentro de um Tema. */
+export interface CatalogPersonagemAparicao {
+  character_id: number;
+  character_name: string;
+  is_active: boolean;
+}
+
+/**
+ * Um tema onde o personagem aparece. Mais de uma aparição no mesmo tema é caso real e válido —
+ * "Astronauta 1" e "Astronauta 2" são dois performers do mesmo figurino no mesmo show.
+ */
+export interface CatalogPersonagemTema {
+  tema_id: number;
+  tema_name: string;
+  aparicoes: CatalogPersonagemAparicao[];
+}
+
+/**
+ * Um personagem do catálogo visto por identidade, não por aparição (feature 235). A identidade
+ * é a **ficha de figurino**: é ela que diz que o Gatuno da Gabby e o Gatuno da Gabby Humanizada
+ * são o mesmo. Sem ficha, o personagem existe só dentro do tema dele — e aparece como pendência.
+ */
+export interface CatalogPersonagem {
+  key: string;
+  name: string;
+  photo_url: string | null;
+  figurino_sheet_id: number | null;
+  figurino_sheet_name: string | null;
+  /** Quantos figurinos iguais existem no acervo; `null` quando não há ficha. */
+  quantidade_figurinos: number | null;
+  manutencao: { abertas: number; impede_uso: boolean; titulos: string[] } | null;
+  temas: CatalogPersonagemTema[];
+  /** Soma das aparições em todos os temas — pode ser maior que `temas.length`. */
+  total_aparicoes: number;
+}
+
+export interface CatalogPersonagensResponse {
+  personagens: CatalogPersonagem[];
+  totais: {
+    personagens: number;
+    aparicoes: number;
+    com_ficha: number;
+    sem_ficha: number;
+    em_varios_temas: number;
+    fichas_fora_do_catalogo: number;
+  };
+}
+
+export function useCatalogPersonagens() {
+  return useQuery<CatalogPersonagensResponse>({
+    // Sob a chave ["admin-catalogo", ...] de propósito: toda mutação de personagem já invalida
+    // esse prefixo, então a aba nova acompanha sem precisar ser lembrada em cada mutação.
+    queryKey: ["admin-catalogo", "personagens"],
+    queryFn: () => apiFetch<CatalogPersonagensResponse>("/api/admin/catalogo/personagens"),
+  });
+}
+
+/** Põe no elenco de um tema um personagem que já existe, identificado pela ficha (feature 235). */
+export function useReuseCharacter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ temaId, figurinoSheetId }: { temaId: number; figurinoSheetId: number }) =>
+      apiFetch<CatalogCharacter>(`/api/admin/catalogo/${temaId}/personagens/reaproveitar`, {
+        method: "POST",
+        body: JSON.stringify({ figurino_sheet_id: figurinoSheetId }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo"] });
+      queryClient.invalidateQueries({ queryKey: ["catalogo-elenco-busca"] });
     },
   });
 }

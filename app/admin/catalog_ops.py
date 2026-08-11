@@ -101,12 +101,89 @@ def validate_photo_extensions(files) -> None:
         )
 
 
+def _save_new_photos(item: CatalogItem, files) -> list[CatalogItemImage]:
+    """Persiste os arquivos de `new_photos` na ordem em que vieram.
+
+    A `position` sai zerada de propósito: quem decide a posição final de TODAS as fotos é
+    `apply_photos`, depois de resolver a ordem manual e a capa.
+    """
+    new_images: list[CatalogItemImage] = []
+    for f in files.getlist("new_photos"):
+        if not f or not f.filename:
+            continue
+        url = _rewrite_public_url(save_file(f, "catalog_photos"))
+        img = CatalogItemImage(item_id=item.id, url=url, position=0)
+        db.session.add(img)
+        new_images.append(img)
+    db.session.flush()
+    return new_images
+
+
+def _resolve_photo_order(
+    order_raw: str,
+    remaining: list[CatalogItemImage],
+    new_images: list[CatalogItemImage],
+) -> tuple[list[CatalogItemImage], bool]:
+    """Ordena as fotos finais a partir do `photo_order` enviado pelo cliente.
+
+    Cada token de `photo_order` é o id de uma foto já salva **ou** `new:<i>`, onde `i` é o
+    índice do arquivo dentro de `new_photos` — é isso que permite intercalar uma foto recém
+    enviada entre as antigas (antes toda foto nova ia obrigatoriamente para o fim).
+
+    Devolve `(ordenadas, ordem_completa)`. `ordem_completa` é falso quando o cliente não citou
+    todas as fotos — caso do formulário Jinja legado, que só manda os ids das existentes; o que
+    ficou de fora entra no fim, preservando a ordem atual.
+    """
+    by_token: dict[str, CatalogItemImage] = {str(im.id): im for im in remaining}
+    by_token.update({f"new:{i}": im for i, im in enumerate(new_images)})
+
+    ordered: list[CatalogItemImage] = []
+    seen: set[int] = set()
+    for token in (t.strip() for t in (order_raw or "").split(",")):
+        img = by_token.get(token)
+        if img is not None and img.id not in seen:
+            seen.add(img.id)
+            ordered.append(img)
+
+    rest = [im for im in (remaining + new_images) if im.id not in seen]
+    return ordered + rest, bool(ordered) and not rest
+
+
+def _resolve_cover(
+    form,
+    remaining: list[CatalogItemImage],
+    new_images: list[CatalogItemImage],
+    *,
+    allow_first_new_default: bool,
+) -> CatalogItemImage | None:
+    """Capa escolhida explicitamente (`cover_photo_id` → `new_photo_cover_index`).
+
+    `allow_first_new_default` mantém a regra da feature 141 — a primeira foto nova vira capa
+    quando ninguém escolheu — e só vale quando o cliente NÃO mandou uma ordem completa. Com
+    ordem completa a capa é simplesmente a primeira da ordem, sem promoção surpresa.
+    """
+    cover_raw = form.get("cover_photo_id", "")
+    if cover_raw.isdigit():
+        cover = next((im for im in remaining if im.id == int(cover_raw)), None)
+        if cover is not None:
+            return cover
+    cover_index_raw = form.get("new_photo_cover_index", "")
+    if cover_index_raw.isdigit() and 0 <= int(cover_index_raw) < len(new_images):
+        return new_images[int(cover_index_raw)]
+    if allow_first_new_default and new_images:
+        return new_images[0]
+    return None
+
+
 def apply_photos(item: CatalogItem, form, files) -> None:
     """Aplica remoções, reordenação, novos uploads e escolha de capa nas fotos de um item.
 
-    Ordem: remove → aplica `photo_order` manual nas restantes → adiciona novas → resolve capa
-    (explícita → primeira nova → primeira restante), sempre recolocando a capa em `position=0`.
-    Chamar `validate_photo_extensions` antes desta função.
+    Ordem: remove → sobe as novas → ordena tudo por `photo_order` → capa para a frente → grava
+    `position`. Chamar `validate_photo_extensions` antes desta função.
+
+    A `position` é SEMPRE regravada no fim. Antes ela só era tocada quando havia capa a
+    definir, e uma edição que apenas reordenava (o form React, que não manda `cover_photo_id`)
+    era aceita pela API e descartada em silêncio no banco.
     """
     remove_ids = {int(x) for x in form.getlist("remove_photo_ids[]") if x.isdigit()}
     for img in list(item.images):
@@ -120,43 +197,17 @@ def apply_photos(item: CatalogItem, form, files) -> None:
         .order_by(CatalogItemImage.position.asc())
         .all()
     )
-
-    order_raw = form.get("photo_order", "")
-    if order_raw:
-        order_ids = [int(x) for x in order_raw.split(",") if x.isdigit()]
-        by_id = {im.id: im for im in remaining}
-        ordered = [by_id[i] for i in order_ids if i in by_id]
-        ordered += [im for im in remaining if im.id not in set(order_ids)]
-        remaining = ordered
-
-    next_pos = len(remaining)
-    new_images = []
-    for f in files.getlist("new_photos"):
-        if not f or not f.filename:
-            continue
-        url = _rewrite_public_url(save_file(f, "catalog_photos"))
-        img = CatalogItemImage(item_id=item.id, url=url, position=next_pos)
-        db.session.add(img)
-        new_images.append(img)
-        next_pos += 1
-    db.session.flush()
-
-    cover_raw = form.get("cover_photo_id", "")
-    cover_index_raw = form.get("new_photo_cover_index", "")
-    cover = None
-    if cover_raw.isdigit():
-        cover = next((im for im in remaining if im.id == int(cover_raw)), None)
-    if cover is None and cover_index_raw.isdigit():
-        idx = int(cover_index_raw)
-        if 0 <= idx < len(new_images):
-            cover = new_images[idx]
-    if cover is None and new_images:
-        cover = new_images[0]
+    new_images = _save_new_photos(item, files)
+    ordered, order_is_complete = _resolve_photo_order(
+        form.get("photo_order", ""), remaining, new_images
+    )
+    cover = _resolve_cover(
+        form, remaining, new_images, allow_first_new_default=not order_is_complete
+    )
     if cover is not None:
-        others = [im for im in (remaining + new_images) if im is not cover]
-        cover.position = 0
-        for i, im in enumerate(others, start=1):
-            im.position = i
+        ordered = [cover] + [im for im in ordered if im.id != cover.id]
+    for position, img in enumerate(ordered):
+        img.position = position
 
 
 # Vocabulário do editor rich-text do admin + do acervo importado do WooCommerce

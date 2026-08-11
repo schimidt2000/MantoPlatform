@@ -22,6 +22,7 @@ import {
   type MarketingPost,
   type MarketingStatus,
 } from "../lib/marketing";
+import { attributeAtPoint, viewportPoint } from "../lib/pointerDrag";
 
 /** Duração das transições do quadro — dentro da faixa de 150–350ms do Princípio IX. */
 const MOVE_TRANSITION = { duration: 0.28, ease: "easeOut" } as const;
@@ -29,37 +30,12 @@ const MOVE_TRANSITION = { duration: 0.28, ease: "easeOut" } as const;
 /** Atributo que marca a área de soltura de cada coluna (lido no hit-test do drop). */
 const STATUS_ATTR = "data-kanban-status";
 
-/**
- * Coluna sob o ponteiro, pelo empilhamento real de elementos.
- *
- * `elementsFromPoint` devolve a pilha inteira naquele ponto, então o card arrastado (que está por
- * cima) não esconde a coluna de baixo — é o que permite acertar o alvo sem medir `getBoundingRect`
- * de cada coluna a cada quadro de arraste.
- */
+/** Coluna sob o ponteiro, pelo empilhamento real de elementos (ver `lib/pointerDrag`). */
 function statusAtPoint(x: number, y: number): MarketingStatus | null {
-  for (const element of document.elementsFromPoint(x, y)) {
-    const status = element.getAttribute?.(STATUS_ATTR);
-    if (status && (MARKETING_STATUSES as string[]).includes(status)) {
-      return status as MarketingStatus;
-    }
-  }
-  return null;
-}
-
-/**
- * Ponto do ponteiro em coordenadas de **viewport**, que é o que `elementsFromPoint` espera.
- *
- * `info.point` do Framer é coordenada de página; com a janela rolada, usá-lo direto erraria o alvo.
- * Mouse/pointer trazem `clientX/clientY`; no toque, o dedo que saiu está em `changedTouches`.
- */
-function viewportPoint(
-  event: MouseEvent | TouchEvent | PointerEvent,
-  info: PanInfo,
-): { x: number; y: number } {
-  if ("clientX" in event) return { x: event.clientX, y: event.clientY };
-  const touch = event.changedTouches?.[0] ?? event.touches?.[0];
-  if (touch) return { x: touch.clientX, y: touch.clientY };
-  return { x: info.point.x - window.scrollX, y: info.point.y - window.scrollY };
+  const status = attributeAtPoint(STATUS_ATTR, x, y);
+  return status && (MARKETING_STATUSES as string[]).includes(status)
+    ? (status as MarketingStatus)
+    : null;
 }
 
 /** Selo de urgência do prazo — mesma leitura de relance da Fila de Impressão 3D. */

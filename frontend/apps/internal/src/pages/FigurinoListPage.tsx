@@ -79,6 +79,22 @@ function FigurinoCard({ sheet, canEdit, linkedCharacterName, onQuickLink }: Figu
                 : `🪡 ${sheet.manutencao.abertas} conserto${sheet.manutencao.abertas === 1 ? "" : "s"}`}
             </Link>
           )}
+          {/* Só aparece quando foge do padrão (1): é a informação que decide se dá para escalar
+              o mesmo personagem em dois eventos no mesmo horário (feature 235). */}
+          {sheet.quantity !== 1 && (
+            <span
+              title={
+                sheet.quantity === 0
+                  ? "Nenhum figurino pronto desta ficha"
+                  : `${sheet.quantity} figurinos iguais no acervo`
+              }
+              className={`absolute right-1 top-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${
+                sheet.quantity === 0 ? "bg-red text-on-color" : "bg-accent-soft text-accent-dark"
+              }`}
+            >
+              {sheet.quantity === 0 ? "sem figurino" : `${sheet.quantity}×`}
+            </span>
+          )}
         </div>
         <div>
           <div className="truncate text-sm font-medium text-ink" title={sheet.character_name}>

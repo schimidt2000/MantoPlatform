@@ -14,7 +14,7 @@ from app import db
 from app.admin.catalog_ops import CatalogValidationError
 from app.catalogo.importer import _rewrite_public_url, _slugify
 from app.catalogo.media import classify_video_url
-from app.models import CatalogCharacter, CatalogItem, CatalogItemImage
+from app.models import CatalogCharacter, CatalogItem, CatalogItemImage, FigurinoSheet
 from app.storage import copy_file, delete_file, save_file
 from app.utils import audit
 
@@ -261,6 +261,142 @@ def adopt_item_as_character(tema: CatalogItem, item: CatalogItem) -> CatalogChar
     )
     db.session.commit()
     return character
+
+
+def reuse_character(tema: CatalogItem, sheet: FigurinoSheet) -> CatalogCharacter:
+    """Põe no elenco de `tema` um personagem que já existe no acervo (feature 235).
+
+    **A identidade de um personagem é a ficha de figurino** — o figurino físico que a Manto tem.
+    Duas linhas de `CatalogCharacter` apontando para a mesma ficha são o mesmo personagem em dois
+    temas (o caso "Gatuno e Pandy também estão na Gabby Humanizada"). Não existe tabela de
+    identidade separada de propósito: a ficha já é a âncora do resto do ERP (elenco do evento,
+    alerta de "sem ficha", manutenção, produção), e um terceiro cadastro seria uma segunda
+    verdade sobre quem é o personagem.
+
+    Cada aparição continua sendo uma linha própria: nome, foto, vídeo e ordem podem diferir de
+    tema para tema, e mexer numa não mexe na outra. O que amarra as duas é a ficha.
+
+    A foto é COPIADA (nunca referenciada) da aparição mais recente ou da própria ficha — os
+    fluxos de remoção chamam `delete_file` sem saber de compartilhamento.
+    """
+    ja_no_tema = CatalogCharacter.query.filter_by(
+        catalog_item_id=tema.id, figurino_sheet_id=sheet.id
+    ).first()
+    if ja_no_tema:
+        raise CatalogValidationError(
+            "figurino_sheet_id",
+            f'"{ja_no_tema.name}" já está no elenco deste tema.',
+        )
+
+    # Aparição mais recente: é dela que vêm nome/foto/vídeo já ajustados para o catálogo — a
+    # ficha costuma ter o nome do figurino ("Gabby Boneco"), não o nome de cena.
+    fonte = (
+        CatalogCharacter.query.filter_by(figurino_sheet_id=sheet.id)
+        .order_by(CatalogCharacter.id.desc())
+        .first()
+    )
+    nome = (fonte.name if fonte else sheet.character_name).strip()
+    origem_foto = fonte.photo_url if fonte and fonte.photo_url else sheet.photo_url
+    photo_url = None
+    if origem_foto:
+        copiada = copy_file(origem_foto, "catalog_photos")
+        photo_url = _rewrite_public_url(copiada) if copiada else None
+
+    character = CatalogCharacter(
+        catalog_item_id=tema.id,
+        name=nome,
+        slug=unique_character_slug(tema.slug, nome),
+        photo_url=photo_url,
+        video_url=fonte.video_url if fonte else None,
+        figurino_sheet_id=sheet.id,
+        position=len(tema.characters),
+    )
+    db.session.add(character)
+    db.session.flush()
+    audit(
+        "create", "CatalogCharacter", character.id, nome,
+        f'Personagem "{nome}" reaproveitado em "{tema.name}"',
+    )
+    db.session.commit()
+    return character
+
+
+def list_catalog_characters() -> dict:
+    """Personagens do catálogo agrupados por identidade, com em quantos temas cada um aparece.
+
+    Uma linha por personagem, não por aparição: a chave é a ficha (`ficha-<id>`) e, para quem
+    ainda não tem ficha, o próprio registro (`char-<id>`) — que aparece marcado como pendência,
+    porque sem ficha não dá para dizer que dois personagens de temas diferentes são o mesmo.
+
+    Não lista as 616 fichas do acervo: isto é o elenco **do catálogo**. O caminho para trazer uma
+    ficha ainda não usada é `reuse_character`, e o total de fichas fora do catálogo vai em
+    `totais` como medida de progresso.
+
+    Tema e aparição são coisas diferentes e a estrutura reflete isso: "Astronauta 1" e
+    "Astronauta 2" são duas aparições da MESMA ficha dentro de um tema só (dois performers do
+    mesmo figurino no mesmo show) — o que é exatamente onde a quantidade de figurinos iguais
+    passa a importar.
+    """
+    from app.figurino.producao_ops import alertas_por_ficha
+
+    characters = CatalogCharacter.query.all()
+    temas = {t.id: t for t in CatalogItem.query.all()}
+    sheets = {s.id: s for s in FigurinoSheet.query.all()}
+    alertas = alertas_por_ficha()
+
+    grupos: dict[str, dict] = {}
+    for c in sorted(characters, key=lambda c: (c.catalog_item_id, c.position)):
+        sheet = sheets.get(c.figurino_sheet_id) if c.figurino_sheet_id else None
+        key = f"ficha-{sheet.id}" if sheet else f"char-{c.id}"
+        grupo = grupos.setdefault(
+            key,
+            {
+                "key": key,
+                "name": c.name,
+                "photo_url": c.photo_url,
+                "figurino_sheet_id": sheet.id if sheet else None,
+                "figurino_sheet_name": sheet.character_name if sheet else None,
+                "quantidade_figurinos": sheet.quantity if sheet else None,
+                "manutencao": alertas.get(sheet.id) if sheet else None,
+                "temas": [],
+                "_por_tema": {},
+            },
+        )
+        if not grupo["photo_url"]:
+            grupo["photo_url"] = c.photo_url
+        tema = temas.get(c.catalog_item_id)
+        entrada = grupo["_por_tema"].get(c.catalog_item_id)
+        if entrada is None:
+            entrada = {
+                "tema_id": c.catalog_item_id,
+                "tema_name": tema.name if tema else "—",
+                "aparicoes": [],
+            }
+            grupo["_por_tema"][c.catalog_item_id] = entrada
+            grupo["temas"].append(entrada)
+        entrada["aparicoes"].append(
+            {"character_id": c.id, "character_name": c.name, "is_active": c.is_active}
+        )
+
+    personagens = sorted(grupos.values(), key=lambda g: g["name"].lower())
+    for grupo in personagens:
+        grupo.pop("_por_tema")
+        grupo["total_aparicoes"] = sum(len(t["aparicoes"]) for t in grupo["temas"])
+
+    com_ficha = [g for g in personagens if g["figurino_sheet_id"]]
+    return {
+        "personagens": personagens,
+        "totais": {
+            "personagens": len(personagens),
+            "aparicoes": len(characters),
+            "com_ficha": len(com_ficha),
+            "sem_ficha": len(personagens) - len(com_ficha),
+            "em_varios_temas": sum(1 for g in personagens if len(g["temas"]) > 1),
+            # Quanto do acervo de figurino ainda não virou personagem de nenhum tema — a medida
+            # de progresso que a tela existe para mostrar.
+            "fichas_fora_do_catalogo": len(sheets) - len({g["figurino_sheet_id"] for g in com_ficha}),
+        },
+    }
 
 
 def delete_character(character: CatalogCharacter) -> None:

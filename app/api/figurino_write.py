@@ -38,6 +38,7 @@ def api_figurino_create() -> Any:
         pieces=body.get("pieces"),
         notes=body.get("notes"),
         tags=body.get("tags"),
+        quantity=body.get("quantity"),
     )
     if sheet is None:
         return json_error(
@@ -52,6 +53,7 @@ def api_figurino_create() -> Any:
         {
             "id": sheet.id,
             "character_name": sheet.character_name,
+            "quantity": sheet.quantity,
             "pieces": sheet.pieces_list,
             "tags": sheet.tags_list,
             "notes": sheet.notes,
@@ -79,6 +81,7 @@ def api_figurino_edit(sheet_id: int) -> Any:
         pieces=body.get("pieces"),
         notes=body.get("notes"),
         tags=body.get("tags"),
+        quantity=body.get("quantity"),
     )
     if not ok:
         return json_error(
@@ -93,6 +96,7 @@ def api_figurino_edit(sheet_id: int) -> Any:
         {
             "id": sheet.id,
             "character_name": sheet.character_name,
+            "quantity": sheet.quantity,
             "pieces": sheet.pieces_list,
             "tags": sheet.tags_list,
             "notes": sheet.notes,
@@ -124,6 +128,7 @@ def _sheet_json(sheet: FigurinoSheet) -> dict:
     return {
         "id": sheet.id,
         "character_name": sheet.character_name,
+        "quantity": sheet.quantity,
         "pieces": sheet.pieces_list,
         "tags": sheet.tags_list,
         "notes": sheet.notes,
