@@ -84,6 +84,13 @@ def api_figurino_producao_create() -> Any:
         return denied
 
     dados = _payload()
+    # Validado ANTES de criar: a foto que não serve tem de barrar o pedido inteiro, não sobrar
+    # como erro depois de o pedido já estar salvo (feature 225g).
+    try:
+        fotos = ops.validar_fotos(request.files.getlist("fotos"))
+    except ops.ProducaoValidationError as exc:
+        return json_error(exc.message, 400, fields={"fotos": exc.message})
+
     try:
         producao, aviso = ops.create_producao(
             title=dados.get("title", ""),
@@ -100,6 +107,8 @@ def api_figurino_producao_create() -> Any:
         )
     except ops.ProducaoValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+
+    ops.add_fotos_iniciais(producao, fotos, actor=current_user)
 
     _avisar_responsavel(producao, None)
     # Aviso ao SETOR: o pedido pode ter nascido sem dono (é a regra na manutenção), e nesse caso

@@ -23,6 +23,7 @@ from sqlalchemy.orm import joinedload
 
 from app import db
 from app.constants import (
+    FIGURINO_ANEXO_FOTO,
     FIGURINO_ANEXO_KINDS,
     FIGURINO_ANEXO_ORCAMENTO,
     FIGURINO_KIND_COMPRA,
@@ -951,6 +952,57 @@ def add_anexo(
 
     db.session.commit()
     return anexo
+
+
+def validar_fotos(files: list[Any]) -> list[Any]:
+    """Filtra e valida as fotos que vieram no formulário de abertura (feature 225g).
+
+    Roda **antes** de o pedido existir, e valida a lista INTEIRA: se a terceira foto for um
+    arquivo que não serve, quem pediu recebe o erro com o pedido ainda em mãos, em vez de um
+    pedido salvo pela metade com duas fotos e uma mensagem de erro.
+
+    Returns:
+        Só os arquivos realmente preenchidos — campo de upload vazio manda ``FileStorage`` sem
+        nome, e tratá-lo como foto criaria anexo fantasma.
+    """
+    validos = [f for f in files if f and (getattr(f, "filename", "") or "").strip()]
+    for file_obj in validos:
+        _validar_extensao(file_obj, FIGURINO_ANEXO_FOTO)
+    return validos
+
+
+def add_fotos_iniciais(
+    producao: FigurinoProducao, files: list[Any], *, actor: User
+) -> int:
+    """Anexa as fotos que chegaram junto com a abertura do pedido. Retorna quantas entraram.
+
+    Diferente de `add_anexo`, **não escreve uma linha de histórico por foto**: num pedido que
+    acabou de nascer isso empilharia N linhas "Foto do andamento." embaixo da linha de abertura,
+    dizendo a mesma coisa N vezes. As fotos aparecem na grade de Fotos do detalhe, e o histórico
+    ganha uma linha só, com a contagem.
+
+    A compressão é a de `storage.save_file` — a mesma de todo upload do app (lado máximo de
+    1200px, JPEG qualidade 85). Aqui não se inventa outro padrão.
+    """
+    if not files:
+        return 0
+
+    for file_obj in files:
+        url = save_file(file_obj, SUBFOLDER_FOTOS)
+        db.session.add(
+            FigurinoProducaoAnexo(
+                producao_id=producao.id,
+                kind=FIGURINO_ANEXO_FOTO,
+                file_path=url,
+                original_name=(getattr(file_obj, "filename", "") or "")[:255] or None,
+                uploaded_by_id=actor.id,
+            )
+        )
+
+    plural = "fotos" if len(files) > 1 else "foto"
+    registrar_log(producao, f"{len(files)} {plural} anexada(s) na abertura.", actor=actor)
+    db.session.commit()
+    return len(files)
 
 
 def remove_anexo(anexo: FigurinoProducaoAnexo, *, actor: User) -> None:

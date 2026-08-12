@@ -21,6 +21,7 @@ import {
 import { formatBRL } from "@manto/money";
 import { useGastosEventos } from "../lib/gastos";
 import { FigurinoPicker } from "../components/FigurinoPicker";
+import { FotosDoPedidoPicker } from "../components/FotosDoPedidoPicker";
 import {
   PRODUCAO_KIND_TONES,
   PRODUCAO_KINDS,
@@ -129,6 +130,7 @@ function NovoPedidoDialog({
   const [responsibleId, setResponsibleId] = useState("");
   const [estimated, setEstimated] = useState("");
   const [quantity, setQuantity] = useState("1");
+  const [fotos, setFotos] = useState<File[]>([]);
   const eventos = useGastosEventos(dataEvento);
 
   const eManutencao = kind === "manutencao";
@@ -147,6 +149,7 @@ function NovoPedidoDialog({
     setResponsibleId("");
     setEstimated("");
     setQuantity("1");
+    setFotos([]);
     criar.reset();
   }
 
@@ -163,6 +166,7 @@ function NovoPedidoDialog({
         responsible_id: responsibleId ? Number(responsibleId) : null,
         estimated_cost: estimated ? Number(estimated.replace(",", ".")) : null,
         quantity: Number(quantity) || 1,
+        fotos,
       },
       { onSuccess: fechar },
     );
@@ -318,6 +322,22 @@ function NovoPedidoDialog({
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
+
+          {/* Logo abaixo dos detalhes de propósito: a foto é continuação do enunciado ("é este
+              defeito", "é esta peça"), não um anexo administrativo no fim do formulário. */}
+          <FotosDoPedidoPicker
+            fotos={fotos}
+            onChange={setFotos}
+            disabled={criar.isPending}
+            ajuda={
+              eCompra
+                ? "Foto do que comprar, do modelo ou do orçamento. Opcional."
+                : eManutencao
+                  ? "Foto do defeito poupa explicação — e a oficina entende sem ligar de volta."
+                  : "Foto da referência, do molde ou do tecido. Opcional."
+            }
+          />
+          {erroCampo("fotos") && <p className="text-xs text-red">{erroCampo("fotos")}</p>}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

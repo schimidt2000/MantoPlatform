@@ -433,6 +433,18 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   Manutenção (é o destino dos avisos "não pode ir").
 - O título da página é fixo e igual ao rótulo do menu — um título que mudasse junto com a aba
   faria a tela parecer três telas diferentes.
+- **Fotos já na abertura** *(225g)*, nos três tipos: opcionais, quantas quiser, logo abaixo dos
+  detalhes (a foto é continuação do enunciado, não anexo administrativo). Antes só dava para
+  anexar **depois** de criar, na tela de detalhe — e lá o anexo exige permissão de execução, então
+  quem abria o pedido frequentemente não conseguia anexar nada ao próprio pedido.
+  - A criação virou **`multipart/form-data`** (o formulário carrega arquivo). Todo campo chega
+    como string; campo vazio é **omitido** pelo front, porque os resolvedores tratam ausente e
+    `""` como "sem valor" mas engasgariam com a string `"null"`.
+  - A lista de fotos é validada **antes** de o pedido ser criado: um arquivo que não serve recusa
+    o pedido inteiro, em vez de deixar um pedido salvo pela metade.
+  - O histórico ganha **uma** linha ("3 fotos anexada(s) na abertura."), não uma por foto.
+  - Compressão é a de `storage.save_file` (1200px, JPEG 85) — a mesma de todo upload do app.
+    **Furo conhecido: `.heic` passa sem compressão** (ver 225g em `docs/03`).
 - **Acesso**: qualquer papel interno lê e abre pedido; **Figurino/Superadmin** executam;
   **só Superadmin aprova**. As flags vêm do servidor em `flags` (`can_create`, `can_execute`,
   `can_approve`) — a tela não recalcula RBAC.

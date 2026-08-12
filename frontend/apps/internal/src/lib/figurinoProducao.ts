@@ -320,6 +320,27 @@ export interface ProducaoInput {
   due_date?: string | null;
   estimated_cost?: number | null;
   quantity?: number;
+  /** Fotos anexadas já na abertura — opcionais e em qualquer quantidade, nos três tipos. */
+  fotos?: File[];
+}
+
+/**
+ * Monta o corpo `multipart` da abertura de pedido.
+ *
+ * A criação sempre vai como multipart (e não JSON) porque o formulário passou a carregar
+ * arquivos: manter os dois caminhos significaria dois contratos para a mesma rota. Campo vazio
+ * é **omitido** em vez de virar a string "null" — os resolvedores do backend tratam ausente e
+ * `""` como "sem valor", mas engasgariam com "null".
+ */
+function corpoDaCriacao(input: ProducaoInput): FormData {
+  const { fotos, ...campos } = input;
+  const body = new FormData();
+  for (const [chave, valor] of Object.entries(campos)) {
+    if (valor === undefined || valor === null) continue;
+    body.append(chave, String(valor));
+  }
+  for (const foto of fotos ?? []) body.append("fotos", foto);
+  return body;
 }
 
 export function useCreateProducao() {
@@ -328,7 +349,7 @@ export function useCreateProducao() {
     mutationFn: (input: ProducaoInput) =>
       apiFetch<MutationResponse>("/api/figurino/producoes", {
         method: "POST",
-        body: JSON.stringify(input),
+        body: corpoDaCriacao(input),
       }),
     onSuccess: () => invalidate(),
   });
