@@ -4,10 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-11** · Estado do repositório: pós-feature **225c (Pedido de
-> Compra + Revisão movida para Marketing — sem migration)**, antes dela 235 (personagem em
-> vários temas + quantidade de figurinos) · Head de migration: **`f4a8d61c9e27`**
-> (*quantidade de figurinos por ficha*)
+> Última atualização: **2026-08-12** · Estado do repositório: pós-feature **225e (hotfix do menu
+> "Ferramentas" cortado atrás da barra lateral)**, antes dela 225d (espaçamento padrão + busca de
+> figurino unificada) e 225c (Pedido de Compra + Revisão movida para Marketing) — nenhuma com
+> migration · Head de migration: **`f4a8d61c9e27`** (*quantidade de figurinos por ficha*)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -39,45 +39,47 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **225c** | Pedido de Compra (3º `kind` de `figurino_producoes`, fluxo `comprado → recebido`, sem migration) + "Revisão" movida de Produção para Marketing no menu | 2026-08-11 | `—` | (aqui) | 157 |
-| **235** | O mesmo personagem em vários temas (identidade = ficha de figurino), aba Personagens com termômetro de progresso, e quantos figurinos iguais existem por ficha | 2026-08-11 | `f4a8d61c9e27` | (aqui) | 228 |
-| **234** | Fotos do catálogo: reordenar e salvar não gravava posição nenhuma; grade refeita (capa = 1ª foto, arraste por ponteiro, `photo_order` com tokens `new:<i>`) | 2026-08-11 | `—` | (aqui) | 288 |
-| **233** | Coordenadora sem ver figurino (a 230 deixou o link levando a 403) e convite automático de quem é escalado na criação/edição do evento | 2026-08-11 | `—` | (aqui) | 347 |
-| **232** | Avaliação do portal: detalhar por partes volta a ser o caminho padrão (era cartão opcional abaixo da dobra) e `texto` recupera o sentido de "Show no geral" | 2026-08-10 | `—` | (aqui) | 410 |
-| **231** | Confirmações pendentes: painel na home do casting (com cobrança no WhatsApp) e lembrete automático por e-mail com teto de 2 por convite e 1 por pessoa/dia | 2026-08-10 | `e3f7c25a8b90` | (aqui) | 466 |
-| **230** | Portal segue a escala e não o convite: escalação não recusada passa a aparecer (26 futuros e 97 passados invisíveis, R$ 36.910), totais batendo com a planilha | 2026-08-10 | `—` | (aqui) | 544 |
-| **229** | Portal: link de avaliar também no histórico da Agenda (`RatingLink`); diagnóstico do "acesso travado" | 2026-08-09 | `—` | (aqui) | 600 |
-| **228** | `ConfirmDialog` promovido para o `@manto/ui`; exclusão em lote de pagamentos confirma em diálogo, com a soma e o que a busca escondeu | 2026-08-09 | `—` | (aqui) | 653 |
-| **227** | Foto do portal saía por rota de staff (255 talentos com ícone quebrado); coordenador passa a ver o figurino do elenco inteiro | 2026-08-09 | `—` | (aqui) | 689 |
-| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 759 |
-| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 831 |
-| **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 875 |
-| **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 940 |
-| **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 957 |
-| **224d** | `alo.mantoproducoes.com.br` como endereço curto da Loja de Interações Virtuais | 2026-08-07 | `—` | (aqui) | 983 |
-| **224c** | Estorno de comissão aparecia e descontava em todos os meses; agora só no mês corrente | 2026-08-07 | `—` | (aqui) | 1009 |
-| **224b** | Loja de Interações Virtuais destravada: upload de capa na gestão, capa servida em rota pública, editor de FAQ | 2026-08-07 | `—` | (aqui) | 1044 |
-| **224** | Evento com dinheiro vira cancelado (não apagado), com devolução ao cliente; exclusão só para Superadmin | 2026-08-07 | `b8e4d27a91f5` | (aqui) | 1089 |
-| **223** | Calculadora EducaManto: transporte dobrado no recalcular, Econômico sem adicional por pessoa, NF sem transporte, comissão configurável | 2026-08-07 | `a3f7c19d5e02` | (aqui) | 1149 |
-| **222** | Exportar elenco perdeu quatro campos (nascimento/CPF/RG/documento) na migração para o React | 2026-08-07 | `—` | (aqui) | 1202 |
-| **221** | Agente auditor financeiro semanal (endpoints + fix de sobrescrita de upload) | 2026-08-06 | `—` | (aqui) | 1229 |
-| **220b** | Hotfix: menu "Ferramentas" do evento embaçado no meio | 2026-08-06 | `—` | (aqui) | 1257 |
-| **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 1280 |
-| **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 1341 |
-| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 1416 |
-| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 1491 |
-| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 1560 |
-| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 1618 |
-| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 1695 |
-| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 1730 |
-| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 1762 |
-| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 1795 |
-| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 1830 |
-| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 1862 |
-| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 1891 |
-| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 1926 |
-| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 1999 |
-| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 2048 |
+| **225e** | Hotfix: menu "Ferramentas" cortado atrás da barra lateral — o painel abria para a esquerda e sumia sob a sidebar `z-40`; lado da abertura passou a ser medido | 2026-08-12 | `—` | (aqui) | 159 |
+| **225d** | Padding padrão nas 6 telas coladas na sidebar + busca de figurino unificada no `FigurinoPicker` (`FigurinoSheetPicker` apagado) | 2026-08-11 | `—` | (aqui) | 201 |
+| **225c** | Pedido de Compra (3º `kind` de `figurino_producoes`, fluxo `comprado → recebido`, sem migration) + "Revisão" movida de Produção para Marketing no menu | 2026-08-11 | `—` | (aqui) | 234 |
+| **235** | O mesmo personagem em vários temas (identidade = ficha de figurino), aba Personagens com termômetro de progresso, e quantos figurinos iguais existem por ficha | 2026-08-11 | `f4a8d61c9e27` | (aqui) | 305 |
+| **234** | Fotos do catálogo: reordenar e salvar não gravava posição nenhuma; grade refeita (capa = 1ª foto, arraste por ponteiro, `photo_order` com tokens `new:<i>`) | 2026-08-11 | `—` | (aqui) | 365 |
+| **233** | Coordenadora sem ver figurino (a 230 deixou o link levando a 403) e convite automático de quem é escalado na criação/edição do evento | 2026-08-11 | `—` | (aqui) | 424 |
+| **232** | Avaliação do portal: detalhar por partes volta a ser o caminho padrão (era cartão opcional abaixo da dobra) e `texto` recupera o sentido de "Show no geral" | 2026-08-10 | `—` | (aqui) | 487 |
+| **231** | Confirmações pendentes: painel na home do casting (com cobrança no WhatsApp) e lembrete automático por e-mail com teto de 2 por convite e 1 por pessoa/dia | 2026-08-10 | `e3f7c25a8b90` | (aqui) | 543 |
+| **230** | Portal segue a escala e não o convite: escalação não recusada passa a aparecer (26 futuros e 97 passados invisíveis, R$ 36.910), totais batendo com a planilha | 2026-08-10 | `—` | (aqui) | 621 |
+| **229** | Portal: link de avaliar também no histórico da Agenda (`RatingLink`); diagnóstico do "acesso travado" | 2026-08-09 | `—` | (aqui) | 677 |
+| **228** | `ConfirmDialog` promovido para o `@manto/ui`; exclusão em lote de pagamentos confirma em diálogo, com a soma e o que a busca escondeu | 2026-08-09 | `—` | (aqui) | 730 |
+| **227** | Foto do portal saía por rota de staff (255 talentos com ícone quebrado); coordenador passa a ver o figurino do elenco inteiro | 2026-08-09 | `—` | (aqui) | 766 |
+| **226** | Planilha de pagamentos no celular: cartões abaixo de `xl`, caixa de busca de volta e adiantamentos em janela sobreposta | 2026-08-08 | `—` | (aqui) | 836 |
+| **225b** | Manutenção de figurino: conserto e ajuste do que já existe, com aviso na ficha e no elenco do evento | 2026-08-07 | `d2e6b94c07f1` | (aqui) | 908 |
+| **225** | Produção de Figurinos: o trabalho de produzir ganhou registro, responsável, prazo na agenda e custo real | 2026-08-07 | `c1d5a83b64e7` | (aqui) | 952 |
+| **224f** | Conta de recebimento da Loja de Interações Virtuais ganhou tela (estava nula em produção) | 2026-08-07 | `—` | (aqui) | 1017 |
+| **224e** | Landing da loja: a raiz do `alo.` caía no catálogo de eventos; agora lista as conversas | 2026-08-07 | `—` | (aqui) | 1034 |
+| **224d** | `alo.mantoproducoes.com.br` como endereço curto da Loja de Interações Virtuais | 2026-08-07 | `—` | (aqui) | 1060 |
+| **224c** | Estorno de comissão aparecia e descontava em todos os meses; agora só no mês corrente | 2026-08-07 | `—` | (aqui) | 1086 |
+| **224b** | Loja de Interações Virtuais destravada: upload de capa na gestão, capa servida em rota pública, editor de FAQ | 2026-08-07 | `—` | (aqui) | 1121 |
+| **224** | Evento com dinheiro vira cancelado (não apagado), com devolução ao cliente; exclusão só para Superadmin | 2026-08-07 | `b8e4d27a91f5` | (aqui) | 1166 |
+| **223** | Calculadora EducaManto: transporte dobrado no recalcular, Econômico sem adicional por pessoa, NF sem transporte, comissão configurável | 2026-08-07 | `a3f7c19d5e02` | (aqui) | 1226 |
+| **222** | Exportar elenco perdeu quatro campos (nascimento/CPF/RG/documento) na migração para o React | 2026-08-07 | `—` | (aqui) | 1279 |
+| **221** | Agente auditor financeiro semanal (endpoints + fix de sobrescrita de upload) | 2026-08-06 | `—` | (aqui) | 1306 |
+| **220b** | Hotfix: menu "Ferramentas" do evento embaçado no meio | 2026-08-06 | `—` | (aqui) | 1334 |
+| **220** | Formulários×clientes×eventos: vínculo endurecido, fila de revisão e histórico da cliente | 2026-08-06 | `—` | (aqui) | 1357 |
+| **219** | Email errado do talento: confirmação no cadastro e fila de devoluções | 2026-08-06 | `b4c81ef07d29`, `c5d92fa16e34` | (aqui) | 1418 |
+| **218** | Superadmin corrige/exclui faixa de salário; Usuários com filtros; telas desempilhadas | 2026-08-06 | `—` | (aqui) | 1493 |
+| **217** | Tema escuro com switch na sidebar, e reestruturação da documentação | 2026-08-06 | `—` | (aqui) | 1568 |
+| **216** | Cachê no portal, prévia de link no WhatsApp, contraste e endurecimento de segurança | 2026-08-05 | `—` | (aqui) | 1637 |
+| **215** | Tela de evento em abas, com edição inline e buscas visuais | 2026-08-05 | `—` | (aqui) | 1695 |
+| **214** | Hotfix: Revendedor EducaManto sem acesso a nada (calculadora incluída) | 2026-08-05 | `—` | (aqui) | 1772 |
+| **213** | Acervo 3D: superadmin exclui peça já usada, desvinculando de todos os eventos | 2026-08-05 | `—` | (aqui) | 1807 |
+| **212** | Hotfix: diálogos abrindo pela metade, fora da tela | 2026-08-05 | `—` | (aqui) | 1839 |
+| **211** | Vitrine: quadro da foto com teto e piso | 2026-08-05 | `—` | (aqui) | 1872 |
+| **210d** | Hotfix: navegador preso no bundle antigo (e vínculo de ficha mais óbvio) | 2026-08-05 | `—` | (aqui) | 1907 |
+| **210c** | Hotfix: Comercial voltou a enxergar o pagamento do evento | 2026-08-05 | `—` | (aqui) | 1939 |
+| **210b** | Hotfix: buscador de pré-contrato mudo | 2026-08-05 | `—` | (aqui) | 1968 |
+| **210** | Hotfix: horário deslocado, anexo do evento e orçamento sem saída | 2026-08-05 | `—` | (aqui) | 2003 |
+| **209** | Catálogo como espinha organizacional (página própria + fichas + busca) | 2026-08-05 | `e7a1c94f20b3` | (aqui) | 2076 |
+| **208** | Restauração do papel ENSAIO (dashboard + agendamento + presença) | 2026-08-05 | `—` | (aqui) | 2125 |
 | **206b** | Hotfix: superfícies públicas por link voltaram a abrir sem login | 2026-08-05 | `—` | H2 | 11 |
 | **207** | Pacote de melhorias operacionais (5 frentes) | 2026-08-04 | `d9f2b3a41c07` | H2 | 36 |
 | **206** | React como interface primária e proxy reverso em produção | 2026-08-04 | `—` | H2 | 101 |
@@ -153,6 +155,81 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 225e — Hotfix: menu "Ferramentas" cortado atrás da barra lateral            (main · 2026-08-12 · sem migration)
+
+**Sintoma.** No detalhe do evento, o menu "⋯ Ferramentas" abria com o texto cortado no meio da
+palavra ("cronizar", "ortar elenco", "firmar dados do"). Relatado como *"não acontece na minha
+tela que é gigante, mas na tela de outros usuários tá cortado"* — e essa frase é o diagnóstico.
+
+**Não é o 220b de volta.** Aquele era empate de `z-index` com a régua de abas, e o sintoma era
+uma faixa horizontal embaçada no meio do menu. Este corta na vertical, sempre do lado esquerdo, e
+tem outra causa.
+
+**Causa.** O painel era `absolute right-0`: ancorado à direita, ele **cresce para a esquerda**. O
+cabeçalho do evento é `flex flex-wrap justify-between` — em tela larga o grupo de ações fica na
+mesma linha do título, lá na direita, e há espaço de sobra à esquerda. Quando a largura aperta (ou
+o título é comprido, como o do relato, com três personagens), o grupo **quebra para a linha de
+baixo e vai para o começo do conteúdo**. Aí o painel de 208px cresce a partir de x=403 para trás,
+chega em x=195 — e a área de conteúdo só começa em 256, porque a barra lateral é
+`fixed left-0 w-64 z-40`. Os 61px que sobram não saem da tela: ficam **atrás** da barra, que
+ganha de `z-30` do painel por ter z maior. Daí o texto começar no meio da palavra.
+
+**Medição (antes).** vw=1280: gatilho `[280,403]`, painel `[195,403]`, `main.left=256`,
+61px escondidos, e `elementFromPoint` no ponto do primeiro item devolvendo o `NAV` da sidebar.
+
+**Correção.** O lado da abertura passa a ser medido. `useLayoutEffect` (antes da pintura, para não
+piscar do lado errado) compara a largura do painel com o espaço até a borda da **área de
+conteúdo** — lida do DOM via `closest("main")`, e não repetindo os 256px em número, para não sair
+de sincronia com o `lg:pl-64` do `AppLayout`. Não cabendo à esquerda e cabendo à direita, o painel
+vira `left-0`. Sem espaço dos dois lados, fica no padrão da direita.
+
+Subir o painel para `z-50` resolveria o corte e criaria coisa pior: um menu flutuando por cima da
+navegação. O que estava errado era o lado, não a camada.
+
+**Medição (depois).** vw=2560 → âncora direita, painel `[547,755]`, 0px escondidos (o
+comportamento de antes, preservado). vw=1920/1280/1100/900 → âncora esquerda, 0px escondidos,
+**0 de 10 itens cobertos** em todas. Kebabs de ícone do catálogo (o uso original, na ponta direita
+do card) seguem abrindo para a esquerda, 0 cobertos.
+
+**Pegadinha de quem for medir isto de novo.** Na aba Árvore do catálogo os kebabs dos nós
+recolhidos continuam no DOM dentro de um contêiner `overflow-hidden` com `height:0` e
+`opacity:0`. Abrir um deles por script dá um menu "coberto" que **não é bug nenhum** — é um menu
+dentro de um nó fechado. Filtre com `checkVisibility({ checkOpacity: true })` antes de concluir
+qualquer coisa.
+
+### 225d — Espaçamento padrão nas telas coladas na sidebar, e uma só busca de figurino            (main · 2026-08-11 · sem migration)
+
+**Motivação.** Dois relatos: *"todas as páginas têm uma distanciazinha da barra lateral, essa está
+sem"* (apontando a Produção de Figurinos) e *"preciso que absolutamente todos os lugares que
+tenham busca de figurino sigam o padrão de outras páginas"*.
+
+**Espaçamento.** `AppLayout` renderiza `<main className="min-h-screen">` **sem padding**: o
+espaçamento é de cada página. A auditoria das 57 achou **6** sem ele — Produção de Figurinos
+(lista e detalhe) e as quatro telas de Interações Virtuais; as outras 51 já usavam `p-4 sm:p-6`.
+Todas passaram para `mx-auto max-w-<X> space-y-N p-4 sm:p-6`. Os ramos de **carregando e de erro**
+levam o mesmo invólucro — senão o esqueleto nasce deslocado e a tela pula quando os dados chegam.
+Medido: `paddingLeft=24px` e conteúdo em `left=256px` nas seis, igual à Agenda.
+
+**Busca de figurino.** Havia três aparências para a mesma tarefa: o `<select>` cego do pedido de
+figurino/compra, o `FigurinoSheetPicker` (209, lista própria) e o `FigurinoPicker` (215,
+`Combobox` do design system). Ficou só o último, promovido de `components/EventDetail/` para
+`components/`; o `FigurinoSheetPicker` foi apagado e seus 4 usos no catálogo migraram (a API dos
+dois já era a mesma; `ariaLabel` virou opcional com o default antigo). `fichaId` do
+`NovoPedidoDialog` deixou de ser string e virou `number | null`, o que dispensou o `fichaOptions`
+e as conversões na borda.
+
+O `Combobox` já traz filtro sem acento, teto de 30 resultados, limpar e teclado — o picker da 209
+reimplementava tudo isso à mão. São 616 fichas (612 com foto): lista alfabética é inviável e a
+escolha é visual, daí a miniatura quadrada (Princípio X.2).
+
+**Pegadinha.** No `Combobox`, `role="option"` fica no `<li>` mas o `onClick` mora no `<button>` de
+dentro. Testar com `document.querySelector('[role=option]').click()` não seleciona nada e o campo
+volta nulo **em silêncio** — o que quase virou um bug reportado que não existia. Use
+`[role=option] button`.
+
+A tabela de onde o `FigurinoPicker` aparece está em `docs/02` → "Padrões transversais do app
+interno", junto com o padrão de espaçamento.
 
 ### 225c — Pedido de Compra, e a Revisão movida para Marketing            (main · 2026-08-11 · sem migration)
 
