@@ -70,6 +70,9 @@ export const PRODUCAO_STATUS_ABERTOS: ProducaoStatus[] = [
  */
 export type ProducaoKind = "producao" | "manutencao" | "compra";
 
+/** Os tipos válidos, na ordem em que a tela os oferece. Usado para validar o `?tipo=` da URL. */
+export const PRODUCAO_KINDS: ProducaoKind[] = ["producao", "manutencao", "compra"];
+
 export const PRODUCAO_KIND_LABELS: Record<ProducaoKind, string> = {
   producao: "Produção",
   manutencao: "Manutenção",

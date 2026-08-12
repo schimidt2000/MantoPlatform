@@ -27,7 +27,6 @@ import {
   Scissors,
   Settings,
   Shirt,
-  ShoppingCart,
   SlidersHorizontal,
   Star,
   Target,
@@ -150,25 +149,19 @@ const SECTIONS: NavSectionConfig[] = [
       {
         // Feature 225 — ao lado das fichas de propósito: uma descreve o figurino pronto, a
         // outra acompanha o que ainda está sendo feito.
+        //
+        // 225f: um item só para os três tipos de pedido (produção, manutenção e compra). Eles
+        // são o MESMO objeto no banco, discriminado por `kind`, e dois itens de menu para uma
+        // tabela só era porta duplicada. O rótulo cita a compra porque este é o único letreiro
+        // que ela tem — quem procura onde pedir uma compra não clicaria em "Produção de
+        // Figurinos". O recorte por tipo virou aba, e a aba mora na URL (`?tipo=compra`).
         key: "figurinos-producao",
-        label: "Produção de Figurinos",
+        label: "Produção e Compras",
         href: "/figurinos/producao",
         icon: <Scissors />,
-        hint: "O que precisa ser produzido, por quem e a que custo",
+        hint: "Pedidos de produção, conserto e compra",
         isVisible: notRevendedor,
-        isActive: (path) => path.startsWith("/figurinos/producao"),
-      },
-      {
-        // Feature 225c — porta de entrada própria porque uma compra pode não ter nada a ver com
-        // figurino (tinta de cenário, material de escritório), e quem só precisa pedir alguma
-        // coisa não deveria ter que passar pela fila da oficina para achar onde pedir.
-        key: "compras",
-        label: "Pedidos de Compra",
-        href: "/compras",
-        icon: <ShoppingCart />,
-        hint: "O que precisa ser comprado, até quando e por quem",
-        isVisible: notRevendedor,
-        isActive: (path) => path.startsWith("/compras"),
+        isActive: (path) => path.startsWith("/figurinos/producao") || path.startsWith("/compras"),
       },
     ],
   },

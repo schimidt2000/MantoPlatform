@@ -23,6 +23,7 @@ import { useGastosEventos } from "../lib/gastos";
 import { FigurinoPicker } from "../components/FigurinoPicker";
 import {
   PRODUCAO_KIND_TONES,
+  PRODUCAO_KINDS,
   PRODUCAO_STATUS_LABELS,
   PRODUCAO_STATUS_TONES,
   prazoInfo,
@@ -104,16 +105,19 @@ function NovoPedidoDialog({
   open,
   onOpenChange,
   podeDesignar,
-  tipoFixo,
+  tipoInicial,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   podeDesignar: boolean;
-  /** Na tela de Compras o tipo não é escolha: o seletor some e o pedido já nasce compra. */
-  tipoFixo?: ProducaoKind;
+  /**
+   * Tipo já marcado ao abrir, vindo da aba ativa: quem está na aba Compras e clica em "Novo
+   * pedido" quer pedir uma compra. O seletor continua à vista — é sugestão, não trava.
+   */
+  tipoInicial?: ProducaoKind;
 }) {
   const criar = useCreateProducao();
-  const [kind, setKind] = useState<ProducaoKind>(tipoFixo ?? "producao");
+  const [kind, setKind] = useState<ProducaoKind>(tipoInicial ?? "producao");
   const responsaveis = useResponsaveis(kind);
   const [severity, setSeverity] = useState<ProducaoSeveridade | "">("");
   const [fichaId, setFichaId] = useState<number | null>(null);
@@ -132,7 +136,7 @@ function NovoPedidoDialog({
 
   function fechar() {
     onOpenChange(false);
-    setKind(tipoFixo ?? "producao");
+    setKind(tipoInicial ?? "producao");
     setSeverity("");
     setFichaId(null);
     setTitle("");
@@ -187,11 +191,10 @@ function NovoPedidoDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          {/* O tipo vem primeiro porque muda o resto do formulário — e muda o fluxo. Na tela de
-              Compras ele já está decidido, e um seletor de uma opção só seria ruído. */}
-          {!tipoFixo && (
-            <div className="flex gap-2">
-              {(["producao", "manutencao", "compra"] as ProducaoKind[]).map((k) => (
+          {/* O tipo vem primeiro porque muda o resto do formulário — e muda o fluxo. Vem sempre
+              à vista: com um menu só, é aqui que a pessoa descobre que dá para pedir compra. */}
+          <div className="flex gap-2">
+            {(["producao", "manutencao", "compra"] as ProducaoKind[]).map((k) => (
                 <button
                   key={k}
                   type="button"
@@ -209,8 +212,7 @@ function NovoPedidoDialog({
                       : "Comprar"}
                 </button>
               ))}
-            </div>
-          )}
+          </div>
 
           {eCompra && (
             <div>
@@ -526,17 +528,24 @@ function LinhaPedido({ p }: { p: Producao }) {
  * lançamentos soltos de gasto extra — oito linhas para uma peça só, sem nada dizendo que eram o
  * mesmo trabalho, nem quem estava fazendo, nem se ficou pronto.
  */
-export function FigurinoProducaoListPage({ tipoFixo }: { tipoFixo?: ProducaoKind } = {}) {
+export function FigurinoProducaoListPage() {
   const { data: user } = useCurrentUser();
   const reduceMotion = useReducedMotion();
   const [searchParams, setSearchParams] = useSearchParams();
   // `?ficha=` é o destino dos avisos de manutenção na lista de figurinos e no elenco do evento:
   // clicar em "não pode ir" tem que cair já filtrado naquele figurino.
   const fichaFiltro = Number(searchParams.get("ficha")) || null;
-  const [tipoLivre, setTipoLivre] = useState<ProducaoKind | "">(
-    fichaFiltro ? "manutencao" : "",
-  );
-  const tipo: ProducaoKind | "" = tipoFixo ?? tipoLivre;
+  // A aba mora na URL, e não em `useState`: é o que faz `/figurinos/producao?tipo=compra` ser um
+  // link válido — o item de menu "Pedidos de Compra" virou este link, e é para cá que a rota
+  // `/compras` redireciona. A troca de aba usa `replace`, então clicar em quatro abas não deixa
+  // quatro paradas para o botão Voltar desfazer.
+  const tipoUrl = searchParams.get("tipo");
+  const tipo: ProducaoKind | "" =
+    tipoUrl && PRODUCAO_KINDS.includes(tipoUrl as ProducaoKind)
+      ? (tipoUrl as ProducaoKind)
+      : fichaFiltro
+        ? "manutencao"
+        : "";
   const [filtro, setFiltro] = useState(fichaFiltro ? "" : "abertos");
   const [busca, setBusca] = useState("");
   const [soMeus, setSoMeus] = useState(false);
@@ -557,24 +566,25 @@ export function FigurinoProducaoListPage({ tipoFixo }: { tipoFixo?: ProducaoKind
 
   const itens = data?.items ?? [];
   const flags = data?.flags;
-  const eCompras = tipoFixo === "compra";
+  const eCompras = tipo === "compra";
 
   // Trocar de aba pode deixar um filtro órfão ("Recebidos" não existe em produção): voltar para
   // "Em aberto" evita a tela vazia que parece bug.
   function trocarTipo(valor: ProducaoKind | "") {
-    setTipoLivre(valor);
+    const proximo = new URLSearchParams(searchParams);
+    if (valor) proximo.set("tipo", valor);
+    else proximo.delete("tipo");
+    setSearchParams(proximo, { replace: true });
     if (!filtrosDe(valor).some((f) => f.key === filtro)) setFiltro("abertos");
   }
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
+      {/* Título fixo, igual ao rótulo do menu: a página é uma só, e as abas é que recortam.
+          Um título que mudasse junto com a aba faria a tela parecer três telas diferentes. */}
       <PageHeader
-        title={eCompras ? "Pedidos de Compra" : "Produção de Figurinos"}
-        subtitle={
-          eCompras
-            ? "O que precisa ser comprado, até quando, por quem — e se já chegou"
-            : "O que precisa ser feito, quem está fazendo e quanto já custou"
-        }
+        title="Produção e Compras"
+        subtitle="O que precisa ser feito ou comprado, por quem, até quando e quanto custou"
         actions={
           flags?.can_create ? (
             <Button onClick={() => setNovoAberto(true)}>
@@ -616,17 +626,17 @@ export function FigurinoProducaoListPage({ tipoFixo }: { tipoFixo?: ProducaoKind
           <Resumo itens={itens} />
 
           {/* Tipo primeiro: produzir peça nova, consertar uma que existe e comprar são três
-              trabalhos diferentes, com fluxos diferentes. Na tela de Compras não há escolha. */}
-          {!tipoFixo && (
-            <div className="flex gap-2 border-b border-line">
-              {(
-                [
-                  ["", "Tudo"],
-                  ["producao", "Produção"],
-                  ["manutencao", "Manutenção"],
-                  ["compra", "Compras"],
-                ] as const
-              ).map(([valor, rotulo]) => (
+              trabalhos diferentes, com fluxos diferentes. São estas abas que substituíram o
+              segundo item de menu — a aba Compras É a antiga tela de Pedidos de Compra. */}
+          <div className="flex gap-2 border-b border-line">
+            {(
+              [
+                ["", "Tudo"],
+                ["producao", "Produção"],
+                ["manutencao", "Manutenção"],
+                ["compra", "Compras"],
+              ] as const
+            ).map(([valor, rotulo]) => (
                 <button
                   key={valor || "tudo"}
                   type="button"
@@ -640,8 +650,7 @@ export function FigurinoProducaoListPage({ tipoFixo }: { tipoFixo?: ProducaoKind
                   {rotulo}
                 </button>
               ))}
-            </div>
-          )}
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {filtrosDe(tipo).map((f) => (
@@ -713,7 +722,7 @@ export function FigurinoProducaoListPage({ tipoFixo }: { tipoFixo?: ProducaoKind
         open={novoAberto}
         onOpenChange={setNovoAberto}
         podeDesignar={Boolean(flags?.can_execute)}
-        tipoFixo={tipoFixo}
+        tipoInicial={tipo || undefined}
       />
     </div>
   );

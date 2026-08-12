@@ -115,11 +115,10 @@ export function App() {
               "/figurinos/:id/edit" (mesmo cuidado que "/events/cancelamentos" exigiu na 224). */}
           <Route path="/figurinos/producao" element={<FigurinoProducaoListPage />} />
           <Route path="/figurinos/producao/:id" element={<FigurinoProducaoDetailPage />} />
-          {/* Feature 225c — a mesma tela da fila, travada em `compra`: um pedido de compra pode
-              não ter nada a ver com figurino, e obrigar a passar pela oficina para encontrá-lo
-              esconderia a porta de entrada de quem só precisa pedir alguma coisa. O detalhe
-              continua sendo `/figurinos/producao/:id`, porque o pedido é o mesmo objeto. */}
-          <Route path="/compras" element={<FigurinoProducaoListPage tipoFixo="compra" />} />
+          {/* 225f — `/compras` teve item de menu próprio por um dia; virou aba da mesma tela.
+              O redirect fica porque a rota já circulou em links e favoritos, e porque é ele que
+              mantém "abrir direto nas compras" possível a partir de qualquer lugar. */}
+          <Route path="/compras" element={<Navigate to="/figurinos/producao?tipo=compra" replace />} />
           <Route path="/figurinos/new" element={<FigurinoFormPage />} />
           <Route path="/figurinos/:id/edit" element={<FigurinoFormPage />} />
           <Route path="/vendas" element={<VendasPipelinePage />} />

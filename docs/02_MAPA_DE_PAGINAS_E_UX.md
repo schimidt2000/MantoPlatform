@@ -425,7 +425,14 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   `POST|DELETE /api/figurino/<id>/photo` · `POST /api/figurino/<id>/photo/rotate`.
 - **Vínculos**: Ficha ↔ Personagem do Catálogo ↔ Elenco de Evento (`EventRole`).
 
-#### `/figurinos/producao` — Produção de Figurinos *(feature 225)*
+#### `/figurinos/producao` — Produção e Compras *(feature 225; menu unificado na 225f)*
+- **É a única porta para os três tipos de pedido.** Abas **Tudo / Produção / Manutenção /
+  Compras**, e a aba mora na URL (`?tipo=`) — por isso ela é linkável e serve de destino do
+  redirect de `/compras`. Trocar de aba usa `replace`, então quatro cliques não deixam quatro
+  paradas para o botão Voltar desfazer. Sem `?tipo=`, abre em "Tudo"; com `?ficha=`, abre em
+  Manutenção (é o destino dos avisos "não pode ir").
+- O título da página é fixo e igual ao rótulo do menu — um título que mudasse junto com a aba
+  faria a tela parecer três telas diferentes.
 - **Acesso**: qualquer papel interno lê e abre pedido; **Figurino/Superadmin** executam;
   **só Superadmin aprova**. As flags vêm do servidor em `flags` (`can_create`, `can_execute`,
   `can_approve`) — a tela não recalcula RBAC.
@@ -442,11 +449,14 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **API**: `GET /api/figurino/producoes` · `POST /api/figurino/producoes` ·
   `GET /api/figurino/producoes/responsaveis`.
 
-#### `/compras` — Pedidos de Compra *(feature 225c)*
-- **É a mesma tela** (`FigurinoProducaoListPage`) com `tipoFixo="compra"`: as abas de tipo somem,
-  o título vira "Pedidos de Compra" e tudo já nasce `kind="compra"`. Porta de entrada própria
-  porque uma compra pode não ter nada a ver com figurino (tinta de cenário, material de
-  escritório), e quem só precisa pedir alguma coisa não deveria passar pela fila da oficina.
+#### Pedidos de Compra — aba `?tipo=compra` *(feature 225c; menu unificado na 225f)*
+- **Não tem tela nem item de menu próprios.** Nasceu com os dois na 225c e perdeu ambos na 225f:
+  produção, manutenção e compra são o **mesmo objeto** (`figurino_producoes`, discriminado por
+  `kind`), e dois itens de menu para uma tabela só eram porta duplicada. A compra é a aba
+  **Compras** de `/figurinos/producao`, endereçável por `?tipo=compra`.
+- **`/compras` continua respondendo**, como `<Navigate replace>` para
+  `/figurinos/producao?tipo=compra` — a rota circulou em links e favoritos, e é ela que mantém
+  "abrir direto nas compras" possível de qualquer lugar.
 - **Acesso**: qualquer papel interno vê e abre (menos Revendedor EducaManto). **Só Superadmin
   aprova.** Depois de aprovada, quem move é o **responsável pela própria compra** (ou a oficina)
   — é o que faz o pedido entregue ao Comercial não travar em "aprovado".
@@ -461,11 +471,14 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   (`?tipo=compra`), não só o figurino.
 - **Os chips de situação mudam com o tipo** (`filtrosDe`): "Comprados/Recebidos" só na compra,
   "Em produção/Prontos" só na oficina. Trocar de aba com um filtro órfão volta para "Em aberto".
-- **Onde a compra ainda aparece**: aba **Compras** em `/figurinos/producao`; painel pessoal da
-  home (**"🧵 Minhas peças e compras"**); e, quando nasce sem dono, na caixa de entrada do setor
-  — mas **só para quem aprova**, não para a oficina.
-- O detalhe continua em `/figurinos/producao/:id` (é o mesmo objeto); o breadcrumb é que muda,
-  voltando para `/compras` quando o pedido é uma compra.
+- **Onde a compra aparece**: aba **Compras** (e também na aba **Tudo**, junto com os outros dois);
+  painel pessoal da home (**"🧵 Minhas peças e compras"**); e, quando nasce sem dono, na caixa de
+  entrada do setor — mas **só para quem aprova**, não para a oficina.
+- **A aba ativa pré-seleciona o tipo** no diálogo de "Novo pedido": quem está em Compras e clica
+  já encontra "Comprar" marcado. O seletor dos três tipos continua à vista — é sugestão, não
+  trava, e com um menu só é ali que a pessoa descobre que dá para pedir compra.
+- O detalhe é `/figurinos/producao/:id` para os três tipos; o breadcrumb volta para a aba de
+  origem (`?tipo=compra` quando é compra).
 
 #### `/figurinos/producao/:id` — Detalhe do pedido
 - **UX**: coluna esquerda tem o que precisa ser feito, as fotos, os **gastos** e o **histórico**;

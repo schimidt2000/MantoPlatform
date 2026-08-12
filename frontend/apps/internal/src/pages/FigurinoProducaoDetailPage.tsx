@@ -619,10 +619,11 @@ export function FigurinoProducaoDetailPage() {
           )
         }
         breadcrumbs={[
-          // A volta é para a lista de onde o pedido veio: uma compra não mora na fila da oficina.
-          p.kind === "compra"
-            ? { label: "Pedidos de Compra", href: "/compras" }
-            : { label: "Produção de Figurinos", href: "/figurinos/producao" },
+          // A volta cai na aba de onde o pedido veio — é a mesma lista, recortada pelo tipo.
+          {
+            label: "Produção e Compras",
+            href: `/figurinos/producao${p.kind === "compra" ? "?tipo=compra" : ""}`,
+          },
           { label: p.title },
         ]}
         renderCrumb={(crumb, className) =>
