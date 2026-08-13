@@ -144,7 +144,7 @@ O superadmin cadastra e edita musicais: nome, nº de personagens, nº de pessoas
 
 **Calculadora por responsabilidades**
 
-- **FR-004**: A calculadora DEVE oferecer, por configuração: musical, dias com 1 e 2 sessões, ensemble, transporte, acréscimo do vendedor, e os quatro blocos de responsabilidade — sonorização, iluminação, alimentação (dia do evento) e cenário — cada um alternável entre "por conta da Manto" (padrão) e "por conta da contratante".
+- **FR-004**: A calculadora DEVE oferecer, por configuração: musical, dias com 1 e 2 sessões, ensemble, transporte, acréscimo do vendedor, e os quatro blocos de responsabilidade — sonorização, iluminação, alimentação (dia do evento) e cenário — cada um alternável entre "por conta da Manto" (padrão) e "por conta da contratante". A data da apresentação continua existindo como campo opcional fora do preço, alimentando o alerta de personagens já escalados no dia (comportamento atual preservado).
 - **FR-005**: Cada bloco de responsabilidade DEVE ter uma dica (tooltip) explicando ao vendedor o que a escolha implica para o cliente.
 - **FR-006**: Blocos por conta da contratante DEVEM remover seus custos do cálculo; blocos por conta da Manto DEVEM incluí-los.
 - **FR-007**: A equipe técnica DEVE seguir a matriz: som e iluminação pela Manto → sonoplasta + técnico de som + técnico de iluminação; só som → sonoplasta + técnico de som; só iluminação → sonoplasta + técnico de iluminação; nenhum → apenas o sonoplasta. O sonoplasta é fixo em todos os casos, com custo próprio por cenário (valores provisórios até o dono enviar os definitivos).
