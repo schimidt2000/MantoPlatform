@@ -65,6 +65,9 @@ DEFAULTS: dict = {
         "afsp_divisor":       3.0,
         "ashow_divisor":      6.0,
         "ashow_min_km":       500,
+        # Feature 235: caminhão de cenografia do EducaManto DENTRO de São Paulo (valor fixo,
+        # entra na soma de custos do musical). Fora de SP o caminhão sai e entram 2 vans.
+        "caminhao_sp":        800,
     },
     # Feature 100: tipos de acréscimo comuns, editáveis nas Configurações de Preços. BV e Outro são
     # sempre acrescentados pelo helper acrescimo_tipos_list() (BV é protegido — regra financeira).
@@ -202,6 +205,11 @@ def _migrate(data: dict) -> dict:
     # Feature 100: garante a chave de tipos de acréscimo em configs salvas antes desta feature.
     if "acrescimo_tipos" not in data:
         data["acrescimo_tipos"] = copy.deepcopy(DEFAULTS["acrescimo_tipos"])
+
+    # Feature 235: garante o caminhão de cenografia do EducaManto em configs antigas.
+    data.setdefault("transporte", {}).setdefault(
+        "caminhao_sp", DEFAULTS["transporte"]["caminhao_sp"]
+    )
 
     return data
 
