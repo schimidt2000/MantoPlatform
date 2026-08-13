@@ -126,6 +126,50 @@ def main() -> int:
         sem_caminhao = [r for r in fora.item_rows if "Caminhão" in r["name"]]
         check(not sem_caminhao, "fora de SP: caminhão fora da base")
 
+        # ── Bloco 6: contratação Manto embutida ───────────────────────────
+        print("6. Contratação Manto embutida")
+        from app.orcamento.quote_ops import calculate_quote
+
+        performer = {"type": "ator", "subtipo": "cara_limpa", "nome": "", "show": False}
+        entrada6 = quote_ops.parse_config_input({
+            "musical_id": 1, "d1": 1, "d2": 0, "ensemble": 0,
+            "responsabilidades": {}, "fora_sp": False, "acrescimo": 0,
+            "contratacao_manto": {
+                "duracoes": ["1h", "2h"],
+                "payload": {"performers": [performer], "coordenador_qty": 1},
+            },
+        })
+        _, r6, snap6 = quote_ops.calcular_config(entrada6)
+        manto = calculate_quote({
+            "performers": [performer], "coordenador_qty": 1,
+            "nota_fiscal": False, "fora_sp": False,
+        })["quote"]
+        check(snap6.get("totais", {}).get("1h") == manto["total_1h"],
+              "parte Manto = calculate_quote sem NF (fonte única)")
+        liq = full.liquido  # mesma config base (tudo Manto, 1d/1s, sem extras)
+        for dur in ("1h", "2h"):
+            esp_sem = math.ceil((liq + manto[f"total_{dur}"]) / 100) * 100
+            esp_com = math.ceil((liq + manto[f"total_{dur}"]) / 0.84 / 100) * 100
+            comb = r6.combinados[dur]
+            check(comb["sem_nota"] == esp_sem and comb["com_nota"] == esp_com,
+                  f"combinado {dur}: {comb['sem_nota']}/{comb['com_nota']} — NF única sobre a soma")
+        entrada6b = {
+            "configs": [{
+                "musical_id": 1, "d1": 1, "d2": 0, "ensemble": 0,
+                "responsabilidades": {}, "fora_sp": False, "acrescimo": 0,
+                "contratacao_manto": {
+                    "duracoes": ["1h"],
+                    "payload": {"performers": [performer], "coordenador_qty": 1},
+                },
+            }],
+            "client_name": "TESTE-VERIFY-235-CONTRATACAO",
+        }
+        _, snapc = quote_ops.generate_quote(1, entrada6b)
+        pdf_c = gerar_orcamento_pdf(snapc)
+        check(snapc["configs"][0]["contratacao_manto"] is not None
+              and pdf_c.startswith(b"%PDF") and len(pdf_c) > 1500,
+              f"snapshot v2 com contratação + PDF gera ({len(pdf_c)} bytes)")
+
         # ── Bloco 7: RBAC (corte no servidor) ─────────────────────────────
         print("7. Corte de breakdown (função da API)")
         from app.api.educamanto_read import _cortar_breakdown

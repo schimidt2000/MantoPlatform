@@ -18,6 +18,10 @@ import {
 } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
 import { GoogleAddressInput } from "../components/GoogleAddressInput";
+import { AcrescimosEditor } from "../components/orcamento/AcrescimosEditor";
+import { PerformersEditor } from "../components/orcamento/PerformersEditor";
+import { useCurrentUser } from "../lib/useAuth";
+import { useOrcamentoOpcoes, type Acrescimo, type Performer } from "../lib/orcamento";
 import {
   isSnapshotV2,
   RESPONSABILIDADES_PADRAO,
@@ -55,6 +59,31 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiRequestError ? err.message : fallback;
 }
 
+/** Contratação Manto embutida (apresentação tradicional junto do EducaManto). */
+interface ContratacaoState {
+  ativa: boolean;
+  performers: Performer[];
+  coordenadorQty: number;
+  acrescimos: Acrescimo[];
+  eventTime: string;
+  /** Durações fixas selecionadas (1h–4h). */
+  duracoes: string[];
+  /** Duração extra acima de 4h (0 = nenhuma). */
+  duracaoCustom: number;
+}
+
+const CONTRATACAO_INICIAL: ContratacaoState = {
+  ativa: false,
+  performers: [],
+  coordenadorQty: 1,
+  acrescimos: [],
+  eventTime: "",
+  duracoes: ["1h"],
+  duracaoCustom: 0,
+};
+
+const DURACOES_FIXAS = ["1h", "2h", "3h", "4h"] as const;
+
 /** Estado editável de UMA página (configuração) do orçamento. */
 interface ConfigState {
   musicalId: number | null;
@@ -66,6 +95,7 @@ interface ConfigState {
   endereco: string;
   kmIda: number | null;
   acrescimo: number;
+  contratacao: ContratacaoState;
 }
 
 function novaConfig(musicalId: number | null): ConfigState {
@@ -79,11 +109,19 @@ function novaConfig(musicalId: number | null): ConfigState {
     endereco: "",
     kmIda: null,
     acrescimo: 0,
+    contratacao: { ...CONTRATACAO_INICIAL },
   };
 }
 
-function configParaInput(config: ConfigState): ConfigInput | null {
+function duracoesDaContratacao(c: ContratacaoState): string[] {
+  const fixas = DURACOES_FIXAS.filter((d) => c.duracoes.includes(d)) as string[];
+  return c.duracaoCustom > 4 ? [...fixas, `${c.duracaoCustom}h`] : fixas;
+}
+
+function configParaInput(config: ConfigState, eventDate: string): ConfigInput | null {
   if (!config.musicalId) return null;
+  const c = config.contratacao;
+  const duracoes = duracoesDaContratacao(c);
   return {
     musical_id: config.musicalId,
     d1: config.d1,
@@ -93,6 +131,21 @@ function configParaInput(config: ConfigState): ConfigInput | null {
     fora_sp: config.foraSp,
     km_ida: config.foraSp && config.kmIda ? config.kmIda : null,
     acrescimo: config.acrescimo,
+    contratacao_manto:
+      c.ativa && duracoes.length > 0
+        ? {
+            duracoes,
+            payload: {
+              performers: c.performers,
+              coordenador_qty: c.coordenadorQty,
+              acrescimos: c.acrescimos,
+              event_date: eventDate || undefined,
+              event_time: c.eventTime || undefined,
+              modo_duracao: "horas",
+              incluir_duracao: DURACOES_FIXAS.filter((d) => c.duracoes.includes(d)),
+            },
+          }
+        : null,
   };
 }
 
@@ -171,6 +224,14 @@ export function EducaMantoCalculadoraPage() {
 
   const musicalsQuery = useMusicals();
   const textosQuery = useEducaMantoTextos();
+  const user = useCurrentUser();
+  // A contratação Manto usa o módulo da calculadora de eventos, restrito a
+  // Comercial/Superadmin — para os demais papéis a seção nem aparece.
+  const podeContratacao = Boolean(
+    user.data &&
+      (user.data.is_superadmin || user.data.roles.some((r) => r === "COMERCIAL" || r === "SUPERADMIN")),
+  );
+  const opcoes = useOrcamentoOpcoes();
   const distancia = useDistanciaEducaManto();
   const calcular = useCalcularConfig();
   const gerarOrcamento = useGerarOrcamento();
@@ -211,17 +272,35 @@ export function EducaMantoCalculadoraPage() {
 
     if (isSnapshotV2(snap)) {
       setConfigs(
-        snap.configs.map((c) => ({
-          musicalId: c.musical_id,
-          d1: c.d1,
-          d2: c.d2,
-          ensemble: c.ensemble,
-          responsabilidades: { ...c.responsabilidades },
-          foraSp: c.fora_sp,
-          endereco: "",
-          kmIda: c.km_ida,
-          acrescimo: c.acrescimo,
-        })),
+        snap.configs.map((c) => {
+          const inputs = c.contratacao_manto?.inputs as
+            | { performers?: Performer[]; coordenador_qty?: number; acrescimos?: Acrescimo[]; event_time?: string }
+            | undefined;
+          const duracoes = c.contratacao_manto?.duracoes ?? [];
+          const custom = duracoes.find((d) => !["1h", "2h", "3h", "4h"].includes(d));
+          return {
+            musicalId: c.musical_id,
+            d1: c.d1,
+            d2: c.d2,
+            ensemble: c.ensemble,
+            responsabilidades: { ...c.responsabilidades },
+            foraSp: c.fora_sp,
+            endereco: "",
+            kmIda: c.km_ida,
+            acrescimo: c.acrescimo,
+            contratacao: c.contratacao_manto
+              ? {
+                  ativa: true,
+                  performers: inputs?.performers ?? [],
+                  coordenadorQty: inputs?.coordenador_qty ?? 1,
+                  acrescimos: inputs?.acrescimos ?? [],
+                  eventTime: inputs?.event_time ?? "",
+                  duracoes: duracoes.filter((d) => ["1h", "2h", "3h", "4h"].includes(d)),
+                  duracaoCustom: custom ? Number(custom.replace("h", "")) || 0 : 0,
+                }
+              : { ...CONTRATACAO_INICIAL },
+          };
+        }),
       );
       setClientName(snap.client_name ?? "");
       setEventDate(snap.event_date ?? "");
@@ -264,7 +343,7 @@ export function EducaMantoCalculadoraPage() {
   // Recalcula a página ATIVA com debounce a cada mudança relevante.
   useEffect(() => {
     if (!config) return undefined;
-    const input = configParaInput(config);
+    const input = configParaInput(config, eventDate);
     if (!input || totalDias <= 0) return undefined;
     if (config.foraSp && !config.kmIda) return undefined;
     const timer = setTimeout(() => calcular.mutate(input), 300);
@@ -275,6 +354,8 @@ export function EducaMantoCalculadoraPage() {
     config?.foraSp, config?.kmIda,
     config?.responsabilidades.som, config?.responsabilidades.iluminacao,
     config?.responsabilidades.alimentacao, config?.responsabilidades.cenario,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    JSON.stringify(config?.contratacao), eventDate,
     ativa,
   ]);
 
@@ -315,8 +396,8 @@ export function EducaMantoCalculadoraPage() {
   }
 
   const inputsValidos = useMemo(
-    () => configs.map(configParaInput).filter((c): c is ConfigInput => c !== null),
-    [configs],
+    () => configs.map((c) => configParaInput(c, eventDate)).filter((c): c is ConfigInput => c !== null),
+    [configs, eventDate],
   );
 
   function handleGerarOrcamento() {
@@ -743,6 +824,147 @@ export function EducaMantoCalculadoraPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Contratação Manto embutida (US4) — módulo da calculadora de
+                  eventos como fonte única; NF e transporte ficam com o EducaManto. */}
+              {podeContratacao && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Contratação Manto (apresentação tradicional)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {!config.contratacao.ativa && (
+                      <>
+                        <p className="text-xs text-muted">
+                          Vai ter uma apresentação da Manto tradicional junto do EducaManto?
+                          Monte a equipe aqui — o valor soma ao desta página e a nota fiscal é
+                          aplicada sobre o total.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            alterarConfig({
+                              contratacao: { ...config.contratacao, ativa: true },
+                            })
+                          }
+                        >
+                          + Adicionar contratação Manto
+                        </Button>
+                      </>
+                    )}
+                    {config.contratacao.ativa && (
+                      <>
+                        {opcoes.isLoading && <Skeleton className="h-24 w-full" />}
+                        {opcoes.isError && (
+                          <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
+                            Não foi possível carregar as opções da calculadora de eventos.
+                          </div>
+                        )}
+                        {opcoes.data && (
+                          <>
+                            <div className="flex flex-wrap items-end gap-3">
+                              <div>
+                                <label className={LABEL} htmlFor="contratacao_horario">
+                                  Horário da apresentação
+                                </label>
+                                <Input
+                                  id="contratacao_horario"
+                                  type="time"
+                                  className="max-w-[140px]"
+                                  value={config.contratacao.eventTime}
+                                  onChange={(e) =>
+                                    alterarConfig({
+                                      contratacao: { ...config.contratacao, eventTime: e.target.value },
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div>
+                                <span className={LABEL}>Durações no orçamento</span>
+                                <div className="flex flex-wrap items-center gap-3">
+                                  {DURACOES_FIXAS.map((d) => (
+                                    <label key={d} className="flex items-center gap-1 text-sm text-ink">
+                                      <input
+                                        type="checkbox"
+                                        checked={config.contratacao.duracoes.includes(d)}
+                                        onChange={() =>
+                                          alterarConfig({
+                                            contratacao: {
+                                              ...config.contratacao,
+                                              duracoes: config.contratacao.duracoes.includes(d)
+                                                ? config.contratacao.duracoes.filter((x) => x !== d)
+                                                : [...config.contratacao.duracoes, d],
+                                            },
+                                          })
+                                        }
+                                      />
+                                      {d}
+                                    </label>
+                                  ))}
+                                  <label className="flex items-center gap-1 text-sm text-ink">
+                                    <span className="text-xs text-muted">Extra (h):</span>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="h-8 w-16"
+                                      value={config.contratacao.duracaoCustom || ""}
+                                      onChange={(e) =>
+                                        alterarConfig({
+                                          contratacao: {
+                                            ...config.contratacao,
+                                            duracaoCustom: Math.max(0, Number(e.target.value) || 0),
+                                          },
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="overflow-x-auto rounded-md border border-line">
+                              <PerformersEditor
+                                performers={config.contratacao.performers}
+                                onPerformersChange={(performers) =>
+                                  alterarConfig({ contratacao: { ...config.contratacao, performers } })
+                                }
+                                coordenadorQty={config.contratacao.coordenadorQty}
+                                onCoordenadorQtyChange={(coordenadorQty) =>
+                                  alterarConfig({ contratacao: { ...config.contratacao, coordenadorQty } })
+                                }
+                                especiais={opcoes.data.especiais}
+                                especiaisComShow={opcoes.data.especiais_com_show}
+                                especiaisComCantor={opcoes.data.especiais_com_cantor}
+                              />
+                            </div>
+
+                            <AcrescimosEditor
+                              acrescimos={config.contratacao.acrescimos}
+                              onChange={(acrescimos) =>
+                                alterarConfig({ contratacao: { ...config.contratacao, acrescimos } })
+                              }
+                              tipos={[...opcoes.data.acrescimo_tipos, opcoes.data.acrescimo_tipo_bv]}
+                            />
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                alterarConfig({ contratacao: { ...CONTRATACAO_INICIAL } })
+                              }
+                            >
+                              Remover contratação Manto
+                            </Button>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* ── Resultado ─────────────────────────────────────────────── */}
@@ -804,6 +1026,27 @@ export function EducaMantoCalculadoraPage() {
                       </div>
                     </div>
                   </div>
+
+                  {resultado.combinados && Object.keys(resultado.combinados).length > 0 && (
+                    <div className="rounded-lg border border-gold/60 bg-gold-soft p-4">
+                      <p className="text-xs font-semibold uppercase text-gold-ink">
+                        Totais com contratação Manto (NF sobre a soma)
+                      </p>
+                      <div className="mt-2 space-y-1 text-sm text-ink">
+                        {Object.entries(resultado.combinados)
+                          .sort(([a], [b]) => a.length - b.length || a.localeCompare(b))
+                          .map(([dur, tot]) => (
+                            <p key={dur}>
+                              <strong>{dur}:</strong> {brl(tot.sem_nota)} sem NF ·{" "}
+                              {brl(tot.com_nota)} com NF{" "}
+                              <span className="text-xs text-muted">
+                                (à vista {brl(tot.a_vista_sem)} / {brl(tot.a_vista_com)})
+                              </span>
+                            </p>
+                          ))}
+                      </div>
+                    </div>
+                  )}
 
                   {breakdown && (
                     <Card>
