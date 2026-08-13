@@ -148,8 +148,8 @@ O superadmin cadastra e edita musicais: nome, nº de personagens, nº de pessoas
 - **FR-005**: Cada bloco de responsabilidade DEVE ter uma dica (tooltip) explicando ao vendedor o que a escolha implica para o cliente.
 - **FR-006**: Blocos por conta da contratante DEVEM remover seus custos do cálculo; blocos por conta da Manto DEVEM incluí-los.
 - **FR-007**: A equipe técnica DEVE seguir a matriz: som e iluminação pela Manto → sonoplasta + técnico de som + técnico de iluminação; só som → sonoplasta + técnico de som; só iluminação → sonoplasta + técnico de iluminação; nenhum → apenas o sonoplasta. O sonoplasta é fixo em todos os casos, com custo próprio por cenário (valores provisórios até o dono enviar os definitivos).
-- **FR-008**: O headcount da configuração (personagens + produção + técnicos do caso + ensemble) DEVE alimentar: cadeiras do camarim, itens cobrados por pessoa (catering e ajuda de custo) e o adicional por pessoa da viagem.
-- **FR-009**: Os custos por pessoa por ensaio (catering de ensaio e ajuda de custo) DEVEM multiplicar pelo nº de ensaios do musical.
+- **FR-008**: Existem dois headcounts derivados: o **do dia do evento** (personagens + produção + técnicos do caso + ensemble), que alimenta cadeiras do camarim, catering da apresentação e o adicional por pessoa da viagem; e o **de ensaio** (personagens + produção + ensemble, sem técnicos), que alimenta os custos por pessoa dos ensaios. (Confere com os dados atuais: Uma Aventura Animal tem catering de ensaio para 11 = 9 personagens + 2 produção.)
+- **FR-009**: Os custos por pessoa por ensaio (catering de ensaio e ajuda de custo) DEVEM multiplicar pelo nº de ensaios do musical, aplicados sobre o headcount de ensaio.
 - **FR-010**: A fórmula de fechamento DEVE permanecer a atual: margens por cenário, desconto de 5% acima de 3 dias, acréscimo capado, arredondamento para cima na centena para o valor sem NF e (líquido ÷ 0,84) arredondado para cima na centena para o valor com NF.
 - **FR-011**: O valor à vista (PIX) DEVE ser calculado de fato — 5% de desconto sobre o valor final — e exibido na tela e no PDF.
 
@@ -162,12 +162,12 @@ O superadmin cadastra e edita musicais: nome, nº de personagens, nº de pessoas
 
 - **FR-014**: A calculadora DEVE oferecer "Adicionar contratação Manto" por configuração, reusando os módulos da calculadora de orçamento de eventos (coordenador, equipe, acréscimos/BV, ajustes finos) como fonte única — sem duplicar regra de negócio.
 - **FR-015**: Data e local DEVEM ser herdados da configuração EducaManto; as durações disponíveis (1h, 2h, 3h, 4h ou mais) geram um valor da parte Manto por duração.
-- **FR-016**: O total combinado DEVE somar EducaManto + parte Manto e aplicar a nota fiscal sobre a soma, produzindo um total por duração.
+- **FR-016**: O total combinado por duração DEVE ser calculado sobre a soma dos líquidos: sem NF = soma arredondada para cima na centena; com NF = (soma ÷ 0,84) arredondada para cima na centena — a nota incide uma única vez, sobre o total (nunca por parte).
 
 **Multi-páginas**
 
 - **FR-017**: O vendedor DEVE poder criar novas páginas (configurações independentes, inclusive de musicais diferentes), navegar entre elas, editá-las e removê-las (mínimo de 1) antes de gerar.
-- **FR-018**: O PDF DEVE trazer uma página por configuração, cada uma completa e autoexplicativa.
+- **FR-018**: O PDF DEVE trazer uma página A4 por configuração, cada uma completa e autoexplicativa; o conteúdo DEVE caber na página (tipografia compacta como hoje, 8.5pt nas seções longas) e, se ainda assim estourar, a observação livre transborda para uma página de continuação — valores e avisos obrigatórios nunca saem da primeira página da configuração.
 
 **PDF**
 
@@ -175,7 +175,7 @@ O superadmin cadastra e edita musicais: nome, nº de personagens, nº de pessoas
 - **FR-020**: O PDF DEVE mostrar as quantidades da equipe do musical: personagens, produção e técnicos (conforme a matriz do caso).
 - **FR-021**: O PDF DEVE conter os avisos fixos: palco mínimo de 5 m de frente × 4 m de fundo; camarim obrigatório (espaço com cadeiras para a equipe, espelho, banheiro e água); "o som completo é suficiente para área X (local fechado) e área Y (local aberto)" (valores pendentes do dono); local aberto exige visita técnica ou chamada de vídeo.
 - **FR-022**: Linhas de dias com valor zero NÃO aparecem no PDF.
-- **FR-023**: O vendedor DEVE poder digitar uma observação livre por orçamento, exibida formatada em seção própria do PDF.
+- **FR-023**: O vendedor DEVE poder digitar uma observação livre por orçamento (texto simples, até 2.000 caracteres, com quebras de linha preservadas), exibida formatada em seção própria do PDF.
 - **FR-024**: Quando houver contratação Manto, a mesma página DEVE mostrar o trecho "o que está incluso" da parte Manto e o total combinado por duração.
 - **FR-025**: Os textos por nível (descrições Master/Intermediário/Econômica e "O que está incluso" por nível) DEIXAM de existir, substituídos pelos textos por responsabilidade.
 
@@ -216,7 +216,7 @@ O superadmin cadastra e edita musicais: nome, nº de personagens, nº de pessoas
 
 ## Assumptions
 
-- **Valores provisórios**: custos dos técnicos e áreas X/Y do som entram como constantes provisórias claramente identificadas; a substituição pelos valores definitivos do dono é **gate de lançamento** (a feature não vai a produção sem eles).
+- **Valores provisórios**: custos dos técnicos, áreas X/Y do som, custos de iluminação completa/cenário por musical e a **divisão personagens × produção dos musicais restantes** (só Uma Aventura Animal está confirmada: 9 + 2; dos demais temos apenas os totais 10/9/7/9/10) entram como valores provisórios claramente identificados; a substituição pelos definitivos do dono é **gate de lançamento** (a feature não vai a produção sem eles).
 - **Textos das responsabilidades**: os textos do PDF (mínimos exigidos / o que levaremos) e os tooltips são redigidos pela equipe de desenvolvimento a partir do material existente (PDF atual, planos.md, descrições do dono); a **revisão e aprovação do dono antes do deploy** é gate de lançamento, mas não bloqueia plano nem implementação.
 - **Catering de ensaio e ajuda de custo** não são afetados pelo bloco "alimentação": o bloco controla apenas a alimentação do dia do evento; os custos de ensaio sempre existem, multiplicados pelo nº de ensaios.
 - **À vista**: o desconto de 5% é exibido como valor final à vista para os dois regimes (sem NF e com NF), calculado sobre o valor final de cada um.
@@ -224,5 +224,5 @@ O superadmin cadastra e edita musicais: nome, nº de personagens, nº de pessoas
 - **Teto do acréscimo** continua sendo o valor da configuração sem transporte, como hoje.
 - **Comissão do responsável EducaManto** (5% sobre o lucro, fora do orçamento) não muda nesta feature.
 - **Gráfica e demais itens de custo** do musical permanecem itens sempre inclusos (não viram responsabilidade alternável).
-- **Tela de musicais** herda o RBAC atual da tela de pacotes (ver: comercial e superadmin; gerir: só superadmin).
+- **Tela de musicais**: gerir continua só superadmin; comercial pode ver a lista de musicais **sem custos nem margens** (a visão com custos passa a ser exclusiva do superadmin, coerente com a nova regra de visibilidade).
 - **Config de transporte** (tarifas por km e divisor do adicional) continua vindo das Configurações de Preços compartilhadas com a calculadora de orçamento de eventos.

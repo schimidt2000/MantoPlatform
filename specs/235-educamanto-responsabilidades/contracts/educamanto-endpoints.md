@@ -11,7 +11,7 @@ Papéis: `_CAN_USE`. Lista para o dropdown da calculadora.
     "num_personagens": 9, "num_producao": 2, "num_ensaios": 2 } ] }
 ```
 
-Para COMERCIAL/SUPERADMIN na tela de gestão, `GET /api/educamanto/musicals/<id>` devolve o musical completo (margens, custos por cenário, itens). Custos/margens **nunca** vão no payload da listagem da calculadora.
+`GET /api/educamanto/musicals/<id>` devolve o musical completo (margens, custos por cenário, itens) **apenas para SUPERADMIN** — coerente com FR-028. COMERCIAL vê a listagem de gestão sem custos/margens (nomes, equipe, nº de ensaios). Custos/margens **nunca** vão no payload da listagem da calculadora.
 
 ## POST /api/educamanto/calcular
 
@@ -84,7 +84,7 @@ Como hoje (filtros, snapshot congelado, PDF inline), com duas mudanças: o detal
 
 ## CRUD de musicais (substitui /packages)
 
-- `GET /api/educamanto/musicals` (listagem de gestão, COMERCIAL+SUPERADMIN — inclui margens/custos)
+- `GET /api/educamanto/musicals` (listagem de gestão, COMERCIAL+SUPERADMIN — margens/custos incluídos **só na resposta do superadmin**)
 - `POST /api/educamanto/musicals` · `PATCH /api/educamanto/musicals/<id>` · `DELETE /api/educamanto/musicals/<id>` · `POST /api/educamanto/musicals/<id>/duplicate` — SUPERADMIN.
 - Validações: `num_ensaios >= 2` (400 "O mínimo são 2 ensaios."); `name` obrigatório e único; custos ≥ 0.
 - Endpoints antigos `/api/educamanto/packages*` são removidos (breaking interno aceito — o frontend migra junto no mesmo deploy).
