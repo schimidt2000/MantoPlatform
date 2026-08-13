@@ -4,12 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-12** · Estado do repositório: pós-feature **225g (fotos na
-> abertura do pedido; criação virou `multipart`)**, antes dela 225f (um menu só,
-> "Produção e Compras", para os três tipos de pedido), 225e (hotfix do menu
-> "Ferramentas"), 225d (espaçamento padrão + busca de figurino unificada) e 225c (Pedido de
-> Compra + Revisão movida para Marketing) — nenhuma com migration · Head de migration:
-> **`f4a8d61c9e27`** (*quantidade de figurinos por ficha*)
+> Última atualização: **2026-08-13** · Estado do repositório: pós-feature
+> **235-educamanto (EducaManto por responsabilidades)**, antes dela 225g (fotos na
+> abertura do pedido; criação virou `multipart`), 225f, 225e, 225d e 225c · Head de migration:
+> **`b7e3a91d5c24`** (*educamanto musicais*)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -41,6 +39,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **235-educamanto** | EducaManto por responsabilidades: musicais no lugar de pacotes por nível; snapshot v2 recalculado no servidor; Jinja do EducaManto desligado. **Gate de deploy: valores `PROVISORIO` + textos pendem do dono** | 2026-08-13 | `b7e3a91d5c24` | (aqui) | — |
 | **225g** | Fotos já na abertura do pedido (opcionais, várias, nos três tipos); criação virou `multipart`. **Furo conhecido: `.heic` não é comprimido** | 2026-08-12 | `—` | (aqui) | 163 |
 | **225f** | Um menu só ("Produção e Compras") para os três tipos de pedido; a aba virou `?tipo=` na URL e `/compras` passou a redirecionar | 2026-08-12 | `—` | (aqui) | 216 |
 | **225e** | Hotfix: menu "Ferramentas" cortado atrás da barra lateral — o painel abria para a esquerda e sumia sob a sidebar `z-40`; lado da abertura passou a ser medido | 2026-08-12 | `—` | (aqui) | 248 |
@@ -159,6 +158,51 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 235-educamanto — EducaManto por responsabilidades            (branch 235-educamanto-responsabilidades · 2026-08-13 · migration `b7e3a91d5c24`)
+
+**Motivação.** Os pacotes por nível (Master/Intermediário/Econômica) engessavam a venda: o
+cliente que queria o espetáculo completo com a própria iluminação não cabia em nenhum pacote.
+O dono pediu a reestruturação completa (conversa de 13/08/2026, esteira SDD completa em
+`specs/235-educamanto-responsabilidades/`).
+
+**O que mudou.**
+- **Musicais** (`educamanto_musicals`, rename com ids preservados) substituem os 22 pacotes; a
+  migração poda Intermediário/Econômica/cópia órfã e move Som/Catering/Transporte para colunas
+  ou regra. `Recalcular` de snapshot v1 mapeia por id preservado ou prefixo do nome.
+- **Responsabilidades** som/iluminação/alimentação/cenário (Manto×contratante) ligam/desligam
+  blocos de custo; **matriz técnica** de 4 casos (sonoplasta fixo); headcount de ensaio
+  (personagens+produção+ensemble) ≠ headcount do evento (+técnicos).
+- **Fechamento preservado** (margens, desconto>3d, teto do acréscimo, ceil100, ÷0,84); novo:
+  ensaios ×`num_ensaios` (mín. 2, **não** escalam com dias do evento), caminhão SP R$ 800
+  (`pricing_config['transporte']['caminhao_sp']`), fora de SP 2 vans + adicional por pessoa 1×,
+  à vista −5% **calculado** (era só texto no PDF).
+- **Snapshot v2** multi-configuração **recalculado no servidor** (fim da confiança no payload
+  do cliente); v1 re-renderiza intacto. PDF v2 por configuração com "o que levaremos"/"mínimo
+  exigido", avisos fixos (palco 5×4, camarim=headcount, som área X/Y, visita técnica), dias
+  zerados ocultos, observação com transbordo.
+- **Contratação Manto embutida**: reusa `app.orcamento.quote_ops.calculate_quote` com
+  `nota_fiscal=False`/`fora_sp=False`; NF única sobre a soma por duração (FR-016).
+  `PerformersEditor`/`AcrescimosEditor` extraídos de `OrcamentoCalculadoraPage` para
+  `components/orcamento/` (fonte única, render idêntico).
+- **RBAC**: breakdown/custos cortados **no servidor** para não-superadmin (`_cortar_breakdown`);
+  tela de musicais mostra custos só a superadmin.
+- **Jinja do EducaManto desligado**: templates removidos, rotas viram 301 para o SPA — morre a
+  réplica JS da fórmula (que divergia do Python no transporte e no headcount).
+
+**Regras de negócio novas.** Nível não existe mais em lugar nenhum (fim da detecção por
+substring no nome); alimentação da contratante é negociada com o vendedor; camarim obrigatório.
+
+**Pegadinhas.**
+- `PROVISORIO` (grep) em `pdf_textos.py` + colunas de iluminação/cenário zeradas + divisão
+  personagens×produção dos musicais ≠ UAA: **gate de deploy** — dono ainda envia os valores
+  (técnicos, áreas X/Y do som) e revisa os textos.
+- O default do model `discount_days` virou 3 (paridade com produção; era 2 e pacote novo
+  nascia diferente).
+- `verify_235.py` (specs/235) roda 34 checagens contra `manto_local`, incluindo re-derivação
+  independente da fórmula; a senha local do SUPERADMIN agora é `verify-235-senha`.
+- Havia colisão de numeração: a migration `f4a8d61c9e27` (quantidade de figurinos) se dizia
+  "feature 235" no docstring — esta entrada usa **235-educamanto** para desambiguar.
 
 ### 225g — Fotos já na abertura do pedido, nos três tipos            (main · 2026-08-12 · sem migration)
 

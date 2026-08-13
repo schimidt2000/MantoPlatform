@@ -47,7 +47,7 @@ Criar página 2 (copiando a 1), trocar musical na página 2, editar a página 1 
 ## 5. Transporte (FR-012/013)
 
 - Dentro de SP (padrão): transporte = R$ 800, km ignorado.
-- Fora de SP + km 100 + headcount 13 + 2 dias, com tarifas default (5,5 / 4,5 / divisor 3): viagem = 200×(5,5+4,5) + 13×200÷3 = 2.000 + 866,67 = **R$ 2.866,67**; total = × 2 dias = **R$ 5.733,34**; caminhão ausente.
+- Fora de SP + km 100 + headcount 14 + 2 dias, com tarifas default (van c/ carretinha 5,5 + van comum 6,3, divisor 3): viagem = 200×(5,5+6,3) + 14×200÷3 = 2.360 + 933,33 = **R$ 3.293,33**; total = × 2 dias = **R$ 6.586,66**; caminhão ausente. (Conferido pelo `verify_235.py` contra o `manto_local`.)
 - Fora de SP sem km: transporte 0 e caminhão ausente; geração avisa km obrigatório.
 
 ## 6. Contratação Manto (US4, SC-007)

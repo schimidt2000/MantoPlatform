@@ -445,3 +445,24 @@ esforço e maior efeito da lista, porque envenenam **toda** sessão futura.
 8. **§7.1 e §7.2** — as docstrings de `models.py` e o cabeçalho de `calendar/routes.py`. Baratas e é o
    que mais reduz o custo de leitura das próximas sessões.
 9. **§9.1** — as fatias A→E de `calendar/routes.py`, uma por sessão.
+
+
+---
+
+## Baixas e novidades da feature 235-educamanto (2026-08-13)
+
+**Dívidas quitadas pela reestruturação do EducaManto:**
+- Fórmula duplicada em JavaScript no template Jinja do EducaManto (e divergente do Python no
+  gross-up do transporte e no headcount) — **morta**: templates removidos, cálculo só em
+  `app/educamanto/pricing_ops.py`.
+- Geração aceitava `sem_nota`/`com_nota` prontos do cliente sem recálculo — **corrigida**:
+  `POST /api/educamanto/orcamento/gerar` recalcula tudo no servidor (snapshot v2).
+- `EducaMantoPackage.commission_rate` (campo morto que a UI exibia como "% s/ lucro") —
+  **removido** na migration `b7e3a91d5c24`.
+- "Desconto especial de 5% à vista" era só texto no PDF — **virou cálculo real** (tela e PDF).
+
+**Pendência nova (P1 — gate de deploy da 235):** valores `PROVISORIO` em
+`app/educamanto/pdf_textos.py` (custos de técnicos, áreas X/Y do som), custos de
+iluminação/cenário por musical (colunas zeradas) e a divisão personagens×produção dos musicais
+além de Uma Aventura Animal; textos das responsabilidades aguardam revisão do dono. **Não fazer
+merge para `main` antes disso** — Railway faz deploy automático do main.
