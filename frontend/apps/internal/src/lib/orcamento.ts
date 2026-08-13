@@ -28,6 +28,8 @@ export interface PricingSettings {
     carro_por_km: number;
     afsp_divisor: number;
     ashow_divisor: number;
+    /** Caminhão de cenografia do EducaManto dentro de SP (feature 235). */
+    caminhao_sp: number;
     ashow_min_km: number;
   };
   acrescimo_tipos: string[];

@@ -403,11 +403,11 @@ const SECTIONS: NavSectionConfig[] = [
           hasRole(user, "COMERCIAL", "SUPERADMIN", "ENSAIO", "REVENDEDOR_EDUCAMANTO"),
       },
       {
-        key: "educamanto-pacotes",
-        label: "Pacotes EducaManto",
-        href: "/educamanto/pacotes",
+        key: "educamanto-musicais",
+        label: "Musicais EducaManto",
+        href: "/educamanto/musicais",
         icon: <Package />,
-        isActive: (path) => path.startsWith("/educamanto/pacotes"),
+        isActive: (path) => path.startsWith("/educamanto/musicais"),
         isVisible: (user) => hasRole(user, "COMERCIAL", "SUPERADMIN"),
       },
       {

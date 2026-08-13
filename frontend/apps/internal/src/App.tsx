@@ -40,8 +40,8 @@ import { RevisaoSpaceCreatePage } from "./pages/RevisaoSpaceCreatePage";
 import { RevisaoSpacePage } from "./pages/RevisaoSpacePage";
 import { RevisaoAssetPage } from "./pages/RevisaoAssetPage";
 import { EducaMantoCalculadoraPage } from "./pages/EducaMantoCalculadoraPage";
-import { EducaMantoPackagesPage } from "./pages/EducaMantoPackagesPage";
-import { EducaMantoPackageFormPage } from "./pages/EducaMantoPackageFormPage";
+import { EducaMantoMusicaisPage } from "./pages/EducaMantoMusicaisPage";
+import { EducaMantoMusicalFormPage } from "./pages/EducaMantoMusicalFormPage";
 import { EducaMantoHistoricoPage } from "./pages/EducaMantoHistoricoPage";
 import { GastosExtrasPage } from "./pages/GastosExtrasPage";
 import { GastosRecorrentesPage } from "./pages/GastosRecorrentesPage";
@@ -133,9 +133,9 @@ export function App() {
           {/* Depois das rotas fixas: `/orcamento/:id` casaria "historico" e "configuracoes". */}
           <Route path="/orcamento/:id" element={<OrcamentoResultadoPage />} />
           <Route path="/educamanto" element={<EducaMantoCalculadoraPage />} />
-          <Route path="/educamanto/pacotes" element={<EducaMantoPackagesPage />} />
-          <Route path="/educamanto/pacotes/novo" element={<EducaMantoPackageFormPage />} />
-          <Route path="/educamanto/pacotes/:id/editar" element={<EducaMantoPackageFormPage />} />
+          <Route path="/educamanto/musicais" element={<EducaMantoMusicaisPage />} />
+          <Route path="/educamanto/musicais/novo" element={<EducaMantoMusicalFormPage />} />
+          <Route path="/educamanto/musicais/:id/editar" element={<EducaMantoMusicalFormPage />} />
           <Route path="/educamanto/historico" element={<EducaMantoHistoricoPage />} />
           <Route path="/clientes" element={<ClientsListPage />} />
           <Route path="/clientes/avaliacoes" element={<ClientFeedbackPage />} />

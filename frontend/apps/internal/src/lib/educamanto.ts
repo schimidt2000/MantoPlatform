@@ -1,7 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiFetchBlob } from "@manto/api-client";
 
-/** Linha de custo dentro de um pacote EducaManto. */
+// ─────────────────────────────────────────────────────────────────────────────
+// Feature 235: EducaManto por responsabilidades. Os pacotes por nível morreram —
+// o cadastro é por MUSICAL e o orçamento marca cada bloco (som/iluminação/
+// alimentação/cenário) como "manto" ou "contratante". Todo cálculo é do servidor;
+// o breakdown de custos só vem na resposta de SUPERADMIN.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type Responsavel = "manto" | "contratante";
+
+export type ResponsabilidadeChave = "som" | "iluminacao" | "alimentacao" | "cenario";
+
+export type Responsabilidades = Record<ResponsabilidadeChave, Responsavel>;
+
+export const RESPONSABILIDADES_PADRAO: Responsabilidades = {
+  som: "manto",
+  iluminacao: "manto",
+  alimentacao: "manto",
+  cenario: "manto",
+};
+
+/** Linha de custo sempre inclusa de um musical (elenco, produção, gráfica…). */
 export interface EducaMantoItem {
   id: number;
   name: string;
@@ -13,25 +33,94 @@ export interface EducaMantoItem {
   ensemble_add: number;
 }
 
-/** Pacote de precificação do EducaManto (ex.: "Uma Aventura Animal"). */
-export interface EducaMantoPackage {
+/** Payload básico de um musical — SEM custos (é o que a calculadora recebe). */
+export interface EducaMantoMusicalBasico {
   id: number;
   name: string;
+  num_personagens: number;
+  num_producao: number;
+  num_ensaios: number;
+}
+
+/** Musical completo (custos/margens/itens) — só chega para SUPERADMIN. */
+export interface EducaMantoMusical extends EducaMantoMusicalBasico {
   margin_1s: number;
   margin_2s: number;
   margin_1s_days: number;
   margin_2s_days: number;
   discount_days: number;
   discount_pct: number;
-  commission_rate: number;
   ensemble_1s: number;
   ensemble_2s: number;
   ensemble_1s_days: number;
   ensemble_2s_days: number;
+  custo_som_1s: number;
+  custo_som_2s: number;
+  custo_som_1s_days: number;
+  custo_som_2s_days: number;
+  custo_iluminacao_1s: number;
+  custo_iluminacao_2s: number;
+  custo_iluminacao_1s_days: number;
+  custo_iluminacao_2s_days: number;
+  custo_cenario_1s: number;
+  custo_cenario_2s: number;
+  custo_cenario_1s_days: number;
+  custo_cenario_2s_days: number;
+  custo_alimentacao_1s: number;
+  custo_alimentacao_2s: number;
+  custo_catering_ensaio_pp: number;
+  custo_ajuda_ensaio_pp: number;
   items: EducaMantoItem[];
 }
 
-/** Distância até o endereço do evento (feature 076/171). */
+const MUSICALS_QUERY_KEY = ["educamanto-musicals"];
+
+/** Lista de musicais para o seletor da calculadora (payload básico, sem custos). */
+export function useMusicals() {
+  return useQuery({
+    queryKey: MUSICALS_QUERY_KEY,
+    queryFn: () =>
+      apiFetch<{ musicals: EducaMantoMusicalBasico[]; pode_gerir: boolean }>(
+        "/api/educamanto/musicals",
+      ),
+  });
+}
+
+/** Lista de gestão (tela de musicais): custos/margens só vêm para SUPERADMIN. */
+export function useMusicalsGestao() {
+  return useQuery({
+    queryKey: [...MUSICALS_QUERY_KEY, "gestao"],
+    queryFn: () =>
+      apiFetch<{
+        musicals: (EducaMantoMusicalBasico | EducaMantoMusical)[];
+        pode_gerir: boolean;
+      }>("/api/educamanto/musicals?gestao=1"),
+  });
+}
+
+/** Musical completo para o formulário de edição — SÓ superadmin. */
+export function useMusicalDetalhe(id: number | null) {
+  return useQuery<EducaMantoMusical>({
+    queryKey: [...MUSICALS_QUERY_KEY, "detalhe", id],
+    queryFn: () => apiFetch<EducaMantoMusical>(`/api/educamanto/musicals/${id}`),
+    enabled: id != null,
+  });
+}
+
+/** Rótulos e tooltips das responsabilidades — fonte única no backend (`pdf_textos.py`). */
+export function useEducaMantoTextos() {
+  return useQuery({
+    queryKey: ["educamanto-textos"],
+    queryFn: () =>
+      apiFetch<{
+        ordem: ResponsabilidadeChave[];
+        responsabilidades: Record<ResponsabilidadeChave, { label: string; tooltip: string }>;
+      }>("/api/educamanto/textos"),
+    staleTime: Infinity,
+  });
+}
+
+/** Distância até o endereço do evento. */
 export function useDistanciaEducaManto() {
   return useMutation({
     mutationFn: (endereco: string) =>
@@ -41,74 +130,90 @@ export function useDistanciaEducaManto() {
   });
 }
 
-const PACKAGES_QUERY_KEY = ["educamanto-packages"];
-
-/** Lista de pacotes para o seletor da calculadora. */
-export function useEducaMantoPackages() {
-  return useQuery({
-    queryKey: PACKAGES_QUERY_KEY,
-    queryFn: () => apiFetch<{ packages: EducaMantoPackage[] }>("/api/educamanto/packages"),
-  });
-}
-
-/** Resultado do transporte — sempre van com carretinha, já com o multiplicador de dias (171). */
-export interface TransporteResultado {
-  vt: number;
-  afsp: number;
+/** Transporte da configuração: caminhão dentro de SP ou 2 vans fora de SP (feature 235). */
+export interface TransporteInfo {
+  modo: "caminhao_sp" | "vans_fora_sp";
+  total: number;
+  /** Custo do caminhão (já dentro da base) — só na resposta de superadmin. */
+  caminhao?: number;
   valor_viagem: number;
   dias: number;
-  total: number;
-  label: string;
   km_total: number;
   pessoas: number;
 }
 
-/** Linha de detalhamento de um item do pacote (formato varia por cenário 1S/2S/multi-dia). */
-export interface PacoteItemRow {
+export interface ConfigItemRow {
   name: string;
   qty: number;
-  unit_cost?: number;
-  raw?: number;
-  sell?: number;
-  raw1?: number;
-  raw2?: number;
-  raw_item?: number;
-  sell_item?: number;
+  raw: number;
+  sell: number;
 }
 
-/** Resultado completo do cálculo de um pacote (itens, desconto, transporte, totais). */
-export interface PacoteCalculado {
-  scenario: string;
-  item_rows: PacoteItemRow[];
+/** Breakdown interno — presente APENAS na resposta de SUPERADMIN. */
+export interface ConfigBreakdown {
+  item_rows: ConfigItemRow[];
+  blocos: Partial<Record<string, number>>;
   raw_cost: number;
   valor_base: number;
-  desconto_aplicado: boolean;
   desconto: number;
-  transporte: TransporteResultado | null;
+  liquido: number;
+  contratacao_memoria: unknown[];
+}
+
+/** Total combinado (EducaManto + contratação Manto) de uma duração. */
+export interface TotalCombinado {
+  sem_nota: number;
+  com_nota: number;
+  a_vista_sem: number;
+  a_vista_com: number;
+}
+
+/** Resultado do cálculo de uma configuração (uma página do orçamento). */
+export interface ConfigCalculada {
+  scenario: string;
+  headcount: number;
+  headcount_ensaio: number;
+  tecnicos: string[];
+  transporte: TransporteInfo | null;
   valor_final_sem_nota: number;
   valor_final_com_nota: number;
-  /** Comissão que de fato entrou na conta — pode ser menor que a digitada (teto do pacote). */
+  a_vista_sem_nota: number;
+  a_vista_com_nota: number;
+  /** Comissão que de fato entrou — pode ser menor que a digitada (teto da configuração). */
   acrescimo_efetivo: number;
-  /** Teto da comissão: o valor do pacote sem transporte. */
+  /** Teto da comissão: o valor da configuração sem transporte. */
   acrescimo_maximo: number;
   /** `true` quando o teto cortou o valor digitado — a tela precisa avisar. */
   acrescimo_capado: boolean;
+  desconto_aplicado: boolean;
+  combinados: Record<string, TotalCombinado>;
+  breakdown?: ConfigBreakdown;
 }
 
-export interface CalcularPacoteInput {
-  package_id: number;
+/** Entradas da contratação Manto embutida (payload da calculadora de eventos + durações). */
+export interface ContratacaoMantoInput {
+  duracoes: string[];
+  payload: Record<string, unknown>;
+}
+
+/** Entradas de UMA configuração — é isso (e só isso) que o servidor aceita. */
+export interface ConfigInput {
+  musical_id: number;
   d1: number;
   d2: number;
   ensemble: number;
+  responsabilidades: Responsabilidades;
+  fora_sp: boolean;
+  km_ida?: number | null;
   acrescimo: number;
-  transporte?: { km_ida: number };
+  contratacao_manto?: ContratacaoMantoInput | null;
 }
 
-/** Calcula o pacote (itens/desconto) + transporte já multiplicado pelos dias (feature 171). */
-export function useCalcularPacote() {
+/** Calcula uma configuração no servidor (nada é persistido). */
+export function useCalcularConfig() {
   return useMutation({
-    mutationFn: (input: CalcularPacoteInput) =>
-      apiFetch<PacoteCalculado>("/api/educamanto/calcular", {
+    mutationFn: (input: ConfigInput) =>
+      apiFetch<ConfigCalculada>("/api/educamanto/calcular", {
         method: "POST",
         body: JSON.stringify(input),
       }),
@@ -120,11 +225,7 @@ export interface PersonagemNoDia {
   eventos: string[];
 }
 
-/**
- * Personagens já escalados na data da apresentação — mesmo aviso da Calculadora de Orçamento,
- * atrás do gate do EducaManto (o endpoint de `/api/orcamento` é restrito a Comercial/Superadmin
- * e deixaria Ensaio e Revendedor sem o alerta).
- */
+/** Personagens já escalados na data da apresentação — evita vender o mesmo em dobro. */
 export function usePersonagensNoDiaEducaManto(date: string) {
   return useQuery<{ date: string | null; personagens: PersonagemNoDia[] }>({
     queryKey: ["educamanto-personagens-no-dia", date],
@@ -136,75 +237,93 @@ export function usePersonagensNoDiaEducaManto(date: string) {
   });
 }
 
-/** Campos de um pacote enviados ao criar/editar (feature 175) — sem `id` (gerado pelo servidor). */
-export interface PackageInput {
+/** Campos de um musical enviados ao criar/editar — sem `id` (gerado pelo servidor). */
+export interface MusicalInput {
   name: string;
+  num_personagens: number;
+  num_producao: number;
+  num_ensaios: number;
   margin_1s: number;
   margin_2s: number;
   margin_1s_days: number;
   margin_2s_days: number;
   discount_days: number;
   discount_pct: number;
-  commission_rate: number;
   ensemble_1s: number;
   ensemble_2s: number;
   ensemble_1s_days: number;
   ensemble_2s_days: number;
+  custo_som_1s: number;
+  custo_som_2s: number;
+  custo_som_1s_days: number;
+  custo_som_2s_days: number;
+  custo_iluminacao_1s: number;
+  custo_iluminacao_2s: number;
+  custo_iluminacao_1s_days: number;
+  custo_iluminacao_2s_days: number;
+  custo_cenario_1s: number;
+  custo_cenario_2s: number;
+  custo_cenario_1s_days: number;
+  custo_cenario_2s_days: number;
+  custo_alimentacao_1s: number;
+  custo_alimentacao_2s: number;
+  custo_catering_ensaio_pp: number;
+  custo_ajuda_ensaio_pp: number;
   items: Omit<EducaMantoItem, "id">[];
 }
 
-/** Cria um pacote educacional (feature 175, US2 — SuperAdmin). */
-export function useCreatePackage() {
+/** Cria um musical (SuperAdmin). */
+export function useCreateMusical() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: PackageInput) =>
-      apiFetch<EducaMantoPackage>("/api/educamanto/packages", {
+    mutationFn: (input: MusicalInput) =>
+      apiFetch<EducaMantoMusical>("/api/educamanto/musicals", {
         method: "POST",
         body: JSON.stringify(input),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PACKAGES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: MUSICALS_QUERY_KEY });
     },
   });
 }
 
-/** Atualiza um pacote existente, substituindo a lista de itens (feature 175, US2). */
-export function useUpdatePackage(pkgId: number) {
+/** Atualiza um musical, substituindo a lista de itens (SuperAdmin). */
+export function useUpdateMusical(musicalId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: PackageInput) =>
-      apiFetch<EducaMantoPackage>(`/api/educamanto/packages/${pkgId}`, {
+    mutationFn: (input: MusicalInput) =>
+      apiFetch<EducaMantoMusical>(`/api/educamanto/musicals/${musicalId}`, {
         method: "PATCH",
         body: JSON.stringify(input),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PACKAGES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: MUSICALS_QUERY_KEY });
     },
   });
 }
 
-/** Duplica um pacote (parâmetros + itens), prefixando o nome com "Cópia de " (feature 175). */
-export function useDuplicatePackage() {
+/** Duplica um musical, prefixando o nome com "Cópia de " (SuperAdmin). */
+export function useDuplicateMusical() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (pkgId: number) =>
-      apiFetch<EducaMantoPackage>(`/api/educamanto/packages/${pkgId}/duplicate`, {
+    mutationFn: (musicalId: number) =>
+      apiFetch<EducaMantoMusical>(`/api/educamanto/musicals/${musicalId}/duplicate`, {
         method: "POST",
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PACKAGES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: MUSICALS_QUERY_KEY });
     },
   });
 }
 
-/** Exclui um pacote educacional — ação destrutiva, confirmar antes de chamar (feature 175). */
-export function useDeletePackage() {
+/** Exclui um musical — ação destrutiva, confirmar antes de chamar (SuperAdmin). */
+export function useDeleteMusical() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (pkgId: number) =>
-      apiFetch<void>(`/api/educamanto/packages/${pkgId}`, { method: "DELETE" }),
+    mutationFn: (musicalId: number) =>
+      apiFetch<void>(`/api/educamanto/musicals/${musicalId}`, { method: "DELETE" }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PACKAGES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: MUSICALS_QUERY_KEY });
     },
   });
 }
@@ -220,22 +339,16 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-/** Corpo enviado para gerar um orçamento (mesmo shape do `POST /educamanto/orcamento/gerar` legado). */
+/** Corpo do `POST /api/educamanto/orcamento/gerar` — só ENTRADAS; o servidor recalcula tudo. */
 export interface GerarOrcamentoInput {
-  packages: { id: number; name: string; sem_nota: number; com_nota: number }[];
-  d1: number;
-  d2: number;
-  ensemble: number;
-  acrescimo: number;
-  transporte?: { total: number; label: string; kmT?: number; pessoas?: number };
+  configs: ConfigInput[];
   client_name?: string;
-  /** Distância de IDA — é a entrada real do cálculo, o `kmT` é ida e volta (só exibição). */
-  km_ida?: number;
-  /** Data da apresentação (ISO), usada pelo alerta de personagens já escalados no dia. */
   event_date?: string;
+  /** Texto livre do vendedor (até 2.000 caracteres) — sai formatado no PDF. */
+  observacao?: string;
 }
 
-/** Gera o PDF do orçamento, salva no histórico e baixa automaticamente (feature 175, US1). */
+/** Gera o PDF (uma página por configuração), salva no histórico e baixa automaticamente. */
 export function useGerarOrcamento() {
   return useMutation({
     mutationFn: async (input: GerarOrcamentoInput) => {
@@ -249,7 +362,7 @@ export function useGerarOrcamento() {
   });
 }
 
-/** Reabre o PDF de um orçamento do histórico (valores congelados na geração — feature 175, US3). */
+/** Reabre o PDF de um orçamento do histórico (valores congelados na geração). */
 export function useOrcamentoPdf() {
   return useMutation({
     mutationFn: async (quoteId: number) => {
@@ -259,7 +372,7 @@ export function useOrcamentoPdf() {
   });
 }
 
-/** Uma entrada do histórico de orçamentos gerados (feature 175, US3). */
+/** Uma entrada do histórico de orçamentos gerados. */
 export interface EducaMantoHistoricoEntry {
   id: number;
   created_at: string;
@@ -275,8 +388,9 @@ export interface EducaMantoHistoricoFiltros {
   user_id?: string;
 }
 
-/** Snapshot bruto de um orçamento EducaManto salvo — usado por "Ver" e "Recalcular". */
-export interface EducaMantoQuoteSnapshot {
+/** Snapshot v1 (LEGADO, pré-feature 235) — formato de pacotes por nível. */
+export interface SnapshotV1 {
+  version?: undefined;
   d1: number;
   d2: number;
   ensemble: number;
@@ -286,13 +400,64 @@ export interface EducaMantoQuoteSnapshot {
     label: string;
     /** Ida e volta — o que o PDF mostra. NÃO use para repopular o campo de km. */
     kmT: number | null;
-    /** Distância de IDA, a entrada real do cálculo. O servidor deriva de `kmT` nos snapshots antigos. */
+    /** Distância de IDA, a entrada real do cálculo (derivada de kmT nos antigos). */
     km_ida: number | null;
     pessoas: number | null;
-  };
+  } | null;
   client_name: string;
   event_date?: string | null;
   packages: { id: number; name: string; sem_nota: number; com_nota: number }[];
+}
+
+/** Configuração congelada de um snapshot v2 (entradas + resultado do servidor). */
+export interface SnapshotV2Config {
+  musical_id: number;
+  musical_name: string;
+  num_personagens: number;
+  num_producao: number;
+  num_ensaios: number;
+  d1: number;
+  d2: number;
+  ensemble: number;
+  responsabilidades: Responsabilidades;
+  fora_sp: boolean;
+  km_ida: number | null;
+  acrescimo: number;
+  contratacao_manto: {
+    inputs: Record<string, unknown>;
+    duracoes: string[];
+    totais: Record<string, number>;
+    team_lines: string[];
+  } | null;
+  resultado: {
+    scenario: string;
+    headcount: number;
+    headcount_ensaio: number;
+    tecnicos: string[];
+    transporte: TransporteInfo | null;
+    sem_nota: number;
+    com_nota: number;
+    a_vista_sem_nota: number;
+    a_vista_com_nota: number;
+    acrescimo_efetivo: number;
+    desconto_aplicado: boolean;
+    combinados: Record<string, TotalCombinado>;
+  };
+}
+
+/** Snapshot v2 (feature 235) — multi-configuração, recalculado no servidor. */
+export interface SnapshotV2 {
+  version: 2;
+  client_name: string;
+  event_date: string | null;
+  observacao: string;
+  configs: SnapshotV2Config[];
+}
+
+export type EducaMantoQuoteSnapshot = SnapshotV1 | SnapshotV2;
+
+export function isSnapshotV2(snap: EducaMantoQuoteSnapshot): snap is SnapshotV2 {
+  return (snap as SnapshotV2).version === 2;
 }
 
 /** Detalhe de um orçamento salvo — mesmo dado usado para regerar o PDF, exposto em JSON. */
@@ -304,7 +469,7 @@ export function useEducaMantoQuoteDetalhe(id: number | null) {
   });
 }
 
-/** Histórico de orçamentos gerados, com busca/filtros — "Gerado por" só visível a SuperAdmin. */
+/** Histórico de orçamentos gerados, com busca/filtros — "Gerado por" só p/ SuperAdmin. */
 export function useEducaMantoHistorico(filtros: EducaMantoHistoricoFiltros) {
   const params = new URLSearchParams();
   if (filtros.q) params.set("q", filtros.q);
