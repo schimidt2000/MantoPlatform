@@ -28,6 +28,12 @@ Registradas na conversa de 13/08/2026 (válidas como fonte para o plano):
 10. O "desconto especial de 5% à vista" deixa de ser só texto: vira **cálculo real exibido no PDF** (valor final à vista).
 11. Valores pendentes que o dono ainda vai enviar: **custos dos técnicos** (sonoplasta, técnico de som, técnico de iluminação) e as **áreas X/Y** do aviso de suficiência do som. Até lá, entram como constantes provisórias claramente marcadas.
 
+## Clarifications
+
+### Session 2026-08-13
+
+- Q: Quem escreve os novos textos do PDF e das dicas (mínimos exigidos da contratante, "o que levaremos" e tooltips das responsabilidades)? → A: A equipe de desenvolvimento redige a partir do material existente (PDF atual, planos.md e as descrições do dono); o dono revisa e aprova antes do deploy.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Montar orçamento por responsabilidades (Priority: P1)
@@ -211,6 +217,7 @@ O superadmin cadastra e edita musicais: nome, nº de personagens, nº de pessoas
 ## Assumptions
 
 - **Valores provisórios**: custos dos técnicos e áreas X/Y do som entram como constantes provisórias claramente identificadas; a substituição pelos valores definitivos do dono é **gate de lançamento** (a feature não vai a produção sem eles).
+- **Textos das responsabilidades**: os textos do PDF (mínimos exigidos / o que levaremos) e os tooltips são redigidos pela equipe de desenvolvimento a partir do material existente (PDF atual, planos.md, descrições do dono); a **revisão e aprovação do dono antes do deploy** é gate de lançamento, mas não bloqueia plano nem implementação.
 - **Catering de ensaio e ajuda de custo** não são afetados pelo bloco "alimentação": o bloco controla apenas a alimentação do dia do evento; os custos de ensaio sempre existem, multiplicados pelo nº de ensaios.
 - **À vista**: o desconto de 5% é exibido como valor final à vista para os dois regimes (sem NF e com NF), calculado sobre o valor final de cada um.
 - **Ensemble** continua funcionando como hoje (linha própria + crescimento dos itens por pessoa), agora também somando no headcount unificado.
