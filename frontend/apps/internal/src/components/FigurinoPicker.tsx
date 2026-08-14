@@ -1,7 +1,17 @@
-import { useMemo } from "react";
-import { Combobox, type ComboboxOption } from "@manto/ui";
-import { assetUrl } from "@manto/api-client";
+import { useMemo, useState } from "react";
+import {
+  Button,
+  Combobox,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  type ComboboxOption,
+} from "@manto/ui";
+import { ApiRequestError, assetUrl } from "@manto/api-client";
 import { useFigurinoSheets } from "../lib/figurino";
+import { useSolicitarFicha } from "../lib/figurinoProducao";
 
 /** Remove acentos e caixa — mesmo espírito do `strip_accents_lower` do backend. */
 function normalize(value: string): string {
@@ -50,6 +60,51 @@ export function FigurinoPicker({
   const query = useFigurinoSheets();
   const items = query.data?.items;
 
+  // "Solicitar ficha" (feature 237): quando a busca não tem o personagem, o pedido nasce daqui
+  // e cai na fila de Produção e Compras como tipo "Ficha". O texto digitado pré-preenche o nome.
+  const solicitar = useSolicitarFicha();
+  const [textoDigitado, setTextoDigitado] = useState("");
+  const [dialogAberto, setDialogAberto] = useState(false);
+  const [personagem, setPersonagem] = useState("");
+  const [observacao, setObservacao] = useState("");
+  const [solicitadoMsg, setSolicitadoMsg] = useState<string | null>(null);
+  const [erroMsg, setErroMsg] = useState<string | null>(null);
+
+  function abrirSolicitacao() {
+    setPersonagem(textoDigitado.trim());
+    setObservacao("");
+    setErroMsg(null);
+    setDialogAberto(true);
+  }
+
+  function enviarSolicitacao() {
+    if (!personagem.trim()) {
+      setErroMsg("Diga o nome do personagem da ficha.");
+      return;
+    }
+    setErroMsg(null);
+    solicitar.mutate(
+      {
+        personagem: personagem.trim(),
+        observacao: observacao.trim() || undefined,
+        origem: window.location.pathname,
+      },
+      {
+        onSuccess: () => {
+          setDialogAberto(false);
+          setSolicitadoMsg(`Ficha de "${personagem.trim()}" solicitada ao figurino.`);
+        },
+        onError: (err) => {
+          setErroMsg(
+            err instanceof ApiRequestError
+              ? err.message
+              : "Não foi possível solicitar a ficha.",
+          );
+        },
+      },
+    );
+  }
+
   const options = useMemo<ComboboxOption[]>(() => {
     const sheets = items ?? [];
     const charNorm = normalize((characterName ?? "").trim());
@@ -71,16 +126,84 @@ export function FigurinoPicker({
   }, [items, characterName]);
 
   return (
-    <Combobox
-      className={className}
-      aria-label={ariaLabel ?? "Buscar ficha de figurino"}
-      placeholder={placeholder ?? "🔍 Buscar ficha de figurino…"}
-      emptyMessage="Nenhuma ficha encontrada."
-      options={options}
-      loading={query.isLoading}
-      disabled={disabled}
-      value={value != null ? String(value) : null}
-      onChange={(next) => onChange(next ? Number(next) : null)}
-    />
+    <div className={className}>
+      <Combobox
+        aria-label={ariaLabel ?? "Buscar ficha de figurino"}
+        placeholder={placeholder ?? "🔍 Buscar ficha de figurino…"}
+        emptyMessage="Nenhuma ficha encontrada."
+        options={options}
+        loading={query.isLoading}
+        disabled={disabled}
+        value={value != null ? String(value) : null}
+        onChange={(next) => onChange(next ? Number(next) : null)}
+        onInputValueChange={setTextoDigitado}
+      />
+      {!disabled && (
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={abrirSolicitacao}
+            className="text-xs text-accent hover:underline"
+          >
+            Não achou? Solicitar ficha
+          </button>
+          {solicitadoMsg && (
+            <span className="text-xs text-green" role="status">
+              {solicitadoMsg}
+            </span>
+          )}
+        </div>
+      )}
+
+      <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
+        <DialogContent open={dialogAberto} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Solicitar ficha ao figurino</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-xs text-muted">
+              O pedido entra na fila de Produção e Compras do figurino como tipo
+              &quot;Ficha&quot;, registrando você como solicitante.
+            </p>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase text-muted" htmlFor="ficha-personagem">
+                Nome do personagem
+              </label>
+              <Input
+                id="ficha-personagem"
+                value={personagem}
+                onChange={(e) => setPersonagem(e.target.value)}
+                placeholder="Ex.: Zeca Urubu"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase text-muted" htmlFor="ficha-observacao">
+                Observação (opcional)
+              </label>
+              <textarea
+                id="ficha-observacao"
+                className="h-20 w-full resize-y rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink"
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+                placeholder="Contexto pro figurino (evento, prazo, referências)…"
+              />
+            </div>
+            {erroMsg && (
+              <p className="text-xs text-red" role="alert">
+                {erroMsg}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setDialogAberto(false)}>
+                Cancelar
+              </Button>
+              <Button size="sm" loading={solicitar.isPending} onClick={enviarSolicitacao}>
+                Solicitar ficha
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

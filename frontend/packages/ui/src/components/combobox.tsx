@@ -44,6 +44,11 @@ export interface ComboboxProps {
    * `options` — a lista recebida já é o resultado. Sem ele, o filtro é local, ignorando acentos.
    */
   onQueryChange?: (query: string) => void;
+  /**
+   * Observa o texto digitado SEM assumir a busca — o filtro local continua ativo. Existe para
+   * quem precisa do termo por fora (ex.: "Solicitar ficha" pré-preenchido, feature 237).
+   */
+  onInputValueChange?: (text: string) => void;
   /** Exibe spinner e mensagem "Buscando…" enquanto a requisição está em voo (Princípio V). */
   loading?: boolean;
   placeholder?: string;
@@ -89,6 +94,7 @@ export function Combobox({
   value,
   onChange,
   onQueryChange,
+  onInputValueChange,
   loading = false,
   placeholder = "Buscar…",
   emptyMessage = "Nenhum resultado encontrado.",
@@ -158,9 +164,10 @@ export function Combobox({
     (text: string) => {
       setQuery(text);
       onQueryChange?.(text);
+      onInputValueChange?.(text);
       if (freeSolo) onChange(text, null);
     },
-    [onQueryChange, onChange, freeSolo],
+    [onQueryChange, onInputValueChange, onChange, freeSolo],
   );
 
   const openList = useCallback(() => {

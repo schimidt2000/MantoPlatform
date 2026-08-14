@@ -68,15 +68,16 @@ export const PRODUCAO_STATUS_ABERTOS: ProducaoStatus[] = [
  * `comprado → recebido` em vez de `em_producao → pronto`. Quem manda nas transições é o
  * servidor (`transicoes`).
  */
-export type ProducaoKind = "producao" | "manutencao" | "compra";
+export type ProducaoKind = "producao" | "manutencao" | "compra" | "ficha";
 
 /** Os tipos válidos, na ordem em que a tela os oferece. Usado para validar o `?tipo=` da URL. */
-export const PRODUCAO_KINDS: ProducaoKind[] = ["producao", "manutencao", "compra"];
+export const PRODUCAO_KINDS: ProducaoKind[] = ["producao", "manutencao", "compra", "ficha"];
 
 export const PRODUCAO_KIND_LABELS: Record<ProducaoKind, string> = {
   producao: "Produção",
   manutencao: "Manutenção",
   compra: "Compra",
+  ficha: "Ficha",
 };
 
 /** Tom do `Badge` de tipo. `producao` fica neutro por ser o caso comum — cor onde há exceção. */
@@ -84,6 +85,7 @@ export const PRODUCAO_KIND_TONES: Record<ProducaoKind, "neutral" | "accent" | "g
   producao: "neutral",
   manutencao: "accent",
   compra: "gold",
+  ficha: "accent",
 };
 
 /** A peça pode ir para o próximo evento assim como está, ou não? Só vale em `manutencao`. */
@@ -350,6 +352,26 @@ export function useCreateProducao() {
       apiFetch<MutationResponse>("/api/figurino/producoes", {
         method: "POST",
         body: corpoDaCriacao(input),
+      }),
+    onSuccess: () => invalidate(),
+  });
+}
+
+/** Corpo do "Solicitar ficha" da busca (feature 237) — só nome + observação + origem. */
+export interface SolicitarFichaInput {
+  personagem: string;
+  observacao?: string;
+  origem?: string;
+}
+
+/** Cria um pedido tipo "Ficha" em Produção e Compras a partir da busca (feature 237). */
+export function useSolicitarFicha() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (input: SolicitarFichaInput) =>
+      apiFetch<MutationResponse>("/api/figurino/producoes/solicitar-ficha", {
+        method: "POST",
+        body: JSON.stringify(input),
       }),
     onSuccess: () => invalidate(),
   });
