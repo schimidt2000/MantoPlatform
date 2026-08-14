@@ -160,6 +160,23 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
 
+### 238-teto-autorizado — Valor do superadmin vira o teto do papel            (branch · 2026-08-14 · sem migration)
+
+**Motivação.** Caso real na véspera do Baile do Addan: o dono (superadmin) subiu os cachês dos
+papéis acima do teto do orçamento; o casting foi escalar as pessoas e não conseguia salvar — o
+rebaixamento de não-superadmin usava sempre o `cache_cap` original, derrubando o valor que o
+próprio dono tinha acabado de autorizar.
+
+**O que mudou.** Em `casting_ops.assign_role`, o teto para não-superadmin virou o **teto
+efetivo** = `max(cache_cap, valor já salvo no papel)` — o invariante segura sozinho, porque só
+superadmin consegue deixar salvo algo acima do cap. O aviso do `CastingSection` usa a mesma
+regra. Superadmin, papéis sem cap e valores abaixo do cap seguem idênticos.
+
+**Pegadinhas.** O teto efetivo ACOMPANHA o valor vigente: se o casting baixa de 460 para 420,
+o teto passa a ser 420 (não dá para voltar a 460 sem superadmin). `verify_238.py`: 9/9 no
+manto_local, com evento de laboratório próprio (o espelho é recriado com frequência — não
+dependa de dados de verifies anteriores).
+
 ### 237-solicitar-ficha — Solicitar ficha pela busca            (branch · 2026-08-14 · sem migration)
 
 **Motivação.** Quando a busca de ficha não tem o personagem, o pedido de criação saía do

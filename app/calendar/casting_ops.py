@@ -65,9 +65,15 @@ def assign_role(
 
     new_cache = parse_brl(cache_value)
     # Teto de cachê: casting não ultrapassa o cap do orçamento; superadmin pode (fica no log).
-    if new_cache is not None and role.cache_cap is not None and new_cache > role.cache_cap:
-        if not is_superadmin:
-            new_cache = role.cache_cap
+    # Feature 238: se um superadmin JÁ salvou um valor acima do cap neste papel, esse valor é o
+    # novo teto efetivo — o casting pode manter/usar até ele. Sem isso, o casting não conseguia
+    # nem ESCALAR alguém sem rebaixar o cachê que o dono tinha acabado de subir (caso real do
+    # Baile do Addan). O invariante se sustenta: só superadmin consegue deixar salvo um valor
+    # acima do cap, porque este mesmo rebaixamento barra todo mundo antes.
+    if new_cache is not None and role.cache_cap is not None:
+        teto_efetivo = max(role.cache_cap, old_cache_value or 0)
+        if new_cache > teto_efetivo and not is_superadmin:
+            new_cache = teto_efetivo
 
     role.cache_value = new_cache
     new_travel = parse_brl(travel_cache)
