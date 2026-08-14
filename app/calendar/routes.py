@@ -2738,12 +2738,19 @@ def link_ensaio_parent(ensaio_id: int):
 
 # ─── CRIAR EVENTO (COMERCIAL) ─────────────────────────────────────────────────
 
-def _compute_performer_caches(snapshot: dict) -> list[dict]:
-    """Retorna lista de {label, cache_1h, cache_2h, cache_4h, needs_makeup, is_singer}
-    para cada performer + coordenadores + técnico + maquiador do snapshot.
+def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) -> list[dict]:
+    """Retorna lista de {label, cache_1h..cache_4h, needs_makeup, is_singer} para cada
+    performer + coordenadores + técnico + maquiador do snapshot.
 
     Inclui o acréscimo de "show customizado" (+R$50/artista) nos cachês de personagem quando
     aplicável — antes só entrava no total do orçamento, não no cachê individual (feature 172).
+
+    Feature 236: com ``horas_extra`` > 4, cada papel de tabela ganha também ``cache_custom`` —
+    a régua do dono para eventos além da tabela: **valor-base de 4h SEM adicionais ÷ 4 ×
+    horas**, com os adicionais fixos somados por fora, sem escalar (delta de maquiagem,
+    noturno, adicional fora-SP por pessoa e show customizado). Coordenador e técnico de som
+    escalam como os demais; o maquiador não (custo por make, não por hora). Com
+    ``horas_extra=None`` a saída é byte-a-byte a de sempre (paridade 1–4h).
     """
     from app.orcamento.pricing import (
         get_ator_prices, get_cantor_prices, get_especial_prices,
@@ -2775,6 +2782,12 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
             afsp_divisor = float(_orc_cfg.load().get("transporte", {}).get("afsp_divisor", 3.0))
             transport_add = round(km_ida * 2 / afsp_divisor, 2)
 
+    extra = int(horas_extra) if horas_extra and int(horas_extra) > 4 else None
+
+    def _custom(base_4h: float, adicionais_fixos: float) -> int:
+        """Régua >4h (feature 236): base de 4h ÷ 4 × horas + adicionais fixos, sem escalar."""
+        return round(base_4h / 4 * extra + adicionais_fixos)
+
     result = []
     num_makes_regular  = 0
     num_makes_especial = 0
@@ -2788,27 +2801,34 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
         nome       = p.get("nome", "").strip()
         is_singer  = False
 
+        # `base_prices` = variante SEM maquiagem: é a base que escala na régua >4h; a diferença
+        # para `prices` (o delta de make, hoje R$ 20) soma por fora como adicional fixo.
         if ptype == "ator":
             subtipo = p.get("subtipo", "cara_limpa")
             if subtipo == "cantor":
                 prices = get_cantor_prices(show, makeup)
+                base_prices = get_cantor_prices(show, makeup=False)
                 label  = nome or "Cantor"
                 is_singer = True
             else:
                 prices = get_ator_prices(subtipo, show, makeup)
+                base_prices = get_ator_prices(subtipo, show, makeup=False)
                 label  = nome or ("Boneco" if subtipo == "boneco" else "Ator")
         elif ptype == "cantor":
             prices = get_cantor_prices(show=True, makeup=makeup)
+            base_prices = get_cantor_prices(show=True, makeup=False)
             label  = nome or "Cantor"
             is_singer = True
         elif ptype == "especial":
             personagem = p.get("personagem", "")
             prices = get_especial_prices(personagem, show, cantor_flag)
+            base_prices = prices
             label  = nome or personagem
             if cantor_flag:
                 is_singer = True
         else:
             prices = (0, 0, 0, 0)
+            base_prices = prices
             label  = nome or "Profissional"
 
         if makeup:
@@ -2817,7 +2837,7 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
             else:
                 num_makes_regular += 1
 
-        result.append({
+        item = {
             "label":       label,
             "cache_1h":    round(int(prices[0]) + noturno_add + transport_add + sosia_custom_add_per_artist),
             "cache_2h":    round(int(prices[1]) + noturno_add + transport_add + sosia_custom_add_per_artist),
@@ -2826,13 +2846,20 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
             "needs_makeup": makeup,
             "is_singer":    is_singer,
             "role_type":   "character",
-        })
+        }
+        if extra:
+            delta_make = int(prices[3]) - int(base_prices[3])
+            item["cache_custom"] = _custom(
+                int(base_prices[3]),
+                delta_make + noturno_add + transport_add + sosia_custom_add_per_artist,
+            )
+        result.append(item)
 
     # Coordenadores
     coord_prices = get_coordenador_prices(has_show, coordenador_qty)
     per_coord    = [coord_prices[i] // max(coordenador_qty, 1) for i in range(4)]
     for _ in range(coordenador_qty):
-        result.append({
+        item = {
             "label":       "Coordenador",
             "cache_1h":    round(int(per_coord[0]) + noturno_add + transport_add),
             "cache_2h":    round(int(per_coord[1]) + noturno_add + transport_add),
@@ -2841,12 +2868,15 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
             "needs_makeup": False,
             "is_singer":    False,
             "role_type":   "extra",
-        })
+        }
+        if extra:
+            item["cache_custom"] = _custom(int(per_coord[3]), noturno_add + transport_add)
+        result.append(item)
 
     # Técnico de som (se houver show) — apenas regra do >500km afeta o técnico, não os adicionais por pessoa
     if has_show:
         tp = get_tecnico_prices()
-        result.append({
+        item = {
             "label":       "Técnico de Som",
             "cache_1h":    int(tp[0]),
             "cache_2h":    int(tp[1]),
@@ -2855,12 +2885,15 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
             "needs_makeup": False,
             "is_singer":    False,
             "role_type":   "extra",
-        })
+        }
+        if extra:
+            item["cache_custom"] = _custom(int(tp[3]), 0)
+        result.append(item)
 
     # Maquiador (se necessário)
     if num_makes_regular > 0 or num_makes_especial > 0:
         mq_cost = calcular_maquiador(num_makes_regular, num_makes_especial)
-        result.append({
+        item = {
             "label":       "Maquiador",
             "cache_1h":    int(mq_cost),
             "cache_2h":    int(mq_cost),
@@ -2869,7 +2902,11 @@ def _compute_performer_caches(snapshot: dict) -> list[dict]:
             "needs_makeup": False,
             "is_singer":    False,
             "role_type":   "extra",
-        })
+        }
+        if extra:
+            # Maquiador cobra por make, não por hora — a régua não escala este papel.
+            item["cache_custom"] = int(mq_cost)
+        result.append(item)
 
     return result
 
@@ -2994,9 +3031,12 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
     acrescimo = float(snap.get("acrescimo_valor", 0) or 0)
     acrescimo_val = int(acrescimo) if snap.get("acrescimo_tipo", "valor") == "valor" else 0
 
-    caches = _compute_performer_caches(snap)
-
     duracao_custom = int(snap.get("duracao_custom", 0) or 0)
+    # Feature 236: quando o orçamento tem duração extra (>4h), a tela de criação também recebe
+    # o cachê da régua (`cache_custom`) — informativo; a criação recalcula no servidor.
+    caches = _compute_performer_caches(
+        snap, horas_extra=duracao_custom if duracao_custom > 4 else None
+    )
     total_4h_val = float(entry.total_4h or 0)
     total_custom = (
         round(total_4h_val / 4 * duracao_custom, 2)
@@ -3037,6 +3077,8 @@ def _validate_event_core(data: dict) -> dict[str, str]:
     title = (data.get("title") or "").strip()
     if not title:
         errors["title"] = "Título obrigatório."
+    if _parse_duracao(data.get("duracao")) is None:
+        errors["duracao"] = "Duração inválida."
 
     date_str = (data.get("date_str") or "").strip()
     start_str = (data.get("start_str") or "").strip()
@@ -3158,12 +3200,28 @@ def _create_event_row(data: dict, *, google_event_id: str, gc_title: str) -> Cal
     return event
 
 
+def _parse_duracao(raw) -> int | None:
+    """Duração da criação como inteiro ≥ 1 — `None` para valor inválido (feature 236).
+
+    O mapa antigo `{"1".."4"}.get(..., 0)` engolia qualquer outra duração no índice de 1h;
+    agora a duração é um inteiro livre (a régua cobre > 4h) e valor não numérico é erro de
+    validação, nunca fallback silencioso.
+    """
+    if raw in (None, ""):
+        return 1
+    try:
+        valor = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return valor if valor >= 1 else None
+
+
 def _create_roles_from_input(
     event: CalendarEvent,
     characters: list[dict],
     *,
     orc_caches: list[dict],
-    dur_idx: int,
+    duracao: int,
     figurino_by_name: dict[str, int],
     valid_talent_ids: set[int],
 ) -> list[tuple[int, str]]:
@@ -3175,7 +3233,9 @@ def _create_roles_from_input(
     """
     used_talent_ids: set[int] = set()
     assigned_now: list[tuple[int, str]] = []
+    # 1–4h indexa a tabela; acima de 4h usa a régua da duração real (feature 236).
     cache_keys = ["cache_1h", "cache_2h", "cache_3h", "cache_4h"]
+    chave_cache = "cache_custom" if duracao > 4 else cache_keys[duracao - 1]
 
     for i, char_data in enumerate(characters):
         name = (char_data.get("name") or "").strip()
@@ -3185,7 +3245,7 @@ def _create_roles_from_input(
         sheet_id = char_data.get("figurino_sheet_id") or figurino_by_name.get(name.lower())
         cache_val = char_data.get("cache_value")
         if cache_val is None and i < len(orc_caches):
-            cache_val = orc_caches[i].get(cache_keys[dur_idx])
+            cache_val = orc_caches[i].get(chave_cache)
         role_type = orc_caches[i].get("role_type", "character") if i < len(orc_caches) else "character"
 
         talent_id = char_data.get("talent_id")
@@ -3374,13 +3434,28 @@ def _create_event_core(
     ]
     valid_talent_ids = {t["id"] for t in assignable_talents}
     orc_caches = data.get("orc_caches") or []
-    dur_idx = {"1": 0, "2": 1, "3": 2, "4": 3}.get(str(data.get("duracao", "1")), 0)
+    duracao = _parse_duracao(data.get("duracao")) or 1
+
+    # Fonte única dos cachês (feature 236): com orçamento vinculado, o servidor recalcula os
+    # valores AQUI para a duração real do evento — inclusive acima de 4h, pela régua
+    # (base de 4h ÷ 4 × horas + adicionais fixos). Antes, a duração era mapeada por
+    # `{"1".."4"}.get(..., 0)`: um evento de 6 horas nascia com CACHÊ (e teto imposto pelo
+    # casting_ops) de 1 HORA — caso real do Baile do Addan (evento 1235). A lista `orc_caches`
+    # do cliente permanece só como fallback de chamadas sem orçamento vinculado.
+    orc_id = data.get("orcamento_history_id")
+    if orc_id:
+        entry = OrcamentoHistory.query.get(orc_id)
+        if entry is not None:
+            snap = json.loads(entry.form_snapshot or "{}")
+            orc_caches = _compute_performer_caches(
+                snap, horas_extra=duracao if duracao > 4 else None
+            )
 
     assigned_now = _create_roles_from_input(
         event,
         data.get("characters") or [],
         orc_caches=orc_caches,
-        dur_idx=dur_idx,
+        duracao=duracao,
         figurino_by_name=figurino_by_name,
         valid_talent_ids=valid_talent_ids,
     )
