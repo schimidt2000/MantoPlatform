@@ -172,8 +172,12 @@ tabela recebe `cache_custom` = **base de 4h sem adicionais ÷ 4 × horas** + adi
 (delta de make, noturno de R$ 50 — repasse ao artista —, adicional fora-SP, show customizado);
 maquiador não escala (por make). A criação valida `duracao` como int ≥ 1 e, com orçamento
 vinculado, **recalcula os cachês no servidor** (fonte única; a lista `orc_caches` do cliente é
-só fallback sem orçamento). `/events/new` ganhou "Outra (h)"; `CastingSection` avisa cachê
-abaixo do sugerido (espelho do aviso de teto). Preço ao cliente intocado.
+só fallback sem orçamento). `/events/new` ganhou "Outra (h)". **2ª rodada (mesmo dia)**: o
+cachê passou a NASCER VAZIO — o valor da régua vira só o `cache_cap` invisível (decisão de
+incentivo: personagens têm horários distintos não modelados de propósito, a venda cobra a
+duração cheia como margem, e expor sugestão ancoraria o casting no máximo — quem escala pode
+se escalar). O aviso "abaixo do sugerido" foi adicionado e removido nesta mesma rodada. Preço
+ao cliente intocado.
 
 **Pegadinhas.**
 - Gabarito real: orçamento 1806 em 6h → Green 520 / Space 500 / Coordenador 575 (verify_236,

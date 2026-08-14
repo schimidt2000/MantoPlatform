@@ -30,11 +30,25 @@ Registradas na conversa de 14/08/2026:
    cachê-base. Ex.: base 300, 6h, com make → 450 + 20 = 470 (+50 se noturno).
 3. **O adicional noturno é repasse ao artista**: os R$ 50 cobrados do cliente por pessoa
    pertencem ao cachê da pessoa e devem aparecer no valor sugerido.
-4. **O evento nasce preenchido**: papéis criados a partir do orçamento já vêm com o cachê
-   sugerido da duração REAL preenchido (editável) e com o teto correspondente — em qualquer
-   duração, incluindo 5h/6h+.
+4. **(Revisto na 2ª rodada de 14/08)** O cachê **nasce VAZIO**: o valor calculado da duração
+   real vira apenas o TETO (`cache_cap`), invisível e imposto como hoje. A sugestão NÃO é
+   mostrada nem pré-preenchida — quem escala pode se escalar, e um valor exposto viraria o
+   piso de todo cachê. A diferença entre o que se cobra do cliente (duração cheia, todos os
+   papéis) e o que o casting negocia é margem intencional da empresa.
 5. **O preço ao cliente não muda** nesta feature (a regra `total de 4h ÷ 4 × horas` do orçamento
    permanece como está).
+
+## Clarifications
+
+### Session 2026-08-14 (2ª rodada, após a implementação inicial)
+
+- Q: Mostrar a sugestão/pré-preencher o cachê para o casting? → A: **Não.** O cachê nasce
+  vazio; o valor da régua vira só o teto invisível (imposto como hoje). Motivo do dono: os
+  personagens têm horários diferentes dentro do evento (não modelados de propósito), a venda
+  cobra a duração cheia de todos para gerar margem, e expor a sugestão ancoraria o casting no
+  máximo — inclusive quem se escala. O aviso de "abaixo do sugerido" foi removido junto.
+- Q: Registrar de que horas até que horas cada personagem atua? → A: **Fora de escopo**, por
+  decisão explícita do dono.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -53,8 +67,8 @@ e conferir cachê e teto = 470 (+50 se ≥19h).
 **Acceptance Scenarios**:
 
 1. **Given** um orçamento com um ator cara limpa com maquiagem (base 4h = 300, make = 20),
-   **When** o evento é criado com duração de 6 horas, **Then** o papel nasce com cachê sugerido e
-   teto de 450 + 20 = 470 (mais o noturno, se aplicável).
+   **When** o evento é criado com duração de 6 horas, **Then** o papel nasce com o campo de
+   cachê VAZIO e teto (invisível) de 450 + 20 = 470 (mais o noturno, se aplicável).
 2. **Given** o mesmo orçamento, **When** o evento é criado com duração de 2 horas, **Then** o
    papel nasce com o valor da tabela de 2h (comportamento atual preservado).
 3. **Given** duração de 5 horas (o caso que hoje cai no fallback), **When** o evento é criado,
@@ -83,27 +97,27 @@ em cada cachê). Depende da mesma mecânica da US1.
 
 ---
 
-### User Story 3 - Casting enxerga a referência e os desvios (Priority: P3)
+### User Story 3 - A sugestão fica invisível; só o teto trabalha (Priority: P3) — REVISTA
 
-Na tela do evento, o casting vê ao lado de cada cachê o valor de referência da duração real.
-Quando lança um valor **acima** do teto, o aviso atual continua; quando lança **abaixo** da
-referência, passa a ver um aviso de que a pessoa está recebendo menos que o sugerido — os dois
-desvios ficam visíveis, nenhum é bloqueado.
+Na tela do evento, o casting NÃO vê valor sugerido nenhum: o campo nasce vazio e ele negocia
+como sempre. O teto da duração real age por baixo: lançar acima dele mantém o aviso atual (e o
+rebaixamento para não-superadmin), sem nunca expor o número.
 
-**Why this priority**: transparência para o caso "seguraram o cachê porque parecia o limite";
-depende das duas anteriores para a referência existir.
+**Why this priority**: decisão de incentivo do dono — expor a sugestão viraria piso; quem
+escala pode se escalar.
 
-**Independent Test**: num evento com referência 470, lançar 460 e ver o aviso de "abaixo do
-sugerido"; lançar 500 e ver o aviso de "acima do teto"; lançar 470 e não ver aviso.
+**Independent Test**: num evento de 6h criado de orçamento, abrir o casting e confirmar campo
+vazio e nenhuma menção a valor sugerido; lançar acima do teto e ver só o aviso de limite.
 
 **Acceptance Scenarios**:
 
-1. **Given** um papel com referência 470, **When** o casting lança 460, **Then** aparece um aviso
-   informativo de valor abaixo do sugerido (sem bloqueio).
-2. **Given** o mesmo papel, **When** lança acima do teto, **Then** o aviso atual de "acima do
-   teto" continua funcionando.
-3. **Given** um papel de evento criado sem orçamento (sem referência), **When** o casting lança
-   qualquer valor, **Then** nenhum aviso de referência aparece (comportamento atual).
+1. **Given** um papel de evento criado de orçamento, **When** o casting abre a tela, **Then** o
+   campo de cachê está vazio e nenhum valor sugerido aparece em lugar algum.
+2. **Given** o mesmo papel (teto 470), **When** lança 500 como não-superadmin, **Then** o aviso
+   atual de limite aparece e o valor volta ao teto ao salvar (comportamento de hoje, com o teto
+   agora certo).
+3. **Given** um papel de evento criado sem orçamento, **When** o casting lança qualquer valor,
+   **Then** nada muda (sem teto, sem avisos).
 
 ---
 
@@ -130,15 +144,13 @@ sugerido"; lançar 500 e ver o aviso de "acima do teto"; lançar 470 e não ver 
 - **FR-002**: Os adicionais fixos DEVEM somar inteiros por cima do cachê-base, sem escalar por
   hora: diferença de maquiagem (valor vigente da tabela, hoje R$ 20) quando o papel tem make, e
   adicional noturno (valor vigente, hoje R$ 50) quando o evento começa às 19h ou mais tarde.
-- **FR-003**: A criação de evento a partir de orçamento DEVE preencher `cache_value` e
-  `cache_cap` de cada papel com o cachê sugerido da duração REAL do evento, para QUALQUER
-  duração — o fallback que hoje aplica o valor de 1 hora a durações fora de 1–4h DEVE ser
-  eliminado.
-- **FR-004**: O valor pré-preenchido DEVE continuar editável pelo casting (é sugestão com teto,
-  não trava).
-- **FR-005**: A tela de casting DEVE exibir a referência do papel (quando existir) e avisar,
-  sem bloquear: valor lançado acima do teto (aviso atual) e valor lançado abaixo da referência
-  (aviso novo).
+- **FR-003** *(revisto)*: A criação de evento a partir de orçamento DEVE gravar o cachê da
+  duração REAL apenas em `cache_cap` (teto invisível), para QUALQUER duração — o fallback que
+  aplicava o valor de 1 hora DEVE ser eliminado. `cache_value` NASCE VAZIO.
+- **FR-004** *(revisto)*: O casting lança o cachê livremente num campo vazio; o teto continua
+  imposto exatamente como hoje (rebaixamento para não-superadmin, aviso sem expor o número).
+- **FR-005** *(revisto)*: NENHUMA sugestão de valor é exibida ou pré-preenchida para o casting
+  — nem aviso de "abaixo do sugerido". Só o aviso atual de acima-do-limite permanece.
 - **FR-006**: Papéis sem origem em orçamento (evento manual, papel adicionado depois) DEVEM
   continuar sem referência e sem avisos de referência.
 - **FR-007**: O preço ao cliente NÃO muda nesta feature — nenhuma alteração na fórmula de
@@ -158,14 +170,15 @@ sugerido"; lançar 500 e ver o aviso de "acima do teto"; lançar 470 e não ver 
 
 ### Measurable Outcomes
 
-- **SC-001**: Evento de 6h criado de orçamento com ator base 300 + make nasce com cachê e teto
-  de exatamente 470 (+50 quando noturno) — hoje nasce com o valor de 1h.
+- **SC-001**: Evento de 6h criado de orçamento com ator base 300 + make nasce com campo de
+  cachê VAZIO e teto de exatamente 470 (+50 quando noturno) — hoje o teto nasce com o valor
+  de 1h.
 - **SC-002**: Nenhuma duração de criação (1h a 12h) resulta em papel com cachê de uma duração
   diferente da escolhida — 100% dos casos de teste da régua batem.
 - **SC-003**: Evento iniciando ≥19h nasce com +R$ 50 em cada cachê sugerido; antes das 19h,
   nenhum papel ganha o adicional.
-- **SC-004**: No casting, lançar abaixo da referência mostra o aviso novo e lançar acima do teto
-  mantém o aviso atual — verificável nas duas direções no app real.
+- **SC-004** *(revisto)*: No casting, nenhum valor sugerido aparece em lugar algum; lançar
+  acima do teto mantém o aviso atual (sem número) — verificável no app real.
 - **SC-005**: Eventos criados sem orçamento seguem byte-a-byte o comportamento atual (sem
   referência, sem avisos).
 

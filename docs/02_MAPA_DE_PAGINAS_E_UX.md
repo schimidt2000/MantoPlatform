@@ -1482,6 +1482,7 @@ seleciona nada e o campo volta nulo sem erro — use `[role=option] button`.
 - **`/events/new`**: card do orçamento vinculado ganhou **"Outra (h)"** (≥5) ao lado dos botões
   1–4h — pré-carrega a duração extra do orçamento e mostra o preço de referência; a duração
   escolhida vai para a criação e define os cachês/tetos dos papéis (recalculados no servidor).
-- **Detalhe do evento → Elenco (`CastingSection`)**: aviso novo, informativo, quando o cachê
-  lançado fica **abaixo do sugerido** da duração real (espelho do aviso de teto; sem bloqueio,
-  sem expor o número — o sugerido já nasce preenchido no campo).
+- **Detalhe do evento → Elenco (`CastingSection`)**: sem mudança visível (2ª rodada do dono):
+  o cachê NASCE VAZIO e nenhuma sugestão é exibida — o valor da régua age só como TETO
+  invisível (`cache_cap`), imposto como sempre. Expor a sugestão ancoraria o casting no máximo
+  (quem escala pode se escalar).

@@ -3243,9 +3243,12 @@ def _create_roles_from_input(
             continue
 
         sheet_id = char_data.get("figurino_sheet_id") or figurino_by_name.get(name.lower())
+        # Decisão do dono (feature 236, 2ª rodada): o cachê NASCE VAZIO — o valor calculado da
+        # duração real vira só o TETO invisível (`cache_cap`, imposto por `casting_ops` a
+        # não-superadmin). Mostrar/pré-preencher a sugestão ancorava o casting no máximo — e
+        # quem escala pode se escalar. O campo explícito do formulário continua valendo.
         cache_val = char_data.get("cache_value")
-        if cache_val is None and i < len(orc_caches):
-            cache_val = orc_caches[i].get(chave_cache)
+        cap = orc_caches[i].get(chave_cache) if i < len(orc_caches) else None
         role_type = orc_caches[i].get("role_type", "character") if i < len(orc_caches) else "character"
 
         talent_id = char_data.get("talent_id")
@@ -3255,13 +3258,12 @@ def _create_roles_from_input(
             used_talent_ids.add(pre_tid)
             assigned_now.append((pre_tid, name))
 
-        from_orc = bool(orc_caches) and cache_val is not None
         db.session.add(EventRole(
             event_id=event.id,
             character_name=name,
             figurino_sheet_id=sheet_id,
             cache_value=cache_val,
-            cache_cap=cache_val if from_orc else None,
+            cache_cap=cap,
             role_type=role_type,
             needs_makeup=bool(char_data.get("needs_makeup")) or None,
             is_singer=bool(char_data.get("is_singer")) or None,

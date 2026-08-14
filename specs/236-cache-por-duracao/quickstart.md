@@ -12,8 +12,9 @@ Tudo contra o espelho `manto_local` (dump fresco de 14/08 já contém os casos-g
 
 ## 2. Criação de evento (API, app real)
 
-- Criar evento do orçamento 1806 com `duracao=6`: papéis nascem com `cache_value = cache_cap` =
-  520/520/520/520/500/500 (+ coordenador 575) — nunca os valores de 1h.
+- Criar evento do orçamento 1806 com `duracao=6`: papéis nascem com `cache_value` **VAZIO** e
+  `cache_cap` = 520/520/520/520/500/500 (+ coordenador 575) — nunca os valores de 1h e nunca
+  expostos ao casting (2ª rodada do dono).
 - Criar com `duracao=2`: valores da tabela de 2h (paridade com hoje).
 - `duracao=0` ou "abc": 400 com erro de campo, evento não criado.
 - Criar evento SEM orçamento: papéis sem cap, como hoje.
@@ -25,9 +26,10 @@ Tudo contra o espelho `manto_local` (dump fresco de 14/08 já contém os casos-g
 
 ## 4. Casting
 
-- Num papel com cap 520: lançar 500 → aviso "abaixo do sugerido"; lançar 600 como não-superadmin
-  → rebaixa para 520 com o aviso atual; lançar 520 → sem avisos.
-- Papel adicionado à mão (sem cap): nenhum aviso novo.
+- Num papel com cap 520: o campo abre VAZIO e nenhum valor sugerido aparece em lugar algum;
+  lançar 600 como não-superadmin → rebaixa para 520 com o aviso atual (sem expor o número);
+  lançar 500 → nenhum aviso (a sugestão é invisível de propósito).
+- Papel adicionado à mão (sem cap): comportamento de sempre.
 
 ## 5. Regressão
 

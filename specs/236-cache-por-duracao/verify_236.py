@@ -92,6 +92,47 @@ def main() -> int:
         erros_ok = _validate_event_core({"title": "X", "duracao": "6"})
         check("duracao" not in erros_ok, "duração 6 é aceita")
 
+        print("4. Criação: cachê nasce vazio, teto com a régua (2ª rodada do dono)")
+        from datetime import date as _date
+
+        from app.calendar import routes as cr
+        from app.models import EventRole
+        caches = _compute_performer_caches(snap_green)
+        data = {
+            "title": "(R&I) TESTE VERIFY 236 - NASCE VAZIO",
+            "event_type": "R&I",
+            "date_str": "2026-08-21", "start_str": "22:00", "end_str": "04:00",
+            "location": "Teste 236 - 2a rodada", "description": "",
+            "needs_rehearsal": False,
+            "sale_value": 9678, "sale_value_gross": 9678,
+            "transport_value": None, "acrescimo_value": None,
+            "with_invoice": False, "invoice_filename": None, "is_cortesia_permuta": False,
+            "seller_id": None, "sale_date": _date(2026, 8, 14),
+            "payment_method": None, "payment_installments": None, "payment_due_date": None,
+            "orcamento_history_id": 1806,
+            "duracao": "6",
+            "characters": [{"name": c["label"].strip(), "talent_id": None} for c in caches],
+            "orc_caches": caches,
+            "acrescimos": [], "coordinator_talent_id": None, "client_pairs": [],
+            "form_response_id": None, "has_reembolso": False,
+            "reembolso_description": "", "reembolso_amount": None,
+            "reembolso_invoice_file_path": None, "observations": [],
+        }
+        import time as _time
+        event, _avisos = cr._create_event_core(
+            data, google_event_id=f"fake-verify-236-{int(_time.time())}",
+            gc_title=data["title"], actor_id=1, actor_name="verify-236",
+            actor_role="SUPERADMIN",
+        )
+        roles = EventRole.query.filter_by(event_id=event.id).order_by(EventRole.id).all()
+        g1 = next(r for r in roles if r.character_name == "Green 1")
+        sp = next(r for r in roles if r.character_name == "Space Reflection - 1")
+        co = next(r for r in roles if r.character_name == "Coordenador")
+        check(all(r.cache_value is None for r in roles),
+              "todos os papéis nascem com o cachê VAZIO (sugestão invisível)")
+        check((float(g1.cache_cap), float(sp.cache_cap), float(co.cache_cap)) == (520.0, 500.0, 575.0),
+              f"tetos pela régua de 6h: 520/500/575 (={g1.cache_cap}/{sp.cache_cap}/{co.cache_cap})")
+
     print()
     if FALHAS:
         print(f"FALHOU: {len(FALHAS)}:")
