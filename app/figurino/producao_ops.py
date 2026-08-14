@@ -27,6 +27,7 @@ from app.constants import (
     FIGURINO_ANEXO_KINDS,
     FIGURINO_ANEXO_ORCAMENTO,
     FIGURINO_KIND_COMPRA,
+    FIGURINO_KIND_FICHA,
     FIGURINO_KIND_LABELS,
     FIGURINO_KIND_MANUTENCAO,
     FIGURINO_KIND_PRODUCAO,
@@ -36,6 +37,7 @@ from app.constants import (
     FIGURINO_PROD_CANCELADO,
     FIGURINO_PROD_FLUXOS,
     FIGURINO_PROD_LABELS,
+    FIGURINO_PROD_PRONTO,
     FIGURINO_PROD_SOLICITADO,
     FIGURINO_PROD_STATUSES,
     FIGURINO_SEV_ESPERA,
@@ -142,6 +144,7 @@ def _erro_titulo(kind: str) -> str:
     return {
         FIGURINO_KIND_MANUTENCAO: "Diga o que precisa ser resolvido.",
         FIGURINO_KIND_COMPRA: "Diga o que precisa ser comprado.",
+        FIGURINO_KIND_FICHA: "Diga o nome do personagem da ficha.",
     }.get(kind, "Diga o que precisa ser produzido.")
 
 
@@ -793,6 +796,44 @@ def update_producao(
     return producao, aviso
 
 
+def criar_solicitacao_ficha(
+    actor: User,
+    personagem: str,
+    observacao: str | None = None,
+    origem: str | None = None,
+) -> tuple[FigurinoProducao, str | None]:
+    """Abre um pedido do tipo FICHA a partir da busca (feature 237).
+
+    É o caminho do botão "Solicitar ficha" do FigurinoPicker: sem valores, sem compra, sem
+    responsável — só o nome do personagem, a observação de quem pediu e a tela de origem
+    (registrada na descrição, para a oficina saber o contexto). Reusa `create_producao`
+    inteiro (validações, log, e-mail ao setor quando nasce sem dono).
+
+    Args:
+        actor: Quem está solicitando (vira ``requested_by``).
+        personagem: Nome do personagem da ficha (vira o título do pedido).
+        observacao: Texto livre opcional de quem pediu.
+        origem: Rota/tela de onde a busca foi aberta (opcional).
+
+    Returns:
+        Tupla ``(pedido, aviso_da_agenda)`` — mesmo contrato de `create_producao`.
+
+    Raises:
+        ProducaoValidationError: personagem vazio.
+    """
+    partes = []
+    if (observacao or "").strip():
+        partes.append(observacao.strip())
+    if (origem or "").strip():
+        partes.append(f"Solicitada pela busca em: {origem.strip()}")
+    return create_producao(
+        title=(personagem or "").strip(),
+        actor=actor,
+        description="\n\n".join(partes) or None,
+        kind=FIGURINO_KIND_FICHA,
+    )
+
+
 def mudar_status(
     producao: FigurinoProducao,
     novo_status: str,
@@ -828,6 +869,18 @@ def mudar_status(
 
     if novo_status == FIGURINO_PROD_CANCELADO and not (motivo or "").strip():
         raise ProducaoValidationError("motivo", "Diga por que o pedido está sendo cancelado.")
+
+    # Feature 237: o pedido de ficha só conclui apontando para a ficha criada — é o elo que
+    # faz o solicitante encontrá-la; concluir sem vínculo deixaria o loop aberto de novo.
+    if (
+        novo_status == FIGURINO_PROD_PRONTO
+        and producao.kind == FIGURINO_KIND_FICHA
+        and not producao.figurino_sheet_id
+    ):
+        raise ProducaoValidationError(
+            "figurino_sheet_id",
+            "Vincule a ficha criada antes de concluir o pedido de ficha.",
+        )
 
     agora = now_sp()
     producao.status = novo_status
