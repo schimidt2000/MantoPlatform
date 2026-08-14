@@ -39,6 +39,8 @@ export interface OrcamentoCache {
   cache_2h: number;
   cache_3h: number;
   cache_4h: number;
+  /** Régua da duração extra do orçamento (>4h) — informativo; a criação recalcula no servidor (feature 236). */
+  cache_custom?: number;
   needs_makeup: boolean;
   is_singer: boolean;
   role_type: string;

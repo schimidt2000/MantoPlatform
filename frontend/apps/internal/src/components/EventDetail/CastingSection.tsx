@@ -162,6 +162,10 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
    * antiga avisava; a migração para o React perdeu isso).
    */
   const acimaDoTeto = role.cache_cap != null && cache > role.cache_cap;
+  // Espelho do teto (feature 236): o papel nasce com o cachê sugerido da duração real do
+  // evento preenchido; lançar abaixo dele merece o mesmo aviso informativo — foi assim que o
+  // casting ficou espremido sem saber no caso real do Baile do Addan.
+  const abaixoDoSugerido = role.cache_cap != null && cache > 0 && cache < role.cache_cap;
   const podeUltrapassar = Boolean(data.flags.is_superadmin);
 
   return (
@@ -263,6 +267,12 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
             : podeUltrapassar
               ? "Acima do limite deste evento. Como superadmin você pode salvar assim mesmo — fica registrado no log."
               : "Acima do limite deste evento. Ao salvar, o valor volta para o limite."}
+        </p>
+      )}
+
+      {canEdit && abaixoDoSugerido && (
+        <p role="status" className="mt-1.5 text-sm text-muted">
+          Abaixo do cachê sugerido para a duração deste evento — confirme se é intencional.
         </p>
       )}
 
