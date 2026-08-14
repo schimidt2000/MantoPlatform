@@ -1486,3 +1486,16 @@ seleciona nada e o campo volta nulo sem erro — use `[role=option] button`.
   o cachê NASCE VAZIO e nenhuma sugestão é exibida — o valor da régua age só como TETO
   invisível (`cache_cap`), imposto como sempre. Expor a sugestão ancoraria o casting no máximo
   (quem escala pode se escalar).
+
+
+### Feature 237 (branch `237-solicitar-ficha`, 2026-08-14)
+
+- **`FigurinoPicker` (porta única da busca de ficha)**: rodapé ganhou "Não achou? Solicitar
+  ficha" → dialog com o nome pré-preenchido com o texto digitado (novo `onInputValueChange` do
+  `Combobox`, que observa sem assumir a busca) + observação; cria pedido tipo "Ficha" e confirma
+  na própria tela. O `ElencoBlock` (criação E edição de evento) trocou seu Combobox cru pelo
+  picker — o resquício que tinha escapado da unificação da 225d.
+- **Produção e Compras**: fila/badge mostram o tipo "Ficha" (rótulo do servidor); filtros do
+  tipo = os da manutenção; detalhe de pedido ficha esconde o painel de dinheiro e traz "Ficha
+  criada (obrigatória para concluir)" com o próprio picker — concluir sem vínculo é barrado
+  pelo servidor.

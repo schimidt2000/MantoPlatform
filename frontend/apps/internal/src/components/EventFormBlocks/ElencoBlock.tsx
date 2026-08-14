@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { useFormContext } from "react-hook-form";
 import { Button, Combobox, type ComboboxOption } from "@manto/ui";
+import { FigurinoPicker } from "../FigurinoPicker";
 import { assetUrl } from "@manto/api-client";
 import { MoneyInput } from "@manto/money";
 import type { EventFormValues } from "../../lib/eventFormSchema";
 import type { CharacterInput } from "../../lib/eventCreate";
-import type { AssignableTalent, FigurinoSheetOption } from "../../lib/eventCreate";
+import type { AssignableTalent } from "../../lib/eventCreate";
 import { useCatalogElencoBusca } from "../../lib/catalogoElenco";
 import { CharacterAutocomplete, type CharacterSelection } from "../CharacterAutocomplete";
 import { FIELD, FIELD_ERROR, LABEL, HELP, FieldError, BlockCard } from "./shared";
@@ -21,25 +22,15 @@ function talentOptions(talents: AssignableTalent[]): ComboboxOption[] {
 }
 
 /** Opções de ficha de figurino com miniatura quadrada (feature 195, Princípio X.2). */
-function figurinoOptions(sheets: FigurinoSheetOption[]): ComboboxOption[] {
-  return sheets.map((s) => ({
-    value: String(s.id),
-    label: s.character_name,
-    imageUrl: s.photo_url ? assetUrl(s.photo_url) : null,
-    imageShape: "square" as const,
-    fallbackIcon: "🎭",
-  }));
-}
 
 interface CharacterRowProps {
   value: CharacterInput;
   onChange: (next: CharacterInput) => void;
   onRemove: () => void;
-  figurinoOpts: ComboboxOption[];
   talentOpts: ComboboxOption[];
 }
 
-function CharacterRow({ value, onChange, onRemove, figurinoOpts, talentOpts }: CharacterRowProps) {
+function CharacterRow({ value, onChange, onRemove, talentOpts }: CharacterRowProps) {
   return (
     <li className="space-y-2 border-b border-line pb-3 last:border-none">
       <div className="flex flex-wrap items-center gap-2">
@@ -55,16 +46,16 @@ function CharacterRow({ value, onChange, onRemove, figurinoOpts, talentOpts }: C
         </Button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Combobox
+        {/* Porta única da busca de ficha (feature 237): o FigurinoPicker traz a miniatura,
+            a ordenação pelo nome do personagem e o botão "Solicitar ficha". Este Combobox cru
+            era um resquício que escapou da unificação da 225d. */}
+        <FigurinoPicker
           className="min-w-56 flex-1"
-          aria-label="Buscar figurino"
+          value={value.figurino_sheet_id ?? null}
+          onChange={(sheetId) => onChange({ ...value, figurino_sheet_id: sheetId })}
+          characterName={value.name}
+          ariaLabel="Buscar figurino"
           placeholder="🔍 Buscar figurino… (auto-detectar pelo nome)"
-          emptyMessage="Nenhuma ficha de figurino encontrada."
-          options={figurinoOpts}
-          value={value.figurino_sheet_id != null ? String(value.figurino_sheet_id) : null}
-          onChange={(next) =>
-            onChange({ ...value, figurino_sheet_id: next ? Number(next) : null })
-          }
         />
         <Combobox
           className="min-w-56 flex-1"
@@ -109,7 +100,6 @@ export interface ElencoBlockProps {
   onCharactersChange: (next: CharacterInput[]) => void;
   coordinatorTalentId: number | null;
   onCoordinatorTalentIdChange: (id: number | null) => void;
-  figurinoSheets: FigurinoSheetOption[];
   talents: AssignableTalent[];
 }
 
@@ -119,7 +109,6 @@ export function ElencoBlock({
   onCharactersChange,
   coordinatorTalentId,
   onCoordinatorTalentIdChange,
-  figurinoSheets,
   talents,
 }: ElencoBlockProps) {
   const {
@@ -132,7 +121,6 @@ export function ElencoBlock({
   const eventType = watch("event_type");
   const catalogElenco = useCatalogElencoBusca();
   const talentOpts = useMemo(() => talentOptions(talents), [talents]);
-  const figurinoOpts = useMemo(() => figurinoOptions(figurinoSheets), [figurinoSheets]);
 
   const addCharacter = () =>
     onCharactersChange([
@@ -189,7 +177,6 @@ export function ElencoBlock({
             value={c}
             onChange={(next) => onCharactersChange(characters.map((p, j) => (j === i ? next : p)))}
             onRemove={() => onCharactersChange(characters.filter((_, j) => j !== i))}
-            figurinoOpts={figurinoOpts}
             talentOpts={talentOpts}
           />
         ))}

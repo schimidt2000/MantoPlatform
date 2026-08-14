@@ -160,6 +160,28 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
 
+### 237-solicitar-ficha — Solicitar ficha pela busca            (branch · 2026-08-14 · sem migration)
+
+**Motivação.** Quando a busca de ficha não tem o personagem, o pedido de criação saía do
+sistema (voz/lembrete). Agora a própria busca abre o pedido, que cai na fila que o figurino já
+usa (Produção e Compras, feature 225) como o quarto tipo: **Ficha**.
+
+**O que mudou.** `FIGURINO_KIND_FICHA` (sem migração — kind é string) com fluxo curto sem
+aprovação (= manutenção); `criar_solicitacao_ficha` reusa `create_producao` (log, e-mail ao
+setor); `POST /api/figurino/producoes/solicitar-ficha` com o gate `pode_abrir` de sempre;
+transição para `pronto` de kind=ficha **exige `figurino_sheet_id`** (o pedido concluído aponta
+para a ficha criada). No front: botão no rodapé do `FigurinoPicker` (dialog pré-preenchido via
+`Combobox.onInputValueChange`, prop nova que observa o texto SEM desligar o filtro local),
+tipo/filtros nas telas de produção, vínculo da ficha no detalhe. `ElencoBlock` (criar/editar
+evento) trocou o Combobox cru pelo picker — restaurando a "porta única" da 225d.
+
+**Pegadinhas.**
+- `onQueryChange` do Combobox DESLIGA o filtro local (contrato de busca remota) — por isso a
+  prop nova `onInputValueChange`, que só observa.
+- O pedido registra a origem (rota) na descrição; decisão de escopo: sem vínculo estruturado
+  com evento nesta versão.
+- `verify_237.py` (14/14 no manto_local) cria pedidos de teste "TESTE VERIFY 237" no espelho.
+
 ### 236-cache-por-duracao — Cachê sugerido pela duração real            (branch · 2026-08-14 · sem migration)
 
 **Motivação.** Caso real (Baile do Addan, evento 1235, 22h–4h): a criação de evento mapeava a

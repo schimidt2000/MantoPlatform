@@ -528,7 +528,6 @@ export function EventCreatePage() {
               onCharactersChange={setCharacters}
               coordinatorTalentId={coordinatorTalentId}
               onCoordinatorTalentIdChange={setCoordinatorTalentId}
-              figurinoSheets={opts.figurino_sheets}
               talents={opts.assignable_talents}
             />
 
