@@ -7,7 +7,7 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-11** · Estado do repositório: pós-feature **225c (Pedido de
+> Última atualização: **2026-08-14** · Feature **236-cache-por-duracao** (branch): criação de evento aceita `duracao` inteira ≥ 1 (fim do fallback que dava cachê de 1h a durações fora de 1–4h); com `orcamento_history_id`, `cache_value`/`cache_cap` são RECALCULADOS no servidor pela duração real — >4h usa a régua (base de 4h ÷ 4 × horas + adicionais fixos). Anterior: · Estado do repositório: pós-feature **225c (Pedido de
 > Compra — terceiro `kind` de `figurino_producoes`, fluxo `solicitado → aprovado → comprado →
 > recebido`, **sem migration**; nav: "Revisão" saiu de Produção e foi para Marketing, e nasceu
 > `/compras`. Endpoint mudado: `GET /api/figurino/producoes/responsaveis?tipo=compra`)**. Antes

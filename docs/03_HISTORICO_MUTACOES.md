@@ -160,6 +160,30 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
 
+### 236-cache-por-duracao — Cachê sugerido pela duração real            (branch · 2026-08-14 · sem migration)
+
+**Motivação.** Caso real (Baile do Addan, evento 1235, 22h–4h): a criação de evento mapeava a
+duração com `{"1".."4"}.get(..., 0)` — evento de 6 horas nascia com cachê E TETO (imposto por
+`casting_ops` a não-superadmin) de **1 hora**; a tela de criação nem oferecia mais que 4h. O
+preço ao cliente escala por hora, o valor das pessoas não escalava junto.
+
+**O que mudou.** `_compute_performer_caches` ganhou `horas_extra`: acima de 4h cada papel de
+tabela recebe `cache_custom` = **base de 4h sem adicionais ÷ 4 × horas** + adicionais fixos
+(delta de make, noturno de R$ 50 — repasse ao artista —, adicional fora-SP, show customizado);
+maquiador não escala (por make). A criação valida `duracao` como int ≥ 1 e, com orçamento
+vinculado, **recalcula os cachês no servidor** (fonte única; a lista `orc_caches` do cliente é
+só fallback sem orçamento). `/events/new` ganhou "Outra (h)"; `CastingSection` avisa cachê
+abaixo do sugerido (espelho do aviso de teto). Preço ao cliente intocado.
+
+**Pegadinhas.**
+- Gabarito real: orçamento 1806 em 6h → Green 520 / Space 500 / Coordenador 575 (verify_236,
+  14/14 no manto_local; evento de teste 1236 criado só no espelho local).
+- O teto de 400 do evento 1205 (mascotes) não incluía o adicional fora-SP — a função de hoje
+  dá 467; o gabarito de paridade é a função, não caps antigos.
+- O dublê `run-local-sem-google.py` NÃO cobre o `insert_event` importado dentro de
+  `api_create_event` (import tardio de `app.calendar.routes` — este está patchado; conferir se
+  o servidor local usado é mesmo o script dublê, o launcher pode ter config em cache).
+
 ### 225g — Fotos já na abertura do pedido, nos três tipos            (main · 2026-08-12 · sem migration)
 
 **Motivação.** *"Gostaria que nos 3 modos de input fosse possível adicionar fotos: opcional, pode

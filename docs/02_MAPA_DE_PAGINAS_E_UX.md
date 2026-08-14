@@ -1475,3 +1475,13 @@ exatamente o que o princípio de consistência proíbe.
 **Pegadinha ao testar por script**: no `Combobox` o `role="option"` fica no `<li>`, mas o
 `onClick` mora no `<button>` de dentro. `document.querySelector('[role=option]').click()` não
 seleciona nada e o campo volta nulo sem erro — use `[role=option] button`.
+
+
+### Feature 236 (branch `236-cache-por-duracao`, 2026-08-14)
+
+- **`/events/new`**: card do orçamento vinculado ganhou **"Outra (h)"** (≥5) ao lado dos botões
+  1–4h — pré-carrega a duração extra do orçamento e mostra o preço de referência; a duração
+  escolhida vai para a criação e define os cachês/tetos dos papéis (recalculados no servidor).
+- **Detalhe do evento → Elenco (`CastingSection`)**: aviso novo, informativo, quando o cachê
+  lançado fica **abaixo do sugerido** da duração real (espelho do aviso de teto; sem bloqueio,
+  sem expor o número — o sugerido já nasce preenchido no campo).

@@ -445,3 +445,14 @@ esforço e maior efeito da lista, porque envenenam **toda** sessão futura.
 8. **§7.1 e §7.2** — as docstrings de `models.py` e o cabeçalho de `calendar/routes.py`. Baratas e é o
    que mais reduz o custo de leitura das próximas sessões.
 9. **§9.1** — as fatias A→E de `calendar/routes.py`, uma por sessão.
+
+
+## Baixa da feature 236-cache-por-duracao (2026-08-14, branch)
+
+- **Quitada**: teto/cachê de 1 hora aplicado silenciosamente a eventos com duração fora de
+  1–4h na criação a partir de orçamento (`dur_idx` com fallback 0) — causa raiz do caso do
+  Baile do Addan. A duração agora é validada e os cachês recalculados no servidor pela régua.
+- **Nova (P3)**: o dublê `scripts/db/run-local-sem-google.py` não cobre todos os caminhos de
+  escrita no Google (ex.: `api_create_event` faz import tardio) e o launcher de preview pode
+  usar config em cache — criar evento em teste local pode tentar o Google real e falhar com
+  502 (sem lixo, mas confunde a verificação).
