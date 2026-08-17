@@ -4,9 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-13** · Estado do repositório: pós-feature
-> **235-educamanto (EducaManto por responsabilidades)**, antes dela 225g (fotos na
-> abertura do pedido; criação virou `multipart`), 225f, 225e, 225d e 225c · Head de migration:
+> Última atualização: **2026-08-17** · Estado do repositório: pós-feature
+> **235-educamanto 4ª rodada (gate fechado, branch)**, antes dela 238 (teto autorizado),
+> 237 (solicitar ficha), 236 (cachê por duração) — todas na main · Head de migration:
 > **`b7e3a91d5c24`** (*educamanto musicais*)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
@@ -39,7 +39,12 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **235-educamanto** | EducaManto por responsabilidades: musicais no lugar de pacotes por nível; snapshot v2 recalculado no servidor; Jinja do EducaManto desligado. **Gate de deploy: valores `PROVISORIO` + textos pendem do dono** | 2026-08-13 | `b7e3a91d5c24` | (aqui) | — |
+| **235-educamanto (4ª rodada)** | Gate FECHADO: cenário sai das responsabilidades (sem custo, colunas removidas); personagens×produção derivados dos itens (Cara Limpa+Bonecos+Papai Noel / item Produção); textos aprovados. Aguarda só o "push 235" | 2026-08-17 | `b7e3a91d5c24` reescrita | (aqui) | — |
+| **238-teto-autorizado** | Valor salvo por superadmin vira teto efetivo do papel (`max(cache_cap, valor salvo)`) — casting consegue usar o valor autorizado | 2026-08-14 | `—` | (aqui) | — |
+| **237-solicitar-ficha** | Botão "Solicitar ficha" no FigurinoPicker → pedido kind `ficha` na fila de Produção e Compras; concluir exige vincular a ficha criada | 2026-08-14 | `—` | (aqui) | — |
+| **236-cache-por-duracao** | Cachê por duração real (>4h: base÷4×horas + adicionais); cachê nasce vazio, régua vira só teto invisível | 2026-08-14 | `—` | (aqui) | — |
+| **235-educamanto (3ª rodada)** | Som/iluminação viram tabela única por combinação (4.200/2.900/2.900/750, técnicos inclusos) em `pricing_config`; riders reais no PDF | 2026-08-14 | `b7e3a91d5c24` reescrita | (aqui) | — |
+| **235-educamanto** | EducaManto por responsabilidades: musicais no lugar de pacotes por nível; snapshot v2 recalculado no servidor; Jinja do EducaManto desligado (gate fechado na 4ª rodada — ver entrada de 2026-08-17) | 2026-08-13 | `b7e3a91d5c24` | (aqui) | — |
 | **225g** | Fotos já na abertura do pedido (opcionais, várias, nos três tipos); criação virou `multipart`. **Furo conhecido: `.heic` não é comprimido** | 2026-08-12 | `—` | (aqui) | 163 |
 | **225f** | Um menu só ("Produção e Compras") para os três tipos de pedido; a aba virou `?tipo=` na URL e `/compras` passou a redirecionar | 2026-08-12 | `—` | (aqui) | 216 |
 | **225e** | Hotfix: menu "Ferramentas" cortado atrás da barra lateral — o painel abria para a esquerda e sumia sob a sidebar `z-40`; lado da abertura passou a ser medido | 2026-08-12 | `—` | (aqui) | 248 |
@@ -158,6 +163,30 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 235-educamanto (4ª rodada) — Gate fechado: cenário sai, equipe vem dos itens            (branch · 2026-08-17 · migration `b7e3a91d5c24` reescrita)
+
+**Motivação.** Últimas 3 pendências do dono, respondidas de uma vez: (1) o cenário **não tem
+custo adicional hoje** e não existe diferença Manto×contratante — "pode tirar por enquanto,
+talvez futuramente a gente volte"; (2) personagens×produção **derivam da tabela antiga de
+itens** ("3 cara limpa e 5 bonecos = 8 personagens"); (3) frases de alimentação aprovadas.
+
+**O que mudou.** Responsabilidade `cenario` removida por inteiro: dataclass, linha de custo,
+colunas `custo_cenario_*` (model + migração), textos/ordem do PDF, card do formulário e tipos
+do front. `Responsabilidades.from_dict` ignora chaves desconhecidas — snapshot v2 antigo com
+`cenario` carrega sem erro (e o rótulo segue no histórico do front). Derivação na migração:
+`num_personagens = Σ qty(Cara Limpa, Bonecos, Papai Noel)`, `num_producao = qty(Produção)`
+— resultado: UAA 9+2 · Jardim 8+2 · Onda 7+2 · Unicórnios 5+1 · Turma 8+2 · Natal 6+2 ·
+Natal c/ PN 7+2. Valores finais intocados (cenário valia 0): UAA 1d/1s tudo Manto segue
+16.700/19.800 (verify_235: 44/44).
+
+**Pegadinhas.**
+- **Cenógrafo/Maquiador ficam FORA das contagens** (não são personagens nem produção). O
+  headcount antigo do catering os incluía — por isso a derivação anterior (catering −
+  produção) dava 1 a mais em Unicórnios/Turma/Natal/Natal c/ PN. Se o dono quiser
+  alimentá-los no evento, é ajuste manual no musical.
+- "Cenário" continua existindo como palavra para o **cenário de margem** (1S/2S/diárias) —
+  só a responsabilidade morreu.
 
 ### 238-teto-autorizado — Valor do superadmin vira o teto do papel            (branch · 2026-08-14 · sem migration)
 

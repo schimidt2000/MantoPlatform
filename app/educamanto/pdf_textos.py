@@ -82,25 +82,11 @@ RESPONSABILIDADES: dict[str, dict[str, str]] = {
             "combinados previamente com o vendedor."
         ),
     },
-    "cenario": {
-        "label": "Cenário",
-        "tooltip": (
-            "Ambientação de espetáculo (backdrops, elementos cenográficos). Por conta da "
-            "contratante: levamos apenas os elementos de cena usados pelos personagens."
-        ),
-        "manto": (
-            "Ambientação de espetáculo por conta da Manto: backdrops cenográficos, elementos "
-            "cenográficos e elementos de cena do musical."
-        ),
-        "contratante": (
-            "A ambientação do palco fica por conta da parte contratante. A Manto leva apenas "
-            "os elementos de cena utilizados pelos personagens durante o espetáculo."
-        ),
-    },
 }
 
-# Ordem fixa de exibição das responsabilidades (calculadora e PDF).
-RESPONSABILIDADES_ORDEM = ("som", "iluminacao", "alimentacao", "cenario")
+# Ordem fixa de exibição das responsabilidades (calculadora e PDF). Cenário saiu na
+# 4ª rodada — sem custo nem diferença Manto×contratante por ora.
+RESPONSABILIDADES_ORDEM = ("som", "iluminacao", "alimentacao")
 
 # ── Avisos fixos do PDF ────────────────────────────────────────────────────────────────────
 AVISO_PALCO = "Palco mínimo: 5 m de frente × 4 m de fundo."

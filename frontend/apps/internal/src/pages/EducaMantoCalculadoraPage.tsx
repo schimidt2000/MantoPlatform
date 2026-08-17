@@ -353,7 +353,7 @@ export function EducaMantoCalculadoraPage() {
     config?.musicalId, config?.d1, config?.d2, config?.ensemble, config?.acrescimo,
     config?.foraSp, config?.kmIda,
     config?.responsabilidades.som, config?.responsabilidades.iluminacao,
-    config?.responsabilidades.alimentacao, config?.responsabilidades.cenario,
+    config?.responsabilidades.alimentacao,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     JSON.stringify(config?.contratacao), eventDate,
     ativa,
@@ -551,7 +551,7 @@ export function EducaMantoCalculadoraPage() {
                     Marque o que fica por conta da Manto e o que a contratante fornece — o valor
                     e a equipe técnica se ajustam na hora.
                   </p>
-                  {(textos?.ordem ?? (["som", "iluminacao", "alimentacao", "cenario"] as ResponsabilidadeChave[])).map(
+                  {(textos?.ordem ?? (["som", "iluminacao", "alimentacao"] as ResponsabilidadeChave[])).map(
                     (chave) => {
                       const info = textos?.responsabilidades[chave];
                       const valor = config.responsabilidades[chave];

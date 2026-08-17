@@ -30,6 +30,21 @@ Registradas na conversa de 13/08/2026 (válidas como fonte para o plano):
 
 ## Clarifications
 
+### Session 2026-08-17 (4ª rodada — fecha o gate de deploy)
+
+- Q: Custo do cenário/ambientação? → A: **Cenário NÃO tem custo adicional hoje e sai das
+  responsabilidades por ora** ("pode inclusive tirar isso por enquanto, talvez futuramente
+  a gente volte"). Não existe diferença cenário-pela-Manto × cenário-pela-contratante; o
+  bloco, as colunas `custo_cenario_*` e os textos do PDF foram removidos. Nenhum valor
+  muda ("não mude nada do nosso valor" — o custo era 0).
+- Q: Divisão personagens×produção dos musicais? → A: **Deriva da tabela antiga de itens**:
+  personagens = Cara Limpa + Bonecos (+ Papai Noel no pacote com Papai Noel); produção =
+  qty do item "Produção". Cenógrafo/Maquiador ficam fora das contagens. Resultado:
+  UAA 9+2 · Jardim Mágico 8+2 · Onda de Mudança 7+2 · Unicórnios 5+1 · Turma do
+  Mantinho 8+2 · Natal 6+2 · Natal com Papai Noel 7+2.
+- Q: Textos de alimentação (frases redigidas pelo Claude)? → A: **Aprovados como estão**;
+  as frases do cenário morrem junto com o bloco.
+
 ### Session 2026-08-14 (3ª rodada — valores reais de `EspecificacoesEducamanto.md`)
 
 - Q: Como precificar som/iluminação? → A: **Tabela ÚNICA por combinação** (vale para todos os
@@ -232,12 +247,13 @@ O superadmin cadastra e edita musicais: nome, nº de personagens, nº de pessoas
 
 ## Assumptions
 
-- **Valores provisórios (gate atualizado na 3ª rodada)**: som/iluminação e técnicos estão
-  RESOLVIDOS (tabela única real). Continuam pendentes do dono: **custo do cenário/ambientação**
-  (colunas provisórias zeradas) e a **divisão personagens × produção dos musicais restantes**
-  (só Uma Aventura Animal confirmada: 9 + 2; dos demais temos os totais 10/9/7/9/10) — gate de
-  lançamento.
-- **Textos das responsabilidades**: os textos do PDF (mínimos exigidos / o que levaremos) e os tooltips são redigidos pela equipe de desenvolvimento a partir do material existente (PDF atual, planos.md, descrições do dono); a **revisão e aprovação do dono antes do deploy** é gate de lançamento, mas não bloqueia plano nem implementação.
+- **Valores (gate FECHADO na 4ª rodada)**: som/iluminação resolvidos na 3ª rodada (tabela
+  única real); cenário saiu das responsabilidades (sem custo); personagens × produção
+  derivados da tabela antiga de itens e conferidos musical a musical. Não há mais valores
+  provisórios — a feature aguarda apenas o "push 235" do dono.
+- **Textos das responsabilidades**: redigidos pela equipe de desenvolvimento e **aprovados
+  pelo dono na 4ª rodada** (frases de alimentação como estão; as de cenário morreram com o
+  bloco).
 - **Catering de ensaio e ajuda de custo** não são afetados pelo bloco "alimentação": o bloco controla apenas a alimentação do dia do evento; os custos de ensaio sempre existem, multiplicados pelo nº de ensaios.
 - **À vista**: o desconto de 5% é exibido como valor final à vista para os dois regimes (sem NF e com NF), calculado sobre o valor final de cada um.
 - **Ensemble** continua funcionando como hoje (linha própria + crescimento dos itens por pessoa), agora também somando no headcount unificado.

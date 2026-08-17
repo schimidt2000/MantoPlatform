@@ -1259,17 +1259,18 @@ class EducaMantoMusical(db.Model):
 
     Uma linha por espetáculo (ex.: Uma Aventura Animal). Os antigos níveis
     Master/Intermediário/Econômica viraram RESPONSABILIDADES escolhidas por orçamento
-    (som/iluminação/alimentação/cenário por conta da Manto ou da contratante); os custos de
+    (som/iluminação/alimentação por conta da Manto ou da contratante); os custos de
     cada bloco vivem em colunas próprias e só entram na conta quando o bloco é da Manto.
+    Cenário saiu na 4ª rodada: não há custo adicional nem diferença Manto×contratante hoje.
     Ids preservados dos pacotes Master de origem (o "Recalcular" de snapshots antigos depende).
     """
     __tablename__ = "educamanto_musicals"
 
     id              = db.Column(db.Integer, primary_key=True)
     name            = db.Column(db.String(200), nullable=False)
-    # Equipe declarada do musical (aparece no PDF e deriva os headcounts).
-    # PROVISÓRIO (feature 235): a divisão personagens×produção só foi confirmada pelo dono
-    # para Uma Aventura Animal (9+2); nos demais a migração assume produção=2. Gate de deploy.
+    # Equipe declarada do musical (aparece no PDF e deriva os headcounts). Regra do dono
+    # (4ª rodada): personagens = Cara Limpa + Bonecos (+ Papai Noel); produção = item
+    # "Produção" — Cenógrafo/Maquiador ficam fora das contagens.
     num_personagens = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     num_producao    = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     # Nº de ensaios do pacote — mínimo de negócio 2 (validação em musical_ops).
@@ -1287,14 +1288,9 @@ class EducaMantoMusical(db.Model):
     ensemble_2s      = db.Column(db.Float, nullable=False, default=600, server_default="600")
     ensemble_1s_days = db.Column(db.Float, nullable=False, default=300, server_default="300")
     ensemble_2s_days = db.Column(db.Float, nullable=False, default=550, server_default="550")
-    # Blocos de responsabilidade com custo POR MUSICAL: só o cenário (PROVISÓRIO até o dono
-    # enviar — gate de deploy). Som/iluminação NÃO ficam aqui: são a tabela única por
-    # combinação em `pricing_config['educamanto_som_luz']` (3ª rodada, valores reais — os
-    # preços não são aditivos e a equipe técnica já está dentro).
-    custo_cenario_1s      = db.Column(db.Float, nullable=False, default=0, server_default="0")
-    custo_cenario_2s      = db.Column(db.Float, nullable=False, default=0, server_default="0")
-    custo_cenario_1s_days = db.Column(db.Float, nullable=False, default=0, server_default="0")
-    custo_cenario_2s_days = db.Column(db.Float, nullable=False, default=0, server_default="0")
+    # Som/iluminação NÃO ficam aqui: são a tabela única por combinação em
+    # `pricing_config['educamanto_som_luz']` (3ª rodada, valores reais — os preços não são
+    # aditivos e a equipe técnica já está dentro). Cenário não tem custo (4ª rodada).
     # Alimentação do DIA DO EVENTO, POR PESSOA (headcount do evento) — migrada do item
     # "Catering apresentação" (55 em 1 sessão, 73 em 2 sessões; diárias usam os mesmos valores).
     custo_alimentacao_1s = db.Column(db.Float, nullable=False, default=55, server_default="55")
@@ -1330,10 +1326,6 @@ class EducaMantoMusical(db.Model):
             "ensemble_2s": self.ensemble_2s,
             "ensemble_1s_days": self.ensemble_1s_days,
             "ensemble_2s_days": self.ensemble_2s_days,
-            "custo_cenario_1s": self.custo_cenario_1s,
-            "custo_cenario_2s": self.custo_cenario_2s,
-            "custo_cenario_1s_days": self.custo_cenario_1s_days,
-            "custo_cenario_2s_days": self.custo_cenario_2s_days,
             "custo_alimentacao_1s": self.custo_alimentacao_1s,
             "custo_alimentacao_2s": self.custo_alimentacao_2s,
             "custo_catering_ensaio_pp": self.custo_catering_ensaio_pp,

@@ -1,7 +1,7 @@
 """Núcleo de precificação do EducaManto por responsabilidades (feature 235).
 
-Substitui o motor por pacote/nível: o preço nasce do MUSICAL + quatro responsabilidades
-(sonorização, iluminação, alimentação, cenário), cada uma "por conta da Manto" (custo entra)
+Substitui o motor por pacote/nível: o preço nasce do MUSICAL + três responsabilidades
+(sonorização, iluminação, alimentação), cada uma "por conta da Manto" (custo entra)
 ou "por conta da contratante" (custo sai). A equipe técnica segue a matriz de 4 casos
 (sonoplasta fixo; técnico de som quando som=Manto; técnico de iluminação quando
 iluminação=Manto).
@@ -50,11 +50,14 @@ class Responsabilidades:
     som: bool = True
     iluminacao: bool = True
     alimentacao: bool = True
-    cenario: bool = True
 
     @classmethod
     def from_dict(cls, data: dict | None) -> "Responsabilidades":
-        """Parseia o shape da API ({"som": "manto"|"contratante", ...}); ausente = Manto."""
+        """Parseia o shape da API ({"som": "manto"|"contratante", ...}); ausente = Manto.
+
+        Chaves desconhecidas (ex.: "cenario", removida na 4ª rodada) são ignoradas —
+        snapshots v2 antigos continuam carregando sem erro.
+        """
         data = data or {}
 
         def _manto(key: str) -> bool:
@@ -64,7 +67,6 @@ class Responsabilidades:
             som=_manto("som"),
             iluminacao=_manto("iluminacao"),
             alimentacao=_manto("alimentacao"),
-            cenario=_manto("cenario"),
         )
 
     def to_dict(self) -> dict:
@@ -72,7 +74,6 @@ class Responsabilidades:
             "som": "manto" if self.som else "contratante",
             "iluminacao": "manto" if self.iluminacao else "contratante",
             "alimentacao": "manto" if self.alimentacao else "contratante",
-            "cenario": "manto" if self.cenario else "contratante",
         }
 
 
@@ -268,14 +269,8 @@ def _linhas_de_custo(
         "name": f"Som/Iluminação ({_CASO_LABELS[caso]})", "qty": 1, "bloco": "som_luz",
         "custos": (valor_caso, valor_caso, valor_caso, valor_caso),
     })
-    if resp.cenario:
-        linhas.append({
-            "name": "Cenário (ambientação)", "qty": 1, "bloco": "cenario",
-            "custos": (
-                musical.custo_cenario_1s, musical.custo_cenario_2s,
-                musical.custo_cenario_1s_days, musical.custo_cenario_2s_days,
-            ),
-        })
+    # Cenário saiu das responsabilidades na 4ª rodada: hoje não há custo adicional nem
+    # diferença Manto×contratante; se voltar a existir, volta como bloco aqui.
     if resp.alimentacao:
         linhas.append({
             "name": "Alimentação (dia do evento)", "qty": hc_evento, "bloco": "alimentacao",

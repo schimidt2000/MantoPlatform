@@ -24,7 +24,7 @@ Request:
   "musical_id": 1,
   "d1": 1, "d2": 0, "ensemble": 2,
   "responsabilidades": { "som": "manto", "iluminacao": "contratante",
-                          "alimentacao": "manto", "cenario": "manto" },
+                          "alimentacao": "manto" },   // "cenario" saiu na 4ª rodada (chave desconhecida é ignorada)
   "fora_sp": false, "km_ida": null,        // km_ida obrigatório quando fora_sp=true (>0)
   "acrescimo": 500.0,
   "contratacao_manto": {                    // opcional
@@ -59,7 +59,7 @@ Adicional **apenas superadmin** (removido no servidor para os demais — não é
   "breakdown": {
     "item_rows": [ { "name": "...", "qty": 3, "raw": 1200.0, "sell": 1692.0 } ],
     "raw_cost": 10363.0, "valor_base": 14611.83, "desconto": 0.0,
-    "blocos": { "som": 4000.0, "iluminacao": 0.0, "cenario": 900.0, "alimentacao": 715.0 },
+    "blocos": { "som_luz": 2900.0, "alimentacao": 715.0, "caminhao": 800.0 },
     "contratacao_memoria": [ /* memoria do calculate_quote */ ]
   }
 }

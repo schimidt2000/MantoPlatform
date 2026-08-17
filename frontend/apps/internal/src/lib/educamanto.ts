@@ -4,13 +4,13 @@ import { apiFetch, apiFetchBlob } from "@manto/api-client";
 // ─────────────────────────────────────────────────────────────────────────────
 // Feature 235: EducaManto por responsabilidades. Os pacotes por nível morreram —
 // o cadastro é por MUSICAL e o orçamento marca cada bloco (som/iluminação/
-// alimentação/cenário) como "manto" ou "contratante". Todo cálculo é do servidor;
+// alimentação) como "manto" ou "contratante". Todo cálculo é do servidor;
 // o breakdown de custos só vem na resposta de SUPERADMIN.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type Responsavel = "manto" | "contratante";
 
-export type ResponsabilidadeChave = "som" | "iluminacao" | "alimentacao" | "cenario";
+export type ResponsabilidadeChave = "som" | "iluminacao" | "alimentacao";
 
 export type Responsabilidades = Record<ResponsabilidadeChave, Responsavel>;
 
@@ -18,7 +18,6 @@ export const RESPONSABILIDADES_PADRAO: Responsabilidades = {
   som: "manto",
   iluminacao: "manto",
   alimentacao: "manto",
-  cenario: "manto",
 };
 
 /** Linha de custo sempre inclusa de um musical (elenco, produção, gráfica…). */
@@ -54,10 +53,6 @@ export interface EducaMantoMusical extends EducaMantoMusicalBasico {
   ensemble_2s: number;
   ensemble_1s_days: number;
   ensemble_2s_days: number;
-  custo_cenario_1s: number;
-  custo_cenario_2s: number;
-  custo_cenario_1s_days: number;
-  custo_cenario_2s_days: number;
   custo_alimentacao_1s: number;
   custo_alimentacao_2s: number;
   custo_catering_ensaio_pp: number;
@@ -245,10 +240,6 @@ export interface MusicalInput {
   ensemble_2s: number;
   ensemble_1s_days: number;
   ensemble_2s_days: number;
-  custo_cenario_1s: number;
-  custo_cenario_2s: number;
-  custo_cenario_1s_days: number;
-  custo_cenario_2s_days: number;
   custo_alimentacao_1s: number;
   custo_alimentacao_2s: number;
   custo_catering_ensaio_pp: number;

@@ -13,9 +13,8 @@
 | discount_days | int | mantido (3 em produção; default do model alinhado para 3) |
 | discount_pct | float | mantido (0.05) |
 | ensemble_1s / _2s / _1s_days / _2s_days | float | mantidos (350 / 600 / 300 / 550) |
-| custo_som_1s / _2s / _1s_days / _2s_days | float | NOVO — migrado do item "Som" do Master |
-| custo_iluminacao_1s / _2s / _1s_days / _2s_days | float | NOVO — provisório até o dono enviar |
-| custo_cenario_1s / _2s / _1s_days / _2s_days | float | NOVO — provisório até o dono enviar |
+| ~~custo_som_* / custo_iluminacao_*~~ | — | 3ª rodada: viraram a tabela única por combinação em `pricing_config['educamanto_som_luz']` (não são colunas do musical) |
+| ~~custo_cenario_*~~ | — | 4ª rodada: cenário saiu das responsabilidades (sem custo) — colunas removidas |
 | custo_alimentacao_1s / _2s | float/pessoa | NOVO — migrado do item "Catering apresentação" (55 / 73) |
 | created_at | datetime | mantido |
 

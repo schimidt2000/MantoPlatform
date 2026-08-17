@@ -61,8 +61,24 @@ def main() -> int:
               "alimentação 55/73 por pessoa")
         check((uaa.custo_catering_ensaio_pp, uaa.custo_ajuda_ensaio_pp) == (28, 50),
               "custos de ensaio 28/50 por pessoa")
-        check((uaa.num_personagens, uaa.num_producao) == (9, 2),
-              f"UAA 9 personagens + 2 produção (={uaa.num_personagens}+{uaa.num_producao})")
+        # 4ª rodada — regra do dono: personagens = Cara Limpa + Bonecos (+ Papai Noel);
+        # produção = item "Produção". Gabarito independente, derivado dos pacotes Master.
+        equipe_esperada = {
+            "Uma Aventura Animal": (9, 2), "Jardim Mágico": (8, 2),
+            "Onda de Mudança": (7, 2), "Unicórnios": (5, 1),
+            "Turma do Mantinho": (8, 2), "Natal": (6, 2),
+            "Natal com Papai Noel": (7, 2),
+        }
+        for m in musicais:
+            esp = equipe_esperada.get(m.name)
+            check(esp == (m.num_personagens, m.num_producao),
+                  f"{m.name}: {m.num_personagens} personagens + {m.num_producao} produção"
+                  f" (esperado {esp})")
+        check(not hasattr(uaa, "custo_cenario_1s"),
+              "colunas custo_cenario_* removidas (4ª rodada)")
+        check(pdf_textos.RESPONSABILIDADES_ORDEM == ("som", "iluminacao", "alimentacao")
+              and "cenario" not in pdf_textos.RESPONSABILIDADES,
+              "cenário fora das responsabilidades (textos e ordem)")
         check(all(m.num_ensaios == 2 for m in musicais), "num_ensaios=2 em todos")
         check(all(m.discount_days == 3 for m in musicais), "discount_days=3 em todos")
 
@@ -96,7 +112,6 @@ def main() -> int:
         # 3ª rodada: som/luz é UMA parcela pelo caso (técnicos inclusos), da tabela única.
         soma = (
             itens + orc_settings.load()["educamanto_som_luz"]["som_luz"]
-            + uaa.custo_cenario_1s
             + hc_ev * uaa.custo_alimentacao_1s
             + cfg_t["caminhao_sp"]
             + (uaa.custo_catering_ensaio_pp + uaa.custo_ajuda_ensaio_pp) * hc_ens * uaa.num_ensaios

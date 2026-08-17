@@ -12,10 +12,8 @@ from app.models import EducaMantoMusical, EducaMantoMusicalItem
 
 MIN_ENSAIOS = 2
 
-# Campos de custo por cenário dos blocos de responsabilidade + ensaios/alimentação.
+# Campos de custo dos blocos de responsabilidade + ensaios/alimentação.
 _CAMPOS_CUSTO = [
-    "custo_cenario_1s", "custo_cenario_2s",
-    "custo_cenario_1s_days", "custo_cenario_2s_days",
     "custo_alimentacao_1s", "custo_alimentacao_2s",
     "custo_catering_ensaio_pp", "custo_ajuda_ensaio_pp",
 ]

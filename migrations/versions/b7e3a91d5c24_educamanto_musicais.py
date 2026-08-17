@@ -14,10 +14,10 @@ custos em colunas próprias:
 - item "Transporte" (R$ 600)  → REMOVIDO (regra nova: caminhão R$ 800 dentro de SP via
   pricing_config; fora de SP, 2 vans — nada no musical)
 
-``num_personagens``/``num_producao`` são derivados dos dados reais: headcount = qty do
-"Catering apresentação" do Master; produção = qty do item "Produção" (fallback 2);
-personagens = headcount − produção. PROVISÓRIO para os musicais além de Uma Aventura Animal
-(9+2 confirmado pelo dono) — gate de deploy da feature 235.
+``num_personagens``/``num_producao`` são derivados dos itens reais, regra do dono
+(4ª rodada): personagens = Σ qty de "Cara Limpa" + "Bonecos" + "Papai Noel"; produção =
+qty do item "Produção" (fallback 2). Cenógrafo/Maquiador ficam fora das contagens (não
+entravam como personagens nem produção; o headcount antigo do catering os incluía).
 
 Downgrade restaura a ESTRUTURA antiga, mas não os níveis podados (Intermediário/Econômica/
 cópia) — fazer dump antes do deploy, conforme plano da feature.
@@ -36,9 +36,8 @@ branch_labels = None
 depends_on = None
 
 # (coluna, server_default) — todas Float exceto as Integer marcadas.
+# Sem custo_cenario_*: cenário saiu das responsabilidades na 4ª rodada (sem custo).
 _NOVAS_FLOAT = [
-    ("custo_cenario_1s", "0"), ("custo_cenario_2s", "0"),
-    ("custo_cenario_1s_days", "0"), ("custo_cenario_2s_days", "0"),
     ("custo_alimentacao_1s", "55"), ("custo_alimentacao_2s", "73"),
     ("custo_catering_ensaio_pp", "28"), ("custo_ajuda_ensaio_pp", "50"),
 ]
@@ -77,16 +76,15 @@ def upgrade() -> None:
         " WHERE name NOT LIKE '%Master%' OR name LIKE 'Cópia de%'"
     ))
 
-    # 2. Equipe declarada, ANTES de apagar os itens de origem:
-    #    headcount = qty do "Catering apresentação"; produção = qty de "Produção" (fallback 2).
+    # 2. Equipe declarada, regra do dono (4ª rodada): personagens = Cara Limpa + Bonecos
+    #    (+ Papai Noel); produção = item "Produção" (fallback 2). Cenógrafo/Maquiador fora.
     bind.execute(sa.text(
         "UPDATE educamanto_musicals m SET"
         "  num_producao = COALESCE((SELECT i.qty FROM educamanto_musical_items i"
         "    WHERE i.musical_id = m.id AND i.name = 'Produção'), 2),"
-        "  num_personagens = COALESCE((SELECT i.qty FROM educamanto_musical_items i"
-        "    WHERE i.musical_id = m.id AND i.name = 'Catering apresentação'), 0)"
-        "  - COALESCE((SELECT i.qty FROM educamanto_musical_items i"
-        "    WHERE i.musical_id = m.id AND i.name = 'Produção'), 2),"
+        "  num_personagens = COALESCE((SELECT SUM(i.qty) FROM educamanto_musical_items i"
+        "    WHERE i.musical_id = m.id"
+        "    AND i.name IN ('Cara Limpa', 'Bonecos', 'Papai Noel')), 0),"
         "  num_ensaios = 2"
     ))
 

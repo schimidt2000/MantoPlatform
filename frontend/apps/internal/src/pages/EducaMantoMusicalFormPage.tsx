@@ -63,7 +63,6 @@ interface FormState {
   ensemble_2s: number;
   ensemble_1s_days: number;
   ensemble_2s_days: number;
-  custo_cenario: [number, number, number, number];
   custo_alimentacao_1s: number;
   custo_alimentacao_2s: number;
   custo_catering_ensaio_pp: number;
@@ -86,7 +85,6 @@ const FORM_INICIAL: FormState = {
   ensemble_2s: 600,
   ensemble_1s_days: 300,
   ensemble_2s_days: 550,
-  custo_cenario: [0, 0, 0, 0],
   custo_alimentacao_1s: 55,
   custo_alimentacao_2s: 73,
   custo_catering_ensaio_pp: 28,
@@ -110,12 +108,6 @@ function musicalParaForm(m: EducaMantoMusical): FormState {
     ensemble_2s: m.ensemble_2s,
     ensemble_1s_days: m.ensemble_1s_days,
     ensemble_2s_days: m.ensemble_2s_days,
-    custo_cenario: [
-      m.custo_cenario_1s,
-      m.custo_cenario_2s,
-      m.custo_cenario_1s_days,
-      m.custo_cenario_2s_days,
-    ],
     custo_alimentacao_1s: m.custo_alimentacao_1s,
     custo_alimentacao_2s: m.custo_alimentacao_2s,
     custo_catering_ensaio_pp: m.custo_catering_ensaio_pp,
@@ -143,10 +135,6 @@ function formParaInput(form: FormState): MusicalInput {
     ensemble_2s: form.ensemble_2s,
     ensemble_1s_days: form.ensemble_1s_days,
     ensemble_2s_days: form.ensemble_2s_days,
-    custo_cenario_1s: form.custo_cenario[0],
-    custo_cenario_2s: form.custo_cenario[1],
-    custo_cenario_1s_days: form.custo_cenario[2],
-    custo_cenario_2s_days: form.custo_cenario[3],
     custo_alimentacao_1s: form.custo_alimentacao_1s,
     custo_alimentacao_2s: form.custo_alimentacao_2s,
     custo_catering_ensaio_pp: form.custo_catering_ensaio_pp,
@@ -157,7 +145,7 @@ function formParaInput(form: FormState): MusicalInput {
 
 const CENARIO_LABELS = ["1 sessão", "2 sessões", "1S/dia (multi)", "2S/dia (multi)"];
 
-/** Linha de 4 MoneyInputs — custo por cenário de um bloco (som/iluminação/cenário). */
+/** Linha de 4 MoneyInputs — valor por cenário de margem (1S/2S/diárias), ex.: ensemble. */
 function CustoCenarioRow({
   valores,
   onChange,
@@ -414,19 +402,8 @@ export function EducaMantoMusicalFormPage() {
         </Card>
 
         {/* Som/iluminação NÃO são por musical: tabela única por combinação, editável nas
-            Configurações de Preços (seção "EducaManto — Som e Iluminação"). */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Cenário / ambientação (responsabilidade: cenário)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CustoCenarioRow
-              valores={form.custo_cenario}
-              onChange={(v) => set("custo_cenario", v)}
-            />
-          </CardContent>
-        </Card>
-
+            Configurações de Preços (seção "EducaManto — Som e Iluminação"). Cenário não
+            tem custo (4ª rodada) — sem card. */}
         <Card>
           <CardHeader>
             <CardTitle>Alimentação e ensaios (por pessoa)</CardTitle>

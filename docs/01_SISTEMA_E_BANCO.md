@@ -389,7 +389,7 @@ Pontos que valem para quem for ler esses dados:
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `educamanto_musicals` | `EducaMantoMusical` | feature 235 (rename de `educamanto_packages`, ids preservados): 1 linha por musical; `num_personagens`/`num_producao`/`num_ensaios (≥2)`; custos por cenário dos blocos de responsabilidade (`custo_som_*`, `custo_iluminacao_*`, `custo_cenario_*`), alimentação por pessoa (`custo_alimentacao_1s/2s`) e ensaio por pessoa (`custo_catering_ensaio_pp`, `custo_ajuda_ensaio_pp`); `commission_rate` (campo morto) removido | 1:N `items` |
+| `educamanto_musicals` | `EducaMantoMusical` | feature 235 (rename de `educamanto_packages`, ids preservados): 1 linha por musical; `num_personagens`/`num_producao` derivados dos itens (Cara Limpa+Bonecos+Papai Noel / item Produção — 4ª rodada) e `num_ensaios (≥2)`; alimentação por pessoa (`custo_alimentacao_1s/2s`) e ensaio por pessoa (`custo_catering_ensaio_pp`, `custo_ajuda_ensaio_pp`); som/iluminação NÃO ficam aqui (tabela única `pricing_config['educamanto_som_luz']`); cenário sem custo/coluna (removido na 4ª rodada); `commission_rate` (campo morto) removido | 1:N `items` |
 | `educamanto_musical_items` | `EducaMantoMusicalItem` | rename de `educamanto_items` (`package_id`→`musical_id`); itens sempre inclusos — Som/Catering apresentação/Caterings de ensaio/Transporte viraram colunas ou regra na migração | `musical_id` |
 | `educamanto_quotes` | `EducaMantoQuote` | `snapshot` versionado: **v2** = `{version: 2, configs: [...]}` com entradas + resultado **recalculado no servidor**; sem `version` = v1 (legado por pacote, re-render intacto) | `user_id` |
 

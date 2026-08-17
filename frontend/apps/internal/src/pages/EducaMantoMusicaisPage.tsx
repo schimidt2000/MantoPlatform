@@ -69,8 +69,8 @@ function MusicalCard({
               {musical.margin_1s_days.toFixed(2)}× · {musical.margin_2s_days.toFixed(2)}×
             </p>
             <p>
-              Cenário: {brl(musical.custo_cenario_1s)} (1S) · Alimentação:{" "}
-              {brl(musical.custo_alimentacao_1s)}/pessoa (1S)
+              Alimentação: {brl(musical.custo_alimentacao_1s)}/pessoa (1S) · Ensaio:{" "}
+              {brl(musical.custo_catering_ensaio_pp + musical.custo_ajuda_ensaio_pp)}/pessoa
             </p>
             <p className="text-muted">
               {musical.items.length} {musical.items.length === 1 ? "item" : "itens"} ·{" "}
