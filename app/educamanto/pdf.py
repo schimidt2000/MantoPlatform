@@ -1,11 +1,17 @@
-"""Geração do PDF de orçamento do EducaManto (feature 077).
+"""Geração do PDF de orçamento do EducaManto.
 
-Uma página por pacote, reproduzindo a estrutura do modelo de referência
-(`Orccamentos_Educamanto.pdf`): cabeçalho com contato da Manto, título "ORÇAMENTO", nome do pacote,
-breve explicação, dias com 1/2 sessões, VALOR SEM NF / COM NF e formas de pagamento.
+Dois renderizadores convivem aqui:
 
-O PDF é reconstruído com reportlab (o arquivo de referência é um exemplo preenchido), mantendo a
-identidade visual da Manto (mesmas cores do `orcamento/pdf.py`).
+- **v2 (feature 235)** — uma página A4 por CONFIGURAÇÃO (musical + responsabilidades), com
+  "o que levaremos" / "mínimo exigido" por bloco, quantidades da equipe, avisos fixos,
+  valor à vista (5% real) e o trecho da contratação Manto. Todo o conteúdo editorial vem de
+  ``pdf_textos.py`` (fonte única; gate de revisão do dono).
+- **v1 (features 077/080/082, LEGADO)** — reproduz byte-a-byte o layout antigo por pacote,
+  usado SOMENTE para re-renderizar snapshots do histórico gravados antes da feature 235.
+  Os textos por nível (Master/Intermediário/Econômica) vivem aqui apenas por isso.
+
+O despacho é por ``snapshot["version"]`` (ausente = v1). Identidade visual Manto compartilhada
+(mesmas cores do `orcamento/pdf.py`).
 """
 from __future__ import annotations
 
@@ -17,23 +23,302 @@ from reportlab.lib.colors import HexColor, white
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas as rl_canvas
 
+from app.educamanto import pdf_textos
 from app.money import format_brl
 
-# Identidade visual Manto (mesmas cores do orçamento)
+# Identidade visual Manto (mesmas cores do orcamento/pdf.py)
 _PURPLE = HexColor("#2d1f6e")
 _GOLD = HexColor("#b8975a")
 _GRAY = HexColor("#555555")
 _LIGHT = HexColor("#888888")
+_BOX_BG = HexColor("#f4f2fb")
 
 _W, _H = A4  # 595 x 842
 _LEFT = 56
 _RIGHT = _W - 56
+_MIN_Y = 60  # abaixo disso, quebra para página de continuação
 
-_CONTACT_PHONE = "+55 (11) 97057-0577"
-_CONTACT_EMAIL = "educamanto@mantoproducoes.com.br"
 
-# Descrição CURTA do tipo (abaixo do título). Tipo detectado por substring no nome do pacote
-# (ex.: "Uma Aventura Animal - Master" -> master). Feature 077/080.
+def _wrap(c: rl_canvas.Canvas, text: str, font: str, size: float, max_width: float) -> list[str]:
+    """Quebra `text` em linhas que cabem em `max_width` (pt)."""
+    words = (text or "").split()
+    lines: list[str] = []
+    cur = ""
+    for w in words:
+        trial = f"{cur} {w}".strip()
+        if c.stringWidth(trial, font, size) <= max_width:
+            cur = trial
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+# ═════════════════════════════════ v2 — feature 235 ═════════════════════════════════════
+
+
+def _header(c: rl_canvas.Canvas, client_name: str) -> float:
+    """Faixa roxa + título; devolve o y inicial do conteúdo."""
+    c.setFillColor(_PURPLE)
+    c.rect(0, _H - 70, _W, 70, fill=1, stroke=0)
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 15)
+    c.drawString(_LEFT, _H - 38, "MANTO PRODUÇÕES")
+    c.setFont("Helvetica", 9)
+    c.setFillColor(HexColor("#d8d2f0"))
+    c.drawRightString(_RIGHT, _H - 30, pdf_textos.CONTACT_PHONE)
+    c.drawRightString(_RIGHT, _H - 44, pdf_textos.CONTACT_EMAIL)
+
+    y = _H - 104
+    c.setFillColor(_GOLD)
+    c.setFont("Helvetica-Bold", 20)
+    c.drawString(_LEFT, y, "ORÇAMENTO")
+    if client_name:
+        c.setFont("Helvetica", 10)
+        c.setFillColor(_LIGHT)
+        c.drawRightString(_RIGHT, y + 4, f"Cliente: {client_name}")
+    y -= 12
+    c.setStrokeColor(_GOLD)
+    c.setLineWidth(1.5)
+    c.line(_LEFT, y, _RIGHT, y)
+    return y - 26
+
+
+def _footer(c: rl_canvas.Canvas) -> None:
+    c.setFillColor(_LIGHT)
+    c.setFont("Helvetica", 7.5)
+    c.drawCentredString(_W / 2, 32, "Manto Produções · EducaManto")
+
+
+def _titulo_secao(c: rl_canvas.Canvas, y: float, titulo: str) -> float:
+    c.setFillColor(_PURPLE)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(_LEFT, y, titulo)
+    y -= 5
+    c.setStrokeColor(_GOLD)
+    c.setLineWidth(0.5)
+    c.line(_LEFT, y, _RIGHT, y)
+    return y - 12
+
+
+def _paragrafo(
+    c: rl_canvas.Canvas, y: float, texto: str, *,
+    size: float = 8.5, indent: float = 0, color=_LIGHT, font: str = "Helvetica",
+    leading: float | None = None,
+) -> float:
+    c.setFont(font, size)
+    c.setFillColor(color)
+    for ln in _wrap(c, texto, font, size, _RIGHT - _LEFT - indent):
+        c.drawString(_LEFT + indent, y, ln)
+        y -= leading or (size + 1.5)
+    return y
+
+
+def _quebra(c: rl_canvas.Canvas, y: float, precisa: float, client_name: str) -> float:
+    """Se não couber `precisa` pt até o rodapé, abre página de continuação."""
+    if y - precisa < _MIN_Y:
+        _footer(c)
+        c.showPage()
+        return _header(c, client_name)
+    return y
+
+
+def _fmt(v: float) -> str:
+    return format_brl(v, prefix=True)
+
+
+def _bloco_valores(c: rl_canvas.Canvas, y: float, resultado: dict) -> float:
+    """Caixas SEM NF / COM NF lado a lado + linha do à vista (5% calculado)."""
+    largura = (_RIGHT - _LEFT - 10) / 2
+
+    def _caixa(x: float, label: str, valor: float, accent) -> None:
+        c.setFillColor(_BOX_BG)
+        c.roundRect(x, y - 30, largura, 38, 6, fill=1, stroke=0)
+        c.setFillColor(_LIGHT)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(x + 12, y - 4, label)
+        c.setFillColor(accent)
+        c.setFont("Helvetica-Bold", 15)
+        c.drawRightString(x + largura - 12, y - 22, _fmt(valor))
+
+    _caixa(_LEFT, "VALOR SEM NF", float(resultado.get("sem_nota") or 0), _PURPLE)
+    _caixa(_LEFT + largura + 10, "VALOR COM NF", float(resultado.get("com_nota") or 0), _GOLD)
+    y -= 44
+    c.setFont("Helvetica-Bold", 8.5)
+    c.setFillColor(_GRAY)
+    c.drawString(
+        _LEFT, y,
+        "À vista (PIX, 5% de desconto): "
+        f"{_fmt(float(resultado.get('a_vista_sem_nota') or 0))} sem NF · "
+        f"{_fmt(float(resultado.get('a_vista_com_nota') or 0))} com NF",
+    )
+    return y - 14
+
+
+def _draw_config_page(c: rl_canvas.Canvas, snapshot: dict, config: dict) -> None:
+    """Uma página A4 completa para uma configuração (v2)."""
+    client_name = snapshot.get("client_name") or ""
+    resultado = config.get("resultado") or {}
+    resp = config.get("responsabilidades") or {}
+    tecnicos = resultado.get("tecnicos") or ["sonoplasta"]
+    headcount = int(resultado.get("headcount") or 0)
+
+    y = _header(c, client_name)
+
+    # ── Musical + equipe ──────────────────────────────────────────────────
+    c.setFillColor(_PURPLE)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(_LEFT, y, config.get("musical_name", "Musical"))
+    y -= 15
+    equipe = pdf_textos.descricao_equipe(
+        int(config.get("num_personagens") or 0),
+        int(config.get("num_producao") or 0),
+        tecnicos,
+    )
+    if int(config.get("ensemble") or 0) > 0:
+        equipe += f" + {config['ensemble']} ensemble"
+    y = _paragrafo(c, y, equipe, size=9.5, color=_GRAY, font="Helvetica-Oblique")
+    y -= 4
+
+    # ── Dias (linhas zeradas não aparecem — FR-022) ──────────────────────
+    c.setFont("Helvetica", 10)
+    c.setFillColor(_GRAY)
+    for dias, rotulo in ((config.get("d1"), "1 sessão"), (config.get("d2"), "2 sessões")):
+        if int(dias or 0) > 0:
+            c.drawString(_LEFT, y, f"Quantidade de dias com {rotulo}: {int(dias)}")
+            y -= 14
+    y -= 8
+
+    # ── Valores ───────────────────────────────────────────────────────────
+    y = _bloco_valores(c, y, resultado)
+    transporte = resultado.get("transporte") or {}
+    if transporte.get("modo") == "vans_fora_sp" and float(transporte.get("total") or 0) > 0:
+        y = _paragrafo(
+            c, y,
+            "(valores já incluem logística/transporte fora de SP: "
+            f"{_fmt(float(transporte['total']))} — 2 vans, {transporte.get('km_total', 0):g} km "
+            f"ida e volta × {int(transporte.get('dias') or 1)} dia(s))",
+            size=8, font="Helvetica-Oblique",
+        )
+    y -= 6
+
+    # ── Contratação Manto embutida (quando houver) ────────────────────────
+    contratacao = config.get("contratacao_manto")
+    combinados = resultado.get("combinados") or {}
+    if contratacao and combinados:
+        y = _quebra(c, y, 70, client_name)
+        y = _titulo_secao(c, y, "COM CONTRATAÇÃO MANTO (apresentação tradicional)")
+        team = contratacao.get("team_lines") or []
+        if team:
+            y = _paragrafo(c, y, "Inclui: " + ", ".join(team) + ".", size=8.5, color=_GRAY)
+        for duracao in sorted(combinados, key=lambda d: (len(d), d)):
+            tot = combinados[duracao]
+            c.setFont("Helvetica-Bold", 8.5)
+            c.setFillColor(_PURPLE)
+            c.drawString(
+                _LEFT + 4, y,
+                f"Total com {duracao} de apresentação Manto: "
+                f"{_fmt(float(tot.get('sem_nota') or 0))} sem NF · "
+                f"{_fmt(float(tot.get('com_nota') or 0))} com NF",
+            )
+            y -= 11
+        y -= 6
+
+    # ── Responsabilidades: o que levamos / mínimo exigido (FR-019) ───────
+    y = _quebra(c, y, 120, client_name)
+    y = _titulo_secao(c, y, "RESPONSABILIDADES")
+    for chave in pdf_textos.RESPONSABILIDADES_ORDEM:
+        textos = pdf_textos.RESPONSABILIDADES[chave]
+        eh_manto = str(resp.get(chave) or "manto") != "contratante"
+        rotulo = "por conta da Manto" if eh_manto else "por conta da contratante"
+        y = _quebra(c, y, 34, client_name)
+        c.setFont("Helvetica-Bold", 8.5)
+        c.setFillColor(_GRAY)
+        c.drawString(_LEFT, y, f"{textos['label']} — {rotulo}:")
+        y -= 10
+        corpo = textos["manto"] if eh_manto else f"Mínimo exigido: {textos['contratante']}"
+        y = _paragrafo(c, y, corpo, indent=10, size=8.5)
+        y -= 3
+
+    # ── Avisos fixos (FR-021) ─────────────────────────────────────────────
+    y = _quebra(c, y, 80, client_name)
+    y = _titulo_secao(c, y, "INFORMAÇÕES IMPORTANTES")
+    avisos = [
+        pdf_textos.AVISO_PALCO,
+        pdf_textos.AVISO_CAMARIM.format(cadeiras=headcount or "—"),
+    ]
+    # A cobertura do rider só faz sentido quando o som é NOSSO; com som da contratante, a
+    # responsabilidade pela cobertura é dela (o texto do mínimo exigido já diz isso).
+    if str(resp.get("som") or "manto") != "contratante":
+        avisos.append(pdf_textos.AVISO_SOM_AREA)
+    avisos.append(pdf_textos.AVISO_LOCAL_ABERTO)
+    for aviso in avisos:
+        y = _quebra(c, y, 22, client_name)
+        y = _paragrafo(c, y, f"• {aviso}", size=8.5, color=_GRAY)
+        y -= 1
+
+    # ── Formas de pagamento ───────────────────────────────────────────────
+    y = _quebra(c, y, 70, client_name)
+    y = _titulo_secao(c, y, "FORMAS DE PAGAMENTO")
+    avista_valores = (
+        f"{_fmt(float(resultado.get('a_vista_sem_nota') or 0))} sem NF / "
+        f"{_fmt(float(resultado.get('a_vista_com_nota') or 0))} com NF"
+    )
+    linhas_pagamento = [
+        (pdf_textos.PAGAMENTO_AVISTA_TITULO,
+         pdf_textos.PAGAMENTO_AVISTA_DESC.format(valores=avista_valores)),
+        *pdf_textos.PAGAMENTO_LINHAS_FIXAS,
+    ]
+    for titulo, desc in linhas_pagamento:
+        y = _quebra(c, y, 24, client_name)
+        c.setFont("Helvetica-Bold", 8.5)
+        c.setFillColor(_GRAY)
+        c.drawString(_LEFT, y, titulo)
+        c.setFont("Helvetica", 8.5)
+        c.setFillColor(_LIGHT)
+        for ln in _wrap(c, desc, "Helvetica", 8.5, _RIGHT - _LEFT - 125):
+            c.drawString(_LEFT + 125, y, ln)
+            y -= 10
+        y -= 3
+
+    # ── Observação do vendedor (FR-023 — pode transbordar p/ continuação) ─
+    observacao = (snapshot.get("observacao") or "").strip()
+    if observacao:
+        y = _quebra(c, y, 40, client_name)
+        y = _titulo_secao(c, y, "OBSERVAÇÕES")
+        for linha in observacao.splitlines():
+            if not linha.strip():
+                y -= 5
+                continue
+            y = _quebra(c, y, 14, client_name)
+            y = _paragrafo(c, y, linha.strip(), size=8.5, color=_GRAY)
+
+    _footer(c)
+
+
+def _gerar_v2(snapshot: dict[str, Any]) -> bytes:
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    c.setAuthor("Manto Produções")
+    c.setTitle("Orçamento EducaManto")
+    configs = snapshot.get("configs") or [{}]
+    for config in configs:
+        _draw_config_page(c, snapshot, config)
+        c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+# ═══════════════════════ v1 — LEGADO (snapshots pré-feature 235) ════════════════════════
+# Reproduz o PDF antigo por pacote/nível para o histórico congelado. NÃO usar em orçamentos
+# novos — os textos por nível abaixo existem só para manter o re-download idêntico (FR-027).
+
+_V1_CONTACT_PHONE = pdf_textos.CONTACT_PHONE
+_V1_CONTACT_EMAIL = pdf_textos.CONTACT_EMAIL
+
 SHORT_DESC = {
     "master": (
         "A Manto Produções se responsabiliza pela sonorização, iluminação completa e "
@@ -49,8 +334,6 @@ SHORT_DESC = {
     ),
 }
 
-# Descrição LONGA do plano (após as formas de pagamento) — conteúdo de planos.md. Feature 080.
-# Obs.: o resumo "Geral" NÃO entra aqui — já aparece como descrição curta abaixo do título (082).
 LONG_DESC = {
     "master": [
         ("Iluminação Cênica Completa", "Moving Head, Moving Bee, Parleds, Ribaltas, Máquinas de Fumaça, Máquinas de Bolha de Sabão, Mesa DMX, Estrutura Box Truss"),
@@ -94,34 +377,16 @@ def _tipo_for(name: str) -> str:
 
 
 def explanation_for(name: str) -> str:
-    """Descrição CURTA do tipo (abaixo do título); vazio se tipo não reconhecido."""
+    """(v1) Descrição CURTA do tipo; vazio se tipo não reconhecido."""
     return SHORT_DESC.get(_tipo_for(name), "")
 
 
 def detalhes_for(name: str) -> list[tuple[str, str]]:
-    """Descrição LONGA do plano (após as formas de pagamento); [] se tipo não reconhecido."""
+    """(v1) Descrição LONGA do plano; [] se tipo não reconhecido."""
     return LONG_DESC.get(_tipo_for(name), [])
 
 
-def _wrap(c: rl_canvas.Canvas, text: str, font: str, size: float, max_width: float) -> list[str]:
-    """Quebra `text` em linhas que cabem em `max_width` (pt)."""
-    words = (text or "").split()
-    lines: list[str] = []
-    cur = ""
-    for w in words:
-        trial = f"{cur} {w}".strip()
-        if c.stringWidth(trial, font, size) <= max_width:
-            cur = trial
-        else:
-            if cur:
-                lines.append(cur)
-            cur = w
-    if cur:
-        lines.append(cur)
-    return lines
-
-
-def _draw_page(c: rl_canvas.Canvas, pk: dict, d1: int, d2: int, transporte: dict, client_name: str) -> None:
+def _draw_page_v1(c: rl_canvas.Canvas, pk: dict, d1: int, d2: int, transporte: dict, client_name: str) -> None:
     # ── Cabeçalho: faixa roxa com contato ──────────────────────────────────
     c.setFillColor(_PURPLE)
     c.rect(0, _H - 70, _W, 70, fill=1, stroke=0)
@@ -130,8 +395,8 @@ def _draw_page(c: rl_canvas.Canvas, pk: dict, d1: int, d2: int, transporte: dict
     c.drawString(_LEFT, _H - 38, "MANTO PRODUÇÕES")
     c.setFont("Helvetica", 9)
     c.setFillColor(HexColor("#d8d2f0"))
-    c.drawRightString(_RIGHT, _H - 30, _CONTACT_PHONE)
-    c.drawRightString(_RIGHT, _H - 44, _CONTACT_EMAIL)
+    c.drawRightString(_RIGHT, _H - 30, _V1_CONTACT_PHONE)
+    c.drawRightString(_RIGHT, _H - 44, _V1_CONTACT_EMAIL)
 
     y = _H - 110
 
@@ -178,7 +443,7 @@ def _draw_page(c: rl_canvas.Canvas, pk: dict, d1: int, d2: int, transporte: dict
     com = float(pk.get("com_nota") or 0)
 
     def _value_box(yb: float, label: str, value: float, accent) -> None:
-        c.setFillColor(HexColor("#f4f2fb"))
+        c.setFillColor(_BOX_BG)
         c.roundRect(_LEFT, yb - 30, _RIGHT - _LEFT, 40, 6, fill=1, stroke=0)
         c.setFillColor(_LIGHT)
         c.setFont("Helvetica-Bold", 10)
@@ -219,7 +484,7 @@ def _draw_page(c: rl_canvas.Canvas, pk: dict, d1: int, d2: int, transporte: dict
             y -= 13
         y -= 5
 
-    # ── Descrição longa do plano (planos.md) — após as formas de pagamento (080) ──
+    # ── Descrição longa do plano — após as formas de pagamento (080) ──────
     detalhes = detalhes_for(pk.get("name", ""))
     if detalhes:
         y -= 8
@@ -249,16 +514,7 @@ def _draw_page(c: rl_canvas.Canvas, pk: dict, d1: int, d2: int, transporte: dict
     c.drawCentredString(_W / 2, 32, "Manto Produções · EducaManto")
 
 
-def gerar_orcamento_pdf(snapshot: dict[str, Any]) -> bytes:
-    """Gera o PDF (uma página por pacote) a partir do snapshot do orçamento.
-
-    Args:
-        snapshot: dict com ``d1``, ``d2``, ``ensemble``, ``transporte`` e ``packages``
-            (lista de ``{name, sem_nota, com_nota}``), além de ``client_name`` opcional.
-
-    Returns:
-        Bytes do PDF pronto para download.
-    """
+def _gerar_v1(snapshot: dict[str, Any]) -> bytes:
     packages = snapshot.get("packages") or []
     d1 = snapshot.get("d1", 0) or 0
     d2 = snapshot.get("d2", 0) or 0
@@ -274,7 +530,25 @@ def gerar_orcamento_pdf(snapshot: dict[str, Any]) -> bytes:
         packages = [{"name": "—", "sem_nota": 0, "com_nota": 0}]
 
     for pk in packages:
-        _draw_page(c, pk, d1, d2, transporte, client_name)
+        _draw_page_v1(c, pk, d1, d2, transporte, client_name)
         c.showPage()
     c.save()
     return buf.getvalue()
+
+
+# ═══════════════════════════════════ Despacho ═══════════════════════════════════════════
+
+
+def gerar_orcamento_pdf(snapshot: dict[str, Any]) -> bytes:
+    """Gera o PDF a partir do snapshot congelado — v2 (configs) ou v1 (pacotes, legado).
+
+    Args:
+        snapshot: Snapshot do orçamento. ``{"version": 2, "configs": [...]}`` usa o layout
+            por responsabilidades; sem ``version``, reproduz o PDF antigo por pacote.
+
+    Returns:
+        Bytes do PDF pronto para download.
+    """
+    if snapshot.get("version") == 2:
+        return _gerar_v2(snapshot)
+    return _gerar_v1(snapshot)

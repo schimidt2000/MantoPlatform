@@ -4,12 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-12** · Estado do repositório: pós-feature **225g (fotos na
-> abertura do pedido; criação virou `multipart`)**, antes dela 225f (um menu só,
-> "Produção e Compras", para os três tipos de pedido), 225e (hotfix do menu
-> "Ferramentas"), 225d (espaçamento padrão + busca de figurino unificada) e 225c (Pedido de
-> Compra + Revisão movida para Marketing) — nenhuma com migration · Head de migration:
-> **`f4a8d61c9e27`** (*quantidade de figurinos por ficha*)
+> Última atualização: **2026-08-17** · Estado do repositório: pós-feature
+> **235-educamanto 4ª rodada (gate fechado, branch)**, antes dela 238 (teto autorizado),
+> 237 (solicitar ficha), 236 (cachê por duração) — todas na main · Head de migration:
+> **`b7e3a91d5c24`** (*educamanto musicais*)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -41,6 +39,12 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **235-educamanto (4ª rodada)** | Gate FECHADO: cenário sai das responsabilidades (sem custo, colunas removidas); personagens×produção derivados dos itens (Cara Limpa+Bonecos+Papai Noel / item Produção); textos aprovados. Aguarda só o "push 235" | 2026-08-17 | `b7e3a91d5c24` reescrita | (aqui) | — |
+| **238-teto-autorizado** | Valor salvo por superadmin vira teto efetivo do papel (`max(cache_cap, valor salvo)`) — casting consegue usar o valor autorizado | 2026-08-14 | `—` | (aqui) | — |
+| **237-solicitar-ficha** | Botão "Solicitar ficha" no FigurinoPicker → pedido kind `ficha` na fila de Produção e Compras; concluir exige vincular a ficha criada | 2026-08-14 | `—` | (aqui) | — |
+| **236-cache-por-duracao** | Cachê por duração real (>4h: base÷4×horas + adicionais); cachê nasce vazio, régua vira só teto invisível | 2026-08-14 | `—` | (aqui) | — |
+| **235-educamanto (3ª rodada)** | Som/iluminação viram tabela única por combinação (4.200/2.900/2.900/750, técnicos inclusos) em `pricing_config`; riders reais no PDF | 2026-08-14 | `b7e3a91d5c24` reescrita | (aqui) | — |
+| **235-educamanto** | EducaManto por responsabilidades: musicais no lugar de pacotes por nível; snapshot v2 recalculado no servidor; Jinja do EducaManto desligado (gate fechado na 4ª rodada — ver entrada de 2026-08-17) | 2026-08-13 | `b7e3a91d5c24` | (aqui) | — |
 | **225g** | Fotos já na abertura do pedido (opcionais, várias, nos três tipos); criação virou `multipart`. **Furo conhecido: `.heic` não é comprimido** | 2026-08-12 | `—` | (aqui) | 163 |
 | **225f** | Um menu só ("Produção e Compras") para os três tipos de pedido; a aba virou `?tipo=` na URL e `/compras` passou a redirecionar | 2026-08-12 | `—` | (aqui) | 216 |
 | **225e** | Hotfix: menu "Ferramentas" cortado atrás da barra lateral — o painel abria para a esquerda e sumia sob a sidebar `z-40`; lado da abertura passou a ser medido | 2026-08-12 | `—` | (aqui) | 248 |
@@ -160,6 +164,48 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
 
+### 235-educamanto (4ª rodada) — Gate fechado: cenário sai, equipe vem dos itens            (branch · 2026-08-17 · migration `b7e3a91d5c24` reescrita)
+
+**Motivação.** Últimas 3 pendências do dono, respondidas de uma vez: (1) o cenário **não tem
+custo adicional hoje** e não existe diferença Manto×contratante — "pode tirar por enquanto,
+talvez futuramente a gente volte"; (2) personagens×produção **derivam da tabela antiga de
+itens** ("3 cara limpa e 5 bonecos = 8 personagens"); (3) frases de alimentação aprovadas.
+
+**O que mudou.** Responsabilidade `cenario` removida por inteiro: dataclass, linha de custo,
+colunas `custo_cenario_*` (model + migração), textos/ordem do PDF, card do formulário e tipos
+do front. `Responsabilidades.from_dict` ignora chaves desconhecidas — snapshot v2 antigo com
+`cenario` carrega sem erro (e o rótulo segue no histórico do front). Derivação na migração:
+`num_personagens = Σ qty(Cara Limpa, Bonecos, Papai Noel)`, `num_producao = qty(Produção)`
+— resultado: UAA 9+2 · Jardim 8+2 · Onda 7+2 · Unicórnios 5+1 · Turma 8+2 · Natal 6+2 ·
+Natal c/ PN 7+2. Valores finais intocados (cenário valia 0): UAA 1d/1s tudo Manto segue
+16.700/19.800 (verify_235: 44/44).
+
+**Dois defeitos achados na revisão pré-deploy (corrigidos antes do merge).**
+1. **`POST /api/orcamento/settings` ignorava `educamanto_som_luz`**: o handler só copia do corpo
+   as seções da allowlist, e o card novo "EducaManto — Som e Iluminação" (criado nesta feature)
+   não tinha bloco. A tela salvava, respondia 200, e os campos voltavam sozinhos ao default —
+   ou seja, a maior linha de custo do orçamento (R$ 4.200/dia) ficaria travada no hardcode, sem
+   nenhum erro que denunciasse. Corrigido com o mesmo padrão do `transporte`.
+2. **`GET /api/educamanto/historico/<id>` vazava `transporte.caminhao`** (custo interno,
+   R$ 800) no snapshot v2 para Comercial/Ensaio/Revendedor — exatamente o campo que
+   `_cortar_breakdown` esconde no cálculo. O corte passou a valer também no histórico. Os v1
+   não têm custo interno (conferido nos 34 reais de produção).
+
+**Pegadinhas.**
+- **Cenógrafo/Maquiador ficam FORA das contagens** (não são personagens nem produção). O
+  headcount antigo do catering os incluía — por isso a derivação anterior (catering −
+  produção) dava 1 a mais em Unicórnios/Turma/Natal/Natal c/ PN. Se o dono quiser
+  alimentá-los no evento, é ajuste manual no musical.
+- "Cenário" continua existindo como palavra para o **cenário de margem** (1S/2S/diárias) —
+  só a responsabilidade morreu.
+- **Ensaio do deploy antes do push**: o dump de produção foi restaurado num banco descartável
+  (`manto_preflight`) e a sequência real do Railway (`flask db upgrade && python seed.py`)
+  rodou nele — exit 0 nos dois, 22 pacotes → 7 musicais, e os **34 orçamentos v1 reais
+  re-renderizaram o PDF**. Vale repetir isso em toda migração destrutiva.
+- O estado pré-migração (22 pacotes, 233 itens, com os custos por nível) foi exportado para
+  `backups/educamanto_pre_235_2026-08-17.json` — os `.dump` são podados após 15 dias e essa
+  é a única fonte do que cada nível Intermediário/Econômica incluía.
+
 ### 238-teto-autorizado — Valor do superadmin vira o teto do papel            (branch · 2026-08-14 · sem migration)
 
 **Motivação.** Caso real na véspera do Baile do Addan: o dono (superadmin) subiu os cachês dos
@@ -226,6 +272,64 @@ ao cliente intocado.
 - O dublê `run-local-sem-google.py` NÃO cobre o `insert_event` importado dentro de
   `api_create_event` (import tardio de `app.calendar.routes` — este está patchado; conferir se
   o servidor local usado é mesmo o script dublê, o launcher pode ter config em cache).
+
+### 235-educamanto (3ª rodada) — Valores reais de som/iluminação            (branch · 2026-08-14 · migration `b7e3a91d5c24` reescrita)
+
+**Motivação.** O dono entregou `EspecificacoesEducamanto.md` com os valores e riders reais dos
+4 casos de som/iluminação — e eles NÃO são aditivos (som+luz 4.200 < 750 + 2.150 + 2.150), com
+a equipe técnica já dentro. O modelo por blocos independentes + técnicos avulsos foi
+substituído por **tabela única por combinação** em `pricing_config['educamanto_som_luz']`
+(4.200/2.900/2.900/750), custo com margem em cima, cobrado POR DIA de evento. As 12 colunas
+`custo_som_*`/`custo_iluminacao_*` saíram do musical (migração reescrita — ainda não aplicada
+em produção); os PROVISÓRIOS de técnicos e áreas morreram; os riders viram os textos reais do
+PDF e a cobertura (≈300 m²/150 pessoas) é impressa só quando o som é da Manto. Editável na
+tela de Configurações de Preços. Gabarito novo: UAA 1d/1s tudo Manto = 16.700/19.800
+(verify_235: 36/36). **Gate restante**: custo do cenário + divisão personagens×produção.
+
+### 235-educamanto — EducaManto por responsabilidades            (branch 235-educamanto-responsabilidades · 2026-08-13 · migration `b7e3a91d5c24`)
+
+**Motivação.** Os pacotes por nível (Master/Intermediário/Econômica) engessavam a venda: o
+cliente que queria o espetáculo completo com a própria iluminação não cabia em nenhum pacote.
+O dono pediu a reestruturação completa (conversa de 13/08/2026, esteira SDD completa em
+`specs/235-educamanto-responsabilidades/`).
+
+**O que mudou.**
+- **Musicais** (`educamanto_musicals`, rename com ids preservados) substituem os 22 pacotes; a
+  migração poda Intermediário/Econômica/cópia órfã e move Som/Catering/Transporte para colunas
+  ou regra. `Recalcular` de snapshot v1 mapeia por id preservado ou prefixo do nome.
+- **Responsabilidades** som/iluminação/alimentação/cenário (Manto×contratante) ligam/desligam
+  blocos de custo; **matriz técnica** de 4 casos (sonoplasta fixo); headcount de ensaio
+  (personagens+produção+ensemble) ≠ headcount do evento (+técnicos).
+- **Fechamento preservado** (margens, desconto>3d, teto do acréscimo, ceil100, ÷0,84); novo:
+  ensaios ×`num_ensaios` (mín. 2, **não** escalam com dias do evento), caminhão SP R$ 800
+  (`pricing_config['transporte']['caminhao_sp']`), fora de SP 2 vans + adicional por pessoa 1×,
+  à vista −5% **calculado** (era só texto no PDF).
+- **Snapshot v2** multi-configuração **recalculado no servidor** (fim da confiança no payload
+  do cliente); v1 re-renderiza intacto. PDF v2 por configuração com "o que levaremos"/"mínimo
+  exigido", avisos fixos (palco 5×4, camarim=headcount, som área X/Y, visita técnica), dias
+  zerados ocultos, observação com transbordo.
+- **Contratação Manto embutida**: reusa `app.orcamento.quote_ops.calculate_quote` com
+  `nota_fiscal=False`/`fora_sp=False`; NF única sobre a soma por duração (FR-016).
+  `PerformersEditor`/`AcrescimosEditor` extraídos de `OrcamentoCalculadoraPage` para
+  `components/orcamento/` (fonte única, render idêntico).
+- **RBAC**: breakdown/custos cortados **no servidor** para não-superadmin (`_cortar_breakdown`);
+  tela de musicais mostra custos só a superadmin.
+- **Jinja do EducaManto desligado**: templates removidos, rotas viram 301 para o SPA — morre a
+  réplica JS da fórmula (que divergia do Python no transporte e no headcount).
+
+**Regras de negócio novas.** Nível não existe mais em lugar nenhum (fim da detecção por
+substring no nome); alimentação da contratante é negociada com o vendedor; camarim obrigatório.
+
+**Pegadinhas.**
+- `PROVISORIO` (grep) em `pdf_textos.py` + colunas de iluminação/cenário zeradas + divisão
+  personagens×produção dos musicais ≠ UAA: **gate de deploy** — dono ainda envia os valores
+  (técnicos, áreas X/Y do som) e revisa os textos.
+- O default do model `discount_days` virou 3 (paridade com produção; era 2 e pacote novo
+  nascia diferente).
+- `verify_235.py` (specs/235) roda 34 checagens contra `manto_local`, incluindo re-derivação
+  independente da fórmula; a senha local do SUPERADMIN agora é `verify-235-senha`.
+- Havia colisão de numeração: a migration `f4a8d61c9e27` (quantidade de figurinos) se dizia
+  "feature 235" no docstring — esta entrada usa **235-educamanto** para desambiguar.
 
 ### 225g — Fotos já na abertura do pedido, nos três tipos            (main · 2026-08-12 · sem migration)
 

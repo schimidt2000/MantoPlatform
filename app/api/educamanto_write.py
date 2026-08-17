@@ -1,8 +1,8 @@
-"""Endpoints de ESCRITA do EducaManto (feature 175): CRUD de pacote + geração de orçamento.
+"""Endpoints de ESCRITA do EducaManto (feature 235): CRUD de musicais + geração de orçamento.
 
-Só orquestra e serializa — a regra de negócio mora em `app/educamanto/package_ops.py` e
-`app/educamanto/quote_ops.py`, sem duplicar lógica com a view Jinja legada. Gates reimplementados
-como função, paridade com `app/educamanto/routes.py` (`_CAN_MANAGE`/`_CAN_USE`).
+Só orquestra e serializa — a regra de negócio mora em `app/educamanto/musical_ops.py` e
+`quote_ops.py`. A geração RECALCULA tudo no servidor (FR-026): o corpo traz apenas as
+entradas de cada configuração, nunca valores prontos.
 """
 
 from typing import Any
@@ -13,9 +13,9 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
-from app.educamanto import package_ops, quote_ops
+from app.educamanto import musical_ops, quote_ops
 from app.educamanto.pdf import gerar_orcamento_pdf
-from app.models import EducaMantoPackage, EducaMantoQuote
+from app.models import EducaMantoMusical, EducaMantoQuote
 
 _CAN_USE = {
     RoleName.COMERCIAL,
@@ -49,66 +49,68 @@ def _pdf_response(snapshot: dict, quote_id: int, *, inline: bool) -> Response:
     return resp
 
 
-@api_bp.route("/educamanto/packages", methods=["POST"])
+@api_bp.route("/educamanto/musicals", methods=["POST"])
 @api_login_required
-def api_create_package() -> Any:
+def api_create_musical() -> Any:
     denied = _require_manage()
     if denied:
         return denied
     data = request.get_json(silent=True) or {}
     try:
-        pkg = package_ops.create_package(data)
-    except package_ops.PackageValidationError as exc:
+        musical = musical_ops.create_musical(data)
+    except musical_ops.MusicalValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
-    return jsonify(pkg.to_dict()), 201
+    return jsonify(musical.to_dict()), 201
 
 
-@api_bp.route("/educamanto/packages/<int:pkg_id>", methods=["PATCH"])
+@api_bp.route("/educamanto/musicals/<int:musical_id>", methods=["PATCH"])
 @api_login_required
-def api_update_package(pkg_id: int) -> Any:
+def api_update_musical(musical_id: int) -> Any:
     denied = _require_manage()
     if denied:
         return denied
-    pkg = EducaMantoPackage.query.get(pkg_id)
-    if pkg is None:
-        return json_error("Pacote não encontrado.", 404)
+    musical = EducaMantoMusical.query.get(musical_id)
+    if musical is None:
+        return json_error("Musical não encontrado.", 404)
     data = request.get_json(silent=True) or {}
     try:
-        package_ops.update_package(pkg, data)
-    except package_ops.PackageValidationError as exc:
+        musical_ops.update_musical(musical, data)
+    except musical_ops.MusicalValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
-    return jsonify(pkg.to_dict())
+    return jsonify(musical.to_dict())
 
 
-@api_bp.route("/educamanto/packages/<int:pkg_id>/duplicate", methods=["POST"])
+@api_bp.route("/educamanto/musicals/<int:musical_id>/duplicate", methods=["POST"])
 @api_login_required
-def api_duplicate_package(pkg_id: int) -> Any:
+def api_duplicate_musical(musical_id: int) -> Any:
     denied = _require_manage()
     if denied:
         return denied
-    original = EducaMantoPackage.query.get(pkg_id)
+    original = EducaMantoMusical.query.get(musical_id)
     if original is None:
-        return json_error("Pacote não encontrado.", 404)
-    copy = package_ops.duplicate_package(original)
-    return jsonify(copy.to_dict()), 201
+        return json_error("Musical não encontrado.", 404)
+    copia = musical_ops.duplicate_musical(original)
+    return jsonify(copia.to_dict()), 201
 
 
-@api_bp.route("/educamanto/packages/<int:pkg_id>", methods=["DELETE"])
+@api_bp.route("/educamanto/musicals/<int:musical_id>", methods=["DELETE"])
 @api_login_required
-def api_delete_package(pkg_id: int) -> Any:
+def api_delete_musical(musical_id: int) -> Any:
     denied = _require_manage()
     if denied:
         return denied
-    pkg = EducaMantoPackage.query.get(pkg_id)
-    if pkg is None:
-        return json_error("Pacote não encontrado.", 404)
-    package_ops.delete_package(pkg)
+    musical = EducaMantoMusical.query.get(musical_id)
+    if musical is None:
+        return json_error("Musical não encontrado.", 404)
+    musical_ops.delete_musical(musical)
     return "", 204
 
 
 @api_bp.route("/educamanto/orcamento/gerar", methods=["POST"])
 @api_login_required
 def api_gerar_orcamento() -> Any:
+    """Gera o orçamento multi-configuração: RECALCULA no servidor, congela o snapshot v2 e
+    devolve o PDF (uma página A4 por configuração)."""
     denied = _require_use()
     if denied:
         return denied
@@ -116,7 +118,7 @@ def api_gerar_orcamento() -> Any:
     try:
         quote, snapshot = quote_ops.generate_quote(current_user.id, data)
     except quote_ops.QuoteValidationError as exc:
-        return json_error(exc.message, 400)
+        return json_error(exc.message, 400, fields={exc.field: exc.message} if exc.field else None)
     return _pdf_response(snapshot, quote.id, inline=False)
 
 

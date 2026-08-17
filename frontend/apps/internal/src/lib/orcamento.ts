@@ -28,7 +28,16 @@ export interface PricingSettings {
     carro_por_km: number;
     afsp_divisor: number;
     ashow_divisor: number;
+    /** Caminhão de cenografia do EducaManto dentro de SP (feature 235). */
+    caminhao_sp: number;
     ashow_min_km: number;
+  };
+  /** Custos de som/iluminação do EducaManto por combinação (feature 235, tabela única). */
+  educamanto_som_luz: {
+    som_luz: number;
+    som: number;
+    luz: number;
+    nenhum: number;
   };
   acrescimo_tipos: string[];
 }

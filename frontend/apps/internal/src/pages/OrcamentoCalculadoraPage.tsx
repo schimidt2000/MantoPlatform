@@ -15,13 +15,12 @@ import {
   Input,
   PageHeader,
   Skeleton,
-  Table,
-  TableCell,
-  TableRow,
 } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
 import { GoogleAddressInput } from "../components/GoogleAddressInput";
 import { MemoriaDeCalculo } from "../components/MemoriaDeCalculo";
+import { AcrescimosEditor } from "../components/orcamento/AcrescimosEditor";
+import { PerformersEditor } from "../components/orcamento/PerformersEditor";
 import {
   useCalcularOrcamento,
   useDistancia,
@@ -43,10 +42,6 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function brl(v: number): string {
   return `R$ ${formatBRL(v)}`;
-}
-
-function emptyPerformer(type: Performer["type"] = "ator"): Performer {
-  return { type, subtipo: "cara_limpa", nome: "", show: false, makeup: false };
 }
 
 const DURACOES = ["1h", "2h", "3h", "4h"] as const;
@@ -75,142 +70,6 @@ const INITIAL_STATE = {
   custValores: { "1h": 0, "2h": 0, "3h": 0, "4h": 0 } as Record<Duracao, number>,
   custMult: { "1h": 0, "2h": 0, "3h": 0, "4h": 0 } as Record<Duracao, number>,
 };
-
-function PerformerTableRow({
-  performer,
-  onChange,
-  onRemove,
-  especiais,
-  especiaisComShow,
-  especiaisComCantor,
-}: {
-  performer: Performer;
-  onChange: (p: Performer) => void;
-  onRemove: () => void;
-  especiais: string[];
-  especiaisComShow: string[];
-  especiaisComCantor: string[];
-}) {
-  const canShow =
-    performer.type === "ator" ||
-    (performer.type === "especial" && especiaisComShow.includes(performer.personagem ?? ""));
-  const canCantor =
-    performer.type === "especial" && especiaisComCantor.includes(performer.personagem ?? "");
-
-  return (
-    <TableRow>
-      <TableCell>
-        {performer.type === "ator" ? (
-          <select
-            className={INPUT}
-            value={performer.subtipo ?? "cara_limpa"}
-            onChange={(e) => onChange({ ...performer, subtipo: e.target.value as Performer["subtipo"] })}
-          >
-            <option value="cara_limpa">Ator — Cara limpa</option>
-            <option value="boneco">Ator — Boneco</option>
-            <option value="cantor">Ator — Cantor</option>
-          </select>
-        ) : (
-          <div className="space-y-1.5">
-            <select
-              className={INPUT}
-              value={performer.personagem ?? ""}
-              onChange={(e) => onChange({ ...performer, personagem: e.target.value })}
-            >
-              <option value="">Selecione o especial…</option>
-              {especiais.map((nome) => (
-                <option key={nome} value={nome}>
-                  {nome}
-                </option>
-              ))}
-            </select>
-            {performer.personagem === "Boneco Grande Especial" && (
-              <select
-                className={INPUT}
-                value={performer.bge_subtipo ?? ""}
-                onChange={(e) =>
-                  onChange({ ...performer, bge_subtipo: e.target.value as Performer["bge_subtipo"] })
-                }
-              >
-                <option value="">Sub-tipo do BGE…</option>
-                <option value="dinossauro">Dinossauro</option>
-                <option value="transformers">Transformers</option>
-                <option value="outro">Outro</option>
-              </select>
-            )}
-            {performer.bge_subtipo === "outro" && (
-              <input
-                className={INPUT}
-                placeholder="Nome do personagem"
-                value={performer.bge_outro_nome ?? ""}
-                onChange={(e) => onChange({ ...performer, bge_outro_nome: e.target.value })}
-              />
-            )}
-          </div>
-        )}
-      </TableCell>
-      <TableCell>
-        <input
-          className={INPUT}
-          placeholder="Opcional"
-          value={performer.nome ?? ""}
-          onChange={(e) => onChange({ ...performer, nome: e.target.value })}
-        />
-      </TableCell>
-      <TableCell>
-        <div className="flex flex-col gap-1">
-          {canShow && (
-            <label className="flex items-center gap-1.5 text-xs text-ink">
-              <input
-                type="checkbox"
-                checked={Boolean(performer.show)}
-                onChange={(e) => onChange({ ...performer, show: e.target.checked })}
-              />
-              Com show
-            </label>
-          )}
-          {canCantor && (
-            <label className="flex items-center gap-1.5 text-xs text-ink">
-              <input
-                type="checkbox"
-                checked={Boolean(performer.cantor)}
-                onChange={(e) => onChange({ ...performer, cantor: e.target.checked })}
-              />
-              Com cantor
-            </label>
-          )}
-        </div>
-      </TableCell>
-      <TableCell>
-        <div className="flex flex-col gap-1">
-          <label className="flex items-center gap-1.5 text-xs text-ink">
-            <input
-              type="checkbox"
-              checked={Boolean(performer.makeup)}
-              onChange={(e) => onChange({ ...performer, makeup: e.target.checked })}
-            />
-            Maquiagem
-          </label>
-          {performer.makeup && (
-            <select
-              className={`${INPUT} h-8 text-xs`}
-              value={performer.makeup_tipo ?? "comum"}
-              onChange={(e) => onChange({ ...performer, makeup_tipo: e.target.value as Performer["makeup_tipo"] })}
-            >
-              <option value="comum">Comum</option>
-              <option value="especial">Especial</option>
-            </select>
-          )}
-        </div>
-      </TableCell>
-      <TableCell align="right">
-        <Button size="sm" variant="ghost" onClick={onRemove}>
-          Remover
-        </Button>
-      </TableCell>
-    </TableRow>
-  );
-}
 
 /** Painel de alerta "Já na agenda neste dia" — evita venda em dobro de um personagem. */
 function AgendaNoDiaAlert({ date }: { date: string }) {
@@ -366,9 +225,6 @@ export function OrcamentoCalculadoraPage() {
 
   const toggleDuracao = (d: string) =>
     setIncluirDuracao((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
-
-  const addAcrescimo = () =>
-    setAcrescimos((prev) => [...prev, { tipo: opcoes.data?.acrescimo_tipos[0] ?? "", value: 0, is_percent: false }]);
 
   const payload: CalcularOrcamentoInput = useMemo(
     () => ({
@@ -608,69 +464,15 @@ export function OrcamentoCalculadoraPage() {
                 <CardTitle>Equipe</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <Table className="min-w-[720px]">
-                  <thead>
-                    <TableRow head>
-                      <TableCell as="th">Tipo / Subtipo</TableCell>
-                      <TableCell as="th">Personagem/Nome</TableCell>
-                      <TableCell as="th">Flags</TableCell>
-                      <TableCell as="th">Maquiagem</TableCell>
-                      <TableCell as="th" align="right">
-                        Ações
-                      </TableCell>
-                    </TableRow>
-                  </thead>
-                  <tbody>
-                    <TableRow>
-                      <TableCell className="font-medium text-ink">Coordenador</TableCell>
-                      <TableCell colSpan={2} className="text-xs text-muted">
-                        Obrigatório — sempre presente na equipe
-                      </TableCell>
-                      <TableCell colSpan={2} align="right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setCoordenadorQty((q) => Math.max(0, q - 1))}
-                          >
-                            −
-                          </Button>
-                          <span className="w-6 text-center tabular-nums text-ink">{coordenadorQty}</span>
-                          <Button size="sm" variant="outline" onClick={() => setCoordenadorQty((q) => q + 1)}>
-                            +
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    {performers.map((p, i) => (
-                      <PerformerTableRow
-                        key={i}
-                        performer={p}
-                        onChange={(np) => setPerformers((prev) => prev.map((x, idx) => (idx === i ? np : x)))}
-                        onRemove={() => setPerformers((prev) => prev.filter((_, idx) => idx !== i))}
-                        especiais={opcoes.data.especiais}
-                        especiaisComShow={opcoes.data.especiais_com_show}
-                        especiaisComCantor={opcoes.data.especiais_com_cantor}
-                      />
-                    ))}
-                  </tbody>
-                </Table>
-                <div className="flex gap-2 p-3">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setPerformers((prev) => [...prev, emptyPerformer("ator")])}
-                  >
-                    + Ator / Cantor
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setPerformers((prev) => [...prev, emptyPerformer("especial")])}
-                  >
-                    + Especial
-                  </Button>
-                </div>
+                <PerformersEditor
+                  performers={performers}
+                  onPerformersChange={setPerformers}
+                  coordenadorQty={coordenadorQty}
+                  onCoordenadorQtyChange={setCoordenadorQty}
+                  especiais={opcoes.data.especiais}
+                  especiaisComShow={opcoes.data.especiais_com_show}
+                  especiaisComCantor={opcoes.data.especiais_com_cantor}
+                />
               </CardContent>
             </Card>
 
@@ -678,53 +480,12 @@ export function OrcamentoCalculadoraPage() {
               <CardHeader>
                 <CardTitle>Acréscimos</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-xs text-muted">
-                  O BV entra no total, mas é um repasse (não aparece para o cliente) e o PIX de quem
-                  recebe é informado no evento.
-                </p>
-                {acrescimos.map((a, i) => (
-                  <div key={i} className="flex flex-wrap items-center gap-2">
-                    <select
-                      className={`${INPUT} max-w-[160px]`}
-                      value={a.tipo}
-                      onChange={(e) =>
-                        setAcrescimos((prev) => prev.map((x, idx) => (idx === i ? { ...x, tipo: e.target.value } : x)))
-                      }
-                    >
-                      {[...opcoes.data.acrescimo_tipos, opcoes.data.acrescimo_tipo_bv].map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                    <MoneyInput
-                      className={`${INPUT} max-w-[120px]`}
-                      value={a.value}
-                      onValueChange={(v) =>
-                        setAcrescimos((prev) => prev.map((x, idx) => (idx === i ? { ...x, value: v } : x)))
-                      }
-                    />
-                    <label className="flex items-center gap-1 text-xs text-muted">
-                      <input
-                        type="checkbox"
-                        checked={a.is_percent}
-                        onChange={(e) =>
-                          setAcrescimos((prev) =>
-                            prev.map((x, idx) => (idx === i ? { ...x, is_percent: e.target.checked } : x)),
-                          )
-                        }
-                      />
-                      %
-                    </label>
-                    <Button size="sm" variant="ghost" onClick={() => setAcrescimos((prev) => prev.filter((_, idx) => idx !== i))}>
-                      Remover
-                    </Button>
-                  </div>
-                ))}
-                <Button size="sm" variant="ghost" onClick={addAcrescimo}>
-                  + Adicionar acréscimo
-                </Button>
+              <CardContent>
+                <AcrescimosEditor
+                  acrescimos={acrescimos}
+                  onChange={setAcrescimos}
+                  tipos={[...opcoes.data.acrescimo_tipos, opcoes.data.acrescimo_tipo_bv]}
+                />
               </CardContent>
             </Card>
 

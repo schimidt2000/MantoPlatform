@@ -7,7 +7,7 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-14** · Feature **237-solicitar-ficha** (branch): kind novo `ficha` em `figurino_producoes` (sem migração; fluxo curto sem aprovação = manutenção), `POST /api/figurino/producoes/solicitar-ficha` (login, gate `pode_abrir`), e transição para `pronto` de kind=ficha exige `figurino_sheet_id`. Antes: **236-cache-por-duracao** (branch): criação de evento aceita `duracao` inteira ≥ 1 (fim do fallback que dava cachê de 1h a durações fora de 1–4h); com `orcamento_history_id`, `cache_value`/`cache_cap` são RECALCULADOS no servidor pela duração real — >4h usa a régua (base de 4h ÷ 4 × horas + adicionais fixos). Anterior: · Estado do repositório: pós-feature **225c (Pedido de
+> Última atualização: **2026-08-14** · Em branch: **235-educamanto** (EducaManto por responsabilidades: pacotes por nível viram musicais, snapshot v2 recalculado no servidor, Jinja do EducaManto desligado; migration **`b7e3a91d5c24`**). Na main: Última atualização: **2026-08-14** · Feature **237-solicitar-ficha** (branch): kind novo `ficha` em `figurino_producoes` (sem migração; fluxo curto sem aprovação = manutenção), `POST /api/figurino/producoes/solicitar-ficha` (login, gate `pode_abrir`), e transição para `pronto` de kind=ficha exige `figurino_sheet_id`. Antes: **236-cache-por-duracao** (branch): criação de evento aceita `duracao` inteira ≥ 1 (fim do fallback que dava cachê de 1h a durações fora de 1–4h); com `orcamento_history_id`, `cache_value`/`cache_cap` são RECALCULADOS no servidor pela duração real — >4h usa a régua (base de 4h ÷ 4 × horas + adicionais fixos). Anterior: · Estado do repositório: pós-feature **225c (Pedido de
 > Compra — terceiro `kind` de `figurino_producoes`, fluxo `solicitado → aprovado → comprado →
 > recebido`, **sem migration**; nav: "Revisão" saiu de Produção e foi para Marketing, e nasceu
 > `/compras`. Endpoint mudado: `GET /api/figurino/producoes/responsaveis?tipo=compra`)**. Antes
@@ -387,11 +387,11 @@ Pontos que valem para quem for ler esses dados:
 
 ### 2.8 EducaManto
 
-| Tabela | Model | FKs |
-|---|---|---|
-| `educamanto_packages` | `EducaMantoPackage` | 1:N `items` |
-| `educamanto_items` | `EducaMantoItem` | `package_id` |
-| `educamanto_quotes` | `EducaMantoQuote` | `user_id` |
+| Tabela | Model | Destaques | FKs |
+|---|---|---|---|
+| `educamanto_musicals` | `EducaMantoMusical` | feature 235 (rename de `educamanto_packages`, ids preservados): 1 linha por musical; `num_personagens`/`num_producao` derivados dos itens (Cara Limpa+Bonecos+Papai Noel / item Produção — 4ª rodada) e `num_ensaios (≥2)`; alimentação por pessoa (`custo_alimentacao_1s/2s`) e ensaio por pessoa (`custo_catering_ensaio_pp`, `custo_ajuda_ensaio_pp`); som/iluminação NÃO ficam aqui (tabela única `pricing_config['educamanto_som_luz']`); cenário sem custo/coluna (removido na 4ª rodada); `commission_rate` (campo morto) removido | 1:N `items` |
+| `educamanto_musical_items` | `EducaMantoMusicalItem` | rename de `educamanto_items` (`package_id`→`musical_id`); itens sempre inclusos — Som/Catering apresentação/Caterings de ensaio/Transporte viraram colunas ou regra na migração | `musical_id` |
+| `educamanto_quotes` | `EducaMantoQuote` | `snapshot` versionado: **v2** = `{version: 2, configs: [...]}` com entradas + resultado **recalculado no servidor**; sem `version` = v1 (legado por pacote, re-render intacto) | `user_id` |
 
 ### 2.9 Revisão de Mídia
 
@@ -682,9 +682,10 @@ Orçamento: `GET /api/orcamento/{opcoes,personagens-no-dia,distancia,settings,hi
 bruto de entrada do formulário) além do `quote` congelado — usado pela tela de histórico para a
 ação "Recalcular" (mudança aditiva, retrocompatível).
 
-EducaManto: `GET /api/educamanto/{historico,packages,distancia}` ·
-`POST /api/educamanto/calcular`, `/packages`, `/packages/<id>/duplicate`, `/orcamento/gerar` ·
-`PATCH|DELETE /api/educamanto/packages/<id>` · `GET /api/educamanto/orcamento/<id>/pdf`.
+EducaManto (feature 235 — contrato novo por responsabilidades): `GET /api/educamanto/{historico,musicals,textos,distancia,personagens-no-dia}` ·
+`POST /api/educamanto/calcular` (uma configuração; **breakdown só na resposta de SUPERADMIN** — corte no servidor), `/musicals`, `/musicals/<id>/duplicate`, `/orcamento/gerar` (**recalcula tudo no servidor**, snapshot v2, PDF por configuração) ·
+`PATCH|DELETE /api/educamanto/musicals/<id>` · `GET /api/educamanto/musicals/<id>` (só superadmin) · `GET /api/educamanto/orcamento/<id>/pdf`.
+`GET /api/educamanto/musicals?gestao=1` (Comercial+Superadmin) devolve custos/margens **apenas** para superadmin. Os endpoints `/packages*` morreram com os pacotes. As rotas Jinja `/educamanto/*` viraram redirects 301 para o SPA.
 **Novo na feature 190**: `GET /api/educamanto/historico/<id>` — snapshot bruto (`d1`, `d2`,
 `ensemble`, `acrescimo`, `transporte`, `client_name`, `packages`) de um orçamento salvo em JSON
 (mesmo dado já usado para regerar o PDF, agora também exposto para "Ver" e "Recalcular"); mesmo

@@ -1,8 +1,8 @@
-"""Endpoints de LEITURA/cálculo da calculadora EducaManto (feature 171).
+"""Endpoints de LEITURA/cálculo do EducaManto por responsabilidades (feature 235).
 
-Só orquestra e serializa — a regra de negócio (precificação do pacote + transporte com
-multiplicador de dias) mora em `app/educamanto/pricing_ops.py`, sem duplicar a fórmula aqui.
-Gate `_require_use` reimplementado como função, paridade com `app/educamanto/routes.py::_CAN_USE`.
+Só orquestra e serializa — a regra de negócio mora em `app/educamanto/pricing_ops.py` e
+`quote_ops.py`. Regra de visibilidade (FR-028): papéis que não são SUPERADMIN recebem apenas
+os valores finais — o corte do breakdown acontece AQUI, no servidor, nunca só na tela.
 """
 
 from typing import Any
@@ -13,8 +13,8 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
-from app.educamanto import pricing_ops, quote_ops
-from app.models import EducaMantoPackage, EducaMantoQuote
+from app.educamanto import pdf_textos, quote_ops
+from app.models import EducaMantoMusical, EducaMantoQuote
 
 _CAN_USE = {
     RoleName.COMERCIAL,
@@ -22,6 +22,7 @@ _CAN_USE = {
     RoleName.ENSAIO,
     RoleName.REVENDEDOR_EDUCAMANTO,
 }
+_CAN_VER_GESTAO = {RoleName.COMERCIAL, RoleName.SUPERADMIN}
 
 
 def _require_use() -> Any:
@@ -34,10 +35,24 @@ def _is_superadmin() -> bool:
     return bool({r.name.upper() for r in current_user.roles} & {RoleName.SUPERADMIN})
 
 
+def _cortar_breakdown(resultado: dict) -> dict:
+    """Remove custos/breakdown para papéis não-superadmin (FR-028, SC-005).
+
+    Fica só a allowlist: valores finais (sem/com NF, à vista), cenário, equipe, transporte de
+    viagem (repasse, sem o custo do caminhão) e os campos do próprio acréscimo (necessários
+    ao aviso de teto).
+    """
+    resultado.pop("breakdown", None)
+    transporte = resultado.get("transporte")
+    if isinstance(transporte, dict):
+        transporte.pop("caminhao", None)
+    return resultado
+
+
 @api_bp.route("/educamanto/historico")
 @api_login_required
 def api_educamanto_historico() -> Any:
-    """Histórico de orçamentos gerados — mesmos filtros da tela Jinja legada (`historico()`)."""
+    """Histórico de orçamentos gerados — filtros de sempre; "Gerado por" só superadmin."""
     denied = _require_use()
     if denied:
         return denied
@@ -71,10 +86,11 @@ def api_educamanto_historico() -> Any:
 @api_bp.route("/educamanto/historico/<int:quote_id>")
 @api_login_required
 def api_educamanto_historico_detail(quote_id: int) -> Any:
-    """Snapshot bruto de um orçamento EducaManto salvo — usado por "Ver" e "Recalcular".
+    """Snapshot congelado (v1 ou v2) — alimenta "Ver" e "Recalcular".
 
-    Mesmo dado que já alimenta a regeração do PDF (`load_quote_snapshot`), só exposto em JSON.
-    Sem restrição de dono (mesma regra já aplicada ao endpoint de PDF por id).
+    Snapshots nascem sem breakdown, mas o v2 congela `transporte.caminhao` (custo interno do
+    caminhão dentro de SP) — o mesmo campo que `_cortar_breakdown` esconde no cálculo. Para
+    não-superadmin ele sai também aqui (FR-028): senão o histórico seria a porta dos fundos.
     """
     denied = _require_use()
     if denied:
@@ -82,24 +98,76 @@ def api_educamanto_historico_detail(quote_id: int) -> Any:
     quote = EducaMantoQuote.query.get(quote_id)
     if quote is None:
         return json_error("Orçamento não encontrado.", 404)
-    return jsonify(quote_ops.load_quote_snapshot(quote))
+    snapshot = quote_ops.load_quote_snapshot(quote)
+    if not _is_superadmin():
+        for config in snapshot.get("configs") or []:
+            resultado = config.get("resultado")
+            if isinstance(resultado, dict):
+                _cortar_breakdown(resultado)
+    return jsonify(snapshot)
 
 
-@api_bp.route("/educamanto/packages")
+@api_bp.route("/educamanto/musicals")
 @api_login_required
-def api_educamanto_packages() -> Any:
-    """Lista os pacotes para o seletor da calculadora (mesmo dado do `packages_json` do Jinja)."""
+def api_educamanto_musicals() -> Any:
+    """Lista de musicais.
+
+    Sem parâmetro: payload básico (sem custos) para o seletor da calculadora — todos os
+    papéis com acesso. Com ``?gestao=1``: tela de musicais (Comercial + Superadmin); custos e
+    margens só entram na resposta do SUPERADMIN (FR-028).
+    """
     denied = _require_use()
     if denied:
         return denied
-    packages = EducaMantoPackage.query.order_by(EducaMantoPackage.id).all()
-    return jsonify({"packages": [p.to_dict() for p in packages]})
+
+    gestao = request.args.get("gestao") == "1"
+    if gestao and not (
+        {r.name.upper() for r in current_user.roles} & _CAN_VER_GESTAO
+    ):
+        return json_error("Sem permissão", 403)
+
+    musicals = EducaMantoMusical.query.order_by(EducaMantoMusical.id).all()
+    completo = gestao and _is_superadmin()
+    return jsonify({
+        "musicals": [
+            m.to_dict() if completo else m.to_dict_basico() for m in musicals
+        ],
+        "pode_gerir": _is_superadmin(),
+    })
+
+
+@api_bp.route("/educamanto/musicals/<int:musical_id>")
+@api_login_required
+def api_educamanto_musical_detail(musical_id: int) -> Any:
+    """Musical completo (custos/margens/itens) — SÓ superadmin (form de edição)."""
+    if not _is_superadmin():
+        return json_error("Sem permissão", 403)
+    musical = EducaMantoMusical.query.get(musical_id)
+    if musical is None:
+        return json_error("Musical não encontrado.", 404)
+    return jsonify(musical.to_dict())
+
+
+@api_bp.route("/educamanto/textos")
+@api_login_required
+def api_educamanto_textos() -> Any:
+    """Rótulos e tooltips das responsabilidades — fonte única (`pdf_textos.py`)."""
+    denied = _require_use()
+    if denied:
+        return denied
+    return jsonify({
+        "ordem": list(pdf_textos.RESPONSABILIDADES_ORDEM),
+        "responsabilidades": {
+            chave: {"label": t["label"], "tooltip": t["tooltip"]}
+            for chave, t in pdf_textos.RESPONSABILIDADES.items()
+        },
+    })
 
 
 @api_bp.route("/educamanto/distancia")
 @api_login_required
 def api_educamanto_distancia() -> Any:
-    """Distância até o endereço do evento — mesmo cálculo de `GET /educamanto/api/distancia`."""
+    """Distância até o endereço do evento — mesmo cálculo da calculadora de eventos."""
     denied = _require_use()
     if denied:
         return denied
@@ -114,12 +182,7 @@ def api_educamanto_distancia() -> Any:
 @api_bp.route("/educamanto/personagens-no-dia")
 @api_login_required
 def api_educamanto_personagens_no_dia() -> Any:
-    """Personagens já escalados na data da apresentação — evita vender o mesmo em dobro.
-
-    Mesma consulta do alerta da Calculadora de Orçamento (`orcamento_ops.personagens_no_dia`),
-    exposta atrás do gate do EducaManto: `/api/orcamento/personagens-no-dia` é restrito a
-    Comercial/Superadmin, e Ensaio e Revendedor EducaManto também precisam desse aviso.
-    """
+    """Personagens já escalados na data da apresentação — evita vender o mesmo em dobro."""
     denied = _require_use()
     if denied:
         return denied
@@ -135,55 +198,26 @@ def api_educamanto_personagens_no_dia() -> Any:
     return jsonify({"date": raw, "personagens": personagens_no_dia(dia)})
 
 
-def _int_arg(data: dict, key: str, default: int = 0) -> int:
-    try:
-        return max(int(data.get(key) or default), 0)
-    except (TypeError, ValueError):
-        return default
-
-
-def _float_arg(data: dict, key: str, default: float = 0.0) -> float:
-    try:
-        return max(float(data.get(key) or default), 0.0)
-    except (TypeError, ValueError):
-        return default
-
-
 @api_bp.route("/educamanto/calcular", methods=["POST"])
 @api_login_required
 def api_educamanto_calcular() -> Any:
-    """Calcula o pacote (itens/desconto) + transporte já com o multiplicador de dias (feature 171).
+    """Calcula UMA configuração (uma página) — nada é persistido.
 
-    Endpoint de cálculo (não persiste nada) — usa POST pelo corpo aninhado (`transporte`), mesma
-    convenção já aceita no projeto para ações de cálculo (ex.: `/educamanto/orcamento/gerar`).
+    A resposta completa (com breakdown) sai só para superadmin; os demais papéis recebem a
+    versão cortada por `_cortar_breakdown` (FR-028).
     """
     denied = _require_use()
     if denied:
         return denied
 
     data = request.get_json(silent=True) or {}
-    package = EducaMantoPackage.query.get(data.get("package_id"))
-    if package is None:
-        return json_error("Pacote inválido.", 400)
+    try:
+        entrada = quote_ops.parse_config_input(data)
+        _, resultado, _ = quote_ops.calcular_config(entrada)
+    except quote_ops.QuoteValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message} if exc.field else None)
 
-    d1 = _int_arg(data, "d1")
-    d2 = _int_arg(data, "d2")
-    if d1 + d2 <= 0:
-        return json_error("Preencha os dias (1 e/ou 2 sessões) antes de calcular.", 400)
-
-    ensemble = _int_arg(data, "ensemble")
-    acrescimo = _float_arg(data, "acrescimo")
-
-    transporte_in = data.get("transporte") or {}
-    km_ida = _float_arg(transporte_in, "km_ida")
-    transporte = None
-    if km_ida > 0:
-        pessoas = pricing_ops.pessoas_transporte(package, ensemble)
-        transporte = pricing_ops.calcular_transporte(
-            km_ida=km_ida,
-            pessoas=pessoas,
-            dias_total=d1 + d2,
-        )
-
-    resultado = pricing_ops.calcular_pacote(package, d1, d2, ensemble, acrescimo, transporte)
-    return jsonify(resultado.to_dict())
+    resposta = resultado.to_dict()
+    if not _is_superadmin():
+        resposta = _cortar_breakdown(resposta)
+    return jsonify(resposta)

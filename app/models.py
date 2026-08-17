@@ -1254,59 +1254,102 @@ def load_user(user_id):
 #  EducaManto — Motor de Orçamentos por Pacote
 # ══════════════════════════════════════════════════════════════════
 
-class EducaMantoPackage(db.Model):
-    """Pacote de precificação (ex: Uma Aventura Animal)."""
-    __tablename__ = "educamanto_packages"
+class EducaMantoMusical(db.Model):
+    """Musical do EducaManto (feature 235) — substitui o antigo pacote por nível.
+
+    Uma linha por espetáculo (ex.: Uma Aventura Animal). Os antigos níveis
+    Master/Intermediário/Econômica viraram RESPONSABILIDADES escolhidas por orçamento
+    (som/iluminação/alimentação por conta da Manto ou da contratante); os custos de
+    cada bloco vivem em colunas próprias e só entram na conta quando o bloco é da Manto.
+    Cenário saiu na 4ª rodada: não há custo adicional nem diferença Manto×contratante hoje.
+    Ids preservados dos pacotes Master de origem (o "Recalcular" de snapshots antigos depende).
+    """
+    __tablename__ = "educamanto_musicals"
 
     id              = db.Column(db.Integer, primary_key=True)
     name            = db.Column(db.String(200), nullable=False)
+    # Equipe declarada do musical (aparece no PDF e deriva os headcounts). Regra do dono
+    # (4ª rodada): personagens = Cara Limpa + Bonecos (+ Papai Noel); produção = item
+    # "Produção" — Cenógrafo/Maquiador ficam fora das contagens.
+    num_personagens = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    num_producao    = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    # Nº de ensaios do pacote — mínimo de negócio 2 (validação em musical_ops).
+    num_ensaios     = db.Column(db.Integer, nullable=False, default=2, server_default="2")
     margin_1s       = db.Column(db.Float, nullable=False, default=1.41)
     margin_2s       = db.Column(db.Float, nullable=False, default=1.70)
     margin_1s_days  = db.Column(db.Float, nullable=False, default=1.50)
     margin_2s_days  = db.Column(db.Float, nullable=False, default=1.80)
-    discount_days    = db.Column(db.Integer, nullable=False, default=2)
+    # Default 3 = paridade com produção (todos os musicais reais usam 3; o default antigo 2
+    # fazia pacote novo nascer descontando diferente dos existentes).
+    discount_days    = db.Column(db.Integer, nullable=False, default=3)
     discount_pct     = db.Column(db.Float, nullable=False, default=0.05)
-    commission_rate  = db.Column(db.Float, nullable=False, default=0.05)
     # Cachê do ensemble (figurante extra) por cenário — somado por ensemble no orçamento.
     ensemble_1s      = db.Column(db.Float, nullable=False, default=350, server_default="350")
     ensemble_2s      = db.Column(db.Float, nullable=False, default=600, server_default="600")
     ensemble_1s_days = db.Column(db.Float, nullable=False, default=300, server_default="300")
     ensemble_2s_days = db.Column(db.Float, nullable=False, default=550, server_default="550")
+    # Som/iluminação NÃO ficam aqui: são a tabela única por combinação em
+    # `pricing_config['educamanto_som_luz']` (3ª rodada, valores reais — os preços não são
+    # aditivos e a equipe técnica já está dentro). Cenário não tem custo (4ª rodada).
+    # Alimentação do DIA DO EVENTO, POR PESSOA (headcount do evento) — migrada do item
+    # "Catering apresentação" (55 em 1 sessão, 73 em 2 sessões; diárias usam os mesmos valores).
+    custo_alimentacao_1s = db.Column(db.Float, nullable=False, default=55, server_default="55")
+    custo_alimentacao_2s = db.Column(db.Float, nullable=False, default=73, server_default="73")
+    # Custos POR PESSOA POR ENSAIO (headcount de ensaio × num_ensaios) — migrados dos itens
+    # "Catering ensaio" (28) e "Ajuda de custo ensaio" (50).
+    custo_catering_ensaio_pp = db.Column(db.Float, nullable=False, default=28, server_default="28")
+    custo_ajuda_ensaio_pp    = db.Column(db.Float, nullable=False, default=50, server_default="50")
     created_at       = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     items = db.relationship(
-        "EducaMantoItem",
-        backref="package",
+        "EducaMantoMusicalItem",
+        backref="musical",
         cascade="all, delete-orphan",
         lazy=True,
-        order_by="EducaMantoItem.sort_order",
+        order_by="EducaMantoMusicalItem.sort_order",
     )
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "name": self.name,
+            "num_personagens": self.num_personagens,
+            "num_producao": self.num_producao,
+            "num_ensaios": self.num_ensaios,
             "margin_1s": self.margin_1s,
             "margin_2s": self.margin_2s,
             "margin_1s_days": self.margin_1s_days,
             "margin_2s_days": self.margin_2s_days,
             "discount_days": self.discount_days,
             "discount_pct": self.discount_pct,
-            "commission_rate": self.commission_rate,
             "ensemble_1s": self.ensemble_1s,
             "ensemble_2s": self.ensemble_2s,
             "ensemble_1s_days": self.ensemble_1s_days,
             "ensemble_2s_days": self.ensemble_2s_days,
+            "custo_alimentacao_1s": self.custo_alimentacao_1s,
+            "custo_alimentacao_2s": self.custo_alimentacao_2s,
+            "custo_catering_ensaio_pp": self.custo_catering_ensaio_pp,
+            "custo_ajuda_ensaio_pp": self.custo_ajuda_ensaio_pp,
             "items": [item.to_dict() for item in self.items],
         }
 
+    def to_dict_basico(self) -> dict:
+        """Payload SEM custos/margens — listagem da calculadora e visão de papel não-superadmin."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "num_personagens": self.num_personagens,
+            "num_producao": self.num_producao,
+            "num_ensaios": self.num_ensaios,
+        }
 
-class EducaMantoItem(db.Model):
-    """Linha de custo dentro de um pacote EducaManto."""
-    __tablename__ = "educamanto_items"
+
+class EducaMantoMusicalItem(db.Model):
+    """Linha de custo sempre inclusa de um musical (elenco, produção, gráfica…)."""
+    __tablename__ = "educamanto_musical_items"
 
     id           = db.Column(db.Integer, primary_key=True)
-    package_id   = db.Column(db.Integer, db.ForeignKey("educamanto_packages.id"), nullable=False)
+    musical_id   = db.Column(db.Integer, db.ForeignKey("educamanto_musicals.id"), nullable=False)
     name         = db.Column(db.String(200), nullable=False)
     qty          = db.Column(db.Integer, nullable=False, default=1)
     cost_1s      = db.Column(db.Float, nullable=False, default=0)

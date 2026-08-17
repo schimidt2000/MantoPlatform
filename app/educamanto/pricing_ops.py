@@ -1,340 +1,465 @@
-"""Núcleo de precificação do EducaManto (feature 171) — usado apenas pela API/React.
+"""Núcleo de precificação do EducaManto por responsabilidades (feature 235).
 
-A tela Jinja legada (`templates/educamanto/index.html`) continua com sua própria réplica em
-JavaScript (padrão já estabelecido pela feature 076/081); este módulo existe para servir a nova
-tela React sem duplicar a fórmula em TypeScript (Princípio III — regra de negócio fora do
-frontend). Funções puras, sem `flask.request`/`render_template`.
+Substitui o motor por pacote/nível: o preço nasce do MUSICAL + três responsabilidades
+(sonorização, iluminação, alimentação), cada uma "por conta da Manto" (custo entra)
+ou "por conta da contratante" (custo sai). A equipe técnica segue a matriz de 4 casos
+(sonoplasta fixo; técnico de som quando som=Manto; técnico de iluminação quando
+iluminação=Manto).
+
+Fechamento preservado da fórmula histórica: soma de custos × margem por cenário, desconto
+acima de `discount_days`, acréscimo do vendedor capado, arredondamento para cima na centena
+e nota fiscal por ÷ 0,84 — o transporte de viagem entra no líquido antes da nota.
+
+Funções puras (sem `flask.request`), servindo API/React. A tela Jinja morreu nesta feature —
+não existe mais réplica da fórmula em JavaScript.
 """
+
+from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
 
-from app.models import EducaMantoPackage
-from app.orcamento.transport import calcular_van
+from app.educamanto import pdf_textos
+from app.models import EducaMantoMusical
+from app.orcamento import settings as _orc_settings
+
+# Fator de nota fiscal (com nota = líquido ÷ 0,84) — mesmo da tela histórica.
+NF_DIVISOR = 0.84
+# Desconto à vista (PIX) — agora calculado de fato (feature 235; antes era só texto no PDF).
+AVISTA_FATOR = 0.95
+
+# Cenários de custo/margem, na ordem canônica das colunas: 1 sessão/1 dia, 2 sessões/1 dia,
+# diária de 1 sessão (multi-dia), diária de 2 sessões (multi-dia).
+_CENARIOS = ("1s", "2s", "1s_days", "2s_days")
+
+# Rótulos dos 4 casos de som/iluminação — os valores vivem em
+# `pricing_config['educamanto_som_luz']` (tabela única, 3ª rodada com o dono: os preços NÃO
+# são aditivos e a equipe técnica já está dentro do valor do caso).
+_CASO_LABELS = {
+    "som_luz": "som e iluminação pela Manto",
+    "som": "som pela Manto",
+    "luz": "iluminação pela Manto",
+    "nenhum": "apenas sonoplasta",
+}
 
 
-@dataclass
-class TransporteResultado:
-    """Resultado do cálculo de transporte do EducaManto, já com o multiplicador de dias."""
+@dataclass(frozen=True)
+class Responsabilidades:
+    """Quem assume cada bloco: True = por conta da Manto (default), False = contratante."""
 
-    vt: float
-    afsp: float
-    valor_viagem: float
-    dias: int
-    total: float
-    label: str
-    km_total: float
-    pessoas: int
+    som: bool = True
+    iluminacao: bool = True
+    alimentacao: bool = True
+
+    @classmethod
+    def from_dict(cls, data: dict | None) -> "Responsabilidades":
+        """Parseia o shape da API ({"som": "manto"|"contratante", ...}); ausente = Manto.
+
+        Chaves desconhecidas (ex.: "cenario", removida na 4ª rodada) são ignoradas —
+        snapshots v2 antigos continuam carregando sem erro.
+        """
+        data = data or {}
+
+        def _manto(key: str) -> bool:
+            return str(data.get(key) or "manto").strip().lower() != "contratante"
+
+        return cls(
+            som=_manto("som"),
+            iluminacao=_manto("iluminacao"),
+            alimentacao=_manto("alimentacao"),
+        )
 
     def to_dict(self) -> dict:
         return {
-            "vt": self.vt,
-            "afsp": self.afsp,
+            "som": "manto" if self.som else "contratante",
+            "iluminacao": "manto" if self.iluminacao else "contratante",
+            "alimentacao": "manto" if self.alimentacao else "contratante",
+        }
+
+
+@dataclass
+class TransporteInfo:
+    """Transporte da configuração — caminhão dentro de SP ou 2 vans fora de SP."""
+
+    modo: str  # "caminhao_sp" | "vans_fora_sp"
+    total: float = 0.0        # somado ao líquido (só vans; o caminhão entra na base c/ margem)
+    caminhao: float = 0.0     # valor do caminhão (informativo, já dentro da base)
+    valor_viagem: float = 0.0
+    dias: int = 0
+    km_total: float = 0.0
+    pessoas: int = 0
+
+    def to_dict(self) -> dict:
+        return {
+            "modo": self.modo,
+            "total": self.total,
+            "caminhao": self.caminhao,
             "valor_viagem": self.valor_viagem,
             "dias": self.dias,
-            "total": self.total,
-            "label": self.label,
             "km_total": self.km_total,
             "pessoas": self.pessoas,
         }
 
 
 @dataclass
-class PacoteCalculado:
-    """Resultado completo do cálculo de um pacote EducaManto (itens, desconto, transporte)."""
+class ConfigCalculada:
+    """Resultado completo do cálculo de uma configuração (uma página do orçamento)."""
 
     scenario: str
-    item_rows: list = field(default_factory=list)
-    raw_cost: float = 0.0
-    valor_base: float = 0.0
-    desconto_aplicado: bool = False
-    desconto: float = 0.0
-    transporte: TransporteResultado | None = None
+    headcount_evento: int
+    headcount_ensaio: int
+    tecnicos: list = field(default_factory=list)
+    transporte: TransporteInfo | None = None
     valor_final_sem_nota: float = 0.0
     valor_final_com_nota: float = 0.0
-    # Comissão do vendedor: o que ele digitou é capado no valor do pacote. Antes o corte era
-    # mudo — a tela seguia exibindo o valor digitado. Estes dois campos existem para a tela
-    # poder avisar em vez de fingir que entrou tudo.
+    a_vista_sem_nota: float = 0.0
+    a_vista_com_nota: float = 0.0
     acrescimo_efetivo: float = 0.0
     acrescimo_maximo: float = 0.0
     acrescimo_capado: bool = False
+    desconto_aplicado: bool = False
+    combinados: dict = field(default_factory=dict)
+    # Breakdown interno — REMOVIDO da resposta para papéis não-superadmin (corte na API).
+    item_rows: list = field(default_factory=list)
+    blocos: dict = field(default_factory=dict)
+    raw_cost: float = 0.0
+    valor_base: float = 0.0
+    desconto: float = 0.0
+    liquido: float = 0.0
+    contratacao_memoria: list = field(default_factory=list)
+    contratacao_totais: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
+        """Resposta completa (superadmin). O corte por papel acontece na camada de API."""
         return {
             "scenario": self.scenario,
-            "item_rows": self.item_rows,
-            "raw_cost": self.raw_cost,
-            "valor_base": self.valor_base,
-            "desconto_aplicado": self.desconto_aplicado,
-            "desconto": self.desconto,
+            "headcount": self.headcount_evento,
+            "headcount_ensaio": self.headcount_ensaio,
+            "tecnicos": self.tecnicos,
             "transporte": self.transporte.to_dict() if self.transporte else None,
             "valor_final_sem_nota": self.valor_final_sem_nota,
             "valor_final_com_nota": self.valor_final_com_nota,
+            "a_vista_sem_nota": self.a_vista_sem_nota,
+            "a_vista_com_nota": self.a_vista_com_nota,
             "acrescimo_efetivo": self.acrescimo_efetivo,
             "acrescimo_maximo": self.acrescimo_maximo,
             "acrescimo_capado": self.acrescimo_capado,
+            "desconto_aplicado": self.desconto_aplicado,
+            "combinados": self.combinados,
+            "breakdown": {
+                "item_rows": self.item_rows,
+                "blocos": self.blocos,
+                "raw_cost": self.raw_cost,
+                "valor_base": self.valor_base,
+                "desconto": self.desconto,
+                "liquido": self.liquido,
+                "contratacao_memoria": self.contratacao_memoria,
+            },
         }
 
 
-def pessoas_transporte(package: EducaMantoPackage, ensemble: int) -> int:
-    """Deriva o nº de pessoas que viajam, a partir das linhas cobradas POR PESSOA do pacote.
-
-    O campo de pessoas do transporte nunca foi digitado pelo usuário — sai do próprio pacote.
-    A regra original (feature 079) lia só o item "Catering apresentação", e isso quebrou em
-    silêncio: os pacotes Econômicos não têm essa linha (a escola fornece a alimentação do dia),
-    então o headcount caía para zero e o adicional por pessoa do transporte sumia da conta,
-    mesmo com a equipe inteira viajando — a mesma equipe do Master.
-
-    Agora o headcount é o **maior** entre as linhas que crescem com o ensemble
-    (`ensemble_add > 0`): são exatamente as cobradas por cabeça (catering, ajuda de custo), e
-    portanto a quantidade delas *é* o tamanho da equipe. Verificado contra os 22 pacotes de
-    produção: devolve o mesmo número dos 15 pacotes que já funcionavam e corrige os 7
-    Econômicos, que passam a ter o headcount dos seus irmãos Master/Intermediário.
-
-    Args:
-        package: Pacote EducaManto.
-        ensemble: Quantidade de figurantes extras.
-
-    Returns:
-        Quantidade de pessoas, ou 0 se o pacote não tiver nenhuma linha por pessoa.
-    """
-    por_pessoa = [
-        item.qty + (item.ensemble_add or 0) * ensemble
-        for item in package.items
-        if (item.ensemble_add or 0) > 0
-    ]
-    return max(por_pessoa) if por_pessoa else 0
+def _ceil100(valor: float) -> float:
+    """Arredonda para cima até o próximo múltiplo de 100 (regra histórica do EducaManto)."""
+    return math.ceil(valor / 100) * 100
 
 
-def calcular_transporte(km_ida: float, pessoas: int, dias_total: int) -> TransporteResultado:
-    """Calcula o transporte de uma viagem e multiplica pelo total de dias do pacote (feature 171).
+def caso_som_luz(resp: Responsabilidades) -> str:
+    """A combinação som×iluminação que indexa a tabela única de custos (3ª rodada)."""
+    if resp.som and resp.iluminacao:
+        return "som_luz"
+    if resp.som:
+        return "som"
+    if resp.iluminacao:
+        return "luz"
+    return "nenhum"
 
-    Reusa a mesma fórmula de tarifa por km + adicional por pessoa já usada pela calculadora de
-    orçamento (`app.orcamento.transport`); o multiplicador de dias é específico do EducaManto
-    (pacotes de múltiplos dias fora de São Paulo exigem uma ida e volta por dia). O transporte do
-    EducaManto é sempre **van com carretinha** — decisão de negócio da feature 080 (o tipo de
-    veículo deixou de ser escolhível; só endereço e nº de pessoas variam).
 
-    Args:
-        km_ida: Distância de ida, em km.
-        pessoas: Número de pessoas que viajam (para o adicional por pessoa).
-        dias_total: Total de dias do pacote (`d1 + d2`); usa no mínimo 1.
+def tecnicos_do_caso(resp: Responsabilidades) -> list[str]:
+    """Matriz dos 4 casos — sonoplasta sempre vai; os técnicos seguem som/iluminação."""
+    tecnicos = ["sonoplasta"]
+    if resp.som:
+        tecnicos.append("tecnico_som")
+    if resp.iluminacao:
+        tecnicos.append("tecnico_iluminacao")
+    return tecnicos
 
-    Returns:
-        O resultado do cálculo, com o valor de uma viagem e o total já multiplicado.
-    """
+
+def headcount_ensaio(musical: EducaMantoMusical, ensemble: int) -> int:
+    """Quem ensaia: personagens + produção + ensemble (técnicos não ensaiam)."""
+    return musical.num_personagens + musical.num_producao + ensemble
+
+
+def headcount_evento(
+    musical: EducaMantoMusical, resp: Responsabilidades, ensemble: int
+) -> int:
+    """Quem vai ao evento: equipe de ensaio + técnicos do caso — alimenta camarim,
+    alimentação e o adicional por pessoa da viagem."""
+    return headcount_ensaio(musical, ensemble) + len(tecnicos_do_caso(resp))
+
+
+def calcular_transporte_fora_sp(
+    km_ida: float, pessoas: int, dias_total: int
+) -> TransporteInfo:
+    """Viagem fora de SP: SEMPRE 2 vans (uma com carretinha), km de ida e volta das duas,
+    adicional por pessoa uma única vez, × dias do pacote. Sem caminhão (feature 235)."""
+    cfg = _orc_settings.load()["transporte"]
     dias = max(int(dias_total or 0), 1)
-    if not km_ida or km_ida <= 0:
-        return TransporteResultado(
-            vt=0.0,
-            afsp=0.0,
-            valor_viagem=0.0,
-            dias=dias,
-            total=0.0,
-            label="",
-            km_total=0.0,
-            pessoas=pessoas,
-        )
-
-    resultado = calcular_van(pessoas, km_ida, carretinha=True, show=False)
-    valor_viagem = round(resultado["transporte"] + resultado["adicional_fora_sp"], 2)
-    total = round(valor_viagem * dias, 2)
-    return TransporteResultado(
-        vt=resultado["transporte"],
-        afsp=resultado["adicional_fora_sp"],
+    km_total = float(km_ida) * 2
+    vans = round(km_total * (cfg["van_com_carretinha"] + cfg["van_sem_carretinha"]), 2)
+    adicional = round(pessoas * km_total / cfg["afsp_divisor"], 2)
+    valor_viagem = round(vans + adicional, 2)
+    return TransporteInfo(
+        modo="vans_fora_sp",
+        total=round(valor_viagem * dias, 2),
         valor_viagem=valor_viagem,
         dias=dias,
-        total=total,
-        label="Van c/ carretinha",
-        km_total=km_ida * 2,
+        km_total=km_total,
         pessoas=pessoas,
     )
 
 
-def _ceil100(valor: float) -> float:
-    """Arredonda para cima até o próximo múltiplo de 100 (mesma regra do template Jinja)."""
-    return math.ceil(valor / 100) * 100
+def _caminhao_sp() -> float:
+    return float(_orc_settings.load()["transporte"].get("caminhao_sp", 800))
 
 
-def _effective_items(package: EducaMantoPackage, ensemble: int) -> list[dict]:
-    """Itens do pacote com a quantidade ajustada pelo ensemble, + a linha de ensemble se houver."""
-    items = [
-        {
+def _custo_alimentacao(musical: EducaMantoMusical, cenario: str) -> float:
+    """Alimentação por pessoa: 1 sessão usa o valor de 1s, 2 sessões o de 2s (diárias idem)."""
+    if cenario in ("2s", "2s_days"):
+        return musical.custo_alimentacao_2s
+    return musical.custo_alimentacao_1s
+
+
+def _linhas_de_custo(
+    musical: EducaMantoMusical,
+    resp: Responsabilidades,
+    ensemble: int,
+    fora_sp: bool,
+    hc_evento: int,
+) -> list[dict]:
+    """Linhas de custo por cenário (itens sempre inclusos + blocos condicionais + técnicos).
+
+    Cada linha tem `name`, `qty`, `bloco` (None = item comum) e os 4 custos unitários por
+    cenário. Custos de ENSAIO ficam de fora — são independentes de dias (ver docstring de
+    `_valores_configuracao`).
+    """
+    linhas: list[dict] = []
+    for item in musical.items:
+        linhas.append({
             "name": item.name,
             "qty": item.qty + (item.ensemble_add or 0) * ensemble,
-            "cost_1s": item.cost_1s,
-            "cost_2s": item.cost_2s,
-            "cost_1s_days": item.cost_1s_days,
-            "cost_2s_days": item.cost_2s_days,
-        }
-        for item in package.items
-    ]
+            "bloco": None,
+            "custos": (item.cost_1s, item.cost_2s, item.cost_1s_days, item.cost_2s_days),
+        })
     if ensemble > 0:
-        items.append(
-            {
-                "name": f"Ensemble ({ensemble})",
-                "qty": ensemble,
-                "cost_1s": package.ensemble_1s,
-                "cost_2s": package.ensemble_2s,
-                "cost_1s_days": package.ensemble_1s_days,
-                "cost_2s_days": package.ensemble_2s_days,
-            }
-        )
-    return items
+        linhas.append({
+            "name": f"Ensemble ({ensemble})",
+            "qty": ensemble,
+            "bloco": None,
+            "custos": (
+                musical.ensemble_1s, musical.ensemble_2s,
+                musical.ensemble_1s_days, musical.ensemble_2s_days,
+            ),
+        })
+    # Som/iluminação: UMA linha pelo caso da combinação (valores reais do dono, tabela única,
+    # equipe técnica inclusa). O mesmo valor nos 4 cenários = cobra por DIA de evento (no
+    # multi-dia a soma por dia multiplica por d1/d2, exatamente a regra combinada).
+    caso = caso_som_luz(resp)
+    valor_caso = float(_orc_settings.load()["educamanto_som_luz"][caso])
+    linhas.append({
+        "name": f"Som/Iluminação ({_CASO_LABELS[caso]})", "qty": 1, "bloco": "som_luz",
+        "custos": (valor_caso, valor_caso, valor_caso, valor_caso),
+    })
+    # Cenário saiu das responsabilidades na 4ª rodada: hoje não há custo adicional nem
+    # diferença Manto×contratante; se voltar a existir, volta como bloco aqui.
+    if resp.alimentacao:
+        linhas.append({
+            "name": "Alimentação (dia do evento)", "qty": hc_evento, "bloco": "alimentacao",
+            "custos": tuple(_custo_alimentacao(musical, c) for c in _CENARIOS),
+        })
+    # Técnicos NÃO têm custo próprio — já estão dentro do valor do caso; a matriz
+    # `tecnicos_do_caso` segue valendo para headcount, camarim e PDF.
+    if not fora_sp:
+        caminhao = _caminhao_sp()
+        linhas.append({
+            "name": "Caminhão (dentro de SP)", "qty": 1, "bloco": "caminhao",
+            "custos": (caminhao, caminhao, caminhao, caminhao),
+        })
+    return linhas
 
 
-def _valores_pacote(
-    package: EducaMantoPackage,
+def _custo_ensaios(musical: EducaMantoMusical, hc_ensaio: int) -> float:
+    """Custo total dos ensaios: por pessoa × headcount de ensaio × nº de ensaios."""
+    por_pessoa = musical.custo_catering_ensaio_pp + musical.custo_ajuda_ensaio_pp
+    return por_pessoa * hc_ensaio * max(int(musical.num_ensaios or 2), 2)
+
+
+def _valores_configuracao(
+    linhas: list[dict],
+    musical: EducaMantoMusical,
     d1: int,
     d2: int,
-    ensemble: int,
-    acrescimo: float,
-    transporte: float = 0.0,
-) -> dict:
-    """Valor final sem/com nota de um pacote, com o transporte já dentro da base.
+    custo_ensaios: float,
+) -> tuple[float, float, str, list[dict], dict]:
+    """Valor base (custo × margem) + memória de linhas para o cenário efetivo.
 
-    O transporte entra ANTES do bruteamento da nota (`÷ 0,84`) e antes do arredondamento —
-    mesma ordem da Calculadora de Orçamento. Antes ele era somado depois de tudo, então a Manto
-    absorvia o imposto sobre a parcela de transporte (numa viagem de R$ 3.986 isso era R$ 759
-    de imposto por orçamento).
+    Os ENSAIOS entram uma única vez (não escalam com os dias do evento — regra nova da
+    feature 235: o nº de ensaios é do musical), usando a margem de diária aplicável no
+    multi-dia e a margem do cenário nos casos de 1 dia.
+
+    Returns:
+        (valor_base, raw_cost, rótulo do cenário, item_rows, blocos_venda)
     """
+    item_rows: list[dict] = []
+    blocos: dict[str, float] = {}
+    raw_cost = 0.0
+    valor_base = 0.0
+
+    def _acumula(nome: str, qty: float, raw: float, sell: float, bloco: str | None) -> None:
+        nonlocal raw_cost, valor_base
+        raw_cost += raw
+        valor_base += sell
+        item_rows.append({
+            "name": nome, "qty": qty, "raw": round(raw, 2), "sell": round(sell, 2),
+        })
+        if bloco:
+            blocos[bloco] = round(blocos.get(bloco, 0.0) + sell, 2)
+
     total_dias = d1 + d2
-    if total_dias <= 0:
-        return {"sem_nota": 0.0, "com_nota": 0.0, "valor_base": 0.0, "sem_exato": 0.0}
-
-    items = _effective_items(package, ensemble)
     if total_dias == 1 and d1 == 1:
-        valor_base = sum(it["qty"] * it["cost_1s"] for it in items) * package.margin_1s
+        scenario = "1 sessão — 1 dia"
+        for ln in linhas:
+            raw = ln["qty"] * ln["custos"][0]
+            _acumula(ln["name"], ln["qty"], raw, raw * musical.margin_1s, ln["bloco"])
+        _acumula("Ensaios", 1, custo_ensaios, custo_ensaios * musical.margin_1s, "ensaios")
     elif total_dias == 1 and d2 == 1:
-        valor_base = sum(it["qty"] * it["cost_2s"] for it in items) * package.margin_2s
+        scenario = "2 sessões — 1 dia"
+        for ln in linhas:
+            raw = ln["qty"] * ln["custos"][1]
+            _acumula(ln["name"], ln["qty"], raw, raw * musical.margin_2s, ln["bloco"])
+        _acumula("Ensaios", 1, custo_ensaios, custo_ensaios * musical.margin_2s, "ensaios")
     else:
-        part1 = sum(it["qty"] * it["cost_1s_days"] for it in items) * d1 * package.margin_1s_days
-        part2 = sum(it["qty"] * it["cost_2s_days"] for it in items) * d2 * package.margin_2s_days
-        valor_base = part1 + part2
+        scenario = (
+            f"{d1}d×1 sessão + {d2}d×2 sessões" if (d1 > 0 and d2 > 0)
+            else f"{d1} dias × 1 sessão" if d1 > 0
+            else f"{d2} dias × 2 sessões"
+        )
+        for ln in linhas:
+            raw1 = ln["qty"] * ln["custos"][2] * d1
+            raw2 = ln["qty"] * ln["custos"][3] * d2
+            sell = raw1 * musical.margin_1s_days + raw2 * musical.margin_2s_days
+            _acumula(ln["name"], ln["qty"], raw1 + raw2, sell, ln["bloco"])
+        margem_ensaio = musical.margin_1s_days if d1 > 0 else musical.margin_2s_days
+        _acumula("Ensaios", 1, custo_ensaios, custo_ensaios * margem_ensaio, "ensaios")
 
-    sem_exato = (
-        valor_base * (1 - package.discount_pct)
-        if total_dias > package.discount_days
-        else valor_base
-    )
-    liquido = sem_exato + acrescimo + transporte
+    return valor_base, raw_cost, scenario, item_rows, blocos
+
+
+def _fechar(valor_base: float, musical: EducaMantoMusical, total_dias: int) -> float:
+    """Aplica o desconto por duração — devolve o valor exato pré-acréscimo/transporte."""
+    if total_dias > musical.discount_days:
+        return valor_base * (1 - musical.discount_pct)
+    return valor_base
+
+
+def _combinado(liquido: float, extra: float) -> dict:
+    """Total combinado (EducaManto + parte Manto): nota UMA vez, sobre a soma (FR-016)."""
+    soma = liquido + extra
+    sem = _ceil100(soma)
+    com = _ceil100(soma / NF_DIVISOR)
     return {
-        "sem_nota": _ceil100(liquido),
-        "com_nota": _ceil100(liquido / 0.84),
-        "valor_base": valor_base,
-        "sem_exato": sem_exato,
+        "sem_nota": sem,
+        "com_nota": com,
+        "a_vista_sem": round(sem * AVISTA_FATOR, 2),
+        "a_vista_com": round(com * AVISTA_FATOR, 2),
     }
 
 
-def calcular_pacote(
-    package: EducaMantoPackage,
+def calcular_configuracao(
+    musical: EducaMantoMusical,
     d1: int,
     d2: int,
     ensemble: int,
+    resp: Responsabilidades,
     acrescimo: float,
-    transporte: TransporteResultado | None,
-) -> PacoteCalculado:
-    """Calcula o pacote completo (itens, cenário, desconto, acréscimo) somando o transporte.
-
-    Reproduz em Python a lógica hoje só em JavaScript no template Jinja (`calcular()`/
-    `valoresPacote()`/`effectiveItemsFor()`), para servir a nova tela React sem duplicar a fórmula
-    em TypeScript.
+    fora_sp: bool,
+    km_ida: float,
+    contratacao_totais: dict[str, float] | None = None,
+    contratacao_memoria: list | None = None,
+) -> ConfigCalculada:
+    """Calcula uma configuração completa (uma página do orçamento).
 
     Args:
-        package: Pacote EducaManto (itens, margens, desconto, ensemble).
-        d1: Dias de 1 sessão.
-        d2: Dias de 2 sessões.
-        ensemble: Quantidade de figurantes extras.
-        acrescimo: Comissão do vendedor, somada aos dois valores e capada no valor do pacote.
-            Quando o teto corta, `acrescimo_capado` sai `True` para a tela poder avisar.
-        transporte: Resultado do transporte já calculado (ou `None`/zerado).
+        musical: Musical escolhido.
+        d1: Dias com 1 sessão. d2: Dias com 2 sessões (d1 + d2 > 0).
+        ensemble: Figurantes extras (≥ 0).
+        resp: Responsabilidades Manto × contratante.
+        acrescimo: Comissão do vendedor em R$ (capada no valor da configuração sem transporte).
+        fora_sp: Evento fora de São Paulo (2 vans; sem caminhão).
+        km_ida: Distância de ida em km (obrigatória > 0 quando `fora_sp`).
+        contratacao_totais: Totais da contratação Manto por duração (ex.: {"1h": 3200.0}),
+            já calculados por `app.orcamento.quote_ops.calculate_quote` SEM nota fiscal.
+        contratacao_memoria: Memória de cálculo da parte Manto (breakdown, só superadmin).
 
     Returns:
-        O breakdown completo do pacote, incluindo os totais finais com transporte somado.
+        O resultado completo — a camada de API corta o breakdown por papel.
     """
     total_dias = d1 + d2
     if total_dias <= 0:
-        return PacoteCalculado(scenario="")
+        return ConfigCalculada(scenario="", headcount_evento=0, headcount_ensaio=0)
 
-    items = _effective_items(package, ensemble)
-    # Teto da comissão: o valor do pacote sozinho, sem transporte — o transporte é repasse de
-    # custo, não faz sentido ampliar o quanto o vendedor pode acrescentar.
-    original = _valores_pacote(package, d1, d2, ensemble, 0)["sem_nota"]
-    acrescimo_efetivo = min(acrescimo, original) if original > 0 else acrescimo
+    hc_ensaio = headcount_ensaio(musical, ensemble)
+    hc_evento = headcount_evento(musical, resp, ensemble)
+    linhas = _linhas_de_custo(musical, resp, ensemble, fora_sp, hc_evento)
+    custo_ensaios = _custo_ensaios(musical, hc_ensaio)
+    valor_base, raw_cost, scenario, item_rows, blocos = _valores_configuracao(
+        linhas, musical, d1, d2, custo_ensaios
+    )
+    sem_exato = _fechar(valor_base, musical, total_dias)
 
-    item_rows: list[dict] = []
-    if total_dias == 1 and d1 == 1:
-        scenario = "1 sessão — 1 dia"
-        raw_cost = 0.0
-        for it in items:
-            raw = it["qty"] * it["cost_1s"]
-            raw_cost += raw
-            item_rows.append(
-                {
-                    "name": it["name"],
-                    "qty": it["qty"],
-                    "unit_cost": it["cost_1s"],
-                    "raw": raw,
-                    "sell": raw * package.margin_1s,
-                }
-            )
-    elif total_dias == 1 and d2 == 1:
-        scenario = "2 sessões — 1 dia"
-        raw_cost = 0.0
-        for it in items:
-            raw = it["qty"] * it["cost_2s"]
-            raw_cost += raw
-            item_rows.append(
-                {
-                    "name": it["name"],
-                    "qty": it["qty"],
-                    "unit_cost": it["cost_2s"],
-                    "raw": raw,
-                    "sell": raw * package.margin_2s,
-                }
-            )
+    if fora_sp and km_ida > 0:
+        transporte = calcular_transporte_fora_sp(km_ida, hc_evento, total_dias)
+    elif fora_sp:
+        transporte = TransporteInfo(modo="vans_fora_sp", pessoas=hc_evento)
     else:
-        scenario = (
-            f"{d1}d×1 sessão + {d2}d×2 sessões"
-            if (d1 > 0 and d2 > 0)
-            else f"{d1} dias × 1 sessão"
-            if d1 > 0
-            else f"{d2} dias × 2 sessões"
+        transporte = TransporteInfo(
+            modo="caminhao_sp", caminhao=_caminhao_sp(), pessoas=hc_evento
         )
-        raw_cost = 0.0
-        for it in items:
-            raw1 = it["qty"] * it["cost_1s_days"] * d1
-            raw2 = it["qty"] * it["cost_2s_days"] * d2
-            raw_item = raw1 + raw2
-            raw_cost += raw_item
-            sell_item = raw1 * package.margin_1s_days + raw2 * package.margin_2s_days
-            item_rows.append(
-                {
-                    "name": it["name"],
-                    "qty": it["qty"],
-                    "raw1": raw1,
-                    "raw2": raw2,
-                    "raw_item": raw_item,
-                    "sell_item": sell_item,
-                }
-            )
 
-    transporte_total = transporte.total if transporte else 0.0
-    vp = _valores_pacote(package, d1, d2, ensemble, acrescimo_efetivo, transporte_total)
-    desconto_aplicado = total_dias > package.discount_days
-    desconto = vp["valor_base"] - vp["sem_exato"]
+    # Teto do acréscimo: o valor da configuração SEM transporte de viagem e SEM acréscimo
+    # (regra histórica — transporte é repasse de custo, não amplia a comissão).
+    teto = _ceil100(sem_exato)
+    acrescimo_efetivo = min(acrescimo, teto) if teto > 0 else acrescimo
 
-    return PacoteCalculado(
+    liquido = sem_exato + acrescimo_efetivo + transporte.total
+    sem_nota = _ceil100(liquido)
+    com_nota = _ceil100(liquido / NF_DIVISOR)
+
+    combinados = {
+        duracao: _combinado(liquido, extra)
+        for duracao, extra in (contratacao_totais or {}).items()
+    }
+
+    return ConfigCalculada(
         scenario=scenario,
-        item_rows=item_rows,
-        raw_cost=raw_cost,
-        valor_base=vp["valor_base"],
-        desconto_aplicado=desconto_aplicado,
-        desconto=desconto,
+        headcount_evento=hc_evento,
+        headcount_ensaio=hc_ensaio,
+        tecnicos=tecnicos_do_caso(resp),
         transporte=transporte,
-        valor_final_sem_nota=vp["sem_nota"],
-        valor_final_com_nota=vp["com_nota"],
+        valor_final_sem_nota=sem_nota,
+        valor_final_com_nota=com_nota,
+        a_vista_sem_nota=round(sem_nota * AVISTA_FATOR, 2),
+        a_vista_com_nota=round(com_nota * AVISTA_FATOR, 2),
         acrescimo_efetivo=acrescimo_efetivo,
-        acrescimo_maximo=original,
+        acrescimo_maximo=teto,
         acrescimo_capado=acrescimo > acrescimo_efetivo,
+        desconto_aplicado=total_dias > musical.discount_days,
+        combinados=combinados,
+        item_rows=item_rows,
+        blocos=blocos,
+        raw_cost=round(raw_cost, 2),
+        valor_base=round(valor_base, 2),
+        desconto=round(valor_base - sem_exato, 2),
+        liquido=round(liquido, 2),
+        contratacao_memoria=contratacao_memoria or [],
+        contratacao_totais=contratacao_totais or {},
     )
