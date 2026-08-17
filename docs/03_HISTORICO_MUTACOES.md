@@ -39,6 +39,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **cadastro-raiz (hotfix)** | `/cadastro` na raiz do domínio vira o endereço do formulário React; Jinja do cadastro apagado; `FileUpload` copia o arquivo para memória (mata `ERR_UPLOAD_FILE_CHANGED`) | 2026-08-17 | `—` | (aqui) | — |
 | **235-educamanto (4ª rodada)** | Gate FECHADO: cenário sai das responsabilidades (sem custo, colunas removidas); personagens×produção derivados dos itens (Cara Limpa+Bonecos+Papai Noel / item Produção); textos aprovados. Aguarda só o "push 235" | 2026-08-17 | `b7e3a91d5c24` reescrita | (aqui) | — |
 | **238-teto-autorizado** | Valor salvo por superadmin vira teto efetivo do papel (`max(cache_cap, valor salvo)`) — casting consegue usar o valor autorizado | 2026-08-14 | `—` | (aqui) | — |
 | **237-solicitar-ficha** | Botão "Solicitar ficha" no FigurinoPicker → pedido kind `ficha` na fila de Produção e Compras; concluir exige vincular a ficha criada | 2026-08-14 | `—` | (aqui) | — |
@@ -163,6 +164,44 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### cadastro-raiz (hotfix) — `/cadastro` curto no React, Jinja aposentado, upload imune a `ERR_UPLOAD_FILE_CHANGED`            (2026-08-17 · sem migration)
+
+**Motivação.** Uma artista perdeu o formulário inteiro no envio com a tela do Chrome
+`ERR_UPLOAD_FILE_CHANGED`: o `<input type="file">` guarda só uma referência ao disco, e o Chrome
+aborta o POST se tamanho/mtime mudaram desde a escolha (Google Fotos/Drive reescrevendo o
+temporário, HEIC→JPEG descartado pelo iOS, foto editada depois de anexar). Ela estava no
+formulário **Jinja** (`/cadastro`), que era o link divulgado — e o React só existia em
+`/catalogo/cadastro`, endereço que não faz sentido divulgar (o `/catalogo` é a vitrine de
+personagens, não onde alguém se inscreve).
+
+**O que mudou.**
+- **`FileUpload` (`@manto/ui`) tira snapshot em memória** no `onChange` (`arrayBuffer` → `File`
+  novo) até 24 MB — o `FormData` deixa de apontar para o disco e o erro do Chrome fica
+  impossível. Acima de 24 MB (só o Acervo 3D, 50 MB, desktop) segue a referência de sempre.
+  De quebra: rejeita acima de `maxSizeBytes` na escolha (antes só o backend barrava, depois do
+  upload inteiro) e arquivo ilegível avisa na hora, não no envio.
+- **`/cadastro` na raiz é o endereço canônico**, nos dois hosts (`app.` e `portal.`).
+  `frontend/server.js` serve o bundle da vitrine nesse prefixo SEM reescrever a URL (não é
+  redirect — a barra de endereço fica limpa); `apps/public/src/App.tsx` escolhe o `basename`
+  pela URL (`/cadastro/*` roda sem o `/catalogo`). `WishlistFloat` some nessa superfície e o
+  link "Ver o catálogo" da confirmação virou âncora absoluta (com `basename` dinâmico, `to="/"`
+  cairia no ERP).
+- **`/catalogo/cadastro/*` continua vivo de propósito**: os e-mails de confirmação já enviados
+  apontam para lá e o token não expira. E-mails novos saem com `/cadastro/confirmar/<token>`.
+- **Jinja do cadastro apagado**: `app/cadastro/routes.py`, `templates/cadastro/{form,success}.html`
+  e o registro do `cadastro_bp`; `/cadastro` saiu de `BACKEND_PREFIXES` e da exceção do
+  `portal_domain_routing`. Sobrou do cadastro no Flask só `/api/cadastro/*` (o `check-cpf` do
+  Jinja era rota própria; o React sempre usou o da API).
+- **Pegadinha nova no `server.js`**: o host do portal ganhou exceção de redirect para
+  `/catalogo/*` — a página de cadastro carrega os assets de `/catalogo/assets/` (o `base` do
+  bundle), e sem a exceção cada asset viraria 302 para `/portal/catalogo/...` (página sem JS).
+- Copy do erro de rede do formulário deixou de vazar "Failed to fetch".
+
+**Verificação.** `verify-proxy.mjs` (+7 casos: raiz, host do portal, endereço antigo, API) todos
+verdes; typecheck limpo nos 3 apps; smoke do Flask lista só as 4 rotas `/api/cadastro/*`;
+navegação real no bundle de produção (mobile) com escolha de arquivo simulada e rejeição de
+11 MB no campo de 10 MB.
 
 ### 235-educamanto (4ª rodada) — Gate fechado: cenário sai, equipe vem dos itens            (branch · 2026-08-17 · migration `b7e3a91d5c24` reescrita)
 

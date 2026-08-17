@@ -180,7 +180,18 @@ export function CadastroForm() {
             setServerError(messages.join(" "));
             return;
           }
-          setServerError(error.message);
+          if (error instanceof ApiRequestError) {
+            setServerError(error.message);
+            return;
+          }
+          // Falha de rede: o `fetch` rejeita com `TypeError` e a mensagem nativa ("Failed to
+          // fetch") não diz nada para quem está preenchendo. Aqui nada saiu do aparelho — e nada
+          // do que ela digitou se perdeu, então a instrução certa é simplesmente reenviar.
+          setServerError(
+            "Não conseguimos enviar o cadastro — pode ter sido a conexão. Tudo que você " +
+              "preencheu continua aqui: toque em “Enviar cadastro” de novo. Se insistir, troque " +
+              "de Wi-Fi para 4G (ou o contrário) e tente mais uma vez.",
+          );
         },
       },
     );

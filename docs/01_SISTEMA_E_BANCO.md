@@ -954,8 +954,9 @@ que muda conteúdo grava a versão anterior em `EventRatingVersion` (feature 181
 ### 3.16 Rotas Jinja legadas ainda registradas
 `app/__init__.py` registra, além de `api_bp`: `auth_bp` (`/auth`), `rh_bp` (`/rh`),
 `admin_bp` (`/admin`), `calendar_bp`, `talents_bp`, `financeiro_bp`, `figurino_bp`,
-`portal_bp`, `orcamento_bp`, `educamanto_bp`, `gastos_bp`, `cadastro_bp`, `revisao_bp`,
-`clientes_bp`, `formularios_bp`, `feedback_bp`, `catalogo_bp`.
+`portal_bp`, `orcamento_bp`, `educamanto_bp`, `gastos_bp`, `revisao_bp`,
+`clientes_bp`, `formularios_bp`, `feedback_bp`, `catalogo_bp`. (`cadastro_bp` foi apagado no
+hotfix cadastro-raiz — o formulário público é 100% React e só `/api/cadastro/*` fica no Flask.)
 
 Rotas legadas que **ainda têm uso real** (não são só resíduo):
 - `GET /figurinos/<id>/print` e `GET /figurinos/print-event/<event_id>` — impressão de ficha.
@@ -1164,7 +1165,8 @@ primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e 
 | `/catalogo/og/*` | miniatura da prévia de link (`app/catalogo/routes.py:og_image`) — feature 216 |
 | `/portal/photo/*` | foto de figurino do portal (Jinja, mesma sessão do talento) — **antes** do mount `/portal` |
 | `/google/*` | callback do OAuth do Google Calendar (`app/calendar/routes.py`), rota Jinja com `redirect_uri` fixo no Google Console |
-| `/cadastro/*`, `/avaliar/*` | superfícies públicas por link já distribuído (cadastro de talentos, feedback da cliente) — hotfix 206b; sem elas o link caía no login do ERP |
+| `/avaliar/*` | superfície pública por link já distribuído (feedback da cliente) — hotfix 206b; sem ela o link caía no login do ERP |
+| `/cadastro/*` | **não vai ao Flask** (hotfix cadastro-raiz): servido pelo bundle da vitrine SEM reescrever a URL — endereço canônico do cadastro de talento nos hosts `app.` e `portal.`; `/catalogo/cadastro/*` segue vivo para os e-mails de confirmação antigos |
 | `/f/*` | **não vai ao Flask**: endereço canônico dos formulários públicos, 302 → `/catalogo/f/<slug>` (formulário React da vitrine), query preservada |
 | `/static/*` | CSS/JS das páginas Jinja públicas acima (bundles Vite usam `/assets` — sem colisão) |
 | `/figurinos/<id>/print`, `/figurinos/print-event/<id>` | páginas Jinja de impressão que a SPA interna linka; regex restrito ao sub-path |

@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Button, Card, CardContent, Skeleton } from "@manto/ui";
 import { useConfirmEmail } from "../lib/cadastro";
 
@@ -51,8 +51,12 @@ export function CadastroConfirmarPage() {
             </>
           )}
 
+          {/* Âncora absoluta, não `Link`: esta página é servida em DOIS endereços com basenames
+              diferentes (`/cadastro/confirmar/:token` na raiz e `/catalogo/cadastro/confirmar/...`
+              dos e-mails antigos). Um `to="/"` resolveria para a raiz do domínio no primeiro caso
+              — que é o ERP interno, não o catálogo. */}
           <Button asChild variant="outline" className="mt-2">
-            <Link to="/">Ver o catálogo da Manto</Link>
+            <a href={import.meta.env.PROD ? "/catalogo" : "/"}>Ver o catálogo da Manto</a>
           </Button>
         </CardContent>
       </Card>

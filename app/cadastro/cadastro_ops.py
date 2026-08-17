@@ -1,8 +1,8 @@
 """Núcleo compartilhado do cadastro público de talentos (feature 162).
 
-Extraído de ``app/cadastro/routes.py`` (feature 086) para ser reaproveitado tanto pelo handler
-Jinja quanto pelo endpoint API (``app/api/cadastro_write.py``) — mesma lógica, duas superfícies
-(pesquisa em `specs/162-cadastro-publico-react/research.md` §4).
+Extraído do handler Jinja (feature 086) para ser reaproveitado pelo endpoint API
+(``app/api/cadastro_write.py``) — pesquisa em `specs/162-cadastro-publico-react/research.md` §4.
+O Jinja foi aposentado desde então e a API é a única superfície que chega aqui.
 """
 
 import os
@@ -126,8 +126,8 @@ class SubmissionOutcome:
 def process_submission(form, files) -> SubmissionOutcome:
     """Valida e monta um ``Talent`` pendente a partir da submissão do formulário público.
 
-    Reaproveitada por ``app/cadastro/routes.py`` (Jinja) e ``app/api/cadastro_write.py`` (API) —
-    fonte única da regra de negócio do cadastro (Princípio I). Não adiciona/commita na sessão:
+    Chamada por ``app/api/cadastro_write.py`` — fonte única da regra de negócio do cadastro
+    (Princípio I). Não adiciona/commita na sessão:
     o chamador decide o que fazer com o ``Talent`` retornado (e como reagir ao honeypot/erro).
 
     Args:

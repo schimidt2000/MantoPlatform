@@ -1280,7 +1280,12 @@ Todas as telas são **mobile-first** (Princípio VIII).
   revisar itens e **enviar por WhatsApp** (`api.whatsapp.com/send?phone=...&text=...`), com o
   número vindo de `SiteSetting` no payload do catálogo.
 
-#### `/catalogo/cadastro` e `/catalogo/cadastro/enviado` — Cadastro de Talento
+#### `/cadastro` e `/cadastro/enviado` — Cadastro de Talento
+> **Endereço canônico na RAIZ do domínio** (hotfix cadastro-raiz), nos hosts `app.` e `portal.` —
+> é o link divulgado às artistas, herdado do formulário Jinja aposentado. O mesmo bundle da
+> vitrine atende `/catalogo/cadastro/*` (e-mails de confirmação antigos); o roteador escolhe o
+> `basename` pela URL (`apps/public/src/App.tsx`). O upload copia cada arquivo para a memória na
+> escolha — imune ao `ERR_UPLOAD_FILE_CHANGED` do Chrome que custou um formulário inteiro.
 - **UX**: formulário público de candidatura; `GET /api/cadastro/check-cpf` valida duplicidade em
   tempo real (estrangeiro grava `cpf = NULL`). Cria `Talent` com `status = "pending"`.
 - **Confirmação de email (feature 219)**: o campo de e-mail avisa "você quis dizer gmail.com?"
@@ -1290,7 +1295,7 @@ Todas as telas são **mobile-first** (Princípio VIII).
   deliberada: o `Talent` já está gravado quando a confirmação entra em cena, então errar o email
   nunca custa as fotos, o documento e o formulário inteiro.
 
-#### `/catalogo/cadastro/confirmar/:token` — Confirmação do e-mail
+#### `/cadastro/confirmar/:token` — Confirmação do e-mail (também em `/catalogo/cadastro/confirmar/:token`)
 - **UX**: destino do link do email. Confirma ao carregar e carimba `email_verified_at`; o token é
   de uso único, então o segundo clique cai em "Link já utilizado" — tratado como sucesso tardio,
   não como erro. A ficha do talento passa a mostrar "✓ confirmado" ao lado do e-mail.

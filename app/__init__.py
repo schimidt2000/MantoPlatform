@@ -606,11 +606,14 @@ def create_app():
 
     PORTAL_HOSTS = {"portal.mantoproducoes.com.br"}
 
+    # `/cadastro` saiu da lista de exceções junto com o formulário Jinja: hoje esse endereço é
+    # servido pelo bundle da vitrine em `frontend/server.js`, que é a porta de entrada e resolve
+    # antes de qualquer coisa chegar aqui. O que sobra no Flask é `/api/cadastro/*`.
     @app.before_request
     def portal_domain_routing():
         host = request.host.split(":")[0]
         if host in PORTAL_HOSTS:
-            if not request.path.startswith(("/portal", "/cadastro", "/f/", "/static", "/uploads")):
+            if not request.path.startswith(("/portal", "/f/", "/static", "/uploads")):
                 return redirect("/portal/")
 
     # ✅ Importa blueprints AQUI (depois do db existir)
@@ -625,7 +628,6 @@ def create_app():
     from .orcamento.routes import orcamento_bp
     from .educamanto.routes import educamanto_bp
     from .gastos.routes import gastos_bp
-    from .cadastro.routes import cadastro_bp
     from .revisao.routes import revisao_bp
     from .clientes.routes import clientes_bp
     from .formularios.routes import formularios_bp
@@ -644,7 +646,6 @@ def create_app():
     app.register_blueprint(orcamento_bp)
     app.register_blueprint(educamanto_bp)
     app.register_blueprint(gastos_bp)
-    app.register_blueprint(cadastro_bp)
     app.register_blueprint(revisao_bp)
     app.register_blueprint(clientes_bp)
     app.register_blueprint(formularios_bp)

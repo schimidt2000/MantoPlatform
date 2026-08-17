@@ -31,10 +31,42 @@ export interface FileUploadProps {
 }
 
 /**
+ * Teto para a cópia em memória do arquivo escolhido (ver `snapshotFile`).
+ *
+ * Cobre com folga todas as superfícies de foto/documento (8 a 20 MB). Acima disso só existe o
+ * Acervo 3D (50 MB), que é upload de desktop: lá o arquivo não é reescrito por sincronização de
+ * nuvem no meio do formulário, e segurar 50 MB em RAM custaria mais do que resolve.
+ */
+const SNAPSHOT_MAX_BYTES = 24 * 1024 * 1024;
+
+function formatMb(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+}
+
+/**
+ * Cópia do arquivo em memória, desligada do disco.
+ *
+ * O `<input type="file">` guarda só uma REFERÊNCIA. O Chrome anota tamanho e data de modificação
+ * no momento da escolha e reabre o arquivo na hora do envio — se qualquer um dos dois mudou, ele
+ * aborta com `ERR_UPLOAD_FILE_CHANGED` sem mandar um byte, e a pessoa recebe uma tela de erro do
+ * navegador em vez do formulário. Num formulário longo preenchido no celular isso acontece de
+ * verdade: o Google Fotos/Drive reescreve o arquivo temporário que entregou, o iOS descarta a
+ * conversão HEIC→JPEG sob pressão de memória, a pessoa corta ou gira a foto depois de anexar.
+ *
+ * Lendo os bytes agora, o `FormData` passa a apontar para memória e o navegador nunca mais volta
+ * ao disco — o erro deixa de ser possível. De quebra, um arquivo já ilegível falha AQUI, com a
+ * seleção fresca na cabeça de quem escolheu, e não vinte minutos depois no envio.
+ */
+async function snapshotFile(file: File): Promise<File> {
+  const bytes = await file.arrayBuffer();
+  return new File([bytes], file.name, { type: file.type, lastModified: file.lastModified });
+}
+
+/**
  * Campo de upload de arquivo com preview de imagem — primeiro componente compartilhado de
- * upload do design system (feature 162, `research.md` §3). Não valida tipo/tamanho por conta
- * própria além do atributo `accept` nativo do input — a validação de negócio (extensão exata,
- * tamanho máximo) é responsabilidade do backend/schema, aqui só refletida via `error`.
+ * upload do design system (feature 162, `research.md` §3). Além do `accept` nativo, valida
+ * localmente só o que dá para checar sem enviar nada: o tamanho máximo e a legibilidade do
+ * arquivo. O resto da validação de negócio continua sendo do backend, refletida via `error`.
  */
 export function FileUpload({
   label,
@@ -52,26 +84,65 @@ export function FileUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  /** Problema detectado na própria escolha (tamanho/leitura) — soma-se ao `error` do chamador. */
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const maxSizeMb = Math.round(maxSizeBytes / (1024 * 1024));
+  const shownError = error ?? localError ?? undefined;
 
-  function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] ?? null;
-    setFileName(file?.name ?? null);
+  function replacePreview(file: File | null) {
     setPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return file && file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
     });
-    onChange(file);
+  }
+
+  async function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    const picked = event.target.files?.[0] ?? null;
+    setLocalError(null);
+    setFileName(picked?.name ?? null);
+
+    if (!picked) {
+      replacePreview(null);
+      onChange(null);
+      return;
+    }
+
+    // Rejeitar aqui evita subir o arquivo inteiro para o backend recusar no fim — no celular
+    // isso é a diferença entre um aviso imediato e minutos de upload jogados fora.
+    if (picked.size > maxSizeBytes) {
+      replacePreview(null);
+      setLocalError(`Arquivo de ${formatMb(picked.size)} — o limite é ${maxSizeMb} MB.`);
+      onChange(null);
+      return;
+    }
+
+    // Grande demais para copiar (hoje só o Acervo 3D): segue com a referência de disco de sempre.
+    if (picked.size > SNAPSHOT_MAX_BYTES) {
+      replacePreview(picked);
+      onChange(picked);
+      return;
+    }
+
+    try {
+      const stable = await snapshotFile(picked);
+      replacePreview(stable);
+      onChange(stable);
+    } catch {
+      replacePreview(null);
+      setLocalError(
+        "Não foi possível ler este arquivo. Se ele veio do Google Fotos ou do Drive, " +
+          "salve na galeria do aparelho e escolha de novo.",
+      );
+      onChange(null);
+    }
   }
 
   function handleClear() {
     if (inputRef.current) inputRef.current.value = "";
     setFileName(null);
-    setPreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
+    setLocalError(null);
+    replacePreview(null);
     onChange(null);
   }
 
@@ -88,12 +159,12 @@ export function FileUpload({
         accept={accept}
         onChange={handleChange}
         className="sr-only"
-        aria-invalid={Boolean(error)}
+        aria-invalid={Boolean(shownError)}
       />
       <div
         className={cn(
           "flex min-h-11 items-center gap-3 rounded-md border border-line bg-panel p-2",
-          error && "border-red ring-2 ring-red/30",
+          shownError && "border-red ring-2 ring-red/30",
         )}
       >
         {previewUrl ? (
@@ -144,9 +215,9 @@ export function FileUpload({
           </Button>
         )}
       </div>
-      {error && (
+      {shownError && (
         <p className="mt-1 text-sm text-red" role="alert">
-          {error}
+          {shownError}
         </p>
       )}
     </div>

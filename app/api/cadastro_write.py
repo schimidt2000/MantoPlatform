@@ -2,8 +2,8 @@
 
 Reaproveita 100% da regra de negócio já em `app/cadastro/cadastro_ops.py` (feature 086,
 extraída na 162) — este módulo só traduz o resultado em JSON. Público (sem `@login_required`/
-RBAC), mesma acessibilidade do blueprint `cadastro_bp` hoje. A rota Jinja `/cadastro/*` continua
-no ar em paralelo (ver `specs/162-cadastro-publico-react/plan.md`).
+RBAC). São os ÚNICOS endpoints do cadastro: o formulário Jinja que rodava em paralelo foi
+aposentado, e `/cadastro` passou a ser o endereço da SPA (ver `frontend/server.js`).
 
 Feature 219 acrescentou a confirmação de email — sempre **depois** da gravação do `Talent`, nunca
 como condição para ela: o formulário tem três fotos e um documento, e perder isso porque a pessoa
@@ -22,9 +22,14 @@ from app.cadastro.cadastro_ops import check_cpf_exists, process_submission
 
 
 def _confirm_url(token: str) -> str:
-    """Link de confirmação na SPA pública (servida sob `/catalogo` em produção)."""
+    """Link de confirmação na SPA pública, na URL curta `/cadastro`.
+
+    Os e-mails emitidos antes disso apontam para `/catalogo/cadastro/confirmar/<token>`, e o
+    token não expira: aquele endereço continua servido pelo mesmo bundle (ver
+    ``frontend/server.js`` e ``apps/public/src/App.tsx``) e não pode ser desativado.
+    """
     base = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
-    return f"{base}/catalogo/cadastro/confirmar/{token}"
+    return f"{base}/cadastro/confirmar/{token}"
 
 
 def _send_confirmation(talent) -> None:
@@ -37,7 +42,7 @@ def _send_confirmation(talent) -> None:
 @api_bp.route("/cadastro/check-cpf")
 @limiter.limit("60 per hour")
 def api_cadastro_check_cpf() -> Any:
-    """Checagem de CPF em tempo real (paridade com `cadastro_bp.check_cpf`)."""
+    """Checagem de CPF em tempo real, enquanto a pessoa digita os 11 dígitos."""
     exists, valid = check_cpf_exists(request.args.get("cpf") or "")
     return jsonify({"exists": exists, "valid": valid})
 

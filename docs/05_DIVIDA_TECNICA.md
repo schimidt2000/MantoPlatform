@@ -367,9 +367,10 @@ nome antigo voltar vazio.
 
 ### 9.3 Superfícies Jinja inalcançáveis, mas vivas
 
-`frontend/server.js:176` só devolve ao Flask os prefixos `/api`, `/uploads`, `/catalogo/midia`,
-`/catalogo/og`, `/portal/photo`, `/google`, `/cadastro`, `/avaliar`, `/static` (mais o regex
-`/figurinos/<id>/print`). Portanto:
+`frontend/server.js` só devolve ao Flask os prefixos `/api`, `/uploads`, `/catalogo/midia`,
+`/catalogo/og`, `/portal/photo`, `/google`, `/avaliar`, `/static` (mais o regex
+`/figurinos/<id>/print`). `/cadastro` saiu da lista no hotfix cadastro-raiz (o Jinja do cadastro
+foi **apagado**, não só desalcançado). Portanto:
 
 - **`calendar_bp`**: 18 das 20 rotas sem caminho de acesso (vivas só `/google/connect` e
   `/google/callback`).

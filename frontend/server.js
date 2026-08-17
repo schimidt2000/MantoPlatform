@@ -174,12 +174,14 @@ const ALO_HOSTS = new Set(
  *
  * SUPERFÍCIES PÚBLICAS POR LINK (Jinja, sem login) — os links já distribuídos apontam para
  * este domínio e, sem estas entradas, caíam no fallback do ERP interno, que PEDE LOGIN:
- *   - `/cadastro/*` cadastro público de talentos (`cadastro_bp`)
  *   - `/avaliar/*`  avaliação da cliente por token (`feedback_bp`)
  *   - `/static/*`   CSS/JS que essas páginas Jinja referenciam (os bundles Vite usam
  *                   `/assets`, então não há colisão)
  * Nenhum desses prefixos existe como rota nos três React Routers (`/formularios` do ERP é
  * outra rota — o público é só `/f/*`).
+ *
+ * `/cadastro/*` SAIU desta lista: o formulário Jinja foi aposentado e o endereço agora é servido
+ * pelo bundle da vitrine (ver CADASTRO_PREFIX). O que continua no Flask é só `/api/cadastro/*`.
  *
  * `/f/*` NÃO vai para o Flask: é o endereço canônico dos formulários públicos — impresso em
  * bio/integrações — e o formulário atual é o REACT da vitrine (`/catalogo/f/*`). Ver
@@ -196,13 +198,30 @@ const BACKEND_PREFIXES = [
   "/catalogo/og",
   "/portal/photo",
   "/google",
-  "/cadastro",
   "/avaliar",
   "/static",
 ];
 
 /** Endereço canônico curto dos formulários públicos → SPA pública sob /catalogo. */
 const PUBLIC_FORM_PREFIX = "/f";
+
+/**
+ * Cadastro público de talento: URL curta na raiz do domínio, servida pelo bundle da vitrine.
+ *
+ * É o endereço divulgado para as artistas (`app.mantoproducoes.com.br/cadastro` e, pelo host
+ * dedicado, `portal.mantoproducoes.com.br/cadastro`) e já estava em circulação apontando para o
+ * formulário Jinja, agora aposentado. `/catalogo/cadastro` não serve como endereço público:
+ * `/catalogo` é a vitrine de personagens, não o lugar onde alguém se candidata.
+ *
+ * Redirect não resolveria — a barra de endereço passaria a mostrar `/catalogo/cadastro`, que é
+ * justamente o que se quer evitar. Então serve o bundle SEM reescrever `req.url`: o
+ * `serve-handler` não acha `/cadastro` no `dist` e cai no fallback de SPA, e o roteador do bundle
+ * detecta a URL para rodar sem o `basename` de `/catalogo` (`apps/public/src/App.tsx`).
+ *
+ * O HTML continua referenciando os assets em `/catalogo/assets/*` (o `base` do Vite), servidos
+ * pelo mount de `/catalogo` — por isso esse mount precisa seguir alcançável nos dois hosts.
+ */
+const CADASTRO_PREFIX = "/cadastro";
 
 /** Rotas Jinja remanescentes, casadas por regex para não sombrear rotas do React Router. */
 const BACKEND_PATTERNS = [
@@ -543,6 +562,13 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Cadastro público de talento na URL curta (ver CADASTRO_PREFIX). Precisa vir ANTES do bloco
+  // de host do portal: sem isto, `portal.mantoproducoes.com.br/cadastro` seria empurrado para
+  // `/portal/cadastro`, que não existe no bundle do Portal do Artista.
+  if (req.url && matchesPrefix(req.url, CADASTRO_PREFIX)) {
+    return handler(req, res, { public: PUBLIC_DIST, ...SERVE_OPTIONS });
+  }
+
   // Formulários públicos: o link curto `/f/<slug>` é o canônico (impresso em bio e
   // conectado em outros softwares) e abre o formulário React da vitrine. Redirect, não
   // reescrita: o bundle público usa `base`/`basename` = `/catalogo` e precisa ver o
@@ -562,8 +588,12 @@ const server = http.createServer((req, res) => {
   //
   // E preserva o caminho: o link de redefinição de senha que sai por e-mail é
   // `<PORTAL_URL>/reset-password/<token>`; mandar tudo para `/portal/` descartaria o token.
+  //
+  // `/catalogo` é exceção junto com `/portal`: a página de cadastro servida acima carrega os
+  // assets dela de `/catalogo/assets/*` (o `base` do bundle da vitrine). Sem a exceção, cada
+  // asset viraria um 302 para `/portal/catalogo/assets/...` e a página abriria sem JavaScript.
   if (req.url && PORTAL_HOSTS.has((req.headers.host ?? "").split(":")[0].toLowerCase())) {
-    if (!matchesPrefix(req.url, "/portal")) {
+    if (!matchesPrefix(req.url, "/portal") && !matchesPrefix(req.url, "/catalogo")) {
       res.statusCode = 302;
       res.setHeader("location", `/portal${req.url === "/" ? "/" : req.url}`);
       res.end();

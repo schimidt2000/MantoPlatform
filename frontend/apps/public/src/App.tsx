@@ -18,11 +18,29 @@ import { WishlistFloat } from "./components/WishlistFloat";
 // Prefixo de rota condicional ao build de produção (feature 186, US6) — mesmo app servido sob
 // `/catalogo/*` no mesmo serviço Railway do app interno (ver `frontend/server.js`); em dev
 // continua em `/`, mesmo comportamento de sempre.
-const BASENAME = import.meta.env.PROD ? "/catalogo" : undefined;
+const CATALOGO_BASENAME = import.meta.env.PROD ? "/catalogo" : undefined;
+
+/**
+ * O cadastro público de talento mora na RAIZ do domínio (`/cadastro`), fora do `/catalogo`.
+ *
+ * `/catalogo/cadastro` é um endereço que não faz sentido para quem recebe o link: `/catalogo` é a
+ * vitrine de personagens, não o lugar onde uma artista se inscreve. `/cadastro` também é o que já
+ * está impresso e em circulação — era o formulário Jinja, agora aposentado.
+ *
+ * Os dois endereços saem deste mesmo bundle; o que muda é o `basename` do roteador, escolhido
+ * pela URL que o navegador abriu. `/catalogo/cadastro/*` CONTINUA funcionando de propósito: os
+ * e-mails de confirmação já enviados apontam para lá e o token não expira nunca
+ * (`app/cadastro/verify_ops.py`).
+ */
+function isCadastroSurface(pathname: string): boolean {
+  return pathname === "/cadastro" || pathname.startsWith("/cadastro/");
+}
 
 export function App() {
+  const cadastroSurface = isCadastroSurface(window.location.pathname);
+
   return (
-    <BrowserRouter basename={BASENAME}>
+    <BrowserRouter basename={cadastroSurface ? undefined : CATALOGO_BASENAME}>
       <Routes>
         <Route path="/" element={<CatalogGridPage />} />
         <Route path="/categorias" element={<CategoriesPage />} />
@@ -44,7 +62,9 @@ export function App() {
         <Route path="/v/pedido/:token" element={<PedidoVirtualPage />} />
         <Route path="/:slug" element={<ProductDetailPage />} />
       </Routes>
-      <WishlistFloat />
+      {/* A lista de desejos é da vitrine. Servida de `/cadastro`, sem o basename `/catalogo`, ela
+          apontaria para `/lista-desejos` na raiz do domínio — que é o bundle do ERP interno. */}
+      {!cadastroSurface && <WishlistFloat />}
     </BrowserRouter>
   );
 }

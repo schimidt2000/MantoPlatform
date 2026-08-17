@@ -65,8 +65,15 @@ const CASES = [
   ["/portal/agenda", "spa:portal"],
   ["/google/callback?code=x", "backend"],
   ["/google/connect", "backend"],
-  ["/cadastro", "backend"],
-  ["/cadastro/check-cpf", "backend"],
+  // Cadastro de talento: URL curta na raiz, servida pelo bundle da vitrine (Jinja aposentado).
+  ["/cadastro", "spa:public"],
+  ["/cadastro/enviado", "spa:public"],
+  ["/cadastro/confirmar/tok123", "spa:public"],
+  // Endereço antigo: os e-mails de confirmação já enviados apontam para cá e o token não expira.
+  ["/catalogo/cadastro", "spa:public"],
+  ["/catalogo/cadastro/confirmar/tok123", "spa:public"],
+  // O que sobrou do cadastro no Flask é só a API.
+  ["/api/cadastro/check-cpf?cpf=1", "backend"],
   ["/avaliar/token123", "backend"],
   ["/static/style.css", "backend"],
   ["/formularios", "spa:internal"],
@@ -145,6 +152,18 @@ for (const [url, expected, nota] of PORTAL_CASES) {
 // Ja dentro de /portal nao pode redirecionar de novo (laco) nem roubar a API.
 const noLoop = await rawGet("/portal/agenda", PORTAL_HOST);
 check(noLoop.status === 200, `/portal/agenda ja prefixado → ${noLoop.status} (sem laco)`);
+// O cadastro de talento e servido NESTE host tambem (link divulgado), sem virar /portal/cadastro.
+const cadPortal = await rawGet("/cadastro", PORTAL_HOST);
+check(
+  cadPortal.status === 200 && cadPortal.body.includes("/catalogo/assets/"),
+  `/cadastro no host do portal → ${cadPortal.status} bundle da vitrine (sem redirect)`,
+);
+// ...e os assets que essa pagina referencia nao podem ser redirecionados para /portal/catalogo.
+const cadAsset = await rawGet("/catalogo/", PORTAL_HOST);
+check(
+  cadAsset.status === 200,
+  `/catalogo/* no host do portal → ${cadAsset.status} (excecao ao redirect, assets carregam)`,
+);
 check(
   (await rawGet("/api/auth/me", PORTAL_HOST)).body.startsWith("BACKEND"),
   "/api no host do portal → ainda vai para o backend",
