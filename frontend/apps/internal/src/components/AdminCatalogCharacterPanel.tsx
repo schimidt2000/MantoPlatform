@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { assetUrl, ApiRequestError } from "@manto/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, cn } from "@manto/ui";
 import {
   useAdminCatalogo,
   useAdoptItemAsCharacter,
@@ -43,9 +43,13 @@ interface DraftState {
 const EMPTY_DRAFT: DraftState = { name: "", videoUrl: "", figurinoSheetId: null, photo: null };
 
 /**
- * Busca de itens do catálogo para vincular/adotar (feature 209). Exclui o próprio tema,
- * itens que já são página de alguém e itens com elenco próprio (temas) — o backend valida
- * de novo, aqui é só para a lista não oferecer opções inválidas.
+ * Busca de itens do catálogo para vincular/adotar (feature 209). O próprio tema fica de
+ * fora; item que já é página de alguém ou que tem elenco próprio (é um tema) APARECE na
+ * lista, mas bloqueado e com o motivo no lugar do botão. Esconder em silêncio fazia
+ * "Nenhum item disponível" significar tanto "não existe" quanto "existe mas não pode" —
+ * quem organiza o catálogo não tinha como saber a diferença (caso Cinderella: a versão
+ * Desenho é um tema com elenco próprio e sumia da busca sem explicação). O backend valida
+ * as mesmas regras de novo.
  */
 function CatalogItemSearch({
   temaId,
@@ -64,10 +68,16 @@ function CatalogItemSearch({
   const results = useMemo(
     () =>
       (list.data?.items ?? [])
-        .filter(
-          (item) =>
-            item.id !== temaId && !item.parte_de_tema && item.characters_total === 0,
-        )
+        .filter((item) => item.id !== temaId)
+        .map((item) => ({
+          item,
+          blockedReason:
+            item.characters_total > 0
+              ? "É um tema com elenco próprio — não pode virar personagem de outro tema."
+              : item.parte_de_tema
+                ? `Já é a página de um personagem no tema “${item.parte_de_tema.tema_name}”.`
+                : null,
+        }))
         .slice(0, 8),
     [list.data, temaId],
   );
@@ -83,26 +93,40 @@ function CatalogItemSearch({
       />
       {query.trim().length >= 2 && (
         <ul className="max-h-56 divide-y divide-line overflow-y-auto rounded-md border border-line">
-          {results.map((item) => (
+          {results.map(({ item, blockedReason }) => (
             <li key={item.id} className="flex items-center gap-2 p-2">
-              <span className="h-9 w-9 flex-none overflow-hidden rounded bg-surface-2">
+              <span
+                className={cn(
+                  "h-9 w-9 flex-none overflow-hidden rounded bg-surface-2",
+                  blockedReason && "opacity-50",
+                )}
+              >
                 {item.cover_url && (
                   <img src={assetUrl(item.cover_url)} alt="" className="h-full w-full object-cover" />
                 )}
               </span>
-              <span className="min-w-0 flex-1 truncate text-sm text-ink">{item.name}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                loading={pending}
-                onClick={() => onPick(item.id)}
-              >
-                {actionLabel}
-              </Button>
+              <span className="min-w-0 flex-1">
+                <span
+                  className={cn("block truncate text-sm", blockedReason ? "text-muted" : "text-ink")}
+                >
+                  {item.name}
+                </span>
+                {blockedReason && <span className="block text-xs text-muted">{blockedReason}</span>}
+              </span>
+              {!blockedReason && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={pending}
+                  onClick={() => onPick(item.id)}
+                >
+                  {actionLabel}
+                </Button>
+              )}
             </li>
           ))}
           {results.length === 0 && !list.isLoading && (
-            <li className="p-2 text-xs text-muted">Nenhum item disponível para “{query}”.</li>
+            <li className="p-2 text-xs text-muted">Nenhum item encontrado para “{query}”.</li>
           )}
         </ul>
       )}

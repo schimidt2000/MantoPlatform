@@ -39,6 +39,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **fichas-por-escalacao + adotar-item-honesto (hotfixes)** | Imprimir fichas do evento: 1 folha por escalação (dois "Soldado" saíam como um); busca de adotar item mostra tema/já-adotado bloqueado com o motivo em vez de sumir | 2026-08-17 | `—` | (aqui) | — |
 | **cadastro-raiz (hotfix)** | `/cadastro` na raiz do domínio vira o endereço do formulário React; Jinja do cadastro apagado; `FileUpload` copia o arquivo para memória (mata `ERR_UPLOAD_FILE_CHANGED`) | 2026-08-17 | `—` | (aqui) | — |
 | **235-educamanto (4ª rodada)** | Gate FECHADO: cenário sai das responsabilidades (sem custo, colunas removidas); personagens×produção derivados dos itens (Cara Limpa+Bonecos+Papai Noel / item Produção); textos aprovados. Aguarda só o "push 235" | 2026-08-17 | `b7e3a91d5c24` reescrita | (aqui) | — |
 | **238-teto-autorizado** | Valor salvo por superadmin vira teto efetivo do papel (`max(cache_cap, valor salvo)`) — casting consegue usar o valor autorizado | 2026-08-14 | `—` | (aqui) | — |
@@ -164,6 +165,27 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### fichas-por-escalacao + adotar-item-honesto (hotfixes)            (2026-08-17 · sem migration)
+
+**1. Imprimir fichas do evento: 1 folha por ESCALAÇÃO, não por personagem.** No Transformers do
+dia 20, dois talentos vestindo "Soldado" saíam como UMA folha — e a folha imprime o nome e as
+medidas de quem veste (`figurino_print.html`), então faltava a folha de um deles. O gatilho real
+era o `seen_sheets` do `print_event_figurinos`: qualquer cargo apontando para uma ficha já
+impressa era pulado (no caso, os cargos nem tinham o mesmo nome — "…Transformers" e
+"…Transformes", com typo — mas compartilhavam a ficha). Reescrito: agrupa por personagem
+(identidade = ficha quando existe, senão nome normalizado) e sai uma folha por talento distinto.
+Continuam deduplicados: extras, o mesmo talento 2× no personagem, cargo vago quando o personagem
+já tem gente (vago sozinho ainda sai como folha anônima) e a herança de ficha entre cargos de
+mesmo nome. Verificado contra o `manto_local` (evento 429): 4 folhas, os dois Soldados presentes.
+
+**2. Busca de "Adotar item existente" mostra o bloqueado com o motivo.** A Gabi buscava
+"Cinderella" e só via a versão Live Action — a versão Desenho é um TEMA com 9 personagens de
+elenco próprio, e a regra da feature 209 (tema não vira personagem de outro tema; item já adotado
+não é adotado de novo) a escondia EM SILÊNCIO: "Nenhum item disponível" não distinguia "não
+existe" de "existe mas não pode". Agora o item bloqueado aparece na lista, apagado e sem botão,
+com o motivo ("É um tema com elenco próprio…" / "Já é a página de um personagem no tema X").
+A regra de negócio não mudou — o backend segue validando as mesmas condições.
 
 ### cadastro-raiz (hotfix) — `/cadastro` curto no React, Jinja aposentado, upload imune a `ERR_UPLOAD_FILE_CHANGED`            (2026-08-17 · sem migration)
 

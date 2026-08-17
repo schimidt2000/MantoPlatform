@@ -156,37 +156,57 @@ def print_sheet(sheet_id: int):
 @figurino_bp.route("/figurinos/print-event/<int:event_id>")
 @login_required
 def print_event_figurinos(event_id: int):
-    """Uma folha A4 por PERSONAGEM do evento.
+    """Uma folha A4 por ESCALAÇÃO (personagem × quem veste) do evento.
 
-    Duas regras que não existiam e geravam "páginas em branco" na impressão:
+    Por personagem não basta: a folha imprime o nome e as medidas do talento
+    (`figurino_print.html`), então dois talentos no mesmo personagem são duas folhas —
+    dois "Soldado" saíam como uma, com as medidas de só um deles.
+
+    A identidade do personagem é a FICHA quando ela existe: dois cargos com nomes
+    digitados diferentes ("Assistente do Transformers" / "…Transformes") apontando para
+    a mesma ficha são o mesmo personagem. Sem ficha, vale o nome normalizado.
+
+    O que continua deduplicado, para não voltarem as folhas inúteis de antes:
 
     - Cargos ``role_type == "extra"`` (transporte, maquiador, presença…) ficam de fora —
-      mesmo filtro do painel de Figurino (legado `event_detail.html` e React
-      `FigurinoSection.tsx`). Cada extra virava uma folha quase vazia de "Sem ficha".
-    - Personagem repetido (dois talentos no mesmo personagem) sai UMA vez — mesma
-      deduplicação do portal (`portal_ops.get_figurino`). Sem isso, cada cargo virava
-      uma folha duplicada.
+      mesmo filtro do painel de Figurino. Cada extra virava uma folha vazia "Sem ficha".
+    - O mesmo talento duas vezes no mesmo personagem → uma folha.
+    - Cargo VAGO de personagem que já tem alguém escalado → nada (seria uma folha
+      anônima duplicada); personagem só com cargos vagos → uma folha anônima.
+    - Dois cargos com o mesmo nome em que só um tem ficha vinculada → todos usam a
+      ficha (nunca sai uma folha "Sem ficha" ao lado da folha da ficha).
     """
     from app.models import CalendarEvent
     from .drive_service import normalize_name
 
     event = CalendarEvent.query.get_or_404(event_id)
+    roles = [r for r in sorted(event.roles, key=lambda r: r.id) if r.role_type != "extra"]
 
-    # Dedup por nome normalizado, preferindo o cargo COM ficha: dois cargos do mesmo
-    # personagem em que só o segundo tem ficha vinculada não podem virar uma folha
-    # "Sem ficha" + uma folha da ficha. `seen_sheets` cobre o caso inverso — a mesma
-    # ficha alcançada por dois nomes (vínculo explícito + lookup por norma).
-    by_norm: dict[str, dict] = {}
-    order: list[str] = []
-    seen_sheets: set[int] = set()
-    for role in sorted(event.roles, key=lambda r: r.id):
-        if role.role_type == "extra":
-            continue
-
-        sheet = role.figurino_sheet
+    # 1º passe: nome normalizado → ficha explícita de algum cargo. É o que deixa um cargo
+    # sem vínculo herdar a ficha do colega de mesmo nome mesmo quando a ficha se chama
+    # diferente do cargo (aí o lookup por norma abaixo não a encontraria).
+    sheet_by_norm: dict[str, FigurinoSheet] = {}
+    for role in roles:
         norm = normalize_name(role.character_name)
-        if not sheet:
-            sheet = FigurinoSheet.query.filter_by(character_name_norm=norm).first()
+        if role.figurino_sheet is not None and norm not in sheet_by_norm:
+            sheet_by_norm[norm] = role.figurino_sheet
+
+    # 2º passe: agrupa por personagem e, dentro dele, uma folha por talento distinto.
+    groups: dict[tuple, dict] = {}
+    order: list[tuple] = []
+    for role in roles:
+        norm = normalize_name(role.character_name)
+        sheet = (
+            role.figurino_sheet
+            or sheet_by_norm.get(norm)
+            or FigurinoSheet.query.filter_by(character_name_norm=norm).first()
+        )
+
+        key = ("sheet", sheet.id) if sheet else ("norm", norm)
+        group = groups.get(key)
+        if group is None:
+            group = groups[key] = {"by_talent": {}, "talent_order": [], "anon": None}
+            order.append(key)
 
         entry = {
             "role": role,
@@ -194,22 +214,21 @@ def print_event_figurinos(event_id: int):
             "pieces": sheet.pieces_list if sheet else [],
             "talent": role.talent,
         }
+        if role.talent is None:
+            if group["anon"] is None:
+                group["anon"] = entry
+        elif role.talent_id not in group["by_talent"]:
+            group["by_talent"][role.talent_id] = entry
+            group["talent_order"].append(role.talent_id)
 
-        if norm in by_norm:
-            existing = by_norm[norm]
-            if existing["sheet"] is None and sheet is not None and sheet.id not in seen_sheets:
-                seen_sheets.add(sheet.id)
-                by_norm[norm] = entry
-            continue
+    items: list[dict] = []
+    for key in order:
+        group = groups[key]
+        if group["by_talent"]:
+            items.extend(group["by_talent"][tid] for tid in group["talent_order"])
+        elif group["anon"] is not None:
+            items.append(group["anon"])
 
-        if sheet is not None:
-            if sheet.id in seen_sheets:
-                continue
-            seen_sheets.add(sheet.id)
-        by_norm[norm] = entry
-        order.append(norm)
-
-    items = [by_norm[n] for n in order]
     return render_template("figurino_print.html", items=items, event=event,
                            title=f"Figurinos — {event.title}")
 

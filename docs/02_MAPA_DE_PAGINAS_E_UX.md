@@ -101,7 +101,8 @@
 >
 > UX novas da 207: `/agenda` ganhou campo único de busca (evento/cliente/telefone, param `q`,
 > resultados Próximos/Anteriores no lugar das visões enquanto há termo); detalhe do evento
-> ganhou botão "Imprimir fichas" (1 folha por personagem) e exclusão de feedback p/ SUPERADMIN;
+> ganhou botão "Imprimir fichas" (1 folha por ESCALAÇÃO — personagem × quem veste, pois a folha
+> imprime nome e medidas do talento; hotfix fichas-por-escalacao) e exclusão de feedback p/ SUPERADMIN;
 > `/admin/catalogo/:id` ganhou editor rich-text na descrição e drag de foto da galeria →
 > personagem; `/avaliar/<token>` mostra CTA do Google Review após nota 5; a seção "Log de
 > atividades" do evento agora só existe para SUPERADMIN (o servidor omite a chave).
