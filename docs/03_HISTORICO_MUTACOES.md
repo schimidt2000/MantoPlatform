@@ -180,6 +180,17 @@ do front. `Responsabilidades.from_dict` ignora chaves desconhecidas — snapshot
 Natal c/ PN 7+2. Valores finais intocados (cenário valia 0): UAA 1d/1s tudo Manto segue
 16.700/19.800 (verify_235: 44/44).
 
+**Dois defeitos achados na revisão pré-deploy (corrigidos antes do merge).**
+1. **`POST /api/orcamento/settings` ignorava `educamanto_som_luz`**: o handler só copia do corpo
+   as seções da allowlist, e o card novo "EducaManto — Som e Iluminação" (criado nesta feature)
+   não tinha bloco. A tela salvava, respondia 200, e os campos voltavam sozinhos ao default —
+   ou seja, a maior linha de custo do orçamento (R$ 4.200/dia) ficaria travada no hardcode, sem
+   nenhum erro que denunciasse. Corrigido com o mesmo padrão do `transporte`.
+2. **`GET /api/educamanto/historico/<id>` vazava `transporte.caminhao`** (custo interno,
+   R$ 800) no snapshot v2 para Comercial/Ensaio/Revendedor — exatamente o campo que
+   `_cortar_breakdown` esconde no cálculo. O corte passou a valer também no histórico. Os v1
+   não têm custo interno (conferido nos 34 reais de produção).
+
 **Pegadinhas.**
 - **Cenógrafo/Maquiador ficam FORA das contagens** (não são personagens nem produção). O
   headcount antigo do catering os incluía — por isso a derivação anterior (catering −
@@ -187,6 +198,13 @@ Natal c/ PN 7+2. Valores finais intocados (cenário valia 0): UAA 1d/1s tudo Man
   alimentá-los no evento, é ajuste manual no musical.
 - "Cenário" continua existindo como palavra para o **cenário de margem** (1S/2S/diárias) —
   só a responsabilidade morreu.
+- **Ensaio do deploy antes do push**: o dump de produção foi restaurado num banco descartável
+  (`manto_preflight`) e a sequência real do Railway (`flask db upgrade && python seed.py`)
+  rodou nele — exit 0 nos dois, 22 pacotes → 7 musicais, e os **34 orçamentos v1 reais
+  re-renderizaram o PDF**. Vale repetir isso em toda migração destrutiva.
+- O estado pré-migração (22 pacotes, 233 itens, com os custos por nível) foi exportado para
+  `backups/educamanto_pre_235_2026-08-17.json` — os `.dump` são podados após 15 dias e essa
+  é a única fonte do que cada nível Intermediário/Econômica incluía.
 
 ### 238-teto-autorizado — Valor do superadmin vira o teto do papel            (branch · 2026-08-14 · sem migration)
 

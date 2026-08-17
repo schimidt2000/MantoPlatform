@@ -88,8 +88,9 @@ def api_educamanto_historico() -> Any:
 def api_educamanto_historico_detail(quote_id: int) -> Any:
     """Snapshot congelado (v1 ou v2) — alimenta "Ver" e "Recalcular".
 
-    Snapshots v2 já nascem sem breakdown (só valores finais do servidor); v1 idem. Não há
-    custo interno a cortar aqui.
+    Snapshots nascem sem breakdown, mas o v2 congela `transporte.caminhao` (custo interno do
+    caminhão dentro de SP) — o mesmo campo que `_cortar_breakdown` esconde no cálculo. Para
+    não-superadmin ele sai também aqui (FR-028): senão o histórico seria a porta dos fundos.
     """
     denied = _require_use()
     if denied:
@@ -97,7 +98,13 @@ def api_educamanto_historico_detail(quote_id: int) -> Any:
     quote = EducaMantoQuote.query.get(quote_id)
     if quote is None:
         return json_error("Orçamento não encontrado.", 404)
-    return jsonify(quote_ops.load_quote_snapshot(quote))
+    snapshot = quote_ops.load_quote_snapshot(quote)
+    if not _is_superadmin():
+        for config in snapshot.get("configs") or []:
+            resultado = config.get("resultado")
+            if isinstance(resultado, dict):
+                _cortar_breakdown(resultado)
+    return jsonify(snapshot)
 
 
 @api_bp.route("/educamanto/musicals")

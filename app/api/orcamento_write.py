@@ -190,6 +190,15 @@ def api_orcamento_settings_save() -> Any:
         if key in incoming_transporte:
             s["transporte"][key] = float(incoming_transporte[key])
 
+    # Tabela única de som/iluminação do EducaManto (feature 235): custo por dia de evento de
+    # cada combinação. Sem este bloco a tela salvava no vazio e o valor voltava ao default.
+    incoming_som_luz = body.get("educamanto_som_luz") or {}
+    for key in s["educamanto_som_luz"]:
+        if key in incoming_som_luz:
+            s["educamanto_som_luz"][key] = _to_money(
+                incoming_som_luz[key], s["educamanto_som_luz"][key]
+            )
+
     if "acrescimo_tipos" in body:
         novos = []
         for t in body["acrescimo_tipos"]:
