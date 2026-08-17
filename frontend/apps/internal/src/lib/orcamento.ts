@@ -32,6 +32,13 @@ export interface PricingSettings {
     caminhao_sp: number;
     ashow_min_km: number;
   };
+  /** Custos de som/iluminação do EducaManto por combinação (feature 235, tabela única). */
+  educamanto_som_luz: {
+    som_luz: number;
+    som: number;
+    luz: number;
+    nenhum: number;
+  };
   acrescimo_tipos: string[];
 }
 

@@ -12,16 +12,10 @@ descrições do dono na conversa de 13/08/2026) — decisão registrada em
 
 from __future__ import annotations
 
-# ── Valores PROVISÓRIOS (gate de deploy: substituir pelos definitivos do dono) ─────────────
-# Custos por cenário [1 sessão, 2 sessões, diária 1s, diária 2s] — entram na soma de custos
-# com margem, como o elenco.
-PROVISORIO_SONOPLASTA = (450.0, 700.0, 400.0, 650.0)
-PROVISORIO_TECNICO_SOM = (500.0, 750.0, 450.0, 700.0)
-PROVISORIO_TECNICO_ILUMINACAO = (500.0, 750.0, 450.0, 700.0)
-
-# Áreas de suficiência do som completo (m²) — aviso fixo do PDF.
-PROVISORIO_SOM_AREA_FECHADA_M2 = 500
-PROVISORIO_SOM_AREA_ABERTA_M2 = 300
+# Custos de som/iluminação: NÃO ficam aqui — são a tabela única por combinação em
+# `pricing_config['educamanto_som_luz']` (3ª rodada, valores reais de
+# EspecificacoesEducamanto.md: 4.200 / 2.900 / 2.900 / 750, equipe técnica inclusa,
+# por dia de evento, com margem em cima).
 
 # ── Contato (cabeçalho do PDF) ─────────────────────────────────────────────────────────────
 CONTACT_PHONE = "+55 (11) 97057-0577"
@@ -31,39 +25,46 @@ CONTACT_EMAIL = "educamanto@mantoproducoes.com.br"
 # Cada bloco tem: label (calculadora e PDF), tooltip (dica ao vendedor na calculadora),
 # manto (PDF: "o que levaremos") e contratante (PDF: "mínimo exigido da contratante").
 RESPONSABILIDADES: dict[str, dict[str, str]] = {
+    # Som e iluminação: riders REAIS de EspecificacoesEducamanto.md (14/08/2026) — "manto" é o
+    # rider do que levamos; "contratante" é o rider MÍNIMO que ela precisa fornecer.
     "som": {
         "label": "Sonorização",
         "tooltip": (
-            "Por conta da Manto: levamos o som completo do espetáculo e a equipe técnica "
-            "(sonoplasta + técnico de som). Por conta da contratante: a escola fornece o "
-            "sistema de som e nosso sonoplasta opera — confirme a estrutura antes de fechar."
+            "Por conta da Manto: rider completo de som com sonoplasta e técnico de som "
+            "(operação considera 1 dia de ensaio, 1 de montagem e 1 de evento). Por conta da "
+            "contratante: ela fornece PA, microfones, mesa e técnico — nosso sonoplasta opera "
+            "o espetáculo."
         ),
         "manto": (
-            "Sonorização teatral completa: caixas de som, microfones headset e/ou bastão e "
-            "mesa digital, operada por sonoplasta e técnico de som da Manto."
+            "Sonorização completa: 04 caixas de som 1.000 W com pedestais de 1,75 m, "
+            "03 microfones headset (Armer), 03 microfones bastão de stand by (Arcano/Armer), "
+            "mesa digital UI16 ou Duonn Atrium 12, tablet e notebook — operada por sonoplasta "
+            "e técnico de som da Manto."
         ),
         "contratante": (
-            "Sistema de som em bom estado compatível com o porte do espetáculo: caixas "
-            "amplificadas, mesa de som com entradas para ao menos 4 microfones e 1 linha de "
-            "playback (P2/Bluetooth), montado e testado antes da primeira sessão. Nosso "
-            "sonoplasta acompanha e opera o playback."
+            "PA compatível com o espaço da apresentação, retorno de palco, 03 microfones "
+            "headset (Armer/Shure/Sennheiser), 03 microfones bastão de stand by "
+            "(Arcano/Armer/Shure/Sennheiser), mesa de som que comporte os microfones e um "
+            "notebook, e técnico de som. A cobertura sonora do ambiente deve ser garantida "
+            "pela empresa responsável pela montagem do som; nosso sonoplasta opera o "
+            "espetáculo."
         ),
     },
     "iluminacao": {
         "label": "Iluminação",
         "tooltip": (
-            "Por conta da Manto: iluminação cênica completa com técnico de iluminação. Por "
-            "conta da contratante: basta o palco uniformemente iluminado — não vai técnico de "
-            "iluminação da Manto."
+            "Por conta da Manto: rider completo de iluminação cênica com técnico de luz. Por "
+            "conta da contratante: ela fornece o rider mínimo de iluminação com técnico "
+            "próprio."
         ),
         "manto": (
-            "Iluminação cênica completa: moving heads, moving bees, parleds, ribaltas, "
-            "máquinas de fumaça e de bolhas de sabão, mesa DMX e estrutura box truss, operada "
-            "por técnico de iluminação da Manto."
+            "Iluminação cênica completa: 02 moving heads, 02 moving bees, 10 par LEDs, "
+            "08 ribaltas, 01 máquina de fumaça, mesa de iluminação (Operator/Pilot) e "
+            "estrutura em box de 10 metros — operada por técnico de iluminação da Manto."
         ),
         "contratante": (
-            "Iluminação capaz de manter o palco uniformemente visível (luz frontal branca) "
-            "durante toda a apresentação. Não é necessária iluminação cênica."
+            "02 moving heads, 02 moving bees, 10 par LEDs, 08 ribaltas, 01 máquina de "
+            "fumaça, mesa de iluminação e técnico de iluminação próprios."
         ),
     },
     "alimentacao": {
@@ -107,9 +108,10 @@ AVISO_CAMARIM = (
     "Camarim obrigatório: espaço reservado com {cadeiras} cadeiras, espelho, banheiro e água "
     "para a equipe."
 )
+# Cobertura real do rider (EspecificacoesEducamanto.md) — impressa quando o som é da Manto.
 AVISO_SOM_AREA = (
-    "O som completo é suficiente para até {fechada} m² em local fechado e {aberta} m² em "
-    "local aberto."
+    "Nosso som atende um espaço de aproximadamente 300 m² (ex.: 25 m × 12 m) e até 150 "
+    "pessoas — a capacidade pode variar conforme a eficiência acústica do local."
 )
 AVISO_LOCAL_ABERTO = (
     "Local aberto: será necessária uma visita técnica ou chamada de vídeo antes do evento."

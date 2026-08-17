@@ -6,7 +6,8 @@ Os antigos ``educamanto_packages`` (7 espetáculos × 3 níveis + 1 cópia órf�
 entre eles (som, alimentação, gráfica) virou responsabilidade escolhida por orçamento, com os
 custos em colunas próprias:
 
-- item "Som"                  → ``custo_som_*``           (bloco Sonorização)
+- item "Som"                  → REMOVIDO (som/iluminação viram tabela única por
+  combinação em ``pricing_config['educamanto_som_luz']`` — 3ª rodada)
 - item "Catering apresentação"→ ``custo_alimentacao_*``   (bloco Alimentação, por pessoa)
 - item "Catering ensaio"      → ``custo_catering_ensaio_pp`` (por pessoa POR ENSAIO)
 - item "Ajuda de custo ensaio"→ ``custo_ajuda_ensaio_pp``    (por pessoa POR ENSAIO)
@@ -36,10 +37,6 @@ depends_on = None
 
 # (coluna, server_default) — todas Float exceto as Integer marcadas.
 _NOVAS_FLOAT = [
-    ("custo_som_1s", "0"), ("custo_som_2s", "0"),
-    ("custo_som_1s_days", "0"), ("custo_som_2s_days", "0"),
-    ("custo_iluminacao_1s", "0"), ("custo_iluminacao_2s", "0"),
-    ("custo_iluminacao_1s_days", "0"), ("custo_iluminacao_2s_days", "0"),
     ("custo_cenario_1s", "0"), ("custo_cenario_2s", "0"),
     ("custo_cenario_1s_days", "0"), ("custo_cenario_2s_days", "0"),
     ("custo_alimentacao_1s", "55"), ("custo_alimentacao_2s", "73"),
@@ -94,9 +91,9 @@ def upgrade() -> None:
     ))
 
     # 3. Itens que viram colunas do musical.
+    # O item "Som" NÃO vira coluna (3ª rodada): som/iluminação são a tabela única por
+    # combinação em pricing_config — o item é simplesmente removido no passo 4.
     _mover = [
-        ("Som", "custo_som_1s = i.cost_1s, custo_som_2s = i.cost_2s,"
-                " custo_som_1s_days = i.cost_1s_days, custo_som_2s_days = i.cost_2s_days"),
         ("Catering apresentação",
          "custo_alimentacao_1s = i.cost_1s, custo_alimentacao_2s = i.cost_2s"),
         ("Catering ensaio", "custo_catering_ensaio_pp = i.cost_1s"),

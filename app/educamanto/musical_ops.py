@@ -14,9 +14,6 @@ MIN_ENSAIOS = 2
 
 # Campos de custo por cenário dos blocos de responsabilidade + ensaios/alimentação.
 _CAMPOS_CUSTO = [
-    "custo_som_1s", "custo_som_2s", "custo_som_1s_days", "custo_som_2s_days",
-    "custo_iluminacao_1s", "custo_iluminacao_2s",
-    "custo_iluminacao_1s_days", "custo_iluminacao_2s_days",
     "custo_cenario_1s", "custo_cenario_2s",
     "custo_cenario_1s_days", "custo_cenario_2s_days",
     "custo_alimentacao_1s", "custo_alimentacao_2s",

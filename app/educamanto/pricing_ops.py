@@ -32,10 +32,14 @@ AVISTA_FATOR = 0.95
 # diária de 1 sessão (multi-dia), diária de 2 sessões (multi-dia).
 _CENARIOS = ("1s", "2s", "1s_days", "2s_days")
 
-_CUSTOS_TECNICOS: dict[str, tuple[float, float, float, float]] = {
-    "sonoplasta": pdf_textos.PROVISORIO_SONOPLASTA,
-    "tecnico_som": pdf_textos.PROVISORIO_TECNICO_SOM,
-    "tecnico_iluminacao": pdf_textos.PROVISORIO_TECNICO_ILUMINACAO,
+# Rótulos dos 4 casos de som/iluminação — os valores vivem em
+# `pricing_config['educamanto_som_luz']` (tabela única, 3ª rodada com o dono: os preços NÃO
+# são aditivos e a equipe técnica já está dentro do valor do caso).
+_CASO_LABELS = {
+    "som_luz": "som e iluminação pela Manto",
+    "som": "som pela Manto",
+    "luz": "iluminação pela Manto",
+    "nenhum": "apenas sonoplasta",
 }
 
 
@@ -158,6 +162,17 @@ def _ceil100(valor: float) -> float:
     return math.ceil(valor / 100) * 100
 
 
+def caso_som_luz(resp: Responsabilidades) -> str:
+    """A combinação som×iluminação que indexa a tabela única de custos (3ª rodada)."""
+    if resp.som and resp.iluminacao:
+        return "som_luz"
+    if resp.som:
+        return "som"
+    if resp.iluminacao:
+        return "luz"
+    return "nenhum"
+
+
 def tecnicos_do_caso(resp: Responsabilidades) -> list[str]:
     """Matriz dos 4 casos — sonoplasta sempre vai; os técnicos seguem som/iluminação."""
     tecnicos = ["sonoplasta"]
@@ -244,22 +259,15 @@ def _linhas_de_custo(
                 musical.ensemble_1s_days, musical.ensemble_2s_days,
             ),
         })
-    if resp.som:
-        linhas.append({
-            "name": "Som completo", "qty": 1, "bloco": "som",
-            "custos": (
-                musical.custo_som_1s, musical.custo_som_2s,
-                musical.custo_som_1s_days, musical.custo_som_2s_days,
-            ),
-        })
-    if resp.iluminacao:
-        linhas.append({
-            "name": "Iluminação completa", "qty": 1, "bloco": "iluminacao",
-            "custos": (
-                musical.custo_iluminacao_1s, musical.custo_iluminacao_2s,
-                musical.custo_iluminacao_1s_days, musical.custo_iluminacao_2s_days,
-            ),
-        })
+    # Som/iluminação: UMA linha pelo caso da combinação (valores reais do dono, tabela única,
+    # equipe técnica inclusa). O mesmo valor nos 4 cenários = cobra por DIA de evento (no
+    # multi-dia a soma por dia multiplica por d1/d2, exatamente a regra combinada).
+    caso = caso_som_luz(resp)
+    valor_caso = float(_orc_settings.load()["educamanto_som_luz"][caso])
+    linhas.append({
+        "name": f"Som/Iluminação ({_CASO_LABELS[caso]})", "qty": 1, "bloco": "som_luz",
+        "custos": (valor_caso, valor_caso, valor_caso, valor_caso),
+    })
     if resp.cenario:
         linhas.append({
             "name": "Cenário (ambientação)", "qty": 1, "bloco": "cenario",
@@ -273,11 +281,8 @@ def _linhas_de_custo(
             "name": "Alimentação (dia do evento)", "qty": hc_evento, "bloco": "alimentacao",
             "custos": tuple(_custo_alimentacao(musical, c) for c in _CENARIOS),
         })
-    for tecnico in tecnicos_do_caso(resp):
-        linhas.append({
-            "name": pdf_textos.TECNICO_LABELS[tecnico], "qty": 1, "bloco": "tecnicos",
-            "custos": _CUSTOS_TECNICOS[tecnico],
-        })
+    # Técnicos NÃO têm custo próprio — já estão dentro do valor do caso; a matriz
+    # `tecnicos_do_caso` segue valendo para headcount, camarim e PDF.
     if not fora_sp:
         caminhao = _caminhao_sp()
         linhas.append({

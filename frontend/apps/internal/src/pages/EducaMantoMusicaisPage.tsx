@@ -69,8 +69,8 @@ function MusicalCard({
               {musical.margin_1s_days.toFixed(2)}× · {musical.margin_2s_days.toFixed(2)}×
             </p>
             <p>
-              Som completo: {brl(musical.custo_som_1s)} (1S) · Iluminação:{" "}
-              {brl(musical.custo_iluminacao_1s)} (1S)
+              Cenário: {brl(musical.custo_cenario_1s)} (1S) · Alimentação:{" "}
+              {brl(musical.custo_alimentacao_1s)}/pessoa (1S)
             </p>
             <p className="text-muted">
               {musical.items.length} {musical.items.length === 1 ? "item" : "itens"} ·{" "}

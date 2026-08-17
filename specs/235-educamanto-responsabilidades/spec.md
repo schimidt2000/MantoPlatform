@@ -30,6 +30,22 @@ Registradas na conversa de 13/08/2026 (válidas como fonte para o plano):
 
 ## Clarifications
 
+### Session 2026-08-14 (3ª rodada — valores reais de `EspecificacoesEducamanto.md`)
+
+- Q: Como precificar som/iluminação? → A: **Tabela ÚNICA por combinação** (vale para todos os
+  musicais), com a equipe técnica JÁ DENTRO do valor: som+luz R$ 4.200 · só som R$ 2.900 · só
+  luz R$ 2.900 · nada (apenas sonoplasta) R$ 750. Os preços NÃO são aditivos (o combo custa
+  menos que a soma das partes) — por isso o modelo é por caso, não por bloco. Editável nas
+  Configurações de Preços (`educamanto_som_luz`).
+- Q: Custo ou preço? → A: **Custo da Manto, margem do musical em cima** (como o antigo item
+  Som).
+- Q: Escala com dias/sessões? → A: **Por dia de evento** — 1 dia (1 ou 2 sessões) = valor
+  cheio; cada dia extra soma o valor de novo.
+- Os **riders reais** do arquivo viram os textos do PDF: "o que levaremos" (rider Manto) e
+  "mínimo exigido" (rider da contratante) para som e iluminação; a cobertura real (≈300 m²,
+  até 150 pessoas) substitui o placeholder de áreas X/Y e só é impressa quando o som é da
+  Manto.
+
 ### Session 2026-08-13
 
 - Q: Quem escreve os novos textos do PDF e das dicas (mínimos exigidos da contratante, "o que levaremos" e tooltips das responsabilidades)? → A: A equipe de desenvolvimento redige a partir do material existente (PDF atual, planos.md e as descrições do dono); o dono revisa e aprova antes do deploy.
@@ -216,7 +232,11 @@ O superadmin cadastra e edita musicais: nome, nº de personagens, nº de pessoas
 
 ## Assumptions
 
-- **Valores provisórios**: custos dos técnicos, áreas X/Y do som, custos de iluminação completa/cenário por musical e a **divisão personagens × produção dos musicais restantes** (só Uma Aventura Animal está confirmada: 9 + 2; dos demais temos apenas os totais 10/9/7/9/10) entram como valores provisórios claramente identificados; a substituição pelos definitivos do dono é **gate de lançamento** (a feature não vai a produção sem eles).
+- **Valores provisórios (gate atualizado na 3ª rodada)**: som/iluminação e técnicos estão
+  RESOLVIDOS (tabela única real). Continuam pendentes do dono: **custo do cenário/ambientação**
+  (colunas provisórias zeradas) e a **divisão personagens × produção dos musicais restantes**
+  (só Uma Aventura Animal confirmada: 9 + 2; dos demais temos os totais 10/9/7/9/10) — gate de
+  lançamento.
 - **Textos das responsabilidades**: os textos do PDF (mínimos exigidos / o que levaremos) e os tooltips são redigidos pela equipe de desenvolvimento a partir do material existente (PDF atual, planos.md, descrições do dono); a **revisão e aprovação do dono antes do deploy** é gate de lançamento, mas não bloqueia plano nem implementação.
 - **Catering de ensaio e ajuda de custo** não são afetados pelo bloco "alimentação": o bloco controla apenas a alimentação do dia do evento; os custos de ensaio sempre existem, multiplicados pelo nº de ensaios.
 - **À vista**: o desconto de 5% é exibido como valor final à vista para os dois regimes (sem NF e com NF), calculado sobre o valor final de cada um.

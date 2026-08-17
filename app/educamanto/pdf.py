@@ -249,12 +249,12 @@ def _draw_config_page(c: rl_canvas.Canvas, snapshot: dict, config: dict) -> None
     avisos = [
         pdf_textos.AVISO_PALCO,
         pdf_textos.AVISO_CAMARIM.format(cadeiras=headcount or "—"),
-        pdf_textos.AVISO_SOM_AREA.format(
-            fechada=pdf_textos.PROVISORIO_SOM_AREA_FECHADA_M2,
-            aberta=pdf_textos.PROVISORIO_SOM_AREA_ABERTA_M2,
-        ),
-        pdf_textos.AVISO_LOCAL_ABERTO,
     ]
+    # A cobertura do rider só faz sentido quando o som é NOSSO; com som da contratante, a
+    # responsabilidade pela cobertura é dela (o texto do mínimo exigido já diz isso).
+    if str(resp.get("som") or "manto") != "contratante":
+        avisos.append(pdf_textos.AVISO_SOM_AREA)
+    avisos.append(pdf_textos.AVISO_LOCAL_ABERTO)
     for aviso in avisos:
         y = _quebra(c, y, 22, client_name)
         y = _paragrafo(c, y, f"• {aviso}", size=8.5, color=_GRAY)

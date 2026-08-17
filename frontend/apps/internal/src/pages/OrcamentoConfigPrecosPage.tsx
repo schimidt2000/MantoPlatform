@@ -378,6 +378,41 @@ export function OrcamentoConfigPrecosPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>EducaManto — Som e Iluminação (custo por dia de evento)</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          {(
+            [
+              ["som_luz", "Som e iluminação pela Manto"],
+              ["som", "Só som pela Manto"],
+              ["luz", "Só iluminação pela Manto"],
+              ["nenhum", "Tudo da contratante (sonoplasta)"],
+            ] as const
+          ).map(([chave, rotulo]) => (
+            <div key={chave}>
+              <label className={LABEL}>{rotulo}</label>
+              <input
+                type="number"
+                step="50"
+                className={INPUT}
+                value={settings.educamanto_som_luz[chave]}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    educamanto_som_luz: {
+                      ...settings.educamanto_som_luz,
+                      [chave]: Number(e.target.value),
+                    },
+                  })
+                }
+              />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Transporte</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">

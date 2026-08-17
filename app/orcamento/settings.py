@@ -69,6 +69,17 @@ DEFAULTS: dict = {
         # entra na soma de custos do musical). Fora de SP o caminhão sai e entram 2 vans.
         "caminhao_sp":        800,
     },
+    # Feature 235 (3ª rodada, valores reais do dono em EspecificacoesEducamanto.md): CUSTO de
+    # som/iluminação do EducaManto POR COMBINAÇÃO de responsabilidades — os preços não são
+    # aditivos (som+luz custa menos que a soma das partes) e a equipe técnica (sonoplasta/
+    # técnicos) já está DENTRO do valor. Cobra-se por DIA DE EVENTO; entra na soma de custos
+    # com a margem do musical, como o antigo item "Som".
+    "educamanto_som_luz": {
+        "som_luz": 4200,   # som e iluminação pela Manto (rider completo, 3 técnicos)
+        "som":     2900,   # só som pela Manto (sonoplasta + técnico de som)
+        "luz":     2900,   # só iluminação pela Manto (sonoplasta + técnico de luz)
+        "nenhum":  750,    # tudo da contratante (apenas o sonoplasta)
+    },
     # Feature 100: tipos de acréscimo comuns, editáveis nas Configurações de Preços. BV e Outro são
     # sempre acrescentados pelo helper acrescimo_tipos_list() (BV é protegido — regra financeira).
     "acrescimo_tipos": [
@@ -210,6 +221,8 @@ def _migrate(data: dict) -> dict:
     data.setdefault("transporte", {}).setdefault(
         "caminhao_sp", DEFAULTS["transporte"]["caminhao_sp"]
     )
+    # Feature 235 (3ª rodada): tabela de som/iluminação por combinação em configs antigas.
+    data.setdefault("educamanto_som_luz", copy.deepcopy(DEFAULTS["educamanto_som_luz"]))
 
     return data
 

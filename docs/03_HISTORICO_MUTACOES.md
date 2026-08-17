@@ -226,6 +226,19 @@ ao cliente intocado.
   `api_create_event` (import tardio de `app.calendar.routes` — este está patchado; conferir se
   o servidor local usado é mesmo o script dublê, o launcher pode ter config em cache).
 
+### 235-educamanto (3ª rodada) — Valores reais de som/iluminação            (branch · 2026-08-14 · migration `b7e3a91d5c24` reescrita)
+
+**Motivação.** O dono entregou `EspecificacoesEducamanto.md` com os valores e riders reais dos
+4 casos de som/iluminação — e eles NÃO são aditivos (som+luz 4.200 < 750 + 2.150 + 2.150), com
+a equipe técnica já dentro. O modelo por blocos independentes + técnicos avulsos foi
+substituído por **tabela única por combinação** em `pricing_config['educamanto_som_luz']`
+(4.200/2.900/2.900/750), custo com margem em cima, cobrado POR DIA de evento. As 12 colunas
+`custo_som_*`/`custo_iluminacao_*` saíram do musical (migração reescrita — ainda não aplicada
+em produção); os PROVISÓRIOS de técnicos e áreas morreram; os riders viram os textos reais do
+PDF e a cobertura (≈300 m²/150 pessoas) é impressa só quando o som é da Manto. Editável na
+tela de Configurações de Preços. Gabarito novo: UAA 1d/1s tudo Manto = 16.700/19.800
+(verify_235: 36/36). **Gate restante**: custo do cenário + divisão personagens×produção.
+
 ### 235-educamanto — EducaManto por responsabilidades            (branch 235-educamanto-responsabilidades · 2026-08-13 · migration `b7e3a91d5c24`)
 
 **Motivação.** Os pacotes por nível (Master/Intermediário/Econômica) engessavam a venda: o

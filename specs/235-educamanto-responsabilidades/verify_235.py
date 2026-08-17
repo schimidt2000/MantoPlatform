@@ -53,8 +53,10 @@ def main() -> int:
 
         uaa = EducaMantoMusical.query.get(1)
         check(uaa is not None and uaa.name == "Uma Aventura Animal", "id 1 = Uma Aventura Animal")
-        check((uaa.custo_som_1s, uaa.custo_som_2s, uaa.custo_som_1s_days,
-               uaa.custo_som_2s_days) == (4000, 4000, 3500, 3500), "custo do som migrado do Master")
+        from app.orcamento import settings as _orc
+        tabela_caso = _orc.load()["educamanto_som_luz"]
+        check(tabela_caso == {"som_luz": 4200, "som": 2900, "luz": 2900, "nenhum": 750},
+              f"tabela única de som/luz por caso (3ª rodada) = {tabela_caso}")
         check((uaa.custo_alimentacao_1s, uaa.custo_alimentacao_2s) == (55, 73),
               "alimentação 55/73 por pessoa")
         check((uaa.custo_catering_ensaio_pp, uaa.custo_ajuda_ensaio_pp) == (28, 50),
@@ -91,11 +93,11 @@ def main() -> int:
         itens = sum(i.qty * i.cost_1s for i in uaa.items)
         hc_ens = uaa.num_personagens + uaa.num_producao
         hc_ev = hc_ens + 3
+        # 3ª rodada: som/luz é UMA parcela pelo caso (técnicos inclusos), da tabela única.
         soma = (
-            itens + uaa.custo_som_1s + uaa.custo_iluminacao_1s + uaa.custo_cenario_1s
+            itens + orc_settings.load()["educamanto_som_luz"]["som_luz"]
+            + uaa.custo_cenario_1s
             + hc_ev * uaa.custo_alimentacao_1s
-            + pdf_textos.PROVISORIO_SONOPLASTA[0] + pdf_textos.PROVISORIO_TECNICO_SOM[0]
-            + pdf_textos.PROVISORIO_TECNICO_ILUMINACAO[0]
             + cfg_t["caminhao_sp"]
             + (uaa.custo_catering_ensaio_pp + uaa.custo_ajuda_ensaio_pp) * hc_ens * uaa.num_ensaios
         )

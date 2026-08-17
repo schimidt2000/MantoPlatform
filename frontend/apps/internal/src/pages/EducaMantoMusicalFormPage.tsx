@@ -63,8 +63,6 @@ interface FormState {
   ensemble_2s: number;
   ensemble_1s_days: number;
   ensemble_2s_days: number;
-  custo_som: [number, number, number, number];
-  custo_iluminacao: [number, number, number, number];
   custo_cenario: [number, number, number, number];
   custo_alimentacao_1s: number;
   custo_alimentacao_2s: number;
@@ -88,8 +86,6 @@ const FORM_INICIAL: FormState = {
   ensemble_2s: 600,
   ensemble_1s_days: 300,
   ensemble_2s_days: 550,
-  custo_som: [0, 0, 0, 0],
-  custo_iluminacao: [0, 0, 0, 0],
   custo_cenario: [0, 0, 0, 0],
   custo_alimentacao_1s: 55,
   custo_alimentacao_2s: 73,
@@ -114,13 +110,6 @@ function musicalParaForm(m: EducaMantoMusical): FormState {
     ensemble_2s: m.ensemble_2s,
     ensemble_1s_days: m.ensemble_1s_days,
     ensemble_2s_days: m.ensemble_2s_days,
-    custo_som: [m.custo_som_1s, m.custo_som_2s, m.custo_som_1s_days, m.custo_som_2s_days],
-    custo_iluminacao: [
-      m.custo_iluminacao_1s,
-      m.custo_iluminacao_2s,
-      m.custo_iluminacao_1s_days,
-      m.custo_iluminacao_2s_days,
-    ],
     custo_cenario: [
       m.custo_cenario_1s,
       m.custo_cenario_2s,
@@ -154,14 +143,6 @@ function formParaInput(form: FormState): MusicalInput {
     ensemble_2s: form.ensemble_2s,
     ensemble_1s_days: form.ensemble_1s_days,
     ensemble_2s_days: form.ensemble_2s_days,
-    custo_som_1s: form.custo_som[0],
-    custo_som_2s: form.custo_som[1],
-    custo_som_1s_days: form.custo_som[2],
-    custo_som_2s_days: form.custo_som[3],
-    custo_iluminacao_1s: form.custo_iluminacao[0],
-    custo_iluminacao_2s: form.custo_iluminacao[1],
-    custo_iluminacao_1s_days: form.custo_iluminacao[2],
-    custo_iluminacao_2s_days: form.custo_iluminacao[3],
     custo_cenario_1s: form.custo_cenario[0],
     custo_cenario_2s: form.custo_cenario[1],
     custo_cenario_1s_days: form.custo_cenario[2],
@@ -432,27 +413,8 @@ export function EducaMantoMusicalFormPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Som completo (responsabilidade: sonorização)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CustoCenarioRow valores={form.custo_som} onChange={(v) => set("custo_som", v)} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Iluminação completa (responsabilidade: iluminação)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CustoCenarioRow
-              valores={form.custo_iluminacao}
-              onChange={(v) => set("custo_iluminacao", v)}
-            />
-          </CardContent>
-        </Card>
-
+        {/* Som/iluminação NÃO são por musical: tabela única por combinação, editável nas
+            Configurações de Preços (seção "EducaManto — Som e Iluminação"). */}
         <Card>
           <CardHeader>
             <CardTitle>Cenário / ambientação (responsabilidade: cenário)</CardTitle>

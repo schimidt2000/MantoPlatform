@@ -1287,17 +1287,10 @@ class EducaMantoMusical(db.Model):
     ensemble_2s      = db.Column(db.Float, nullable=False, default=600, server_default="600")
     ensemble_1s_days = db.Column(db.Float, nullable=False, default=300, server_default="300")
     ensemble_2s_days = db.Column(db.Float, nullable=False, default=550, server_default="550")
-    # Blocos de responsabilidade — custo por cenário, entra na soma só quando "por conta da
-    # Manto". Som migrado do item "Som" dos pacotes Master; iluminação/cenário PROVISÓRIOS
-    # até o dono enviar os custos reais (gate de deploy).
-    custo_som_1s           = db.Column(db.Float, nullable=False, default=0, server_default="0")
-    custo_som_2s           = db.Column(db.Float, nullable=False, default=0, server_default="0")
-    custo_som_1s_days      = db.Column(db.Float, nullable=False, default=0, server_default="0")
-    custo_som_2s_days      = db.Column(db.Float, nullable=False, default=0, server_default="0")
-    custo_iluminacao_1s      = db.Column(db.Float, nullable=False, default=0, server_default="0")
-    custo_iluminacao_2s      = db.Column(db.Float, nullable=False, default=0, server_default="0")
-    custo_iluminacao_1s_days = db.Column(db.Float, nullable=False, default=0, server_default="0")
-    custo_iluminacao_2s_days = db.Column(db.Float, nullable=False, default=0, server_default="0")
+    # Blocos de responsabilidade com custo POR MUSICAL: só o cenário (PROVISÓRIO até o dono
+    # enviar — gate de deploy). Som/iluminação NÃO ficam aqui: são a tabela única por
+    # combinação em `pricing_config['educamanto_som_luz']` (3ª rodada, valores reais — os
+    # preços não são aditivos e a equipe técnica já está dentro).
     custo_cenario_1s      = db.Column(db.Float, nullable=False, default=0, server_default="0")
     custo_cenario_2s      = db.Column(db.Float, nullable=False, default=0, server_default="0")
     custo_cenario_1s_days = db.Column(db.Float, nullable=False, default=0, server_default="0")
@@ -1337,14 +1330,6 @@ class EducaMantoMusical(db.Model):
             "ensemble_2s": self.ensemble_2s,
             "ensemble_1s_days": self.ensemble_1s_days,
             "ensemble_2s_days": self.ensemble_2s_days,
-            "custo_som_1s": self.custo_som_1s,
-            "custo_som_2s": self.custo_som_2s,
-            "custo_som_1s_days": self.custo_som_1s_days,
-            "custo_som_2s_days": self.custo_som_2s_days,
-            "custo_iluminacao_1s": self.custo_iluminacao_1s,
-            "custo_iluminacao_2s": self.custo_iluminacao_2s,
-            "custo_iluminacao_1s_days": self.custo_iluminacao_1s_days,
-            "custo_iluminacao_2s_days": self.custo_iluminacao_2s_days,
             "custo_cenario_1s": self.custo_cenario_1s,
             "custo_cenario_2s": self.custo_cenario_2s,
             "custo_cenario_1s_days": self.custo_cenario_1s_days,
