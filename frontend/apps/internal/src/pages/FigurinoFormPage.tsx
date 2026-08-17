@@ -328,6 +328,23 @@ export function FigurinoFormPage() {
 
   const removePiece = (i: number) => setPieces((ps) => ps.filter((_, idx) => idx !== i));
 
+  const pieceNameRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  /**
+   * Tab na descrição da ÚLTIMA peça (preenchida) cria a próxima com qtd 1 e o cursor já na
+   * descrição nova — digitação da checklist em série, sem mouse. Shift+Tab e as linhas do meio
+   * seguem a navegação normal do teclado; numa descrição vazia o Tab também segue normal (senão
+   * não daria para sair do campo por teclado).
+   */
+  const handlePieceNameTab = (e: KeyboardEvent<HTMLInputElement>, i: number) => {
+    if (e.key !== "Tab" || e.shiftKey) return;
+    if (i !== pieces.length - 1 || !pieces[i].name.trim()) return;
+    e.preventDefault();
+    setPieces((ps) => [...ps, { name: "", qty: 1 }]);
+    // Foca depois do commit do React — o input novo ainda não existe neste instante.
+    setTimeout(() => pieceNameRefs.current[i + 1]?.focus(), 0);
+  };
+
   const submit = () => {
     if (!characterName.trim()) return;
     const cleanPieces = pieces.filter((p) => p.name.trim());
@@ -488,10 +505,14 @@ export function FigurinoFormPage() {
                     aria-label="Quantidade"
                   />
                   <input
+                    ref={(el) => {
+                      pieceNameRefs.current[i] = el;
+                    }}
                     className="h-9 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink"
                     placeholder="Ex: Blazer azul, Calça preta, Sapato Oxford..."
                     value={p.name}
                     onChange={(e) => updatePiece(i, { name: e.target.value })}
+                    onKeyDown={(e) => handlePieceNameTab(e, i)}
                     aria-label="Descrição da peça"
                   />
                   <Button variant="ghost" size="sm" onClick={() => removePiece(i)} aria-label="Remover peça">
