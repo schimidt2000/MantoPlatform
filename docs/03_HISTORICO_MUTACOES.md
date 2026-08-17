@@ -159,6 +159,73 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
 
+### 238-teto-autorizado — Valor do superadmin vira o teto do papel            (branch · 2026-08-14 · sem migration)
+
+**Motivação.** Caso real na véspera do Baile do Addan: o dono (superadmin) subiu os cachês dos
+papéis acima do teto do orçamento; o casting foi escalar as pessoas e não conseguia salvar — o
+rebaixamento de não-superadmin usava sempre o `cache_cap` original, derrubando o valor que o
+próprio dono tinha acabado de autorizar.
+
+**O que mudou.** Em `casting_ops.assign_role`, o teto para não-superadmin virou o **teto
+efetivo** = `max(cache_cap, valor já salvo no papel)` — o invariante segura sozinho, porque só
+superadmin consegue deixar salvo algo acima do cap. O aviso do `CastingSection` usa a mesma
+regra. Superadmin, papéis sem cap e valores abaixo do cap seguem idênticos.
+
+**Pegadinhas.** O teto efetivo ACOMPANHA o valor vigente: se o casting baixa de 460 para 420,
+o teto passa a ser 420 (não dá para voltar a 460 sem superadmin). `verify_238.py`: 9/9 no
+manto_local, com evento de laboratório próprio (o espelho é recriado com frequência — não
+dependa de dados de verifies anteriores).
+
+### 237-solicitar-ficha — Solicitar ficha pela busca            (branch · 2026-08-14 · sem migration)
+
+**Motivação.** Quando a busca de ficha não tem o personagem, o pedido de criação saía do
+sistema (voz/lembrete). Agora a própria busca abre o pedido, que cai na fila que o figurino já
+usa (Produção e Compras, feature 225) como o quarto tipo: **Ficha**.
+
+**O que mudou.** `FIGURINO_KIND_FICHA` (sem migração — kind é string) com fluxo curto sem
+aprovação (= manutenção); `criar_solicitacao_ficha` reusa `create_producao` (log, e-mail ao
+setor); `POST /api/figurino/producoes/solicitar-ficha` com o gate `pode_abrir` de sempre;
+transição para `pronto` de kind=ficha **exige `figurino_sheet_id`** (o pedido concluído aponta
+para a ficha criada). No front: botão no rodapé do `FigurinoPicker` (dialog pré-preenchido via
+`Combobox.onInputValueChange`, prop nova que observa o texto SEM desligar o filtro local),
+tipo/filtros nas telas de produção, vínculo da ficha no detalhe. `ElencoBlock` (criar/editar
+evento) trocou o Combobox cru pelo picker — restaurando a "porta única" da 225d.
+
+**Pegadinhas.**
+- `onQueryChange` do Combobox DESLIGA o filtro local (contrato de busca remota) — por isso a
+  prop nova `onInputValueChange`, que só observa.
+- O pedido registra a origem (rota) na descrição; decisão de escopo: sem vínculo estruturado
+  com evento nesta versão.
+- `verify_237.py` (14/14 no manto_local) cria pedidos de teste "TESTE VERIFY 237" no espelho.
+
+### 236-cache-por-duracao — Cachê sugerido pela duração real            (branch · 2026-08-14 · sem migration)
+
+**Motivação.** Caso real (Baile do Addan, evento 1235, 22h–4h): a criação de evento mapeava a
+duração com `{"1".."4"}.get(..., 0)` — evento de 6 horas nascia com cachê E TETO (imposto por
+`casting_ops` a não-superadmin) de **1 hora**; a tela de criação nem oferecia mais que 4h. O
+preço ao cliente escala por hora, o valor das pessoas não escalava junto.
+
+**O que mudou.** `_compute_performer_caches` ganhou `horas_extra`: acima de 4h cada papel de
+tabela recebe `cache_custom` = **base de 4h sem adicionais ÷ 4 × horas** + adicionais fixos
+(delta de make, noturno de R$ 50 — repasse ao artista —, adicional fora-SP, show customizado);
+maquiador não escala (por make). A criação valida `duracao` como int ≥ 1 e, com orçamento
+vinculado, **recalcula os cachês no servidor** (fonte única; a lista `orc_caches` do cliente é
+só fallback sem orçamento). `/events/new` ganhou "Outra (h)". **2ª rodada (mesmo dia)**: o
+cachê passou a NASCER VAZIO — o valor da régua vira só o `cache_cap` invisível (decisão de
+incentivo: personagens têm horários distintos não modelados de propósito, a venda cobra a
+duração cheia como margem, e expor sugestão ancoraria o casting no máximo — quem escala pode
+se escalar). O aviso "abaixo do sugerido" foi adicionado e removido nesta mesma rodada. Preço
+ao cliente intocado.
+
+**Pegadinhas.**
+- Gabarito real: orçamento 1806 em 6h → Green 520 / Space 500 / Coordenador 575 (verify_236,
+  14/14 no manto_local; evento de teste 1236 criado só no espelho local).
+- O teto de 400 do evento 1205 (mascotes) não incluía o adicional fora-SP — a função de hoje
+  dá 467; o gabarito de paridade é a função, não caps antigos.
+- O dublê `run-local-sem-google.py` NÃO cobre o `insert_event` importado dentro de
+  `api_create_event` (import tardio de `app.calendar.routes` — este está patchado; conferir se
+  o servidor local usado é mesmo o script dublê, o launcher pode ter config em cache).
+
 ### 235-educamanto — EducaManto por responsabilidades            (branch 235-educamanto-responsabilidades · 2026-08-13 · migration `b7e3a91d5c24`)
 
 **Motivação.** Os pacotes por nível (Master/Intermediário/Econômica) engessavam a venda: o

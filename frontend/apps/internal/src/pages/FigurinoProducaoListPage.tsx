@@ -53,7 +53,7 @@ function filtrosDe(tipo: ProducaoKind | ""): { key: string; label: string }[] {
           { key: "comprado", label: "Comprados" },
           { key: "recebido", label: "Recebidos" },
         ]
-      : tipo === "manutencao"
+      : tipo === "manutencao" || tipo === "ficha"
         ? [
             { key: "em_producao", label: "Em produção" },
             { key: "pronto", label: "Prontos" },

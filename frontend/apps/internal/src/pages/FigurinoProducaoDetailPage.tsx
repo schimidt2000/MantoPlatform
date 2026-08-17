@@ -23,6 +23,7 @@ import {
   Skeleton,
 } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
+import { FigurinoPicker } from "../components/FigurinoPicker";
 import { formatBRL } from "@manto/money";
 import {
   PRODUCAO_KIND_TONES,
@@ -578,6 +579,9 @@ export function FigurinoProducaoDetailPage() {
   const reduceMotion = useReducedMotion();
   const [aviso, setAviso] = useState<string | undefined>();
   const { data, isLoading, isError, error } = useProducao(id ? Number(id) : null);
+  // Vínculo da ficha criada (feature 237) — hook aqui em cima porque hooks não podem ficar
+  // atrás dos early-returns; só é usado quando o pedido é do tipo "ficha".
+  const vinculoFicha = useUpdateProducao(id ? Number(id) : 0);
 
   if (isLoading) {
     return (
@@ -708,7 +712,7 @@ export function FigurinoProducaoDetailPage() {
           {/* Manutenção sem custo previsto e sem gasto lançado não mostra o painel de dinheiro:
               a maior parte é trabalho manual, e um "R$ 0,00" grande sugeriria que falta lançar
               alguma coisa. Se aparecer gasto ou previsão, o painel volta sozinho. */}
-          {(p.kind !== "manutencao" || p.total_gasto > 0 || p.estimated_cost != null) && (
+          {((p.kind !== "manutencao" && p.kind !== "ficha") || p.total_gasto > 0 || p.estimated_cost != null) && (
             <Gastos producao={p} podeEditar={podeEditar} />
           )}
           <Historico producaoId={p.id} logs={p.logs ?? []} />
@@ -755,6 +759,25 @@ export function FigurinoProducaoDetailPage() {
                 <div className="flex justify-between">
                   <span className="text-muted">Figurino</span>
                   <span className="text-ink">{p.figurino_sheet_name}</span>
+                </div>
+              )}
+              {/* Feature 237: concluir um pedido de FICHA exige apontar a ficha criada — o
+                  vínculo é feito aqui, pela mesma busca de sempre. */}
+              {p.kind === "ficha" && p.status !== "pronto" && p.status !== "cancelado" && (
+                <div>
+                  <span className="text-xs text-muted">
+                    Ficha criada (obrigatória para concluir)
+                  </span>
+                  <FigurinoPicker
+                    className="mt-1"
+                    value={p.figurino_sheet_id ?? null}
+                    onChange={(sheetId: number | null) =>
+                      vinculoFicha.mutate({ figurino_sheet_id: sheetId })
+                    }
+                    characterName={p.title}
+                    ariaLabel="Vincular a ficha criada"
+                    placeholder="🔍 Buscar a ficha criada…"
+                  />
                 </div>
               )}
               {p.severity_label && (

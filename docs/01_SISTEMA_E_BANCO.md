@@ -7,7 +7,7 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-13** · Estado do repositório: pós-feature **235-educamanto (EducaManto por responsabilidades: pacotes por nível viram musicais, snapshot v2 recalculado no servidor, Jinja do EducaManto desligado; migration **`b7e3a91d5c24`**)**. Antes dela, **225c (Pedido de
+> Última atualização: **2026-08-14** · Em branch: **235-educamanto** (EducaManto por responsabilidades: pacotes por nível viram musicais, snapshot v2 recalculado no servidor, Jinja do EducaManto desligado; migration **`b7e3a91d5c24`**). Na main: Última atualização: **2026-08-14** · Feature **237-solicitar-ficha** (branch): kind novo `ficha` em `figurino_producoes` (sem migração; fluxo curto sem aprovação = manutenção), `POST /api/figurino/producoes/solicitar-ficha` (login, gate `pode_abrir`), e transição para `pronto` de kind=ficha exige `figurino_sheet_id`. Antes: **236-cache-por-duracao** (branch): criação de evento aceita `duracao` inteira ≥ 1 (fim do fallback que dava cachê de 1h a durações fora de 1–4h); com `orcamento_history_id`, `cache_value`/`cache_cap` são RECALCULADOS no servidor pela duração real — >4h usa a régua (base de 4h ÷ 4 × horas + adicionais fixos). Anterior: · Estado do repositório: pós-feature **225c (Pedido de
 > Compra — terceiro `kind` de `figurino_producoes`, fluxo `solicitado → aprovado → comprado →
 > recebido`, **sem migration**; nav: "Revisão" saiu de Produção e foi para Marketing, e nasceu
 > `/compras`. Endpoint mudado: `GET /api/figurino/producoes/responsaveis?tipo=compra`)**. Antes

@@ -68,6 +68,7 @@ export function EventCreatePage() {
 
   const [serverError, setServerError] = useState<string | null>(null);
   const [duracao, setDuracao] = useState("1");
+  const [duracaoExtra, setDuracaoExtra] = useState("");
   const [orcCaches, setOrcCaches] = useState<OrcamentoCache[]>([]);
   const [characters, setCharacters] = useState<CharacterInput[]>([]);
   const [coordinatorTalentId, setCoordinatorTalentId] = useState<number | null>(null);
@@ -155,10 +156,38 @@ export function EventCreatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options.data, currentUser.data]);
 
+  useEffect(() => {
+    const custom = prefill.data?.duracao_custom;
+    if (custom && custom > 4) selectDuracaoExtra(String(custom));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill.data?.duracao_custom]);
+
   const selectDuracao = (dur: "1" | "2" | "3" | "4") => {
     setDuracao(dur);
+    setDuracaoExtra("");
     if (!prefill.data) return;
     const total = prefill.data[`total_${dur}h` as "total_1h"] ?? 0;
+    setValue("sale_value_gross", total);
+    setValue("sale_value", total);
+  };
+
+  /**
+   * Duração acima de 4h (feature 236): o evento pode declarar a duração REAL — antes o
+   * formulário só oferecia 1–4h e um evento de 6 horas nascia com cachês (e teto) errados.
+   * O preço de referência usa o total_custom do orçamento quando a duração bate; senão, a
+   * mesma régua linear da calculadora (total de 4h ÷ 4 × horas) — só sugestão, editável.
+   */
+  const selectDuracaoExtra = (raw: string) => {
+    setDuracaoExtra(raw);
+    const horas = Number(raw);
+    if (!Number.isInteger(horas) || horas < 5) return;
+    setDuracao(String(horas));
+    if (!prefill.data) return;
+    const total4 = prefill.data.total_4h ?? 0;
+    const total =
+      prefill.data.duracao_custom === horas && prefill.data.total_custom
+        ? prefill.data.total_custom
+        : Math.round((total4 / 4) * horas * 100) / 100;
     setValue("sale_value_gross", total);
     setValue("sale_value", total);
   };
@@ -463,6 +492,32 @@ export function EventCreatePage() {
                         {dur}h — R$ {formatBRL(prefill.data[`total_${dur}h` as "total_1h"] ?? 0)}
                       </button>
                     ))}
+                    <label
+                      className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+                        duracaoExtra && duracao === duracaoExtra
+                          ? "border-accent bg-accent-soft text-ink"
+                          : "border-line bg-panel text-ink"
+                      }`}
+                    >
+                      Outra (h):
+                      <input
+                        type="number"
+                        min={5}
+                        className="w-16 rounded border border-line bg-panel px-1 py-0.5 text-sm text-ink"
+                        value={duracaoExtra}
+                        onChange={(e) => selectDuracaoExtra(e.target.value)}
+                        aria-label="Outra duração em horas"
+                      />
+                      {duracaoExtra && duracao === duracaoExtra && prefill.data && (
+                        <span className="text-xs text-muted">
+                          R$ {formatBRL(
+                            prefill.data.duracao_custom === Number(duracaoExtra) && prefill.data.total_custom
+                              ? prefill.data.total_custom
+                              : Math.round(((prefill.data.total_4h ?? 0) / 4) * Number(duracaoExtra) * 100) / 100,
+                          )}
+                        </span>
+                      )}
+                    </label>
                   </div>
                 </CardContent>
               </Card>
@@ -473,7 +528,6 @@ export function EventCreatePage() {
               onCharactersChange={setCharacters}
               coordinatorTalentId={coordinatorTalentId}
               onCoordinatorTalentIdChange={setCoordinatorTalentId}
-              figurinoSheets={opts.figurino_sheets}
               talents={opts.assignable_talents}
             />
 

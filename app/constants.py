@@ -84,11 +84,19 @@ GIFT_3D_STATUSES = [
 FIGURINO_KIND_PRODUCAO   = "producao"
 FIGURINO_KIND_MANUTENCAO = "manutencao"
 FIGURINO_KIND_COMPRA     = "compra"
-FIGURINO_KINDS = [FIGURINO_KIND_PRODUCAO, FIGURINO_KIND_MANUTENCAO, FIGURINO_KIND_COMPRA]
+# Feature 237: pedido para CRIAR a ficha de um personagem que a busca não encontrou — nasce do
+# botão "Solicitar ficha" do FigurinoPicker. Sem valores nem compra; concluir exige vincular a
+# ficha criada (validação em `producao_ops.mudar_status`).
+FIGURINO_KIND_FICHA      = "ficha"
+FIGURINO_KINDS = [
+    FIGURINO_KIND_PRODUCAO, FIGURINO_KIND_MANUTENCAO, FIGURINO_KIND_COMPRA,
+    FIGURINO_KIND_FICHA,
+]
 FIGURINO_KIND_LABELS = {
     FIGURINO_KIND_PRODUCAO:   "Produção",
     FIGURINO_KIND_MANUTENCAO: "Manutenção",
     FIGURINO_KIND_COMPRA:     "Compra",
+    FIGURINO_KIND_FICHA:      "Ficha",
 }
 
 # Gravidade de uma manutenção. É a única informação que muda uma decisão de verdade: a peça pode
@@ -163,6 +171,13 @@ FIGURINO_PROD_FLUXOS = {
         FIGURINO_PROD_APROVADO,
         FIGURINO_PROD_COMPRADO,
         FIGURINO_PROD_RECEBIDO,
+    ],
+    # Ficha não passa por aprovação (não é dinheiro saindo — é trabalho de cadastro da oficina);
+    # mesmo fluxo curto da manutenção.
+    FIGURINO_KIND_FICHA: [
+        FIGURINO_PROD_SOLICITADO,
+        FIGURINO_PROD_EM_PRODUCAO,
+        FIGURINO_PROD_PRONTO,
     ],
 }
 

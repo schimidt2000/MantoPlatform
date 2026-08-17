@@ -75,6 +75,39 @@ def _avisar_responsavel(producao: FigurinoProducao, anterior_id: int | None) -> 
 # ── Pedido ───────────────────────────────────────────────────────────────────
 
 
+@api_bp.route("/figurino/producoes/solicitar-ficha", methods=["POST"])
+@api_login_required
+def api_figurino_solicitar_ficha() -> Any:
+    """Solicita a criação de uma ficha a partir da busca (feature 237).
+
+    Endpoint leve do botão "Solicitar ficha" do FigurinoPicker: corpo JSON simples
+    (personagem + observação + origem), mesmo gate de abertura dos demais pedidos
+    (qualquer papel interno) e todo o resto — validação, log, e-mail ao setor — reusado de
+    `criar_solicitacao_ficha`/`create_producao`.
+    """
+    denied = _require_create()
+    if denied:
+        return denied
+
+    body = request.get_json(silent=True) or {}
+    try:
+        producao, aviso = ops.criar_solicitacao_ficha(
+            actor=current_user,
+            personagem=body.get("personagem") or "",
+            observacao=body.get("observacao"),
+            origem=body.get("origem"),
+        )
+    except ops.ProducaoValidationError as exc:
+        campo = "personagem" if exc.field == "title" else exc.field
+        return json_error(exc.message, 400, fields={campo: exc.message})
+
+    if producao.responsible_id is None:
+        send_async(
+            send_figurino_pedido_setor_email, producao, ops.equipe_figurino(producao.kind)
+        )
+    return _resposta(producao, aviso, status=201)
+
+
 @api_bp.route("/figurino/producoes", methods=["POST"])
 @api_login_required
 def api_figurino_producao_create() -> Any:

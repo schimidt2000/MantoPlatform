@@ -161,7 +161,11 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
    * digitava acima via "✓ Salvo" e o número voltava sozinho, sem explicação (a tela Jinja
    * antiga avisava; a migração para o React perdeu isso).
    */
-  const acimaDoTeto = role.cache_cap != null && cache > role.cache_cap;
+  // Feature 238: o teto efetivo considera o valor JÁ salvo no papel — se um superadmin o
+  // subiu acima do cap, o casting pode usar até ele (o servidor aplica a mesma regra).
+  const tetoEfetivo =
+    role.cache_cap != null ? Math.max(role.cache_cap, role.cache_value ?? 0) : null;
+  const acimaDoTeto = tetoEfetivo != null && cache > tetoEfetivo;
   const podeUltrapassar = Boolean(data.flags.is_superadmin);
 
   return (
