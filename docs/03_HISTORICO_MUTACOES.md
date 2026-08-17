@@ -39,6 +39,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **vincular-na-criacao (hotfix)** | "Vincular a um Personagem do Catálogo" também na CRIAÇÃO da ficha (deferido pós-criação, padrão da foto); só personagens sem ficha; nome preenchido de brinde | 2026-08-17 | `—` | (aqui) | — |
 | **fichas-por-escalacao + adotar-item-honesto (hotfixes)** | Imprimir fichas do evento: 1 folha por escalação (dois "Soldado" saíam como um); busca de adotar item mostra tema/já-adotado bloqueado com o motivo em vez de sumir | 2026-08-17 | `—` | (aqui) | — |
 | **cadastro-raiz (hotfix)** | `/cadastro` na raiz do domínio vira o endereço do formulário React; Jinja do cadastro apagado; `FileUpload` copia o arquivo para memória (mata `ERR_UPLOAD_FILE_CHANGED`) | 2026-08-17 | `—` | (aqui) | — |
 | **235-educamanto (4ª rodada)** | Gate FECHADO: cenário sai das responsabilidades (sem custo, colunas removidas); personagens×produção derivados dos itens (Cara Limpa+Bonecos+Papai Noel / item Produção); textos aprovados. Aguarda só o "push 235" | 2026-08-17 | `b7e3a91d5c24` reescrita | (aqui) | — |
@@ -165,6 +166,19 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### vincular-na-criacao (hotfix) — personagem já na criação da ficha            (2026-08-17 · sem migration)
+
+O campo "Vincular a um Personagem do Catálogo" (feature 186, `FigurinoCatalogLinkField`) só
+existia na EDIÇÃO da ficha — na criação ele sumia porque o vínculo é um PATCH no personagem que
+precisa do `sheetId`, que ainda não existe. Mesmo problema que a foto já tinha, mesma solução
+(`NewFigurinoPhotoField`): o novo `NewFigurinoCharacterField` guarda a escolha e o submit roda o
+vínculo logo após o `POST` da ficha. Decisões: (1) a lista só oferece personagens **sem** ficha —
+dar ficha a quem não tem é o caso da criação; trocar a de quem já tem fica na edição, onde o
+vínculo atual é visível antes de sobrescrever; (2) escolher o personagem com o nome da ficha
+vazio preenche o nome (nunca sobrescreve o digitado); (3) com foto e/ou vínculo pendentes, a
+navegação pós-criação vai para a edição, para a confirmação visual dos dois; falha do vínculo
+não desfaz a ficha criada.
 
 ### fichas-por-escalacao + adotar-item-honesto (hotfixes)            (2026-08-17 · sem migration)
 

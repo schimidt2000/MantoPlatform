@@ -421,7 +421,12 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   mesma `CatalogCharacter.figurino_sheet_id` usada pelo lado do catálogo — **vínculo bidirecional
   sem coluna nova** (feature 186).
   Numa ficha nova, a foto escolhida só sobe **após** a ficha existir (o endpoint de foto exige
-  `sheetId`).
+  `sheetId`). O vínculo de Personagem também existe na CRIAÇÃO (`NewFigurinoCharacterField`,
+  hotfix vincular-na-criacao): escolhe-se o personagem antes do "Criar ficha" e o PATCH roda logo
+  depois da criação, mesmo padrão deferido da foto; lista só personagens **sem** ficha (trocar a
+  ficha de quem já tem é fluxo da edição) e, com o nome da ficha vazio, escolher o personagem
+  preenche o nome de brinde. Com foto e/ou vínculo pendentes a navegação pós-criação vai para a
+  **edição** (confirmação visual), senão para a lista.
 - **API**: `POST /api/figurino` · `PATCH|DELETE /api/figurino/<id>` ·
   `POST|DELETE /api/figurino/<id>/photo` · `POST /api/figurino/<id>/photo/rotate`.
 - **Vínculos**: Ficha ↔ Personagem do Catálogo ↔ Elenco de Evento (`EventRole`).

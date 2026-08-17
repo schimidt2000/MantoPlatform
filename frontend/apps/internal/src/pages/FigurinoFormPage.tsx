@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { Button, Card, CardContent, PageHeader } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
@@ -15,7 +15,7 @@ import {
 } from "../lib/figurino";
 import { useCatalogElencoBusca } from "../lib/catalogoElenco";
 import { useLinkCharacterFigurino } from "../lib/adminCatalogo";
-import { CharacterAutocomplete } from "../components/CharacterAutocomplete";
+import { CharacterAutocomplete, type CharacterSelection } from "../components/CharacterAutocomplete";
 
 /**
  * Vínculo bidirecional Ficha↔Personagem a partir da tela da Ficha (feature 186, US2) — escreve
@@ -62,6 +62,59 @@ function FigurinoCatalogLinkField({ sheetId }: { sheetId: number }) {
       {link.isError && (
         <p className="mt-1 text-xs text-red">Não foi possível atualizar o vínculo.</p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Personagem escolhido durante a criação de uma ficha nova — o vínculo só grava depois que a
+ * ficha existe (o PATCH do personagem precisa do `sheetId`), no submit. Mesmo padrão da foto
+ * (`NewFigurinoPhotoField`). Na edição o campo imediato (`FigurinoCatalogLinkField`) continua.
+ */
+function NewFigurinoCharacterField({
+  selection,
+  onChange,
+}: {
+  selection: CharacterSelection | null;
+  onChange: (selection: CharacterSelection | null) => void;
+}) {
+  const elencoBusca = useCatalogElencoBusca();
+
+  // Só personagens ainda SEM ficha: vincular aqui é dar ficha a quem não tem. Trocar a ficha
+  // de um personagem já vinculado é fluxo da edição, onde o vínculo atual fica visível antes.
+  const temas = useMemo(
+    () =>
+      (elencoBusca.data?.temas ?? [])
+        .map((tema) => ({
+          ...tema,
+          characters: tema.characters.filter((c) => c.figurino_sheet_id === null),
+        }))
+        .filter((tema) => tema.characters.length > 0),
+    [elencoBusca.data],
+  );
+
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-muted">
+        Vincular a um Personagem do Catálogo
+      </label>
+      {selection ? (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm">
+          <span className="text-ink">
+            {selection.character.name} <span className="text-muted">— {selection.temaName}</span>
+          </span>
+          <Button variant="ghost" size="sm" onClick={() => onChange(null)}>
+            Remover
+          </Button>
+        </div>
+      ) : (
+        <CharacterAutocomplete
+          temas={temas}
+          placeholder="Buscar personagem do catálogo…"
+          onSelect={onChange}
+        />
+      )}
+      <p className="mt-1 text-xs text-muted">O vínculo é gravado junto com o "Criar ficha".</p>
     </div>
   );
 }
@@ -246,6 +299,7 @@ export function FigurinoFormPage() {
   const edit = useEditFigurinoSheet();
   const del = useDeleteFigurinoSheet();
   const uploadPhoto = useUploadFigurinoPhoto();
+  const linkCharacter = useLinkCharacterFigurino();
 
   const [characterName, setCharacterName] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -253,6 +307,7 @@ export function FigurinoFormPage() {
   const [tags, setTags] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [newPhoto, setNewPhoto] = useState<File | null>(null);
+  const [newCharacter, setNewCharacter] = useState<CharacterSelection | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -281,17 +336,29 @@ export function FigurinoFormPage() {
       edit.mutate({ id: sheetId, ...body }, { onSuccess: () => navigate("/figurinos") });
     } else {
       create.mutate(body, {
-        onSuccess: (created: FigurinoSheetItem) => {
+        onSuccess: async (created: FigurinoSheetItem) => {
+          // Foto e vínculo de personagem exigem uma ficha já existente — rodam logo após
+          // criar. Havendo qualquer um dos dois, a navegação vai para a edição (não a lista)
+          // para o usuário confirmar que foto/vínculo foram salvos; falha de um deles não
+          // desfaz a ficha (o estado real fica visível na própria edição).
+          const followUps: Promise<unknown>[] = [];
           if (newPhoto) {
-            // Endpoint de foto exige uma ficha já existente — sobe logo após criar, e leva
-            // para a edição (não a lista) para o usuário confirmar que a foto foi salva.
-            uploadPhoto.mutate(
-              { id: created.id, file: newPhoto },
-              { onSettled: () => navigate(`/figurinos/${created.id}/edit`) },
-            );
-          } else {
-            navigate("/figurinos");
+            followUps.push(uploadPhoto.mutateAsync({ id: created.id, file: newPhoto }));
           }
+          if (newCharacter) {
+            followUps.push(
+              linkCharacter.mutateAsync({
+                characterId: newCharacter.character.id,
+                figurinoSheetId: created.id,
+              }),
+            );
+          }
+          if (followUps.length === 0) {
+            navigate("/figurinos");
+            return;
+          }
+          await Promise.allSettled(followUps);
+          navigate(`/figurinos/${created.id}/edit`);
         },
       });
     }
@@ -373,7 +440,21 @@ export function FigurinoFormPage() {
             />
           </div>
 
-          {isEdit && sheetId && <FigurinoCatalogLinkField sheetId={sheetId} />}
+          {isEdit && sheetId ? (
+            <FigurinoCatalogLinkField sheetId={sheetId} />
+          ) : (
+            <NewFigurinoCharacterField
+              selection={newCharacter}
+              onChange={(selection) => {
+                setNewCharacter(selection);
+                // Conveniência: criar a ficha a partir do personagem — o nome vem de brinde
+                // quando o campo ainda está vazio (nunca sobrescreve o que já foi digitado).
+                if (selection && !characterName.trim()) {
+                  setCharacterName(selection.character.name);
+                }
+              }}
+            />
+          )}
           </div>
 
           <div>
@@ -429,7 +510,7 @@ export function FigurinoFormPage() {
           <div className="flex items-center justify-between gap-2 border-t border-line pt-4">
             <div className="flex gap-2">
               <Button
-                loading={mutation.isPending || uploadPhoto.isPending}
+                loading={mutation.isPending || uploadPhoto.isPending || linkCharacter.isPending}
                 disabled={!characterName.trim()}
                 onClick={submit}
               >
