@@ -9,6 +9,7 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  InfoTip,
   Input,
   PageHeader,
   Skeleton,
@@ -48,6 +49,19 @@ const TECNICO_LABELS: Record<string, string> = {
   sonoplasta: "Sonoplasta",
   tecnico_som: "Técnico de som",
   tecnico_iluminacao: "Técnico de iluminação",
+};
+
+/** Ordem das responsabilidades quando os textos do servidor ainda não chegaram. */
+const RESPONSABILIDADES_ORDEM: ResponsabilidadeChave[] = ["som", "iluminacao", "alimentacao"];
+
+/**
+ * Rótulos de reserva em pt-BR: se `/api/educamanto/textos` falhar ou ainda estiver
+ * carregando, a tela mostra "Sonorização" — nunca a chave crua "som".
+ */
+const RESPONSABILIDADE_LABELS: Record<ResponsabilidadeChave, string> = {
+  som: "Sonorização",
+  iluminacao: "Iluminação",
+  alimentacao: "Alimentação",
 };
 
 function brl(v: number | null | undefined): string {
@@ -113,9 +127,30 @@ function novaConfig(musicalId: number | null): ConfigState {
   };
 }
 
+/**
+ * Durações fixas efetivamente marcadas: as dos checkboxes MAIS a do campo "Extra (h)"
+ * quando ele recebe 1–4 (antes esse valor era descartado em silêncio).
+ */
+function duracoesFixasDaContratacao(c: ContratacaoState): string[] {
+  const doCustom =
+    c.duracaoCustom >= 1 && c.duracaoCustom <= 4 ? `${c.duracaoCustom}h` : null;
+  return DURACOES_FIXAS.filter((d) => c.duracoes.includes(d) || d === doCustom);
+}
+
+/** Durações enviadas ao servidor: as fixas + a extra acima de 4h, quando houver. */
 function duracoesDaContratacao(c: ContratacaoState): string[] {
-  const fixas = DURACOES_FIXAS.filter((d) => c.duracoes.includes(d)) as string[];
+  const fixas = duracoesFixasDaContratacao(c);
   return c.duracaoCustom > 4 ? [...fixas, `${c.duracaoCustom}h`] : fixas;
+}
+
+/** Cópia profunda da contratação — páginas novas não podem compartilhar performers/acréscimos. */
+function clonarContratacao(c: ContratacaoState): ContratacaoState {
+  return {
+    ...c,
+    performers: c.performers.map((p) => ({ ...p })),
+    acrescimos: c.acrescimos.map((a) => ({ ...a })),
+    duracoes: [...c.duracoes],
+  };
 }
 
 function configParaInput(config: ConfigState, eventDate: string): ConfigInput | null {
@@ -131,21 +166,23 @@ function configParaInput(config: ConfigState, eventDate: string): ConfigInput | 
     fora_sp: config.foraSp,
     km_ida: config.foraSp && config.kmIda ? config.kmIda : null,
     acrescimo: config.acrescimo,
-    contratacao_manto:
-      c.ativa && duracoes.length > 0
-        ? {
-            duracoes,
-            payload: {
-              performers: c.performers,
-              coordenador_qty: c.coordenadorQty,
-              acrescimos: c.acrescimos,
-              event_date: eventDate || undefined,
-              event_time: c.eventTime || undefined,
-              modo_duracao: "horas",
-              incluir_duracao: DURACOES_FIXAS.filter((d) => c.duracoes.includes(d)),
-            },
-          }
-        : null,
+    // Vai sempre que a contratação está ativa, mesmo sem duração marcada: é assim que a
+    // validação do servidor recusa o orçamento em vez de congelá-lo sem a parte Manto.
+    contratacao_manto: c.ativa
+      ? {
+          duracoes,
+          payload: {
+            performers: c.performers,
+            coordenador_qty: c.coordenadorQty,
+            acrescimos: c.acrescimos,
+            event_date: eventDate || undefined,
+            event_time: c.eventTime || undefined,
+            event_location: config.endereco || undefined,
+            modo_duracao: "horas",
+            incluir_duracao: duracoesFixasDaContratacao(c),
+          },
+        }
+      : null,
   };
 }
 
@@ -384,7 +421,14 @@ export function EducaMantoCalculadoraPage() {
   }
 
   function handleNovaPagina() {
-    setConfigs((prev) => [...prev, { ...prev[ativa], responsabilidades: { ...prev[ativa].responsabilidades } }]);
+    setConfigs((prev) => [
+      ...prev,
+      {
+        ...prev[ativa],
+        responsabilidades: { ...prev[ativa].responsabilidades },
+        contratacao: clonarContratacao(prev[ativa].contratacao),
+      },
+    ]);
     setAtiva(configs.length);
     setGerarMsg(null);
   }
@@ -395,14 +439,48 @@ export function EducaMantoCalculadoraPage() {
     setAtiva((atual) => (idx <= atual ? Math.max(0, atual - 1) : atual));
   }
 
+  /**
+   * Liga/desliga uma duração fixa da contratação. Desmarcar uma duração que estava marcada
+   * por causa do campo "Extra (h)" (1–4) também zera o extra — senão ela voltaria sozinha.
+   */
+  function alternarDuracaoContratacao(d: string) {
+    const c = config.contratacao;
+    const marcada = duracoesFixasDaContratacao(c).includes(d);
+    const vemDoExtra = c.duracaoCustom >= 1 && c.duracaoCustom <= 4 && `${c.duracaoCustom}h` === d;
+    alterarConfig({
+      contratacao: {
+        ...c,
+        duracoes: marcada ? c.duracoes.filter((x) => x !== d) : [...c.duracoes, d],
+        duracaoCustom: marcada && vemDoExtra ? 0 : c.duracaoCustom,
+      },
+    });
+  }
+
   const inputsValidos = useMemo(
     () => configs.map((c) => configParaInput(c, eventDate)).filter((c): c is ConfigInput => c !== null),
     [configs, eventDate],
   );
 
+  /** Páginas com a contratação Manto ligada e nenhuma duração marcada — o servidor recusa. */
+  const paginasSemDuracao = useMemo(
+    () =>
+      configs
+        .map((c, i) => (c.contratacao.ativa && duracoesDaContratacao(c.contratacao).length === 0 ? i + 1 : 0))
+        .filter((n) => n > 0),
+    [configs],
+  );
+  const contratacaoSemDuracao = paginasSemDuracao.length > 0;
+  const avisoSemDuracao = contratacaoSemDuracao
+    ? `Marque ao menos uma duração da contratação Manto (${
+        paginasSemDuracao.length > 1
+          ? `páginas ${paginasSemDuracao.join(", ")}`
+          : `página ${paginasSemDuracao[0]}`
+      }) para gerar o orçamento.`
+    : null;
+
   function handleGerarOrcamento() {
     // O cálculo é debounced: gerar no meio congelaria um valor que já não é o da tela.
-    if (calcular.isPending || inputsValidos.length !== configs.length) return;
+    if (calcular.isPending || contratacaoSemDuracao || inputsValidos.length !== configs.length) return;
     setGerarMsg({ text: "Gerando…", error: false });
     gerarOrcamento.mutate(
       {
@@ -433,15 +511,17 @@ export function EducaMantoCalculadoraPage() {
         className="mb-0"
         actions={
           <div className="flex flex-wrap gap-3 text-sm">
-            {resultado && totalDias > 0 && (
+            {(resultado || contratacaoSemDuracao) && totalDias > 0 && (
               <Button
                 size="sm"
                 loading={gerarOrcamento.isPending}
-                disabled={calcular.isPending}
+                disabled={calcular.isPending || contratacaoSemDuracao}
                 title={
-                  calcular.isPending
-                    ? "Aguarde o recálculo terminar para não congelar um valor antigo no PDF"
-                    : undefined
+                  contratacaoSemDuracao
+                    ? (avisoSemDuracao ?? undefined)
+                    : calcular.isPending
+                      ? "Aguarde o recálculo terminar para não congelar um valor antigo no PDF"
+                      : undefined
                 }
                 onClick={handleGerarOrcamento}
               >
@@ -455,6 +535,11 @@ export function EducaMantoCalculadoraPage() {
               <Button asChild variant="ghost" size="sm">
                 <Link to="/educamanto/musicais">Musicais</Link>
               </Button>
+            )}
+            {avisoSemDuracao && (
+              <p className="w-full text-xs text-red sm:text-right" role="alert">
+                {avisoSemDuracao}
+              </p>
             )}
           </div>
         }
@@ -502,6 +587,7 @@ export function EducaMantoCalculadoraPage() {
                     } ${configs.length === 1 ? "rounded-r-md" : ""}`}
                   >
                     Página {i + 1} · {nome}
+                    {c.contratacao.ativa ? " + Manto" : ""}
                   </button>
                   {configs.length > 1 && (
                     <button
@@ -551,9 +637,16 @@ export function EducaMantoCalculadoraPage() {
                     Marque o que fica por conta da Manto e o que a contratante fornece — o valor
                     e a equipe técnica se ajustam na hora.
                   </p>
-                  {(textos?.ordem ?? (["som", "iluminacao", "alimentacao"] as ResponsabilidadeChave[])).map(
+                  {textosQuery.isError && (
+                    <p className="text-xs text-red" role="alert">
+                      Não foi possível carregar as dicas de cada responsabilidade. O cálculo
+                      continua normal — recarregue a página para tentar de novo.
+                    </p>
+                  )}
+                  {(textos?.ordem ?? RESPONSABILIDADES_ORDEM).map(
                     (chave) => {
                       const info = textos?.responsabilidades[chave];
+                      const rotulo = info?.label ?? RESPONSABILIDADE_LABELS[chave] ?? chave;
                       const valor = config.responsabilidades[chave];
                       return (
                         <div
@@ -561,20 +654,21 @@ export function EducaMantoCalculadoraPage() {
                           className="flex items-center justify-between gap-3 rounded-md border border-line bg-panel px-3 py-2"
                         >
                           <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-medium text-ink">
-                              {info?.label ?? chave}
-                            </span>
-                            {info?.tooltip && (
-                              <span
-                                className="cursor-help text-xs text-muted"
-                                title={info.tooltip}
-                                aria-label={`Dica: ${info.tooltip}`}
-                              >
-                                ⓘ
-                              </span>
+                            <span className="text-sm font-medium text-ink">{rotulo}</span>
+                            {info?.tooltip ? (
+                              <InfoTip label={rotulo} content={info.tooltip} />
+                            ) : (
+                              // Sem texto ainda: o gatilho fica visível porém inerte enquanto
+                              // carrega (ou quando a busca falhou), sem sumir da linha.
+                              <InfoTip
+                                label={rotulo}
+                                content=""
+                                disabled
+                                className={textosQuery.isLoading ? "animate-pulse" : ""}
+                              />
                             )}
                           </div>
-                          <div className="flex overflow-hidden rounded-md border border-line" role="group" aria-label={info?.label ?? chave}>
+                          <div className="flex overflow-hidden rounded-md border border-line" role="group" aria-label={rotulo}>
                             {(["manto", "contratante"] as const).map((opcao) => (
                               <button
                                 key={opcao}
@@ -670,6 +764,150 @@ export function EducaMantoCalculadoraPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Contratação Manto embutida (US4) — módulo da calculadora de
+                  eventos como fonte única; NF e transporte ficam com o EducaManto.
+                  Fica logo após "Dias e ensemble" porque no fim da coluna ninguém achava. */}
+              {podeContratacao && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Contratação Manto (apresentação tradicional)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {!config.contratacao.ativa && (
+                      <>
+                        <p className="text-xs text-muted">
+                          Vai ter uma apresentação da Manto tradicional junto do EducaManto?
+                          Monte a equipe aqui — o valor soma ao desta página e a nota fiscal é
+                          aplicada sobre o total.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            alterarConfig({
+                              contratacao: { ...config.contratacao, ativa: true },
+                            })
+                          }
+                        >
+                          + Adicionar contratação Manto
+                        </Button>
+                      </>
+                    )}
+                    {config.contratacao.ativa && (
+                      <>
+                        {opcoes.isLoading && <Skeleton className="h-24 w-full" />}
+                        {opcoes.isError && (
+                          <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
+                            Não foi possível carregar as opções da calculadora de eventos.
+                          </div>
+                        )}
+                        {opcoes.data && (
+                          <>
+                            <div className="flex flex-wrap items-end gap-3">
+                              <div>
+                                <label className={LABEL} htmlFor="contratacao_horario">
+                                  Horário da apresentação
+                                </label>
+                                <Input
+                                  id="contratacao_horario"
+                                  type="time"
+                                  className="max-w-[140px]"
+                                  value={config.contratacao.eventTime}
+                                  onChange={(e) =>
+                                    alterarConfig({
+                                      contratacao: { ...config.contratacao, eventTime: e.target.value },
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div>
+                                <span className={LABEL}>Durações no orçamento</span>
+                                <div className="flex flex-wrap items-center gap-3">
+                                  {DURACOES_FIXAS.map((d) => (
+                                    <label key={d} className="flex items-center gap-1 text-sm text-ink">
+                                      <input
+                                        type="checkbox"
+                                        checked={duracoesFixasDaContratacao(config.contratacao).includes(d)}
+                                        onChange={() => alternarDuracaoContratacao(d)}
+                                      />
+                                      {d}
+                                    </label>
+                                  ))}
+                                  <label className="flex items-center gap-1 text-sm text-ink">
+                                    <span className="text-xs text-muted">Extra (h):</span>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="h-8 w-16"
+                                      value={config.contratacao.duracaoCustom || ""}
+                                      onChange={(e) =>
+                                        alterarConfig({
+                                          contratacao: {
+                                            ...config.contratacao,
+                                            duracaoCustom: Math.max(0, Number(e.target.value) || 0),
+                                          },
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                </div>
+                                {duracoesDaContratacao(config.contratacao).length === 0 ? (
+                                  <p className="mt-1 text-xs text-red" role="alert">
+                                    Marque ao menos uma duração — sem isso o orçamento não sai
+                                    com a contratação Manto.
+                                  </p>
+                                ) : (
+                                  <p className="mt-1 text-xs text-muted">
+                                    Extra de 1h a 4h marca a duração correspondente; acima de 4h
+                                    entra como duração adicional.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="overflow-x-auto rounded-md border border-line">
+                              <PerformersEditor
+                                performers={config.contratacao.performers}
+                                onPerformersChange={(performers) =>
+                                  alterarConfig({ contratacao: { ...config.contratacao, performers } })
+                                }
+                                coordenadorQty={config.contratacao.coordenadorQty}
+                                onCoordenadorQtyChange={(coordenadorQty) =>
+                                  alterarConfig({ contratacao: { ...config.contratacao, coordenadorQty } })
+                                }
+                                especiais={opcoes.data.especiais}
+                                especiaisComShow={opcoes.data.especiais_com_show}
+                                especiaisComCantor={opcoes.data.especiais_com_cantor}
+                              />
+                            </div>
+
+                            <AcrescimosEditor
+                              acrescimos={config.contratacao.acrescimos}
+                              onChange={(acrescimos) =>
+                                alterarConfig({ contratacao: { ...config.contratacao, acrescimos } })
+                              }
+                              tipos={[...opcoes.data.acrescimo_tipos, opcoes.data.acrescimo_tipo_bv]}
+                            />
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                alterarConfig({ contratacao: { ...CONTRATACAO_INICIAL } })
+                              }
+                            >
+                              Remover contratação Manto
+                            </Button>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* ── Transporte ────────────────────────────────────────────── */}
               <Card>
@@ -824,147 +1062,6 @@ export function EducaMantoCalculadoraPage() {
                   </div>
                 </CardContent>
               </Card>
-
-              {/* Contratação Manto embutida (US4) — módulo da calculadora de
-                  eventos como fonte única; NF e transporte ficam com o EducaManto. */}
-              {podeContratacao && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Contratação Manto (apresentação tradicional)</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {!config.contratacao.ativa && (
-                      <>
-                        <p className="text-xs text-muted">
-                          Vai ter uma apresentação da Manto tradicional junto do EducaManto?
-                          Monte a equipe aqui — o valor soma ao desta página e a nota fiscal é
-                          aplicada sobre o total.
-                        </p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            alterarConfig({
-                              contratacao: { ...config.contratacao, ativa: true },
-                            })
-                          }
-                        >
-                          + Adicionar contratação Manto
-                        </Button>
-                      </>
-                    )}
-                    {config.contratacao.ativa && (
-                      <>
-                        {opcoes.isLoading && <Skeleton className="h-24 w-full" />}
-                        {opcoes.isError && (
-                          <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-                            Não foi possível carregar as opções da calculadora de eventos.
-                          </div>
-                        )}
-                        {opcoes.data && (
-                          <>
-                            <div className="flex flex-wrap items-end gap-3">
-                              <div>
-                                <label className={LABEL} htmlFor="contratacao_horario">
-                                  Horário da apresentação
-                                </label>
-                                <Input
-                                  id="contratacao_horario"
-                                  type="time"
-                                  className="max-w-[140px]"
-                                  value={config.contratacao.eventTime}
-                                  onChange={(e) =>
-                                    alterarConfig({
-                                      contratacao: { ...config.contratacao, eventTime: e.target.value },
-                                    })
-                                  }
-                                />
-                              </div>
-                              <div>
-                                <span className={LABEL}>Durações no orçamento</span>
-                                <div className="flex flex-wrap items-center gap-3">
-                                  {DURACOES_FIXAS.map((d) => (
-                                    <label key={d} className="flex items-center gap-1 text-sm text-ink">
-                                      <input
-                                        type="checkbox"
-                                        checked={config.contratacao.duracoes.includes(d)}
-                                        onChange={() =>
-                                          alterarConfig({
-                                            contratacao: {
-                                              ...config.contratacao,
-                                              duracoes: config.contratacao.duracoes.includes(d)
-                                                ? config.contratacao.duracoes.filter((x) => x !== d)
-                                                : [...config.contratacao.duracoes, d],
-                                            },
-                                          })
-                                        }
-                                      />
-                                      {d}
-                                    </label>
-                                  ))}
-                                  <label className="flex items-center gap-1 text-sm text-ink">
-                                    <span className="text-xs text-muted">Extra (h):</span>
-                                    <Input
-                                      type="number"
-                                      min={0}
-                                      className="h-8 w-16"
-                                      value={config.contratacao.duracaoCustom || ""}
-                                      onChange={(e) =>
-                                        alterarConfig({
-                                          contratacao: {
-                                            ...config.contratacao,
-                                            duracaoCustom: Math.max(0, Number(e.target.value) || 0),
-                                          },
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="overflow-x-auto rounded-md border border-line">
-                              <PerformersEditor
-                                performers={config.contratacao.performers}
-                                onPerformersChange={(performers) =>
-                                  alterarConfig({ contratacao: { ...config.contratacao, performers } })
-                                }
-                                coordenadorQty={config.contratacao.coordenadorQty}
-                                onCoordenadorQtyChange={(coordenadorQty) =>
-                                  alterarConfig({ contratacao: { ...config.contratacao, coordenadorQty } })
-                                }
-                                especiais={opcoes.data.especiais}
-                                especiaisComShow={opcoes.data.especiais_com_show}
-                                especiaisComCantor={opcoes.data.especiais_com_cantor}
-                              />
-                            </div>
-
-                            <AcrescimosEditor
-                              acrescimos={config.contratacao.acrescimos}
-                              onChange={(acrescimos) =>
-                                alterarConfig({ contratacao: { ...config.contratacao, acrescimos } })
-                              }
-                              tipos={[...opcoes.data.acrescimo_tipos, opcoes.data.acrescimo_tipo_bv]}
-                            />
-
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                alterarConfig({ contratacao: { ...CONTRATACAO_INICIAL } })
-                              }
-                            >
-                              Remover contratação Manto
-                            </Button>
-                          </>
-                        )}
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
             </div>
 
             {/* ── Resultado ─────────────────────────────────────────────── */}
@@ -1026,6 +1123,16 @@ export function EducaMantoCalculadoraPage() {
                       </div>
                     </div>
                   </div>
+
+                  {config.contratacao.ativa && (
+                    <div
+                      className="rounded-md border border-gold/40 bg-gold-soft px-3 py-2 text-xs font-medium text-gold-ink"
+                      role="note"
+                    >
+                      ⚠️ Estes dois valores são só do EducaManto — NÃO incluem a contratação
+                      Manto. Use os totais combinados abaixo.
+                    </div>
+                  )}
 
                   {resultado.combinados && Object.keys(resultado.combinados).length > 0 && (
                     <div className="rounded-lg border border-gold/60 bg-gold-soft p-4">
