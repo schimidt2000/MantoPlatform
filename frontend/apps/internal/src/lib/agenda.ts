@@ -116,6 +116,16 @@ export interface RoleAvailability {
 /** Status de pagamento do cachê de um cargo (mesma lista aceita pelo servidor). */
 export type PaymentStatus = "nao_pago" | "pago" | "no_banco" | "fora_do_banco";
 
+/**
+ * Nome da vaga "presença" do som — quem vai fisicamente ao evento (feature 239).
+ *
+ * Não confundir com a vaga "Técnico de Som" (a do PIX, do Nivaldo), que essa sim tem cachê.
+ * A de presença nunca tem valor, é designada no painel de Ensaio e aparece no casting apenas
+ * como leitura. Constante única para o nome não virar literal espalhado pelas telas — o
+ * servidor manda `is_presence` em cada cargo, e isto aqui é só a retaguarda para payload antigo.
+ */
+export const PRESENCA_CHARACTER = "Técnico de Som (Presença)";
+
 export interface RoleItem {
   role_id: number;
   character_name: string;
@@ -127,7 +137,22 @@ export interface RoleItem {
   dismissed: boolean;
   cache_value?: number | null; // só para casting/superadmin
   travel_cache?: number | null; // idem
-  cache_cap?: number | null; // idem
+  cache_cap?: number | null; // só para superadmin (feature 239)
+  /**
+   * Feature 239 — a conta do teto em valores ("Ator cara-limpa: base 2h R$ 300 + noturno
+   * R$ 50 = R$ 350"), gravada na criação quando o evento nasceu de um orçamento. Só chega
+   * para superadmin; `null` quando o papel foi criado sem orçamento vinculado.
+   */
+  cache_cap_note?: string | null;
+  /** Feature 239 — este integrante leva um veículo no evento fora de SP ("carrinho"). */
+  does_transport?: boolean;
+  /** Parcela de UM veículo do orçamento; o mesmo valor para todos os papéis do evento. */
+  transporte_valor?: number | null;
+  /**
+   * Teto já calculado pelo servidor: `max(cache_cap, cachê salvo)` + parcela do veículo quando
+   * o carrinho está marcado. A tela não refaz essa conta — a regra mora no servidor.
+   */
+  cache_cap_efetivo?: number | null;
   figurino_sheet_id: number | null;
   figurino_sheet_name: string | null;
   figurino_done_at: string | null;
@@ -146,6 +171,11 @@ export interface RoleItem {
   availability: RoleAvailability | null;
   needs_makeup: boolean;
   is_singer: boolean;
+  /**
+   * Feature 239 — é a vaga "Técnico de Som (Presença)": somente leitura no casting (sem cachê,
+   * sem convite, sem pagamento). O servidor nem manda os campos de dinheiro dela.
+   */
+  is_presence?: boolean;
 }
 
 /** Estimativa de trajeto Manto → local do evento (cache do Google Maps). */
@@ -271,6 +301,12 @@ export interface EventoDetalhe {
    */
   logs?: { ts: string; actor_name: string; actor_role: string; message: string }[];
   elenco?: RoleItem[];
+  /**
+   * Resumo de maquiador para o badge do Casting (feature 239, decisão 17). `precisa` = algum
+   * personagem com `needs_makeup`; `fechado` = existe vaga extra com nome ~"maquiad" e talento
+   * atribuído — mesmo critério do `has_makeup_role` legado.
+   */
+  maquiagem?: { precisa: boolean; fechado: boolean };
   materiais?: EventMaterial[];
   /**
    * Presentes 3D do evento (feature 200) — só vem no payload quando o evento é do tipo SHOW;
@@ -331,6 +367,9 @@ export interface EventoDetalhe {
     payment_method: string | null;
     payment_installments: number | null;
     payment_due_date: string | null;
+    // feature 239 — só vem preenchido quando o usuário consegue abrir o orçamento
+    // (superadmin, ou comercial dono do orçamento); demais papéis recebem null.
+    orcamento_history_id: number | null;
     clients: { client_id: number; name: string | null; relation: string }[];
     form_response: { id: number; name: string; form_type: string } | null;
   };

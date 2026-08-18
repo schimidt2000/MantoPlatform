@@ -81,7 +81,19 @@ def _get_commission_rate(event, settings) -> Decimal:
 
 
 def _event_cost(event) -> int:
-    return sum(r.cache_value or 0 for r in event.roles if r.talent_id)
+    """Custo de cachês do evento — soma só o que a Manto realmente paga.
+
+    A vaga "Técnico de Som (Presença)" fica fora (feature 239, decisão 10): ela nunca tem
+    cachê, e um valor herdado de antes da trava não pode continuar inflando custo, margem e
+    base de comissão.
+    """
+    from app.calendar.casting_ops import e_vaga_de_presenca
+
+    return sum(
+        r.cache_value or 0
+        for r in event.roles
+        if r.talent_id and not e_vaga_de_presenca(r)
+    )
 
 
 def _group_cost(event) -> int:
@@ -513,7 +525,12 @@ def dashboard():
     )
 
     # A pagar / pago a talentos no período (exclui permutas? não: cachê é devido mesmo em permuta).
-    roles_no_periodo = [r for e in events for r in e.roles if r.talent_id]
+    # A vaga de presença fica fora, como na planilha de pagamentos (feature 239, decisão 10).
+    from app.calendar.casting_ops import e_vaga_de_presenca
+
+    roles_no_periodo = [
+        r for e in events for r in e.roles if r.talent_id and not e_vaga_de_presenca(r)
+    ]
     pagamentos_pendentes = sum(
         r.cache_value or 0 for r in roles_no_periodo
         if r.payment_status == "nao_pago"
@@ -822,7 +839,15 @@ def _pagamentos_query(month_str: str):
 
     Cachê de evento cancelado (feature 224) fica de fora: o evento não vai acontecer, ninguém
     trabalhou nele, e deixá-lo na planilha faria o financeiro pagar por um show que não houve.
+
+    A vaga "Técnico de Som (Presença)" também fica de fora (feature 239, decisão 10): ela é a
+    designação de quem VAI ao evento, feita pela equipe de ensaio — quem recebe o PIX do som é a
+    outra vaga ("Técnico de Som", Nivaldo). Como esta função é a fonte única dos quatro
+    consumidores da planilha (view Jinja, CSV Jinja, `GET /api/financeiro/pagamentos` e o CSV da
+    API), o filtro aqui limpa todos de uma vez.
     """
+    from app.calendar.routes import PRESENCE_CHARACTER
+
     try:
         year, month = int(month_str[:4]), int(month_str[5:7])
     except (ValueError, IndexError):
@@ -840,6 +865,7 @@ def _pagamentos_query(month_str: str):
         .join(CalendarEvent)
         .filter(
             EventRole.talent_id.isnot(None),
+            EventRole.character_name != PRESENCE_CHARACTER,
             CalendarEvent.cancelled_at.is_(None),
             CalendarEvent.start_at >= start,
             CalendarEvent.start_at < end,

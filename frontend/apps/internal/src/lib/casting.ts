@@ -120,6 +120,31 @@ export function useSetFigurinoDone(eventId: number) {
   return useRoleAction(eventId, (roleId) => `/api/roles/${roleId}/figurino-done`);
 }
 
+interface ToggleTransporteInput {
+  roleId: number;
+  /** `true` marca o integrante como responsável pelo veículo; `false` desmarca. */
+  marcado: boolean;
+}
+
+/**
+ * Marca/desmarca quem leva o carro no evento fora de SP (feature 239). Ida e volta na mesma
+ * rota, como o "figurino separado": `POST` marca, `DELETE` desmarca. O teto de cachê da pessoa
+ * marcada sobe a parcela de um veículo — quem recalcula é o servidor, que devolve o evento
+ * inteiro atualizado (inclusive `cache_cap_efetivo`).
+ */
+export function useToggleTransporte(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, ToggleTransporteInput>({
+    mutationFn: ({ roleId, marcado }) =>
+      apiFetch<EventoDetalhe>(`/api/roles/${roleId}/transporte`, {
+        method: marcado ? "POST" : "DELETE",
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["event", eventId], updated);
+    },
+  });
+}
+
 /** Dispensa um cargo sem talento (para de contar como pendente, sem excluir). */
 export function useDismissRole(eventId: number) {
   return useRoleAction(eventId, (roleId) => `/api/roles/${roleId}/dismiss`);

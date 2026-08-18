@@ -317,7 +317,13 @@ def api_financeiro_dashboard() -> Any:
         for e in eventos_com_venda
     )
 
-    roles_no_periodo = [r for e in events for r in e.roles if r.talent_id]
+    # A vaga "Técnico de Som (Presença)" fica fora do "a pagar/pago a talentos", como na planilha
+    # de pagamentos (feature 239, decisão 10) — quem recebe o PIX do som é a outra vaga.
+    from app.calendar.casting_ops import e_vaga_de_presenca
+
+    roles_no_periodo = [
+        r for e in events for r in e.roles if r.talent_id and not e_vaga_de_presenca(r)
+    ]
     pagamentos_pendentes = sum(
         float(r.cache_value or 0) for r in roles_no_periodo if r.payment_status == "nao_pago"
     )

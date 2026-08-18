@@ -4,6 +4,7 @@ import calendar as cal
 import json
 import os
 import re
+import unicodedata
 import urllib.parse
 import urllib.request
 import uuid
@@ -27,6 +28,7 @@ from .service import (
 from .. import db
 from app.constants import (
     RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CLIENT_RELATION_TIPOS, GCAL_KIND_KEY,
+    EVENT_TYPE_SHOW,
 )
 from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
@@ -61,9 +63,62 @@ _CAN_REQUEST_DELETE = {RoleName.SUPERADMIN, RoleName.COMERCIAL}
 # Técnico de Som padrão para eventos SHOW (Nivaldo de Andrade — recebe o PIX)
 SOUND_TECH_TALENT_ID: int = 42
 
+# Vaga do PIX do som. Nasce automaticamente com o tipo SHOW e sai junto quando o evento deixa
+# de ser SHOW (feature 239) — por isso o nome virou constante, e não literal solto.
+SOUND_TECH_CHARACTER: str = "Técnico de Som"
+
 # Vaga "presença" definida pela equipe de ensaio (quem vai ao evento). É tarefa do ensaio,
 # não do casting.
 PRESENCE_CHARACTER: str = "Técnico de Som (Presença)"
+
+# Nomes de equipe (não-personagens) que nunca podem aparecer no título do evento
+# (feature 239, decisão 6). Constante única usada tanto pelo sync do Google (ignora
+# segmentos do título que batam aqui) quanto pela reconciliação de EventRole a partir
+# do título — evita que uma edição direta no Google materialize equipe como personagem.
+RESERVED_TITLE_NAMES: tuple[str, ...] = (
+    "Coordenador",
+    SOUND_TECH_CHARACTER,
+    PRESENCE_CHARACTER,
+    "Maquiador",
+)
+
+
+def _normalize_title_name(name: str) -> str:
+    """Normaliza um nome de personagem/equipe para comparação robusta.
+
+    Remove acentos e caixa para que a denylist ``RESERVED_TITLE_NAMES`` capture
+    variações como "tecnico de som" ou "MAQUIADOR" (feature 239, decisão 6).
+
+    Args:
+        name: Texto a normalizar (nome de personagem ou segmento do título).
+
+    Returns:
+        O nome em minúsculas, sem acentos e sem espaços nas pontas.
+    """
+    decomposed = unicodedata.normalize("NFD", name)
+    without_accents = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return without_accents.strip().lower()
+
+
+_RESERVED_TITLE_NAMES_NORMALIZED = frozenset(
+    _normalize_title_name(name) for name in RESERVED_TITLE_NAMES
+)
+
+
+def _is_reserved_title_name(name: str) -> bool:
+    """Verifica se ``name`` bate com a denylist de nomes de equipe reservados.
+
+    Usado pelo sync do Google e pela reconciliação de roles a partir do título
+    (feature 239, decisão 6) para evitar que Coordenador/Técnico de Som/Maquiador
+    voltem a aparecer no título ou virem EventRole de personagem.
+
+    Args:
+        name: Segmento do título (ou nome de personagem) a checar.
+
+    Returns:
+        ``True`` se ``name`` bate com algum nome da denylist, ignorando acentos/caixa.
+    """
+    return _normalize_title_name(name) in _RESERVED_TITLE_NAMES_NORMALIZED
 
 
 def _build_start_end(d: date, start_str: str, end_str: str) -> tuple[datetime, datetime]:
@@ -1970,7 +2025,38 @@ def parse_characters(title: str) -> list[str]:
     parts = [p.strip() for p in re.split(r"\s*\+\s*", title) if p.strip()]
     # Remove prefixo (TIPO) de cada personagem
     cleaned = [strip_role_prefix(p) for p in parts]
-    return [p for p in cleaned if p]
+    # Coordenador/Técnico de Som/Maquiador nunca são personagens (feature 239, decisão 6) —
+    # blindagem mesmo que o título ainda contenha esses segmentos (ex.: título antigo ainda
+    # não passado pelo script retroativo, ou edição manual direta no Google).
+    return [p for p in cleaned if p and not _is_reserved_title_name(p)]
+
+
+def _strip_reserved_title_segments(title: str) -> str:
+    """Remove segmentos de equipe reservados (``RESERVED_TITLE_NAMES``) de um título.
+
+    Preserva o prefixo "(TIPO)" e os demais segmentos separados por "+". Usado no sync do
+    Google Calendar (feature 239, decisão 6): uma edição direta no título feita no Google
+    (ex.: alguém acrescenta "+ Coordenador" à mão para conferir pelo celular) não pode
+    reintroduzir equipe como personagem nem permanecer no título sincronizado para a
+    plataforma.
+
+    Args:
+        title: Título bruto vindo do Google Calendar (``summary``).
+
+    Returns:
+        Título sem os segmentos reservados. Retorna ``title`` sem alteração quando não há
+        nenhum segmento "+" ou nenhum deles bate com a denylist.
+    """
+    if not title or "+" not in title:
+        return title
+    m = re.match(r'^(\s*\([^)]*\)\s*)?(.*)$', title, re.DOTALL)
+    prefix = (m.group(1) or "") if m else ""
+    rest = m.group(2) if m else title
+    parts = [p.strip() for p in re.split(r"\s*\+\s*", rest) if p.strip()]
+    kept = [p for p in parts if not _is_reserved_title_name(strip_role_prefix(p))]
+    if len(kept) == len(parts):
+        return title
+    return f"{prefix}{' + '.join(kept)}".strip()
 
 
 _PTBR_WEEKDAYS = [
@@ -2079,13 +2165,13 @@ def _ensure_sound_technician(event_id: int) -> None:
     """
     pix_exists = EventRole.query.filter_by(
         event_id=event_id,
-        character_name="Técnico de Som",
+        character_name=SOUND_TECH_CHARACTER,
         role_type="extra",
     ).first()
     if not pix_exists:
         db.session.add(EventRole(
             event_id=event_id,
-            character_name="Técnico de Som",
+            character_name=SOUND_TECH_CHARACTER,
             role_type="extra",
             talent_id=SOUND_TECH_TALENT_ID,
         ))
@@ -2220,6 +2306,10 @@ def sync_events(items: list[dict]) -> None:
             continue
 
         title = item.get("summary") or "Sem título"
+        # Blindagem contra edição manual do título direto no Google (feature 239, decisão 6):
+        # segmentos de equipe reservados (Coordenador/Técnico de Som/Maquiador) nunca chegam a
+        # virar event.title nem a alimentar parse_characters/reconciliação de roles abaixo.
+        title = _strip_reserved_title_segments(title)
         description = item.get("description")
         location = item.get("location")
         start_at, end_at = parse_event_datetime(item)
@@ -2275,16 +2365,30 @@ def sync_events(items: list[dict]) -> None:
             _changes = _detect_changes(event, start_at, end_at, location)
             old_needs_rehearsal = event.needs_rehearsal
             old_location = event.location
+            old_title = event.title
 
             event.title = title
             event.description = description
             event.location = location
             event.start_at = start_at
             event.end_at = end_at
-            event.event_type = event_type
+            # O tipo vem do prefixo do título, então só é reimposto quando o título do Google
+            # REALMENTE mudou em relação ao guardado (feature 239). Antes ele era reescrito em
+            # toda rodada: quem trocava o tipo no Manto via o SHOW voltar sozinho no próximo
+            # sync — junto com "precisa ensaio" e a vaga de som — porque a Agenda ainda não
+            # tinha recebido o título novo (ou a escrita no Google falhou).
+            titulo_mudou = (title or "").strip() != (old_title or "").strip()
+            if titulo_mudou:
+                event.event_type = event_type
+            tipo_efetivo = event.event_type
             event.google_html_link = item.get("htmlLink") or event.google_html_link
             # parent_event_id NÃO é sobrescrito — gerenciado pela plataforma
-            if gc_needs_rehearsal and not old_needs_rehearsal:
+            precisa_ensaio_google = (
+                tipo_efetivo == "SHOW"
+                or "#ensaio" in desc_lower
+                or "precisa de ensaio" in desc_lower
+            )
+            if precisa_ensaio_google and not old_needs_rehearsal:
                 event.needs_rehearsal = True
                 _notify_ensaio_team(event)
 
@@ -2304,8 +2408,10 @@ def sync_events(items: list[dict]) -> None:
                 _notify_accepted_roles(event, _changes)
                 _log_sync("google_updated", event, details="; ".join(_changes))
 
-            # Garante técnico de som para eventos SHOW existentes (idempotente)
-            if event_type == "SHOW":
+            # Garante técnico de som para eventos SHOW existentes (idempotente). Usa o tipo
+            # EFETIVO (o que ficou gravado), não o lido do título: senão a vaga voltaria a ser
+            # recriada no evento que acabou de deixar de ser SHOW.
+            if tipo_efetivo == "SHOW":
                 _ensure_sound_technician(event.id)
 
         # Eventos criados pela plataforma: atualiza metadados mas preserva roles
@@ -2738,9 +2844,66 @@ def link_ensaio_parent(ensaio_id: int):
 
 # ─── CRIAR EVENTO (COMERCIAL) ─────────────────────────────────────────────────
 
+# Rótulo do subtipo de ator na explicação do teto (feature 239); subtipo novo cai no fallback.
+ATOR_SUBTIPO_LABELS = {
+    "cara_limpa": "Ator cara-limpa",
+    "boneco": "Boneco",
+    "cantor": "Cantor",
+}
+
+
+def _fmt_valor_nota(valor: float) -> str:
+    """Formata um valor em reais para a explicação do teto do cachê.
+
+    Args:
+        valor: Valor em reais.
+
+    Returns:
+        O valor em pt-BR (``"R$ 1.234"``, ``"R$ 66,67"``), sem centavos quando eles são zero.
+    """
+    if abs(valor - round(valor)) < 0.005:
+        return "R$ " + f"{round(valor):,}".replace(",", ".")
+    inteiro, centavos = f"{valor:,.2f}".split(".")
+    return "R$ " + inteiro.replace(",", ".") + "," + centavos
+
+
+def _montar_cap_note(
+    descricao: str,
+    base_rotulo: str,
+    base_valor: float,
+    adicionais: list[tuple[str, float]],
+    total: float,
+) -> str:
+    """Monta a explicação do teto de um papel, com a conta EM VALORES (feature 239).
+
+    Args:
+        descricao: Tipo/subtipo do papel ("Ator cara-limpa (show)", "Coordenador"…).
+        base_rotulo: Rótulo da parcela-base já com a régua de duração aplicada
+            ("base 2h", "base 4h ÷ 4 × 6h").
+        base_valor: Valor da parcela-base.
+        adicionais: Pares ``(rótulo, valor)`` dos adicionais; os zerados são omitidos.
+        total: O teto final — o mesmo número gravado em ``EventRole.cache_cap``.
+
+    Returns:
+        Ex.: ``"Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 + fora-SP R$ 67 = R$ 417"``.
+        Sem adicionais e com total igual à base, o ``"= total"`` redundante é omitido. O total
+        pode diferir da soma exibida em centavos: o teto é arredondado, a conta não.
+    """
+    partes = [f"{base_rotulo} {_fmt_valor_nota(base_valor)}"]
+    partes += [
+        f"{rotulo} {_fmt_valor_nota(valor)}"
+        for rotulo, valor in adicionais
+        if round(valor, 2)
+    ]
+    conta = " + ".join(partes)
+    if len(partes) == 1 and abs(total - base_valor) < 0.5:
+        return f"{descricao}: {conta}"
+    return f"{descricao}: {conta} = {_fmt_valor_nota(total)}"
+
+
 def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) -> list[dict]:
-    """Retorna lista de {label, cache_1h..cache_4h, needs_makeup, is_singer} para cada
-    performer + coordenadores + técnico + maquiador do snapshot.
+    """Retorna lista de {label, cache_1h..cache_4h, cap_notes, needs_makeup, is_singer} para
+    cada performer + coordenadores + técnico + maquiador do snapshot.
 
     Inclui o acréscimo de "show customizado" (+R$50/artista) nos cachês de personagem quando
     aplicável — antes só entrava no total do orçamento, não no cachê individual (feature 172).
@@ -2751,6 +2914,11 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
     noturno, adicional fora-SP por pessoa e show customizado). Coordenador e técnico de som
     escalam como os demais; o maquiador não (custo por make, não por hora). Com
     ``horas_extra=None`` a saída é byte-a-byte a de sempre (paridade 1–4h).
+
+    Feature 239: cada item traz também ``cap_notes`` — a mesma conta em TEXTO, uma nota por
+    chave de cachê (``cache_1h``..``cache_4h`` e ``cache_custom``). É o que
+    ``_create_roles_from_input`` grava em ``EventRole.cache_cap_note`` para o superadmin
+    entender de onde saiu o teto, em vez de ver só um número que ninguém sabe explicar.
     """
     from app.orcamento.pricing import (
         get_ator_prices, get_cantor_prices, get_especial_prices,
@@ -2803,6 +2971,7 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
 
         # `base_prices` = variante SEM maquiagem: é a base que escala na régua >4h; a diferença
         # para `prices` (o delta de make, hoje R$ 20) soma por fora como adicional fixo.
+        marcas: list[str] = []
         if ptype == "ator":
             subtipo = p.get("subtipo", "cara_limpa")
             if subtipo == "cantor":
@@ -2814,11 +2983,20 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
                 prices = get_ator_prices(subtipo, show, makeup)
                 base_prices = get_ator_prices(subtipo, show, makeup=False)
                 label  = nome or ("Boneco" if subtipo == "boneco" else "Ator")
+            descricao = ATOR_SUBTIPO_LABELS.get(subtipo, f"Ator {subtipo.replace('_', ' ')}")
+            if show:
+                marcas.append("show")
+            if makeup:
+                marcas.append("com maquiagem")
         elif ptype == "cantor":
             prices = get_cantor_prices(show=True, makeup=makeup)
             base_prices = get_cantor_prices(show=True, makeup=False)
             label  = nome or "Cantor"
             is_singer = True
+            descricao = "Cantor"
+            marcas.append("show")
+            if makeup:
+                marcas.append("com maquiagem")
         elif ptype == "especial":
             personagem = p.get("personagem", "")
             prices = get_especial_prices(personagem, show, cantor_flag)
@@ -2826,10 +3004,18 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
             label  = nome or personagem
             if cantor_flag:
                 is_singer = True
+            descricao = f"Especial {personagem}".strip()
+            if cantor_flag:
+                marcas.append("cantor")
+            elif show:
+                marcas.append("show")
         else:
             prices = (0, 0, 0, 0)
             base_prices = prices
             label  = nome or "Profissional"
+            descricao = "Profissional"
+        if marcas:
+            descricao = f"{descricao} ({', '.join(marcas)})"
 
         if makeup:
             if makeup_tipo == "especial":
@@ -2847,17 +3033,41 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
             "is_singer":    is_singer,
             "role_type":   "character",
         }
+        adicionais_papel = [
+            ("noturno", float(noturno_add)),
+            ("fora-SP", float(transport_add)),
+            ("show customizado", float(sosia_custom_add_per_artist)),
+        ]
+        item["cap_notes"] = {
+            f"cache_{h}h": _montar_cap_note(
+                descricao,
+                f"base {h}h",
+                float(prices[h - 1]),
+                adicionais_papel,
+                float(item[f"cache_{h}h"]),
+            )
+            for h in (1, 2, 3, 4)
+        }
         if extra:
             delta_make = int(prices[3]) - int(base_prices[3])
             item["cache_custom"] = _custom(
                 int(base_prices[3]),
                 delta_make + noturno_add + transport_add + sosia_custom_add_per_artist,
             )
+            item["cap_notes"]["cache_custom"] = _montar_cap_note(
+                descricao,
+                f"base 4h ÷ 4 × {extra}h",
+                float(base_prices[3]) / 4 * extra,
+                [("maquiagem", float(delta_make)), *adicionais_papel],
+                float(item["cache_custom"]),
+            )
         result.append(item)
 
     # Coordenadores
     coord_prices = get_coordenador_prices(has_show, coordenador_qty)
     per_coord    = [coord_prices[i] // max(coordenador_qty, 1) for i in range(4)]
+    coord_desc = "Coordenador (show)" if has_show else "Coordenador"
+    coord_adicionais = [("noturno", float(noturno_add)), ("fora-SP", float(transport_add))]
     for _ in range(coordenador_qty):
         item = {
             "label":       "Coordenador",
@@ -2869,8 +3079,25 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
             "is_singer":    False,
             "role_type":   "extra",
         }
+        item["cap_notes"] = {
+            f"cache_{h}h": _montar_cap_note(
+                coord_desc,
+                f"base {h}h",
+                float(per_coord[h - 1]),
+                coord_adicionais,
+                float(item[f"cache_{h}h"]),
+            )
+            for h in (1, 2, 3, 4)
+        }
         if extra:
             item["cache_custom"] = _custom(int(per_coord[3]), noturno_add + transport_add)
+            item["cap_notes"]["cache_custom"] = _montar_cap_note(
+                coord_desc,
+                f"base 4h ÷ 4 × {extra}h",
+                float(per_coord[3]) / 4 * extra,
+                coord_adicionais,
+                float(item["cache_custom"]),
+            )
         result.append(item)
 
     # Técnico de som (se houver show) — apenas regra do >500km afeta o técnico, não os adicionais por pessoa
@@ -2886,8 +3113,21 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
             "is_singer":    False,
             "role_type":   "extra",
         }
+        item["cap_notes"] = {
+            f"cache_{h}h": _montar_cap_note(
+                "Técnico de Som", f"base {h}h", float(tp[h - 1]), [], float(item[f"cache_{h}h"])
+            )
+            for h in (1, 2, 3, 4)
+        }
         if extra:
             item["cache_custom"] = _custom(int(tp[3]), 0)
+            item["cap_notes"]["cache_custom"] = _montar_cap_note(
+                "Técnico de Som",
+                f"base 4h ÷ 4 × {extra}h",
+                float(tp[3]) / 4 * extra,
+                [],
+                float(item["cache_custom"]),
+            )
         result.append(item)
 
     # Maquiador (se necessário)
@@ -2903,9 +3143,14 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
             "is_singer":    False,
             "role_type":   "extra",
         }
+        num_makes = num_makes_regular + num_makes_especial
+        mq_rotulo = f"{num_makes} maquiagem" if num_makes == 1 else f"{num_makes} maquiagens"
+        nota_mq = _montar_cap_note("Maquiador", mq_rotulo, float(mq_cost), [], float(mq_cost))
+        item["cap_notes"] = {f"cache_{h}h": nota_mq for h in (1, 2, 3, 4)}
         if extra:
             # Maquiador cobra por make, não por hora — a régua não escala este papel.
             item["cache_custom"] = int(mq_cost)
+            item["cap_notes"]["cache_custom"] = f"{nota_mq} (não escala com a duração)"
         result.append(item)
 
     return result
@@ -3129,6 +3374,10 @@ def _create_event_row(data: dict, *, google_event_id: str, gc_title: str) -> Cal
     d = date.fromisoformat(data["date_str"])
     st, et = _build_start_end(d, data["start_str"], data["end_str"])
     is_cortesia = bool(data.get("is_cortesia_permuta"))
+    # "SHOW sempre gera ensaio" é regra de servidor (feature 239): o React parou de somar
+    # `|| event_type === "SHOW"` no payload para a regra viver num lugar só — aqui e em
+    # `aplicar_troca_de_tipo`.
+    precisa_ensaio = bool(data.get("needs_rehearsal")) or data.get("event_type") == EVENT_TYPE_SHOW
 
     event = CalendarEvent(
         google_event_id=google_event_id,
@@ -3138,7 +3387,7 @@ def _create_event_row(data: dict, *, google_event_id: str, gc_title: str) -> Cal
         start_at=st,
         end_at=et,
         event_type=data.get("event_type") or None,
-        needs_rehearsal=bool(data.get("needs_rehearsal")),
+        needs_rehearsal=precisa_ensaio,
         source="platform",
         is_cortesia_permuta=is_cortesia,
         sale_value=0 if is_cortesia else data.get("sale_value"),
@@ -3244,12 +3493,18 @@ def _create_roles_from_input(
 
         sheet_id = char_data.get("figurino_sheet_id") or figurino_by_name.get(name.lower())
         # Decisão do dono (feature 236, 2ª rodada): o cachê NASCE VAZIO — o valor calculado da
-        # duração real vira só o TETO invisível (`cache_cap`, imposto por `casting_ops` a
-        # não-superadmin). Mostrar/pré-preencher a sugestão ancorava o casting no máximo — e
+        # duração real vira só o TETO (`cache_cap`, imposto por `casting_ops` a não-superadmin;
+        # invisível para quem escala, exposto com a conta ao superadmin desde a feature 239).
+        # Mostrar/pré-preencher a sugestão ancorava o casting no máximo — e
         # quem escala pode se escalar. O campo explícito do formulário continua valendo.
         cache_val = char_data.get("cache_value")
         cap = orc_caches[i].get(chave_cache) if i < len(orc_caches) else None
         role_type = orc_caches[i].get("role_type", "character") if i < len(orc_caches) else "character"
+        # Feature 239: a conta do teto em valores, para o superadmin não ver um número órfão.
+        # Só existe quando o cachê veio do orçamento recalculado no servidor — no fallback sem
+        # orçamento vinculado (`orc_caches` cru do cliente) não há como decompor a conta.
+        notas = orc_caches[i].get("cap_notes") if i < len(orc_caches) else None
+        cap_note = notas.get(chave_cache) if isinstance(notas, dict) and cap is not None else None
 
         talent_id = char_data.get("talent_id")
         pre_tid = None
@@ -3264,6 +3519,7 @@ def _create_roles_from_input(
             figurino_sheet_id=sheet_id,
             cache_value=cache_val,
             cache_cap=cap,
+            cache_cap_note=cap_note,
             role_type=role_type,
             needs_makeup=bool(char_data.get("needs_makeup")) or None,
             is_singer=bool(char_data.get("is_singer")) or None,

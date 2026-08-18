@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Pencil } from "lucide-react";
 import { Badge, Button } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
@@ -499,6 +500,13 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
         )}
         {venda.sale_date && <DataRow label="Data da venda">{formatDay(venda.sale_date)}</DataRow>}
         {venda.seller && <DataRow label="Vendedor responsável">{venda.seller}</DataRow>}
+        {venda.orcamento_history_id != null && (
+          <DataRow label="Orçamento de origem">
+            <Link to={`/orcamento/${venda.orcamento_history_id}`} className="text-blue underline">
+              Abrir orçamento
+            </Link>
+          </DataRow>
+        )}
         {venda.commission_rate != null && (
           <DataRow label="Taxa de comissão">{venda.commission_rate}%</DataRow>
         )}

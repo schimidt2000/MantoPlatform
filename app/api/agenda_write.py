@@ -128,14 +128,17 @@ def api_assign_role(role_id: int) -> Any:
     data = request.get_json(silent=True) or {}
     is_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
 
-    from app.calendar.casting_ops import assign_role
+    from app.calendar.casting_ops import _UNSET, assign_role
 
     assign_role(
         event,
         role,
         talent_id=data.get("talent_id"),
         cache_value=data.get("cache_value"),
-        travel_cache=data.get("travel_cache"),
+        # Repasse CONDICIONAL (feature 239): esta tela não edita o adicional de transporte e
+        # nunca manda a chave. Passar `data.get(...)` = None fazia o `assign_role` gravar NULL
+        # por cima do valor existente a cada "Salvar" — o `_UNSET` é o "não mexe nisso".
+        travel_cache=data["travel_cache"] if "travel_cache" in data else _UNSET,
         actor_name=current_user.name,
         is_superadmin=is_superadmin,
         tz=_TZ_SP,
@@ -228,6 +231,59 @@ def api_figurino_done(role_id: int) -> Any:
     from app.calendar.casting_ops import set_figurino_done
 
     set_figurino_done(event, role, actor_name=current_user.name, tz=_TZ_SP)
+    return _event_detail_json(event)
+
+
+@api_bp.route("/roles/<int:role_id>/transporte", methods=["POST"])
+@api_login_required
+def api_marcar_transporte(role_id: int) -> Any:
+    """Marca o integrante como responsável pelo transporte fora de SP (feature 239).
+
+    RBAC = `_CAN_EDIT_EVENT` — mesmo gate de quem escala o casting (decisão 4). O marcador só
+    existe em evento fora de SP: dentro de SP não há veículo a ratear, então a marcação é
+    recusada em vez de virar um teto inflado sem lastro.
+    """
+    role = EventRole.query.get(role_id)
+    if role is None:
+        return json_error("Cargo não encontrado", 404)
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+    event = CalendarEvent.query.get(role.event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not event.is_outside_sp:
+        return json_error("O transporte só vale para evento fora de São Paulo.", 400)
+
+    from app.calendar.casting_ops import set_transporte
+
+    set_transporte(
+        event, role, faz_transporte=True, actor_name=current_user.name, tz=_TZ_SP
+    )
+    return _event_detail_json(event)
+
+
+@api_bp.route("/roles/<int:role_id>/transporte", methods=["DELETE"])
+@api_login_required
+def api_desmarcar_transporte(role_id: int) -> Any:
+    """Desmarca o responsável pelo transporte (feature 239) — volta do `POST` de mesma rota.
+
+    Sem a guarda de fora-SP do POST: um evento que deixou de ser fora de SP precisa poder
+    limpar a marcação que já estava lá.
+    """
+    role = EventRole.query.get(role_id)
+    if role is None:
+        return json_error("Cargo não encontrado", 404)
+    if not _can_edit_event():
+        return json_error("Sem permissão", 403)
+    event = CalendarEvent.query.get(role.event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+
+    from app.calendar.casting_ops import set_transporte
+
+    set_transporte(
+        event, role, faz_transporte=False, actor_name=current_user.name, tz=_TZ_SP
+    )
     return _event_detail_json(event)
 
 
@@ -667,12 +723,12 @@ def api_create_event() -> Any:
     from app.calendar.routes import CALENDAR_ID, _build_start_end
     from app.calendar.routes import insert_event as _insert_event
 
-    title = data["title"]
-    event_type = data["event_type"]
-    import re
+    # Prefixo "(TIPO)" do título: a normalização virou `build_gc_title` em `event_ops`
+    # (feature 239), para a criação e as duas telas de edição usarem a MESMA regra — o sync do
+    # Google deriva o tipo desse prefixo.
+    from app.calendar.event_ops import build_gc_title
 
-    clean_title = re.sub(r"^\s*\([^)]*\)\s*", "", title).strip() if title else title
-    gc_title = f"({event_type}) {clean_title}" if event_type else title
+    gc_title = build_gc_title(data["title"], data["event_type"])
     d = date.fromisoformat(data["date_str"])
     st, et = _build_start_end(d, data["start_str"], data["end_str"])
 

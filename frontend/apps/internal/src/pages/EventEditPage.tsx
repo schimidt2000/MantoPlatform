@@ -213,7 +213,10 @@ export function EventEditPage() {
         end: values.end,
         location: values.location,
         description: values.description,
-        needs_rehearsal: values.needs_rehearsal || values.event_type === "SHOW",
+        // "SHOW sempre pede ensaio" é regra do servidor (feature 239) — o cliente manda só o
+        // que o usuário marcou, senão o `|| SHOW` daqui religava o flag do evento que acabou
+        // de deixar de ser SHOW.
+        needs_rehearsal: values.needs_rehearsal,
         sale_value: values.is_cortesia_permuta ? 0 : values.sale_value,
         sale_value_gross: values.is_cortesia_permuta ? 0 : values.sale_value_gross,
         transport_value: values.transport_value,

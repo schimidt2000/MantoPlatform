@@ -20,6 +20,7 @@ from app.models import (
     EventPayment,
     EventRating,
     EventReimbursement,
+    OrcamentoHistory,
     SiteSetting,
     SpecialExpense,
     User,
@@ -146,6 +147,10 @@ def _role_flags(user: Any, impersonate: str | None) -> dict[str, bool]:
         "show_casting": has(RoleName.CASTING) or is_superadmin,
         "show_figurino": has(RoleName.FIGURINO) or is_superadmin,
         "show_comercial": has(RoleName.COMERCIAL) or has(RoleName.FINANCEIRO) or is_superadmin,
+        # feature 239 — usado para decidir se o link do orçamento de origem é visível (só quem
+        # consegue de fato abrir GET /api/orcamento/historico/<id>: superadmin, ou o comercial
+        # dono do orçamento — ver _get_entry_or_none em app/api/orcamento_read.py).
+        "is_comercial": has(RoleName.COMERCIAL),
         "show_financeiro": has(RoleName.FINANCEIRO) or is_superadmin,
         "show_ensaio": has(RoleName.ENSAIO) or has(RoleName.CASTING) or is_superadmin,
         "is_superadmin": is_superadmin,
@@ -235,8 +240,25 @@ def _serialize_role(
     availability: dict[int, dict[str, str]],
     show_pii: bool,
     alertas_figurino: dict[int, dict[str, Any]] | None = None,
+    transporte_valor: Decimal | None = None,
+    is_superadmin: bool = False,
 ) -> dict[str, Any]:
-    """Um cargo do elenco. `cache_value` (cachê) só para casting/superadmin (dado do casting)."""
+    """Um cargo do elenco. `cache_value` (cachê) só para casting/superadmin (dado do casting).
+
+    Args:
+        role: O `EventRole`.
+        show_casting: Se quem lê enxerga os dados de casting (cachês, teto, carrinho).
+        availability: Agenda do talento na janela do evento, por `talent_id`.
+        show_pii: Se os dados pessoais do talento vão no payload.
+        alertas_figurino: Manutenções abertas por ficha de figurino.
+        transporte_valor: Parcela de UM veículo do evento (feature 239) — o MESMO número para
+            todos os papéis; o chamador calcula uma vez só (`valor_transporte_papel`).
+        is_superadmin: Se quem lê é superadmin. Só ele recebe o teto do orçamento (`cache_cap`)
+            e a conta que o produziu (`cache_cap_note`, feature 239) — para o casting o número
+            do teto continua fora do payload, ele só vê o aviso de que passou dele.
+    """
+    from app.calendar.casting_ops import e_vaga_de_presenca
+
     sheet = role.figurino_sheet
     data: dict[str, Any] = {
         "role_id": role.id,
@@ -267,16 +289,40 @@ def _serialize_role(
             if role.figurino_sheet_id
             else None
         ),
+        # Feature 239 (decisões 9/11): a vaga de presença é somente leitura no casting — a tela
+        # mostra quem está designado, sem campo de dinheiro nem ações. O flag vem SEMPRE (fora
+        # do `show_casting`) porque é ele que define a anatomia do card, não a permissão.
+        "is_presence": e_vaga_de_presenca(role),
     }
-    if show_casting:
+    # Nenhum dado de dinheiro sai para a vaga de presença: sem valor no payload, nenhuma tela
+    # futura consegue reintroduzir o campo por descuido.
+    if show_casting and not data["is_presence"]:
         data["cache_value"] = _money(role.cache_value)
         data["travel_cache"] = _money(role.travel_cache)
-        data["cache_cap"] = _money(role.cache_cap)
+        # Feature 239 — decisão 18: o teto do orçamento e a conta dele saem SÓ para o
+        # superadmin. `cache_cap_efetivo` (abaixo) continua indo para o casting porque é dele
+        # que sai o aviso "acima do limite" da feature 238 — o aviso não cita valor na tela.
+        if is_superadmin:
+            data["cache_cap"] = _money(role.cache_cap)
+            data["cache_cap_note"] = role.cache_cap_note
+        # Feature 239 — carrinho de transporte fora de SP. `cache_cap_efetivo` já vem somado
+        # (teto da 238 + parcela do veículo quando marcado) para a tela não reimplementar a
+        # regra do servidor: a conta do teto mora em um lugar só.
+        parcela = transporte_valor or Decimal("0")
+        data["does_transport"] = bool(role.does_transport)
+        data["transporte_valor"] = _money(parcela)
+        cap_efetivo = None
+        if role.cache_cap is not None:
+            cap_efetivo = max(role.cache_cap, role.cache_value or Decimal("0"))
+            if role.does_transport:
+                cap_efetivo += parcela
+        data["cache_cap_efetivo"] = _money(cap_efetivo)
     return data
 
 
 def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
     """KPIs financeiros agregados pelo grupo comercial — mesma fórmula da view `event_detail`."""
+    from app.calendar.casting_ops import e_vaga_de_presenca
     from app.calendar.routes import _group_events
 
     settings = SiteSetting.query.get(1)
@@ -291,7 +337,17 @@ def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
         Decimal(str(kpi_event.commission_rate))
         if kpi_event.commission_rate is not None else default_rate
     )
-    cost = sum((r.cache_value or 0 for ge in group for r in ge.roles if r.talent_id), Decimal("0"))
+    # A vaga de presença não custa nada (feature 239, decisão 10): incluí-la aqui distorceria
+    # lucro, margem e a comissão exibida no detalhe do evento.
+    cost = sum(
+        (
+            r.cache_value or 0
+            for ge in group
+            for r in ge.roles
+            if r.talent_id and not e_vaga_de_presenca(r)
+        ),
+        Decimal("0"),
+    )
     expenses_total = sum(
         (
             e.amount
@@ -574,7 +630,14 @@ def serialize_event_detail(
             ),
             "is_satellite": event.is_satellite,
             "group_name": event.group_name or None,
-            "characters": parse_characters(event.title),
+            # Personagens vêm da tabela EventRole (fonte de verdade) quando o evento já tem
+            # roles de personagem cadastradas; só cai para o parse do título (texto livre)
+            # em eventos sem EventRole de personagem — ex.: importados do Google antes de
+            # qualquer edição pela plataforma (feature 239, decisão 6).
+            "characters": (
+                [r.character_name for r in event.roles if r.role_type == "character"]
+                or parse_characters(event.title)
+            ),
             "is_ensaio": is_ensaio,
             # Logística (feature 149) — não-financeiro, sempre presente.
             "makeup_time": event.makeup_time or None,
@@ -649,10 +712,37 @@ def serialize_event_detail(
     alertas_figurino = alertas_por_ficha(
         [r.figurino_sheet_id for r in roles if r.figurino_sheet_id]
     )
+    # Feature 239: a parcela de UM veículo é a mesma para o evento inteiro (cada marcado leva
+    # um carro), e o cálculo relê o orçamento — uma vez só, fora do laço.
+    transporte_valor = None
+    if flags["show_casting"]:
+        from app.calendar.casting_ops import valor_transporte_papel
+
+        transporte_valor = valor_transporte_papel(event)
     data["elenco"] = [
-        _serialize_role(r, flags["show_casting"], availability, show_pii, alertas_figurino)
+        _serialize_role(
+            r,
+            flags["show_casting"],
+            availability,
+            show_pii,
+            alertas_figurino,
+            transporte_valor,
+            is_superadmin=flags["is_superadmin"],
+        )
         for r in roles
     ]
+    # Feature 239 (decisão 17): resumo de maquiador para o badge do Casting — mesmo critério do
+    # `has_makeup_role` legado (app/calendar/routes.py), agora exigindo também talento atribuído
+    # para considerar a vaga "fechada".
+    data["maquiagem"] = {
+        "precisa": any(r.needs_makeup for r in roles),
+        "fechado": any(
+            r.character_name
+            and "maquiad" in r.character_name.lower()
+            and r.talent_id is not None
+            for r in roles
+        ),
+    }
     data["materiais"] = _serialize_materials(event)
     # Presentes 3D (feature 200) — só evento SHOW tem a seção; a chave ausente é o sinal para o
     # React não renderizar nada (mesmo padrão dos blocos financeiros: o servidor decide).
@@ -721,6 +811,23 @@ def serialize_event_detail(
     # Bloco comercial (venda, contratos, cobrança) — COMERCIAL/FINANCEIRO/SUPERADMIN.
     if flags["show_comercial"]:
         form_response = event.form_responses[0] if event.form_responses else None
+        # feature 239 — só entra no payload quando o usuário consegue de fato abrir o orçamento
+        # (mesmo RBAC de GET /api/orcamento/historico/<id>: superadmin vê qualquer um; comercial
+        # não-superadmin só o que ele mesmo criou). Demais papéis (ex.: FINANCEIRO) recebem null
+        # e o React simplesmente não mostra o link.
+        orcamento_history_id: int | None = None
+        if event.orcamento_history_id:
+            if flags["is_superadmin"]:
+                orcamento_history_id = event.orcamento_history_id
+            elif flags["is_comercial"]:
+                owns_orcamento = (
+                    OrcamentoHistory.query.filter_by(
+                        id=event.orcamento_history_id, user_id=user.id
+                    ).first()
+                    is not None
+                )
+                if owns_orcamento:
+                    orcamento_history_id = event.orcamento_history_id
         data["venda"] = {
             "sale_value": _money(event.sale_value),
             "sale_value_gross": _money(event.sale_value_gross),
@@ -735,6 +842,7 @@ def serialize_event_detail(
             "payment_method": event.payment_method,
             "payment_installments": event.payment_installments,
             "payment_due_date": event.payment_due_date.isoformat() if event.payment_due_date else None,
+            "orcamento_history_id": orcamento_history_id,
             # feature 184 — necessários para pré-preencher/salvar o formulário de edição de evento.
             "clients": [
                 {

@@ -11,6 +11,26 @@ import { useCatalogElencoBusca } from "../../lib/catalogoElenco";
 import { CharacterAutocomplete, type CharacterSelection } from "../CharacterAutocomplete";
 import { FIELD, FIELD_ERROR, LABEL, HELP, FieldError, BlockCard } from "./shared";
 
+/** Marcas de acento decompostas pelo `normalize("NFD")` (bloco Unicode Combining Diacriticals). */
+const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
+
+/** Remove acentos e caixa para comparação robusta ("Técnico" casa com "tecnico"). */
+function normalizeName(text: string): string {
+  return text.normalize("NFD").replace(DIACRITICS, "").trim().toLowerCase();
+}
+
+/**
+ * Nomes de equipe que nunca podem aparecer no título do evento (feature 239, decisão 6).
+ * Blindagem defensiva de `generateTitle`: mesmo que esses nomes entrem na lista de
+ * personagens por algum outro caminho (ex.: digitados manualmente), são excluídos aqui.
+ */
+const RESERVED_TITLE_NAMES = [
+  "Coordenador",
+  "Técnico de Som",
+  "Técnico de Som (Presença)",
+  "Maquiador",
+].map(normalizeName);
+
 /** Opções de talento com avatar circular (feature 195, Princípio X.1/X.2). */
 function talentOptions(talents: AssignableTalent[]): ComboboxOption[] {
   return talents.map((t) => ({
@@ -162,6 +182,7 @@ export function ElencoBlock({
     const names = characters
       .map((c) => c.name.trim())
       .filter(Boolean)
+      .filter((n) => !RESERVED_TITLE_NAMES.includes(normalizeName(n)))
       .map((n) => n.toUpperCase());
     const prefix = eventType ? `(${eventType}) ` : "";
     setValue("title", `${prefix}${names.join(" + ")}`, { shouldValidate: true });

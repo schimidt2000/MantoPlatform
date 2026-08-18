@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AvatarThumb, Badge, Button } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import { formatBRL, MoneyInput } from "@manto/money";
+import { PRESENCA_CHARACTER } from "../../lib/agenda";
 import type { EventoDetalhe, PaymentStatus, RoleItem } from "../../lib/agenda";
 import {
   useAddRole,
@@ -10,6 +11,7 @@ import {
   useDismissRole,
   useRestoreRole,
   useSendInvite,
+  useToggleTransporte,
 } from "../../lib/casting";
 import { buildConviteMsg, useSetPaymentStatus } from "../../lib/eventDetail";
 import { brl, Empty, formatDay, formatTime, INPUT_CLASS, Panel } from "./parts";
@@ -27,6 +29,22 @@ const INVITE_LABELS: Record<string, { text: string; tone: "green" | "gold" | "re
   pending: { text: "⏳ Aguardando", tone: "gold" },
   rejected: { text: "✕ Recusado", tone: "red" },
 };
+
+/**
+ * É a vaga "Técnico de Som (Presença)" (feature 239)? O servidor manda `is_presence`; a
+ * comparação pelo nome fica como retaguarda para payload antigo em cache.
+ */
+function ehPresenca(role: RoleItem): boolean {
+  return role.is_presence ?? role.character_name === PRESENCA_CHARACTER;
+}
+
+/**
+ * É a vaga de Maquiador (equipe de apoio)? Mesmo critério do resumo `maquiagem` que o servidor
+ * calcula (feature 239, decisão 17) — nome contendo "maquiad", case-insensitive.
+ */
+function ehVagaDeMaquiador(role: RoleItem): boolean {
+  return role.role_type === "extra" && /maquiad/i.test(role.character_name);
+}
 
 /** Badge de atenção quando o talento tem outro compromisso na mesma data. */
 function AvailabilityBadge({ role }: { role: RoleItem }) {
@@ -144,18 +162,25 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
   const invite = useSendInvite(eventId);
   const dismiss = useDismissRole(eventId);
   const restore = useRestoreRole(eventId);
+  const transporte = useToggleTransporte(eventId);
   const [talentId, setTalentId] = useState<number | null>(role.talent?.id ?? null);
   const [cache, setCache] = useState<number>(role.cache_value ?? 0);
 
   const inviteInfo = role.invite_status ? INVITE_LABELS[role.invite_status] : undefined;
   const alerta = role.availability && role.availability.status !== "free";
+  // Feature 239 (decisão 17): a vaga de Maquiador sem talento usa o mesmo destaque visual de
+  // alerta já existente — sinaliza no card que falta fechar essa vaga.
+  const maquiadorSemTalento = ehVagaDeMaquiador(role) && !role.talent;
   const cacheAlterado = cache !== (role.cache_value ?? 0);
   const sujo = talentId !== (role.talent?.id ?? null) || cacheAlterado;
 
   /**
    * Teto de cachê do orçamento (`cache_cap`, gravado na criação quando o evento nasce da
-   * calculadora). O **valor** do teto é deliberadamente invisível — o casting não negocia
-   * contra um número exposto na tela; o que ele precisa saber é só que passou dele.
+   * calculadora). O **valor** do teto é invisível para quem escala — o casting não negocia
+   * contra um número exposto na tela; o que ele precisa saber é só que passou dele. Para o
+   * superadmin (feature 239, decisão 18) o número aparece junto com a conta que o produziu
+   * (`cache_cap_note`): quem autoriza acima do teto precisa saber de onde o teto saiu. O
+   * servidor faz o mesmo corte — `cache_cap`/`cache_cap_note` nem chegam a quem não é SA.
    *
    * Sem este aviso, `assign_casting_role` rebaixava o valor para o teto em silêncio: quem
    * digitava acima via "✓ Salvo" e o número voltava sozinho, sem explicação (a tela Jinja
@@ -163,15 +188,34 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
    */
   // Feature 238: o teto efetivo considera o valor JÁ salvo no papel — se um superadmin o
   // subiu acima do cap, o casting pode usar até ele (o servidor aplica a mesma regra).
+  // Feature 239: o servidor manda o teto pronto em `cache_cap_efetivo` (já com a parcela do
+  // veículo de quem leva o carro). O cálculo local fica só como retaguarda para payload antigo.
   const tetoEfetivo =
-    role.cache_cap != null ? Math.max(role.cache_cap, role.cache_value ?? 0) : null;
+    role.cache_cap_efetivo ??
+    (role.cache_cap != null ? Math.max(role.cache_cap, role.cache_value ?? 0) : null);
   const acimaDoTeto = tetoEfetivo != null && cache > tetoEfetivo;
   const podeUltrapassar = Boolean(data.flags.is_superadmin);
+  // O carrinho só existe fora de SP: dentro da cidade não há veículo a ratear (decisão 4).
+  const foraDeSP = Boolean(data.event.travel?.is_outside_sp);
+  const fazTransporte = Boolean(role.does_transport);
+  // A conta do teto (só superadmin). Papel criado à mão não tem nota: o teto existe, mas
+  // ninguém o calculou de um orçamento — dizer isso é mais útil do que não dizer nada.
+  const explicacaoTeto = role.cache_cap_note || "definido manualmente, sem orçamento vinculado";
+  const parcelaCarrinho =
+    fazTransporte && role.transporte_valor
+      ? ` + transporte ${brl(role.transporte_valor)} (carrinho)`
+      : "";
+  // Regra da 238: um cachê que o superadmin já autorizou acima do orçamento vira o novo teto.
+  // Sem esta ressalva o número exibido não bateria com a conta ao lado dele.
+  const tetoElevado =
+    role.cache_cap != null && (role.cache_value ?? 0) > role.cache_cap
+      ? " (teto elevado pelo cachê já autorizado)"
+      : "";
 
   return (
     <li
       className={`rounded-md border p-3 ${
-        alerta ? "border-gold bg-gold-soft/20" : "border-line bg-surface-2/40"
+        alerta || maquiadorSemTalento ? "border-gold bg-gold-soft/20" : "border-line bg-surface-2/40"
       }`}
     >
       <div className="flex items-start gap-2.5">
@@ -187,8 +231,26 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
             <span className="text-sm font-bold uppercase tracking-wide text-ink">
               {role.character_name}
             </span>
+            {role.needs_makeup && (
+              <span title="Precisa de maquiagem" aria-label="Precisa de maquiagem">
+                💄
+              </span>
+            )}
             {role.dismissed && <Badge>dispensado</Badge>}
             <AvailabilityBadge role={role} />
+            {fazTransporte && (
+              <Badge tone="gold">
+                <span
+                  title={
+                    role.transporte_valor
+                      ? `Leva um veículo — o teto do cachê sobe ${brl(role.transporte_valor)}`
+                      : "Leva um veículo neste evento"
+                  }
+                >
+                  🚗 Transporte
+                </span>
+              </Badge>
+            )}
             {inviteInfo && (
               <Badge tone={inviteInfo.tone} className="sm:ml-auto">
                 {inviteInfo.text}
@@ -204,6 +266,14 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
               <span className="ml-2 tabular-nums">Cachê: {brl(role.cache_value)}</span>
             )}
           </div>
+          {data.flags.is_superadmin && tetoEfetivo != null && (
+            <div className="text-xs text-muted/80">
+              <span className="tabular-nums">Teto: {brl(tetoEfetivo)}</span>
+              <span> — {explicacaoTeto}</span>
+              {parcelaCarrinho}
+              {tetoElevado}
+            </div>
+          )}
         </div>
       </div>
 
@@ -272,6 +342,27 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <PaymentStatusSelect role={role} eventId={eventId} canEdit={canEdit} />
+        {/* Fora de SP o botão aparece para marcar; se a marcação já existe ele continua
+            aparecendo mesmo que o evento tenha voltado a ser dentro de SP — senão a marca
+            ficaria presa no banco sem ninguém conseguir tirá-la da tela. */}
+        {canEdit && (foraDeSP || fazTransporte) && (
+          <Button
+            variant={fazTransporte ? "outline" : "ghost"}
+            size="sm"
+            aria-pressed={fazTransporte}
+            loading={transporte.isPending}
+            title={
+              role.transporte_valor
+                ? `Parcela de um veículo: ${brl(role.transporte_valor)} acima do teto`
+                : undefined
+            }
+            onClick={() =>
+              transporte.mutate({ roleId: role.role_id, marcado: !fazTransporte })
+            }
+          >
+            {fazTransporte ? "🚗 Leva o carro" : "🚗 Marcar transporte"}
+          </Button>
+        )}
         {canEdit && role.talent && (
           <>
             <Button
@@ -332,7 +423,54 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
       {assign.isError && (
         <p className="mt-1 text-sm text-red">Não foi possível salvar. Tente novamente.</p>
       )}
+      {transporte.isError && (
+        <p className="mt-1 text-sm text-red">
+          {transporte.error?.message || "Não foi possível mudar o transporte."}
+        </p>
+      )}
       {remove.isError && <p className="mt-1 text-sm text-red">{remove.error?.message}</p>}
+    </li>
+  );
+}
+
+/**
+ * Card SOMENTE LEITURA da vaga "Técnico de Som (Presença)" (feature 239, decisões 9/11).
+ *
+ * Ela continua visível na Equipe de apoio — quem abre o evento precisa ver quem vai ao show —
+ * mas sem campo de cachê, sem convite, sem status de pagamento e sem remover: a vaga nunca tem
+ * valor (quem recebe o PIX do som é a vaga "Técnico de Som") e a designação é tarefa do painel
+ * de Ensaio. Antes desta feature ela era um card comum, e salvar um valor nele criava uma linha
+ * na planilha de pagamentos.
+ */
+function PresencaCard({ role }: { role: RoleItem }) {
+  return (
+    <li className="rounded-md border border-line bg-surface-2/40 p-3">
+      <div className="flex items-start gap-2.5">
+        <AvatarThumb
+          src={role.talent?.photo_url ? assetUrl(role.talent.photo_url) : null}
+          name={role.talent?.name}
+          shape="circle"
+          size="lg"
+          fallbackIcon="🎧"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-sm font-bold uppercase tracking-wide text-ink">
+              {role.character_name}
+            </span>
+            <Badge>somente leitura</Badge>
+          </div>
+          <div className="text-sm text-muted">
+            {role.talent ? role.talent.name : "— ninguém designado —"}
+          </div>
+          <div className="text-xs text-muted">
+            {role.assigned_at && (
+              <span className="mr-2">Designado em {formatDay(role.assigned_at)}</span>
+            )}
+            <span>Vaga sem cachê — designação no painel de Ensaio.</span>
+          </div>
+        </div>
+      </div>
     </li>
   );
 }
@@ -444,15 +582,23 @@ export function CastingSection({ data }: CastingSectionProps) {
   const personagens = roles.filter((r) => r.role_type !== "extra");
   const apoio = roles.filter((r) => r.role_type === "extra");
   const comAlerta = roles.filter((r) => r.availability && r.availability.status !== "free");
+  // Feature 239 (decisão 17): resumo de maquiador calculado pelo servidor — o mesmo critério do
+  // `has_makeup_role` legado, agora exigindo talento atribuído para considerar "fechado".
+  const maquiagem = data.maquiagem;
 
   const renderList = (items: RoleItem[]) =>
     items.length === 0 ? (
       <Empty>Nenhum cargo cadastrado.</Empty>
     ) : (
       <ul className="space-y-2">
-        {items.map((role) => (
-          <RoleCard key={role.role_id} role={role} data={data} canEdit={canEdit} />
-        ))}
+        {items.map((role) =>
+          // A vaga de presença fica visível, mas sem nenhuma ação de dinheiro (feature 239).
+          ehPresenca(role) ? (
+            <PresencaCard key={role.role_id} role={role} />
+          ) : (
+            <RoleCard key={role.role_id} role={role} data={data} canEdit={canEdit} />
+          ),
+        )}
       </ul>
     );
 
@@ -461,10 +607,22 @@ export function CastingSection({ data }: CastingSectionProps) {
       <Panel
         title="Casting"
         actions={
-          comAlerta.length > 0 ? (
-            <Badge tone="gold" className="whitespace-nowrap">
-              {comAlerta.length} com conflito de agenda
-            </Badge>
+          comAlerta.length > 0 || (maquiagem && maquiagem.precisa) ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {comAlerta.length > 0 && (
+                <Badge tone="gold" className="whitespace-nowrap">
+                  {comAlerta.length} com conflito de agenda
+                </Badge>
+              )}
+              {maquiagem?.precisa && (
+                <Badge
+                  tone={maquiagem.fechado ? "green" : "gold"}
+                  className="whitespace-nowrap"
+                >
+                  💄 {maquiagem.fechado ? "Maquiador fechado" : "Falta maquiador"}
+                </Badge>
+              )}
+            </div>
           ) : null
         }
       >

@@ -8,10 +8,11 @@ não existirem em duas versões paralelas quando a Fundação (feature 144) migr
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from flask import current_app
 from sqlalchemy import and_, func, not_
 
 from app import db
-from app.constants import RoleName
+from app.constants import EVENT_TYPE_SHOW, RoleName
 from app.models import CalendarEvent, EventPayment, EventRole, SiteSetting
 
 
@@ -176,11 +177,20 @@ def compute_ensaio_tasks(cutoff: datetime) -> dict[str, Any]:
         if e.parent is None
     ]
 
+    # Cinto de segurança (feature 239): a vaga de presença só é tarefa em evento SHOW e não
+    # cancelado. A remoção automática na troca de tipo já limpa a vaga, mas esta consulta era a
+    # única das tarefas sem `not_cancelled` — e sem filtro de tipo nenhum, então qualquer vaga
+    # órfã sobrevivente seguia cobrando a equipe de ensaio para sempre.
     pending_presence = (
         EventRole.query
         .filter(EventRole.talent_id.is_(None), EventRole.character_name == PRESENCE_CHARACTER)
         .join(CalendarEvent)
-        .filter(exclude_ensaios, CalendarEvent.start_at >= now)
+        .filter(
+            exclude_ensaios,
+            CalendarEvent.start_at >= now,
+            CalendarEvent.event_type == EVENT_TYPE_SHOW,
+            CalendarEvent.cancelled_at.is_(None),
+        )
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
@@ -392,10 +402,18 @@ def compute_performance(start_dt: datetime | None, end_dt: datetime | None) -> d
         .filter(perf_filter)
         .count()
     )
+    # A vaga "Técnico de Som (Presença)" não entra na entrada total (feature 239, decisão 10):
+    # ela nunca tem cachê, e o mesmo `not_presence` já vale para as tarefas de casting/figurino.
+    from app.calendar.routes import PRESENCE_CHARACTER
+
     money_total = (
         db.session.query(func.coalesce(func.sum(EventRole.cache_value), 0))
         .join(CalendarEvent)
-        .filter(perf_filter, EventRole.assigned_at.isnot(None))
+        .filter(
+            perf_filter,
+            EventRole.assigned_at.isnot(None),
+            EventRole.character_name != PRESENCE_CHARACTER,
+        )
         .scalar()
     )
     return {
@@ -555,6 +573,10 @@ def build_dashboard_summary(
     # evento e não é quem vai consertar.
     fila_oficina = _producao_resumo_setor(user) if show_figurino else None
 
+    # URL raiz do portal (mesma fonte de `_portal_url()` em `app/email_service.py`), para a
+    # mensagem de cobrança via WhatsApp linkar direto para o portal (feature 239).
+    portal_url = current_app.config.get("PORTAL_URL", "").rstrip("/") or None
+
     return {
         "casting": casting,
         "figurino": figurino,
@@ -565,6 +587,7 @@ def build_dashboard_summary(
         "financeiro": financeiro,
         "performance": performance,
         "dismissed_casting": dismissed,
+        "portal_url": portal_url,
     }
 
 

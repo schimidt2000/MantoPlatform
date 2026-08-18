@@ -111,15 +111,17 @@ export function EventCreatePage() {
     setValue("with_invoice", Boolean(p.with_invoice));
     setOrcCaches(p.caches ?? []);
     setCharacters(
-      (p.caches ?? []).map((c) => ({
-        role_id: null,
-        name: c.label,
-        figurino_sheet_id: null,
-        cache_value: null,
-        needs_makeup: c.needs_makeup,
-        is_singer: c.is_singer,
-        talent_id: null,
-      })),
+      (p.caches ?? [])
+        .filter((c) => c.role_type === "character")
+        .map((c) => ({
+          role_id: null,
+          name: c.label,
+          figurino_sheet_id: null,
+          cache_value: null,
+          needs_makeup: c.needs_makeup,
+          is_singer: c.is_singer,
+          talent_id: null,
+        })),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill.data?.orcamento_id]);
@@ -279,7 +281,9 @@ export function EventCreatePage() {
         end: values.end,
         location: values.location,
         description: values.description,
-        needs_rehearsal: values.needs_rehearsal || values.event_type === "SHOW",
+        // "SHOW sempre pede ensaio" é regra do servidor (feature 239): `_create_event_row`
+        // liga o flag sozinho, e o cliente manda só o que o usuário marcou.
+        needs_rehearsal: values.needs_rehearsal,
         sale_value: values.is_cortesia_permuta ? 0 : values.sale_value,
         sale_value_gross: values.is_cortesia_permuta ? 0 : values.sale_value_gross,
         transport_value: values.transport_value,

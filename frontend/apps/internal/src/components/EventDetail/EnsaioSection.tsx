@@ -335,12 +335,15 @@ export function EnsaioSection({ data }: EnsaioSectionProps) {
   if (data.ensaios === undefined) return null;
 
   const precisaEnsaio = data.event.needs_rehearsal || data.event.event_type === "SHOW";
+  // Evento que não pede ensaio e não tem nenhum agendado não oferece o botão: ele contradizia
+  // a frase "Este evento não pede ensaio." logo abaixo (feature 239).
+  const podeAgendar = canEdit && (precisaEnsaio || data.ensaios.length > 0);
 
   return (
     <Panel
       title="Ensaios"
       actions={
-        canEdit ? (
+        podeAgendar ? (
           <Button variant="outline" size="sm" onClick={() => setShowForm((v) => !v)}>
             {showForm ? "Fechar" : "+ Agendar ensaio"}
           </Button>
@@ -402,7 +405,7 @@ export function EnsaioSection({ data }: EnsaioSectionProps) {
           </ul>
         )}
 
-        {showForm && canEdit && (
+        {showForm && podeAgendar && (
           <EnsaioForm
             submitLabel="Agendar"
             pending={create.isPending}

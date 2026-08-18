@@ -14,11 +14,12 @@ movidos de `routes.py` (que os reimporta com alias) para manter a dependência u
 """
 
 import logging
+import re
 from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.constants import RoleName
+from app.constants import EVENT_TYPE_SHOW, RoleName
 from app.email_service import send_async, send_ensaio_alert_email, send_event_changed_email
 from app.models import (
     EventClient,
@@ -299,6 +300,170 @@ def _reconcile_characters(
     return warnings, assigned_now
 
 
+# ── Troca de tipo do evento (SHOW ⇄ não-SHOW) — feature 239 ──────────────────────────────────
+# Fonte única da reação à mudança de `event_type`. Os dois caminhos de edição (o cabeçalho da
+# aba Resumo e o formulário em bloco) passam por aqui; a criação mantém a mesma regra em
+# `_create_event_row`/`_apply_default_roles`. Sem isto, o evento que deixava de ser SHOW seguia
+# cobrando ensaio e técnico de som para sempre — e o sync do Google ainda ressuscitava tudo pelo
+# prefixo do título, por isso `build_gc_title` anda junto.
+
+
+def build_gc_title(title: str | None, event_type: str | None) -> str | None:
+    """Reescreve o prefixo "(TIPO)" do título do evento, preservando o resto intacto.
+
+    Extraído da criação (`app/api/agenda_write.py`), onde era a única normalização existente.
+    Só o par de parênteses inicial é trocado: a parte dos personagens ("HOMEM ARANHA + MARIO")
+    fica idêntica, porque é dela que `parse_characters` reconstrói o elenco no sync do Google.
+
+    Args:
+        title: Título como veio do formulário (com ou sem prefixo de tipo).
+        event_type: Tipo do evento ("SHOW", "CORP", ...). Vazio/None devolve o título como veio.
+
+    Returns:
+        O título prefixado com o tipo atual, ou o título original quando não há tipo.
+    """
+    if not title or not event_type:
+        return title
+    clean = re.sub(r"^\s*\([^)]*\)\s*", "", title).strip()
+    return f"({event_type}) {clean}"
+
+
+def _descrever_vaga_de_som(role: Any) -> str:
+    """Resume uma vaga automática de som para o `EventLog` (quem estava, quanto e em que status).
+
+    O log é o único rastro do que existia antes da remoção automática — sem ele ninguém consegue
+    reconstruir a vaga (nem saber que havia dinheiro combinado nela).
+    """
+    if role.talent_id:
+        talent = Talent.query.get(role.talent_id)
+        quem = (talent.artistic_name or talent.full_name) if talent else f"talento {role.talent_id}"
+    else:
+        quem = "sem talento"
+    cache = f"cachê {role.cache_value}" if role.cache_value is not None else "sem cachê"
+    return (
+        f"{role.character_name} [{quem}; {cache}; convite {role.invite_status or '—'}; "
+        f"pagamento {role.payment_status}]"
+    )
+
+
+def _entrar_em_show(event: Any, tipo_antigo: str, *, actor_name: str, tz: ZoneInfo) -> list[str]:
+    """Aplica o que a criação de um SHOW aplica: vagas de som e "precisa ensaio" ligado."""
+    from app.calendar.routes import _ensure_sound_technician
+
+    _ensure_sound_technician(event.id)
+    event.needs_rehearsal = True
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Comercial",
+        message=(
+            f"Tipo do evento: {tipo_antigo or '—'} → {EVENT_TYPE_SHOW}. "
+            "Vagas de Técnico de Som criadas e 'precisa ensaio' ligado (regra do SHOW)."
+        ),
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.commit()
+    return [
+        "O evento virou SHOW: vagas de Técnico de Som criadas e ensaio marcado como necessário.",
+    ]
+
+
+def _sair_de_show(event: Any, tipo_novo: str, *, actor_name: str, tz: ZoneInfo) -> list[str]:
+    """Desmonta TUDO que só existia por causa do SHOW (decisão 7 da rodada 239).
+
+    Remoção automática e incondicional: ensaios já agendados são cancelados (no Google Agenda
+    também, pelo mesmo `delete_ensaio` do botão de cancelar), as duas vagas automáticas de som
+    saem mesmo preenchidas, e `needs_rehearsal` é desligado. Tudo vai para o `EventLog` com os
+    valores que existiam, e volta como aviso não-bloqueante para a tela.
+    """
+    from app.calendar.routes import PRESENCE_CHARACTER, SOUND_TECH_CHARACTER
+
+    avisos: list[str] = []
+    removidos: list[str] = []
+
+    for ensaio in list(event.ensaios or []):
+        quando = ensaio.start_at.strftime("%d/%m/%Y %H:%M") if ensaio.start_at else "sem data"
+        removidos.append(f"ensaio de {quando}")
+        aviso_google = delete_ensaio(ensaio)
+        avisos.append(f"Ensaio de {quando} cancelado — o evento deixou de ser SHOW.")
+        if aviso_google:
+            avisos.append(aviso_google)
+
+    vagas = (
+        EventRole.query
+        .filter(
+            EventRole.event_id == event.id,
+            EventRole.role_type == "extra",
+            EventRole.character_name.in_((SOUND_TECH_CHARACTER, PRESENCE_CHARACTER)),
+        )
+        .all()
+    )
+    for role in vagas:
+        removidos.append(_descrever_vaga_de_som(role))
+        preenchida = role.talent_id is not None or role.cache_value is not None
+        if preenchida:
+            avisos.append(
+                f"A vaga '{role.character_name}' já estava preenchida e foi removida — "
+                "o evento deixou de ser SHOW."
+            )
+        else:
+            avisos.append(f"Vaga '{role.character_name}' removida — o evento deixou de ser SHOW.")
+        db.session.delete(role)
+
+    if event.needs_rehearsal:
+        removidos.append("'precisa ensaio' desligado")
+        event.needs_rehearsal = False
+
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Comercial",
+        message=(
+            f"Tipo do evento: {EVENT_TYPE_SHOW} → {tipo_novo or '—'}. Removido automaticamente: "
+            + ("; ".join(removidos) if removidos else "nada (não havia ensaio nem vaga de som)")
+        ),
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.commit()
+    return avisos
+
+
+def aplicar_troca_de_tipo(
+    event: Any,
+    tipo_antigo: str | None,
+    tipo_novo: str | None,
+    *,
+    actor_name: str,
+    tz: ZoneInfo,
+) -> list[str]:
+    """Reage à mudança de tipo de um evento já existente — fonte única (feature 239).
+
+    Chamada por `update_event_basics` e por `update_event_core`, sempre com o tipo ANTIGO lido
+    antes da atribuição. Nada acontece quando o tipo não muda ou quando a troca não envolve
+    SHOW (CORP → R&I, por exemplo, não tem regra automática nenhuma).
+
+    Args:
+        event: O `CalendarEvent` já com o tipo novo atribuído e gravado.
+        tipo_antigo: Tipo que o evento tinha antes da edição.
+        tipo_novo: Tipo que o evento passou a ter.
+        actor_name: Nome de quem editou, para o `EventLog`.
+        tz: Fuso usado no carimbo dos logs.
+
+    Returns:
+        Avisos não-bloqueantes descrevendo o que foi criado ou removido automaticamente —
+        entram na mesma lista de `warnings` que os endpoints já devolvem.
+    """
+    antigo = (tipo_antigo or "").strip().upper()
+    novo = (tipo_novo or "").strip().upper()
+    if antigo == novo:
+        return []
+    if novo == EVENT_TYPE_SHOW:
+        return _entrar_em_show(event, antigo, actor_name=actor_name, tz=tz)
+    if antigo == EVENT_TYPE_SHOW:
+        return _sair_de_show(event, novo, actor_name=actor_name, tz=tz)
+    return []
+
+
 def update_event_core(
     event: Any,
     data: dict,
@@ -335,6 +500,8 @@ def update_event_core(
 
     old_title, old_start, old_end = event.title, event.start_at, event.end_at
     old_location, old_description = event.location, event.description
+    # Tipo ANTES da atribuição: é o que `aplicar_troca_de_tipo` compara no fim (feature 239).
+    old_event_type = event.event_type
 
     # Reconciliação do elenco ANTES de qualquer outra escrita — se bloquear (convite aceito),
     # nada mais deste método deve ter efeito colateral.
@@ -347,8 +514,10 @@ def update_event_core(
         end=et,
     )
 
-    event.title = data["title"]
     event.event_type = data["event_type"] or None
+    # O prefixo "(TIPO)" do título é reescrito junto com o tipo (feature 239): é ele que o sync
+    # do Google lê de volta — título antigo = tipo antigo ressuscitado na próxima rodada.
+    event.title = build_gc_title(data["title"], event.event_type)
     event.start_at = st
     event.end_at = et
     event.location = data["location"] or None
@@ -385,6 +554,13 @@ def update_event_core(
         created_at=datetime.now(tz=tz),
     ))
     db.session.commit()
+
+    # Depois do commit e DEPOIS de `event.needs_rehearsal` obedecer ao payload: a regra do tipo
+    # é a última palavra (feature 239) — o formulário chega com a caixinha marcada mesmo quando
+    # o evento acabou de deixar de ser SHOW.
+    warnings += aplicar_troca_de_tipo(
+        event, old_event_type, event.event_type, actor_name=actor_name, tz=tz
+    )
 
     # Quem acabou de ser pré-escalado recebe o convite agora (feature 233): antes o cargo nascia
     # com pessoa e SEM convite, e nenhuma tela pedia para alguém clicar em "Convidar".
@@ -454,9 +630,13 @@ def update_event_basics(
 
     old_title, old_start, old_end = event.title, event.start_at, event.end_at
     old_location, old_description = event.location, event.description
+    # Tipo ANTES da atribuição: é o que `aplicar_troca_de_tipo` compara logo abaixo (239).
+    old_event_type = event.event_type
 
-    event.title = data["title"]
     event.event_type = data["event_type"] or None
+    # O prefixo "(TIPO)" acompanha o tipo (feature 239) — é ele que o sync do Google lê de
+    # volta, e `changed_core` empurra o título novo para a Agenda logo adiante.
+    event.title = build_gc_title(data["title"], event.event_type)
     event.start_at = st
     event.end_at = et
     event.location = data["location"] or None
@@ -471,7 +651,9 @@ def update_event_basics(
     ))
     db.session.commit()
 
-    warnings: list[str] = []
+    warnings: list[str] = aplicar_troca_de_tipo(
+        event, old_event_type, event.event_type, actor_name=actor_name, tz=tz
+    )
     changed_core = (
         event.title != old_title
         or st != old_start
