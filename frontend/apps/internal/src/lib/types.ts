@@ -153,4 +153,6 @@ export interface DashboardSummary {
   financeiro: { recurring_expense_alerts: RecurringExpenseAlert[] } | null;
   performance: PerformanceSummary | null;
   dismissed_casting: DashboardTaskRef[];
+  /** URL raiz do portal do artista (PORTAL_URL), ou `null` quando a env var não está setada. */
+  portal_url: string | null;
 }

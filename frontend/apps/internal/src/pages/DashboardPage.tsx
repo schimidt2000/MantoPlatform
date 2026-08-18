@@ -63,12 +63,15 @@ function TaskRow({ task }: { task: DashboardTaskRef }) {
  * e aí o caminho é abrir o evento. Também diz quantos lembretes automáticos já saíram, para
  * ninguém cobrar de novo quem o robô acabou de cobrar.
  */
-function UnconfirmedRow({ item }: { item: UnconfirmedInviteRef }) {
+function UnconfirmedRow({ item, portalUrl }: { item: UnconfirmedInviteRef; portalUrl: string | null }) {
   const urgency = getUrgency(item.start_at);
   const nuncaEnviado = item.invite_status !== "pending";
+  // Barra final é o mesmo padrão que os e-mails automáticos já usam (`f"{portal_url}/"`); se a
+  // env var não estiver setada, `portalUrl` vem `null` e o link é omitido em vez de quebrado.
+  const linkPortal = portalUrl ? ` ${portalUrl}/` : "";
   const zap = item.whatsapp
     ? `https://wa.me/${item.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(
-        `Oi, ${item.talent_name}! Falta você confirmar no portal a sua presença em "${item.event_title}". Consegue responder por lá?`,
+        `Oi, ${item.talent_name}! Falta você confirmar no portal a sua presença em "${item.event_title}". Consegue responder por lá?${linkPortal}`,
       )}`
     : null;
 
@@ -394,7 +397,11 @@ export function DashboardPage() {
                     <strong className="text-ink">convite não enviado</strong> depende de você.
                   </p>
                   {dashboard.data.casting.unconfirmed.map((item) => (
-                    <UnconfirmedRow key={item.role_id ?? `${item.event_id}-${item.talent_id}`} item={item} />
+                    <UnconfirmedRow
+                      key={item.role_id ?? `${item.event_id}-${item.talent_id}`}
+                      item={item}
+                      portalUrl={dashboard.data.portal_url}
+                    />
                   ))}
                 </>
               )}
