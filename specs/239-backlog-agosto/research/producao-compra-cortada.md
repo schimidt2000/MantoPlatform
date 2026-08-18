@@ -1,0 +1,30 @@
+# BUG de layout: tela de criar producao/compra fica cortada (precisa tirar zoom para ver tudo)
+
+## Resumo
+A tela de criar produção/compra é o `NovoPedidoDialog` em FigurinoProducaoListPage.tsx, aberto pelo botão "Novo pedido"/"Novo pedido de compra" do PageHeader (linha 610). É o formulário mais longo de todo o app (seletor de tipo, ficha, severidade condicional, título, descrição, fotos, 2 grids de campos, responsável), e cresceu em 3 mutações recentes (225c compra, 225f menu único, 225g fotos) sem nunca ganhar o tratamento de altura que os outros diálogos igualmente longos do app já têm.
+
+## Comportamento atual (evidencia)
+O `Dialog` compartilhado (`frontend/packages/ui/src/components/dialog.tsx:62-63`) já resolve o bug geral de "diálogo cortado" documentado na mutação 212 (`docs/03_HISTORICO_MUTACOES.md:2222-2253`): o painel fica dentro de `fixed inset-0 z-50 overflow-y-auto` > `flex min-h-full items-center justify-center p-4`, então em tese um diálogo mais alto que a janela faz o container inteiro rolar (header, corpo e rodapé juntos), em vez de vazar. Isso foi verificado na época para diálogos genéricos.
+
+O `NovoPedidoDialog` (`frontend/apps/internal/src/pages/FigurinoProducaoListPage.tsx:183`) usa `<DialogContent open={open} className="max-w-lg">` — sem nenhum limite de altura própria (max-h) nem overflow-y-auto no próprio painel. O corpo do formulário (linhas 197-459) empilha: 3 botões de tipo, o FigurinoPicker (compra/manutenção) ou os 2 botões de severidade, campo título, textarea de descrição (h-20), o FotosDoPedidoPicker (que cresce ainda mais quando há fotos anexadas, com grid de miniaturas), um grid de 2 colunas (data do evento/evento) e um grid de 3 colunas (prazo/quantidade/custo), o seletor de responsável com texto de ajuda, mais a área de erro e o rodapé com os botões Cancelar/Salvar. Com padding do painel (p-5) e header (mb-4), a altura total facilmente passa de 900-1000px de conteúdo — mais ainda com fotos anexadas — o que estoura a altura útil de janelas de laptop comuns (ex. 1366x768, com barra de endereço/abas consumindo boa parte).
+
+Comparando com os outros diálogos longos do mesmo app, todos ganharam explicitamente max-h-[NNvh] overflow-y-auto no próprio DialogContent, prendendo a rolagem DENTRO do painel (cabeçalho e rodapé de botões continuam visíveis/próximos, só o meio rola): MarketingPostDialog.tsx:465 (max-h-[90vh] ... overflow-y-auto), Fila3DPage.tsx:151 (max-h-[85vh] ... overflow-y-auto), FormulariosAdminPage.tsx:528 e :630 (max-h-[85vh] ... overflow-y-auto). O NovoPedidoDialog é o único formulário desse porte que não recebeu esse tratamento — mesmo tendo ficado mais comprido a cada mutação recente (225c/225f/225g) sem que ninguém revisitasse o layout do Dialog.
+
+Resultado prático: em vez de um painel compacto com rolagem interna óbvia (scrollbar visível dentro do card, botões Cancelar/Pedir compra sempre alcançáveis logo abaixo), o usuário vê o card inteiro (com cabeçalho "Novo pedido de compra" e botões) ficar parcialmente fora da tela, dependendo de rolar a página inteira por trás do overlay escuro para achar o resto — o que não é óbvio, então o hábito relatado é reduzir o zoom do navegador para encolher tudo e caber sem precisar rolar.
+
+## Arquivos relevantes
+- frontend/apps/internal/src/pages/FigurinoProducaoListPage.tsx (105-472, 183, 609-614) — Contém o NovoPedidoDialog (linhas 105-472). O DialogContent problemático está na linha 183. O botão que abre o diálogo está nas linhas 609-614.
+- frontend/packages/ui/src/components/dialog.tsx (62-86) — Componente Dialog compartilhado. Linhas 62-86 mostram o mecanismo de centralização por flex + overflow-y-auto no wrapper externo (fixado pela mutação 212), que é o que hoje sustenta a rolagem quando o painel não define seu próprio max-h.
+- frontend/apps/internal/src/components/FotosDoPedidoPicker.tsx — Picker de fotos (feature 225g) inserido no formulário; adiciona altura extra ao NovoPedidoDialog sem nenhum controle de overflow próprio — contribuiu para o formulário ficar mais alto.
+- frontend/apps/internal/src/components/MarketingPostDialog.tsx (465) — Referência do padrão correto já usado em outro diálogo longo: max-h-[90vh] max-w-xl overflow-y-auto.
+- frontend/apps/internal/src/pages/Fila3DPage.tsx (151) — Referência do padrão correto: max-h-[85vh] max-w-2xl overflow-y-auto.
+- frontend/apps/internal/src/pages/FormulariosAdminPage.tsx (528, 630) — Referência do padrão correto, usado em dois diálogos: max-h-[85vh] overflow-y-auto.
+- docs/03_HISTORICO_MUTACOES.md (457-660, 2222-2253) — Mutação 212 documenta o fix geral de centralização/scroll do Dialog compartilhado; mutações 225c/225f/225g documentam o crescimento do formulário de pedido sem revisitar a altura do painel.
+- specs/225-producao-figurinos/spec.md — Spec original da feature de Produção de Figurinos — não trata de layout/altura do Dialog, é sobre o fluxo de negócio (produção/manutenção/compra).
+
+## Abordagem proposta pela investigacao
+Aplicar no DialogContent do NovoPedidoDialog (frontend/apps/internal/src/pages/FigurinoProducaoListPage.tsx:183) o mesmo padrão já usado nos outros formulários longos do app: trocar className="max-w-lg" por algo como className="max-h-[85vh] max-w-lg overflow-y-auto" (mesmo valor de max-h-[85vh] usado em Fila3DPage.tsx e FormulariosAdminPage.tsx, que são os diálogos comparáveis em altura). Isso limita o painel a 85% da altura da viewport e move a rolagem para DENTRO do card — o título/descrição do diálogo e a área de rodapé (Cancelar/Pedir compra) ficam sempre visíveis logo no topo e perto do fim do painel, e só o meio do formulário rola, em vez de rolar a página inteira atrás do overlay.
+
+Nenhuma migração de banco é necessária — é uma mudança de className em um único arquivo de frontend, puramente CSS/Tailwind. Não há endpoints ou campos novos envolvidos.
+
+Vale conferir visualmente depois (fora do escopo desta investigação, que é só leitura) se o rodapé de botões deveria também virar "sticky" dentro da área rolável (como alguns diálogos fazem) — mas isso já seria um refinamento de UX opcional, não a causa do bug relatado.
