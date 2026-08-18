@@ -32,13 +32,17 @@ export function CharacterCard({ character, temaSlug, highlighted = false }: Char
   const ownPage = character.own_item_slug ? `/${character.own_item_slug}` : null;
 
   const media = (
-    <div className="aspect-square overflow-hidden bg-bg-alt">
+    // 4:5 (mesmo ritmo do ProductCard) com `object-contain`: foto de figurino é corpo inteiro
+    // em pé, e o `aspect-square` + `object-cover` de antes decapitava personagem de cabeça
+    // grande (Abóbora Maldita) e cortava os pés. Mesma linguagem do palco da galeria
+    // (`ProductGallery`): a foto aparece INTEIRA sobre o fundo neutro.
+    <div className="aspect-[4/5] overflow-hidden bg-bg-alt">
       {character.photo_url ? (
         <img
           src={assetUrl(character.photo_url)}
           alt={character.name}
           loading="lazy"
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
         />
       ) : character.video_url ? (
         <div className="flex h-full w-full items-center justify-center bg-ink/80 text-3xl text-white">
