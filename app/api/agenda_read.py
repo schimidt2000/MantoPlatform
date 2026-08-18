@@ -305,17 +305,19 @@ def _serialize_role(
         if is_superadmin:
             data["cache_cap"] = _money(role.cache_cap)
             data["cache_cap_note"] = role.cache_cap_note
-        # Feature 239 — carrinho de transporte fora de SP. `cache_cap_efetivo` já vem somado
-        # (teto da 238 + parcela do veículo quando marcado) para a tela não reimplementar a
-        # regra do servidor: a conta do teto mora em um lugar só.
+        # Feature 239 — carrinho de transporte fora de SP. `cache_cap_efetivo` já vem pronto para
+        # a tela não reimplementar a regra do servidor: a conta do teto mora em um lugar só.
+        # Espelho EXATO do enforcement de `assign_role`: `max(cap + parcela quando marcado, valor
+        # já salvo)`. A parcela entra DENTRO do `max` — somá-la por cima do `max` (que já inclui o
+        # `cache_value` gravado na rodada anterior) inflaria o teto exibido a cada gravação, e a
+        # tela acompanharia a catraca sem nunca mostrar o aviso de "acima do limite".
         parcela = transporte_valor or Decimal("0")
         data["does_transport"] = bool(role.does_transport)
         data["transporte_valor"] = _money(parcela)
         cap_efetivo = None
         if role.cache_cap is not None:
-            cap_efetivo = max(role.cache_cap, role.cache_value or Decimal("0"))
-            if role.does_transport:
-                cap_efetivo += parcela
+            base = role.cache_cap + (parcela if role.does_transport else Decimal("0"))
+            cap_efetivo = max(base, role.cache_value or Decimal("0"))
         data["cache_cap_efetivo"] = _money(cap_efetivo)
     return data
 

@@ -109,13 +109,20 @@ def assign_role(
     # Baile do Addan). O invariante se sustenta: só superadmin consegue deixar salvo um valor
     # acima do cap, porque este mesmo rebaixamento barra todo mundo antes.
     # Feature 239 (carrinho): quem leva o carro fora de SP tem direito à parcela de UM veículo
-    # do orçamento POR CIMA do teto — e o valor pago fica todo em `cache_value` (um número só),
+    # do orçamento POR CIMA do CAP — e o valor pago fica todo em `cache_value` (um número só),
     # para entrar automático na planilha de pagamentos/custo/DRE sem mudar o financeiro.
     parcela_transporte = (
         valor_transporte_papel(event) if role.does_transport else Decimal("0")
     )
     if new_cache is not None and role.cache_cap is not None:
-        teto_efetivo = max(role.cache_cap, old_cache_value or 0) + parcela_transporte
+        # A parcela entra DENTRO do `max`, nunca somada por cima dele: como o valor rebaixado é
+        # gravado em `cache_value`, ele vira o `old_cache_value` da chamada seguinte — somar a
+        # parcela depois do `max` faria cada "Salvar" render mais um degrau do tamanho da parcela
+        # (catraca), e um casting comum subiria o cachê sem limite, sem superadmin e sem aviso.
+        # Assim o teto vira ponto fixo: salvo `cap + parcela`, o próximo `max` devolve o mesmo
+        # número — e o invariante da 238 continua valendo (valor autorizado por superadmin acima
+        # de `cap + parcela` segue sendo o piso, sem rebaixamento).
+        teto_efetivo = max(role.cache_cap + parcela_transporte, old_cache_value or 0)
         if new_cache > teto_efetivo and not is_superadmin:
             new_cache = teto_efetivo
 
@@ -180,12 +187,20 @@ def assign_role(
         if parcela_transporte > 0
         else ""
     )
+    # A nota de "acima do cap" compara contra o teto EFETIVO (cap + parcela do veículo), não
+    # contra o `cache_cap` cru: com o carrinho marcado, `cap + parcela > cap` por construção, e
+    # comparar com o cap cru marcaria TODO papel com carrinho como "autorizado pelo admin" —
+    # inclusive quando quem salvou foi um casting comum, dentro do limite legítimo. A parcela já
+    # é anunciada à parte por `transporte_nota`.
+    teto_da_nota = (
+        role.cache_cap + parcela_transporte if role.cache_cap is not None else None
+    )
 
     if role.talent_id and role.talent_id != old_talent_id:
         role.invite_status = "pending"
         cap_note = ""
-        if role.cache_cap and role.cache_value and role.cache_value > role.cache_cap:
-            cap_note = f" (acima do cap de {role.cache_cap}R$ — autorizado pelo admin)"
+        if teto_da_nota and role.cache_value and role.cache_value > teto_da_nota:
+            cap_note = f" (acima do cap de {teto_da_nota}R$ — autorizado pelo admin)"
         message = (
             f"Adicionou {role.talent.full_name} como {role.character_name} "
             f"com cachê de {role.cache_value or 0}R${cap_note}{transporte_nota}"
@@ -203,8 +218,8 @@ def assign_role(
 
     if role.talent_id:
         cap_note = ""
-        if role.cache_cap and role.cache_value and role.cache_value > role.cache_cap:
-            cap_note = f" (acima do cap de {role.cache_cap}R$ — autorizado pelo admin)"
+        if teto_da_nota and role.cache_value and role.cache_value > teto_da_nota:
+            cap_note = f" (acima do cap de {teto_da_nota}R$ — autorizado pelo admin)"
         message = (
             f"Atualizou cachê de {role.talent.full_name} como {role.character_name} "
             f"para {role.cache_value or 0}R${cap_note}{transporte_nota}"
@@ -313,16 +328,28 @@ def valor_transporte_papel(event: Any) -> Decimal:
     cada marcado leva um carro (decisão 3). Cascata de fontes, da mais fiel à mais grosseira:
 
     1. orçamento que gerou o evento (`orcamento_history_id`) — recálculo da rodagem;
-    2. `event.transport_value` (o transporte vendido) como aproximação;
-    3. `km de ida × 2 × tarifa do carro` (a mesma sugestão que a tela Jinja antiga fazia);
-    4. zero.
+    2. `km de ida × 2 × tarifa do carro` (a mesma sugestão que a tela Jinja antiga fazia);
+    3. zero.
+
+    **`event.transport_value` NUNCA entra nesta conta** (decisão 1). Aquele campo é o transporte
+    VENDIDO: `_build_orcamento_prefill` o grava como `tb["total"]`, ou seja rodagem de TODOS os
+    carros + `adicional_fora_sp` (que já está somado dentro do `cache_cap` de todo mundo, por
+    `_compute_performer_caches`) + adicional de show — e, em evento lançado à mão, ainda com a
+    margem de venda. Usá-lo pagaria o adicional fora-SP duas vezes e daria a um único motorista a
+    frota inteira.
+
+    O degrau 2 aplica a tarifa de CARRO mesmo quando o evento foi orçado com van (6,30/5,50): é
+    aproximação conservadora **deliberada** (carro é a tarifa mais barata), não esquecimento — não
+    "conserte" isto somando o adicional fora-SP de volta. `travel_distance_km` é a distância de
+    IDA (ver `app/models.py`), por isso o ×2 para ida e volta.
 
     Args:
         event: O `CalendarEvent` do papel.
 
     Returns:
         O valor em reais, sempre `Decimal("0.00")` quando o evento não é fora de SP (dentro de
-        SP não existe carrinho — decisão 4) ou quando não há nenhuma base de cálculo.
+        SP não existe carrinho — decisão 4) ou quando não há nenhuma base de cálculo — sem base,
+        zero mesmo: a decisão 1 não autoriza inventar valor (a tela avisa "sem base de cálculo").
     """
     zero = Decimal("0.00")
     if event is None or not getattr(event, "is_outside_sp", False):
@@ -331,9 +358,6 @@ def valor_transporte_papel(event: Any) -> Decimal:
     parcela = _parcela_veiculo_do_orcamento(event)
     if parcela is not None and parcela > 0:
         return parcela
-
-    if getattr(event, "transport_value", None):
-        return Decimal(str(event.transport_value)).quantize(_CENTAVOS)
 
     if getattr(event, "travel_distance_km", None):
         from app.orcamento import settings as orcamento_settings

@@ -832,7 +832,11 @@ def api_update_event(event_id: int) -> Any:
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
 
-    from app.calendar.event_ops import EventCoreUpdateBlocked, update_event_core
+    from app.calendar.event_ops import (
+        EventCoreUpdateBlocked,
+        EventTypeChangeBlocked,
+        update_event_core,
+    )
 
     try:
         warnings = update_event_core(
@@ -843,6 +847,11 @@ def api_update_event(event_id: int) -> Any:
             tz=_TZ_SP,
         )
     except EventCoreUpdateBlocked as exc:
+        return json_error(exc.message, 409)
+    # Troca de tipo desfeita porque o título novo não chegou à Agenda (feature 239): o resto do
+    # salvamento ficou gravado, mas o usuário precisa saber que o tipo continua o de antes —
+    # sair de SHOW apaga ensaio e vaga de som para sempre e não pode rodar "no escuro".
+    except EventTypeChangeBlocked as exc:
         return json_error(exc.message, 409)
 
     result = _event_detail_json(event).get_json()
@@ -898,9 +907,14 @@ def api_update_event_basics(event_id: int) -> Any:
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
 
-    from app.calendar.event_ops import update_event_basics
+    from app.calendar.event_ops import EventTypeChangeBlocked, update_event_basics
 
-    warnings = update_event_basics(event, data, actor_name=current_user.name, tz=_TZ_SP)
+    try:
+        warnings = update_event_basics(event, data, actor_name=current_user.name, tz=_TZ_SP)
+    # Mesma trava do PATCH em bloco: sem o título novo no Google, a troca de tipo é desfeita e
+    # devolvida como erro em vez de rodar a parte irreversível às cegas (feature 239).
+    except EventTypeChangeBlocked as exc:
+        return json_error(exc.message, 409)
     result = _event_detail_json(event).get_json()
     result["warnings"] = warnings
     return jsonify(result)

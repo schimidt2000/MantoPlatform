@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, useReducedMotion } from "framer-motion";
-import { Button, PageHeader, Skeleton } from "@manto/ui";
+import { TriangleAlert } from "lucide-react";
+import { Button, Card, PageHeader, Skeleton } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
 import { useEvent } from "../lib/agenda";
 import { dataDeIsoLocal, horaDeIsoLocal } from "../lib/horaLocal";
@@ -44,6 +45,25 @@ type PendingAttachment =
   | { id: string; kind: "reimbursement"; description: string; amount: number; file: File | null }
   | { id: string; kind: "observation-image"; content: string; label: string; file: File };
 
+/** Avisos não-bloqueantes do que a edição removeu automaticamente (feature 239, decisão 7 —
+ * troca de tipo saindo de SHOW cancela ensaio e vagas de som). O evento já foi salvo quando
+ * isto aparece; "Ver evento" segue para a página do evento como a navegação normal faria. */
+function AvisosCard({ avisos, onVerEvento }: { avisos: string[]; onVerEvento: () => void }) {
+  return (
+    <Card className="mb-4 flex items-start gap-3 border-l-4 border-l-gold px-4 py-3">
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-gold-ink" aria-hidden="true" />
+      <div className="flex-1 space-y-1 text-sm text-ink">
+        {avisos.map((aviso, i) => (
+          <p key={i}>{aviso}</p>
+        ))}
+      </div>
+      <Button size="sm" onClick={onVerEvento}>
+        Ver evento
+      </Button>
+    </Card>
+  );
+}
+
 export function EventEditPage() {
   const params = useParams<{ id: string }>();
   const eventId = Number(params.id);
@@ -55,6 +75,9 @@ export function EventEditPage() {
   const updateEvent = useUpdateEvent(eventId);
 
   const [serverError, setServerError] = useState<string | null>(null);
+  // Avisos não-bloqueantes da troca de tipo saindo de SHOW (feature 239, decisão 7) — o evento
+  // já foi salvo quando isto aparece; só segura a navegação automática até o usuário ver.
+  const [avisos, setAvisos] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [characters, setCharacters] = useState<CharacterInput[]>([]);
   const [coordinatorTalentId, setCoordinatorTalentId] = useState<number | null>(null);
@@ -181,11 +204,13 @@ export function EventEditPage() {
   const allResolved = attachments.length > 0 && attachments.every((a) => attachmentStatus[a.id] === "success");
 
   useEffect(() => {
-    if (uploadingAttachments && attachments.length > 0 && allResolved) {
+    // Com avisos pendentes a navegação espera o clique em "Ver evento" no banner — o usuário
+    // precisa ver o que a troca de tipo removeu antes de sair da tela (decisão 7).
+    if (uploadingAttachments && attachments.length > 0 && allResolved && avisos.length === 0) {
       navigate(`/events/${eventId}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allResolved, uploadingAttachments]);
+  }, [allResolved, uploadingAttachments, avisos.length]);
 
   // Ver EventCreatePage.tsx para o porquê deste efeito depender só de `submitCount` — evita a
   // closure desatualizada de `errors` que um `setTimeout` chamado de dentro do handler de erro
@@ -237,7 +262,8 @@ export function EventEditPage() {
       };
 
       updateEvent.mutate(payload, {
-        onSuccess: () => {
+        onSuccess: (updated) => {
+          setAvisos(updated.warnings ?? []);
           const pending: PendingAttachment[] = [
             ...paymentProofs.map((proof, i) => ({ id: `payment-${i}`, kind: "payment" as const, proof })),
             ...(contractFile
@@ -266,7 +292,10 @@ export function EventEditPage() {
           ];
 
           if (pending.length === 0) {
-            navigate(`/events/${eventId}`);
+            // Com avisos, fica na tela para o usuário ver o banner — "Ver evento" navega.
+            if ((updated.warnings?.length ?? 0) === 0) {
+              navigate(`/events/${eventId}`);
+            }
             return;
           }
           setAttachments(pending);
@@ -330,6 +359,9 @@ export function EventEditPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4 p-4 sm:p-6">
         <PageHeader title="Salvando anexos" className="mb-0" />
+        {avisos.length > 0 && (
+          <AvisosCard avisos={avisos} onVerEvento={() => navigate(`/events/${eventId}`)} />
+        )}
         <PendingAttachmentsPanel
           items={attachments.map((a) => ({
             id: a.id,
@@ -371,6 +403,12 @@ export function EventEditPage() {
         transition={{ duration: 0.22, ease: "easeOut" }}
       >
         <PageHeader title={`Editar — ${data.event.title}`} className="mb-0" />
+
+        {avisos.length > 0 && (
+          <div className="mt-4">
+            <AvisosCard avisos={avisos} onVerEvento={() => navigate(`/events/${eventId}`)} />
+          </div>
+        )}
 
         {serverError && (
           <div className="mt-4 rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">

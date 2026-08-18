@@ -2438,10 +2438,25 @@ def sync_events(items: list[dict]) -> None:
 
         # Apaga roles que não existem mais (mesmo após normalização)
         for name, role in list(existing.items()):
-            if strip_role_prefix(name) not in characters:
-                if role.talent_id and role.talent:
-                    send_removal_email(role.talent, event, role.character_name)
-                db.session.delete(role)
+            nome_limpo = strip_role_prefix(name)
+            if nome_limpo in characters:
+                continue
+            # Equipe (Coordenador/Técnico de Som/Maquiador) nunca é personagem (feature 239,
+            # decisão 6): esses nomes saem do título pela denylist, não porque alguém tirou a
+            # pessoa do evento. Migrar para "extra" preserva a escalação e tira o role desta
+            # reconciliação para sempre — e NENHUM e-mail de remoção é enviado, porque remoção
+            # nenhuma aconteceu.
+            if _is_reserved_title_name(nome_limpo):
+                role.role_type = "extra"
+                _log_sync(
+                    "role_reservado_migrado",
+                    event,
+                    details=f"{role.character_name}: character → extra (nome de equipe)",
+                )
+                continue
+            if role.talent_id and role.talent:
+                send_removal_email(role.talent, event, role.character_name)
+            db.session.delete(role)
 
         # Cria novos ou renomeia roles com prefixo antigo
         for char in characters:
@@ -3479,12 +3494,26 @@ def _create_roles_from_input(
     Auto-detecta a ficha de figurino pelo nome quando não selecionada manualmente; pré-escala um
     talento por vaga sem duplicar o mesmo talento no mesmo formulário. Devolve `(talent_id,
     character_name)` de cada pré-escala feita, para o aviso de conflito pós-commit.
+
+    Feature 239: as vagas de apoio do orçamento (Coordenador/Técnico de Som/Maquiador) não vêm
+    mais em `characters` — são criadas aqui, por `_create_extra_roles_from_orcamento`.
     """
     used_talent_ids: set[int] = set()
     assigned_now: list[tuple[int, str]] = []
     # 1–4h indexa a tabela; acima de 4h usa a régua da duração real (feature 236).
     cache_keys = ["cache_1h", "cache_2h", "cache_3h", "cache_4h"]
     chave_cache = "cache_custom" if duracao > 4 else cache_keys[duracao - 1]
+
+    # Feature 239: o pré-fill do orçamento manda em `characters` só os PERSONAGENS — Coordenador,
+    # Técnico de Som e Maquiador (`role_type == "extra"`) ficam fora da caixa de elenco e do
+    # título (decisão 6). Por isso o pareamento posicional só pode enxergar o prefixo de
+    # personagens de `orc_caches` (`_compute_performer_caches` devolve os extras sempre no fim):
+    # sem esse recorte, uma linha acrescentada à mão cairia no índice do Coordenador e herdaria o
+    # teto e o `role_type` dele. Fora da lista filtrada o papel nasce sem teto e como
+    # "character", exatamente como antes da 239. Os extras do orçamento viram `EventRole` logo
+    # depois do laço, em `_create_extra_roles_from_orcamento`.
+    orc_chars = [c for c in orc_caches if (c.get("role_type") or "character") == "character"]
+    roles_by_name: dict[str, list[EventRole]] = {}
 
     for i, char_data in enumerate(characters):
         name = (char_data.get("name") or "").strip()
@@ -3498,12 +3527,14 @@ def _create_roles_from_input(
         # Mostrar/pré-preencher a sugestão ancorava o casting no máximo — e
         # quem escala pode se escalar. O campo explícito do formulário continua valendo.
         cache_val = char_data.get("cache_value")
-        cap = orc_caches[i].get(chave_cache) if i < len(orc_caches) else None
-        role_type = orc_caches[i].get("role_type", "character") if i < len(orc_caches) else "character"
+        cap = orc_chars[i].get(chave_cache) if i < len(orc_chars) else None
+        # Todo item de `orc_chars` é personagem (o filtro acima garante), e linha acrescentada à
+        # mão (índice além da lista) também nasce como personagem.
+        role_type = "character"
         # Feature 239: a conta do teto em valores, para o superadmin não ver um número órfão.
         # Só existe quando o cachê veio do orçamento recalculado no servidor — no fallback sem
         # orçamento vinculado (`orc_caches` cru do cliente) não há como decompor a conta.
-        notas = orc_caches[i].get("cap_notes") if i < len(orc_caches) else None
+        notas = orc_chars[i].get("cap_notes") if i < len(orc_chars) else None
         cap_note = notas.get(chave_cache) if isinstance(notas, dict) and cap is not None else None
 
         talent_id = char_data.get("talent_id")
@@ -3513,7 +3544,7 @@ def _create_roles_from_input(
             used_talent_ids.add(pre_tid)
             assigned_now.append((pre_tid, name))
 
-        db.session.add(EventRole(
+        role = EventRole(
             event_id=event.id,
             character_name=name,
             figurino_sheet_id=sheet_id,
@@ -3525,9 +3556,67 @@ def _create_roles_from_input(
             is_singer=bool(char_data.get("is_singer")) or None,
             talent_id=pre_tid,
             assigned_at=datetime.now(tz=TZ) if pre_tid else None,
-        ))
+        )
+        db.session.add(role)
+        roles_by_name.setdefault(name.lower(), []).append(role)
 
+    _create_extra_roles_from_orcamento(
+        event, orc_caches, chave_cache=chave_cache, roles_by_name=roles_by_name
+    )
     return assigned_now
+
+
+def _create_extra_roles_from_orcamento(
+    event: CalendarEvent,
+    orc_caches: list[dict],
+    *,
+    chave_cache: str,
+    roles_by_name: dict[str, list[EventRole]],
+) -> None:
+    """Cria as vagas de apoio do orçamento (Coordenador/Técnico de Som/Maquiador) com teto.
+
+    Antes da feature 239 essas vagas chegavam dentro de `characters`, porque o pré-fill copiava
+    a lista de cachês inteira. Com o filtro que limpa a caixa de personagens (decisão 6) elas
+    passam a nascer AQUI, no servidor — a regra de negócio deixa de depender de o cliente mandar
+    a linha, e o teto/nota do orçamento (decisão 18) continua chegando em cada vaga.
+
+    `_ensure_coordinator`/`_ensure_sound_technician` rodam depois e casam por
+    `character_name` + `role_type="extra"`: como as vagas criadas aqui já estão na sessão (o
+    autoflush as materializa antes do SELECT), eles encontram a vaga com teto e não duplicam.
+
+    Args:
+        event: o evento recém-criado (já com `id`).
+        orc_caches: os cachês do orçamento, personagens e extras (`_compute_performer_caches`).
+        chave_cache: a chave de cachê da duração real do evento (`cache_2h`, `cache_custom`…).
+        roles_by_name: papéis já criados pelo laço de personagens, indexados pelo nome em
+            minúsculas — cliente antigo (payload sem o filtro) manda o extra em `characters`, e
+            aí a linha é corrigida no lugar em vez de duplicada.
+    """
+    for entry in orc_caches:
+        if (entry.get("role_type") or "character") != "extra":
+            continue
+        label = (entry.get("label") or "").strip()
+        if not label:
+            continue
+        cap = entry.get(chave_cache)
+        notas = entry.get("cap_notes")
+        cap_note = notas.get(chave_cache) if isinstance(notas, dict) and cap is not None else None
+
+        pendentes = roles_by_name.get(label.lower())
+        if pendentes:
+            role = pendentes.pop(0)
+            role.role_type = "extra"
+            role.cache_cap = cap
+            role.cache_cap_note = cap_note
+            continue
+
+        db.session.add(EventRole(
+            event_id=event.id,
+            character_name=label,
+            role_type="extra",
+            cache_cap=cap,
+            cache_cap_note=cap_note,
+        ))
 
 
 def _apply_default_roles(
@@ -3539,28 +3628,35 @@ def _apply_default_roles(
     valid_talent_ids: set[int],
     used_talent_ids: set[int],
 ) -> tuple[int, str] | None:
-    """Garante coordenador + (SHOW) técnico de som quando a criação não veio de um orçamento
-    (feature 152) — mesma regra condicional de `_ensure_coordinator`/`_ensure_sound_technician`.
+    """Garante coordenador + (SHOW) técnico de som na criação (feature 152) — mesma regra de
+    `_ensure_coordinator`/`_ensure_sound_technician`.
+
+    Feature 239: a rede de segurança do Coordenador vale AGORA em qualquer caminho. O gate
+    `came_from_orcamento` cobre só a pré-escala por `coordinator_talent_id` (que continua sendo
+    ignorada quando os coordenadores vêm do orçamento, inclusive com `coordenador_qty` > 1). O
+    `_ensure_coordinator` é idempotente: com orçamento a vaga já nasceu em
+    `_create_extra_roles_from_orcamento`, com teto, e ele não duplica — sem orçamento (ou com um
+    orçamento sem coordenador) ele cria a vaga que antes simplesmente não existia.
 
     Devolve a pré-escala do coordenador (para o aviso de conflito), se houver.
     """
     assigned: tuple[int, str] | None = None
-    if not came_from_orcamento:
-        if (
-            coordinator_talent_id is not None
-            and coordinator_talent_id in valid_talent_ids
-            and coordinator_talent_id not in used_talent_ids
-        ):
-            db.session.add(EventRole(
-                event_id=event.id,
-                character_name="Coordenador",
-                role_type="extra",
-                talent_id=coordinator_talent_id,
-                assigned_at=datetime.now(tz=TZ),
-            ))
-            assigned = (coordinator_talent_id, "Coordenador")
-        else:
-            _ensure_coordinator(event.id)
+    if (
+        not came_from_orcamento
+        and coordinator_talent_id is not None
+        and coordinator_talent_id in valid_talent_ids
+        and coordinator_talent_id not in used_talent_ids
+    ):
+        db.session.add(EventRole(
+            event_id=event.id,
+            character_name="Coordenador",
+            role_type="extra",
+            talent_id=coordinator_talent_id,
+            assigned_at=datetime.now(tz=TZ),
+        ))
+        assigned = (coordinator_talent_id, "Coordenador")
+    else:
+        _ensure_coordinator(event.id)
 
     if event_type == "SHOW":
         _ensure_sound_technician(event.id)

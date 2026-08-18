@@ -183,6 +183,22 @@ class EventCoreUpdateBlocked(Exception):
         super().__init__(message)
 
 
+class EventTypeChangeBlocked(Exception):
+    """Levantado quando a troca de tipo do evento não pôde ser aplicada porque o título novo não
+    chegou ao Google Agenda (feature 239).
+
+    A automação da troca de tipo (criar/remover vagas de som, cancelar ensaios) só é segura
+    depois que a Agenda recebeu o prefixo "(TIPO)" novo — é ele que o `sync_events` lê de volta.
+    Quando esta exceção sobe, o tipo e o título JÁ VOLTARAM ao que estavam e nada da automação
+    rodou; os demais campos do salvamento (data, local, descrição, valores) continuam gravados,
+    como no comportamento best-effort de sempre.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(message)
+
+
 def _reconcile_characters(
     event: Any,
     characters: list[dict],
@@ -464,6 +480,134 @@ def aplicar_troca_de_tipo(
     return []
 
 
+def _push_cabecalho_ao_google(event: Any) -> None:
+    """Empurra título/data/local/descrição do evento para o Google Agenda.
+
+    Sem tratamento de erro de propósito: quem chama decide o que fazer com a falha (ver
+    `_sincronizar_e_trocar_tipo`).
+    """
+    from app.calendar.routes import CALENDAR_ID
+    from app.calendar.service import update_event as google_update_event
+
+    google_update_event(
+        CALENDAR_ID,
+        event.google_event_id,
+        event.title,
+        event.start_at,
+        event.end_at,
+        description=event.description or "",
+        location=event.location or "",
+    )
+
+
+def _desfazer_troca_de_tipo(
+    event: Any,
+    *,
+    old_title: str | None,
+    old_event_type: str | None,
+    actor_name: str,
+    tz: ZoneInfo,
+) -> None:
+    """Devolve tipo e prefixo do título ao estado anterior, registrando o motivo no `EventLog`.
+
+    Chamado quando o Google recusou o título novo: o prefixo que ficou na Agenda ainda é o
+    antigo, então manter o tipo novo no banco só faria o `sync_events` desfazê-lo sozinho
+    minutos depois. A renomeação feita no mesmo salvamento é preservada — só o prefixo
+    "(TIPO)" volta.
+    """
+    tipo_novo = event.event_type
+    event.event_type = old_event_type
+    if old_event_type:
+        event.title = build_gc_title(event.title, old_event_type)
+    else:
+        # `build_gc_title` devolve o título intacto quando o tipo é vazio; aqui o prefixo TEM
+        # que sair, senão o sync leria o tipo novo de volta a partir do próprio título.
+        sem_prefixo = re.sub(r"^\s*\([^)]*\)\s*", "", event.title or "").strip()
+        event.title = sem_prefixo or old_title
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role="Comercial",
+        message=(
+            f"Troca de tipo {old_event_type or '—'} → {tipo_novo or '—'} NÃO aplicada: "
+            "o Google Agenda recusou o título novo. Nenhum ensaio, vaga de som ou "
+            "'precisa ensaio' foi alterado."
+        ),
+        created_at=datetime.now(tz=tz),
+    ))
+    db.session.commit()
+
+
+def _sincronizar_e_trocar_tipo(
+    event: Any,
+    *,
+    old_title: str | None,
+    old_event_type: str | None,
+    changed_core: bool,
+    actor_name: str,
+    tz: ZoneInfo,
+) -> list[str]:
+    """Empurra o cabeçalho ao Google e SÓ ENTÃO aplica a automação da troca de tipo (239).
+
+    A ordem é obrigatória e não pode ser invertida: sair de SHOW é IRREVERSÍVEL — `delete_ensaio`
+    apaga o ensaio do Google Calendar de verdade e as duas vagas de som somem mesmo preenchidas.
+    Se isso rodasse antes do push e o push falhasse, a Agenda continuaria com "(SHOW) ..." e o
+    `sync_events` seguinte reimporia SHOW + `needs_rehearsal` + vagas num evento cujos ensaios
+    já não existem mais — sem nenhuma tela mostrando que existiram.
+
+    Por isso, quando o push falha numa troca que envolve SHOW (nos dois sentidos: as duas têm
+    automação), a troca é DESFEITA e `EventTypeChangeBlocked` sobe para o endpoint devolver erro.
+    Edição sem troca de tipo — ou troca sem automação, como CORP → R&I — segue best-effort de
+    sempre: a falha do Google vira só um aviso.
+
+    Args:
+        event: Evento já gravado com tipo e título novos.
+        old_title: Título anterior (o que a Agenda ainda tem, quando o push falha).
+        old_event_type: Tipo anterior — é o que `aplicar_troca_de_tipo` compara.
+        changed_core: Se algum campo sincronizável mudou (título/data/horário/local/descrição).
+        actor_name: Quem editou, para o `EventLog`.
+        tz: Fuso usado no carimbo dos logs.
+
+    Returns:
+        Avisos não-bloqueantes: o que a troca de tipo criou/removeu, mais a falha de
+        sincronização quando ela não impede a troca.
+
+    Raises:
+        EventTypeChangeBlocked: o Google recusou o cabeçalho novo e a troca envolvia SHOW —
+            nada da automação rodou e o tipo voltou ao anterior.
+    """
+    google_ok = True
+    if changed_core and event.google_event_id:
+        try:
+            _push_cabecalho_ao_google(event)
+        except Exception as exc:  # noqa: BLE001 — Google fora do ar não bloqueia a edição
+            logger.warning("falha ao sincronizar evento %s com o Google Agenda: %s", event.id, exc)
+            google_ok = False
+
+    antigo = (old_event_type or "").strip().upper()
+    novo = (event.event_type or "").strip().upper()
+    troca_com_automacao = antigo != novo and EVENT_TYPE_SHOW in (antigo, novo)
+
+    if not google_ok and troca_com_automacao:
+        _desfazer_troca_de_tipo(
+            event,
+            old_title=old_title,
+            old_event_type=old_event_type,
+            actor_name=actor_name,
+            tz=tz,
+        )
+        raise EventTypeChangeBlocked(
+            "Não foi possível sincronizar com o Google Agenda — a troca de tipo não foi aplicada."
+        )
+
+    avisos = aplicar_troca_de_tipo(
+        event, old_event_type, event.event_type, actor_name=actor_name, tz=tz
+    )
+    if not google_ok:
+        avisos.append("Não foi possível sincronizar a mudança com o Google Agenda.")
+    return avisos
+
+
 def update_event_core(
     event: Any,
     data: dict,
@@ -482,18 +626,21 @@ def update_event_core(
 
     Sincroniza título/data/horário/local/descrição com o Google Agenda quando mudam
     (best-effort — ver research.md §10): uma falha do Google não impede salvar no Manto, só vira
-    um aviso na lista devolvida.
+    um aviso na lista devolvida. A ÚNICA exceção é a troca de tipo com automação (entrar/sair de
+    SHOW): sem o título novo na Agenda ela é desfeita e vira erro (`EventTypeChangeBlocked`),
+    porque a saída de SHOW apaga ensaios e vagas para sempre — ver `_sincronizar_e_trocar_tipo`.
 
     Raises:
         EventCoreUpdateBlocked: se a reconciliação de elenco tentar remover um personagem com
             convite aceito e quem edita não for superadmin — nada é gravado nesse caso.
+        EventTypeChangeBlocked: se o título novo não chegou ao Google numa troca de tipo com
+            automação (entrar/sair de SHOW) — a troca é desfeita, o resto do salvamento fica.
 
     Returns:
         Lista de avisos não-bloqueantes (conflito de agenda de talento pré-escalado, falha de
         sincronização com o Google).
     """
-    from app.calendar.routes import CALENDAR_ID, _build_start_end, _create_client_links
-    from app.calendar.service import update_event as google_update_event
+    from app.calendar.routes import _build_start_end, _create_client_links
 
     d = date.fromisoformat(data["date_str"])
     st, et = _build_start_end(d, data["start_str"], data["end_str"])
@@ -555,13 +702,6 @@ def update_event_core(
     ))
     db.session.commit()
 
-    # Depois do commit e DEPOIS de `event.needs_rehearsal` obedecer ao payload: a regra do tipo
-    # é a última palavra (feature 239) — o formulário chega com a caixinha marcada mesmo quando
-    # o evento acabou de deixar de ser SHOW.
-    warnings += aplicar_troca_de_tipo(
-        event, old_event_type, event.event_type, actor_name=actor_name, tz=tz
-    )
-
     # Quem acabou de ser pré-escalado recebe o convite agora (feature 233): antes o cargo nascia
     # com pessoa e SEM convite, e nenhuma tela pedia para alguém clicar em "Convidar".
     from app.calendar.casting_ops import convidar_recem_escalados
@@ -575,20 +715,18 @@ def update_event_core(
         or event.location != old_location
         or event.description != old_description
     )
-    if changed_core and event.google_event_id:
-        try:
-            google_update_event(
-                CALENDAR_ID,
-                event.google_event_id,
-                event.title,
-                st,
-                et,
-                description=event.description or "",
-                location=event.location or "",
-            )
-        except Exception as exc:  # noqa: BLE001 — Google fora do ar não pode bloquear a edição
-            logger.warning("falha ao sincronizar evento %s com o Google Agenda: %s", event.id, exc)
-            warnings.append("Não foi possível sincronizar a mudança com o Google Agenda.")
+    # Google PRIMEIRO, automação do tipo DEPOIS (feature 239): a saída de SHOW apaga ensaio no
+    # Google Calendar e vagas de som para sempre, e só é segura com o título novo já na Agenda.
+    # A regra do tipo continua sendo a última palavra sobre `needs_rehearsal` — o formulário
+    # chega com a caixinha marcada mesmo quando o evento acabou de deixar de ser SHOW.
+    warnings += _sincronizar_e_trocar_tipo(
+        event,
+        old_title=old_title,
+        old_event_type=old_event_type,
+        changed_core=changed_core,
+        actor_name=actor_name,
+        tz=tz,
+    )
 
     return warnings
 
@@ -608,9 +746,10 @@ def update_event_basics(
 ) -> list[str]:
     """Grava título, tipo, data/horário, local e descrição de um evento existente (feature 215).
 
-    Recorte deliberado de `update_event_core`: os mesmos campos "de cabeçalho" e a mesma
-    sincronização best-effort com o Google Agenda, SEM tocar em elenco, clientes, valores ou
-    pré-contrato — é a edição inline do cabeçalho da aba Resumo.
+    Recorte deliberado de `update_event_core`: os mesmos campos "de cabeçalho", a mesma
+    sincronização best-effort com o Google Agenda e a mesma ordem "Google antes da automação do
+    tipo" (feature 239), SEM tocar em elenco, clientes, valores ou pré-contrato — é a edição
+    inline do cabeçalho da aba Resumo.
 
     Args:
         event: O `CalendarEvent` a atualizar.
@@ -620,10 +759,14 @@ def update_event_basics(
         tz: Fuso usado no carimbo do log.
 
     Returns:
-        Avisos não-bloqueantes (hoje só falha de sincronização com o Google).
+        Avisos não-bloqueantes (falha de sincronização com o Google, e o que a troca de tipo
+        criou ou removeu automaticamente).
+
+    Raises:
+        EventTypeChangeBlocked: se o título novo não chegou ao Google numa troca de tipo com
+            automação (entrar/sair de SHOW) — a troca é desfeita, o resto do salvamento fica.
     """
-    from app.calendar.routes import CALENDAR_ID, _build_start_end
-    from app.calendar.service import update_event as google_update_event
+    from app.calendar.routes import _build_start_end
 
     d = date.fromisoformat(data["date_str"])
     st, et = _build_start_end(d, data["start_str"], data["end_str"])
@@ -651,9 +794,6 @@ def update_event_basics(
     ))
     db.session.commit()
 
-    warnings: list[str] = aplicar_troca_de_tipo(
-        event, old_event_type, event.event_type, actor_name=actor_name, tz=tz
-    )
     changed_core = (
         event.title != old_title
         or st != old_start
@@ -661,21 +801,16 @@ def update_event_basics(
         or event.location != old_location
         or event.description != old_description
     )
-    if changed_core and event.google_event_id:
-        try:
-            google_update_event(
-                CALENDAR_ID,
-                event.google_event_id,
-                event.title,
-                st,
-                et,
-                description=event.description or "",
-                location=event.location or "",
-            )
-        except Exception as exc:  # noqa: BLE001 — Google fora do ar não bloqueia a edição
-            logger.warning("falha ao sincronizar evento %s com o Google Agenda: %s", event.id, exc)
-            warnings.append("Não foi possível sincronizar a mudança com o Google Agenda.")
-    return warnings
+    # Mesma ordem obrigatória de `update_event_core` (feature 239): o título novo vai ao Google
+    # ANTES da automação da troca de tipo, que é irreversível na saída de SHOW.
+    return _sincronizar_e_trocar_tipo(
+        event,
+        old_title=old_title,
+        old_event_type=old_event_type,
+        changed_core=changed_core,
+        actor_name=actor_name,
+        tz=tz,
+    )
 
 
 def update_event_comercial(event: Any, data: dict, *, actor_name: str, tz: ZoneInfo) -> None:

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Pencil } from "lucide-react";
-import { Badge, Button } from "@manto/ui";
+import { Pencil, TriangleAlert } from "lucide-react";
+import { Badge, Button, Card } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
 import type { EventoDetalhe } from "../../lib/agenda";
 import { useUpdateEventBasics, type EventBasicsInput } from "../../lib/eventInline";
@@ -18,6 +18,25 @@ const EVENT_TYPES: { value: string; label: string }[] = [
 ];
 
 const LABEL_CLASS = "mb-1 block text-[11px] font-bold uppercase tracking-wider text-muted";
+
+/** Avisos não-bloqueantes do que a edição removeu automaticamente (feature 239, decisão 7 —
+ * troca de tipo saindo de SHOW cancela ensaio e vagas de som). Não impede o formulário de
+ * fechar: aparece depois de salvo, com um "Fechar" para dispensar. */
+function AvisosCard({ avisos, onFechar }: { avisos: string[]; onFechar: () => void }) {
+  return (
+    <Card className="mb-4 flex items-start gap-3 border-l-4 border-l-gold px-4 py-3">
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-gold-ink" aria-hidden="true" />
+      <div className="flex-1 space-y-1 text-sm text-ink">
+        {avisos.map((aviso, i) => (
+          <p key={i}>{aviso}</p>
+        ))}
+      </div>
+      <button type="button" className="text-xs text-muted hover:text-ink" onClick={onFechar}>
+        Fechar
+      </button>
+    </Card>
+  );
+}
 
 /** Estado inicial do formulário a partir do evento — datas recortadas, nunca via `Date`. */
 function valoresIniciais(data: EventoDetalhe): EventBasicsInput {
@@ -40,7 +59,15 @@ function valoresIniciais(data: EventoDetalhe): EventBasicsInput {
  * elenco nem clientes. Em caso de erro o que foi digitado permanece na tela (Princípio VI) —
  * o formulário só fecha depois do sucesso.
  */
-function DadosForm({ data, onClose }: { data: EventoDetalhe; onClose: () => void }) {
+function DadosForm({
+  data,
+  onClose,
+  onSaved,
+}: {
+  data: EventoDetalhe;
+  onClose: () => void;
+  onSaved: (warnings: string[]) => void;
+}) {
   const salvar = useUpdateEventBasics(data.event.id);
   const [form, setForm] = useState<EventBasicsInput>(() => valoresIniciais(data));
   const [erros, setErros] = useState<Record<string, string>>({});
@@ -65,7 +92,10 @@ function DadosForm({ data, onClose }: { data: EventoDetalhe; onClose: () => void
       description: descricaoTocada ? form.description : (data.event.description ?? ""),
     };
     salvar.mutate(payload, {
-      onSuccess: onClose,
+      onSuccess: (updated) => {
+        onClose();
+        onSaved(updated.warnings ?? []);
+      },
       onError: (error) => {
         setErros(error instanceof ApiRequestError ? (error.fields ?? {}) : {});
       },
@@ -233,26 +263,34 @@ function DadosLeitura({ data }: { data: EventoDetalhe }) {
  */
 export function DadosEventoPanel({ data }: { data: EventoDetalhe }) {
   const [editando, setEditando] = useState(false);
+  const [avisos, setAvisos] = useState<string[]>([]);
   const canEdit = Boolean(data.flags.can_edit_core);
 
   return (
-    <Panel
-      title="Dados do evento"
-      actions={
-        canEdit && !editando ? (
-          <Button variant="outline" size="sm" onClick={() => setEditando(true)}>
-            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-            Editar
-          </Button>
-        ) : null
-      }
-    >
-      {editando ? (
-        <DadosForm data={data} onClose={() => setEditando(false)} />
-      ) : (
-        <DadosLeitura data={data} />
-      )}
-    </Panel>
+    <>
+      {avisos.length > 0 && <AvisosCard avisos={avisos} onFechar={() => setAvisos([])} />}
+      <Panel
+        title="Dados do evento"
+        actions={
+          canEdit && !editando ? (
+            <Button variant="outline" size="sm" onClick={() => setEditando(true)}>
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              Editar
+            </Button>
+          ) : null
+        }
+      >
+        {editando ? (
+          <DadosForm
+            data={data}
+            onClose={() => setEditando(false)}
+            onSaved={(warnings) => setAvisos(warnings)}
+          />
+        ) : (
+          <DadosLeitura data={data} />
+        )}
+      </Panel>
+    </>
   );
 }
 

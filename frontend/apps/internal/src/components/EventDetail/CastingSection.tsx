@@ -201,14 +201,19 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
   // A conta do teto (só superadmin). Papel criado à mão não tem nota: o teto existe, mas
   // ninguém o calculou de um orçamento — dizer isso é mais útil do que não dizer nada.
   const explicacaoTeto = role.cache_cap_note || "definido manualmente, sem orçamento vinculado";
-  const parcelaCarrinho =
-    fazTransporte && role.transporte_valor
+  const parcelaCarrinho = fazTransporte
+    ? role.transporte_valor
       ? ` + transporte ${brl(role.transporte_valor)} (carrinho)`
-      : "";
+      : " — sem base de cálculo para o transporte"
+    : "";
   // Regra da 238: um cachê que o superadmin já autorizou acima do orçamento vira o novo teto.
   // Sem esta ressalva o número exibido não bateria com a conta ao lado dele.
+  // Feature 239: o carrinho (decisão 1) sobe o teto efetivo pela parcela do veículo — isso é a
+  // soma normal, não uma autorização excepcional. O aviso só faz sentido quando o cachê salvo
+  // ultrapassa o teto JÁ SOMADO ao carrinho (cache_cap + parcela), não o cap bruto do orçamento.
+  const capComCarrinho = (role.cache_cap ?? 0) + (fazTransporte ? role.transporte_valor || 0 : 0);
   const tetoElevado =
-    role.cache_cap != null && (role.cache_value ?? 0) > role.cache_cap
+    role.cache_cap != null && (role.cache_value ?? 0) > capComCarrinho
       ? " (teto elevado pelo cachê já autorizado)"
       : "";
 

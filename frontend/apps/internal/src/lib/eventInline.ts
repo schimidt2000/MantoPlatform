@@ -14,6 +14,10 @@ import type { EventoDetalhe } from "./agenda";
  * refetch (mesmo padrão de `lib/casting.ts` e `lib/eventOps.ts`).
  */
 
+/** Resposta de um patch pontual — o evento inteiro + `warnings` não-bloqueantes quando o
+ * endpoint removeu algo automaticamente (feature 239, decisão 7: troca de tipo saindo de SHOW). */
+export type EventPatchResult = EventoDetalhe & { warnings?: string[] };
+
 /** Escreve a resposta no cache do evento e revalida a agenda quando o cabeçalho muda. */
 function useEventPatch<TBody>(
   eventId: number,
@@ -22,9 +26,9 @@ function useEventPatch<TBody>(
   { touchesAgenda = false }: { touchesAgenda?: boolean } = {},
 ) {
   const queryClient = useQueryClient();
-  return useMutation<EventoDetalhe, Error, TBody>({
+  return useMutation<EventPatchResult, Error, TBody>({
     mutationFn: (body) =>
-      apiFetch<EventoDetalhe>(`/api/events/${eventId}${path}`, {
+      apiFetch<EventPatchResult>(`/api/events/${eventId}${path}`, {
         method,
         body: JSON.stringify(body),
       }),

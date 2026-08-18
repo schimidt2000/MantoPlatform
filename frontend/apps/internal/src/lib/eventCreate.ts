@@ -177,6 +177,12 @@ export interface EventCreateResult extends EventoDetalhe {
   warnings: string[];
 }
 
+/** Resposta de `PATCH /api/events/<id>` — o evento inteiro + `warnings` não-bloqueantes quando
+ * a edição removeu algo automaticamente (feature 239, decisão 7: troca de tipo saindo de SHOW). */
+export interface EventUpdateResult extends EventoDetalhe {
+  warnings?: string[];
+}
+
 /** Cria um evento novo (feature 152). RBAC no servidor: `_CAN_CREATE` (Comercial/Superadmin). */
 export function useCreateEvent() {
   const queryClient = useQueryClient();
@@ -194,9 +200,9 @@ export function useCreateEvent() {
  * nível de criação (Comercial/Superadmin) — o payload cobre os mesmos campos financeiros. */
 export function useUpdateEvent(eventId: number) {
   const queryClient = useQueryClient();
-  return useMutation<EventoDetalhe, Error, EventUpdateInput>({
+  return useMutation<EventUpdateResult, Error, EventUpdateInput>({
     mutationFn: (body) =>
-      apiFetch<EventoDetalhe>(`/api/events/${eventId}`, {
+      apiFetch<EventUpdateResult>(`/api/events/${eventId}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       }),
