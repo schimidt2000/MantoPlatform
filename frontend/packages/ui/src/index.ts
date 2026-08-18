@@ -23,6 +23,8 @@ export { MetricBadge } from "./components/metric-badge";
 export type { MetricBadgeProps } from "./components/metric-badge";
 export { FilterDropdown, CheckboxList } from "./components/filter-dropdown";
 export type { FilterDropdownProps, CheckboxOption, CheckboxListProps } from "./components/filter-dropdown";
+export { InfoTip } from "./components/info-tip";
+export type { InfoTipProps } from "./components/info-tip";
 export {
   Dialog,
   DialogTrigger,
