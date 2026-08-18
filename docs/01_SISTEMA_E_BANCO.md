@@ -7,6 +7,26 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
+> Última atualização: **2026-08-18** · Em branch: **239-backlog-agosto** (rodada de 11 itens do
+> backlog de agosto/2026 — ver `specs/239-backlog-agosto/`). Schema: `event_roles` ganhou
+> `does_transport` (Boolean, nullable — "leva o carrinho de transporte fora de SP") e
+> `cache_cap_note` (Text, nullable — a conta do teto em valores, só para superadmin); migrations
+> **`d1c7b93a2f60`** → **`e2d8ca4b3071`** (head atual; confirme com `flask db heads`). Endpoints
+> novos `POST`/`DELETE /api/roles/<id>/transporte` (gate `_can_edit_event()`; o `POST` recusa com
+> 400 fora de `event.is_outside_sp`). Regras de negócio novas: **teto com carrinho** —
+> `teto_efetivo = max(cache_cap + parcela_do_veículo_quando_marcado, valor_já_salvo)`, a parcela
+> somada **dentro** do `max` (nunca por cima, para não virar catraca a cada "Salvar") —
+> `casting_ops.valor_transporte_papel`/`set_transporte`; **vaga "Técnico de Som (Presença)"**
+> travada sem valor no servidor (`assign_role`/`add_role` forçam `cache_value=None`) e fora de
+> todos os somatórios de dinheiro (custo de evento, KPI, DRE, dashboard, planilha de pagamentos);
+> **troca de tipo de evento** reage automaticamente ao entrar/sair de SHOW
+> (`event_ops.aplicar_troca_de_tipo`), com o título novo empurrado ao Google **antes** da parte
+> destrutiva (cancelar ensaios, remover vagas de som) — falha do Google nessa troca vira **409**
+> `EventTypeChangeBlocked` e a troca é desfeita, nada é removido. Ver §2.2 (regras) e §3.3
+> (endpoints/payload) para o detalhe completo. Scripts retroativos em `scripts/db/`
+> (`cleanup_presenca_239.py`, `cleanup_show_nao_show_239.py`, `cleanup_titulos_239.py`) — só
+> `--dry-run` até aqui, execução real fica para depois do deploy.
+>
 > Última atualização: **2026-08-14** · Em branch: **235-educamanto** (EducaManto por responsabilidades: pacotes por nível viram musicais, snapshot v2 recalculado no servidor, Jinja do EducaManto desligado; migration **`b7e3a91d5c24`**). Na main: Última atualização: **2026-08-14** · Feature **237-solicitar-ficha** (branch): kind novo `ficha` em `figurino_producoes` (sem migração; fluxo curto sem aprovação = manutenção), `POST /api/figurino/producoes/solicitar-ficha` (login, gate `pode_abrir`), e transição para `pronto` de kind=ficha exige `figurino_sheet_id`. Antes: **236-cache-por-duracao** (branch): criação de evento aceita `duracao` inteira ≥ 1 (fim do fallback que dava cachê de 1h a durações fora de 1–4h); com `orcamento_history_id`, `cache_value`/`cache_cap` são RECALCULADOS no servidor pela duração real — >4h usa a régua (base de 4h ÷ 4 × horas + adicionais fixos). Anterior: · Estado do repositório: pós-feature **225c (Pedido de
 > Compra — terceiro `kind` de `figurino_producoes`, fluxo `solicitado → aprovado → comprado →
 > recebido`, **sem migration**; nav: "Revisão" saiu de Produção e foi para Marketing, e nasceu
@@ -32,8 +52,11 @@
 > frontend) e 227 (foto do portal e figurino do coordenador: `GET
 > /api/portal/events/<id>/figurino` ganhou `is_coordinator` e `talent_name`, e a agenda do portal
 > ganhou `has_figurino`). Nenhuma das quatro tem schema ou migration** · Head de
-> migration: **`e3f7c25a8b90`** (*lembrete de confirmação*) — confirme com
-> `flask db heads`; este cabeçalho é a **única** menção ao head neste documento.
+> migration: **`e2d8ca4b3071`** (*explicação do teto do cachê, feature 239 — encadeada em
+> `d1c7b93a2f60` → `c8f4d92e17ab`*) — confirme com `flask db heads`; este cabeçalho é a **única**
+> menção ao head neste documento. (Nota: este campo ficou parado em `e3f7c25a8b90`, da feature 231,
+> por várias rodadas — 235, 236, 237, 238 e catalogo-fase-1 já não estavam refletidas aqui antes
+> desta correção; §2.11 tem a mesma ressalva.)
 >
 > **Edição por recorte (215).** `PATCH /api/events/<id>` (feature 184) é **edição em bloco**: ele
 > reconcilia elenco e **substitui** os clientes. Para editar um dado isolado use os endpoints
@@ -161,7 +184,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
 | `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e de **toda** métrica, mas o registro fica porque é a ele que a devolução ao cliente se refere; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido do Comercial aguardando o Superadmin; zerados ao recusar ou ao atender) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
-| `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, `travel_cache`, `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at` | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users` |
+| `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, **`cache_cap_note`** (Text, nullable — feature 239: a conta do teto EM VALORES, ex. "Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 = R$ 350"; só sai pela API para superadmin), `travel_cache`, **`does_transport`** (Boolean, nullable — feature 239: marcador puro "leva o carrinho de transporte fora de SP", mesma semântica `True`\|`NULL` de `needs_makeup`/`is_singer`; não guarda valor), `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at` | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users` |
 | `event_observations` | `EventObservation` | observações de evento (texto/foto) | `event_id` |
 | `event_contracts` | `EventContract` | arquivo + flag assinado | `event_id` |
 | `event_payments` | `EventPayment` | comprovantes de pagamento com valor | `event_id` |
@@ -183,6 +206,57 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 - `is_educamanto` (property) = título começa com `(EDU` (`EDUCAMANTO_TITLE_PREFIX`).
 - `event_requires_client(event)` (em `app/constants.py`): eventos com início ≥ **2026-06-29**
   (`CLIENT_REQUIRED_FROM`) exigem cliente para salvar a venda; anteriores são grandfathered.
+
+**Feature 239 — regras de negócio novas do Casting/Agenda.**
+
+- **Carrinho de transporte fora de SP** (`app/calendar/casting_ops.py`). `EventRole.does_transport`
+  marca quem leva um veículo no evento (só existe com `event.is_outside_sp`; gate de quem marca =
+  `_can_edit_event()`, mesmo de quem escala). O valor **nunca** é gravado à parte: o teto do cachê
+  sobe pela parcela e o que se paga fica todo em `cache_value` (um número só), então planilha de
+  pagamentos, custo do evento, KPI e DRE seguem sem qualquer mudança de código.
+  `valor_transporte_papel(event)` calcula a parcela de **um** veículo (cada marcado tem direito à
+  parcela de um, mesmo com vários carros no orçamento) numa cascata: 1) recálculo do orçamento que
+  gerou o evento (`_parcela_veiculo_do_orcamento`, só a rodagem — **nunca**
+  `event.transport_value` cheio, que já inclui o adicional fora-SP por pessoa somado dentro do
+  `cache_cap` de todo mundo e pagaria esse adicional duas vezes); 2) `travel_distance_km × 2 ×
+  tarifa do carro` quando não há orçamento; 3) zero. Em `assign_role`, o enforcement é
+  `teto_efetivo = max(role.cache_cap + parcela_transporte, old_cache_value or 0)` — a parcela entra
+  **dentro** do `max`, nunca somada por cima dele: somá-la depois faria cada "Salvar" render mais
+  um degrau do tamanho da parcela (catraca que a revisão adversarial pegou antes do merge — ver
+  `docs/03`). `app/api/agenda_read.py::_serialize_role` espelha a mesma fórmula em
+  `cache_cap_efetivo`, para a tela nunca mostrar um teto diferente do que o servidor vai realmente
+  aplicar.
+- **"Técnico de Som (Presença)" nunca tem valor** (`casting_ops.e_vaga_de_presenca`, testa
+  `character_name == PRESENCE_CHARACTER and role_type == "extra"`). `assign_role`/`add_role`
+  forçam `cache_value=None`/`travel_cache=None` para essa vaga no servidor (a UI não tem campo de
+  dinheiro nela, mas a trava real é aqui) e ela sai de **todos** os somatórios de dinheiro: custo de
+  evento (`app/api/agenda_read.py::_compute_kpi`, `app/financeiro/routes.py::_event_cost`),
+  planilha de pagamentos (`_pagamentos_query`), dashboard de performance (`money_total`) e o
+  dashboard financeiro (`financeiro_read.py`). Continua visível no casting como **somente leitura**
+  (quem recebe o PIX do som é a outra vaga, "Técnico de Som" — Nivaldo); designar quem vai
+  fisicamente ao evento é tarefa do painel de Ensaio.
+- **Troca de tipo do evento** (`app/calendar/event_ops.py::aplicar_troca_de_tipo`, chamada por
+  `update_event_core` e `update_event_basics`, fonte única). Entrar em SHOW recria as vagas de som e
+  liga `needs_rehearsal` (mesma regra da criação). Sair de SHOW **cancela/remove tudo
+  automaticamente**: ensaios já agendados (inclusive no Google Calendar, via `delete_ensaio`),
+  as duas vagas automáticas de som (mesmo preenchidas) e desliga `needs_rehearsal` — tudo registrado
+  em `EventLog` com o que existia, e devolvido como `warnings` não-bloqueantes na resposta do PATCH.
+  **A ordem é obrigatória**: o título com o prefixo `(TIPO)` novo (`event_ops.build_gc_title`) vai
+  ao Google **antes** da parte destrutiva rodar (`_sincronizar_e_trocar_tipo`) — é o prefixo que o
+  `sync_events` lê de volta para saber o tipo, então aplicar a automação antes do push arriscava
+  apagar ensaio de verdade e o sync seguinte reimpor SHOW num evento que já não tem mais ensaio
+  nenhum. Se o push falhar numa troca com automação (entrando ou saindo de SHOW), a troca inteira é
+  desfeita (`_desfazer_troca_de_tipo`) e o endpoint devolve **409** `EventTypeChangeBlocked` — o
+  resto do salvamento (data, local, descrição, valores) fica gravado, só a troca de tipo é
+  revertida. Troca sem automação (ex.: CORP → R&I) continua best-effort, como toda sincronização.
+- **Nomes de equipe nunca no título** (`RESERVED_TITLE_NAMES` em `app/calendar/routes.py`:
+  Coordenador, Técnico de Som, Técnico de Som (Presença), Maquiador). Denylist normalizada
+  (sem acento/caixa) aplicada em três pontas: `ElencoBlock.tsx` (não gera o nome no título),
+  `parse_characters`/`_strip_reserved_title_segments` (o sync do Google ignora esses segmentos,
+  inclusive numa edição manual do título feita direto na Agenda), e a reconciliação de roles a
+  partir do título **migra** o role reservado para `role_type="extra"` em vez de apagá-lo — apagar
+  dispararia e-mail de "você foi removido" para quem estava escalado sem ninguém tê-lo removido de
+  verdade (achado da revisão adversarial, ver `docs/03`).
 
 ### 2.2.1 Impressões e Acervo 3D (features 200, 201 e 202)
 
@@ -456,15 +530,21 @@ nunca sai pela API: a leitura devolve só `infinitepay_webhook_configured`), `ta
 ### 2.11 Migrations
 
 - Alembic via Flask-Migrate, **sempre escritas à mão** (`migrations/versions/`).
-- Head atual: **rode `flask db heads`** (115 arquivos em `migrations/versions/`, head único). O head
-  vigente no momento desta revisão está **só no cabeçalho deste documento** — versionar o head em
-  dois lugares foi o que produziu a divergência corrigida em 2026-08-06 (esta seção declarava
-  `b7d4f81a6e0c`, da 204b, enquanto o head real já era `e7a1c94f20b3`, da 209).
-- Cadeia recente: `27acb021e8d6` → `aa1bb2cc3dd4` (review asset status) → `7c2d9e4f1a3b`
+- Head atual: **rode `flask db heads`** — head único. O head vigente no momento desta revisão está
+  **só no cabeçalho deste documento** — versionar o head em dois lugares foi o que produziu a
+  divergência corrigida em 2026-08-06 (esta seção declarava `b7d4f81a6e0c`, da 204b, enquanto o
+  head real já era `e7a1c94f20b3`, da 209). **A mesma divergência se repetiu**: entre a 209 e esta
+  revisão (239) a cadeia recente abaixo não foi atualizada a cada feature (235, 236, 237, 238 e
+  catalogo-fase-1 têm migration própria e não aparecem listadas) — só o cabeçalho do documento
+  vinha sendo corrigido. Não confie na lista "Cadeia recente" para o head; confie só no cabeçalho.
+- Cadeia recente (histórico até a 209; **não é exaustiva a partir daí** — ver nota acima):
+  `27acb021e8d6` → `aa1bb2cc3dd4` (review asset status) → `7c2d9e4f1a3b`
   (figurino_missing_dismissals) → `4e6f8a1c2d5b` (figurino_sheet tags) → `9f1c3a7b5e2d`
   (catalog characters) → `c8d2f4a6b013` (impressões 3D) → `d9e3a5b7c124` (multi-arquivos)
   → `e4f7b2c9a350` (pendência 3D por evento) → `a3c7e1d59f42` (marketing) → `b7d4f81a6e0c`
-  (marketing multi-Tema).
+  (marketing multi-Tema) → … → `c8f4d92e17ab` (catalogo-fase-1) → `d1c7b93a2f60`
+  (`event_roles.does_transport`, feature 239) → `e2d8ca4b3071` (`event_roles.cache_cap_note`,
+  feature 239, **head atual**).
 - Features **186**, **187**, **199** e **203** não geraram migration (reusaram colunas existentes).
 - Os papéis `ARTISTA_3D` e `MARKETING` **não** vêm por migration: papéis são linhas de `roles`
   semeadas por `seed.py` (mesmo tratamento de `REVENDEDOR_EDUCAMANTO`), e o Railway roda
@@ -491,6 +571,11 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 ### 3.2 Dashboard e RH
 `GET /api/dashboard` (`dashboard.py` + `dashboard_service.py`) · `GET /api/rh/dashboard`.
 
+> **Feature 239**: `GET /api/dashboard` ganhou `portal_url` (raiz do Portal do Artista, mesma
+> fonte de `_portal_url()` em `app/email_service.py`; `null` quando a env `PORTAL_URL` não está
+> setada). O card "Confirmações pendentes" usa para incluir o link do portal na mensagem de
+> cobrança pelo WhatsApp — sem a env, o link é omitido em vez de sair quebrado.
+
 ### 3.3 Agenda e Eventos — `agenda.py` (leitura) / `agenda_write.py` (escrita)
 | Método | Rota |
 |---|---|
@@ -499,6 +584,7 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 | POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` |
 | POST | `/api/roles/<id>/assign`, `/api/roles/<id>/invite`, `/api/roles/<id>/figurino-done`, `/api/roles/<id>/dismiss`, `/api/roles/<id>/restore` |
 | POST | `/api/roles/<id>/payment-status`, `/api/roles/<id>/figurino-sheet` *(feature 192)* |
+| POST\|DELETE | `/api/roles/<id>/transporte` *(feature 239 — marca/desmarca o carrinho de transporte; `POST` recusa com 400 fora de `event.is_outside_sp`, `DELETE` não tem essa guarda para permitir limpar marcação de evento que deixou de ser fora de SP)* |
 | POST | `/api/events/<id>/travel-estimate`, `/api/events/<id>/materials`, `/api/events/<id>/feedback-link` *(feature 192)* |
 | POST | `/api/contracts/<id>/toggle-signed`, `/api/reimbursements/<id>/collect` |
 | PATCH | `/api/events/<id>`, `/api/events/<id>/logistics`, `/api/payments/<id>` |
@@ -516,8 +602,24 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > Os cargos são ordenados por `id` — `CalendarEvent.roles` não tem `order_by` e o Postgres
 > reordenava a lista a cada UPDATE.
 > **RBAC das escritas novas**: `_CAN_EDIT_EVENT` (payment-status, figurino-sheet,
-> figurino-done DELETE, travel-estimate) · `_CAN_ENSAIO_MATERIAL` (materials) ·
-> Comercial/Superadmin (feedback-link).
+> figurino-done DELETE, travel-estimate, **transporte** — feature 239) · `_CAN_ENSAIO_MATERIAL`
+> (materials) · Comercial/Superadmin (feedback-link).
+>
+> **Payload do detalhe do evento — adições da feature 239.** Cada item de `elenco` ganhou
+> `is_presence` (sempre presente, define a anatomia do card — vaga de presença não recebe NENHUM
+> campo de dinheiro no payload), `does_transport`, `transporte_valor` (parcela de UM veículo, o
+> mesmo número em todos os papéis do evento) e `cache_cap_efetivo` (o teto já calculado pelo
+> servidor, `max(cache_cap + parcela quando marcado, cache_value)` — a tela não refaz essa conta).
+> `cache_cap`/`cache_cap_note` **só saem para superadmin** (antes `cache_cap` ia para
+> `show_casting` inteiro); o casting comum continua sem ver o número do teto, só o aviso de que
+> passou dele. O evento ganhou `data.maquiagem` (`{precisa, fechado}` — decisão 17: `fechado` exige
+> vaga extra com nome ~"maquiad" **e** talento atribuído) e `venda.orcamento_history_id`, que só
+> vem preenchido quando quem lê consegue de fato abrir o orçamento (superadmin, ou o comercial
+> dono daquele orçamento) — demais papéis (ex.: FINANCEIRO) recebem `null` e o React omite o link
+> "Orçamento de origem" na aba Comercial. `characters` (usado por telas legadas) passou a vir da
+> tabela `EventRole` (fonte de verdade) quando o evento já tem roles de personagem, caindo para o
+> parse do título só em evento sem nenhuma — decisão 6, para o texto livre do título nunca mais ser
+> a única fonte de quem é personagem.
 
 ### 3.4 Talentos — `talents_read.py` / `talents_write.py`
 `GET /api/talents/directory`, `/api/talents/character-suggestions`, `/api/talents/<id>`,

@@ -6,6 +6,33 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
+> Última atualização: **2026-08-18** · Em branch: **239-backlog-agosto** (rodada de 11 itens do
+> backlog — ver `specs/239-backlog-agosto/`)
+>
+> UX nova da 239: **Catálogo** subiu para a **1ª seção do menu** (logo após Agenda), visível a
+> **todos os papéis** (inclusive `REVENDEDOR_EDUCAMANTO` — o catálogo já é público, sem login); o
+> item de gestão "Gerenciar catálogo" não mudou de lugar. `CastingSection` do detalhe do evento
+> ganhou o **carrinho de transporte** (botão "🚗 Marcar transporte"/"🚗 Leva o carro" por papel,
+> só em evento fora de SP; badge dourada "🚗 Transporte"; linha de teto + explicação da conta,
+> **visível só a superadmin**, com a parcela do veículo somada quando marcado) e os **badges de
+> maquiador** ("Falta maquiador" dourado/"Maquiador fechado" verde no cabeçalho da seção, 💄 ao
+> lado de cada personagem com `needs_makeup`); a vaga "Técnico de Som (Presença)" virou um card
+> **somente leitura** (sem cachê, sem convite, sem botão de pagamento — designação continua no
+> painel de Ensaio). A aba **Comercial** ganhou o link **"Orçamento de origem"** (só quando o
+> usuário consegue de fato abrir aquele orçamento). `EnsaioSection` esconde o botão **"+ Agendar
+> ensaio"** quando o evento não pede ensaio e não tem nenhum já agendado (evita contradizer o
+> aviso "Este evento não pede ensaio."). O diálogo de **novo pedido de produção/compra** ganhou
+> `max-h-[85vh] overflow-y-auto` — parava de caber na tela em formulário longo. A **calculadora do
+> EducaManto** reposicionou o card "Contratação Manto" para logo após "Dias e ensemble" (ninguém
+> achava no fim da coluna), a aba marca **"· + Manto"** quando a contratação está ativa, ganhou um
+> **banner** sob os cards "Sem Nota Fiscal"/"Com Nota Fiscal" avisando que esses dois valores não
+> incluem a contratação Manto, **`InfoTip`** real nos ⓘ (componente novo em `@manto/ui` — hover,
+> clique, toque e teclado; o `title` nativo antigo não respondia a toque nem teclado), e passou a
+> desabilitar "Gerar orçamento" com aviso inline quando a contratação está ativa e nenhuma duração
+> foi marcada. O **Dashboard** incluiu o link do portal na mensagem de cobrança pronta do WhatsApp,
+> e a edição de evento (aba Resumo e formulário completo) ganhou um card de **avisos não-bloqueantes**
+> quando a troca de tipo do evento remove ensaio/vagas automaticamente (decisão 7 da rodada).
+>
 > Última atualização: **2026-08-11** · Estado do repositório: pós-feature **235 (aba Personagens no
 > gerenciador de catálogo)**
 >
@@ -137,13 +164,18 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   para `/`.
 
 #### `AppShell` (moldura de todas as telas)
-- Navegação lateral por seções: *(sem rótulo)* Home/Agenda/Gastos Extras · **Casting** ·
-  **Produção** · **Comercial** · **Financeiro** · **Ferramentas** · **Sistema**.
+- Navegação lateral por seções: *(sem rótulo)* Home/Agenda/**Catálogo**/Gastos Extras ·
+  **Casting** · **Produção** · **Comercial** · **Financeiro** · **Ferramentas** · **Sistema**.
 - Seções sem itens visíveis desaparecem inteiras.
 - Menu do usuário exibe os papéis; superadmin real tem o seletor **"Ver como"** (impersonação de
   `CASTING`/`FIGURINO`/`COMERCIAL`/`FINANCEIRO`/`ENSAIO`) — com impersonação ativa, o shell passa
   a contar **apenas** o papel simulado.
 - Link **"Catálogo"** é `external: true` → abre `/catalogo/` (vitrine pública) em outra aba.
+  **Feature 239**: saiu da seção Comercial (onde vivia ao lado de "Gerenciar catálogo") e subiu
+  para a 1ª seção do menu, logo após Agenda, com `isVisible: everyone` — visível a **todos os
+  papéis internos, inclusive `REVENDEDOR_EDUCAMANTO`** (o catálogo já é público, sem exigir
+  login; não fazia sentido escondê-lo de quem só vê Agenda e EducaManto). "Gerenciar catálogo"
+  não mudou de lugar (`admin-catalogo`, continua restrito a Comercial/Financeiro/Superadmin).
 
 ---
 
@@ -157,7 +189,13 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **Desde a 206 é a única `/` da plataforma.** O dashboard Jinja foi aposentado: a raiz do Flask
   responde 301 para `https://app.mantoproducoes.com.br`. Painéis atuais: Casting, Figurino,
   Comercial (cobranças), Contas recorrentes, Performance e Cargos dispensados — **menos** blocos
-  do que a home Jinja tinha (ver o aviso em `01_SISTEMA_E_BANCO.md` §3.16).
+  do que a home Jinja tinha (ver o aviso em `01_SISTEMA_E_BANCO.md` §3.16). Lista incompleta desde
+  a feature 231 (o painel "🙋 Confirmações pendentes" não está listada acima — ver nota da 231 no
+  cabeçalho deste documento).
+- **Feature 239**: a mensagem pronta de **"Cobrar no WhatsApp"** (painel "Confirmações
+  pendentes", feature 231) passou a incluir a URL raiz do Portal do Artista no texto —
+  `GET /api/dashboard` manda `portal_url` (mesma fonte usada nos e-mails automáticos); com a env
+  `PORTAL_URL` ausente, `portal_url` vem `null` e o link é omitido em vez de sair quebrado.
 
 #### `/agenda` — Agenda
 - **Objetivo**: enxergar os eventos por período.
@@ -263,14 +301,20 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
     resolve**) · *Dados do evento* (**editável inline**) · *Resumo para WhatsApp* (descrição do
     Google/Kommo convertida de HTML para texto puro, monoespaçada, com botão copiar) ·
     *Observações*.
-  - **Aba Produção**: *Casting* · *Equipe de apoio* (mesmos cards, `role_type="extra"`) ·
-    *Figurino* · *Ensaios* · *Logística & trajeto* · *Materiais de ensaio* · *Presente 3D* ·
-    *Pedido virtual*.
+  - **Aba Produção**: *Casting* · *Equipe de apoio* (mesmos cards, `role_type="extra"`, inclusive
+    o card somente-leitura da vaga de Presença — feature 239) · *Figurino* · *Ensaios* (o botão
+    "+ Agendar ensaio" some quando o evento não pede ensaio **e** não tem nenhum já agendado —
+    feature 239, evita contradizer o aviso "Este evento não pede ensaio." logo abaixo) ·
+    *Logística & trajeto* · *Materiais de ensaio* · *Presente 3D* · *Pedido virtual*.
   - **Aba Comercial**: *Clientes* (**editável inline**) · *Pré-contrato* (**editável inline**) ·
     *Comercial — dados da venda* (**editável inline**: bruto/desconto/final, transporte, comissão,
     forma de pagamento, parcelas, datas, vendedor, nota fiscal, cortesia/permuta; acréscimos com
-    marcação de BV seguem em leitura) · *Resultado* (grade de KPI: venda, custo de cachês, gastos
-    extras, comissão e **lucro líquido** em verde/vermelho, + lista dos gastos extras aprovados) ·
+    marcação de BV seguem em leitura) · **"Orçamento de origem"** (feature 239, decisão 16 — link
+    "Abrir orçamento" para `/orcamento/:id` quando o evento nasceu de um orçamento **e** quem lê
+    consegue de fato abri-lo: superadmin, ou o comercial dono daquele orçamento; para os demais
+    — ex. FINANCEIRO — o servidor manda `null` e a linha some) · *Resultado* (grade de KPI: venda,
+    custo de cachês, gastos extras, comissão e **lucro líquido** em verde/vermelho, + lista dos
+    gastos extras aprovados) ·
     *Contrato assinado* · *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado" quando
     recebido ≥ venda) · *Reembolsos*.
   - **Aba Histórico**: *Avaliações dos artistas* (média + notas individuais com tags por
@@ -287,6 +331,13 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   **Pegadinha da descrição**: o textarea mostra a versão em texto puro, mas o HTML original só é
   substituído se o usuário realmente digitar no campo — sem isso, o `<br>`/âncoras do Google
   Agenda seriam achatados a cada salvamento.
+  **Avisos não-bloqueantes (feature 239, decisão 7)**: quando o cabeçalho salvo troca o tipo do
+  evento e a troca envolve sair de SHOW, o servidor devolve `warnings[]` com o que foi removido
+  automaticamente (ensaios cancelados, vagas de som removidas). O bloco "Dados do evento" (aba
+  Resumo) mostra um `AvisosCard` dourado com esses avisos e um "Fechar"; o formulário completo
+  (`/events/:id/edit`) mostra o mesmo card e **segura a navegação automática** pós-salvamento até
+  o usuário clicar "Ver evento" — sem isso a troca de tipo apagava ensaio/vaga em silêncio e a
+  tela já tinha saído do ar antes de alguém notar.
 - **Buscas visuais na tela (feature 215)**: *Casting* e *Figurino* passaram a usar o `Combobox`
   do design system, alinhando-se ao padrão da 195/209.
   - **Talento**: era um `<select>` nativo com ~260 nomes, sem foto e sem indicar quem já estava
@@ -313,17 +364,39 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   tem outro evento na mesma data (`talent_availability`), com o evento concorrente no `title` —
   e desde a 215 o mesmo indicador aparece na busca, antes de escalar.
 - **Teto de cachê (feature 215)**: quando o evento nasce da calculadora de orçamento, cada cargo
-  guarda um `cache_cap` (= o cachê calculado). **O valor do teto nunca é exibido** — decisão de
-  produto: o casting não negocia contra um número na tela. O que aparece é só o aviso, em três
-  estados no card: *valor digitado acima do teto e ainda não salvo* → aviso vermelho + borda
-  vermelha no campo ("Acima do limite deste evento. Ao salvar, o valor volta para o limite.", ou
-  a variante de superadmin, que pode salvar assim mesmo e fica no log); *valor acima do teto já
-  gravado* → nota discreta "Cachê autorizado acima do limite deste evento.", sem borda vermelha
-  (é estado legítimo, não erro); *sem teto* (evento criado à mão) → nada. Ao salvar, o campo
-  **reespelha o `cache_value` devolvido pelo servidor**: como `assign_casting_role` rebaixa o
-  valor ao teto para não-superadmin, sem isso a tela exibiria o número recusado. A tela Jinja
-  antiga mostrava o valor do cap (`event_detail.html`); a migração React o havia perdido por
-  completo — o servidor rebaixava em silêncio.
+  guarda um `cache_cap` (= o cachê calculado). **O valor do teto continua invisível para quem
+  escala** — decisão de produto: o casting não negocia contra um número na tela. O que aparece é
+  só o aviso, em três estados no card: *valor digitado acima do teto e ainda não salvo* → aviso
+  vermelho + borda vermelha no campo ("Acima do limite deste evento. Ao salvar, o valor volta
+  para o limite.", ou a variante de superadmin, que pode salvar assim mesmo e fica no log);
+  *valor acima do teto já gravado* → nota discreta "Cachê autorizado acima do limite deste
+  evento.", sem borda vermelha (é estado legítimo, não erro); *sem teto* (evento criado à mão) →
+  nada. Ao salvar, o campo **reespelha o `cache_value` devolvido pelo servidor**: como
+  `assign_casting_role` rebaixa o valor ao teto para não-superadmin, sem isso a tela exibiria o
+  número recusado. A tela Jinja antiga mostrava o valor do cap (`event_detail.html`); a migração
+  React o havia perdido por completo — o servidor rebaixava em silêncio.
+  **Feature 239, decisão 18 — exceção para superadmin**: só ele vê uma linha discreta com o
+  **número do teto** (`cache_cap_efetivo`) e a **conta que o produziu** (`cache_cap_note` —
+  ex. "Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 = R$ 350", ou "definido manualmente, sem
+  orçamento vinculado" quando o papel não veio de orçamento); quem autoriza acima do teto precisa
+  saber de onde ele saiu. O servidor faz o mesmo corte de RBAC — `cache_cap`/`cache_cap_note` nem
+  chegam no payload de quem não é superadmin.
+- **Carrinho de transporte fora de SP (feature 239)**: em evento com `is_outside_sp`, cada card
+  de casting ganha o botão **"🚗 Marcar transporte"**/**"🚗 Leva o carro"** (gate `_can_edit_event`,
+  mesmo de quem escala) para marcar quem leva o veículo. Marcado, o card mostra a badge dourada
+  **"🚗 Transporte"** (com o valor da parcela no `title`) e, só para superadmin, a linha do teto
+  passa a somar essa parcela ("... + transporte R$ 100,00 (carrinho)"). O valor pago continua sendo
+  um número só em `cache_value` — não existe campo de dinheiro separado para o transporte na tela.
+- **Vaga "Técnico de Som (Presença)" somente leitura (feature 239, decisões 9/11)**: dentro de
+  "Equipe de apoio" ela vira um card sem nenhuma ação — sem campo de cachê, sem botão de convite,
+  sem status de pagamento, só o nome de quem foi designado (ou "— ninguém designado —") e a nota
+  "Vaga sem cachê — designação no painel de Ensaio." A vaga do PIX ("Técnico de Som", Nivaldo)
+  continua um card comum.
+- **Badge de maquiador (feature 239, decisão 17)**: no cabeçalho da seção Casting, badge
+  **"Falta maquiador"** (dourado) quando algum personagem tem `needs_makeup` e não existe vaga
+  extra de maquiador com talento atribuído, ou **"Maquiador fechado"** (verde) quando existe.
+  Cada personagem com `needs_makeup` ganha 💄 ao lado do nome. O card da vaga de Maquiador sem
+  talento herda o destaque visual (borda dourada) já usado para conflito de agenda.
 - **API**: `GET /api/events/<id>` (payload único da tela) · `POST /api/roles/<id>/payment-status`
   · `POST /api/roles/<id>/figurino-sheet` · `POST|DELETE /api/roles/<id>/figurino-done` ·
   `POST /api/events/<id>/travel-estimate` · `POST /api/events/<id>/materials` ·
@@ -470,6 +543,9 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **Novo pedido**: título, detalhes, evento (opcional — via data + seletor, mesmo padrão de
   Gastos Extras), prazo, quantidade, custo previsto. O campo **Responsável** só aparece para
   quem executa: quem pede não escolhe quem faz — **exceto em compra** (ver `/compras`).
+  **Feature 239**: o `DialogContent` ganhou `max-h-[85vh] overflow-y-auto` (mesmo padrão de
+  `Fila3DPage`/`FormulariosAdminPage`) — o diálogo estourava a altura da tela em formulário longo
+  (com fotos anexadas na abertura, feature 225g) e a parte de baixo ficava inalcançável.
 - **Rotas declaradas ANTES das dinâmicas** em `App.tsx` — `/figurinos/producao/12` não pode cair
   em `/figurinos/:id/edit` (mesmo cuidado de `/events/cancelamentos` na 224).
 - **API**: `GET /api/figurino/producoes` · `POST /api/figurino/producoes` ·
@@ -1231,7 +1307,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 | `/orcamento/:id` | Orçamento gerado | `COMERCIAL`, `SUPERADMIN` | destino de "Gerar Orçamento" e de "Abrir orçamento" no histórico (hotfix 210, sucessora de `orcamento/resultado.html`): mensagem de WhatsApp copiável, resumo por duração, detalhamento do transporte quando fora de SP, memória de cálculo e envio do PDF por e-mail. Rota declarada **depois** de `/orcamento/historico` e `/orcamento/configuracoes` — `:id` casaria com elas |
 | `/orcamento/historico` | Orçamentos | `COMERCIAL`, `SUPERADMIN` | tabela densa com filtros avançados (data, valor, vendedor, tipo), PDF, envio por e-mail, exclusão; **Abrir orçamento** (`/orcamento/:id`), **Criar evento** (`/events/new?orcamento_id=`) e **Recalcular** (`/orcamento?recalcular_id=`), feature 190 |
 | `/orcamento/configuracoes` | Config. Preços | `SUPERADMIN` | `SiteSetting.pricing_config` + personagens especiais, em tabelas densas (feature 190) |
-| `/educamanto` | Calculadora EducaManto | `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO` | feature 235 — por responsabilidades: seletor de **musical**, 4 blocos Manto×Contratante com tooltip (textos de `pdf_textos.py` via `/api/educamanto/textos`), **multi-páginas** (abas; nova página = cópia da atual; musicais podem diferir), equipe técnica da matriz visível, cards Sem/Com NF + **à vista (−5%)**, observação (2.000 chars), transporte novo (checkbox fora de SP → 2 vans; dentro de SP caminhão incluso), **contratação Manto embutida** (Comercial/Superadmin; `PerformersEditor`/`AcrescimosEditor` compartilhados + durações 1h–4h/extra; totais combinados com NF única sobre a soma), breakdown de custos **só para superadmin** (corte na API); mantém `?musical_id=`/`?package_id=`, `?recalcular_id=` (v2 restaura tudo; v1 mapeia pacote→musical com aviso), Data da apresentação + alerta de agenda |
+| `/educamanto` | Calculadora EducaManto | `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO` | feature 235 — por responsabilidades: seletor de **musical**, 4 blocos Manto×Contratante com tooltip (textos de `pdf_textos.py` via `/api/educamanto/textos`), **multi-páginas** (abas; nova página = cópia da atual; musicais podem diferir), equipe técnica da matriz visível, cards Sem/Com NF + **à vista (−5%)**, observação (2.000 chars), transporte novo (checkbox fora de SP → 2 vans; dentro de SP caminhão incluso), **contratação Manto embutida** (Comercial/Superadmin; `PerformersEditor`/`AcrescimosEditor` compartilhados + durações 1h–4h/extra; totais combinados com NF única sobre a soma), breakdown de custos **só para superadmin** (corte na API); mantém `?musical_id=`/`?package_id=`, `?recalcular_id=` (v2 restaura tudo; v1 mapeia pacote→musical com aviso), Data da apresentação + alerta de agenda. **Feature 239**: card "Contratação Manto" reposicionado para logo após "Dias e ensemble" (descoberta — no fim da coluna ninguém achava); a aba da página marca **"+ Manto"** quando a contratação está ativa (`Página N · Nome + Manto`); tooltips dos 4 blocos viraram **`InfoTip`** (hover/clique/toque/teclado, com fallback pt-BR e estado de erro/carregamento em vez de sumir enquanto os textos não chegam); `contratacao_manto` é enviada ao servidor sempre que ativa, mesmo sem duração marcada (antes o payload virava `null` em silêncio e o orçamento saía sem a parte Manto) — "Gerar orçamento" fica desabilitado com aviso inline nesse caso; campo "Extra (h)" de 1 a 4 marca o checkbox de duração correspondente em vez de descartar o valor; "Nova Página" faz cópia profunda da contratação (performers/acréscimos não ficam mais compartilhados entre páginas); `event_location` entra no payload da contratação; banner dourado sob os cards "Sem Nota Fiscal"/"Com Nota Fiscal" avisando que esses dois valores não incluem a contratação Manto quando ela está ativa (usar os totais combinados) |
 | `/educamanto/musicais` · `/novo` · `/:id/editar` | Musicais EducaManto | ver: `COMERCIAL`, `SUPERADMIN` (comercial **sem custos/margens**); gerir: `SUPERADMIN` | feature 235 — substitui `/educamanto/pacotes`: cards com equipe/ensaios (custos só p/ superadmin), Usar, CRUD + duplicar com `ConfirmDialog`; form com personagens/produção/ensaios (mín. 2), custos por cenário de som/iluminação/cenário, alimentação e ensaios por pessoa, itens sempre inclusos |
 | `/educamanto/historico` | Histórico EducaManto | mesmos da calculadora | tabela densa; Ver (Dialog com o snapshot), Baixar PDF e **Recalcular** (`/educamanto?recalcular_id=`), feature 190 |
 

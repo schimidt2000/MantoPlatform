@@ -4,10 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-17** · Estado do repositório: pós-feature
-> **235-educamanto 4ª rodada (gate fechado, branch)**, antes dela 238 (teto autorizado),
-> 237 (solicitar ficha), 236 (cachê por duração) — todas na main · Head de migration:
-> **`b7e3a91d5c24`** (*educamanto musicais*)
+> Última atualização: **2026-08-18** · Estado do repositório: pós-feature
+> **239-backlog-agosto (11 itens, branch)**, antes dela catalogo-fase-1 (item avulso veste ficha
+> própria, main), antes dela **235-educamanto 4ª rodada (gate fechado, branch)**, antes dela 238
+> (teto autorizado), 237 (solicitar ficha), 236 (cachê por duração) — todas na main · Head de
+> migration: **`e2d8ca4b3071`** (*explicação do teto do cachê, feature 239*)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -39,6 +40,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **239-backlog-agosto** | Carrinho de transporte fora de SP com teto efetivo p/ superadmin; "Técnico de Som (Presença)" sem valor e fora de todos os somatórios; troca de tipo do evento reage sozinha (push do título antes da parte destrutiva); nomes de equipe nunca no título; link do orçamento na aba Comercial; badge de maquiador; Catálogo no topo do menu; link do portal na cobrança WhatsApp; EducaManto (InfoTip, contratação Manto) — 11 itens do backlog | 2026-08-18 | `d1c7b93a2f60`, `e2d8ca4b3071` | (aqui) | — |
 | **catalogo-fase-1** | Ficha de figurino direto no item AVULSO; 12 auto-temas achatados; selo Tema×Avulso no gerenciador; ação "virar avulso"; avulsos entram na visão de personagens | 2026-08-18 | `c8f4d92e17ab` | (aqui) | — |
 | **vincular-na-criacao (hotfix)** | "Vincular a um Personagem do Catálogo" também na CRIAÇÃO da ficha (deferido pós-criação, padrão da foto); só personagens sem ficha; nome preenchido de brinde | 2026-08-17 | `—` | (aqui) | — |
 | **fichas-por-escalacao + adotar-item-honesto (hotfixes)** | Imprimir fichas do evento: 1 folha por escalação (dois "Soldado" saíam como um); busca de adotar item mostra tema/já-adotado bloqueado com o motivo em vez de sumir | 2026-08-17 | `—` | (aqui) | — |
@@ -167,6 +169,139 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 239-backlog-agosto — Carrinho de transporte, presença sem valor, troca de tipo automática            (branch · 2026-08-18 · migration `d1c7b93a2f60`, `e2d8ca4b3071`)
+
+**Motivação.** Rodada de 11 itens do backlog levantados pelo João em 18/08/2026, investigados
+item a item (`specs/239-backlog-agosto/research/*.md`, um arquivo por item, causa raiz +
+evidência arquivo:linha) e fechados em `decisoes.md` (fonte de verdade em conflito com qualquer
+proposta da investigação): (1) carrinho de transporte fora de SP no casting + fix do apagamento
+de `travel_cache`; (2) Técnico de Som (Presença) sem valor e fora da planilha de pagamentos;
+(3) show→não-show remove ensaio/vagas automaticamente e corrige o prefixo do título; (4) link do
+orçamento de origem na aba Comercial; (5) Coordenador/Técnico/Maquiador nunca no título;
+(6) badge de maquiador; (7) teto do cachê visível a superadmin com a conta em valores;
+(8) link do portal na cobrança WhatsApp; (9) EducaManto — descoberta da Contratação Manto + 4
+defeitos + `InfoTip` real; (10) Catálogo no topo do menu; (11) dialog de produção/compra com
+scroll interno.
+
+**O que mudou.**
+- **Banco**: `event_roles.does_transport` (Boolean, nullable — `d1c7b93a2f60`) e
+  `event_roles.cache_cap_note` (Text, nullable — `e2d8ca4b3071`), encadeadas em `c8f4d92e17ab`
+  (catalogo-fase-1). Head atual: `e2d8ca4b3071`.
+- **Backend**: `app/calendar/casting_ops.py` ganhou `e_vaga_de_presenca`,
+  `valor_transporte_papel` (cascata: orçamento → `travel_distance_km × 2 × tarifa` → zero),
+  `set_transporte`, e o sentinela `_UNSET` em `assign_role` para `travel_cache` (só grava quem
+  manda a chave — o casting em React nunca manda). `app/calendar/event_ops.py` ganhou
+  `aplicar_troca_de_tipo`/`build_gc_title`/`EventTypeChangeBlocked`/`_sincronizar_e_trocar_tipo`,
+  fonte única chamada por `update_event_core` e `update_event_basics`. `app/calendar/routes.py`
+  ganhou a denylist `RESERVED_TITLE_NAMES` (+ `_strip_reserved_title_segments`, usada no sync do
+  Google) e `_create_extra_roles_from_orcamento` (vagas de apoio do orçamento criadas no
+  servidor). Endpoints novos: `POST`/`DELETE /api/roles/<id>/transporte` (gate
+  `_can_edit_event()`; `POST` recusa fora de `event.is_outside_sp`). `app/api/agenda_read.py`
+  serializa `is_presence`, `does_transport`, `transporte_valor`, `cache_cap_efetivo` em cada
+  papel, restringe `cache_cap`/`cache_cap_note` a superadmin, e `venda.orcamento_history_id` ao
+  dono do orçamento/superadmin; `data.maquiagem` (`{precisa, fechado}`) no detalhe do evento.
+  `app/api/dashboard_service.py` ganhou `portal_url`. `app/financeiro/routes.py`,
+  `app/api/financeiro_read.py` e `_compute_kpi` passaram a excluir a vaga de presença dos
+  somatórios.
+- **Frontend**: `CastingSection.tsx` (botão de carrinho, badge 🚗, teto+nota só para
+  superadmin, card somente-leitura da presença, badges de maquiador, 💄 por personagem),
+  `ComercialSection.tsx` (link "Orçamento de origem"), `EnsaioSection.tsx` (esconde "+ Agendar
+  ensaio" sem necessidade), `ResumoSection.tsx`/`EventEditPage.tsx` (`AvisosCard` para os
+  `warnings` da troca de tipo), `EventCreatePage.tsx` (pré-fill filtra `characters` por
+  `role_type === "character"`), `ElencoBlock.tsx` (denylist defensiva em `generateTitle`),
+  `EducaMantoCalculadoraPage.tsx` (card Contratação Manto reposicionado, aba "+ Manto", banner
+  Sem/Com NF, `contratacao_manto` sempre enviada quando ativa, deep-copy em Nova Página,
+  `event_location` no payload), `navigation.tsx` (Catálogo na 1ª seção, `everyone`),
+  `FigurinoProducaoListPage.tsx` (`max-h-[85vh] overflow-y-auto`). Componente novo
+  `InfoTip` em `@manto/ui` (hover/clique/toque/teclado, Framer Motion, `useReducedMotion`).
+
+**Regras de negócio novas (decisões-chave).**
+1. **Parcela de UM veículo** — nunca `event.transport_value` cheio: aquele campo já inclui o
+   adicional fora-SP por pessoa (somado dentro do `cache_cap` de todo mundo) e a rodagem de
+   TODOS os carros; usá-lo pagaria o adicional duas vezes e daria a frota inteira a um motorista.
+   Com 2 carros no orçamento, cada motorista marcado recebe a parcela de 1 carro.
+2. **Teto com carrinho** — `teto_efetivo = max(cache_cap + parcela_do_veículo_quando_marcado,
+   valor_já_salvo)`, a parcela somada **dentro** do `max` (nunca por cima — ver pegadinha 1
+   abaixo). O valor pago fica todo em `cache_value` (um número só): entra automático em
+   planilha de pagamentos/custo/DRE, sem mudar nada no financeiro.
+3. **Presença sem valor e fora de tudo** — `assign_role`/`add_role` forçam `cache_value=None`
+   para a vaga "Técnico de Som (Presença)"; ela sai de custo de evento, KPI, DRE, dashboard
+   `money_total`, comissões e planilha de pagamentos. Continua visível no casting como somente
+   leitura (a designação é tarefa do painel de Ensaio).
+4. **Equipe nunca no título** — denylist (`RESERVED_TITLE_NAMES`: Coordenador, Técnico de Som,
+   Técnico de Som (Presença), Maquiador) aplicada em três pontas: pré-fill/`generateTitle` no
+   cliente, `parse_characters`/reconciliação no servidor, e o sync do Google
+   (`_strip_reserved_title_segments`, para uma edição manual do título feita direto na Agenda
+   não reintroduzir o nome).
+5. **Troca de tipo com push-antes-do-destrutivo** — sair de SHOW cancela ensaios agendados
+   (inclusive no Google), remove as duas vagas de som (mesmo preenchidas) e desliga
+   `needs_rehearsal`, tudo registrado em `EventLog` e devolvido como `warnings` não-bloqueantes.
+   O título com o prefixo `(TIPO)` novo vai ao Google **antes** dessa automação rodar; se o push
+   falhar numa troca que envolve SHOW, a troca inteira é desfeita e o endpoint devolve **409**
+   `EventTypeChangeBlocked` — o resto do salvamento fica gravado.
+6. **Extras do orçamento criados no servidor** — `_create_roles_from_input`/
+   `_create_extra_roles_from_orcamento` criam as vagas de apoio (Coordenador/Técnico de
+   Som/Maquiador) a partir de `orc_caches`, com `cache_cap`/`cache_cap_note`, independente do que
+   o cliente mandar em `characters` (que agora só traz personagens).
+
+**Pegadinhas encontradas (revisão adversarial antes do merge, commit `ce7b66b`).**
+- **A catraca do teto**: a primeira versão de `assign_role` somava a parcela do veículo **por
+  cima** de `max(cache_cap, valor_já_salvo)` em vez de dentro dele. Como o valor rebaixado vira o
+  `old_cache_value` da chamada seguinte, cada "Salvar" empilhava mais uma parcela — um casting
+  comum (não-superadmin) conseguia escalar o cachê indefinidamente, em degraus do tamanho da
+  parcela do veículo, sem nenhum aviso de "acima do limite" na tela (o `cache_cap_efetivo`
+  servido acompanhava a mesma catraca). Corrigido somando a parcela **dentro** do `max` — vira
+  ponto fixo: depois de salvo `cap + parcela`, o próximo `max` devolve o mesmo número.
+- **O filtro do pré-fill quase matou as vagas de Coordenador/Maquiador**: filtrar
+  `characters` por `role_type === "character"` em `EventCreatePage.tsx` (para cumprir a decisão
+  4) tirou os extras da lista que o servidor usa para CRIAR `EventRole` — e como
+  `came_from_orcamento` continuava `True`, `_apply_default_roles` também pulava a criação de
+  fallback do Coordenador. Evento nascido de orçamento passava a sair **sem** vaga de Coordenador
+  nem de Maquiador (a de Técnico de Som sobrevivia só por `_ensure_sound_technician`, mas sem
+  teto). Corrigido no servidor: `_create_extra_roles_from_orcamento` cria essas vagas a partir de
+  `orc_caches` independente do que o cliente mandou.
+- **O sync do Google revertendo o tipo pelo prefixo do título**: `aplicar_troca_de_tipo` rodava
+  **antes** do push do título ao Google. Se o push falhasse numa troca saindo de SHOW, os
+  ensaios já tinham sido apagados de verdade (banco **e** Google Calendar) e as vagas de som já
+  tinham sumido — mas o título na Agenda continuava "(SHOW) ...", e o próximo `sync_events`
+  reimpunha `event_type = SHOW` a partir do prefixo, religava `needs_rehearsal` e recriava as
+  vagas de som, num evento cujos ensaios já não existiam mais. Corrigido invertendo a ordem
+  (`_sincronizar_e_trocar_tipo`): título primeiro; falha numa troca com automação desfaz a troca
+  e devolve 409 em vez de rodar a parte irreversível às cegas.
+- **`travel_cache` apagado por `parse_brl(None)`**: o casting em React nunca manda a chave
+  `travel_cache` no `POST /api/roles/<id>/assign` (não edita esse campo nessa tela); sem
+  tratamento especial, `assign_role` gravava `parse_brl(None)` = `None` por cima do adicional já
+  salvo a cada "Salvar" — apagamento silencioso, decisão 5 da rodada exigia a correção mesmo sem
+  o carrinho usar `travel_cache`. Corrigido com o sentinela `_UNSET`: só quem manda a chave
+  escreve nela.
+- **Reconciliação por título deletando role reservada com e-mail de remoção**: a denylist limpa
+  o título antes da reconciliação de `EventRole` a partir dele (`sync_events`, eventos
+  `source != "platform"`); sem tratamento, um "COORDENADOR" que saía do texto do título era
+  interpretado como personagem removido — a role era apagada e, se tivesse talento, o
+  `send_removal_email` disparava "você foi removido do evento" para quem ninguém decidiu
+  remover. Corrigido migrando o role reservado para `role_type="extra"` em vez de apagar; o
+  script `cleanup_titulos_239.py` já nasce fazendo essa migração junto da limpeza de título.
+
+**Scripts retroativos** (`scripts/db/`, **não executados ainda** — só relatório `--dry-run` até
+aqui; exigem `DATABASE_URL` no ambiente e a flag `--execute` para gravar de verdade, liberada só
+depois do deploy e com aprovação explícita do João, porque a execução real mexe no Google
+Calendar de produção):
+- `cleanup_presenca_239.py` — zera `cache_value`/`travel_cache` das vagas de Presença **não
+  pagas** (linha já paga fica intacta); relatório prévio por evento/data/pessoa/valor/status.
+- `cleanup_show_nao_show_239.py` — eventos **futuros** com `event_type != SHOW`: desliga
+  `needs_rehearsal`, remove as vagas automáticas de som (mesmo preenchidas), cancela ensaios
+  filhos já agendados (Google incluído) e corrige o prefixo do título, empurrando ao Google
+  **antes** da parte destrutiva (mesma ordem obrigatória da correção acima).
+- `cleanup_titulos_239.py` — remove segmentos de equipe de títulos já poluídos (todos os
+  eventos com `google_event_id`, exceto cancelados/virtuais/ENSAIO) e migra junto os
+  `EventRole` reservados de `character` para `extra`, para a própria limpeza não gerar e-mail de
+  remoção no sync seguinte.
+
+**Critérios de aceite da rodada**: `npx tsc --noEmit` limpo nos apps tocados, `py_compile` limpo
+no backend, migrations encadeadas a partir do head real (`c8f4d92e17ab`), regras do CLAUDE.md
+respeitadas (`@manto/money`, `*_ops` puros, RBAC como função, UI pt-BR com feedback TanStack,
+Framer Motion 150–350ms com `useReducedMotion`).
 
 ### catalogo-fase-1 — item avulso veste ficha própria            (2026-08-18 · migration `c8f4d92e17ab`)
 
