@@ -286,6 +286,7 @@ export function AdminCatalogoFormPage() {
             adoptPhoto.isPending ? (adoptPhoto.variables?.characterId ?? null) : null
           }
           photoDropError={photoDropError}
+          itemFigurinoSheetId={itemQuery.data?.figurino_sheet_id ?? null}
         />
       )}
 

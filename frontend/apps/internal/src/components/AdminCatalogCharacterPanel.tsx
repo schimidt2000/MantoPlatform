@@ -11,6 +11,8 @@ import {
   useToggleOwnPage,
   useUpdateCharacter,
   type CatalogCharacter,
+  useSetItemFigurino,
+  useFlattenToAvulso,
 } from "../lib/adminCatalogo";
 import { useFigurinoSheets } from "../lib/figurino";
 import { FigurinoPicker } from "./FigurinoPicker";
@@ -31,6 +33,8 @@ interface AdminCatalogCharacterPanelProps {
   adoptingCharacterId?: number | null;
   /** Erro da última adoção de foto por arraste. */
   photoDropError?: string | null;
+  /** Ficha própria do item quando ele é avulso (fase 1). */
+  itemFigurinoSheetId?: number | null;
 }
 
 interface DraftState {
@@ -221,6 +225,7 @@ export function AdminCatalogCharacterPanel({
   photoDropTargetId = null,
   adoptingCharacterId = null,
   photoDropError = null,
+  itemFigurinoSheetId = null,
 }: AdminCatalogCharacterPanelProps) {
   const figurinoQuery = useFigurinoSheets();
   const createCharacter = useCreateCharacter(itemId);
@@ -234,6 +239,13 @@ export function AdminCatalogCharacterPanel({
   const adoptItem = useAdoptItemAsCharacter(itemId);
   const reuseCharacter = useReuseCharacter();
   const [reuseError, setReuseError] = useState<string | null>(null);
+  const setItemFigurino = useSetItemFigurino();
+  const flattenToAvulso = useFlattenToAvulso();
+  const [itemFichaError, setItemFichaError] = useState<string | null>(null);
+
+  // O tipo do item É a presença de elenco — não existe flag no banco (fase 1).
+  const isAvulso = characters.length === 0;
+  const isTemaDeUmSo = characters.length === 1;
 
   const sorted = [...characters].sort((a, b) => a.position - b.position);
   const figurinoSheets = figurinoQuery.data?.items ?? [];
@@ -278,6 +290,73 @@ export function AdminCatalogCharacterPanel({
         <CardTitle>Personagens</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Tipo do item e o que ele aceita (fase 1). Item avulso veste ficha própria; tema
+            monta elenco e a ficha pertence a cada personagem. Era a distinção invisível que
+            levava a criar um "elenco" de um personagem só dentro do próprio item. */}
+        {isAvulso ? (
+          <div className="space-y-2 rounded-md border border-dashed border-line p-3">
+            <p className="text-xs font-semibold text-muted">
+              Item avulso · ficha de figurino
+            </p>
+            <p className="text-xs text-muted">
+              Este item não tem elenco — ele se contrata sozinho, então a ficha do figurino é
+              dele mesmo. Ao montar um elenco aqui, ele vira um tema e a ficha passa a ser de
+              cada personagem.
+            </p>
+            <FigurinoPicker
+              value={itemFigurinoSheetId}
+              ariaLabel="Ficha de figurino deste item"
+              disabled={setItemFigurino.isPending}
+              onChange={(sheetId) => {
+                setItemFichaError(null);
+                setItemFigurino.mutate(
+                  { itemId, figurinoSheetId: sheetId },
+                  {
+                    onError: (err) => {
+                      if (err instanceof ApiRequestError) setItemFichaError(err.message);
+                    },
+                  },
+                );
+              }}
+            />
+            {itemFichaError && (
+              <p className="text-xs text-red" role="alert">
+                {itemFichaError}
+              </p>
+            )}
+          </div>
+        ) : (
+          isTemaDeUmSo && (
+            <div className="space-y-2 rounded-md border border-dashed border-line p-3">
+              <p className="text-xs font-semibold text-muted">Tema com um personagem só</p>
+              <p className="text-xs text-muted">
+                Se “{sorted[0]?.name}” é o próprio item e não um elenco, transforme em item
+                avulso: o personagem sai, o item herda a ficha dele e a vitrine deixa de
+                mostrar um “Elenco Individual” repetindo a mesma foto da capa.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                loading={flattenToAvulso.isPending}
+                onClick={() => {
+                  setItemFichaError(null);
+                  flattenToAvulso.mutate(itemId, {
+                    onError: (err) => {
+                      if (err instanceof ApiRequestError) setItemFichaError(err.message);
+                    },
+                  });
+                }}
+              >
+                Transformar em item avulso
+              </Button>
+              {itemFichaError && (
+                <p className="text-xs text-red" role="alert">
+                  {itemFichaError}
+                </p>
+              )}
+            </div>
+          )
+        )}
         {sorted.length > 0 && (
           <p className="text-xs text-muted">
             Dica: arraste uma foto <strong>já salva</strong> da galeria acima até um personagem

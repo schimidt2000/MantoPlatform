@@ -14,7 +14,7 @@ import {
   type FigurinoSheetItem,
 } from "../lib/figurino";
 import { useCatalogElencoBusca } from "../lib/catalogoElenco";
-import { useLinkCharacterFigurino } from "../lib/adminCatalogo";
+import { useLinkCharacterFigurino, useSetItemFigurino } from "../lib/adminCatalogo";
 import { CharacterAutocomplete, type CharacterSelection } from "../components/CharacterAutocomplete";
 
 /**
@@ -25,10 +25,46 @@ import { CharacterAutocomplete, type CharacterSelection } from "../components/Ch
 function FigurinoCatalogLinkField({ sheetId }: { sheetId: number }) {
   const elencoBusca = useCatalogElencoBusca();
   const link = useLinkCharacterFigurino();
+  const setItemFigurino = useSetItemFigurino();
 
   const linkedCharacter = elencoBusca.data?.temas
     .flatMap((tema) => tema.characters.map((c) => ({ ...c, temaName: tema.name })))
     .find((c) => c.figurino_sheet_id === sheetId);
+
+  // Item AVULSO que veste esta ficha (fase 1). Sem isto, as 12 fichas que a migration moveu de
+  // "personagem de si mesmo" para o item apareceriam aqui como "sem vínculo" — e a tela
+  // ofereceria criar um vínculo que já existe, do outro lado.
+  const linkedItem = elencoBusca.data?.temas.find(
+    (tema) => tema.kind === "avulso" && tema.figurino_sheet_id === sheetId,
+  );
+
+  if (linkedItem) {
+    return (
+      <div>
+        <label className="mb-1 block text-xs font-medium text-muted">
+          Vinculado a um item do Catálogo
+        </label>
+        <div className="flex items-center justify-between gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm">
+          <span className="text-ink">
+            {linkedItem.name} <span className="text-muted">— item avulso</span>
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={setItemFigurino.isPending}
+            onClick={() =>
+              setItemFigurino.mutate({ itemId: linkedItem.id, figurinoSheetId: null })
+            }
+          >
+            Desvincular
+          </Button>
+        </div>
+        <p className="mt-1 text-xs text-muted">
+          Este personagem se contrata sozinho: a ficha é do próprio item, não de um elenco.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>

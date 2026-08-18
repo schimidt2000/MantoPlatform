@@ -12,6 +12,10 @@ export interface CatalogElencoTema {
   id: number;
   name: string;
   slug: string;
+  /** `avulso` = item sem elenco, que veste ficha própria (fase 1). */
+  kind: "tema" | "avulso";
+  /** Ficha do item avulso — `null` num tema, onde a ficha é de cada personagem. */
+  figurino_sheet_id: number | null;
   characters: CatalogElencoCharacter[];
 }
 

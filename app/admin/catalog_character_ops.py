@@ -49,6 +49,23 @@ def _validate_photo_extension(photo_file) -> None:
         )
 
 
+def _require_sem_ficha_propria(item: CatalogItem) -> None:
+    """Recusa montar elenco num item que já veste ficha própria (fase 1).
+
+    A invariante é: item COM elenco é um tema, e tema não veste figurino — a ficha pertence a
+    cada personagem. O outro lado da regra vive em `catalog_ops.set_item_figurino`. Sem esta
+    guarda, um item avulso com ficha própria que ganhasse elenco ficaria com duas verdades
+    sobre qual figurino ele usa.
+    """
+    if item.figurino_sheet_id:
+        nome = item.figurino_sheet.character_name if item.figurino_sheet else "própria"
+        raise CatalogValidationError(
+            "item_id",
+            f'"{item.name}" é um item avulso com ficha própria ({nome}). Remova a ficha do '
+            "item antes de montar um elenco — num tema, a ficha pertence a cada personagem.",
+        )
+
+
 def create_character(
     item: CatalogItem,
     *,
@@ -58,6 +75,7 @@ def create_character(
     photo_file,
 ) -> CatalogCharacter:
     """Cria um novo Personagem filho do Tema `item`."""
+    _require_sem_ficha_propria(item)
     clean_name = (name or "").strip()
     if not clean_name:
         raise CatalogValidationError("name", "Nome do personagem é obrigatório.")
@@ -226,6 +244,7 @@ def adopt_item_as_character(tema: CatalogItem, item: CatalogItem) -> CatalogChar
     """
     from app.storage import copy_file
 
+    _require_sem_ficha_propria(tema)
     if item.id == tema.id:
         raise CatalogValidationError("item_id", "Um tema não pode ser personagem de si mesmo.")
     if item.characters:
@@ -279,6 +298,7 @@ def reuse_character(tema: CatalogItem, sheet: FigurinoSheet) -> CatalogCharacter
     A foto é COPIADA (nunca referenciada) da aparição mais recente ou da própria ficha — os
     fluxos de remoção chamam `delete_file` sem saber de compartilhamento.
     """
+    _require_sem_ficha_propria(tema)
     ja_no_tema = CatalogCharacter.query.filter_by(
         catalog_item_id=tema.id, figurino_sheet_id=sheet.id
     ).first()
@@ -370,6 +390,7 @@ def list_catalog_characters() -> dict:
             entrada = {
                 "tema_id": c.catalog_item_id,
                 "tema_name": tema.name if tema else "—",
+                "is_avulso": False,
                 "aparicoes": [],
             }
             grupo["_por_tema"][c.catalog_item_id] = entrada
@@ -377,6 +398,44 @@ def list_catalog_characters() -> dict:
         entrada["aparicoes"].append(
             {"character_id": c.id, "character_name": c.name, "is_active": c.is_active}
         )
+
+    # Itens AVULSOS com ficha própria (fase 1) entram como aparição também: sem isto, os 12
+    # personagens que a migration tirou de "elenco de si mesmo" sumiriam desta tela — ela é a
+    # resposta de "onde este personagem aparece", e um avulso É um lugar onde ele aparece.
+    for item in temas.values():
+        if item.characters or not item.figurino_sheet_id:
+            continue
+        sheet = sheets.get(item.figurino_sheet_id)
+        if sheet is None:
+            continue
+        key = f"ficha-{sheet.id}"
+        grupo = grupos.setdefault(
+            key,
+            {
+                "key": key,
+                "name": item.name,
+                "photo_url": item.cover_image.url if item.cover_image else None,
+                "figurino_sheet_id": sheet.id,
+                "figurino_sheet_name": sheet.character_name,
+                "quantidade_figurinos": sheet.quantity,
+                "manutencao": alertas.get(sheet.id),
+                "temas": [],
+                "_por_tema": {},
+            },
+        )
+        if not grupo["photo_url"] and item.cover_image:
+            grupo["photo_url"] = item.cover_image.url
+        entrada = {
+            "tema_id": item.id,
+            "tema_name": item.name,
+            # A tela distingue "está no elenco do tema X" de "é a página avulsa X".
+            "is_avulso": True,
+            "aparicoes": [
+                {"character_id": None, "character_name": item.name, "is_active": item.is_active}
+            ],
+        }
+        grupo["_por_tema"][item.id] = entrada
+        grupo["temas"].append(entrada)
 
     personagens = sorted(grupos.values(), key=lambda g: g["name"].lower())
     for grupo in personagens:
@@ -388,7 +447,7 @@ def list_catalog_characters() -> dict:
         "personagens": personagens,
         "totais": {
             "personagens": len(personagens),
-            "aparicoes": len(characters),
+            "aparicoes": sum(g["total_aparicoes"] for g in personagens),
             "com_ficha": len(com_ficha),
             "sem_ficha": len(personagens) - len(com_ficha),
             "em_varios_temas": sum(1 for g in personagens if len(g["temas"]) > 1),
@@ -427,6 +486,7 @@ def move_characters(character_ids: list[int], target_item: CatalogItem) -> int:
     Raises:
         CatalogValidationError: `character_ids` vazio ou contém um id inexistente.
     """
+    _require_sem_ficha_propria(target_item)
     if not character_ids:
         raise CatalogValidationError("character_ids", "Selecione ao menos um personagem.")
 

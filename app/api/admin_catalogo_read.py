@@ -40,6 +40,15 @@ def _item_summary(item: CatalogItem) -> dict:
         # Cobertura de fichas do elenco — o "termômetro" do gerenciador.
         "characters_total": len(characters),
         "characters_com_ficha": sum(1 for c in characters if c.figurino_sheet_id),
+        # "tema" (tem elenco) x "avulso" (se contrata sozinho). Não é uma coluna: o tipo de um
+        # item É a presença de elenco. Vem explícito no payload porque essa distinção era
+        # invisível na tela e é justamente a que confundia quem organiza o catálogo (fase 1).
+        "kind": "tema" if characters else "avulso",
+        # Ficha do item avulso (fase 1). Num tema é sempre null — lá a ficha é de cada personagem.
+        "figurino_sheet_id": item.figurino_sheet_id,
+        "figurino_sheet_name": (
+            item.figurino_sheet.character_name if item.figurino_sheet else None
+        ),
         "parte_de_tema": (
             {"tema_id": as_char.catalog_item_id, "tema_name": as_char.tema.name}
             if as_char
@@ -114,6 +123,12 @@ def api_admin_catalogo_detail(item_id: int) -> Any:
             "is_active": item.is_active,
             "category_ids": [c.id for c in item.categories],
             "video_url": item.video_url,
+            # Ficha própria do item avulso (fase 1) — o formulário mostra o campo só quando o
+            # item não tem elenco, porque num tema a ficha pertence a cada personagem.
+            "figurino_sheet_id": item.figurino_sheet_id,
+            "figurino_sheet_name": (
+                item.figurino_sheet.character_name if item.figurino_sheet else None
+            ),
             "images": [
                 {"id": img.id, "url": img.url, "position": img.position} for img in item.images
             ],

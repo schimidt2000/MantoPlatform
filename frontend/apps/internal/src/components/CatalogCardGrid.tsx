@@ -69,6 +69,30 @@ export function CatalogCardGrid({
                 </span>
               )}
               <div className="mt-1 text-xs text-muted">{item.category_names.join(", ")}</div>
+              {/* Tema x avulso (fase 1): a distinção decide o que dá para fazer com o item —
+                  tema monta elenco, avulso veste ficha própria — e era invisível na tela. */}
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                <span
+                  className={`rounded-full px-1.5 py-0.5 font-medium ${
+                    item.kind === "tema"
+                      ? "bg-accent-soft text-accent-dark"
+                      : "bg-surface-2 text-muted"
+                  }`}
+                >
+                  {item.kind === "tema" ? "Tema" : "Avulso"}
+                </span>
+                {item.kind === "avulso" && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 font-medium ${
+                      item.figurino_sheet_name
+                        ? "bg-green-soft text-green"
+                        : "bg-gold/15 text-accent-dark"
+                    }`}
+                  >
+                    👗 {item.figurino_sheet_name ?? "sem ficha"}
+                  </span>
+                )}
+              </div>
               {item.characters.length > 0 && (
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
                   <span>

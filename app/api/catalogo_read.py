@@ -253,6 +253,11 @@ def api_catalogo_elenco_busca() -> Any:
                     "id": item.id,
                     "name": item.name,
                     "slug": item.slug,
+                    # Item avulso com ficha própria (fase 1): sem elenco, mas É um lugar onde a
+                    # ficha aparece. A tela da Ficha de Figurino usa isto para mostrar o vínculo
+                    # de um avulso em vez de dizer "sem vínculo" e oferecer criar um.
+                    "kind": "tema" if item.characters else "avulso",
+                    "figurino_sheet_id": item.figurino_sheet_id,
                     "characters": [
                         {
                             "id": c.id,

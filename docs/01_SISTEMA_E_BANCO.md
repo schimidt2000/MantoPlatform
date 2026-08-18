@@ -872,6 +872,13 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
   (`:155`, `:172`, `:276`, `:282`, `:332`, `:521`). Ver §3.6.
 
 ### 3.14 Superfícies públicas (sem login)
+**Catálogo — item avulso × tema (fase 1, migration `c8f4d92e17ab`).** `catalog_items.figurino_sheet_id`
+guarda a ficha do item quando ele se contrata SOZINHO. INVARIANTE: item com elenco (um tema) tem
+esse campo `NULL` — num tema a ficha é de cada `CatalogCharacter`. Endpoints:
+`POST /api/admin/catalogo/<id>/figurino` (vincula/desvincula; 400 em tema) ·
+`POST /api/admin/catalogo/<id>/virar-avulso` (tema de 1 personagem → avulso herdando a ficha).
+O tipo do item não é coluna: `kind` = `"tema"` se tem elenco, senão `"avulso"`.
+
 `GET /api/cadastro/check-cpf` · `POST /api/cadastro` (devolve `id`, `email` e `verify_token`) ·
 `POST /api/cadastro/confirmar` (token do link; consome o token) ·
 `POST /api/cadastro/reenviar` (autenticado pelo par `id` + `verify_token`; corrige **só** o email

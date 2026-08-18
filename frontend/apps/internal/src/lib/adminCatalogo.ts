@@ -22,6 +22,15 @@ export interface CatalogListItem {
   characters_com_ficha: number;
   /** Quando este item é a página própria de um personagem de outro tema (caso Coelho). */
   parte_de_tema: { tema_id: number; tema_name: string } | null;
+  /**
+   * `tema` = tem elenco; `avulso` = se contrata sozinho. Não é uma coluna do banco — o tipo de
+   * um item É a presença de elenco. Vem do servidor porque essa distinção era invisível na tela
+   * e é a que confundia quem organiza o catálogo (fase 1).
+   */
+  kind: "tema" | "avulso";
+  /** Ficha do item avulso (fase 1). Sempre `null` num tema — lá a ficha é de cada personagem. */
+  figurino_sheet_id: number | null;
+  figurino_sheet_name: string | null;
   characters: CatalogCharacterSummary[];
 }
 
@@ -83,6 +92,9 @@ export interface CatalogItemDetail {
   video_url: string | null;
   images: CatalogImage[];
   characters: CatalogCharacter[];
+  /** Ficha própria do item avulso (fase 1) — `null` num tema. */
+  figurino_sheet_id: number | null;
+  figurino_sheet_name: string | null;
 }
 
 export function useAdminCatalogoItem(id: number | undefined) {
@@ -433,6 +445,35 @@ export function useLinkCharacterFigurino() {
         method: "PATCH",
         body: buildCharacterFormData({ figurinoSheetId }),
       }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo"] });
+      queryClient.invalidateQueries({ queryKey: ["catalogo-elenco-busca"] });
+    },
+  });
+}
+
+/** Vincula/desvincula a ficha de figurino de um item AVULSO do catálogo (fase 1). */
+export function useSetItemFigurino() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, figurinoSheetId }: { itemId: number; figurinoSheetId: number | null }) =>
+      apiFetch<CatalogListItem>(`/api/admin/catalogo/${itemId}/figurino`, {
+        method: "POST",
+        body: JSON.stringify({ figurino_sheet_id: figurinoSheetId }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo"] });
+      queryClient.invalidateQueries({ queryKey: ["catalogo-elenco-busca"] });
+    },
+  });
+}
+
+/** Transforma um tema de UM personagem só em item avulso, herdando a ficha dele (fase 1). */
+export function useFlattenToAvulso() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (itemId: number) =>
+      apiFetch<CatalogListItem>(`/api/admin/catalogo/${itemId}/virar-avulso`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-catalogo"] });
       queryClient.invalidateQueries({ queryKey: ["catalogo-elenco-busca"] });

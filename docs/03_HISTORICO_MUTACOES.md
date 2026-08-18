@@ -39,6 +39,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **catalogo-fase-1** | Ficha de figurino direto no item AVULSO; 12 auto-temas achatados; selo Tema×Avulso no gerenciador; ação "virar avulso"; avulsos entram na visão de personagens | 2026-08-18 | `c8f4d92e17ab` | (aqui) | — |
 | **vincular-na-criacao (hotfix)** | "Vincular a um Personagem do Catálogo" também na CRIAÇÃO da ficha (deferido pós-criação, padrão da foto); só personagens sem ficha; nome preenchido de brinde | 2026-08-17 | `—` | (aqui) | — |
 | **fichas-por-escalacao + adotar-item-honesto (hotfixes)** | Imprimir fichas do evento: 1 folha por escalação (dois "Soldado" saíam como um); busca de adotar item mostra tema/já-adotado bloqueado com o motivo em vez de sumir | 2026-08-17 | `—` | (aqui) | — |
 | **cadastro-raiz (hotfix)** | `/cadastro` na raiz do domínio vira o endereço do formulário React; Jinja do cadastro apagado; `FileUpload` copia o arquivo para memória (mata `ERR_UPLOAD_FILE_CHANGED`) | 2026-08-17 | `—` | (aqui) | — |
@@ -166,6 +167,53 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### catalogo-fase-1 — item avulso veste ficha própria            (2026-08-18 · migration `c8f4d92e17ab`)
+
+**Motivação.** Levantamento do catálogo real (458 itens, 619 fichas) explicou a confusão de quem
+organiza: **só `CatalogCharacter` podia apontar para uma ficha**. Um item sem elenco — Coringa,
+Arlequina, Abóbora Maldita, Capitão América — não tinha onde guardar o figurino, e a saída era
+criar um "elenco" de UM personagem só, com o mesmo nome, dentro do próprio item. Eram **12
+itens** nesse estado, e o efeito vazava para a vitrine: a seção "Elenco Individual" abria com um
+card único repetindo a foto da capa. Não era erro de quem cadastrou — era o modelo forçando.
+
+**O que mudou.**
+- **`catalog_items.figurino_sheet_id`**: item avulso veste ficha direto.
+- **INVARIANTE nova**: item COM elenco é um tema, e tema não veste figurino — a ficha pertence a
+  cada personagem. Guardada nos dois sentidos: `catalog_ops.set_item_figurino` recusa ficha em
+  tema, e `_require_sem_ficha_propria` recusa montar elenco em item com ficha própria nos
+  **quatro** caminhos que criam elenco (`create_character`, `reuse_character`,
+  `adopt_item_as_character`, `move_characters` — este último era o furo menos óbvio).
+- **Migration achata os 12 auto-temas**: item cujo único personagem tem nome idêntico (sem
+  acento/caixa) herda a ficha e o personagem redundante é apagado. Regra deliberadamente
+  estreita: os **11** casos de nome só parecido ("Wandinha Addams" contendo "Wandinha",
+  "Aracnídeo" contendo "Aranha") NÃO foram tocados — podem ser tema legítimo, e a decisão é de
+  quem organiza, pelo botão **"Transformar em item avulso"** (`flatten_to_avulso`). Personagem
+  com campanha da Loja Virtual é pulado (`virtual_campaigns.catalog_character_id` é NOT NULL);
+  não havia nenhum, mas a guarda fica. Downgrade recria os personagens — simétrico e testado.
+- **Gerenciador**: selo **Tema · N personagens** × **Avulso** com a ficha do avulso ao lado; o
+  painel do item mostra o campo de ficha (avulso) ou o botão de achatar (tema de um só).
+- **Coerência das outras telas**: `list_catalog_characters` passou a incluir itens avulsos como
+  aparição (`is_avulso: true`) — sem isso os 12 sumiriam da visão "onde este personagem
+  aparece"; e `elenco-busca` expõe `kind`/`figurino_sheet_id` do item, para a tela da Ficha
+  mostrar "vinculado ao item avulso X" em vez de "sem vínculo" (as 12 fichas mudaram de dono).
+
+**Pegadinha de payload.** `admin_catalogo_write.py` tinha um `_item_summary` MENOR que o da
+listagem. As ações que mudam o tipo do item passaram a responder com `_item_summary_full`
+(import local, para não criar circularidade na ordem de registro das rotas) — senão a tela
+recebia de volta um objeto sem `kind`/`figurino_sheet_*`, justamente o que acabou de mudar.
+
+**Verificação.** Ensaio da migração destrutiva num banco descartável (`manto_ensaio`, clone do
+espelho de produção) rodando o `startCommand` do Railway inteiro: `flask db upgrade` (12
+achatados) + `seed.py`; 458 itens intactos, 231→219 personagens, 12 itens com a ficha certa e
+fotos preservadas, invariantes zeradas; downgrade devolveu os 231. Depois: 10 checks de regra de
+negócio nas ops, 13 checks nos endpoints reais como superadmin, e a vitrine conferida no
+navegador (Abóbora Maldita sem a seção redundante e com as 13 fotos; Aladdin com os 6
+personagens intactos).
+
+**Fases seguintes (não feitas aqui):** 2) mutirão assistido de vínculos (fichas ligadas ao
+catálogo estão em 22%, cargos de evento com ficha em 32%); 3) estoque real (as 619 fichas estão
+todas com `quantity = 1`, o default); 4) PDF da vendedora com as fotos do catálogo.
 
 ### vincular-na-criacao (hotfix) — personagem já na criação da ficha            (2026-08-17 · sem migration)
 

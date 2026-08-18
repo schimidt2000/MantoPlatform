@@ -14,7 +14,7 @@ import nh3
 from app import db
 from app.catalogo.importer import _rewrite_public_url, _slugify
 from app.catalogo.media import classify_video_url
-from app.models import CatalogCategory, CatalogItem, CatalogItemImage
+from app.models import CatalogCategory, CatalogItem, CatalogItemImage, FigurinoSheet
 from app.storage import delete_file, save_file
 from app.utils import audit
 
@@ -319,6 +319,86 @@ def update_product(
 
     apply_photos(item, form, files)
     audit("edit", "CatalogItem", item.id, item.name, "Produto do catálogo editado")
+    db.session.commit()
+    return item
+
+
+def set_item_figurino(item: CatalogItem, sheet: FigurinoSheet | None) -> CatalogItem:
+    """Define (ou remove) a ficha de figurino de um item AVULSO do catálogo (fase 1).
+
+    Item avulso é a página de um personagem que se contrata sozinho — Coringa, Arlequina,
+    Abóbora Maldita. Antes desta função ele não tinha onde guardar o figurino, e a saída era
+    criar um "elenco" de um personagem só dentro dele mesmo (ver a migration
+    ``c8f4d92e17ab``); agora a ficha mora no próprio item.
+
+    Um item COM elenco é um tema, e num tema a ficha pertence a cada personagem — o pacote
+    inteiro não veste um figurino só. Por isso a operação é recusada nesse caso, com a
+    instrução do que fazer (a mesma regra guarda a criação de elenco, do outro lado).
+    """
+    if sheet is not None and item.characters:
+        raise CatalogValidationError(
+            "figurino_sheet_id",
+            f'"{item.name}" é um tema com {len(item.characters)} personagem(ns) no elenco. '
+            "Num tema a ficha pertence a cada personagem — vincule a ficha ao personagem, "
+            "não ao tema.",
+        )
+
+    item.figurino_sheet_id = sheet.id if sheet else None
+    audit(
+        "edit",
+        "CatalogItem",
+        item.id,
+        item.name,
+        f'Ficha de figurino {"vinculada: " + sheet.character_name if sheet else "removida"}',
+    )
+    db.session.commit()
+    return item
+
+
+def flatten_to_avulso(item: CatalogItem) -> CatalogItem:
+    """Transforma um tema de UM personagem só em item avulso, herdando a ficha dele.
+
+    É a versão manual do que a migration ``c8f4d92e17ab`` fez automaticamente nos 12 casos em
+    que o nome do personagem era idêntico ao do item. Os casos de nome apenas parecido
+    ("Wandinha Addams" contendo "Wandinha", "Aracnídeo" contendo "Aranha") ficaram de fora de
+    propósito: podem ser um tema legítimo, e a decisão é de quem organiza o catálogo — este é
+    o botão que ela usa.
+
+    A foto do personagem NÃO é copiada para o item: a página do item já tem a galeria própria,
+    e era justamente a duplicação dessa foto no "Elenco Individual" que motivou a mudança.
+    """
+    if len(item.characters) != 1:
+        raise CatalogValidationError(
+            "item_id",
+            f'"{item.name}" tem {len(item.characters)} personagens no elenco. '
+            "Só um tema com exatamente um personagem vira item avulso.",
+        )
+
+    character = item.characters[0]
+    if character.own_item_id:
+        raise CatalogValidationError(
+            "item_id",
+            f'"{character.name}" tem página própria — desfaça a página própria antes.',
+        )
+    from app.models import VirtualCampaign
+
+    if VirtualCampaign.query.filter_by(catalog_character_id=character.id).first():
+        raise CatalogValidationError(
+            "item_id",
+            f'"{character.name}" tem campanha da Loja de Interações Virtuais e não pode ser '
+            "removido do elenco.",
+        )
+
+    item.figurino_sheet_id = character.figurino_sheet_id
+    nome_personagem = character.name
+    db.session.delete(character)
+    audit(
+        "edit",
+        "CatalogItem",
+        item.id,
+        item.name,
+        f'Virou item avulso: personagem "{nome_personagem}" removido e ficha herdada pelo item',
+    )
     db.session.commit()
     return item
 

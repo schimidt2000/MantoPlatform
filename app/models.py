@@ -1977,7 +1977,21 @@ class CatalogItem(db.Model):
     is_active               = db.Column(db.Boolean, default=True, nullable=False)
     imported_at             = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     video_url               = db.Column(db.String(500), nullable=True)  # feature 185 — Drive/MP4/Vimeo
+    # Ficha do figurino deste item quando ele é contratado SOZINHO (item avulso).
+    #
+    # Até a fase 1 da reestruturação do catálogo, só `CatalogCharacter` podia apontar para uma
+    # ficha — então, para dar figurino a um item sem elenco (Coringa, Arlequina, Abóbora
+    # Maldita…), alguém criava um "elenco" de um personagem só, com o mesmo nome do item, dentro
+    # dele mesmo. Eram 12 itens nesse estado, e a vitrine mostrava um "Elenco Individual"
+    # redundante repetindo a própria capa. Com esta coluna, item avulso veste ficha direto.
+    #
+    # INVARIANTE: item COM elenco (um tema) não tem ficha própria — num tema, a ficha pertence a
+    # cada personagem. Garantido em `catalog_ops.set_item_figurino` e nas ops que criam elenco.
+    figurino_sheet_id       = db.Column(
+        db.Integer, db.ForeignKey("figurino_sheets.id", ondelete="SET NULL"), nullable=True
+    )
 
+    figurino_sheet = db.relationship("FigurinoSheet", lazy=True)
     categories = db.relationship("CatalogCategory", secondary=catalog_item_categories, lazy=True)
     images     = db.relationship(
         "CatalogItemImage", backref="item", lazy=True,

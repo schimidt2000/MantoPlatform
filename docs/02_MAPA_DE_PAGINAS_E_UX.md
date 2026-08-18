@@ -408,6 +408,14 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **API**: `GET /api/figurino`, `GET /api/catalogo/elenco-busca`,
   `PATCH /api/admin/catalogo/personagens/<id>`.
 
+> **Item avulso × tema (fase 1).** O painel de Personagens do gerenciador
+> (`/admin/catalogo/:id/editar`) agora abre com o tipo do item: quando NÃO tem elenco, mostra o
+> campo **"Item avulso · ficha de figurino"** (a ficha é do próprio item); quando tem elenco de
+> UM personagem só, oferece **"Transformar em item avulso"**. A grade do catálogo carimba
+> **Tema · N personagens** ou **Avulso** + a ficha. Regra para quem organiza: *elenco individual
+> é só para tema de verdade; avulso recebe ficha direto.* Na tela da Ficha, um figurino que
+> pertence a um item avulso aparece como "Vinculado a um item do Catálogo", não como sem vínculo.
+
 #### `/figurinos/new` e `/figurinos/:id/edit` — Ficha de Figurino
 - **UX**: nome do personagem (obrigatório), foto (upload, rotação, remoção), **peças** como lista
   `{name, qty}`, **tags** via `ChipInput`, notas.

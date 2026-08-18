@@ -37,6 +37,19 @@ def _item_summary(item: CatalogItem) -> dict:
     }
 
 
+def _item_summary_full(item: CatalogItem) -> dict:
+    """Resumo COMPLETO do item — o mesmo que a listagem devolve.
+
+    As ações que mudam o tipo do item (ficha própria, virar avulso) precisam responder com
+    `kind`/`figurino_sheet_*`, senão a tela recebe de volta um objeto que não descreve o que
+    acabou de mudar. Import local: os dois módulos são carregados por `app/api/__init__.py` e
+    um import no topo criaria dependência circular na ordem de registro das rotas.
+    """
+    from app.api.admin_catalogo_read import _item_summary as _full
+
+    return _full(item)
+
+
 @api_bp.route("/admin/catalogo/categorias", methods=["POST"])
 @api_login_required
 def api_admin_catalogo_new_category() -> Any:
@@ -100,6 +113,52 @@ def api_admin_catalogo_update(item_id: int) -> Any:
     except catalog_ops.CatalogValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
     return jsonify(_item_summary(item))
+
+
+@api_bp.route("/admin/catalogo/<int:item_id>/figurino", methods=["POST"])
+@api_login_required
+def api_admin_catalogo_item_figurino(item_id: int) -> Any:
+    """Vincula/desvincula a ficha de figurino de um item AVULSO (`{"figurino_sheet_id": int|null}`).
+
+    Só para item sem elenco: num tema a ficha pertence a cada personagem (fase 1 da
+    reestruturação do catálogo — ver `catalog_ops.set_item_figurino`).
+    """
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    item = CatalogItem.query.get(item_id)
+    if item is None:
+        return json_error("Produto não encontrado", 404)
+
+    body = request.get_json(silent=True) or {}
+    raw = body.get("figurino_sheet_id")
+    sheet = None
+    if raw is not None:
+        sheet = FigurinoSheet.query.get(raw)
+        if sheet is None:
+            return json_error("Ficha de figurino não encontrada", 404)
+    try:
+        catalog_ops.set_item_figurino(item, sheet)
+    except catalog_ops.CatalogValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(_item_summary_full(item))
+
+
+@api_bp.route("/admin/catalogo/<int:item_id>/virar-avulso", methods=["POST"])
+@api_login_required
+def api_admin_catalogo_item_flatten(item_id: int) -> Any:
+    """Transforma um tema de UM personagem só em item avulso, herdando a ficha dele (fase 1)."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    item = CatalogItem.query.get(item_id)
+    if item is None:
+        return json_error("Produto não encontrado", 404)
+    try:
+        catalog_ops.flatten_to_avulso(item)
+    except catalog_ops.CatalogValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify(_item_summary_full(item))
 
 
 @api_bp.route("/admin/catalogo/<int:item_id>/toggle-ativo", methods=["POST"])
