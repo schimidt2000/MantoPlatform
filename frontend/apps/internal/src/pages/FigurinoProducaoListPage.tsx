@@ -180,7 +180,7 @@ function NovoPedidoDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => (v ? onOpenChange(true) : fechar())}>
-      <DialogContent open={open} className="max-w-lg">
+      <DialogContent open={open} className="max-h-[85vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {eCompra ? "Novo pedido de compra" : "Novo pedido de figurino"}

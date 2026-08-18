@@ -104,6 +104,16 @@ const SECTIONS: NavSectionConfig[] = [
         isVisible: everyone,
       },
       {
+        key: "catalogo-publico",
+        label: "Catálogo",
+        href: "/catalogo/",
+        icon: <BookOpen />,
+        external: true,
+        hint: "Abre o catálogo público em outra aba",
+        isActive: () => false,
+        isVisible: everyone,
+      },
+      {
         key: "gastos-extras",
         label: "Gastos Extras",
         href: "/gastos",
@@ -292,17 +302,6 @@ const SECTIONS: NavSectionConfig[] = [
         href: "/clientes/avaliacoes",
         icon: <Star />,
         isActive: (path) => path === "/clientes/avaliacoes",
-        isVisible: (user) =>
-          notRevendedor(user) && hasRole(user, "COMERCIAL", "FINANCEIRO", "SUPERADMIN"),
-      },
-      {
-        key: "catalogo-publico",
-        label: "Catálogo",
-        href: "/catalogo/",
-        icon: <BookOpen />,
-        external: true,
-        hint: "Abre o catálogo público em outra aba",
-        isActive: () => false,
         isVisible: (user) =>
           notRevendedor(user) && hasRole(user, "COMERCIAL", "FINANCEIRO", "SUPERADMIN"),
       },
