@@ -520,6 +520,11 @@ class EventRole(db.Model):
     talent_id = db.Column(db.Integer, db.ForeignKey("talents.id"), nullable=True)
     cache_value = db.Column(db.Numeric(10, 2), nullable=True)
     cache_cap   = db.Column(db.Numeric(10, 2), nullable=True)   # valor máximo pré-calculado (do orçamento)
+    # Feature 239 — a conta do teto EM VALORES, como texto pronto ("Ator cara-limpa: base 2h
+    # R$ 300 + noturno R$ 50 + fora-SP R$ 67 = R$ 417"). Gravada na criação quando o evento
+    # nasce de um orçamento; NULL quando o papel foi criado à mão (sem orçamento vinculado).
+    # Só o superadmin lê esse campo pela API (`_serialize_role`).
+    cache_cap_note = db.Column(db.Text, nullable=True)
     travel_cache = db.Column(db.Numeric(10, 2), nullable=True)  # adicional fora de SP
     assigned_at = db.Column(db.DateTime, nullable=True)
     figurino_done_at = db.Column(db.DateTime, nullable=True)
@@ -538,6 +543,12 @@ class EventRole(db.Model):
 
     needs_makeup  = db.Column(db.Boolean, nullable=True)  # pré-preenchido do orçamento
     is_singer     = db.Column(db.Boolean, nullable=True)  # pré-preenchido do orçamento
+
+    # Feature 239 — "carrinho": este integrante leva um veículo no evento fora de SP. Marcador
+    # puro (True | NULL, como needs_makeup/is_singer): não guarda valor. O efeito é no TETO do
+    # cachê (assign_role soma a parcela de UM veículo do orçamento); o que se paga continua
+    # sendo um número só em `cache_value`.
+    does_transport = db.Column(db.Boolean, nullable=True)
 
     # Dispensa de tarefa de casting obsoleta (feature 108): o cargo continua existindo (por
     # isso a sincronização com o Google Agenda não o recria) mas para de contar como pendente.
