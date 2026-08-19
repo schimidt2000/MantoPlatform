@@ -16,9 +16,9 @@ from sqlalchemy.orm import joinedload
 
 from app import db
 from app.clientes.importer import normalize_phone
-from app.feedback.routes import ATTENTION_TAGS, POSITIVE_TAGS
+from app.feedback.feedback_ops import ATTENTION_TAGS, POSITIVE_TAGS
 from app.models import CalendarEvent, Client, ClientFeedback, EventClient, FormResponse
-from app.talents.routes import _parse_period
+from app.talents.rating_ops import parse_period as _parse_period
 from app.utils import strip_accents_lower, unaccent_lower_sql
 
 ALL_FEEDBACK_TAGS = POSITIVE_TAGS + ATTENTION_TAGS

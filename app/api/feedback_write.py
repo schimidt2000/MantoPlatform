@@ -15,7 +15,7 @@ from flask import jsonify, request
 from app import db, limiter
 from app.api import api_bp
 from app.api_utils import json_error
-from app.feedback.routes import ATTENTION_TAGS, POSITIVE_TAGS, _tags_for_score
+from app.feedback.feedback_ops import ATTENTION_TAGS, POSITIVE_TAGS, tags_for_score
 from app.models import CalendarEvent, ClientFeedback, SiteSetting
 
 # Fallback do link de review no Google quando `SiteSetting.google_review_url` está vazio.
@@ -85,7 +85,7 @@ def api_feedback_submit(token: str) -> Any:
             "Selecione uma nota de 1 a 5 estrelas.", 400, fields={"score": "Escolha de 1 a 5"}
         )
 
-    allowed_tags = set(_tags_for_score(score))
+    allowed_tags = set(tags_for_score(score))
     raw_tags = body.get("tags") or []
     selected_tags = [t for t in raw_tags if t in allowed_tags]
     comment = (body.get("comment") or "").strip()[:2000]

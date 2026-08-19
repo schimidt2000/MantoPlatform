@@ -470,7 +470,7 @@ def dashboard():
     )
 
     # Gastos recorrentes do período (feature 110): competência pelo mês de referência.
-    from app.gastos.routes import ensure_recurring_entries
+    from app.gastos.gastos_ops import ensure_recurring_entries
     ensure_recurring_entries(today.year, today.month)
     gastos_recorrentes = sum(
         (Decimal(e.amount) for e in RecurringExpenseEntry.query.filter(
@@ -1214,7 +1214,7 @@ def pagamentos():
     items += _build_commission_items(prev_start, prev_end, date(year_i, month_i, 5), today)
 
     # Gastos recorrentes (feature 110): contas variáveis preenchidas do mês visto.
-    from app.gastos.routes import ensure_recurring_entries
+    from app.gastos.gastos_ops import ensure_recurring_entries
     ensure_recurring_entries(year_i, month_i)
     items += _build_recurring_items(year_i, month_i, today)
     items.sort(key=lambda x: x["date"])
