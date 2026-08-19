@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import secrets
 
-from flask import Blueprint, abort, current_app, jsonify, render_template, request
+from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request
 from flask_login import current_user, login_required
 
 from app import db, limiter
@@ -71,22 +71,29 @@ def gerar_link(event_id: int):
         db.session.commit()
     # PUBLIC_BASE_URL, não url_root: atrás do proxy (206) o Host aqui é o do backend.
     base = (current_app.config.get("PUBLIC_BASE_URL") or request.url_root).rstrip("/")
-    url = f"{base}/avaliar/{event.feedback_token}"
+    url = f"{base}/catalogo/avaliar/{event.feedback_token}"
     return jsonify({"url": url})
 
 
 @feedback_bp.route("/avaliar/<token>", methods=["GET"])
 def avaliar(token: str):
-    event = CalendarEvent.query.filter_by(feedback_token=token).first()
-    if not event:
-        return render_template("feedback/invalid.html"), 404
-    return render_template(
-        "feedback/public.html",
-        event=event,
-        positive_tags=POSITIVE_TAGS,
-        attention_tags=ATTENTION_TAGS,
-        submitted=False,
-    )
+    """Manda a cliente para a página React de avaliação, preservando o token.
+
+    Esta rota **não some nunca**. `/avaliar/<token>` é o endereço que a comercial copia e cola no
+    WhatsApp desde a feature 130, o token não expira, e não há como recolher um link já enviado —
+    então todo link em circulação continua entrando por aqui. O que mudou é o destino: em vez de
+    renderizar o Jinja, ela devolve 302 para a página React equivalente (feature 164), que tem
+    paridade completa (grava `ClientFeedback`, CTA do Google Review em nota 5 pela mesma função,
+    mesmo limite de 10/h).
+
+    Redirect **relativo** de propósito: sai pelo mesmo host público, o browser reentra em
+    `frontend/server.js` e `/catalogo/*` cai no bundle da vitrine — que roda com
+    `basename="/catalogo"` (`apps/public/src/App.tsx`), daí o caminho ter esse prefixo. Uma URL
+    absoluta montada aqui pegaria o Host do serviço backend (o proxy usa `changeOrigin`).
+
+    302 e não 301: o navegador não memoriza, então o destino continua sendo nosso para mudar.
+    """
+    return redirect(f"/catalogo/avaliar/{token}", code=302)
 
 
 @feedback_bp.route("/avaliar/<token>", methods=["POST"])
