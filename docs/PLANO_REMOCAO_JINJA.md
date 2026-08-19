@@ -325,7 +325,15 @@ Os três viram uma feature só, "auto-serviço de conta", que também libera a F
 > acréscimo/nota/parcela antes da Fase 6; corrigir o sync de comissão em
 > `event_ops.update_event_comercial`; apagar página e templates no mesmo commit.
 
-### Fase 5 — `/avaliar`
+### Fase 5 — `/avaliar` · ⚠️ **METADE FEITA em 19/08** (commit `d4d16cc`, branch `241-avaliar-aponta-para-react`)
+
+> **Feito:** `GET /avaliar/<token>` virou 302 para `/catalogo/avaliar/<token>` e os dois geradores
+> emitem o endereço novo. Nenhuma cliente cai mais no Jinja. `verify_241`: 11/11.
+>
+> **Falta**, e é bloqueante para apagar `feedback_bp`: extrair `POSITIVE_TAGS`, `ATTENTION_TAGS` e
+> `_tags_for_score` de `app/feedback/routes.py` para um `feedback_ops.py`, porque
+> `app/api/feedback_write.py:18` os importa de lá — **apagar o arquivo hoje derruba a API React**.
+> Depois disso saem o POST Jinja, `feedback/public.html` e `feedback/invalid.html`.
 
 Trocar os dois geradores de link para `/catalogo/avaliar/<token>`, transformar `/avaliar/<token>`
 em redirect 302 (no `server.js` ou no Flask, preservando os tokens antigos) e só então apagar
