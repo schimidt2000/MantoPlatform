@@ -753,25 +753,9 @@ def create_app():
             resp.headers["Content-Type"] = "application/octet-stream"
         return resp
 
-    # ── Impersonação de role (somente SUPERADMIN) ──────────────────
-    # Feature 173: lista promovida a app/constants.py (fonte única com a API).
-    from app.constants import IMPERSONABLE_ROLES as _IMPERSONABLE_ROLES
-
-    @app.route("/impersonate/<role_name>", methods=["POST"])
-    @login_required
-    def impersonate_role(role_name: str):
-        if not any(r.name == RoleName.SUPERADMIN for r in current_user.roles):
-            return "", 403
-        if role_name.upper() not in _IMPERSONABLE_ROLES:
-            return "", 400
-        session["impersonate_role"] = role_name.upper()
-        return redirect(_safe_next(request.referrer, "/"))
-
-    @app.route("/impersonate/reset", methods=["POST"])
-    @login_required
-    def impersonate_reset():
-        session.pop("impersonate_role", None)
-        return redirect(_safe_next(request.referrer, "/"))
+    # A impersonação de role vive em `POST/DELETE /api/auth/impersonate` (app/api/auth.py:104,119),
+    # que grava na mesma chave de sessão e valida contra a mesma `IMPERSONABLE_ROLES`. As rotas
+    # `/impersonate/*` que existiam aqui só recebiam POST do layout Jinja e saíram com ele.
 
     @app.route("/health")
     def health():

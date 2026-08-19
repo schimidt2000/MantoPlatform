@@ -532,7 +532,7 @@ def _serialize_materials(event: CalendarEvent) -> list[dict[str, Any]]:
 
 
 def _maps_url(origin: str, destination: str) -> str:
-    """URL de rota do Google Maps entre dois endereços (mesmo formato de `travel_estimate`)."""
+    """URL de rota do Google Maps entre dois endereços."""
     import urllib.parse
 
     return (
