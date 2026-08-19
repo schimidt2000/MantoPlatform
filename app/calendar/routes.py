@@ -2542,18 +2542,6 @@ def _lookup_sp_status(location: str) -> bool | None:
     return None
 
 
-def _is_outside_sp(location: str) -> bool:
-    """Retorna True se o endereço não pertence à cidade de São Paulo (checagem rápida por string).
-
-    Usado internamente quando só precisamos de bool (ex: decidir se chama Google Maps).
-    Para persistir em banco, use _lookup_sp_status.
-    """
-    if not location:
-        return False
-    loc = location.lower()
-    return not any(term in loc for term in _SP_CITY_TERMS)
-
-
 def _fetch_travel_data(event: CalendarEvent, settings) -> dict:
     """Chama o Google Maps Distance Matrix e salva travel_time_minutes + travel_distance_km no evento.
 
@@ -2599,55 +2587,6 @@ def _fetch_travel_data(event: CalendarEvent, settings) -> dict:
     except Exception as exc:  # noqa: BLE001 — cálculo de rota é opcional; segue sem estimativa
         current_app.logger.warning("[transporte] cálculo de rota falhou: %s", exc)
         return {}
-
-
-def travel_estimate(event_id: int):
-    """Retorna estimativa de tempo de viagem via Google Maps Distance Matrix API."""
-    from flask import jsonify
-
-    event = CalendarEvent.query.get_or_404(event_id)
-    settings = SiteSetting.query.get(1)
-
-    if not event.location:
-        return {"error": "Evento sem endereço de destino."}, 400
-
-    origin = (settings.manto_address if settings and settings.manto_address
-              else "R. Olga Camelini, 147 - São João Climaco, São Paulo - SP")
-    import os
-    api_key = (settings.google_maps_api_key if settings else None) or os.getenv("GOOGLE_MAPS_API_KEY")
-
-    if not api_key:
-        maps_url = (
-            "https://www.google.com/maps/dir/"
-            + urllib.parse.quote(origin) + "/"
-            + urllib.parse.quote(event.location)
-        )
-        return {"maps_url": maps_url, "no_key": True}
-
-    result = _fetch_travel_data(event, settings)
-    if not result:
-        return {"error": "Endereço não encontrado pelo Google Maps."}, 400
-
-    db.session.commit()
-
-    suggested = None
-    margin = (settings.departure_margin_minutes if settings and settings.departure_margin_minutes is not None else 60)
-    if event.start_at:
-        depart_dt = event.start_at - timedelta(minutes=margin + result["duration_minutes"])
-        suggested = depart_dt.strftime("%H:%M")
-
-    maps_url = (
-        "https://www.google.com/maps/dir/"
-        + urllib.parse.quote(origin) + "/"
-        + urllib.parse.quote(event.location)
-    )
-    return {
-        "duration_text":    result["duration_text"],
-        "distance_text":    result["distance_text"],
-        "duration_minutes": result["duration_minutes"],
-        "suggested_departure": suggested,
-        "maps_url": maps_url,
-    }
 
 
 # ─── ENSAIOS ──────────────────────────────────────────────────────────────────
