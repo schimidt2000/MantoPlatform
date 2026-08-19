@@ -604,17 +604,11 @@ def create_app():
             view_as_role=view_as_role,
         )
 
-    PORTAL_HOSTS = {"portal.mantoproducoes.com.br"}
-
-    # `/cadastro` saiu da lista de exceções junto com o formulário Jinja: hoje esse endereço é
-    # servido pelo bundle da vitrine em `frontend/server.js`, que é a porta de entrada e resolve
-    # antes de qualquer coisa chegar aqui. O que sobra no Flask é `/api/cadastro/*`.
-    @app.before_request
-    def portal_domain_routing():
-        host = request.host.split(":")[0]
-        if host in PORTAL_HOSTS:
-            if not request.path.startswith(("/portal", "/f/", "/static", "/uploads")):
-                return redirect("/portal/")
+    # O roteamento por host do Portal do Artista saiu na fase 2 da remoção do Jinja. Ele mandava
+    # `portal.mantoproducoes.com.br/<algo>` para `/portal/`, e não fazia mais efeito nenhum por dois
+    # motivos somados: o proxy usa `changeOrigin`, então o Host que chega aqui é sempre o do serviço
+    # backend e nunca o do portal; e `/portal/` deixou de existir no Flask junto com as telas Jinja.
+    # Quem cuida desse host hoje é `PORTAL_HOSTS` em `frontend/server.js`, na porta pública.
 
     # ✅ Importa blueprints AQUI (depois do db existir)
     from .auth.routes import auth_bp
