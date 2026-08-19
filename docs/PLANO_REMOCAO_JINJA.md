@@ -244,7 +244,33 @@ Detalhe tranquilizador: o e-mail de redefinição de senha usa `PORTAL_URL` (Rea
 na porta pública cai no bundle React — o proxy não repassa esse caminho. Apagar a rota Jinja
 homônima **não** mata o link.
 
-### Fase 3 — Blueprints substituídos 1:1
+### Fase 3 — Blueprints substituídos 1:1 · ⚠️ **PRÉ-REQUISITO CONCLUÍDO em 19/08** (commit `7512f7d`)
+
+> **A fase 3 não era uma remoção limpa, e o plano original errava nisso.** A varredura de imports
+> revelou que **cinco módulos vivos importavam lógica de negócio de dentro dos `routes.py` Jinja** —
+> o caso do `feedback` (§3.1) era a ponta de um padrão sistêmico, não uma exceção. Apagar os
+> blueprints sem tratar isso derrubaria a API React.
+>
+> **Já resolvido**, e `main` não tem mais nenhum `from app.<blueprint>.routes import`:
+>
+> | De onde saiu | Para onde foi | Quem importava |
+> | --- | --- | --- |
+> | `gastos/routes.py` | `gastos_ops` (já era lá; o Jinja só re-exportava) | `api/dashboard_service`, `api/financeiro_read` ×2, `financeiro/routes` ×2 |
+> | `talents/routes.py` (`_parse_period`, um alias) | `talents/rating_ops` | `clientes/client_ops` |
+> | `feedback/routes.py` (etiquetas + regra por nota) | **`feedback/feedback_ops.py`** (novo) | `api/feedback_write`, `clientes/client_ops` |
+> | `formularios/routes.py` (**271 linhas**, 14 símbolos) | `formularios/formularios_ops.py` | `api/formularios_write`, `api/catalogo_read`, `calendar/sync`, `cli` |
+>
+> O corte do `formularios` foi deliberadamente **não contíguo**: os decorators de RBAC usam
+> `current_user` e `abort`, então são camada de rota e ficaram. `routes.py` foi de 631 para 361
+> linhas.
+>
+> **Lição para as fases seguintes:** antes de apagar qualquer blueprint, rodar
+> `grep "from app\.<nome>\.routes import"` no repo inteiro. O `calendar` e o `financeiro` (§3.4)
+> têm a mesma doença, em escala maior e com *imports tardios* dentro de função — que o grep pega,
+> mas a leitura casual não.
+
+**O que falta na fase 3:** apagar de fato as rotas e os templates dos blueprints abaixo. O caminho
+agora está livre.
 
 Cada um tem página React e endpoints `/api` equivalentes, e nenhum está no proxy:
 

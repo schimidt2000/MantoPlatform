@@ -173,6 +173,45 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
 
+### 242 e 243 — Portal Jinja removido, e a lógica que a API importava sai do Jinja            (branch · 2026-08-19 · sem migration)
+
+**242 — fase 2: Portal do Artista.** As 20 rotas Jinja de `talent_portal/routes.py` e os 12
+templates de `app/templates/portal/` saíram. **−3.230 linhas.** Não era só limpeza: essas rotas
+seguiam respondendo pelo domínio direto do backend com validação **mais fraca** que a da API — o
+upload de foto do perfil conferia só a extensão, sem limite de tamanho.
+
+`/portal/photo/<caminho>` **fica**: é como toda imagem chega ao talento, porque `/uploads` exige
+sessão de *staff* e para ele vira ícone quebrado. Conferido antes de tocar: nenhum módulo importa
+de `talent_portal.routes` (os cinco `api/portal_*.py` importam dos `*_ops`), e
+`api/portal_auth.py:92` grava `session["talent_id"]` — **a mesma chave** que `portal_photo` confere,
+então o login do React mantém a foto funcionando. Saiu junto o `before_request`
+`portal_domain_routing`, que já não fazia efeito (o proxy usa `changeOrigin`, então o Host que chega
+ao Flask nunca é o do portal) e passaria a apontar para uma rota inexistente.
+
+**243 — a descoberta que muda a fase 3.** O plano tratava a fase 3 como remoção limpa. **Errado:**
+uma varredura de imports mostrou **cinco módulos vivos importando lógica de negócio de dentro dos
+`routes.py` Jinja**. O caso do `feedback`, registrado na 241, era a ponta de um padrão sistêmico.
+
+Três eram re-exportação e viraram repontamento: `ensure_recurring_entries`/`recurring_alerts` já
+viviam em `gastos_ops` (:445, :482) e `_parse_period` era um alias para `rating_ops.parse_period`.
+Dois foram extração de verdade: `app/feedback/feedback_ops.py` (novo, com as etiquetas e a regra
+por nota) e **271 linhas** do núcleo dos formulários para `formularios_ops.py` — `FORM_META`,
+`_save_response`, `_validate_dynamic`, `retry_auto_link_pending` e mais dez, que o **formulário
+público React** consome. `formularios/routes.py` foi de 631 para 361 linhas.
+
+**Pegadinha do recorte:** ele não podia ser contíguo. Os decorators de RBAC no meio do arquivo usam
+`current_user` e `abort` — são camada de rota e ficaram. E o `ruff --select F821` pagou o próprio
+custo: pegou quatro nomes que ficaram sem import (`SiteSetting`, `urllib`, `normalize_phone`,
+`not_`) e uma chamada por prefixo de módulo que virou local.
+
+**Regra que fica para as próximas fases:** antes de apagar qualquer blueprint, rodar
+`grep "from app\.<nome>\.routes import"` no repo inteiro. `calendar` e `financeiro` têm a mesma
+doença em escala maior, com *imports tardios* dentro de função.
+
+**Verificação (as duas).** `create_app()` sobe com 506 rotas; a única rota `/portal` restante é
+`/portal/photo`; `verify_206` 20/20; `verify_241` 11/11; zero mojibake nos arquivos reescritos por
+script (conferido com `git diff --stat`, que tocou só as linhas pretendidas).
+
 ### 241-avaliar-aponta-para-react — O link da cliente para de cair no Jinja            (branch · 2026-08-19 · sem migration)
 
 **Motivação.** A página React de avaliação existe e funciona desde a feature 164, mas a geração do
