@@ -14,7 +14,7 @@ from flask import current_app, jsonify, request
 from app import db, limiter
 from app.api import api_bp
 from app.api_utils import json_error
-from app.formularios.routes import (
+from app.formularios.formularios_ops import (
     FORM_META,
     _attempt_auto_link,
     _build_message,

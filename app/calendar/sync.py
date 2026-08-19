@@ -88,7 +88,7 @@ def run_calendar_sync(lookahead_months: int = 6) -> dict:
     # caso do evento ter sido criado/importado DEPOIS da resposta já ter chegado.
     linked_count = 0
     try:
-        from app.formularios.routes import retry_auto_link_pending
+        from app.formularios.formularios_ops import retry_auto_link_pending
         linked_count = retry_auto_link_pending()
     except Exception:  # noqa: BLE001 — best-effort, não pode derrubar o ciclo de sync
         pass

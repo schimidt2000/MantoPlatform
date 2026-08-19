@@ -52,39 +52,26 @@ from . import formularios_ops
 
 formularios_bp = Blueprint("formularios", __name__)
 
-DEFAULT_WHATSAPP_NUMBER = "5511970570577"
-
-FIELD_TYPE_LABELS = {
-    "texto_curto": "Texto curto",
-    "texto_longo": "Texto longo (parágrafo)",
-    "selecao": "Seleção (lista de opções)",
-    "data": "Data",
-    "hora": "Hora",
-    "telefone": "Telefone/WhatsApp",
-    "email": "E-mail",
-    "cpf": "CPF",
-    "cnpj": "CNPJ",
-    "cep": "CEP",
-    "sim_nao": "Sim/Não",
-}
-
-# Campos de endereço acoplados ao autopreenchimento por CEP (só existem no formulário 'comum').
-CEP_TARGET_KEYS = ("logradouro", "bairro", "cidade", "estado")
-
-FORM_META = {
-    "comum": {
-        "title": "Informações para Pré-Contrato — Manto Produções",
-        "header": "INFORMAÇÕES PARA PRÉ-CONTRATO",
-        "message_title": "INFORMAÇÕES PARA PRÉ-CONTRATO — MANTO PRODUÇÕES",
-        "name_key": "nome_contratante",
-    },
-    "corporativo": {
-        "title": "Contrato Corporativo — Manto Produções",
-        "header": "CONTRATO CORPORATIVO",
-        "message_title": "CONTRATO CORPORATIVO — MANTO PRODUÇÕES",
-        "name_key": "razao_social",
-    },
-}
+from app.formularios.formularios_ops import (
+    CEP_TARGET_KEYS,
+    DEFAULT_WHATSAPP_NUMBER,
+    FIELD_TYPE_LABELS,
+    FORM_META,
+    _attempt_auto_link,
+    _build_message,
+    _build_phone_display,
+    _build_sections_dynamic,
+    _fmt_date_br,
+    _grouped_sections,
+    _load_fields,
+    _only_digits,
+    _parse_event_date,
+    _save_response,
+    _validate_dynamic,
+    _whatsapp_link,
+    _whatsapp_target,
+    retry_auto_link_pending,
+)
 
 
 def _has_role(*names: str) -> bool:
@@ -117,244 +104,6 @@ def require_superadmin(fn):
 
     return wrapper
 
-
-# ── Helpers de validação/montagem ────────────────────────────────────
-
-
-def _only_digits(raw: str | None) -> str:
-    return "".join(c for c in (raw or "") if c.isdigit())
-
-
-def _build_phone_display(form, prefix: str) -> str:
-    """Telefone como digitado (DDI + nacional), ex.: ``"+55 (11) 99999-9999"``."""
-    national = (form.get(f"{prefix}_national") or "").strip()
-    if not national:
-        return ""
-    if national.startswith("+"):
-        return national
-    ddi = (form.get(f"{prefix}_ddi") or "+55").strip()
-    if not ddi.startswith("+"):
-        ddi = "+" + ddi.lstrip("+")
-    return f"{ddi} {national}".strip()
-
-
-def _parse_event_date(raw: str | None) -> date | None:
-    """Converte a data do input HTML (``YYYY-MM-DD``) em ``date``."""
-    try:
-        return datetime.strptime((raw or "").strip(), "%Y-%m-%d").date()
-    except ValueError:
-        return None
-
-
-def _fmt_date_br(d: date | None) -> str:
-    return d.strftime("%d/%m/%Y") if d else ""
-
-
-def _valid_email(raw: str) -> bool:
-    return "@" in raw and "." in raw.split("@")[-1] and " " not in raw
-
-
-def _whatsapp_target() -> str:
-    """Número destino das mensagens (settings, com fallback para o padrão)."""
-    settings = SiteSetting.query.get(1)
-    number = _only_digits(getattr(settings, "whatsapp_form_number", None) or "")
-    return number or DEFAULT_WHATSAPP_NUMBER
-
-
-def _build_message(title: str, sections: list[dict]) -> str:
-    """Formata a mensagem de WhatsApp: título + seções com ``*Rótulo:* valor`` por linha."""
-    lines = [f"*{title}*"]
-    for section in sections:
-        lines.append("")
-        lines.append(f"*— {section['secao']} —*")
-        for campo in section["campos"]:
-            label, value = campo[-2], campo[-1]
-            if (value or "").strip():
-                lines.append(f"*{label}:* {value}")
-    return "\n".join(lines)
-
-
-def _whatsapp_link(message: str) -> str:
-    return (
-        "https://api.whatsapp.com/send?phone="
-        f"{_whatsapp_target()}&text={urllib.parse.quote(message)}"
-    )
-
-
-def _save_response(form_type: str, contact_name: str, phone_display: str,
-                   event_date: date | None, sections: list[dict]) -> FormResponse:
-    """Persiste a resposta (sempre ANTES de abrir o WhatsApp — SC-002)."""
-    response = FormResponse(
-        form_type=form_type,
-        data=json.dumps(sections, ensure_ascii=False),
-        contact_name=contact_name[:200],
-        contact_phone=normalize_phone(phone_display),
-        contact_phone_display=phone_display[:30] or None,
-        event_date=event_date,
-    )
-    db.session.add(response)
-    db.session.commit()
-    return response
-
-
-# ── Vínculo automático a evento da agenda (feature 126) ──────────────
-
-
-def _real_event_candidates(event_date: date) -> list[CalendarEvent]:
-    """Eventos "reais" (não ensaio, não satélite) numa data — candidatos a vínculo."""
-    return (
-        CalendarEvent.query
-        .filter(
-            db.func.date(CalendarEvent.start_at) == event_date,
-            not_(CalendarEvent.title.like("🟧 ENSAIO%")),
-            CalendarEvent.group_leader_id.is_(None),
-        )
-        .all()
-    )
-
-
-def _event_client_phones(event_id: int) -> set[str]:
-    """Telefones dos clientes já associados a um evento (para checar contradição)."""
-    return {
-        ec.client.phone for ec in EventClient.query.filter_by(event_id=event_id).all()
-        if ec.client and ec.client.phone
-    }
-
-
-def _attempt_auto_link(response: FormResponse) -> str | None:
-    """Tenta vincular a resposta a um evento real da agenda (endurecido pós-feature 126).
-
-    Só vincula sozinho quando os DOIS sinais confirmam: existe evento real na data
-    informada E o telefone da resposta pertence a um cliente associado a exatamente um
-    desses eventos. Qualquer coisa a menos vira revisão manual (``"ambiguous"``) — a
-    Manto costuma ter vários eventos no mesmo dia e clientes recorrentes, então data
-    sozinha ou identidade sozinha já vincularam resposta errada em evento errado
-    (correção de dados de 06/08/2026: 25 vínculos desfeitos).
-
-    Retorna ``"auto_date"`` se vinculou (persiste ``response.event_id`` no objeto, sem
-    commit — quem chama decide quando salvar), ``"ambiguous"`` se há candidato na data
-    mas sem confirmação pelo telefone, ou ``None`` se não havia evento na data.
-    """
-    if response.event_id is not None or response.event_link_locked or not response.event_date:
-        return None
-
-    candidates = _real_event_candidates(response.event_date)
-    if not candidates:
-        return None
-    if not response.contact_phone:
-        return "ambiguous"
-
-    matched = [e for e in candidates if response.contact_phone in _event_client_phones(e.id)]
-    if len(matched) == 1:
-        response.event_id = matched[0].id
-        return "auto_date"
-    return "ambiguous"
-
-
-def retry_auto_link_pending() -> int:
-    """Reprocessa respostas sem evento vinculado (feature 126).
-
-    Chamada pelo ciclo de sincronização da agenda para cobrir o caso do evento ser
-    criado/importado DEPOIS da resposta já ter chegado. Nunca reprocessa uma resposta
-    que um humano já decidiu manualmente (``event_link_locked``). Retorna quantas
-    respostas foram vinculadas nesta chamada.
-    """
-    pending = FormResponse.query.filter(
-        FormResponse.event_id.is_(None),
-        FormResponse.event_link_locked.is_(False),
-        FormResponse.event_date.isnot(None),
-    ).all()
-    if not pending:
-        return 0
-    linked = 0
-    for response in pending:
-        result = _attempt_auto_link(response)
-        if result in ("auto_date", "auto_client"):
-            response.event_link_source = result
-            response.event_link_ambiguous = False
-            linked += 1
-        elif result == "ambiguous":
-            response.event_link_ambiguous = True
-    db.session.commit()
-    return linked
-
-
-# ── Motor dinâmico dos formulários públicos (feature 123) ────────────
-
-
-def _load_fields(form_type: str) -> list[FormFieldDefinition]:
-    """Campos de um formulário, na ordem de exibição vigente."""
-    return formularios_ops.list_field_definitions(form_type)
-
-
-def _grouped_sections(fields: list[FormFieldDefinition]) -> list[dict]:
-    """Agrupa campos por seção, preservando a ordem de primeira aparição da seção e a ordem
-    interna dos campos dentro dela (não depende de os campos de uma seção serem contíguos em
-    ``order`` — um campo novo cai no fim da própria seção onde quer que seja inserido)."""
-    by_section: dict[str, list[FormFieldDefinition]] = {}
-    section_order: list[str] = []
-    for field in fields:
-        if field.section_name not in by_section:
-            by_section[field.section_name] = []
-            section_order.append(field.section_name)
-        by_section[field.section_name].append(field)
-    return [{"secao": name, "campos": by_section[name]} for name in section_order]
-
-
-def _validate_dynamic(f, fields: list[FormFieldDefinition]) -> dict[str, str]:
-    """Valida um formulário público a partir da definição de campos vigente (feature 123)."""
-    errors: dict[str, str] = {}
-    for field in fields:
-        key = field.field_key
-        if field.field_type == "telefone":
-            if field.required and len(_only_digits(f.get(f"{key}_national"))) < 10:
-                errors[f"{key}_national"] = f'Informe "{field.label}" com DDD.'
-            continue
-        raw = (f.get(key) or "").strip()
-        if not raw:
-            if field.required:
-                errors[key] = f'Preencha o campo obrigatório: "{field.label}".'
-            continue
-        if field.field_type == "cpf" and len(_only_digits(raw)) != 11:
-            errors[key] = "CPF inválido — confira os 11 dígitos."
-        elif field.field_type == "cnpj" and len(_only_digits(raw)) != 14:
-            errors[key] = "CNPJ inválido — confira os 14 dígitos."
-        elif field.field_type == "cep" and len(_only_digits(raw)) != 8:
-            errors[key] = "CEP inválido — confira os 8 dígitos."
-        elif field.field_type == "email" and not _valid_email(raw):
-            errors[key] = "Informe um e-mail válido."
-        elif field.field_type == "data" and not _parse_event_date(raw):
-            errors[key] = "Selecione uma data válida."
-    # Regra especial preservada da versão hardcoded: "Descreva Outros" é obrigatório quando a
-    # forma de pagamento escolhida é "Outros" — acoplada à chave, não generalizável sem lógica
-    # condicional entre campos (fora de escopo da feature 123, ver spec/Assumptions).
-    if any(fld.field_key == "descreva_outros" for fld in fields):
-        if f.get("forma_pagamento") == "Outros" and not (f.get("descreva_outros") or "").strip():
-            errors["descreva_outros"] = "Descreva a forma de pagamento."
-    return errors
-
-
-def _build_sections_dynamic(f, fields: list[FormFieldDefinition]) -> list[dict]:
-    """Monta as seções ``[chave, rótulo, valor]`` a partir da definição de campos vigente.
-
-    Agrupa pelo mesmo critério de ``_grouped_sections`` (por nome de seção, não por
-    contiguidade em ``order``) — um campo personalizado inserido numa seção que já não está
-    mais "por último" na ordenação global ainda cai na seção certa, sem duplicar o bloco.
-    """
-    by_section: dict[str, list[list[str]]] = {}
-    section_order: list[str] = []
-    for field in fields:
-        if field.field_type == "telefone":
-            value = _build_phone_display(f, field.field_key)
-        elif field.field_type == "data":
-            value = _fmt_date_br(_parse_event_date(f.get(field.field_key)))
-        else:
-            value = (f.get(field.field_key) or "").strip()
-        if field.section_name not in by_section:
-            by_section[field.section_name] = []
-            section_order.append(field.section_name)
-        by_section[field.section_name].append([field.field_key, field.label, value])
-    return [{"secao": name, "campos": by_section[name]} for name in section_order]
 
 
 def _render_public_form(form_type: str, form, errors: dict, status: int = 200):

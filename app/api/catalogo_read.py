@@ -91,7 +91,7 @@ def _category_summary(category: CatalogCategory, items_by_category: dict[int, li
 @api_bp.route("/catalogo")
 def api_catalogo_list() -> Any:
     """Grade geral do catálogo — itens ativos + categorias com contagem (paridade com `catalogo_bp.index`)."""
-    from app.formularios.routes import DEFAULT_WHATSAPP_NUMBER, _whatsapp_target
+    from app.formularios.formularios_ops import DEFAULT_WHATSAPP_NUMBER, _whatsapp_target
 
     items = CatalogItem.query.filter_by(is_active=True).order_by(CatalogItem.name.asc()).all()
 
