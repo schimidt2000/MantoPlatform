@@ -4,7 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-18** · Estado do repositório: pós-feature
+> Última atualização: **2026-08-19** · Estado do repositório: pós-feature
+> **240-remocao-jinja-fase1 (branch, sem migration)**, antes dela
 > **239-backlog-agosto (11 itens, branch)**, antes dela catalogo-fase-1 (item avulso veste ficha
 > própria, main), antes dela **235-educamanto 4ª rodada (gate fechado, branch)**, antes dela 238
 > (teto autorizado), 237 (solicitar ficha), 236 (cachê por duração) — todas na main · Head de
@@ -40,6 +41,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **240-remocao-jinja-fase1** | Remoção do Jinja legado, fase 1: 3 templates órfãos, 1 gif órfão, `travel_estimate` (já sem decorator) e `_is_outside_sp`, rotas `/impersonate/*`. −1.043 linhas, zero mudança de comportamento. Plano completo em `docs/PLANO_REMOCAO_JINJA.md` | 2026-08-19 | `—` | (aqui) | — |
 | **239-backlog-agosto** | Carrinho de transporte fora de SP com teto efetivo p/ superadmin; "Técnico de Som (Presença)" sem valor e fora de todos os somatórios; troca de tipo do evento reage sozinha (push do título antes da parte destrutiva); nomes de equipe nunca no título; link do orçamento na aba Comercial; badge de maquiador; Catálogo no topo do menu; link do portal na cobrança WhatsApp; EducaManto (InfoTip, contratação Manto) — 11 itens do backlog | 2026-08-18 | `d1c7b93a2f60`, `e2d8ca4b3071` | (aqui) | — |
 | **catalogo-fase-1** | Ficha de figurino direto no item AVULSO; 12 auto-temas achatados; selo Tema×Avulso no gerenciador; ação "virar avulso"; avulsos entram na visão de personagens | 2026-08-18 | `c8f4d92e17ab` | (aqui) | — |
 | **vincular-na-criacao (hotfix)** | "Vincular a um Personagem do Catálogo" também na CRIAÇÃO da ficha (deferido pós-criação, padrão da foto); só personagens sem ficha; nome preenchido de brinde | 2026-08-17 | `—` | (aqui) | — |
@@ -169,6 +171,46 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 240-remocao-jinja-fase1 — Órfãos e código morto do Jinja legado            (branch · 2026-08-19 · sem migration)
+
+**Motivação.** O sistema tem três estágios convivendo desde a migração para React, e as páginas
+Jinja substituídas continuavam registradas. O plano completo de remoção está em
+`docs/PLANO_REMOCAO_JINJA.md`: 530 rotas auditadas, 346 ficam (326 são `/api/*`), 175 removíveis.
+Esta é a primeira fase — só o que a verificação adversarial confirmou não ter nenhuma referência
+viva. −1.043 linhas, zero mudança de comportamento em produção.
+
+**O que saiu.** Templates órfãos `home.html`, `admin_layout.html` e `financeiro_layout.html` — os
+três eram documentos autocontidos com `<!doctype html>` próprio, não layouts herdados (os 12
+`admin_*.html` sempre estenderam `base.html`). O estático `slapwars.gif`, cujo ciclo de vida o
+`git log -S` mostra inteiro: entrou nas páginas de erro e foi trocado por `source.gif` no 74f97f0.
+Em `calendar/routes.py`, `travel_estimate` (que **já respondia 404**, porque perdeu o decorator em
+algum momento — quem atende é `GET /api/events/<id>/travel-estimate`) e `_is_outside_sp`, sem
+nenhum chamador. E as rotas `/impersonate/<role>` e `/impersonate/reset`, que só recebiam POST do
+`base.html`.
+
+**Pegadinhas encontradas — as três valem mais que a remoção em si.**
+
+1. **Existe um `home.html` VIVO.** `app/templates/portal/home.html` é renderizado em
+   `talent_portal/routes.py:462`. Um glob recursivo derrubaria o Portal do Artista. Deletado pelo
+   caminho exato.
+2. **`_SP_CITY_TERMS` foi preservada de propósito.** A constante fica no mesmo bloco "LOGÍSTICA" do
+   `_is_outside_sp` removido, mas é usada também por `_lookup_sp_status`, como fallback quando o
+   ViaCEP falha — e isso **roda em produção**. Apagar o bloco inteiro daria `NameError`.
+3. **`_safe_next` também foi preservada.** Parece morta depois que as rotas de impersonação saem,
+   mas `financeiro/routes.py:12` a importa de `app`. Só vira código morto na fase 3.
+
+**O que NÃO entrou, e por quê.** O `rh_bp` estava listado nesta fase como "risco zero". A
+verificação adversarial derrubou: `scripts/db/verify_166_rh_tools_bp.py:107-110` bate em
+`GET /rh/dashboard` esperando 200 e sai com código 1 se falhar. Produção não quebra (`/rh` não é
+proxiado, o React existe em `App.tsx:143`, a API em `api/rh_read.py:16`), mas o harness de
+regressão local sim. Escapou da varredura inicial porque `scripts/db/` é gitignorada. Foi para a
+fase 3, junto com a adaptação do verify.
+
+**Verificação.** `create_app()` sobe e `/impersonate/*` sumiu do `url_map`, restando só
+`/api/auth/impersonate` (que grava na mesma chave de sessão e valida contra a mesma
+`IMPERSONABLE_ROLES`). `verify_206_react_primario.py` contra o `manto_local`: 20/20. Ruff nos
+arquivos tocados: 16 erros em `main` → 15 aqui, nenhum novo.
 
 ### 239-backlog-agosto — Carrinho de transporte, presença sem valor, troca de tipo automática            (branch · 2026-08-18 · migration `d1c7b93a2f60`, `e2d8ca4b3071`)
 
