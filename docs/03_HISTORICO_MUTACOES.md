@@ -41,6 +41,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **241-avaliar-aponta-para-react** | O link de avaliação da cliente para de cair no Jinja: `/avaliar/<token>` vira 302 para a página React (feature 164, ociosa até aqui) e os geradores emitem o endereço novo. A rota antiga fica para sempre — o token não expira | 2026-08-19 | `—` | (aqui) | — |
 | **240-remocao-jinja-fase1** | Remoção do Jinja legado, fase 1: 3 templates órfãos, 1 gif órfão, `travel_estimate` (já sem decorator) e `_is_outside_sp`, rotas `/impersonate/*`. −1.043 linhas, zero mudança de comportamento. Plano completo em `docs/PLANO_REMOCAO_JINJA.md` | 2026-08-19 | `—` | (aqui) | — |
 | **239-backlog-agosto** | Carrinho de transporte fora de SP com teto efetivo p/ superadmin; "Técnico de Som (Presença)" sem valor e fora de todos os somatórios; troca de tipo do evento reage sozinha (push do título antes da parte destrutiva); nomes de equipe nunca no título; link do orçamento na aba Comercial; badge de maquiador; Catálogo no topo do menu; link do portal na cobrança WhatsApp; EducaManto (InfoTip, contratação Manto) — 11 itens do backlog | 2026-08-18 | `d1c7b93a2f60`, `e2d8ca4b3071` | (aqui) | — |
 | **catalogo-fase-1** | Ficha de figurino direto no item AVULSO; 12 auto-temas achatados; selo Tema×Avulso no gerenciador; ação "virar avulso"; avulsos entram na visão de personagens | 2026-08-18 | `c8f4d92e17ab` | (aqui) | — |
@@ -171,6 +172,40 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 241-avaliar-aponta-para-react — O link da cliente para de cair no Jinja            (branch · 2026-08-19 · sem migration)
+
+**Motivação.** A página React de avaliação existe e funciona desde a feature 164, mas a geração do
+link nunca foi trocada — então **toda cliente que recebeu o link continuava caindo na página
+Jinja**, e nenhuma leitura casual do código denunciava isso. Foi confirmado executando o
+`frontend/server.js` real contra um backend falso: `GET /avaliar/<token>` é proxiado ao Flask,
+porque `isBackendRequest` é a **primeira** checagem do handler, antes de qualquer mount de SPA —
+inclusive com `Host` de portal e de alo.
+
+**O que mudou.** `GET /avaliar/<token>` devolve 302 para `/catalogo/avaliar/<token>` em vez de
+renderizar Jinja, e os dois geradores passam a emitir o endereço novo direto.
+
+**Por que a rota antiga não some nunca.** `/avaliar/<token>` é o endereço que a comercial copia e
+cola no WhatsApp desde a feature 130, **o token não expira** e não há como recolher um link já
+enviado. Ela vira redirect permanente de compatibilidade.
+
+**Decisões de implementação.** Redirect **relativo**: sai pelo mesmo host público e o browser
+reentra no `server.js`; uma URL absoluta montada no Flask pegaria o Host do serviço backend, porque
+o proxy usa `changeOrigin`. **302 e não 301**, para o navegador não memorizar e o destino continuar
+nosso para mudar. O prefixo `/catalogo` existe porque o bundle da vitrine roda com
+`basename="/catalogo"`.
+
+**O POST Jinja foi mantido de propósito** — quem estiver com o formulário antigo aberto no
+navegador ainda consegue enviar.
+
+**Armadilha registrada para a fase 5.** `app/api/feedback_write.py:18` importa `POSITIVE_TAGS`,
+`ATTENTION_TAGS` e `_tags_for_score` de `app/feedback/routes.py`. **Apagar o arquivo Jinja hoje
+derrubaria a API React de avaliação, que está viva em produção.** Extrair essas constantes para um
+módulo próprio é pré-requisito da remoção do blueprint. É o segundo caso de API importando do
+Jinja — o outro são os imports tardios de `calendar/routes.py`.
+
+**Verificação.** `scripts/db/verify_241_avaliar_react.py` (novo): 11/11 contra o `manto_local`.
+`verify_206`: 20/20. Ruff: 1 erro em `main` → 1 aqui, o mesmo, pré-existente.
 
 ### 240-remocao-jinja-fase1 — Órfãos e código morto do Jinja legado            (branch · 2026-08-19 · sem migration)
 

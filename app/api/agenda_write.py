@@ -1621,4 +1621,7 @@ def api_feedback_link(event_id: int) -> Any:
     # aqui é o do serviço backend (changeOrigin) — url_root geraria um link com o domínio
     # interno da Railway em vez do endereço público da plataforma.
     base = (current_app.config.get("PUBLIC_BASE_URL") or request.url_root).rstrip("/")
-    return jsonify({"url": f"{base}/avaliar/{token}"})
+    # `/catalogo/avaliar/...` e não `/avaliar/...`: este é o endereço da página React (o bundle da
+    # vitrine roda com `basename="/catalogo"`). O caminho antigo continua vivo como 302 em
+    # `feedback.avaliar`, para os links já enviados às clientes — o token não expira.
+    return jsonify({"url": f"{base}/catalogo/avaliar/{token}"})
