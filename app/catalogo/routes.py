@@ -198,7 +198,7 @@ def categoria_detail(slug: str):
 def lista_desejos():
     """Página da lista de desejos — conteúdo é montado no navegador via localStorage
     (feature 140); o servidor só injeta o WhatsApp comercial de destino."""
-    from app.formularios.routes import DEFAULT_WHATSAPP_NUMBER, _whatsapp_target
+    from app.formularios.formularios_ops import DEFAULT_WHATSAPP_NUMBER, _whatsapp_target
 
     return render_template(
         "catalogo/lista_desejos.html",

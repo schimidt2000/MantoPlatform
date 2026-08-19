@@ -208,7 +208,7 @@ def api_financeiro_dashboard() -> Any:
         _resolve_period,
         _salary_cost,
     )
-    from app.gastos.routes import ensure_recurring_entries
+    from app.gastos.gastos_ops import ensure_recurring_entries
     from app.models import EventPayment, RecurringExpenseEntry, SpecialExpense
 
     if not _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN):
@@ -661,7 +661,7 @@ def api_financeiro_pagamentos() -> Any:
         _pagamentos_query,
         _resync_pending_commissions,
     )
-    from app.gastos.routes import ensure_recurring_entries
+    from app.gastos.gastos_ops import ensure_recurring_entries
     from app.models import EventAcrescimo, SalaryPayment, SpecialExpense
 
     if not _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN):

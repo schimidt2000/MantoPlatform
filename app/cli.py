@@ -53,7 +53,7 @@ def register_commands(app):
     def backfill_form_event_links():
         """Tenta vincular automaticamente respostas de formulário antigas ainda sem
         evento (feature 126) — rodar uma vez após o deploy da feature."""
-        from app.formularios.routes import retry_auto_link_pending
+        from app.formularios.formularios_ops import retry_auto_link_pending
         linked = retry_auto_link_pending()
         click.echo(f"Respostas vinculadas automaticamente: {linked}")
 

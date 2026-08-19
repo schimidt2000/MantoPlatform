@@ -20,22 +20,15 @@ from app.models import CalendarEvent, ClientFeedback
 
 feedback_bp = Blueprint("feedback", __name__)
 
-POSITIVE_TAGS = [
-    "🎭 Atuação Impecável",
-    "👗 Figurino Perfeito",
-    "🤝 Interação com Convidados",
-    "⏰ Pontualidade",
-    "✨ Pura Magia",
-]
-
-ATTENTION_TAGS = [
-    "⏰ Atraso",
-    "👗 Figurino",
-    "🎭 Atuação / Energia",
-    "🗣️ Comunicação",
-]
-
-MAX_COMMENT_LENGTH = 2000
+# As etiquetas e a regra por nota vivem em `feedback_ops` — é de lá que a API React e o CRM de
+# clientes importam. Aqui ficam só como referência para o POST Jinja remanescente, que sai junto
+# com este blueprint na fase 5.
+from app.feedback.feedback_ops import (  # noqa: E402  — depois do bp por clareza de leitura
+    ATTENTION_TAGS,
+    MAX_COMMENT_LENGTH,
+    POSITIVE_TAGS,
+    tags_for_score as _tags_for_score,
+)
 
 
 def _has_role(*names: str) -> bool:
@@ -55,10 +48,6 @@ def require_comercial(fn):
         return fn(*args, **kwargs)
 
     return wrapper
-
-
-def _tags_for_score(score: int) -> list[str]:
-    return POSITIVE_TAGS if score == 5 else ATTENTION_TAGS
 
 
 @feedback_bp.route("/events/<int:event_id>/gerar-link-feedback", methods=["POST"])

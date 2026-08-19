@@ -522,7 +522,7 @@ def build_dashboard_summary(
 
     financeiro: dict[str, Any] | None = None
     if show_financeiro:
-        from app.gastos.routes import ensure_recurring_entries, recurring_alerts
+        from app.gastos.gastos_ops import ensure_recurring_entries, recurring_alerts
 
         today = date.today()
         ensure_recurring_entries(today.year, today.month)
