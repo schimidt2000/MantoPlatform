@@ -460,6 +460,29 @@ A parte cara, e por isso a última. A ordem interna importa:
 5. Só então apagar as 18 views Jinja, os 23 handlers `_handle_*` e as 4.992 linhas de template
    (`event_detail.html` sozinho tem 3.201)
 
+   > ⚠️ **MEDIDO em 20/08 — este item está subdimensionado no plano, e por muito.**
+   >
+   > Depois de limpar o `financeiro`, sobrou o `calendar`, e ele é outra ordem de grandeza:
+   > **`app/calendar/routes.py` exporta 47 símbolos distintos, em 86 pontos de import**, para
+   > **13 módulos vivos** (`api/agenda_read`, `api/agenda_write`, `api/agenda`,
+   > `api/admin_config_write`, `api/dashboard_service`, `calendar/event_ops`, `calendar/sync`,
+   > `calendar/cancel_ops`, `calendar/casting_ops`, `figurino/producao_ops`,
+   > `marketing/virtuais_ops`, `talents/rating_ops`, `financeiro/routes`) mais 15 scripts de
+   > verificação em `scripts/db/`.
+   >
+   > A maioria **não é view**: `_create_event_core`, `_validate_event_core`, `_query_month_events`,
+   > `parse_characters`, `parse_event_type`, `_build_start_end`, os `_CAN_*`, os
+   > `_add_*_record`/`_delete_*_record` de pagamento, contrato, nota e reembolso. Ou seja, o
+   > arquivo virou uma **biblioteca compartilhada com views penduradas** — apagar as views não o
+   > apaga.
+   >
+   > **Consequência para o plano:** o item 5 não é "apagar as views". É *primeiro* extrair essas
+   > ~47 peças para módulos `*_ops.py` (provavelmente 3 ou 4: criação/validação de evento, consulta
+   > de mês, registros financeiros do evento, e parsing de título), e só então apagar. É uma
+   > sequência de features, não um lote de deleção — e cada extração pede o mesmo tratamento que a
+   > do motor de comissão levou: comparar o resultado contra o `main` para os 450 eventos reais,
+   > porque `ruff` e `create_app()` não pegam mudança de número.
+
 ### Fase 7 — Fechamento
 
 Por último, porque tudo depende disso: `login_view` (§3.2) → apagar `auth` Jinja, `base.html`, os
