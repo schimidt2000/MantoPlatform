@@ -14,12 +14,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from zoneinfo import ZoneInfo
 
 from app import db
 from app.constants import EVENT_TYPE_VIRTUAL
-from app.models import CalendarEvent, CommissionPayment, User
+from app.models import CalendarEvent, CommissionPayment, SiteSetting, User
 
 TZ_SP = ZoneInfo("America/Sao_Paulo")
 
@@ -444,3 +444,216 @@ def pay_seller_month(seller_id: int, month: str, actor: User) -> PayoutResult:
         paid_total=paid_total,
         summary=summary,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Motor de cálculo da comissão, movido de `routes.py` na preparação da fase 6 da remoção do Jinja.
+#
+# Isto nunca foi código de tela: `app/api/financeiro_read.py` — a API que alimenta o DRE, o
+# pipeline de vendas e a planilha de pagamentos do React — importava `_event_commission`,
+# `_event_cost`, `_group_cost`, `_get_commission_rate` e `_resync_pending_commissions` de dentro
+# do blueprint Jinja. Apagar aquele arquivo derrubaria o financeiro inteiro da plataforma nova.
+#
+# São nove ramos de decisão até o valor final: Loja Virtual não comissiona, beneficiário pode ser
+# o responsável EducaManto em vez do vendedor, EducaManto calcula sobre o LUCRO (venda − BV −
+# cachês) e o resto sobre a venda, BV sempre sai da base, evento cancelado não comissiona, custo
+# de líder de grupo agrega os satélites, e comissão já paga nunca é reescrita.
+# ─────────────────────────────────────────────────────────────────────────────
+
+DEFAULT_COMMISSION = Decimal("2.5")
+# Comissão EducaManto (feature 109): % sobre o LUCRO do evento (venda − BV − cachês),
+# diferente da comissão comum (% sobre a venda). Override por evento continua valendo.
+# Este é só o piso de fábrica: a taxa vigente é `SiteSetting.educamanto_commission_rate`,
+# editável em Configurações — mudar o acordo com o responsável não deve exigir deploy.
+EDUCAMANTO_COMMISSION_RATE = Decimal("5")
+
+
+def _educamanto_commission_rate(settings) -> Decimal:
+    """% da comissão EducaManto vigente — configuração, com fallback no padrão de 5%."""
+    rate = getattr(settings, "educamanto_commission_rate", None) if settings else None
+    return Decimal(str(rate)) if rate is not None else EDUCAMANTO_COMMISSION_RATE
+
+
+def _get_commission_rate(event, settings) -> Decimal:
+    """Returns commission rate as Decimal (never float)."""
+    if event.commission_rate is not None:
+        return Decimal(str(event.commission_rate))
+    if settings and settings.default_commission_rate is not None:
+        return Decimal(str(settings.default_commission_rate))
+    return DEFAULT_COMMISSION
+
+
+def _event_cost(event) -> int:
+    """Custo de cachês do evento — soma só o que a Manto realmente paga.
+
+    A vaga "Técnico de Som (Presença)" fica fora (feature 239, decisão 10): ela nunca tem
+    cachê, e um valor herdado de antes da trava não pode continuar inflando custo, margem e
+    base de comissão.
+    """
+    from app.calendar.casting_ops import e_vaga_de_presenca
+
+    return sum(
+        r.cache_value or 0
+        for r in event.roles
+        if r.talent_id and not e_vaga_de_presenca(r)
+    )
+
+
+def _group_cost(event) -> int:
+    """Custo de cachês do evento, somando os satélites quando for principal de grupo (FR-011)."""
+    total = _event_cost(event)
+    for satellite in event.satellites:
+        total += _event_cost(satellite)
+    return total
+
+
+def _event_bv_total(event) -> Decimal:
+    """Soma dos acréscimos BV do evento, em R$ (feature 099).
+
+    BV é um repasse a terceiros: não é lucro da Manto nem entra na comissão da vendedora. Usa o valor
+    efetivo já congelado (``amount_brl``) de cada acréscimo marcado como BV.
+    """
+    total = Decimal("0")
+    for a in getattr(event, "acrescimos", []) or []:
+        if a.is_bv and a.amount_brl:
+            total += Decimal(a.amount_brl)
+    return total
+
+
+def _educamanto_responsavel(settings) -> User | None:
+    """Usuário configurado como responsável EducaManto, ou None (feature 109)."""
+    if settings and settings.educamanto_seller_id:
+        return User.query.get(settings.educamanto_seller_id)
+    return None
+
+
+def _commission_beneficiary(event, settings) -> User | None:
+    """Beneficiário da comissão do evento (feature 109).
+
+    Evento EducaManto (título "(EDU…") com responsável configurado → responsável;
+    caso contrário → vendedor do evento (regra original).
+    """
+    if event.is_educamanto:
+        responsavel = _educamanto_responsavel(settings)
+        if responsavel is not None:
+            return responsavel
+    return event.seller
+
+
+def _event_commission(event, settings) -> Decimal:
+    if not event.sale_value:
+        return Decimal("0")
+    # Venda da Loja de Interações Virtuais não comissiona (feature 205, FR-054): ela se fecha
+    # sozinha, sem vendedor, e provisionar percentual sobre ela criaria uma despesa que nunca
+    # será paga a ninguém — dinheiro reservado no caixa para um beneficiário que não existe.
+    from app.financeiro.vendas_ops import is_loja_virtual
+
+    if is_loja_virtual(event):
+        return Decimal("0")
+    beneficiary = _commission_beneficiary(event, settings)
+    if beneficiary and not beneficiary.receives_commission:
+        return Decimal("0")
+    if event.is_educamanto and _educamanto_responsavel(settings) is not None:
+        # Comissão EducaManto (feature 109): 5% sobre o LUCRO (venda − BV − cachês).
+        rate = (
+            Decimal(str(event.commission_rate))
+            if event.commission_rate is not None
+            else _educamanto_commission_rate(settings)
+        )
+        custo = _group_cost(event) if event.is_group_leader else _event_cost(event)
+        base = Decimal(event.sale_value) - _event_bv_total(event) - Decimal(custo)
+    else:
+        rate = _get_commission_rate(event, settings)
+        # BV sai da base de comissão (repasse, não é receita comissionável) — feature 099.
+        base = Decimal(event.sale_value) - _event_bv_total(event)
+    if base < 0:
+        base = Decimal("0")
+    return (base * rate / Decimal("100")).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+
+
+def _sync_commission_payment(event: CalendarEvent) -> None:
+    """Cria ou atualiza o CommissionPayment de um evento. Não faz commit."""
+    # Loja Virtual não gera linha de comissão (feature 205, FR-054). O corte é aqui, na origem:
+    # se a linha nunca nasce, nenhum relatório precisa lembrar de escondê-la depois.
+    from app.financeiro.vendas_ops import is_loja_virtual
+
+    if is_loja_virtual(event):
+        return
+
+    existing = CommissionPayment.query.filter_by(event_id=event.id).filter(
+        CommissionPayment.status != "cancelado"
+    ).first()
+
+    settings = SiteSetting.query.get(1)
+    beneficiary = _commission_beneficiary(event, settings)
+
+    should_have = (
+        event.sale_value
+        and beneficiary is not None
+        and beneficiary.receives_commission
+        # Evento cancelado (feature 224) não comissiona. Sem isto, qualquer escrita posterior
+        # no evento recriaria a comissão que `aplicar_estorno_comissao` acabou de estornar.
+        and not event.is_cancelled
+    )
+
+    if not should_have:
+        if existing and existing.status == "a_pagar":
+            existing.status = "cancelado"
+            existing.notes = (existing.notes or "") + " | Cancelado: sem comissão elegível"
+        return
+
+    # Comissão EducaManto (feature 109): só entra no ciclo de pagamento após a realização —
+    # payable_from = data do evento. Comissão comum fica NULL (ciclo pela sale_date).
+    is_edu_com_responsavel = event.is_educamanto and _educamanto_responsavel(settings) is not None
+    payable_from = (
+        event.start_at.date()
+        if is_edu_com_responsavel and event.start_at is not None
+        else None
+    )
+
+    amount = _event_commission(event, settings)
+    if existing:
+        if existing.status == "a_pagar":
+            existing.amount = amount
+            existing.sale_date = event.sale_date
+            existing.event_title = event.title
+            existing.seller_id = beneficiary.id
+            existing.payable_from = payable_from
+        # Se já está pago, não alteramos o registro histórico
+    else:
+        db.session.add(CommissionPayment(
+            event_id=event.id,
+            event_title=event.title,
+            seller_id=beneficiary.id,
+            sale_date=event.sale_date,
+            payable_from=payable_from,
+            amount=amount,
+            status="a_pagar",
+        ))
+
+
+def _resync_pending_commissions() -> None:
+    """Reconcilia as comissões A PAGAR com o cálculo atual do evento (mesma base da aba comercial).
+
+    Evita divergência quando a taxa muda depois de a comissão ter sido registrada. Não altera
+    comissões já pagas (histórico) nem estornos (valores negativos).
+    """
+    pendentes = (
+        CommissionPayment.query
+        .filter(
+            CommissionPayment.status == "a_pagar",
+            CommissionPayment.event_id.isnot(None),
+            CommissionPayment.amount >= 0,
+        )
+        .all()
+    )
+    event_ids = {cp.event_id for cp in pendentes}
+    if not event_ids:
+        return
+    for eid in event_ids:
+        ev = CalendarEvent.query.get(eid)
+        if ev:
+            _sync_commission_payment(ev)
+    db.session.commit()
