@@ -12,8 +12,14 @@ import {
   useUpdateEventComercial,
   type EventComercialInput,
 } from "../../lib/eventInline";
+import {
+  useDesagruparEvento,
+  useRemoverSatelite,
+  useRenomearGrupo,
+} from "../../lib/eventOps";
 import { ClientPicker, type SelectedClient } from "../ClientPicker";
 import { FormResponsePicker, type SelectedFormResponse } from "../FormResponsePicker";
+import { AgruparEventosDialog } from "./AgruparEventosDialog";
 import { brl, DataRow, Empty, formatDay, INPUT_CLASS, Panel } from "./parts";
 
 /** Rótulos legíveis das formas de pagamento gravadas no evento. */
@@ -457,7 +463,9 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
   const bruto = venda.sale_value_gross ?? 0;
   const liquido = venda.sale_value ?? 0;
   const desconto = bruto > liquido ? bruto - liquido : 0;
-  const canEdit = Boolean(data.flags.can_edit_core);
+  // Satélite não edita venda: o dinheiro do contrato mora no principal, e o servidor recusa o
+  // PATCH com 409. Sem esta trava o botão existia, a pessoa preenchia e só descobria no envio.
+  const canEdit = Boolean(data.flags.can_edit_core) && !data.event.is_satellite;
 
   if (editando) {
     return (
@@ -553,6 +561,177 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
   );
 }
 
+/**
+ * Agrupamento comercial do evento (feature 246): satélite, principal ou avulso.
+ *
+ * Os três estados são excludentes e mostram coisas diferentes: o satélite precisa do caminho de
+ * volta ao principal, o principal precisa da lista de satélites (com como tirar cada um), e o
+ * avulso precisa só do convite para agrupar.
+ */
+function GrupoPanel({ data }: { data: EventoDetalhe }) {
+  const grupo = data.event.group;
+  const canGroup = Boolean(data.flags.can_group);
+  const [agruparAberto, setAgruparAberto] = useState(false);
+  const desagrupar = useDesagruparEvento(data.event.id);
+  const removerSatelite = useRemoverSatelite(data.event.id);
+  const renomear = useRenomearGrupo(data.event.id);
+  const [editandoNome, setEditandoNome] = useState(false);
+  const [nome, setNome] = useState(grupo?.group_name ?? "");
+
+  // Backend sem o bloco (bundle novo + API antiga, ou o contrário): não renderiza e pronto.
+  // Os hooks acima já rodaram, então a ordem deles não muda — a saída tem de vir DEPOIS deles.
+  if (!grupo) return null;
+
+  if (grupo.role === "satellite") {
+    return (
+      <Panel title="Grupo comercial">
+        <div className="rounded-md border border-gold/40 bg-gold-soft p-3 text-sm" role="alert">
+          <p className="font-semibold text-gold-ink">Este evento é satélite de um grupo</p>
+          <p className="mt-0.5 text-ink">
+            A venda inteira está em{" "}
+            {grupo.leader ? (
+              <Link to={`/events/${grupo.leader.id}`} className="underline">
+                {grupo.leader.title}
+              </Link>
+            ) : (
+              "outro evento"
+            )}
+            . Os valores que este evento tinha antes de ser agrupado ficaram guardados na aba
+            Histórico.
+          </p>
+        </div>
+        {canGroup && (
+          <div className="mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              loading={desagrupar.isPending}
+              onClick={() => desagrupar.mutate()}
+            >
+              Desfazer agrupamento
+            </Button>
+            {desagrupar.isError && (
+              <p className="mt-2 text-sm text-red">{desagrupar.error?.message}</p>
+            )}
+            <p className="mt-2 text-xs text-muted">
+              Desagrupar devolve a edição da venda, mas com os campos vazios — os valores antigos
+              estão no histórico, para redigitar.
+            </p>
+          </div>
+        )}
+      </Panel>
+    );
+  }
+
+  if (grupo.role === "leader") {
+    return (
+      <Panel
+        title="Grupo comercial"
+        actions={
+          canGroup && !editandoNome ? (
+            <Button variant="outline" size="sm" onClick={() => setEditandoNome(true)}>
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              Nome
+            </Button>
+          ) : null
+        }
+      >
+        {editandoNome ? (
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <label className={LABEL_CLASS} htmlFor="grupo-nome-inline">
+                Nome do grupo
+              </label>
+              <input
+                id="grupo-nome-inline"
+                className={INPUT_CLASS}
+                value={nome}
+                maxLength={200}
+                onChange={(e) => setNome(e.target.value)}
+                placeholder="Sem nome, usa o título deste evento"
+              />
+            </div>
+            <Button
+              size="sm"
+              loading={renomear.isPending}
+              onClick={() =>
+                renomear.mutate(nome.trim() || null, { onSuccess: () => setEditandoNome(false) })
+              }
+            >
+              Salvar
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setEditandoNome(false)}>
+              Cancelar
+            </Button>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-ink">
+              Este é o evento <strong>principal</strong> de{" "}
+              <strong>{grupo.display_name}</strong> — a venda do contrato inteiro está aqui.
+            </p>
+            {!grupo.group_name && (
+              <p className="mt-0.5 text-xs text-muted">
+                O grupo não tem nome; está usando o título deste evento.
+              </p>
+            )}
+            <ul className="mt-3 divide-y divide-line">
+              {grupo.satellites.map((s) => (
+                <li key={s.id} className="flex items-center justify-between py-2 text-sm">
+                  <span>
+                    <Link to={`/events/${s.id}`} className="text-ink underline">
+                      {s.title}
+                    </Link>
+                    <span className="ml-2 text-xs text-muted">{formatDay(s.start_at)}</span>
+                  </span>
+                  {canGroup && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={removerSatelite.isPending}
+                      onClick={() => removerSatelite.mutate(s.id)}
+                    >
+                      Remover
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {removerSatelite.isError && (
+              <p className="mt-2 text-sm text-red">{removerSatelite.error?.message}</p>
+            )}
+            {canGroup && (
+              <div className="mt-3">
+                <Button variant="outline" size="sm" onClick={() => setAgruparAberto(true)}>
+                  Agrupar mais um evento
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+        <AgruparEventosDialog data={data} open={agruparAberto} onOpenChange={setAgruparAberto} />
+      </Panel>
+    );
+  }
+
+  if (!canGroup) return null;
+
+  return (
+    <Panel title="Grupo comercial">
+      <p className="text-sm text-muted">
+        Este evento não faz parte de nenhum grupo. Agrupe quando o mesmo contrato tiver mais de um
+        evento — a venda fica num principal só, e os relatórios param de contar em dobro.
+      </p>
+      <div className="mt-3">
+        <Button variant="outline" size="sm" onClick={() => setAgruparAberto(true)}>
+          Agrupar com outro evento
+        </Button>
+      </div>
+      <AgruparEventosDialog data={data} open={agruparAberto} onOpenChange={setAgruparAberto} />
+    </Panel>
+  );
+}
+
 export interface ComercialSectionProps {
   data: EventoDetalhe;
 }
@@ -561,7 +740,8 @@ export interface ComercialSectionProps {
  * Bloco comercial da aba Comercial (feature 190; edição inline na 215).
  *
  * Ordem deliberada: primeiro com quem se vendeu (clientes e pré-contrato), depois quanto e
- * como, e só então o resultado — cada painel editado onde é exibido.
+ * como, então de onde vem o número (o grupo, feature 246) e só por fim o resultado — que o
+ * `KpiGrid` já agrega pelo grupo inteiro.
  */
 export function ComercialSection({ data }: ComercialSectionProps) {
   return (
@@ -569,6 +749,7 @@ export function ComercialSection({ data }: ComercialSectionProps) {
       {data.venda && <ClientesPanel data={data} />}
       {data.venda && <PreContratoPanel data={data} />}
       <VendaPanel data={data} />
+      <GrupoPanel data={data} />
       <KpiGrid data={data} />
     </>
   );

@@ -213,3 +213,134 @@ export function useCancelamentos() {
       ),
   });
 }
+
+// ── Agrupar / desagrupar eventos (feature 246) ───────────────────────────────
+
+/** Um evento que pode entrar no grupo, como devolvido por `/grupo/candidatos`. */
+export interface CandidatoGrupo {
+  id: number;
+  title: string;
+  start_at: string | null;
+  event_type: string;
+  /** `true` = tem valor de venda, e vai PERDÊ-LO ao virar satélite. */
+  has_sale: boolean;
+  /** Preenchido = não pode ser agrupado; o texto explica por quê. */
+  blocked_reason: string | null;
+}
+
+export interface AgruparInput {
+  leader_event_id: number;
+  target_event_ids: number[];
+  group_name?: string;
+  /** Só `true` depois que a pessoa viu a lista do que será apagado. */
+  confirm_clear_financials?: boolean;
+}
+
+/** Um evento que perde a venda ao ser agrupado — vem no 409 de confirmação. */
+export interface EventoComVenda {
+  id: number;
+  title: string;
+  sale_value: string;
+}
+
+/**
+ * Candidatos a satélite, buscados no SERVIDOR (mínimo 2 caracteres).
+ *
+ * A busca é do servidor de propósito: a tela antiga carregava os 354 eventos de uma vez no HTML
+ * e filtrava no navegador. `enabled` evita a chamada enquanto o diálogo está fechado.
+ */
+export function useCandidatosGrupo(eventId: number, q: string, enabled: boolean) {
+  return useQuery<{ items: CandidatoGrupo[]; min_chars: number }>({
+    queryKey: ["grupo-candidatos", eventId, q],
+    queryFn: () =>
+      apiFetch<{ items: CandidatoGrupo[]; min_chars: number }>(
+        `/api/events/${eventId}/grupo/candidatos?q=${encodeURIComponent(q)}`,
+      ),
+    enabled: enabled && q.trim().length >= 2,
+    staleTime: 0,
+  });
+}
+
+/**
+ * Invalida tudo que um agrupamento suja. Compartilhado pelas quatro mutações do grupo.
+ *
+ * As chaves vão SEM id de propósito: a operação toca dois ou mais eventos e o hook só conhece o
+ * id de um deles — `invalidateQueries` casa por prefixo. Corrigir só o evento aberto deixaria o
+ * outro lado do grupo com número velho na tela.
+ */
+function invalidarGrupo(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ["event"] });
+  queryClient.invalidateQueries({ queryKey: ["agenda"] });
+  queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+  queryClient.invalidateQueries({ queryKey: ["agenda-search"] });
+  // A venda do satélite migra para o grupo e a comissão a pagar dele é cancelada.
+  queryClient.invalidateQueries({ queryKey: ["vendas-dashboard"] });
+  queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
+  queryClient.invalidateQueries({ queryKey: ["financeiro-dashboard"] });
+  queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
+  queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  // `is_group_leader` muda, e é ele que trava/destrava o botão de excluir.
+  queryClient.invalidateQueries({ queryKey: ["evento-impacto-exclusao"] });
+}
+
+/**
+ * Agrupa eventos sob um principal (feature 246). RBAC no servidor: Comercial/Financeiro/Superadmin.
+ *
+ * Sem `confirm_clear_financials`, o servidor responde 409 com a lista de eventos que perderiam a
+ * venda — é isso que o diálogo usa para mostrar nomes e valores antes de confirmar. A resposta
+ * traz `leader_id`: quem agrupa pode eleger OUTRO evento como principal, e aí a página em que a
+ * pessoa está acabou de virar satélite.
+ */
+export function useAgruparEventos(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe & { leader_id: number }, Error, AgruparInput>({
+    mutationFn: (input) =>
+      apiFetch(`/api/events/${eventId}/grupo`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => invalidarGrupo(queryClient),
+  });
+}
+
+/**
+ * Solta ESTE evento do grupo (feature 246) — só faz sentido em satélite.
+ *
+ * Não restaura os campos comerciais: eles foram apagados no agrupamento. A cópia do que havia
+ * ficou no histórico do evento.
+ */
+export function useDesagruparEvento(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, void>({
+    mutationFn: () => apiFetch(`/api/events/${eventId}/grupo`, { method: "DELETE" }),
+    onSuccess: () => invalidarGrupo(queryClient),
+  });
+}
+
+/**
+ * Tira um satélite a partir da tela do PRINCIPAL (feature 246).
+ *
+ * Existe para não ser preciso abrir cada satélite: o maior grupo do sistema tem 13. E é o que
+ * destrava cancelar um evento principal, que o sistema recusa enquanto houver satélites.
+ */
+export function useRemoverSatelite(leaderId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, number>({
+    mutationFn: (satelliteId) =>
+      apiFetch(`/api/events/${leaderId}/grupo/satelites/${satelliteId}`, { method: "DELETE" }),
+    onSuccess: () => invalidarGrupo(queryClient),
+  });
+}
+
+/** Nomeia, renomeia ou limpa o nome do grupo (feature 246) — sempre no principal. */
+export function useRenomearGrupo(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, string | null>({
+    mutationFn: (groupName) =>
+      apiFetch(`/api/events/${eventId}/grupo`, {
+        method: "PATCH",
+        body: JSON.stringify({ group_name: groupName }),
+      }),
+    onSuccess: () => invalidarGrupo(queryClient),
+  });
+}

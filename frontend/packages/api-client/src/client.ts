@@ -10,18 +10,30 @@
 export interface ApiErrorBody {
   message: string;
   fields?: Record<string, string>;
+  /** Chaves adicionais que o endpoint anexa ao erro — ver `details` em `ApiRequestError`. */
+  [chave: string]: unknown;
 }
 
 /** Erro lançado quando a API responde com status fora da faixa 2xx. */
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly fields?: Record<string, string>;
+  /**
+   * O corpo do erro inteiro, para quando o endpoint manda mais que uma mensagem.
+   *
+   * Nem todo erro é um beco: um 409 de "isto vai apagar dados" devolve a lista do que será
+   * apagado, para a tela abrir a confirmação com nomes e valores; um 409 de "este evento é
+   * satélite" devolve o `leader_id`, para a tela oferecer o caminho até o principal. Sem guardar
+   * o corpo, essas chaves eram descartadas aqui e o front teria que adivinhar por texto.
+   */
+  readonly details: Record<string, unknown>;
 
   constructor(status: number, body: ApiErrorBody) {
     super(body.message);
     this.name = "ApiRequestError";
     this.status = status;
     this.fields = body.fields;
+    this.details = body;
   }
 }
 

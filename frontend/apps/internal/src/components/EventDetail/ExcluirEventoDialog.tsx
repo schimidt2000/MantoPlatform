@@ -172,9 +172,29 @@ export function ExcluirEventoDialog({
             <ResumoImpacto impacto={dados} />
 
             {dados.is_group_leader && (
-              <p className="text-sm text-red" role="alert">
-                Este evento é o principal de um grupo comercial. Desagrupe os satélites antes.
-              </p>
+              <div className="rounded-md border border-red/40 bg-surface-2 p-3 text-sm" role="alert">
+                <p className="font-semibold text-red">
+                  Este evento é o principal de um grupo comercial.
+                </p>
+                <p className="mt-1 text-ink">
+                  Cancelar o principal deixaria os satélites sem contrato. Tire os satélites do
+                  grupo primeiro — dá para fazer isso na aba Comercial, no painel{" "}
+                  <strong>Grupo comercial</strong>, sem precisar abrir um por um.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => {
+                    onOpenChange(false);
+                    // Sai do diálogo direto no painel que resolve — até a feature 246 esta
+                    // mensagem era um beco: dizia o que fazer sem oferecer onde.
+                    navigate(`/events/${eventId}?aba=comercial`);
+                  }}
+                >
+                  Ir para o painel do grupo
+                </Button>
+              </div>
             )}
 
             {dados.acao === "cancelar" && (
