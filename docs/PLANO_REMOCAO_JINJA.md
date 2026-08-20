@@ -10,7 +10,7 @@
 > | 3 — blueprints substituídos | ✅ em produção (pré-requisito de extração incluído) | `c94995d`, `0aef653`, `e8e17f6`, `5ab99db` |
 > | 5 — `/avaliar` | ✅ em produção | `d4d16cc`, `5ab99db` |
 > | 4 — decisões | ✅ todas respondidas · vira feature (ver §7) | — |
-> | 6 — `calendar` e `financeiro` | ⬜ pendente, e é a parte cara | — |
+> | 6 — `calendar` e `financeiro` | 🔨 em curso — a feature de grupos (§7) tem o **backend pronto e em produção** | `a58f54b`, `a0af948` |
 > | 7 — `auth` e fechamento | ⬜ pendente, depende da feature de conta | — |
 >
 > **~19.000 linhas de Jinja removidas.** Templates: 84 → 17. Rotas: 530 → 382.
@@ -475,6 +475,31 @@ Existem **agora**, independentes da remoção do Jinja:
 3. **Comissão órfã.** Nenhum dos três handlers chama `_sync_commission_payment`. No espelho, o
    evento 287 é satélite com venda zerada e mantém `commission_payments` de R$ 137,50 com status
    *pago*. Corrigir isso é **mudança de comportamento**, não paridade — decidir de propósito.
+
+### 7.2b Decisões do João (19/08) e o que já foi construído
+
+- **Snapshot antes de apagar: SIM.** `group_ops.snapshot_comercial` grava os 14 campos no histórico
+  do evento antes de zerar. Não restaura sozinho — serve para consultar e redigitar.
+- **Corrigir a comissão órfã: SIM.** `agrupar` recebe `sincronizar_comissao` injetada e a chama
+  depois de zerar a venda; com `sale_value` nula a função cancela a linha *a pagar*. Comissão já
+  **paga sobrevive** — dinheiro que saiu não se desfaz por software. Sem limpeza retroativa: o
+  evento 287 continua com a comissão órfã de R$ 137,50 até alguém decidir mexer nela à mão.
+- **Renomear grupo entrou** (2 usos reais no histórico, ~40 linhas).
+
+**BACKEND PRONTO E EM PRODUÇÃO** (`verify_246_grupos_api.py`, 22/22 contra o espelho):
+
+- `app/calendar/group_ops.py` — núcleo puro, compartilhado com os handlers Jinja, que passaram a
+  delegar. As duas superfícies não divergem mais.
+- Cinco endpoints: `GET .../grupo/candidatos?q=`, `POST/DELETE/PATCH .../grupo` e
+  `DELETE .../grupo/satelites/<id>` (este não existe no Jinja e é o que destrava dissolver o grupo
+  de 13 satélites sem abrir os 13).
+- `GET /api/events/<id>` passou a devolver o bloco `group` e a flag `can_group`.
+- **Dois defeitos de produção corrigidos:** `PATCH /comercial` agora recusa satélite (aceitava
+  gravar venda que sumia dos relatórios), e `json_error` ganhou `**extra` para o 409 poder dizer
+  *o que* será apagado.
+
+**FALTA A TELA.** Sem ela a feature não existe para o usuário — os endpoints estão no ar e ninguém
+os chama.
 
 ### 7.3 Escopo
 
