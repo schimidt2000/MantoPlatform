@@ -214,6 +214,99 @@ export function useCancelamentos() {
   });
 }
 
+// ── Coleções comerciais: acréscimos, notas fiscais e parcelas (feature 253) ──
+//
+// Até aqui as três só podiam ser editadas pelo formulário Jinja. Acréscimos e parcelas usam PUT
+// com a lista inteira (o corpo é a verdade, não um delta); notas fiscais têm CRUD por id, porque
+// cada uma carrega um anexo que sobe por multipart.
+
+export interface AcrescimoInput {
+  tipo: string;
+  descricao?: string | null;
+  is_percent?: boolean;
+  value: number | string;
+  bv_recipient?: string | null;
+  bv_pix?: string | null;
+}
+
+export interface ParcelaInput {
+  due_date: string;
+  amount: number | string;
+}
+
+/** Invalida o detalhe do evento e o que depende do dinheiro dele. */
+function invalidarComercial(queryClient: ReturnType<typeof useQueryClient>, eventId: number) {
+  queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+  queryClient.invalidateQueries({ queryKey: ["vendas-dashboard"] });
+  queryClient.invalidateQueries({ queryKey: ["financeiro-dashboard"] });
+  queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
+  // Acréscimo muda a BASE da comissão (o BV sai dela), então a linha a pagar é recalculada.
+  queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
+}
+
+/**
+ * Substitui os acréscimos do evento (features 099/100). RBAC no servidor:
+ * Comercial/Financeiro/Superadmin — acréscimo mexe na base da comissão e o BV é repasse a terceiro.
+ *
+ * A lista enviada é a verdade: mandar `[]` apaga todos. O servidor congela acréscimo percentual em
+ * reais sobre a venda do momento, e preserva o status de pagamento de um BV já pago.
+ */
+export function useSetAcrescimos(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, AcrescimoInput[]>({
+    mutationFn: (items) =>
+      apiFetch(`/api/events/${eventId}/acrescimos`, {
+        method: "PUT",
+        body: JSON.stringify({ items }),
+      }),
+    onSuccess: () => invalidarComercial(queryClient, eventId),
+  });
+}
+
+/** Substitui o cronograma de parcelas (feature 065). Parcela sem data ou sem valor é ignorada. */
+export function useSetParcelas(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, ParcelaInput[]>({
+    mutationFn: (items) =>
+      apiFetch(`/api/events/${eventId}/parcelas`, {
+        method: "PUT",
+        body: JSON.stringify({ items }),
+      }),
+    onSuccess: () => invalidarComercial(queryClient, eventId),
+  });
+}
+
+/**
+ * Edita uma nota fiscal (feature 251). `multipart`, porque a nota carrega anexo.
+ *
+ * Enviar arquivo **emite** a nota; não enviar preserva o anexo atual — é edição de valor ou data,
+ * não remoção do anexo.
+ */
+export function useUpdateNotaFiscal(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, { id: number; amount?: string; issue_date?: string; file?: File }>({
+    mutationFn: ({ id, amount, issue_date, file }) => {
+      const form = new FormData();
+      // Número puro, nunca o formato BRL: `_decimal_from_form` no servidor não entende vírgula.
+      if (amount !== undefined) form.append("amount", amount);
+      if (issue_date !== undefined) form.append("issue_date", issue_date);
+      if (file) form.append("file", file);
+      return apiFetch(`/api/events/${eventId}/invoices/${id}`, { method: "PATCH", body: form });
+    },
+    onSuccess: () => invalidarComercial(queryClient, eventId),
+  });
+}
+
+/** Remove uma nota fiscal (feature 251). O arquivo em disco NÃO é apagado — documento contábil. */
+export function useDeleteNotaFiscal(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, number>({
+    mutationFn: (invoiceId) =>
+      apiFetch(`/api/events/${eventId}/invoices/${invoiceId}`, { method: "DELETE" }),
+    onSuccess: () => invalidarComercial(queryClient, eventId),
+  });
+}
+
 // ── Agrupar / desagrupar eventos (feature 246) ───────────────────────────────
 
 /** Um evento que pode entrar no grupo, como devolvido por `/grupo/candidatos`. */

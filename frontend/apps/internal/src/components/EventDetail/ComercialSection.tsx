@@ -20,6 +20,7 @@ import {
 import { ClientPicker, type SelectedClient } from "../ClientPicker";
 import { FormResponsePicker, type SelectedFormResponse } from "../FormResponsePicker";
 import { AgruparEventosDialog } from "./AgruparEventosDialog";
+import { ColecoesComerciaisPanel } from "./ColecoesComerciaisPanel";
 import { brl, DataRow, Empty, formatDay, INPUT_CLASS, Panel } from "./parts";
 
 /** Rótulos legíveis das formas de pagamento gravadas no evento. */
@@ -459,7 +460,6 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
   const venda = data.venda;
   const [editando, setEditando] = useState(false);
   if (!venda) return null;
-  const acrescimos = data.acrescimos ?? [];
   const bruto = venda.sale_value_gross ?? 0;
   const liquido = venda.sale_value ?? 0;
   const desconto = bruto > liquido ? bruto - liquido : 0;
@@ -530,33 +530,9 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
         )}
       </div>
 
-      <div className="mt-3">
-        <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-muted">
-          Acréscimos
-        </div>
-        {acrescimos.length === 0 ? (
-          <Empty>Nenhum acréscimo.</Empty>
-        ) : (
-          <ul className="divide-y divide-line text-sm">
-            {acrescimos.map((acrescimo) => (
-              <li key={acrescimo.id} className="flex items-center justify-between gap-2 py-1.5">
-                <span className="truncate text-ink">
-                  {acrescimo.label}
-                  {acrescimo.is_bv && (
-                    <Badge tone="gold" className="ml-2">
-                      BV — repasse
-                    </Badge>
-                  )}
-                  {acrescimo.is_bv && acrescimo.bv_recipient && (
-                    <span className="ml-2 text-xs text-muted">{acrescimo.bv_recipient}</span>
-                  )}
-                </span>
-                <span className="shrink-0 tabular-nums text-ink">{brl(acrescimo.amount_brl)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {/* Os acréscimos saíram daqui para o painel próprio logo abaixo (feature 253), que mostra a
+          mesma lista e permite editar. Mantê-los nos dois lugares deixava a tela com dois blocos
+          "Acréscimos" um sob o outro. */}
     </Panel>
   );
 }
@@ -749,6 +725,7 @@ export function ComercialSection({ data }: ComercialSectionProps) {
       {data.venda && <ClientesPanel data={data} />}
       {data.venda && <PreContratoPanel data={data} />}
       <VendaPanel data={data} />
+      <ColecoesComerciaisPanel data={data} />
       <GrupoPanel data={data} />
       <KpiGrid data={data} />
     </>

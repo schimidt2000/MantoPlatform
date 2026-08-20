@@ -367,6 +367,12 @@ export interface EventoDetalhe {
   client_feedbacks?: ClientFeedbackItem[];
   gastos?: EventGasto[];
   acrescimos?: EventAcrescimo[];
+  /**
+   * Cronograma de parcelas (feature 065), por vencimento. Entrava no cálculo do KPI mas nunca
+   * saía no payload — só o formulário Jinja conhecia (feature 253). `received` é marcado pela
+   * planilha de pagamentos; a tela do evento mostra, não edita.
+   */
+  parcelas?: { id: number; due_date: string | null; amount: number | null; received: boolean }[];
   mensagens?: EventMensagens;
   reembolsos_pendentes_total?: number | null;
   feedback_link_pendente?: boolean;

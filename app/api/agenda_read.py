@@ -508,6 +508,22 @@ def _serialize_acrescimos(event: CalendarEvent) -> list[dict[str, Any]]:
     ]
 
 
+def _serialize_installments(event: CalendarEvent) -> list[dict[str, Any]]:
+    """Cronograma de parcelas do evento (feature 065), na ordem de vencimento.
+
+    `received` é o que a planilha de pagamentos marca — a tela do evento mostra, não edita.
+    """
+    return [
+        {
+            "id": p.id,
+            "due_date": p.due_date.isoformat() if p.due_date else None,
+            "amount": _money(p.amount),
+            "received": bool(p.received),
+        }
+        for p in sorted(event.installments, key=lambda p: (p.due_date or date.max))
+    ]
+
+
 def _material_url(path: str | None) -> str | None:
     """Normaliza o caminho de um material: registros antigos guardam o caminho relativo a
     `UPLOAD_FOLDER` (`ensaio_materials/x.pdf`); os novos, a URL já pronta de `app.storage`
@@ -936,6 +952,9 @@ def serialize_event_detail(
         ]
         data["cobranca"] = _compute_cobranca(event, payments)
         data["acrescimos"] = _serialize_acrescimos(event)
+        # Parcelas: entravam no cálculo do KPI mas nunca saíam no payload, então a tela não tinha
+        # como mostrar (nem editar) o cronograma — só o formulário Jinja sabia dele (feature 253).
+        data["parcelas"] = _serialize_installments(event)
         data["feedback_link_pendente"] = not data["client_feedbacks"]
         data["reembolsos_pendentes_total"] = _money(
             sum((r.amount or 0 for r in reembolsos if not r.is_collected), Decimal("0"))
