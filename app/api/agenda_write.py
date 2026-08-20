@@ -4,7 +4,7 @@ Cada ação reusa o núcleo em `app/calendar/casting_ops.py` (mesma lógica do h
 devolve o evento no formato de leitura da feature 145. As ações Jinja seguem intactas.
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -926,12 +926,22 @@ def api_update_event_comercial(event_id: int) -> Any:
     """Valores da venda, forma de pagamento, vendedor e comissão (feature 215).
 
     RBAC `_can_create_event()` — mesmos campos financeiros sensíveis do PATCH em bloco.
+
+    Recusa satélite de grupo. Isto era um buraco real: o Jinja escondia o formulário de venda para
+    satélite, mas a API aceitava gravar. O valor entrava no banco e **sumia de todos os relatórios**
+    — o financeiro pula satélites de propósito, porque o dinheiro do contrato mora no principal.
     """
     event = CalendarEvent.query.get(event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
     if not _can_create_event():
         return json_error("Sem permissão", 403)
+    if event.is_satellite:
+        return json_error(
+            "Este evento é satélite de um grupo: os dados comerciais são do evento principal.",
+            409,
+            leader_id=event.group_leader_id,
+        )
 
     body = request.get_json(silent=True) or {}
     sale_date_raw = body.get("sale_date")
@@ -1042,7 +1052,6 @@ def api_add_invoice(event_id: int) -> Any:
             "Informe ao menos o valor, a data ou o arquivo da nota.", 400,
             {"amount": "Preencha ao menos um campo"},
         )
-    db.session.commit()
     return _event_detail_json(event), 201
 
 
@@ -1069,7 +1078,6 @@ def api_add_contract(event_id: int) -> Any:
         return json_error(
             "Selecione o arquivo do contrato (até 10 MB).", 400, {"file": "Obrigatório"}
         )
-    db.session.commit()
     return _event_detail_json(event), 201
 
 
@@ -1133,7 +1141,6 @@ def api_add_payment(event_id: int) -> Any:
             "Informe o valor e anexe o comprovante para adicionar o pagamento.", 400,
             {"amount": "Obrigatório", "file": "Obrigatório"},
         )
-    db.session.commit()
     return _event_detail_json(event), 201
 
 
@@ -1208,7 +1215,6 @@ def api_add_reimbursement(event_id: int) -> Any:
             "Informe a descrição e o valor do reembolso.", 400,
             {"description": "Obrigatório", "amount": "Obrigatório"},
         )
-    db.session.commit()
     return _event_detail_json(event), 201
 
 
@@ -1242,7 +1248,6 @@ def api_collect_reimbursement(reimbursement_id: int) -> Any:
             "Informe o valor recebido e anexe o comprovante para marcar como cobrado.", 400,
             {"collected_amount": "Obrigatório", "file": "Obrigatório"},
         )
-    db.session.commit()
     return _event_detail_json(event)
 
 
@@ -1380,7 +1385,6 @@ def api_travel_estimate(event_id: int) -> Any:
         return json_error(
             "Não foi possível estimar o trajeto — verifique o endereço do evento.", 400
         )
-    db.session.commit()
     return _event_detail_json(event)
 
 
@@ -1626,3 +1630,220 @@ def api_feedback_link(event_id: int) -> Any:
     # vitrine roda com `basename="/catalogo"`). O caminho antigo continua vivo como 302 em
     # `feedback.avaliar`, para os links já enviados às clientes — o token não expira.
     return jsonify({"url": f"{base}/catalogo/avaliar/{token}"})
+
+
+# ── Agrupamento comercial de eventos (features 053/054/055) ──────────────────────────────────
+#
+# O núcleo (regras, snapshot, histórico) mora em `app/calendar/group_ops.py`, compartilhado com os
+# handlers Jinja enquanto eles existirem. Aqui fica só o HTTP: RBAC, leitura do corpo e resposta.
+#
+# A busca de candidatos vive neste arquivo, e não em `agenda.py`, porque só serve ao diálogo de
+# agrupar — mantê-la junto evita que alguém mude a regra de elegibilidade num lugar só.
+
+
+def _can_group() -> bool:
+    """Gate de mexer em grupo: Comercial, Financeiro ou Superadmin (paridade com o Jinja)."""
+    from app.calendar import group_ops
+
+    return group_ops.pode_agrupar(current_user)
+
+
+def _grupo_detalhe_json(event: Any, leader_id: int | None = None) -> Any:
+    """Detalhe do evento com o `leader_id` no topo, para a tela saber se precisa navegar.
+
+    O principal pode NÃO ser o evento de onde a ação partiu — quem agrupa pode eleger outro como
+    principal, e aí a página em que a pessoa está acabou de virar satélite.
+    """
+    payload = serialize_event_detail(event, current_user, session.get("impersonate_role"))
+    if leader_id is not None:
+        payload["leader_id"] = leader_id
+    return jsonify(payload)
+
+
+@api_bp.route("/events/<int:event_id>/grupo/candidatos", methods=["GET"])
+@api_login_required
+def api_grupo_candidatos(event_id: int) -> Any:
+    """Eventos que podem entrar no grupo, filtrados por `?q=` no SERVIDOR.
+
+    O Jinja carregava TODOS os eventos não-ENSAIO do banco (354 hoje) como checkbox no HTML e
+    filtrava no navegador. Aqui a busca é no servidor, limitada — a tela nova não deve herdar
+    aquele despejo.
+
+    Cada item traz `blocked_reason` em vez de sumir da lista: um evento que já está em outro grupo
+    precisa aparecer explicando por que não pode ser marcado, senão a pessoa procura e não acha.
+    """
+    from app.calendar import group_ops
+    from app.calendar.event_ops import SEARCH_MIN_CHARS, search_events
+
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_group():
+        return json_error("Sem permissão", 403)
+
+    q = (request.args.get("q") or "").strip()
+    if len(q) < SEARCH_MIN_CHARS:
+        return jsonify({"items": [], "min_chars": SEARCH_MIN_CHARS})
+
+    itens = []
+    for candidato in search_events(q):
+        if candidato.id == event_id or candidato.event_type == "ENSAIO":
+            continue
+        motivo = None
+        if candidato.is_satellite:
+            motivo = "já pertence a outro grupo"
+        elif candidato.is_group_leader:
+            motivo = "já é principal de outro grupo"
+        itens.append({
+            "id": candidato.id,
+            "title": candidato.title,
+            "start_at": candidato.start_at.isoformat() if candidato.start_at else None,
+            "event_type": candidato.event_type,
+            "has_sale": group_ops.has_financial_data(candidato),
+            "blocked_reason": motivo,
+        })
+    return jsonify({"items": itens, "min_chars": SEARCH_MIN_CHARS})
+
+
+@api_bp.route("/events/<int:event_id>/grupo", methods=["POST"])
+@api_login_required
+def api_agrupar_eventos(event_id: int) -> Any:
+    """Agrupa eventos sob um principal. Corpo: `leader_event_id`, `target_event_ids`,
+    `group_name`, `confirm_clear_financials`.
+
+    Devolve **409 com `needs_confirmation`** e a lista de eventos que perderiam venda quando a
+    confirmação não veio. É a única trava contra perda irreversível: agrupar apaga os 14 campos
+    comerciais do satélite e desagrupar não devolve. O 409 tipado (em vez do checkbox genérico do
+    Jinja) é o que deixa a tela mostrar NOMES e VALORES do que será apagado.
+    """
+    from app.calendar import group_ops
+    from app.financeiro.routes import _sync_commission_payment
+
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_group():
+        return json_error("Sem permissão", 403)
+
+    body = request.get_json(silent=True) or {}
+    alvos_raw = body.get("target_event_ids") or []
+    alvo_ids = {int(t) for t in alvos_raw if isinstance(t, int) or str(t).isdigit()}
+    if not alvo_ids:
+        return json_error("Selecione ao menos um evento para agrupar.", 400)
+
+    alvos = CalendarEvent.query.filter(CalendarEvent.id.in_(alvo_ids)).all()
+    if len(alvos) != len(alvo_ids):
+        return json_error("Selecione eventos válidos para agrupar.", 400)
+
+    participantes = {event.id: event, **{a.id: a for a in alvos}}
+    leader_raw = body.get("leader_event_id")
+    if leader_raw is None or int(leader_raw) not in participantes:
+        return json_error("Selecione qual evento é o principal do grupo.", 400)
+
+    leader = participantes.pop(int(leader_raw))
+    satellites = list(participantes.values())
+
+    erro = group_ops.validar_agrupamento(leader, satellites)
+    if erro:
+        return json_error(erro, 409)
+
+    if not body.get("confirm_clear_financials"):
+        com_venda = group_ops.satelites_com_venda(satellites)
+        if com_venda:
+            return json_error(
+                "Estes eventos já têm valor de venda preenchido e vão perdê-lo.",
+                409,
+                needs_confirmation=True,
+                events_with_sale=[
+                    {"id": s.id, "title": s.title, "sale_value": str(s.sale_value)}
+                    for s in com_venda
+                ],
+            )
+
+    resultado = group_ops.agrupar(
+        leader=leader,
+        satellites=satellites,
+        group_name=(body.get("group_name") or "").strip(),
+        actor_name=current_user.name,
+        agora=datetime.now(tz=_TZ_SP),
+        sincronizar_comissao=_sync_commission_payment,
+    )
+    return _grupo_detalhe_json(leader, leader_id=resultado["leader_id"])
+
+
+@api_bp.route("/events/<int:event_id>/grupo", methods=["DELETE"])
+@api_login_required
+def api_desagrupar_evento(event_id: int) -> Any:
+    """Solta ESTE evento do grupo — `event_id` é o satélite (paridade com o Jinja).
+
+    Não restaura os campos comerciais: eles foram apagados no agrupamento. O que existe é a cópia
+    gravada no histórico do evento, para consulta.
+    """
+    from app.calendar import group_ops
+
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_group():
+        return json_error("Sem permissão", 403)
+    if not event.is_satellite:
+        return json_error("Este evento não pertence a um grupo.", 409)
+
+    resultado = group_ops.desagrupar(
+        event, current_user.name, datetime.now(tz=_TZ_SP)
+    )
+    return _grupo_detalhe_json(event, leader_id=resultado["leader_id"])
+
+
+@api_bp.route("/events/<int:leader_id>/grupo/satelites/<int:sat_id>", methods=["DELETE"])
+@api_login_required
+def api_remover_satelite(leader_id: int, sat_id: int) -> Any:
+    """Tira um satélite a partir da tela do PRINCIPAL — o Jinja não tinha isto.
+
+    Sem esta rota, dissolver o grupo de 13 satélites que existe no banco exigiria abrir os 13, um
+    por um. E é ela que destrava o cancelamento: um evento principal não pode ser cancelado
+    enquanto tiver satélites.
+    """
+    from app.calendar import group_ops
+
+    satelite = CalendarEvent.query.get(sat_id)
+    if satelite is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_group():
+        return json_error("Sem permissão", 403)
+    if satelite.group_leader_id != leader_id:
+        return json_error("Este evento não é satélite deste grupo.", 404)
+
+    group_ops.desagrupar(
+        satelite, current_user.name, datetime.now(tz=_TZ_SP)
+    )
+    leader = CalendarEvent.query.get(leader_id)
+    return _grupo_detalhe_json(leader, leader_id=leader_id)
+
+
+@api_bp.route("/events/<int:event_id>/grupo", methods=["PATCH"])
+@api_login_required
+def api_renomear_grupo(event_id: int) -> Any:
+    """Define, edita ou limpa o nome do grupo. Corpo: `{"group_name": str | null}`.
+
+    Só no principal — `group_name` gravado num satélite é ignorado por toda a leitura. Nome vazio
+    volta ao fallback (o título do evento).
+    """
+    from app.calendar import group_ops
+
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_group():
+        return json_error("Sem permissão", 403)
+    if not event.is_group_leader:
+        return json_error("Apenas o evento principal de um grupo pode ser renomeado.", 409)
+
+    body = request.get_json(silent=True) or {}
+    group_ops.renomear_grupo(
+        event,
+        body.get("group_name"),
+        current_user.name,
+        datetime.now(tz=_TZ_SP),
+    )
+    return _event_detail_json(event)

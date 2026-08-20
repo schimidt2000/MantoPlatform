@@ -5,7 +5,7 @@ RESUMO do evento (agenda); o detalhe do evento (com RBAC financeiro) entra no In
 Reaproveita os parsers e a query de mês da view Jinja (Princípio I) — não duplica lógica.
 """
 
-from datetime import UTC, date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -147,6 +147,10 @@ def _role_flags(user: Any, impersonate: str | None) -> dict[str, bool]:
         "show_casting": has(RoleName.CASTING) or is_superadmin,
         "show_figurino": has(RoleName.FIGURINO) or is_superadmin,
         "show_comercial": has(RoleName.COMERCIAL) or has(RoleName.FINANCEIRO) or is_superadmin,
+        # feature 246 — agrupar/desagrupar/renomear grupo. Mesmo trio do `_can_group` da escrita;
+        # aqui a flag passa pela impersonação, então o superadmin vendo "como Casting" não vê o
+        # painel, embora a API ainda aceitasse o comando dele.
+        "can_group": has(RoleName.COMERCIAL) or has(RoleName.FINANCEIRO) or is_superadmin,
         # feature 239 — usado para decidir se o link do orçamento de origem é visível (só quem
         # consegue de fato abrir GET /api/orcamento/historico/<id>: superadmin, ou o comercial
         # dono do orçamento — ver _get_entry_or_none em app/api/orcamento_read.py).
@@ -531,6 +535,49 @@ def _serialize_materials(event: CalendarEvent) -> list[dict[str, Any]]:
     ]
 
 
+def _group_block(event) -> dict:
+    """Estado do agrupamento comercial do evento, para a tela do detalhe (feature 246).
+
+    Devolve os três papéis possíveis num campo só (`role`), porque a interface é excludente: ou o
+    evento é satélite (e aí o que importa é o caminho de volta ao principal), ou é principal (e o
+    que importa é a lista de satélites), ou é avulso (e o que importa é o botão de agrupar).
+
+    `display_name` já resolve o fallback do modelo (`group_name` ou o título do principal), para a
+    tela não repetir essa regra.
+    """
+    if event.is_satellite:
+        leader = event.group_leader
+        return {
+            "role": "satellite",
+            "group_name": leader.group_name if leader else None,
+            "display_name": leader.group_display_name if leader else None,
+            "leader": {"id": leader.id, "title": leader.title} if leader else None,
+            "satellites": [],
+        }
+    if event.is_group_leader:
+        return {
+            "role": "leader",
+            "group_name": event.group_name or None,
+            "display_name": event.group_display_name,
+            "leader": None,
+            "satellites": [
+                {
+                    "id": s.id,
+                    "title": s.title,
+                    "start_at": s.start_at.isoformat() if s.start_at else None,
+                }
+                for s in sorted(event.satellites, key=lambda s: (s.start_at or datetime.max))
+            ],
+        }
+    return {
+        "role": "none",
+        "group_name": None,
+        "display_name": None,
+        "leader": None,
+        "satellites": [],
+    }
+
+
 def _maps_url(origin: str, destination: str) -> str:
     """URL de rota do Google Maps entre dois endereços."""
     import urllib.parse
@@ -632,6 +679,10 @@ def serialize_event_detail(
             ),
             "is_satellite": event.is_satellite,
             "group_name": event.group_name or None,
+            # Bloco do agrupamento comercial (feature 246). Antes daqui a SPA recebia só
+            # `is_satellite` e `group_name` e não renderizava nenhum dos dois — dava para ver que
+            # existia um grupo (pelo título do KPI) e não havia como mexer nele.
+            "group": _group_block(event),
             # Personagens vêm da tabela EventRole (fonte de verdade) quando o evento já tem
             # roles de personagem cadastradas; só cai para o parse do título (texto livre)
             # em eventos sem EventRole de personagem — ex.: importados do Google antes de
