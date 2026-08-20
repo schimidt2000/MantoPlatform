@@ -412,6 +412,16 @@ A parte cara, e por isso a última. A ordem interna importa:
    >
    > Estimativa honesta: é uma feature própria (ops + endpoints + UI das três coleções), da ordem
    > da feature de grupos. **Não começar como apêndice de outra tarefa.**
+   >
+   > **PRIMEIRA METADE FEITA em 20/08** (commit `88ba7a7`): `app/calendar/comercial_ops.py` tem o
+   > núcleo puro das três coleções, com contrato de lista de dicionários no lugar das listas
+   > paralelas de formulário. O handler Jinja traduz e delega — comportamento inalterado, e as
+   > duas superfícies vão compartilhar a regra quando a API chegar.
+   > `verify_249_comercial_ops.py`: **17/17**, cobrindo as quatro regras delicadas (a quarta
+   > apareceu escrevendo o teste: anexar arquivo emite a nota, mas `issued_at` só é carimbado na
+   > transição — salvar de novo não reescreve a data de emissão).
+   >
+   > **Falta:** os endpoints e a UI das três coleções.
 3. ~~Corrigir `event_ops.update_event_comercial` para chamar `_sync_commission_payment`~~
    ✅ **FEITO em 20/08** (commit `a01ab48`). A função recebe `sincronizar_comissao` injetada, como
    o `group_ops`. **Provado antes do conserto:** venda de R$ 5.000 com vendedor comissionado

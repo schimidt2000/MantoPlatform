@@ -175,6 +175,48 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
 
+### 248 e 249 — Comissão sincroniza pela API, e o núcleo comercial sai do formulário            (branch · 2026-08-20 · sem migration)
+
+**248 — a comissão não acompanhava a edição pela tela nova.**
+`event_ops.update_event_comercial` grava `sale_value`, `seller_id` e `commission_rate` — os três
+insumos da comissão — e **nunca tocava em `CommissionPayment`**. O gêmeo Jinja sincronizava, então
+a mesma edição dava resultado diferente conforme a tela usada, e a nova era a errada. Provado antes
+do conserto: venda de R$ 5.000 com vendedor comissionado gerava zero linhas.
+
+**O estrago real era pequeno, e isto importa registrar** para ninguém procurar um rombo que não
+existe: `_resync_pending_commissions()` roda a cada abertura da tela de comissões ou de pagamentos
+(`api/financeiro_read.py:566` e `:670`) e recalcula **toda** linha *a pagar*. A auditoria do espelho
+achou **zero** linhas `a_pagar` divergentes. As 6 divergências existentes são todas `pago` ou
+`cancelado` — congeladas de propósito, porque histórico do que foi pago não acompanha recálculo.
+
+**O buraco que sobrava:** o resync só percorre linhas que já existem. Venda que nunca gerou linha
+nunca ganhava uma — são 3 eventos no espelho (`69`, `62`, `203`, R$ 12.355 somados, todos sem
+`sale_date`). **Não foram tocados:** comissão retroativa é decisão do dono. Ver §7.3b do plano.
+
+A correção injeta `sincronizar_comissao` em `update_event_comercial`, mesmo arranjo do `group_ops` —
+o domínio da agenda não deve puxar a régua de comissão de 9 ramos do financeiro, e
+`financeiro/routes.py` morre na fase 6.
+
+**249 — as três coleções comerciais saem do formulário.** Acréscimos, notas fiscais e parcelas
+eram escritos **só** em `_handle_update_comercial`, lidos linha a linha
+(`request.form.getlist("acrescimo_bv_recipient[]")`, arquivo por linha em `nf_file__<key>`). Não
+existiam para a plataforma React. Agora vivem em `app/calendar/comercial_ops.py`, com contrato de
+lista de dicionários; o Jinja traduz e delega.
+
+**Quatro regras que a tradução podia perder em silêncio — todas com teste:**
+
+1. **Lista ausente ≠ lista vazia.** `None` é "não mexa", `[]` é "apague tudo". No formulário era
+   `if _acr_tipos:` — sem a distinção, salvar outra parte da aba apagaria todos os acréscimos.
+2. **BV já pago continua pago.** A gravação apaga e recria, então o status é resgatado por
+   `(recebedor, pix)`. Sem isso, salvar a aba "despaga" alguém que já recebeu dinheiro.
+3. **Acréscimo percentual congela em reais** sobre a venda do momento do save.
+4. *(achada escrevendo o teste)* **Anexar arquivo emite a nota, mas `issued_at` só é carimbado na
+   transição** — salvar de novo com o mesmo arquivo não reescreve a data de emissão.
+
+**Verificação.** `verify_249_comercial_ops.py` 17/17 e o probe da comissão (R$ 5.000 → R$ 500;
+editar para R$ 2.500 → R$ 250), ambos contra o espelho. `verify_206` 20/20, `verify_246` 22/22,
+`check_url_for_orfaos` limpo, ruff 60 → 60. `calendar/routes.py`: 3.720 → 3.662 linhas.
+
 ### 246 e 247 — Agrupar e desagrupar eventos na plataforma nova            (branch · 2026-08-19 · sem migration)
 
 **Motivação.** Agrupar evento só existia na tela Jinja, que a fase 6 vai apagar. O dono confirmou
