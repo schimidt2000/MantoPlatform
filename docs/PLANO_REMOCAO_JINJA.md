@@ -10,7 +10,7 @@
 > | 3 — blueprints substituídos | ✅ em produção (pré-requisito de extração incluído) | `c94995d`, `0aef653`, `e8e17f6`, `5ab99db` |
 > | 5 — `/avaliar` | ✅ em produção | `d4d16cc`, `5ab99db` |
 > | 4 — decisões | ✅ todas respondidas · vira feature (ver §7) | — |
-> | 6 — `calendar` e `financeiro` | 🔨 em curso — a feature de grupos (§7) tem o **backend pronto e em produção** | `a58f54b`, `a0af948` |
+> | 6 — `calendar` e `financeiro` | 🔨 **4 dos 5 pré-requisitos fechados** — falta só a API+UI das coleções comerciais | `a58f54b`, `a01ab48`, `88ba7a7`, `1343939` |
 > | 7 — `auth` e fechamento | ⬜ pendente, depende da feature de conta | — |
 >
 > **~19.000 linhas de Jinja removidas.** Templates: 84 → 17. Rotas: 530 → 382.
@@ -393,7 +393,24 @@ em redirect 302 (no `server.js` ou no Flask, preservando os tokens antigos) e s�
 
 A parte cara, e por isso a última. A ordem interna importa:
 
-1. Extrair `financeiro_ops.py` (regra de comissão) de `financeiro/routes.py`
+1. ~~Extrair a régua de comissão de `financeiro/routes.py`~~
+   ✅ **FEITO em 20/08** (commit `1343939`). 230 linhas foram para `app/financeiro/comissoes_ops.py`
+   — o módulo que já era desse domínio, em vez de um `financeiro_ops.py` novo.
+
+   > **Era o pré-requisito mais perigoso.** `app/api/financeiro_read.py`, que alimenta o DRE, o
+   > pipeline de vendas e a planilha de pagamentos do React, importava `_event_commission`,
+   > `_event_cost`, `_group_cost`, `_get_commission_rate` e `_resync_pending_commissions` de
+   > dentro do blueprint Jinja. Apagar aquele arquivo derrubaria o financeiro inteiro da
+   > plataforma nova.
+   >
+   > **O recorte por intervalo levou junto 4 coisas que são camada de rota** (`_has_role`,
+   > `require_financeiro`, `_is_educamanto_responsavel` sem argumento, `require_vendas`) — todas
+   > dependem de `current_user`. Foram devolvidas. Quem apontou foi o `ruff --select F821`,
+   > reclamando de nomes de requisição dentro de um módulo que deve ser puro.
+   >
+   > **Verificação à altura de um motor que decide quanto cada vendedor recebe:** comissão, custo,
+   > custo de grupo e taxa calculados para os **450 eventos** do espelho antes (worktree do `main`)
+   > e depois, comparados item a item — **zero divergências**.
 2. Dar à API paridade de escrita para `EventAcrescimo` / `EventInvoice` / `EventInstallment`
 
    > **Dimensionado em 20/08 — é maior do que este item sugeria.** Confirmado que as três escritas
