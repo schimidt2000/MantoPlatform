@@ -445,8 +445,16 @@ A parte cara, e por isso a última. A ordem interna importa:
    > malformada nunca virar "apague tudo"). Ambas recusam satélite com 409 + `leader_id`.
    > `verify_251`: **12/12**.
    >
-   > **Falta:** editar e remover nota fiscal pela API (hoje só há `POST` de uma, com upload
-   > multipart) e a UI das três coleções.
+   > **API COMPLETA em 20/08** (commit `d5a25a7`): a nota fiscal ganhou `PATCH` e `DELETE` por id
+   > (`/api/events/<id>/invoices/<invoice_id>`). Duas decisões que ficaram no código: `PATCH` sem
+   > `file` **preserva** o anexo (é edição de valor/data, não remoção), e `DELETE` **não apaga o
+   > arquivo do disco** — nota fiscal é documento contábil. `verify_251`: **18/18**.
+   >
+   > *O teste pegou um erro dele mesmo: mandar `"1500,00"` faz o valor virar `None` em silêncio.
+   > Não é defeito — `_decimal_from_form` recebe número puro de propósito, e `"1.234,56"` é
+   > convenção do Jinja. Ficou comentado no teste.*
+   >
+   > **Falta só a UI das três coleções** para o item 2 fechar.
 3. ~~Corrigir `event_ops.update_event_comercial` para chamar `_sync_commission_payment`~~
    ✅ **FEITO em 20/08** (commit `a01ab48`). A função recebe `sincronizar_comissao` injetada, como
    o `group_ops`. **Provado antes do conserto:** venda de R$ 5.000 com vendedor comissionado
