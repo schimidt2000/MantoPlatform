@@ -395,7 +395,22 @@ A parte cara, e por isso a última. A ordem interna importa:
 
 1. Extrair `financeiro_ops.py` (regra de comissão) de `financeiro/routes.py`
 2. Dar à API paridade de escrita para `EventAcrescimo` / `EventInvoice` / `EventInstallment`
-3. Corrigir `event_ops.update_event_comercial` para chamar `_sync_commission_payment`
+3. ~~Corrigir `event_ops.update_event_comercial` para chamar `_sync_commission_payment`~~
+   ✅ **FEITO em 20/08** (commit `a01ab48`). A função recebe `sincronizar_comissao` injetada, como
+   o `group_ops`. **Provado antes do conserto:** venda de R$ 5.000 com vendedor comissionado
+   gerava zero linhas de comissão pela API.
+
+   > **O estrago era pequeno, e vale escrever por quê — para ninguém procurar um rombo que não
+   > existe.** `_resync_pending_commissions()` roda a cada abertura da tela de comissões ou de
+   > pagamentos (`api/financeiro_read.py:566` e `:670`) e recalcula **toda** linha *a pagar*. A
+   > auditoria do espelho achou **zero** linhas `a_pagar` com valor divergente. As 6 divergências
+   > existentes são todas `pago` ou `cancelado` — que o código congela de propósito, porque
+   > registro histórico do que foi de fato pago não se reescreve.
+   >
+   > **O que sobrava:** o resync só percorre linhas que já existem. Uma venda que nunca gerou
+   > linha nenhuma nunca ganhava uma. **São 3 eventos no espelho** — ids `69`, `62` e `203`, todos
+   > sem `sale_date`, somando R$ 12.355 de venda. **Não foram tocados:** mexer em comissão
+   > retroativa é decisão do João, não efeito colateral de um conserto. Ver a pendência abaixo.
 4. **Construir a gestão de grupos na API e na SPA** — confirmado em uso (decisão 1 da Fase 4).
    Agrupar e desagrupar no mínimo; renomear grupo confirmar se também é usado
 5. Só então apagar as 18 views Jinja, os 23 handlers `_handle_*` e as 4.992 linhas de template
@@ -525,6 +540,22 @@ era o item 1 da Fase 6.
 **Armadilha a não repetir:** as regras de `routes.py:1554-1569` são o que impede grupo aninhado
 (A→B→C). Portar "quase igual" cria hierarquia que `_group_events` (que só olha um nível) ignora em
 silêncio, e o financeiro passa a somar errado.
+
+### 7.3b Pendências de comissão para o João decidir (nenhuma foi tocada)
+
+Duas coisas que a apuração encontrou no banco e que **não** foram alteradas, porque mexer em
+comissão retroativa é decisão de dono, não conserto técnico:
+
+1. **3 eventos com venda e sem linha de comissão nenhuma** — ids `69` (R$ 4.180), `62` (R$ 6.800)
+   e `203` (R$ 1.375), todos com `sale_date` vazio. Depois do commit `a01ab48` basta abrir cada um
+   e salvar a aba Comercial para a linha nascer; ou decidir que são antigos demais e ficam como
+   estão.
+2. **A comissão órfã do evento 287** — R$ 137,50 marcados como *pagos* num evento que virou
+   satélite e teve a venda zerada. O cálculo atual diz que deveria ser zero. Comissão paga é
+   dinheiro que saiu: só um humano decide se vira estorno ou fica como registro.
+
+As outras 5 divergências entre valor gravado e cálculo atual são todas `pago`/`cancelado` e são
+**esperadas** — o histórico do que foi pago não acompanha recálculo.
 
 ### 7.4 Decisão do José sobre o `Produtos Catalogo` (item 10)
 
