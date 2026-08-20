@@ -1082,7 +1082,7 @@ def clear_figurino_done(event: Any, role: Any, *, actor_name: str, tz: ZoneInfo)
 def ensure_feedback_token(event: Any) -> str:
     """Devolve o token público de avaliação da cliente, gerando-o na primeira chamada.
 
-    Mesma regra de `app/feedback/routes.py::gerar_link` (token aleatório, nunca o id) — a API
+    Token aleatório, nunca o id sequencial, para o link não ser adivinhável — a API
     reusa esta função para não ter uma segunda geração de token.
     """
     import secrets
