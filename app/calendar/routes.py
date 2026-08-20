@@ -14,7 +14,7 @@ from flask import Blueprint, redirect, request, session, url_for, render_templat
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
-from app.calendar import group_ops
+from app.calendar import comercial_ops, group_ops
 
 from .service import (
     get_authorization_url,
@@ -34,7 +34,7 @@ from app.constants import (
 )
 from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, CommissionPayment, SpecialExpense, ClientFeedback, EventReimbursement, EventAcrescimo
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, SpecialExpense, ClientFeedback, EventReimbursement, EventAcrescimo
 from app.email_service import send_removal_email
 from app.storage import (
     ALLOWED_DOCUMENT_EXTENSIONS,
@@ -846,7 +846,6 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     # ── Acréscimos tipados (feature 099) ─────────────────────────────────────
     # Recria a coleção a partir das linhas do form; congela o valor efetivo em R$ (amount_brl):
     # R$ direto, ou % sobre o valor de venda. O tipo BV guarda recebedor/PIX para a planilha de pagamentos.
-    from app.models import EventAcrescimo as _EventAcrescimo
 
     _acr_tipos      = request.form.getlist("acrescimo_tipo[]")
     _acr_descricoes = request.form.getlist("acrescimo_descricao[]")
@@ -855,98 +854,45 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     _acr_bv_recip   = request.form.getlist("acrescimo_bv_recipient[]")
     _acr_bv_pix     = request.form.getlist("acrescimo_bv_pix[]")
 
-    if _acr_tipos:  # só mexe nos acréscimos se o editor foi enviado (evita apagar em POSTs de outras seções)
-        # preserva o status de pagamento de BVs já existentes (por recebedor+pix), para não "despagar"
-        _prev_bv_status = {
-            (a.bv_recipient or "", a.bv_pix or ""): a.bv_payment_status
-            for a in event.acrescimos if a.is_bv
-        }
-        _EventAcrescimo.query.filter_by(event_id=event.id).delete()
-        _sale = Decimal(event.sale_value or 0)
-        for _i, _tipo in enumerate(_acr_tipos):
-            _tipo = (_tipo or "").strip()
-            if not _tipo:
-                continue
-            _val = parse_brl(_acr_valores[_i]) if _i < len(_acr_valores) else None
-            if _val is None or _val == 0:
-                continue
-            _is_pct = (_acr_percents[_i] == "1") if _i < len(_acr_percents) else False
-            _amount = (
-                (_sale * Decimal(_val) / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                if _is_pct else Decimal(_val)
-            )
-            _is_bv = _tipo == ACRESCIMO_TIPO_BV
-            _recip = (_acr_bv_recip[_i].strip() if _i < len(_acr_bv_recip) else "") or None
-            _pix = (_acr_bv_pix[_i].strip() if _i < len(_acr_bv_pix) else "") or None
-            _status = _prev_bv_status.get((_recip or "", _pix or ""), "nao_pago") if _is_bv else "nao_pago"
-            db.session.add(_EventAcrescimo(
-                event_id=event.id,
-                tipo=_tipo,
-                descricao=(_acr_descricoes[_i].strip() if _i < len(_acr_descricoes) else "") or None,
-                is_percent=_is_pct,
-                value=Decimal(_val),
-                amount_brl=_amount,
-                is_bv=_is_bv,
-                bv_recipient=_recip if _is_bv else None,
-                bv_pix=_pix if _is_bv else None,
-                bv_payment_status=_status,
-            ))
+    # Traduz as listas paralelas do formulário para o contrato de `comercial_ops`. A lista só é
+    # montada quando o editor veio no POST — `None` diz ao ops "não mexa", que é o que impede um
+    # salvamento de outra seção da aba apagar todos os acréscimos.
+    _acrescimos = None
+    if _acr_tipos:
+        _acrescimos = [
+            {
+                "tipo": _acr_tipos[_i],
+                "descricao": _acr_descricoes[_i] if _i < len(_acr_descricoes) else None,
+                "is_percent": (_acr_percents[_i] == "1") if _i < len(_acr_percents) else False,
+                "value": parse_brl(_acr_valores[_i]) if _i < len(_acr_valores) else None,
+                "bv_recipient": _acr_bv_recip[_i] if _i < len(_acr_bv_recip) else None,
+                "bv_pix": _acr_bv_pix[_i] if _i < len(_acr_bv_pix) else None,
+            }
+            for _i in range(len(_acr_tipos))
+        ]
+    comercial_ops.substituir_acrescimos(event, _acrescimos)
 
     # ── Notas fiscais (feature 069): coleção de notas por evento (valor + data + arquivo) ──
     # Linhas do form: nf_key[] ("id_<n>" p/ existente, "new_*" p/ nova), nf_amount[], nf_date[];
     # arquivo opcional por linha em nf_file__<key>. Linha com arquivo → nota "emitida".
-    if not event.with_invoice:
-        # venda deixou de ser "com nota": remove as notas
-        EventInvoice.query.filter_by(event_id=event.id).delete()
-    else:
-        _existing = {inv.id: inv for inv in event.invoices}
-        _keys = request.form.getlist("nf_key[]")
-        _amounts = request.form.getlist("nf_amount[]")
-        _dates = request.form.getlist("nf_date[]")
-        _seen_ids: set[int] = set()
-        for _i, _key in enumerate(_keys):
-            _key = (_key or "").strip()
-            if not _key:
-                continue
-            _amt = parse_brl(_amounts[_i]) if _i < len(_amounts) else None
-            _draw = (_dates[_i] if _i < len(_dates) else "").strip()
-            try:
-                _dval = date.fromisoformat(_draw) if _draw else None
-            except ValueError:
-                _dval = None
-            _upload = _save_nf_file(request.files.get(f"nf_file__{_key}"))
-            if _key.startswith("id_") and _key[3:].isdigit():
-                _inv = _existing.get(int(_key[3:]))
-                if not _inv:
-                    continue
-                _seen_ids.add(_inv.id)
-                _inv.amount = _amt
-                _inv.issue_date = _dval
-                if _upload:
-                    _inv.file = _upload
-                    if _inv.status != "emitida":
-                        _inv.status = "emitida"
-                        _inv.issued_at = datetime.now(tz=tz_sp)
-            else:  # nova nota
-                if _amt is None and not _dval and not _upload:
-                    continue
-                db.session.add(EventInvoice(
-                    event_id=event.id, amount=_amt, issue_date=_dval, file=_upload,
-                    status="emitida" if _upload else "a_emitir",
-                    issued_at=datetime.now(tz=tz_sp) if _upload else None,
-                ))
-        # remove notas existentes que não vieram no form (removidas pelo usuário)
-        for _id, _inv in _existing.items():
-            if _id not in _seen_ids:
-                db.session.delete(_inv)
-        # sinaliza divergência soma != total (sem bloquear)
-        _sum = sum((parse_brl(x) or Decimal("0") for x in _amounts), Decimal("0"))
-        if event.sale_value and _sum and _sum != Decimal(event.sale_value):
-            flash(
-                f"Atenção: a soma das notas (R$ {_sum:.2f}) é diferente do valor da venda "
-                f"(R$ {Decimal(event.sale_value):.2f}).",
-                "warning",
-            )
+    # O upload fica aqui de propósito: o ops recebe o caminho já salvo, nunca o `FileStorage`.
+    _nf_keys = request.form.getlist("nf_key[]")
+    _nf_amounts = request.form.getlist("nf_amount[]")
+    _nf_dates = request.form.getlist("nf_date[]")
+    _notas = []
+    for _i, _key in enumerate(_nf_keys):
+        _key = (_key or "").strip()
+        if not _key:
+            continue
+        _notas.append({
+            # "id_<n>" identifica nota existente; qualquer outra chave ("new_*") é nota nova.
+            "id": int(_key[3:]) if _key.startswith("id_") and _key[3:].isdigit() else None,
+            "amount": parse_brl(_nf_amounts[_i]) if _i < len(_nf_amounts) else None,
+            "issue_date": _nf_dates[_i] if _i < len(_nf_dates) else None,
+            "file": _save_nf_file(request.files.get(f"nf_file__{_key}")),
+        })
+    for _aviso in comercial_ops.sincronizar_notas(event, _notas, datetime.now(tz=tz_sp)):
+        flash(f"Atenção: {_aviso}", "warning")
 
     _VALID_METHODS = {"avista", "pix_parcelado", "faturado", "cartao", "futuro", "parcelado_datas"}
     pay_method = request.form.get("payment_method", "").strip()
@@ -965,19 +911,15 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
     # Cronograma de parcelas com data + valor (feature 065): recria as parcelas do evento.
     if pay_method == "parcelado_datas":
-        EventInstallment.query.filter_by(event_id=event.id).delete()
-        _dates = request.form.getlist("parcela_date[]")
-        _amounts = request.form.getlist("parcela_amount[]")
-        for _i, _draw in enumerate(_dates):
-            _draw = (_draw or "").strip()
-            _amt = parse_brl(_amounts[_i]) if _i < len(_amounts) else None
-            if not _draw or _amt is None:
-                continue
-            try:
-                _d = date.fromisoformat(_draw)
-            except ValueError:
-                continue
-            db.session.add(EventInstallment(event_id=event.id, due_date=_d, amount=_amt))
+        _p_dates = request.form.getlist("parcela_date[]")
+        _p_amounts = request.form.getlist("parcela_amount[]")
+        comercial_ops.substituir_parcelas(event, [
+            {
+                "due_date": _p_dates[_i],
+                "amount": parse_brl(_p_amounts[_i]) if _i < len(_p_amounts) else None,
+            }
+            for _i in range(len(_p_dates))
+        ])
 
     if any(r.name.upper() == RoleName.COMERCIAL for r in current_user.roles):
         if not event.seller_id:
