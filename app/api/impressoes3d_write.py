@@ -54,6 +54,7 @@ def api_3d_acervo_create() -> Any:
             name=request.form.get("name", ""),
             photo_file=request.files.get("photo"),
             model_files=_model_files(),
+            nfc_prefix=request.form.get("nfc_prefix"),
         )
     except ops.Impressao3DValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})

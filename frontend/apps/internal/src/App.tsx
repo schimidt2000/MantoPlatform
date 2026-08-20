@@ -53,6 +53,7 @@ import { AvaliacaoCastingPage } from "./pages/AvaliacaoCastingPage";
 import { FormulariosAdminPage } from "./pages/FormulariosAdminPage";
 import { Acervo3DPage } from "./pages/Acervo3DPage";
 import { Fila3DPage } from "./pages/Fila3DPage";
+import { Tags3DPage } from "./pages/Tags3DPage";
 import { MarketingPainelPage } from "./pages/MarketingPainelPage";
 import { VirtuaisCampanhasPage } from "./pages/VirtuaisCampanhasPage";
 import { VirtuaisCampanhaFormPage } from "./pages/VirtuaisCampanhaFormPage";
@@ -104,6 +105,7 @@ export function App() {
           <Route path="/talents/:id/edit" element={<TalentEditRedirect />} />
           <Route path="/3d/acervo" element={<Acervo3DPage />} />
           <Route path="/3d/fila" element={<Fila3DPage />} />
+          <Route path="/3d/tags" element={<Tags3DPage />} />
           <Route path="/virtuais/campanhas" element={<VirtuaisCampanhasPage />} />
           <Route path="/virtuais/campanhas/:id" element={<VirtuaisCampanhaFormPage />} />
           <Route path="/virtuais/devolucoes" element={<VirtuaisDevolucoesPage />} />

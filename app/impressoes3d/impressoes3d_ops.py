@@ -120,7 +120,11 @@ def _attach_model_files(item: Acervo3DItem, model_files: list[Any], start_positi
 
 
 def create_acervo_item(
-    *, name: str, photo_file: Any, model_files: list[Any] | None = None
+    *,
+    name: str,
+    photo_file: Any,
+    model_files: list[Any] | None = None,
+    nfc_prefix: Any = None,
 ) -> Acervo3DItem:
     """Cadastra uma peça nova no Acervo 3D.
 
@@ -129,6 +133,7 @@ def create_acervo_item(
         photo_file: Foto de preview JPG/PNG (obrigatória — a seleção da peça é visual).
         model_files: Arquivos 3D `.stl`/`.3mf`/`.zip` — **pelo menos um**. Um mesmo presente
             costuma vir fatiado em várias partes (corpo, argola, base).
+        nfc_prefix: Prefixo NFC (feature 255) — não-vazio habilita a peça para tags.
 
     Raises:
         Impressao3DValidationError: Nome vazio, foto/arquivo ausente ou extensão não suportada.
@@ -147,9 +152,15 @@ def create_acervo_item(
     for model_file in valid_models:
         _validate_extension(model_file, "files", ACERVO_3D_MODEL_EXTENSIONS, "STL, 3MF ou ZIP")
 
+    try:
+        clean_prefix = nfc_ops.normalize_nfc_prefix(nfc_prefix)
+    except nfc_ops.NfcValidationError as exc:
+        raise Impressao3DValidationError(exc.field, exc.message) from exc
+
     item = Acervo3DItem(
         name=clean_name,
         photo_url=save_file(photo_file, ACERVO_3D_PHOTO_SUBFOLDER),
+        nfc_prefix=clean_prefix,
     )
     db.session.add(item)
     _attach_model_files(item, valid_models, 0)
