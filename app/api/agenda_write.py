@@ -966,8 +966,15 @@ def api_update_event_comercial(event_id: int) -> Any:
         return json_error("Data inválida (use AAAA-MM-DD)", 400)
 
     from app.calendar.event_ops import update_event_comercial
+    from app.financeiro.routes import _sync_commission_payment
 
-    update_event_comercial(event, data, actor_name=current_user.name, tz=_TZ_SP)
+    update_event_comercial(
+        event,
+        data,
+        actor_name=current_user.name,
+        tz=_TZ_SP,
+        sincronizar_comissao=_sync_commission_payment,
+    )
     return _event_detail_json(event)
 
 

@@ -813,7 +813,14 @@ def update_event_basics(
     )
 
 
-def update_event_comercial(event: Any, data: dict, *, actor_name: str, tz: ZoneInfo) -> None:
+def update_event_comercial(
+    event: Any,
+    data: dict,
+    *,
+    actor_name: str,
+    tz: ZoneInfo,
+    sincronizar_comissao: Any = None,
+) -> None:
     """Grava os valores comerciais do evento na própria aba Comercial (feature 215).
 
     Mesmos campos e mesma regra de cortesia/permuta de `update_event_core` (venda zerada
@@ -826,6 +833,18 @@ def update_event_comercial(event: Any, data: dict, *, actor_name: str, tz: ZoneI
             `payment_method`, `payment_installments`, `payment_due_date`).
         actor_name: Nome de quem editou, para o `EventLog`.
         tz: Fuso usado no carimbo do log.
+        sincronizar_comissao: Chamada com o evento depois de gravar, para criar ou atualizar a
+            linha de comissão. Esta função escreve `sale_value`, `seller_id` e `commission_rate`
+            — os três insumos da comissão — e até aqui não mexia nela: o gêmeo Jinja
+            (`_handle_update_comercial`) sincronizava e esta não, então a mesma edição dava
+            resultados diferentes conforme a tela usada.
+
+            O estrago era pequeno porque `_resync_pending_commissions()` recalcula toda linha *a
+            pagar* quando alguém abre a tela de comissões ou de pagamentos. Mas ele só percorre
+            linhas que JÁ existem: uma venda que nunca gerou linha nenhuma nunca ganhava uma.
+
+            Injetada, e não importada, para o domínio da agenda não puxar a régua de comissão de
+            9 ramos do financeiro — mesmo arranjo de `calendar/group_ops.py`.
     """
     is_cortesia = bool(data.get("is_cortesia_permuta"))
     event.is_cortesia_permuta = is_cortesia
@@ -839,6 +858,10 @@ def update_event_comercial(event: Any, data: dict, *, actor_name: str, tz: ZoneI
     event.payment_method = data.get("payment_method")
     event.payment_installments = data.get("payment_installments")
     event.payment_due_date = data.get("payment_due_date")
+
+    # Antes do commit: `_sync_commission_payment` não commita, então as duas escritas saem juntas.
+    if sincronizar_comissao is not None:
+        sincronizar_comissao(event)
 
     db.session.add(EventLog(
         event_id=event.id,
