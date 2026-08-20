@@ -3169,6 +3169,10 @@ def _validate_event_core(data: dict) -> dict[str, str]:
     title = (data.get("title") or "").strip()
     if not title:
         errors["title"] = "Título obrigatório."
+    # 480 e não 500: o banco guarda o título COM o prefixo "(TIPO) " (feature 254 — um título
+    # listando o elenco inteiro estourava o varchar DEPOIS do insert no Google, deixando órfão).
+    elif len(title) > 480:
+        errors["title"] = f"Título com {len(title)} caracteres — o máximo é 480. Encurte a lista."
     if _parse_duracao(data.get("duracao")) is None:
         errors["duracao"] = "Duração inválida."
 
