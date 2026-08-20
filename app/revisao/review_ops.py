@@ -119,7 +119,11 @@ def save_assets(
             continue
         media_type = detect_media_type(file.filename)
         if not media_type:
-            errors.append(f"{file.filename}: tipo não suportado.")
+            errors.append(
+                f"{file.filename}: formato não aceito. "
+                "Vídeo: MP4, MOV, WEBM, M4V ou OGV (os que o navegador reproduz). "
+                "Áudio: MP3, WAV, M4A, OGG, AAC. Imagem: JPG, PNG, WEBP, GIF. Ou PDF."
+            )
             continue
         if _file_size(file) > _MAX_FILE:
             errors.append(f"{file.filename}: arquivo acima de 512 MB.")

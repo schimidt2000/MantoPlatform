@@ -15,6 +15,7 @@ import {
   useUpdateAssetStatus,
   type AddCommentInput,
 } from "../lib/revisao";
+import { UploadProgressBar } from "../components/UploadProgressBar";
 import {
   CommentFeed,
   NewCommentForm,
@@ -50,6 +51,7 @@ export function RevisaoAssetPage() {
   const imgRef = useRef<HTMLImageElement>(null);
   const [imageClick, setImageClick] = useState<{ x: number; y: number } | null>(null);
   const [replaceError, setReplaceError] = useState<string | null>(null);
+  const [replaceProgress, setReplaceProgress] = useState<number | null>(null);
   const reduceMotion = useReducedMotion();
 
   if (query.isLoading) {
@@ -333,15 +335,27 @@ export function RevisaoAssetPage() {
                   <input
                     type="file"
                     className="text-sm text-ink"
+                    disabled={replaceAsset.isPending}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
+                      e.target.value = "";
                       if (!file) return;
                       setReplaceError(null);
-                      replaceAsset.mutate(file, {
-                        onError: (err) =>
-                          setReplaceError(err instanceof ApiRequestError ? err.message : "Falha ao substituir."),
-                      });
+                      setReplaceProgress(0);
+                      replaceAsset.mutate(
+                        { file, onProgress: setReplaceProgress },
+                        {
+                          onSettled: () => setReplaceProgress(null),
+                          onError: (err) =>
+                            setReplaceError(
+                              err instanceof ApiRequestError ? err.message : "Falha ao substituir.",
+                            ),
+                        },
+                      );
                     }}
+                  />
+                  <UploadProgressBar
+                    fraction={replaceAsset.isPending ? replaceProgress : null}
                   />
                   {replaceError && <p className="mt-1 text-xs text-red">{replaceError}</p>}
                 </div>
