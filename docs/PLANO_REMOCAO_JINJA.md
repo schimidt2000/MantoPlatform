@@ -395,6 +395,23 @@ A parte cara, e por isso a última. A ordem interna importa:
 
 1. Extrair `financeiro_ops.py` (regra de comissão) de `financeiro/routes.py`
 2. Dar à API paridade de escrita para `EventAcrescimo` / `EventInvoice` / `EventInstallment`
+
+   > **Dimensionado em 20/08 — é maior do que este item sugeria.** Confirmado que as três escritas
+   > existem **só** em `calendar/routes.py` (acréscimos `:864-893`, notas `:898-960`, parcelas
+   > `:968-980`, mais a criação em `:3308-3320`). Mas o bloco não é extraível movendo linhas: ele
+   > lê `request.form.getlist("acrescimo_bv_recipient[]")` e afins **linha a linha do formulário**,
+   > com upload de arquivo por nota (`nf_file__<key>`). Portar isso é **redesenhar o contrato de
+   > entrada** — de listas paralelas de formulário para objetos estruturados —, não mover código.
+   >
+   > Três regras de negócio que o redesenho não pode perder, e que só aparecem lendo o bloco:
+   > - o editor de acréscimos só age **se foi enviado** (`if _acr_tipos:`), senão um POST de outra
+   >   seção apagaria todos os acréscimos do evento;
+   > - o status de pagamento de BV já existente é **preservado por (recebedor, pix)** — sem isso,
+   >   salvar a aba "despaga" um BV já pago;
+   > - acréscimo percentual é calculado sobre a venda no momento do save e gravado em `amount_brl`.
+   >
+   > Estimativa honesta: é uma feature própria (ops + endpoints + UI das três coleções), da ordem
+   > da feature de grupos. **Não começar como apêndice de outra tarefa.**
 3. ~~Corrigir `event_ops.update_event_comercial` para chamar `_sync_commission_payment`~~
    ✅ **FEITO em 20/08** (commit `a01ab48`). A função recebe `sincronizar_comissao` injetada, como
    o `group_ops`. **Provado antes do conserto:** venda de R$ 5.000 com vendedor comissionado
