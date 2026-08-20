@@ -41,6 +41,8 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **244 / 245-remocao-jinja-fases-3-e-5** | Onze blueprints Jinja removidos: oito inteiros (rh, clientes, gastos, revisão, orçamento, formulários, admin, talents) e três parciais (catálogo, figurino, feedback), guardando só as rotas de arquivo, as duas de impressão e o redirect do `/avaliar`. −14.364 linhas. Ferramenta nova: detector de `url_for` órfão | 2026-08-19 | `—` | (aqui) | — |
+| **242 / 243-remocao-jinja-fase2-e-extracao** | Portal do Artista Jinja removido (−3.230 linhas) e a lógica que a API viva importava de dentro dos `routes.py` tirada para os `*_ops.py` — cinco módulos dependiam disso | 2026-08-19 | `—` | (aqui) | — |
 | **241-avaliar-aponta-para-react** | O link de avaliação da cliente para de cair no Jinja: `/avaliar/<token>` vira 302 para a página React (feature 164, ociosa até aqui) e os geradores emitem o endereço novo. A rota antiga fica para sempre — o token não expira | 2026-08-19 | `—` | (aqui) | — |
 | **240-remocao-jinja-fase1** | Remoção do Jinja legado, fase 1: 3 templates órfãos, 1 gif órfão, `travel_estimate` (já sem decorator) e `_is_outside_sp`, rotas `/impersonate/*`. −1.043 linhas, zero mudança de comportamento. Plano completo em `docs/PLANO_REMOCAO_JINJA.md` | 2026-08-19 | `—` | (aqui) | — |
 | **239-backlog-agosto** | Carrinho de transporte fora de SP com teto efetivo p/ superadmin; "Técnico de Som (Presença)" sem valor e fora de todos os somatórios; troca de tipo do evento reage sozinha (push do título antes da parte destrutiva); nomes de equipe nunca no título; link do orçamento na aba Comercial; badge de maquiador; Catálogo no topo do menu; link do portal na cobrança WhatsApp; EducaManto (InfoTip, contratação Manto) — 11 itens do backlog | 2026-08-18 | `d1c7b93a2f60`, `e2d8ca4b3071` | (aqui) | — |
@@ -172,6 +174,44 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 244 e 245 — Fases 3 e 5 da remoção do Jinja: onze blueprints            (branch · 2026-08-19 · sem migration)
+
+**244 — os oito que saem inteiros.** `rh` (1 rota), `clientes` (7), `gastos` (18), `revisao` (14),
+`orcamento` (14), `formularios` (17), `admin` (24) e `talents` (13), com os templates. **47
+arquivos, −11.864 linhas.** Os `*_ops.py` de cada pacote **ficaram** — são eles que a API consome.
+
+**245 — os três parciais.** Cada um perdeu a superfície Jinja e manteve o que a plataforma nova
+depende: `catalogo` fica só com as rotas de arquivo (`/midia/*`, `/og/*`); `figurino` fica com as
+**duas rotas de impressão**, que não são legado — são o único Jinja que a interface nova abre de
+propósito (`window.open` em `FigurinoListPage.tsx` e `FigurinoSection.tsx`); `feedback` fica só com
+o `GET /avaliar/<token>` que virou 302 na 241 e **não some nunca**, porque o token não expira.
+**−2.500 linhas.** Fecha também a fase 5.
+
+Saiu junto o importador de fichas do Google Drive (`/figurinos/sync-drive`) — o dono confirmou que
+rodou uma vez só, na migração — levando as ~160 linhas do parser de Google Docs que só ele chamava.
+`drive_service.normalize_name` **continua em uso**: é o que casa dois cargos escritos diferente
+como o mesmo personagem na impressão do evento.
+
+**Ferramenta nova: `scripts/db/check_url_for_orfaos.py`.** O Flask só descobre `BuildError` em
+tempo de execução, quando alguém abre a página — numa remoção em lote o estrago apareceria dias
+depois, numa tela que ninguém tocou. O script varre todos os templates, extrai o primeiro argumento
+de cada `url_for` e confere contra o `url_map` real. Rodar depois de cada lote. (Vive em
+`scripts/db/`, que é gitignorada, então é local.)
+
+**Pegadinha que se repetiu:** `scripts/db/verify_220_vinculos_formularios.py` importava dois
+símbolos de `app.formularios.routes` — mesma classe do `verify_166` do `rh`. A pasta é gitignorada,
+então **só o grep encontra**; o `git grep` não. Por isso a regra agora é varrer o repo inteiro,
+`scripts/` incluído.
+
+**Verificação.** `create_app()` sobe com 382 rotas; `check_url_for_orfaos` zero órfãos; as APIs
+equivalentes seguem registradas (`/api/rh/dashboard`, `/api/admin/users`, `/api/clientes/`,
+`/api/gastos`, `/api/revisao`, `/api/formularios`, `/api/talents`, `/api/catalogo`); as quatro
+superfícies vivas de pé (`/uploads/`, `/figurinos/<id>/print`, `/portal/photo`, `/avaliar/<token>`);
+`verify_206` 20/20; `verify_241` 11/11; ruff medido com worktree de `main`: 98 → 60 erros, nenhum
+novo. Templates: 84 → 17.
+
+**Estado:** o Jinja que resta é exatamente `calendar`, `financeiro` (+`/vendas/`) e `auth`.
 
 ### 242 e 243 — Portal Jinja removido, e a lógica que a API importava sai do Jinja            (branch · 2026-08-19 · sem migration)
 

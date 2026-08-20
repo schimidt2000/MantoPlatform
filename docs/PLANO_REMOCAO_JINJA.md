@@ -1,5 +1,29 @@
 # Plano de remoção do sistema Jinja legado
 
+> ## Estado em 19/08/2026 — fases 1, 2, 3 e 5 **CONCLUÍDAS e em produção**
+>
+> | Fase | Estado | Commit |
+> | --- | --- | --- |
+> | 0 — interruptor | **pulada** (prejudicada: as decisões foram respondidas direto) | — |
+> | 1 — órfãos e código morto | ✅ em produção | `c628d25` |
+> | 2 — Portal do Artista | ✅ em produção | `9d42f82` |
+> | 3 — blueprints substituídos | ✅ em produção (pré-requisito de extração incluído) | `c94995d`, `0aef653`, `e8e17f6`, `5ab99db` |
+> | 5 — `/avaliar` | ✅ em produção | `d4d16cc`, `5ab99db` |
+> | 4 — decisões | ✅ todas respondidas · vira feature (ver §7) | — |
+> | 6 — `calendar` e `financeiro` | ⬜ pendente, e é a parte cara | — |
+> | 7 — `auth` e fechamento | ⬜ pendente, depende da feature de conta | — |
+>
+> **~19.000 linhas de Jinja removidas.** Templates: 84 → 17. Rotas: 530 → 382.
+>
+> **O que resta de Jinja é exatamente:** `calendar` (agenda, eventos, ensaios, cargos),
+> `financeiro` (+ `/vendas/`) e `auth` (login, perfil, troca de senha). Mais os intocáveis da §5.
+>
+> **A regra que nasceu do caminho:** antes de apagar qualquer blueprint, rodar
+> `grep "from app\.<nome>\.routes import"` no repo **inteiro, incluindo `scripts/`**. Foi assim que
+> se descobriu que cinco módulos vivos importavam lógica de dentro do Jinja. E rodar
+> `scripts/db/check_url_for_orfaos.py` depois de cada lote.
+
+
 **Data:** 19/08/2026 · **Estado do repositório:** `main` limpo, sincronizado com `origin/main` (5b14d2d)
 
 Este documento é o plano para apagar as páginas server-rendered em Jinja sem afetar a plataforma
