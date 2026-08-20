@@ -175,6 +175,56 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
 
+### 246 e 247 — Agrupar e desagrupar eventos na plataforma nova            (branch · 2026-08-19 · sem migration)
+
+**Motivação.** Agrupar evento só existia na tela Jinja, que a fase 6 vai apagar. O dono confirmou
+que é "importantíssimo". E a ausência dela na plataforma nova já causava **dois defeitos em
+produção**, encontrados na apuração: era impossível cancelar um evento principal pela interface
+nova (a mensagem mandava desagrupar antes, e desagrupar não existia — beco sem saída), e
+`PATCH /api/events/<id>/comercial` **aceitava gravar venda num satélite**, valor que entrava no
+banco e sumia de todos os relatórios, porque o financeiro pula satélites de propósito.
+
+**Núcleo.** `app/calendar/group_ops.py`, extraído de `calendar/routes.py`. Funções puras; os
+handlers Jinja passaram a delegar, então as duas superfícies não divergem enquanto o Jinja existir.
+
+**Duas travas que o Jinja não tinha**, decididas pelo dono:
+
+1. **Cópia antes de apagar.** Agrupar zera os 14 campos comerciais do satélite e desagrupar **não
+   devolve**. Agora os valores vão para o histórico do evento antes de sumirem — não restaura
+   sozinho, mas dá para consultar e redigitar. `Decimal` vai como string, não float: este snapshot
+   existe justamente para alguém redigitar um valor de venda.
+2. **Comissão órfã.** Agrupar zerava a venda e não mexia na comissão (no espelho, o evento 287 é
+   satélite com venda zerada e R$ 137,50 marcados como *pagos*). `agrupar` recebe
+   `sincronizar_comissao` injetada e cancela a linha **a pagar**; a já paga sobrevive. A injeção
+   evita a agenda importar a régua de comissão de 9 ramos do financeiro.
+
+**Endpoints.** `GET .../grupo/candidatos?q=` (busca no **servidor** — o Jinja despejava os 354
+eventos no HTML), `POST/DELETE/PATCH .../grupo`, e `DELETE .../grupo/satelites/<id>`, que o Jinja
+não tinha: sem ele, dissolver o grupo de 13 satélites exigia abrir os 13.
+
+**Tela.** `GrupoPanel` com os três estados e `AgruparEventosDialog` com confirmação em duas etapas
+— o 409 devolve **quais** eventos perdem venda e **quanto**, e o diálogo lista nome e valor antes
+de perguntar (a tela antiga tinha um checkbox genérico). Se o principal escolhido não for o evento
+aberto, navega para ele: a página em que a pessoa está pode ter acabado de virar satélite.
+
+**Pegadinhas — três, e duas só apareceram testando:**
+
+- `json_error` e `ApiRequestError` **descartavam** qualquer chave além de `message`/`fields`. Sem
+  os dois lados, `events_with_sale` e `leader_id` chegavam e eram jogados fora.
+- `datetime` não estava importado em `agenda_write.py` nem em `agenda_read.py` (só `date`). O
+  segundo passou no teste contra dado real **por sorte** — todos os satélites do espelho têm
+  horário — e quebraria no primeiro sem. Foi o `ruff --select F821` que pegou.
+- **O `GrupoPanel` derrubava a página inteira** quando o bloco `group` não vinha: tela branca, não
+  um painel a menos. O typecheck não pega isso. Apareceu na verificação visual, com o backend de
+  dev rodando código anterior — que é exatamente o descompasso backend/bundle que este projeto já
+  registrou antes. O campo virou opcional.
+
+**Verificação.** `verify_246_grupos_api.py` 22/22 contra o espelho (inclui: o aviso mostra o valor
+exato antes de apagar; a cópia chegou ao histórico; a porta do satélite fechou; **os 5 grupos reais
+continuam intactos**). `npx tsc --noEmit` limpo nos dois apps. E na tela, contra o espelho: o
+evento 319 lista seus 13 satélites com "Remover" em cada um, o 329 mostra o caminho de volta ao
+principal, e o painel de venda do satélite ficou com **zero botões**.
+
 ### 244 e 245 — Fases 3 e 5 da remoção do Jinja: onze blueprints            (branch · 2026-08-19 · sem migration)
 
 **244 — os oito que saem inteiros.** `rh` (1 rota), `clientes` (7), `gastos` (18), `revisao` (14),
