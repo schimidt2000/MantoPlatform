@@ -223,6 +223,16 @@ const PUBLIC_FORM_PREFIX = "/f";
  */
 const CADASTRO_PREFIX = "/cadastro";
 
+/**
+ * Página pública das tags NFC das peças 3D (feature 255): `/nfc/<code>` na raiz do domínio.
+ *
+ * MESMO mecanismo do `/cadastro` (servir o bundle da vitrine SEM reescrever `req.url`), mas com
+ * uma restrição mais dura que a dele: esta URL está GRAVADA em tags NFC físicas dentro das
+ * luminárias entregues às clientes — é imutável e eterna. Nunca renomear este prefixo; todo o
+ * conteúdo da página evolui no servidor (`/api/nfc/<code>`), nunca na URL.
+ */
+const NFC_PREFIX = "/nfc";
+
 /** Rotas Jinja remanescentes, casadas por regex para não sombrear rotas do React Router. */
 const BACKEND_PATTERNS = [
   /^\/figurinos\/\d+\/print(?:[/?]|$)/,
@@ -566,6 +576,12 @@ const server = http.createServer((req, res) => {
   // de host do portal: sem isto, `portal.mantoproducoes.com.br/cadastro` seria empurrado para
   // `/portal/cadastro`, que não existe no bundle do Portal do Artista.
   if (req.url && matchesPrefix(req.url, CADASTRO_PREFIX)) {
+    return handler(req, res, { public: PUBLIC_DIST, ...SERVE_OPTIONS });
+  }
+
+  // Página pública das tags NFC (ver NFC_PREFIX) — mesmo arranjo do cadastro: o bundle da
+  // vitrine cai no fallback de SPA e o roteador detecta a superfície de raiz pela URL.
+  if (req.url && matchesPrefix(req.url, NFC_PREFIX)) {
     return handler(req, res, { public: PUBLIC_DIST, ...SERVE_OPTIONS });
   }
 
