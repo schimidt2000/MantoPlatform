@@ -31,6 +31,7 @@ from app.models import (
     EventRole,
     FormResponse,
 )
+from app.impressoes3d import nfc_ops
 from app.storage import delete_file, save_file
 from app.utils import audit
 
@@ -169,6 +170,7 @@ def update_acervo_item(
     photo_file: Any = None,
     model_files: list[Any] | None = None,
     remove_file_ids: set[int] | None = None,
+    nfc_prefix: Any = ...,
 ) -> Acervo3DItem:
     """Edita uma peça do Acervo. Só aplica os campos explicitamente informados.
 
@@ -176,6 +178,10 @@ def update_acervo_item(
     "não enviar nada" significa manter a atual). Os arquivos 3D são **acumulativos**:
     `model_files` acrescenta, `remove_file_ids` remove — e a peça nunca pode ficar com zero
     arquivos, senão deixaria de ser imprimível.
+
+    `nfc_prefix` (feature 255) usa `...` como sentinela de "não alterar" porque string vazia é
+    valor válido (desabilita o NFC do item). Mudar o prefixo NÃO toca em tag existente — código
+    gravado é imutável; só as tags futuras nascem com o prefixo novo.
     """
     if name is not None:
         clean_name = name.strip()
@@ -184,6 +190,11 @@ def update_acervo_item(
         item.name = clean_name
     if is_active is not None:
         item.is_active = is_active
+    if nfc_prefix is not ...:
+        try:
+            item.nfc_prefix = nfc_ops.normalize_nfc_prefix(nfc_prefix)
+        except nfc_ops.NfcValidationError as exc:
+            raise Impressao3DValidationError(exc.field, exc.message) from exc
 
     _validate_extension(photo_file, "photo", ACERVO_3D_PHOTO_EXTENSIONS, "JPG ou PNG")
     if _has_upload(photo_file):
@@ -327,6 +338,9 @@ def add_event_gift(
     if event.dispensa_3d is not None:
         db.session.delete(event.dispensa_3d)
     db.session.flush()
+    # Item habilitado para NFC (feature 255): as tags das unidades físicas nascem na MESMA
+    # transação do presente — uma por unidade, já associadas ao evento. No-op para item comum.
+    nfc_ops.sync_event_gift_tags(event, item)
     audit(
         "create", "Event3DGift", gift.id, item.name,
         f"Presente 3D '{item.name}' vinculado ao evento #{event.id}",
@@ -357,11 +371,19 @@ def update_event_gift(
         gift.deadline_date = _parse_deadline(deadline_date)
     if notes is not None:
         gift.notes = notes.strip() or None
+    target_item = gift.item
     if item_id is not None:
         item = Acervo3DItem.query.get(item_id)
         if item is None:
             raise Impressao3DValidationError("item_id", "Peça do Acervo não encontrada.")
         gift.item_id = item.id
+        target_item = item
+
+    db.session.flush()
+    # Quantidade aumentou (ou a peça virou uma NFC)? Completa as tags que faltam na mesma
+    # transação (feature 255). Reduzir NUNCA apaga — a tag física já pode existir no mundo.
+    if gift.event is not None and target_item is not None:
+        nfc_ops.sync_event_gift_tags(gift.event, target_item)
 
     audit("edit", "Event3DGift", gift.id, gift.item.name if gift.item else "", "Presente 3D editado")
     db.session.commit()
@@ -494,6 +516,7 @@ def serialize_acervo_item(item: Acervo3DItem, usage_count: int = 0) -> dict[str,
         "id": item.id,
         "name": item.name,
         "photo_url": item.photo_url,
+        "nfc_prefix": item.nfc_prefix,
         "files": serialize_model_files(item),
         "is_active": bool(item.is_active),
         "created_at": item.created_at.isoformat() if item.created_at else None,
