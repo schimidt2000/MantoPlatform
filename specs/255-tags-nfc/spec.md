@@ -69,7 +69,7 @@ Na área de Impressões 3D do ERP, a equipe abre a lista de tags NFC: código, p
 
 **Acceptance Scenarios**:
 
-1. **Given** a área de Impressões 3D, **When** a equipe abre a lista de tags, **Then** vê código, produto, evento, cliente (contratante do evento), situação e ação de copiar a URL completa.
+1. **Given** a área de Impressões 3D, **When** a equipe abre a lista de tags, **Then** vê o número sequencial (nº 1, 2, 3… por produto), código, produto, evento, cliente (contratante do evento), situação e ação de copiar a URL completa — o número em destaque, pois é ele que a equipe anota na tag física para alocar depois.
 2. **Given** a lista de tags, **When** a equipe gera um lote (produto + quantidade), **Then** as tags nascem sem evento e aparecem na lista prontas para associar depois.
 3. **Given** uma tag sem evento (ou com evento errado), **When** a equipe associa/troca o evento, **Then** a mudança vale imediatamente e o cliente exibido acompanha o evento novo.
 4. **Given** uma tag ativa, **When** a equipe a desativa, **Then** a página pública passa a mostrar o conteúdo padrão genérico; reativar restaura o comportamento normal. Nenhuma ação de apagar é oferecida.
@@ -90,6 +90,7 @@ Na área de Impressões 3D do ERP, a equipe abre a lista de tags NFC: código, p
 ### Functional Requirements
 
 - **FR-001**: O sistema MUST manter um cadastro de tags NFC onde cada tag tem código único e imutável no formato `<prefixo>-<6 caracteres aleatórios de alfabeto sem ambiguidade>`, referência ao produto (item do acervo 3D), associação opcional a um evento e situação ativa/inativa. Tags nunca são apagadas.
+- **FR-001b**: Cada tag MUST receber um número sequencial humano por linha de produto (nº 1, 2, 3…), imutável, exibido com destaque no ERP — é o rótulo físico que a equipe anota na tagzinha ao gravar em lote, para depois alocar "nº X → cliente Y" sem depender do código aleatório. O número não aparece na URL.
 - **FR-002**: Um item do acervo 3D MUST poder ser habilitado para NFC com um prefixo próprio (ex.: `01` para a luminária v1); itens sem prefixo não participam do fluxo NFC.
 - **FR-003**: Ao criar um presente 3D de um item habilitado para NFC num evento, o sistema MUST gerar automaticamente uma tag por unidade, associada ao evento. Ao aumentar a quantidade do presente, MUST completar as tags que faltam; ao reduzir, MUST NOT apagar nenhuma.
 - **FR-004**: A equipe MUST poder gerar lotes manuais de tags (produto + quantidade) sem evento, para estoque, e associar/trocar o evento de qualquer tag depois.
@@ -104,7 +105,7 @@ Na área de Impressões 3D do ERP, a equipe abre a lista de tags NFC: código, p
 
 ### Key Entities
 
-- **Tag NFC**: unidade física gravável — código único imutável, produto (item do acervo 3D), evento associado (opcional, alterável), situação ativa/inativa, contadores de acesso.
+- **Tag NFC**: unidade física gravável — código único imutável, número sequencial humano por produto (rótulo de logística), produto (item do acervo 3D), evento associado (opcional, alterável), situação ativa/inativa, contadores de acesso.
 - **Item do Acervo 3D** *(existente, estendido)*: ganha a habilitação NFC com prefixo de código; continua sendo o "catálogo de produtos" impressos.
 - **Evento / Cliente** *(existentes)*: o evento do show é a âncora da tag; o cliente (contratante) vem do vínculo evento↔cliente que já existe.
 
