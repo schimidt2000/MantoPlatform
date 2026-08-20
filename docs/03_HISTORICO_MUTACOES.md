@@ -212,16 +212,26 @@ para a LISTA; agora aterrissa em `/admin/catalogo/<id>/editar` com aviso apontan
 Pegadinha de Router: `/novo` e `/:id/editar` usam o mesmo elemento — o componente NÃO remonta,
 então o aviso é derivado de `location.state` a cada render (um `useState` inicial congelava).
 
-**d) A corrida do sync (investigação do 12:08).** O payload exato da vendedora (cliente
-vinculado, pré-contrato, CORP, todas as variantes hostis) cria 201 em processo contra a CÓPIA DO
-BANCO DE PRODUÇÃO da madrugada — o código e os dados estão sãos. O único mecanismo interno que
-produz o sintoma exato (500 cru; zero órfão no Google; zero linha no banco): o auto-sync roda a
-cada 10 min e importa qualquer evento do Google sem linha local; a criação insere no Google
-PRIMEIRO e commita depois; um sync no intervalo importa o recém-nascido e o commit de quem cria
-estoura a unicidade de `google_event_id`. Correção: evento do Google com <5 min de vida e sem
-linha local fica para o ciclo seguinte. A janela é estreita (~2s a cada 10 min), então segue em
-aberto se foi ELA que mordeu às 12:08 — o log do Railway do horário decide; os handlers novos de
-(a) garantem que a próxima ocorrência venha com mensagem e rastro em vez de "inesperado".
+**d) O erro das 12:08 — RESOLVIDO pelo log do Railway (e uma corrida de brinde).** O log cravou
+as duas causas reais, nenhuma reproduzível com payload "bem-comportado":
+
+1. **Criar evento**: `StringDataRightTruncation` — o título da casa lista o elenco inteiro
+   ("(CORP) SOLDADO 1 BONECO + SOLDADO 2 BONECO + PINGUINO + …") e passa de 200 chars;
+   `calendar_events.title` era `VARCHAR(200)`. O estouro acontecia DEPOIS do insert no Google:
+   cada tentativa deixou um órfão no Google Calendar (4 tentativas 12:04–12:19). Migration
+   `f3a9c15d8b42` alarga título/location/`audit_logs.entity_name`/`commission_payments.event_title`
+   para 500 (as cópias vão juntas, senão o estouro só muda de endereço), e `_validate_event_core`
+   barra título >480 com erro de campo ANTES do Google — sem órfão nunca mais.
+2. **Calculadora** (o "não pode ser calculado" de dias): `IndexError` em `quote_ops:202` —
+   `get_especial_prices` devolvia default de **3 itens** para personagem ausente da tabela;
+   recalcular orçamento antigo cujo personagem foi removido derrubava o cálculo inteiro. Agora
+   os defaults têm 4 itens com `_ensure4` (normaliza tabela legada também) e o `calculate_quote`
+   responde 400 amigável: "o personagem X não está mais na tabela — remova-o ou recadastre".
+
+A corrida com o auto-sync (importa evento do Google sem linha local ANTES do commit de quem está
+criando → unicidade de `google_event_id` estoura) é real mas não foi o que mordeu — ficou
+corrigida mesmo assim (evento do Google com <5 min e sem linha local espera o ciclo seguinte).
+Os handlers novos de (a) garantem que qualquer próximo 500 venha com mensagem e rastro.
 
 **Verificação.** `tsc` limpo; `ruff F821` limpo; diagnóstico in-process da Revisão (rejeição,
 413 JSON, upload válido listado); e2e no navegador contra `manto_local` (mkv barrado na hora,
