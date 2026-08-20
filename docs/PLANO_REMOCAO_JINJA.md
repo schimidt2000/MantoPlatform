@@ -10,7 +10,7 @@
 > | 3 — blueprints substituídos | ✅ em produção (pré-requisito de extração incluído) | `c94995d`, `0aef653`, `e8e17f6`, `5ab99db` |
 > | 5 — `/avaliar` | ✅ em produção | `d4d16cc`, `5ab99db` |
 > | 4 — decisões | ✅ todas respondidas · vira feature (ver §7) | — |
-> | 6 — `calendar` e `financeiro` | 🔨 **4 dos 5 pré-requisitos fechados** — falta só a API+UI das coleções comerciais | `a58f54b`, `a01ab48`, `88ba7a7`, `1343939` |
+> | 6 — `calendar` e `financeiro` | 🔨 **os 5 pré-requisitos originais estão fechados.** Resta a extração do `calendar` (medida depois: 47 símbolos) | `a58f54b`, `a01ab48`, `88ba7a7`, `1343939`, `53da3a4` |
 > | 7 — `auth` e fechamento | ⬜ pendente, depende da feature de conta | — |
 >
 > **~19.000 linhas de Jinja removidas.** Templates: 84 → 17. Rotas: 530 → 382.
@@ -454,7 +454,17 @@ A parte cara, e por isso a última. A ordem interna importa:
    > Não é defeito — `_decimal_from_form` recebe número puro de propósito, e `"1.234,56"` é
    > convenção do Jinja. Ficou comentado no teste.*
    >
-   > **Falta só a UI das três coleções** para o item 2 fechar.
+   > ✅ **ITEM 2 FECHADO em 20/08** (commit `53da3a4`). `ColecoesComerciaisPanel` no
+   > `ComercialSection`: acréscimos **editáveis** (com recebedor e chave PIX quando o tipo é BV, e
+   > o selo de pago) e parcelas em leitura. O payload ganhou `parcelas` — elas entravam no cálculo
+   > do KPI e **nunca saíam no JSON**, então a tela nova nem sabia que o cronograma existia.
+   >
+   > **Duas duplicatas que só a tela mostrou** (o typecheck passou limpo por cima das duas):
+   > "Acréscimos" aparecia **duas vezes**, porque o `VendaPanel` já listava em leitura; e o painel
+   > novo trazia "Notas fiscais", que o `FinanceiroSection` já tem. Ambos corrigidos.
+   >
+   > *Nota fiscal segue com CRUD só na API (`PATCH`/`DELETE` da 252) — ligar isso ao painel do
+   > `FinanceiroSection` é o que resta dessa coleção.*
 3. ~~Corrigir `event_ops.update_event_comercial` para chamar `_sync_commission_payment`~~
    ✅ **FEITO em 20/08** (commit `a01ab48`). A função recebe `sincronizar_comissao` injetada, como
    o `group_ops`. **Provado antes do conserto:** venda de R$ 5.000 com vendedor comissionado
