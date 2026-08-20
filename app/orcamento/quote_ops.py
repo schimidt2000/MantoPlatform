@@ -174,6 +174,15 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         elif ptype == "especial":
             personagem = p.get("personagem", "")
             cantor_flag = bool(p.get("cantor", False))
+            # Recalcular um orçamento antigo cujo personagem foi REMOVIDO da tabela de preços
+            # (feature 254): sem esta checagem o preço saía silenciosamente zerado — e antes
+            # dela, com o default de 3 itens, o cálculo inteiro caía com IndexError.
+            if personagem and personagem not in _cfg.load()["especiais"]:
+                raise QuoteValidationError(
+                    "performers",
+                    f'O personagem "{personagem}" não está mais na tabela de preços. '
+                    "Remova-o do orçamento ou recadastre-o nas Configurações de Preços.",
+                )
             prices = get_especial_prices(personagem, show, cantor_flag)
             if personagem == "Boneco Grande Especial":
                 bge_sub = p.get("bge_subtipo", "")

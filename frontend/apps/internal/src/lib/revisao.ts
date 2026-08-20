@@ -1,5 +1,92 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@manto/api-client";
+import { API_BASE, ApiRequestError, apiFetch, type ApiErrorBody } from "@manto/api-client";
+
+/**
+ * Espelho de `review_ops._MEDIA_EXTS` + `_MAX_FILE` do backend. A dupla existe para o arquivo
+ * inválido ser barrado ANTES do upload — subir 300 MB para descobrir a rejeição no fim era o
+ * caminho do "anexei e o vídeo sumiu". Só os formatos que o navegador reproduz entram na lista
+ * de vídeo; alargar aqui sem alargar o player só muda o lugar da frustração.
+ */
+export const REVISAO_EXTS: Record<MediaType, string[]> = {
+  video: [".mp4", ".mov", ".webm", ".m4v", ".ogv"],
+  audio: [".mp3", ".wav", ".m4a", ".ogg", ".aac"],
+  image: [".jpg", ".jpeg", ".png", ".webp", ".gif"],
+  pdf: [".pdf"],
+};
+export const REVISAO_MAX_MB = 512;
+/** Valor do `accept` dos inputs de arquivo — extensões explícitas, não `video/*`: o seletor do
+ * sistema já esconde .mkv/.avi em vez de deixá-los entrar para serem rejeitados depois. */
+export const REVISAO_ACCEPT = Object.values(REVISAO_EXTS).flat().join(",");
+
+/** Valida arquivos antes do envio. Devolve uma mensagem por problema (vazio = tudo ok). */
+export function validateRevisaoFiles(files: File[]): string[] {
+  const problems: string[] = [];
+  const allExts = Object.values(REVISAO_EXTS).flat();
+  const maxBytes = REVISAO_MAX_MB * 1024 * 1024;
+  let total = 0;
+  for (const f of files) {
+    const ext = f.name.includes(".") ? `.${f.name.split(".").pop()!.toLowerCase()}` : "";
+    if (!allExts.includes(ext)) {
+      problems.push(
+        `${f.name}: formato não aceito. Vídeo: MP4, MOV, WEBM, M4V ou OGV (os que o navegador reproduz).`,
+      );
+      continue;
+    }
+    if (f.size > maxBytes) {
+      problems.push(`${f.name}: arquivo acima de ${REVISAO_MAX_MB} MB.`);
+      continue;
+    }
+    total += f.size;
+  }
+  if (total > maxBytes) {
+    problems.push(`Os arquivos juntos passam de ${REVISAO_MAX_MB} MB — envie menos por vez.`);
+  }
+  return problems;
+}
+
+/**
+ * Upload multipart com progresso real. O `fetch` não expõe progresso de envio, e um vídeo de
+ * centenas de MB sobe por minutos — sem barra, o silêncio parecia conclusão e a aba era fechada
+ * no meio (o "anexei e não apareceu" da feature 254). Mesmo contrato de erro do `apiFetch`:
+ * envelope da API vira `ApiRequestError`, resposta sem envelope vira a mensagem genérica.
+ */
+function uploadForm<T>(
+  path: string,
+  form: FormData,
+  onProgress?: (fraction: number) => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}${path}`);
+    xhr.withCredentials = true;
+    xhr.responseType = "text";
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
+      };
+    }
+    xhr.onerror = () => reject(new Error("Falha de rede durante o envio. Tente novamente."));
+    xhr.onload = () => {
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(xhr.responseText || "null");
+      } catch {
+        parsed = null;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(parsed as T);
+        return;
+      }
+      const envelope = (parsed as { error?: ApiErrorBody } | null)?.error;
+      const body: ApiErrorBody =
+        envelope && typeof envelope.message === "string"
+          ? envelope
+          : { message: "Ocorreu um erro inesperado. Tente novamente." };
+      reject(new ApiRequestError(xhr.status, body));
+    };
+    xhr.send(form);
+  });
+}
 
 export interface RevisaoSpaceSummary {
   id: number;
@@ -70,6 +157,8 @@ export interface CreateSpaceInput {
   description?: string;
   reviewerIds: number[];
   files: File[];
+  /** Fração 0..1 do corpo já enviado — alimenta a barra de progresso da página. */
+  onProgress?: (fraction: number) => void;
 }
 
 export function useCreateRevisaoSpace() {
@@ -81,10 +170,11 @@ export function useCreateRevisaoSpace() {
       form.set("description", input.description ?? "");
       input.reviewerIds.forEach((id) => form.append("reviewer_ids[]", String(id)));
       input.files.forEach((f) => form.append("files", f));
-      return apiFetch<RevisaoSpaceSummary & { saved: number; errors: string[] }>("/api/revisao", {
-        method: "POST",
-        body: form,
-      });
+      return uploadForm<RevisaoSpaceSummary & { saved: number; errors: string[] }>(
+        "/api/revisao",
+        form,
+        input.onProgress,
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["revisao-spaces"] });
@@ -92,15 +182,21 @@ export function useCreateRevisaoSpace() {
   });
 }
 
+export interface UploadAssetsInput {
+  files: File[];
+  onProgress?: (fraction: number) => void;
+}
+
 export function useUploadRevisaoAssets(spaceId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (files: File[]) => {
+    mutationFn: ({ files, onProgress }: UploadAssetsInput) => {
       const form = new FormData();
       files.forEach((f) => form.append("files", f));
-      return apiFetch<{ saved: number; errors: string[] }>(
+      return uploadForm<{ saved: number; errors: string[] }>(
         `/api/revisao/${spaceId}/upload`,
-        { method: "POST", body: form },
+        form,
+        onProgress,
       );
     },
     onSuccess: () => {
@@ -173,16 +269,22 @@ export function useDeleteRevisaoAsset() {
   });
 }
 
+export interface ReplaceAssetInput {
+  file: File;
+  onProgress?: (fraction: number) => void;
+}
+
 export function useReplaceRevisaoAsset(assetId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (file: File) => {
+    mutationFn: ({ file, onProgress }: ReplaceAssetInput) => {
       const form = new FormData();
       form.set("file", file);
-      return apiFetch<{ version: number }>(`/api/revisao/asset/${assetId}/replace`, {
-        method: "POST",
-        body: form,
-      });
+      return uploadForm<{ version: number }>(
+        `/api/revisao/asset/${assetId}/replace`,
+        form,
+        onProgress,
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["revisao-asset"] });

@@ -90,6 +90,18 @@ function FigurinoCatalogLinkField({ sheetId }: { sheetId: number }) {
         <CharacterAutocomplete
           temas={elencoBusca.data?.temas ?? []}
           placeholder="Buscar personagem do catálogo…"
+          // Personagem já vinculado a OUTRA ficha aparece apagado, não selecionável: escolher um
+          // deles roubava o vínculo da outra ficha em silêncio (feature 254). Trocar uma ficha de
+          // personagem é: desvincular na ficha atual dele, vincular aqui.
+          disabledCharacterIds={
+            new Set(
+              (elencoBusca.data?.temas ?? [])
+                .flatMap((tema) => tema.characters)
+                .filter((c) => c.figurino_sheet_id !== null && c.figurino_sheet_id !== sheetId)
+                .map((c) => c.id),
+            )
+          }
+          disabledNote="já tem ficha"
           onSelect={(selection) =>
             link.mutate({ characterId: selection.character.id, figurinoSheetId: sheetId })
           }
@@ -116,16 +128,17 @@ function NewFigurinoCharacterField({
 }) {
   const elencoBusca = useCatalogElencoBusca();
 
-  // Só personagens ainda SEM ficha: vincular aqui é dar ficha a quem não tem. Trocar a ficha
-  // de um personagem já vinculado é fluxo da edição, onde o vínculo atual fica visível antes.
-  const temas = useMemo(
+  // Personagem que já tem ficha aparece apagado em vez de sumir da lista (feature 254): vincular
+  // aqui é dar ficha a quem não tem, e quem procura um personagem já vinculado entende o porquê
+  // em vez de achar que ele não existe. Trocar ficha é fluxo da edição.
+  const disabledIds = useMemo(
     () =>
-      (elencoBusca.data?.temas ?? [])
-        .map((tema) => ({
-          ...tema,
-          characters: tema.characters.filter((c) => c.figurino_sheet_id === null),
-        }))
-        .filter((tema) => tema.characters.length > 0),
+      new Set(
+        (elencoBusca.data?.temas ?? [])
+          .flatMap((tema) => tema.characters)
+          .filter((c) => c.figurino_sheet_id !== null)
+          .map((c) => c.id),
+      ),
     [elencoBusca.data],
   );
 
@@ -145,8 +158,10 @@ function NewFigurinoCharacterField({
         </div>
       ) : (
         <CharacterAutocomplete
-          temas={temas}
+          temas={elencoBusca.data?.temas ?? []}
           placeholder="Buscar personagem do catálogo…"
+          disabledCharacterIds={disabledIds}
+          disabledNote="já tem ficha"
           onSelect={onChange}
         />
       )}

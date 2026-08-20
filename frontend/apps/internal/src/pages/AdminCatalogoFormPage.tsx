@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
 import {
@@ -29,6 +29,14 @@ export function AdminCatalogoFormPage() {
   const id = params.id ? Number(params.id) : undefined;
   const isEdit = id !== undefined;
   const navigate = useNavigate();
+  const location = useLocation();
+  // Chegou aqui direto do "Criar produto" — mostra o aviso apontando o painel de elenco/fichas.
+  // Derivado do location a CADA render (não num useState inicial): a rota /novo e esta usam o
+  // mesmo elemento no Router, então o componente não remonta na navegação pós-criação.
+  const [avisoDispensado, setAvisoDispensado] = useState(false);
+  useEffect(() => setAvisoDispensado(false), [location.key]);
+  const recemCriado =
+    !avisoDispensado && Boolean((location.state as { recemCriado?: boolean } | null)?.recemCriado);
 
   const categoriesQuery = useAdminCatalogo({});
   const itemQuery = useAdminCatalogoItem(id);
@@ -129,7 +137,16 @@ export function AdminCatalogoFormPage() {
     };
     const mutation = isEdit ? updateItem : createItem;
     mutation.mutate(input, {
-      onSuccess: () => navigate("/admin/catalogo"),
+      onSuccess: (saved) => {
+        if (isEdit) {
+          navigate("/admin/catalogo");
+          return;
+        }
+        // Criação aterrissa na EDIÇÃO do produto recém-criado (feature 254): é onde vivem o
+        // elenco e o vínculo com ficha de figurino — antes era preciso saber voltar à lista e
+        // reabrir o produto para conseguir vincular qualquer coisa.
+        navigate(`/admin/catalogo/${saved.id}/editar`, { state: { recemCriado: true } });
+      },
       onError: (err) => {
         if (err instanceof ApiRequestError && err.fields) setFieldErrors(err.fields);
       },
@@ -158,6 +175,29 @@ export function AdminCatalogoFormPage() {
           {isEdit ? "Editar produto" : "Novo produto"}
         </h1>
       </header>
+
+      {recemCriado && (
+        <div
+          className="flex items-start justify-between gap-3 rounded-md border border-accent bg-accent-soft px-4 py-3 text-sm text-accent-dark"
+          role="status"
+        >
+          <p>
+            Produto criado. Agora monte o elenco e vincule as fichas de figurino no painel{" "}
+            <strong>Personagens</strong>, mais abaixo — ou volte ao catálogo se este produto não
+            tem elenco.
+          </p>
+          <button
+            type="button"
+            className="shrink-0 text-xs underline"
+            onClick={() => {
+              setAvisoDispensado(true);
+              navigate(location.pathname, { replace: true });
+            }}
+          >
+            Entendi
+          </button>
+        </div>
+      )}
 
       {/* Dados leva o dobro da largura (tem editor de texto rico); categorias é só uma lista de
           chips, cabe na coluna estreita ao lado em vez de virar mais um bloco na pilha. */}

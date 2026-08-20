@@ -243,9 +243,11 @@ class CalendarEvent(db.Model):
     # payload da API ("htmlLink"), capturado na sincronização; usado só pelo botão
     # "Editar no Google Agenda" (nenhuma escrita do Manto pro Google).
     google_html_link = db.Column(db.String(500), nullable=True)
-    title = db.Column(db.String(200), nullable=False)
+    # 500 e não 200 (feature 254): o título lista o elenco inteiro por prática da casa, e o
+    # estouro do varchar matava a criação DEPOIS do insert no Google (órfão lá, 500 aqui).
+    title = db.Column(db.String(500), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    location = db.Column(db.String(200), nullable=True)
+    location = db.Column(db.String(500), nullable=True)
     start_at = db.Column(db.DateTime, nullable=True)
     end_at = db.Column(db.DateTime, nullable=True)
     event_type = db.Column(db.String(30), nullable=True)  # 'SHOW', 'CORP', 'R&I', 'ENSAIO', etc.
@@ -589,7 +591,7 @@ class AuditLog(db.Model):
     actor_role  = db.Column(db.String(60), nullable=True)
     entity_type = db.Column(db.String(30), nullable=True)   # "talent","user","figurino","payment","settings"
     entity_id   = db.Column(db.Integer, nullable=True)
-    entity_name = db.Column(db.String(200), nullable=True)  # nome legível do objeto
+    entity_name = db.Column(db.String(500), nullable=True)  # nome legível do objeto (500: recebe event.title — feature 254)
     action      = db.Column(db.String(60), nullable=False)  # "create","edit","delete","approve","payment"
     detail      = db.Column(db.Text, nullable=True)
     created_at  = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -857,7 +859,7 @@ class CommissionPayment(db.Model):
 
     id          = db.Column(db.Integer, primary_key=True)
     event_id    = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
-    event_title = db.Column(db.String(200), nullable=False)  # cópia: persiste mesmo se evento for deletado
+    event_title = db.Column(db.String(500), nullable=False)  # cópia: persiste mesmo se evento for deletado (500: feature 254)
     seller_id   = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     sale_date   = db.Column(db.Date, nullable=True)          # data da venda (herda do evento)
     # Feature 109: comissões EducaManto só entram no ciclo de pagamento após a realização do

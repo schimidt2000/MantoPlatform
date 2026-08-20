@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
 import {
+  REVISAO_ACCEPT,
   useDeleteRevisaoSpace,
   useRevisaoSpace,
   useReviewerOptions,
   useUpdateRevisaoReviewers,
   useUploadRevisaoAssets,
+  validateRevisaoFiles,
   type MediaType,
 } from "../lib/revisao";
+import { UploadProgressBar } from "../components/UploadProgressBar";
 
 const MEDIA_ICON: Record<MediaType, string> = {
   video: "🎬",
@@ -21,6 +25,7 @@ export function RevisaoSpacePage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const navigate = useNavigate();
+  const location = useLocation();
   const query = useRevisaoSpace(id);
   const reviewerOptions = useReviewerOptions();
   const upload = useUploadRevisaoAssets(id);
@@ -28,6 +33,13 @@ export function RevisaoSpacePage() {
   const deleteSpace = useDeleteRevisaoSpace();
 
   const [reviewerIds, setReviewerIds] = useState<number[]>([]);
+  // Arquivos que a CRIAÇÃO do espaço rejeitou chegam via state da navegação (feature 254) —
+  // antes eram descartados no redirect e o material "sumia" sem aviso nenhum.
+  const [createErrors, setCreateErrors] = useState<string[]>(
+    () => (location.state as { uploadErrors?: string[] } | null)?.uploadErrors ?? [],
+  );
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  const [progress, setProgress] = useState<number | null>(null);
 
   useEffect(() => {
     if (query.data) setReviewerIds(query.data.reviewer_ids);
@@ -83,6 +95,35 @@ export function RevisaoSpacePage() {
         }
       />
 
+      {createErrors.length > 0 && (
+        <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">
+                {createErrors.length === 1
+                  ? "1 arquivo não entrou no espaço:"
+                  : `${createErrors.length} arquivos não entraram no espaço:`}
+              </p>
+              <ul className="mt-1 list-inside list-disc">
+                {createErrors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 text-xs underline"
+              onClick={() => {
+                setCreateErrors([]);
+                navigate(location.pathname + location.search, { replace: true });
+              }}
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Materiais ocupam duas frações e revisores uma: a lista de mídia é o conteúdo que cresce,
           o painel de revisores é uma escolha curta que não precisa de meia tela. */}
       <div className="grid items-start gap-4 [&>*]:min-w-0 lg:grid-cols-3">
@@ -115,24 +156,52 @@ export function RevisaoSpacePage() {
             </ul>
           )}
           {space.can_manage && (
-            <div>
+            <div className="space-y-2">
               <label className="mb-1 block text-xs font-medium text-muted">
                 Adicionar materiais
               </label>
               <input
                 type="file"
                 multiple
-                accept="video/*,audio/*,image/*,application/pdf"
+                accept={REVISAO_ACCEPT}
                 className="text-sm text-ink"
+                disabled={upload.isPending}
                 onChange={(e) => {
                   const files = Array.from(e.target.files ?? []);
-                  if (files.length > 0) upload.mutate(files);
+                  // Permite reescolher o mesmo arquivo após um erro — sem isto o onChange não
+                  // dispara de novo para a mesma seleção.
+                  e.target.value = "";
+                  if (files.length === 0) return;
+                  const problems = validateRevisaoFiles(files);
+                  if (problems.length > 0) {
+                    setUploadErrors(problems);
+                    return;
+                  }
+                  setUploadErrors([]);
+                  setProgress(0);
+                  upload.mutate(
+                    { files, onProgress: setProgress },
+                    {
+                      onSettled: () => setProgress(null),
+                      onError: (err) =>
+                        setUploadErrors([
+                          err instanceof ApiRequestError
+                            ? err.message
+                            : "Falha no envio. Tente novamente.",
+                        ]),
+                    },
+                  );
                 }}
               />
-              {upload.data && upload.data.errors.length > 0 && (
+              <UploadProgressBar fraction={upload.isPending ? progress : null} />
+              {(uploadErrors.length > 0 ||
+                (upload.data && upload.data.errors.length > 0)) && (
                 <ul className="mt-1 text-xs text-red">
-                  {upload.data.errors.map((e, i) => (
-                    <li key={i}>{e}</li>
+                  {uploadErrors.map((e, i) => (
+                    <li key={`c${i}`}>{e}</li>
+                  ))}
+                  {(upload.data?.errors ?? []).map((e, i) => (
+                    <li key={`s${i}`}>{e}</li>
                   ))}
                 </ul>
               )}

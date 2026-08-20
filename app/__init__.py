@@ -648,18 +648,41 @@ def create_app():
         number = os.getenv("SUPPORT_WHATSAPP", "")
         return f"https://wa.me/{number}?text={urllib.parse.quote(msg)}" if number else ""
 
+    # Erros dentro de /api respondem com o envelope JSON padrão: o cliente React só sabe exibir
+    # mensagem vinda do envelope — HTML aqui vira um "Ocorreu um erro inesperado" sem pista.
+    def _api_json_error(message: str, status: int):
+        from app.api_utils import json_error
+
+        return json_error(message, status)
+
     @app.errorhandler(404)
     def not_found(e):
+        if request.path.startswith("/api/"):
+            return _api_json_error("Recurso não encontrado.", 404)
         return render_template("404.html", wa_link=_wa_link(404)), 404
 
     @app.errorhandler(500)
     def internal_error(e):
         app.logger.error(f"500 error: {e}")
+        if request.path.startswith("/api/"):
+            return _api_json_error("Erro interno do servidor. Tente novamente.", 500)
         return render_template("500.html", wa_link=_wa_link(500)), 500
 
     @app.errorhandler(403)
     def forbidden(e):
+        if request.path.startswith("/api/"):
+            return _api_json_error("Sem permissão.", 403)
         return render_template("403.html", wa_link=_wa_link(403)), 403
+
+    @app.errorhandler(413)
+    def payload_too_large(e):
+        limit_mb = int(app.config.get("MAX_CONTENT_LENGTH", 0) / (1024 * 1024)) or 512
+        message = (
+            f"O envio passa de {limit_mb} MB. Envie arquivos menores ou menos arquivos por vez."
+        )
+        if request.path.startswith("/api/"):
+            return _api_json_error(message, 413)
+        return message, 413
 
     @app.route("/robots.txt")
     def robots_txt():

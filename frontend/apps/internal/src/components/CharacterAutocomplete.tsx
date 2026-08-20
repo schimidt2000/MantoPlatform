@@ -14,6 +14,11 @@ interface CharacterAutocompleteProps {
   placeholder?: string;
   /** Também mostra uma opção "Tema completo (pacote)" por Tema — usado no elenco de eventos. */
   includeTemaOption?: boolean;
+  /** Personagens listados mas NÃO selecionáveis (ex.: já vinculados a outra ficha) — aparecem
+   * apagados com a `disabledNote` ao lado. Melhor do que escondê-los: quem procura "Homem-Aranha"
+   * entende por que não pode escolher, em vez de achar que o personagem sumiu do catálogo. */
+  disabledCharacterIds?: ReadonlySet<number>;
+  disabledNote?: string;
 }
 
 interface FlatOption {
@@ -23,18 +28,22 @@ interface FlatOption {
   character: CatalogElencoCharacter | null;
   label: string;
   photoUrl: string | null;
+  disabled: boolean;
 }
 
 /**
  * Busca com auto-complete visual (feature 186, US1/US2): mostra a foto em miniatura de cada
- * Personagem ao lado do nome, restrita a Personagens Filhos (nunca o Tema pai isolado, a menos
- * que `includeTemaOption` peça explicitamente a opção de pacote completo).
+ * Personagem ao lado do nome E o produto de onde ele vem (feature 254 — cinco "Homem-Aranha"
+ * idênticos na lista, um por produto, eram indistinguíveis). Restrita a Personagens Filhos
+ * (nunca o Tema pai isolado, a menos que `includeTemaOption` peça a opção de pacote completo).
  */
 export function CharacterAutocomplete({
   temas,
   onSelect,
   placeholder = "Buscar personagem…",
   includeTemaOption = false,
+  disabledCharacterIds,
+  disabledNote = "indisponível",
 }: CharacterAutocompleteProps) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -50,6 +59,7 @@ export function CharacterAutocomplete({
           character: null,
           label: `${tema.name} (pacote completo)`,
           photoUrl: null,
+          disabled: false,
         });
       }
       for (const character of tema.characters) {
@@ -60,16 +70,20 @@ export function CharacterAutocomplete({
           character,
           label: character.name,
           photoUrl: character.photo_url,
+          disabled: disabledCharacterIds?.has(character.id) ?? false,
         });
       }
     }
     return flat;
-  }, [temas, includeTemaOption]);
+  }, [temas, includeTemaOption, disabledCharacterIds]);
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
     if (!term) return options.slice(0, 20);
-    return options.filter((o) => o.label.toLowerCase().includes(term)).slice(0, 20);
+    // O produto entra na busca: "aranha aventura" acha o Homem-Aranha do produto Aventura.
+    return options
+      .filter((o) => `${o.label} ${o.temaName}`.toLowerCase().includes(term))
+      .slice(0, 20);
   }, [options, query]);
 
   function handleSelect(option: FlatOption) {
@@ -112,11 +126,16 @@ export function CharacterAutocomplete({
             <li key={option.key}>
               <button
                 type="button"
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink hover:bg-accent-soft"
+                disabled={option.disabled}
+                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm ${
+                  option.disabled
+                    ? "cursor-not-allowed text-muted opacity-60"
+                    : "text-ink hover:bg-accent-soft"
+                }`}
                 onMouseDown={(e) => {
                   // preventDefault evita o onBlur do input fechar a lista antes do clique registrar
                   e.preventDefault();
-                  handleSelect(option);
+                  if (!option.disabled) handleSelect(option);
                 }}
               >
                 <span className="flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-full bg-surface-2">
@@ -130,7 +149,15 @@ export function CharacterAutocomplete({
                     <span className="text-sm">🎭</span>
                   )}
                 </span>
-                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {option.label}
+                  {option.character && (
+                    <span className="text-muted"> — {option.temaName}</span>
+                  )}
+                </span>
+                {option.disabled && (
+                  <span className="flex-none text-xs text-muted">{disabledNote}</span>
+                )}
               </button>
             </li>
           ))}

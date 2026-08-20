@@ -2,7 +2,13 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader } from "@manto/ui";
-import { useCreateRevisaoSpace, useReviewerOptions } from "../lib/revisao";
+import {
+  REVISAO_ACCEPT,
+  useCreateRevisaoSpace,
+  useReviewerOptions,
+  validateRevisaoFiles,
+} from "../lib/revisao";
+import { UploadProgressBar } from "../components/UploadProgressBar";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
@@ -16,19 +22,37 @@ export function RevisaoSpaceCreatePage() {
   const [description, setDescription] = useState("");
   const [reviewerIds, setReviewerIds] = useState<number[]>([]);
   const [files, setFiles] = useState<File[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [progress, setProgress] = useState<number | null>(null);
 
   const toggleReviewer = (id: number) =>
     setReviewerIds((prev) => (prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]));
 
   const handleSubmit = () => {
-    setError(null);
+    // Barrar arquivo inválido AQUI, antes de subir megabytes para descobrir a rejeição no fim
+    // (feature 254 — era o caminho do "anexei o vídeo e ele sumiu").
+    const problems = validateRevisaoFiles(files);
+    if (problems.length > 0) {
+      setErrors(problems);
+      return;
+    }
+    setErrors([]);
+    setProgress(files.length > 0 ? 0 : null);
     create.mutate(
-      { title, description, reviewerIds, files },
+      { title, description, reviewerIds, files, onProgress: setProgress },
       {
-        onSuccess: (result) => navigate(`/revisao/${result.id}?novo=1`),
+        onSuccess: (result) => {
+          // Arquivos rejeitados pelo servidor viajam até o espaço novo, que os exibe num aviso —
+          // navegar descartando `result.errors` era exatamente o bug do vídeo que "sumia".
+          navigate(`/revisao/${result.id}?novo=1`, {
+            state: result.errors.length > 0 ? { uploadErrors: result.errors } : undefined,
+          });
+        },
         onError: (err) => {
-          setError(err instanceof ApiRequestError ? err.message : "Não foi possível criar o espaço.");
+          setProgress(null);
+          setErrors([
+            err instanceof ApiRequestError ? err.message : "Não foi possível criar o espaço.",
+          ]);
         },
       },
     );
@@ -92,21 +116,32 @@ export function RevisaoSpaceCreatePage() {
           <input
             type="file"
             multiple
-            accept="video/*,audio/*,image/*,application/pdf"
+            accept={REVISAO_ACCEPT}
             className="text-sm text-ink"
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+            disabled={create.isPending}
+            onChange={(e) => {
+              setErrors(validateRevisaoFiles(Array.from(e.target.files ?? [])));
+              setFiles(Array.from(e.target.files ?? []));
+            }}
           />
           {files.length > 0 && (
             <ul className="mt-2 text-xs text-muted">
               {files.map((f, i) => (
-                <li key={i}>{f.name}</li>
+                <li key={i}>
+                  {f.name} · {(f.size / (1024 * 1024)).toFixed(1)} MB
+                </li>
               ))}
             </ul>
           )}
         </CardContent>
       </Card>
 
-      {error && <p className="text-sm text-red">{error}</p>}
+      {errors.map((msg, i) => (
+        <p key={i} className="text-sm text-red">
+          {msg}
+        </p>
+      ))}
+      <UploadProgressBar fraction={create.isPending ? progress : null} />
       <Button loading={create.isPending} onClick={handleSubmit}>
         Criar espaço
       </Button>

@@ -81,15 +81,21 @@ def get_coordenador_prices(show: bool, qty: int) -> tuple:
 
 
 def get_especial_prices(personagem: str, show: bool, cantor: bool = False) -> tuple:
-    """Return (1h, 2h, 4h) cache prices for a special character."""
-    p = _cfg.load()["especiais"].get(personagem, [0, 0, 0])
+    """Return (1h, 2h, 3h, 4h) cache prices for a special character.
+
+    SEMPRE 4 valores (feature 254): os defaults antigos tinham 3 itens e um personagem removido
+    da tabela (recalcular orçamento antigo) derrubava o cálculo inteiro com IndexError no
+    `prices[3]`. `_ensure4` também normaliza tabela legada salva com 3 valores.
+    """
+    zeros = [0, 0, 0, 0]
+    p = _cfg.load()["especiais"].get(personagem, zeros)
     if isinstance(p, dict):
         if personagem in _cfg.ESPECIAIS_COM_CANTOR and cantor:
-            return tuple(p.get("cantor", [0, 0, 0]))
+            return tuple(_cfg._ensure4(p.get("cantor", zeros)))
         if show:
-            return tuple(p.get("show", p.get("true", [0, 0, 0])))
-        return tuple(p.get("none", p.get("false", [0, 0, 0])))
-    return tuple(p)
+            return tuple(_cfg._ensure4(p.get("show", p.get("true", zeros))))
+        return tuple(_cfg._ensure4(p.get("none", p.get("false", zeros))))
+    return tuple(_cfg._ensure4(p))
 
 
 def calcular_maquiador(num_regular: int, num_especial: int) -> float:
