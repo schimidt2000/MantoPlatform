@@ -17,6 +17,7 @@ def json_error(
     message: str,
     status: int,
     fields: dict[str, str] | None = None,
+    **extra: Any,
 ) -> tuple[Response, int]:
     """Constrói uma resposta de erro JSON no formato padrão da API.
 
@@ -24,6 +25,12 @@ def json_error(
         message: Mensagem amigável em pt-BR (nunca stack trace).
         status: Código HTTP (400, 401, 403, 404, 500...).
         fields: Mapa opcional campo → mensagem, para erros de validação (400).
+        **extra: Chaves adicionais dentro do objeto de erro, para o cliente **agir** e não só
+            exibir. Existe porque nem todo erro é um beco: um 409 de "isto vai apagar dados"
+            precisa dizer *o quê* (`needs_confirmation` + a lista) para a tela abrir a confirmação
+            com nomes e valores; um 409 de "este evento é satélite" precisa devolver `leader_id`
+            para a tela oferecer o caminho até o principal. Sem isto, sobra a mensagem em prosa e
+            o front teria que adivinhar por texto.
 
     Returns:
         Tupla ``(resposta_json, status)`` no formato ``{"error": {...}}``.
@@ -31,6 +38,7 @@ def json_error(
     body: dict[str, Any] = {"message": message}
     if fields:
         body["fields"] = fields
+    body.update(extra)
     return jsonify({"error": body}), status
 
 

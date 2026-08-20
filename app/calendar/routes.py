@@ -14,6 +14,8 @@ from flask import Blueprint, redirect, request, session, url_for, render_templat
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
+from app.calendar import group_ops
+
 from .service import (
     get_authorization_url,
     build_flow,
@@ -1481,45 +1483,17 @@ def _handle_assign_tech_presence(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 # Campos comerciais zerados quando um evento se torna satélite (FR-005).
-_SATELLITE_FIELDS_CLEARED = (
-    "sale_value", "sale_value_gross", "sale_date", "with_invoice",
-    "is_cortesia_permuta", "seller_id", "commission_rate",
-    "payment_method", "payment_installments", "payment_due_date",
-    "transport_value", "acrescimo_value", "invoice_file", "orcamento_history_id",
-)
-
-
-def _has_financial_data(event: CalendarEvent) -> bool:
-    """True se o evento já tem valor de venda preenchido (gatilho de confirmação na FR-005)."""
-    return bool(event.sale_value)
-
-
-def _group_events(event: CalendarEvent) -> list[CalendarEvent]:
-    """Retorna todos os eventos do mesmo grupo comercial que `event`, o principal primeiro.
-
-    Se `event` não pertence a nenhum grupo, retorna ``[event]`` — mesmo comportamento de
-    um evento avulso, sem agregação (feature 137).
-    """
-    if event.is_satellite:
-        leader = event.group_leader
-        return [leader, *leader.satellites]
-    if event.is_group_leader:
-        return [event, *event.satellites]
-    return [event]
-
-
-def _apply_satellite(event: CalendarEvent) -> None:
-    """Zera os campos comerciais de um evento ao vinculá-lo como satélite de um grupo (FR-005)."""
-    for field in _SATELLITE_FIELDS_CLEARED:
-        setattr(event, field, False if field == "with_invoice" else None)
-    event.is_cortesia_permuta = False
+# O núcleo do agrupamento mora em `app/calendar/group_ops.py` — é de lá que a API React e estes
+# handlers Jinja tiram a MESMA regra, para as duas superfícies não divergirem enquanto o Jinja
+# existir. Os aliases abaixo preservam os nomes que outros módulos já importam (import tardio).
+_SATELLITE_FIELDS_CLEARED = group_ops.SATELLITE_FIELDS_CLEARED
+_has_financial_data = group_ops.has_financial_data
+_group_events = group_ops.group_events
+_apply_satellite = group_ops.apply_satellite
 
 
 def _can_group_events() -> bool:
-    return any(
-        r.name.upper() in (RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN)
-        for r in current_user.roles
-    )
+    return group_ops.pode_agrupar(current_user)
 
 
 def _resolve_group_selection(
@@ -1551,21 +1525,7 @@ def _resolve_group_selection(
     return leader, satellites, None
 
 
-def _validate_group_satellites(leader: CalendarEvent, satellites: list[CalendarEvent]) -> str | None:
-    """Aplica as regras de integridade da feature 053 a cada participante. Retorna erro ou None."""
-    if leader.is_satellite:
-        return f'"{leader.title}" já é satélite de outro grupo e não pode ser principal.'
-    # Um principal que já lidera um grupo pode receber novos satélites (mesma regra da 053).
-    if leader.event_type == "ENSAIO":  # FR-003
-        return "Eventos do tipo ENSAIO não podem ser agrupados por este mecanismo."
-    for sat in satellites:
-        if sat.event_type == "ENSAIO":  # FR-003
-            return "Eventos do tipo ENSAIO não podem ser agrupados por este mecanismo."
-        if sat.is_satellite:  # FR-002
-            return f'"{sat.title}" já pertence a outro grupo — desagrupe antes de continuar.'
-        if sat.is_group_leader:
-            return f'"{sat.title}" já é principal de outro grupo — desagrupe os satélites dele antes.'
-    return None
+_validate_group_satellites = group_ops.validar_agrupamento
 
 
 def _handle_group_events(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
@@ -1595,25 +1555,16 @@ def _handle_group_events(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             )
             return
 
-    group_name = request.form.get("group_name", "").strip()
-    if group_name:
-        leader.group_name = group_name
+    from app.financeiro.routes import _sync_commission_payment
 
-    now = datetime.now(tz=tz_sp)
-    for sat in satellites:
-        _apply_satellite(sat)
-        sat.group_leader_id = leader.id
-        db.session.add(EventLog(
-            event_id=leader.id, actor_name=current_user.name, actor_role="Comercial",
-            message=f'Agrupou o evento "{sat.title}" como satélite deste contrato',
-            created_at=now,
-        ))
-        db.session.add(EventLog(
-            event_id=sat.id, actor_name=current_user.name, actor_role="Comercial",
-            message=f'Vinculado ao grupo do evento "{leader.title}" — dados comerciais agora seguem o principal',
-            created_at=now,
-        ))
-    db.session.commit()
+    group_ops.agrupar(
+        leader=leader,
+        satellites=satellites,
+        group_name=request.form.get("group_name", "").strip(),
+        actor_name=current_user.name,
+        agora=datetime.now(tz=tz_sp),
+        sincronizar_comissao=_sync_commission_payment,
+    )
     flash(
         f'Eventos agrupados: "{leader.title}" é o evento principal '
         f"({len(satellites)} satélite{'s' if len(satellites) != 1 else ''}).",
@@ -1630,21 +1581,7 @@ def _handle_ungroup_event(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         flash("Este evento não pertence a um grupo.", "error")
         return
 
-    leader = event.group_leader
-    event.group_leader_id = None
-    db.session.add(EventLog(
-        event_id=event.id, actor_name=current_user.name, actor_role="Comercial",
-        message=f'Desfez o agrupamento com "{leader.title if leader else "?"}" '
-                "— campos comerciais voltam a ser próprios e editáveis",
-        created_at=datetime.now(tz=tz_sp),
-    ))
-    if leader:
-        db.session.add(EventLog(
-            event_id=leader.id, actor_name=current_user.name, actor_role="Comercial",
-            message=f'O evento "{event.title}" deixou de ser satélite deste contrato',
-            created_at=datetime.now(tz=tz_sp),
-        ))
-    db.session.commit()
+    group_ops.desagrupar(event, current_user.name, datetime.now(tz=tz_sp))
     flash("Agrupamento desfeito.", "success")
 
 
@@ -1657,15 +1594,9 @@ def _handle_rename_group(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         flash("Apenas o evento principal de um grupo pode ser renomeado.", "error")
         return
 
-    novo_nome = request.form.get("group_name", "").strip() or None
-    event.group_name = novo_nome
-    rotulo = f'"{novo_nome}"' if novo_nome else "o título do evento (sem nome)"
-    db.session.add(EventLog(
-        event_id=event.id, actor_name=current_user.name, actor_role="Comercial",
-        message=f"Nome do grupo definido para {rotulo}",
-        created_at=datetime.now(tz=tz_sp),
-    ))
-    db.session.commit()
+    group_ops.renomear_grupo(
+        event, request.form.get("group_name", ""), current_user.name, datetime.now(tz=tz_sp)
+    )
     flash("Nome do grupo atualizado.", "success")
 
 
