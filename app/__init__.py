@@ -611,38 +611,25 @@ def create_app():
     # Quem cuida desse host hoje é `PORTAL_HOSTS` em `frontend/server.js`, na porta pública.
 
     # ✅ Importa blueprints AQUI (depois do db existir)
+    # Saíram na fase 3 da remoção do Jinja (docs/PLANO_REMOCAO_JINJA.md): rh, admin, talents,
+    # orcamento, gastos, revisao, clientes e formularios. As telas equivalentes vivem no React e
+    # a lógica de negócio já estava (ou foi movida para) os módulos `*_ops.py`.
     from .auth.routes import auth_bp
-    from .rh.routes import rh_bp
-    from .admin.routes import admin_bp
     from .calendar.routes import calendar_bp
-    from .talents.routes import talents_bp
     from .financeiro.routes import financeiro_bp
     from .figurino.routes import figurino_bp
     from .talent_portal.routes import portal_bp
-    from .orcamento.routes import orcamento_bp
     from .educamanto.routes import educamanto_bp
-    from .gastos.routes import gastos_bp
-    from .revisao.routes import revisao_bp
-    from .clientes.routes import clientes_bp
-    from .formularios.routes import formularios_bp
     from .feedback.routes import feedback_bp
     from .catalogo.routes import catalogo_bp
     from .api import api_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
-    app.register_blueprint(rh_bp, url_prefix="/rh")
-    app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(calendar_bp)
-    app.register_blueprint(talents_bp)
     app.register_blueprint(financeiro_bp)
     app.register_blueprint(figurino_bp)
     app.register_blueprint(portal_bp)
-    app.register_blueprint(orcamento_bp)
     app.register_blueprint(educamanto_bp)
-    app.register_blueprint(gastos_bp)
-    app.register_blueprint(revisao_bp)
-    app.register_blueprint(clientes_bp)
-    app.register_blueprint(formularios_bp)
     app.register_blueprint(feedback_bp)
     app.register_blueprint(catalogo_bp)
     app.register_blueprint(api_bp)
