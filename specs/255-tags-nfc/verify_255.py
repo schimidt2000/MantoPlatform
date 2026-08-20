@@ -11,9 +11,10 @@ Cenários (quickstart.md da spec):
 8. Item sem prefixo → presente não gera tag nenhuma (não-regressão).
 9. Limpeza total dos registros de teste.
 
-Rodar contra o manto_local:
+Rodar contra o manto_local (PowerShell)::
+
     $env:DATABASE_URL = (gc .local-db-url -Raw).Trim(); $env:FLASK_ENV = "development"
-    .venv\Scripts\python.exe scripts\db\verify_255_nfc.py
+    .venv/Scripts/python.exe specs/255-tags-nfc/verify_255.py
 
 O evento de teste é criado DIRETO no banco (nunca pela API de eventos — ela sincroniza com o
 Google Calendar de verdade; ver memória do projeto sobre o espelho ter credenciais reais).

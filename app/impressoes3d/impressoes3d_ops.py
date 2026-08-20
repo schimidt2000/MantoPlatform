@@ -22,6 +22,7 @@ from app.constants import (
     GIFT_3D_STATUS_PENDENTE,
     GIFT_3D_STATUSES,
 )
+from app.impressoes3d import nfc_ops
 from app.models import (
     Acervo3DFile,
     Acervo3DItem,
@@ -31,7 +32,6 @@ from app.models import (
     EventRole,
     FormResponse,
 )
-from app.impressoes3d import nfc_ops
 from app.storage import delete_file, save_file
 from app.utils import audit
 
