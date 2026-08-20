@@ -272,6 +272,25 @@ export interface EventoDetalhe {
     } | null;
     is_satellite: boolean;
     group_name: string | null;
+    /**
+     * Agrupamento comercial (feature 246). Sempre presente — `role: "none"` é o evento avulso,
+     * e é o estado em que a tela oferece o botão de agrupar.
+     *
+     * A venda inteira mora no principal: agrupar zera os 14 campos comerciais do satélite e
+     * desagrupar NÃO os devolve. O que existe é uma cópia gravada no histórico do evento, para
+     * consulta e redigitação manual.
+     */
+    group: {
+      role: "leader" | "satellite" | "none";
+      /** Nome dado ao grupo. Só existe no principal; `null` = ninguém nomeou. */
+      group_name: string | null;
+      /** Rótulo já resolvido: o nome do grupo, ou o título do principal. */
+      display_name: string | null;
+      /** O principal — preenchido só quando este evento é satélite. */
+      leader: { id: number; title: string } | null;
+      /** Os satélites, por data. Vazio quando este evento não é o principal. */
+      satellites: { id: number; title: string; start_at: string | null }[];
+    };
     characters: string[];
     is_ensaio: boolean;
     // Logística (feature 149)
