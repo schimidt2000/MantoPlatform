@@ -4,8 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-19** · Estado do repositório: pós-feature
-> **240-remocao-jinja-fase1 (branch, sem migration)**, antes dela
+> Última atualização: **2026-08-20** · Estado do repositório: pós-feature
+> **254-melhorias-video-catalogo (branch, sem migration)** — antes dela a sequência da remoção
+> do Jinja **240–252 (pausada, ver `docs/PARADA_REMOCAO_JINJA.md`)**, antes dela
 > **239-backlog-agosto (11 itens, branch)**, antes dela catalogo-fase-1 (item avulso veste ficha
 > própria, main), antes dela **235-educamanto 4ª rodada (gate fechado, branch)**, antes dela 238
 > (teto autorizado), 237 (solicitar ficha), 236 (cachê por duração) — todas na main · Head de
@@ -41,6 +42,10 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **254-melhorias-video-catalogo** | Anexar vídeo na Revisão para de falhar em silêncio (pré-validação, barra de progresso XHR, 413/500 de `/api` com envelope); sync ganha janela de graça de 5 min (corrida com o criar evento); busca de personagem mostra o produto e não rouba vínculo; criar produto do catálogo aterrissa na edição | 2026-08-20 | `—` | (aqui) | — |
+| **250 / 251 / 252** | Régua de comissão extraída para `comissoes_ops` (450 eventos, zero divergência); acréscimos, parcelas e CRUD de nota fiscal na API | 2026-08-20 | `—` | (aqui) | — |
+| **248 / 249** | Comissão volta a sincronizar ao editar venda pela API; núcleo das coleções comerciais sai do formulário Jinja (`comercial_ops`) | 2026-08-20 | `—` | (aqui) | — |
+| **246 / 247** | Agrupar/desagrupar eventos na plataforma nova (núcleo `group_ops` + endpoints + tela); satélite rejeita venda com 409 + `leader_id` | 2026-08-19 | `—` | (aqui) | — |
 | **244 / 245-remocao-jinja-fases-3-e-5** | Onze blueprints Jinja removidos: oito inteiros (rh, clientes, gastos, revisão, orçamento, formulários, admin, talents) e três parciais (catálogo, figurino, feedback), guardando só as rotas de arquivo, as duas de impressão e o redirect do `/avaliar`. −14.364 linhas. Ferramenta nova: detector de `url_for` órfão | 2026-08-19 | `—` | (aqui) | — |
 | **242 / 243-remocao-jinja-fase2-e-extracao** | Portal do Artista Jinja removido (−3.230 linhas) e a lógica que a API viva importava de dentro dos `routes.py` tirada para os `*_ops.py` — cinco módulos dependiam disso | 2026-08-19 | `—` | (aqui) | — |
 | **241-avaliar-aponta-para-react** | O link de avaliação da cliente para de cair no Jinja: `/avaliar/<token>` vira 302 para a página React (feature 164, ociosa até aqui) e os geradores emitem o endereço novo. A rota antiga fica para sempre — o token não expira | 2026-08-19 | `—` | (aqui) | — |
@@ -174,6 +179,57 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
+
+### 254 — Vídeo da Revisão sem sumiço, catálogo↔ficha nas duas mãos, e a corrida do sync            (branch · 2026-08-20 · sem migration)
+
+**Motivação.** Três melhorias pedidas pelo dono no mesmo dia, mais um incidente real: (a) "não
+está sendo possível anexar o vídeo para revisão"; (b/c) o vínculo ficha↔catálogo precisava
+funcionar nas duas direções e a busca "parecia bem errada"; e (d) a vendedora recebeu "Ocorreu um
+erro inesperado" criando um evento CORP às 12:08 — DEPOIS do fim da tempestade de deploys da
+remoção do Jinja, o que derrubou a explicação de janela de deploy para o caso.
+
+**a) Revisão de mídia.** O vídeo nunca "falhava": ele era rejeitado (extensão fora da lista dos
+formatos que o navegador reproduz, ou >512 MB) e a rejeição morria em silêncio em três lugares —
+a página de criação navegava descartando `errors`; a página do espaço não tinha `onError` nem
+indicador de envio (minutos de upload sem nenhum sinal); e o 413 do teto global respondia HTML
+cru, que o cliente traduz para a mensagem genérica. Correções: validação no cliente ANTES do
+envio (espelho de `review_ops._MEDIA_EXTS` + 512 MB), upload por `XMLHttpRequest` com barra de
+progresso real (fetch não expõe progresso de envio) nas três superfícies, rejeições da criação
+viajam via `state` da navegação e viram aviso persistente no espaço, `accept=` com extensões
+explícitas, e handlers globais 403/404/500/413 respondendo o envelope JSON em `/api/*` — a
+lacuna que transformava qualquer 500 num "inesperado" sem rastro.
+
+**b) Busca de personagem do catálogo.** A lista mostrava só o nome — cinco "Homem-Aranha"
+idênticos, um por produto — e, na edição da ficha, personagens já vinculados a OUTRA ficha eram
+selecionáveis: escolher um roubava o vínculo em silêncio. Agora toda linha mostra
+"Personagem — Produto", a busca casa também com o produto, e personagem com ficha aparece
+apagado com "já tem ficha" (`disabledCharacterIds` no `CharacterAutocomplete`) em vez de sumir
+ou ser roubável. O casting de eventos herda o contexto do produto sem mudar de comportamento.
+
+**c) Criar produto do catálogo.** O painel de Personagens (elenco, vínculo personagem→ficha,
+ficha própria do avulso) só existe na edição — toda mutação dele precisa do id. Criar mandava
+para a LISTA; agora aterrissa em `/admin/catalogo/<id>/editar` com aviso apontando o painel.
+Pegadinha de Router: `/novo` e `/:id/editar` usam o mesmo elemento — o componente NÃO remonta,
+então o aviso é derivado de `location.state` a cada render (um `useState` inicial congelava).
+
+**d) A corrida do sync (investigação do 12:08).** O payload exato da vendedora (cliente
+vinculado, pré-contrato, CORP, todas as variantes hostis) cria 201 em processo contra a CÓPIA DO
+BANCO DE PRODUÇÃO da madrugada — o código e os dados estão sãos. O único mecanismo interno que
+produz o sintoma exato (500 cru; zero órfão no Google; zero linha no banco): o auto-sync roda a
+cada 10 min e importa qualquer evento do Google sem linha local; a criação insere no Google
+PRIMEIRO e commita depois; um sync no intervalo importa o recém-nascido e o commit de quem cria
+estoura a unicidade de `google_event_id`. Correção: evento do Google com <5 min de vida e sem
+linha local fica para o ciclo seguinte. A janela é estreita (~2s a cada 10 min), então segue em
+aberto se foi ELA que mordeu às 12:08 — o log do Railway do horário decide; os handlers novos de
+(a) garantem que a próxima ocorrência venha com mensagem e rastro em vez de "inesperado".
+
+**Verificação.** `tsc` limpo; `ruff F821` limpo; diagnóstico in-process da Revisão (rejeição,
+413 JSON, upload válido listado); e2e no navegador contra `manto_local` (mkv barrado na hora,
+mp4/mov criados; busca "aranha" com produto e badge; criar produto aterrissa na edição com
+painel); janela de graça do sync testada contra cópia de produção (1 min não importa, 10 min
+importa). Ferramenta nova em `scripts/db/`: `diag_20260820_restore.py` restaura o dump noturno
+de produção num banco descartável — foi o que permitiu testar o fluxo da vendedora com os dados
+reais dela.
 
 ### 250, 251 e 252 — A régua de comissão sai do Jinja e as coleções comerciais ganham API            (branch · 2026-08-20 · sem migration)
 
