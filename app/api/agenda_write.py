@@ -1062,6 +1062,81 @@ def api_add_invoice(event_id: int) -> Any:
     return _event_detail_json(event), 201
 
 
+@api_bp.route("/events/<int:event_id>/acrescimos", methods=["PUT"])
+@api_login_required
+def api_set_acrescimos(event_id: int) -> Any:
+    """Substitui os acréscimos do evento (features 099/100). Corpo: `{"items": [...]}`.
+
+    `PUT` porque o corpo é a lista inteira, não um delta — mesma escolha de
+    `PUT /events/<id>/clients`. Mandar `{"items": []}` apaga todos.
+
+    Cada item aceita `tipo`, `descricao`, `is_percent`, `value`, `bv_recipient` e `bv_pix`.
+    Acréscimo percentual é congelado em reais sobre a venda **do momento do save**.
+
+    RBAC `_can_manage_sale()`: acréscimo mexe na base da comissão e o BV é repasse a terceiro —
+    mesmo gate da nota fiscal, não o de editar evento.
+
+    Até aqui essas linhas só podiam ser escritas pelo formulário Jinja, que a fase 6 apaga.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_manage_sale():
+        return json_error("Sem permissão", 403)
+    if event.is_satellite:
+        return json_error(
+            "Este evento é satélite de um grupo: os dados comerciais são do evento principal.",
+            409,
+            leader_id=event.group_leader_id,
+        )
+
+    body = request.get_json(silent=True) or {}
+    itens = body.get("items")
+    if not isinstance(itens, list):
+        return json_error("Envie a lista completa em `items`.", 400, fields={"items": "Obrigatório"})
+
+    from app.calendar import comercial_ops
+
+    comercial_ops.substituir_acrescimos(event, itens)
+    db.session.commit()
+    return _event_detail_json(event)
+
+
+@api_bp.route("/events/<int:event_id>/parcelas", methods=["PUT"])
+@api_login_required
+def api_set_parcelas(event_id: int) -> Any:
+    """Substitui o cronograma de parcelas do evento (feature 065). Corpo: `{"items": [...]}`.
+
+    Cada item aceita `due_date` (ISO) e `amount`; parcela sem um dos dois é ignorada, como no
+    editor antigo. `{"items": []}` apaga o cronograma.
+
+    Não valida a soma contra o valor da venda de propósito — o Jinja também não valida, e a
+    planilha de pagamentos existe justamente para mostrar a diferença.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_manage_sale():
+        return json_error("Sem permissão", 403)
+    if event.is_satellite:
+        return json_error(
+            "Este evento é satélite de um grupo: os dados comerciais são do evento principal.",
+            409,
+            leader_id=event.group_leader_id,
+        )
+
+    body = request.get_json(silent=True) or {}
+    itens = body.get("items")
+    if not isinstance(itens, list):
+        return json_error("Envie a lista completa em `items`.", 400, fields={"items": "Obrigatório"})
+
+    from app.calendar import comercial_ops
+
+    comercial_ops.substituir_parcelas(event, itens)
+    db.session.commit()
+    return _event_detail_json(event)
+
+
 @api_bp.route("/events/<int:event_id>/contracts", methods=["POST"])
 @api_login_required
 def api_add_contract(event_id: int) -> Any:
