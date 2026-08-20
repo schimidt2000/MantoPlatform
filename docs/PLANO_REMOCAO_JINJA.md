@@ -1,5 +1,19 @@
 # Plano de remoção do sistema Jinja legado
 
+> # ⏸️ TRABALHO PAUSADO EM 20/08/2026
+>
+> **Antes de retomar qualquer coisa deste plano, leia
+> [`PARADA_REMOCAO_JINJA.md`](PARADA_REMOCAO_JINJA.md).**
+>
+> Decisão do João, e concordo com ela: a parte que valia a pena está feita e em produção
+> (~19.000 linhas, fases 1, 2, 3 e 5). O que resta exigiria extrair do `calendar` o código que
+> calcula **cachê de artista** e **comissão de vendedor** — risco em dinheiro, sem urgência e sem
+> ninguém pedindo. O ganho seria arrumação.
+>
+> O gatilho para retomar **não é "está sujo"**: é alguém precisar mexer no `calendar` por outro
+> motivo. Aí a extração paga o próprio custo, e o caminho está mapeado em
+> [`PLANO_EXTRACAO_CALENDAR.md`](PLANO_EXTRACAO_CALENDAR.md).
+
 > ## Estado em 19/08/2026 — fases 1, 2, 3 e 5 **CONCLUÍDAS e em produção**
 >
 > | Fase | Estado | Commit |
