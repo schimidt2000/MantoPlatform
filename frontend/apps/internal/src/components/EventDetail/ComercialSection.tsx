@@ -576,7 +576,11 @@ function GrupoPanel({ data }: { data: EventoDetalhe }) {
   const removerSatelite = useRemoverSatelite(data.event.id);
   const renomear = useRenomearGrupo(data.event.id);
   const [editandoNome, setEditandoNome] = useState(false);
-  const [nome, setNome] = useState(grupo.group_name ?? "");
+  const [nome, setNome] = useState(grupo?.group_name ?? "");
+
+  // Backend sem o bloco (bundle novo + API antiga, ou o contrário): não renderiza e pronto.
+  // Os hooks acima já rodaram, então a ordem deles não muda — a saída tem de vir DEPOIS deles.
+  if (!grupo) return null;
 
   if (grupo.role === "satellite") {
     return (
