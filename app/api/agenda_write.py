@@ -1606,7 +1606,8 @@ def api_assign_presence(event_id: int) -> Any:
 def api_feedback_link(event_id: int) -> Any:
     """Gera (na primeira vez) e devolve o link público de avaliação da cliente (feature 130).
 
-    RBAC: Comercial ou Superadmin — mesmo gate de `feedback.gerar_link` (`require_comercial`).
+    RBAC: Comercial ou Superadmin. Desde a fase 3 da remoção do Jinja este é o **único** gerador
+    do link — o gêmeo `feedback.gerar_link` foi apagado junto com a superfície Jinja.
     """
     event = CalendarEvent.query.get(event_id)
     if event is None:
