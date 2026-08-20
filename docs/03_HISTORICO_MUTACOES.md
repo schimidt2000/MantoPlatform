@@ -175,6 +175,50 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
 
+### 250, 251 e 252 — A régua de comissão sai do Jinja e as coleções comerciais ganham API            (branch · 2026-08-20 · sem migration)
+
+**250 — o pré-requisito mais perigoso da fase 6.** `app/api/financeiro_read.py`, que alimenta o
+DRE, o pipeline de vendas e a planilha de pagamentos do React, importava `_event_commission`,
+`_event_cost`, `_group_cost`, `_get_commission_rate` e `_resync_pending_commissions` de dentro do
+blueprint Jinja. Apagar aquele arquivo derrubaria o financeiro inteiro da plataforma nova.
+
+230 linhas foram para `app/financeiro/comissoes_ops.py` — nove ramos de decisão até o valor final:
+Loja Virtual não comissiona; o beneficiário pode ser o responsável EducaManto em vez do vendedor;
+EducaManto calcula sobre o **lucro** (venda − BV − cachês) e o resto sobre a venda; BV sempre sai
+da base; evento cancelado não comissiona; líder de grupo agrega o custo dos satélites; e comissão
+já paga nunca é reescrita.
+
+**O recorte por intervalo levou junto 4 coisas de camada de rota** (`_has_role`,
+`require_financeiro`, `_is_educamanto_responsavel` sem argumento, `require_vendas`) — todas
+dependem de `current_user`. Foram devolvidas. Quem apontou foi o `ruff --select F821`.
+
+> **Verificação à altura do que o código decide:** comissão, custo, custo de grupo e taxa
+> calculados para os **450 eventos** do espelho antes (worktree do `main`) e depois, comparados
+> item a item — **zero divergências**. Nenhum vendedor recebe um centavo diferente.
+
+**251 e 252 — as coleções comerciais ganham API.** O levantamento das rotas mostrou que existia
+`POST` para contrato, nota e pagamento, mas **nada** para acréscimo e parcela — elas só podiam ser
+escritas pelo formulário Jinja. Agora: `PUT /acrescimos`, `PUT /parcelas` (corpo é a lista inteira;
+`{"items": []}` apaga, corpo sem `items` é 400 para requisição malformada nunca virar "apague
+tudo") e `PATCH`/`DELETE` de nota fiscal por id. Todas herdam as regras já testadas de
+`comercial_ops` e recusam satélite com 409 + `leader_id`.
+
+Duas decisões que ficaram no código: `PATCH` de nota sem `file` **preserva** o anexo (é edição de
+valor/data), e `DELETE` **não apaga o arquivo do disco** — nota fiscal é documento contábil.
+
+**O teste pegou um erro dele mesmo:** mandar `"1500,00"` faz o valor virar `None` em silêncio. Não
+é defeito — `_decimal_from_form` recebe número puro de propósito (BRL formatado é só exibição, e
+`"1.234,56"` é convenção do Jinja). Ficou comentado no teste.
+
+**Medição que corrige o plano:** depois de limpar o financeiro, `calendar/routes.py` ainda exporta
+**47 símbolos distintos em 86 pontos de import** para 13 módulos vivos. A maioria não é view — é
+criação e validação de evento, consulta de mês, parsing de título, registros de pagamento e
+contrato. Aquele arquivo virou uma **biblioteca com views penduradas**: apagar as views não o
+apaga. O item 5 da fase 6 é uma sequência de extrações, não um lote de deleção.
+
+**Verificação.** `verify_251` 18/18 (novo), `verify_249` 17/17, `verify_246` 22/22, `verify_206`
+20/20, `check_url_for_orfaos` limpo, ruff 60 → 60. `financeiro/routes.py`: 1.736 → 1.507 linhas.
+
 ### 248 e 249 — Comissão sincroniza pela API, e o núcleo comercial sai do formulário            (branch · 2026-08-20 · sem migration)
 
 **248 — a comissão não acompanhava a edição pela tela nova.**
