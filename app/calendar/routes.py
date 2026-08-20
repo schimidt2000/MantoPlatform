@@ -2159,6 +2159,26 @@ def sync_events(items: list[dict]) -> None:
         if not google_id:
             continue
 
+        # Corrida com a criação pela plataforma (feature 254): o fluxo de criar evento insere no
+        # Google PRIMEIRO e só depois commita a linha local. Um sync que rode nesse intervalo não
+        # encontra a linha (transação alheia, invisível), importa o evento recém-nascido e commita
+        # — e o commit da criação estoura a unicidade de `google_event_id` com um 500 para quem
+        # está criando. Evento do Google com menos de 5 minutos de vida e ainda sem linha local
+        # fica para o ciclo seguinte; quem cria direto no Google espera um ciclo, quem cria pela
+        # plataforma nunca mais perde o evento no meio.
+        created_raw = item.get("created")
+        if created_raw:
+            try:
+                created_at = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+            except ValueError:
+                created_at = None
+            if created_at is not None:
+                age = datetime.now(tz=created_at.tzinfo) - created_at
+                if age < timedelta(minutes=5) and not (
+                    CalendarEvent.query.filter_by(google_event_id=google_id).first()
+                ):
+                    continue
+
         # Compromisso interno (prazo de figurino): a plataforma criou, a plataforma é dona, e ele
         # nunca vira CalendarEvent. Ver `_is_manto_task_item`.
         if _is_manto_task_item(item):
