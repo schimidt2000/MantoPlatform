@@ -438,7 +438,15 @@ A parte cara, e por isso a última. A ordem interna importa:
    > apareceu escrevendo o teste: anexar arquivo emite a nota, mas `issued_at` só é carimbado na
    > transição — salvar de novo não reescreve a data de emissão).
    >
-   > **Falta:** os endpoints e a UI das três coleções.
+   > **SEGUNDA PARTE FEITA em 20/08** (commit `46fd077`). O levantamento das rotas mostrou que a
+   > API já tinha `POST` para contrato, nota fiscal e pagamento — mas **nada** para acréscimo e
+   > parcela. Agora existem `PUT /api/events/<id>/acrescimos` e `PUT .../parcelas`, com o corpo
+   > como lista inteira (`{"items": []}` apaga; corpo sem `items` é 400, para requisição
+   > malformada nunca virar "apague tudo"). Ambas recusam satélite com 409 + `leader_id`.
+   > `verify_251`: **12/12**.
+   >
+   > **Falta:** editar e remover nota fiscal pela API (hoje só há `POST` de uma, com upload
+   > multipart) e a UI das três coleções.
 3. ~~Corrigir `event_ops.update_event_comercial` para chamar `_sync_commission_payment`~~
    ✅ **FEITO em 20/08** (commit `a01ab48`). A função recebe `sincronizar_comissao` injetada, como
    o `group_ops`. **Provado antes do conserto:** venda de R$ 5.000 com vendedor comissionado
