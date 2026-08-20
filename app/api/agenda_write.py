@@ -1062,6 +1062,70 @@ def api_add_invoice(event_id: int) -> Any:
     return _event_detail_json(event), 201
 
 
+@api_bp.route("/events/<int:event_id>/invoices/<int:invoice_id>", methods=["PATCH"])
+@api_login_required
+def api_update_invoice(event_id: int, invoice_id: int) -> Any:
+    """Edita uma nota fiscal do evento (feature 251). Corpo `multipart`, como o POST irmão.
+
+    Campos: `amount`, `issue_date` e o arquivo opcional em `file`. Anexar arquivo **emite** a
+    nota; reenviar o mesmo não reescreve a data de emissão. Sem `file`, o anexo atual é
+    preservado — um PATCH sem upload é edição de valor ou data, não remoção do anexo.
+
+    Até aqui a API só sabia **adicionar** nota (`POST /invoices`): editar a lista era exclusivo do
+    formulário Jinja, que a fase 6 apaga.
+    """
+    from app.models import EventInvoice
+
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_manage_sale():
+        return json_error("Sem permissão", 403)
+
+    nota = EventInvoice.query.filter_by(id=invoice_id, event_id=event_id).first()
+    if nota is None:
+        return json_error("Nota fiscal não encontrada", 404)
+
+    from app.calendar import comercial_ops
+    from app.calendar.routes import _save_nf_file
+
+    comercial_ops.atualizar_nota(
+        nota,
+        amount=_decimal_from_form(request.form.get("amount")),
+        issue_date=(request.form.get("issue_date") or "").strip(),
+        arquivo=_save_nf_file(request.files.get("file")),
+        agora=datetime.now(tz=_TZ_SP),
+    )
+    db.session.commit()
+    return _event_detail_json(event)
+
+
+@api_bp.route("/events/<int:event_id>/invoices/<int:invoice_id>", methods=["DELETE"])
+@api_login_required
+def api_delete_invoice(event_id: int, invoice_id: int) -> Any:
+    """Remove uma nota fiscal do evento (feature 251).
+
+    O arquivo em disco não é apagado — nota fiscal é documento contábil.
+    """
+    from app.models import EventInvoice
+
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_manage_sale():
+        return json_error("Sem permissão", 403)
+
+    nota = EventInvoice.query.filter_by(id=invoice_id, event_id=event_id).first()
+    if nota is None:
+        return json_error("Nota fiscal não encontrada", 404)
+
+    from app.calendar import comercial_ops
+
+    comercial_ops.remover_nota(nota)
+    db.session.commit()
+    return _event_detail_json(event)
+
+
 @api_bp.route("/events/<int:event_id>/acrescimos", methods=["PUT"])
 @api_login_required
 def api_set_acrescimos(event_id: int) -> Any:

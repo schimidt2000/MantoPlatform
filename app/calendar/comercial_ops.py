@@ -188,6 +188,40 @@ def sincronizar_notas(event: Any, itens: list[dict] | None, agora: datetime) -> 
     return avisos
 
 
+def atualizar_nota(
+    nota: Any,
+    *,
+    amount: Any,
+    issue_date: Any,
+    arquivo: str | None,
+    agora: datetime,
+) -> None:
+    """Edita UMA nota fiscal já existente. Sem commit.
+
+    Mesma regra de emissão de `sincronizar_notas`: anexar arquivo é o que emite a nota, e o
+    carimbo de `issued_at` só acontece na **transição** — reenviar o mesmo arquivo não reescreve
+    a data de emissão. `arquivo=None` preserva o que já estava lá, em vez de apagar: um PATCH sem
+    upload é edição de valor ou data, não remoção de anexo.
+    """
+    nota.amount = _to_decimal(amount)
+    nota.issue_date = _to_date(issue_date)
+    if arquivo:
+        nota.file = arquivo
+        if nota.status != "emitida":
+            nota.status = "emitida"
+            nota.issued_at = agora
+
+
+def remover_nota(nota: Any) -> None:
+    """Remove uma nota fiscal do evento. Sem commit.
+
+    O arquivo em disco **não** é apagado de propósito: nota fiscal é documento contábil, e o
+    caminho pode estar referenciado num registro anterior. O mesmo vale para o resto do sistema —
+    nenhum upload é removido do armazenamento por ação de tela.
+    """
+    db.session.delete(nota)
+
+
 def substituir_parcelas(event: Any, itens: list[dict] | None) -> None:
     """Recria o cronograma de parcelas do evento (feature 065). Sem commit.
 
