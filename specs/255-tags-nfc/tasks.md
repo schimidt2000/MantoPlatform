@@ -75,7 +75,7 @@
 
 - [x] T025 Verify completo (cenários 1–9) em PASS contra `manto_local` + `ruff check` nos arquivos Python tocados + `tsc` limpo nos dois apps
 - [x] T026 [P] Documentação viva: `docs/01_SISTEMA_E_BANCO.md` (tabela/coluna/rotas/RBAC), `docs/02_MAPA_DE_PAGINAS_E_UX.md` (`/nfc/<code>` público + `/3d/tags`), entrada nova no topo de `docs/03_HISTORICO_MUTACOES.md` (migration, motivação, regras, pegadinhas)
-- [ ] T027 `/speckit-converge` para fechar gaps entre spec/plan/tasks/código
+- [x] T027 `/speckit-converge` para fechar gaps entre spec/plan/tasks/código
 
 ## Dependencies & Execution Order
 
@@ -93,3 +93,7 @@
 ## Implementation Strategy
 
 MVP = Foundational + US1 (página pública com tag semeada). Depois US2 (automação) e US3 (admin), validando cada checkpoint com o verify + tsc antes de seguir. Commits atômicos por fase/história no padrão `feat(255): ...`.
+
+## Phase 7: Convergence
+
+- [x] T028 Corrigir o comando de verificação em `specs/255-tags-nfc/quickstart.md` para o caminho real `specs/255-tags-nfc/verify_255.py` (o script saiu de `scripts/` porque `scripts/db` é gitignorado) per quickstart.md (partial)

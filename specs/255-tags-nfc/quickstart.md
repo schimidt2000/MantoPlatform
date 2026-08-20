@@ -11,7 +11,7 @@ Roteiro de validação ponta a ponta. Referências: [contracts/nfc-api.md](./con
 ## Verificação automatizada (obrigatória antes de cada commit relevante)
 
 ```bash
-python scripts/verify_255_nfc.py
+python specs/255-tags-nfc/verify_255.py
 ```
 
 O script (padrão `verify_*` do projeto: login só pela API, imprime PASS/FAIL por cenário):
