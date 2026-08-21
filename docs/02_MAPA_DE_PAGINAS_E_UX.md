@@ -708,6 +708,58 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
   prazo e observações.
 - **API**: `POST|PATCH|DELETE /api/events/<id>/3d-gifts[/<gift_id>]` · `GET /api/3d/acervo?ativos=1`.
 
+#### `/3d/tags` — Tags NFC *(feature 255)*
+- **Acesso**: `ARTISTA_3D`, `SUPERADMIN` (mesmo gate da seção 3D).
+- **Objetivo**: a ponte entre a tag NFC física (embutida na luminária entregue) e o sistema.
+  Fluxo real da equipe: gerar lote → gravar as tagzinhas → **anotar o Nº em cada uma** → na
+  alocação, "nº X → evento/cliente Y" pelo vínculo de evento.
+- **UX**:
+  - **Formulário de lote no topo**: `Combobox` das peças habilitadas (só `nfc_prefix` não-nulo e
+    ativas) + quantidade → "Gerar tags" com loading e confirmação textual ("N tags geradas —
+    anote o Nº em cada tagzinha ao gravar").
+  - **Tabela** (uma linha por tag física): **Nº em destaque** (`font-display`, é o rótulo que
+    grita mais que o código, de propósito), código + **copiar link** (`CopyButton`, copia
+    `<origin>/nfc/<code>` — é o que se grava na tag), produto com miniatura quadrada, evento
+    (título+data, ou "— estoque"), **cliente** (contratante do evento), acessos (tooltip com o
+    último), badge Ativa/Inativa e ações.
+  - **Vincular (evento OU cliente direta)**: `Dialog` com dois `Combobox` **assíncronos** —
+    evento pela busca da agenda (`useAgendaSearch`) e **cliente direta** pela busca de clientes
+    (`useClientSearch`), para o caso de campanha/brinde **sem show** (a pessoa é cadastrada no
+    módulo Clientes e vinculada aqui). Escolher **já salva** (PATCH e fecha); "Desvincular
+    evento"/"Desvincular cliente" no rodapé. Na tabela, cliente direta aparece com badge
+    "direta" e tem precedência sobre a contratante do evento.
+  - **Desativar/Reativar** com loading por linha. **Não existe ação de excluir em lugar
+    nenhum** — nota fixa no rodapé explica: código gravado numa peça entregue é eterno;
+    desativar faz a página pública mostrar o conteúdo padrão.
+- **API**: `GET /api/3d/nfc` · `POST /api/3d/nfc/lote` · `PATCH /api/3d/nfc/<id>`.
+- **Acervo (`/3d/acervo`)**: o formulário da peça ganhou o campo opcional **"Prefixo NFC"** com
+  hint do formato do código — preenchido, presentes da peça geram tags automaticamente.
+
+#### `/nfc/<code>` — página pública da tag NFC *(feature 255, SEM login)*
+- **Endereço**: raiz do domínio (`app.mantoproducoes.com.br/nfc/<code>`) — **URL gravada na tag
+  física, imutável e eterna**. Servida pelo bundle da vitrine via `NFC_PREFIX` no
+  `frontend/server.js` (mesmo mecanismo do `/cadastro`; `isRootSurface` no `App.tsx` roda o
+  Router sem basename e sem o `WishlistFloat`).
+- **Objetivo**: a cliente encosta o celular na luminária e cai aqui. V1 é o "portal fechado":
+  identidade Manto + Instagram. Todo o conteúdo vem de `GET /api/nfc/<code>` — a página evolui
+  (campanhas, fotos do evento) sem regravar tag nenhuma (`campaign: null` é o gancho).
+- **UX** (mobile-first de verdade — o acesso nasce de um toque NFC, geralmente à noite ao lado
+  da luminária acesa; 2ª rodada, redesenhada com a foto da peça física em mãos):
+  - **Retrato da luminária**: céu noturno (gradiente roxo da paleta) com 12 estrelinhas
+    piscando, nuvens difusas na base, e a **estrela "Magia de Sonhar" que ACENDE** como a
+    lâmpada real — contorno apagado chega primeiro, o brilho quente sobe revelando o escrito
+    (Fraunces itálico, SVG inline; cores da peça registradas como tokens `lamp.*` no
+    `tailwind.config.ts` do app público — zero cor hardcoded). Halo `drop-shadow-lamp`
+    "respirando". Com `useReducedMotion`: estrela já acesa, nada pisca.
+  - A arte substitui a foto do produto do acervo (a luminária É a estrela); modo genérico usa o
+    mesmo palco.
+  - Copy provisória: eyebrow "Manto Produções" + "A magia da Manto também na sua casa" + "Este
+    é o portal da sua luminária. Em breve, ele se abrirá bem aqui…".
+  - CTA "Seguir @mantoproducoes" (URL vem do servidor; botão só renderiza com o dado na mão —
+    nunca botão morto), toque ≥ 44px, sem rolagem horizontal de 320 a 430px.
+  - **Código inexistente ou tag desativada = mesma página em modo genérico** — nunca uma tela
+    de erro, nunca a confirmação de que um código existe (SC-006).
+
 ---
 
 ### A.4.2 Marketing *(seção nova de navegação — feature 204)*

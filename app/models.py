@@ -2113,6 +2113,9 @@ class Acervo3DItem(db.Model):
     name       = db.Column(db.String(200), nullable=False)
     # URL pública da foto de preview (JPG/PNG) — sempre presente.
     photo_url  = db.Column(db.String(500), nullable=False)
+    # Feature 255: não-nulo = item sai com tag NFC embutida; o valor é o prefixo do código
+    # (ex.: "01" → códigos "01-K7M3QF"). Alterar depois só afeta tags futuras — código é imutável.
+    nfc_prefix = db.Column(db.String(10), nullable=True)
     is_active  = db.Column(db.Boolean, default=True, nullable=False, server_default="1")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -2220,6 +2223,55 @@ class Event3DDismissal(db.Model):
         backref=db.backref("dispensa_3d", uselist=False, cascade="all, delete-orphan"),
     )
     dismisser = db.relationship("User", lazy=True, foreign_keys=[dismissed_by])
+
+
+class NfcTag(db.Model):
+    """Tag NFC embutida numa peça 3D entregue à cliente (feature 255).
+
+    Cada linha é UMA unidade física: a URL pública gravada na tag
+    (``/nfc/<code>``) é imutável e eterna — depois que a luminária está na casa da cliente,
+    ninguém regrava. Todo o conteúdo da página é decidido pelo servidor a cada acesso, por isso
+    a linha nunca é apagada (só ``is_active=False``) e ``code`` nunca muda.
+
+    ``sequence`` é a numeração humana por item (nº 1, 2, 3… da luminária v1): é o rótulo que a
+    equipe anota na tagzinha ao gravar em lote, para depois alocar "nº X → cliente Y" sem
+    depender do código aleatório. ``event_id`` é o único vínculo mutável — o cliente vem de
+    carona pelo evento (``EventClient``); evento apagado deixa a tag órfã de evento, nunca a
+    derruba (``ondelete="SET NULL"``).
+    """
+
+    __tablename__ = "nfc_tags"
+    __table_args__ = (
+        db.UniqueConstraint("item_id", "sequence", name="uq_nfc_tags_item_sequence"),
+        db.Index("ix_nfc_tags_item_id", "item_id"),
+        db.Index("ix_nfc_tags_event_id", "event_id"),
+        db.Index("ix_nfc_tags_client_id", "client_id"),
+    )
+
+    id               = db.Column(db.Integer, primary_key=True)
+    code             = db.Column(db.String(20), nullable=False, unique=True, index=True)
+    sequence         = db.Column(db.Integer, nullable=False)
+    item_id          = db.Column(
+        db.Integer, db.ForeignKey("acervo_3d_items.id"), nullable=False
+    )
+    event_id         = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="SET NULL"), nullable=True
+    )
+    # Cliente DIRETA (2ª rodada): campanha de marketing/brinde para cliente em potencial, sem
+    # show nenhum. Independente de `event_id`; na exibição, a direta ganha da contratante do
+    # evento. Mesmo `SET NULL`: apagar a cliente nunca derruba a tag.
+    client_id        = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True
+    )
+    is_active        = db.Column(db.Boolean, default=True, nullable=False, server_default="1")
+    notes            = db.Column(db.Text, nullable=True)
+    access_count     = db.Column(db.Integer, default=0, nullable=False, server_default="0")
+    last_accessed_at = db.Column(db.DateTime, nullable=True)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    item   = db.relationship("Acervo3DItem", lazy="joined", backref=db.backref("nfc_tags", lazy=True))
+    event  = db.relationship("CalendarEvent", lazy=True)
+    client = db.relationship("Client", lazy=True)
 
 
 # ── Gestão de Marketing e Frequência (feature 204) ──────────────────────────

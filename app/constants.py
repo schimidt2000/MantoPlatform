@@ -71,6 +71,19 @@ GIFT_3D_STATUSES = [
     GIFT_3D_STATUS_ENTREGUE,
 ]
 
+# Feature 255: código das tags NFC das peças 3D (`<prefixo do item>-<sufixo aleatório>`).
+# O sufixo é sorteado deste alfabeto SEM caracteres ambíguos (0/O, 1/I/L fora) porque a equipe
+# confere o código a olho na etiqueta física. 31^6 ≈ 887 milhões de combinações por prefixo —
+# o sufixo é, na prática, um token de acesso (a página pública terá conteúdo pessoal no futuro),
+# por isso a geração usa `secrets` e nunca numeração sequencial.
+NFC_SUFFIX_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+NFC_SUFFIX_LENGTH = 6
+NFC_MAX_CODE_ATTEMPTS = 20
+
+# Feature 255: destino do link da página pública das tags NFC. O conteúdo da página é decidido
+# 100% pelo servidor (a URL gravada na tag é imutável) — até o link do Instagram viaja no payload.
+MANTO_INSTAGRAM_URL = "https://www.instagram.com/mantoproducoes"
+
 
 # Feature 225b: o que a oficina está fazendo com a peça. `producao` cria algo que não existe;
 # `manutencao` mexe no que já existe — conserto de defeito, ajuste para um evento, adaptação.

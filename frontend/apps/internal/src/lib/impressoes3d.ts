@@ -49,6 +49,11 @@ export interface Acervo3DItem {
   name: string;
   /** Foto de preview (JPG/PNG) — sempre presente; passar por `assetUrl()` antes de exibir. */
   photo_url: string;
+  /**
+   * Prefixo NFC (feature 255): não-nulo = a peça sai com tag NFC embutida e presentes dela
+   * geram códigos `<prefixo>-XXXXXX` automaticamente. `null` = peça comum.
+   */
+  nfc_prefix: string | null;
   /** Arquivos 3D (.stl/.3mf/.zip) — sempre pelo menos um. */
   files: Acervo3DFile[];
   is_active: boolean;
@@ -205,6 +210,8 @@ export interface SaveAcervoItemInput {
   /** Ids de arquivos já salvos a remover — o servidor recusa deixar a peça com zero. */
   removeFileIds?: number[];
   isActive?: boolean;
+  /** Prefixo NFC (feature 255) — string vazia desabilita; omitido mantém o atual. */
+  nfcPrefix?: string;
 }
 
 function buildAcervoFormData(input: SaveAcervoItemInput): FormData {
@@ -214,6 +221,7 @@ function buildAcervoFormData(input: SaveAcervoItemInput): FormData {
   (input.files ?? []).forEach((file) => form.append("files", file));
   (input.removeFileIds ?? []).forEach((id) => form.append("remove_file_ids[]", String(id)));
   if (input.isActive !== undefined) form.set("is_active", String(input.isActive));
+  if (input.nfcPrefix !== undefined) form.set("nfc_prefix", input.nfcPrefix);
   return form;
 }
 

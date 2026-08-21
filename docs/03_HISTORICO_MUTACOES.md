@@ -5,12 +5,11 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-08-20** · Estado do repositório: pós-feature
-> **254-melhorias-video-catalogo (branch, sem migration)** — antes dela a sequência da remoção
-> do Jinja **240–252 (pausada, ver `docs/PARADA_REMOCAO_JINJA.md`)**, antes dela
-> **239-backlog-agosto (11 itens, branch)**, antes dela catalogo-fase-1 (item avulso veste ficha
-> própria, main), antes dela **235-educamanto 4ª rodada (gate fechado, branch)**, antes dela 238
-> (teto autorizado), 237 (solicitar ficha), 236 (cachê por duração) — todas na main · Head de
-> migration: **`e2d8ca4b3071`** (*explicação do teto do cachê, feature 239*)
+> **255-tags-nfc (branch, migrations `a7e2f94c1d58` + `b3f8d27a9e14`)** — antes dela
+> **254-melhorias-video-catalogo (em produção, migration `f3a9c15d8b42`)**, antes dela a
+> sequência da remoção do Jinja **240–252 (pausada, ver `docs/PARADA_REMOCAO_JINJA.md`)**,
+> antes dela **239-backlog-agosto (11 itens)**, catalogo-fase-1, **235-educamanto 4ª rodada**,
+> 238, 237, 236 · Head de migration: **`b3f8d27a9e14`** (*cliente direta na tag NFC, feature 255*)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -42,6 +41,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **255-tags-nfc** | Tags NFC nas peças 3D (luminárias): URL pública imutável por unidade física (`/nfc/<code>`, código aleatório + Nº sequencial humano por produto), geração automática pelo presente 3D, vínculo direto a cliente (campanha sem show), página da estrela "Magia de Sonhar" acendendo, tela de gestão sem exclusão | 2026-08-20 | `a7e2f94c1d58`, `b3f8d27a9e14` | (aqui) | — |
 | **254-melhorias-video-catalogo** | Anexar vídeo na Revisão para de falhar em silêncio (pré-validação, barra de progresso XHR, 413/500 de `/api` com envelope); sync ganha janela de graça de 5 min (corrida com o criar evento); busca de personagem mostra o produto e não rouba vínculo; criar produto do catálogo aterrissa na edição | 2026-08-20 | `—` | (aqui) | — |
 | **250 / 251 / 252** | Régua de comissão extraída para `comissoes_ops` (450 eventos, zero divergência); acréscimos, parcelas e CRUD de nota fiscal na API | 2026-08-20 | `—` | (aqui) | — |
 | **248 / 249** | Comissão volta a sincronizar ao editar venda pela API; núcleo das coleções comerciais sai do formulário Jinja (`comercial_ops`) | 2026-08-20 | `—` | (aqui) | — |
@@ -177,6 +177,69 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 255 — Tags NFC nas luminárias: a URL eterna e o Nº que a equipe anota na tagzinha            (branch · 2026-08-20 · migrations `a7e2f94c1d58` + `b3f8d27a9e14`)
+
+*(2ª rodada, mesmo dia, antes do merge: (a) `nfc_tags.client_id` — a luminária também vai para
+**cliente em potencial** via campanha de marketing, sem show nenhum; a equipe cadastra a pessoa
+em Clientes e vincula direto na tag; precedência: cliente direta → contratante do evento;
+(b) página pública redesenhada como retrato da peça física — céu noturno, nuvens e a estrela
+"Magia de Sonhar" **acendendo** como a lâmpada real, com as cores da peça como tokens `lamp.*`
+no tema do app público.)*
+
+**Contexto.** Todo show entrega um presente 3D; o produto virou uma luminária de marca própria
+com tag NFC embutida. A cliente encosta o celular e abre uma página da Manto — hoje um "portal
+fechado" (boas-vindas + Instagram), amanhã campanhas segmentadas, descontos e as fotos do evento
+dela. Feature desenhada em conversa com o dono do produto; decisões registradas na spec
+(`specs/255-tags-nfc/`).
+
+**A decisão que rege tudo**: a URL gravada na tag física é **imutável e eterna** — grava uma
+vez, trava a tag, e TODO o conteúdo é decidido pelo servidor a cada acesso. Por isso:
+- `nfc_tags.code` nunca muda; linha nunca é apagada (não existe DELETE em camada nenhuma; só
+  `is_active`). Evento apagado → `event_id` vira NULL (`ondelete=SET NULL`), a página nunca quebra.
+- O payload público já traz `campaign: null` — o gancho para o sistema futuro de campanhas sem
+  regravar nenhuma tag entregue.
+- Até o link do Instagram viaja no payload (`MANTO_INSTAGRAM_URL`), não no bundle.
+
+**Regras de negócio principais.**
+- **Uma tag = uma unidade física.** Código `<prefixo>-<sufixo>`: prefixo por produto
+  (`acervo_3d_items.nfc_prefix`, ex. `01` = luminária v1 — decisão do usuário para organização
+  humana), sufixo de 6 chars via `secrets` de alfabeto sem ambiguidade (31⁶ ≈ 887M por prefixo).
+  **Nunca sequencial na URL**: a página terá conteúdo pessoal; código adivinhável era o risco
+  nº 1 (uma cliente abriria a página da outra trocando o final).
+- **`sequence` (pedido do usuário no meio do plan)**: numeração humana POR ITEM (nº 1, 2, 3…),
+  única em `(item_id, sequence)` — é o rótulo que a equipe anota fisicamente na tagzinha ao
+  gravar em lote, para depois alocar "nº X → cliente Y" sem depender do código aleatório.
+- **Geração automática**: `add_event_gift`/`update_event_gift` chamam
+  `nfc_ops.sync_event_gift_tags(event, item)` NA MESMA transação. Alvo = soma das `quantity`
+  dos presentes do par `(evento, item)` — por par, e não por linha de presente, para sobreviver
+  a presente deletado/recriado e a dois presentes do mesmo item. Cria só a diferença positiva;
+  **reduzir/remover nunca apaga** (a tag física pode já existir no mundo).
+- **Privacidade por indistinguibilidade**: `GET /api/nfc/<code>` responde **sempre 200 com o
+  mesmo shape** — código inexistente e tag desativada são idênticos (`product: null`). Nada de
+  404. Contadores de acesso são melhor-esforço (falha loga e não derruba a página).
+
+**Superfícies.** Pública `/nfc/<code>` na raiz do domínio pelo mecanismo do `/cadastro`
+(`NFC_PREFIX` no `frontend/server.js`, `isRootSurface` no `App.tsx` da vitrine) — portal
+dourado sobre roxo profundo, Framer Motion com `useReducedMotion`, CTA só renderiza com a URL
+na mão. ERP `/3d/tags` — Nº em destaque, lote, vínculo de evento via busca da agenda
+(`useAgendaSearch`), copiar link, desativar/reativar; **sem excluir**. Campo "Prefixo NFC" no
+formulário do Acervo.
+
+**Pegadinhas encontradas.**
+- O espelho `manto_local` estava um migration atrás do repo (`e2d8ca4b3071` × `f3a9c15d8b42`):
+  o `db upgrade` local aplicou a da 254 junto — reforça a rotina de conferir `db current` antes
+  de validar migration nova.
+- Seed de teste de `CalendarEvent` exige `google_event_id` (NOT NULL/UNIQUE) e o de peça do
+  Acervo exige ≥1 `Acervo3DFile` — sem o arquivo, o PATCH do Acervo devolve 400 por regra de
+  negócio antiga e parece bug da feature nova.
+- Verificação de UI com o Browser pane oculto: transições de saída congelam (dropdown do
+  `Combobox` "fica aberto" cobrindo o rodapé do Dialog e engole cliques por coordenada) e a
+  árvore de acessibilidade trunca — parecia bug da tela, era artefato já documentado na memória
+  do projeto. O caminho de dados foi provado por `specs/255-tags-nfc/verify_255.py` (34/34).
+- A foto do item vem do banco espelhado mas o ARQUIVO não existe em `instance/uploads/` local →
+  a página pública ganhou fallback de `onError` na imagem (brilho genérico no lugar do ícone de
+  imagem quebrada) — resiliência que vale também em produção.
 
 *(As 12 entradas mais recentes. As anteriores estão em `docs/historico/` — ver índice acima.)*
 

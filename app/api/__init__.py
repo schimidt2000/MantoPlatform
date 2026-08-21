@@ -52,6 +52,8 @@ from app.api import formularios_admin_write as _formularios_admin_write  # noqa:
 from app.api import maps_read as _maps_read  # noqa: E402,F401
 from app.api import impressoes3d_read as _impressoes3d_read  # noqa: E402,F401
 from app.api import impressoes3d_write as _impressoes3d_write  # noqa: E402,F401
+from app.api import nfc_read as _nfc_read  # noqa: E402,F401
+from app.api import nfc_write as _nfc_write  # noqa: E402,F401
 from app.api import marketing_read as _marketing_read  # noqa: E402,F401
 from app.api import marketing_write as _marketing_write  # noqa: E402,F401
 from app.api import virtuais_public as _virtuais_public  # noqa: E402,F401

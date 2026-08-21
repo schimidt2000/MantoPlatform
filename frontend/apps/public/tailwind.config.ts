@@ -56,6 +56,20 @@ const config: Config = {
           DEFAULT: "#c0392b",
           soft: "#fde8e8",
         },
+        // Feature 255 — paleta da luminária "Magia de Sonhar" para a página pública `/nfc`.
+        // Cores da peça física (estrela que acende em laranja quente, borda escura, nuvem
+        // clara), registradas AQUI para a página não hardcodar cor nenhuma (Constituição V).
+        lamp: {
+          glow: "#ffa93d",
+          "glow-deep": "#f07f1f",
+          script: "#7a3a0d",
+          border: "#33205c",
+          cloud: "#efe8fa",
+        },
+      },
+      dropShadow: {
+        // Halo da estrela acesa — dois raios, como a luz da luminária vazando no escuro.
+        lamp: ["0 0 24px rgba(255,169,61,0.55)", "0 0 72px rgba(255,169,61,0.30)"],
       },
       fontFamily: {
         display: ["Fraunces", "Georgia", "serif"],

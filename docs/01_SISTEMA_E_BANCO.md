@@ -258,11 +258,12 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
   dispararia e-mail de "você foi removido" para quem estava escalado sem ninguém tê-lo removido de
   verdade (achado da revisão adversarial, ver `docs/03`).
 
-### 2.2.1 Impressões e Acervo 3D (features 200, 201 e 202)
+### 2.2.1 Impressões e Acervo 3D (features 200, 201, 202 e 255)
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `acervo_3d_items` | `Acervo3DItem` | catálogo de peças base: `name`, `photo_url` (**NOT NULL** — foto JPG/PNG de preview), `is_active`, `created_at` | — |
+| `acervo_3d_items` | `Acervo3DItem` | catálogo de peças base: `name`, `photo_url` (**NOT NULL** — foto JPG/PNG de preview), `nfc_prefix` (feature 255 — não-nulo habilita a peça para tags NFC; é o prefixo do código, ex. `01`), `is_active`, `created_at` | — |
+| `nfc_tags` | `NfcTag` | tag NFC física embutida numa peça entregue (feature 255): `code` (**UNIQUE**, imutável, `<prefixo>-<6 chars aleatórios sem ambiguidade>` via `secrets`), `sequence` (nº humano por item — **UNIQUE `(item_id, sequence)`** — rótulo físico da equipe), `is_active`, `notes`, `access_count`, `last_accessed_at`, `created_at`; índices em `code`, `item_id`, `event_id`, `client_id`. **Nunca é apagada** | `item_id`→`acervo_3d_items`, `event_id`→`calendar_events` e `client_id`→`clients` (ambos **ON DELETE SET NULL** — `client_id` é a cliente DIRETA, p/ campanha/brinde sem show; tem precedência sobre a contratante do evento na exibição) |
 | `acervo_3d_files` | `Acervo3DFile` | arquivos 3D da peça (**1:N**, feature 201 — o modelo vem fatiado em partes): `file_path`, `original_name` (nome enviado, ex.: `corpo.stl`), `position`, `created_at` | `item_id`→`acervo_3d_items` (**ON DELETE CASCADE**) |
 | `event_3d_gifts` | `Event3DGift` | presente 3D vinculado a um evento (1:N): `status` (`pendente`\|`imprimindo`\|`finalizado`\|`entregue`), `deadline_date`, `quantity`, `notes`, `created_at`/`updated_at`; índices em `event_id`, `item_id` e `status` | `event_id`→`calendar_events` (**ON DELETE CASCADE**), `item_id`→`acervo_3d_items` |
 | `event_3d_dismissals` | `Event3DDismissal` | dispensa da pendência "show sem presente" (feature 202): `dismissed_at`, `dismissed_by`. `event_id` é **UNIQUE** — uma dispensa por evento | `event_id`→`calendar_events` (**ON DELETE CASCADE**), `dismissed_by`→`users` |
@@ -291,6 +292,16 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 - Núcleo de negócio em `app/impressoes3d/impressoes3d_ops.py`. *(Nomenclatura: a proposta original
   era `app/3d_impressions/3d_ops.py`, impossível em Python — identificador não pode começar com
   dígito. As URLs públicas mantêm o `3d`.)*
+- **Tags NFC (feature 255)** — contrato central: a URL gravada na tag física
+  (`app.mantoproducoes.com.br/nfc/<code>`) é **imutável e eterna**; todo o conteúdo da página é
+  decidido pelo servidor a cada acesso (gancho `campaign: null` no payload para campanhas
+  futuras sem regravar tags). Geração automática: `add_event_gift`/`update_event_gift` chamam
+  `nfc_ops.sync_event_gift_tags(event, item)` na MESMA transação — alvo é a soma das
+  `quantity` dos presentes do par `(evento, item)`; cria só a diferença positiva e **nunca
+  apaga** (reduzir quantidade/remover presente não toca nas tags). Lote avulso e edição
+  (evento/situação/notas) em `app/impressoes3d/nfc_ops.py`; não existe DELETE em camada
+  nenhuma — desativar (`is_active=False`) faz a página pública responder o payload genérico,
+  **indistinguível de código inexistente** (sempre 200, mesmo shape — requisito de privacidade).
 
 ### 2.3 Talentos e Casting
 
@@ -847,6 +858,25 @@ no máximo 5 itens, descartando predições sem `description`.
   compressão automática do Pillow) e `acervo_3d_files` (arquivos brutos, sem compressão). Como o
   caminho salvo é um UUID, `Acervo3DFile.original_name` guarda o nome enviado — é o que diz qual
   parte do modelo é qual (`corpo.stl`, `argola.3mf`).
+- **Feature 255**: `POST`/`PATCH` do Acervo aceitam o campo opcional `nfc_prefix` (normalizado:
+  trim, MAIÚSCULAS, sem `-`; string vazia = desabilitar; ausente no PATCH = não alterar) e
+  `serialize_acervo_item` devolve `nfc_prefix`. Criar/editar presente 3D dispara a geração
+  automática de tags (ver §2.2.1) — sem mudança de contrato nos endpoints de presente.
+
+### 3.13.2b Tags NFC — `nfc_read.py` / `nfc_write.py` (feature 255)
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET` | `/api/nfc/<code>` | **PÚBLICO, sem login** (padrão `catalogo_read.py`). Resolve o código gravado na tag física. **Sempre 200, mesmo shape**: tag ativa → `{product: {name, photo_url}, campaign: null, instagram_url}` + incrementa `access_count`/`last_accessed_at` (melhor-esforço, falha não derruba a resposta); inexistente **ou** desativada → `{product: null, campaign: null, instagram_url}` — indistinguíveis de propósito. Lookup case-insensitive. `instagram_url` vem de `MANTO_INSTAGRAM_URL` (`app/constants.py`): TODO o conteúdo da página é do servidor. |
+| `GET` | `/api/3d/nfc` | Lista de gestão (ordem: item + `sequence`), cada linha com `item` aninhado, `event` resumido, `client` (vínculo direto) e `client_name`/`client_direct` resolvidos: **cliente direta → contratante do evento** (`client_of_event` de `agenda_read.py` — acrescentado no endpoint, não no ops: ops não importa de `app.api`). |
+| `POST` | `/api/3d/nfc/lote` | Gera lote avulso (JSON `{item_id, quantity}` 1–999), tags sem evento (estoque). 400 com `fields` se o item não tem `nfc_prefix`. |
+| `PATCH` | `/api/3d/nfc/<id>` | Edita **só** os mutáveis: `event_id` e `client_id` (`null` desassocia; sentinela = não alterar; independentes entre si), `is_active`, `notes`. `code` e `sequence` são imutáveis por contrato. |
+
+- **RBAC**: os três `/api/3d/nfc*` exigem `ARTISTA_3D` ou `SUPERADMIN` (`require_3d_access`,
+  reuso da feature 200). **Não existe DELETE** — tag física entregue é eterna.
+- **Serving da página**: `frontend/server.js` serve `/nfc/*` com o bundle da vitrine **sem
+  reescrever a URL** (`NFC_PREFIX`, mesmo mecanismo de `CADASTRO_PREFIX`); o React Router roda
+  sem o basename `/catalogo` (`isRootSurface` em `apps/public/src/App.tsx`).
 
 ### 3.13.3 Marketing e Frequência — `marketing_read.py` / `marketing_write.py` (feature 204, multi-Tema na 204b)
 

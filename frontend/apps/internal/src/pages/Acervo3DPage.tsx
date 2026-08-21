@@ -62,6 +62,7 @@ interface AcervoFormProps {
 function AcervoForm({ item, onSaved, onCancel }: AcervoFormProps) {
   const isEdit = item !== undefined;
   const [name, setName] = useState(item?.name ?? "");
+  const [nfcPrefix, setNfcPrefix] = useState(item?.nfc_prefix ?? "");
   const [photo, setPhoto] = useState<File | null>(null);
   const [modelFiles, setModelFiles] = useState<File[]>([]);
   const [removeFileIds, setRemoveFileIds] = useState<number[]>([]);
@@ -73,7 +74,13 @@ function AcervoForm({ item, onSaved, onCancel }: AcervoFormProps) {
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const input = { name: name.trim(), photo, files: modelFiles, removeFileIds };
+    const input = {
+      name: name.trim(),
+      photo,
+      files: modelFiles,
+      removeFileIds,
+      nfcPrefix: nfcPrefix.trim(),
+    };
     // O formulário NUNCA é limpo em caso de erro (Princípio V) — a limpeza é o `onSaved` do
     // chamador, que remonta este componente por `key` (o `FileUpload` guarda o nome do arquivo
     // em estado interno, então zerar o estado daqui não apagaria o que ele mostra).
@@ -103,6 +110,28 @@ function AcervoForm({ item, onSaved, onCancel }: AcervoFormProps) {
         {fieldError(error, "name") && (
           <p className="mt-1 text-sm text-red" role="alert">
             {fieldError(error, "name")}
+          </p>
+        )}
+      </label>
+
+      <label className="block">
+        <span className="mb-1 block text-sm text-muted">Prefixo NFC (opcional)</span>
+        <Input
+          value={nfcPrefix}
+          onChange={(e) => setNfcPrefix(e.target.value)}
+          placeholder="Ex.: 01"
+          className="max-w-[10rem]"
+          aria-invalid={Boolean(fieldError(error, "nfc_prefix"))}
+          aria-label="Prefixo NFC"
+        />
+        <p className="mt-1 text-xs text-muted">
+          Preenchido, a peça sai com tag NFC: cada unidade de um presente ganha um código{" "}
+          <code>{(nfcPrefix.trim() || "01").toUpperCase()}-XXXXXX</code> automaticamente (tela
+          Tags NFC). Vazio = peça comum.
+        </p>
+        {fieldError(error, "nfc_prefix") && (
+          <p className="mt-1 text-sm text-red" role="alert">
+            {fieldError(error, "nfc_prefix")}
           </p>
         )}
       </label>
