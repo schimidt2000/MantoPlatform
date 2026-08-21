@@ -432,15 +432,14 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **Vínculos**: Talentos · Figurino (`EventRole.figurino_sheet_id`) · Financeiro (comissões e
   pagamentos) · Ensaios (`parent_event_id`) · Grupo comercial (`group_leader_id`) · Clientes ·
   Gastos Extras (`SpecialExpense.event_id`) · Avaliação pública da cliente (`/avaliar/<token>`).
-
----
-
-### A.3 Casting
-
 - **Hotfix 257 (2026-08-21)**: anexar comprovante, contrato, reembolso ou nota fiscal **não**
   gravava (2xx e nada no banco; a tela desenhava o anexo por causa do autoflush e o refresh
   perdia). Faltava `db.session.commit()` nos cinco POSTs. Os arquivos enviados no período
   ficaram órfãos no volume — ver `specs/257-hotfix-anexos-persistencia/`.
+
+---
+
+### A.3 Casting
 
 #### `/talents` — Banco de Talentos
 - **Acesso**: todos exceto `REVENDEDOR_EDUCAMANTO`; **edição** só `CASTING`/`SUPERADMIN`.
