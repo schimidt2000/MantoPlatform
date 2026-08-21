@@ -720,13 +720,12 @@ def api_create_event() -> Any:
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
 
-    from app.calendar.routes import CALENDAR_ID, _build_start_end
-    from app.calendar.routes import insert_event as _insert_event
-
     # Prefixo "(TIPO)" do título: a normalização virou `build_gc_title` em `event_ops`
     # (feature 239), para a criação e as duas telas de edição usarem a MESMA regra — o sync do
     # Google deriva o tipo desse prefixo.
     from app.calendar.event_ops import build_gc_title
+    from app.calendar.routes import CALENDAR_ID, _build_start_end
+    from app.calendar.routes import insert_event as _insert_event
 
     gc_title = build_gc_title(data["title"], data["event_type"])
     d = date.fromisoformat(data["date_str"])
@@ -1059,6 +1058,9 @@ def api_add_invoice(event_id: int) -> Any:
             "Informe ao menos o valor, a data ou o arquivo da nota.", 400,
             {"amount": "Preencha ao menos um campo"},
         )
+    # Mesmo motivo do comprovante de pagamento: o helper só faz `db.session.add` (quem
+    # commitava era o dispatcher do Jinja), então sem esta linha o anexo some no refresh.
+    db.session.commit()
     return _event_detail_json(event), 201
 
 
@@ -1224,6 +1226,9 @@ def api_add_contract(event_id: int) -> Any:
         return json_error(
             "Selecione o arquivo do contrato (até 10 MB).", 400, {"file": "Obrigatório"}
         )
+    # Mesmo motivo do comprovante de pagamento: o helper só faz `db.session.add` (quem
+    # commitava era o dispatcher do Jinja), então sem esta linha o anexo some no refresh.
+    db.session.commit()
     return _event_detail_json(event), 201
 
 
@@ -1287,6 +1292,10 @@ def api_add_payment(event_id: int) -> Any:
             "Informe o valor e anexe o comprovante para adicionar o pagamento.", 400,
             {"amount": "Obrigatório", "file": "Obrigatório"},
         )
+    # `_add_payment_record` só faz `db.session.add` — quem commitava era o dispatcher do Jinja.
+    # Sem esta linha o INSERT é desfeito no fim do request e o comprovante some no refresh
+    # (a resposta ainda o mostrava por causa do autoflush do serializador).
+    db.session.commit()
     return _event_detail_json(event), 201
 
 
@@ -1361,6 +1370,9 @@ def api_add_reimbursement(event_id: int) -> Any:
             "Informe a descrição e o valor do reembolso.", 400,
             {"description": "Obrigatório", "amount": "Obrigatório"},
         )
+    # Mesmo motivo do comprovante de pagamento: o helper só faz `db.session.add` (quem
+    # commitava era o dispatcher do Jinja), então sem esta linha o anexo some no refresh.
+    db.session.commit()
     return _event_detail_json(event), 201
 
 
@@ -1394,6 +1406,9 @@ def api_collect_reimbursement(reimbursement_id: int) -> Any:
             "Informe o valor recebido e anexe o comprovante para marcar como cobrado.", 400,
             {"collected_amount": "Obrigatório", "file": "Obrigatório"},
         )
+    # Mesmo motivo do comprovante de pagamento: o helper só faz `db.session.add` (quem
+    # commitava era o dispatcher do Jinja), então sem esta linha o anexo some no refresh.
+    db.session.commit()
     return _event_detail_json(event)
 
 

@@ -6,6 +6,8 @@ de e-mail configurado. Estes endpoints entregam exatamente isso — nada além:
 
 * ``GET  /api/audit-agent/<token>/file/<path>``  — download read-only de um comprovante.
 * ``POST /api/audit-agent/<token>/report``       — envia o relatório semanal por e-mail.
+* ``GET  /api/audit-agent/<token>/orphan-attachments`` — arquivos do volume sem linha no
+  banco (hotfix 257), para recuperar os anexos que o bug de commit deixou órfãos.
 
 Autenticação por token de ambiente (``AUDIT_AGENT_TOKEN``), no molde do webhook da
 InfinitePay: token errado ou ausente responde **404** (403 confirmaria que o endereço
@@ -16,6 +18,8 @@ O agente é somente leitura sobre o ERP: nenhum endpoint aqui escreve no banco.
 
 import logging
 import os
+import re
+from datetime import datetime, timedelta
 from typing import Any
 
 from flask import current_app, jsonify, request, send_from_directory
@@ -112,3 +116,162 @@ def api_audit_agent_report(token: str) -> Any:
 
     sent = send_audit_report_email(subject, html, users)
     return jsonify({"sent": sent, "rejected": recusados}), 200
+
+
+# ── Anexos órfãos (hotfix 257) ────────────────────────────────────────────────
+#
+# O bug de commit (feature 153 → hotfix 257) salvava o arquivo no volume e perdia a linha do
+# banco. Este endpoint lista o que ficou órfão para a recuperação manual — somente leitura:
+# nada é apagado nem re-vinculado por aqui.
+
+# Pasta física → colunas que apontam para ela.
+ORPHAN_SOURCES: dict[str, tuple[tuple[str, str], ...]] = {
+    "payments": (
+        ("event_payments", "file_path"),
+        ("event_reimbursements", "invoice_file_path"),
+        ("event_reimbursements", "receipt_file_path"),
+    ),
+    "contracts": (("event_contracts", "file_path"),),
+    "invoices": (("event_invoices", "file"), ("calendar_events", "invoice_file")),
+}
+# Carimbo que `_save_bounded_upload` põe no nome: 20260821124233_668f58_nome.pdf
+_PREFIXO_CARIMBO = re.compile(r"^(\d{14})_[0-9a-f]{6}_")
+CANDIDATOS_MAX = 5
+JANELA_EDICAO_DIAS = 1
+JANELA_EVENTO_DIAS = 45
+
+
+def _uploaded_at(nome: str) -> str | None:
+    """Data/hora do envio, lida do carimbo no nome do arquivo (quando houver)."""
+    achado = _PREFIXO_CARIMBO.match(nome)
+    if not achado:
+        return None
+    try:
+        return datetime.strptime(achado.group(1), "%Y%m%d%H%M%S").isoformat()
+    except ValueError:
+        return None
+
+
+def _caminhos_no_banco(subpasta: str) -> set[str]:
+    """Todos os caminhos já referenciados por alguma linha, para a pasta pedida."""
+    from app import db
+
+    usados: set[str] = set()
+    for tabela, coluna in ORPHAN_SOURCES[subpasta]:
+        # Nomes de tabela/coluna vêm do dicionário fixo acima, nunca do request.
+        linhas = db.session.execute(
+            db.text(f"SELECT {coluna} AS caminho FROM {tabela} WHERE {coluna} IS NOT NULL")  # noqa: S608
+        ).scalars()
+        usados.update(str(v).strip() for v in linhas if v)
+    return usados
+
+
+def _evento_resumo(linha: Any, *, com_saldo: bool = False) -> dict[str, Any]:
+    resumo = {
+        "event_id": linha["id"],
+        "title": linha["title"],
+        "start_at": linha["dia"],
+        "sale_value": str(linha["sale_value"]) if linha["sale_value"] is not None else None,
+    }
+    if com_saldo:
+        resumo["received"] = str(linha["recebido"])
+    return resumo
+
+
+def _candidatos(enviado_em: str | None) -> dict[str, Any]:
+    """Eventos que podem ser o dono do arquivo: mexidos na hora do envio, ou com saldo em aberto."""
+    from app import db
+
+    vazio: dict[str, Any] = {"editados_perto": [], "com_saldo_aberto": []}
+    if not enviado_em:
+        return vazio
+    quando = datetime.fromisoformat(enviado_em)
+    editados = db.session.execute(
+        db.text(
+            "SELECT id, title, to_char(start_at, 'YYYY-MM-DD') AS dia, sale_value "
+            "FROM calendar_events WHERE updated_at BETWEEN :ini AND :fim "
+            "ORDER BY abs(EXTRACT(EPOCH FROM (updated_at - :quando))) LIMIT :lim"
+        ),
+        {
+            "ini": quando - timedelta(days=JANELA_EDICAO_DIAS),
+            "fim": quando + timedelta(days=JANELA_EDICAO_DIAS),
+            "quando": quando,
+            "lim": CANDIDATOS_MAX,
+        },
+    ).mappings().all()
+    com_saldo = db.session.execute(
+        db.text(
+            "SELECT e.id, e.title, to_char(e.start_at, 'YYYY-MM-DD') AS dia, e.sale_value, "
+            "COALESCE((SELECT SUM(p.amount) FROM event_payments p WHERE p.event_id = e.id), 0) AS recebido "
+            "FROM calendar_events e "
+            "WHERE e.sale_value > 0 AND e.cancelled_at IS NULL "
+            "AND e.start_at BETWEEN :ini AND :fim "
+            "AND COALESCE((SELECT SUM(p.amount) FROM event_payments p WHERE p.event_id = e.id), 0) < e.sale_value "
+            "ORDER BY abs(EXTRACT(EPOCH FROM (e.start_at - :quando))) LIMIT :lim"
+        ),
+        {
+            "ini": quando - timedelta(days=JANELA_EVENTO_DIAS),
+            "fim": quando + timedelta(days=JANELA_EVENTO_DIAS),
+            "quando": quando,
+            "lim": CANDIDATOS_MAX,
+        },
+    ).mappings().all()
+    return {
+        "editados_perto": [_evento_resumo(linha) for linha in editados],
+        "com_saldo_aberto": [_evento_resumo(linha, com_saldo=True) for linha in com_saldo],
+    }
+
+
+def _orfaos_da_pasta(subpasta: str, upload_root: str, *, com_candidatos: bool) -> dict[str, Any]:
+    """Arquivos da pasta que nenhuma linha do banco referencia."""
+    pasta = os.path.join(upload_root, subpasta)
+    if not os.path.isdir(pasta):
+        return {"files_total": 0, "orphans": [], "note": "pasta inexistente"}
+    usados = _caminhos_no_banco(subpasta)
+    arquivos = sorted(os.listdir(pasta))
+    orfaos: list[dict[str, Any]] = []
+    for nome in arquivos:
+        caminho_absoluto = os.path.join(pasta, nome)
+        if not os.path.isfile(caminho_absoluto):
+            continue
+        publico = f"/uploads/{subpasta}/{nome}"
+        if publico in usados:
+            continue
+        enviado_em = _uploaded_at(nome)
+        item: dict[str, Any] = {
+            "file": publico,
+            "filename": nome,
+            "size_bytes": os.path.getsize(caminho_absoluto),
+            "uploaded_at": enviado_em,
+            "modified_at": datetime.utcfromtimestamp(os.path.getmtime(caminho_absoluto)).isoformat(),
+        }
+        if com_candidatos:
+            item["candidates"] = _candidatos(enviado_em)
+        orfaos.append(item)
+    orfaos.sort(key=lambda o: o["uploaded_at"] or o["modified_at"], reverse=True)
+    return {"files_total": len(arquivos), "orphans": orfaos}
+
+
+@api_bp.route("/audit-agent/<token>/orphan-attachments", methods=["GET"])
+def api_audit_agent_orphan_attachments(token: str) -> Any:
+    """Lista arquivos das pastas de anexo que não têm linha correspondente no banco.
+
+    Existe por causa do hotfix 257: o upload era salvo no volume e o registro se perdia, então
+    os bytes continuam lá, órfãos. Somente leitura — enumera o volume, cruza com as colunas que
+    guardam caminho e devolve cada órfão com data de envio, tamanho e eventos candidatos. Não
+    apaga nem re-vincula: a decisão é humana.
+    """
+    if not _token_valido(token):
+        return jsonify({"error": {"message": "Não encontrado"}}), 404
+
+    com_candidatos = request.args.get("candidatos", "1") != "0"
+    upload_root = current_app.config["UPLOAD_FOLDER"]
+    subfolders = {
+        nome: _orfaos_da_pasta(nome, upload_root, com_candidatos=com_candidatos)
+        for nome in ORPHAN_SOURCES
+    }
+    return jsonify({
+        "generated_at": datetime.utcnow().isoformat(),
+        "subfolders": subfolders,
+        "orphans_total": sum(len(bloco["orphans"]) for bloco in subfolders.values()),
+    })
