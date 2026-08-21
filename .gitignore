@@ -37,7 +37,7 @@ backups/
 
 # Agente auditor financeiro (feature 221): token e artefatos de rodada — NUNCA versionar
 # (runs/ contém comprovantes baixados; data/ tem a memória com extrações)
-.audit-agent-token
+.audit-agent-token*
 /scripts/auditor/data/
 /scripts/auditor/runs/
 

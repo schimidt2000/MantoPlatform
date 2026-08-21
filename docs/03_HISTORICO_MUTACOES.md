@@ -4,7 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-21** · Estado do repositório: pós-hotfix
+> Última atualização: **2026-08-21** · Estado do repositório: pós-feature
+> **258-cliente-manual (sem migration)** — antes dela
 > **257-hotfix-anexos-persistencia (em produção, sem migration)** — antes dele
 > **256-auditor-marketing (em produção, migration `c4d1e7b2a9f3` — head)** — antes dela
 > **255-tags-nfc (branch, migrations `a7e2f94c1d58` + `b3f8d27a9e14`)** — antes dela
@@ -43,6 +44,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **258-cliente-manual** | Botão "Nova cliente" na tela de Clientes: cadastro manual com nome, telefone, e-mail, empresa, CPF, CNPJ e endereço, reusando o endpoint de cadastro rápido (telefone único; repetido avisa e não duplica nem sobrescreve) | 2026-08-21 | `—` | (aqui) | — |
 | **257-hotfix-anexos-persistencia** | Anexos do evento sumiam no refresh: os cinco POSTs de anexo (comprovante, contrato, reembolso, nota fiscal, marcar reembolso cobrado) faziam `db.session.add` sem `commit` — quem commitava era o dispatcher do Jinja. Endpoint novo de listagem de arquivos órfãos no volume + script de recuperação | 2026-08-21 | `—` | (aqui) | — |
 | **256-auditor-marketing** | Auditor de marketing semanal (Claude Code local, zero API): lê exports CSV da Meta/Google numa pasta, grava histórico no ERP por endpoints do agente, mantém o Gasto Extra de reembolso de anúncios por plataforma × mês civil (pendente, sem comprovante, congela ao aprovar), relatório por e-mail com barras HTML/CSS, tela `/marketing/desempenho` com SVG próprio, link do post no card, utms do Kommo no cliente | 2026-08-21 | `c4d1e7b2a9f3` | (aqui) | — |
 | **255-tags-nfc** | Tags NFC nas peças 3D (luminárias): URL pública imutável por unidade física (`/nfc/<code>`, código aleatório + Nº sequencial humano por produto), geração automática pelo presente 3D, vínculo direto a cliente (campanha sem show), página da estrela "Magia de Sonhar" acendendo, tela de gestão sem exclusão | 2026-08-20 | `a7e2f94c1d58`, `b3f8d27a9e14` | (aqui) | — |
@@ -173,6 +175,33 @@ vivem em `scripts/db/README.md`, que **não é versionado** (`.gitignore` cobre 
 Formato de cada entrada:
 
 ```
+### 258-cliente-manual — cadastrar cliente pela tela de Clientes (2026-08-21)
+
+**Migration**: nenhuma. **Pedido**: "na tela do comercial das clientes preciso que seja possível
+adicionar uma cliente manualmente".
+
+A base só crescia por caminhos automáticos (Kommo, formulários) e pelo cadastro rápido de dentro
+do formulário de evento — quem estava na tela de Clientes precisava abrir um evento para criar
+uma ficha. Agora há o botão **"Nova cliente"** no cabeçalho e no estado vazio da busca.
+
+**Decisões**:
+- Reusa `POST /api/clientes/quick-create` (feature 165) em vez de endpoint novo: mesmo gate
+  (`COMERCIAL`/`FINANCEIRO`/`SUPERADMIN`) e mesma regra de **telefone único**.
+- Telefone repetido **não duplica**: o servidor devolve a ficha existente (`reused: true`) e o
+  diálogo avisa com atalho para abri-la. E **não sobrescreve** o que já estava lá — cadastro
+  rápido não pode apagar CPF/nome já conferidos por alguém.
+- `quick_create_client` ganhou `cpf`/`cnpj`/`address` opcionais (só valem na criação): quem
+  cadastra pela tela de Clientes costuma estar com o contrato ou a nota na mão.
+- `useQuickCreateClient` passou a invalidar `clientes-list`/`clientes-metricas`/`clientes-search`
+  — cadastro que não aparece na lista parece que não salvou. Reaproveitamento não invalida nada.
+
+**Pegadinha encontrada**: o primeiro verify falhou por expectativa **minha** errada — o telefone
+é normalizado com DDI (`11988880001` → `5511988880001`, regra do `normalize_phone`), o código
+estava certo.
+
+**Verificação**: `specs/258-cliente-manual/verify_258.py` — 7/7 no `manto_local`; e o fluxo
+conferido na tela (validação, cadastro aparecendo na lista sem F5, aviso de telefone repetido).
+
 ### 257-hotfix-anexos-persistencia — o comprovante aparecia e sumia no refresh (2026-08-21)
 
 **Migration**: nenhuma. **Relato do dono**: "ao anexar comprovantes na página do evento, na parte

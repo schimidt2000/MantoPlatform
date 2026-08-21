@@ -10,6 +10,7 @@ import {
   Skeleton,
 } from "@manto/ui";
 import { useClients, useClientsMetrics, type ClientsMonthMetric } from "../lib/clientes";
+import { NovaClienteDialog } from "../components/NovaClienteDialog";
 
 /** "2026-08" → "ago/26" — rótulo curto do gráfico de novos clientes. */
 function monthLabel(month: string): string {
@@ -80,9 +81,12 @@ export function ClientsListPage() {
           query.data ? `${query.data.total_clients} cliente(s) cadastrado(s)` : undefined
         }
         actions={
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/clientes/avaliacoes">Avaliações ›</Link>
-          </Button>
+          <>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/clientes/avaliacoes">Avaliações ›</Link>
+            </Button>
+            <NovaClienteDialog />
+          </>
         }
       />
 
@@ -135,7 +139,12 @@ export function ClientsListPage() {
       )}
 
       {query.data && query.data.items.length === 0 && (
-        <p className="text-sm text-muted">Nenhum cliente encontrado.</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-muted">
+            {q ? `Nenhum cliente encontrado para "${q}".` : "Nenhum cliente cadastrado ainda."}
+          </p>
+          <NovaClienteDialog />
+        </div>
       )}
 
       {query.data && query.data.items.length > 0 && (

@@ -7,6 +7,9 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
+> Última atualização: **2026-08-21** · Feature **258**: `POST /api/clientes/quick-create`
+> aceita `cpf`, `cnpj` e `address` (opcionais, só na criação — telefone já cadastrado devolve a
+> ficha existente intocada), usados pelo cadastro manual da tela de Clientes. Antes:
 > Última atualização: **2026-08-21** · Hotfix **257** em produção: os cinco POSTs de anexo do
 > evento (`payments`, `contracts`, `reimbursements`, `invoices`,
 > `reimbursements/<id>/collect`) ganharam o `db.session.commit()` que faltava — respondiam 2xx

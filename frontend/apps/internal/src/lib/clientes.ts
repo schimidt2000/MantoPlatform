@@ -103,20 +103,35 @@ export interface QuickCreateClientInput {
   phone_display?: string;
   email?: string;
   company?: string;
+  /** Opcionais do cadastro manual pela tela de Clientes (feature 258). */
+  cpf?: string;
+  cnpj?: string;
+  address?: string;
 }
 
 export interface QuickCreateClientResult extends ClientSummary {
   reused: boolean;
 }
 
-/** Cria um cliente ou reaproveita o existente por telefone (feature 165). */
+/** Cria um cliente ou reaproveita o existente por telefone (feature 165).
+ *
+ * Invalida lista e métricas ao criar de verdade (feature 258): a tela de Clientes mostra as duas
+ * coisas, e um cadastro que não aparece na lista parece que não salvou. Reaproveitamento
+ * (`reused`) não mexe em nada — nada mudou na base. */
 export function useQuickCreateClient() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: QuickCreateClientInput) =>
       apiFetch<QuickCreateClientResult>("/api/clientes/quick-create", {
         method: "POST",
         body: JSON.stringify(input),
       }),
+    onSuccess: (result) => {
+      if (result.reused) return;
+      queryClient.invalidateQueries({ queryKey: ["clientes-list"] });
+      queryClient.invalidateQueries({ queryKey: ["clientes-metricas"] });
+      queryClient.invalidateQueries({ queryKey: ["clientes-search"] });
+    },
   });
 }
 

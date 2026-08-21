@@ -68,8 +68,15 @@ def quick_create_client(
     phone_display: str | None = None,
     email: str | None = None,
     company: str | None = None,
+    cpf: str | None = None,
+    cnpj: str | None = None,
+    address: str | None = None,
 ) -> tuple[Client, bool]:
     """Cria um cliente (nome + telefone) ou reaproveita o existente por telefone.
+
+    `cpf`/`cnpj`/`address` são opcionais e só valem na CRIAÇÃO (feature 258): quando o telefone
+    já pertence a alguém, o cliente existente volta **intocado** — sobrescrever documento de
+    quem já está na base a partir de um cadastro rápido seria perda silenciosa de dado.
 
     Returns:
         Tupla (cliente, reused) — `reused=True` quando o telefone já pertencia a outro cliente.
@@ -92,6 +99,9 @@ def quick_create_client(
         phone_display=(phone_display or "").strip()[:30] or None,
         email=(email or "").strip()[:200] or None,
         company=(company or "").strip()[:200] or None,
+        cpf=(cpf or "").strip()[:20] or None,
+        cnpj=(cnpj or "").strip()[:20] or None,
+        address=(address or "").strip() or None,
     )
     db.session.add(client)
     db.session.commit()
