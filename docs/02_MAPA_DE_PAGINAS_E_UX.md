@@ -437,6 +437,11 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 
 ### A.3 Casting
 
+- **Hotfix 257 (2026-08-21)**: anexar comprovante, contrato, reembolso ou nota fiscal **não**
+  gravava (2xx e nada no banco; a tela desenhava o anexo por causa do autoflush e o refresh
+  perdia). Faltava `db.session.commit()` nos cinco POSTs. Os arquivos enviados no período
+  ficaram órfãos no volume — ver `specs/257-hotfix-anexos-persistencia/`.
+
 #### `/talents` — Banco de Talentos
 - **Acesso**: todos exceto `REVENDEDOR_EDUCAMANTO`; **edição** só `CASTING`/`SUPERADMIN`.
 - **UX**: `TalentMosaic` (grade visual com foto) + `TalentFilterPanel` (status, tags, medidas,

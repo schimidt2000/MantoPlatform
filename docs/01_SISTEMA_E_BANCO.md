@@ -7,6 +7,11 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
+> Última atualização: **2026-08-21** · Hotfix **257** em produção: os cinco POSTs de anexo do
+> evento (`payments`, `contracts`, `reimbursements`, `invoices`,
+> `reimbursements/<id>/collect`) ganharam o `db.session.commit()` que faltava — respondiam 2xx
+> sem gravar; e `GET /api/audit-agent/<token>/orphan-attachments` (somente leitura) lista os
+> arquivos órfãos que o bug deixou no volume. Antes:
 > Última atualização: **2026-08-21** · Em branch: **256-auditor-marketing** (auditor de marketing
 > semanal; migration **`c4d1e7b2a9f3`** — head: 7 tabelas `marketing_*` + `marketing_posts.permalink` +
 > `clients.lead_origin/utm_*`; endpoints `/api/marketing-agent/<token>/{context,run,report}` por env
@@ -691,7 +696,9 @@ semanal que roda FORA do Railway (Claude Code local): `GET
 /api/audit-agent/<token>/file/<path>` (download read-only de comprovante; escopo
 `payments/expenses/invoices/contracts` + allowlist de extensão; `safe_join`) e `POST
 /api/audit-agent/<token>/report` (envia o relatório por e-mail — destinatários restritos a
-usuários internos ativos). Token via env `AUDIT_AGENT_TOKEN`; inválido/ausente → **404**
+usuários internos ativos). `GET /api/audit-agent/<token>/orphan-attachments` (hotfix 257): arquivos das pastas
+`payments`/`contracts`/`invoices` sem linha no banco, com data de envio, tamanho e eventos
+candidatos — somente leitura, não re-vincula nada. Token via env `AUDIT_AGENT_TOKEN`; inválido/ausente → **404**
 (molde do webhook InfinitePay). Nenhum endpoint escreve no banco. Pipeline do auditor em
 `scripts/auditor/` (ver `specs/221-agente-auditor-financeiro/spec.md`).
 

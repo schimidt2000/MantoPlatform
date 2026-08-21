@@ -130,6 +130,9 @@ ORPHAN_SOURCES: dict[str, tuple[tuple[str, str], ...]] = {
         ("event_payments", "file_path"),
         ("event_reimbursements", "invoice_file_path"),
         ("event_reimbursements", "receipt_file_path"),
+        # Adiantamento de salário grava no MESMO volume (`adv_<sp>_<id>_arquivo`) por outro
+        # caminho (`financeiro`), e sem esta linha todo adiantamento apareceria como órfão.
+        ("salary_advances", "proof"),
     ),
     "contracts": (("event_contracts", "file_path"),),
     "invoices": (("event_invoices", "file"), ("calendar_events", "invoice_file")),
@@ -162,7 +165,9 @@ def _caminhos_no_banco(subpasta: str) -> set[str]:
         linhas = db.session.execute(
             db.text(f"SELECT {coluna} AS caminho FROM {tabela} WHERE {coluna} IS NOT NULL")  # noqa: S608
         ).scalars()
-        usados.update(str(v).strip() for v in linhas if v)
+        # Compara pelo NOME do arquivo: colunas antigas guardam só o nome, outras o caminho
+        # público inteiro — casar string crua marcaria arquivo em uso como órfão.
+        usados.update(str(v).strip().replace("\\", "/").rsplit("/", 1)[-1] for v in linhas if v)
     return usados
 
 
@@ -235,7 +240,7 @@ def _orfaos_da_pasta(subpasta: str, upload_root: str, *, com_candidatos: bool) -
         if not os.path.isfile(caminho_absoluto):
             continue
         publico = f"/uploads/{subpasta}/{nome}"
-        if publico in usados:
+        if nome in usados:
             continue
         enviado_em = _uploaded_at(nome)
         item: dict[str, Any] = {

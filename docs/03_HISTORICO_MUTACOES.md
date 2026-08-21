@@ -4,8 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-21** · Estado do repositório: pós-feature
-> **256-auditor-marketing (branch, migration `c4d1e7b2a9f3` — head)** — antes dela
+> Última atualização: **2026-08-21** · Estado do repositório: pós-hotfix
+> **257-hotfix-anexos-persistencia (em produção, sem migration)** — antes dele
+> **256-auditor-marketing (em produção, migration `c4d1e7b2a9f3` — head)** — antes dela
 > **255-tags-nfc (branch, migrations `a7e2f94c1d58` + `b3f8d27a9e14`)** — antes dela
 > **254-melhorias-video-catalogo (em produção, migration `f3a9c15d8b42`)**, antes dela a
 > sequência da remoção do Jinja **240–252 (pausada, ver `docs/PARADA_REMOCAO_JINJA.md`)**,
@@ -42,6 +43,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **257-hotfix-anexos-persistencia** | Anexos do evento sumiam no refresh: os cinco POSTs de anexo (comprovante, contrato, reembolso, nota fiscal, marcar reembolso cobrado) faziam `db.session.add` sem `commit` — quem commitava era o dispatcher do Jinja. Endpoint novo de listagem de arquivos órfãos no volume + script de recuperação | 2026-08-21 | `—` | (aqui) | — |
 | **256-auditor-marketing** | Auditor de marketing semanal (Claude Code local, zero API): lê exports CSV da Meta/Google numa pasta, grava histórico no ERP por endpoints do agente, mantém o Gasto Extra de reembolso de anúncios por plataforma × mês civil (pendente, sem comprovante, congela ao aprovar), relatório por e-mail com barras HTML/CSS, tela `/marketing/desempenho` com SVG próprio, link do post no card, utms do Kommo no cliente | 2026-08-21 | `c4d1e7b2a9f3` | (aqui) | — |
 | **255-tags-nfc** | Tags NFC nas peças 3D (luminárias): URL pública imutável por unidade física (`/nfc/<code>`, código aleatório + Nº sequencial humano por produto), geração automática pelo presente 3D, vínculo direto a cliente (campanha sem show), página da estrela "Magia de Sonhar" acendendo, tela de gestão sem exclusão | 2026-08-20 | `a7e2f94c1d58`, `b3f8d27a9e14` | (aqui) | — |
 | **254-melhorias-video-catalogo** | Anexar vídeo na Revisão para de falhar em silêncio (pré-validação, barra de progresso XHR, 413/500 de `/api` com envelope); sync ganha janela de graça de 5 min (corrida com o criar evento); busca de personagem mostra o produto e não rouba vínculo; criar produto do catálogo aterrissa na edição | 2026-08-20 | `—` | (aqui) | — |
@@ -171,6 +173,46 @@ vivem em `scripts/db/README.md`, que **não é versionado** (`.gitignore` cobre 
 Formato de cada entrada:
 
 ```
+### 257-hotfix-anexos-persistencia — o comprovante aparecia e sumia no refresh (2026-08-21)
+
+**Migration**: nenhuma. **Relato do dono**: "ao anexar comprovantes na página do evento, na parte
+comercial, quando dá refresh o comprovante some."
+
+**Causa raiz**: `POST /api/events/<id>/payments` (e mais quatro da mesma família, feature 153)
+chamavam os helpers `_add_*_record` de `app/calendar/routes.py`, que só fazem `db.session.add`.
+Quem commitava era o **dispatcher do Jinja** (`_handle_add_payment` termina em
+`db.session.commit()`); ao extrair a lógica para a API, o commit ficou para trás. O `PATCH` e o
+`DELETE` dos mesmos recursos sempre commitaram — por isso editar e excluir funcionavam e ninguém
+suspeitou do POST.
+
+**Por que enganava**: o serializador da resposta consulta `EventPayment` na **mesma sessão**. O
+autoflush do SQLAlchemy grava o INSERT pendente antes da consulta, então o JSON de resposta traz
+o comprovante e a tela o desenha. No fim do request a sessão é descartada e o INSERT é desfeito.
+Aparece e some — exatamente o relato.
+
+**Escopo confirmado por HTTP real** (todos 2xx, nada gravado): comprovante de pagamento,
+contrato, reembolso, nota fiscal e `POST /reimbursements/<id>/collect`.
+
+**Correção**: `db.session.commit()` nos cinco endpoints (`app/api/agenda_write.py`).
+
+**Recuperação**: o arquivo é salvo no volume **antes** do INSERT, então os anexos do período
+ficaram órfãos (bytes intactos, sem linha). Endpoint novo — somente leitura, token do auditor —
+`GET /api/audit-agent/<token>/orphan-attachments` lista os arquivos sem dono com data de envio
+(carimbo do nome), tamanho e eventos candidatos (mexidos na mesma hora / com saldo em aberto por
+perto); `specs/257-hotfix-anexos-persistencia/recuperar_anexos_orfaos.py` monta o relatório para
+conferência humana. Nada é re-vinculado automaticamente.
+
+**Pegadinhas encontradas**:
+- **Um verify que confere pela sessão do Flask passa mesmo com o bug** (autoflush). A checagem
+  tem de ser por conexão separada — foi o que quase escondeu o defeito no diagnóstico: a primeira
+  varredura com `test_client` deu "tudo ok" porque um request posterior que commitava arrastava
+  junto os INSERTs pendentes dos anteriores (mesma sessão compartilhada com o script).
+- `secure_filename` come os `__` do prefixo de teste ao salvar (`__v257_c.png` → `v257_c.png`);
+  limpeza de arquivos de verify precisa procurar pelo miolo.
+
+**Pendência conhecida**: o handler Jinja gravava um `EventLog` por anexo ("Adicionou pagamento
+recebido de R$ X") e a API não grava — o histórico do evento perde esse rastro. Item separado.
+
 ### 256-auditor-marketing — auditor de marketing semanal + mensuração no ERP (2026-08-21)
 
 **Migration**: `c4d1e7b2a9f3` (aditiva): tabelas `marketing_agent_runs`, `marketing_import_files`
