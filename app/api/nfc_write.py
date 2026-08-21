@@ -46,8 +46,10 @@ def api_3d_nfc_update(tag_id: int) -> Any:
     try:
         nfc_ops.update_tag(
             tag,
-            # `...` = "não alterar" (None é válido: desassocia do evento).
+            # `...` = "não alterar" (None é válido: desassocia). `client_id` é a cliente
+            # DIRETA — campanha/brinde sem show; independente do evento.
             event_id=body["event_id"] if "event_id" in body else ...,
+            client_id=body["client_id"] if "client_id" in body else ...,
             is_active=body.get("is_active"),
             notes=body.get("notes"),
         )

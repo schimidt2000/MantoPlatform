@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Link2, Link2Off, Nfc } from "lucide-react";
+import { Link2Off, Nfc } from "lucide-react";
 import {
   Badge,
   Button,
@@ -25,6 +25,7 @@ import {
 } from "@manto/ui";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
 import { useAgendaSearch } from "../lib/agenda";
+import { useClientSearch } from "../lib/clientes";
 import { useAcervo3D } from "../lib/impressoes3d";
 import {
   useAtualizarNfcTag,
@@ -58,30 +59,48 @@ interface AssociarDialogProps {
   onClose: () => void;
 }
 
-/** Vincular/trocar o evento de uma tag — busca textual da agenda (título, cliente, telefone). */
+/**
+ * Vincular a tag a um evento OU direto a uma cliente (campanha/brinde sem show).
+ *
+ * Cada seleção num combobox SALVA na hora (PATCH) e fecha — sem botão "Salvar" que obrigaria a
+ * lembrar de dois estados. Desvincular é ação explícita no rodapé. A cliente direta tem
+ * precedência sobre a contratante do evento na lista.
+ */
 function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
-  const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const search = useAgendaSearch(query);
+  const [eventQuery, setEventQuery] = useState("");
+  const [clientQuery, setClientQuery] = useState("");
+  const eventSearch = useAgendaSearch(eventQuery);
+  const clientSearch = useClientSearch(clientQuery);
   const update = useAtualizarNfcTag();
 
-  const options = useMemo(
+  const eventOptions = useMemo(
     () =>
-      (search.data?.items ?? []).map((ev) => ({
+      (eventSearch.data?.items ?? []).map((ev) => ({
         value: String(ev.id),
-        label: ev.start_at
-          ? `${ev.title} — ${formatShortDate(ev.start_at)}`
-          : ev.title,
+        label: ev.start_at ? `${ev.title} — ${formatShortDate(ev.start_at)}` : ev.title,
         description: ev.client_name ?? undefined,
       })),
-    [search.data],
+    [eventSearch.data],
+  );
+  const clientOptions = useMemo(
+    () =>
+      (clientSearch.data ?? []).map((cl) => ({
+        value: String(cl.id),
+        label: cl.name,
+        description: cl.phone_display ?? undefined,
+      })),
+    [clientSearch.data],
   );
 
   function close() {
-    setQuery("");
-    setSelectedId(null);
+    setEventQuery("");
+    setClientQuery("");
     update.reset();
     onClose();
+  }
+
+  function save(input: { event_id?: number | null; client_id?: number | null }) {
+    if (tag) update.mutate({ id: tag.id, input }, { onSuccess: close });
   }
 
   return (
@@ -89,28 +108,56 @@ function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
       <DialogContent open={tag !== null} className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            Vincular evento — tag nº {tag?.sequence} ({tag?.code})
+            Vincular — tag nº {tag?.sequence} ({tag?.code})
           </DialogTitle>
           <DialogDescription>
-            O cliente vem junto do evento. A associação pode ser trocada a qualquer momento; o
+            Show contratado: vincule o evento (a cliente vem de carona). Campanha ou brinde sem
+            show: cadastre a pessoa em Clientes e vincule direto aqui. Escolher já salva; o
             código gravado na tag nunca muda.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <Combobox
-            options={options}
-            value={selectedId}
-            onChange={(value) => setSelectedId(value)}
-            onQueryChange={setQuery}
-            placeholder="Buscar evento por título, cliente ou telefone…"
-            aria-label="Buscar evento"
-          />
-          {search.isFetching && <p className="text-xs text-muted">Buscando…</p>}
-          {fieldError(update.error, "event_id") && (
-            <p className="text-sm text-red" role="alert">
-              {fieldError(update.error, "event_id")}
-            </p>
+        <div className="space-y-4">
+          <label className="block">
+            <span className="mb-1 block text-sm text-muted">
+              Evento do show{tag?.event ? ` — atual: ${tag.event.title}` : ""}
+            </span>
+            <Combobox
+              options={eventOptions}
+              value={null}
+              onChange={(value) => value !== null && save({ event_id: Number(value) })}
+              onQueryChange={setEventQuery}
+              placeholder="Buscar evento por título, cliente ou telefone…"
+              aria-label="Buscar evento"
+            />
+            {fieldError(update.error, "event_id") && (
+              <p className="mt-1 text-sm text-red" role="alert">
+                {fieldError(update.error, "event_id")}
+              </p>
+            )}
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-sm text-muted">
+              Cliente direta (sem show){tag?.client ? ` — atual: ${tag.client.name}` : ""}
+            </span>
+            <Combobox
+              options={clientOptions}
+              value={null}
+              onChange={(value) => value !== null && save({ client_id: Number(value) })}
+              onQueryChange={setClientQuery}
+              placeholder="Buscar cliente por nome ou telefone…"
+              aria-label="Buscar cliente"
+            />
+            {fieldError(update.error, "client_id") && (
+              <p className="mt-1 text-sm text-red" role="alert">
+                {fieldError(update.error, "client_id")}
+              </p>
+            )}
+          </label>
+
+          {(eventSearch.isFetching || clientSearch.isFetching) && (
+            <p className="text-xs text-muted">Buscando…</p>
           )}
         </div>
 
@@ -119,35 +166,24 @@ function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
             <Button
               variant="outline"
               loading={update.isPending}
-              onClick={() =>
-                tag &&
-                update.mutate(
-                  { id: tag.id, input: { event_id: null } },
-                  { onSuccess: close },
-                )
-              }
+              onClick={() => save({ event_id: null })}
             >
               <Link2Off className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              Desvincular
+              Desvincular evento
+            </Button>
+          )}
+          {tag?.client && (
+            <Button
+              variant="outline"
+              loading={update.isPending}
+              onClick={() => save({ client_id: null })}
+            >
+              <Link2Off className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Desvincular cliente
             </Button>
           )}
           <Button variant="ghost" onClick={close} disabled={update.isPending}>
-            Cancelar
-          </Button>
-          <Button
-            loading={update.isPending}
-            disabled={selectedId === null}
-            onClick={() =>
-              tag &&
-              selectedId !== null &&
-              update.mutate(
-                { id: tag.id, input: { event_id: Number(selectedId) } },
-                { onSuccess: close },
-              )
-            }
-          >
-            <Link2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Vincular
+            Fechar
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -349,7 +385,14 @@ export function Tags3DPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <span className="text-sm text-ink">{tag.client_name ?? "—"}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-sm text-ink">{tag.client_name ?? "—"}</span>
+                          {tag.client_direct && (
+                            <span title="Vínculo direto na tag (sem show)">
+                              <Badge tone="gold">direta</Badge>
+                            </span>
+                          )}
+                        </span>
                       </TableCell>
                       <TableCell align="right">
                         <span
@@ -374,9 +417,9 @@ export function Tags3DPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => setAssociando(tag)}
-                            aria-label={`Vincular evento à tag nº ${tag.sequence}`}
+                            aria-label={`Vincular evento ou cliente à tag nº ${tag.sequence}`}
                           >
-                            {tag.event ? "Trocar evento" : "Vincular evento"}
+                            {tag.event || tag.client ? "Editar vínculos" : "Vincular"}
                           </Button>
                           <Button
                             variant="ghost"

@@ -2245,6 +2245,7 @@ class NfcTag(db.Model):
         db.UniqueConstraint("item_id", "sequence", name="uq_nfc_tags_item_sequence"),
         db.Index("ix_nfc_tags_item_id", "item_id"),
         db.Index("ix_nfc_tags_event_id", "event_id"),
+        db.Index("ix_nfc_tags_client_id", "client_id"),
     )
 
     id               = db.Column(db.Integer, primary_key=True)
@@ -2256,14 +2257,21 @@ class NfcTag(db.Model):
     event_id         = db.Column(
         db.Integer, db.ForeignKey("calendar_events.id", ondelete="SET NULL"), nullable=True
     )
+    # Cliente DIRETA (2ª rodada): campanha de marketing/brinde para cliente em potencial, sem
+    # show nenhum. Independente de `event_id`; na exibição, a direta ganha da contratante do
+    # evento. Mesmo `SET NULL`: apagar a cliente nunca derruba a tag.
+    client_id        = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True
+    )
     is_active        = db.Column(db.Boolean, default=True, nullable=False, server_default="1")
     notes            = db.Column(db.Text, nullable=True)
     access_count     = db.Column(db.Integer, default=0, nullable=False, server_default="0")
     last_accessed_at = db.Column(db.DateTime, nullable=True)
     created_at       = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-    item  = db.relationship("Acervo3DItem", lazy="joined", backref=db.backref("nfc_tags", lazy=True))
-    event = db.relationship("CalendarEvent", lazy=True)
+    item   = db.relationship("Acervo3DItem", lazy="joined", backref=db.backref("nfc_tags", lazy=True))
+    event  = db.relationship("CalendarEvent", lazy=True)
+    client = db.relationship("Client", lazy=True)
 
 
 # ── Gestão de Marketing e Frequência (feature 204) ──────────────────────────

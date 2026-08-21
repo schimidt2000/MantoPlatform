@@ -26,7 +26,7 @@ from app.constants import (
     NFC_SUFFIX_ALPHABET,
     NFC_SUFFIX_LENGTH,
 )
-from app.models import Acervo3DItem, CalendarEvent, Event3DGift, NfcTag
+from app.models import Acervo3DItem, CalendarEvent, Client, Event3DGift, NfcTag
 from app.utils import audit
 
 logger = logging.getLogger(__name__)
@@ -203,6 +203,7 @@ def list_tags() -> list[NfcTag]:
         NfcTag.query.options(
             joinedload(NfcTag.item),
             joinedload(NfcTag.event).joinedload(CalendarEvent.event_clients),
+            joinedload(NfcTag.client),
         )
         .join(Acervo3DItem, NfcTag.item_id == Acervo3DItem.id)
         .order_by(Acervo3DItem.name.asc(), NfcTag.sequence.asc())
@@ -237,17 +238,20 @@ def update_tag(
     tag: NfcTag,
     *,
     event_id: Any = ...,
+    client_id: Any = ...,
     is_active: bool | None = None,
     notes: str | None = None,
 ) -> NfcTag:
-    """Edita os ÚNICOS campos mutáveis de uma tag: evento, situação e observações.
+    """Edita os ÚNICOS campos mutáveis de uma tag: evento, cliente direta, situação e notas.
 
-    `event_id` usa `...` (Ellipsis) como sentinela de "não alterar", porque `None` é um valor
-    válido (desassociar do evento). `code` e `sequence` são imutáveis por contrato — não há
-    parâmetro para eles de propósito. Apagar tag não existe em lugar nenhum.
+    `event_id` e `client_id` usam `...` (Ellipsis) como sentinela de "não alterar", porque
+    `None` é um valor válido (desassociar). `client_id` é a cliente DIRETA — o caso da campanha
+    de marketing sem show; independe do evento e ganha dele na exibição. `code` e `sequence`
+    são imutáveis por contrato — não há parâmetro para eles de propósito. Apagar tag não
+    existe em lugar nenhum.
 
     Raises:
-        NfcValidationError: `event_id` informado não existe.
+        NfcValidationError: `event_id`/`client_id` informado não existe.
     """
     if event_id is not ...:
         if event_id is None:
@@ -257,6 +261,14 @@ def update_tag(
             if event is None:
                 raise NfcValidationError("event_id", "Evento não encontrado.")
             tag.event_id = event.id
+    if client_id is not ...:
+        if client_id is None:
+            tag.client_id = None
+        else:
+            client = Client.query.get(client_id)
+            if client is None:
+                raise NfcValidationError("client_id", "Cliente não encontrada.")
+            tag.client_id = client.id
     if is_active is not None:
         tag.is_active = is_active
     if notes is not None:
@@ -301,6 +313,11 @@ def serialize_tag(tag: NfcTag) -> dict[str, Any]:
             }
             if event
             else None
+        ),
+        # Cliente DIRETA (campanha/brinde sem show). A contratante do evento não sai daqui —
+        # é o endpoint quem resolve a precedência (ops não importa de `app.api`).
+        "client": (
+            {"id": tag.client.id, "name": tag.client.name} if tag.client else None
         ),
         "is_active": bool(tag.is_active),
         "notes": tag.notes,

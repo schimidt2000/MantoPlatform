@@ -36,14 +36,21 @@ def api_nfc_resolve(code: str) -> Any:
 
 
 def _serialize_admin_tag(tag: NfcTag) -> dict[str, Any]:
-    """Linha da lista do ERP: payload do ops + nome da cliente do evento.
+    """Linha da lista do ERP: payload do ops + nome da cliente resolvido.
 
+    Precedência: cliente DIRETA da tag (campanha/brinde sem show) → contratante do evento.
     O `client_name` entra AQUI (e não em `nfc_ops.serialize_tag`) porque `client_of_event`
-    mora na camada de API — ops não importa de `app.api`.
+    mora na camada de API — ops não importa de `app.api`. `client_direct` diz à UI se o nome
+    veio do vínculo direto (editável na tag) ou de carona do evento.
     """
     entry = nfc_ops.serialize_tag(tag)
-    client_name, _phone = client_of_event(tag.event) if tag.event else (None, None)
-    entry["client_name"] = client_name
+    if tag.client is not None:
+        entry["client_name"] = tag.client.name
+        entry["client_direct"] = True
+    else:
+        client_name, _phone = client_of_event(tag.event) if tag.event else (None, None)
+        entry["client_name"] = client_name
+        entry["client_direct"] = False
     return entry
 
 

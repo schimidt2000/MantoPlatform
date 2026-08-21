@@ -98,7 +98,8 @@ with app.app_context():
     item = Acervo3DItem(name=f"Luminaria {MARKER}", photo_url="/uploads/acervo_3d_photos/v255.jpg")
     item_sem_nfc = Acervo3DItem(name=f"Chaveiro {MARKER}", photo_url="/uploads/acervo_3d_photos/v255b.jpg")
     cliente = Client(name=f"Cliente {MARKER}", phone="999255000001")
-    db.session.add_all([item, item_sem_nfc, cliente])
+    cliente_direta = Client(name=f"Cliente Direta {MARKER}", phone="999255000002")
+    db.session.add_all([item, item_sem_nfc, cliente, cliente_direta])
     db.session.flush()
     # Peça sem arquivo 3D não existe na regra de negócio — o PATCH do acervo valida isso.
     db.session.add_all([
@@ -124,6 +125,7 @@ with app.app_context():
     db.session.commit()
     item_id, item2_id, event_id, event2_id = item.id, item_sem_nfc.id, ev.id, ev2.id
     cliente_nome = cliente.name
+    cliente_direta_id, cliente_direta_nome = cliente_direta.id, cliente_direta.name
 
 c = app.test_client()
 r = c.post("/api/auth/login", json={"email": EMAIL, "password": PW})
@@ -186,6 +188,26 @@ check("client_name do contratante na linha", linha.get("client_name") == cliente
 r = c.patch(f"/api/3d/nfc/{tag_avulsa_id}", json={"event_id": None})
 check("PATCH desassocia (event_id null)", r.status_code == 200
       and (r.get_json() or {}).get("tag", {}).get("event") is None)
+
+print("\n=== 5b. Cliente DIRETA (campanha/brinde sem show) e precedencia ===")
+r = c.patch(f"/api/3d/nfc/{tag_avulsa_id}", json={"client_id": cliente_direta_id})
+body = (r.get_json() or {}).get("tag") or {}
+check("PATCH vincula cliente direta", r.status_code == 200
+      and body.get("client_name") == cliente_direta_nome and body.get("client_direct") is True,
+      f"status={r.status_code} client_name={body.get('client_name')!r}")
+r = c.patch(f"/api/3d/nfc/{tag_avulsa_id}", json={"event_id": event2_id})
+body = (r.get_json() or {}).get("tag") or {}
+check("com evento E cliente direta, a direta ganha", body.get("client_name") == cliente_direta_nome
+      and body.get("client_direct") is True, f"client_name={body.get('client_name')!r}")
+r = c.patch(f"/api/3d/nfc/{tag_avulsa_id}", json={"client_id": None})
+body = (r.get_json() or {}).get("tag") or {}
+check("removida a direta, volta a contratante do evento", body.get("client_name") == cliente_nome
+      and body.get("client_direct") is False, f"client_name={body.get('client_name')!r}")
+r = c.patch(f"/api/3d/nfc/{tag_avulsa_id}", json={"client_id": 99999999})
+check("cliente inexistente → 400 com campo", r.status_code == 400
+      and "client_id" in (((r.get_json() or {}).get("error") or {}).get("fields") or {}))
+r = c.patch(f"/api/3d/nfc/{tag_avulsa_id}", json={"event_id": None})
+check("desassocia evento de novo (segue para o cenario 6)", r.status_code == 200)
 
 print("\n=== 6. Pagina publica resolve SEM login ===")
 anon = app.test_client()  # sem cookie de sessao

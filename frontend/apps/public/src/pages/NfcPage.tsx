@@ -1,7 +1,5 @@
-import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { assetUrl } from "@manto/api-client";
 import { useNfcResolution } from "../lib/nfc";
 
 /**
@@ -9,13 +7,14 @@ import { useNfcResolution } from "../lib/nfc";
  *
  * A cliente encosta o celular na peça e cai aqui, sem login. A URL gravada na tag é imutável;
  * TODO o conteúdo vem do servidor (`useNfcResolution`), então esta página evolui sem regravar
- * tag nenhuma. Código inexistente/desativado chega como `product: null` e a página simplesmente
- * mostra o modo genérico — não existe caminho de erro visível (SC-006: nunca revelar se um
- * código existe).
+ * tag nenhuma. Código inexistente/desativado chega como `product: null` e a página mostra o
+ * mesmo palco — não existe caminho de erro visível (SC-006: nunca revelar se um código existe).
  *
- * Mobile-first de verdade (Princípio X): o acesso nasce de um toque de NFC num iPhone/Android,
- * quase sempre à noite, ao lado da luminária acesa — daí a superfície escura (roxo profundo da
- * paleta) com o portal dourado se abrindo (Princípio XI, com `useReducedMotion`).
+ * A entrada é o RETRATO da luminária física (2ª rodada, com foto da peça em mãos): céu noturno
+ * com estrelinhas piscando, nuvens na base, e a estrela "Magia de Sonhar" que **acende** como a
+ * lâmpada de verdade acende — primeiro o contorno apagado, depois o brilho quente revelando o
+ * escrito. Coreografia em fases de ≤350ms (Princípio XI); com `useReducedMotion`, a estrela já
+ * aparece acesa e nada pisca.
  */
 
 /** `@handle` legível a partir da URL do Instagram que o servidor mandou. */
@@ -24,18 +23,37 @@ function instagramHandle(url: string): string {
   return match ? `@${match[1]}` : "@mantoproducoes";
 }
 
+/** Estrela de 5 pontas centrada em (110,116) — raio externo 92, interno 38. */
+const STAR_POINTS = Array.from({ length: 10 }, (_, i) => {
+  const radius = i % 2 === 0 ? 92 : 38;
+  const angle = (Math.PI / 5) * i - Math.PI / 2;
+  return `${(110 + radius * Math.cos(angle)).toFixed(1)},${(116 + radius * Math.sin(angle)).toFixed(1)}`;
+}).join(" ");
+
+/** Estrelinhas do céu — posições fixas (nada de aleatório: render estável, sem hidratar duas vezes). */
+const SKY_STARS = [
+  { top: "8%", left: "12%", size: 3, delay: 0 },
+  { top: "14%", left: "78%", size: 2, delay: 0.6 },
+  { top: "22%", left: "38%", size: 2, delay: 1.4 },
+  { top: "28%", left: "88%", size: 3, delay: 0.9 },
+  { top: "34%", left: "8%", size: 2, delay: 1.8 },
+  { top: "6%", left: "55%", size: 2, delay: 2.2 },
+  { top: "44%", left: "92%", size: 2, delay: 0.3 },
+  { top: "52%", left: "6%", size: 3, delay: 1.1 },
+  { top: "18%", left: "24%", size: 2, delay: 2.6 },
+  { top: "40%", left: "72%", size: 2, delay: 1.6 },
+  { top: "60%", left: "86%", size: 2, delay: 0.7 },
+  { top: "64%", left: "14%", size: 2, delay: 2.0 },
+];
+
 export function NfcPage() {
   const { code = "" } = useParams<{ code: string }>();
   const resolution = useNfcResolution(code);
   const reducedMotion = useReducedMotion();
-  // Foto que não carregou vira o brilho genérico — nunca o ícone de imagem quebrada no portal.
-  const [photoBroken, setPhotoBroken] = useState(false);
 
-  const product = resolution.data?.product ?? null;
   const instagramUrl = resolution.data?.instagram_url;
-  const showPhoto = product !== null && !photoBroken;
 
-  // Entrada encadeada: portal abre → conteúdo sobe. Com movimento reduzido, tudo já visível.
+  // Conteúdo textual sobe em fases, depois que a estrela acendeu (~0.8s).
   const enter = (delay: number) =>
     reducedMotion
       ? {}
@@ -46,51 +64,137 @@ export function NfcPage() {
         };
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-gradient-to-b from-accent-dark to-ink px-6 py-10 text-center">
-      <main className="flex w-full max-w-md flex-col items-center gap-6">
-        {/* O portal: anel dourado que se abre revelando a peça (ou o brilho genérico). */}
+    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-accent-dark to-ink px-6 py-10 text-center">
+      {/* Céu: estrelinhas piscando (estáticas com movimento reduzido). */}
+      {SKY_STARS.map((star, i) => (
+        <motion.span
+          key={i}
+          aria-hidden="true"
+          className="absolute rounded-full bg-on-color"
+          style={{ top: star.top, left: star.left, width: star.size, height: star.size }}
+          initial={{ opacity: reducedMotion ? 0.5 : 0.15 }}
+          animate={
+            reducedMotion
+              ? { opacity: 0.5 }
+              : { opacity: [0.15, 0.9, 0.15], scale: [1, 1.4, 1] }
+          }
+          transition={
+            reducedMotion
+              ? undefined
+              : { duration: 2.8, delay: star.delay, repeat: Infinity, ease: "easeInOut" }
+          }
+        />
+      ))}
+
+      {/* Nuvens da base — como a nuvem que segura a estrela na peça física. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-16 left-1/2 h-48 w-[130%] -translate-x-1/2 rounded-[100%] bg-lamp-cloud/10 blur-2xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-24 left-1/4 h-40 w-96 -translate-x-1/2 rounded-[100%] bg-lamp-cloud/[0.07] blur-3xl"
+      />
+
+      <main className="relative flex w-full max-w-md flex-col items-center gap-5">
+        {/* A luminária: o contorno chega apagado; o miolo ACENDE revelando o "Magia de Sonhar". */}
         <motion.div
-          initial={reducedMotion ? undefined : { scale: 0.25, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
+          initial={reducedMotion ? undefined : { scale: 0.4, opacity: 0, rotate: -8 }}
+          animate={{ scale: 1, opacity: 1, rotate: 0 }}
           transition={{ duration: 0.35, ease: [0.22, 1.2, 0.36, 1] }}
-          className="relative flex h-44 w-44 items-center justify-center rounded-full border-2 border-gold/80 shadow-[0_0_60px_rgba(177,121,58,0.35)]"
+          className="relative"
           aria-hidden="true"
         >
-          {/* Halo respirando — só para quem aceita movimento. */}
+          <svg viewBox="0 0 220 232" className="h-56 w-56">
+            {/* Corpo apagado: só o contorno e um miolo quase escuro. */}
+            <polygon
+              points={STAR_POINTS}
+              className="fill-lamp-glow/10 stroke-lamp-border"
+              strokeWidth="9"
+              strokeLinejoin="round"
+            />
+          </svg>
+
+          {/* A luz: camada acesa que surge por cima, com o halo vazando no escuro. */}
+          <motion.div
+            className="absolute inset-0 drop-shadow-lamp"
+            initial={reducedMotion ? { opacity: 1 } : { opacity: 0 }}
+            animate={
+              reducedMotion
+                ? { opacity: 1 }
+                : { opacity: [0, 0.35, 1, 0.85, 1] }
+            }
+            transition={
+              reducedMotion
+                ? undefined
+                : { duration: 0.5, delay: 0.4, times: [0, 0.35, 0.6, 0.8, 1] }
+            }
+          >
+            <svg viewBox="0 0 220 232" className="h-56 w-56">
+              <defs>
+                <radialGradient id="nfc-star-glow" cx="50%" cy="48%" r="62%">
+                  <stop offset="0%" className="[stop-color:theme(colors.lamp.glow)]" />
+                  <stop offset="100%" className="[stop-color:theme(colors.lamp.glow-deep)]" />
+                </radialGradient>
+              </defs>
+              <polygon
+                points={STAR_POINTS}
+                fill="url(#nfc-star-glow)"
+                className="stroke-lamp-border"
+                strokeWidth="9"
+                strokeLinejoin="round"
+              />
+              {/* O escrito da peça, que só aparece com a luz acesa — igual à luminária. */}
+              <text
+                x="110"
+                y="112"
+                textAnchor="middle"
+                className="fill-lamp-script font-display italic"
+                fontSize="30"
+              >
+                Magia
+              </text>
+              <text
+                x="110"
+                y="140"
+                textAnchor="middle"
+                className="fill-lamp-script font-display italic"
+                fontSize="17"
+              >
+                de Sonhar
+              </text>
+            </svg>
+          </motion.div>
+
+          {/* Respiração da luz — só para quem aceita movimento. */}
           {!reducedMotion && (
             <motion.div
-              className="absolute inset-0 rounded-full border border-gold/30"
-              animate={{ scale: [1, 1.12, 1], opacity: [0.6, 0.15, 0.6] }}
-              transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
-            />
-          )}
-          {showPhoto ? (
-            <img
-              src={assetUrl(product.photo_url)}
-              alt={product.name}
-              onError={() => setPhotoBroken(true)}
-              className="h-40 w-40 rounded-full object-cover"
-            />
-          ) : (
-            <span className="text-6xl">✨</span>
+              className="absolute inset-0 drop-shadow-lamp"
+              animate={{ opacity: [0, 0.35, 0] }}
+              transition={{ duration: 3.6, delay: 1.2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <svg viewBox="0 0 220 232" className="h-56 w-56">
+                <polygon points={STAR_POINTS} className="fill-lamp-glow/40" strokeLinejoin="round" />
+              </svg>
+            </motion.div>
           )}
         </motion.div>
 
         <motion.p
-          {...enter(0.2)}
+          {...enter(0.8)}
           className="text-xs font-bold uppercase tracking-[0.3em] text-gold"
         >
           Manto Produções
         </motion.p>
 
         <motion.h1
-          {...enter(0.3)}
+          {...enter(0.9)}
           className="font-display text-3xl leading-tight text-on-color"
         >
           A magia da Manto também na sua casa
         </motion.h1>
 
-        <motion.p {...enter(0.4)} className="text-base leading-relaxed text-on-color/70">
+        <motion.p {...enter(1.0)} className="text-base leading-relaxed text-on-color/70">
           Este é o portal da sua luminária. Em breve, ele se abrirá bem aqui — com novidades e
           surpresas feitas para você.
         </motion.p>
@@ -98,7 +202,7 @@ export function NfcPage() {
         {/* CTA só quando o servidor respondeu: botão sem destino é botão morto (Princípio V). */}
         {instagramUrl && (
           <motion.a
-            {...enter(0.5)}
+            {...enter(1.1)}
             href={instagramUrl}
             target="_blank"
             rel="noopener noreferrer"
@@ -112,7 +216,7 @@ export function NfcPage() {
         )}
       </main>
 
-      <motion.footer {...enter(0.65)} className="mt-10 text-xs text-on-color/40">
+      <motion.footer {...enter(1.25)} className="relative mt-10 text-xs text-on-color/40">
         mantoproducoes.com.br
       </motion.footer>
     </div>

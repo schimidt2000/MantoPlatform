@@ -31,8 +31,12 @@ export interface NfcTag {
   sequence: number;
   item: NfcTagItemRef;
   event: NfcTagEventRef | null;
-  /** Contratante do evento associado — `null` sem evento ou sem cliente. */
+  /** Cliente DIRETA da tag (campanha/brinde sem show) — independente do evento. */
+  client: { id: number; name: string } | null;
+  /** Nome resolvido pelo servidor: cliente direta quando houver, senão contratante do evento. */
   client_name: string | null;
+  /** `true` = `client_name` veio do vínculo direto (editável na tag), não do evento. */
+  client_direct: boolean;
   is_active: boolean;
   notes: string | null;
   access_count: number;
@@ -72,6 +76,8 @@ export function useGerarLoteNfc() {
 export interface UpdateNfcTagInput {
   /** `null` desassocia do evento; omitido mantém. */
   event_id?: number | null;
+  /** Cliente DIRETA (sem show): `null` desassocia; omitido mantém. */
+  client_id?: number | null;
   is_active?: boolean;
   notes?: string;
 }

@@ -5,11 +5,11 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-08-20** · Estado do repositório: pós-feature
-> **255-tags-nfc (branch, migration `a7e2f94c1d58`)** — antes dela
+> **255-tags-nfc (branch, migrations `a7e2f94c1d58` + `b3f8d27a9e14`)** — antes dela
 > **254-melhorias-video-catalogo (em produção, migration `f3a9c15d8b42`)**, antes dela a
 > sequência da remoção do Jinja **240–252 (pausada, ver `docs/PARADA_REMOCAO_JINJA.md`)**,
 > antes dela **239-backlog-agosto (11 itens)**, catalogo-fase-1, **235-educamanto 4ª rodada**,
-> 238, 237, 236 · Head de migration: **`a7e2f94c1d58`** (*tags NFC, feature 255*)
+> 238, 237, 236 · Head de migration: **`b3f8d27a9e14`** (*cliente direta na tag NFC, feature 255*)
 > (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
@@ -41,7 +41,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **255-tags-nfc** | Tags NFC nas peças 3D (luminárias): URL pública imutável por unidade física (`/nfc/<code>`, código aleatório + Nº sequencial humano por produto), geração automática pelo presente 3D, página "portal" mobile-first sem login, tela de gestão sem exclusão | 2026-08-20 | `a7e2f94c1d58` | (aqui) | — |
+| **255-tags-nfc** | Tags NFC nas peças 3D (luminárias): URL pública imutável por unidade física (`/nfc/<code>`, código aleatório + Nº sequencial humano por produto), geração automática pelo presente 3D, vínculo direto a cliente (campanha sem show), página da estrela "Magia de Sonhar" acendendo, tela de gestão sem exclusão | 2026-08-20 | `a7e2f94c1d58`, `b3f8d27a9e14` | (aqui) | — |
 | **254-melhorias-video-catalogo** | Anexar vídeo na Revisão para de falhar em silêncio (pré-validação, barra de progresso XHR, 413/500 de `/api` com envelope); sync ganha janela de graça de 5 min (corrida com o criar evento); busca de personagem mostra o produto e não rouba vínculo; criar produto do catálogo aterrissa na edição | 2026-08-20 | `—` | (aqui) | — |
 | **250 / 251 / 252** | Régua de comissão extraída para `comissoes_ops` (450 eventos, zero divergência); acréscimos, parcelas e CRUD de nota fiscal na API | 2026-08-20 | `—` | (aqui) | — |
 | **248 / 249** | Comissão volta a sincronizar ao editar venda pela API; núcleo das coleções comerciais sai do formulário Jinja (`comercial_ops`) | 2026-08-20 | `—` | (aqui) | — |
@@ -178,7 +178,14 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
-### 255 — Tags NFC nas luminárias: a URL eterna e o Nº que a equipe anota na tagzinha            (branch · 2026-08-20 · migration `a7e2f94c1d58`)
+### 255 — Tags NFC nas luminárias: a URL eterna e o Nº que a equipe anota na tagzinha            (branch · 2026-08-20 · migrations `a7e2f94c1d58` + `b3f8d27a9e14`)
+
+*(2ª rodada, mesmo dia, antes do merge: (a) `nfc_tags.client_id` — a luminária também vai para
+**cliente em potencial** via campanha de marketing, sem show nenhum; a equipe cadastra a pessoa
+em Clientes e vincula direto na tag; precedência: cliente direta → contratante do evento;
+(b) página pública redesenhada como retrato da peça física — céu noturno, nuvens e a estrela
+"Magia de Sonhar" **acendendo** como a lâmpada real, com as cores da peça como tokens `lamp.*`
+no tema do app público.)*
 
 **Contexto.** Todo show entrega um presente 3D; o produto virou uma luminária de marca própria
 com tag NFC embutida. A cliente encosta o celular e abre uma página da Manto — hoje um "portal

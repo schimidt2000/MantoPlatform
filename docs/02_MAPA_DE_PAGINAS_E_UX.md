@@ -722,9 +722,12 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
     `<origin>/nfc/<code>` — é o que se grava na tag), produto com miniatura quadrada, evento
     (título+data, ou "— estoque"), **cliente** (contratante do evento), acessos (tooltip com o
     último), badge Ativa/Inativa e ações.
-  - **Vincular/trocar evento**: `Dialog` com `Combobox` **assíncrono** sobre a busca textual da
-    agenda (`useAgendaSearch` — título, cliente ou telefone; resultado mostra data e cliente).
-    Botão "Desvincular" quando há evento. Cliente exibido acompanha o evento novo na hora.
+  - **Vincular (evento OU cliente direta)**: `Dialog` com dois `Combobox` **assíncronos** —
+    evento pela busca da agenda (`useAgendaSearch`) e **cliente direta** pela busca de clientes
+    (`useClientSearch`), para o caso de campanha/brinde **sem show** (a pessoa é cadastrada no
+    módulo Clientes e vinculada aqui). Escolher **já salva** (PATCH e fecha); "Desvincular
+    evento"/"Desvincular cliente" no rodapé. Na tabela, cliente direta aparece com badge
+    "direta" e tem precedência sobre a contratante do evento.
   - **Desativar/Reativar** com loading por linha. **Não existe ação de excluir em lugar
     nenhum** — nota fixa no rodapé explica: código gravado numa peça entregue é eterno;
     desativar faz a página pública mostrar o conteúdo padrão.
@@ -741,11 +744,15 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
   identidade Manto + Instagram. Todo o conteúdo vem de `GET /api/nfc/<code>` — a página evolui
   (campanhas, fotos do evento) sem regravar tag nenhuma (`campaign: null` é o gancho).
 - **UX** (mobile-first de verdade — o acesso nasce de um toque NFC, geralmente à noite ao lado
-  da luminária acesa):
-  - Superfície escura (gradiente roxo profundo da paleta) com **portal dourado que se abre**
-    (Framer Motion ~350ms + halo "respirando"; com `useReducedMotion` tudo aparece sem
-    animação). Dentro do portal, a foto da peça (`assetUrl`; foto quebrada → brilho genérico,
-    nunca ícone de imagem quebrada) ou ✨ no modo genérico.
+  da luminária acesa; 2ª rodada, redesenhada com a foto da peça física em mãos):
+  - **Retrato da luminária**: céu noturno (gradiente roxo da paleta) com 12 estrelinhas
+    piscando, nuvens difusas na base, e a **estrela "Magia de Sonhar" que ACENDE** como a
+    lâmpada real — contorno apagado chega primeiro, o brilho quente sobe revelando o escrito
+    (Fraunces itálico, SVG inline; cores da peça registradas como tokens `lamp.*` no
+    `tailwind.config.ts` do app público — zero cor hardcoded). Halo `drop-shadow-lamp`
+    "respirando". Com `useReducedMotion`: estrela já acesa, nada pisca.
+  - A arte substitui a foto do produto do acervo (a luminária É a estrela); modo genérico usa o
+    mesmo palco.
   - Copy provisória: eyebrow "Manto Produções" + "A magia da Manto também na sua casa" + "Este
     é o portal da sua luminária. Em breve, ele se abrirá bem aqui…".
   - CTA "Seguir @mantoproducoes" (URL vem do servidor; botão só renderiza com o dado na mão —
