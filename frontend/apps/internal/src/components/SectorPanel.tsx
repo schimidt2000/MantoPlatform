@@ -5,25 +5,45 @@ import { Card } from "@manto/ui";
 export interface SectorPanelProps {
   title: string;
   count: number;
+  /** Subconjunto de `count` que precisa de ação imediata — vira selo vermelho no cabeçalho. */
+  urgentCount?: number;
   children: ReactNode;
   defaultOpen?: boolean;
+  /** Modo controlado (Home): o pai decide o estado para poder abrir via card da visão geral. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /** Painel colapsável por setor (Casting/Figurino/Comercial/Recorrentes) — paridade com o
  * `.sector-panel`/`toggleSector()` do Jinja clássico; estado local, sem persistência. */
-export function SectorPanel({ title, count, children, defaultOpen = true }: SectorPanelProps) {
-  const [open, setOpen] = useState(defaultOpen);
+export function SectorPanel({
+  title,
+  count,
+  urgentCount = 0,
+  children,
+  defaultOpen = true,
+  open: controlledOpen,
+  onOpenChange,
+}: SectorPanelProps) {
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const open = controlledOpen ?? internalOpen;
   const reduceMotion = useReducedMotion();
+
+  const toggle = () => {
+    const next = !open;
+    setInternalOpen(next);
+    onOpenChange?.(next);
+  };
 
   return (
     <Card className="overflow-hidden">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-surface-2"
         aria-expanded={open}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium text-ink">{title}</span>
           {count > 0 ? (
             <span className="text-xs text-muted">
@@ -32,6 +52,11 @@ export function SectorPanel({ title, count, children, defaultOpen = true }: Sect
           ) : (
             <span className="rounded-full bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
               Tudo em dia ✓
+            </span>
+          )}
+          {urgentCount > 0 && (
+            <span className="rounded-full bg-red-soft px-2 py-0.5 text-xs font-medium text-red">
+              {urgentCount} urgente{urgentCount !== 1 ? "s" : ""}
             </span>
           )}
         </div>
