@@ -54,6 +54,11 @@ def api_clientes_quick_create() -> Any:
             phone_display=body.get("phone_display") or body.get("phone"),
             email=body.get("email"),
             company=body.get("company"),
+            # Opcionais do cadastro manual pela tela de Clientes (feature 258); o formulário
+            # rápido do evento simplesmente não manda estes campos.
+            cpf=body.get("cpf"),
+            cnpj=body.get("cnpj"),
+            address=body.get("address"),
         )
     except client_ops.ClientValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})

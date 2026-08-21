@@ -1099,6 +1099,12 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   **"Festas anteriores (formulários)"** lista os formulários preenchidos pela cliente — data da
   festa, link para o evento quando existe ("na agenda") ou marcação "só formulário" (histórico
   pré-2026, que não é materializado no calendário). É a base do marketing de recompra.
+- **Cadastro manual (feature 258)**: botão **"Nova cliente"** no cabeçalho (e no estado vazio da
+  busca) abre diálogo com nome*, telefone*, e-mail, empresa, CPF, CNPJ e endereço. Reusa
+  `POST /api/clientes/quick-create` (feature 165) e a regra de telefone único: número já
+  cadastrado devolve a ficha existente com aviso "nada foi duplicado" + atalho para abri-la, e
+  **não sobrescreve** nada dela. Cadastro real invalida lista, busca e métricas (aparece sem F5)
+  e nasce com `source="manual"`, separado no gráfico por origem.
 
 #### `/clientes/avaliacoes` — Satisfação das Clientes *(refeita na feature 197)*
 - **Acesso**: `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (`_require_vendas()`).
