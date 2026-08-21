@@ -16,6 +16,7 @@ import {
   useUpdateGasto,
   type GastoExtra,
   type GastosTotals,
+  type GastoMarketingBatch,
 } from "../lib/gastos";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
@@ -448,6 +449,37 @@ function GastoFormModal({
   );
 }
 
+/**
+ * Detalhe do gasto gerado pelo auditor de marketing (feature 256): quanto cada campanha pesou
+ * no mês e se o lote já congelou (gasto aprovado/rejeitado — diferenças viram achado no
+ * relatório, nunca alteração silenciosa).
+ */
+function MarketingBatchDetail({ batch }: { batch: GastoMarketingBatch }) {
+  const [ano, mes] = batch.month_ref.split("-");
+  return (
+    <div className="mt-2 rounded-md border border-line bg-surface px-3 py-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2 font-medium text-ink">
+        Gerado pelo auditor de marketing — {batch.platform} {mes}/{ano}
+        <span className={`rounded-full px-2 py-0.5 text-[11px] ${batch.frozen ? "bg-surface-2 text-muted" : "bg-gold-soft text-gold-ink"}`}>
+          {batch.frozen ? "congelado" : "atualiza até aprovar"}
+        </span>
+      </div>
+      <ul className="mt-1 space-y-0.5">
+        {batch.lines.map((line) => (
+          <li key={line.campaign_name} className="flex justify-between gap-3">
+            <span className="truncate text-muted">{line.campaign_name}</span>
+            <span className="whitespace-nowrap tabular-nums text-ink">{brl(Number(line.amount))}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 text-muted">
+        Reportado pelas plataformas: {brl(Number(batch.reported_total))}
+        {batch.run_id && ` · rodada ${batch.run_id}`}
+      </p>
+    </div>
+  );
+}
+
 function GastoRow({
   expense,
   canManage,
@@ -481,6 +513,7 @@ function GastoRow({
         <td className={TD}>
           {expense.description}
           {expense.notes && <p className="text-xs text-muted">{expense.notes}</p>}
+          {expense.marketing_batch && <MarketingBatchDetail batch={expense.marketing_batch} />}
         </td>
         <td className={TD}>{expense.category}</td>
         <td className={`${TD} whitespace-nowrap text-right tabular-nums`}>{brl(expense.amount)}</td>

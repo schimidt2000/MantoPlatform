@@ -196,6 +196,30 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   pendentes", feature 231) passou a incluir a URL raiz do Portal do Artista no texto —
   `GET /api/dashboard` manda `portal_url` (mesma fonte usada nos e-mails automáticos); com a env
   `PORTAL_URL` ausente, `portal_url` vem `null` e o link é omitido em vez de sair quebrado.
+- **Redesign 2026-08-20 (triagem por cards)**: a home deixou de ser uma pilha de listas abertas.
+  UX atual: (1) **visão geral no topo** (`HomeOverview.tsx`) — um card compacto por setor com
+  contagem de pendências, selo vermelho de urgentes e contexto extra (R$ em aberto no Comercial,
+  "N sem convite enviado" nas Confirmações); tocar no card abre e rola até o painel
+  (`scroll-mt` compensa o topbar sticky do mobile); (2) linha-resumo "N pendências no total ·
+  N urgentes"; (3) **painel nasce aberto só se tem item urgente** (escolha manual da pessoa
+  prevalece depois); (4) **listas truncadas em 6 linhas** (`ListaTruncada`) com "Mostrar todas as
+  N" — as consultas já vêm ordenadas por data, então o topo é o mais próximo de acontecer;
+  (5) desktop = grade de 2 colunas de painéis (mobile continua 1 coluna); (6) o painel Casting
+  ganhou o subgrupo **"Convites recusados"** — `rejected_invites` já vinha da API (231) e era
+  descartado pela tela; recusa cujo cargo já voltou para `pending` não conta duas vezes.
+  `SectorPanel` agora aceita modo controlado (`open`/`onOpenChange`) e `urgentCount`.
+  Sem mudança de backend: tudo deriva do `GET /api/dashboard` existente.
+- **Painel "📈 Performance" (2026-08-20, `HomePerformance.tsx`)**: voltou à Home depois da
+  migração (a API já calculava; a tela não desenhava). **Somente leitura e só para o superadmin
+  real** — o gate é do servidor: `GET /api/dashboard` devolve `performance: null` para quem não
+  é SA e durante o "Ver como", e aí o card some. Seletor segmentado 7 dias / 30 dias /
+  Personalizado (datas + Aplicar; período inválido mantém o card com instrução em vez de sumir).
+  Três métricas: **Casting escalado** (cargos com talento ÷ total, barra verde ≥ 90 %, dourada
+  ≥ 70 %, vermelha abaixo), **Figurino pronto** (mesma régua) e **Cachês escalados** (soma de
+  `cache_value` dos cargos escalados no período — a vaga de Presença fica de fora, decisão 10 da
+  239). O período entra na chave da query (`["dashboard", periodo]`) com `keepPreviousData`, para
+  a troca não piscar a visão geral. Rótulo "Cachês escalados" é deliberado: o campo `money_total`
+  é custo de cachê comprometido, não receita.
 
 #### `/agenda` — Agenda
 - **Objetivo**: enxergar os eventos por período.
@@ -816,6 +840,9 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   `PATCH|DELETE /api/marketing/posts/<id>` · `GET /api/marketing/opcoes`.
 
 #### `/marketing/painel` → **Card de Postagem** *(Dialog de edição)*
+- **Feature 256**: campo **"Link do post publicado"** (`permalink`, http(s), querystring removida) —
+  é por ele que o auditor casa o card com as métricas reais do export da Meta. Mudar o status para
+  "Publicado" sem link destaca o campo (borda dourada + orientação), sem bloquear.
 - **Vínculo com o catálogo (múltiplos Temas, feature 204b)**: um post pode falar de vários Temas
   ao mesmo tempo (ex.: Reels que junta "15 Anos" e "Debutante"). A UI compõe o **`Combobox` de
   `@manto/ui`** (que continua single-select — nenhum componente novo entrou no design system)
@@ -862,6 +889,25 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **API**: `GET|POST /api/marketing/goals` · `PATCH|DELETE /api/marketing/goals/<id>` ·
   `GET /api/marketing/opcoes`.
 - **Vínculos**: Meta → Tema do catálogo (`CatalogItem`) → postagens publicadas (`MarketingPost`).
+
+#### `/marketing/desempenho` — Desempenho de marketing *(feature 256)*
+- **Acesso**: `MARKETING`, `SUPERADMIN` (gate de servidor em `GET /api/marketing/desempenho`).
+- **Objetivo**: o histórico que o auditor de marketing semanal grava a partir dos exports da
+  Meta/Google — a memória que o e-mail não tem.
+- **UX**: seletor segmentado 4/12/26 semanas + intervalo livre (`keepPreviousData`, sem piscar);
+  4 KPIs (manchete = **leads no período e custo por lead**, ou alcance com o motivo quando não há
+  atribuição; CAC do mês; gasto no período; posts publicados + metas atrasadas); gráficos SVG
+  próprios (`components/charts/`): **um eixo por gráfico** (alcance por semana e seguidores são
+  dois gráficos), barras de gasto por campanha (uma matiz = magnitude), **funil de unidades
+  mistas como tiles** (gasto → cliques → leads → eventos com CPC/taxa/custo na seta); tabela
+  semanal escondida em `<details>`; tabelas de campanhas e de posts (vínculo "pelo link" / "pela
+  data" / "sem card"); metas atrasadas com atalho; lista de rodadas com arquivos rejeitados e
+  motivo. Estado vazio explica onde salvar os exports e quando a rotina roda. Mobile: tabelas
+  rolam dentro do bloco, página sem rolagem horizontal (375 px conferido).
+- **API**: `GET /api/marketing/desempenho`.
+- **Rotina que alimenta**: `scripts/marketing/` (collect → publish → checks → report), scheduled
+  task `auditoria-marketing-semanal` (segunda 06:30, catch-up), skill local `marketing-auditor`.
+  Relatório por e-mail com barras em HTML/CSS (Gmail não renderiza SVG).
 
 #### `/virtuais/campanhas` — Interações Virtuais (feature 205, US1)
 - **Acesso**: `COMERCIAL`, `SUPERADMIN` (gate de servidor `require_virtuais_access()`).
@@ -1313,6 +1359,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **Acesso**: staff para lançar; aprovar/rejeitar em `_require_financeiro()`.
 - **UX**: fluxo criar → aprovar/rejeitar → reembolsar, com vínculo opcional a evento (feature 179
   trouxe RBAC e edição).
+
+- **Feature 256**: gasto gerado pelo auditor de marketing mostra, abaixo da descrição, o bloco
+  "Gerado pelo auditor de marketing — <plataforma> <mês>" com as linhas por campanha, o total
+  reportado pelas plataformas, a rodada de origem e o selo "atualiza até aprovar" / "congelado".
+  Nasce pendente e sem comprovante — anexar a fatura do cartão antes de aprovar.
 
 #### `/gastos/recorrentes` — Gastos Recorrentes *(refeita na feature 189)*
 - **Acesso**: `FINANCEIRO`, `SUPERADMIN`.

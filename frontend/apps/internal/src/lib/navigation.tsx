@@ -233,6 +233,16 @@ const SECTIONS: NavSectionConfig[] = [
         isVisible: (user) => notRevendedor(user) && hasRole(user, "MARKETING", "SUPERADMIN"),
       },
       {
+        // Feature 256 — histórico do auditor de marketing (exports da Meta/Google, reembolso).
+        key: "marketing-desempenho",
+        label: "Desempenho",
+        href: "/marketing/desempenho",
+        icon: <LineChart />,
+        hint: "Alcance, gasto por campanha, leads e rodadas do auditor",
+        isActive: (path) => path === "/marketing/desempenho",
+        isVisible: (user) => notRevendedor(user) && hasRole(user, "MARKETING", "SUPERADMIN"),
+      },
+      {
         // A revisão de mídia é etapa do marketing (feature 088), não da produção de figurino —
         // mora ao lado do painel que planeja a postagem que essa mídia vai virar. Segue visível
         // para toda a equipe interna: quem grava e quem aprova nem sempre é do marketing.

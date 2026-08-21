@@ -86,9 +86,16 @@ function KanbanCard({
   const previous = index > 0 ? MARKETING_STATUSES[index - 1] : null;
   const next = index < MARKETING_STATUSES.length - 1 ? MARKETING_STATUSES[index + 1] : null;
 
+  // Feature 256: card que vira "publicado" sem o link do post abre o Dialog logo em seguida —
+  // é o link que deixa o auditor de marketing reconhecer a publicação no export da Meta.
+  function pedeLinkSePublicado(status: MarketingStatus) {
+    if (status === "publicado" && !post.permalink) onOpen();
+  }
+
   function moveTo(status: MarketingStatus, event: React.MouseEvent) {
     event.stopPropagation();
     move.mutate({ id: post.id, status });
+    pedeLinkSePublicado(status);
   }
 
   function handleDragEnd(event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
@@ -100,6 +107,7 @@ function KanbanCard({
     // (`dragSnapToOrigin`) e nenhuma requisição é disparada.
     if (target && target !== post.status) {
       move.mutate({ id: post.id, status: target });
+      pedeLinkSePublicado(target);
     }
   }
 

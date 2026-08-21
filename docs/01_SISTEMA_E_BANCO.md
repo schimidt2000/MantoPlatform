@@ -7,6 +7,11 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
+> Última atualização: **2026-08-21** · Em branch: **256-auditor-marketing** (auditor de marketing
+> semanal; migration **`c4d1e7b2a9f3`** — head: 7 tabelas `marketing_*` + `marketing_posts.permalink` +
+> `clients.lead_origin/utm_*`; endpoints `/api/marketing-agent/<token>/{context,run,report}` por env
+> `MARKETING_AGENT_TOKEN` e `GET /api/marketing/desempenho` (MARKETING/SA); ver bloco "Agente de
+> marketing" abaixo do agente auditor financeiro). Anterior:
 > Última atualização: **2026-08-18** · Em branch: **239-backlog-agosto** (rodada de 11 itens do
 > backlog de agosto/2026 — ver `specs/239-backlog-agosto/`). Schema: `event_roles` ganhou
 > `does_transport` (Boolean, nullable — "leva o carrinho de transporte fora de SP") e
@@ -689,6 +694,37 @@ semanal que roda FORA do Railway (Claude Code local): `GET
 usuários internos ativos). Token via env `AUDIT_AGENT_TOKEN`; inválido/ausente → **404**
 (molde do webhook InfinitePay). Nenhum endpoint escreve no banco. Pipeline do auditor em
 `scripts/auditor/` (ver `specs/221-agente-auditor-financeiro/spec.md`).
+
+#### Agente de marketing (feature 256) — `app/api/marketing_agent.py` + `app/marketing/desempenho_ops.py`
+
+Mesmo molde do agente auditor financeiro (token de ambiente, 404 para token errado/ausente), mas
+este agente **escreve** — e só o que `desempenho_ops` permite:
+
+- `GET /api/marketing-agent/<token>/context?window_start&window_end&card_holder_email` — posts
+  publicados (90 dias, com `permalink`), metas (`goal_health`), clientes novos por mês
+  (`client_metrics`), gastos de Marketing do mês corrente/anterior (com `batch`), clientes com
+  utm na janela e seus eventos. 403 se o titular não for usuário interno ativo.
+- `POST /api/marketing-agent/<token>/run` — ingestão idempotente por `run_id`: registra a
+  rodada e os arquivos (`sha256` único), faz upsert das fotografias de post, campanhas e conta,
+  vincula posts aos cards (permalink > data > nenhum) e mantém o **Gasto Extra de reembolso por
+  plataforma × mês civil** (`sync_ad_spend`: created / updated / frozen_ok / frozen_divergent /
+  skipped_manual / skipped_currency). `mode=local` só em `FLASK_ENV=development`.
+- `POST /api/marketing-agent/<token>/report` — envia o HTML por e-mail (destinatários restritos a
+  usuários internos ativos; `send_audit_report_email(..., preheader=…)`) e marca `report_sent`.
+- Env **`MARKETING_AGENT_TOKEN`** (Railway) = arquivo local `.marketing-agent-token`. Sem o env,
+  tudo responde 404 (interruptor geral).
+
+Schema (migration `c4d1e7b2a9f3`): `marketing_agent_runs`, `marketing_import_files`,
+`marketing_post_metrics` (única por plataforma+post+`snapshot_date`), `marketing_campaign_metrics`
+(única por plataforma+campanha+`period_start`+`period_end`), `marketing_account_metrics`
+(plataforma+dia), `marketing_ad_spend_batches` (plataforma+`month_ref`, 1:1 com
+`special_expenses`), `marketing_ad_spend_lines`; `marketing_posts.permalink`;
+`clients.lead_origin/utm_source/utm_medium/utm_campaign` (preenchidos pelo importador do Kommo).
+
+Leitura para a tela: `GET /api/marketing/desempenho?weeks=4|12|26` ou `?start&end` (gate
+MARKETING/SUPERADMIN, `marketing_read.py`). `GET /api/gastos` passa a devolver `marketing_batch`
+(null nos gastos comuns). `PATCH /api/marketing/posts/<id>` aceita `permalink` (http(s), sem
+querystring).
 
 Núcleo de negócio de comissões: `app/financeiro/comissoes_ops.py`
 (`resolve_month`, `get_month_entries`, `get_month_summary_by_seller`, `get_month_kpis`,

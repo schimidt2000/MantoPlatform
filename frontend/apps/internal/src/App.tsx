@@ -60,6 +60,7 @@ import { VirtuaisCampanhaFormPage } from "./pages/VirtuaisCampanhaFormPage";
 import { VirtuaisDevolucoesPage } from "./pages/VirtuaisDevolucoesPage";
 import { FilaProducaoMidiaPage } from "./pages/FilaProducaoMidiaPage";
 import { MarketingMetasPage } from "./pages/MarketingMetasPage";
+import { MarketingDesempenhoPage } from "./pages/MarketingDesempenhoPage";
 
 /** Rota antiga `/talents/:id/edit` — redireciona para o modo edição unificado (feature 180). */
 function TalentEditRedirect() {
@@ -112,6 +113,7 @@ export function App() {
           <Route path="/virtuais/producao" element={<FilaProducaoMidiaPage />} />
           <Route path="/marketing/painel" element={<MarketingPainelPage />} />
           <Route path="/marketing/metas" element={<MarketingMetasPage />} />
+          <Route path="/marketing/desempenho" element={<MarketingDesempenhoPage />} />
           <Route path="/figurinos" element={<FigurinoListPage />} />
           {/* Declaradas ANTES das dinâmicas: "/figurinos/producao/12" não pode cair em
               "/figurinos/:id/edit" (mesmo cuidado que "/events/cancelamentos" exigiu na 224). */}

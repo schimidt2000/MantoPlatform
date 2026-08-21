@@ -122,6 +122,26 @@ def _validate_drive_url(raw: Any) -> str | None:
     return url
 
 
+PERMALINK_MAX = 500
+
+
+def _validate_permalink(raw: Any) -> str | None:
+    """Link do post publicado (feature 256): http(s), até 500 chars, sem querystring/fragmento.
+
+    A querystring cai fora porque o que vem colado do Instagram traz `utm_source`/`igsh` que
+    mudam a cada cópia — e é este link que casa o card com o export da Meta.
+    """
+    if raw in (None, ""):
+        return None
+    texto = str(raw).strip()
+    if not texto.lower().startswith(("http://", "https://")) or " " in texto:
+        raise MarketingValidationError("permalink", "Informe um link http(s) válido do post publicado.")
+    limpo = texto.split("#", 1)[0].split("?", 1)[0]
+    if len(limpo) > PERMALINK_MAX:
+        raise MarketingValidationError("permalink", f"Link longo demais (máximo {PERMALINK_MAX} caracteres).")
+    return limpo
+
+
 def _validate_interval(raw: Any) -> int:
     """Intervalo alvo da meta, em dias (inteiro ≥ 1)."""
     try:
@@ -218,6 +238,7 @@ def create_post(
     publish_date: Any = None,
     platform: Any = None,
     drive_folder_url: Any = None,
+    permalink: Any = None,
     notes: Any = None,
     assignee_id: Any = None,
     catalog_item_ids: Any = None,
@@ -235,6 +256,7 @@ def create_post(
         publish_date=_parse_date(publish_date, "publish_date"),
         platform=_validate_platform(platform),
         drive_folder_url=_validate_drive_url(drive_folder_url),
+        permalink=_validate_permalink(permalink),
         notes=(notes or "").strip() or None,
         assignee_id=_resolve_assignee(assignee_id),
         temas=_resolve_catalog_items(catalog_item_ids),
@@ -267,6 +289,7 @@ def update_post(
     publish_date: Any = KEEP,
     platform: Any = KEEP,
     drive_folder_url: Any = KEEP,
+    permalink: Any = KEEP,
     notes: Any = KEEP,
     assignee_id: Any = KEEP,
     catalog_item_ids: Any = KEEP,
@@ -289,6 +312,8 @@ def update_post(
         post.platform = _validate_platform(platform)
     if drive_folder_url is not KEEP:
         post.drive_folder_url = _validate_drive_url(drive_folder_url)
+    if permalink is not KEEP:
+        post.permalink = _validate_permalink(permalink)
     if notes is not KEEP:
         post.notes = (notes or "").strip() or None
     if assignee_id is not KEEP:
@@ -541,6 +566,7 @@ def serialize_post(post: MarketingPost) -> dict[str, Any]:
         "publish_date": post.publish_date.isoformat() if post.publish_date else None,
         "platform": post.platform,
         "drive_folder_url": post.drive_folder_url,
+        "permalink": post.permalink,
         "notes": post.notes,
         "assignee_id": post.assignee_id,
         "assignee": _serialize_assignee(post.assignee),
