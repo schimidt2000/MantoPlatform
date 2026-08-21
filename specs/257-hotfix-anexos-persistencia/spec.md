@@ -67,6 +67,17 @@ com tamanho, data de envio (do nome do arquivo) e eventos candidatos por proximi
 script `specs/257-hotfix-anexos-persistencia/recuperar_anexos_orfaos.py` consome esse endpoint e gera o relatório para
 conferência humana — **não escreve nada**.
 
+## Resultado da recuperação (produção, 21/08/2026)
+
+23 arquivos sem linha no banco, dos quais **4 têm o carimbo do fluxo novo** (`YYYYMMDDHHMMSS_hex_`)
+e são as vítimas confirmadas do bug: 10/08 12:43, 20/08 e duas tentativas em 21/08 12:31 e 12:32
+(a mesma pessoa tentando de novo — foi o relato que abriu este hotfix). Os outros 19 não têm
+carimbo: são anteriores ao prefixo único, incluindo 4 `adv_*` de adiantamentos cujo registro foi
+apagado. Todos os 4 confirmados têm evento candidato sugerido no relatório.
+
+Rodar de novo: `python specs/257-hotfix-anexos-persistencia/recuperar_anexos_orfaos.py`
+(o `.md` gerado fica fora do git — tem nome de cliente).
+
 ## Verificação
 
 `specs/257-hotfix-anexos-persistencia/verify_257.py` contra o `manto_local`: cada upload é feito

@@ -67,3 +67,7 @@ Manto_Sales/
 /scripts/marketing/processed/
 /scripts/marketing/runs/
 /scripts/marketing/data/
+
+# Relatorio de anexos orfaos (hotfix 257): retrato do volume com nomes de cliente,
+# gerado sob demanda — nao versionar.
+/specs/257-hotfix-anexos-persistencia/orfaos_*.md
