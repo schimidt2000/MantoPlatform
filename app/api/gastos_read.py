@@ -14,6 +14,7 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.gastos import gastos_ops
+from app.marketing import desempenho_ops
 from app.models import RecurringExpense, SpecialExpense, User
 
 
@@ -27,9 +28,13 @@ def _num(value: Decimal | None) -> float | None:
     return float(value) if value is not None else None
 
 
-def _expense_dict(e) -> dict:
+def _expense_dict(e, batches: dict[int, object] | None = None) -> dict:
+    # Lote do auditor de marketing (feature 256): `batches` vem pré-carregado pela lista para
+    # não virar uma consulta por gasto; fora da lista cai na busca individual.
+    lote = batches.get(e.id) if batches is not None else desempenho_ops.batch_for_expense(e.id)
     return {
         "id": e.id,
+        "marketing_batch": desempenho_ops.serialize_batch(lote),
         "description": e.description,
         "category": e.category,
         "amount": _num(e.amount),
@@ -58,8 +63,9 @@ def api_gastos_list() -> Any:
     """Lista gastos extras: FINANCEIRO/SUPERADMIN vê todos (+ totais), demais só os próprios."""
     can_manage = gastos_ops.is_financeiro(current_user)
     expenses = gastos_ops.list_expenses_for_admin() if can_manage else gastos_ops.list_expenses(current_user)
+    lotes = desempenho_ops.batches_for_expenses([e.id for e in expenses])
     payload = {
-        "expenses": [_expense_dict(e) for e in expenses],
+        "expenses": [_expense_dict(e, lotes) for e in expenses],
         "can_manage": can_manage,
         "categories": SpecialExpense.CATEGORIES,
     }

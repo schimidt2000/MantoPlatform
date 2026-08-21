@@ -28,6 +28,11 @@ COL_STAGE = "Etapa do lead"
 COL_FUNNEL = "Funil de vendas"
 COL_VALUE = "Lead venda R$"
 COL_CREATED = "Criado em"
+# Atribuição de marketing (feature 256): origem e utms do lead, quando o export trouxer.
+COL_ORIGEM = "Origem do Lead"
+COL_UTM_SOURCE = "utm_source"
+COL_UTM_MEDIUM = "utm_medium"
+COL_UTM_CAMPAIGN = "utm_campaign"
 
 # Um telefone discável tem entre 10 (DDD + 8) e 13 (DDI 55 + DDD + 9) dígitos. Fora disso = inválido
 # (vazio, lixo ou números concatenados como nas linhas com 24/26 dígitos do export).
@@ -117,6 +122,18 @@ class ImportReport:
         )
 
 
+def _apply_attribution(client: Client, row: dict) -> None:
+    """Origem e utms do lead (feature 256) — "mais recente sobrescreve"; coluna ausente não mexe."""
+    origem = (row.get(COL_ORIGEM) or "").strip()
+    if origem:
+        client.lead_origin = origem[:120]
+    for coluna, campo in ((COL_UTM_SOURCE, "utm_source"), (COL_UTM_MEDIUM, "utm_medium"),
+                          (COL_UTM_CAMPAIGN, "utm_campaign")):
+        valor = (row.get(coluna) or "").strip()
+        if valor:
+            setattr(client, campo, valor[:200])
+
+
 def _apply_metadata(client: Client, row: dict, created_at: datetime | None) -> None:
     """Aplica/agrega metadados de marketing de uma linha do CSV ao cliente.
 
@@ -159,6 +176,7 @@ def _apply_metadata(client: Client, row: dict, created_at: datetime | None) -> N
         lead_id = (row.get(COL_ID) or "").strip()
         if lead_id:
             client.kommo_lead_id = lead_id[:40]
+        _apply_attribution(client, row)
 
 
 def import_kommo_csv(path: str) -> ImportReport:

@@ -398,3 +398,24 @@ IMPERSONABLE_ROLES = [
     RoleName.FINANCEIRO,
     RoleName.ENSAIO,
 ]
+
+
+# ── Auditor de marketing (feature 256) ──────────────────────────────────────
+# Plataformas que o agente mede. "Instagram" coincide com MARKETING_PLATFORMS (é a mesma
+# plataforma do card do painel); "Meta Ads"/"Google Ads" são fontes de gasto, não de post.
+MARKETING_AGENT_PLATFORMS = ["Instagram", "Meta Ads", "Google Ads"]
+MARKETING_AD_PLATFORMS = ["Meta Ads", "Google Ads"]
+# Tipos de arquivo reconhecidos na pasta de entrada.
+MARKETING_IMPORT_KINDS = ["meta_content", "meta_account", "meta_ads", "google_ads", "unknown"]
+# Códigos de achado da rodada (o texto em português é montado no relatório).
+FINDING_ARQUIVO_REJEITADO = "arquivo_rejeitado"
+FINDING_SEM_ARQUIVO = "sem_arquivo"
+FINDING_GASTO_DIVERGENTE = "gasto_divergente"
+FINDING_GASTO_MANUAL_EXISTENTE = "gasto_manual_existente"
+FINDING_GASTO_SEM_COMPROVANTE = "gasto_sem_comprovante"
+FINDING_PERIODO_SOBREPOSTO = "periodo_sobreposto"
+FINDING_POST_NAO_VINCULADO = "post_nao_vinculado"
+FINDING_MOEDA_NAO_BRL = "moeda_nao_brl"
+FINDING_META_ATRASADA = "meta_atrasada"
+FINDING_SEM_ATRIBUICAO = "sem_atribuicao"
+FINDING_SEVERITIES = ["critico", "atencao", "info"]

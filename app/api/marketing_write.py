@@ -27,6 +27,7 @@ POST_FIELDS = (
     "notes",
     "assignee_id",
     "catalog_item_ids",
+    "permalink",
 )
 GOAL_FIELDS = ("name", "target_interval_days", "catalog_item_id")
 

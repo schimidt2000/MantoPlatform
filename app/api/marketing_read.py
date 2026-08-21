@@ -8,6 +8,7 @@ Gate: `MARKETING` ou `SUPERADMIN` — reimplementado como função, não decorat
 de API do projeto).
 """
 
+from datetime import date, timedelta
 from typing import Any
 
 from flask import jsonify, request
@@ -16,6 +17,7 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import MARKETING_PLATFORMS, MARKETING_STATUSES, RoleName
+from app.marketing import desempenho_ops
 from app.marketing import marketing_ops as ops
 from app.models import CatalogItem, MarketingFrequencyGoal, MarketingPost, User
 
@@ -126,3 +128,41 @@ def api_marketing_options() -> Any:
             "plataformas": MARKETING_PLATFORMS,
         }
     )
+
+
+DESEMPENHO_WEEKS = (4, 12, 26)
+DESEMPENHO_WEEKS_DEFAULT = 12
+
+
+@api_bp.route("/marketing/desempenho")
+@api_login_required
+def api_marketing_desempenho() -> Any:
+    """Histórico do auditor de marketing para a tela "Marketing → Desempenho" (feature 256).
+
+    `?weeks=4|12|26` (padrão 12) ou `?start=YYYY-MM-DD&end=YYYY-MM-DD` (precedência; 400 se
+    `start > end`). Mesmo gate das demais telas de marketing.
+    """
+    denied = require_marketing_access()
+    if denied:
+        return denied
+    start_raw, end_raw = request.args.get("start"), request.args.get("end")
+    weeks: int | None = None
+    if start_raw and end_raw:
+        try:
+            inicio, fim = date.fromisoformat(start_raw), date.fromisoformat(end_raw)
+        except ValueError:
+            return json_error("Datas inválidas (use YYYY-MM-DD)", 400, fields={"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"})
+        if inicio > fim:
+            return json_error("A data inicial precisa ser anterior à final", 400, fields={"start": "depois do fim"})
+    else:
+        try:
+            weeks = int(request.args.get("weeks", DESEMPENHO_WEEKS_DEFAULT))
+        except ValueError:
+            weeks = DESEMPENHO_WEEKS_DEFAULT
+        if weeks not in DESEMPENHO_WEEKS:
+            weeks = DESEMPENHO_WEEKS_DEFAULT
+        # Semanas fechadas de segunda a domingo, terminando na semana corrente — assim a série
+        # tem exatamente `weeks` pontos (a última, parcial).
+        fim = date.today()
+        inicio = fim - timedelta(days=fim.weekday()) - timedelta(days=(weeks - 1) * 7)
+    return jsonify(desempenho_ops.desempenho_summary(inicio, fim, weeks=weeks))

@@ -26,6 +26,7 @@ def send_async(fn, *args) -> None:
     à sessão da thread principal (erro InvalidRequestError em gthread workers).
     """
     from sqlalchemy import inspect as sa_inspect
+
     from app import db
 
     app = current_app._get_current_object()
@@ -294,8 +295,8 @@ def send_removal_email(talent, event, character_name: str) -> bool:
     content = (
         _greeting(first_name)
         + _alert_box(
-            f"<strong>Sua participação neste evento foi cancelada.</strong><br>"
-            f"Se isso for inesperado, entre em contato com a equipe da Manto.",
+            "<strong>Sua participação neste evento foi cancelada.</strong><br>"
+            "Se isso for inesperado, entre em contato com a equipe da Manto.",
             color="#fff5f5", border="#fca5a5", text="#7f1d1d",
         )
         + _info_box(rows)
@@ -373,8 +374,8 @@ def send_portal_announcement_email(talent) -> bool:
         )
         + f'<div style="margin:20px 0;">{bullets}</div>'
         + _paragraph(
-            f'O acesso é feito com o seu <strong>CPF</strong> e uma senha que você mesmo cria no '
-            f'primeiro acesso. É rápido e seguro.'
+            'O acesso é feito com o seu <strong>CPF</strong> e uma senha que você mesmo cria no '
+            'primeiro acesso. É rápido e seguro.'
         )
         + _btn("Acessar o portal agora →", login_url)
         + _paragraph(

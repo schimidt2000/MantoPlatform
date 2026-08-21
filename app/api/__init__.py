@@ -61,5 +61,6 @@ from app.api import virtuais_read as _virtuais_read  # noqa: E402,F401
 from app.api import virtuais_write as _virtuais_write  # noqa: E402,F401
 from app.api import virtuais_webhook as _virtuais_webhook  # noqa: E402,F401
 from app.api import audit_agent as _audit_agent  # noqa: E402,F401
+from app.api import marketing_agent as _marketing_agent  # noqa: E402,F401
 from app.api import figurino_producao_read as _figurino_producao_read  # noqa: E402,F401
 from app.api import figurino_producao_write as _figurino_producao_write  # noqa: E402,F401

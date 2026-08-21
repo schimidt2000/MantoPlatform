@@ -1,0 +1,69 @@
+{
+  "_comentario": "Aliases de colunas por tipo de arquivo (feature 256). Comparação sem acento/caixa; alias também casa como prefixo quando o cabeçalho continua com ' (' — ex.: 'Valor usado' casa 'Valor usado (BRL)'. A ordem dos tipos importa: o primeiro cujo conjunto 'required' (grupos 'ou') for satisfeito vence. Novo rótulo de coluna entra aqui, sem código.",
+  "kinds": [
+    {
+      "kind": "meta_content",
+      "platform": "Instagram",
+      "required": [["post_id"], ["published_at"], ["reach", "views"]],
+      "fields": {
+        "post_id": ["Identificação da publicação", "ID da publicação", "Identificador da publicação", "Post ID"],
+        "published_at": ["Horário de publicação", "Data de publicação", "Publish time"],
+        "permalink": ["Link permanente", "Permalink", "Link"],
+        "post_type": ["Tipo de publicação", "Post type"],
+        "caption": ["Descrição", "Legenda", "Description"],
+        "date": ["Data", "Date"],
+        "reach": ["Alcance", "Reach"],
+        "impressions": ["Impressões", "Impressions"],
+        "likes": ["Curtidas", "Reações", "Likes"],
+        "comments": ["Comentários", "Comments"],
+        "saves": ["Salvamentos", "Salvos", "Saves"],
+        "shares": ["Compartilhamentos", "Shares"],
+        "views": ["Visualizações", "Reproduções", "Views", "Plays"]
+      }
+    },
+    {
+      "kind": "meta_account",
+      "platform": "Instagram",
+      "required": [["date"], ["followers", "reach"]],
+      "fields": {
+        "date": ["Data", "Date"],
+        "followers": ["Seguidores", "Total de seguidores", "Followers"],
+        "reach": ["Alcance", "Reach"],
+        "profile_views": ["Visitas ao perfil", "Profile visits"]
+      }
+    },
+    {
+      "kind": "meta_ads",
+      "platform": "Meta Ads",
+      "required": [["campaign_name"], ["spend"], ["day", "period_start"]],
+      "fields": {
+        "campaign_name": ["Nome da campanha", "Campaign name"],
+        "campaign_id": ["Identificação da campanha", "ID da campanha", "Campaign ID"],
+        "day": ["Dia", "Day"],
+        "period_start": ["Início dos relatórios", "Reporting starts"],
+        "period_end": ["Término dos relatórios", "Reporting ends"],
+        "spend": ["Valor usado", "Valor gasto", "Amount spent"],
+        "impressions": ["Impressões", "Impressions"],
+        "reach": ["Alcance", "Reach"],
+        "clicks": ["Cliques no link", "Link clicks", "Cliques (todos)"],
+        "results": ["Resultados", "Results"],
+        "result_type": ["Tipo de resultado", "Result type"]
+      }
+    },
+    {
+      "kind": "google_ads",
+      "platform": "Google Ads",
+      "required": [["campaign_name"], ["spend"], ["currency"]],
+      "fields": {
+        "campaign_name": ["Campanha", "Campaign"],
+        "campaign_id": ["ID da campanha", "Campaign ID"],
+        "day": ["Dia", "Day"],
+        "spend": ["Custo", "Cost"],
+        "currency": ["Código da moeda", "Moeda", "Currency code"],
+        "impressions": ["Impr.", "Impressões", "Impressions"],
+        "clicks": ["Cliques", "Clicks"],
+        "conversions": ["Conversões", "Conversions"]
+      }
+    }
+  ]
+}

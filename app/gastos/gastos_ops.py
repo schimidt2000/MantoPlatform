@@ -23,7 +23,6 @@ from werkzeug.utils import secure_filename
 from app import db
 from app.constants import RoleName
 from app.email_service import send_async, send_new_expense_alert_email
-from app.storage import ALLOWED_DOCUMENT_EXTENSIONS, is_allowed_extension
 from app.models import (
     AuditLog,
     CalendarEvent,
@@ -33,6 +32,7 @@ from app.models import (
     SpecialExpense,
     User,
 )
+from app.storage import ALLOWED_DOCUMENT_EXTENSIONS, is_allowed_extension
 
 
 class GastoValidationError(Exception):
@@ -224,7 +224,12 @@ def _validate_expense_data(data: dict, *, require_receipt: bool) -> dict:
 
 
 def create_expense(
-    creator: User, data: dict, receipt_path: str | None, event_id: int | None
+    creator: User,
+    data: dict,
+    receipt_path: str | None,
+    event_id: int | None,
+    *,
+    require_receipt: bool = True,
 ) -> SpecialExpense:
     """Cria um gasto extra pendente. `data` já validado/parseado pelo chamador.
 
@@ -239,12 +244,15 @@ def create_expense(
             `paid_at_creation` (bool).
         receipt_path: caminho já salvo do comprovante (via `save_receipt`).
         event_id: evento a vincular, se houver.
+        require_receipt: ``False`` só para o auditor de marketing (feature 256), que cria o
+            reembolso de anúncios antes de a fatura do cartão existir — o financeiro anexa
+            depois e a aprovação continua humana.
 
     Raises:
         GastoValidationError: descrição/valor ausente, comprovante ausente ou desembolso
             incompleto (funcionário não selecionado / fornecedor sem nome).
     """
-    parsed = _validate_expense_data({**data, "receipt_path": receipt_path}, require_receipt=True)
+    parsed = _validate_expense_data({**data, "receipt_path": receipt_path}, require_receipt=require_receipt)
     disbursement_type = parsed["disbursement_type"]
     paid_at_creation = bool(disbursement_type) and bool(data.get("paid_at_creation"))
 

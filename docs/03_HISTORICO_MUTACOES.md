@@ -4,7 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-20** · Estado do repositório: pós-feature
+> Última atualização: **2026-08-21** · Estado do repositório: pós-feature
+> **256-auditor-marketing (branch, migration `c4d1e7b2a9f3` — head)** — antes dela
 > **255-tags-nfc (branch, migrations `a7e2f94c1d58` + `b3f8d27a9e14`)** — antes dela
 > **254-melhorias-video-catalogo (em produção, migration `f3a9c15d8b42`)**, antes dela a
 > sequência da remoção do Jinja **240–252 (pausada, ver `docs/PARADA_REMOCAO_JINJA.md`)**,
@@ -41,6 +42,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **256-auditor-marketing** | Auditor de marketing semanal (Claude Code local, zero API): lê exports CSV da Meta/Google numa pasta, grava histórico no ERP por endpoints do agente, mantém o Gasto Extra de reembolso de anúncios por plataforma × mês civil (pendente, sem comprovante, congela ao aprovar), relatório por e-mail com barras HTML/CSS, tela `/marketing/desempenho` com SVG próprio, link do post no card, utms do Kommo no cliente | 2026-08-21 | `c4d1e7b2a9f3` | (aqui) | — |
 | **255-tags-nfc** | Tags NFC nas peças 3D (luminárias): URL pública imutável por unidade física (`/nfc/<code>`, código aleatório + Nº sequencial humano por produto), geração automática pelo presente 3D, vínculo direto a cliente (campanha sem show), página da estrela "Magia de Sonhar" acendendo, tela de gestão sem exclusão | 2026-08-20 | `a7e2f94c1d58`, `b3f8d27a9e14` | (aqui) | — |
 | **254-melhorias-video-catalogo** | Anexar vídeo na Revisão para de falhar em silêncio (pré-validação, barra de progresso XHR, 413/500 de `/api` com envelope); sync ganha janela de graça de 5 min (corrida com o criar evento); busca de personagem mostra o produto e não rouba vínculo; criar produto do catálogo aterrissa na edição | 2026-08-20 | `—` | (aqui) | — |
 | **250 / 251 / 252** | Régua de comissão extraída para `comissoes_ops` (450 eventos, zero divergência); acréscimos, parcelas e CRUD de nota fiscal na API | 2026-08-20 | `—` | (aqui) | — |
@@ -169,6 +171,60 @@ vivem em `scripts/db/README.md`, que **não é versionado** (`.gitignore` cobre 
 Formato de cada entrada:
 
 ```
+### 256-auditor-marketing — auditor de marketing semanal + mensuração no ERP (2026-08-21)
+
+**Migration**: `c4d1e7b2a9f3` (aditiva): tabelas `marketing_agent_runs`, `marketing_import_files`
+(`sha256` único), `marketing_post_metrics` (única por plataforma+post+`snapshot_date` — post é
+FOTOGRAFIA, o export traz acumulados), `marketing_campaign_metrics` (única por
+plataforma+campanha+período; `is_daily`), `marketing_account_metrics` (plataforma+dia),
+`marketing_ad_spend_batches` (única por plataforma+`month_ref`; 1:1 com `special_expenses`) e
+`marketing_ad_spend_lines`; colunas `marketing_posts.permalink` e
+`clients.lead_origin/utm_source/utm_medium/utm_campaign`.
+
+**Motivação**: Instagram, Meta Ads e Google Ads rodavam sem ninguém medir; o dono queria uma
+auditoria semanal sem gastar API. Molde operacional do auditor financeiro (221): scheduled task
+`auditoria-marketing-semanal` (segunda 06:30) → `scripts/marketing/` (collect → publish → checks
+→ report) → e-mail. Decisões do dono (20/08): entrada = pasta local; canais Google Ads + Meta
+Ads + Instagram orgânico; e-mail **e** tela; gasto de anúncios do cartão pessoal vai
+**automaticamente** para reembolso com detalhe por campanha; gasto nasce **pendente**; reembolso
+**dia 10**; manchete = **leads para o comercial**.
+
+**Regras de negócio**:
+- A rotina fala com o ERP **só por HTTP** (`/api/marketing-agent/<token>/{context,run,report}`,
+  env `MARKETING_AGENT_TOKEN`, 404 sem env/token errado); diferente da 221, não lê banco nenhum.
+- Única escrita além do histórico: Gasto Extra categoria Marketing, `disbursement_type=reembolso`
+  ao titular (`card_holder_email` do `config.py`, validado como usuário interno ativo), status
+  pendente, **sem comprovante** (`create_expense(..., require_receipt=False)` — parâmetro novo;
+  a fatura do cartão é anexada depois). **Um por plataforma × mês civil**: atualiza valor e
+  linhas enquanto pendente; aprovado/rejeitado ⇒ `frozen_at` e a diferença vira achado
+  `gasto_divergente` (tolerância R$ 0,01). Gasto manual no mês com a plataforma no nome ⇒ não
+  cria (`skipped_manual`). Moeda ≠ BRL ⇒ métricas gravadas, reembolso não.
+- Sobreposição diário × agregado na mesma campanha: só as diárias contam; achado
+  `periodo_sobreposto`.
+- Vínculo post ↔ card: permalink normalizado > data+plataforma (só quando há **um** card e **um**
+  post naquele dia) > nenhum (com candidatos); preencher o link depois revincula na rodada
+  seguinte; o vínculo nunca piora.
+- `POST /run` idempotente por `run_id` (replay devolve `result_json`); arquivo por `sha256`;
+  `mode=local` só com `FLASK_ENV=development`.
+- Importador do Kommo passa a guardar origem e utms ("mais recente sobrescreve"); atribuição
+  casa `utm_campaign` normalizado com o nome da campanha.
+- Gráficos do e-mail em HTML/CSS (Gmail não renderiza SVG embutido); na tela, SVG próprio em
+  `components/charts/` (um eixo por gráfico; funil de unidades mistas vira tiles com a taxa).
+
+**Pegadinhas encontradas**:
+- `flask db downgrade -1` não existe no Flask-Migrate daqui — use a revisão explícita.
+- Console do Windows em cp1252 quebra `print` com "↔"/acentos nos scripts de verificação:
+  `sys.stdout.reconfigure(encoding="utf-8")`.
+- O upsert das métricas "adota" a linha para a rodada que a regravou (`run_id`); a limpeza do
+  verify por `run_id` de teste apaga métricas que uma rodada local anterior tinha gravado com as
+  mesmas chaves — inofensivo no `manto_local`, mas explica "tela zerada depois do verify".
+- Arquivo já lido (sha256) é `skipped_duplicate` no agente **e** no servidor; para repetir uma
+  rodada local, apague `scripts/marketing/data/marketing_store_local.sqlite`.
+
+**Ativação em produção**: deploy + env `MARKETING_AGENT_TOKEN` no Railway com o valor de
+`.marketing-agent-token` (raiz, gitignored). Sem o env os endpoints respondem 404. Verificação:
+`specs/256-auditor-marketing/verify_256.py` — 12/12 no `manto_local`.
+
 ### <NNN> — <título>            (branch · data do merge · migration)
 Motivação · O que mudou (Backend / Banco / Frontend) · Impacto em RBAC e regras de negócio ·
 Rotas e endpoints novos/alterados · Riscos e pegadinhas

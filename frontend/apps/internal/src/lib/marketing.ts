@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 
 /**
@@ -102,6 +102,8 @@ export interface MarketingPost {
   publish_date: string | null;
   platform: string | null;
   drive_folder_url: string | null;
+  /** Link do post publicado — chave do cruzamento com as métricas do auditor (feature 256). */
+  permalink: string | null;
   notes: string | null;
   assignee_id: number | null;
   assignee: MarketingAssigneeRef | null;
@@ -221,6 +223,7 @@ export interface SaveMarketingPostInput {
   notes?: string | null;
   assignee_id?: number | null;
   catalog_item_ids?: number[];
+  permalink?: string | null;
 }
 
 /**
@@ -360,5 +363,128 @@ export function useDeleteMarketingGoal() {
     mutationFn: (id: number) =>
       apiFetch<void>(`/api/marketing/goals/${id}`, { method: "DELETE" }),
     onSuccess: invalidate,
+  });
+}
+
+// ── Desempenho (feature 256 — auditor de marketing) ─────────────────────────
+
+/** Manchete da tela: leads por campanha (decisão do dono) ou alcance quando não há atribuição. */
+export interface DesempenhoHeadline {
+  kind: "leads" | "alcance";
+  value: number;
+  cost_per_lead: string | null;
+  fallback_reason: string | null;
+}
+
+export interface DesempenhoWeek {
+  week_start: string;
+  reach: number;
+  followers: number | null;
+  /** Decimal em string — formatar com `formatBRL(Number(...))`. */
+  spend: string;
+  clicks: number;
+  leads: number;
+  events: number;
+  posts_published: number;
+}
+
+export interface DesempenhoCampaign {
+  platform: string;
+  campaign_name: string;
+  spend: string;
+  impressions: number;
+  clicks: number;
+  cpc: string | null;
+  leads: number;
+  cost_per_lead: string | null;
+  events: number;
+  cost_per_event: string | null;
+  currency: string;
+}
+
+export type DesempenhoLinkMethod = "permalink" | "date" | "none";
+
+export interface DesempenhoPost {
+  platform: string;
+  platform_post_id: string;
+  permalink: string | null;
+  published_at: string | null;
+  post_type: string | null;
+  caption: string | null;
+  snapshot_date: string;
+  reach: number | null;
+  impressions: number | null;
+  likes: number | null;
+  comments: number | null;
+  saves: number | null;
+  shares: number | null;
+  views: number | null;
+  marketing_post: { id: number; title: string } | null;
+  link_method: DesempenhoLinkMethod;
+}
+
+export interface DesempenhoGoal {
+  id: number;
+  name: string;
+  target_interval_days: number;
+  status: "on_track" | "delayed";
+  days_late?: number | null;
+  never_posted?: boolean;
+  last_posted_date?: string | null;
+}
+
+export interface DesempenhoCac {
+  month: string;
+  spend: string;
+  new_clients: number;
+  value: string | null;
+}
+
+export interface DesempenhoRun {
+  run_id: string;
+  mode: "prod" | "local";
+  executed_at: string;
+  window: [string, string];
+  files_accepted: number;
+  files_rejected: number;
+  report_sent: boolean;
+  rejected_files: { filename: string; reason: string | null }[];
+}
+
+export interface DesempenhoResponse {
+  period: { start: string; end: string; weeks: number | null };
+  headline: DesempenhoHeadline;
+  weekly: DesempenhoWeek[];
+  campaigns: DesempenhoCampaign[];
+  posts: DesempenhoPost[];
+  goals: DesempenhoGoal[];
+  cac: DesempenhoCac;
+  runs: DesempenhoRun[];
+  /** Nenhuma rodada ainda — a tela mostra as instruções de exportação. */
+  empty: boolean;
+}
+
+export type DesempenhoWeeks = 4 | 12 | 26;
+export type DesempenhoParams = { weeks: DesempenhoWeeks } | { start: string; end: string };
+
+function desempenhoQuery(params: DesempenhoParams): string {
+  const qs = new URLSearchParams();
+  if ("weeks" in params) qs.set("weeks", String(params.weeks));
+  else {
+    qs.set("start", params.start);
+    qs.set("end", params.end);
+  }
+  return qs.toString();
+}
+
+/**
+ * Histórico do auditor de marketing. `keepPreviousData` segura a tela enquanto o período novo
+ * carrega — trocar de 12 para 4 semanas não pode piscar os gráficos.
+ */
+export function useMarketingDesempenho(params: DesempenhoParams) {
+  return useQuery<DesempenhoResponse>({
+    queryKey: ["marketing", "desempenho", params],
+    queryFn: () => apiFetch<DesempenhoResponse>(`/api/marketing/desempenho?${desempenhoQuery(params)}`),
+    placeholderData: keepPreviousData,
   });
 }

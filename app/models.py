@@ -1,11 +1,14 @@
-from flask_login import UserMixin
 import logging
 
+from flask_login import UserMixin
+
 logger = logging.getLogger(__name__)
-from werkzeug.security import generate_password_hash, check_password_hash
 import re as _re
+from datetime import datetime
+
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from . import db, login_manager
-from datetime import datetime, date
 from .constants import (
     FIGURINO_ANEXO_FOTO,
     FIGURINO_KIND_COMPRA,
@@ -15,8 +18,6 @@ from .constants import (
     FIGURINO_PROD_SOLICITADO,
     FIGURINO_SEV_IMPEDE,
     GIFT_3D_STATUS_PENDENTE,
-    now_sp,
-    RoleName,
     VIRTUAL_CAMPAIGN_STATUS_PUBLICADA,
     VIRTUAL_CAMPAIGN_STATUS_RASCUNHO,
     VIRTUAL_ORDER_STATUS_RESERVADO,
@@ -24,6 +25,8 @@ from .constants import (
     VIRTUAL_REFUND_STATUS_PENDENTE,
     VIRTUAL_SLOT_STATUS_LIVRE,
     VIRTUAL_SLOT_STATUS_TRAVADO,
+    RoleName,
+    now_sp,
 )
 
 user_roles = db.Table(
@@ -1827,6 +1830,12 @@ class Client(db.Model):
     funnel = db.Column(db.String(120), nullable=True)         # "Funil de vendas"
     lead_value = db.Column(db.Numeric(12, 2), nullable=True)  # "Lead venda R$" (maior/agregado)
     kommo_created_at = db.Column(db.DateTime, nullable=True)  # "Criado em" no Kommo
+    # Atribuição de marketing (feature 256): "Origem do Lead" e utms do export do Kommo —
+    # é por `utm_campaign` que o auditor liga lead e evento à campanha paga.
+    lead_origin = db.Column(db.String(120), nullable=True)
+    utm_source = db.Column(db.String(200), nullable=True)
+    utm_medium = db.Column(db.String(200), nullable=True)
+    utm_campaign = db.Column(db.String(200), nullable=True)
     notes = db.Column(db.Text, nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -2330,6 +2339,9 @@ class MarketingPost(db.Model):
     publish_date     = db.Column(db.Date, nullable=True)
     platform         = db.Column(db.String(40), nullable=True)
     drive_folder_url = db.Column(db.Text, nullable=True)
+    # Link do post publicado (feature 256): chave que casa o card com as métricas reais do
+    # export da Meta. Opcional — sem ele o auditor tenta por data + plataforma.
+    permalink        = db.Column(db.String(500), nullable=True)
     notes            = db.Column(db.Text, nullable=True)
 
     assignee_id      = db.Column(
@@ -2377,6 +2389,201 @@ class MarketingFrequencyGoal(db.Model):
     created_at          = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     catalog_item = db.relationship("CatalogItem", lazy="joined")
+
+
+# ── Auditor de marketing (feature 256) ──────────────────────────────────────
+#
+# Histórico do que a rotina semanal lê dos exports da Meta/Google. Duas granularidades
+# convivem de propósito: post é FOTOGRAFIA (o export traz totais acumulados até a data do
+# export), campanha e conta são POR PERÍODO/DIA. O lote de reembolso liga o gasto de anúncios
+# de um mês civil ao Gasto Extra que o agente cria para o titular do cartão.
+
+
+class MarketingAgentRun(db.Model):
+    """Uma execução da rotina semanal do auditor de marketing (feature 256).
+
+    ``run_id`` é o carimbo gerado na máquina do dono; repetir o mesmo ``run_id`` devolve o
+    ``result_json`` guardado em vez de reprocessar (idempotência do ``POST /run``).
+    """
+
+    __tablename__ = "marketing_agent_runs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(db.String(40), nullable=False, unique=True)
+    mode = db.Column(db.String(10), nullable=False)  # prod | local
+    window_start = db.Column(db.DateTime, nullable=False)
+    window_end = db.Column(db.DateTime, nullable=False)
+    executed_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    files_accepted = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    files_rejected = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    posts_upserted = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    campaigns_upserted = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    account_upserted = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    findings_json = db.Column(db.Text, nullable=True)
+    result_json = db.Column(db.Text, nullable=True)
+    report_sent = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+
+    files = db.relationship(
+        "MarketingImportFile", backref="run", lazy=True, cascade="all, delete-orphan"
+    )
+
+
+class MarketingImportFile(db.Model):
+    """Um export lido da pasta de entrada; ``sha256`` único impede reprocessar o mesmo conteúdo."""
+
+    __tablename__ = "marketing_import_files"
+
+    id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(
+        db.Integer, db.ForeignKey("marketing_agent_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    filename = db.Column(db.String(300), nullable=False)
+    sha256 = db.Column(db.String(64), nullable=False, unique=True)
+    kind = db.Column(db.String(30), nullable=False)
+    period_start = db.Column(db.Date, nullable=True)
+    period_end = db.Column(db.Date, nullable=True)
+    status = db.Column(db.String(10), nullable=False)  # accepted | rejected
+    reason = db.Column(db.Text, nullable=True)
+    row_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+
+
+class MarketingPostMetric(db.Model):
+    """Fotografia de um post numa plataforma na data do export (feature 256).
+
+    ``marketing_post_id`` liga ao card do painel; ``link_method`` registra como o vínculo foi
+    feito (``permalink`` > ``date`` > ``none``) e nunca piora de uma rodada para outra.
+    """
+
+    __tablename__ = "marketing_post_metrics"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "platform", "platform_post_id", "snapshot_date",
+            name="uq_marketing_post_metrics_snapshot",
+        ),
+        db.Index("ix_marketing_post_metrics_post", "marketing_post_id"),
+        db.Index("ix_marketing_post_metrics_published", "published_at"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    platform = db.Column(db.String(20), nullable=False)
+    platform_post_id = db.Column(db.String(80), nullable=False)
+    permalink = db.Column(db.String(500), nullable=True)
+    post_type = db.Column(db.String(40), nullable=True)
+    caption = db.Column(db.String(300), nullable=True)
+    published_at = db.Column(db.DateTime, nullable=True)
+    snapshot_date = db.Column(db.Date, nullable=False)
+    reach = db.Column(db.Integer, nullable=True)
+    impressions = db.Column(db.Integer, nullable=True)
+    likes = db.Column(db.Integer, nullable=True)
+    comments = db.Column(db.Integer, nullable=True)
+    saves = db.Column(db.Integer, nullable=True)
+    shares = db.Column(db.Integer, nullable=True)
+    views = db.Column(db.Integer, nullable=True)
+    extra_json = db.Column(db.Text, nullable=True)
+    marketing_post_id = db.Column(
+        db.Integer, db.ForeignKey("marketing_posts.id", ondelete="SET NULL"), nullable=True
+    )
+    link_method = db.Column(db.String(10), nullable=False, default="none", server_default="none")
+    run_id = db.Column(db.Integer, db.ForeignKey("marketing_agent_runs.id"), nullable=False)
+
+    marketing_post = db.relationship("MarketingPost", lazy="joined")
+
+
+class MarketingCampaignMetric(db.Model):
+    """Métrica de uma campanha paga num período (diário quando ``period_start == period_end``)."""
+
+    __tablename__ = "marketing_campaign_metrics"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "platform", "campaign_id", "period_start", "period_end",
+            name="uq_marketing_campaign_metrics_period",
+        ),
+        db.Index("ix_marketing_campaign_metrics_platform_start", "platform", "period_start"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    platform = db.Column(db.String(20), nullable=False)
+    campaign_id = db.Column(db.String(80), nullable=False)
+    campaign_name = db.Column(db.String(200), nullable=False)
+    period_start = db.Column(db.Date, nullable=False)
+    period_end = db.Column(db.Date, nullable=False)
+    is_daily = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
+    spend = db.Column(db.Numeric(12, 2), nullable=False)
+    currency = db.Column(db.String(3), nullable=False, default="BRL", server_default="BRL")
+    impressions = db.Column(db.Integer, nullable=True)
+    reach = db.Column(db.Integer, nullable=True)
+    clicks = db.Column(db.Integer, nullable=True)
+    results = db.Column(db.Integer, nullable=True)
+    conversions = db.Column(db.Integer, nullable=True)
+    result_type = db.Column(db.String(80), nullable=True)
+    run_id = db.Column(db.Integer, db.ForeignKey("marketing_agent_runs.id"), nullable=False)
+
+
+class MarketingAccountMetric(db.Model):
+    """Seguidores/alcance da conta por dia e plataforma (feature 256)."""
+
+    __tablename__ = "marketing_account_metrics"
+    __table_args__ = (
+        db.UniqueConstraint("platform", "metric_date", name="uq_marketing_account_metrics_day"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    platform = db.Column(db.String(20), nullable=False)
+    metric_date = db.Column(db.Date, nullable=False)
+    followers = db.Column(db.Integer, nullable=True)
+    reach = db.Column(db.Integer, nullable=True)
+    profile_views = db.Column(db.Integer, nullable=True)
+    extra_json = db.Column(db.Text, nullable=True)
+    run_id = db.Column(db.Integer, db.ForeignKey("marketing_agent_runs.id"), nullable=False)
+
+
+class MarketingAdSpendBatch(db.Model):
+    """Lote de reembolso de anúncios: uma plataforma × um mês civil → um Gasto Extra (feature 256).
+
+    Enquanto o gasto está ``pendente`` o lote é atualizado a cada rodada (valor + linhas);
+    quando o gasto deixa de estar pendente, ``frozen_at`` é carimbado e o lote não muda mais —
+    diferenças posteriores viram achado no relatório, nunca alteração silenciosa.
+    """
+
+    __tablename__ = "marketing_ad_spend_batches"
+    __table_args__ = (
+        db.UniqueConstraint("platform", "month_ref", name="uq_marketing_ad_spend_batches_month"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    platform = db.Column(db.String(20), nullable=False)
+    month_ref = db.Column(db.String(7), nullable=False)  # YYYY-MM
+    special_expense_id = db.Column(
+        db.Integer, db.ForeignKey("special_expenses.id", ondelete="CASCADE"),
+        nullable=False, unique=True,
+    )
+    reported_total = db.Column(db.Numeric(12, 2), nullable=False)
+    last_run_id = db.Column(db.Integer, db.ForeignKey("marketing_agent_runs.id"), nullable=False)
+    frozen_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    expense = db.relationship("SpecialExpense", lazy="joined")
+    last_run = db.relationship("MarketingAgentRun", foreign_keys=[last_run_id], lazy="joined")
+    lines = db.relationship(
+        "MarketingAdSpendLine", backref="batch", lazy="joined",
+        cascade="all, delete-orphan", order_by="MarketingAdSpendLine.amount.desc()",
+    )
+
+
+class MarketingAdSpendLine(db.Model):
+    """Quanto cada campanha pesou no lote do mês — o detalhe que o financeiro vê ao abrir o gasto."""
+
+    __tablename__ = "marketing_ad_spend_lines"
+
+    id = db.Column(db.Integer, primary_key=True)
+    batch_id = db.Column(
+        db.Integer, db.ForeignKey("marketing_ad_spend_batches.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    campaign_name = db.Column(db.String(200), nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    clicks = db.Column(db.Integer, nullable=True)
+    results = db.Column(db.Integer, nullable=True)
 
 
 # ── Loja de Interações Virtuais (feature 205) ───────────────────────────────

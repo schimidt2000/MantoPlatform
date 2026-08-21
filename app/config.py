@@ -87,7 +87,7 @@ def _resolve_secret_key() -> str:
     )
     try:
         if os.path.exists(key_path):
-            with open(key_path, "r", encoding="utf-8") as fh:
+            with open(key_path, encoding="utf-8") as fh:
                 saved = fh.read().strip()
             if saved:
                 return saved
@@ -178,6 +178,9 @@ class Config:
     # Token do agente auditor financeiro (feature 221). Sem valor configurado, os endpoints
     # `/api/audit-agent/*` respondem 404 para tudo — mesmo racional do webhook da InfinitePay.
     AUDIT_AGENT_TOKEN = os.getenv("AUDIT_AGENT_TOKEN", "")
+    # Agente de marketing (feature 256): mesmo molde — sem o env, os endpoints
+    # `/api/marketing-agent/*` respondem 404 (interruptor geral).
+    MARKETING_AGENT_TOKEN = os.getenv("MARKETING_AGENT_TOKEN", "")
 
     # Pasta dos vídeos gravados (feature 205, FR-038e). **Fora** de `UPLOAD_FOLDER` de propósito:
     # `/uploads/<path>` é uma rota servida (ainda que com login de staff) e, com `USE_S3=true`,

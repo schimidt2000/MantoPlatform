@@ -275,6 +275,7 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
   const [publishDate, setPublishDate] = useState(post?.publish_date ?? "");
   const [platform, setPlatform] = useState(post?.platform ?? "");
   const [driveUrl, setDriveUrl] = useState(post?.drive_folder_url ?? "");
+  const [permalink, setPermalink] = useState(post?.permalink ?? "");
   const [notes, setNotes] = useState(post?.notes ?? "");
   const [temaIds, setTemaIds] = useState<string[]>(
     (post?.catalog_item_ids ?? []).map((id) => String(id)),
@@ -292,6 +293,7 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
       publish_date: publishDate || null,
       platform: platform || null,
       drive_folder_url: driveUrl.trim() || null,
+      permalink: permalink.trim() || null,
       notes: notes.trim() || null,
       assignee_id: assigneeId ? Number(assigneeId) : null,
       catalog_item_ids: temaIds.map(Number),
@@ -388,6 +390,25 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
           />
         </Field>
       </div>
+
+      {/* Feature 256: é por este link que o auditor de marketing casa o card com as métricas
+          reais do export da Meta. Publicar sem link não bloqueia — só avisa. */}
+      <Field label="Link do post publicado" error={fieldError(error, "permalink")}>
+        <Input
+          type="url"
+          value={permalink}
+          onChange={(e) => setPermalink(e.target.value)}
+          placeholder="https://www.instagram.com/p/…"
+          aria-invalid={Boolean(fieldError(error, "permalink"))}
+          aria-label="Link do post publicado"
+          className={status === "publicado" && !permalink.trim() ? "border-gold focus-visible:ring-gold" : undefined}
+        />
+        {status === "publicado" && !permalink.trim() && (
+          <span className="mt-1 block text-[11px] text-gold-ink">
+            Cole o link do post para o relatório semanal reconhecer esta publicação.
+          </span>
+        )}
+      </Field>
 
       <Field label="Pasta do acervo no Google Drive" error={fieldError(error, "drive_folder_url")}>
         <Input

@@ -59,3 +59,11 @@ clean_events.py
 # chave do Google Maps). Nunca foi versionado — esta linha existe para que um `git add -A`
 # distraído não o publique no GitHub.
 Manto_Sales/
+
+# Auditor de marketing (feature 256): token e artefatos de rodada — NUNCA versionar
+# (inbox/processed guardam exports brutos; runs/ tem relatórios; data/ a memória local)
+.marketing-agent-token
+/scripts/marketing/inbox/
+/scripts/marketing/processed/
+/scripts/marketing/runs/
+/scripts/marketing/data/

@@ -4,8 +4,20 @@ import { apiFetch } from "@manto/api-client";
 export type ExpenseStatus = "pendente" | "aprovado" | "rejeitado";
 export type DisbursementType = "reembolso" | "fornecedor" | null;
 
+/** Lote de reembolso gerado pelo auditor de marketing (feature 256) — detalhe por campanha. */
+export interface GastoMarketingBatch {
+  platform: string;
+  month_ref: string;
+  reported_total: string;
+  frozen: boolean;
+  run_id: string | null;
+  lines: { campaign_name: string; amount: string; clicks: number | null; results: number | null }[];
+}
+
 export interface GastoExtra {
   id: number;
+  /** Presente só nos gastos criados pelo auditor de marketing; `null` nos demais. */
+  marketing_batch: GastoMarketingBatch | null;
   description: string;
   category: string;
   amount: number;
