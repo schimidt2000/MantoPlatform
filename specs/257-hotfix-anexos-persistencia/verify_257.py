@@ -11,7 +11,8 @@ Cenários:
  4. Nota fiscal persiste (`POST /events/<id>/invoices`).
  5. Marcar reembolso como cobrado persiste (`POST /reimbursements/<id>/collect`).
  6. Editar e excluir comprovante continuam funcionando (não-regressão).
- 7. Limpeza total dos registros e arquivos de teste.
+ 7. Histórico do evento registra cada anexo (paridade com o Jinja, restaurada no hotfix).
+ 8. Limpeza total dos registros e arquivos de teste.
 
 Rodar contra o manto_local (PowerShell)::
 
@@ -166,6 +167,29 @@ def cen_06_editar_e_excluir() -> None:
              "exclusão do comprovante não persistiu")
 
 
+def cen_07_historico() -> None:
+    """O histórico do evento tem de registrar cada anexo — era o rastro que a API perdia."""
+    mensagens = [
+        m for (m,) in fora_da_sessao(
+            "SELECT message FROM event_logs WHERE event_id=%s ORDER BY id", (estado["event_id"],))
+    ]
+    esperado = [
+        ("Adicionou pagamento recebido de R$ 250.00", "comprovante"),
+        ("Adicionou contrato assinado", "contrato"),
+        ("Registrou reembolso a cobrar", "reembolso"),
+        ("Adicionou nota fiscal", "nota fiscal"),
+        ("Marcou reembolso como cobrado", "reembolso cobrado"),
+        ("Corrigiu valor de comprovante: R$ 250.00 → R$ 300", "correção de valor"),
+        ("Excluiu comprovante de R$ 300.00", "exclusão"),
+    ]
+    for trecho, rotulo in esperado:
+        _garante(any(trecho in m for m in mensagens),
+                 f"histórico sem o registro de {rotulo}: {mensagens}")
+    autores = {a for (a,) in fora_da_sessao(
+        "SELECT DISTINCT actor_name FROM event_logs WHERE event_id=%s", (estado["event_id"],))}
+    _garante(autores == {estado["user"].name}, f"autor do log errado: {autores}")
+
+
 def preparar() -> None:
     limpar()
     user = User(name=f"{PREFIX}sa", email=f"{PREFIX}sa@manto.local", is_active=True, has_access=True)
@@ -214,8 +238,9 @@ def main() -> int:
             cenario("4. nota fiscal persiste", cen_04_nota_fiscal)
             cenario("5. reembolso marcado como cobrado persiste", cen_05_reembolso_cobrado)
             cenario("6. editar e excluir comprovante (não-regressão)", cen_06_editar_e_excluir)
+            cenario("7. histórico do evento registra os anexos", cen_07_historico)
         finally:
-            cenario("7. limpeza", limpar)
+            cenario("8. limpeza", limpar)
     ok = sum(1 for _, passou, _ in resultados if passou)
     print(f"\n{ok}/{len(resultados)} OK")
     for nome, passou, erro in resultados:

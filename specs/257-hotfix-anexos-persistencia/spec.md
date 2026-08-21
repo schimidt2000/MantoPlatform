@@ -85,8 +85,23 @@ pela API e conferido por **conexão psycopg independente** (uma checagem feita n
 Flask passaria mesmo com o bug, por causa do autoflush — foi o que quase escondeu o defeito no
 diagnóstico).
 
-## Pendência conhecida (não incluída neste hotfix)
+## Histórico do evento (2ª rodada do hotfix, mesmo dia)
 
-O handler Jinja gravava um `EventLog` a cada anexo ("Adicionou pagamento recebido de R$ X"); a
-API não grava. O histórico do evento perde esse rastro. Corrigir junto exigiria decidir o texto
-de cada log — fica como item separado.
+O dispatcher do Jinja gravava um `EventLog` a cada anexo e a API não gravava **nada** — o
+histórico do evento tinha perdido o rastro de quem anexou, corrigiu ou excluiu. Restaurado com
+as mesmas mensagens, via `_log_anexo()` em `agenda_write.py`, nos dez pontos: adicionar
+comprovante / contrato / reembolso / nota fiscal, marcar reembolso cobrado, corrigir valor e
+excluir comprovante / contrato / reembolso.
+
+Detalhes que importam:
+
+- `created_at` em **UTC** (`datetime.utcnow()`), não em horário de São Paulo: `_serialize_logs`
+  trata o campo naive como UTC e converte na leitura. Conferido no banco — os logs escritos pelo
+  Jinja (`datetime.now(tz=tz_sp)`) chegaram gravados em UTC também, então o histórico continua
+  contínuo e sem salto de 3 h.
+- `actor_role` fixo em `"Comercial"`, por paridade com o Jinja (é o painel comercial).
+- Nas ações destrutivas o valor é lido **antes** de apagar/alterar, senão o log sairia vazio.
+- A nota fiscal ganhou log que o Jinja não tinha ("Adicionou nota fiscal: R$ X") — mesma família,
+  e sem ele o anexo mais caro do bloco seria o único invisível no histórico.
+
+Coberto pelo cenário 7 do `verify_257.py`.

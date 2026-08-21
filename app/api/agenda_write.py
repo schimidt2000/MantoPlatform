@@ -20,6 +20,7 @@ from app.models import (
     CalendarEvent,
     Client,
     EventContract,
+    EventLog,
     EventObservation,
     EventPayment,
     EventReimbursement,
@@ -1030,6 +1031,27 @@ def api_set_event_form_response(event_id: int) -> Any:
 # Convenção multipart: specs/144-migracao-react-spa/contracts/api-conventions.md.
 
 
+def _log_anexo(event_id: int, message: str) -> None:
+    """Registra no histórico do evento uma ação de anexo (feature 153 → hotfix 257).
+
+    O dispatcher do Jinja gravava um `EventLog` a cada anexo e a API não gravava nada, então o
+    histórico do evento perdeu o rastro de quem anexou, corrigiu ou excluiu comprovante,
+    contrato, reembolso e nota fiscal. Mensagens idênticas às do Jinja para o histórico ficar
+    contínuo. `actor_role` fixo em "Comercial" (também por paridade: é o painel comercial).
+
+    `created_at` em UTC como todo o resto do sistema — `_serialize_logs` converte para São Paulo
+    na leitura.
+    """
+    db.session.add(
+        EventLog(
+            event_id=event_id,
+            actor_name=current_user.name,
+            actor_role="Comercial",
+            message=message,
+            created_at=datetime.utcnow(),
+        )
+    )
+
 @api_bp.route("/events/<int:event_id>/invoices", methods=["POST"])
 @api_login_required
 def api_add_invoice(event_id: int) -> Any:
@@ -1058,6 +1080,7 @@ def api_add_invoice(event_id: int) -> Any:
             "Informe ao menos o valor, a data ou o arquivo da nota.", 400,
             {"amount": "Preencha ao menos um campo"},
         )
+    _log_anexo(event.id, f"Adicionou nota fiscal: R$ {invoice.amount or 0}")
     # Mesmo motivo do comprovante de pagamento: o helper só faz `db.session.add` (quem
     # commitava era o dispatcher do Jinja), então sem esta linha o anexo some no refresh.
     db.session.commit()
@@ -1226,6 +1249,7 @@ def api_add_contract(event_id: int) -> Any:
         return json_error(
             "Selecione o arquivo do contrato (até 10 MB).", 400, {"file": "Obrigatório"}
         )
+    _log_anexo(event.id, "Adicionou contrato assinado")
     # Mesmo motivo do comprovante de pagamento: o helper só faz `db.session.add` (quem
     # commitava era o dispatcher do Jinja), então sem esta linha o anexo some no refresh.
     db.session.commit()
@@ -1245,6 +1269,7 @@ def api_delete_contract(contract_id: int) -> Any:
 
     from app.calendar.routes import _delete_contract_record
 
+    _log_anexo(contract.event_id, "Excluiu contrato enviado")
     _delete_contract_record(contract)
     db.session.commit()
     return _event_detail_json(event)
@@ -1292,6 +1317,7 @@ def api_add_payment(event_id: int) -> Any:
             "Informe o valor e anexe o comprovante para adicionar o pagamento.", 400,
             {"amount": "Obrigatório", "file": "Obrigatório"},
         )
+    _log_anexo(event.id, f"Adicionou pagamento recebido de R$ {amount}")
     # `_add_payment_record` só faz `db.session.add` — quem commitava era o dispatcher do Jinja.
     # Sem esta linha o INSERT é desfeito no fim do request e o comprovante some no refresh
     # (a resposta ainda o mostrava por causa do autoflush do serializador).
@@ -1316,8 +1342,10 @@ def api_edit_payment(payment_id: int) -> Any:
 
     from app.calendar.routes import _edit_payment_amount
 
+    valor_anterior = payment.amount or 0
     if not _edit_payment_amount(payment, amount=amount):
         return json_error("Informe um valor válido para o comprovante", 400, {"amount": "Obrigatório"})
+    _log_anexo(payment.event_id, f"Corrigiu valor de comprovante: R$ {valor_anterior} → R$ {amount}")
     db.session.commit()
     return _event_detail_json(event)
 
@@ -1336,6 +1364,7 @@ def api_delete_payment(payment_id: int) -> Any:
 
     from app.calendar.routes import _delete_payment_record
 
+    _log_anexo(payment.event_id, f"Excluiu comprovante de R$ {payment.amount or 0}")
     _delete_payment_record(payment)
     db.session.commit()
     return _event_detail_json(event)
@@ -1370,6 +1399,7 @@ def api_add_reimbursement(event_id: int) -> Any:
             "Informe a descrição e o valor do reembolso.", 400,
             {"description": "Obrigatório", "amount": "Obrigatório"},
         )
+    _log_anexo(event.id, f"Registrou reembolso a cobrar: {(description or '')[:200]} — R$ {amount}")
     # Mesmo motivo do comprovante de pagamento: o helper só faz `db.session.add` (quem
     # commitava era o dispatcher do Jinja), então sem esta linha o anexo some no refresh.
     db.session.commit()
@@ -1406,6 +1436,10 @@ def api_collect_reimbursement(reimbursement_id: int) -> Any:
             "Informe o valor recebido e anexe o comprovante para marcar como cobrado.", 400,
             {"collected_amount": "Obrigatório", "file": "Obrigatório"},
         )
+    _log_anexo(
+        reimbursement.event_id,
+        f"Marcou reembolso como cobrado: {reimbursement.description} — R$ {collected_amount}",
+    )
     # Mesmo motivo do comprovante de pagamento: o helper só faz `db.session.add` (quem
     # commitava era o dispatcher do Jinja), então sem esta linha o anexo some no refresh.
     db.session.commit()
@@ -1426,6 +1460,10 @@ def api_delete_reimbursement(reimbursement_id: int) -> Any:
 
     from app.calendar.routes import _delete_reimbursement_record
 
+    _log_anexo(
+        reimbursement.event_id,
+        f"Excluiu reembolso: {reimbursement.description} — R$ {reimbursement.amount or 0}",
+    )
     _delete_reimbursement_record(reimbursement)
     db.session.commit()
     return _event_detail_json(event)
