@@ -42,15 +42,29 @@ def token() -> str:
 
 
 def buscar(base: str) -> dict:
+    """Consulta o endpoint traduzindo TODO erro à mão.
+
+    Nada de `raise_for_status()` nem de deixar a exceção do `requests` subir: a mensagem delas
+    inclui a URL, e a URL carrega o token — foi assim que ele vazou uma vez.
+    """
     url = f"{base}/api/audit-agent/{token()}/orphan-attachments"
-    resp = requests.get(url, timeout=TIMEOUT)
+    try:
+        resp = requests.get(url, timeout=TIMEOUT)
+    except requests.RequestException as exc:
+        raise SystemExit(f"Falha de rede falando com {base}: {type(exc).__name__}") from None
     if resp.status_code == 404:
         raise SystemExit(
             "404 do endpoint: token inválido ou env AUDIT_AGENT_TOKEN ausente no ambiente alvo.\n"
             "Confirme a variável no Railway (produção) ou no .env (local)."
         )
-    resp.raise_for_status()
-    return resp.json()
+    if resp.status_code != 200:
+        raise SystemExit(
+            f"HTTP {resp.status_code} de {base} — se for 502, o deploy está reiniciando; tente de novo."
+        )
+    try:
+        return resp.json()
+    except ValueError:
+        raise SystemExit(f"Resposta não-JSON de {base} (HTTP {resp.status_code}).") from None
 
 
 def _data_br(iso: str | None) -> str:
