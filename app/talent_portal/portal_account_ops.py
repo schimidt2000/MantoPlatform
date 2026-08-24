@@ -155,8 +155,8 @@ def request_password_reset(
     senha". Antes dessa mudança, quem nunca passou pelo Primeiro Acesso clicava em "Esqueci
     minha senha" e caía num retorno silencioso, sem receber e-mail nenhum (caso real: talento
     139, e outros 118 talentos ativos sem senha no mesmo buraco). Primeiro Acesso continua
-    existindo como caminho paralelo — ambos os fluxos hoje terminam na mesma função de definir
-    senha via token.
+    existindo como caminho paralelo (lá a senha temporária vai no e-mail de boas-vindas; aqui
+    o talento define a senha pelo link com token).
 
     Silencioso por design (enumeração de conta): nunca sinaliza ao chamador se o talento existe
     — a rota sempre responde "se os dados conferem, enviamos o link". Qualquer falha é logada e
