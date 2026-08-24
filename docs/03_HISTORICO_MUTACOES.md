@@ -4,7 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-21** · Estado do repositório: pós-feature
+> Última atualização: **2026-08-24** · Estado do repositório: pós-feature
+> **259-portal-reset-sem-senha (branch, sem migration)** — antes dela
 > **258-cliente-manual (sem migration)** — antes dela
 > **257-hotfix-anexos-persistencia (em produção, sem migration)** — antes dele
 > **256-auditor-marketing (em produção, migration `c4d1e7b2a9f3` — head)** — antes dela
@@ -44,6 +45,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **259-portal-reset-sem-senha** | "Esqueci minha senha" do Portal do Artista silenciava para quem nunca criou senha (`password_hash` NULL) — `request_password_reset` exigia senha prévia na condição de match; talento clicava, a tela dizia "enviamos o link", e nada era enviado (caso real: talent 139, Iara, e mais 118 talentos ativos no mesmo buraco). Removida a exigência de senha prévia; o link de reset já define a primeira senha | 2026-08-24 | `—` | (aqui) | — |
 | **258-cliente-manual** | Botão "Nova cliente" na tela de Clientes: cadastro manual com nome, telefone, e-mail, empresa, CPF, CNPJ e endereço, reusando o endpoint de cadastro rápido (telefone único; repetido avisa e não duplica nem sobrescreve) | 2026-08-21 | `—` | (aqui) | — |
 | **257-hotfix-anexos-persistencia** | Anexos do evento sumiam no refresh: os cinco POSTs de anexo (comprovante, contrato, reembolso, nota fiscal, marcar reembolso cobrado) faziam `db.session.add` sem `commit` — quem commitava era o dispatcher do Jinja. Endpoint novo de listagem de arquivos órfãos no volume + script de recuperação | 2026-08-21 | `—` | (aqui) | — |
 | **256-auditor-marketing** | Auditor de marketing semanal (Claude Code local, zero API): lê exports CSV da Meta/Google numa pasta, grava histórico no ERP por endpoints do agente, mantém o Gasto Extra de reembolso de anúncios por plataforma × mês civil (pendente, sem comprovante, congela ao aprovar), relatório por e-mail com barras HTML/CSS, tela `/marketing/desempenho` com SVG próprio, link do post no card, utms do Kommo no cliente | 2026-08-21 | `c4d1e7b2a9f3` | (aqui) | — |
@@ -175,6 +177,34 @@ vivem em `scripts/db/README.md`, que **não é versionado** (`.gitignore` cobre 
 Formato de cada entrada:
 
 ```
+### 259-portal-reset-sem-senha — "Esqueci minha senha" também para quem nunca criou senha (2026-08-24)
+
+**Migration**: nenhuma. **Achado real, com dados de produção**: a maquiadora Iara (talent 139,
+`password_hash` NULL) clica "Esqueci minha senha" no Portal do Artista, a tela responde "se os
+dados conferem, enviamos o link", e nenhum e-mail sai. Há **119 talentos ativos** sem senha no
+mesmo buraco.
+
+**Causa**: `request_password_reset` (`app/talent_portal/portal_account_ops.py`) exigia
+`talent.password_hash` truthy na condição de "matches" — quem nunca passou pelo fluxo de
+Primeiro Acesso (ou nunca precisou, por ser talento antigo importado sem senha) caía num
+`return` silencioso antes de gerar o token, sem log nem erro visível.
+
+**Decisão**: remover a exigência de senha prévia da condição de match, mantendo todo o resto
+igual — talento encontrado por `find_talent_by_login`, `email_contact` presente, e-mail digitado
+batendo (`strip().lower()`) e a resposta HTTP idêntica em todos os casos (anti-enumeração, por
+design). Isso funciona porque `reset_password_with_token` já define a senha e zera
+`must_change_password` — na prática, o link de reset também serve como "definir a primeira
+senha". **Primeiro Acesso continua existindo** como caminho paralelo (mensagem de erro em
+`start_first_access` não mudou: "Este CPF já possui senha. Use a opção 'Esqueci minha senha'"
+segue certa, pois só dispara quando `password_hash` já existe).
+
+**Verificação**: `scripts/db/verify_259_portal_reset_sem_senha.py` (gitignored, não versionado)
+contra `manto_local` — 15/15 checks: (a) sem senha + e-mail certo grava token (conferido por
+conexão SQL separada da sessão do ORM, para não ser enganado por autoflush), (b) sem senha +
+e-mail errado não grava nada, (c) com senha + e-mail certo continua funcionando (regressão), (d)
+CPF inexistente devolve a mesma resposta 200 genérica dos demais casos, e o reset ponta-a-ponta
+(token → definir senha → login → `must_change_password=False` → token invalidado).
+
 ### 258-cliente-manual — cadastrar cliente pela tela de Clientes (2026-08-21)
 
 **Migration**: nenhuma. **Pedido**: "na tela do comercial das clientes preciso que seja possível
