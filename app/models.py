@@ -2310,7 +2310,7 @@ class MarketingPost(db.Model):
     """Postagem planejada pela equipe de marketing — o card do Kanban (feature 204).
 
     ``status`` percorre ``MARKETING_STATUSES`` (``ideia`` → ``producao`` → ``revisao`` →
-    ``agendado`` → ``publicado``); ``publish_date`` é a data em que o post foi (ou será)
+    ``pronto`` → ``agendado`` → ``publicado``); ``publish_date`` é a data em que o post foi (ou será)
     publicado e é o que alimenta o cálculo de frequência de ``MarketingFrequencyGoal``.
 
     Os três vínculos existem para o post não virar uma ilha:
