@@ -1,5 +1,6 @@
 import { useParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
+import { assetUrl } from "@manto/api-client";
 import { useNfcResolution } from "../lib/nfc";
 
 /**
@@ -52,6 +53,8 @@ export function NfcPage() {
   const reducedMotion = useReducedMotion();
 
   const instagramUrl = resolution.data?.instagram_url;
+  // Feature 261: por ora no máximo uma entrega de vídeo por tag.
+  const videoDelivery = resolution.data?.deliveries.find((d) => d.kind === "video");
 
   // Conteúdo textual sobe em fases, depois que a estrela acendeu (~0.8s).
   const enter = (delay: number) =>
@@ -194,10 +197,30 @@ export function NfcPage() {
           A magia da Manto também na sua casa
         </motion.h1>
 
-        <motion.p {...enter(1.0)} className="text-base leading-relaxed text-on-color/70">
-          Este é o portal da sua luminária. Em breve, ele se abrirá bem aqui — com novidades e
-          surpresas feitas para você.
-        </motion.p>
+        {videoDelivery ? (
+          // Entrega de vídeo (feature 261): substitui o placeholder pelo conteúdo real. O card
+          // entra na mesma coreografia de fases das linhas acima — só troca o conteúdo.
+          <motion.div
+            {...enter(1.0)}
+            className="w-full overflow-hidden rounded-xl border border-lamp-cloud/20 bg-lamp-cloud/[0.06] shadow-lg"
+          >
+            <p className="px-5 pt-4 text-sm font-semibold text-on-color">
+              {videoDelivery.title || "Um vídeo especial para você"}
+            </p>
+            <video
+              controls
+              playsInline
+              preload="metadata"
+              className="mt-3 block w-full bg-ink"
+              src={assetUrl(videoDelivery.media_url)}
+            />
+          </motion.div>
+        ) : (
+          <motion.p {...enter(1.0)} className="text-base leading-relaxed text-on-color/70">
+            Este é o portal da sua luminária. Em breve, ele se abrirá bem aqui — com novidades e
+            surpresas feitas para você.
+          </motion.p>
+        )}
 
         {/* CTA só quando o servidor respondeu: botão sem destino é botão morto (Princípio V). */}
         {instagramUrl && (

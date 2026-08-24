@@ -23,6 +23,16 @@ export interface NfcTagEventRef {
   start_at: string | null;
 }
 
+/** Entrega de vídeo ativa da tag (feature 261) — `null` quando não há vídeo enviado ainda. */
+export interface NfcTagVideoDelivery {
+  id: number;
+  kind: "video";
+  title: string | null;
+  /** Nome do arquivo em disco — só para exibir, nunca é URL (o arquivo é servido por código). */
+  file_name: string | null;
+  created_at: string | null;
+}
+
 export interface NfcTag {
   id: number;
   /** Código gravado na tag física — imutável e eterno (`/nfc/<code>`). */
@@ -42,6 +52,7 @@ export interface NfcTag {
   access_count: number;
   last_accessed_at: string | null;
   created_at: string | null;
+  video_delivery: NfcTagVideoDelivery | null;
 }
 
 export interface NfcTagListResponse {
@@ -90,6 +101,48 @@ export function useAtualizarNfcTag() {
       apiFetch<{ tag: NfcTag }>(`/api/3d/nfc/${id}`, {
         method: "PATCH",
         body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: NFC_KEY });
+    },
+  });
+}
+
+// ── Entregas (feature 261) ───────────────────────────────────────────────────
+
+export interface EnviarNfcVideoInput {
+  tagId: number;
+  file: File;
+  title?: string;
+}
+
+/** Envia (ou substitui) o vídeo da tag — multipart, mesmo padrão de `eventAttachments.ts`. */
+export function useEnviarNfcVideo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tagId, file, title }: EnviarNfcVideoInput) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("kind", "video");
+      if (title) form.append("title", title);
+      return apiFetch<{ tag: NfcTag }>(`/api/3d/nfc/${tagId}/entregas`, {
+        method: "POST",
+        body: form,
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: NFC_KEY });
+    },
+  });
+}
+
+/** Remove a entrega de vídeo da tag (linha + arquivo do disco). */
+export function useRemoverNfcVideo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tagId, deliveryId }: { tagId: number; deliveryId: number }) =>
+      apiFetch<{ tag: NfcTag }>(`/api/3d/nfc/${tagId}/entregas/${deliveryId}`, {
+        method: "DELETE",
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: NFC_KEY });
