@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Link2Off, Nfc, Trash2, Upload } from "lucide-react";
 import {
@@ -208,7 +208,8 @@ interface VideoDialogProps {
  * invalidam a query, o diálogo continua aberto já mostrando o novo estado, sem fechar e reabrir.
  * Sem vídeo: escolhe o arquivo (a escolha já dispara o envio, mesmo padrão de
  * `FilaProducaoMidiaPage`). Com vídeo: nome + data do envio, Substituir (reabre o seletor) e
- * Remover (com confirmação).
+ * Remover (com confirmação). O campo de título aparece nos dois estados, pré-carregado com o
+ * título salvo — Substituir reenvia o que estiver no campo, então nada some sem o admin ver.
  */
 function VideoDialog({ tag, onClose }: VideoDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -216,6 +217,12 @@ function VideoDialog({ tag, onClose }: VideoDialogProps) {
   const enviar = useEnviarNfcVideo();
   const remover = useRemoverNfcVideo();
   const delivery = tag?.video_delivery ?? null;
+
+  // Pré-carrega o título salvo ao abrir (e ao trocar de tag/vídeo): Substituir manda o campo
+  // junto com o arquivo novo — sem isso, o título personalizado sumiria da página pública.
+  useEffect(() => {
+    setTitle(tag?.video_delivery?.title ?? "");
+  }, [tag?.id, tag?.video_delivery?.id, tag?.video_delivery?.title]);
 
   function close() {
     setTitle("");
@@ -264,7 +271,7 @@ function VideoDialog({ tag, onClose }: VideoDialogProps) {
             }}
           />
 
-          {delivery ? (
+          {delivery && (
             <div className="rounded-md border border-line bg-surface-2 p-3">
               <p className="text-sm font-medium text-ink">
                 {delivery.title || "Sem título — a página usa a copy padrão"}
@@ -274,20 +281,21 @@ function VideoDialog({ tag, onClose }: VideoDialogProps) {
                 {delivery.created_at && ` · enviado em ${formatShortDate(delivery.created_at)}`}
               </p>
             </div>
-          ) : (
-            <label className="block">
-              <span className="mb-1 block text-sm text-muted">Título (opcional)</span>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Um vídeo especial para você"
-                aria-label="Título do vídeo"
-              />
-              <span className="mt-1 block text-xs text-muted">
-                Formatos aceitos: MP4, MOV, WEBM, M4V.
-              </span>
-            </label>
           )}
+
+          <label className="block">
+            <span className="mb-1 block text-sm text-muted">Título (opcional)</span>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Um vídeo especial para você"
+              aria-label="Título do vídeo"
+            />
+            <span className="mt-1 block text-xs text-muted">
+              Formatos aceitos: MP4, MOV, WEBM, M4V.
+              {delivery && " Substituir grava o título acima junto com o vídeo novo."}
+            </span>
+          </label>
 
           {enviar.error && (
             <p className="text-sm text-red" role="alert">
