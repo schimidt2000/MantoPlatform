@@ -77,7 +77,7 @@ def _clean_title(raw: Any) -> str:
 
 
 def _validate_status(raw: Any) -> str:
-    """Garante que o status informado é um dos cinco do fluxo do Kanban."""
+    """Garante que o status informado é um dos status do fluxo do Kanban."""
     status = str(raw or "").strip().lower()
     if status not in MARKETING_STATUSES:
         raise MarketingValidationError(

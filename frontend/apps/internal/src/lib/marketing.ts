@@ -10,12 +10,13 @@ import { apiFetch } from "@manto/api-client";
  */
 
 /** Colunas do Kanban, na ordem do fluxo de produção. */
-export type MarketingStatus = "ideia" | "producao" | "revisao" | "agendado" | "publicado";
+export type MarketingStatus = "ideia" | "producao" | "revisao" | "pronto" | "agendado" | "publicado";
 
 export const MARKETING_STATUSES: MarketingStatus[] = [
   "ideia",
   "producao",
   "revisao",
+  "pronto",
   "agendado",
   "publicado",
 ];
@@ -24,6 +25,7 @@ export const MARKETING_STATUS_LABELS: Record<MarketingStatus, string> = {
   ideia: "Ideia",
   producao: "Produção",
   revisao: "Revisão",
+  pronto: "Pronto",
   agendado: "Agendado",
   publicado: "Publicado",
 };
@@ -36,6 +38,7 @@ export const MARKETING_STATUS_TONES: Record<
   ideia: "neutral",
   producao: "gold",
   revisao: "blue",
+  pronto: "green",
   agendado: "accent",
   publicado: "green",
 };
@@ -45,6 +48,7 @@ export const MARKETING_STATUS_ICONS: Record<MarketingStatus, string> = {
   ideia: "💡",
   producao: "🎬",
   revisao: "👀",
+  pronto: "✅",
   agendado: "📅",
   publicado: "🚀",
 };

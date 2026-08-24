@@ -5,7 +5,8 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-08-24** · Estado do repositório: pós-feature
-> **259-portal-reset-sem-senha (branch, sem migration)** — antes dela
+> **260-etapa-pronto-marketing (em produção, sem migration)** — antes dela
+> **259-portal-reset-sem-senha (em produção, sem migration)** — antes dela
 > **258-cliente-manual (sem migration)** — antes dela
 > **257-hotfix-anexos-persistencia (em produção, sem migration)** — antes dele
 > **256-auditor-marketing (em produção, migration `c4d1e7b2a9f3` — head)** — antes dela
@@ -45,6 +46,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **260-etapa-pronto-marketing** | Nova etapa "Pronto" no funil de marketing: status intermediário entre "Revisão" (material aprovado) e "Agendado", material pronto para ir ao ar e aguardando dia/hora de publicação | 2026-08-24 | `—` | (aqui) | — |
 | **259-portal-reset-sem-senha** | "Esqueci minha senha" do Portal do Artista silenciava para quem nunca criou senha (`password_hash` NULL) — `request_password_reset` exigia senha prévia na condição de match; talento clicava, a tela dizia "enviamos o link", e nada era enviado (caso real: talent 139, Iara, e mais 118 talentos ativos no mesmo buraco). Removida a exigência de senha prévia; o link de reset já define a primeira senha | 2026-08-24 | `—` | (aqui) | — |
 | **258-cliente-manual** | Botão "Nova cliente" na tela de Clientes: cadastro manual com nome, telefone, e-mail, empresa, CPF, CNPJ e endereço, reusando o endpoint de cadastro rápido (telefone único; repetido avisa e não duplica nem sobrescreve) | 2026-08-21 | `—` | (aqui) | — |
 | **257-hotfix-anexos-persistencia** | Anexos do evento sumiam no refresh: os cinco POSTs de anexo (comprovante, contrato, reembolso, nota fiscal, marcar reembolso cobrado) faziam `db.session.add` sem `commit` — quem commitava era o dispatcher do Jinja. Endpoint novo de listagem de arquivos órfãos no volume + script de recuperação | 2026-08-21 | `—` | (aqui) | — |
@@ -177,6 +179,45 @@ vivem em `scripts/db/README.md`, que **não é versionado** (`.gitignore` cobre 
 Formato de cada entrada:
 
 ```
+### <NNN> — <título>            (branch · data do merge · migration)
+Motivação · O que mudou (Backend / Banco / Frontend) · Impacto em RBAC e regras de negócio ·
+Rotas e endpoints novos/alterados · Riscos e pegadinhas
+```
+
+---
+
+## Registro
+
+### 260 — Nova etapa "Pronto" no painel de marketing                                                (em produção · 2026-08-24 · sem migration)
+
+**Contexto.** O funil do Kanban de marketing era: Ideia → Produção → Revisão → Agendado →
+Publicado. Revisão marca "material aprovado pela equipe de conteúdo"; Agendado era "vai ao ar no
+dia/hora X". A lacuna: entre "tá tudo pronto" e "vai sair" precisa de um status intermediário,
+porque o material chega pronto DIAS antes de sair (conforme a semana de conteúdo planejada).
+
+**Solução.** Novo status "Pronto" (label "Pronto", emoji ✅, tom green no badge) entre Revisão e
+Agendado. Material aprovado sai de Revisão para Pronto (propósito: está tudo bem, pronto pra ir
+ao ar assim que vier a hora); depois vai para Agendado (propósito: foi agendado, esperando a data).
+O Kanban ganha uma sexta coluna; não precisa de migration (coluna `status` é `VARCHAR(20)` sem
+constraint de enum).
+
+**Superfícies.**
+- Backend `app/constants.py`: nova constante `MARKETING_STATUS_PRONTO = "pronto"` e entrada na lista
+  `MARKETING_STATUSES` (ordem: ideia, producao, revisao, **pronto**, agendado, publicado).
+  `app/models.py`: docstring do modelo atualizada. Validação em `marketing_ops.py` já aplica via
+  lista — não precisa tocar na lógica.
+- Frontend `frontend/apps/internal/src/lib/marketing.ts` — fonte única: type `MarketingStatus`
+  (union), array `MARKETING_STATUSES`, records de labels, tones (green para contrastar) e icons.
+  Kanban itera sobre `MARKETING_STATUSES` — coluna entra automaticamente.
+- Tela `/marketing/painel` exibe novo status no Dialog de edição (`<select>` nativo, 6 options).
+- API: `GET /api/marketing/posts` devolve a lista atualizada no campo `statuses`.
+
+**Verificação.** `tsc --noEmit` limpo em `frontend/apps/internal`; `verify_204_marketing.py` lista
+atualizada (ordem dos status conferida); backend valida novo status automaticamente (nenhuma
+validação hardcoded).
+
+**Pegadinhas.** Nenhuma — é um status novo no meio de uma lista flexível, sem constraint no banco.
+
 ### 259-portal-reset-sem-senha — "Esqueci minha senha" também para quem nunca criou senha (2026-08-24)
 
 **Migration**: nenhuma. **Achado real, com dados de produção**: a maquiadora Iara (talent 139,
@@ -325,15 +366,6 @@ Ads + Instagram orgânico; e-mail **e** tela; gasto de anúncios do cartão pess
 **Ativação em produção**: deploy + env `MARKETING_AGENT_TOKEN` no Railway com o valor de
 `.marketing-agent-token` (raiz, gitignored). Sem o env os endpoints respondem 404. Verificação:
 `specs/256-auditor-marketing/verify_256.py` — 12/12 no `manto_local`.
-
-### <NNN> — <título>            (branch · data do merge · migration)
-Motivação · O que mudou (Backend / Banco / Frontend) · Impacto em RBAC e regras de negócio ·
-Rotas e endpoints novos/alterados · Riscos e pegadinhas
-```
-
----
-
-## Registro
 
 ### 255 — Tags NFC nas luminárias: a URL eterna e o Nº que a equipe anota na tagzinha            (branch · 2026-08-20 · migrations `a7e2f94c1d58` + `b3f8d27a9e14`)
 

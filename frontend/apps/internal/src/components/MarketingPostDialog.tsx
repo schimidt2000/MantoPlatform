@@ -341,7 +341,7 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
       </Field>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {/* 5 e 7 opções: `<select>` nativo é legítimo aqui (limite do Princípio X.1 é 10). */}
+        {/* 6 e 7 opções: `<select>` nativo é legítimo aqui (limite do Princípio X.1 é 10). */}
         <Field label="Status" error={fieldError(error, "status")}>
           <select
             className={INPUT_CLASS}

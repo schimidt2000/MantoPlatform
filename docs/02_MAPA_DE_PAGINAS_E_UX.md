@@ -806,7 +806,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
     opções; a troca de visão é um `AnimatePresence mode="wait"` (fade + deslocamento de 8px,
     220ms). Ambos zerados sob `useReducedMotion()`.
 - **UX — Kanban (Framer Motion)**:
-  - Cinco colunas na ordem do fluxo: 💡 Ideia · 🎬 Produção · 👀 Revisão · 📅 Agendado ·
+  - Seis colunas na ordem do fluxo: 💡 Ideia · 🎬 Produção · 👀 Revisão · ✅ Pronto · 📅 Agendado ·
     🚀 Publicado, cada uma com contador e um "+" que abre o Dialog **já com aquele status
     pré-selecionado**.
   - Cada card tem `layoutId={"marketing-post-<id>"}` dentro de um `LayoutGroup`: ao mudar de
