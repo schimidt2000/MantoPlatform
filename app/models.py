@@ -2283,6 +2283,56 @@ class NfcTag(db.Model):
     client = db.relationship("Client", lazy=True)
 
 
+class NfcTagDelivery(db.Model):
+    """Uma "entrega" anexada a uma tag NFC — o conteúdo extra que a cliente vê ao encostar o
+    celular (feature 261).
+
+    O nome é proposital: não é "o vídeo da tag" porque o vídeo é só a primeira espécie. Uma
+    tabela nasce em vez de colunas soltas em `NfcTag` porque a próxima entrega (foto com link,
+    por exemplo) não pode exigir migração nova — só uma linha nova com `kind` diferente. Hoje
+    `kind` só assume `"video"`; `link_url` já existe para quando uma entrega for "abra este
+    link" em vez de um arquivo hospedado aqui.
+
+    `file_path` guarda só o NOME do arquivo em disco (não o caminho completo, não a URL) — mora
+    em `NFC_MEDIA_FOLDER`, que é **irmão** de `UPLOAD_FOLDER` pelo mesmo motivo da feature 205:
+    a rota `/uploads/<path>` exige login (`@login_required`) e a página da tag é pública, sem
+    sessão. O arquivo só sai por `GET /api/nfc/<code>/entregas/<id>/media`, que revalida a cada
+    requisição que a tag (e a entrega) seguem ativas.
+
+    Por ora **1 vídeo ativo por tag**: `add_delivery` substitui a entrega de vídeo anterior (apaga
+    linha e arquivo antigos) em vez de acumular — é a tabela que é extensível, não o comportamento
+    ainda. `is_active` e `sort_order` já preparam o dia em que isso deixar de ser verdade (várias
+    entregas por tag, mostradas em ordem) sem precisar de migração nova.
+    """
+
+    __tablename__ = "nfc_tag_deliveries"
+    __table_args__ = (
+        db.Index("ix_nfc_tag_deliveries_tag_id", "tag_id"),
+    )
+
+    id         = db.Column(db.Integer, primary_key=True)
+    tag_id     = db.Column(
+        db.Integer, db.ForeignKey("nfc_tags.id", ondelete="CASCADE"), nullable=False
+    )
+    kind       = db.Column(db.String(20), nullable=False)
+    # Título exibido na página pública acima do conteúdo. `None` → a página usa a copy padrão
+    # ("Um vídeo especial para você") em vez de mostrar um título vazio.
+    title      = db.Column(db.String(200), nullable=True)
+    file_path  = db.Column(db.String(500), nullable=True)
+    link_url   = db.Column(db.String(500), nullable=True)
+    is_active  = db.Column(db.Boolean, default=True, nullable=False, server_default="1")
+    sort_order = db.Column(db.Integer, default=0, nullable=False, server_default="0")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    tag = db.relationship(
+        "NfcTag", lazy=True,
+        backref=db.backref("deliveries", lazy=True, cascade="all, delete-orphan"),
+    )
+
+
 # ── Gestão de Marketing e Frequência (feature 204) ──────────────────────────
 
 

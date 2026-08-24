@@ -84,6 +84,13 @@ NFC_MAX_CODE_ATTEMPTS = 20
 # 100% pelo servidor (a URL gravada na tag é imutável) — até o link do Instagram viaja no payload.
 MANTO_INSTAGRAM_URL = "https://www.instagram.com/mantoproducoes"
 
+# Feature 261: entregas de vídeo anexadas a uma tag NFC. Subconjunto de
+# `app.storage.ALLOWED_AV_EXTENSIONS` — só os formatos de vídeo que o player HTML5 toca sem
+# plugin; o de áudio da allowlist geral não faz sentido aqui. Limite espelha
+# `VIRTUAL_VIDEO_MAX_BYTES` da feature 205 (mesma natureza de arquivo, mesmo teto).
+NFC_DELIVERY_VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".webm", ".m4v"})
+NFC_DELIVERY_VIDEO_MAX_BYTES = 250 * 1024 * 1024
+
 
 # Feature 225b: o que a oficina está fazendo com a peça. `producao` cria algo que não existe;
 # `manutencao` mexe no que já existe — conserto de defeito, ajuste para um evento, adaptação.

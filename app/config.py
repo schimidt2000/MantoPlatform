@@ -188,6 +188,12 @@ class Config:
     # voz alta não pode depender de o endereço não vazar — ele só sai pelo endpoint que valida.
     VIRTUAL_VIDEO_FOLDER = os.getenv("VIRTUAL_VIDEO_FOLDER", "")
 
+    # Pasta das entregas de mídia das tags NFC (feature 261) — mesmo motivo do
+    # `VIRTUAL_VIDEO_FOLDER` da 205: **fora** de `UPLOAD_FOLDER` de propósito. `/uploads/<path>`
+    # exige login (`@login_required`) e a página `/nfc/<code>` é pública, sem sessão — o arquivo só
+    # pode sair pelo endpoint que revalida tag e entrega ativas a cada requisição.
+    NFC_MEDIA_FOLDER = os.getenv("NFC_MEDIA_FOLDER", "")
+
     # Object Storage — AWS S3 ou Cloudflare R2
     USE_S3           = os.getenv("USE_S3", "false").lower() == "true"
     S3_BUCKET        = os.getenv("S3_BUCKET", "")

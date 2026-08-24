@@ -13,26 +13,36 @@ código inexistente e tag desativada (não vazar existência é requisito — SC
 from __future__ import annotations
 
 import logging
+import os
 import secrets
+import uuid
 from datetime import datetime
 from typing import Any
 
+from flask import current_app
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from app import db
 from app.constants import (
+    NFC_DELIVERY_VIDEO_EXTENSIONS,
+    NFC_DELIVERY_VIDEO_MAX_BYTES,
     NFC_MAX_CODE_ATTEMPTS,
     NFC_SUFFIX_ALPHABET,
     NFC_SUFFIX_LENGTH,
 )
-from app.models import Acervo3DItem, CalendarEvent, Client, Event3DGift, NfcTag
+from app.models import Acervo3DItem, CalendarEvent, Client, Event3DGift, NfcTag, NfcTagDelivery
+from app.storage import extension_of
 from app.utils import audit
 
 logger = logging.getLogger(__name__)
 
 MAX_NFC_BATCH_QUANTITY = 999
 NFC_PREFIX_MAX_LENGTH = 10
+
+#: Únicas espécies de entrega aceitas hoje (feature 261). A tabela é extensível; a allowlist de
+#: `kind` é intencionalmente rígida — a "extensibilidade" é o schema, não a validação.
+NFC_DELIVERY_KINDS = frozenset({"video"})
 
 
 class NfcValidationError(Exception):
@@ -162,23 +172,37 @@ def sync_event_gift_tags(event: CalendarEvent, item: Acervo3DItem) -> list[NfcTa
 # ── Resolução pública (US1) ──────────────────────────────────────────────────
 
 
+def _serialize_public_delivery(code: str, delivery: NfcTagDelivery) -> dict[str, Any]:
+    """Entrega no payload público — só o que a página precisa para exibir, nada de caminho de disco."""
+    return {
+        "kind": delivery.kind,
+        "title": delivery.title,
+        "media_url": f"/api/nfc/{code}/entregas/{delivery.id}/media",
+    }
+
+
 def resolve_code(raw_code: str) -> dict[str, Any]:
     """Resolve um código de tag para o payload público — SEMPRE o mesmo shape.
 
     Tag ativa → produto + gancho `campaign` (hoje sempre `None`; é o contrato que permitirá
-    campanhas futuras sem regravar tags). Código inexistente ou tag desativada → payload
-    genérico idêntico, sem vazar se o código existe.
+    campanhas futuras sem regravar tags) + `deliveries` (feature 261: vídeo/foto/link anexados —
+    hoje só vídeo). Código inexistente ou tag desativada → payload genérico idêntico, `deliveries`
+    incluso e vazio, sem vazar se o código existe (SC-006).
 
     O contador de acesso é melhor-esforço: falha na métrica loga e NUNCA derruba a página.
     """
     code = (raw_code or "").strip().upper()
     tag = NfcTag.query.filter_by(code=code).first() if code else None
     if tag is None or not tag.is_active:
-        return {"product": None, "campaign": None}
+        return {"product": None, "campaign": None, "deliveries": []}
 
+    deliveries = sorted(
+        (d for d in tag.deliveries if d.is_active), key=lambda d: (d.sort_order, d.id)
+    )
     payload: dict[str, Any] = {
         "product": {"name": tag.item.name, "photo_url": tag.item.photo_url},
         "campaign": None,
+        "deliveries": [_serialize_public_delivery(tag.code, d) for d in deliveries],
     }
     try:
         tag.access_count = (tag.access_count or 0) + 1
@@ -324,4 +348,162 @@ def serialize_tag(tag: NfcTag) -> dict[str, Any]:
         "access_count": int(tag.access_count or 0),
         "last_accessed_at": tag.last_accessed_at.isoformat() if tag.last_accessed_at else None,
         "created_at": tag.created_at.isoformat() if tag.created_at else None,
+        # Entrega de vídeo ativa (feature 261) para a tela `/3d/tags` mostrar "tem vídeo" e
+        # oferecer Substituir/Remover. `None` quando não há entrega — a tela mostra "Enviar".
+        "video_delivery": _serialize_admin_video_delivery(tag),
     }
+
+
+def _active_video_delivery(tag: NfcTag) -> NfcTagDelivery | None:
+    """A entrega de vídeo ativa da tag, se houver (por ora, no máximo uma)."""
+    return next(
+        (d for d in tag.deliveries if d.kind == "video" and d.is_active), None
+    )
+
+
+def _serialize_admin_video_delivery(tag: NfcTag) -> dict[str, Any] | None:
+    """Entrega de vídeo para o ERP: id, título, nome do arquivo e data — nunca o caminho no disco."""
+    delivery = _active_video_delivery(tag)
+    if delivery is None:
+        return None
+    return {
+        "id": delivery.id,
+        "kind": delivery.kind,
+        "title": delivery.title,
+        "file_name": delivery.file_path,
+        "created_at": delivery.created_at.isoformat() if delivery.created_at else None,
+    }
+
+
+# ── Entregas (US — feature 261) ───────────────────────────────────────────────
+
+
+def _delivery_folder() -> str:
+    return current_app.config["NFC_MEDIA_FOLDER"]
+
+
+def delivery_mime_type(delivery: NfcTagDelivery) -> str:
+    """MIME do arquivo da entrega, deduzido da extensão (mesma fórmula de `virtuais_ops`)."""
+    extensao = extension_of(delivery.file_path)
+    return f"video/{extensao.lstrip('.').replace('mov', 'quicktime')}" if extensao else "video/mp4"
+
+
+def delivery_media_path(delivery: NfcTagDelivery) -> str | None:
+    """Caminho absoluto do arquivo da entrega no disco, ou `None` se não há arquivo.
+
+    Uso exclusivo do endpoint público que serve o arquivo (`GET .../entregas/<id>/media`) —
+    este valor nunca sai em payload nenhum (mesmo contrato de `virtuais_ops.caminho_video`).
+    """
+    if not delivery.file_path:
+        return None
+    return os.path.join(_delivery_folder(), delivery.file_path)
+
+
+def _remove_delivery_file(delivery: NfcTagDelivery) -> None:
+    """Apaga o arquivo da entrega do disco, sem derrubar o fluxo se ele já não existir."""
+    caminho = delivery_media_path(delivery)
+    if not caminho:
+        return
+    try:
+        if os.path.exists(caminho):
+            os.remove(caminho)
+    except OSError as exc:  # noqa: BLE001 — arquivo órfão não pode travar a exclusão da linha
+        logger.warning("nfc_ops: falha ao remover arquivo de entrega %s: %s", caminho, exc)
+
+
+def add_delivery(
+    tag: NfcTag, file_obj: Any, *, kind: str = "video", title: str | None = None
+) -> NfcTagDelivery:
+    """Salva o arquivo e cria a entrega — se já existe entrega ativa do mesmo `kind`, substitui.
+
+    "Substitui" = apaga arquivo e linha antigos antes de criar a nova: por ora é 1 vídeo ativo
+    por tag (a TABELA é extensível; este comportamento é o de hoje, não uma limitação do schema).
+    O arquivo só é considerado salvo depois de escrito por inteiro e não-vazio no disco — criar a
+    linha antes disso deixaria a página pública apontar para um vídeo que não existe.
+
+    Raises:
+        NfcValidationError: `kind` não suportado, arquivo ausente, extensão fora da allowlist ou
+            acima do limite de tamanho.
+    """
+    if kind not in NFC_DELIVERY_KINDS:
+        raise NfcValidationError("kind", "Tipo de entrega não suportado.")
+
+    nome_original = getattr(file_obj, "filename", "") or ""
+    if not nome_original:
+        raise NfcValidationError("file", "Escolha o arquivo do vídeo.")
+
+    extensao = extension_of(nome_original)
+    if extensao not in NFC_DELIVERY_VIDEO_EXTENSIONS:
+        raise NfcValidationError(
+            "file",
+            f"Formato não suportado (use {', '.join(sorted(NFC_DELIVERY_VIDEO_EXTENSIONS))}).",
+        )
+
+    pasta = _delivery_folder()
+    os.makedirs(pasta, exist_ok=True)
+    nome_final = f"{uuid.uuid4().hex}{extensao}"
+    caminho = os.path.join(pasta, nome_final)
+
+    tamanho = 0
+    try:
+        file_obj.seek(0)
+        with open(caminho, "wb") as destino:
+            while True:
+                pedaco = file_obj.read(1024 * 1024)
+                if not pedaco:
+                    break
+                tamanho += len(pedaco)
+                if tamanho > NFC_DELIVERY_VIDEO_MAX_BYTES:
+                    raise NfcValidationError(
+                        "file",
+                        f"Vídeo acima do limite de "
+                        f"{NFC_DELIVERY_VIDEO_MAX_BYTES // (1024 * 1024)} MB.",
+                    )
+                destino.write(pedaco)
+    except NfcValidationError:
+        _apagar_arquivo(caminho)
+        raise
+    except OSError as exc:
+        _apagar_arquivo(caminho)
+        raise NfcValidationError("file", "Não foi possível guardar o vídeo agora.") from exc
+
+    if not os.path.exists(caminho) or os.path.getsize(caminho) == 0:
+        _apagar_arquivo(caminho)
+        raise NfcValidationError("file", "O vídeo chegou vazio. Tente enviar de novo.")
+
+    anterior = next((d for d in tag.deliveries if d.kind == kind and d.is_active), None)
+    if anterior is not None:
+        _remove_delivery_file(anterior)
+        db.session.delete(anterior)
+
+    delivery = NfcTagDelivery(
+        tag_id=tag.id, kind=kind, title=(title or "").strip() or None, file_path=nome_final,
+    )
+    db.session.add(delivery)
+    audit(
+        "edit", "NfcTag", tag.id, tag.code,
+        f"Entrega de {kind} {'substituída' if anterior else 'adicionada'} na tag NFC nº {tag.sequence}",
+    )
+    db.session.commit()
+    return delivery
+
+
+def _apagar_arquivo(caminho: str) -> None:
+    """Remove um arquivo recém-gravado que não deve ficar no disco (upload falho/vazio)."""
+    try:
+        if os.path.exists(caminho):
+            os.remove(caminho)
+    except OSError as exc:  # noqa: BLE001 — best-effort, o erro original é o que importa
+        logger.warning("nfc_ops: falha ao limpar arquivo temporário %s: %s", caminho, exc)
+
+
+def remove_delivery(delivery: NfcTagDelivery) -> None:
+    """Apaga a entrega — linha e arquivo do disco. Sem confirmação aqui: é o endpoint quem decide."""
+    tag = delivery.tag
+    _remove_delivery_file(delivery)
+    db.session.delete(delivery)
+    audit(
+        "delete", "NfcTag", tag.id, tag.code,
+        f"Entrega de {delivery.kind} removida da tag NFC nº {tag.sequence}",
+    )
+    db.session.commit()
