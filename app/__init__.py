@@ -474,6 +474,11 @@ def create_app():
     if not app.config.get("VIRTUAL_VIDEO_FOLDER"):
         app.config["VIRTUAL_VIDEO_FOLDER"] = os.path.join(_instance, "virtual_videos")
     os.makedirs(app.config["VIRTUAL_VIDEO_FOLDER"], exist_ok=True)
+    # Entregas de mídia das tags NFC (feature 261): mesmo racional do vídeo da 205 acima — irmã
+    # de `uploads`, nunca dentro dela.
+    if not app.config.get("NFC_MEDIA_FOLDER"):
+        app.config["NFC_MEDIA_FOLDER"] = os.path.join(_instance, "nfc_media")
+    os.makedirs(app.config["NFC_MEDIA_FOLDER"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_CONTRACTS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_PAYMENTS"], exist_ok=True)

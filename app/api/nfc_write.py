@@ -1,7 +1,10 @@
-"""Endpoints de ESCRITA das Tags NFC (feature 255). Gate: `ARTISTA_3D` ou `SUPERADMIN`.
+"""Endpoints de ESCRITA das Tags NFC (feature 255) e das entregas anexadas a elas (feature 261).
+Gate: `ARTISTA_3D` ou `SUPERADMIN`.
 
-Só existem duas escritas — gerar lote avulso e editar os campos mutáveis (evento, situação,
-observações). **Não há DELETE por contrato**: a tag física é eterna; a linha idem.
+A tag em si só tem duas escritas — gerar lote avulso e editar os campos mutáveis (evento,
+situação, observações). **Não há DELETE de tag por contrato**: a tag física é eterna; a linha
+idem. As entregas (vídeo, e futuramente foto/link) SÃO removíveis — são conteúdo anexado, não a
+tag.
 """
 
 from typing import Any
@@ -13,7 +16,7 @@ from app.api.impressoes3d_read import require_3d_access
 from app.api.nfc_read import _serialize_admin_tag
 from app.api_utils import api_login_required, json_error
 from app.impressoes3d import nfc_ops
-from app.models import NfcTag
+from app.models import NfcTag, NfcTagDelivery
 
 
 @api_bp.route("/3d/nfc/lote", methods=["POST"])
@@ -55,4 +58,49 @@ def api_3d_nfc_update(tag_id: int) -> Any:
         )
     except nfc_ops.NfcValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify({"tag": _serialize_admin_tag(tag)})
+
+
+@api_bp.route("/3d/nfc/<int:tag_id>/entregas", methods=["POST"])
+@api_login_required
+def api_3d_nfc_add_delivery(tag_id: int) -> Any:
+    """Envia o vídeo da tag — multipart `file` + `kind` (só `"video"` por ora) + `title` opcional.
+
+    Substitui a entrega de vídeo ativa da tag, se houver (1 vídeo ativo por tag por ora).
+    """
+    denied = require_3d_access()
+    if denied:
+        return denied
+    tag = NfcTag.query.get(tag_id)
+    if tag is None:
+        return json_error("Tag NFC não encontrada", 404)
+
+    file_obj = request.files.get("file")
+    try:
+        nfc_ops.add_delivery(
+            tag,
+            file_obj,
+            kind=(request.form.get("kind") or "video").strip(),
+            title=request.form.get("title"),
+        )
+    except nfc_ops.NfcValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    return jsonify({"tag": _serialize_admin_tag(tag)})
+
+
+@api_bp.route("/3d/nfc/<int:tag_id>/entregas/<int:delivery_id>", methods=["DELETE"])
+@api_login_required
+def api_3d_nfc_remove_delivery(tag_id: int, delivery_id: int) -> Any:
+    """Remove uma entrega (linha + arquivo do disco). Confirmação fica a cargo da UI."""
+    denied = require_3d_access()
+    if denied:
+        return denied
+    tag = NfcTag.query.get(tag_id)
+    if tag is None:
+        return json_error("Tag NFC não encontrada", 404)
+    delivery = NfcTagDelivery.query.filter_by(id=delivery_id, tag_id=tag_id).first()
+    if delivery is None:
+        return json_error("Entrega não encontrada", 404)
+
+    nfc_ops.remove_delivery(delivery)
     return jsonify({"tag": _serialize_admin_tag(tag)})

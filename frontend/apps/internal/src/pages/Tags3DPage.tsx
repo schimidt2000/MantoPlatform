@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Link2Off, Nfc } from "lucide-react";
+import { Link2Off, Nfc, Trash2, Upload } from "lucide-react";
 import {
   Badge,
   Button,
@@ -29,8 +29,10 @@ import { useClientSearch } from "../lib/clientes";
 import { useAcervo3D } from "../lib/impressoes3d";
 import {
   useAtualizarNfcTag,
+  useEnviarNfcVideo,
   useGerarLoteNfc,
   useNfcTags,
+  useRemoverNfcVideo,
   type NfcTag,
 } from "../lib/nfc";
 
@@ -191,6 +193,158 @@ function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
   );
 }
 
+/** Extensões aceitas — espelha `NFC_DELIVERY_VIDEO_EXTENSIONS` de `app/constants.py`. */
+const NFC_VIDEO_ACCEPT = ".mp4,.mov,.webm,.m4v";
+
+interface VideoDialogProps {
+  tag: NfcTag | null;
+  onClose: () => void;
+}
+
+/**
+ * Vídeo "Um vídeo especial para você" anexado à tag (feature 261).
+ *
+ * `tag` vem da lista viva (`tags.find`, não uma cópia local) — assim que o upload ou a remoção
+ * invalidam a query, o diálogo continua aberto já mostrando o novo estado, sem fechar e reabrir.
+ * Sem vídeo: escolhe o arquivo (a escolha já dispara o envio, mesmo padrão de
+ * `FilaProducaoMidiaPage`). Com vídeo: nome + data do envio, Substituir (reabre o seletor) e
+ * Remover (com confirmação). O campo de título aparece nos dois estados, pré-carregado com o
+ * título salvo — Substituir reenvia o que estiver no campo, então nada some sem o admin ver.
+ */
+function VideoDialog({ tag, onClose }: VideoDialogProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [title, setTitle] = useState("");
+  const enviar = useEnviarNfcVideo();
+  const remover = useRemoverNfcVideo();
+  const delivery = tag?.video_delivery ?? null;
+
+  // Pré-carrega o título salvo ao abrir (e ao trocar de tag/vídeo): Substituir manda o campo
+  // junto com o arquivo novo — sem isso, o título personalizado sumiria da página pública.
+  useEffect(() => {
+    setTitle(tag?.video_delivery?.title ?? "");
+  }, [tag?.id, tag?.video_delivery?.id, tag?.video_delivery?.title]);
+
+  function close() {
+    setTitle("");
+    enviar.reset();
+    remover.reset();
+    onClose();
+  }
+
+  function handleFile(file: File) {
+    if (!tag) return;
+    enviar.mutate({ tagId: tag.id, file, title: title.trim() || undefined });
+  }
+
+  function handleRemove() {
+    if (!tag || !delivery) return;
+    if (!window.confirm("Remover o vídeo desta tag? A cliente deixa de vê-lo ao encostar o celular.")) {
+      return;
+    }
+    remover.mutate({ tagId: tag.id, deliveryId: delivery.id });
+  }
+
+  return (
+    <Dialog open={tag !== null} onOpenChange={(open) => !open && close()}>
+      <DialogContent open={tag !== null} className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            Vídeo — tag nº {tag?.sequence} ({tag?.code})
+          </DialogTitle>
+          <DialogDescription>
+            A cliente vê este vídeo ao encostar o celular na peça, antes do link do Instagram.
+            Fica fora de <code>/uploads</code> — só sai por este link público.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <input
+            ref={inputRef}
+            type="file"
+            accept={NFC_VIDEO_ACCEPT}
+            className="hidden"
+            aria-label="Arquivo de vídeo"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) handleFile(file);
+            }}
+          />
+
+          {delivery && (
+            <div className="rounded-md border border-line bg-surface-2 p-3">
+              <p className="text-sm font-medium text-ink">
+                {delivery.title || "Sem título — a página usa a copy padrão"}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                {delivery.file_name}
+                {delivery.created_at && ` · enviado em ${formatShortDate(delivery.created_at)}`}
+              </p>
+            </div>
+          )}
+
+          <label className="block">
+            <span className="mb-1 block text-sm text-muted">Título (opcional)</span>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Um vídeo especial para você"
+              aria-label="Título do vídeo"
+            />
+            <span className="mt-1 block text-xs text-muted">
+              Formatos aceitos: MP4, MOV, WEBM, M4V.
+              {delivery && " Substituir grava o título acima junto com o vídeo novo."}
+            </span>
+          </label>
+
+          {enviar.error && (
+            <p className="text-sm text-red" role="alert">
+              {fieldError(enviar.error, "file") ?? enviar.error.message}
+            </p>
+          )}
+          {remover.error && (
+            <p className="text-sm text-red" role="alert">
+              {remover.error.message}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          {delivery ? (
+            <>
+              <Button
+                variant="outline"
+                loading={enviar.isPending}
+                onClick={() => inputRef.current?.click()}
+              >
+                <Upload className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Substituir
+              </Button>
+              <Button
+                variant="outline"
+                className="text-red"
+                loading={remover.isPending}
+                onClick={handleRemove}
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Remover
+              </Button>
+            </>
+          ) : (
+            <Button loading={enviar.isPending} onClick={() => inputRef.current?.click()}>
+              <Upload className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Enviar vídeo
+            </Button>
+          )}
+          <Button variant="ghost" onClick={close} disabled={enviar.isPending || remover.isPending}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** Formulário de lote: peça NFC + quantidade. As tags nascem sem evento (estoque). */
 function GerarLoteForm() {
   const acervo = useAcervo3D();
@@ -278,9 +432,12 @@ export function Tags3DPage() {
   const query = useNfcTags();
   const update = useAtualizarNfcTag();
   const [associando, setAssociando] = useState<NfcTag | null>(null);
+  const [videoTagId, setVideoTagId] = useState<number | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
 
   const tags = query.data?.tags ?? [];
+  // Da lista viva, não uma cópia: assim o diálogo reflete o vídeo novo sem fechar (ver VideoDialog).
+  const videoTag = tags.find((t) => t.id === videoTagId) ?? null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
@@ -424,6 +581,14 @@ export function Tags3DPage() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => setVideoTagId(tag.id)}
+                            aria-label={`Vídeo da tag nº ${tag.sequence}`}
+                          >
+                            {tag.video_delivery ? "Editar vídeo" : "Vídeo"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             loading={update.isPending && togglingId === tag.id}
                             className={cn(!tag.is_active && "text-green")}
                             onClick={() => {
@@ -454,6 +619,7 @@ export function Tags3DPage() {
       </p>
 
       <AssociarDialog tag={associando} onClose={() => setAssociando(null)} />
+      <VideoDialog tag={videoTag} onClose={() => setVideoTagId(null)} />
     </div>
   );
 }
