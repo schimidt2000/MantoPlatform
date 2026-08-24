@@ -149,6 +149,15 @@ def request_password_reset(
 ) -> None:
     """Emite um token de redefinição e dispara o e-mail, se CPF e e-mail baterem.
 
+    Cobre também talentos que nunca definiram senha (`password_hash` NULL): não exigimos
+    senha prévia na condição de match, porque `reset_password_with_token` já define a senha
+    e zera `must_change_password` — na prática esse link também serve como "definir a primeira
+    senha". Antes dessa mudança, quem nunca passou pelo Primeiro Acesso clicava em "Esqueci
+    minha senha" e caía num retorno silencioso, sem receber e-mail nenhum (caso real: talento
+    139, e outros 118 talentos ativos sem senha no mesmo buraco). Primeiro Acesso continua
+    existindo como caminho paralelo — ambos os fluxos hoje terminam na mesma função de definir
+    senha via token.
+
     Silencioso por design (enumeração de conta): nunca sinaliza ao chamador se o talento existe
     — a rota sempre responde "se os dados conferem, enviamos o link". Qualquer falha é logada e
     engolida, para que um erro de SMTP não vire 500 nem revele o estado da conta.
@@ -163,7 +172,6 @@ def request_password_reset(
         talent = find_talent_by_login(login_value)
         matches = (
             talent is not None
-            and talent.password_hash
             and talent.email_contact
             and talent.email_contact.strip().lower() == (email or "").strip().lower()
         )

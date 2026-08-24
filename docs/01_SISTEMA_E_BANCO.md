@@ -1108,7 +1108,8 @@ aceita um id de talento vindo do cliente. Não há papéis dentro do portal.
 > talento entra sempre no portal React.
 
 `POST /api/portal/auth/first-access` (senha temporária por e-mail) ·
-`POST /api/portal/auth/forgot-password` (silencioso — nunca revela se a conta existe) ·
+`POST /api/portal/auth/forgot-password` (silencioso — nunca revela se a conta existe; cobre
+também talento sem senha ainda, feature 259 — o link também serve pra definir a primeira) ·
 `GET /api/portal/auth/reset-password/<token>` (valida o token) ·
 `POST /api/portal/auth/reset-password` · `POST /api/portal/auth/change-password` ·
 `POST /api/portal/auth/accept-terms`.
