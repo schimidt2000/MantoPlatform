@@ -7,6 +7,10 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
+> Última atualização: **2026-08-24** · Em branch: **261-nfc-entregas-video** (entregas anexadas
+> a tags NFC; migration **`e08e454c4780`** — head: tabela `nfc_tag_deliveries`; endpoints
+> `POST`/`DELETE /api/3d/nfc/<id>/entregas*` e `GET /api/nfc/<code>/entregas/<id>/media`
+> público; ver §2.2.1 e §3.13.2b). Anterior:
 > Última atualização: **2026-08-21** · Feature **258**: `POST /api/clientes/quick-create`
 > aceita `cpf`, `cnpj` e `address` (opcionais, só na criação — telefone já cadastrado devolve a
 > ficha existente intocada), usados pelo cadastro manual da tela de Clientes. Antes:
@@ -271,7 +275,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
   dispararia e-mail de "você foi removido" para quem estava escalado sem ninguém tê-lo removido de
   verdade (achado da revisão adversarial, ver `docs/03`).
 
-### 2.2.1 Impressões e Acervo 3D (features 200, 201, 202 e 255)
+### 2.2.1 Impressões e Acervo 3D (features 200, 201, 202, 255 e 261)
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
@@ -312,9 +316,29 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
   `nfc_ops.sync_event_gift_tags(event, item)` na MESMA transação — alvo é a soma das
   `quantity` dos presentes do par `(evento, item)`; cria só a diferença positiva e **nunca
   apaga** (reduzir quantidade/remover presente não toca nas tags). Lote avulso e edição
-  (evento/situação/notas) em `app/impressoes3d/nfc_ops.py`; não existe DELETE em camada
+  (evento/situação/notas) em `app/impressoes3d/nfc_ops.py`; não existe DELETE de TAG em camada
   nenhuma — desativar (`is_active=False`) faz a página pública responder o payload genérico,
   **indistinguível de código inexistente** (sempre 200, mesmo shape — requisito de privacidade).
+- **Entregas da tag NFC — `nfc_tag_deliveries` (feature 261)**: tabela (não coluna) do que a
+  página pública mostra além do produto — hoje só vídeo ("Um vídeo especial para você"), mas o
+  schema já é extensível para foto/link futuros sem migração nova. Colunas: `tag_id` (FK
+  `nfc_tags.id`, `ondelete=CASCADE` — apagar a tag levaria as entregas, embora tag nunca seja
+  apagada na prática), `kind` (`String(20)`, só `"video"` por ora), `title` (nullable — `None` ⇒
+  a página usa a copy padrão), `file_path` (nullable — só o NOME do arquivo, nunca o caminho
+  completo nem URL), `link_url` (nullable, gancho para entrega futura por link direto),
+  `is_active`, `sort_order`. **1 vídeo ativo por tag por ora**: `nfc_ops.add_delivery` substitui
+  a entrega anterior do mesmo `kind` (apaga arquivo + linha antigos) em vez de acumular —
+  comportamento de hoje, não limite do schema. Arquivo mora em `Config.NFC_MEDIA_FOLDER`
+  (`instance/nfc_media/`, env-overridable), **irmã de `UPLOAD_FOLDER`, nunca dentro dela** —
+  mesmo motivo da feature 205 (`VIRTUAL_VIDEO_FOLDER`): a rota `/uploads/<path>` exige login
+  (`app/__init__.py:733`) e a página `/nfc/<code>` é pública, sem sessão; o arquivo só sai por
+  `GET /api/nfc/<code>/entregas/<id>/media`, que revalida tag ativa + entrega ativa a cada
+  requisição (`conditional=True` → suporte a `Range`/`206`, essencial pro vídeo tocar no
+  celular). Extensão aceita SEMPRE por `app.storage.extension_of` sobre o nome do arquivo
+  (nunca `Content-Type`): `NFC_DELIVERY_VIDEO_EXTENSIONS` = `.mp4`/`.mov`/`.webm`/`.m4v`
+  (`app/constants.py`); limite `NFC_DELIVERY_VIDEO_MAX_BYTES` = 250 MB (espelha
+  `VIRTUAL_VIDEO_MAX_BYTES` da 205). Nome no disco é sempre `<uuid4>.<ext>` — nunca o nome
+  original enviado (evita path traversal e colisão).
 
 ### 2.3 Talentos e Casting
 
@@ -909,17 +933,24 @@ no máximo 5 itens, descartando predições sem `description`.
   `serialize_acervo_item` devolve `nfc_prefix`. Criar/editar presente 3D dispara a geração
   automática de tags (ver §2.2.1) — sem mudança de contrato nos endpoints de presente.
 
-### 3.13.2b Tags NFC — `nfc_read.py` / `nfc_write.py` (feature 255)
+### 3.13.2b Tags NFC — `nfc_read.py` / `nfc_write.py` (feature 255; entregas na 261)
 
 | Método | Rota | O que faz |
 |---|---|---|
-| `GET` | `/api/nfc/<code>` | **PÚBLICO, sem login** (padrão `catalogo_read.py`). Resolve o código gravado na tag física. **Sempre 200, mesmo shape**: tag ativa → `{product: {name, photo_url}, campaign: null, instagram_url}` + incrementa `access_count`/`last_accessed_at` (melhor-esforço, falha não derruba a resposta); inexistente **ou** desativada → `{product: null, campaign: null, instagram_url}` — indistinguíveis de propósito. Lookup case-insensitive. `instagram_url` vem de `MANTO_INSTAGRAM_URL` (`app/constants.py`): TODO o conteúdo da página é do servidor. |
-| `GET` | `/api/3d/nfc` | Lista de gestão (ordem: item + `sequence`), cada linha com `item` aninhado, `event` resumido, `client` (vínculo direto) e `client_name`/`client_direct` resolvidos: **cliente direta → contratante do evento** (`client_of_event` de `agenda_read.py` — acrescentado no endpoint, não no ops: ops não importa de `app.api`). |
+| `GET` | `/api/nfc/<code>` | **PÚBLICO, sem login** (padrão `catalogo_read.py`). Resolve o código gravado na tag física. **Sempre 200, mesmo shape**: tag ativa → `{product: {name, photo_url}, campaign: null, deliveries: [...], instagram_url}` + incrementa `access_count`/`last_accessed_at` (melhor-esforço, falha não derruba a resposta); inexistente **ou** desativada → `{product: null, campaign: null, deliveries: [], instagram_url}` — indistinguíveis de propósito. Lookup case-insensitive. `instagram_url` vem de `MANTO_INSTAGRAM_URL` (`app/constants.py`). `deliveries` (feature 261) é `[{kind, title, media_url}]` das entregas ativas da tag — hoje no máximo 1 vídeo; `media_url` já no formato `/api/nfc/<code>/entregas/<id>/media`, pronto para `assetUrl()`. TODO o conteúdo da página é do servidor. |
+| `GET` | `/api/nfc/<code>/entregas/<id>/media` | **PÚBLICO, sem login** (feature 261). Serve o arquivo da entrega — espelha `GET /api/virtuais/pedidos/<token>/video` (feature 205): `send_file(conditional=True)` (suporte a `Range`/`206`). Código inexistente, tag desativada, entrega de outra tag e entrega inativa devolvem o **mesmo 404 genérico** — nenhum vaza mais que o outro. |
+| `GET` | `/api/3d/nfc` | Lista de gestão (ordem: item + `sequence`), cada linha com `item` aninhado, `event` resumido, `client` (vínculo direto), `client_name`/`client_direct` resolvidos (**cliente direta → contratante do evento**, `client_of_event` de `agenda_read.py`) e `video_delivery` (feature 261: `{id, kind, title, file_name, created_at}` ou `null`). |
 | `POST` | `/api/3d/nfc/lote` | Gera lote avulso (JSON `{item_id, quantity}` 1–999), tags sem evento (estoque). 400 com `fields` se o item não tem `nfc_prefix`. |
 | `PATCH` | `/api/3d/nfc/<id>` | Edita **só** os mutáveis: `event_id` e `client_id` (`null` desassocia; sentinela = não alterar; independentes entre si), `is_active`, `notes`. `code` e `sequence` são imutáveis por contrato. |
+| `POST` | `/api/3d/nfc/<tag_id>/entregas` | **Feature 261.** Multipart `file` + `kind` (só `"video"` por ora) + `title` opcional. Substitui a entrega ativa do mesmo `kind`, se houver (apaga arquivo + linha antigos). 400 com `fields` se faltar arquivo, extensão fora da allowlist ou acima de 250 MB. Devolve `{tag: ...}` (mesmo shape de `GET /api/3d/nfc`). |
+| `DELETE` | `/api/3d/nfc/<tag_id>/entregas/<id>` | **Feature 261.** Remove a entrega (linha + arquivo do disco). Sem confirmação no servidor — a UI confirma antes de chamar. |
 
-- **RBAC**: os três `/api/3d/nfc*` exigem `ARTISTA_3D` ou `SUPERADMIN` (`require_3d_access`,
-  reuso da feature 200). **Não existe DELETE** — tag física entregue é eterna.
+- **RBAC**: os `/api/3d/nfc*` (tag e entregas) exigem `ARTISTA_3D` ou `SUPERADMIN`
+  (`require_3d_access`, reuso da feature 200). **Não existe DELETE de tag** — tag física
+  entregue é eterna; entregas (vídeo/foto/link) SÃO removíveis — são conteúdo anexado, não a tag.
+- **Onde o vídeo mora**: `Config.NFC_MEDIA_FOLDER` (padrão `instance/nfc_media`), irmã de
+  `uploads`, nunca dentro — mesmo racional de `VIRTUAL_VIDEO_FOLDER` (§3.13, feature 205). Ver
+  §2.2.1 para o schema completo de `nfc_tag_deliveries`.
 - **Serving da página**: `frontend/server.js` serve `/nfc/*` com o bundle da vitrine **sem
   reescrever a URL** (`NFC_PREFIX`, mesmo mecanismo de `CADASTRO_PREFIX`); o React Router roda
   sem o basename `/catalogo` (`isRootSurface` em `apps/public/src/App.tsx`).

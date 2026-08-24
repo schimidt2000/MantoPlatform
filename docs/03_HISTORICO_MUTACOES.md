@@ -4,16 +4,17 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-21** · Estado do repositório: pós-feature
+> Última atualização: **2026-08-24** · Estado do repositório: pós-feature
+> **261-nfc-entregas-video (branch, migration `e08e454c4780`)** — antes dela
 > **258-cliente-manual (sem migration)** — antes dela
 > **257-hotfix-anexos-persistencia (em produção, sem migration)** — antes dele
-> **256-auditor-marketing (em produção, migration `c4d1e7b2a9f3` — head)** — antes dela
+> **256-auditor-marketing (em produção, migration `c4d1e7b2a9f3`)** — antes dela
 > **255-tags-nfc (branch, migrations `a7e2f94c1d58` + `b3f8d27a9e14`)** — antes dela
 > **254-melhorias-video-catalogo (em produção, migration `f3a9c15d8b42`)**, antes dela a
 > sequência da remoção do Jinja **240–252 (pausada, ver `docs/PARADA_REMOCAO_JINJA.md`)**,
 > antes dela **239-backlog-agosto (11 itens)**, catalogo-fase-1, **235-educamanto 4ª rodada**,
-> 238, 237, 236 · Head de migration: **`b3f8d27a9e14`** (*cliente direta na tag NFC, feature 255*)
-> (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
+> 238, 237, 236 · Head de migration: **`e08e454c4780`** (*entregas anexadas a tags NFC, feature
+> 261*) (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
 
@@ -44,6 +45,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **261-nfc-entregas-video** | "Um vídeo especial para você": entrega de vídeo anexada a uma tag NFC, num modelo de tabela (`nfc_tag_deliveries`) extensível a futuras entregas (foto, link). Upload/Substituir/Remover pela tela `/3d/tags`; a página pública `/nfc/<code>` mostra o vídeo antes do CTA do Instagram quando há um. Arquivo fora de `UPLOAD_FOLDER` (mesmo motivo da feature 205): serve só por endpoint público que revalida tag e entrega ativas a cada requisição, com suporte a `Range`/`206` | 2026-08-24 | `e08e454c4780` | (aqui) | — |
 | **258-cliente-manual** | Botão "Nova cliente" na tela de Clientes: cadastro manual com nome, telefone, e-mail, empresa, CPF, CNPJ e endereço, reusando o endpoint de cadastro rápido (telefone único; repetido avisa e não duplica nem sobrescreve) | 2026-08-21 | `—` | (aqui) | — |
 | **257-hotfix-anexos-persistencia** | Anexos do evento sumiam no refresh: os cinco POSTs de anexo (comprovante, contrato, reembolso, nota fiscal, marcar reembolso cobrado) faziam `db.session.add` sem `commit` — quem commitava era o dispatcher do Jinja. Endpoint novo de listagem de arquivos órfãos no volume + script de recuperação | 2026-08-21 | `—` | (aqui) | — |
 | **256-auditor-marketing** | Auditor de marketing semanal (Claude Code local, zero API): lê exports CSV da Meta/Google numa pasta, grava histórico no ERP por endpoints do agente, mantém o Gasto Extra de reembolso de anúncios por plataforma × mês civil (pendente, sem comprovante, congela ao aprovar), relatório por e-mail com barras HTML/CSS, tela `/marketing/desempenho` com SVG próprio, link do post no card, utms do Kommo no cliente | 2026-08-21 | `c4d1e7b2a9f3` | (aqui) | — |
@@ -154,7 +156,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 |---|---|
 | Agenda / evento / formulário de evento | 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 205, 205b, 205c, 205d, 205e, 205f |
-| Impressões e Acervo 3D | 213, 202, 201, 200 |
+| Impressões e Acervo 3D | 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
 | Financeiro, comissões e pagamentos | 230, 228, 226, 210c, 199, 194, 189, 187 |
@@ -304,6 +306,65 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 261 — "Um vídeo especial para você": entregas anexadas à tag NFC            (branch 261-nfc-entregas-video · 2026-08-24 · migration `e08e454c4780`)
+
+**Contexto.** A tag NFC (feature 255) hoje é um "portal fechado" — identidade Manto + Instagram.
+O dono quer subir, pela tela `/3d/tags`, um vídeo pessoal para uma luminária já entregue a uma
+cliente específica: ela encosta o celular e vê o vídeo antes de rolar até o CTA. Arquitetura
+pedida explicitamente pelo orquestrador: **tabela, não coluna** — a próxima "entrega" (foto com
+link, por exemplo) não pode custar migração nova.
+
+**O que mudou.**
+- **Modelo novo** `nfc_tag_deliveries` (`app/models.py`): `tag_id` (FK `nfc_tags.id`,
+  `ondelete=CASCADE`), `kind` (`String(20)`, só `"video"` hoje), `title` (nullable — `None` ⇒ a
+  página usa a copy padrão), `file_path` (só o NOME do arquivo), `link_url` (nullable, gancho
+  para entrega futura por link), `is_active`, `sort_order`. `is_active`/`sort_order` já preparam
+  múltiplas entregas por tag; a regra de hoje (**1 vídeo ativo por tag**) mora só em
+  `nfc_ops.add_delivery`, não no schema.
+- **Storage fora de `/uploads`** (mesmo motivo da feature 205): `Config.NFC_MEDIA_FOLDER`
+  (padrão `instance/nfc_media/`, env-overridable), irmã de `UPLOAD_FOLDER` — a rota
+  `/uploads/<path>` exige login (`app/__init__.py:733`) e a página `/nfc/<code>` é pública, sem
+  sessão. Nome no disco sempre `<uuid4>.<ext>` (nunca o nome original — path traversal). Extensão
+  validada SEMPRE por `app.storage.extension_of` sobre o nome do arquivo, nunca `Content-Type`:
+  `.mp4`/`.mov`/`.webm`/`.m4v` (`NFC_DELIVERY_VIDEO_EXTENSIONS`); limite 250 MB
+  (`NFC_DELIVERY_VIDEO_MAX_BYTES`, espelha `VIRTUAL_VIDEO_MAX_BYTES` da 205).
+- **`nfc_ops.py`**: `add_delivery` (salva o arquivo streaming com o mesmo padrão de
+  `virtuais_ops.salvar_video_entrega` — só cria a linha depois do arquivo gravado por inteiro e
+  não-vazio no disco; se já existe entrega ativa do mesmo `kind`, apaga arquivo + linha antigos
+  antes de criar a nova) e `remove_delivery` (apaga linha + arquivo). `resolve_code` ganhou
+  `deliveries: [{kind, title, media_url}]` nos DOIS ramos (tag ativa e o payload genérico) — a
+  simetria SC-006 da 255 exige que `deliveries: []` apareça em ambos, senão o campo sozinho já
+  vazaria se o código existe. `serialize_tag` ganhou `video_delivery` para a tela interna.
+- **API**: `POST`/`DELETE /api/3d/nfc/<tag_id>/entregas[/<id>]` (mesmo gate `require_3d_access`
+  da 255) e `GET /api/nfc/<code>/entregas/<id>/media` **público**, espelhando
+  `GET /api/virtuais/pedidos/<token>/video` da 205 — `send_file(conditional=True)` para suporte a
+  `Range`/`206` (essencial pro vídeo tocar no celular sem baixar tudo de uma vez). Código errado,
+  tag desativada, entrega de outra tag e entrega inativa devolvem o MESMO 404 genérico.
+- **Front público** (`NfcPage.tsx`): quando há entrega de vídeo, o parágrafo placeholder dá lugar
+  a um card arredondado (paleta `lamp`/`gold` já existente no tema, zero cor nova) com o título
+  da entrega (fallback "Um vídeo especial para você") e um `<video controls playsInline
+  preload="metadata">`, na mesma coreografia de fases (`enter()`, `useReducedMotion`) das linhas
+  ao redor. Sem vídeo, a página fica exatamente como na 255.
+- **Front interno** (`Tags3DPage.tsx`): nova ação "Vídeo" por linha, abre um `Dialog` — sem vídeo,
+  input de arquivo oculto (mesmo padrão do seletor da `FilaProducaoMidiaPage`, feature 205) +
+  título opcional; com vídeo, nome/data + Substituir/Remover (`window.confirm`). O diálogo lê a
+  tag da **lista viva** (`tags.find(id)`, não uma cópia local) para refletir o novo estado sem
+  fechar e reabrir depois de cada mutação.
+
+**Pegadinha encontrada (só no script de verificação, não no código da feature).** No Windows, ler
+o arquivo recém-gravado (`open().read()` sem `with`, ou uma resposta de `GET` da mídia ainda
+referenciada) deixa um lock passageiro no arquivo — a SUBSTITUIÇÃO de vídeo (que apaga o antigo)
+tropeçava em `WinError 32` até o script fechar as respostas HTTP e usar `with open(...)`. Em
+produção (Linux, gunicorn) esse lock não existe; e o código de produção já tolera a falha de
+remoção (loga e segue — mesmo padrão de `virtuais_ops._remover_arquivo`), então nunca haveria
+crash, só um arquivo órfão que o próximo `add_delivery` bem-sucedido substituiria mesmo assim.
+
+**Verificação**: `scripts/db/verify_261_nfc_entregas.py` — 24/24 no `manto_local`: upload válido,
+`GET /api/nfc/<code>` com `media_url`, 200 com conteúdo íntegro + 206 sob `Range`, simetria
+SC-006 (código inexistente × tag desativada, inclusive na mídia), extensão proibida → 400,
+substituição apaga o vídeo anterior (linha e arquivo), DELETE remove os dois. `npx tsc --noEmit`
+limpo em `apps/internal` e `apps/public`.
 
 ### 255 — Tags NFC nas luminárias: a URL eterna e o Nº que a equipe anota na tagzinha            (branch · 2026-08-20 · migrations `a7e2f94c1d58` + `b3f8d27a9e14`)
 
