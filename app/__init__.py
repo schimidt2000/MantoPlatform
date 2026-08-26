@@ -1,10 +1,8 @@
 import os
-import time
 from flask import (
     Flask,
     Response,
     abort,
-    g,
     render_template,
     request,
     send_from_directory,
@@ -515,29 +513,6 @@ def create_app():
                 "[cors] flask-cors indisponível — API seguirá sem CORS (SPA cross-origin falhará)"
             )
 
-    # ── Requisição lenta vira log, não reclamação de usuário ───────────────────
-    #
-    # Mede só o tempo de PROCESSAMENTO: numa resposta de arquivo o `after_request` dispara
-    # quando o `send_file` monta a resposta, antes de o corpo ir pela rede — a duração real de
-    # um download só aparece no access log do gunicorn (`%(D)s`, ligado no railway.json). Os
-    # dois se complementam: aqui pega banco/API externa travando, lá pega transferência longa.
-    _SLOW_REQUEST_S = 5.0
-
-    @app.before_request
-    def _stamp_request_start():
-        g._started_at = time.monotonic()
-
-    @app.after_request
-    def _log_slow_request(resp):
-        started = getattr(g, "_started_at", None)
-        if started is not None:
-            elapsed = time.monotonic() - started
-            if elapsed >= _SLOW_REQUEST_S:
-                app.logger.warning(
-                    f"[slow] {elapsed:.1f}s {request.method} {request.path} -> {resp.status_code}"
-                )
-        return resp
-
     # ── Segurança: cabeçalhos em todas as respostas (feature 074) ──────────────
     @app.after_request
     def _security_headers(resp):
@@ -793,22 +768,6 @@ def create_app():
 
     @app.route("/health")
     def health():
-        """Healthcheck do Railway — e sensor de saturação (incidente 26/08/2026).
-
-        Devolvia só "ok", o que não distingue "saudável" de "todas as threads presas servindo
-        vídeo". Agora carrega os dois números que teriam nomeado aquele incidente na hora:
-        threads vivas no processo e conexões do pool em uso. Continua SEMPRE 200 — quem decide
-        derrubar o container é o Railway, e um healthcheck que falha sob carga só piora o quadro.
-        """
-        import threading
-
-        info = {"status": "ok", "threads": threading.active_count()}
-        try:
-            pool = db.engine.pool
-            info["db_pool_em_uso"] = pool.checkedout()
-            info["db_pool_disponivel"] = pool.checkedin()
-        except Exception as exc:  # noqa: BLE001 — diagnóstico nunca derruba o healthcheck
-            info["db_pool_erro"] = str(exc)
-        return info, 200
+        return "ok", 200
 
     return app

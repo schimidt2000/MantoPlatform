@@ -16,14 +16,6 @@ AUTOCOMPLETE_MIN_CHARS = 3
 #: Teto de sugestões devolvidas ao frontend (o Places já devolve no máximo 5).
 AUTOCOMPLETE_MAX_RESULTS = 5
 
-#: Prazo de cada chamada ao Google, em segundos. SEM isto o `googlemaps.Client` nasce com
-#: `timeout=None` e repassa `None` ao `requests`, ou seja **espera para sempre** — uma lentidão
-#: do `maps.googleapis.com` seguraria threads do gunicorn indefinidamente (a mesma assinatura do
-#: incidente de 26/08/2026, sem envolver mídia nenhuma).
-_GMAPS_TIMEOUT = 10
-#: Teto do laço de retentativa da própria biblioteca (default dela: 60s).
-_GMAPS_RETRY_TIMEOUT = 20
-
 
 def _api_key() -> str:
     """Chave do Google Maps: ``SiteSetting.google_maps_api_key`` ou ``GOOGLE_MAPS_API_KEY``."""
@@ -64,7 +56,7 @@ def distance_km_ida(endereco: str):
     try:
         import googlemaps
 
-        gmaps = googlemaps.Client(key=api_key, timeout=_GMAPS_TIMEOUT, retry_timeout=_GMAPS_RETRY_TIMEOUT)
+        gmaps = googlemaps.Client(key=api_key)
         result = gmaps.distance_matrix(origin, endereco, mode="driving")
         element = result["rows"][0]["elements"][0]
         if element["status"] != "OK":
@@ -108,7 +100,7 @@ def address_autocomplete(
     try:
         import googlemaps
 
-        gmaps = googlemaps.Client(key=api_key, timeout=_GMAPS_TIMEOUT, retry_timeout=_GMAPS_RETRY_TIMEOUT)
+        gmaps = googlemaps.Client(key=api_key)
         predictions = gmaps.places_autocomplete(
             termo,
             session_token=session_token,

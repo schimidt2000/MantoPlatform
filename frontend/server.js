@@ -533,28 +533,6 @@ function matchesPrefix(url, prefix) {
   return url === prefix || url.startsWith(`${prefix}/`) || url.startsWith(`${prefix}?`);
 }
 
-/* ── Prazo do proxy (incidente 26/08/2026) ───────────────────────────────────────────────────
- *
- * O proxy nascia sem `proxyTimeout`: uma requisição presa no Flask segurava a conexão daqui
- * para sempre, e o usuário ficava com a ampulheta eterna. Agora há prazo — MENOS para mídia,
- * que legitimamente leva minutos (vídeo de centenas de MB em 4G) e não pode ser cortada no meio.
- * O prazo é folgado de propósito: existe requisição pesada legítima (PDF, exportação, fan-out
- * para o Google Calendar), e cortar cedo trocaria um problema raro por um frequente.
- */
-const PROXY_TIMEOUT_MS = 180_000;
-
-const MEDIA_PATTERNS = [
-  /^\/uploads(?:[/?]|$)/,
-  /^\/catalogo\/(?:midia|og)(?:[/?]|$)/,
-  /^\/portal\/photo(?:[/?]|$)/,
-  /\/(?:media|video|pdf)(?:[/?]|$)/,
-];
-
-/** True se a URL entrega arquivo — nestas o proxy NÃO pode ter prazo. */
-function isMediaRequest(url) {
-  return MEDIA_PATTERNS.some((pattern) => pattern.test(url));
-}
-
 /** True se a requisição é do backend Flask e não de um dos bundles SPA. */
 function isBackendRequest(url) {
   return (
@@ -587,15 +565,7 @@ const server = http.createServer((req, res) => {
     // fora do callback de erro. Sem ele, a exceção sobe como uncaught e mata o servidor inteiro —
     // os três SPAs junto com o proxy.
     try {
-      proxy.web(
-        req,
-        res,
-        {
-          target: BACKEND_URL,
-          proxyTimeout: isMediaRequest(req.url) ? 0 : PROXY_TIMEOUT_MS,
-        },
-        badGateway,
-      );
+      proxy.web(req, res, { target: BACKEND_URL }, badGateway);
     } catch (err) {
       badGateway(err);
     }
