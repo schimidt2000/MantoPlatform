@@ -5,7 +5,8 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-08-26** · Estado do repositório: pós-feature
-> **262-deslocamento-cliente (working tree, sem migration)** — antes dela
+> **263-endurecimento-concorrencia (sem migration)** — antes dela
+> **262-deslocamento-cliente (em produção, sem migration)** — antes dela
 > **261-nfc-entregas-video (em produção, migration `e08e454c4780` — head)** — antes dela
 > **260-etapa-pronto-marketing (em produção, sem migration)** — antes dela
 > **259-portal-reset-sem-senha (em produção, sem migration)** — antes dela
@@ -48,6 +49,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **263-endurecimento-concorrencia** | Incidente de lentidão (11:50–11:56 de 26/08) e endurecimento: `--threads` 4→12 + access log + reciclagem de worker, pool do SQLAlchemy explícito, `preload="metadata"` no player da Revisão, timeout no cliente do Google Maps, `proxyTimeout` no Node exceto mídia, log de requisição lenta e `/health` como sensor de saturação | 2026-08-26 | `—` | (aqui) | — |
 | **262-deslocamento-cliente** | Tri-state de deslocamento na calculadora de orçamento normal: "Evento em São Paulo" (padrão) / "por nossa conta" / "por conta da cliente". No modo cliente o veículo (van/carro) sai da conta, mas os adicionais da equipe (fora-SP e show) continuam; a mensagem e o PDF ganham a frase de responsabilidade; prefill de evento e carrinho (feat. 239) respeitam o veículo não vendido | 2026-08-26 | `—` | (aqui) | — |
 | **261-nfc-entregas-video** | "Um vídeo especial para você": entrega de vídeo anexada a uma tag NFC, num modelo de tabela (`nfc_tag_deliveries`) extensível a futuras entregas (foto, link). Upload/Substituir/Remover pela tela `/3d/tags`; a página pública `/nfc/<code>` mostra o vídeo antes do CTA do Instagram quando há um. Arquivo fora de `UPLOAD_FOLDER` (mesmo motivo da feature 205): serve só por endpoint público que revalida tag e entrega ativas a cada requisição, com suporte a `Range`/`206` | 2026-08-24 | `e08e454c4780` | (aqui) | — |
 | **260-etapa-pronto-marketing** | Nova etapa "Pronto" no funil de marketing: status intermediário entre "Revisão" (material aprovado) e "Agendado", material pronto para ir ao ar e aguardando dia/hora de publicação | 2026-08-24 | `—` | (aqui) | — |
@@ -191,6 +193,68 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 263 — Incidente de lentidão em produção + endurecimento de concorrência            (2026-08-26 · sem migration)
+
+**O incidente.** Entre ~11:50 e ~11:56 de 26/08 a plataforma ficou "lenta e travada": p99 de
+resposta em 20s, login devolvendo "Ocorreu um erro inesperado". O deploy das 11:56 (feature 262)
+**não causou nem corrigiu** — o commit é posterior à janela; o que curou foi o *restart* que todo
+deploy provoca. Assinatura das métricas do Railway: CPU **plana em ~0,05 vCPU**, memória subindo
+em degraus de 800 MB a 1,00 GB sem voltar, **0,0% de erro** (nenhum 5xx), só **20 requisições em
+15 min**, e um pico de **egresso de ~250 MB + ~100 MB** com ingresso plano.
+
+**Causa raiz, em dois andares.**
+- **Amplificador estrutural:** `--workers 3 --threads 4` = **12 requisições simultâneas no
+  container inteiro**, réplica única, e — o ponto central — **nenhum prazo em lugar nenhum do
+  caminho solta uma requisição presa**. O `--timeout 120` parece proteger mas não protege: com
+  `worker-class gthread` o heartbeat sai da thread principal, não das de trabalho. O proxy Node
+  (`frontend/server.js:98`) era criado sem `proxyTimeout`. Só o restart soltava.
+- **O que encheu os slots:** transferências longas de arquivo grande servidas **pelo próprio
+  Python** (`send_file`/`send_from_directory`), cada uma segurando uma thread do primeiro ao
+  último byte, na velocidade da rede do espectador. Os 250 MB de egresso só podem ter saído dos
+  endpoints de mídia: toda chamada externa do backend (Maps, Calendar, InfinitePay, ViaCEP) põe o
+  servidor como *cliente* e apareceria como ingresso, que ficou plano.
+
+**Por que 0% de erro com o site quebrado.** A frase "Ocorreu um erro inesperado" só nasce de
+resposta não-2xx com corpo não-JSON (`frontend/packages/api-client/src/client.ts:75`) — ou seja,
+do `502 Bad Gateway` em texto puro do proxy Node (`frontend/server.js:549`). O erro nasceu no
+**serviço do frontend**, por isso o gráfico do backend marcou 0,0%.
+
+**Candidato mais provável:** `/uploads/review/...` (Revisão de Mídia). O player
+(`components/revisao/VideoPlayer.tsx`) renderizava `<video src>` **sem `preload`** — o default do
+navegador é `auto`, então o arquivo inteiro baixava só de abrir a tela, sem ninguém dar play; e
+o upload de lá aceita 512 MB, o dobro do teto do resto do sistema. O vídeo da tag NFC (feature
+261) foi **descartado**: o espelho de produção não tem **nenhuma** entrega criada
+(`SELECT count(*) FROM nfc_tag_deliveries` = 0).
+
+**O que mudou.**
+- `railway.json` + `nixpacks.toml`: `--threads 4` → **12** (36 slots), mais `--graceful-timeout
+  120`, `--max-requests 800 --max-requests-jitter 100` (recicla worker) e **access log**
+  (`%(b)s` bytes, `%(D)s` duração) — sem ele nenhuma requisição de produção era registrada, e é
+  por isso que este diagnóstico não conseguiu nomear o endpoint culpado.
+- `app/config.py`: `pool_size 10 + max_overflow 10` explícitos. **Obrigatório junto com o aumento
+  de threads** — os defaults (5+10) não cobrem 12 threads de requisição + 6 de background por
+  worker, e subir threads sem subir o pool criaria exaustão de pool onde não havia.
+- `components/revisao/VideoPlayer.tsx`: `preload="metadata"`. Os outros players do sistema já
+  tinham; só este faltava.
+- `app/api/nfc_read.py`: `@limiter.limit("120 per minute")` (folgado de propósito — player pede
+  muitos `Range` ao arrastar a barra) e `max_age=86400` (revisita vira 304 em vez de rebaixar).
+- `app/maps.py`: `googlemaps.Client(timeout=10, retry_timeout=20)`. Nascia com `timeout=None`,
+  que repassa `None` ao `requests` = **espera infinita** — reproduziria esta mesma assinatura sem
+  envolver mídia nenhuma.
+- `frontend/server.js`: `proxyTimeout` de 180s, **exceto** em rotas de mídia (`isMediaRequest`),
+  que legitimamente levam minutos e não podem ser cortadas no meio.
+- `app/__init__.py`: log `[slow]` para requisição acima de 5s (mede só processamento — a duração
+  de um download só aparece no access log do gunicorn, os dois se complementam) e `/health`
+  devolvendo `threads` e conexões do pool em uso.
+
+**Pendências (não feitas aqui, por decisão).** Servir mídia grande por URL assinada em vez de
+pelo Python é a correção definitiva e continua em aberto. As 6 threads de background sobem 3×
+(uma por worker), incluindo a sync de 13 meses da agenda a cada 10 min. `review_ops._MAX_FILE`
+segue em 512 MB, desalinhado dos 250 MB do resto (`app/constants.py:92`). `numReplicas: 2` foi
+descartado de propósito: o `startCommand` roda `flask db upgrade`, e duas réplicas subindo juntas
+disputariam a migration. SMTP continua sem timeout (`flask_mail`), e a cobrança de convites
+envia e-mail em série dentro de transação aberta, numa janela (9h–20h) que contém o incidente.
 
 ### 262 — Deslocamento por conta da cliente na calculadora de orçamento            (working tree · 2026-08-26 · sem migration)
 

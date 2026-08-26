@@ -1457,12 +1457,31 @@ de conexão com o backend responde **502**, sem derrubar os SPAs.
 
 ### 5.3 Serviços no Railway
 
-**Serviço backend** (raiz do repo — `railway.json` + `nixpacks.toml`):
+**Serviço backend** (raiz do repo — `railway.json` + `nixpacks.toml`, que precisam ficar
+**idênticos**; o `railway.json` tem precedência):
 ```
 flask db upgrade && python seed.py && gunicorn run:app \
-  --workers 3 --worker-class gthread --threads 4 --bind 0.0.0.0:$PORT --timeout 120
+  --workers 3 --worker-class gthread --threads 12 --bind 0.0.0.0:$PORT \
+  --timeout 120 --graceful-timeout 120 --max-requests 800 --max-requests-jitter 100 \
+  --access-logfile - --access-log-format '%(h)s %(m)s %(U)s %(s)s %(b)s %(D)s'
 ```
-Healthcheck: `/health`. `sync_worker.py` não roda durante o build da imagem.
+Healthcheck: `/health` — devolve JSON com `threads` e `db_pool_em_uso`/`db_pool_disponivel`, e é
+**sempre 200** de propósito (healthcheck que falha sob carga só antecipa a queda).
+`sync_worker.py` não roda durante o build da imagem.
+
+**Concorrência (pós-incidente de 26/08/2026 — ver `docs/03_HISTORICO_MUTACOES.md`).** O teto é
+`workers × threads` = **36 requisições simultâneas**, era 12. Isso importa porque **cada download
+de mídia segura uma thread do primeiro ao último byte**, na velocidade da rede de quem assiste:
+com 4 threads, dois ou três vídeos travavam um worker inteiro e o site parava sem gerar um único
+5xx (as requisições não falhavam, ficavam na fila). Cuidados ao mexer:
+- `--timeout 120` **não é deadline de requisição** com `worker-class gthread` — o heartbeat sai da
+  thread principal, não das threads de trabalho. Requisição pendurada só morre no restart.
+- Subir `--threads` **exige** subir o pool do SQLAlchemy junto (`app/config.py`,
+  `SQLALCHEMY_ENGINE_OPTIONS`): hoje `pool_size 10 + max_overflow 10` = 20 por worker, para 12
+  threads de requisição + as 6 threads de background que cada worker sobe (`_start_*` no fim de
+  `create_app`). Sem os valores explícitos valem os defaults 5+10, que não cobrem 12 threads.
+- As 6 threads de background sobem **uma vez por worker** (3 cópias de cada, incluindo a sync de
+  13 meses da agenda a cada 10 min). É desperdício conhecido e ainda não resolvido.
 
 **Serviço frontend** (`Root Directory = frontend` — `frontend/railway.json` +
 `frontend/nixpacks.toml`):

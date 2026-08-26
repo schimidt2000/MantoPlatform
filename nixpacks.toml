@@ -3,4 +3,9 @@
 cmds = []
 
 [start]
-cmd = "flask db upgrade && python seed.py && gunicorn run:app --workers 3 --worker-class gthread --threads 4 --bind 0.0.0.0:$PORT --timeout 120"
+# MANTENHA IDENTICO ao startCommand de railway.json (que tem precedencia).
+# --threads 12: streaming de midia e I/O-bound e cada download segura uma thread do primeiro ao
+# ultimo byte; com 4 threads, dois ou tres videos travavam um worker inteiro (incidente 26/08).
+# --access-logfile: sem ele nenhuma requisicao de producao e registrada e um incidente vira
+# adivinhacao. %(b)s = bytes enviados, %(D)s = duracao em microssegundos.
+cmd = "flask db upgrade && python seed.py && gunicorn run:app --workers 3 --worker-class gthread --threads 12 --bind 0.0.0.0:$PORT --timeout 120 --graceful-timeout 120 --max-requests 800 --max-requests-jitter 100 --access-logfile - --access-log-format '%(h)s %(m)s %(U)s %(s)s %(b)s %(D)s'"

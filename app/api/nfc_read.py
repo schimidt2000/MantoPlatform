@@ -16,6 +16,7 @@ from typing import Any
 
 from flask import jsonify, send_file
 
+from app import limiter
 from app.api import api_bp
 from app.api.agenda_read import client_of_event
 from app.api.impressoes3d_read import require_3d_access
@@ -40,6 +41,7 @@ def api_nfc_resolve(code: str) -> Any:
 
 
 @api_bp.route("/nfc/<code>/entregas/<int:delivery_id>/media")
+@limiter.limit("120 per minute")
 def api_nfc_delivery_media(code: str, delivery_id: int) -> Any:
     """Serve o arquivo de uma entrega — público, revalidado a cada requisição (feature 261).
 
@@ -64,7 +66,17 @@ def api_nfc_delivery_media(code: str, delivery_id: int) -> Any:
     if not caminho or not os.path.exists(caminho):
         return json_error("Arquivo não encontrado", 404)
 
-    return send_file(caminho, mimetype=nfc_ops.delivery_mime_type(delivery), conditional=True)
+    # `max_age`: sem ele o Flask manda `no-cache` e cada revisita rebaixa o vídeo inteiro pelo
+    # Python, segurando uma thread do gunicorn a cada vez. Trocar o vídeo cria uma entrega nova
+    # (id novo na URL), então cache velho não existe. O limite de taxa acima é folgado de
+    # propósito: um player pede muitos `Range` ao arrastar a barra — 120/min nunca alcança gente
+    # de verdade, só script martelando.
+    return send_file(
+        caminho,
+        mimetype=nfc_ops.delivery_mime_type(delivery),
+        conditional=True,
+        max_age=86400,
+    )
 
 
 def _serialize_admin_tag(tag: NfcTag) -> dict[str, Any]:

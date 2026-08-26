@@ -246,9 +246,18 @@ class ProductionConfig(Config):
 
     # PostgreSQL — obrigatório em produção
     # DATABASE_URL deve ser definida no .env
+    # pool_size/max_overflow explícitos: sem eles valem os defaults do SQLAlchemy (5 + 10), que
+    # ficam APERTADOS depois que o gunicorn passou a 12 threads por worker (railway.json). Cada
+    # worker consome conexões por 12 threads de requisição MAIS as 6 threads de background
+    # (`_start_*` no fim de create_app), ou seja até 18 usuários simultâneos do pool. 10 + 10 = 20
+    # cobre isso com folga; × 3 workers = 60 conexões no pior caso, dentro do teto do Postgres.
+    # Um download de mídia segura a conexão durante TODA a transferência (a sessão só é devolvida
+    # no teardown, que roda depois do último byte) — por isso o pool tem que acompanhar as threads.
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
         "pool_recycle": 300,
+        "pool_size": 10,
+        "max_overflow": 10,
     }
 
 
