@@ -202,6 +202,15 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 > de lentidão continua válido e vale a leitura; **as mudanças, não** — elas voltam em fatias
 > menores, começando pelas que não tocam o `startCommand`.
 >
+> **Causa exata (log de deploy do Railway):**
+> `gunicorn: error: unrecognized arguments: --access-log-format %(h)s %(m)s %(U)s %(s)s %(b)s %(D)s`
+> — a flag não existe. Na fonte do gunicorn 23.0.0 ela é **`--access-logformat`**, sem hífen entre
+> "log" e "format". A nomenclatura do próprio gunicorn é inconsistente (`--access-logfile` e
+> `--access-logformat` sem hífen, mas `--max-requests-jitter` com). O gunicorn recusou os
+> argumentos e nunca subiu; o healthcheck bateu por 4min51s e o Railway desistiu. No painel:
+> **Initialization ✓ · Build ✓ · Deploy ✓ · Network › Healthcheck ✗** — build passando não diz
+> nada sobre o processo subir.
+>
 > **A lição, que é o mais importante desta entrada:** o `startCommand` do gunicorn é a única
 > parte do sistema que **não pode ser exercitada localmente** (gunicorn não roda no Windows).
 > Validar JSON/TOML e conferir que as flags existem na versão certa **não** é o mesmo que ver o
