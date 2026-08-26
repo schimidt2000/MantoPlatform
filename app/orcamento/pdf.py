@@ -174,6 +174,20 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
         c.drawString(_LEFT, y, "* Valores com Nota Fiscal inclusa")
         y -= 12
 
+    # Mesmas frases da mensagem WhatsApp (quote_ops) — o PDF re-deriva o texto por conta própria.
+    # `.get`: entradas antigas do histórico não têm as chaves (legacy_quote põe fora_sp=False).
+    if quote.get("fora_sp"):
+        if (quote.get("deslocamento_responsavel") or "manto") == "cliente":
+            deslocamento_txt = "O deslocamento é por conta da contratante."
+        else:
+            deslocamento_txt = (
+                "Esse orçamento inclui deslocamento por responsabilidade da Manto Produções."
+            )
+        c.setFont(_FONT_NORMAL, 7.5)
+        c.setFillColor(_LIGHT)
+        c.drawString(_LEFT, y, deslocamento_txt)
+        y -= 12
+
     y -= 8
 
     # ── Formas de pagamento ────────────────────────────────────────────────

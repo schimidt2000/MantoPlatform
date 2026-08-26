@@ -298,6 +298,11 @@ def _parcela_veiculo_do_orcamento(event: Any) -> Decimal | None:
         return None
     if not snap.get("fora_sp"):
         return None
+    if snap.get("deslocamento_responsavel") == "cliente":
+        # A contratante assumiu o deslocamento: nenhum veículo da Manto roda, então o carrinho
+        # vale zero POR DECISÃO do orçamento — não é "sem base de cálculo" (None), que cairia
+        # na estimativa por km e pagaria um motorista por uma viagem que a cliente provê.
+        return Decimal("0.00")
 
     # `km_ida` é a distância de IDA. Snapshots v1 guardavam só `kmT` (ida e volta) e repopular
     # o campo de ida com ele dobrava o transporte (histórico da migration a3f7c19d5e02) — por
@@ -327,7 +332,9 @@ def valor_transporte_papel(event: Any) -> Decimal:
     É sempre a parcela de **um** veículo — o mesmo número para todos os papéis do evento, porque
     cada marcado leva um carro (decisão 3). Cascata de fontes, da mais fiel à mais grosseira:
 
-    1. orçamento que gerou o evento (`orcamento_history_id`) — recálculo da rodagem;
+    1. orçamento que gerou o evento (`orcamento_history_id`) — recálculo da rodagem; qualquer
+       parcela vinda daqui é final, inclusive o zero deliberado de um orçamento com
+       `deslocamento_responsavel == "cliente"` (a contratante leva o elenco);
     2. `km de ida × 2 × tarifa do carro` (a mesma sugestão que a tela Jinja antiga fazia);
     3. zero.
 
@@ -355,9 +362,12 @@ def valor_transporte_papel(event: Any) -> Decimal:
     if event is None or not getattr(event, "is_outside_sp", False):
         return zero
 
+    # Parcela não-None do orçamento sempre curto-circuita — inclusive o ZERO deliberado do
+    # deslocamento por conta da contratante, que não pode cair no degrau 2 (a estimativa por
+    # km pagaria um motorista por uma viagem que a cliente provê).
     parcela = _parcela_veiculo_do_orcamento(event)
-    if parcela is not None and parcela > 0:
-        return parcela
+    if parcela is not None:
+        return parcela if parcela > 0 else zero
 
     if getattr(event, "travel_distance_km", None):
         from app.orcamento import settings as orcamento_settings

@@ -28,7 +28,7 @@ from .pricing import (
     get_especial_prices,
     get_tecnico_prices,
 )
-from .transport import calcular_carro, calcular_van
+from .transport import aplicar_deslocamento_cliente, calcular_carro, calcular_van
 
 _ADICIONAL_NOTURNO = 50.0  # R$ por artista/coordenador, aplicado pré-markup
 _MARKUP_SERVICE = 1.5
@@ -85,6 +85,10 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             coordenador_qty = max(coordenador_qty, minimo)
 
     fora_sp = bool(payload.get("fora_sp"))
+    # Chave ausente (snapshots antigos, EducaManto) = "manto" — comportamento pré-feature.
+    deslocamento_responsavel = payload.get("deslocamento_responsavel") or "manto"
+    if deslocamento_responsavel != "cliente":
+        deslocamento_responsavel = "manto"
     event_time = payload.get("event_time") or ""
     noturno = _is_noturno(event_time)
 
@@ -317,14 +321,26 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             num_carros = int(payload.get("num_carros") or 1)
             tb = calcular_carro(num_carros, num_colaboradores, km_ida, event_has_show)
 
+        if deslocamento_responsavel == "cliente":
+            tb = aplicar_deslocamento_cliente(tb)
+
         transport_breakdown = tb
         for i in range(4):
             totals[i] = round(totals[i] + tb["total"], 2)
-        transport_total += tb["total"]
-        _linha_fixa(
-            "Transporte fora de SP", tb["total"], "pos",
-            f"{transporte_tipo} · {num_colaboradores} pessoa(s) · {km_ida:g} km (ida)",
-        )
+        if deslocamento_responsavel == "cliente":
+            # Fora do `transport_total` de propósito: sem linha "Logística e Transporte" na
+            # mensagem — os adicionais ficam embutidos no valor da apresentação.
+            _linha_fixa(
+                "Adicionais fora de SP", tb["total"], "pos",
+                f"deslocamento por conta da contratante — {transporte_tipo} não incluído · "
+                f"{num_colaboradores} pessoa(s) · {km_ida:g} km (ida)",
+            )
+        else:
+            transport_total += tb["total"]
+            _linha_fixa(
+                "Transporte fora de SP", tb["total"], "pos",
+                f"{transporte_tipo} · {num_colaboradores} pessoa(s) · {km_ida:g} km (ida)",
+            )
 
     if acrescimos:
         for a in acrescimos:
@@ -443,6 +459,17 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
 
     nf_header = "\n🧾 _Valores com Nota Fiscal inclusa_" if nota_fiscal else ""
 
+    # Evento em SP não tem deslocamento — nenhuma frase. Fora de SP, a mensagem sempre diz de
+    # quem é a responsabilidade (frases exatas definidas pelo dono, 26/08/2026).
+    if fora_sp and deslocamento_responsavel == "cliente":
+        deslocamento_nota = "\n\n_O deslocamento é por conta da contratante._"
+    elif fora_sp:
+        deslocamento_nota = (
+            "\n\n_Esse orçamento inclui deslocamento por responsabilidade da Manto Produções._"
+        )
+    else:
+        deslocamento_nota = ""
+
     message = (
         f"{saudacao} ✨ É um prazer preparar a proposta para o seu evento.\n\n"
         f"Estamos prontos para levar toda a magia da Manto Produções para o seu dia especial! "
@@ -455,7 +482,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         f"🎭 *PERSONAGENS E EXPERIÊNCIA*\n"
         f"{team_text}\n\n"
         f"💰 *INVESTIMENTO*{nf_header}\n\n"
-        f"{investimento}\n\n"
+        f"{investimento}{deslocamento_nota}\n\n"
         f"💳 *FORMAS DE PAGAMENTO*\n\n"
         f"1️⃣ *À Vista (PIX):*\n"
         f"{pix_vista}\n"
@@ -475,6 +502,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         "message": message,
         "transport_breakdown": transport_breakdown,
         "fora_sp": fora_sp,
+        "deslocamento_responsavel": deslocamento_responsavel if fora_sp else None,
         "markup_used": markup_used,
         "total_1h": totals[0],
         "total_2h": totals[1],
@@ -506,6 +534,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         "performers": performers,
         "coordenador_qty": coordenador_qty,
         "fora_sp": fora_sp,
+        "deslocamento_responsavel": deslocamento_responsavel,
         "km_ida": str(payload.get("km_ida") or "0"),
         "transporte_tipo": payload.get("transporte_tipo") or "van",
         "carretinha": bool(payload.get("carretinha")),
@@ -573,6 +602,7 @@ def legacy_quote(entry: OrcamentoHistory) -> dict:
         ),
         "transport_breakdown": None,
         "fora_sp": False,
+        "deslocamento_responsavel": None,
         "markup_used": None,
         "total_1h": float(entry.total_1h or 0),
         "total_2h": float(entry.total_2h or 0),

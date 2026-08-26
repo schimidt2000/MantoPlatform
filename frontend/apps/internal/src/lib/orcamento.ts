@@ -84,6 +84,8 @@ export interface CalcularOrcamentoInput {
   performers: Performer[];
   coordenador_qty?: number;
   fora_sp?: boolean;
+  /** Só relevante com `fora_sp` — ausente/undefined equivale a "manto". */
+  deslocamento_responsavel?: "manto" | "cliente";
   event_time?: string;
   acrescimos?: Acrescimo[];
   show_sosia_tipo?: "predefinido" | "customizado";
@@ -142,6 +144,8 @@ export interface Quote {
   memoria?: MemoriaLinha[];
   transport_breakdown: TransportBreakdown | null;
   fora_sp: boolean;
+  /** Ausente em orçamentos salvos antes desta feature — trate como "manto". */
+  deslocamento_responsavel?: "manto" | "cliente" | null;
   markup_used: number[] | null;
   total_1h: number;
   total_2h: number;
@@ -331,6 +335,8 @@ export interface OrcamentoFormSnapshot {
   performers: Performer[];
   coordenador_qty: number;
   fora_sp: boolean;
+  /** Ausente em snapshots salvos antes desta feature — trate como "manto". */
+  deslocamento_responsavel?: "manto" | "cliente";
   km_ida: string;
   transporte_tipo: "van" | "carro";
   carretinha: boolean;

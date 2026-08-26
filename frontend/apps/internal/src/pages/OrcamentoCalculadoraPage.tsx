@@ -47,6 +47,15 @@ function brl(v: number): string {
 const DURACOES = ["1h", "2h", "3h", "4h"] as const;
 type Duracao = (typeof DURACOES)[number];
 
+/**
+ * Deslocamento do evento: "sp" (em São Paulo, sem deslocamento), "manto" (fora de SP com
+ * transporte embutido no orçamento) ou "cliente" (fora de SP, contratante assume o veículo —
+ * só os adicionais da equipe entram na conta). Vira `fora_sp` + `deslocamento_responsavel`
+ * no payload. Na UI a escolha é em duas etapas: em SP × fora de SP e, fora de SP, a
+ * responsabilidade (padrão "manto").
+ */
+type Deslocamento = "sp" | "manto" | "cliente";
+
 const INITIAL_STATE = {
   performers: [] as Performer[],
   coordenadorQty: 1,
@@ -54,7 +63,7 @@ const INITIAL_STATE = {
   eventTime: "",
   clientName: "",
   eventLocation: "",
-  foraSp: false,
+  deslocamento: "sp" as Deslocamento,
   transporteTipo: "van" as "van" | "carro",
   kmIda: 0,
   carretinha: false,
@@ -117,7 +126,7 @@ export function OrcamentoCalculadoraPage() {
   const [eventTime, setEventTime] = useState(INITIAL_STATE.eventTime);
   const [clientName, setClientName] = useState(INITIAL_STATE.clientName);
   const [eventLocation, setEventLocation] = useState(INITIAL_STATE.eventLocation);
-  const [foraSp, setForaSp] = useState(INITIAL_STATE.foraSp);
+  const [deslocamento, setDeslocamento] = useState<Deslocamento>(INITIAL_STATE.deslocamento);
   const [transporteTipo, setTransporteTipo] = useState<"van" | "carro">(INITIAL_STATE.transporteTipo);
   const [kmIda, setKmIda] = useState(INITIAL_STATE.kmIda);
   const [carretinha, setCarretinha] = useState(INITIAL_STATE.carretinha);
@@ -180,7 +189,10 @@ export function OrcamentoCalculadoraPage() {
     setEventTime(snap.event_time ?? "");
     setClientName(snap.client_name ?? "");
     setEventLocation(snap.event_location ?? "");
-    setForaSp(Boolean(snap.fora_sp));
+    // Snapshot pré-feature não tem `deslocamento_responsavel` — fora de SP era sempre "manto".
+    setDeslocamento(
+      !snap.fora_sp ? "sp" : snap.deslocamento_responsavel === "cliente" ? "cliente" : "manto",
+    );
     setTransporteTipo(snap.transporte_tipo ?? "van");
     setKmIda(Number(snap.km_ida) || 0);
     setCarretinha(Boolean(snap.carretinha));
@@ -203,7 +215,7 @@ export function OrcamentoCalculadoraPage() {
     setEventTime(INITIAL_STATE.eventTime);
     setClientName(INITIAL_STATE.clientName);
     setEventLocation(INITIAL_STATE.eventLocation);
-    setForaSp(INITIAL_STATE.foraSp);
+    setDeslocamento(INITIAL_STATE.deslocamento);
     setTransporteTipo(INITIAL_STATE.transporteTipo);
     setKmIda(INITIAL_STATE.kmIda);
     setCarretinha(INITIAL_STATE.carretinha);
@@ -234,7 +246,8 @@ export function OrcamentoCalculadoraPage() {
       event_time: eventTime,
       client_name: clientName,
       event_location: eventLocation,
-      fora_sp: foraSp,
+      fora_sp: deslocamento !== "sp",
+      deslocamento_responsavel: deslocamento !== "sp" ? deslocamento : undefined,
       transporte_tipo: transporteTipo,
       km_ida: kmIda,
       carretinha,
@@ -263,7 +276,7 @@ export function OrcamentoCalculadoraPage() {
       eventTime,
       clientName,
       eventLocation,
-      foraSp,
+      deslocamento,
       transporteTipo,
       kmIda,
       carretinha,
@@ -358,14 +371,31 @@ export function OrcamentoCalculadoraPage() {
                     value={eventLocation}
                     onChange={setEventLocation}
                     onSelectSuggestion={(description) => {
-                      if (foraSp) handleCalcularDistancia(description);
+                      if (deslocamento !== "sp") handleCalcularDistancia(description);
                     }}
                   />
                 </div>
-                <label className="flex items-center gap-2 text-sm text-ink">
-                  <input type="checkbox" checked={foraSp} onChange={(e) => setForaSp(e.target.checked)} />
-                  Evento Fora de São Paulo
-                </label>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={deslocamento === "sp" ? "default" : "outline"}
+                    onClick={() => setDeslocamento("sp")}
+                  >
+                    Evento em São Paulo
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={deslocamento !== "sp" ? "default" : "outline"}
+                    onClick={() => {
+                      // Já estando fora de SP, reclicar não pode descartar a escolha "cliente".
+                      if (deslocamento === "sp") setDeslocamento("manto");
+                    }}
+                  >
+                    Evento fora de São Paulo
+                  </Button>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={LABEL}>Data</label>
@@ -379,23 +409,48 @@ export function OrcamentoCalculadoraPage() {
 
                 {eventDate && <AgendaNoDiaAlert date={eventDate} />}
 
-                {foraSp && (
+                {deslocamento !== "sp" && (
                   // Mesmo motivo do alerta acima: `amber` cru não troca de tema.
                   <div className="space-y-3 rounded-md border border-gold/40 bg-gold-soft p-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-gold-ink">
-                      Transporte — Fora de SP
+                      {deslocamento === "cliente" ? "Adicionais — Fora de SP" : "Transporte — Fora de SP"}
                     </p>
                     <div>
-                      <label className={LABEL}>Tipo de transporte</label>
-                      <select
-                        className={INPUT}
-                        value={transporteTipo}
-                        onChange={(e) => setTransporteTipo(e.target.value as "van" | "carro")}
-                      >
-                        <option value="van">Van</option>
-                        <option value="carro">Carro</option>
-                      </select>
+                      <label className={LABEL}>Deslocamento</label>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={deslocamento === "manto" ? "default" : "outline"}
+                          onClick={() => setDeslocamento("manto")}
+                        >
+                          Por nossa conta
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={deslocamento === "cliente" ? "default" : "outline"}
+                          onClick={() => setDeslocamento("cliente")}
+                        >
+                          Por conta da cliente
+                        </Button>
+                      </div>
                     </div>
+                    {/* Veículo só quando o deslocamento é da Manto; no modo "cliente" o km e os
+                        colaboradores continuam necessários (adicional por pessoa fora de SP). */}
+                    {deslocamento === "manto" && (
+                      <div>
+                        <label className={LABEL}>Tipo de transporte</label>
+                        <select
+                          className={INPUT}
+                          value={transporteTipo}
+                          onChange={(e) => setTransporteTipo(e.target.value as "van" | "carro")}
+                        >
+                          <option value="van">Van</option>
+                          <option value="carro">Carro</option>
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <label className={LABEL}>Km (ida)</label>
                       <div className="flex gap-2">
@@ -420,22 +475,23 @@ export function OrcamentoCalculadoraPage() {
                         </p>
                       )}
                     </div>
-                    {transporteTipo === "van" ? (
-                      <label className="flex items-center gap-2 text-sm text-ink">
-                        <input type="checkbox" checked={carretinha} onChange={(e) => setCarretinha(e.target.checked)} />
-                        Com carretinha
-                      </label>
-                    ) : (
-                      <div>
-                        <label className={LABEL}>Nº de carros</label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={numCarros}
-                          onChange={(e) => setNumCarros(Number(e.target.value))}
-                        />
-                      </div>
-                    )}
+                    {deslocamento === "manto" &&
+                      (transporteTipo === "van" ? (
+                        <label className="flex items-center gap-2 text-sm text-ink">
+                          <input type="checkbox" checked={carretinha} onChange={(e) => setCarretinha(e.target.checked)} />
+                          Com carretinha
+                        </label>
+                      ) : (
+                        <div>
+                          <label className={LABEL}>Nº de carros</label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={numCarros}
+                            onChange={(e) => setNumCarros(Number(e.target.value))}
+                          />
+                        </div>
+                      ))}
                     <div>
                       <label className={LABEL}>Nº de colaboradores (opcional)</label>
                       <Input

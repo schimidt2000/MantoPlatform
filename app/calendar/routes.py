@@ -3101,7 +3101,11 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
     snap = json.loads(entry.form_snapshot or "{}")
     transport_val = 0
     if snap.get("fora_sp"):
-        from app.orcamento.transport import calcular_carro, calcular_van
+        from app.orcamento.transport import (
+            aplicar_deslocamento_cliente,
+            calcular_carro,
+            calcular_van,
+        )
 
         km = float(snap.get("km_ida", 0) or 0)
         if snap.get("transporte_tipo", "van") == "van":
@@ -3118,6 +3122,10 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
                 km,
                 entry.has_show,
             )
+        if snap.get("deslocamento_responsavel") == "cliente":
+            # A cliente assumiu o deslocamento: o veículo não foi vendido e não pode entrar
+            # no transporte do evento — só os adicionais da equipe.
+            tb = aplicar_deslocamento_cliente(tb)
         transport_val = int(tb["total"])
 
     acrescimo = float(snap.get("acrescimo_valor", 0) or 0)

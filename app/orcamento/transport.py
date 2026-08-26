@@ -1,6 +1,10 @@
 """Transport cost calculation functions for the quote calculator."""
 from . import settings as _cfg
 
+# Decisão do dono (26/08/2026): com deslocamento por conta da contratante, o adicional de show
+# continua sendo cobrado — só o veículo sai. Flipar para False exclui o adicional de show também.
+CLIENTE_INCLUI_ADICIONAL_SHOW = True
+
 
 def calcular_van(num_colab: int, km_ida: float, carretinha: bool, show: bool) -> dict:
     """Calculate transport cost for a van.
@@ -28,6 +32,26 @@ def calcular_van(num_colab: int, km_ida: float, carretinha: bool, show: bool) ->
         "total":             round(total, 2),
         "tarifa":            tarifa,
     }
+
+
+def aplicar_deslocamento_cliente(tb: dict) -> dict:
+    """Deslocamento por conta da contratante: remove o veículo, mantém os adicionais da equipe.
+
+    Usado pelo cálculo do orçamento e pelo prefill de evento do calendário — fonte única do
+    que sobra quando a cliente assume o deslocamento (`deslocamento_responsavel == "cliente"`).
+
+    Args:
+        tb: Breakdown de `calcular_van`/`calcular_carro`.
+
+    Returns:
+        Cópia do breakdown com `transporte` zerado e `total` recomposto só dos adicionais.
+    """
+    tb = dict(tb)
+    tb["transporte"] = 0.0
+    if not CLIENTE_INCLUI_ADICIONAL_SHOW:
+        tb["adicional_show"] = 0.0
+    tb["total"] = round(tb["adicional_fora_sp"] + tb["adicional_show"], 2)
+    return tb
 
 
 def calcular_carro(num_carros: int, num_colab: int, km_ida: float, show: bool) -> dict:

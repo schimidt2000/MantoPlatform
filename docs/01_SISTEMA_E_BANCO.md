@@ -864,6 +864,11 @@ Orçamento: `GET /api/orcamento/{opcoes,personagens-no-dia,distancia,settings,hi
 `GET /api/orcamento/historico/<id>` retorna, desde a feature 190, também `form_snapshot` (estado
 bruto de entrada do formulário) além do `quote` congelado — usado pela tela de histórico para a
 ação "Recalcular" (mudança aditiva, retrocompatível).
+**Feature 262 (sem migration)**: payload de `/calcular`, `form_snapshot` e `quote` ganham
+`deslocamento_responsavel: "manto"|"cliente"` ao lado de `fora_sp` — chave ausente ≡ `"manto"`
+(comportamento antigo). No modo `"cliente"` o veículo sai da conta (só adicionais fora-SP/show),
+a mensagem/PDF ganham a frase de responsabilidade, `_build_orcamento_prefill` grava
+`transport_value` sem o veículo e o carrinho (`casting_ops.valor_transporte_papel`) vale zero.
 
 EducaManto (feature 235 — contrato novo por responsabilidades): `GET /api/educamanto/{historico,musicals,textos,distancia,personagens-no-dia}` ·
 `POST /api/educamanto/calcular` (uma configuração; **breakdown só na resposta de SUPERADMIN** — corte no servidor), `/musicals`, `/musicals/<id>/duplicate`, `/orcamento/gerar` (**recalcula tudo no servidor**, snapshot v2, PDF por configuração) ·

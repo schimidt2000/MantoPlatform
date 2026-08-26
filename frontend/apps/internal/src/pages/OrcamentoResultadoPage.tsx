@@ -226,11 +226,19 @@ export function OrcamentoResultadoPage() {
         <Card>
           <CardHeader>
             <CardTitle>Detalhamento do transporte</CardTitle>
+            {quote.deslocamento_responsavel === "cliente" && (
+              <p className="text-xs text-muted">
+                Deslocamento por conta da contratante — van/carro não incluído.
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {[
-                ["Veículo", transporte.transporte],
+                // Modo "cliente": o veículo não foi vendido — só os adicionais da equipe.
+                ...(quote.deslocamento_responsavel === "cliente"
+                  ? []
+                  : [["Veículo", transporte.transporte] as [string, number]]),
                 ["Adicional fora de SP", transporte.adicional_fora_sp],
                 ["Adicional show", transporte.adicional_show],
               ].map(([label, valor]) => (

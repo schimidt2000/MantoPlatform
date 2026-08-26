@@ -4,7 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-24** · Estado do repositório: pós-feature
+> Última atualização: **2026-08-26** · Estado do repositório: pós-feature
+> **262-deslocamento-cliente (working tree, sem migration)** — antes dela
 > **261-nfc-entregas-video (em produção, migration `e08e454c4780` — head)** — antes dela
 > **260-etapa-pronto-marketing (em produção, sem migration)** — antes dela
 > **259-portal-reset-sem-senha (em produção, sem migration)** — antes dela
@@ -47,6 +48,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **262-deslocamento-cliente** | Tri-state de deslocamento na calculadora de orçamento normal: "Evento em São Paulo" (padrão) / "por nossa conta" / "por conta da cliente". No modo cliente o veículo (van/carro) sai da conta, mas os adicionais da equipe (fora-SP e show) continuam; a mensagem e o PDF ganham a frase de responsabilidade; prefill de evento e carrinho (feat. 239) respeitam o veículo não vendido | 2026-08-26 | `—` | (aqui) | — |
 | **261-nfc-entregas-video** | "Um vídeo especial para você": entrega de vídeo anexada a uma tag NFC, num modelo de tabela (`nfc_tag_deliveries`) extensível a futuras entregas (foto, link). Upload/Substituir/Remover pela tela `/3d/tags`; a página pública `/nfc/<code>` mostra o vídeo antes do CTA do Instagram quando há um. Arquivo fora de `UPLOAD_FOLDER` (mesmo motivo da feature 205): serve só por endpoint público que revalida tag e entrega ativas a cada requisição, com suporte a `Range`/`206` | 2026-08-24 | `e08e454c4780` | (aqui) | — |
 | **260-etapa-pronto-marketing** | Nova etapa "Pronto" no funil de marketing: status intermediário entre "Revisão" (material aprovado) e "Agendado", material pronto para ir ao ar e aguardando dia/hora de publicação | 2026-08-24 | `—` | (aqui) | — |
 | **259-portal-reset-sem-senha** | "Esqueci minha senha" do Portal do Artista silenciava para quem nunca criou senha (`password_hash` NULL) — `request_password_reset` exigia senha prévia na condição de match; talento clicava, a tela dizia "enviamos o link", e nada era enviado (caso real: talent 139, Iara, e mais 118 talentos ativos no mesmo buraco). Removida a exigência de senha prévia; o link de reset já define a primeira senha | 2026-08-24 | `—` | (aqui) | — |
@@ -189,6 +191,63 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 262 — Deslocamento por conta da cliente na calculadora de orçamento            (working tree · 2026-08-26 · sem migration)
+
+**Contexto.** Fora de São Paulo, o orçamento sempre embutia o transporte inteiro (veículo +
+adicional por pessoa + adicional de show). Mas há eventos em que **a contratante assume o
+deslocamento** — aí o veículo não pode ser cobrado, porém os adicionais da equipe (por estarem
+fora de SP) continuam devidos. E a mensagem final precisava dizer de quem é a responsabilidade.
+Decisões do dono (26/08): o adicional de show (>500 km ida+volta) **continua** no modo cliente
+(só o veículo sai — flag `CLIENTE_INCLUI_ADICIONAL_SHOW` em `app/orcamento/transport.py`); e no
+modo cliente os adicionais ficam **embutidos** no valor, **sem** linha "Logística e Transporte".
+
+**O que mudou.**
+- **Payload/snapshot/quote** ganham `deslocamento_responsavel: "manto"|"cliente"` ao lado de
+  `fora_sp` (que continua booleano). Sem migração: `form_snapshot`/`result_snapshot` são JSON
+  sem schema; **chave ausente = "manto"** (comportamento pré-feature) — cobre snapshots antigos
+  e o EducaManto, que chama `calculate_quote` com `fora_sp=False` forçado.
+- **`app/orcamento/transport.py`**: helper `aplicar_deslocamento_cliente(tb)` — zera
+  `transporte`, recompõe `total = adicional_fora_sp + adicional_show`. Fonte única, reusada pelo
+  cálculo e pelo prefill do calendário.
+- **`app/orcamento/quote_ops.py`**: no modo cliente o `tb` ajustado entra nos `totals` mas NÃO
+  em `transport_total` — por isso a mensagem não mostra o split Apresentação/Logística (os
+  adicionais ficam dentro do valor). Memória de cálculo ganha a linha "Adicionais fora de SP …
+  van/carro não incluído". Mensagem: frase no fim do bloco INVESTIMENTO — manto: "_Esse
+  orçamento inclui deslocamento por responsabilidade da Manto Produções._" · cliente: "_O
+  deslocamento é por conta da contratante._" · em SP: nada.
+- **`app/orcamento/pdf.py`**: mesma frase após o bloco de valores (o PDF re-deriva o texto, não
+  usa `message` — as duas superfícies precisam andar juntas).
+- **`app/calendar/routes.py` `_build_orcamento_prefill`**: evento criado de um orçamento cliente
+  grava `transport_value` só com os adicionais (o veículo nunca foi vendido).
+- **`app/calendar/casting_ops.py`** (armadilha da feature 239): `_parcela_veiculo_do_orcamento`
+  devolve `Decimal("0.00")` no modo cliente, e `valor_transporte_papel` agora curto-circuita em
+  QUALQUER parcela não-None do orçamento — sem isso o zero caía no degrau 2 (estimativa por km)
+  e pagava um motorista por uma viagem que a cliente provê.
+- **Frontend (`apps/internal`)**: `OrcamentoCalculadoraPage` troca a checkbox "Evento Fora de
+  São Paulo" por uma escolha em duas etapas: "Evento em São Paulo" × "Evento fora de São Paulo"
+  e, fora de SP, "Por nossa conta" (padrão) × "Por conta da cliente" dentro do painel dourado
+  (reclicar "fora" não descarta a escolha "cliente"); no modo cliente o painel vira "Adicionais —
+  Fora de SP" e esconde tipo de transporte/carretinha/nº de carros (km + Maps + colaboradores
+  ficam — o adicional por pessoa depende deles). `OrcamentoResultadoPage` omite o tile "Veículo"
+  e mostra a nota "van/carro não incluído". Tipos em `lib/orcamento.ts`.
+
+**Pegadinhas.**
+- Personagem com transporte especial (ex.: Boneco Grande) continua alimentando
+  `transport_total`, então um orçamento cliente com BGE ainda mostra "Logística e Transporte"
+  (é rigging, não deslocamento de pessoas) — aceito de propósito.
+- Entradas antigas com `fora_sp` ganham retroativamente a frase da Manto ao rebaixar o PDF —
+  correto (o transporte estava embutido), mas é mudança visível.
+- Bug pré-existente descoberto (fora do escopo, não corrigido aqui): PDF de orçamento cujo
+  `client_name` tem emoji trava a resposta inteira (`Content-Disposition` não é latin-1 —
+  `UnicodeEncodeError` no werkzeug; reproduzido com a entrada 1808 do espelho).
+
+**Verificação**: `scripts/db/verify_deslocamento_cliente.py` — 29/29 no `manto_local` (frases e
+ausência da linha de logística por modo, veículo zerado, MANTO−CLIENTE = veículo exato nas 4
+durações, chave ausente ≡ manto byte a byte na mensagem, adicional de show mantido >500 km,
+texto extraído dos PDFs cliente/manto/antigo). UI conferida no Browser pane: tri-state, painéis
+por modo, recálculo ao vivo (queda exata do veículo), "Recalcular" de snapshot novo (cliente) e
+pré-feature (cai em "nossa conta"), tela de resultado nos 3 casos. `npx tsc --noEmit` limpo.
 
 ### 261 — "Um vídeo especial para você": entregas anexadas à tag NFC            (em produção · 2026-08-24 · migration `e08e454c4780`)
 
