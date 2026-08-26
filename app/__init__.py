@@ -793,6 +793,29 @@ def create_app():
 
     @app.route("/health")
     def health():
-        return "ok", 200
+        """Healthcheck do Railway — e sensor de saturação (incidente 26/08/2026).
+
+        Devolvia só "ok", o que não distingue "saudável" de "todas as threads presas servindo
+        vídeo". Agora carrega os dois números que teriam nomeado aquele incidente na hora:
+        threads vivas no processo e conexões do pool em uso.
+
+        **Nunca falha, por construção.** Esta rota é o que o Railway usa para decidir se o deploy
+        subiu; qualquer exceção aqui derrubaria o serviço inteiro (e o serviço tem volume, então
+        não há versão anterior servindo como rede). Por isso o corpo todo é best-effort e o
+        retorno é sempre 200.
+        """
+        try:
+            import threading
+
+            info = {"status": "ok", "threads": threading.active_count()}
+            try:
+                pool = db.engine.pool
+                info["db_pool_em_uso"] = pool.checkedout()
+                info["db_pool_disponivel"] = pool.checkedin()
+            except Exception as exc:  # noqa: BLE001 — diagnóstico nunca derruba o healthcheck
+                info["db_pool_erro"] = str(exc)
+            return info, 200
+        except Exception:  # noqa: BLE001 — última linha de defesa: healthcheck sempre responde
+            return "ok", 200
 
     return app
