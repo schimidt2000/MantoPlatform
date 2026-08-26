@@ -4,7 +4,7 @@ cmds = []
 
 [start]
 # MANTENHA IDENTICO ao startCommand de railway.json (que tem precedencia) e rode
-# `scripts/db/validar_startcommand.py` ANTES de qualquer push que mexa nesta linha:
+# `scripts/validar_startcommand.py` ANTES de qualquer push que mexa nesta linha:
 # em 26/08/2026 a flag `--access-log-format` (que NAO existe — o certo e `--access-logformat`)
 # fez o gunicorn recusar os argumentos, nunca subir, e derrubou a producao.
 # --threads 12: streaming de midia e I/O-bound e cada download segura uma thread do primeiro ao

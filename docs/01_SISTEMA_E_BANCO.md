@@ -1461,39 +1461,49 @@ de conexão com o backend responde **502**, sem derrubar os SPAs.
 **idênticos**; o `railway.json` tem precedência):
 ```
 flask db upgrade && python seed.py && gunicorn run:app \
-  --workers 3 --worker-class gthread --threads 4 --bind 0.0.0.0:$PORT --timeout 120
+  --workers 3 --worker-class gthread --threads 12 --bind 0.0.0.0:$PORT \
+  --timeout 120 --graceful-timeout 120 --max-requests 800 --max-requests-jitter 100 \
+  --access-logfile - --access-logformat '%(h)s %(m)s %(U)s %(s)s %(b)s %(D)s'
 ```
-Healthcheck: `/health` (devolve `ok`). `sync_worker.py` não roda durante o build da imagem.
+Healthcheck: `/health` — devolve JSON com `threads` e `db_pool_em_uso`/`db_pool_disponivel`, e é
+**sempre 200 por construção** (é ele que gateia o deploy; healthcheck que falha sob carga só
+antecipa a queda). `sync_worker.py` não roda durante o build da imagem.
 
-> ⚠️ **Mexer neste comando derruba a produção quando dá errado — e não dá para testar aqui.**
-> Em 26/08/2026 uma tentativa de endurecimento (`--threads 12` + access log + reciclagem de
-> worker) deixou o serviço fora do ar até o rollback. Três fatos que tornam isto perigoso:
-> 1. **gunicorn não roda no Windows**, então o comando não pode ser exercitado na máquina de
->    desenvolvimento. Validar o JSON/TOML e conferir que as flags existem **não é** o mesmo que
->    ver o processo subir.
-> 2. **O serviço tem volume**, então o Railway NÃO sobrepõe deploys: ele derruba o container
->    antigo antes de subir o novo. Um start que falha não "mantém a versão anterior" — deixa o
->    serviço fora.
+**Access log** (desde 26/08/2026): cada linha é `IP MÉTODO CAMINHO STATUS BYTES MICROSSEGUNDOS` —
+ex.: `152.233.76.9 GET /api/orcamento/historico 200 94458 70973` (94 KB em 71 ms). Antes disso
+**nenhuma requisição de produção era registrada**, e por isso o incidente de lentidão de 26/08
+não pôde ser atribuído a um endpoint específico. `%(b)s` (bytes) é o campo que teria nomeado o
+culpado.
+
+> ⚠️ **Mexer neste comando derruba a produção quando dá errado.** Em 26/08/2026 uma primeira
+> tentativa deixou o serviço fora do ar até o rollback: a flag `--access-log-format` **não
+> existe** (o certo é `--access-logformat`), o gunicorn recusou os argumentos, nunca subiu, e o
+> healthcheck falhou por 4min51s. Três fatos que tornam isto perigoso:
+> 1. **gunicorn não RODA no Windows** — mas o **parser** dele roda, com stubs. Use
+>    `scripts/validar_startcommand.py` **antes de todo push** que mexa nesta linha: ele
+>    reproduz exatamente a recusa de argumento que derruba o deploy.
+> 2. **O serviço tem volume**, então o Railway NÃO sobrepõe deploys: derruba o container antigo
+>    antes de subir o novo. Um start que falha não "mantém a versão anterior" — deixa fora.
 > 3. `restartPolicyMaxRetries: 3` (`railway.json`): depois de três tentativas, o Railway desiste.
 >
-> Regra: mudança no `startCommand` vai **sozinha**, num commit só dela, com alguém olhando os
-> logs de *Deployments* no painel, e fora do horário comercial.
+> Regra: mudança no `startCommand` vai **sozinha**, num commit só dela, com os logs de
+> *Deployments* abertos.
 
-**Concorrência — limite conhecido e ainda não resolvido.** O teto é `workers × threads` = **12
-requisições simultâneas no container inteiro**, réplica única. Isso importa porque **cada download
-de mídia segura uma thread do primeiro ao último byte**, na velocidade da rede de quem assiste:
-dois ou três vídeos travam um worker inteiro e o site para **sem gerar um único 5xx** (as
-requisições não falham, ficam na fila) — foi o incidente de lentidão de 26/08. Ao atacar isto:
+**Concorrência.** O teto é `workers × threads` = **36 requisições simultâneas** (era 12). Isso
+importa porque **cada download de mídia segura uma thread do primeiro ao último byte**, na
+velocidade da rede de quem assiste: com 4 threads, dois ou três vídeos travavam um worker inteiro
+e o site parava **sem gerar um único 5xx** (as requisições não falhavam, ficavam na fila) — foi o
+incidente de lentidão de 26/08. Ao mexer nisto:
 - `--timeout 120` **não é deadline de requisição** com `worker-class gthread` — o heartbeat sai da
   thread principal, não das threads de trabalho. Requisição pendurada só morre no restart.
 - Subir `--threads` **exige** subir o pool do SQLAlchemy junto (`app/config.py`,
-  `SQLALCHEMY_ENGINE_OPTIONS`, hoje só `pool_pre_ping`/`pool_recycle` = defaults 5+10). Cada
-  worker consome conexões pelas threads de requisição MAIS as 6 threads de background que ele
-  sobe (`_start_*` no fim de `create_app`).
+  `SQLALCHEMY_ENGINE_OPTIONS`, hoje `pool_size 10 + max_overflow 10` = 20 por worker). Cada
+  worker consome conexões pelas 12 threads de requisição MAIS as 6 threads de background que ele
+  sobe (`_start_*` no fim de `create_app`). O validador confere essa coerência.
 - As 6 threads de background sobem **uma vez por worker** (3 cópias de cada, incluindo a sync de
   13 meses da agenda a cada 10 min). Desperdício conhecido, ainda não resolvido.
-- A correção que não mexe no `startCommand` — e por isso a mais segura — é **tirar o arquivo
-  grande do processo web**: servir mídia por URL assinada em vez de `send_file`.
+- A correção definitiva, que não mexe no `startCommand`, é **tirar o arquivo grande do processo
+  web**: servir mídia por URL assinada em vez de `send_file`. Ainda em aberto.
 
 **Serviço frontend** (`Root Directory = frontend` — `frontend/railway.json` +
 `frontend/nixpacks.toml`):

@@ -5,7 +5,7 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-08-26** · Estado do repositório: pós-feature
-> **263-endurecimento-concorrencia (REVERTIDO em `39f8cfc` — derrubou a produção)** — antes dela
+> **263-endurecimento-concorrencia (em produção em duas partes: `56bb1c4` + `29788ee`)** — antes dela
 > **262-deslocamento-cliente (em produção, sem migration)** — antes dela
 > **261-nfc-entregas-video (em produção, migration `e08e454c4780` — head)** — antes dela
 > **260-etapa-pronto-marketing (em produção, sem migration)** — antes dela
@@ -49,7 +49,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **263-endurecimento-concorrencia** | **REVERTIDO** — diagnóstico do incidente de lentidão (11:50–11:56 de 26/08) segue válido; o endurecimento (`--threads` 4→12, access log, pool explícito, `preload="metadata"`, timeouts) derrubou a produção e voltou em `39f8cfc`. Leia a lição sobre `startCommand` não testável localmente | 2026-08-26 | `—` | (aqui) | — |
+| **263-endurecimento-concorrencia** | Incidente de lentidão (11:50–11:56 de 26/08) e endurecimento: `--threads` 4→12 (36 slots), access log com bytes e duração, reciclagem de worker, pool do SQLAlchemy explícito, `preload="metadata"` no player da Revisão, timeouts no Google Maps e no proxy Node, `/health` como sensor. **Em produção em duas partes** (`56bb1c4` + `29788ee`) depois de a primeira tentativa juntar tudo e derrubar a produção. Deixou `scripts/validar_startcommand.py` | 2026-08-26 | `—` | (aqui) | — |
 | **262-deslocamento-cliente** | Tri-state de deslocamento na calculadora de orçamento normal: "Evento em São Paulo" (padrão) / "por nossa conta" / "por conta da cliente". No modo cliente o veículo (van/carro) sai da conta, mas os adicionais da equipe (fora-SP e show) continuam; a mensagem e o PDF ganham a frase de responsabilidade; prefill de evento e carrinho (feat. 239) respeitam o veículo não vendido | 2026-08-26 | `—` | (aqui) | — |
 | **261-nfc-entregas-video** | "Um vídeo especial para você": entrega de vídeo anexada a uma tag NFC, num modelo de tabela (`nfc_tag_deliveries`) extensível a futuras entregas (foto, link). Upload/Substituir/Remover pela tela `/3d/tags`; a página pública `/nfc/<code>` mostra o vídeo antes do CTA do Instagram quando há um. Arquivo fora de `UPLOAD_FOLDER` (mesmo motivo da feature 205): serve só por endpoint público que revalida tag e entrega ativas a cada requisição, com suporte a `Range`/`206` | 2026-08-24 | `e08e454c4780` | (aqui) | — |
 | **260-etapa-pronto-marketing** | Nova etapa "Pronto" no funil de marketing: status intermediário entre "Revisão" (material aprovado) e "Agendado", material pronto para ir ao ar e aguardando dia/hora de publicação | 2026-08-24 | `—` | (aqui) | — |
@@ -194,13 +194,13 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
-### 263 — Incidente de lentidão + endurecimento REVERTIDO (derrubou a produção)            (2026-08-26 · sem migration)
+### 263 — Incidente de lentidão + endurecimento (caiu, foi revertido, voltou em duas partes)            (2026-08-26 · sem migration)
 
-> **STATUS: o endurecimento descrito abaixo NÃO está no código.** Foi mergeado em `8008108`,
-> **derrubou a produção** (502 em toda a API por ~15 min, com o SPA carregando e nenhuma chamada
-> funcionando) e foi revertido em `39f8cfc`, que restaurou o serviço. O diagnóstico do incidente
-> de lentidão continua válido e vale a leitura; **as mudanças, não** — elas voltam em fatias
-> menores, começando pelas que não tocam o `startCommand`.
+> **STATUS FINAL: o endurecimento ESTÁ em produção**, em dois commits separados —
+> `56bb1c4` (parte 1/2, código de aplicação) e `29788ee` (parte 2/2, infraestrutura), ambos com
+> deploy verde. O caminho até aqui é a parte instrutiva: a primeira tentativa (`8008108`) juntava
+> tudo num commit só, **derrubou a produção** (502 em toda a API por ~15 min, com o SPA
+> carregando e nenhuma chamada funcionando) e foi revertida em `39f8cfc`.
 >
 > **Causa exata (log de deploy do Railway):**
 > `gunicorn: error: unrecognized arguments: --access-log-format %(h)s %(m)s %(U)s %(s)s %(b)s %(D)s`
@@ -219,11 +219,14 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 > deixa o serviço fora, em vez de manter a versão anterior. Mudança no `startCommand` vai
 > **sozinha**, com os logs de *Deployments* abertos, fora do horário comercial.
 >
-> Ordem sugerida para retomar, do mais seguro ao mais arriscado: (1) `preload="metadata"` no
-> player da Revisão — é a correção da causa provável e não toca infraestrutura; (2) `timeout` no
-> cliente do Google Maps; (3) `proxyTimeout` no Node exceto mídia; (4) rate limit + `max_age` no
-> vídeo NFC; (5) log de requisição lenta e `/health` como sensor; (6) **por último e sozinho**,
-> `--threads`/`--max-requests`/access log, junto com o pool do SQLAlchemy.
+> **O que ficou de ferramenta:** `scripts/validar_startcommand.py` usa o **parser real do
+> gunicorn** aqui no Windows (stubs de `grp`/`pwd`/`fcntl` em `sys.modules` e de
+> `os.geteuid`/`os.getegid`, que é o que impedia o import). Ele reproduz a falha localmente —
+> recusa `--access-log-format`, aceita `--access-logformat` — e ainda confere que `railway.json`
+> e `nixpacks.toml` estão idênticos e que o pool do SQLAlchemy cobre `threads + 6` por worker.
+> **Rode-o antes de qualquer push que mexa no comando de start.** A lição maior: "não dá para
+> testar aqui" quase sempre significa "ainda não achei como" — o gunicorn não *roda* no Windows,
+> mas o parser dele, que é quem decide se um argumento existe, roda.
 
 **O incidente.** Entre ~11:50 e ~11:56 de 26/08 a plataforma ficou "lenta e travada": p99 de
 resposta em 20s, login devolvendo "Ocorreu um erro inesperado". O deploy das 11:56 (feature 262)

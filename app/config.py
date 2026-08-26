@@ -253,7 +253,7 @@ class ProductionConfig(Config):
     # cobre isso com folga; × 3 workers = 60 conexões no pior caso. Um download de mídia segura a
     # conexão durante TODA a transferência (a sessão só é devolvida no teardown, que roda depois
     # do último byte) — por isso o pool tem que acompanhar as threads.
-    # `scripts/db/validar_startcommand.py` confere esta coerência automaticamente.
+    # `scripts/validar_startcommand.py` confere esta coerência automaticamente.
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
         "pool_recycle": 300,
