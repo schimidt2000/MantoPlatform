@@ -48,9 +48,13 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     // daqui para baixo estão CERTOS e não devem virar `on-color`.
     <div className="flex flex-col gap-2 rounded-md bg-media p-2">
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      {/* `preload="metadata"`: sem o atributo o default do navegador é `auto`, e o vídeo inteiro
+          (até 512MB aqui) era baixado só de abrir a tela, sem ninguém apertar play — cada
+          download segura uma thread do gunicorn do primeiro ao último byte (incidente 26/08). */}
       <video
         ref={videoRef}
         src={url}
+        preload="metadata"
         className="aspect-video w-full rounded-sm bg-black"
         onClick={controls.togglePlay}
       />
