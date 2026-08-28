@@ -1,0 +1,90 @@
+# Blueprint do Render — contingencia da suspensao do Railway (28/08/2026).
+# "New +" -> "Blueprint" -> selecionar este repo -> Apply cria os 3 recursos abaixo.
+# Os envVars com sync:false ficam vazios de proposito (segredos preenchidos a parte,
+# a partir do .env local do dono — nunca em chat/commit).
+# Espelha o railway.json: mesmo startCommand do gunicorn, mesmo healthcheck /health.
+
+databases:
+  - name: manto-postgres
+    plan: basic-1gb
+    region: oregon
+    databaseName: manto
+    user: manto
+
+services:
+  - type: web
+    name: manto-backend
+    runtime: python
+    plan: standard            # backend usa ~1GB de RAM (3 workers) — starter (512MB) nao serve
+    region: oregon
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: flask db upgrade && python seed.py && gunicorn run:app --workers 3 --worker-class gthread --threads 12 --bind 0.0.0.0:$PORT --timeout 120 --graceful-timeout 120 --max-requests 800 --max-requests-jitter 100 --access-logfile - --access-logformat '%(h)s %(m)s %(U)s %(s)s %(b)s %(D)s'
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: manto-instance
+      mountPath: /opt/render/project/src/instance   # uploads/, nfc_media/, virtual_videos/, .secret_key
+      sizeGB: 10
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: manto-postgres
+          property: connectionString
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: MAIL_SERVER
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_USE_TLS
+        value: "true"
+      - key: MAIL_USERNAME
+        value: joao@mantoproducoes.com.br
+      - key: MAIL_SENDER_NAME
+        value: Sistema Manto
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://beta.mantoproducoes.com.br,https://app.mantoproducoes.com.br
+      - key: SECRET_KEY
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_SHEETS_CREDENTIALS
+        sync: false
+      - key: FIGURINO_DRIVE_FOLDER_ID
+        sync: false
+      - key: TALENTS_SPREADSHEET_ID
+        sync: false
+      - key: TALENTS_SHEET_NAME
+        sync: false
+      - key: PORTAL_URL
+        sync: false
+      - key: AUDIT_AGENT_TOKEN
+        sync: false
+      - key: MARKETING_AGENT_TOKEN
+        sync: false
+
+  - type: web
+    name: manto-frontend
+    runtime: node
+    plan: starter
+    region: oregon
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: BACKEND_URL
+        sync: false           # preencher com a URL publica do manto-backend depois que ele existir
