@@ -752,6 +752,10 @@ def create_app():
     # ── Cobrança de confirmação de convite ─────────────────────────
     _start_invite_reminders(app)
 
+    # ── Backup automático para o Google Drive (feature 264) ────────────
+    from app.backup_drive import start_backup_thread
+    start_backup_thread(app)
+
     # ── Comandos CLI de manutenção ─────────────────────────────────
     from app.cli import register_commands
     register_commands(app)
