@@ -1,7 +1,11 @@
 # Contingência Render — suspensão do Railway (28/08/2026)
 
-A conta do Railway foi suspensa em 28/08/2026 ~00:00 ("ToS Violation", appeal enviado, prazo de
-resposta: até 7 dias). Produção fica no ar pelo Render enquanto isso, a partir do backup local.
+**DESFECHO (28/08/2026): appeal NEGADO — banimento permanente. O Render é a casa definitiva.**
+Os arquivos que só existiam no volume do Railway estão perdidos em definitivo; a lista de
+recoleta é `recuperacao/PENDENCIAS_RECUPERACAO.txt`. O restante deste runbook fica como registro.
+
+A conta do Railway foi suspensa em 28/08/2026 ~00:00 ("ToS Violation"; appeal único enviado e
+negado no mesmo dia). Produção reerguida no Render a partir do backup local.
 
 ## O que temos e o que perdemos
 

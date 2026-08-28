@@ -7,7 +7,7 @@ Este arquivo é lido automaticamente pelo Claude Code ao abrir o projeto. Ele de
 #### 🏗️ Sobre o Projeto
 * **Nome**: Plataforma Manto
 * **Descrição**: Sistema empresarial ERP para gestão de eventos, talentos, figurino, financeiro e agenda. Integrado com Google Calendar e Google Sheets.
-* **Arquitetura**: SPA desacoplada — **Frontend React** (Vite + TypeScript + Tailwind CSS + shadcn/ui + Framer Motion + TanStack Query) consumindo o **Flask como API JSON estrita** (`/api/*`). Banco: SQLite (dev casual) → PostgreSQL (produção, Railway).
+* **Arquitetura**: SPA desacoplada — **Frontend React** (Vite + TypeScript + Tailwind CSS + shadcn/ui + Framer Motion + TanStack Query) consumindo o **Flask como API JSON estrita** (`/api/*`). Banco: SQLite (dev casual) → PostgreSQL (produção, Render).
 * **Padrões obrigatórios (fonte única)**: Valor monetário sempre via `@manto/money` (formatBRL/parseBRL); arquivos servidos pelo Flask sempre usam `assetUrl()` de `@manto/api-client`; núcleo de negócio sempre em módulos `*_ops.py` (nunca duplicar lógica).
 
 ---
