@@ -5,6 +5,7 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-08-28** · Estado do repositório: pós-feature
+> **265-nfc-revisao-videos (branch, sem migration)** — antes dela
 > **264-pos-railway (PRODUCAO NO RENDER; backup Drive; doc no portal — sem migration)** — antes dela
 > **263-endurecimento-concorrencia (em produção em duas partes: `56bb1c4` + `29788ee`)** — antes dela
 > **262-deslocamento-cliente (em produção, sem migration)** — antes dela
@@ -50,6 +51,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **265-nfc-revisao-videos** | Revisão dos vídeos NFC dentro de `/3d/tags`: aba "Vídeos" (KPIs, busca, cards com player agrupados por evento/cliente direta/estoque, fila "Sem vídeo"), coluna Vídeo na tabela, player no diálogo e endpoint espelho admin da mídia — assistir pelo ERP **não conta acesso** e serve tag desativada. `window.confirm` da remoção virou `ConfirmDialog`. Componentes extraídos para `components/nfc/` | 2026-08-28 | `—` | (aqui) | — |
 | **264-pos-railway** | Suspensao do Railway -> producao no Render (dump 27/08), midias recuperadas (catalogo 88%, figurinos 90%, talentos 99%), backup automatico p/ Drive compartilhado, upload de documento no portal, e-mail a 42 talentos. Pegadinhas: SA sem cota no My Drive (so Shared Drive); deploy do Render limpa /tmp e mata nohup | 2026-08-28 | `—` | (aqui) | — |
 | **263-endurecimento-concorrencia** | Incidente de lentidão (11:50–11:56 de 26/08) e endurecimento: `--threads` 4→12 (36 slots), access log com bytes e duração, reciclagem de worker, pool do SQLAlchemy explícito, `preload="metadata"` no player da Revisão, timeouts no Google Maps e no proxy Node, `/health` como sensor. **Em produção em duas partes** (`56bb1c4` + `29788ee`) depois de a primeira tentativa juntar tudo e derrubar a produção. Deixou `scripts/validar_startcommand.py` | 2026-08-26 | `—` | (aqui) | — |
 | **262-deslocamento-cliente** | Tri-state de deslocamento na calculadora de orçamento normal: "Evento em São Paulo" (padrão) / "por nossa conta" / "por conta da cliente". No modo cliente o veículo (van/carro) sai da conta, mas os adicionais da equipe (fora-SP e show) continuam; a mensagem e o PDF ganham a frase de responsabilidade; prefill de evento e carrinho (feat. 239) respeitam o veículo não vendido | 2026-08-26 | `—` | (aqui) | — |
@@ -166,7 +168,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 |---|---|
 | Agenda / evento / formulário de evento | 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 205, 205b, 205c, 205d, 205e, 205f |
-| Impressões e Acervo 3D | 261, 255, 213, 202, 201, 200 |
+| Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
 | Financeiro, comissões e pagamentos | 230, 228, 226, 210c, 199, 194, 189, 187 |
@@ -195,6 +197,51 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 265 — Revisão dos vídeos NFC dentro de `/3d/tags` (assistir sem contar acesso)            (2026-08-28 · sem migration)
+
+**Contexto.** O Artista 3D ficou responsável por revisar os vídeos anexados às tags (feature 261),
+mas a única forma de assistir era abrir o link público `/nfc/<code>` — que incrementa
+`access_count` e polui a métrica das clientes. Pior: o ERP não tinha player nenhum (o diálogo da
+261 mostrava só nome de arquivo + data), e o único sinal de "tem vídeo" na tabela era o rótulo do
+botão "Vídeo"/"Editar vídeo".
+
+**O que mudou.** (a) **Endpoint espelho admin** `GET /api/3d/nfc/<tag_id>/entregas/<id>/media`
+(`nfc_read.py`): mesmo `send_file(conditional=True, max_age=86400)` do público, gate
+`require_3d_access`, busca por `tag_id`, serve **inclusive tag desativada** e **nunca toca
+`access_count`** — o incremento mora só em `resolve_code`, que ele não chama. Sem `audit()`
+(leitura), sem limiter próprio (autenticado). (b) **`/3d/tags` virou duas abas** (`?aba=videos` na
+URL, padrão da `FigurinoProducaoListPage`): "Tags" (a tela de sempre + coluna "Vídeo" com badge
+clicável) e **"Vídeos"** — KPIs (`DenseCard`: ativas/com/sem/nunca acessadas, calculados no
+cliente), busca, cards com player agrupados por **evento (data desc) → clientes diretas →
+estoque**, e a fila "Sem vídeo" (tags ativas sem vídeo, com "Enviar vídeo" direto). "Ver na
+tabela" troca de aba com `scrollIntoView` + highlight `bg-gold-soft` efêmero (~2s, via `id` no
+`<tr>` — `TableRow` não tem forwardRef). (c) **Player no `VideoDialog`** (`key={delivery.id}`
+para remontar no Substituir) e **`ConfirmDialog` na remoção** — o `window.confirm` da 261 violava
+o Princípio V. (d) `Tags3DPage.tsx` (626 linhas) foi fatiada: `AssociarDialog`, `VideoDialog`,
+`GerarLoteForm`, `NfcVideoCard`, `NfcVideosPanel` e `helpers` agora moram em
+`apps/internal/src/components/nfc/`; `adminNfcVideoUrl` em `lib/nfc.ts` é a fonte única da URL do
+player interno.
+
+**Regra de negócio.** Assistir/revisar por dentro NUNCA conta acesso — `access_count` segue
+medindo só a cliente encostando o celular (resolve público). Tag desativada com vídeo continua
+auditável por dentro (o público responde 404 genérico, SC-006 intacto). Nos KPIs, "com/sem vídeo"
+contam só tags ativas.
+
+**Pegadinhas.** (1) A numeração 263/264 já estava ocupada no histórico (endurecimento de
+concorrência e pós-Railway) mesmo sem pasta em `specs/` — o próximo número livre se confere AQUI,
+não em `specs/`. (2) `assetUrl()` devolve `string | undefined` (path vazio) — `adminNfcVideoUrl`
+resolve com `?? ""`. (3) `preload="metadata"` é inegociável e no grid de cards vale N vezes
+(incidente de 26/08). (4) O ffmpeg local (build LGPL) não tem libx264 — vídeo de teste se gera
+com `libopenh264` (ou `.webm`/libvpx). (5) Verificação de contador exige leitura por app context
+NOVO (sessão limpa), o padrão da casa desde a 257.
+
+**Verificação.** `scripts/db/verify_265_nfc_revisao.py` (16/16 no `manto_local`): bytes idênticos
++ `Range`/206, contador intacto após GETs admin, 401/403, tag desativada (admin 200 × público
+404), 404 de entrega alheia/inexistente, resolve público ainda incrementando, limpeza total. No
+navegador (dev 5173+5000): navegação real das abas, players tocando pelo espelho (Network só
+`/api/3d/nfc/...`, 206 de metadata), vídeo reproduzido e contador parado em 0, remoção via
+ConfirmDialog, mobile em 1 coluna.
 
 ### 264 — Pos-suspensao do Railway: producao no Render, midias recuperadas, backup no Drive e upload de documento no portal            (2026-08-28 · sem migration)
 
