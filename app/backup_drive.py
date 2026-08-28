@@ -91,9 +91,13 @@ def _upload(service, folder_id: str, local_path: str, name: str, mime: str) -> N
 
 
 def _prune(service, folder_id: str, prefix: str, keep: int) -> int:
-    """Apaga (permanentemente) os mais antigos além de ``keep``.
+    """Manda para a LIXEIRA os mais antigos além de ``keep``.
 
-    Os nomes carregam a data — ordenar por nome desc é ordenar por idade.
+    Lixeira, não exclusão: a conta de serviço é "Administrador de conteúdo" no Drive
+    compartilhado — pode `trash` mas não `delete` permanente (o delete devolve 404). A lixeira
+    de Drive compartilhado se esvazia sozinha em 30 dias, e de quebra dá janela de
+    arrependimento a um prune indevido. Os nomes carregam a data — ordenar por nome desc é
+    ordenar por idade.
     """
     resp = service.files().list(
         q=f"'{folder_id}' in parents and name contains '{prefix}' and trashed=false",
@@ -102,7 +106,8 @@ def _prune(service, folder_id: str, prefix: str, keep: int) -> int:
     ).execute()
     velhos = resp.get("files", [])[keep:]
     for f in velhos:
-        service.files().delete(fileId=f["id"], supportsAllDrives=True).execute()
+        service.files().update(fileId=f["id"], body={"trashed": True},
+                               supportsAllDrives=True).execute()
     return len(velhos)
 
 
