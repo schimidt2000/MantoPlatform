@@ -132,25 +132,80 @@ def run_db_backup(app) -> str:
             pass
 
 
-def run_media_backup(app) -> str:
-    """Empacota as pastas de mídia de ``instance/`` num tar.gz e envia ao Drive."""
+def _estado_midia_path(app) -> str:
+    """Arquivo de estado com o instante (UTC ISO) do último backup de mídia bem-sucedido."""
+    return os.path.join(app.instance_path, ".backup_media_last.txt")
+
+
+def _arquivos_desde(app, desde: _dt.datetime) -> list[tuple[str, str]]:
+    """Pares (caminho absoluto, arcname) dos arquivos de mídia modificados após ``desde``."""
+    corte = desde.timestamp()
+    achados: list[tuple[str, str]] = []
+    for sub in _MEDIA_SUBDIRS:
+        raiz = os.path.join(app.instance_path, sub)
+        for dirpath, _dirs, files in os.walk(raiz):
+            for f in files:
+                p = os.path.join(dirpath, f)
+                try:
+                    if os.path.getmtime(p) > corte:
+                        achados.append((p, os.path.relpath(p, app.instance_path)))
+                except OSError:
+                    continue
+    return achados
+
+
+def run_media_backup(app, full: bool | None = None) -> str:
+    """Backup de mídia INCREMENTAL por padrão; completo 1x/mês (ou quando não há estado).
+
+    A mídia muda pouco no dia a dia — empacotar 5 GB diários desperdiçava banda (que o Render
+    cobra além da franquia) e o espaço da conta de serviço. Regime desde 29/08/2026:
+
+    - **Completo** (`manto_media_full_<data>.tar.gz`): dia 1 do mês, ou quando não existe o
+      arquivo de estado (primeira execução / disco novo). Retenção: 2.
+    - **Incremental** (`manto_media_inc_<data>.tar.gz`): demais dias — só arquivos modificados
+      desde o último backup (com 2h de sobreposição por segurança). Retenção: 45. Sem mudanças,
+      não envia nada. Restauração = último completo + incrementais posteriores, na ordem.
+    """
     folder = _folder_id(app)
     if not folder:
         raise RuntimeError("BACKUP_DRIVE_FOLDER_ID nao configurado")
-    stamp = _dt.datetime.utcnow().strftime("%Y-%m-%d")
-    nome = f"manto_media_{stamp}.tar.gz"
+
+    agora = _dt.datetime.utcnow()
+    estado = _estado_midia_path(app)
+    if full is None:
+        full = agora.day == 1 or not os.path.exists(estado)
+
     caminho = _tmp_no_disco(app, ".tar.gz")
     try:
-        with tarfile.open(caminho, "w|gz") as tar:
-            for sub in _MEDIA_SUBDIRS:
-                p = os.path.join(app.instance_path, sub)
-                if os.path.isdir(p):
-                    tar.add(p, arcname=sub)
+        if full:
+            nome = f"manto_media_full_{agora:%Y-%m-%d}.tar.gz"
+            with tarfile.open(caminho, "w|gz") as tar:
+                for sub in _MEDIA_SUBDIRS:
+                    p = os.path.join(app.instance_path, sub)
+                    if os.path.isdir(p):
+                        tar.add(p, arcname=sub)
+        else:
+            ultimo = _dt.datetime.fromisoformat(open(estado, encoding="utf-8").read().strip())
+            mudados = _arquivos_desde(app, ultimo - _dt.timedelta(hours=2))
+            if not mudados:
+                open(estado, "w", encoding="utf-8").write(agora.isoformat())
+                logger.info("[backup] midia: nada mudou desde %s — nada a enviar", ultimo)
+                return "(sem mudancas)"
+            nome = f"manto_media_inc_{agora:%Y-%m-%d}.tar.gz"
+            with tarfile.open(caminho, "w|gz") as tar:
+                for p, arc in mudados:
+                    tar.add(p, arcname=arc)
+
         service = _drive_service(app)
         _upload(service, folder, caminho, nome, "application/gzip")
-        removidos = _prune(service, folder, "manto_media_", _KEEP_MEDIA)
-        tam = os.path.getsize(caminho) / 1e9
-        logger.info("[backup] midia OK: %s (%.2f GB), %d antigos removidos", nome, tam, removidos)
+        if full:
+            removidos = _prune(service, folder, "manto_media_full_", _KEEP_MEDIA)
+        else:
+            removidos = _prune(service, folder, "manto_media_inc_", 45)
+        open(estado, "w", encoding="utf-8").write(agora.isoformat())
+        tam = os.path.getsize(caminho) / 1e6
+        logger.info("[backup] midia OK (%s): %s (%.1f MB), %d antigos removidos",
+                    "full" if full else "inc", nome, tam, removidos)
         return nome
     finally:
         try:
