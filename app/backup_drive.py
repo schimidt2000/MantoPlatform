@@ -23,7 +23,6 @@ import logging
 import os
 import subprocess
 import tarfile
-import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +32,17 @@ _MEDIA_SUBDIRS = ("uploads", "nfc_media", "virtual_videos", "credentials")
 _KEEP_DB = 14      # 7 dias x 2 por dia
 _KEEP_MEDIA = 2    # ~6,5 GB no regime atual — o que cabe nos 15 GB da conta de serviço
 _SCOPES = ["https://www.googleapis.com/auth/drive"]
+
+
+def _tmp_no_disco(app, sufixo: str) -> str:
+    """Caminho temporário NO DISCO PERSISTENTE — nunca em /tmp.
+
+    No Render o /tmp é tmpfs (mora na RAM): escrever o tar de ~3 GB lá estourou os 2 GB do
+    container e o kernel matou o serviço inteiro (exit 137, incidente de 28/08/2026 à noite).
+    Fica na raiz de `instance/`, FORA das subpastas empacotadas — o tar só adiciona
+    `_MEDIA_SUBDIRS`, então o temporário nunca entra no próprio pacote.
+    """
+    return os.path.join(app.instance_path, f".backup_tmp{sufixo}")
 
 
 def _folder_id(app) -> str:
@@ -105,8 +115,7 @@ def run_db_backup(app) -> str:
         "postgresql+psycopg://", "postgresql://", 1)
     stamp = _dt.datetime.utcnow().strftime("%Y-%m-%d_%H%M")
     nome = f"manto_db_{stamp}.dump"
-    with tempfile.NamedTemporaryFile(suffix=".dump", delete=False) as tmp:
-        caminho = tmp.name
+    caminho = _tmp_no_disco(app, ".dump")
     try:
         subprocess.run(["pg_dump", db_url, "-Fc", "-f", caminho],
                        check=True, capture_output=True, timeout=600)
@@ -130,8 +139,7 @@ def run_media_backup(app) -> str:
         raise RuntimeError("BACKUP_DRIVE_FOLDER_ID nao configurado")
     stamp = _dt.datetime.utcnow().strftime("%Y-%m-%d")
     nome = f"manto_media_{stamp}.tar.gz"
-    with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
-        caminho = tmp.name
+    caminho = _tmp_no_disco(app, ".tar.gz")
     try:
         with tarfile.open(caminho, "w|gz") as tar:
             for sub in _MEDIA_SUBDIRS:
