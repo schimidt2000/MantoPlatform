@@ -4,7 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-26** · Estado do repositório: pós-feature
+> Última atualização: **2026-08-28** · Estado do repositório: pós-feature
+> **264-pos-railway (PRODUCAO NO RENDER; backup Drive; doc no portal — sem migration)** — antes dela
 > **263-endurecimento-concorrencia (em produção em duas partes: `56bb1c4` + `29788ee`)** — antes dela
 > **262-deslocamento-cliente (em produção, sem migration)** — antes dela
 > **261-nfc-entregas-video (em produção, migration `e08e454c4780` — head)** — antes dela
@@ -49,6 +50,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **264-pos-railway** | Suspensao do Railway -> producao no Render (dump 27/08), midias recuperadas (catalogo 88%, figurinos 90%, talentos 99%), backup automatico p/ Drive compartilhado, upload de documento no portal, e-mail a 42 talentos. Pegadinhas: SA sem cota no My Drive (so Shared Drive); deploy do Render limpa /tmp e mata nohup | 2026-08-28 | `—` | (aqui) | — |
 | **263-endurecimento-concorrencia** | Incidente de lentidão (11:50–11:56 de 26/08) e endurecimento: `--threads` 4→12 (36 slots), access log com bytes e duração, reciclagem de worker, pool do SQLAlchemy explícito, `preload="metadata"` no player da Revisão, timeouts no Google Maps e no proxy Node, `/health` como sensor. **Em produção em duas partes** (`56bb1c4` + `29788ee`) depois de a primeira tentativa juntar tudo e derrubar a produção. Deixou `scripts/validar_startcommand.py` | 2026-08-26 | `—` | (aqui) | — |
 | **262-deslocamento-cliente** | Tri-state de deslocamento na calculadora de orçamento normal: "Evento em São Paulo" (padrão) / "por nossa conta" / "por conta da cliente". No modo cliente o veículo (van/carro) sai da conta, mas os adicionais da equipe (fora-SP e show) continuam; a mensagem e o PDF ganham a frase de responsabilidade; prefill de evento e carrinho (feat. 239) respeitam o veículo não vendido | 2026-08-26 | `—` | (aqui) | — |
 | **261-nfc-entregas-video** | "Um vídeo especial para você": entrega de vídeo anexada a uma tag NFC, num modelo de tabela (`nfc_tag_deliveries`) extensível a futuras entregas (foto, link). Upload/Substituir/Remover pela tela `/3d/tags`; a página pública `/nfc/<code>` mostra o vídeo antes do CTA do Instagram quando há um. Arquivo fora de `UPLOAD_FOLDER` (mesmo motivo da feature 205): serve só por endpoint público que revalida tag e entrega ativas a cada requisição, com suporte a `Range`/`206` | 2026-08-24 | `e08e454c4780` | (aqui) | — |
@@ -193,6 +195,20 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 264 — Pos-suspensao do Railway: producao no Render, midias recuperadas, backup no Drive e upload de documento no portal            (2026-08-28 · sem migration)
+
+**Contexto.** A conta do Railway foi suspensa em 28/08 ~00:00 ("ToS Violation"; appeal unico enviado, prazo 7 dias). No mesmo dia: producao reerguida no Render a partir do dump local de 27/08 (perda: o dia 27, re-digitado pela equipe), dominios app/portal/alo migrados (CNAME -> manto-frontend.onrender.com na Hostinger), e descoberto que os ARQUIVOS do volume nunca tiveram copia externa.
+
+**Recuperacao de midia (automatica, no mesmo dia).** Catalogo: 2.578/2.938 re-baixados do WordPress antigo, que continua VIVO em mantoproducoes.com.br/wp-content (nunca apagar sem conferir). Figurinos: 557/621 (526 do disco local + 31 do Drive via pipeline Doc->PDF->fitz). Talentos: 723/724 pela planilha do Form (o Drive nunca foi apagado; casamento por CPF/nome, arquivos salvos com o uuid que o banco ja referenciava). Enviado tudo por SSH+tar ao disco do Render. Resta so o que depende do appeal: 120 imagens + ~240 personagens de catalogo, 64 figurinos, anexos financeiros (432), 3 videos NFC, acervo 3D. Listas e scripts em `recuperacao/` (fora do git? NAO — a pasta e local; scripts sao one-off).
+
+**Backup automatico -> Google Drive (`app/backup_drive.py`).** Thread `_start_*` no proprio processo: pg_dump 2x/dia (05h/17h UTC) e tar.gz das midias 1x/dia (06h UTC) para um DRIVE COMPARTILHADO do Workspace (id em `instance/backup_drive_folder.txt` ou env `BACKUP_DRIVE_FOLDER_ID`; sem id = desligado com log). Conta de servico como Administrador de conteudo. PEGADINHA: conta de servico NAO tem mais cota no My Drive ("Service Accounts do not have storage quota") — pasta comum compartilhada FALHA; tem que ser Shared Drive. pg_dump existe no runtime python do Render. Retencao: 14 dumps / 2 pacotes de midia.
+
+**Upload de documento no portal.** `POST /portal/profile/document` ganha `kind` ("cnh" default = contrato antigo; "doc" grava `doc_photo_path`), e a tela Fotos e Documentos ganha o card "Foto do documento (RG, CPF ou CNH)". Nasceu porque 42 talentos precisavam reenviar o documento e nao havia botao. Verificado em producao com talento descartavel (login + upload doc + upload cnh default + conferencia das DUAS colunas no banco).
+
+**E-mail de recuperacao.** 42 talentos sem foto receberam pedido de atualizacao (31 na 1a leva com instrucao de responder com anexo — respostas devem ser processadas a mao; 11 na 2a leva ja com o botao novo). Remetente joao@, script `recuperacao/enviar_email_fotos.py`.
+
+**Pegadinhas operacionais do Render (novas).** Deploy TROCA o container: mata processos nohup e limpa /tmp — backup de midia one-off morreu 2x por deploys no meio; rodadas longas so quando nao ha push na fila. SSH: `ssh <srv-id>@ssh.oregon.render.com` (chave da conta), disco em `/opt/render/project/src/instance`. Sessao SSH TEM as env vars do servico. `python3 script.py` fora do CWD nao poe o CWD no sys.path (3.11 safe-path) — usar PYTHONPATH.
 
 ### 263 — Incidente de lentidão + endurecimento (caiu, foi revertido, voltou em duas partes)            (2026-08-26 · sem migration)
 

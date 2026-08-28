@@ -1564,7 +1564,7 @@ avaliar). Alvos de toque ≥44px, nada abaixo de 12px, sem rolagem horizontal de
 | `/portal/convites` | Convites de casting pendentes | Botões **Aceitar** / **Recusar** (recusa pede confirmação); alimenta o contador da aba |
 | `/portal/historico` | Histórico completo de apresentações | Somatórios recebido / a receber / total; cachê + deslocamento por evento; link para avaliar via `RatingLink` (o mesmo da Agenda desde a 229) |
 | `/portal/perfil` | Dados pessoais, **medidas corporais**, PIX e portfólio | Medidas alimentam o módulo de Figurino; até 3 fotos de atuação + links (Vimeo/YouTube) |
-| `/portal/fotos-documentos` | Foto de rosto, corpo inteiro e CNH | Preview do arquivo atual antes de substituir |
+| `/portal/fotos-documentos` | Foto de rosto, corpo inteiro, foto do documento (RG/CPF/CNH — card novo da feature 264) e CNH | Preview do arquivo atual antes de substituir (fotos); documento e CNH mostram sucesso apos envio |
 | `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (rota Jinja, mesma sessão). **Coordenador vê o elenco inteiro** com o nome de quem interpreta cada personagem (feature 227) |
 | `/portal/eventos/:id/avaliar` | Avaliar o evento | Etapa 1 nota geral (abaixo de 4 exige comentário); etapa 2 opcional por categoria e por pessoa; janela de 7 dias para avaliar, 30 para editar. Etapa 2 é o **destino padrão** da etapa 1 desde a 232 (rolagem até o bloco), com desvio explícito para quem só quer a nota geral |
 | `/portal/termos` | Reler o termo já aceito | Modo leitura, sem trava nem botão |
