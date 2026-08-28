@@ -16,6 +16,8 @@ export function PortalFotosDocumentosPage() {
 
   const [faceError, setFaceError] = useState<string | undefined>();
   const [fullError, setFullError] = useState<string | undefined>();
+  const [cnhError, setCnhError] = useState<string | undefined>();
+  const [cnhSent, setCnhSent] = useState(false);
   const [docError, setDocError] = useState<string | undefined>();
   const [docSent, setDocSent] = useState(false);
 
@@ -36,17 +38,22 @@ export function PortalFotosDocumentosPage() {
     );
   }
 
-  function handleDocument(file: File | null) {
-    setDocError(undefined);
-    setDocSent(false);
+  function handleDocument(kind: "cnh" | "doc", file: File | null) {
+    const setError = kind === "cnh" ? setCnhError : setDocError;
+    const setSent = kind === "cnh" ? setCnhSent : setDocSent;
+    setError(undefined);
+    setSent(false);
     if (!file) return;
 
-    documentUpload.mutate(file, {
-      onSuccess: () => setDocSent(true),
-      onError: (err) => {
-        setDocError(err instanceof ApiRequestError ? err.message : "Falha no envio.");
+    documentUpload.mutate(
+      { kind, file },
+      {
+        onSuccess: () => setSent(true),
+        onError: (err) => {
+          setError(err instanceof ApiRequestError ? err.message : "Falha no envio.");
+        },
       },
-    });
+    );
   }
 
   return (
@@ -103,6 +110,24 @@ export function PortalFotosDocumentosPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Foto do documento (RG, CPF ou CNH)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <FileUpload
+            label="Nova foto do documento (imagem ou PDF)"
+            accept={DOC_ACCEPT}
+            maxSizeBytes={DOC_MAX}
+            error={docError}
+            onChange={(file) => {
+              handleDocument("doc", file);
+            }}
+          />
+          {docSent && <p className="text-sm text-green">Documento enviado com sucesso.</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Arquivo da CNH</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -110,12 +135,12 @@ export function PortalFotosDocumentosPage() {
             label="Novo arquivo da CNH (imagem ou PDF)"
             accept={DOC_ACCEPT}
             maxSizeBytes={DOC_MAX}
-            error={docError}
+            error={cnhError}
             onChange={(file) => {
-              handleDocument(file);
+              handleDocument("cnh", file);
             }}
           />
-          {docSent && <p className="text-sm text-green">CNH enviada com sucesso.</p>}
+          {cnhSent && <p className="text-sm text-green">CNH enviada com sucesso.</p>}
         </CardContent>
       </Card>
 

@@ -431,16 +431,29 @@ def update_photo(talent: Talent, kind: str, file: FileStorage) -> Talent:
     return talent
 
 
-def update_document(talent: Talent, file: FileStorage) -> Talent:
-    """Substitui o arquivo da CNH do talento.
+def update_document(talent: Talent, file: FileStorage, kind: str = "cnh") -> Talent:
+    """Substitui o arquivo da CNH ou a foto do documento (RG/CPF/CNH) do talento.
+
+    O ``kind`` "doc" nasceu na recuperação pós-Railway (28/08/2026): o portal só tinha upload de
+    CNH e a foto do documento comum ficava órfã — o talento não tinha como reenviar sozinho.
+
+    Args:
+        talent: Talento autenticado.
+        file: Arquivo enviado.
+        kind: ``"cnh"`` (arquivo da CNH) ou ``"doc"`` (foto do documento — RG, CPF ou CNH).
 
     Raises:
         PortalUploadError: Formato não aceito ou acima do limite.
     """
-    validated, error = validate_upload(file, DOC_EXTS, DOC_MAX, required=True, label="Arquivo da CNH")
+    label = "Arquivo da CNH" if kind == "cnh" else "Foto do documento"
+    validated, error = validate_upload(file, DOC_EXTS, DOC_MAX, required=True, label=label)
     if error:
         raise PortalUploadError(error)
-    talent.cnh_file_path = save_file(validated, "talent_docs")
+    novo = save_file(validated, "talent_docs")
+    if kind == "cnh":
+        talent.cnh_file_path = novo
+    else:
+        talent.doc_photo_path = novo
     db.session.commit()
     return talent
 

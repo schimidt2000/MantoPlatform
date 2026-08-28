@@ -171,17 +171,21 @@ export function usePhotoUpload() {
   });
 }
 
-/** Envia um novo arquivo de CNH, substituindo o anterior. */
+/** Envia um novo documento — `cnh` (arquivo da CNH) ou `doc` (foto do RG/CPF/CNH). */
 export function useDocumentUpload() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (file: File) => {
+    mutationFn: ({ kind, file }: { kind: "cnh" | "doc"; file: File }) => {
       const form = new FormData();
       form.append("file", file);
-      return apiFetch<{ cnh_file_url: string | null }>("/api/portal/profile/document", {
-        method: "POST",
-        body: form,
-      });
+      form.append("kind", kind);
+      return apiFetch<{ cnh_file_url: string | null; doc_photo_url: string | null }>(
+        "/api/portal/profile/document",
+        {
+          method: "POST",
+          body: form,
+        },
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: PROFILE_KEY });

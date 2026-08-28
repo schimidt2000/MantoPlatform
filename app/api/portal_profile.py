@@ -48,12 +48,17 @@ def api_portal_upload_photo() -> Any:
 def api_portal_upload_document() -> Any:
     talent = current_talent()
     file = request.files.get("file")
+    # `kind` ausente = "cnh": preserva o contrato antigo (o app publicado antes do campo existir
+    # continua funcionando durante o rollout).
+    kind = request.form.get("kind", "cnh")
+    if kind not in ("cnh", "doc"):
+        return json_error("Tipo de documento inválido.", 400, fields={"kind": "Use 'cnh' ou 'doc'."})
     try:
-        talent = portal_ops.update_document(talent, file)
+        talent = portal_ops.update_document(talent, file, kind)
     except portal_ops.PortalUploadError as exc:
         return json_error(exc.message, 400, fields={"file": exc.message})
 
-    return jsonify({"cnh_file_url": talent.cnh_file_path})
+    return jsonify({"cnh_file_url": talent.cnh_file_path, "doc_photo_url": talent.doc_photo_path})
 
 
 # ── Perfil e portfólio (feature 191) ───────────────────────────────────────────
