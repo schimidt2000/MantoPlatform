@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Search, Trash2, X } from "lucide-react";
 import {
@@ -224,10 +225,26 @@ function PagamentoBulkBar({
 }
 
 export function PagamentosPage() {
-  const [month, setMonth] = useState(currentMonth());
+  // Estado na URL (feature 267): permite o detalhe do evento linkar para o mês e o item certos.
+  // ⚠️ Mês da PLANILHA = mês da REALIZAÇÃO do evento (`start_at`), diferente do mês da tela de
+  // Comissões (que é o da venda). Um evento vendido em maio e realizado em agosto tem os dois
+  // links em meses diferentes — usar o mesmo entrega tela vazia.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const month = searchParams.get("mes") || currentMonth();
+  const search = searchParams.get("busca") || "";
   const [selected, setSelected] = useState<Record<string, PagamentoItem>>({});
   const [filter, setFilter] = useState<PagamentoFilter>(null);
-  const [search, setSearch] = useState("");
+
+  function atualizarUrl(mudancas: Record<string, string | null>) {
+    const proximo = new URLSearchParams(searchParams);
+    for (const [chave, valor] of Object.entries(mudancas)) {
+      if (valor) proximo.set(chave, valor);
+      else proximo.delete(chave);
+    }
+    setSearchParams(proximo, { replace: true });
+  }
+
+  const setSearch = (valor: string) => atualizarUrl({ busca: valor || null });
   /**
    * Adiantamentos: guardamos só o **id** do lançamento de salário e derivamos o item da query
    * (nunca uma cópia em estado). O diálogo grava adiantamento e remove adiantamento — com um
@@ -323,10 +340,11 @@ export function PagamentosPage() {
 
   const handleMonthChange = (nextMonth: string) => {
     if (!nextMonth) return;
-    setMonth(nextMonth);
+    // Trocar o mês limpa a busca JUNTO, numa única escrita na URL: uma busca semeada por link
+    // reaparecendo num mês onde ela não faz sentido pareceria filtro fantasma.
+    atualizarUrl({ mes: nextMonth, busca: null });
     setSelected({});
     setFilter(null);
-    setSearch("");
     setAdvanceOpen(false);
   };
 
