@@ -1,4 +1,6 @@
-# Feature 270 — miniaturas do catálogo: parar de baixar 1,3 MB para desenhar 64px
+# Feature 270 — miniaturas: parar de baixar 1,3 MB para desenhar 64px
+
+*(catálogo público **e** grade do Banco de Talentos)*
 
 **Branch**: `270-miniaturas-catalogo` · **Created**: 2026-09-01 · **Status**: Draft
 **Migration**: nenhuma
@@ -16,6 +18,7 @@ Três lugares medidos:
 | Tira de miniaturas do produto (`ProductGallery`) | **64×64 px** | o original completo | **~380×** |
 | Card da grade (`ProductCard`, 4 colunas) | ~270 px de largura | o original completo | ~4,5× em área |
 | Palco do produto | até 1200 px | o original | correto |
+| Grade do Banco de Talentos | ~200 px de largura | o original, **e sem cache** | ~6× em área, a cada visita |
 
 O pior caso é a tira: abrir um produto com 8 fotos baixa **os 8 arquivos originais** para desenhar
 oito quadradinhos de 64 px — e são os mesmos arquivos que o palco usa, então o navegador não tem
@@ -96,14 +99,38 @@ já obriga todos a usar. Com ele:
    custa decode de 4 MB por variante. A ordem certa é comprimir primeiro (`flask compress-images
    --execute`), depois aquecer as miniaturas — senão o pré-aquecimento fica lento à toa.
 
-6. **Só a superfície pública.** O ERP interno não entra: lá a rede é boa, o volume de imagens por
-   tela é baixo e o ganho não paga o risco de mexer em tela de trabalho.
+6. **O Banco de Talentos entra junto — e é a exceção à regra "só o público".** A grade de
+   `/talents` é o outro lugar do sistema com dezenas de fotos numa tela só, e sofre dos **dois**
+   problemas de uma vez:
 
-7. **`width`/`height` não entram junto.** O `aspect-[4/5]` do `ProductCard` já reserva o espaço, e
+   - **sem cache**: `/uploads/<path>` (`app/__init__.py:786`) é `send_from_directory` sem
+     `max_age`, então o Flask carimba `no-cache` — o mesmo defeito que a 268 corrigiu no
+     catálogo, aqui ainda de pé. Cada abertura da grade revalida todas as fotos;
+   - **sem variante**: `TalentMosaic` pinta um card `aspect-[3/4]` de ~200 px baixando a foto de
+     rosto inteira.
+
+   Duas diferenças que o plano precisa respeitar:
+
+   1. **`/uploads` é `login_required` e serve documento e contrato** (RG, CNH, comprovante) — não
+      é superfície pública. O cache longo entra **só** para a subpasta das fotos de talento, nunca
+      para a rota inteira. `immutable` continua seguro pelo mesmo motivo do catálogo: o nome é
+      UUID gerado por `save_file`.
+   2. **A foto do documento (`doc_photo_path`) fica de fora das variantes.** É documento de
+      identidade; gerar cópias reduzidas espalha PII por mais um lugar no disco sem necessidade —
+      quem abre um RG quer o original legível.
+
+   As fotos de talento **já são cobertas** pelo `flask compress-images` (`photo_face_path` e
+   `photo_full_path` estão na lista desde sempre), então o peso delas se resolve na mesma passada
+   da 268 — o que falta aqui é o cache e a variante.
+
+7. **O resto do ERP interno não entra.** Fora a grade de talentos, as telas internas mostram
+   poucas imagens por vez e o ganho não paga o risco de mexer em tela de trabalho.
+
+8. **`width`/`height` não entram junto.** O `aspect-[4/5]` do `ProductCard` já reserva o espaço, e
    não há salto de layout a corrigir — acrescentar os atributos agora seria mexer no que não está
    quebrado. *(Se algum dia o card perder o `aspect`, aí sim.)*
 
-8. **O original continua acessível.** A rota `/catalogo/midia/<arquivo>` não muda: o palco usa, a
+9. **O original continua acessível.** A rota `/catalogo/midia/<arquivo>` não muda: o palco usa, a
    prévia de link usa, e qualquer link já compartilhado continua abrindo.
 
 ## Verificação
@@ -125,7 +152,11 @@ Na tela (`manto_local`, viewport desktop **e** mobile 375px), com a aba de rede 
 - abrir um produto com 8 fotos e conferir que a tira baixa **8 arquivos de ~5 KB**, não 8 originais;
 - a grade do catálogo baixa a variante de 320 no celular e 640 no desktop (conferir pelo `srcset`
   resolvido, não pelo atributo);
-- somar os bytes da página antes e depois — o número é o resultado da feature.
+- somar os bytes da página antes e depois — o número é o resultado da feature;
+- **grade do Banco de Talentos**: a segunda abertura da tela não refaz requisição de foto
+  nenhuma (hoje refaz todas), e os cards baixam a variante e não o original;
+- **a foto de documento continua servida inteira**, e `/uploads` fora das fotos de talento
+  continua sem cache longo — conferir que a mudança não vazou para a rota toda.
 
 Portões: `npm run typecheck` limpo nos três apps, `ruff check` sem erro novo, `docs/01`, `docs/02` e
 `docs/03` atualizados.
@@ -139,7 +170,7 @@ Depois de medir o ganho desta feature.
 todos — hoje isso é uma lista de cards com `loading="lazy"`, então o custo é o do DOM, não o da
 rede. Vira problema quando o catálogo dobrar; não é o gargalo medido agora.
 
-**As imagens do ERP interno** e o `/uploads` privado (decisão 6).
+**O resto do ERP interno** e o `/uploads` privado fora das fotos de talento (decisões 6 e 7) — em especial a foto de documento, que continua servida inteira e sem variante, de propósito.
 
 **Reprocessar o que já está no disco:** não é preciso. As variantes nascem do original, e o original
 continua onde está.
