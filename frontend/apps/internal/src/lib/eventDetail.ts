@@ -272,6 +272,21 @@ interface ConviteContext {
   makeupLocation: string | null;
 }
 
+/**
+ * Endereço público do Portal do Artista (feature 269).
+ *
+ * É constante de propósito, e NÃO vem de `PORTAL_URL` da API: toda mensagem que usa este
+ * endereço é copiada por alguém do staff e enviada por WhatsApp para um talento **de fora**.
+ * Quando o valor vinha da env, quem estivesse rodando o ambiente local mandava
+ * `http://localhost:5000/` para uma pessoa real — link morto —, e quando a env não estava setada
+ * a mensagem saía sem link nenhum. O endereço do portal é fixo e público; deixá-lo depender de
+ * configuração de ambiente só criava as duas formas de errar.
+ *
+ * `PORTAL_URL` continua existindo e é a fonte certa para os e-mails do SERVIDOR (onde um
+ * ambiente de teste precisa mesmo apontar para si).
+ */
+export const PORTAL_PUBLICO = "portal.mantoproducoes.com.br";
+
 /** Mensagem de convite individual de um talento (botão "Copiar convite" do card). */
 export function buildConviteMsg(role: RoleItem, ctx: ConviteContext, cache: string): string {
   const linhas = [
@@ -291,7 +306,7 @@ export function buildConviteMsg(role: RoleItem, ctx: ConviteContext, cache: stri
   linhas.push(
     "",
     "Acesse o portal Manto para confirmar sua presença. ✅",
-    "portal.mantoproducoes.com.br",
+    PORTAL_PUBLICO,
   );
   return linhas.join("\n");
 }

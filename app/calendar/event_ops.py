@@ -11,6 +11,11 @@ notificadores de logística (`notify_accepted_roles`, `notify_ensaio_team`) vive
 movidos de `routes.py` (que os reimporta com alias) para manter a dependência unidirecional
 `routes → event_ops` (este módulo só importa `models`/`constants`/`email_service`, nunca
 `routes` — sem ciclo de import).
+
+Desde a feature 267 importa também `formularios_ops` **no topo**, e isso é seguro: aquele módulo é
+folha (importa só `app`, `app.clientes.importer`, `app.models` e `app.utils` — nenhum deles toca
+`app.calendar`). O ciclo real continua sendo `routes → event_ops`, e é por ele que as funções
+daqui importam `routes` dentro do corpo, nunca no topo.
 """
 
 import logging
@@ -21,9 +26,6 @@ from zoneinfo import ZoneInfo
 
 from app.constants import EVENT_TYPE_SHOW, RoleName
 from app.email_service import send_async, send_ensaio_alert_email, send_event_changed_email
-# Import de topo é seguro: `formularios_ops` é folha (importa só `app`, `app.clientes.importer`,
-# `app.models` e `app.utils` — nenhum toca `app.calendar`). O ciclo real do domínio é
-# `routes → event_ops`, e é por isso que ESTE módulo importa `routes` dentro de função.
 from app.formularios.formularios_ops import apply_event_link, clear_event_link
 from app.models import (
     EventClient,

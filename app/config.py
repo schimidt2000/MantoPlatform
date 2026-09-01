@@ -9,6 +9,10 @@ _WEAK_SECRET = "dev-secret-key"
 # não existe mais um segundo endereço "do backend" para o usuário final.
 PLATFORM_BASE_URL = "https://app.mantoproducoes.com.br"
 
+# Endereço do Portal do Artista. É o que os talentos — pessoas de FORA — recebem por e-mail e
+# por WhatsApp, então tem valor fixo e não pode depender de a env estar setada.
+PORTAL_BASE_URL = "https://portal.mantoproducoes.com.br"
+
 
 def _db_url() -> str:
     url = os.getenv("DATABASE_URL", "sqlite:///manto.db")
@@ -161,8 +165,12 @@ class Config:
     ).lower() == "true"
     INVITE_REMINDERS_INTERVAL = int(os.getenv("INVITE_REMINDERS_INTERVAL", "3600"))
 
-    # URL base do portal (para links nos emails)
-    PORTAL_URL = os.getenv("PORTAL_URL", "")
+    # URL base do portal, para os links dos e-mails do servidor (reset de senha, convite,
+    # aviso de ensaio). Default REAL, não vazio (feature 269): no Render a variável é
+    # `sync: false` — vive só no painel —, e se alguém esquecer de setá-la os e-mails saem sem
+    # link, falhando em silêncio. Mesmo raciocínio de `PUBLIC_BASE_URL` logo abaixo.
+    # O ambiente local sobrescreve pelo `.env` e continua apontando para si.
+    PORTAL_URL = os.getenv("PORTAL_URL") or PORTAL_BASE_URL
 
     # URL base pública (feature 205) — usada para montar o `redirect_url` do checkout, o endereço
     # do webhook que a InfinitePay chama e o destino do 301 da raiz do Flask. Precisa ser
