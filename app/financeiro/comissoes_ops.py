@@ -4,10 +4,15 @@ Funções puras (sem `flask.request`/`render_template`/`flash`), reusadas apenas
 de API (`app/api/financeiro_read.py`, `app/api/financeiro_write.py`) — fonte única da agregação
 por mês/vendedor e da liquidação em lote atômica (Princípio I).
 
-`app/financeiro/routes.py` (view Jinja legada) e sua própria cópia de
-`_bulk_set_commission_period` NÃO importam deste módulo — permanecem como estão, por decisão
-explícita de não tocar o Jinja legado nesta feature (ver `specs/187-comissoes-modulo-completo/
-research.md` §2).
+**Desde a feature 267 o Jinja legado importa daqui** — o inverso do que esta docstring dizia. O
+motivo é que a liquidação existia em QUATRO cópias linha a linha (controle individual e em lote,
+cada um com seu gêmeo em `app/financeiro/routes.py`), e as quatro filtravam por `sale_date` puro
+enquanto o item da planilha era montado por `coalesce(payable_from, sale_date)`. Comissão
+EducaManto aparecia num mês e era liquidada por outro: o botão clicava e nada mudava.
+
+`ciclo_de_pagamento_expr()` e `liquidar_periodo()` são a fonte única disso. A decisão de 2026-07
+de "não tocar o Jinja legado" (ver `specs/187-comissoes-modulo-completo/research.md` §2) valia
+enquanto a duplicação era inerte; deixar de valer foi o preço de o defeito ser P0.
 """
 
 from __future__ import annotations
@@ -18,7 +23,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from zoneinfo import ZoneInfo
 
 from app import db
-from app.constants import EVENT_TYPE_VIRTUAL
+from app.constants import EVENT_TYPE_VIRTUAL, now_sp
 from app.models import CalendarEvent, CommissionPayment, SiteSetting, User
 
 TZ_SP = ZoneInfo("America/Sao_Paulo")
@@ -178,6 +183,100 @@ def _sem_loja_virtual(q):
         )
         .exists()
     )
+
+
+def ciclo_de_pagamento_expr():
+    """Expressão do mês em que a comissão entra no repasse (feature 267).
+
+    Comissão comum entra pelo mês da **venda**; comissão EducaManto, pelo mês da **realização**
+    (feature 109, `payable_from`). É a mesma expressão que monta o item agregado da Planilha de
+    Pagamentos — e por isso tem de ser a mesma que o liquida.
+
+    Existir como função é o ponto: as quatro liquidações filtravam por `sale_date` puro enquanto
+    o item era montado pelo `coalesce`, então o item de maio procurava a venda em maio, achava
+    zero linhas, e a tela mostrava "pago" sobre um lote que continuava `a_pagar` no banco.
+
+    Returns:
+        Expressão SQLAlchemy `coalesce(payable_from, sale_date)`.
+    """
+    return db.func.coalesce(CommissionPayment.payable_from, CommissionPayment.sale_date)
+
+
+def liquidar_periodo(
+    seller_id: int, p_start: date, p_end: date, target: str
+) -> list[CommissionPayment]:
+    """Aplica `status`/`paid_at` às comissões de um vendedor no ciclo (feature 267).
+
+    Fonte única das quatro liquidações que existiam duplicadas linha a linha (controle
+    individual e em lote, cada um com seu gêmeo Jinja). **Não commita e não audita** — as duas
+    coisas dependem do request (`current_user`) e ficam nas rotas.
+
+    Args:
+        seller_id: vendedor cujo lote está sendo liquidado.
+        p_start: primeiro dia do ciclo (inclusive).
+        p_end: primeiro dia do mês seguinte (exclusive).
+        target: ``"pago"``, ``"no_banco"`` ou ``"a_pagar"``.
+
+    Returns:
+        As linhas afetadas (para a rota montar a mensagem de auditoria).
+    """
+    ciclo = ciclo_de_pagamento_expr()
+    rows = CommissionPayment.query.filter(
+        CommissionPayment.seller_id == seller_id,
+        ciclo >= p_start,
+        ciclo < p_end,
+        # `no_banco` faz parte do conjunto liquidável aqui, diferente de `_month_scoped_query`
+        # (que é leitura do módulo de Comissões). Não unificar sem medir: muda o que o lote pega.
+        CommissionPayment.status.in_(["a_pagar", "no_banco", "pago"]),
+    ).all()
+    for c in rows:
+        c.status = target
+        # `now_sp()`, nunca `date.today()`: produção roda em UTC e depois das 21h de Brasília o
+        # pagamento seria carimbado no dia seguinte.
+        c.paid_at = now_sp().date() if target == "pago" else None
+    return rows
+
+
+#: Status de comissão que representam dinheiro vivo (o que será ou já foi pago). `cancelado`
+#: fica de fora: é linha de evento cancelado, sem movimentação.
+_STATUS_VIVOS = ("a_pagar", "no_banco", "pago")
+
+
+def comissao_exibida_do_evento(event, settings) -> tuple[Decimal, str]:
+    """Comissão a exibir no detalhe do evento, e de onde ela veio (feature 267).
+
+    Existia em duas cópias divergentes — `_compute_kpi` (API) e a view Jinja `event_detail` —,
+    ambas com 2% flat sobre venda−BV. Isso ignora EducaManto (5% sobre o LUCRO), a Loja Virtual
+    (que não comissiona) e `receives_commission`: a tela do evento mostrava um número que o
+    Financeiro nunca ia pagar.
+
+    Três camadas, nesta ordem:
+
+    1. **Evento cancelado → 0.** O cancelamento esvazia o backref (a linha e o estorno ficam com
+       `event_id` nulo), então sem esta guarda o fallback voltaria a inventar número exatamente
+       onde o financeiro já estornou. A regra canônica sozinha NÃO protege: quem checa
+       cancelamento é a sincronização, não o cálculo.
+    2. **Linha real**, quando existe: é o que o Financeiro efetivamente vai pagar — e, se já foi
+       pago, é histórico congelado que não deve mais acompanhar a venda.
+    3. **Regra canônica** como reserva, nunca a fórmula flat: ela já devolve 0 para Loja Virtual
+       e para beneficiário sem `receives_commission`, e usa a base de lucro no EducaManto.
+
+    Args:
+        event: o evento (num grupo comercial, passe o LÍDER — venda e comissão vivem só nele).
+        settings: `SiteSetting` singleton, para a taxa padrão.
+
+    Returns:
+        `(valor, origem)`, com origem ``"linha"`` (provisionada) ou ``"estimativa"`` (calculada).
+    """
+    if getattr(event, "is_cancelled", False):
+        return Decimal("0"), "linha"
+
+    linhas = [c for c in event.commission_payments if c.status in _STATUS_VIVOS]
+    if linhas:
+        total = sum((Decimal(c.amount) for c in linhas), Decimal("0"))
+        return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "linha"
+
+    return _event_commission(event, settings), "estimativa"
 
 
 def _month_scoped_query(start: date, end: date, seller_id: int | None = None):

@@ -6,7 +6,7 @@ Reaproveita os parsers e a query de mês da view Jinja (Princípio I) — não d
 """
 
 from datetime import UTC, date, datetime, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -372,10 +372,14 @@ def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
         Decimal("0"),
     )
     sale = Decimal(kpi_event.sale_value or 0)
-    base = sale - bv_total
-    if base < 0:
-        base = Decimal("0")
-    commission = (base * rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    # Feature 267: o número exibido passa a ser o que o Financeiro paga. Antes eram 2% flat
+    # sobre venda−BV aqui e a régua de 9 ramos lá, e a tela do evento mostrava um valor que a
+    # planilha nunca confirmava. `kpi_event` é o LÍDER do grupo — venda e comissão vivem só nele.
+    from app.financeiro.comissoes_ops import comissao_exibida_do_evento
+
+    commission, commission_source = comissao_exibida_do_evento(kpi_event, settings)
+    # `lucro` segue sem descontar comissão: é o que a dica da tela declara ("venda − cachês −
+    # gastos"). Mudar isso é decisão de negócio, não correção.
     lucro = sale - Decimal(cost) - expenses_total - bv_total
     return {
         "sale_value": _money(sale),
@@ -384,7 +388,11 @@ def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
         "bv_total": _money(bv_total),
         "commission": _money(commission),
         "lucro": _money(lucro),
+        # `rate` só descreve o número quando ele é ESTIMATIVA. Vindo da linha real ele não é
+        # derivável de um percentual único (EducaManto incide sobre o lucro), e estampar
+        # "Comissão (2,5%)" sobre esse valor seria uma conta que não fecha.
         "rate": float(rate),
+        "commission_source": commission_source,
         "group_size": len(group),
         "seller": kpi_event.seller.name if kpi_event.seller else None,
     }

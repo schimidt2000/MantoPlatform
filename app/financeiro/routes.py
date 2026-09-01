@@ -896,7 +896,12 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
     """
     # Feature 109: comissões EducaManto entram no ciclo pela data da REALIZAÇÃO do evento
     # (payable_from); as demais seguem pela data da venda (payable_from IS NULL).
-    cycle_date = db.func.coalesce(CommissionPayment.payable_from, CommissionPayment.sale_date)
+    # Feature 267: a MESMA expressão que monta o item liquida o item — enquanto eram duas
+    # (aqui `coalesce`, na liquidação `sale_date` puro), o item de um mês era liquidado por
+    # outro e o clique em "pago" atualizava zero linhas.
+    from app.financeiro.comissoes_ops import ciclo_de_pagamento_expr
+
+    cycle_date = ciclo_de_pagamento_expr()
     rows = (
         CommissionPayment.query
         .filter(
@@ -1110,15 +1115,9 @@ def set_payment_status():
         p_start = date(py, pm, 1)
         p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
         target = status if status in ("pago", "no_banco") else "a_pagar"
-        rows = CommissionPayment.query.filter(
-            CommissionPayment.seller_id == seller_id,
-            CommissionPayment.sale_date >= p_start,
-            CommissionPayment.sale_date < p_end,
-            CommissionPayment.status.in_(["a_pagar", "no_banco", "pago"]),
-        ).all()
-        for c in rows:
-            c.status = target
-            c.paid_at = date.today() if target == "pago" else None
+        from app.financeiro.comissoes_ops import liquidar_periodo
+
+        rows = liquidar_periodo(seller_id, p_start, p_end, target)
         audit("payment", "commission", seller_id, "",
               f"Comissões {period_tag}: → {target} ({len(rows)} itens)")
         db.session.commit()
@@ -1297,15 +1296,9 @@ def _bulk_set_commission_period(commission_id: str, action: str) -> bool:
     p_start = date(py, pm, 1)
     p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
     target = action if action in ("pago", "no_banco") else "a_pagar"
-    rows = CommissionPayment.query.filter(
-        CommissionPayment.seller_id == seller_id,
-        CommissionPayment.sale_date >= p_start,
-        CommissionPayment.sale_date < p_end,
-        CommissionPayment.status.in_(["a_pagar", "no_banco", "pago"]),
-    ).all()
-    for c in rows:
-        c.status = target
-        c.paid_at = date.today() if target == "pago" else None
+    from app.financeiro.comissoes_ops import liquidar_periodo
+
+    rows = liquidar_periodo(seller_id, p_start, p_end, target)
     from app.utils import audit
     audit("payment", "commission", seller_id, "",
           f"Bulk comissões {period_tag}: → {target} ({len(rows)} itens)")

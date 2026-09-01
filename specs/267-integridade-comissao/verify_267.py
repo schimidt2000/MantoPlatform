@@ -16,6 +16,12 @@ Cenários:
  8. Excluir evento solta a resposta e limpa o rastro do vínculo, sem apagá-la.
  9. Limpeza total.
 
+⚠️ **O cenário 8 chama a API REAL do Google Calendar.** `DELETE /api/events/<id>` tenta apagar o
+evento no Google, e o espelho local traz as credenciais de produção. É seguro aqui só porque o
+`google_event_id` de teste (`__v267_evt267excl`) não existe lá — a chamada volta 404 e o fluxo
+segue, porque falha do Google nunca bloqueia a escrita local. **Nunca dê a um evento de teste um
+`google_event_id` que possa casar com um evento real**: a exclusão apagaria a agenda de verdade.
+
 Rodar contra o manto_local (PowerShell)::
 
     $env:DATABASE_URL = (gc .local-db-url -Raw).Trim(); $env:FLASK_ENV = "development"
@@ -178,7 +184,7 @@ def cen_03_bulk_tem_o_mesmo_comportamento() -> None:
             "/api/financeiro/pagamentos/bulk-action",
             json={
                 "action": "pago",
-                "items": [{"item_type": "commission", "item_id": f"{estado['vendedor'].id}:{TAG_REALIZACAO}"}],
+                "commission_ids": [f"{estado['vendedor'].id}:{TAG_REALIZACAO}"],
             },
         )
         _garante(r.status_code == 200, f"bulk → {r.status_code} {r.get_data(as_text=True)[:200]}")

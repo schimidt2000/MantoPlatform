@@ -838,6 +838,10 @@ def api_update_event(event_id: int) -> Any:
         update_event_core,
     )
 
+    # Por injeção, não import: `event_ops` não pode depender de `app.financeiro` (a régua de 9
+    # ramos da comissão é do outro domínio). Mesmo contrato do endpoint estreito `/comercial`.
+    from app.financeiro.routes import _sync_commission_payment
+
     try:
         warnings = update_event_core(
             event,
@@ -845,6 +849,7 @@ def api_update_event(event_id: int) -> Any:
             is_superadmin=_is_superadmin(),
             actor_name=current_user.name,
             tz=_TZ_SP,
+            sincronizar_comissao=_sync_commission_payment,
         )
     except EventCoreUpdateBlocked as exc:
         return json_error(exc.message, 409)

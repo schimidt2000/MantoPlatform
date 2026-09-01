@@ -268,7 +268,7 @@ def _clear_event_side_tables(event_id: int) -> None:
     evento a que estava preso deixe de existir. Antes ele não era tratado de forma nenhuma, e
     excluir um evento com gasto vinculado estourava violação de chave estrangeira (feature 224).
     """
-    from app.models import EventSubRating
+    from app.models import EventSubRating, FormResponse
 
     EventLog.query.filter_by(event_id=event_id).delete()
     EventContract.query.filter_by(event_id=event_id).delete()
@@ -285,6 +285,19 @@ def _clear_event_side_tables(event_id: int) -> None:
     ClientFeedback.query.filter_by(event_id=event_id).delete()
     EventReimbursement.query.filter_by(event_id=event_id).delete()
     SpecialExpense.query.filter_by(event_id=event_id).update({"event_id": None})
+    # A resposta de formulário é DESVINCULADA, nunca apagada: o pré-contrato é o registro da
+    # festa da cliente e é a fonte do histórico anterior a 2026 (`list_client_form_history`) —
+    # apagar junto destruiria dado que não existe em outro lugar. Limpar `event_link_source` é
+    # o ponto: sem isso a resposta volta para a fila "sem evento" dizendo `auto_date` sobre um
+    # evento que não existe mais.
+    #
+    # `event_link_locked` NÃO é tocado de propósito: quem estava travado por decisão humana
+    # continua travado, e quem veio de vínculo automático volta destravado para a fila — que é
+    # o certo quando o evento é recriado no mesmo dia (o caso do sync que apaga e o Google
+    # devolve com id novo).
+    FormResponse.query.filter_by(event_id=event_id).update(
+        {"event_id": None, "event_link_source": None, "event_link_ambiguous": False}
+    )
 
 
 def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> str | None:
@@ -1745,12 +1758,12 @@ def event_detail(event_id: int):
         ),
         Decimal("0"),
     )
-    _commission_base = Decimal(kpi_event.sale_value or 0) - event_bv_total
-    if _commission_base < 0:
-        _commission_base = Decimal("0")
-    event_commission = (
-        _commission_base * event_rate / Decimal("100")
-    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    # Feature 267: mesma fonte que a tela React (`_compute_kpi`). Enquanto eram duas cópias com
+    # 2% flat, o MESMO evento exibia números diferentes conforme a tela — e nenhum dos dois era
+    # o que o Financeiro pagava.
+    from app.financeiro.comissoes_ops import comissao_exibida_do_evento
+
+    event_commission, _event_commission_source = comissao_exibida_do_evento(kpi_event, settings)
     sellers = User.query.join(User.roles).filter(Role.name == RoleName.COMERCIAL).order_by(User.name.asc()).all()
 
     show_comercial = has_role(RoleName.COMERCIAL) or has_role(RoleName.FINANCEIRO) or has_role(RoleName.SUPERADMIN)

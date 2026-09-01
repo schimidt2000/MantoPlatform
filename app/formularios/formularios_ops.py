@@ -258,11 +258,50 @@ def dissociate_client(response: FormResponse) -> None:
     db.session.commit()
 
 
+def apply_event_link(
+    response: FormResponse, event: CalendarEvent, *, source: str = "manual"
+) -> None:
+    """Grava o vínculo resposta→evento, **sem commit** (feature 267).
+
+    Núcleo único dos quatro pontos que escreviam esse vínculo à mão. Até a 267, o caminho da
+    agenda gravava só o `event_id` — sem `event_link_locked`, então o reprocessamento do próximo
+    ciclo de sync (a cada 10 min) religava a resposta e desfazia a decisão humana em silêncio;
+    e sem `ensure_event_client`, então o evento não aparecia na ficha da cliente.
+
+    Sem commit de propósito: quem chama pode estar dentro de um laço ou de uma transação maior
+    (um `*_ops` que commita dentro de laço quebra a transação única do request).
+
+    Args:
+        response: a resposta a vincular.
+        event: o evento de destino (objeto, não id — `ensure_event_client` precisa dele).
+        source: origem do vínculo, ``"manual"`` por padrão.
+    """
+    response.event_id = event.id
+    response.event_link_source = source
+    response.event_link_ambiguous = False
+    response.event_link_locked = True
+    ensure_event_client(event, response.client_id)
+
+
+def clear_event_link(response: FormResponse) -> None:
+    """Desfaz o vínculo de evento, **sem commit** (feature 267).
+
+    Marca `event_link_locked`: uma vez que um humano decide desfazer, a automação não pode
+    religar sozinha ao mesmo evento no próximo ciclo de sincronização.
+    """
+    response.event_id = None
+    response.event_link_source = None
+    response.event_link_ambiguous = False
+    response.event_link_locked = True
+
+
 def link_event(response: FormResponse, event_id: int) -> CalendarEvent:
     """Associa manualmente a resposta a um evento existente da agenda (feature 126).
 
-    Marca `event_link_locked` — a partir daqui, a automação nunca mais tenta decidir
-    sozinha por essa resposta (respeita a decisão humana).
+    ⚠️ Este wrapper **sobrescreve** um vínculo existente. O caminho da agenda
+    (`event_ops.set_event_form_response`) faz o contrário: **recusa** com 409 uma resposta já
+    presa a outro evento. Por isso os dois compartilham o NÚCLEO (`apply_event_link`) e não o
+    wrapper — delegar aqui mudaria o contrato da API.
 
     Raises:
         FormValidationError: evento não encontrado.
@@ -270,25 +309,14 @@ def link_event(response: FormResponse, event_id: int) -> CalendarEvent:
     event = CalendarEvent.query.get(event_id)
     if not event:
         raise FormValidationError("event_id", "Evento não encontrado.")
-    response.event_id = event.id
-    response.event_link_source = "manual"
-    response.event_link_ambiguous = False
-    response.event_link_locked = True
-    ensure_event_client(event, response.client_id)
+    apply_event_link(response, event)
     db.session.commit()
     return event
 
 
 def unlink_event(response: FormResponse) -> None:
-    """Desfaz o vínculo de evento — automático ou manual (feature 126, FR-008).
-
-    Também marca `event_link_locked`: uma vez que um humano decide desfazer, a automação
-    não pode religar sozinha ao mesmo evento no próximo ciclo de sincronização.
-    """
-    response.event_id = None
-    response.event_link_source = None
-    response.event_link_ambiguous = False
-    response.event_link_locked = True
+    """Desfaz o vínculo de evento — automático ou manual (feature 126, FR-008)."""
+    clear_event_link(response)
     db.session.commit()
 
 

@@ -21,9 +21,7 @@ from werkzeug.utils import secure_filename
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
-from app.storage import ALLOWED_DOCUMENT_EXTENSIONS, is_allowed_extension
 from app.models import (
-    CommissionPayment,
     EventAcrescimo,
     EventRole,
     RecurringExpenseEntry,
@@ -32,6 +30,7 @@ from app.models import (
     SpecialExpense,
     db,
 )
+from app.storage import ALLOWED_DOCUMENT_EXTENSIONS, is_allowed_extension
 
 _VALID_PAYMENT_STATUS = {"nao_pago", "pago", "no_banco"}
 
@@ -79,15 +78,9 @@ def api_set_payment_status() -> Any:
         p_start = date(py, pm, 1)
         p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
         target = status if status in ("pago", "no_banco") else "a_pagar"
-        rows = CommissionPayment.query.filter(
-            CommissionPayment.seller_id == seller_id,
-            CommissionPayment.sale_date >= p_start,
-            CommissionPayment.sale_date < p_end,
-            CommissionPayment.status.in_(["a_pagar", "no_banco", "pago"]),
-        ).all()
-        for c in rows:
-            c.status = target
-            c.paid_at = date.today() if target == "pago" else None
+        from app.financeiro.comissoes_ops import liquidar_periodo
+
+        rows = liquidar_periodo(seller_id, p_start, p_end, target)
         audit(
             "payment",
             "commission",
@@ -208,15 +201,9 @@ def _bulk_set_commission_period(commission_id: str, action: str) -> bool:
     p_start = date(py, pm, 1)
     p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
     target = action if action in ("pago", "no_banco") else "a_pagar"
-    rows = CommissionPayment.query.filter(
-        CommissionPayment.seller_id == seller_id,
-        CommissionPayment.sale_date >= p_start,
-        CommissionPayment.sale_date < p_end,
-        CommissionPayment.status.in_(["a_pagar", "no_banco", "pago"]),
-    ).all()
-    for c in rows:
-        c.status = target
-        c.paid_at = date.today() if target == "pago" else None
+    from app.financeiro.comissoes_ops import liquidar_periodo
+
+    rows = liquidar_periodo(seller_id, p_start, p_end, target)
     from app.utils import audit
 
     audit(
