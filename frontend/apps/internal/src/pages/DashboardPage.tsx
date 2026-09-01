@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { apiFetch } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, MetricBadge, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL } from "@manto/money";
+import { PORTAL_PUBLICO } from "../lib/eventDetail";
 import { useCurrentUser } from "../lib/useAuth";
 import type {
   DashboardSummary,
@@ -85,15 +86,15 @@ function TaskRow({ task, badge }: { task: DashboardTaskRef; badge?: ReactNode })
  * e aí o caminho é abrir o evento. Também diz quantos lembretes automáticos já saíram, para
  * ninguém cobrar de novo quem o robô acabou de cobrar.
  */
-function UnconfirmedRow({ item, portalUrl }: { item: UnconfirmedInviteRef; portalUrl: string | null }) {
+function UnconfirmedRow({ item }: { item: UnconfirmedInviteRef }) {
   const urgency = getUrgency(item.start_at);
   const nuncaEnviado = item.invite_status !== "pending";
-  // Barra final é o mesmo padrão que os e-mails automáticos já usam (`f"{portal_url}/"`); se a
-  // env var não estiver setada, `portalUrl` vem `null` e o link é omitido em vez de quebrado.
-  const linkPortal = portalUrl ? ` ${portalUrl}/` : "";
+  // Endereço FIXO do portal (feature 269), não o `portal_url` da API: esta mensagem é copiada e
+  // enviada por WhatsApp a um talento de fora. Vindo da env, quem rodasse o ambiente local
+  // mandava `http://localhost:5000/` para uma pessoa real, e sem a env a mensagem saía sem link.
   const zap = item.whatsapp
     ? `https://wa.me/${item.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(
-        `Oi, ${item.talent_name}! Falta você confirmar no portal a sua presença em "${item.event_title}". Consegue responder por lá?${linkPortal}`,
+        `Oi, ${item.talent_name}! Falta você confirmar no portal a sua presença em "${item.event_title}". Consegue responder por lá? ${PORTAL_PUBLICO}`,
       )}`
     : null;
 
@@ -813,7 +814,6 @@ export function DashboardPage() {
                           <UnconfirmedRow
                             key={item.role_id ?? `${item.event_id}-${item.talent_id}`}
                             item={item}
-                            portalUrl={data.portal_url}
                           />
                         ))}
                       </ListaTruncada>
