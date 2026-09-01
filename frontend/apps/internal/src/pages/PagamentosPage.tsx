@@ -240,7 +240,7 @@ export function PagamentosPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const query = usePagamentos(month);
-  const bulkAction = useBulkPaymentAction(month);
+  const bulkAction = useBulkPaymentAction();
   const exportCsv = useExportPagamentosCsv();
 
   const data = query.data;
@@ -697,7 +697,6 @@ export function PagamentosPage() {
         <SalaryAdvancesDialog
           key={advanceItem.id}
           item={advanceItem}
-          month={month}
           open={advanceOpen}
           onClose={() => setAdvanceOpen(false)}
         />

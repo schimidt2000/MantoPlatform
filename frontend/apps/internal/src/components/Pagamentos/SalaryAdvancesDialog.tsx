@@ -42,7 +42,6 @@ interface SalaryAdvancesDialogProps {
    * instantâneo, o diálogo continuaria mostrando o total antigo depois de gravar.
    */
   item: PagamentoItem;
-  month: string;
   open: boolean;
   onClose: () => void;
 }
@@ -55,9 +54,9 @@ interface SalaryAdvancesDialogProps {
  * ele nascia com 28px de largura. Aqui o diálogo repete o que a versão Jinja tinha
  * (`#adv-modal`): bruto, lista do que já foi adiantado, líquido a pagar e o formulário.
  */
-export function SalaryAdvancesDialog({ item, month, open, onClose }: SalaryAdvancesDialogProps) {
-  const addAdvance = useAddSalaryAdvance(month);
-  const deleteAdvance = useDeleteSalaryAdvance(month);
+export function SalaryAdvancesDialog({ item, open, onClose }: SalaryAdvancesDialogProps) {
+  const addAdvance = useAddSalaryAdvance();
+  const deleteAdvance = useDeleteSalaryAdvance();
 
   const [amount, setAmount] = useState(0);
   const [advanceDate, setAdvanceDate] = useState(todayIso());

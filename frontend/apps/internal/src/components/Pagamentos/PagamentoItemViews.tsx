@@ -25,7 +25,6 @@ import {
 interface PagamentoViewProps {
   item: PagamentoItem;
   statusLabels: Record<string, string>;
-  month: string;
   selected: boolean;
   selectable: boolean;
   onToggleSelect: (item: PagamentoItem) => void;
@@ -64,16 +63,14 @@ function TypeBadge({ item }: { item: PagamentoItem }) {
 /** Seletor de situação — a mesma mutation e as mesmas cores na tabela e no cartão. */
 function StatusSelect({
   item,
-  month,
   statusLabels,
   className,
 }: {
   item: PagamentoItem;
-  month: string;
   statusLabels: Record<string, string>;
   className?: string;
 }) {
-  const setStatus = useSetPaymentStatus(month);
+  const setStatus = useSetPaymentStatus();
   const tone = BUCKET_TONE[bucketOf(item)];
   const descricao = descricaoDe(item);
 
@@ -151,7 +148,6 @@ function AdvancesButton({
 export function PagamentoRow({
   item,
   statusLabels,
-  month,
   selected,
   selectable,
   onToggleSelect,
@@ -241,7 +237,7 @@ export function PagamentoRow({
             ⏳ Futuro
           </span>
         )}
-        <StatusSelect item={item} month={month} statusLabels={statusLabels} />
+        <StatusSelect item={item} statusLabels={statusLabels} />
       </td>
     </tr>
   );
@@ -251,7 +247,6 @@ export function PagamentoRow({
 export function PagamentoCard({
   item,
   statusLabels,
-  month,
   selected,
   selectable,
   onToggleSelect,
@@ -327,7 +322,6 @@ export function PagamentoCard({
         </div>
         <StatusSelect
           item={item}
-          month={month}
           statusLabels={statusLabels}
           className="h-11 px-2 text-sm"
         />

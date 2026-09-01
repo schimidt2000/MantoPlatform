@@ -83,10 +83,17 @@ function KpiGrid({ data }: { data: EventoDetalhe }) {
           hint={gastos.length ? `${gastos.length} aprovado(s)` : undefined}
           tone="neutral"
         />
+        {/* O percentual só descreve o número quando ele é estimativa. Vindo da linha real, a
+            conta pode não ser "% sobre a venda" (EducaManto incide sobre o lucro) — estampar
+            "Comissão (2,5%)" ali seria uma conta que não fecha. */}
         <KpiCard
-          label={`Comissão (${kpi.rate}%)`}
+          label={kpi.commission_source === "linha" ? "Comissão" : `Comissão (${kpi.rate}%)`}
           value={brl(kpi.commission)}
-          hint={kpi.seller ?? undefined}
+          hint={
+            kpi.commission_source === "linha"
+              ? (kpi.seller ?? undefined)
+              : [kpi.seller, "estimativa — ainda sem lançamento"].filter(Boolean).join(" · ")
+          }
           tone="neutral"
         />
         <KpiCard

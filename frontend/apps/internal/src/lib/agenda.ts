@@ -420,6 +420,13 @@ export interface EventoDetalhe {
     commission: number | null;
     lucro: number | null;
     rate: number;
+    /**
+     * De onde veio `commission` (feature 267): `"linha"` = a comissão provisionada que o
+     * Financeiro vai pagar; `"estimativa"` = ainda não há linha, o valor foi calculado pela
+     * regra canônica. `rate` só descreve o número no caso `estimativa` — vindo da linha real
+     * ele não é derivável de um percentual único (EducaManto incide sobre o lucro).
+     */
+    commission_source: "linha" | "estimativa";
     group_size: number;
     seller: string | null;
   };
