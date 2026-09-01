@@ -751,20 +751,27 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
   prazo e observações.
 - **API**: `POST|PATCH|DELETE /api/events/<id>/3d-gifts[/<gift_id>]` · `GET /api/3d/acervo?ativos=1`.
 
-#### `/3d/tags` — Tags NFC *(feature 255; vídeo na 261)*
+#### `/3d/tags` — Tags NFC *(feature 255; vídeo na 261; revisão de vídeos na 265)*
 - **Acesso**: `ARTISTA_3D`, `SUPERADMIN` (mesmo gate da seção 3D).
 - **Objetivo**: a ponte entre a tag NFC física (embutida na luminária entregue) e o sistema.
   Fluxo real da equipe: gerar lote → gravar as tagzinhas → **anotar o Nº em cada uma** → na
-  alocação, "nº X → evento/cliente Y" pelo vínculo de evento.
+  alocação, "nº X → evento/cliente Y" pelo vínculo de evento. Desde a 265, também o posto de
+  **revisão dos vídeos**: o Artista 3D acompanha o que tem vídeo ou não e assiste por dentro,
+  **sem contar acesso** (revisar pelo link público inflava a métrica das clientes).
 - **UX**:
-  - **Formulário de lote no topo**: `Combobox` das peças habilitadas (só `nfc_prefix` não-nulo e
-    ativas) + quantidade → "Gerar tags" com loading e confirmação textual ("N tags geradas —
-    anote o Nº em cada tagzinha ao gravar").
+  - **Duas abas** *(feature 265)*: **"Tags"** (gestão — tudo abaixo) e **"Vídeos"** (revisão).
+    A aba mora na URL (`?aba=videos`, padrão de `/figurinos/producao?tipo=`): link
+    compartilhável, F5 mantém, troca com `replace` (Voltar não acumula paradas). Título do
+    `PageHeader` fixo — a página é uma só, as abas é que recortam.
+  - **Formulário de lote no topo** (aba Tags): `Combobox` das peças habilitadas (só `nfc_prefix`
+    não-nulo e ativas) + quantidade → "Gerar tags" com loading e confirmação textual ("N tags
+    geradas — anote o Nº em cada tagzinha ao gravar").
   - **Tabela** (uma linha por tag física): **Nº em destaque** (`font-display`, é o rótulo que
     grita mais que o código, de propósito), código + **copiar link** (`CopyButton`, copia
     `<origin>/nfc/<code>` — é o que se grava na tag), produto com miniatura quadrada, evento
-    (título+data, ou "— estoque"), **cliente** (contratante do evento), acessos (tooltip com o
-    último), badge Ativa/Inativa e ações.
+    (título+data, ou "— estoque"), **cliente** (contratante do evento), **coluna "Vídeo"**
+    *(265)* — badge azul "com vídeo" **clicável** (abre o diálogo de vídeo, com player) ou
+    badge neutra "sem vídeo" —, acessos (tooltip com o último), badge Ativa/Inativa e ações.
   - **Vincular (evento OU cliente direta)**: `Dialog` com dois `Combobox` **assíncronos** —
     evento pela busca da agenda (`useAgendaSearch`) e **cliente direta** pela busca de clientes
     (`useClientSearch`), para o caso de campanha/brinde **sem show** (a pessoa é cadastrada no
@@ -774,19 +781,44 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
   - **Desativar/Reativar** com loading por linha. **Não existe ação de excluir a TAG em lugar
     nenhum** — nota fixa no rodapé explica: código gravado numa peça entregue é eterno;
     desativar faz a página pública mostrar o conteúdo padrão.
-  - **Vídeo** *(feature 261)* — ação por linha, abre `Dialog` dedicado ("Um vídeo especial para
-    você"): **sem vídeo** → input de arquivo oculto (`accept=".mp4,.mov,.webm,.m4v"`, disparado
-    por um botão "Enviar vídeo" que abre o seletor nativo — mesmo padrão de
-    `FilaProducaoMidiaPage`, feature 205) + campo "Título" opcional; escolher o arquivo já
-    dispara o envio, com `loading` no botão. **Com vídeo** → nome do arquivo + data do envio, e
-    os botões **Substituir** (reabre o seletor; o novo upload apaga arquivo e linha do vídeo
-    anterior — 1 vídeo ativo por tag) e **Remover** (`window.confirm` antes de excluir; some da
-    página pública imediatamente). O diálogo lê a tag da **lista viva** (`tags.find`, não uma
-    cópia local) — assim que o upload/remoção invalida a query, ele mostra o novo estado sem
-    fechar e reabrir. Erro de upload (formato fora da allowlist, acima de 250 MB) aparece inline
-    no diálogo.
+  - **Vídeo** *(feature 261; player e ConfirmDialog na 265)* — ação por linha (ou badge da
+    coluna Vídeo), abre `Dialog` dedicado ("Um vídeo especial para você"): **sem vídeo** →
+    input de arquivo oculto (`accept=".mp4,.mov,.webm,.m4v"`, disparado por um botão "Enviar
+    vídeo" que abre o seletor nativo — mesmo padrão de `FilaProducaoMidiaPage`, feature 205) +
+    campo "Título" opcional; escolher o arquivo já dispara o envio, com `loading` no botão.
+    **Com vídeo** → **player embutido** (`<video controls playsInline preload="metadata">`,
+    `key={delivery.id}` para remontar no Substituir; `src` pelo **espelho admin**, nunca a URL
+    pública), nome do arquivo + data do envio, e os botões **Substituir** (reabre o seletor; o
+    novo upload apaga arquivo e linha do vídeo anterior — 1 vídeo ativo por tag) e **Remover**
+    (**`ConfirmDialog`** irmão do diálogo, com pending e erro dentro dele — o `window.confirm`
+    da 261 violava o Princípio V e foi trocado na 265; some da página pública imediatamente).
+    O diálogo lê a tag da **lista viva** (`tags.find`, não uma cópia local) — assim que o
+    upload/remoção invalida a query, ele mostra o novo estado sem fechar e reabrir (depois de
+    Remover, o mesmo diálogo já oferece "Enviar vídeo"). Erro de upload (formato fora da
+    allowlist, acima de 250 MB) aparece inline no diálogo.
+  - **Aba "Vídeos"** *(feature 265)* — o painel de revisão, componentes em
+    `apps/internal/src/components/nfc/` (`NfcVideosPanel` + `NfcVideoCard`):
+    - **KPIs** (`DenseCard`): Tags ativas · Com vídeo · Sem vídeo · Nunca acessadas — calculados
+      no cliente sobre a lista já carregada (com/sem vídeo contam só tags ativas); a busca não
+      mexe nos KPIs.
+    - **Busca** por código, nº, produto, evento ou cliente (filtra cards e lista sem vídeo).
+    - **Cards com player**, agrupados por **evento (data desc) → "Clientes diretas (sem show)"
+      → "Estoque"** (espelha a precedência da tabela). Cada card: vídeo
+      (`preload="metadata"` — obrigatório num grid com N players), título (fallback "Sem
+      título — a página usa a copy padrão"), nº + código + `CopyButton` da URL pública,
+      produto, cliente, data do envio, badge "Inativa" quando for o caso (tag desativada com
+      vídeo continua auditável por dentro — lá fora ela dá 404), e ações "Gerenciar vídeo"
+      (abre o diálogo) e **"Ver na tabela"** (troca para a aba Tags, `scrollIntoView` +
+      highlight `bg-gold-soft` de ~2s na linha — efêmero, não vai para a URL).
+    - **Seção "Sem vídeo"**: tabela compacta das tags **ativas** ainda sem vídeo (a fila de
+      trabalho do revisor), cada linha com "Enviar vídeo" (abre o diálogo direto no estado de
+      upload) e "Ver na tabela". Vazio: "Todas as tags ativas têm vídeo."
+    - Mobile: KPIs em faixa, grid de cards em 1 coluna, sem rolagem horizontal.
 - **API**: `GET /api/3d/nfc` · `POST /api/3d/nfc/lote` · `PATCH /api/3d/nfc/<id>` ·
-  `POST /api/3d/nfc/<id>/entregas` (multipart) · `DELETE /api/3d/nfc/<id>/entregas/<delivery_id>`.
+  `POST /api/3d/nfc/<id>/entregas` (multipart) · `DELETE /api/3d/nfc/<id>/entregas/<delivery_id>` ·
+  `GET /api/3d/nfc/<id>/entregas/<delivery_id>/media` *(265 — espelho admin da mídia: mesmo
+  gate, serve inclusive tag desativada e **nunca incrementa `access_count`**; é o `src` de todos
+  os players do ERP)*.
 - **Acervo (`/3d/acervo`)**: o formulário da peça ganhou o campo opcional **"Prefixo NFC"** com
   hint do formato do código — preenchido, presentes da peça geram tags automaticamente.
 

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@manto/api-client";
+import { apiFetch, assetUrl } from "@manto/api-client";
 
 /**
  * Tags NFC das peças 3D (feature 255) — tipos e hooks TanStack Query.
@@ -60,6 +60,16 @@ export interface NfcTagListResponse {
 }
 
 const NFC_KEY = ["nfc-tags"] as const;
+
+/**
+ * URL do vídeo para o player do ERP (feature 265) — NÃO usa a rota pública de propósito:
+ * o espelho admin não conta acesso (revisar não pode inflar a métrica das clientes) e serve
+ * inclusive tag desativada, que na rota pública devolve 404.
+ */
+export function adminNfcVideoUrl(tagId: number, deliveryId: number): string {
+  // `assetUrl` só devolve `undefined` para path vazio — impossível aqui; o `?? ""` é só o tipo.
+  return assetUrl(`/api/3d/nfc/${tagId}/entregas/${deliveryId}/media`) ?? "";
+}
 
 /** Todas as tags, ordenadas por produto + nº sequencial. */
 export function useNfcTags() {

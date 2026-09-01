@@ -9,6 +9,9 @@ Dois mundos no mesmo arquivo, de propósito separados pelo gate:
   desativada e entrega inexistente/inativa — nada aqui pode confirmar existência.
 - `GET /api/3d/nfc` é a lista de gestão do ERP. Gate: `ARTISTA_3D` ou `SUPERADMIN`
   (reusa `require_3d_access` da feature 200).
+- `GET /api/3d/nfc/<tag_id>/entregas/<id>/media` (feature 265) é o espelho ADMIN da mídia:
+  mesmo gate da lista, serve inclusive tag desativada e NUNCA toca `access_count` — é como a
+  equipe revisa um vídeo sem inflar a métrica de acessos das clientes.
 """
 
 import os
@@ -23,7 +26,7 @@ from app.api.impressoes3d_read import require_3d_access
 from app.api_utils import api_login_required, json_error
 from app.constants import MANTO_INSTAGRAM_URL
 from app.impressoes3d import nfc_ops
-from app.models import NfcTag
+from app.models import NfcTag, NfcTagDelivery
 
 
 @api_bp.route("/nfc/<code>")
@@ -71,6 +74,38 @@ def api_nfc_delivery_media(code: str, delivery_id: int) -> Any:
     # (id novo na URL), então cache velho não existe. O limite de taxa acima é folgado de
     # propósito: um player pede muitos `Range` ao arrastar a barra — 120/min nunca alcança gente
     # de verdade, só script martelando.
+    return send_file(
+        caminho,
+        mimetype=nfc_ops.delivery_mime_type(delivery),
+        conditional=True,
+        max_age=86400,
+    )
+
+
+@api_bp.route("/3d/nfc/<int:tag_id>/entregas/<int:delivery_id>/media")
+@api_login_required
+def api_3d_nfc_delivery_media(tag_id: int, delivery_id: int) -> Any:
+    """Serve o arquivo de uma entrega para REVISÃO no ERP — nunca toca `access_count` (265).
+
+    Existe porque revisar pelo link público (`/nfc/<code>`) incrementava a métrica de acesso
+    das clientes (o contador mora em `resolve_code`, que a página pública sempre chama).
+    Diferenças do endpoint público: gate ARTISTA_3D/SUPERADMIN, busca por `tag_id` (não por
+    código) e serve MESMO com a tag desativada — tag inativa com vídeo continua auditável por
+    dentro. `max_age`/`conditional` pelo mesmo motivo do público: substituir o vídeo cria uma
+    entrega nova (URL nova), então cache velho não existe, e `Range` deixa arrastar a barra.
+    """
+    denied = require_3d_access()
+    if denied:
+        return denied
+
+    delivery = NfcTagDelivery.query.filter_by(id=delivery_id, tag_id=tag_id).first()
+    if delivery is None:
+        return json_error("Entrega não encontrada", 404)
+
+    caminho = nfc_ops.delivery_media_path(delivery)
+    if not caminho or not os.path.exists(caminho):
+        return json_error("Arquivo não encontrado", 404)
+
     return send_file(
         caminho,
         mimetype=nfc_ops.delivery_mime_type(delivery),

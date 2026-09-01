@@ -947,7 +947,7 @@ no máximo 5 itens, descartando predições sem `description`.
   `serialize_acervo_item` devolve `nfc_prefix`. Criar/editar presente 3D dispara a geração
   automática de tags (ver §2.2.1) — sem mudança de contrato nos endpoints de presente.
 
-### 3.13.2b Tags NFC — `nfc_read.py` / `nfc_write.py` (feature 255; entregas na 261)
+### 3.13.2b Tags NFC — `nfc_read.py` / `nfc_write.py` (feature 255; entregas na 261; espelho admin da mídia na 265)
 
 | Método | Rota | O que faz |
 |---|---|---|
@@ -958,8 +958,9 @@ no máximo 5 itens, descartando predições sem `description`.
 | `PATCH` | `/api/3d/nfc/<id>` | Edita **só** os mutáveis: `event_id` e `client_id` (`null` desassocia; sentinela = não alterar; independentes entre si), `is_active`, `notes`. `code` e `sequence` são imutáveis por contrato. |
 | `POST` | `/api/3d/nfc/<tag_id>/entregas` | **Feature 261.** Multipart `file` + `kind` (só `"video"` por ora) + `title` opcional. Substitui a entrega ativa do mesmo `kind`, se houver (apaga arquivo + linha antigos). 400 com `fields` se faltar arquivo, extensão fora da allowlist ou acima de 250 MB. Devolve `{tag: ...}` (mesmo shape de `GET /api/3d/nfc`). |
 | `DELETE` | `/api/3d/nfc/<tag_id>/entregas/<id>` | **Feature 261.** Remove a entrega (linha + arquivo do disco). Sem confirmação no servidor — a UI confirma antes de chamar. |
+| `GET` | `/api/3d/nfc/<tag_id>/entregas/<id>/media` | **Feature 265 — espelho ADMIN da mídia.** Mesmo `send_file(conditional=True, max_age=86400)` do público, mas: gate `ARTISTA_3D`/`SUPERADMIN`, busca por `tag_id` (não por código), serve **inclusive tag desativada** (auditável por dentro) e **NUNCA incrementa `access_count`** — o incremento mora só em `resolve_code`, que este endpoint não chama. É o `src` de todos os players do ERP (`adminNfcVideoUrl` em `apps/internal/src/lib/nfc.ts`); revisar pela URL pública inflava a métrica das clientes. 404 genérico para entrega inexistente/de outra tag. Sem `audit()` (leitura) e sem limiter próprio (autenticado). |
 
-- **RBAC**: os `/api/3d/nfc*` (tag e entregas) exigem `ARTISTA_3D` ou `SUPERADMIN`
+- **RBAC**: os `/api/3d/nfc*` (tag, entregas e mídia admin) exigem `ARTISTA_3D` ou `SUPERADMIN`
   (`require_3d_access`, reuso da feature 200). **Não existe DELETE de tag** — tag física
   entregue é eterna; entregas (vídeo/foto/link) SÃO removíveis — são conteúdo anexado, não a tag.
 - **Onde o vídeo mora**: `Config.NFC_MEDIA_FOLDER` (padrão `instance/nfc_media`), irmã de
