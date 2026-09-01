@@ -1223,7 +1223,11 @@ class RecurringExpenseEntry(db.Model):
     """
     __tablename__ = "recurring_expense_entries"
     __table_args__ = (
-        db.UniqueConstraint("recurring_id", "month_ref", name="uq_recurring_entry_month"),
+        # Sem UNIQUE (recurring_id, month_ref) de propósito: a migration d5e6f7a8b9c0 (feature 121,
+        # pagamento programado) derrubou `uq_recurring_entry_month` para permitir 2 lançamentos por
+        # conta/mês. Declarar a restrição aqui (como ficou até a 271) faria um `flask db migrate`
+        # recriá-la — e o `flask db upgrade` do startCommand falharia em produção nas contas que
+        # já têm dois. A corrida da geração é tratada por advisory lock em `gastos_ops`.
         db.Index("ix_recurring_entries_month_ref", "month_ref"),
         db.Index("ix_recurring_entries_status", "status"),
     )

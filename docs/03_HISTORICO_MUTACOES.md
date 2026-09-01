@@ -4,9 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-01** · Estado do repositório: pós-features
-> **267-integridade-comissao**, **268-imagens-catalogo** e **269-link-portal-fixo** (as três sem
-> migration, subiram no mesmo deploy de 01/09) — antes delas
+> Última atualização: **2026-09-01** · Estado do repositório: pós-hotfix
+> **271-hotfix-corrida-lancamentos** (sem migration; a Home degrada por painel em vez de cair;
+> deploy de 01/09 ~15h40) — a **270-miniaturas-catalogo** tem só `spec.md` (não implementada) —
+> antes deles **267-integridade-comissao**, **268-imagens-catalogo** e **269-link-portal-fixo**
+> (as três sem migration, subiram no mesmo deploy de 01/09) — antes delas
 > **266-costuras-funil (EM PRODUÇÃO, migration `a1c7d3e59b02` — head)** e
 > **265-nfc-revisao-videos (EM PRODUÇÃO, sem migration)** — as duas subiram no **mesmo deploy** de
 > 31/08 (a 266 nasceu da `main` sem a 265, então cada uma teve seu merge; foram ao ar juntas para
@@ -56,6 +58,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **271-hotfix-corrida-lancamentos** | `GET /api/dashboard` deixa de cair inteiro quando um painel estoura: cada bloco (casting, figurino, ensaio, comercial, formulários, recorrentes) passa por `_bloco()` — exceção vira `rollback` + log com o nome do painel + `None` (o front já trata `None` como "sem painel", mesmo contrato do RBAC por ausência). Geração preguiçosa dos lançamentos recorrentes serializada por `pg_advisory_xact_lock` (não há UNIQUE desde a 121 — a corrida virava duplicata silenciosa); `_ensure_salary_payments` tolera `IntegrityError` da `UNIQUE(user_id, due_date)`. `models.py` deixa de declarar a `uq_recurring_entry_month` fantasma (um `flask db migrate` a recriaria e o startCommand cairia em produção) | 2026-09-01 | `—` | (aqui) | — |
 | **269-link-portal-fixo** | O endereço do Portal do Artista nas mensagens copiadas por humano deixa de vir do ambiente: a cobrança de confirmação da Home saía com `http://localhost:5000/` para quem rodava o ambiente local, e **sem link nenhum** quando `PORTAL_URL` não estava setada (no Render ela é `sync: false`, mora só no painel). `PORTAL_PUBLICO` passa a servir as duas mensagens (o convite do evento já tinha o endereço fixo). `PORTAL_URL` continua sendo a fonte dos e-mails do servidor, agora com default real (`PORTAL_BASE_URL`) | 2026-09-01 | `—` | (aqui) | — |
 | **268-imagens-catalogo** | Vitrine lenta: as 457 fotos do catálogo tinham mediana de 627 KB e picos de 4,3 MB (a recuperação da 264 gravou os bytes crus do WordPress sem passar por `save_file`) **e** eram servidas com `no-cache`, ~460 revalidações por visita. Cache longo nas duas rotas públicas de imagem (nome é UUID, então é seguro) e `flask compress-images` — que já existia com a mesma receita — passa a alcançar o catálogo, ganha dry-run padrão, backup e correção do `file_size_bytes` que estava mentindo | 2026-09-01 | `—` | (aqui) | — |
 | **267-integridade-comissao** | A comissão que bate e o vínculo que não se desfaz sozinho. `ciclo_de_pagamento_expr()`/`liquidar_periodo()` viram fonte única das **quatro** cópias que liquidavam por `sale_date` puro enquanto o item era montado por `coalesce(payable_from, sale_date)` — comissão EducaManto aparecia num mês e era liquidada por outro (docs/05 #1, P0). PATCH em bloco passa a sincronizar comissão por injeção, com `flush()` antes (#6, P1). O número exibido no evento passa a ser o que o Financeiro paga, lido da linha real com a regra canônica como reserva e guarda de evento cancelado (#5, P1), na mesma função que o gêmeo Jinja usa. Invalidação completa do cache financeiro (#2, P0). Núcleo único do vínculo evento↔resposta (`apply_event_link`/`clear_event_link`) e exclusão limpando o rastro. Deep-link do evento para `/financeiro/*` (as duas telas passaram a ler filtro da URL) | 2026-08-31 | `—` | (aqui) | — |
@@ -206,6 +209,74 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 271 — A Home degrada por painel em vez de cair inteira            (2026-09-01 · hotfix · sem migration)
+
+**Sintoma relatado.** "Não foi possível carregar o resumo. Tente novamente em instantes." logo
+após o login em `app.mantoproducoes.com.br` — no Firefox do João e no Chrome de outra usuária;
+no Safari, abriu. Reportado ~15h de 01/09.
+
+**O que a investigação descartou (não reproduzido: 60/60 chamadas OK, 0,13 s, payload de 91 KB).**
+DNS (`app` e `portal` são CNAME para `manto-frontend.onrender.com`; os cabeçalhos `cf-*` são do edge
+do próprio Render — o domínio **não** está no Cloudflare do cliente, cuja conta só tem `thebacon.dev`);
+service worker; bundle velho; `localStorage`; lentidão do backend. **Hipótese que ficou de pé:** a
+janela de 502 do deploy das 14:37 (o backend ficou ~40 s fora; a Home é a página de entrada; o
+TanStack tenta 3× em ~7 s e desiste). "No Safari funcionou" = abriu depois da janela. Confere-se nos
+Logs do backend no Render entre 14:37 e 14:40.
+
+**O que a hotfix muda, independentemente da causa daquele minuto.** `GET /api/dashboard` montava seis
+painéis em sequência sem nenhuma barreira: uma exceção em **qualquer** deles virava 500 genérico, a
+Home inteira sumia, e o log não dizia qual painel estourou. Agora cada painel passa por
+`_bloco(nome, montar)` (`app/api/dashboard_service.py`): exceção → `db.session.rollback()` →
+`logger.exception("[dashboard] painel '%s' falhou; Home segue sem ele")` → o bloco vai como `None`.
+O front já tratava `None` como "não renderizar" (é o contrato do **RBAC por ausência** da 144), então
+não houve mudança de tipo nem de tela — um painel quebrado simplesmente não aparece, e o resto da
+Home segue de pé.
+
+O `rollback()` antes de seguir **não é opcional**: sem ele a sessão do SQLAlchemy fica em
+`PendingRollbackError` e os painéis seguintes falham em cascata, transformando um defeito local no
+mesmo 500 de antes.
+
+**Corrida entre workers na geração preguiçosa.** `ensure_recurring_entries` (contas fixas) e
+`_ensure_salary_payments` (salários) rodam a cada Home e **criam** o lançamento do mês se não
+existir — com 36 slots no gunicorn, duas requisições podem decidir criar ao mesmo tempo; no dia 1º
+(o dia do relato), com o mês vazio, é o caso comum. Os dois lados eram diferentes, e isso só ficou
+claro olhando o banco:
+
+- **Salários** têm `UNIQUE(user_id, due_date)` de verdade → a corrida virava `IntegrityError` → 500
+  e sessão abortada. Ganhou `try/except IntegrityError: rollback + logger.info` (quem perde a corrida
+  segue com o registro que o vencedor criou).
+- **Contas fixas** **não têm** `UNIQUE(recurring_id, month_ref)` desde a **feature 121** (migration
+  `d5e6f7a8b9c0`, 09/07: o pagamento programado gera dois lançamentos por conta/mês de propósito —
+  a conta 17, quinzenal, tem linhas nos dias 5 e 20 de cada mês, e isso é correto). Sem restrição, a
+  corrida não estoura: **duplica em silêncio**. Um `except IntegrityError` ali seria código morto.
+  A correção é serializar a geração do mês com `pg_advisory_xact_lock(271, AAAAMM)`
+  (`_serializar_geracao_do_mes`): lock transacional, solto no commit/rollback — nunca fica preso na
+  conexão devolvida ao pool, ao contrário do `pg_advisory_lock` de sessão. Quem chega segundo espera
+  o primeiro commitar e então enxerga os lançamentos. Em SQLite de dev a função não faz nada.
+
+**Restrição fantasma.** `models.py` ainda **declarava** a `uq_recurring_entry_month` que a 121
+derrubou, e `docs/00 §6.10` e `docs/04` a citavam como exemplo de idempotência. O perigo não era
+teórico: um `flask db migrate` (autogenerate) compararia modelo × banco e **recriaria a UNIQUE** —
+e o `flask db upgrade` do startCommand falharia em produção nas contas que já têm dois lançamentos,
+derrubando o serviço no deploy (ver `docs/05`, startCommand). A declaração saiu do modelo, com o
+motivo em comentário; os dois documentos foram corrigidos.
+
+**Verificação.** `specs/271-hotfix-corrida-lancamentos/verify_271.py` — 5/5 contra `manto_local`.
+Cenário 1 força a corrida de verdade: uma transação segura o lock e insere um lançamento sem
+commitar; a geração concorrente tem de **esperar** (tempo medido) e depois não pode duplicar aquela
+conta — sem o lock, ela não enxerga a linha não commitada e duplica. Cenário 3 faz `monkeypatch` em
+`compute_casting_tasks` para levantar exceção e afirma que a Home responde 200 com `casting is None`
+e os demais painéis presentes — **falhava antes da correção** (500). Regressão: verify_266 9/9,
+verify_267 9/9.
+
+**Descartado.** (a) Retry mais agressivo no front — mascararia o defeito em vez de expor qual painel
+caiu. (b) Tirar os `ensure_*` do caminho da Home — muda comportamento financeiro (o lançamento do
+mês deixaria de nascer sozinho) e não cabe num hotfix. (c) Recriar a UNIQUE — contraria a 121 e
+quebraria o pagamento programado. (d) `pg_advisory_lock` de sessão — mais simples de escrever, mas
+um lock esquecido numa conexão do pool trava a geração para sempre até o worker reciclar.
+
+---
 
 ### 269 — O endereço do portal para de depender do ambiente            (2026-09-01 · sem migration)
 

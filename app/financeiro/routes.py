@@ -1,5 +1,6 @@
 import csv
 import io
+import logging
 from collections import defaultdict
 from datetime import datetime, date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -8,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 from flask import Blueprint, render_template, request, redirect, url_for, abort, make_response, jsonify, flash
 from flask_login import login_required, current_user
+from sqlalchemy.exc import IntegrityError
 
 from app import db, _safe_next
 # O motor de comissão mora em `comissoes_ops` — é de lá que a API do React importa. Os nomes
@@ -35,6 +37,8 @@ from app.storage import (
     ALLOWED_INVOICE_EXTENSIONS,
     is_allowed_extension,
 )
+
+logger = logging.getLogger(__name__)
 
 financeiro_bp = Blueprint("financeiro", __name__)
 
@@ -763,7 +767,14 @@ def _ensure_salary_payments(year: int, month: int) -> None:
                     month_ref=month_ref,
                 ))
 
-    db.session.commit()
+    # Mesma corrida do `ensure_recurring_entries` (feature 271): a leitura do que já existe e o
+    # commit não são atômicos, e a `UNIQUE(user_id, due_date)` transforma a disputa em erro.
+    # Perder a corrida significa que a linha já existe — não é falha.
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        logger.info("[financeiro] folha de %s já gerada por outra requisição", month_ref)
 
 
 def _build_payment_items(roles, salary_payments, today: date, expenses=None, now_dt=None) -> list:
