@@ -454,24 +454,40 @@ def _conta_due_date(conta: RecurringExpense, year: int, month: int) -> date:
     return _clamp_day(year, month, conta.due_day)
 
 
+def _serializar_geracao_do_mes(year: int, month: int) -> None:
+    """Advisory lock transacional (Postgres) para a geração dos lançamentos de um mês.
+
+    `pg_advisory_xact_lock(271, AAAAMM)` é solto sozinho no commit/rollback — nunca fica preso na
+    conexão devolvida ao pool, ao contrário do `pg_advisory_lock` de sessão. Em SQLite de dev não
+    há concorrência a tratar (um processo, uma conexão), então não faz nada.
+    """
+    if db.engine.dialect.name != "postgresql":
+        return
+    db.session.execute(
+        db.text("SELECT pg_advisory_xact_lock(:chave, :mes)"),
+        {"chave": 271, "mes": year * 100 + month},
+    )
+
+
 def ensure_recurring_entries(year: int, month: int) -> None:
-    """Cria os lançamentos 'registrado' do mês para os fixos ativos (idempotente).
+    """Cria os lançamentos 'registrado' do mês para os fixos ativos (idempotente). Faz commit.
 
-    Padrão de geração preguiçosa (mesmo dos salários): chamada pelas telas que consomem os
-    dados; a unique (recurring_id, month_ref) garante 1 lançamento por conta/mês. Faz commit.
+    Padrão de geração preguiçosa (mesmo dos salários): chamada pelas telas que consomem os dados.
+    **Não há UNIQUE (recurring_id, month_ref)** desde a feature 121 — o pagamento programado gera
+    dois lançamentos por conta/mês de propósito (ex.: quinzenal, dias 5 e 20). Então a
+    idempotência aqui é só a leitura de `existing_ids`, e leitura + escrita não são atômicas.
 
-    ⚠️ **A leitura e a escrita não são atômicas, e por isso o commit pode perder a corrida**
-    (feature 271). Entre montar `existing_ids` e commitar, outra requisição pode ter inserido a
-    mesma conta/mês — são 36 slots simultâneos no gunicorn (3 workers × 12 threads), e esta função
-    roda em TODA carga da Home de quem é FINANCEIRO/SUPERADMIN. No dia 1º de cada mês, quando
-    `month_ref` ainda está vazio, todo mundo tenta criar ao mesmo tempo.
-
-    Perder a corrida **não é erro**: significa que o lançamento que se queria criar já existe. Sem
-    o tratamento, a `IntegrityError` subia como 500 e — pior — deixava a sessão em transação
-    abortada, então a requisição seguinte na mesma thread também falhava. Era o que derrubava a
-    Home inteira com "Não foi possível carregar o resumo".
+    Corrida (feature 271): são 36 slots no gunicorn e esta função roda em TODA carga da Home de
+    quem é FINANCEIRO/SUPERADMIN; no dia 1º, com o `month_ref` vazio, duas requisições podem
+    decidir criar a mesma conta ao mesmo tempo — e, sem restrição no banco, a corrida vira
+    **duplicata silenciosa**, não erro. Por isso a geração do mês é serializada por
+    `_serializar_geracao_do_mes` (advisory lock transacional, solto no fim da transação): quem
+    chega segundo espera o primeiro commitar e então enxerga os lançamentos já criados. O
+    `except IntegrityError` fica como cinto para quando voltar a existir alguma restrição — é o
+    mesmo tratamento dos salários, que têm `UNIQUE(user_id, due_date)` de verdade.
     """
     ref = _month_ref(year, month)
+    _serializar_geracao_do_mes(year, month)
     fixed = RecurringExpense.query.filter(
         RecurringExpense.is_active.is_(True),
         RecurringExpense.expense_type.in_(["debito_automatico", "assinatura"]),

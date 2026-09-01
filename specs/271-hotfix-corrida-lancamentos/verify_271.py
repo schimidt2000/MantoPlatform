@@ -1,19 +1,24 @@
-"""Verificação do hotfix 271 — corrida na geração preguiçosa dos lançamentos do mês.
+"""Verificação do hotfix 271 — a Home degrada por painel, e a geração preguiçosa não corre.
 
-O defeito: `ensure_recurring_entries` lê o que já existe e só depois commita. Entre as duas coisas,
-outra requisição pode ter inserido a mesma conta/mês — são 36 slots simultâneos no gunicorn
-(3 workers × 12 threads) e a função roda em TODA carga da Home de quem é FINANCEIRO/SUPERADMIN.
-A `UNIQUE(recurring_id, month_ref)` transformava a disputa em `IntegrityError` → 500, e a sessão
-ficava em transação abortada. Era o "Não foi possível carregar o resumo" de 01/09/2026 — o dia 1º,
-quando o `month_ref` do mês novo ainda está vazio e todo mundo tenta criar ao mesmo tempo.
+Sintoma de 01/09/2026: "Não foi possível carregar o resumo" logo após o login. `GET /api/dashboard`
+montava seis painéis sem barreira nenhuma — uma exceção em qualquer um virava 500 e a Home inteira
+sumia. Agora cada painel passa por `_bloco()`: exceção → rollback + log com o nome → painel `None`.
+
+Corrida: `ensure_recurring_entries` lê o que já existe e só depois commita. Entre as duas coisas,
+outra requisição pode ter inserido a mesma conta/mês — são 36 slots simultâneos no gunicorn e a
+função roda em TODA carga da Home de quem é FINANCEIRO/SUPERADMIN; no dia 1º o mês está vazio e
+todo mundo tenta criar ao mesmo tempo. **Não há `UNIQUE(recurring_id, month_ref)` desde a 121**
+(pagamento programado gera 2 lançamentos/mês), então a corrida não estourava: duplicava em
+silêncio. A correção serializa a geração do mês com `pg_advisory_xact_lock(271, AAAAMM)`.
 
 Cenários:
- 1. Duas gerações CONCORRENTES do mesmo mês: nenhuma estoura, e o mês fica com exatamente um
-    lançamento por conta (a UNIQUE continua valendo — o que muda é quem trata a disputa).
+ 1. Corrida forçada: uma transação segura o lock e insere um lançamento SEM commitar; a geração
+    concorrente tem de esperar (tempo medido) e, depois, não duplicar aquela conta. Sem o lock ela
+    não enxerga a linha não commitada e duplica.
  2. Geração repetida em série continua idempotente (não duplica, não estoura).
- 3. Depois de perder a corrida, a sessão continua utilizável — é o que impedia o resto do request
-    de funcionar e derrubava a Home inteira.
- 4. `GET /api/dashboard` responde 200 mesmo quando a geração falha (a Home degrada, não cai).
+ 3. Painel quebrado (monkeypatch em `compute_casting_tasks`) não derruba a Home: 200, `casting`
+    vem `None`, os demais painéis vêm. Falhava antes da correção.
+ 4. `GET /api/dashboard` responde 200 no caminho normal.
  5. Limpeza.
 
 Rodar contra o manto_local (PowerShell)::
@@ -27,6 +32,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import time
 import traceback
 from collections.abc import Callable
 from decimal import Decimal
@@ -88,45 +94,94 @@ def _limpa_mes() -> None:
     db.session.commit()
 
 
+def _conta_alvo() -> RecurringExpense:
+    """Primeira conta fixa ativa que a geração criaria no mês de teste."""
+    fixas = RecurringExpense.query.filter(
+        RecurringExpense.is_active.is_(True),
+        RecurringExpense.expense_type.in_(["debito_automatico", "assinatura"]),
+        RecurringExpense.amount.isnot(None),
+    ).order_by(RecurringExpense.id).all()
+    for conta in fixas:
+        if conta.occurrences_in_month(ANO, MES) > 0:
+            return conta
+    raise AssertionError("manto_local sem conta fixa ativa para o cenário")
+
+
 def cen_01_corrida_simultanea() -> None:
-    """Duas threads gerando o MESMO mês ao mesmo tempo — é o dia 1º com dois usuários na Home."""
+    """Uma transação segura o lock com um lançamento não commitado; a geração tem de esperar."""
     from app.gastos.gastos_ops import ensure_recurring_entries
 
     _limpa_mes()
-    erros: list[BaseException] = []
-    barreira = threading.Barrier(2)
+    with app.app_context():
+        conta = _conta_alvo()
+        alvo_id, alvo_valor = conta.id, conta.amount
+        db.session.remove()
 
-    def gerar() -> None:
-        # Sessão própria por thread, como cada worker/thread do gunicorn tem a sua.
+    lock_tomado = threading.Event()
+    erros: list[BaseException] = []
+    SEGURA_POR = 1.5
+
+    def primeira_requisicao() -> None:
+        # Simula quem chegou antes: já passou pela leitura, já inseriu, ainda não commitou.
+        try:
+            with _engine_externo.connect() as conn, conn.begin():
+                conn.execute(text("SELECT pg_advisory_xact_lock(271, :m)"), {"m": ANO * 100 + MES})
+                conn.execute(
+                    text(
+                        "INSERT INTO recurring_expense_entries "
+                        "(recurring_id, month_ref, amount, due_date, status, created_at) "
+                        "VALUES (:r, :m, :a, :d, 'registrado', now())"
+                    ),
+                    {"r": alvo_id, "m": MONTH_REF, "a": alvo_valor, "d": f"{MONTH_REF}-05"},
+                )
+                lock_tomado.set()
+                time.sleep(SEGURA_POR)
+        except BaseException as exc:  # noqa: BLE001
+            erros.append(exc)
+            lock_tomado.set()
+
+    esperou: dict[str, float] = {}
+
+    def segunda_requisicao() -> None:
         with app.app_context():
             try:
-                barreira.wait(timeout=10)  # dispara as duas no mesmo instante
+                lock_tomado.wait(timeout=10)
+                t0 = time.perf_counter()
                 ensure_recurring_entries(ANO, MES)
+                esperou["s"] = time.perf_counter() - t0
             except BaseException as exc:  # noqa: BLE001 — o teste é justamente pegar o que subir
                 erros.append(exc)
             finally:
                 db.session.remove()
 
-    threads = [threading.Thread(target=gerar) for _ in range(2)]
+    threads = [threading.Thread(target=primeira_requisicao), threading.Thread(target=segunda_requisicao)]
     for t in threads:
         t.start()
     for t in threads:
         t.join(timeout=30)
 
     _garante(not erros, f"a corrida estourou: {erros[:1]}")
-
+    _garante(
+        esperou.get("s", 0) >= SEGURA_POR * 0.6,
+        f"a geração não esperou o lock (levou {esperou.get('s', 0):.2f}s; sem lock = duplicata)",
+    )
     linhas = _no_banco(
+        "SELECT count(*) AS n FROM recurring_expense_entries WHERE month_ref = :m AND recurring_id = :r",
+        m=MONTH_REF, r=alvo_id,
+    )
+    _garante(linhas[0][0] == 1, f"conta {alvo_id} ficou com {linhas[0][0]} lançamento(s) no mês")
+    duplicadas = _no_banco(
         "SELECT recurring_id, count(*) AS n FROM recurring_expense_entries "
         "WHERE month_ref = :m GROUP BY recurring_id HAVING count(*) > 1",
         m=MONTH_REF,
     )
-    _garante(not linhas, f"duplicou lançamento no mês: {linhas[:3]}")
+    _garante(not duplicadas, f"duplicou lançamento no mês: {duplicadas[:3]}")
     estado["gerados"] = len(
-        _no_banco(
-            "SELECT id FROM recurring_expense_entries WHERE month_ref = :m", m=MONTH_REF
-        )
+        _no_banco("SELECT id FROM recurring_expense_entries WHERE month_ref = :m", m=MONTH_REF)
     )
-    print(f"         ({estado['gerados']} lançamento(s) criado(s) no mês de teste)")
+    print(
+        f"         (esperou {esperou['s']:.2f}s pelo lock; {estado['gerados']} lançamento(s) no mês)"
+    )
 
 
 def cen_02_idempotente_em_serie() -> None:
@@ -230,7 +285,7 @@ def main() -> int:
         try:
             preparar()
             print("Hotfix 271 — corrida na geração dos lançamentos do mês")
-            cenario("1. duas gerações simultâneas não estouram nem duplicam", cen_01_corrida_simultanea)
+            cenario("1. geração concorrente espera o lock e não duplica", cen_01_corrida_simultanea)
             cenario("2. geração repetida continua idempotente", cen_02_idempotente_em_serie)
             cenario("3. painel quebrado nao derruba a Home", cen_03_painel_quebrado_nao_derruba_a_home)
             cenario("4. GET /api/dashboard responde 200", cen_04_dashboard_responde_200)

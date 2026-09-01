@@ -279,7 +279,7 @@ pendente (o re-export de `ensure_recurring_entries`).
   vinculado a evento (`link_expense_to_event`, `:325`) e então vira custo do evento.
 - **Contas recorrentes** (`RecurringExpense` + `RecurringExpenseEntry`): `debito_automatico` e
   `assinatura` geram lançamento `registrado` automaticamente (`ensure_recurring_entries`, `:445` —
-  geração preguiçosa idempotente, protegida por `UNIQUE(recurring_id, month_ref)`); `variavel` espera
+  geração preguiçosa idempotente, serializada por `pg_advisory_xact_lock` por mês — hotfix 271; a `UNIQUE(recurring_id, month_ref)` caiu na 121 porque o pagamento programado gera 2 lançamentos/mês); `variavel` espera
   alguém preencher o valor e vira alerta na home a partir do vencimento (`recurring_alerts`, `:482`).
 - Vencimento: dia do mês **clampado no último dia** (`_clamp_day`, `:417` — dia 31 num mês de 30 vira
   30) ou, para frequência semanal, a primeira ocorrência do dia da semana dentro do mês ∩ vigência

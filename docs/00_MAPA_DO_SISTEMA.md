@@ -181,8 +181,10 @@ As que quebram em silêncio. Leia esta seção inteira uma vez.
 9. **Cache do bundle.** `frontend/server.js` manda `no-cache` para HTML e `immutable` para
    `assets/*`. "Verifiquei em produção" ≠ "o usuário está com isso".
 10. **Idempotência é por restrição de banco, não por confiança no fluxo**: `UNIQUE(order_id, kind)`
-    para avisos, `UNIQUE(transaction_nsu)` para webhooks, `UNIQUE(recurring_id, month_ref)` para
-    lançamentos recorrentes. Siga o padrão.
+    para avisos, `UNIQUE(transaction_nsu)` para webhooks, `UNIQUE(user_id, due_date)` para
+    salários. Siga o padrão — e quando a regra de negócio impede a restrição (os lançamentos
+    recorrentes perderam a `UNIQUE(recurring_id, month_ref)` na 121, porque o pagamento programado
+    gera 2 por conta/mês), serialize a geração com `pg_advisory_xact_lock` (hotfix 271).
 11. **Campos JSON moram em `db.Text`** com uma property `*_list`/`*_items` tolerante que devolve `[]`
     em JSON corrompido. **Nunca** `json.loads` direto na coluna.
 12. **Valores congelados por design**: `OrcamentoHistory.result_snapshot`, `EducaMantoQuote.snapshot`,
