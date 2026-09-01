@@ -4,8 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-31** · Estado do repositório: pós-feature
-> **267-integridade-comissao (branch, sem migration)** — antes dela
+> Última atualização: **2026-09-01** · Estado do repositório: pós-features
+> **267-integridade-comissao**, **268-imagens-catalogo** e **269-link-portal-fixo** (as três sem
+> migration, subiram no mesmo deploy de 01/09) — antes delas
 > **266-costuras-funil (EM PRODUÇÃO, migration `a1c7d3e59b02` — head)** e
 > **265-nfc-revisao-videos (EM PRODUÇÃO, sem migration)** — as duas subiram no **mesmo deploy** de
 > 31/08 (a 266 nasceu da `main` sem a 265, então cada uma teve seu merge; foram ao ar juntas para
@@ -55,6 +56,8 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **269-link-portal-fixo** | O endereço do Portal do Artista nas mensagens copiadas por humano deixa de vir do ambiente: a cobrança de confirmação da Home saía com `http://localhost:5000/` para quem rodava o ambiente local, e **sem link nenhum** quando `PORTAL_URL` não estava setada (no Render ela é `sync: false`, mora só no painel). `PORTAL_PUBLICO` passa a servir as duas mensagens (o convite do evento já tinha o endereço fixo). `PORTAL_URL` continua sendo a fonte dos e-mails do servidor, agora com default real (`PORTAL_BASE_URL`) | 2026-09-01 | `—` | (aqui) | — |
+| **268-imagens-catalogo** | Vitrine lenta: as 457 fotos do catálogo tinham mediana de 627 KB e picos de 4,3 MB (a recuperação da 264 gravou os bytes crus do WordPress sem passar por `save_file`) **e** eram servidas com `no-cache`, ~460 revalidações por visita. Cache longo nas duas rotas públicas de imagem (nome é UUID, então é seguro) e `flask compress-images` — que já existia com a mesma receita — passa a alcançar o catálogo, ganha dry-run padrão, backup e correção do `file_size_bytes` que estava mentindo | 2026-09-01 | `—` | (aqui) | — |
 | **267-integridade-comissao** | A comissão que bate e o vínculo que não se desfaz sozinho. `ciclo_de_pagamento_expr()`/`liquidar_periodo()` viram fonte única das **quatro** cópias que liquidavam por `sale_date` puro enquanto o item era montado por `coalesce(payable_from, sale_date)` — comissão EducaManto aparecia num mês e era liquidada por outro (docs/05 #1, P0). PATCH em bloco passa a sincronizar comissão por injeção, com `flush()` antes (#6, P1). O número exibido no evento passa a ser o que o Financeiro paga, lido da linha real com a regra canônica como reserva e guarda de evento cancelado (#5, P1), na mesma função que o gêmeo Jinja usa. Invalidação completa do cache financeiro (#2, P0). Núcleo único do vínculo evento↔resposta (`apply_event_link`/`clear_event_link`) e exclusão limpando o rastro. Deep-link do evento para `/financeiro/*` (as duas telas passaram a ler filtro da URL) | 2026-08-31 | `—` | (aqui) | — |
 | **266-costuras-funil** | O lead deixa de sumir e o sistema deixa de ser beco sem saída: card de respostas na Home (contadores do mesmo `count_status` dos cartões de `/formularios`, sob o gate que já existia), e-mail de resposta nova para COMERCIAL/SUPERADMIN, auto-associação de cliente pelo telefone (`Client.phone` é UNIQUE) com origem registrada, cliente da resposta nasce `source='formulario'`, e seis travessias de navegação sobre ids que já viajavam no payload (evento→cliente/talento/pré-contrato, ficha→resposta/avaliações, resultado do orçamento→criar evento). Corrige de carona: `delete_client` estourava FK com formulário vinculado, `futuros_sem_evento` usava relógio UTC | 2026-08-31 | `a1c7d3e59b02` | (aqui) | — |
 | **265-nfc-revisao-videos** | Revisão dos vídeos NFC dentro de `/3d/tags`: aba "Vídeos" (KPIs, busca, cards com player agrupados por evento/cliente direta/estoque, fila "Sem vídeo"), coluna Vídeo na tabela, player no diálogo e endpoint espelho admin da mídia — assistir pelo ERP **não conta acesso** e serve tag desativada. `window.confirm` da remoção virou `ConfirmDialog`. Componentes extraídos para `components/nfc/` | 2026-08-28 | `—` | (aqui) | — |
@@ -203,6 +206,77 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 269 — O endereço do portal para de depender do ambiente            (2026-09-01 · sem migration)
+
+**Sintoma relatado.** A cobrança de confirmação saía com `http://localhost:5000/` — link morto
+para um talento, que é gente de fora.
+
+**Causa.** A mensagem usava `portal_url` do payload da API, que vem de `PORTAL_URL` do ambiente.
+O `.env` local aponta para `http://localhost:5000`, então quem copiasse a mensagem rodando o
+ambiente local mandava localhost para uma pessoa real. **O outro lado do mesmo defeito era pior
+por ser silencioso:** sem a env setada, `portalUrl` vinha `null` e a mensagem saía **sem link
+nenhum** — e no `render.yaml` a variável é `sync: false`, ou seja, mora só no painel do Render e
+some numa recriação de serviço.
+
+**Correção.** O endereço do portal é constante pública, não detalhe de deploy. `PORTAL_PUBLICO`
+(`lib/eventDetail.ts`) passa a servir as **duas** mensagens copiadas por humano. Detalhe revelador:
+o convite do evento **já** tinha o endereço fixo e nunca quebrou — era só a cobrança da Home que
+dependia da env; a inconsistência entre as duas é que escondia o problema.
+
+`PORTAL_URL` continua existindo e continua sendo a fonte certa dos e-mails do **servidor** (reset
+de senha, convite, aviso de ensaio), onde um ambiente de teste precisa mesmo apontar para si — mas
+ganhou default real (`PORTAL_BASE_URL`, no mesmo padrão de `PLATFORM_BASE_URL`).
+
+**A lição que vale além deste caso:** endereço público e fixo, dentro de mensagem que uma pessoa
+copia e envia para fora, não deve vir de variável de ambiente. As duas formas de errar (mandar o
+ambiente errado, ou não mandar nada) nascem da mesma escolha.
+
+---
+
+### 268 — Vitrine lenta: peso das fotos e ausência de cache            (2026-09-01 · sem migration)
+
+**Sintoma relatado.** As fotos do catálogo demoram a carregar e o site fica lento.
+
+**Medição em produção (01/09).** 457 fotos, **mediana 627 KB, p90 2,5 MB, pico 4,3 MB** (uma delas
+1600×1264), média 1,3 MB — contra as ~200 KB de quem passou pela regra de upload. 69% acima do teto.
+Servidas com `Cache-Control: no-cache`. **São dois problemas somados**, e o segundo é menos óbvio:
+com ~460 imagens, são ~460 idas ao servidor por visita mesmo com tudo já em cache.
+
+**Causa do peso.** A recuperação pós-Railway gravou os bytes crus do WordPress:
+`open(destino, "wb").write(r.content)` (`recuperacao/baixar_catalogo_wp.py:34`). Nunca passou por
+`storage.save_file` (1200px / q85). **E não foi descuido:** o casamento das imagens sem
+`original_url` era por igualdade exata de `file_size_bytes` (`casar_por_tamanho.py:27`) —
+comprimir teria quebrado a própria recuperação. A compressão estava estruturalmente excluída do
+desenho.
+
+**O que já existia e não funcionava.** `flask compress-images` (`app/cli.py`) tinha a receita
+idêntica desde sempre e **nunca tocou o catálogo**, por dois defeitos independentes: não listava
+`CatalogItemImage`/`CatalogCharacter`, e a resolução de caminho fazia `instance/<url>` — para
+`/catalogo/midia/x.jpg` isso dá `instance/catalogo/midia/`, pasta que não existe, e o resultado era
+**SKIP silencioso em 100% das fotos**. Estendido em vez de duplicado (Princípio I), com dry-run
+padrão, backup em `.originais/` e escrita por arquivo temporário + `replace`.
+
+**Efeito colateral que enganava:** `CatalogItemImage.file_size_bytes` guardava o tamanho de quando
+a foto passou pelo importador, então a coluna **mentia** sobre o arquivo em disco desde o
+re-download. O comando agora a reescreve.
+
+**Cache.** As duas rotas públicas de imagem chamavam `send_from_directory` sem `max_age`, e o Flask
+carimba `no-cache`. Agora `public, max-age=1ano, immutable` — seguro porque o nome é UUID: trocar a
+foto gera URL nova. O repositório já documentava essa pegadinha em `app/api/nfc_read.py:72` e já a
+resolvia na rota do OG; as duas do catálogo eram a exceção.
+
+**Pegadinha de logística:** os arquivos ficam no **disco persistente do Render**, não em S3, e as
+cópias locais são de outro conjunto (comparei os nomes: **zero** sobreposição com produção). Rodar
+o comando localmente não toca uma única foto da vitrine — ele precisa rodar no Render.
+
+**Ainda aberto (não feito aqui).** Não existe variante de tamanho: nenhum `<img>` público tem
+`srcset`, e a tira de miniaturas de 64px do `ProductGallery` baixa o original inteiro — fator de
+~380× entre pixel baixado e pixel exibido. `app/catalogo/og_ops.py` já é um motor de thumbnail
+completo (escada de qualidade, cache por digest, escrita atômica) e é a base natural para
+generalizar.
+
+---
 
 ### 267 — A comissão que bate e o vínculo que não se desfaz sozinho            (2026-08-31 · sem migration)
 
