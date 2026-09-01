@@ -13,10 +13,12 @@ de `app/gastos/routes.py` quanto pelos endpoints de API (`app/api/gastos_read.py
 from __future__ import annotations
 
 import calendar as cal_mod
+import logging
 import os
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
+from sqlalchemy.exc import IntegrityError
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
@@ -33,6 +35,8 @@ from app.models import (
     User,
 )
 from app.storage import ALLOWED_DOCUMENT_EXTENSIONS, is_allowed_extension
+
+logger = logging.getLogger(__name__)
 
 
 class GastoValidationError(Exception):
@@ -455,6 +459,17 @@ def ensure_recurring_entries(year: int, month: int) -> None:
 
     Padrão de geração preguiçosa (mesmo dos salários): chamada pelas telas que consomem os
     dados; a unique (recurring_id, month_ref) garante 1 lançamento por conta/mês. Faz commit.
+
+    ⚠️ **A leitura e a escrita não são atômicas, e por isso o commit pode perder a corrida**
+    (feature 271). Entre montar `existing_ids` e commitar, outra requisição pode ter inserido a
+    mesma conta/mês — são 36 slots simultâneos no gunicorn (3 workers × 12 threads), e esta função
+    roda em TODA carga da Home de quem é FINANCEIRO/SUPERADMIN. No dia 1º de cada mês, quando
+    `month_ref` ainda está vazio, todo mundo tenta criar ao mesmo tempo.
+
+    Perder a corrida **não é erro**: significa que o lançamento que se queria criar já existe. Sem
+    o tratamento, a `IntegrityError` subia como 500 e — pior — deixava a sessão em transação
+    abortada, então a requisição seguinte na mesma thread também falhava. Era o que derrubava a
+    Home inteira com "Não foi possível carregar o resumo".
     """
     ref = _month_ref(year, month)
     fixed = RecurringExpense.query.filter(
@@ -484,7 +499,16 @@ def ensure_recurring_entries(year: int, month: int) -> None:
         )
         created = True
     if created:
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            # Outra requisição criou os mesmos lançamentos primeiro. O estado final desejado já
+            # existe no banco — o rollback é obrigatório para a sessão não seguir em transação
+            # abortada e derrubar o resto do request.
+            db.session.rollback()
+            logger.info(
+                "[gastos] lançamentos recorrentes de %s já criados por outra requisição", ref
+            )
 
 
 def recurring_alerts(today: date) -> list[dict]:

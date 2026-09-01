@@ -463,6 +463,28 @@ def _effective_has_role(user: Any, impersonate: str | None, name: str) -> bool:
     return any(r.name.upper() == name.upper() for r in user.roles)
 
 
+def _bloco(nome: str, montar: Any) -> Any:
+    """Monta um painel da Home isolando a falha dele (feature 271).
+
+    A Home é a tela de entrada do sistema: um painel que estoura não pode derrubar a página
+    inteira — era o que produzia "Não foi possível carregar o resumo", uma tela vermelha que
+    **não diz qual** dos oito painéis quebrou nem por quê.
+
+    Com o isolamento, o painel problemático vem `null` (a seção simplesmente não renderiza, que
+    é o mesmo contrato de "sem permissão") e o traceback vai para o log com o NOME do painel.
+    Da próxima ocorrência, o log responde a pergunta que hoje não tem resposta.
+
+    O `rollback` é obrigatório: se a falha veio de escrita, a sessão fica em transação abortada
+    e os painéis seguintes falhariam em cascata por um erro que não é deles.
+    """
+    try:
+        return montar()
+    except Exception:  # noqa: BLE001 — a Home degrada, não cai
+        db.session.rollback()
+        current_app.logger.exception("[dashboard] painel '%s' falhou; Home segue sem ele", nome)
+        return None
+
+
 def build_dashboard_summary(
     user: Any,
     impersonate: str | None,
@@ -493,10 +515,9 @@ def build_dashboard_summary(
         or is_superadmin
     )
 
-    casting: dict[str, Any] | None = None
-    if show_casting:
+    def _painel_casting() -> dict[str, Any]:
         raw = compute_casting_tasks(cutoff)
-        casting = {
+        return {
             "pending": [serialize_task_ref(r) for r in raw["pending"]],
             "rejected_invites": [serialize_task_ref(r) for r in raw["rejected_invites"]],
             "unconfirmed": [serialize_unconfirmed_ref(r) for r in raw["unconfirmed"]],
@@ -504,49 +525,64 @@ def build_dashboard_summary(
             "done": raw["done"],
         }
 
-    figurino: dict[str, Any] | None = None
-    if show_figurino:
+    casting = _bloco("casting", _painel_casting) if show_casting else None
+
+    def _painel_figurino() -> dict[str, Any]:
         raw_fig = compute_figurino_tasks(cutoff)
-        figurino = {
+        return {
             "pending": [serialize_task_ref(r) for r in raw_fig["pending"]],
             "total": raw_fig["total"],
             "done": raw_fig["done"],
         }
 
+    figurino = _bloco("figurino", _painel_figurino) if show_figurino else None
+
     # Ensaio (restaurado na 206 — as quatro listas viviam só na home Jinja aposentada).
     # Mesmo gate da home: ENSAIO ou superadmin (CASTING vê materiais no evento, não o painel).
     show_ensaio = _effective_has_role(user, impersonate, RoleName.ENSAIO) or is_superadmin
-    ensaio: dict[str, Any] | None = None
-    if show_ensaio:
-        ensaio = serialize_ensaio_summary(compute_ensaio_tasks(cutoff))
+    ensaio = (
+        _bloco("ensaio", lambda: serialize_ensaio_summary(compute_ensaio_tasks(cutoff)))
+        if show_ensaio
+        else None
+    )
 
-    financeiro: dict[str, Any] | None = None
-    if show_financeiro:
+    def _painel_recorrentes() -> dict[str, Any]:
         from app.gastos.gastos_ops import ensure_recurring_entries, recurring_alerts
 
         today = date.today()
+        # Único bloco do dashboard que ESCREVE no banco (geração preguiçosa dos lançamentos do
+        # mês) — e, portanto, o único que pode falhar por disputa entre requisições simultâneas.
         ensure_recurring_entries(today.year, today.month)
-        alerts = recurring_alerts(today)
-        financeiro = {"recurring_expense_alerts": [_serialize_alert(a) for a in alerts]}
-
-    comercial: dict[str, Any] | None = None
-    if show_comercial:
-        comercial = {
-            "pending_payments": [
-                serialize_comercial_pending(p) for p in compute_comercial_pending(cutoff)
-            ]
+        return {
+            "recurring_expense_alerts": [_serialize_alert(a) for a in recurring_alerts(today)]
         }
+
+    financeiro = _bloco("recorrentes", _painel_recorrentes) if show_financeiro else None
+
+    comercial = (
+        _bloco(
+            "comercial",
+            lambda: {
+                "pending_payments": [
+                    serialize_comercial_pending(p) for p in compute_comercial_pending(cutoff)
+                ]
+            },
+        )
+        if show_comercial
+        else None
+    )
 
     # Mesmo conjunto de `_require_vendas` (COMERCIAL ∪ FINANCEIRO ∪ SUPERADMIN), em variável
     # própria para os dois gates poderem divergir depois sem ninguém se perder.
     show_formularios = show_comercial
-    formularios: dict[str, Any] | None = None
-    if show_formularios:
+    def _painel_formularios() -> dict[str, Any]:
         from app.formularios import formularios_ops
 
         # `count_status()` resolve os cinco contadores numa query só — o mesmo núcleo que
         # alimenta os cartões de /formularios, para os dois números não poderem divergir.
-        formularios = formularios_ops.count_status()
+        return formularios_ops.count_status()
+
+    formularios = _bloco("formularios", _painel_formularios) if show_formularios else None
 
     performance: dict[str, Any] | None = None
     if is_superadmin:
