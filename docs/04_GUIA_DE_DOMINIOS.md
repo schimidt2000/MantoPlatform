@@ -393,7 +393,7 @@ base sai sempre da config.
 | **Figurino** | Fichas com peças, foto e impressão por evento. O sync com o Drive (`sync_drive_stream`, `routes.py:400`) é um endpoint **SSE** que emite progresso item a item; o parser do Google Doc mora em routes (`_sync_extract_name`:280, `_sync_extract_pieces`:312, `_sync_save_photo`:351) |
 | **Clientes** | `client_ops.py` (310) — padrão ops+routes respeitado |
 | **Revisão de mídia** | Material expira em **7 dias** (`EXPIRY_DAYS`, `review_ops.py:27`); `cleanup_expired_review_files()` remove o **arquivo** mas preserva registro e comentários (`file_removed=True`) — o histórico nunca se perde. Ao substituir material, a versão anterior vira snapshot (`snapshot_current_version`, `:203`) e os comentários ficam presos à versão em que foram feitos |
-| **Formulários** | Auto-vínculo resposta → evento (`_attempt_auto_link`, `routes.py:246`) é a regra mais sutil do domínio, e está bem documentada: (1) exatamente um evento real na data, sem contradição de telefone; (2) telefone que resolve empate, ou aponta para um único evento futuro. **Nunca força vínculo ambíguo** — marca para revisão manual. Roda também no ciclo de sync da agenda (`calendar/sync.py:91`), para cobrir o caso do evento só existir depois da resposta |
+| **Formulários** | Auto-vínculo resposta → evento (`_attempt_auto_link`, `formularios_ops.py:582` — o `routes.py` Jinja foi removido na fase 3) é a regra mais sutil do domínio: (1) exatamente um evento real na data, sem contradição de telefone; (2) telefone que resolve empate, ou aponta para um único evento futuro. **Nunca força vínculo ambíguo** — marca para revisão manual. Roda também no ciclo de sync da agenda (`calendar/sync.py:91`), para cobrir o caso do evento só existir depois da resposta. Desde a **266** há um irmão para cliente (`attempt_auto_link_client`): telefone que bate com exatamente uma ficha (`Client.phone` é UNIQUE) grava `client_id` + `client_link_source='auto_phone'`. ⚠️ Ele roda **só no envio**, nunca no `retry_auto_link_pending` — o filtro de lá é `event_link_locked`, que não sabe nada sobre cliente, e religaria a cada ciclo o vínculo que a comercial desfez |
 | **Impressões 3D** | `impressoes3d_ops.py` (573) — estágio 3, 100% de type hints, 1 função sem docstring em 24. Consumido por outros domínios (a loja virtual injeta presentes aqui). O pacote não se chama `3d_impressions` porque identificador Python não começa com dígito (documentado no `__init__.py`) |
 | **Marketing** | `marketing_ops.py` (566): calendário editorial, metas de frequência (`goal_health`, `:440`, compara o intervalo alvo com o último post publicado) e ponte para o módulo de Revisão (`attach_review_space`, `:317`). Desde a 204b a relação post↔tema é **N:N** via `marketing_post_temas` |
 | **Orçamento** | `calculate_quote` (`quote_ops.py:58`) tem **470 linhas** — a maior função do repositório. Produz as 4 faixas de duração. Regras não óbvias: adicional noturno de R$50 por artista/coordenador a partir das 19h aplicado **pré-markup** (`:33`, `:50`); markup diferente para show e receptivo; maquiador com tabela progressiva; transporte com adicional fora de SP proporcional a colaboradores × km. **Ponto positivo:** `compute_show_pricing` (`pricing.py:9`) é explicitamente uma fonte única extraída de duplicação anterior — o padrão certo |
@@ -418,11 +418,17 @@ base sai sempre da config.
 | `app/maps.py` (124) | Distance Matrix + Places | a chave nunca sai do servidor |
 | `app/email_service.py` (707) | Flask-Mail + HTML por helpers | `send_async` (`:21-58`) empacota objetos ORM como `(classe, pk)` e recarrega dentro da thread — sem isso a sessão estoura |
 
-**As 4 threads de background** (`app/__init__.py:154`, `:215`, `:258`, `:292`) repetem o mesmo
-esqueleto. A diferença que importa: **calendar-sync e virtual-sweep fazem claim atômico** entre
-workers gunicorn; **talent-sync e review-cleanup não**. Review-cleanup justifica (é idempotente);
-talent-sync não justifica nada, e `app/talents/importer.py` lê `ImportState.last_row` no início
-(`:179`) e grava no fim (`:343`) sem lock — dois workers processam as mesmas linhas da planilha.
+**As 7 threads de background** repetem o mesmo esqueleto: talent-sync, calendar-sync,
+review-cleanup, virtual-sweep, **email-bounce** (feature 219), **invite-reminders** (231) e
+**backup-drive** (264) — as três últimas não constavam nesta contagem até a feature 266.
+A diferença que importa: **calendar-sync, virtual-sweep, email-bounce e invite-reminders fazem
+claim atômico** entre workers gunicorn; **talent-sync e review-cleanup não**. Review-cleanup
+justifica (é idempotente); talent-sync não justifica nada, e `app/talents/importer.py` lê
+`ImportState.last_row` no início (`:179`) e grava no fim (`:343`) sem lock — dois workers
+processam as mesmas linhas da planilha.
+
+`invite_reminders.py` é o **molde para qualquer aviso por data** (janela de horário, máximo de
+lembretes, claim atômico); nenhuma das 7 toca cobrança de cliente — ver a spec da feature 267.
 
 **E-mail local é bloqueado por config, não por banco.** `SiteSetting.email_notifications_enabled` vem
 ligado na cópia local do banco de produção; a trava real é `MAIL_SUPPRESS_SEND`

@@ -14,6 +14,8 @@ from flask import current_app, jsonify, request
 from app import db, limiter
 from app.api import api_bp
 from app.api_utils import json_error
+from app.constants import RoleName
+from app.email_service import send_async, send_form_response_email
 from app.formularios.formularios_ops import (
     FORM_META,
     _attempt_auto_link,
@@ -26,8 +28,10 @@ from app.formularios.formularios_ops import (
     _save_response,
     _validate_dynamic,
     _whatsapp_link,
+    attempt_auto_link_client,
+    ensure_event_client,
 )
-from app.models import FormFieldDefinition
+from app.models import FormFieldDefinition, FormResponse, Role, User
 
 _INVALID_FIELDS_MESSAGE = (
     "Alguns campos precisam de atenção. Corrija os campos destacados e envie novamente."
@@ -67,6 +71,30 @@ def api_formularios_schema(form_type: str) -> Any:
     )
 
 
+def _avisar_comercial(response: FormResponse) -> None:
+    """Dispara o aviso de resposta nova para quem pode agir nela (feature 266).
+
+    Best-effort por decisão: a resposta da cliente já está gravada, e perder um lead porque o
+    SMTP caiu seria pior que não ter o aviso. O envio é assíncrono e o POST responde 201
+    independentemente do resultado.
+    """
+    try:
+        destinatarios = (
+            User.query.join(User.roles)
+            .filter(
+                Role.name.in_([RoleName.COMERCIAL, RoleName.SUPERADMIN]),
+                User.is_active.is_(True),
+                User.has_access.is_(True),
+            )
+            .all()
+        )
+        if destinatarios:
+            send_async(send_form_response_email, response, destinatarios)
+    except Exception:  # noqa: BLE001 — aviso nunca derruba a submissão pública
+        current_app.logger.exception(
+            "[formularios_write] falha ao avisar o comercial da resposta %s", response.id)
+
+
 @api_bp.route("/formularios/<form_type>", methods=["POST"])
 @limiter.limit("10 per hour")
 def api_formularios_submit(form_type: str) -> Any:
@@ -100,13 +128,23 @@ def api_formularios_submit(form_type: str) -> Any:
             response.event_link_source = result
         elif result == "ambiguous":
             response.event_link_ambiguous = True
-        if result:
+        client_result = attempt_auto_link_client(response)
+        if client_result:
+            response.client_link_source = client_result
+            # Só quando o evento também foi identificado nesta passada: é o que o caminho
+            # manual (`link_event`) já faz, e é o que faz o evento aparecer na ficha dela.
+            if response.event_id is not None and response.event is not None:
+                ensure_event_client(response.event, response.client_id)
+        if result or client_result:
             db.session.commit()
     except Exception:  # noqa: BLE001 — best-effort, a resposta já foi salva antes disso
         db.session.rollback()
         current_app.logger.exception(
-            "[formularios_write] falha ao tentar vínculo automático de evento (resposta %s)",
+            "[formularios_write] falha ao tentar vínculo automático de evento/cliente "
+            "(resposta %s)",
             response.id)
+
+    _avisar_comercial(response)
 
     message = _build_message(meta["message_title"], sections)
     return jsonify({"wa_link": _whatsapp_link(message), "contact_name": contact_name}), 201

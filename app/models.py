@@ -1819,8 +1819,12 @@ class Client(db.Model):
     cnpj = db.Column(db.String(20), nullable=True)
     address = db.Column(db.Text, nullable=True)
 
+    # Valores em circulação: 'kommo_import' (importador), 'whatsform_import' (carga histórica),
+    # 'formulario' (criado a partir de uma resposta, feature 266) e 'manual' (digitado na tela).
+    # Chave nova aqui exige entrada no mapa de `client_ops.client_metrics` — lá o `get` tem
+    # fallback silencioso para "manual" e a origem nova sumiria do gráfico.
     source = db.Column(db.String(20), nullable=False, default="manual",
-                       server_default="manual")  # 'kommo_import' | 'manual'
+                       server_default="manual")
 
     # ── Metadados de marketing (agregados do Kommo) ──────────────────
     kommo_lead_id = db.Column(db.String(40), nullable=True)   # lead mais recente do telefone
@@ -1885,6 +1889,11 @@ class FormResponse(db.Model):
     contact_phone_display = db.Column(db.String(30), nullable=True)
     event_date = db.Column(db.Date, nullable=True, index=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=True, index=True)
+    # Origem do vínculo com a cliente (feature 266): 'auto_phone' (deduzido pelo telefone no
+    # envio) | 'manual' (associado pela tela) | None (sem vínculo, ou anterior à 266). Existe
+    # porque telefone compartilhado — a mãe que reserva pela amiga — produz match único e errado:
+    # sem a origem, a comercial não sabe qual vínculo merece conferência.
+    client_link_source = db.Column(db.String(20), nullable=True)
     event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True, index=True)
     # Vínculo automático de evento (feature 126): 'auto_date' | 'auto_client' | 'manual' | None.
     event_link_source = db.Column(db.String(20), nullable=True)

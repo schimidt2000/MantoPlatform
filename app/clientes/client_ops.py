@@ -197,7 +197,13 @@ def client_metrics() -> dict:
         .all()
     )
     by_month: dict[str, dict] = {}
-    source_keys = {"whatsform_import": "formulario", "kommo_import": "kommo"}
+    # `get(source, "manual")` tem fallback silencioso: sem 'formulario' aqui, a ficha criada a
+    # partir de uma resposta (feature 266) cairia no balde Manual e a mudança seria invisível.
+    source_keys = {
+        "whatsform_import": "formulario",
+        "formulario": "formulario",
+        "kommo_import": "kommo",
+    }
     for month, source, count in rows:
         entry = by_month.setdefault(
             month, {"month": month, "total": 0, "formulario": 0, "kommo": 0, "manual": 0}
@@ -230,9 +236,19 @@ def update_client_fields(
 
 
 def delete_client(client: Client) -> None:
-    """Exclui um cliente, desvinculando antes os eventos associados (sem referências órfãs)."""
+    """Exclui um cliente, desvinculando antes tudo que aponta para ele (sem órfãos).
+
+    As respostas de formulário são **desvinculadas, nunca apagadas**: o pré-contrato é o
+    registro da festa e é a fonte do histórico anterior a 2026 (``list_client_form_history``).
+    Diferente do vínculo com evento, ``FormResponse.client`` não tem backref, então o ORM não
+    anula o FK sozinho — sem esta linha a exclusão estoura violação de chave estrangeira, e a
+    feature 266 (que passa a preencher ``client_id`` sozinha) torna esse caso o comum.
+    """
     EventClient.query.filter_by(client_id=client.id).delete()
     CalendarEvent.query.filter_by(client_id=client.id).update({"client_id": None})
+    FormResponse.query.filter_by(client_id=client.id).update(
+        {"client_id": None, "client_link_source": None}
+    )
     db.session.delete(client)
     db.session.commit()
 

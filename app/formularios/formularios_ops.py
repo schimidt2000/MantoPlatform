@@ -18,6 +18,7 @@ from sqlalchemy.orm import joinedload
 
 from app import db
 from app.clientes.importer import normalize_phone
+from app.constants import now_sp
 from app.models import (
     CalendarEvent,
     Client,
@@ -141,8 +142,11 @@ def _status_condition(filtro: str):
             FormResponse.event_link_ambiguous.is_(True), FormResponse.event_id.is_(None)
         )
     if filtro == "futuros_sem_evento":
+        # `now_sp()`, nunca `date.today()`: produção roda em UTC, e das 21h à meia-noite de
+        # Brasília o "hoje" do processo já é amanhã — a festa de HOJE sairia da fila
+        # justamente no horário em que a comercial confere o dia seguinte.
         return db.and_(
-            FormResponse.event_id.is_(None), FormResponse.event_date >= date.today()
+            FormResponse.event_id.is_(None), FormResponse.event_date >= now_sp().date()
         )
     return None
 
@@ -231,12 +235,16 @@ def associate_client(response: FormResponse, client_id: int | None) -> Client:
                 name=response.contact_name,
                 phone=phone,
                 phone_display=response.contact_phone_display,
-                source="manual",
+                # A ficha nasceu de uma resposta de formulário, não de digitação na tela —
+                # é o que separa a aquisição por formulário do cadastro manual no gráfico
+                # de origem (o mapa de `client_ops.client_metrics` traduz esta chave).
+                source="formulario",
             )
             db.session.add(client)
             db.session.flush()
     fill_client_from_response(client, response)
     response.client_id = client.id
+    response.client_link_source = "manual"
     if response.event_id is not None and response.event is not None:
         ensure_event_client(response.event, client.id)
     db.session.commit()
@@ -244,8 +252,9 @@ def associate_client(response: FormResponse, client_id: int | None) -> Client:
 
 
 def dissociate_client(response: FormResponse) -> None:
-    """Remove a associação da resposta com o cliente."""
+    """Remove a associação da resposta com o cliente (e o rastro de como ela foi feita)."""
     response.client_id = None
+    response.client_link_source = None
     db.session.commit()
 
 
@@ -607,6 +616,39 @@ def _attempt_auto_link(response: FormResponse) -> str | None:
         response.event_id = matched[0].id
         return "auto_date"
     return "ambiguous"
+
+
+def attempt_auto_link_client(response: FormResponse) -> str | None:
+    """Vincula a resposta à ficha da cliente quando o telefone identifica uma só (feature 266).
+
+    `Client.phone` é UNIQUE, então "bate com exatamente uma" é garantia do banco e não
+    heurística: é literalmente a mesma consulta que a comercial dispara hoje clicando em
+    "associar" na sugestão da tela. O que se ganha é não precisar do clique em toda resposta
+    de cliente recorrente — o que hoje deixa o cartão "sem cliente" cheio de gente conhecida.
+
+    **Nunca cria cliente**: o endpoint de submissão é público e sem autenticação, e deixá-lo
+    inserir em ``clients`` seria porta aberta para poluir o CRM. Criar continua sendo ação
+    humana, por ``associate_client``.
+
+    Não roda no reprocessamento do sync de propósito (ver ``retry_auto_link_pending``): não
+    existe equivalente de ``event_link_locked`` para cliente, então religar em ciclo desfaria
+    a decisão de quem desassociou.
+
+    Args:
+        response: resposta recém-salva (sem commit — quem chama decide quando salvar).
+
+    Returns:
+        ``"auto_phone"`` se vinculou, ``None`` se não havia telefone, já havia vínculo, ou
+        nenhuma ficha corresponde.
+    """
+    if response.client_id is not None or response.client_link_source or not response.contact_phone:
+        return None
+    client = Client.query.filter_by(phone=response.contact_phone).first()
+    if client is None:
+        return None
+    fill_client_from_response(client, response)
+    response.client_id = client.id
+    return "auto_phone"
 
 
 def retry_auto_link_pending() -> int:

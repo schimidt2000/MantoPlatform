@@ -45,6 +45,9 @@ def _response_summary(r: FormResponse) -> dict:
         # Nome do cliente já na listagem: a coluna "Situação" mostra o badge "Cliente: <nome>"
         # sem exigir que a tela abra o detalhe de cada resposta (`list_responses` faz joinedload).
         "client_name": r.client.name if r.client else None,
+        # 'auto_phone' = deduzido pelo telefone no envio (feature 266); a tela sinaliza para a
+        # comercial conferir, porque telefone compartilhado dá match único e errado.
+        "client_link_source": r.client_link_source,
         "event_id": r.event_id,
         "event_link_source": r.event_link_source,
         "event_link_ambiguous": r.event_link_ambiguous,

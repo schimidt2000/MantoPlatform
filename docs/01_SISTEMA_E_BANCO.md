@@ -453,7 +453,7 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
 | `clients` | `Client` | cadastro comercial; identidade = `phone` normalizado (`NOT NULL UNIQUE`, só dígitos com DDI). `source` ∈ `kommo_import` \| `manual` \| `whatsform_import` (feature 193) | 1:N `events` |
-| `form_responses` | `FormResponse` | respostas dos formulários públicos de pré-contrato (`form_type` ∈ `comum` \| `corporativo`) **e** o histórico do WhatsForm importado na feature 193 | `client_id`, `event_id` (ambos indexados e nullable) |
+| `form_responses` | `FormResponse` | respostas dos formulários públicos de pré-contrato (`form_type` ∈ `comum` \| `corporativo`) **e** o histórico do WhatsForm importado na feature 193 | `client_id`, `event_id` (ambos indexados e nullable); `client_link_source` (feature 266: `auto_phone` \| `manual` \| `NULL`, espelha `event_link_source`) |
 | `form_field_definitions` | `FormFieldDefinition` | editor de campos dos formulários (ordem, tipo, obrigatoriedade) | — |
 | `client_feedbacks` | `ClientFeedback` | avaliação pública da cliente via `feedback_token` do evento | `event_id` |
 | `orcamento_history` | `OrcamentoHistory` | histórico da calculadora de orçamento (vira `calendar_events.orcamento_history_id`) | `user_id` |
@@ -623,6 +623,15 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > fonte de `_portal_url()` em `app/email_service.py`; `null` quando a env `PORTAL_URL` não está
 > setada). O card "Confirmações pendentes" usa para incluir o link do portal na mensagem de
 > cobrança pelo WhatsApp — sem a env, o link é omitido em vez de sair quebrado.
+
+> **Feature 266**: ganhou `formularios` — os cinco contadores de `formularios_ops.count_status()`
+> (`total`, `sem_evento`, `sem_cliente`, `ambiguos`, `futuros_sem_evento`), **a mesma fonte dos
+> cartões de `/formularios`**, para os dois números não poderem divergir. Gate: o mesmo
+> `show_comercial` (COMERCIAL ∪ FINANCEIRO ∪ SUPERADMIN); fora dele a chave vem `null` e a seção
+> não renderiza. Embutido aqui, e não consumido de `GET /api/formularios/respostas`, por dois
+> motivos: aquele endpoint carrega 200 respostas inteiras para devolver 5 inteiros, e o
+> `_require_vendas` dele lê `current_user.roles` **cru** — ignora impersonação, então um SUPERADMIN
+> em "Ver como CASTING" continuaria vendo o card.
 
 ### 3.3 Agenda e Eventos — `agenda.py` (leitura) / `agenda_write.py` (escrita)
 | Método | Rota |

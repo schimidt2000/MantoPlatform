@@ -4,7 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-08-28** · Estado do repositório: pós-feature
+> Última atualização: **2026-08-31** · Estado do repositório: pós-feature
+> **266-costuras-funil (branch, migration `a1c7d3e59b02` — head)**. ⚠️ A branch saiu da `main`, que
+> **não** tem a 265 (`265-nfc-revisao-videos`, sem migration, ainda sem merge): as duas precisam de
+> merge próprio. Antes da 266:
 > **264-pos-railway (PRODUCAO NO RENDER; backup Drive; doc no portal — sem migration)** — antes dela
 > **263-endurecimento-concorrencia (em produção em duas partes: `56bb1c4` + `29788ee`)** — antes dela
 > **262-deslocamento-cliente (em produção, sem migration)** — antes dela
@@ -18,8 +21,8 @@
 > **254-melhorias-video-catalogo (em produção, migration `f3a9c15d8b42`)**, antes dela a
 > sequência da remoção do Jinja **240–252 (pausada, ver `docs/PARADA_REMOCAO_JINJA.md`)**,
 > antes dela **239-backlog-agosto (11 itens)**, catalogo-fase-1, **235-educamanto 4ª rodada**,
-> 238, 237, 236 · Head de migration: **`e08e454c4780`** (*entregas anexadas a tags NFC, feature
-> 261*) (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
+> 238, 237, 236 · Head de migration: **`a1c7d3e59b02`** (*origem do vínculo resposta↔cliente,
+> feature 266*) (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
 
@@ -50,6 +53,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **266-costuras-funil** | O lead deixa de sumir e o sistema deixa de ser beco sem saída: card de respostas na Home (contadores do mesmo `count_status` dos cartões de `/formularios`, sob o gate que já existia), e-mail de resposta nova para COMERCIAL/SUPERADMIN, auto-associação de cliente pelo telefone (`Client.phone` é UNIQUE) com origem registrada, cliente da resposta nasce `source='formulario'`, e seis travessias de navegação sobre ids que já viajavam no payload (evento→cliente/talento/pré-contrato, ficha→resposta/avaliações, resultado do orçamento→criar evento). Corrige de carona: `delete_client` estourava FK com formulário vinculado, `futuros_sem_evento` usava relógio UTC | 2026-08-31 | `a1c7d3e59b02` | (aqui) | — |
 | **264-pos-railway** | Suspensao do Railway -> producao no Render (dump 27/08), midias recuperadas (catalogo 88%, figurinos 90%, talentos 99%), backup automatico p/ Drive compartilhado, upload de documento no portal, e-mail a 42 talentos. Pegadinhas: SA sem cota no My Drive (so Shared Drive); deploy do Render limpa /tmp e mata nohup | 2026-08-28 | `—` | (aqui) | — |
 | **263-endurecimento-concorrencia** | Incidente de lentidão (11:50–11:56 de 26/08) e endurecimento: `--threads` 4→12 (36 slots), access log com bytes e duração, reciclagem de worker, pool do SQLAlchemy explícito, `preload="metadata"` no player da Revisão, timeouts no Google Maps e no proxy Node, `/health` como sensor. **Em produção em duas partes** (`56bb1c4` + `29788ee`) depois de a primeira tentativa juntar tudo e derrubar a produção. Deixou `scripts/validar_startcommand.py` | 2026-08-26 | `—` | (aqui) | — |
 | **262-deslocamento-cliente** | Tri-state de deslocamento na calculadora de orçamento normal: "Evento em São Paulo" (padrão) / "por nossa conta" / "por conta da cliente". No modo cliente o veículo (van/carro) sai da conta, mas os adicionais da equipe (fora-SP e show) continuam; a mensagem e o PDF ganham a frase de responsabilidade; prefill de evento e carrinho (feat. 239) respeitam o veículo não vendido | 2026-08-26 | `—` | (aqui) | — |
@@ -195,6 +199,71 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 266 — Costuras do funil: o lead aparece e tudo leva a tudo            (2026-08-31 · migration `a1c7d3e59b02`)
+
+**Contexto.** O sistema tinha os módulos completos e eles conversavam mal: o funil
+(formulário → orçamento → evento → financeiro → pós-evento) tinha degraus manuais, e a
+continuidade vivia na memória de quem opera. Levantamento em `specs/266-costuras-funil/analise-integracao.md`
+(9 agentes de leitura sobre 6 domínios + 5 de ancoragem), que também originou a **267** e as
+ondas 2–4. Esta feature pegou as duas quebras mais baratas e mais sentidas.
+
+**O lead deixa de ser invisível.** Até aqui o único "aviso" de resposta nova era o link de WhatsApp
+que a **própria cliente** disparava depois de enviar — se ela fechasse a página antes do redirect de
+1,2s, o lead ficava salvo e invisível. Agora: card na Home (só para COMERCIAL/FINANCEIRO/SUPERADMIN)
+e e-mail no envio para quem pode agir. E a resposta chega **identificada**:
+`attempt_auto_link_client` grava `client_id` quando o telefone bate com uma ficha.
+
+**Decisões que valem lembrar.**
+1. **Os contadores vêm no payload do dashboard, não de uma segunda chamada.** O endpoint de
+   formulários carregaria 200 respostas inteiras para entregar 5 inteiros, e — o motivo decisivo —
+   o `_require_vendas` dele lê `current_user.roles` **cru, ignorando impersonação**: um SUPERADMIN
+   em "Ver como CASTING" continuaria vendo o card. O dashboard respeita o papel simulado.
+2. **O card conta o NÃO TRATADO, não o "novo".** `FormResponse` não tem `read_at`/`seen_at` — não
+   existe noção de lido no modelo. Um badge "3 novas" exigiria coluna + endpoint de marcar-como-visto.
+   O e-mail, sim, é por resposta nova: ele dispara no envio, onde "nova" é fato e não estado.
+3. **A coluna `client_link_source` existe por um caso concreto:** telefone compartilhado (a mãe que
+   reserva pela amiga) dá match único e **errado**. `Client.phone` é UNIQUE, então "exatamente uma"
+   é garantia do banco — o que ela não cobre é o falso-positivo humano.
+4. **O auto-vínculo de cliente roda SÓ no envio.** Não entra em `retry_auto_link_pending`: o filtro
+   de lá é `event_link_locked`, que não sabe nada sobre cliente, e religaria a cada ciclo de sync o
+   vínculo que a comercial acabou de desfazer.
+5. **Nunca cria `Client`** — o endpoint de submissão é público e sem autenticação.
+
+**Pegadinhas encontradas (as que custariam tempo).**
+- **`delete_client` estourava `IntegrityError`** com resposta de formulário vinculada:
+  `FormResponse.client` **não tem backref**, então o ORM não anula o FK sozinho (diferente do
+  vínculo com evento, que tem). Era raro; a auto-associação tornaria comum. Corrigido junto.
+- **`source='formulario'` sem mexer no mapa de `client_metrics` seria invisível:**
+  `source_keys.get(source, "manual")` tem fallback silencioso e jogaria a origem nova no balde
+  Manual. As duas linhas são uma mudança só.
+- **`futuros_sem_evento` usava `date.today()`** — em UTC, das 21h à meia-noite de Brasília a festa
+  de HOJE saía da fila, justamente quando a comercial confere o dia seguinte. Passou a `now_sp()`.
+  O bug **não aparece rodando local em UTC-3**: o teste que vale é o que lê a fonte da condição.
+- **`?resposta=` precisa de guarda de inteiro:** `Number("abc")` é `NaN`, e `/respostas/NaN` não casa
+  com o conversor `<int:>` do Flask — devolve **404 HTML** e estoura o `JSON.parse` do `apiFetch`.
+- **O link do pré-contrato é em DOIS lugares:** o `DataRow` só renderiza sob `!can_edit_core`; quem
+  tem permissão (o caso normal do comercial) vê o `FormResponsePicker`, que não tinha link.
+- **Efeito esperado, será reportado como bug:** a caixa de sugestão de cliente **some** nas respostas
+  novas — `suggested_client` só é calculado quando `client_id is None`.
+
+**Fora de escopo, por decisão registrada.** Deep-link do evento para `/financeiro/comissoes` (as duas
+telas financeiras **não leem query param** — vai para a 267, junto da comissão que passa a bater);
+unificação do filtro de avaliações contratante × `EventClient` (mudaria a semântica de
+`/clientes/avaliacoes` inteira); badge de "não lida".
+
+**Verificação.** `specs/266-costuras-funil/verify_266.py` — 9/9 contra o `manto_local`, conferindo
+por **conexão separada** (o autoflush esconde falta de commit — lição do hotfix 257). Na tela:
+deep-link por URL colada, guarda de id inválido (zero chamadas a `/respostas/NaN`), travessias do
+evento, card de avaliações preenchido e vazio, prefill do orçamento, e o card sumindo em
+"Ver como CASTING". Mobile 375px sem rolagem horizontal.
+
+**Correções de documentação viva feitas junto:** `docs/00` e `docs/04` apontavam o auto-vínculo para
+`app/formularios/routes.py:246` (arquivo removido na fase 3 da remoção do Jinja) e falavam em **4
+threads de background** quando há **7** (faltavam email-bounce/219, invite-reminders/231 e
+backup-drive/264).
+
+---
 
 ### 264 — Pos-suspensao do Railway: producao no Render, midias recuperadas, backup no Drive e upload de documento no portal            (2026-08-28 · sem migration)
 

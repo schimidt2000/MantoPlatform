@@ -1,5 +1,7 @@
 /** Tipos dos recursos da API consumidos pela Fundação (data-model.md). */
 
+import type { StatusCounts } from "./formulariosAdmin";
+
 /** Usuário autenticado — resposta de /api/auth/me e /api/auth/login. */
 export interface AuthUser {
   id: number;
@@ -138,6 +140,13 @@ export interface OficinaFilaSummary {
   items: MinhaPecaRef[];
 }
 
+/**
+ * Contadores dos cartões de situação de `/formularios`, servidos também na Home (feature 266).
+ * Mesma forma do `StatusCounts` de `lib/formulariosAdmin.ts` — os dois lêem o mesmo
+ * `count_status()` do servidor.
+ */
+export type FormulariosSummary = StatusCounts;
+
 export interface DashboardSummary {
   casting: CastingSummary | null;
   figurino: FigurinoSummary | null;
@@ -150,6 +159,12 @@ export interface DashboardSummary {
   figurino_oficina: OficinaFilaSummary | null;
   ensaio: EnsaioSummary | null;
   comercial: { pending_payments: PendingPayment[] } | null;
+  /**
+   * Contadores das respostas de formulário ainda não tratadas (feature 266). Mesmo gate do
+   * bloco comercial. Não existe noção de "lida" no modelo — o que se conta é o que ainda não
+   * virou evento nem ficha, e `futuros_sem_evento` é a única urgência de verdade.
+   */
+  formularios: FormulariosSummary | null;
   financeiro: { recurring_expense_alerts: RecurringExpenseAlert[] } | null;
   performance: PerformanceSummary | null;
   dismissed_casting: DashboardTaskRef[];

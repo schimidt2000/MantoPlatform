@@ -410,7 +410,18 @@ function ClientesPanel({ data }: { data: EventoDetalhe }) {
               key={client.client_id}
               className="flex items-center justify-between gap-2 rounded-md border border-line bg-surface-2/60 px-2 py-1.5 text-sm"
             >
-              <span className="truncate text-ink">{client.name ?? "—"}</span>
+              {/* Sem nome cadastrado a linha continua texto: um link chamado "—" não diz
+                  para onde vai (e é um alvo sem nome acessível). */}
+              {client.name ? (
+                <Link
+                  to={`/clientes/${client.client_id}`}
+                  className="truncate text-ink hover:underline"
+                >
+                  {client.name}
+                </Link>
+              ) : (
+                <span className="truncate text-ink">—</span>
+              )}
               <Badge>{client.relation}</Badge>
             </li>
           ))}
@@ -431,7 +442,11 @@ function PreContratoPanel({ data }: { data: EventoDetalhe }) {
     return (
       <Panel title="Pré-contrato">
         {atual ? (
-          <DataRow label={atual.form_type}>{atual.name}</DataRow>
+          <DataRow label={atual.form_type}>
+            <Link to={`/formularios?resposta=${atual.id}`} className="text-blue underline">
+              {atual.name}
+            </Link>
+          </DataRow>
         ) : (
           <Empty>Nenhum pré-contrato vinculado.</Empty>
         )}
@@ -449,6 +464,16 @@ function PreContratoPanel({ data }: { data: EventoDetalhe }) {
         value={selecionado}
         onChange={(next) => salvar.mutate({ form_response_id: next ? next.id : null })}
       />
+      {/* O picker desenha nome e tipo, mas não leva a lugar nenhum — e é ele que a maioria
+          do comercial vê (o DataRow acima só aparece sem permissão de edição). */}
+      {atual && (
+        <Link
+          to={`/formularios?resposta=${atual.id}`}
+          className="mt-1 inline-block text-sm text-blue underline"
+        >
+          Ver resposta completa
+        </Link>
+      )}
       {salvar.isPending && <p className="mt-1 text-sm text-muted">Salvando…</p>}
       {salvar.isError && <p className="mt-1 text-sm text-red">{salvar.error?.message}</p>}
     </Panel>

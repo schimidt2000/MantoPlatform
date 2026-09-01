@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Button,
@@ -665,8 +665,31 @@ export function FormulariosAdminPage() {
   const [q, setQ] = useState("");
   const [formFilter, setFormFilter] = useState<FormFilter>("todos");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
-  const [selected, setSelected] = useState<number | null>(null);
   const [editorFormType, setEditorFormType] = useState<FormType | null>(null);
+
+  // A URL é a fonte de verdade de qual resposta está aberta (feature 266): é o que permite
+  // linkar para uma resposta específica a partir do evento e da ficha da cliente.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const respostaParam = Number(searchParams.get("resposta"));
+  // Guarda obrigatória: `Number("abc")` é NaN, e um id inválido viraria
+  // `/api/formularios/respostas/NaN` — que não casa com o conversor `<int:...>` do Flask e
+  // devolve o 404 HTML, estourando o JSON.parse do apiFetch em vez do estado de erro da tela.
+  const selected =
+    Number.isInteger(respostaParam) && respostaParam > 0 ? respostaParam : null;
+
+  function abrirResposta(id: number) {
+    const proximo = new URLSearchParams(searchParams);
+    proximo.set("resposta", String(id));
+    // Sem `replace`: o botão voltar do navegador fecha o diálogo, que é o que quem abriu uma
+    // ficha espera — sair da tela inteira seria surpresa.
+    setSearchParams(proximo);
+  }
+
+  function fecharResposta() {
+    const proximo = new URLSearchParams(searchParams);
+    proximo.delete("resposta");
+    setSearchParams(proximo, { replace: true });
+  }
 
   const isSearching = q.trim().length >= 2;
   const list = useFormResponses(statusFilter);
@@ -771,13 +794,13 @@ export function FormulariosAdminPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
             >
-              <ResponsesTable responses={responses} onOpen={setSelected} />
+              <ResponsesTable responses={responses} onOpen={abrirResposta} />
             </motion.div>
           )}
         </CardContent>
       </Card>
 
-      <ResponseDetailDialog id={selected} open={selected !== null} onClose={() => setSelected(null)} />
+      <ResponseDetailDialog id={selected} open={selected !== null} onClose={fecharResposta} />
 
       {canEditStructure && (
         <FieldEditorDialog

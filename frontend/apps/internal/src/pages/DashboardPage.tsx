@@ -404,6 +404,28 @@ function MinhaPecaRow({ item }: { item: MinhaPecaRef }) {
   );
 }
 
+/** Uma linha "rótulo → número" do painel de formulários (feature 266). */
+function LinhaFormularios({
+  rotulo,
+  valor,
+  urgente = false,
+}: {
+  rotulo: string;
+  valor: number;
+  urgente?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-line py-2 last:border-b-0">
+      <dt className={urgente && valor > 0 ? "text-red" : "text-ink"}>{rotulo}</dt>
+      <dd
+        className={`tabular-nums ${urgente && valor > 0 ? "font-semibold text-red" : "text-ink"}`}
+      >
+        {valor}
+      </dd>
+    </div>
+  );
+}
+
 /** Ordem fixa das seções — a mesma na visão geral e na pilha de painéis (previsibilidade). */
 type SectionKey =
   | "minhas_pecas"
@@ -413,6 +435,7 @@ type SectionKey =
   | "figurino"
   | "ensaio"
   | "comercial"
+  | "formularios"
   | "recorrentes";
 
 interface SectionStat extends HomeOverviewItem {
@@ -502,6 +525,20 @@ function computeSectionStats(data: DashboardSummary): SectionStat[] {
       count: pagamentos.length,
       urgent: pagamentos.filter((p) => SEVERIDADES_URGENTES.includes(p.severity)).length,
       detail: pagamentos.length > 0 ? `R$ ${formatBRL(saldoTotal)} em aberto` : null,
+    });
+  }
+
+  if (data.formularios) {
+    const f = data.formularios;
+    stats.push({
+      key: "formularios",
+      emoji: "📝",
+      label: "Formulários",
+      // A contagem é "ainda não virou evento"; a urgência é a festa marcada chegando sem
+      // evento na agenda — a única das quatro que tem data batendo na porta.
+      count: f.sem_evento,
+      urgent: f.futuros_sem_evento,
+      detail: f.total > 0 ? `${f.total} resposta(s) recebidas` : null,
     });
   }
 
@@ -841,6 +878,47 @@ export function DashboardPage() {
               </div>
             )}
 
+            {data.formularios && (
+              <div {...propsSecao("formularios")}>
+                <SectorPanel
+                  title="📝 Respostas de formulário"
+                  count={data.formularios.sem_evento}
+                  urgentCount={data.formularios.futuros_sem_evento}
+                  open={painelAberto("formularios")}
+                  onOpenChange={aoAlternar("formularios")}
+                >
+                  {data.formularios.total === 0 ? (
+                    <p className="py-2 text-sm text-muted">Nenhuma resposta recebida.</p>
+                  ) : (
+                    <>
+                      <dl className="text-sm">
+                        <LinhaFormularios
+                          rotulo="Festa futura sem evento"
+                          valor={data.formularios.futuros_sem_evento}
+                          urgente
+                        />
+                        <LinhaFormularios
+                          rotulo="Sem evento na agenda"
+                          valor={data.formularios.sem_evento}
+                        />
+                        <LinhaFormularios
+                          rotulo="Sem cliente associada"
+                          valor={data.formularios.sem_cliente}
+                        />
+                        <LinhaFormularios
+                          rotulo="Vínculo ambíguo"
+                          valor={data.formularios.ambiguos}
+                        />
+                      </dl>
+                      <Button asChild variant="outline" size="sm" className="mt-3">
+                        <Link to="/formularios">Abrir formulários</Link>
+                      </Button>
+                    </>
+                  )}
+                </SectorPanel>
+              </div>
+            )}
+
             {data.financeiro && (
               <div {...propsSecao("recorrentes")}>
                 <SectorPanel
@@ -887,6 +965,7 @@ export function DashboardPage() {
             !data.figurino_oficina &&
             !data.ensaio &&
             !data.comercial &&
+            !data.formularios &&
             !data.financeiro && (
               <Card>
                 <CardContent className="p-5">

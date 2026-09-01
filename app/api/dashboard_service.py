@@ -537,6 +537,17 @@ def build_dashboard_summary(
             ]
         }
 
+    # Mesmo conjunto de `_require_vendas` (COMERCIAL ∪ FINANCEIRO ∪ SUPERADMIN), em variável
+    # própria para os dois gates poderem divergir depois sem ninguém se perder.
+    show_formularios = show_comercial
+    formularios: dict[str, Any] | None = None
+    if show_formularios:
+        from app.formularios import formularios_ops
+
+        # `count_status()` resolve os cinco contadores numa query só — o mesmo núcleo que
+        # alimenta os cartões de /formularios, para os dois números não poderem divergir.
+        formularios = formularios_ops.count_status()
+
     performance: dict[str, Any] | None = None
     if is_superadmin:
         start_dt, end_dt = resolve_performance_period(perf_range, perf_start, perf_end)
@@ -584,6 +595,7 @@ def build_dashboard_summary(
         "figurino_oficina": fila_oficina,
         "ensaio": ensaio,
         "comercial": comercial,
+        "formularios": formularios,
         "financeiro": financeiro,
         "performance": performance,
         "dismissed_casting": dismissed,
