@@ -42,11 +42,16 @@ function KpiCard({
   value,
   hint,
   tone,
+  to,
+  linkText = "ver na planilha",
 }: {
   label: string;
   value: string;
   hint?: string;
   tone: "neutral" | "green" | "red";
+  /** Destino do "ver na planilha" (feature 267) — omitido, o card não linka. */
+  to?: string;
+  linkText?: string;
 }) {
   const toneClass =
     tone === "green" ? "text-green" : tone === "red" ? "text-red" : "text-ink";
@@ -55,6 +60,11 @@ function KpiCard({
       <div className="text-[10px] font-bold uppercase tracking-wider text-muted">{label}</div>
       <div className={`mt-0.5 text-lg font-semibold tabular-nums ${toneClass}`}>{value}</div>
       {hint && <div className="text-[11px] text-muted">{hint}</div>}
+      {to && (
+        <Link to={to} className="mt-1 inline-block text-[11px] text-blue underline">
+          {linkText}
+        </Link>
+      )}
     </div>
   );
 }
@@ -69,6 +79,20 @@ function KpiGrid({ data }: { data: EventoDetalhe }) {
   if (!kpi) return null;
   const gastos = data.gastos ?? [];
   const lucro = kpi.lucro ?? 0;
+  const venda = data.venda;
+
+  // Os DOIS meses são diferentes de propósito (feature 267): a comissão é escopada pela data da
+  // VENDA e a planilha de pagamentos pela data do EVENTO. Um evento vendido em maio e realizado
+  // em agosto tem os dois links em meses distintos — usar o mesmo entrega tela vazia.
+  // Recorte por string: `start_at`/`sale_date` são horário de parede, e `new Date()` desloca +3h
+  // (um evento do dia 1º às 00:00 escorregaria para o mês anterior).
+  const linkComissoes =
+    venda?.sale_date && venda?.seller_id
+      ? `/financeiro/comissoes?mes=${venda.sale_date.slice(0, 7)}&vendedor=${venda.seller_id}&evento=${data.event.id}`
+      : undefined;
+  const linkPagamentos = data.event.start_at
+    ? `/financeiro/pagamentos?mes=${data.event.start_at.slice(0, 7)}&busca=${encodeURIComponent(data.event.title)}`
+    : undefined;
 
   return (
     <Panel
@@ -76,18 +100,32 @@ function KpiGrid({ data }: { data: EventoDetalhe }) {
     >
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
         <KpiCard label="Venda" value={brl(kpi.sale_value)} tone="neutral" />
-        <KpiCard label="Custo (cachês)" value={brl(kpi.cost)} tone="neutral" />
+        <KpiCard
+          label="Custo (cachês)"
+          value={brl(kpi.cost)}
+          tone="neutral"
+          to={linkPagamentos}
+        />
         <KpiCard
           label="Gastos extras"
           value={brl(kpi.expenses_total)}
           hint={gastos.length ? `${gastos.length} aprovado(s)` : undefined}
           tone="neutral"
         />
+        {/* O percentual só descreve o número quando ele é estimativa. Vindo da linha real, a
+            conta pode não ser "% sobre a venda" (EducaManto incide sobre o lucro) — estampar
+            "Comissão (2,5%)" ali seria uma conta que não fecha. */}
         <KpiCard
-          label={`Comissão (${kpi.rate}%)`}
+          label={kpi.commission_source === "linha" ? "Comissão" : `Comissão (${kpi.rate}%)`}
           value={brl(kpi.commission)}
-          hint={kpi.seller ?? undefined}
+          hint={
+            kpi.commission_source === "linha"
+              ? (kpi.seller ?? undefined)
+              : [kpi.seller, "estimativa — ainda sem lançamento"].filter(Boolean).join(" · ")
+          }
           tone="neutral"
+          to={linkComissoes}
+          linkText="ver em comissões"
         />
         <KpiCard
           label="Lucro líquido"

@@ -21,6 +21,10 @@ from zoneinfo import ZoneInfo
 
 from app.constants import EVENT_TYPE_SHOW, RoleName
 from app.email_service import send_async, send_ensaio_alert_email, send_event_changed_email
+# Import de topo é seguro: `formularios_ops` é folha (importa só `app`, `app.clientes.importer`,
+# `app.models` e `app.utils` — nenhum toca `app.calendar`). O ciclo real do domínio é
+# `routes → event_ops`, e é por isso que ESTE módulo importa `routes` dentro de função.
+from app.formularios.formularios_ops import apply_event_link, clear_event_link
 from app.models import (
     EventClient,
     EventLog,
@@ -615,6 +619,7 @@ def update_event_core(
     is_superadmin: bool,
     actor_name: str,
     tz: ZoneInfo,
+    sincronizar_comissao: Any = None,
 ) -> list[str]:
     """Atualiza em bloco os campos centrais de um evento existente (feature 184) — título, tipo,
     data/horário, local, descrição, ensaio, valores, pagamento, vendedor, elenco (reconciliado),
@@ -691,7 +696,19 @@ def update_event_core(
     if form_response_id is not None:
         fr = FormResponse.query.get(form_response_id)
         if fr and fr.event_id is None:
-            fr.event_id = event.id
+            apply_event_link(fr, event)
+
+    if sincronizar_comissao is not None:
+        # INCONDICIONAL, como o gêmeo `update_event_comercial`. Guardar por "campo mudou"
+        # reintroduziria metade do defeito: a venda que nunca gerou linha nenhuma precisa de
+        # sync mesmo quando nada mudou nesta gravação — e é exatamente esse buraco que o
+        # `_resync_pending_commissions` não cobre (ele só percorre linhas já existentes).
+        #
+        # O flush é obrigatório: `_reconcile_characters` (acima) adiciona/remove `EventRole`
+        # sem flush, e a comissão EducaManto incide sobre o LUCRO, que lê `event.roles`. Sem
+        # ele a coleção volta do cache sem os cachês novos e a comissão sai errada.
+        db.session.flush()
+        sincronizar_comissao(event)
 
     db.session.add(EventLog(
         event_id=event.id,
@@ -907,15 +924,16 @@ def set_event_form_response(event: Any, form_response_id: int | None) -> bool:
     if form_response_id is None:
         changed = False
         for fr in FormResponse.query.filter_by(event_id=event.id).all():
-            fr.event_id = None
+            clear_event_link(fr)
             changed = True
+        # Um commit depois do laço, não um por resposta — por isso o núcleo não commita.
         db.session.commit()
         return changed
 
     fr = FormResponse.query.get(form_response_id)
     if fr is None or (fr.event_id is not None and fr.event_id != event.id):
         return False
-    fr.event_id = event.id
+    apply_event_link(fr, event)
     db.session.commit()
     return True
 

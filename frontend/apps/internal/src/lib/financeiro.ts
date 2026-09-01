@@ -281,10 +281,27 @@ export function usePagarMesComissao() {
         method: "POST",
         body: JSON.stringify(input),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
-    },
+    onSuccess: () => invalidarFinanceiro(queryClient),
   });
+}
+
+/**
+ * Invalida TODAS as telas que o endpoint poliforme de pagamento pode ter mexido (feature 267).
+ *
+ * `/api/financeiro/pagamentos/set-status` escreve em `CommissionPayment` **e** em
+ * `RecurringExpenseEntry`, mas as mutações invalidavam só `["financeiro-pagamentos", mês]`.
+ * Comissões, Gastos Recorrentes e o Dashboard Financeiro nunca eram invalidados — e com
+ * `staleTime: 30_000` + `refetchOnWindowFocus: false` o número errado **fica na tela**, o que o
+ * usuário lê como "cliquei e não salvou".
+ *
+ * Invalida por prefixo de propósito: as chaves carregam mês/filtros, e o que mudou pode estar
+ * em outro recorte (a liquidação alcança comissão de outro mês de venda).
+ */
+function invalidarFinanceiro(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
+  queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
+  queryClient.invalidateQueries({ queryKey: ["financeiro-dashboard"] });
+  queryClient.invalidateQueries({ queryKey: ["gastos-recorrentes"] });
 }
 
 /** Gera e baixa um CSV do resumo por vendedor do mês selecionado (feature 187) — client-side,
@@ -374,7 +391,7 @@ export interface SetPaymentStatusInput {
 }
 
 /** Marca o status de um item de pagamento (feature 160). */
-export function useSetPaymentStatus(month: string) {
+export function useSetPaymentStatus() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: SetPaymentStatusInput) =>
@@ -383,7 +400,7 @@ export function useSetPaymentStatus(month: string) {
         body: JSON.stringify(input),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos", month] });
+      invalidarFinanceiro(queryClient);
     },
   });
 }
@@ -405,7 +422,7 @@ export interface BulkPaymentActionResult {
 }
 
 /** Aplica uma ação em massa (status ou excluir) sobre itens selecionados (feature 160). */
-export function useBulkPaymentAction(month: string) {
+export function useBulkPaymentAction() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: BulkPaymentActionInput) =>
@@ -414,7 +431,7 @@ export function useBulkPaymentAction(month: string) {
         body: JSON.stringify(input),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos", month] });
+      invalidarFinanceiro(queryClient);
     },
   });
 }
@@ -427,7 +444,7 @@ export interface AddSalaryAdvanceInput {
 }
 
 /** Registra um adiantamento de salário (valor + comprovante), feature 160. */
-export function useAddSalaryAdvance(month: string) {
+export function useAddSalaryAdvance() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ salaryPaymentId, amount, advanceDate, proof }: AddSalaryAdvanceInput) => {
@@ -441,13 +458,13 @@ export function useAddSalaryAdvance(month: string) {
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos", month] });
+      invalidarFinanceiro(queryClient);
     },
   });
 }
 
 /** Exclui um adiantamento de salário já registrado (feature 160). */
-export function useDeleteSalaryAdvance(month: string) {
+export function useDeleteSalaryAdvance() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (advanceId: number) =>
@@ -455,7 +472,7 @@ export function useDeleteSalaryAdvance(month: string) {
         method: "POST",
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos", month] });
+      invalidarFinanceiro(queryClient);
     },
   });
 }

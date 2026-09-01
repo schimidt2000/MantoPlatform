@@ -229,6 +229,11 @@ assinatura) nunca vira pendência (`:1075-1081`).
 
 ### Armadilhas
 
+- ✅ **Feature 267 fechou os quatro defeitos abaixo.** Hoje a comissão exibida no evento vem de
+  `comissoes_ops.comissao_exibida_do_evento` (linha real → regra canônica → 0 se cancelado), a
+  mesma função na API e no Jinja; e a liquidação, das quatro cópias, vem de
+  `comissoes_ops.liquidar_periodo`, que usa a **mesma** expressão de ciclo que monta o item. O que
+  segue documentado é o estado ANTERIOR — mantido porque explica o porquê das funções existirem.
 - **A comissão tem 4 implementações divergentes.** `routes.py:120` (a completa),
   `app/api/agenda_read.py:245` (`_compute_kpi` — desconta BV mas ignora EducaManto, Loja Virtual e
   `receives_commission`, e usa **2%** de padrão), `app/calendar/routes.py:1752` (idem) e o filtro SQL

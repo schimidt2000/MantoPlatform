@@ -17,12 +17,12 @@
 
 | # | Prio | Onde | Sintoma para o usuário | Tamanho |
 |---|---|---|---|---|
-| 1 | **P0** | `app/financeiro/routes.py:1245` + `app/api/financeiro_write.py:213` | marcar comissão EducaManto como paga não faz nada | 2 linhas |
-| 2 | **P0** | `frontend/.../lib/financeiro.ts:386` | Comissões, Gastos Recorrentes e Dashboard ficam com número velho após pagar | ~20 linhas |
+| ~~1~~ | ~~P0~~ | ✅ **RESOLVIDO na feature 267** — eram **4** cópias, não 2 (os controles individuais também). Fonte única em `comissoes_ops.liquidar_periodo` | — |
+| ~~2~~ | ~~P0~~ | ✅ **RESOLVIDO na feature 267** — `invalidarFinanceiro()` em `lib/financeiro.ts` | — |
 | 3 | **P0** | `frontend/.../lib/gastos.ts:324` | histórico da conta recorrente não atualiza | 1 chave |
 | 4 | **P0** | `frontend/.../lib/useAuth.ts:13` + `navigation.tsx:76` | "Ver como REVENDEDOR" cai numa tela que o servidor recusa | ~10 linhas |
-| 5 | **P1** | `app/api/agenda_read.py:245` + `app/calendar/routes.py:1752` | comissão exibida no evento ≠ comissão que o Financeiro paga | ~40 linhas |
-| 6 | **P1** | `app/calendar/event_ops.py:299` e `:490` | evento com venda preenchida depois nunca gera linha de comissão | ~5 linhas |
+| ~~5~~ | ~~P1~~ | ✅ **RESOLVIDO na feature 267** — `comissoes_ops.comissao_exibida_do_evento` serve a API e o gêmeo Jinja; lê a linha real, cai na regra canônica e zera evento cancelado | — |
+| ~~6~~ | ~~P1~~ | ✅ **RESOLVIDO na feature 267** — `update_event_core` recebe `sincronizar_comissao` por injeção. *(`update_event_comercial` já sincronizava; este item estava parcialmente desatualizado)* | — |
 | 7 | **P1** | `app/api/agenda_write.py:926` e `:995` | Figurino/Casting podem registrar pagamento de cachê e reembolso | ~4 linhas |
 | 8 | **P1** | `app/api/orcamento_read.py:30` vs `clientes_read.py:24` | `_require_vendas` com dois significados; FINANCEIRO passa ou não conforme o arquivo | ~30 linhas |
 | 9 | **P1** | `app/api/` (12 cópias) | "Ver como" é respeitado na agenda e ignorado em clientes/financeiro/admin | ~40 linhas |
@@ -113,6 +113,12 @@ mostrava.
 
 A 230 fez o portal seguir a escala (`portal_ops.nao_recusada()`, fonte única das três consultas).
 Convites continua listando só `pending`, que é o que precisa de resposta.
+
+> ✅ **Resolvido na feature 267** — e a contagem deste título estava errada: são **três**
+> implementações, não quatro. `comissoes_ops.py:183` é recorte de **mês**, não cálculo (problema
+> irmão, resolvido junto), e `financeiro/routes.py:120` é `_is_permuta`, sem relação com comissão —
+> o DRE já consumia a regra canônica. Hoje a API e o gêmeo Jinja chamam
+> `comissoes_ops.comissao_exibida_do_evento`.
 
 ### 3.1 Quatro fórmulas de comissão
 

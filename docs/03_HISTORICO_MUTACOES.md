@@ -5,10 +5,11 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-08-31** · Estado do repositório: pós-feature
-> **266-costuras-funil (migration `a1c7d3e59b02` — head)** e
-> **265-nfc-revisao-videos (sem migration)** — as duas subiram no **mesmo deploy** de 31/08 (a 266
-> nasceu da `main` sem a 265, então cada uma teve seu merge; foram ao ar juntas para abrir uma
-> janela de 502 só). Antes delas:
+> **267-integridade-comissao (branch, sem migration)** — antes dela
+> **266-costuras-funil (EM PRODUÇÃO, migration `a1c7d3e59b02` — head)** e
+> **265-nfc-revisao-videos (EM PRODUÇÃO, sem migration)** — as duas subiram no **mesmo deploy** de
+> 31/08 (a 266 nasceu da `main` sem a 265, então cada uma teve seu merge; foram ao ar juntas para
+> abrir uma janela de 502 só). Antes delas:
 > **264-pos-railway (PRODUCAO NO RENDER; backup Drive; doc no portal — sem migration)** — antes dela
 > **263-endurecimento-concorrencia (em produção em duas partes: `56bb1c4` + `29788ee`)** — antes dela
 > **262-deslocamento-cliente (em produção, sem migration)** — antes dela
@@ -54,6 +55,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **267-integridade-comissao** | A comissão que bate e o vínculo que não se desfaz sozinho. `ciclo_de_pagamento_expr()`/`liquidar_periodo()` viram fonte única das **quatro** cópias que liquidavam por `sale_date` puro enquanto o item era montado por `coalesce(payable_from, sale_date)` — comissão EducaManto aparecia num mês e era liquidada por outro (docs/05 #1, P0). PATCH em bloco passa a sincronizar comissão por injeção, com `flush()` antes (#6, P1). O número exibido no evento passa a ser o que o Financeiro paga, lido da linha real com a regra canônica como reserva e guarda de evento cancelado (#5, P1), na mesma função que o gêmeo Jinja usa. Invalidação completa do cache financeiro (#2, P0). Núcleo único do vínculo evento↔resposta (`apply_event_link`/`clear_event_link`) e exclusão limpando o rastro. Deep-link do evento para `/financeiro/*` (as duas telas passaram a ler filtro da URL) | 2026-08-31 | `—` | (aqui) | — |
 | **266-costuras-funil** | O lead deixa de sumir e o sistema deixa de ser beco sem saída: card de respostas na Home (contadores do mesmo `count_status` dos cartões de `/formularios`, sob o gate que já existia), e-mail de resposta nova para COMERCIAL/SUPERADMIN, auto-associação de cliente pelo telefone (`Client.phone` é UNIQUE) com origem registrada, cliente da resposta nasce `source='formulario'`, e seis travessias de navegação sobre ids que já viajavam no payload (evento→cliente/talento/pré-contrato, ficha→resposta/avaliações, resultado do orçamento→criar evento). Corrige de carona: `delete_client` estourava FK com formulário vinculado, `futuros_sem_evento` usava relógio UTC | 2026-08-31 | `a1c7d3e59b02` | (aqui) | — |
 | **265-nfc-revisao-videos** | Revisão dos vídeos NFC dentro de `/3d/tags`: aba "Vídeos" (KPIs, busca, cards com player agrupados por evento/cliente direta/estoque, fila "Sem vídeo"), coluna Vídeo na tabela, player no diálogo e endpoint espelho admin da mídia — assistir pelo ERP **não conta acesso** e serve tag desativada. `window.confirm` da remoção virou `ConfirmDialog`. Componentes extraídos para `components/nfc/` | 2026-08-28 | `—` | (aqui) | — |
 | **264-pos-railway** | Suspensao do Railway -> producao no Render (dump 27/08), midias recuperadas (catalogo 88%, figurinos 90%, talentos 99%), backup automatico p/ Drive compartilhado, upload de documento no portal, e-mail a 42 talentos. Pegadinhas: SA sem cota no My Drive (so Shared Drive); deploy do Render limpa /tmp e mata nohup | 2026-08-28 | `—` | (aqui) | — |
@@ -201,6 +203,87 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 267 — A comissão que bate e o vínculo que não se desfaz sozinho            (2026-08-31 · sem migration)
+
+**Contexto.** A 266 costurou a navegação; esta cuida do outro lado da mesma queixa — **o clique que
+não faz nada e o número que não bate**. São os quatro itens de comissão que a própria
+`docs/05_DIVIDA_TECNICA.md` já prescrevia (dois **P0**, dois **P1**) mais duas assimetrias
+manual↔automático que corroíam dado em silêncio.
+
+**O P0 principal, em uma frase.** A Planilha monta o item de comissão pelo ciclo
+`coalesce(payable_from, sale_date)` — EducaManto entra pelo mês da **realização** —, mas a
+liquidação filtrava só por `sale_date`. O item aparecia em maio, o clique procurava a venda em
+maio, achava **zero linhas**, e a tela mostrava "pago" sobre um lote que continuava `a_pagar` no
+banco. E o inverso também: o mês da venda liquidava uma comissão que ele nem exibia.
+
+**Correções de premissa (a análise errava em duas contas).**
+1. **São QUATRO cópias do filtro, não duas.** Além dos dois `_bulk_set_commission_period`, os
+   controles **individuais** da mesma planilha (`api_set_payment_status` e o gêmeo Jinja) tinham o
+   filtro idêntico. Corrigir só o lote deixaria o bug vivo no clique unitário do mesmo item.
+2. **São TRÊS fórmulas de comissão divergentes, não quatro.** `comissoes_ops:183` é recorte de
+   **mês**, não cálculo, e `financeiro/routes.py:120` é `_is_permuta`. Tratar os dois como "cópias
+   da regra" faria a feature crescer para dentro do módulo de Comissões sem necessidade.
+3. A dívida dizia que `update_event_comercial` também não sincronizava; ela **já sincroniza** (o
+   texto é de 06/08 e envelheceu). Só o `update_event_core` faltava.
+
+**Decisões que valem lembrar.**
+- **A extração inverteu uma decisão de 2026-07.** A docstring de `comissoes_ops` declarava que o
+  Jinja legado NÃO importava dali. Isso valia enquanto a duplicação era inerte; deixou de valer
+  quando ela virou P0. A docstring foi reescrita — deixar o texto velho seria pior que a
+  duplicação que ele descrevia.
+- **A sincronização de comissão é incondicional.** Guardar por "campo mudou" reintroduziria metade
+  do bug: a venda que nunca gerou linha precisa de sync **mesmo quando nada mudou nesta gravação**,
+  e é exatamente esse buraco que `_resync_pending_commissions` não cobre (ele só percorre linhas
+  existentes).
+- **`flush()` antes do sync.** `_reconcile_characters` adiciona/remove `EventRole` sem flush; a
+  comissão EducaManto incide sobre o **lucro**, que lê `event.roles`. Sem o flush a coleção volta
+  do cache sem os cachês novos e a comissão sai errada naquela gravação.
+- **Guarda explícita de evento cancelado no KPI.** O cancelamento **esvazia o backref** (a linha e
+  o estorno ficam com `event_id` nulo), então o fallback voltaria a inventar número exatamente onde
+  o financeiro já estornou. A regra canônica sozinha **não** protege: quem checa cancelamento é a
+  sincronização, não o cálculo.
+- **O rótulo deixa de mentir.** Vindo da linha real, o valor não é derivável de um percentual único
+  (EducaManto incide sobre o lucro), então o payload ganhou `commission_source` e a tela mostra
+  "Comissão" sem `%` — com `%` só quando é estimativa.
+- **`lucro` continua sem descontar comissão** (a dica da tela declara "venda − cachês − gastos").
+  Mudar é decisão de negócio, não correção.
+- **Delegação no NÚCLEO, nunca no wrapper.** `link_event` **sobrescreve** vínculo alheio;
+  `set_event_form_response` **recusa** com 409. Por isso os dois compartilham `apply_event_link` e
+  não o wrapper — delegar lá mudaria o contrato da API. E o núcleo **não commita**: usar
+  `unlink_event` dentro do laço de desvínculo daria um commit por resposta.
+- **A exclusão de evento não trava a resposta.** Quem estava travado por decisão humana continua;
+  quem veio de vínculo automático volta destravado para a fila — o certo quando o evento é recriado
+  no mesmo dia (o sync apaga e o Google devolve com id novo).
+
+**Pegadinhas encontradas.**
+- **Existem DOIS `useSetPaymentStatus`** (`lib/eventDetail` e `lib/financeiro`). O do
+  `CastingSection` é o de `eventDetail` e recebe `eventId` de propósito — quase "consertei" o que
+  não estava quebrado.
+- Com a invalidação por prefixo, o parâmetro `month` de 4 hooks virou **morto** e foi removido,
+  junto do prop que só existia para alimentá-lo em três componentes.
+- **Os dois deep-links do evento apontam para meses DIFERENTES**: comissão pela data da venda,
+  planilha pela data do evento. Conferido num evento vendido em julho e realizado em agosto.
+- **`?evento=` recorta por FK**, não pelo texto do título (que casaria eventos parecidos), e abre a
+  aba Detalhamento — com o default "resumo" o link cairia numa aba onde o filtro nem existe.
+- **O verify chama a API REAL do Google** ao excluir evento. É seguro só porque o
+  `google_event_id` de teste não existe lá (volta 404). Nunca dar a um evento de teste um id que
+  possa casar com um real.
+- `paid_at` usava `date.today()` nas 4 cópias — em UTC, depois das 21h de SP o pagamento era
+  carimbado no dia seguinte. Passou a `now_sp()` de graça na mesma edição.
+
+**Verificação.** `specs/267-integridade-comissao/verify_267.py` — 9/9 contra o `manto_local`,
+conferindo por conexão separada; e `verify_266.py` **9/9 sem regressão** (a 267 mexe em código
+compartilhado). Na tela: do evento 417 (comissão R$ 182,50 lida da linha real), o link abre
+julho/vendedora certa/aba Detalhamento com **uma** linha de R$ 182,50 — o número do evento e o do
+financeiro viraram a mesma coisa.
+
+**Fora de escopo, registrado.** Alinhar o recorte de mês do **módulo de Comissões** (que usa
+`sale_date` com fallback em `created_at`) com o da Planilha: isso MOVE linhas de EducaManto entre
+meses já fechados e conferidos pela equipe — é mudança de leitura financeira histórica, não
+correção de escrita, e merece feature própria com ensaio no dump.
+
+---
 
 ### 266 — Costuras do funil: o lead aparece e tudo leva a tudo            (2026-08-31 · migration `a1c7d3e59b02`)
 

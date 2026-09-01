@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   AccordionRow,
   Card,
@@ -202,18 +202,28 @@ function SummaryBySellerView({
   );
 }
 
-function DetailView({ entries }: { entries: CommissionEntry[] }) {
+function DetailView({
+  entries,
+  eventoId,
+}: {
+  entries: CommissionEntry[];
+  /** Id vindo de `?evento=` (feature 267) — recorta por FK, não por texto do título. */
+  eventoId?: number | null;
+}) {
   const [eventFilter, setEventFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<CommissionStatus | "todos">("todos");
 
   const filtered = useMemo(() => {
     const needle = eventFilter.trim().toLowerCase();
     return entries.filter((e) => {
+      // O filtro por id é mais preciso que o de texto (dois eventos podem ter títulos
+      // parecidos) e é o que o link do detalhe do evento usa.
+      if (eventoId != null && e.event_id !== eventoId) return false;
       if (needle && !e.event_title.toLowerCase().includes(needle)) return false;
       if (statusFilter !== "todos" && e.status !== statusFilter) return false;
       return true;
     });
-  }, [entries, eventFilter, statusFilter]);
+  }, [entries, eventFilter, statusFilter, eventoId]);
 
   return (
     <div>
@@ -287,8 +297,27 @@ function DetailView({ entries }: { entries: CommissionEntry[] }) {
 }
 
 export function ComissoesPage() {
-  const [month, setMonth] = useState(currentMonth());
-  const [sellerFilter, setSellerFilter] = useState<number | null>(null);
+  // Estado na URL (feature 267): é o que permite o detalhe do evento linkar direto para o mês
+  // e o vendedor daquela comissão. Mês da COMISSÃO = mês da VENDA (`sale_date`) — não confundir
+  // com o mês da planilha de pagamentos, que é o da realização do evento.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const month = searchParams.get("mes") || currentMonth();
+  const vendedorParam = Number(searchParams.get("vendedor"));
+  const sellerFilter =
+    Number.isInteger(vendedorParam) && vendedorParam > 0 ? vendedorParam : null;
+  const eventoParam = searchParams.get("evento");
+
+  function atualizarFiltro(chave: string, valor: string | null) {
+    const proximo = new URLSearchParams(searchParams);
+    if (valor) proximo.set(chave, valor);
+    else proximo.delete(chave);
+    setSearchParams(proximo, { replace: true });
+  }
+
+  const setMonth = (valor: string) => atualizarFiltro("mes", valor);
+  const setSellerFilter = (valor: number | null) =>
+    atualizarFiltro("vendedor", valor ? String(valor) : null);
+
   const query = useComissoes(month, sellerFilter);
 
   return (
@@ -373,7 +402,9 @@ export function ComissoesPage() {
                 <CardTitle>Comissões de {monthLabel(query.data.month)}</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <Tabs defaultValue="resumo" className="p-3">
+                {/* Vindo de um link com `?evento=`, abrir na aba Resumo esconderia justamente o
+                    filtro que o link semeou. */}
+                <Tabs defaultValue={eventoParam ? "detalhamento" : "resumo"} className="p-3">
                   <TabsList>
                     <TabsTrigger value="resumo">Resumo por Vendedor</TabsTrigger>
                     <TabsTrigger value="detalhamento">Detalhamento de Vendas</TabsTrigger>
@@ -382,7 +413,10 @@ export function ComissoesPage() {
                     <SummaryBySellerView rows={query.data.by_seller} month={query.data.month} />
                   </TabsContent>
                   <TabsContent value="detalhamento">
-                    <DetailView entries={query.data.entries} />
+                    <DetailView
+                      entries={query.data.entries}
+                      eventoId={eventoParam ? Number(eventoParam) : null}
+                    />
                   </TabsContent>
                 </Tabs>
               </CardContent>
