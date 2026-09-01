@@ -39,15 +39,35 @@ def midia_campanha(filename: str):
     Declarada ANTES da rota genérica: `<path:filename>` engoliria `campanhas/arquivo.jpg`.
     """
     folder = os.path.join(current_app.config["UPLOAD_FOLDER"], "virtual_covers")
-    return send_from_directory(folder, filename)
+    # Mesmo cache longo da rota irmã: a capa também nasce com nome UUID (`save_file` em
+    # `app/api/virtuais_write.py:62`), então trocar a capa muda a URL.
+    resposta = send_from_directory(folder, filename, max_age=_CACHE_MIDIA_SEGUNDOS)
+    resposta.headers["Cache-Control"] = f"public, max-age={_CACHE_MIDIA_SEGUNDOS}, immutable"
+    return resposta
+
+
+#: Um ano. Seguro porque o NOME é o conteúdo: `storage.save_file` grava cada foto com um UUID
+#: novo (`catalog_character_ops.py:89,149` chamam sem `filename`), então trocar a foto de um
+#: personagem produz uma URL diferente — nunca o mesmo endereço com bytes diferentes.
+_CACHE_MIDIA_SEGUNDOS = 31_536_000
 
 
 @catalogo_bp.route("/midia/<path:filename>")
 def midia(filename: str):
     """Serve fotos do catálogo — só desta subpasta, nunca a `/uploads` geral (login-only,
-    serve documentos/contratos)."""
+    serve documentos/contratos).
+
+    `max_age` explícito (feature 268): sem ele o Flask responde `Cache-Control: no-cache`, que
+    obriga o navegador a **revalidar cada imagem em toda visita**. Com as ~460 fotos da vitrine
+    isso são ~460 idas ao servidor por página, mesmo com tudo já em cache — e é metade da
+    lentidão que a cliente sente. A outra metade é o peso dos arquivos (ver
+    `scripts/comprimir_imagens.py`).
+    """
     folder = os.path.join(current_app.config["UPLOAD_FOLDER"], "catalog_photos")
-    return send_from_directory(folder, filename)
+    resposta = send_from_directory(folder, filename, max_age=_CACHE_MIDIA_SEGUNDOS)
+    # `immutable` dispensa até a revalidação condicional: o navegador nem pergunta.
+    resposta.headers["Cache-Control"] = f"public, max-age={_CACHE_MIDIA_SEGUNDOS}, immutable"
+    return resposta
 
 
 def _send_og_thumbnail(cover_url: str | None):

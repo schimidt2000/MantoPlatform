@@ -2,6 +2,7 @@
 import io
 import logging
 import os
+import shutil
 
 import click
 
@@ -58,12 +59,31 @@ def register_commands(app):
         click.echo(f"Respostas vinculadas automaticamente: {linked}")
 
     @app.cli.command("compress-images")
-    def compress_images():
-        """Comprime todas as imagens existentes no servidor mantendo os mesmos URLs."""
+    @click.option("--execute", is_flag=True, help="grava de verdade (padrão: só mede)")
+    @click.option("--sem-backup", is_flag=True, help="não guarda o original (só no modo local)")
+    def compress_images(execute: bool, sem_backup: bool):
+        """Comprime as imagens já gravadas, mantendo os mesmos URLs.
+
+        Aplica retroativamente a MESMA regra dos uploads (`storage.save_file`: 1200px, JPEG q85)
+        em quem entrou por fora dela. O caso que motivou a extensão (feature 268): a recuperação
+        pós-Railway gravou as fotos do catálogo com `open(destino,"wb").write(r.content)`
+        (`recuperacao/baixar_catalogo_wp.py:34`) — bytes crus do WordPress, sem passar por
+        `save_file`. Medido em produção em 01/09/2026: mediana de 627 KB e picos de 4,3 MB contra
+        as ~200 KB de quem passou pela regra.
+
+        **Dry-run por padrão.** Sem `--execute` só mede e relata.
+        """
         import click
         from PIL import Image, ImageOps
 
-        from app.models import FigurinoSheet, Talent, User
+        from app import db
+        from app.models import (
+            CatalogCharacter,
+            CatalogItemImage,
+            FigurinoSheet,
+            Talent,
+            User,
+        )
 
         USE_S3 = app.config.get("USE_S3", False)
         MAX_PX = 1200
@@ -108,6 +128,29 @@ def register_commands(app):
                 logger.warning("[migrate-drive] falha ao comprimir imagem: %s", exc)
                 return None
 
+        def _caminho_local(url: str) -> str | None:
+            """Traduz a URL pública no caminho em disco.
+
+            A regra geral é `instance/<url>` — `/uploads/talent_photos/x.jpg` mora em
+            `instance/uploads/talent_photos/x.jpg`. As fotos do catálogo são a exceção: a URL
+            pública é `/catalogo/midia/<arquivo>` (rota que existe para NÃO exigir login), mas o
+            arquivo mora em `uploads/catalog_photos/`. Sem esta tradução o comando resolvia para
+            `instance/catalogo/midia/...`, que não existe, e PULAVA a vitrine inteira em silêncio
+            — o motivo de o comando existir desde sempre e nunca ter tocado o catálogo.
+            """
+            if not url:
+                return None
+            base = app.config.get("UPLOAD_FOLDER") or os.path.join("instance", "uploads")
+            if url.startswith("/catalogo/midia/campanhas/"):
+                return os.path.abspath(
+                    os.path.join(base, "virtual_covers", url.rsplit("/", 1)[-1])
+                )
+            if url.startswith("/catalogo/midia/"):
+                return os.path.abspath(
+                    os.path.join(base, "catalog_photos", url.rsplit("/", 1)[-1])
+                )
+            return os.path.abspath(os.path.join("instance", url.lstrip("/")))
+
         def _compress_local(url: str) -> tuple[int, int] | None:
             """Comprime arquivo local. Retorna (bytes_antes, bytes_depois) ou None."""
             if not url or url.startswith(("http://", "https://")):
@@ -116,11 +159,8 @@ def register_commands(app):
             if ext not in IMAGE_EXTS:
                 return None
 
-            # /uploads/talent_photos/abc.jpg → instance/uploads/talent_photos/abc.jpg
-            rel = url.lstrip("/")
-            local_path = os.path.abspath(os.path.join("instance", rel))
-
-            if not os.path.exists(local_path):
+            local_path = _caminho_local(url)
+            if local_path is None or not os.path.exists(local_path):
                 return None
 
             with open(local_path, "rb") as f:
@@ -130,8 +170,19 @@ def register_commands(app):
             if compressed is None:
                 return None
 
-            with open(local_path, "wb") as f:
-                f.write(compressed)
+            if execute:
+                if not sem_backup:
+                    backup = os.path.join(os.path.dirname(local_path), ".originais")
+                    os.makedirs(backup, exist_ok=True)
+                    destino = os.path.join(backup, os.path.basename(local_path))
+                    if not os.path.exists(destino):  # não sobrescreve backup de rodada anterior
+                        shutil.copy2(local_path, destino)
+                # Arquivo temporário + replace: um Ctrl-C no meio não deixa imagem truncada
+                # servindo na vitrine.
+                temporario = local_path + ".tmp"
+                with open(temporario, "wb") as f:
+                    f.write(compressed)
+                os.replace(temporario, local_path)
 
             return len(original), len(compressed)
 
@@ -178,7 +229,10 @@ def register_commands(app):
 
                 content_type = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
                                 "png": "image/png", "webp": "image/webp"}.get(ext.lstrip("."), "image/jpeg")
-                s3.put_object(Bucket=bucket, Key=key, Body=compressed, ContentType=content_type)
+                if execute:
+                    s3.put_object(
+                        Bucket=bucket, Key=key, Body=compressed, ContentType=content_type
+                    )
                 return len(original), len(compressed)
             except Exception as e:
                 click.echo(f"    Erro S3: {e}", err=True)
@@ -199,6 +253,19 @@ def register_commands(app):
         for u in User.query.all():
             if u.profile_photo:
                 jobs.append(u.profile_photo)
+
+        # Catálogo (feature 268) — a superfície PÚBLICA, e a única que ficou de fora da regra de
+        # compressão por causa da recuperação da 264. `tamanho_por_url` existe porque
+        # `CatalogItemImage.file_size_bytes` guarda o tamanho de quando a foto passou pelo
+        # importador: depois do re-download cru ela ficou mentindo, e precisa ser reescrita.
+        tamanho_por_url: dict[str, list] = {}
+        for img in CatalogItemImage.query.all():
+            if img.url:
+                jobs.append(img.url)
+                tamanho_por_url.setdefault(img.url, []).append(img)
+        for personagem in CatalogCharacter.query.all():
+            if personagem.photo_url:
+                jobs.append(personagem.photo_url)
 
         # Remove duplicatas mantendo ordem
         seen = set()
@@ -230,10 +297,16 @@ def register_commands(app):
                 total_after += after
                 saved_pct = 100 - after * 100 // before if before else 0
                 compressed_count += 1
+                # A coluna volta a dizer a verdade sobre o arquivo em disco.
+                for img in tamanho_por_url.get(url, []):
+                    img.file_size_bytes = after
                 click.echo(
                     f"  [{i:>3}/{len(jobs)}] OK      {label}"
                     f"   {before/1024:.0f}KB -> {after/1024:.0f}KB  (-{saved_pct}%)"
                 )
+
+        if execute:
+            db.session.commit()
 
         click.echo(f"\n{'-'*60}")
         click.echo(f"  Comprimidas : {compressed_count}")
@@ -241,7 +314,12 @@ def register_commands(app):
         if total_before:
             saved_mb = (total_before - total_after) / 1024 / 1024
             click.echo(f"  Economia    : {total_before/1024/1024:.1f}MB -> {total_after/1024/1024:.1f}MB  ({saved_mb:.1f}MB liberados)")
-        click.echo(f"{'-'*60}\n")
+        click.echo(f"{'-'*60}")
+        if not execute:
+            click.echo("  DRY-RUN — nada foi escrito. Repita com --execute para aplicar.")
+        elif not USE_S3 and not sem_backup:
+            click.echo("  Originais preservados em <pasta>/.originais/")
+        click.echo("")
 
     @app.cli.command("migrate-drive-to-volume")
     @click.option("--dry-run", is_flag=True, help="Apenas conta o que seria migrado, sem baixar nem alterar.")

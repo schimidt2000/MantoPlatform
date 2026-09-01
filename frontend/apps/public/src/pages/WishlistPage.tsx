@@ -68,6 +68,7 @@ export function WishlistPage() {
                     <img
                       src={assetUrl(item.cover)}
                       alt={item.name}
+                      loading="lazy"
                       className="h-full w-full object-cover"
                     />
                   )}
