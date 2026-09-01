@@ -174,6 +174,7 @@ export function VitrineVirtualPage() {
                       <img
                         src={assetUrl(campanha.cover_url)}
                         alt={campanha.title}
+                        loading="lazy"
                         className="h-48 w-full object-cover"
                       />
                     )}
