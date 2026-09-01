@@ -76,6 +76,14 @@ export function useFormResponseDetail(id: number | null) {
 function invalidateResponse(queryClient: ReturnType<typeof useQueryClient>, id: number) {
   queryClient.invalidateQueries({ queryKey: ["formularios-resposta-detalhe", id] });
   queryClient.invalidateQueries({ queryKey: ["formularios-respostas"] });
+  // A Home mostra os mesmos contadores (feature 266). A chave dela é ["dashboard", periodo] —
+  // invalidar o prefixo pega todos os períodos. Sem isso, o `staleTime` de 30s com
+  // `refetchOnWindowFocus: false` deixa o número velho NA TELA, e um contador que não acompanha
+  // a ação parece que a ação não salvou.
+  queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  // A ficha da cliente pode ter acabado de ganhar/perder uma festa no histórico, e o gráfico
+  // de origem muda quando a associação cria uma cliente nova.
+  queryClient.invalidateQueries({ queryKey: ["clientes-metricas"] });
 }
 
 /** Associa a resposta a um cliente existente ou cria um a partir dos dados dela. */
@@ -127,7 +135,10 @@ export function useDeleteFormResponse() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => apiFetch<void>(`/api/formularios/respostas/${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["formularios-respostas"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["formularios-respostas"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
   });
 }
 

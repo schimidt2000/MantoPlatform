@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { AvatarThumb, Badge, Button } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import { formatBRL, MoneyInput } from "@manto/money";
@@ -224,13 +225,26 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
       }`}
     >
       <div className="flex items-start gap-2.5">
-        <AvatarThumb
-          src={role.talent?.photo_url ? assetUrl(role.talent.photo_url) : null}
-          name={role.talent?.name}
-          shape="circle"
-          size="lg"
-          fallbackIcon="🎭"
-        />
+        {/* `AvatarThumb` é decorativo (aria-hidden, alt=""), então um link só em volta dele
+            seria anunciado como "link" vazio — daí o aria-label. `flex-none` precisa vir no
+            link, senão o flexbox comprime o avatar. */}
+        {role.talent ? (
+          <Link
+            to={`/talents/${role.talent.id}`}
+            aria-label={`Abrir ficha de ${role.talent.name}`}
+            className="flex-none"
+          >
+            <AvatarThumb
+              src={role.talent.photo_url ? assetUrl(role.talent.photo_url) : null}
+              name={role.talent.name}
+              shape="circle"
+              size="lg"
+              fallbackIcon="🎭"
+            />
+          </Link>
+        ) : (
+          <AvatarThumb src={null} name={undefined} shape="circle" size="lg" fallbackIcon="🎭" />
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-sm font-bold uppercase tracking-wide text-ink">
@@ -263,7 +277,13 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
             )}
           </div>
           <div className="text-sm text-muted">
-            {role.talent ? role.talent.name : "— sem talento —"}
+            {role.talent ? (
+              <Link to={`/talents/${role.talent.id}`} className="hover:underline">
+                {role.talent.name}
+              </Link>
+            ) : (
+              "— sem talento —"
+            )}
           </div>
           <div className="text-xs text-muted">
             {role.assigned_at && <span>Atribuído em {formatDay(role.assigned_at)}</span>}
@@ -451,13 +471,23 @@ function PresencaCard({ role }: { role: RoleItem }) {
   return (
     <li className="rounded-md border border-line bg-surface-2/40 p-3">
       <div className="flex items-start gap-2.5">
-        <AvatarThumb
-          src={role.talent?.photo_url ? assetUrl(role.talent.photo_url) : null}
-          name={role.talent?.name}
-          shape="circle"
-          size="lg"
-          fallbackIcon="🎧"
-        />
+        {role.talent ? (
+          <Link
+            to={`/talents/${role.talent.id}`}
+            aria-label={`Abrir ficha de ${role.talent.name}`}
+            className="flex-none"
+          >
+            <AvatarThumb
+              src={role.talent.photo_url ? assetUrl(role.talent.photo_url) : null}
+              name={role.talent.name}
+              shape="circle"
+              size="lg"
+              fallbackIcon="🎧"
+            />
+          </Link>
+        ) : (
+          <AvatarThumb src={null} name={undefined} shape="circle" size="lg" fallbackIcon="🎧" />
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-sm font-bold uppercase tracking-wide text-ink">
@@ -466,7 +496,13 @@ function PresencaCard({ role }: { role: RoleItem }) {
             <Badge>somente leitura</Badge>
           </div>
           <div className="text-sm text-muted">
-            {role.talent ? role.talent.name : "— ninguém designado —"}
+            {role.talent ? (
+              <Link to={`/talents/${role.talent.id}`} className="hover:underline">
+                {role.talent.name}
+              </Link>
+            ) : (
+              "— ninguém designado —"
+            )}
           </div>
           <div className="text-xs text-muted">
             {role.assigned_at && (

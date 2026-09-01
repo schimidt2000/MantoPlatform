@@ -52,7 +52,6 @@ from app.models import (  # noqa: E402
     CalendarEvent,
     Client,
     EventClient,
-    FormFieldDefinition,
     FormResponse,
     Role,
     User,

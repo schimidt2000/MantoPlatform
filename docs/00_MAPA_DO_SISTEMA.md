@@ -29,7 +29,7 @@ acontecem só nos fluxos explícitos de criar/editar/excluir evento.
 
 | Camada | Onde | Papel |
 |---|---|---|
-| Factory Flask | `app/__init__.py` | config, 18 blueprints, guards, 4 threads de background, rota `/uploads` |
+| Factory Flask | `app/__init__.py` | config, 18 blueprints, guards, **7** threads de background, rota `/uploads` |
 | Schema | `app/models.py` (2.577 linhas, **68 tabelas**: 63 models + 5 associações) | fonte única do banco |
 | API JSON | `app/api/` (52 módulos, **288 endpoints**) | `<dominio>_read.py` / `<dominio>_write.py` |
 | Núcleo de negócio | `app/<dominio>/<algo>_ops.py` | funções puras — sem `request`/`render_template`/`flash` |
@@ -65,7 +65,7 @@ o `JSON.parse` estoura e o erro vira lista vazia em silêncio.
 | Orçamento | `app/orcamento/quote_ops.py`, `pricing.py`, `settings.py`, `transport.py` | `orcamento_read/write.py` | `OrcamentoCalculadoraPage` |
 | EducaManto | `app/educamanto/pricing_ops.py`, `package_ops.py`, `quote_ops.py` | `educamanto_read/write.py` | `EducaManto*Page` |
 | Clientes | `app/clientes/client_ops.py` | `clientes_read/write.py` | `ClientesPage` |
-| Formulários | `app/formularios/formularios_ops.py` + ⚠️ auto-vínculo em `routes.py:246` | `formularios_write.py`, `formularios_admin_*` | `apps/public` `/f/*` + `FormulariosAdminPage` |
+| Formulários | `app/formularios/formularios_ops.py` (auto-vínculo de evento em `:582`, de cliente em `attempt_auto_link_client`) | `formularios_write.py`, `formularios_admin_*` | `apps/public` `/f/*` + `FormulariosAdminPage` |
 | Revisão de mídia | `app/revisao/review_ops.py`, `cleanup.py` | `revisao_read/write.py` | `Revisao*Page` |
 | Feedback da cliente | `app/feedback/routes.py` (sem ops; ~167 l.) | `feedback_write.py` | `apps/public` `/avaliar/:token` |
 | RH | `app/api/rh_read.py` (a lógica mora aqui; `app/rh/routes.py` é casca de 33 l.) | `rh_read.py` | `RhDashboardPage` |

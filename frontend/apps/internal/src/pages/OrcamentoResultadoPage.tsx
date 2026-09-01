@@ -192,6 +192,12 @@ export function OrcamentoResultadoPage() {
             >
               Baixar PDF
             </Button>
+            {/* Esta é a tela onde o "sim" da cliente chega (WhatsApp, PDF, e-mail saem daqui),
+                então o próximo passo mora aqui — e não só no histórico, que obrigava a voltar e
+                reencontrar a linha. Variante sólida: é a única ação de avanço da barra. */}
+            <Button size="sm" asChild>
+              <Link to={`/events/new?orcamento_id=${entryId}`}>Criar evento</Link>
+            </Button>
           </div>
         }
       />

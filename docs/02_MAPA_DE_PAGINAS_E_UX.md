@@ -186,6 +186,13 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **Acesso**: todos exceto `REVENDEDOR_EDUCAMANTO` puro.
 - **API**: `GET /api/dashboard` (`dashboard_service.py`).
 - **Vínculos**: cards levam a Agenda, Casting, Figurino e Financeiro.
+- **Feature 266 — painel "📝 Respostas de formulário"**: quatro linhas rótulo→número (festa futura
+  sem evento *em vermelho quando > 0*, sem evento, sem cliente, ambíguo) + botão "Abrir formulários".
+  Mesmo gate do painel Comercial, e **respeita "Ver como"** (o bloco vem `null` do servidor e a
+  seção some). Os números são os mesmos cartões de `/formularios` — vêm do mesmo `count_status()`.
+  ⚠️ Contam o que **não foi tratado**, não o que é "novo": não existe noção de lido no modelo.
+  As mutações de `/formularios` invalidam `["dashboard"]`, senão o número ficaria velho na tela
+  (`staleTime` de 30s + `refetchOnWindowFocus: false`).
 - **Desde a 206 é a única `/` da plataforma.** O dashboard Jinja foi aposentado: a raiz do Flask
   responde 301 para `https://app.mantoproducoes.com.br`. Painéis atuais: Casting, Figurino,
   Comercial (cobranças), Contas recorrentes, Performance e Cargos dispensados — **menos** blocos
@@ -330,6 +337,14 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
     "+ Agendar ensaio" some quando o evento não pede ensaio **e** não tem nenhum já agendado —
     feature 239, evita contradizer o aviso "Este evento não pede ensaio." logo abaixo) ·
     *Logística & trajeto* · *Materiais de ensaio* · *Presente 3D* · *Pedido virtual*.
+  - **Navegação para fora (feature 266)**: o nome de cada cliente vira link para `/clientes/:id`
+    (texto puro quando não há nome — um link chamado "—" não diz para onde vai); o talento
+    escalado leva a `/talents/:id` **pelo avatar e pelo nome, nos dois cards** (o do personagem e
+    o de Presença — linkar só um deixaria a mesma pessoa clicável numa lista e morta na de baixo;
+    o avatar leva `aria-label` porque o `AvatarThumb` é decorativo); e o pré-contrato ganha link
+    para `/formularios?resposta=<id>` **nos dois ramos** — o `DataRow` só aparece sem permissão de
+    edição, então quem tem `can_edit_core` (o caso normal do comercial) vê a linha "Ver resposta
+    completa" abaixo do `FormResponsePicker`.
   - **Aba Comercial**: *Clientes* (**editável inline**) · *Pré-contrato* (**editável inline**) ·
     *Comercial — dados da venda* (**editável inline**: bruto/desconto/final, transporte, comissão,
     forma de pagamento, parcelas, datas, vendedor, nota fiscal, cortesia/permuta; acréscimos com
@@ -1119,6 +1134,14 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   **"Festas anteriores (formulários)"** lista os formulários preenchidos pela cliente — data da
   festa, link para o evento quando existe ("na agenda") ou marcação "só formulário" (histórico
   pré-2026, que não é materializado no calendário). É a base do marketing de recompra.
+  **Feature 266**: as linhas "só formulário" passaram a ser clicáveis (`/formularios?resposta=<id>`),
+  e a ficha ganhou o card **"Avaliações"** — nota média em estrelas + notas/comentários dela,
+  consumindo `GET /api/clientes/avaliacoes?client_id=` (o filtro já existia no servidor e nenhuma
+  tela usava). ⚠️ O recorte do servidor é por `CalendarEvent.client_id` — o FK do **contratante** —
+  enquanto o card "Eventos" logo acima lista pela associação múltipla `EventClient`: quem entra num
+  evento só como assessora aparece lá e não aqui, e por isso o estado vazio diz *"nenhuma avaliação
+  nos eventos em que ela é a contratante"*. Unificar os dois recortes mudaria a semântica de
+  `/clientes/avaliacoes` inteira — fica para uma feature própria.
 - **Cadastro manual (feature 258)**: botão **"Nova cliente"** no cabeçalho (e no estado vazio da
   busca) abre diálogo com nome*, telefone*, e-mail, empresa, CPF, CNPJ e endereço. Reusa
   `POST /api/clientes/quick-create` (feature 165) e a regra de telefone único: número já
@@ -1173,6 +1196,12 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 #### `/formularios` — Respostas e Editor de Formulários
 - **Acesso**: `_require_vendas()` (COMERCIAL/FINANCEIRO/SUPERADMIN) para as respostas; **editor de
   campos** só `SUPERADMIN`.
+- **Deep-link (feature 266)**: aceita `?resposta=<id>` e abre o diálogo de detalhe daquela resposta
+  direto — é o destino dos links do detalhe do evento (aba Comercial) e da ficha da cliente.
+  A URL é a fonte de verdade de qual resposta está aberta: abrir empilha no histórico (o **voltar
+  fecha o diálogo**) e fechar limpa o parâmetro, inclusive depois de excluir — senão um F5
+  reabriria o diálogo num id morto. Id não-inteiro é ignorado sem disparar requisição
+  (`/respostas/NaN` devolveria 404 HTML e estouraria o `JSON.parse` do `apiFetch`).
 - **Gerenciador de links públicos** (topo): dois cards — **Pré-Contrato (comum)** ("Festas e
   eventos de pessoa física") e **Contrato Corporativo** ("Empresas / pessoa jurídica") — cada um
   com a URL pública em campo somente-leitura (`{origin}/catalogo/f/pre-contrato` e
@@ -1437,7 +1466,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 |---|---|---|---|
 | `/orcamento` | Calculadora de Orçamento | `COMERCIAL`, `SUPERADMIN` | layout clássico de duas colunas assimétrico (1/3 dados do evento + segurança de agenda, 2/3 equipe/ajustes/resultado); **cálculo 100% reativo** — sem botão "Calcular", qualquer alteração recalcula (debounce ~400ms); alerta "Já na agenda neste dia" abaixo da Data (evita venda em dobro de personagem); painel "Personalizar valores" (valor final ou multiplicador, por duração); contador de itens no link "Histórico de Orçamentos"; campo **Local/Endereço do evento** com **`GoogleAddressInput`** e botão **"Calcular km (Maps)"** ao lado de *Km (ida)*, que preenche a distância pela Distance Matrix (feature 195 — antes o KM aqui era 100% manual); escolher uma sugestão do Google com um modo fora de SP ativo já dispara o cálculo. **Deslocamento em duas etapas** (feature 262, no lugar da checkbox "Evento Fora de São Paulo"): "Evento em São Paulo" (padrão) × "Evento fora de São Paulo"; marcando fora, o painel dourado abre com a escolha "Por nossa conta" (padrão) × "Por conta da cliente" — no modo cliente o painel vira "Adicionais — Fora de SP", esconde tipo de transporte/carretinha/nº de carros (km e colaboradores ficam) e o veículo sai da conta. Salvar no histórico, "Ver memória de cálculo"; lê `?recalcular_id=` para reabrir um orçamento salvo com os campos preenchidos (feature 191, sobre a base da feature 190; snapshot antigo fora de SP reabre como "por nossa conta") |
 | `/events/cancelamentos` | Exclusões e cancelamentos | `SUPERADMIN` | fila com os pedidos de exclusão do Comercial aguardando decisão e o histórico de eventos cancelados, com o valor e a situação da devolução de cada um. É a **única porta de entrada** para um evento cancelado — ele sai da agenda de propósito (feature 224). Declarada **antes** de `/events/:id` no `App.tsx`, senão `:id` casaria com "cancelamentos" |
-| `/orcamento/:id` | Orçamento gerado | `COMERCIAL`, `SUPERADMIN` | destino de "Gerar Orçamento" e de "Abrir orçamento" no histórico (hotfix 210, sucessora de `orcamento/resultado.html`): mensagem de WhatsApp copiável, resumo por duração, detalhamento do transporte quando fora de SP (no modo "deslocamento por conta da cliente" o tile "Veículo" some e aparece a nota "van/carro não incluído" — feature 262), memória de cálculo e envio do PDF por e-mail. Rota declarada **depois** de `/orcamento/historico` e `/orcamento/configuracoes` — `:id` casaria com elas |
+| `/orcamento/:id` | Orçamento gerado | `COMERCIAL`, `SUPERADMIN` | destino de "Gerar Orçamento" e de "Abrir orçamento" no histórico (hotfix 210, sucessora de `orcamento/resultado.html`): mensagem de WhatsApp copiável, resumo por duração, detalhamento do transporte quando fora de SP (no modo "deslocamento por conta da cliente" o tile "Veículo" some e aparece a nota "van/carro não incluído" — feature 262), memória de cálculo e envio do PDF por e-mail. **Feature 266**: ganhou **Criar evento** (`/events/new?orcamento_id=`) como única ação sólida da barra — esta é a tela onde o "sim" da cliente chega, e converter exigia voltar ao histórico e reencontrar a linha. Rota declarada **depois** de `/orcamento/historico` e `/orcamento/configuracoes` — `:id` casaria com elas |
 | `/orcamento/historico` | Orçamentos | `COMERCIAL`, `SUPERADMIN` | tabela densa com filtros avançados (data, valor, vendedor, tipo), PDF, envio por e-mail, exclusão; **Abrir orçamento** (`/orcamento/:id`), **Criar evento** (`/events/new?orcamento_id=`) e **Recalcular** (`/orcamento?recalcular_id=`), feature 190 |
 | `/orcamento/configuracoes` | Config. Preços | `SUPERADMIN` | `SiteSetting.pricing_config` + personagens especiais, em tabelas densas (feature 190) |
 | `/educamanto` | Calculadora EducaManto | `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO` | feature 235 — por responsabilidades: seletor de **musical**, 4 blocos Manto×Contratante com tooltip (textos de `pdf_textos.py` via `/api/educamanto/textos`), **multi-páginas** (abas; nova página = cópia da atual; musicais podem diferir), equipe técnica da matriz visível, cards Sem/Com NF + **à vista (−5%)**, observação (2.000 chars), transporte novo (checkbox fora de SP → 2 vans; dentro de SP caminhão incluso), **contratação Manto embutida** (Comercial/Superadmin; `PerformersEditor`/`AcrescimosEditor` compartilhados + durações 1h–4h/extra; totais combinados com NF única sobre a soma), breakdown de custos **só para superadmin** (corte na API); mantém `?musical_id=`/`?package_id=`, `?recalcular_id=` (v2 restaura tudo; v1 mapeia pacote→musical com aviso), Data da apresentação + alerta de agenda. **Feature 239**: card "Contratação Manto" reposicionado para logo após "Dias e ensemble" (descoberta — no fim da coluna ninguém achava); a aba da página marca **"+ Manto"** quando a contratação está ativa (`Página N · Nome + Manto`); tooltips dos 4 blocos viraram **`InfoTip`** (hover/clique/toque/teclado, com fallback pt-BR e estado de erro/carregamento em vez de sumir enquanto os textos não chegam); `contratacao_manto` é enviada ao servidor sempre que ativa, mesmo sem duração marcada (antes o payload virava `null` em silêncio e o orçamento saía sem a parte Manto) — "Gerar orçamento" fica desabilitado com aviso inline nesse caso; campo "Extra (h)" de 1 a 4 marca o checkbox de duração correspondente em vez de descartar o valor; "Nova Página" faz cópia profunda da contratação (performers/acréscimos não ficam mais compartilhados entre páginas); `event_location` entra no payload da contratação; banner dourado sob os cards "Sem Nota Fiscal"/"Com Nota Fiscal" avisando que esses dois valores não incluem a contratação Manto quando ela está ativa (usar os totais combinados) |

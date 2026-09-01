@@ -1,8 +1,23 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  PageHeader,
+  Skeleton,
+  StarRating,
+} from "@manto/ui";
 import { formatBRL } from "@manto/money";
-import { useClientDetail, useDeleteClient, useUpdateClient } from "../lib/clientes";
+import {
+  useClientDetail,
+  useClientFeedback,
+  useDeleteClient,
+  useUpdateClient,
+} from "../lib/clientes";
 import { useCurrentUser } from "../lib/useAuth";
 
 function formatDate(iso: string | null): string {
@@ -217,7 +232,12 @@ export function ClientDetailPage() {
                             {f.event_title}
                           </Link>
                         ) : (
-                          <span className="text-ink">{f.form_type_label}</span>
+                          <Link
+                            to={`/formularios?resposta=${f.id}`}
+                            className="text-ink hover:underline"
+                          >
+                            {f.form_type_label}
+                          </Link>
                         )}
                       </div>
                       <span className="shrink-0 rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted">
@@ -229,10 +249,97 @@ export function ClientDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Montado só dentro do bloco de dados carregados: com `:id` inválido o
+              `client_id` cairia da query string (o hook não tem `enabled`) e o card mostraria
+              as avaliações de TODAS as clientes na ficha de uma. */}
+          <AvaliacoesCard clientId={query.data.id} />
           </div>
           </div>
         </>
       )}
     </div>
+  );
+}
+
+function scoreTone(score: number): "green" | "gold" | "red" {
+  if (score >= 5) return "green";
+  if (score >= 4) return "gold";
+  return "red";
+}
+
+/**
+ * Avaliações que esta cliente deu depois dos eventos (feature 266).
+ *
+ * Consome o endpoint que já existia com o filtro `client_id` que já era aceito pelo servidor e
+ * que nenhuma tela usava. Zero código novo de backend.
+ *
+ * ⚠️ O recorte do servidor é por `CalendarEvent.client_id` — o FK do **contratante** — enquanto
+ * o card "Eventos" acima lista pela associação múltipla `EventClient`. Uma cliente que entra num
+ * evento só como assessora aparece lá e não aparece aqui; por isso o estado vazio diz de quais
+ * eventos ele fala, em vez de sugerir que ela nunca avaliou. Unificar os dois recortes mudaria a
+ * semântica da tela `/clientes/avaliacoes` inteira e pede feature própria.
+ */
+function AvaliacoesCard({ clientId }: { clientId: number }) {
+  const query = useClientFeedback({ period: "all", client_id: clientId });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Avaliações</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {query.isLoading && <Skeleton className="h-20 w-full" />}
+
+        {query.isError && (
+          <div className="rounded-md bg-red-soft px-3 py-2 text-sm text-red" role="alert">
+            Não foi possível carregar as avaliações.{" "}
+            <button
+              type="button"
+              onClick={() => void query.refetch()}
+              className="underline hover:no-underline"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        )}
+
+        {query.data &&
+          (query.data.feedbacks.length === 0 ? (
+            <p className="text-sm text-muted">
+              Nenhuma avaliação nos eventos em que ela é a contratante.
+            </p>
+          ) : (
+            <>
+              <div className="mb-3 flex items-center gap-2 text-sm text-muted">
+                <StarRating value={query.data.kpis.media_geral} size="sm" />
+                <span className="tabular-nums">
+                  {query.data.kpis.media_geral.toFixed(1)}/5 ·{" "}
+                  {query.data.kpis.total_avaliacoes}{" "}
+                  {query.data.kpis.total_avaliacoes === 1 ? "avaliação" : "avaliações"}
+                </span>
+              </div>
+              <ul className="divide-y divide-line">
+                {query.data.feedbacks.map((f) => (
+                  <li key={f.id} className="py-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Badge tone={scoreTone(f.score)}>{f.score}/5</Badge>
+                      {f.event && (
+                        <Link
+                          to={`/events/${f.event.id}`}
+                          className="truncate text-ink hover:underline"
+                        >
+                          {f.event.title}
+                        </Link>
+                      )}
+                    </div>
+                    {f.comment && <p className="mt-1 text-muted">{f.comment}</p>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ))}
+      </CardContent>
+    </Card>
   );
 }
