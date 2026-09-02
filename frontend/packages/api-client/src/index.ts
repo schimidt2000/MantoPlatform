@@ -1,5 +1,5 @@
-export { apiFetch, apiFetchBlob, ApiRequestError, API_BASE, assetUrl } from "./client";
-export type { ApiErrorBody } from "./client";
+export { apiFetch, apiFetchBlob, ApiRequestError, API_BASE, assetUrl, assetSrcSet } from "./client";
+export type { ApiErrorBody, AssetUrlOptions, LarguraMiniatura } from "./client";
 export { createQueryClient } from "./queryClient";
 export {
   useAddressAutocomplete,

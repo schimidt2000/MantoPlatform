@@ -7,7 +7,8 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-24** · Em branch: **261-nfc-entregas-video** (entregas anexadas
+> Última atualização: **2026-09-01** · Em branch: **270-miniaturas-catalogo** (variantes de
+> miniatura por largura — sem migration; head segue **`a1c7d3e59b02`**). Antes: **261-nfc-entregas-video** (entregas anexadas
 > a tags NFC; migration **`e08e454c4780`** — head: tabela `nfc_tag_deliveries`; endpoints
 > `POST`/`DELETE /api/3d/nfc/<id>/entregas*` e `GET /api/nfc/<code>/entregas/<id>/media`
 > público; ver §2.2.1 e §3.13.2b). Anterior:
@@ -1200,7 +1201,24 @@ Rotas legadas que **ainda têm uso real** (não são só resíduo):
   caía na tela de login do staff e a capa não carregava. Fica sob `/catalogo/midia/` porque esse
   prefixo já é repassado pelo `frontend/server.js` e proxiado pelos três vite configs — e é
   declarada **antes** da rota abaixo, senão o `<path:filename>` dela engoliria o caminho.
-- `GET /catalogo/midia/<path:filename>` — serve as fotos do catálogo público **sem login**.
+- `GET /catalogo/midia/<path:filename>` — serve as fotos do catálogo público **sem login**
+  (`Cache-Control: public, max-age=31536000, immutable` desde a 268 — o nome é UUID).
+- `GET /catalogo/midia/t/<int:largura>/<filename>` — **variante por largura** da foto do catálogo
+  (feature 270), gerada sob demanda pelo motor de `app/catalogo/og_ops.py` (`resolve_variante`) e
+  cacheada em `uploads/catalog_thumbs/<largura>/`. Allowlist fechada `LARGURAS_PERMITIDAS =
+  (128, 320, 480, 640)`: fora dela, ou arquivo ausente, é 404 **sem gravar nada**. Declarada antes da
+  rota acima (o `<path:filename>` engoliria `t/128/x.jpg`). Mesmo `immutable` de 1 ano. Quem pede
+  é `assetUrl(path, { largura })`/`assetSrcSet()` do `@manto/api-client` — a regra de "quem tem
+  variante" é a mesma nos dois lados (`pastas_da_variante`).
+- `GET /uploads/t/<int:largura>/<path:filename>` (`app/__init__.py`, `login_required`) — variante
+  de **foto de talento** (`talent_photos/<arquivo>` apenas; `talent_docs` fica de fora de
+  propósito — miniatura de RG é PII espalhada), cache em `uploads/talent_thumbs/<largura>/`,
+  `Cache-Control: private, max-age=31536000, immutable` (**`private`**: a rota exige login, e
+  `public` deixaria um cache compartilhado servir a foto a quem não logou). O original em
+  `/uploads/talent_photos/*` ganhou o mesmo cabeçalho; o resto de `/uploads` segue sem cache longo.
+- `flask warm-thumbnails` — pré-aquece as variantes (todas as fotos de item a 128; capas e
+  personagens a 320/480/640; rostos de talento a 320/480/640). Idempotente; rodar depois de cada deploy que
+  mude a receita e depois do `compress-images --execute`.
 - `GET /portal/photo/<path:filename>` — foto de figurino que `GET /api/portal/events/<id>/figurino`
   devolve para o portal React; é rota Jinja, mas checa a mesma sessão de talento **e**, desde a
   feature 216, só serve as subpastas de `PORTAL_PHOTO_SUBFOLDERS` (`app/talent_portal/routes.py:41`).
@@ -1304,6 +1322,7 @@ segmento** do caminho, via `UPLOADS_ROLE_BY_SUBFOLDER` (`app/__init__.py:66-71`)
 | `talent_docs/` | `CASTING`, `SUPERADMIN` |
 | `expenses/` | o **dono** do gasto **ou** financeiro (`_can_read_expense_receipt`, `app/__init__.py:94`) |
 | demais subpastas | qualquer usuário autenticado |
+| `talent_photos/` | qualquer usuário autenticado — e é a **única** subpasta com cache longo (`private, immutable`, feature 270); `GET /uploads/t/<largura>/talent_photos/<arq>` gera a variante pela mesma checagem |
 
 Devolve **404, não 403**, para não confirmar a existência do arquivo. `GET /portal/photo/<path>`
 (`app/talent_portal/routes.py:78`) é restrito às subpastas de `PORTAL_PHOTO_SUBFOLDERS`
@@ -1393,7 +1412,7 @@ primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e 
 |---|---|
 | `/api/*` | toda a API JSON (`@manto/api-client`) |
 | `/uploads/*` | mídia de `app/storage.py`; é o que `assetUrl()` devolve |
-| `/catalogo/midia/*` | fotos públicas do catálogo — casa **antes** do mount `/catalogo` |
+| `/catalogo/midia/*` | fotos públicas do catálogo — casa **antes** do mount `/catalogo`; cobre também as variantes `/catalogo/midia/t/<largura>/*` (feature 270) sem entrada nova |
 | `/catalogo/og/*` | miniatura da prévia de link (`app/catalogo/routes.py:og_image`) — feature 216 |
 | `/portal/photo/*` | foto de figurino do portal (Jinja, mesma sessão do talento) — **antes** do mount `/portal` |
 | `/google/*` | callback do OAuth do Google Calendar (`app/calendar/routes.py`), rota Jinja com `redirect_uri` fixo no Google Console |

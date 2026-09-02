@@ -7,6 +7,7 @@ from flask import (
     g,
     render_template,
     request,
+    send_file,
     send_from_directory,
     session,
     redirect,
@@ -77,6 +78,13 @@ UPLOADS_ROLE_BY_SUBFOLDER = {
 # quebraria a tela de quem enviou. Por isso esta subpasta tem checagem de DONO no banco.
 UPLOADS_OWNER_CHECKED_SUBFOLDER = "expenses"
 
+# Fotos de talento (feature 270): um ano de cache, mas `private` — a rota exige login, e `public`
+# autorizaria um cache compartilhado (CDN/proxy) a servir a foto a quem não logou. `immutable` é
+# seguro pelo mesmo motivo do catálogo: `save_file` grava cada foto com nome novo (UUID), então
+# trocar a foto muda a URL. O resto de `/uploads` (contrato, comprovante, documento) segue sem
+# cache longo — nome estável demais e conteúdo sensível demais.
+_CACHE_FOTOS_TALENTO = 31_536_000
+
 # Demais subpastas (talent_photos, figurino_photos, figurino_thumbs, catalog_photos,
 # acervo_3d_photos, acervo_3d_files, event_obs, ensaio_materials, review, logos) seguem como
 # antes — mídia operacional, liberada a qualquer usuário autenticado.
@@ -106,6 +114,11 @@ def _can_read_expense_receipt(user, relative_path: str) -> bool:
         return True
     expense = SpecialExpense.query.filter_by(receipt_path=relative_path).first()
     return expense is not None and expense.created_by_id == user.id
+
+
+def _subpasta_do_upload(filename: str) -> str:
+    """Primeira pasta do caminho pedido em `/uploads`, normalizada (mesma regra do despacho RBAC)."""
+    return filename.replace("\\", "/").lstrip("/").split("/", 1)[0].lower()
 
 
 def _can_read_upload(user, filename: str) -> bool:
@@ -762,6 +775,7 @@ def create_app():
 
     # Import local: `app.storage` só depende do `current_app`, mas mantê-lo fora do topo do
     # pacote evita reintroduzir ciclo de import na inicialização.
+    from app.catalogo.og_ops import LARGURAS_PERMITIDAS, TALENT_MEDIA_SUBFOLDER, resolve_variante
     from app.storage import is_inline_safe
 
     @app.route("/uploads/<path:filename>")
@@ -789,6 +803,39 @@ def create_app():
         resp.headers["X-Content-Type-Options"] = "nosniff"
         if not inline:
             resp.headers["Content-Type"] = "application/octet-stream"
+        if _subpasta_do_upload(filename) == TALENT_MEDIA_SUBFOLDER:
+            # Só a subpasta das fotos de talento (feature 270) — ver `_CACHE_FOTOS_TALENTO`.
+            resp.headers["Cache-Control"] = f"private, max-age={_CACHE_FOTOS_TALENTO}, immutable"
+        return resp
+
+    @app.route("/uploads/t/<int:largura>/<path:filename>")
+    @login_required
+    def uploaded_variant(largura: int, filename: str):
+        """Variante de ``largura`` px de uma foto de talento (feature 270) — grade do Banco.
+
+        Só `talent_photos/<arquivo>`: `/uploads` serve documento e contrato, e miniatura de RG é
+        PII espalhada sem necessidade (`doc_photo_path` fica de fora de propósito). Mesmo
+        despacho por subpasta do `uploaded_file`; fora da allowlist de larguras ou da subpasta
+        é 404 e nada é gravado.
+        """
+        relative_path = filename.replace("\\", "/").lstrip("/")
+        subpasta, _, nome = relative_path.partition("/")
+        if (
+            largura not in LARGURAS_PERMITIDAS
+            or subpasta != TALENT_MEDIA_SUBFOLDER
+            or not nome
+            or "/" in nome
+            or not _can_read_upload(current_user, relative_path)
+        ):
+            abort(404)
+        thumb = resolve_variante(
+            f"/uploads/{TALENT_MEDIA_SUBFOLDER}/{nome}", largura, app.config["UPLOAD_FOLDER"]
+        )
+        if not thumb:
+            abort(404)
+        resp = send_file(thumb.path, mimetype="image/jpeg", max_age=_CACHE_FOTOS_TALENTO)
+        resp.headers["Cache-Control"] = f"private, max-age={_CACHE_FOTOS_TALENTO}, immutable"
+        resp.headers["X-Content-Type-Options"] = "nosniff"
         return resp
 
     # A impersonação de role vive em `POST/DELETE /api/auth/impersonate` (app/api/auth.py:104,119),

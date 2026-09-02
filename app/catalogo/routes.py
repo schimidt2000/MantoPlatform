@@ -17,7 +17,7 @@ import os
 
 from flask import Blueprint, current_app, send_file, send_from_directory
 
-from app.catalogo.og_ops import resolve_thumbnail
+from app.catalogo.og_ops import LARGURAS_PERMITIDAS, resolve_thumbnail, resolve_variante
 from app.models import CatalogCategory, CatalogItem
 
 catalogo_bp = Blueprint("catalogo", __name__, url_prefix="/catalogo")
@@ -50,6 +50,31 @@ def midia_campanha(filename: str):
 #: novo (`catalog_character_ops.py:89,149` chamam sem `filename`), então trocar a foto de um
 #: personagem produz uma URL diferente — nunca o mesmo endereço com bytes diferentes.
 _CACHE_MIDIA_SEGUNDOS = 31_536_000
+
+
+@catalogo_bp.route("/midia/t/<int:largura>/<filename>")
+def midia_variante(largura: int, filename: str):
+    """Variante de ``largura`` px de uma foto do catálogo (feature 270), gerada sob demanda.
+
+    Variante no CAMINHO, não em query string: há CDN na frente (o `cf-cache-status` aparece nas
+    respostas) e cache de CDN com query string é território de configuração — caminho é
+    inequívoco, e cada variante é uma URL própria, então o `immutable` da 268 continua valendo
+    sem ressalva. A largura vem de uma allowlist fechada (`LARGURAS_PERMITIDAS`); fora dela é
+    404 e nada é gravado. `<filename>` (sem `path:`) já recusa barra, e `og_ops` corta `..`.
+
+    Declarada ANTES de `midia`: `<path:filename>` engoliria `t/128/arquivo.jpg`.
+    """
+    if largura not in LARGURAS_PERMITIDAS:
+        return "", 404
+    thumb = resolve_variante(
+        f"/catalogo/midia/{filename}", largura, current_app.config["UPLOAD_FOLDER"]
+    )
+    if not thumb:
+        return "", 404
+    resposta = send_file(thumb.path, mimetype="image/jpeg", max_age=_CACHE_MIDIA_SEGUNDOS)
+    # Mesmo `immutable` da foto original: o nome de origem é UUID, então foto nova = URL nova.
+    resposta.headers["Cache-Control"] = f"public, max-age={_CACHE_MIDIA_SEGUNDOS}, immutable"
+    return resposta
 
 
 @catalogo_bp.route("/midia/<path:filename>")

@@ -4,10 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-01** · Estado do repositório: pós-hotfix
-> **271-hotfix-corrida-lancamentos** (sem migration; a Home degrada por painel em vez de cair;
-> deploy de 01/09 ~15h40) — a **270-miniaturas-catalogo** tem só `spec.md` (não implementada) —
-> antes deles **267-integridade-comissao**, **268-imagens-catalogo** e **269-link-portal-fixo**
+> Última atualização: **2026-09-01** · Estado do repositório: pós-feature
+> **270-miniaturas-catalogo** (variantes por largura na vitrine e no Banco de Talentos; sem
+> migration; em branch) — antes dela o hotfix **271-hotfix-corrida-lancamentos** (sem migration;
+> a Home degrada por painel em vez de cair; deploy de 01/09 ~17h20) — antes deles
+> **267-integridade-comissao**, **268-imagens-catalogo** e **269-link-portal-fixo**
 > (as três sem migration, subiram no mesmo deploy de 01/09) — antes delas
 > **266-costuras-funil (EM PRODUÇÃO, migration `a1c7d3e59b02` — head)** e
 > **265-nfc-revisao-videos (EM PRODUÇÃO, sem migration)** — as duas subiram no **mesmo deploy** de
@@ -58,6 +59,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **270-miniaturas-catalogo** | A vitrine e o Banco de Talentos param de baixar o arquivo inteiro para desenhar 64–270px: o motor de `og_ops` vira `Receita` (prévia OG intacta, chave `"1"`) e ganha variantes por largura — `/catalogo/midia/t/<128|320|480|640>/<arq>` (público) e `/uploads/t/<largura>/talent_photos/<arq>` (login, cache `private`) — allowlist fechada, 404 sem gravar, cache por largura em `catalog_thumbs/`/`talent_thumbs/`; `assetUrl(path, { largura })` + `assetSrcSet()` no `@manto/api-client`; tira 128, cards `srcset` 320/480/640 com `sizes` da grade; `flask warm-thumbnails`. Achado: o `.tmp` do motor era único por PID, não por thread — 8 threads corrompiam a mesma miniatura | 2026-09-01 | `—` | (aqui) | — |
 | **271-hotfix-corrida-lancamentos** | `GET /api/dashboard` deixa de cair inteiro quando um painel estoura: cada bloco (casting, figurino, ensaio, comercial, formulários, recorrentes) passa por `_bloco()` — exceção vira `rollback` + log com o nome do painel + `None` (o front já trata `None` como "sem painel", mesmo contrato do RBAC por ausência). Geração preguiçosa dos lançamentos recorrentes serializada por `pg_advisory_xact_lock` (não há UNIQUE desde a 121 — a corrida virava duplicata silenciosa); `_ensure_salary_payments` tolera `IntegrityError` da `UNIQUE(user_id, due_date)`. `models.py` deixa de declarar a `uq_recurring_entry_month` fantasma (um `flask db migrate` a recriaria e o startCommand cairia em produção) | 2026-09-01 | `—` | (aqui) | — |
 | **269-link-portal-fixo** | O endereço do Portal do Artista nas mensagens copiadas por humano deixa de vir do ambiente: a cobrança de confirmação da Home saía com `http://localhost:5000/` para quem rodava o ambiente local, e **sem link nenhum** quando `PORTAL_URL` não estava setada (no Render ela é `sync: false`, mora só no painel). `PORTAL_PUBLICO` passa a servir as duas mensagens (o convite do evento já tinha o endereço fixo). `PORTAL_URL` continua sendo a fonte dos e-mails do servidor, agora com default real (`PORTAL_BASE_URL`) | 2026-09-01 | `—` | (aqui) | — |
 | **268-imagens-catalogo** | Vitrine lenta: as 457 fotos do catálogo tinham mediana de 627 KB e picos de 4,3 MB (a recuperação da 264 gravou os bytes crus do WordPress sem passar por `save_file`) **e** eram servidas com `no-cache`, ~460 revalidações por visita. Cache longo nas duas rotas públicas de imagem (nome é UUID, então é seguro) e `flask compress-images` — que já existia com a mesma receita — passa a alcançar o catálogo, ganha dry-run padrão, backup e correção do `file_size_bytes` que estava mentindo | 2026-09-01 | `—` | (aqui) | — |
@@ -209,6 +211,69 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 270 — Miniaturas por largura: pedir o arquivo certo, não o arquivo inteiro            (2026-09-01 · sem migration)
+
+**Problema.** A 268 atacou o peso (compressão) e a repetição (cache). Sobrou o desperdício que
+nenhuma das duas resolve: a vitrine baixava **sempre o arquivo inteiro**, qualquer que fosse o
+tamanho em tela. A tira de miniaturas da `ProductGallery` desenhava 64px baixando o original
+(~380× os bytes necessários); o card da grade (~270px) baixava ~4,5× em área; a grade do Banco de
+Talentos baixava a foto de rosto inteira **e sem cache** (`/uploads` respondia `no-cache`,
+revalidando todas as fotos a cada abertura).
+
+**Solução.** Generalizar o motor que já existia — `app/catalogo/og_ops.py`, a prévia Open Graph
+da 209 — em vez de escrever um segundo. Ele já tinha cache por digest, dimensões no nome do arquivo
+e escrita atômica; o que faltava era parametrizar a receita. `Receita` (tentativas × qualidade,
+teto de bytes, redimensionar pela largura ou pelo lado maior) entra na chave de cache:
+`RECEITA_OG` mantém a chave `"1"` para **não invalidar o cache de prévia que já existe em
+produção**; `receita_variante(largura)` usa `t<largura>`. Variantes redimensionam **pela largura**
+(um card é limitado pela coluna, não pela altura): retrato 1200×1500 → 640×800, não 512×640.
+
+Duas rotas, uma por família de foto, cada uma debaixo de um prefixo que os proxies já repassam:
+`GET /catalogo/midia/t/<int:largura>/<filename>` (pública, `immutable` 1 ano) e
+`GET /uploads/t/<int:largura>/<path:filename>` (login, **só** `talent_photos/<arquivo>`,
+`Cache-Control: private, immutable` — `public` autorizaria um cache compartilhado a servir a foto a
+quem não logou). O original em `/uploads/talent_photos/*` ganhou o mesmo cabeçalho privado; o resto
+de `/uploads` (contrato, comprovante, documento) segue sem cache longo, e `doc_photo_path` fica sem
+variante de propósito — miniatura de RG é PII espalhada por mais um lugar do disco.
+
+No frontend, o ponto único que a constituição já obriga: `assetUrl(path, { largura })` reescreve o
+caminho para a rota de variante pela **mesma regra** de `pastas_da_variante` (só os dois prefixos;
+URL absoluta legada do Drive passa intacta), e `assetSrcSet(path, [320, 640])` monta o `srcset`.
+Tira → 128; `ProductCard`/`CharacterCard`/`TalentMosaic` → `src` 640 + `srcset` 320/480/640 +
+`sizes` espelhando a grade real de cada uso (sem `sizes` o navegador assume 100vw e pede sempre a
+maior). O 480 entrou pela medição em tela: a 375px com DPR 2 o navegador pulava de 320 direto para
+640, porque escolhe a **menor** variante ≥ `sizes × dpr` e `50vw × 2` já passa de 320 — e o `sizes`
+do celular passou a ser a coluna real (`calc(50vw - 32px)`), não `50vw`.
+
+**Decisões que valem lembrar.** Variante no *caminho*, não em query string (há CDN na frente e
+cache de CDN com query string é configuração; caminho é inequívoco e mantém o `immutable`).
+Allowlist fechada `(128, 320, 480, 640)`: sem ela `/t/<n>/` é um gerador de trabalho arbitrário para
+encher o disco de 10 GB. 404 **sem gravar nada** para largura, arquivo ou subpasta inválidos.
+Geração sob demanda (auto-curável) **mais** `flask warm-thumbnails` para ninguém pagar a primeira
+geração numa thread do gunicorn (o incidente da 263 foi requisição presa segurando thread) — rodar
+depois do deploy e depois do `compress-images --execute` (decodificar 4 MB por variante é lento à
+toa; a compressão já rodou em 01/09).
+
+**Achado de passagem — defeito antigo do motor.** O temporário da escrita atômica era
+`{path}.{pid}.tmp`: único por **processo**, e as 12 threads de um worker compartilham o PID. O
+cenário 6 do verify (8 requisições simultâneas da mesma variante) reproduziu: as threads escreviam
+o mesmo `.tmp`, uma resposta saiu com bytes pela metade e o `os.replace` falhava. Agora é
+`tempfile.mkstemp` na mesma pasta (rename continua atômico), e perder a corrida devolve a miniatura
+de quem ganhou em vez de 404. A prévia OG tinha o mesmo bug latente desde a 209; raramente
+disparava porque a prévia é pedida por um crawler de cada vez.
+
+**Verificação.** `specs/270-miniaturas-catalogo/verify_270.py` — 10/10 contra `manto_local`
+(128px com <10% dos bytes; segunda chamada do cache sem reescrever; allowlist; inexistente e
+traversal sem cache; digest por URL/receita com OG preservado; concorrência; talento com login e
+`private`; resto de `/uploads` sem cache longo e docs sem variante; retrato pela largura; limpeza).
+`npm run typecheck` limpo nos três apps; `ruff` no baseline.
+
+**Fora.** WebP/AVIF (negociação por `Accept` duplica o cache — medir o ganho desta primeiro);
+paginação do catálogo; o resto do ERP interno; `width`/`height` nos `<img>` (o `aspect-*` já
+reserva o espaço).
+
+---
 
 ### 271 — A Home degrada por painel em vez de cair inteira            (2026-09-01 · hotfix · sem migration)
 
