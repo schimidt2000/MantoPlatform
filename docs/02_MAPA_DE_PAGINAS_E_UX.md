@@ -286,7 +286,11 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
      ou 🎭 (figurinos).
   4. **Valores e comissões** (`ValoresBlock`) — valor cheio × valor de venda com **percentual de
      desconto calculado em tempo real**, transporte, acréscimos, cortesia/permuta, vendedor.
-     Máscara BRL sempre via `@manto/money`.
+     Máscara BRL sempre via `@manto/money`. **"Data da venda" nasce preenchida com hoje**
+     (hotfix 267b): o formulário clássico prefilhava e o React não — 44 vendas entraram sem data
+     entre 05/08 e 02/09/2026 e sumiram da Planilha de Pagamentos. O servidor também assume hoje
+     quando uma venda nova chega sem data (`event_ops.resolver_data_da_venda`); o prefill é para
+     a pessoa ver a data que vai valer.
   5. **Forma de pagamento e comprovantes** (`PagamentoBlock`) — campos condicionais: *Faturado* →
      vencimento; *Dividido no PIX* → parcelas (2–12). Múltiplos comprovantes, cada um com valor.
   6. **Contrato** (`ContratoBlock`) — upload do arquivo + "Contrato já assinado".

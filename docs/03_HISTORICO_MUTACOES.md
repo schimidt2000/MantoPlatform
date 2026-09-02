@@ -4,11 +4,13 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-02** · Estado do repositório: pós-feature
+> Última atualização: **2026-09-02** · Estado do repositório: pós-hotfix
+> **267b-hotfix-data-da-venda** (sem migration; venda sem data ganha hoje no servidor, ciclo da
+> comissão com fallback em `created_at`, backfill do legado; em branch) — antes dele
 > **272-notificacoes-internas** (tabela `notifications`, migration **`b7d2e4f1a9c3`** — head; sino no
-> shell; o e-mail de resposta de formulário da 266 saiu; em branch, empilhada sobre a 270) — antes dela
+> shell; o e-mail de resposta de formulário da 266 saiu; EM PRODUÇÃO desde 02/09 ~16h45 junto da
 > **270-miniaturas-catalogo** (variantes por largura na vitrine e no Banco de Talentos; sem
-> migration; em branch) — antes dela o hotfix **271-hotfix-corrida-lancamentos** (sem migration;
+> migration) — antes delas o hotfix **271-hotfix-corrida-lancamentos** (sem migration;
 > a Home degrada por painel em vez de cair; deploy de 01/09 ~17h20) — antes deles
 > **267-integridade-comissao**, **268-imagens-catalogo** e **269-link-portal-fixo**
 > (as três sem migration, subiram no mesmo deploy de 01/09) — antes delas
@@ -61,6 +63,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **267b-hotfix-data-da-venda** | Comissão de agosto da vendedora aparecia como R$ 303,94 na Planilha de Pagamentos (e R$ 5.466,20 na tela de Comissões): 38 vendas sem `sale_date` desde que o React virou a interface primária (04/08) — o formulário Jinja prefilhava a data, o React nascia vazio — e o ciclo `coalesce(payable_from, sale_date)` excluía linha sem data de todo mês. Regra vai para o servidor (`resolver_data_da_venda`: venda nova sem data → hoje; venda antiga sem data não ganha data inventada), ciclo ganha `date(created_at)` como cinto, React volta a prefilhar, backfill com dry-run para 47 eventos | 2026-09-02 | `—` | (aqui) | — |
 | **272-notificacoes-internas** | O aviso deixa de ser e-mail e passa a morar no ERP: tabela `notifications` (uma linha por destinatário, `dedupe_key` UNIQUE por usuário, índice parcial de não lidas, `now_sp`), `notificacoes_ops.emitir()` que não comita (fato e aviso na mesma transação quando o fato ainda não comitou), três produtores (resposta de formulário — **substitui o e-mail da 266**, `send_form_response_email` removida; avaliação da cliente, nota ≤ 2 `urgent`; recusa de convite no portal), quatro endpoints sem gate de papel (escopo por dono, 404 alheio, `ate_id` obrigatório), sino no shell via slot `headerActions` + popover + `/notificacoes`, retenção 30/180 d no laço do review-cleanup | 2026-09-02 | `b7d2e4f1a9c3` | (aqui) | — |
 | **270-miniaturas-catalogo** | A vitrine e o Banco de Talentos param de baixar o arquivo inteiro para desenhar 64–270px: o motor de `og_ops` vira `Receita` (prévia OG intacta, chave `"1"`) e ganha variantes por largura — `/catalogo/midia/t/<128|320|480|640>/<arq>` (público) e `/uploads/t/<largura>/talent_photos/<arq>` (login, cache `private`) — allowlist fechada, 404 sem gravar, cache por largura em `catalog_thumbs/`/`talent_thumbs/`; `assetUrl(path, { largura })` + `assetSrcSet()` no `@manto/api-client`; tira 128, cards `srcset` 320/480/640 com `sizes` da grade; `flask warm-thumbnails`. Achado: o `.tmp` do motor era único por PID, não por thread — 8 threads corrompiam a mesma miniatura | 2026-09-01 | `—` | (aqui) | — |
 | **271-hotfix-corrida-lancamentos** | `GET /api/dashboard` deixa de cair inteiro quando um painel estoura: cada bloco (casting, figurino, ensaio, comercial, formulários, recorrentes) passa por `_bloco()` — exceção vira `rollback` + log com o nome do painel + `None` (o front já trata `None` como "sem painel", mesmo contrato do RBAC por ausência). Geração preguiçosa dos lançamentos recorrentes serializada por `pg_advisory_xact_lock` (não há UNIQUE desde a 121 — a corrida virava duplicata silenciosa); `_ensure_salary_payments` tolera `IntegrityError` da `UNIQUE(user_id, due_date)`. `models.py` deixa de declarar a `uq_recurring_entry_month` fantasma (um `flask db migrate` a recriaria e o startCommand cairia em produção) | 2026-09-01 | `—` | (aqui) | — |
@@ -214,6 +217,61 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 267b — A venda sem data e a comissão que sumia da planilha            (2026-09-02 · hotfix · sem migration)
+
+**Sintoma.** "A comissão da Thays em setembro está em 300 e poucos reais, mas ela vendeu muito em
+agosto." Medido em produção: a tela de Comissões mostrava **R$ 5.466,20** (43 vendas) para
+agosto/2026; a Planilha de Pagamentos, item "Comissões 08/2026" datado 05/09 — o que a financeira
+usa para pagar — mostrava **R$ 303,94** (5 vendas). Mesma tabela, 38 linhas de diferença
+(R$ 5.162,26): todas com `sale_date` NULL.
+
+**Causa em duas partes.** (1) Até 04/08 o formulário de criação era o Jinja, que prefilhava
+"Data da venda" com hoje (`event_create.html:505`). No deploy da 205+206 o React virou a interface
+primária; seu formulário nasce com `sale_date: ""`, o rótulo diz "Data da venda *" mas o schema não
+exige nada, e a página manda `null`. Quem preenchia, preenchia; a Thays não — **44 vendas seguidas
+sem data** a partir de 05/08 (R$ 206.490 em vendas de agosto). (2) A planilha filtra pelo ciclo
+`coalesce(payable_from, sale_date)` (267): com os dois nulos a linha não cai em mês nenhum e nunca
+entra num lote. A tela de Comissões tinha fallback para `created_at` (`_month_scoped_query`) e por
+isso mostrava o número certo — as duas telas discordavam, e a errada era a que paga.
+
+**Correção.** A regra "venda tem data" sai do formulário e vai para o servidor:
+`event_ops.resolver_data_da_venda()` — data informada vale; sem venda (ou cortesia), sem data;
+venda que já tinha data mantém (editar a aba Comercial não apaga a data); venda registrada
+**agora** sem data → hoje, relógio de São Paulo; venda antiga já sem data continua sem — o servidor
+não inventa data velha, porque pagar no mês errado sem ninguém notar é pior que NULL. Usada na
+criação (`_create_event_row`) e nas duas edições (`update_event_core`, `update_event_comercial`).
+`ciclo_de_pagamento_expr()` ganha o terceiro degrau `date(created_at)`: comissão sem data cai no mês
+em que a linha nasceu (que é quando a venda foi gravada), a mesma regra da tela de Comissões — as
+duas telas voltam a concordar e `liquidar_periodo` (mesma expressão) liquida o que a planilha
+mostra. O React volta a prefilhar hoje, para a pessoa **ver** a data que vai valer.
+
+**Legado.** `specs/267b-hotfix-data-da-venda/backfill_data_da_venda.py` (dry-run por padrão,
+`--execute` grava): 47 eventos com venda e sem data em produção ganham a data pela melhor evidência
+— `created_at` da linha de comissão (44 casos: a linha nasce quando a venda é gravada), o `EventLog`
+"Atualizou dados comerciais: venda" (evento importado do Google com venda digitada depois) ou a
+criação do evento — convertida para o dia em São Paulo (os carimbos são UTC). As linhas de comissão
+`a_pagar`/`no_banco` do evento recebem a mesma data. Rodar em produção depende do OK do dono.
+
+**Achados de passagem.** O evento 267 (`(R&I) BLUEY + BINGO`, festa 22/08, venda R$ 2.280 digitada
+em 02/07) não tem vendedor — comissão de ninguém; é decisão do dono, não do código.
+`_month_scoped_query` exclui `no_banco` enquanto a planilha inclui (assimetria antiga; docs/05).
+A validação da API exige venda > 0 — o único jeito de um evento nascer sem venda pela API é
+cortesia/permuta, e é assim que o verify cobre "sem venda, sem data".
+
+**Verificação.** `verify_267b.py` 8/8 contra `manto_local`, com o Google dublado
+(`insert_event`/`update_event`/`delete_event` substituídos — nada chega à agenda real): criação com
+venda e sem data → hoje no evento, na comissão e no item da planilha do mês seguinte; cortesia →
+sem data; PATCH que registra a venda → hoje; legado sem data + PATCH → continua NULL; data
+informada vale e editar sem data mantém; comissão sem data cai no ciclo do `created_at` e é
+liquidável; backfill dry-run não grava e `--execute` preenche pela fonte certa (comissão → log).
+`npm run typecheck` limpo; `ruff` no baseline.
+
+**Descartado.** Exigir `sale_date` no schema Zod quando há venda — o servidor já garante, e uma
+validação a mais no cliente é só mais um campo vermelho para quem nunca soube que precisava; hoje
+como padrão em edição de venda antiga — mentiria o mês da comissão.
+
+---
 
 ### 272 — Notificações internas: o aviso deixa de ser e-mail e passa a morar no ERP            (2026-09-02 · migration `b7d2e4f1a9c3`)
 

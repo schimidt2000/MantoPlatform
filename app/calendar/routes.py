@@ -3243,9 +3243,12 @@ def _create_event_row(data: dict, *, google_event_id: str, gc_title: str) -> Cal
     arquivo) + detecção fora-de-SP (feature 152). Chamado depois que `insert_event` (Google) já
     rodou com sucesso — recebe o id/título já prontos, não sabe nada de Google.
     """
+    from app.calendar.event_ops import resolver_data_da_venda
+
     d = date.fromisoformat(data["date_str"])
     st, et = _build_start_end(d, data["start_str"], data["end_str"])
     is_cortesia = bool(data.get("is_cortesia_permuta"))
+    venda = 0 if is_cortesia else data.get("sale_value")
     # "SHOW sempre gera ensaio" é regra de servidor (feature 239): o React parou de somar
     # `|| event_type === "SHOW"` no payload para a regra viver num lugar só — aqui e em
     # `aplicar_troca_de_tipo`.
@@ -3262,9 +3265,11 @@ def _create_event_row(data: dict, *, google_event_id: str, gc_title: str) -> Cal
         needs_rehearsal=precisa_ensaio,
         source="platform",
         is_cortesia_permuta=is_cortesia,
-        sale_value=0 if is_cortesia else data.get("sale_value"),
+        sale_value=venda,
         sale_value_gross=None if is_cortesia else data.get("sale_value_gross"),
-        sale_date=data.get("sale_date"),
+        # Venda registrada sem data nasce com a data de hoje (hotfix 267b) — era o que o
+        # formulário Jinja fazia pelo prefill; agora é regra de servidor, para qualquer tela.
+        sale_date=resolver_data_da_venda(data.get("sale_date"), venda, None, None),
         transport_value=data.get("transport_value"),
         acrescimo_value=data.get("acrescimo_value"),
         with_invoice=bool(data.get("with_invoice")),
