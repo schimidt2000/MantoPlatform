@@ -252,8 +252,19 @@ def api_marcar_transporte(role_id: int) -> Any:
     event = CalendarEvent.query.get(role.event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
-    if not event.is_outside_sp:
+    if event.is_outside_sp is False:
         return json_error("O transporte só vale para evento fora de São Paulo.", 400)
+    if event.is_outside_sp is None:
+        # Classificação desconhecida (endereço sem CEP e que o Geocoding não resolveu). Quem escala
+        # está dizendo que há carro a ratear — a marcação É a classificação (hotfix 239b), e a
+        # estimativa de trajeto tenta nascer junto para o teto ter base. Dentro de SP conhecido
+        # continua recusado (decisão 4 da 239).
+        from app.calendar.routes import _fetch_travel_data
+        from app.models import SiteSetting
+
+        event.is_outside_sp = True
+        if not event.travel_distance_km:
+            _fetch_travel_data(event, SiteSetting.query.get(1))
 
     from app.calendar.casting_ops import set_transporte
 
@@ -1582,13 +1593,19 @@ def api_travel_estimate(event_id: int) -> Any:
     if not event.location:
         return json_error("Evento sem endereço de destino.", 400, {"location": "Obrigatório"})
 
+    from app.calendar.event_ops import reclassificar_fora_de_sp
     from app.calendar.routes import _fetch_travel_data
     from app.models import SiteSetting
 
+    # "Estimar via Google Maps" também reclassifica dentro/fora de SP (hotfix 239b): é o botão
+    # que a pessoa aperta quando o trajeto (ou o carrinho) não apareceu — cura à mão.
+    reclassificar_fora_de_sp(event, local_mudou=True)
     if not _fetch_travel_data(event, SiteSetting.query.get(1)):
+        db.session.commit()
         return json_error(
             "Não foi possível estimar o trajeto — verifique o endereço do evento.", 400
         )
+    db.session.commit()
     return _event_detail_json(event)
 
 

@@ -197,7 +197,10 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
   const acimaDoTeto = tetoEfetivo != null && cache > tetoEfetivo;
   const podeUltrapassar = Boolean(data.flags.is_superadmin);
   // O carrinho só existe fora de SP: dentro da cidade não há veículo a ratear (decisão 4).
-  const foraDeSP = Boolean(data.event.travel?.is_outside_sp);
+  // "Desconhecido" (`null`) conta como fora (hotfix 239b): 55 dos 104 eventos futuros estavam
+  // sem classificação e o botão sumia — quem escala é quem sabe se há carro; marcar em evento
+  // desconhecido classifica o evento como fora de SP no servidor.
+  const foraDeSP = data.event.travel?.is_outside_sp !== false;
   const fazTransporte = Boolean(role.does_transport);
   // A conta do teto (só superadmin). Papel criado à mão não tem nota: o teto existe, mas
   // ninguém o calculou de um orçamento — dizer isso é mais útil do que não dizer nada.

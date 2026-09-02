@@ -5,8 +5,10 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-09-02** · Estado do repositório: pós-hotfix
+> **239b-hotfix-carrinho-fora-de-sp** (sem migration; Geocoding classifica dentro/fora de SP,
+> edição reclassifica, marcar transporte em evento desconhecido classifica; em branch) — antes dele
 > **267b-hotfix-data-da-venda** (sem migration; venda sem data ganha hoje no servidor, ciclo da
-> comissão com fallback em `created_at`, backfill do legado; em branch) — antes dele
+> comissão com fallback em `created_at`, backfill do legado; EM PRODUÇÃO desde 02/09 ~17h20) — antes dele
 > **272-notificacoes-internas** (tabela `notifications`, migration **`b7d2e4f1a9c3`** — head; sino no
 > shell; o e-mail de resposta de formulário da 266 saiu; EM PRODUÇÃO desde 02/09 ~16h45 junto da
 > **270-miniaturas-catalogo** (variantes por largura na vitrine e no Banco de Talentos; sem
@@ -63,6 +65,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **239b-hotfix-carrinho-fora-de-sp** | O botão "🚗 Marcar transporte" não aparecia na maioria dos eventos: `is_outside_sp` só era classificado por CEP ou pela palavra "São Paulo" no endereço, e endereço real de festa não tem nenhum dos dois — 55 dos 104 eventos futuros estavam `NULL` (Porto Feliz, Jundiaí, Alphaville, Belém do Pará…) e `NULL` valia como "não é fora". Geocoding do Google entra entre o CEP e o texto (`maps.cidade_do_endereco`), as edições React reclassificam (`reclassificar_fora_de_sp`), "Estimar via Google Maps" reclassifica, desconhecido mostra o botão e marcar classifica como fora; script de reclassificação com dry-run | 2026-09-02 | `—` | (aqui) | — |
 | **267b-hotfix-data-da-venda** | Comissão de agosto da vendedora aparecia como R$ 303,94 na Planilha de Pagamentos (e R$ 5.466,20 na tela de Comissões): 38 vendas sem `sale_date` desde que o React virou a interface primária (04/08) — o formulário Jinja prefilhava a data, o React nascia vazio — e o ciclo `coalesce(payable_from, sale_date)` excluía linha sem data de todo mês. Regra vai para o servidor (`resolver_data_da_venda`: venda nova sem data → hoje; venda antiga sem data não ganha data inventada), ciclo ganha `date(created_at)` como cinto, React volta a prefilhar, backfill com dry-run para 47 eventos | 2026-09-02 | `—` | (aqui) | — |
 | **272-notificacoes-internas** | O aviso deixa de ser e-mail e passa a morar no ERP: tabela `notifications` (uma linha por destinatário, `dedupe_key` UNIQUE por usuário, índice parcial de não lidas, `now_sp`), `notificacoes_ops.emitir()` que não comita (fato e aviso na mesma transação quando o fato ainda não comitou), três produtores (resposta de formulário — **substitui o e-mail da 266**, `send_form_response_email` removida; avaliação da cliente, nota ≤ 2 `urgent`; recusa de convite no portal), quatro endpoints sem gate de papel (escopo por dono, 404 alheio, `ate_id` obrigatório), sino no shell via slot `headerActions` + popover + `/notificacoes`, retenção 30/180 d no laço do review-cleanup | 2026-09-02 | `b7d2e4f1a9c3` | (aqui) | — |
 | **270-miniaturas-catalogo** | A vitrine e o Banco de Talentos param de baixar o arquivo inteiro para desenhar 64–270px: o motor de `og_ops` vira `Receita` (prévia OG intacta, chave `"1"`) e ganha variantes por largura — `/catalogo/midia/t/<128|320|480|640>/<arq>` (público) e `/uploads/t/<largura>/talent_photos/<arq>` (login, cache `private`) — allowlist fechada, 404 sem gravar, cache por largura em `catalog_thumbs/`/`talent_thumbs/`; `assetUrl(path, { largura })` + `assetSrcSet()` no `@manto/api-client`; tira 128, cards `srcset` 320/480/640 com `sizes` da grade; `flask warm-thumbnails`. Achado: o `.tmp` do motor era único por PID, não por thread — 8 threads corrompiam a mesma miniatura | 2026-09-01 | `—` | (aqui) | — |
@@ -217,6 +220,46 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 239b — O carrinho que não aparecia: "fora de SP" ficava desconhecido            (2026-09-02 · hotfix · sem migration)
+
+**Sintoma.** "O botão do carrinho não está aparecendo em todos os eventos." O casting usa
+"🚗 Marcar transporte" para dizer quem leva o carro — o teto de cachê dessa pessoa sobe a parcela
+do veículo (feature 239). Medido em produção: dos 104 eventos futuros, **55 estavam sem
+classificação** (`is_outside_sp` NULL), 47 dentro de SP e só **2** fora. No histórico inteiro, 3.
+
+**Causa.** `_lookup_sp_status` (`app/calendar/routes.py`) só classificava com CEP no texto (ViaCEP)
+ou com a palavra "São Paulo" no texto. Endereço real de festa é "Buffet Wish - Alphaville",
+"Fazenda Boa Vista, Porto Feliz", "buffet jujuba - jundiai": sem CEP, sem "São Paulo" → `None`.
+E `None` valia como "não é fora" — o botão não renderizava (`Boolean(is_outside_sp)`) e o
+`POST /roles/<id>/transporte` recusava com 400. Agravante: as duas edições React trocavam o
+endereço sem reclassificar (só a criação e o sync do Google classificavam).
+
+**Correção.** (1) Geocoding do Google entre o CEP e o fallback por texto:
+`maps.cidade_do_endereco()` devolve município/UF (`administrative_area_level_2` → `locality`).
+Testado com a chave de produção em 10 endereços reais — Porto Feliz, Barueri, Jundiaí,
+Carapicuíba e Belém/PA como fora; Tatuapé, Pinheiros, Campo Belo e um endereço de rua como São
+Paulo; um buffet só com "zona norte" sem resultado. (2) `event_ops.reclassificar_fora_de_sp`:
+endereço que mudou reclassifica; endereço igual só se estava desconhecido (cura sem gastar
+Geocoding — o verify prova que flag conhecida + endereço igual não chama o Google); fora de SP
+sem distância busca a estimativa. Chamada nas duas edições React e em "Estimar via Google Maps".
+(3) **Desconhecido conta como fora, e marcar classifica**: o botão aparece com
+`is_outside_sp !== false`; marcar num evento desconhecido grava `True` e tenta a estimativa. Dentro
+de SP conhecido continua sem botão e com 400 — a decisão 4 da 239 fica de pé. (4) A Logística
+mostra "Dentro ou fora de SP: não identificado" ao lado do botão de estimar.
+
+**Legado.** `specs/239b-hotfix-carrinho-fora-de-sp/reclassificar_fora_de_sp.py` (dry-run;
+`--execute`; `--todos` para os 229 passados) classifica os 55 futuros pelo Geocoding e busca a
+distância dos que forem fora.
+
+**Verificação.** `verify_239b.py` 7/7 contra `manto_local` com Google dublado (Geocoding por
+dicionário, trajeto fixo, Agenda no-op). `npm run typecheck` limpo; `ruff` no baseline.
+
+**Descartado.** Lista de cidades vizinhas em vez do Geocoding (envelhece; não cobre "Belém do
+Pará"); botão dentro de SP (decisão 4); zerar `travel_distance_km` ao virar dentro de SP como o
+Jinja fazia (a Logística estima trajeto para qualquer evento).
+
+---
 
 ### 267b — A venda sem data e a comissão que sumia da planilha            (2026-09-02 · hotfix · sem migration)
 

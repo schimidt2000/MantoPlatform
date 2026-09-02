@@ -443,12 +443,16 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   orçamento vinculado" quando o papel não veio de orçamento); quem autoriza acima do teto precisa
   saber de onde ele saiu. O servidor faz o mesmo corte de RBAC — `cache_cap`/`cache_cap_note` nem
   chegam no payload de quem não é superadmin.
-- **Carrinho de transporte fora de SP (feature 239)**: em evento com `is_outside_sp`, cada card
+- **Carrinho de transporte fora de SP (feature 239)**: em evento com `is_outside_sp` — ou com a
+  classificação **desconhecida**, hotfix 239b: 55 dos 104 eventos futuros estavam `NULL` e o botão
+  sumia; marcar num desconhecido classifica o evento como fora de SP no servidor —, cada card
   de casting ganha o botão **"🚗 Marcar transporte"**/**"🚗 Leva o carro"** (gate `_can_edit_event`,
   mesmo de quem escala) para marcar quem leva o veículo. Marcado, o card mostra a badge dourada
   **"🚗 Transporte"** (com o valor da parcela no `title`) e, só para superadmin, a linha do teto
   passa a somar essa parcela ("... + transporte R$ 100,00 (carrinho)"). O valor pago continua sendo
   um número só em `cache_value` — não existe campo de dinheiro separado para o transporte na tela.
+  Na aba **Logística**, o card do trajeto mostra "Dentro ou fora de SP: não identificado" quando a
+  classificação é `null`, e "Estimar via Google Maps" refaz a classificação (hotfix 239b).
 - **Vaga "Técnico de Som (Presença)" somente leitura (feature 239, decisões 9/11)**: dentro de
   "Equipe de apoio" ela vira um card sem nenhuma ação — sem campo de cachê, sem botão de convite,
   sem status de pagamento, só o nome de quem foi designado (ou "— ninguém designado —") e a nota

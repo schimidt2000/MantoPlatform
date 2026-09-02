@@ -2440,11 +2440,20 @@ def _lookup_sp_status(location: str) -> bool | None:
         except Exception as exc:  # noqa: BLE001 — resposta externa inesperada; cai no fallback de string
             current_app.logger.warning("[transporte] geocode fora de SP falhou, usando fallback: %s", exc)
 
+    # Sem CEP (o caso de quase todo endereço de festa): pergunta ao Geocoding do Google qual é o
+    # município (hotfix 239b). Antes daqui a resposta era "desconhecido" para "Buffet X - Alphaville"
+    # ou "Fazenda Y, Porto Feliz", e o carrinho de transporte simplesmente não aparecia.
+    from app import maps
+
+    cidade, uf = maps.cidade_do_endereco(location)
+    if cidade:
+        return not (cidade.strip().lower() in _SP_CITY_TERMS and (uf or "SP").strip().upper() == "SP")
+
     # Fallback: se "São Paulo" está explicitamente no endereço, é dentro da cidade
     loc_lower = location.lower()
     if any(term in loc_lower for term in _SP_CITY_TERMS):
         return False
-    # Sem CEP e sem "São Paulo" no endereço: desconhecido
+    # Sem CEP, sem Geocoding e sem "São Paulo" no endereço: desconhecido
     return None
 
 

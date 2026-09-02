@@ -231,7 +231,12 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 **Feature 239 — regras de negócio novas do Casting/Agenda.**
 
 - **Carrinho de transporte fora de SP** (`app/calendar/casting_ops.py`). `EventRole.does_transport`
-  marca quem leva um veículo no evento (só existe com `event.is_outside_sp`; gate de quem marca =
+  marca quem leva um veículo no evento (só existe com `event.is_outside_sp` — e, desde o hotfix
+  239b, também quando a classificação é **desconhecida** (`NULL`): marcar grava
+  `is_outside_sp=True` e tenta a estimativa de trajeto; só `False` recusa. A classificação vem de
+  `_lookup_sp_status`: CEP → ViaCEP; senão **Geocoding do Google** (`maps.cidade_do_endereco`);
+  senão texto; e é refeita nas edições React quando o endereço muda ou estava desconhecida
+  (`event_ops.reclassificar_fora_de_sp`). Gate de quem marca =
   `_can_edit_event()`, mesmo de quem escala). O valor **nunca** é gravado à parte: o teto do cachê
   sobe pela parcela e o que se paga fica todo em `cache_value` (um número só), então planilha de
   pagamentos, custo do evento, KPI e DRE seguem sem qualquer mudança de código.
@@ -645,8 +650,8 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 | POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` |
 | POST | `/api/roles/<id>/assign`, `/api/roles/<id>/invite`, `/api/roles/<id>/figurino-done`, `/api/roles/<id>/dismiss`, `/api/roles/<id>/restore` |
 | POST | `/api/roles/<id>/payment-status`, `/api/roles/<id>/figurino-sheet` *(feature 192)* |
-| POST\|DELETE | `/api/roles/<id>/transporte` *(feature 239 — marca/desmarca o carrinho de transporte; `POST` recusa com 400 fora de `event.is_outside_sp`, `DELETE` não tem essa guarda para permitir limpar marcação de evento que deixou de ser fora de SP)* |
-| POST | `/api/events/<id>/travel-estimate`, `/api/events/<id>/materials`, `/api/events/<id>/feedback-link` *(feature 192)* |
+| POST\|DELETE | `/api/roles/<id>/transporte` *(feature 239 — marca/desmarca o carrinho de transporte; `POST` recusa com 400 só quando `event.is_outside_sp` é `False` — desconhecido vira `True` ao marcar (hotfix 239b); `DELETE` não tem essa guarda para permitir limpar marcação de evento que deixou de ser fora de SP)* |
+| POST | `/api/events/<id>/travel-estimate` *(desde o hotfix 239b também reclassifica dentro/fora de SP)*, `/api/events/<id>/materials`, `/api/events/<id>/feedback-link` *(feature 192)* |
 | POST | `/api/contracts/<id>/toggle-signed`, `/api/reimbursements/<id>/collect` |
 | PATCH | `/api/events/<id>`, `/api/events/<id>/logistics`, `/api/payments/<id>` |
 | PATCH | `/api/events/<id>/basico`, `/api/events/<id>/comercial`, `/api/events/<id>/form-response` *(feature 215)* |

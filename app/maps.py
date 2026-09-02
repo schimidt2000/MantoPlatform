@@ -77,6 +77,56 @@ def distance_km_ida(endereco: str):
         return None, f"Erro ao consultar Google Maps: {exc}", 500
 
 
+def cidade_do_endereco(endereco: str) -> tuple[str | None, str | None]:
+    """Município e UF de um endereço pelo Geocoding do Google (hotfix 239b).
+
+    Existe porque a classificação "fora de SP" só sabia ler CEP (ViaCEP) ou a palavra "São Paulo"
+    no texto — e endereço real de festa é "Buffet X - Alphaville" ou "Fazenda Y, Porto Feliz":
+    55 dos 104 eventos futuros estavam "desconhecidos" em 02/09/2026, e o carrinho de transporte
+    não aparecia neles. Município vem de ``administrative_area_level_2`` (é assim que o Google
+    modela cidade no Brasil), com ``locality`` como segunda opção.
+
+    Args:
+        endereco: Endereço livre, como está no evento.
+
+    Returns:
+        ``(municipio, uf)`` — qualquer um pode ser ``None``; ``(None, None)`` quando não há chave,
+        o Google não reconhece o endereço ou a resposta não traz cidade (ex.: só o estado).
+    """
+    termo = (endereco or "").strip()
+    api_key = _api_key()
+    if not termo or not api_key:
+        return None, None
+    try:
+        import googlemaps
+
+        gmaps = googlemaps.Client(key=api_key, timeout=_GMAPS_TIMEOUT, retry_timeout=_GMAPS_RETRY_TIMEOUT)
+        resultados = gmaps.geocode(termo, region="br", language="pt-BR")
+    except ImportError:
+        return None, None
+    except Exception as exc:  # noqa: BLE001 — classificação é opcional; o erro real vai para o log
+        logger.warning("Falha no Geocoding para %r: %s", termo, exc)
+        return None, None
+
+    for resultado in resultados or []:
+        componentes = resultado.get("address_components", [])
+        cidade = _componente(componentes, "administrative_area_level_2") or _componente(
+            componentes, "locality"
+        )
+        uf = _componente(componentes, "administrative_area_level_1", curto=True)
+        if cidade:
+            return cidade, uf
+    return None, None
+
+
+def _componente(componentes: list, tipo: str, *, curto: bool = False) -> str | None:
+    """Nome (longo ou curto) do primeiro `address_component` que tem ``tipo`` em `types`."""
+    for componente in componentes:
+        if tipo in componente.get("types", []):
+            return componente.get("short_name" if curto else "long_name") or None
+    return None
+
+
 def address_autocomplete(
     query: str,
     session_token: str | None = None,
