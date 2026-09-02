@@ -29,9 +29,10 @@ import io
 import os
 import sys
 import threading
+import time
 import traceback
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
@@ -126,12 +127,23 @@ def preparar() -> None:
     estado["superadmin"] = user
 
 
-def limpar() -> None:
-    for caminho in estado.get("arquivos", []):
+def _remove_com_paciencia(caminho: str) -> None:
+    """`os.remove` que espera um handle recém-fechado ser solto (só acontece no Windows)."""
+    for tentativa in range(5):
         try:
             os.remove(caminho)
+            return
+        except FileNotFoundError:
+            return
         except OSError:
-            pass
+            if tentativa == 4:
+                raise
+            time.sleep(0.1)
+
+
+def limpar() -> None:
+    for caminho in estado.get("arquivos", []):
+        _remove_com_paciencia(caminho)
     # Caches gerados pelos cenários: todos os digests das URLs de teste, em todas as larguras.
     urls = [
         f"/catalogo/midia/{estado.get('foto', PREFIX + 'teste.jpg')}",
@@ -145,7 +157,7 @@ def limpar() -> None:
         for largura in og_ops.LARGURAS_PERMITIDAS:
             digest = og_ops.cache_digest(url, og_ops.receita_variante(largura))
             for f in glob.glob(os.path.join(pastas[1], str(largura), f"{digest}_*")):
-                os.remove(f)
+                _remove_com_paciencia(f)
     for u in User.query.filter(User.email.like(f"{PREFIX}%")).all():
         u.roles.clear()
         db.session.delete(u)
@@ -228,9 +240,22 @@ def cen_06_concorrencia() -> None:
         try:
             with app.test_client() as c:
                 barreira.wait(timeout=10)
-                r = c.get(caminho)
+                # No Windows a troca atômica (`os.replace`) e uma LEITURA concorrente do mesmo
+                # arquivo podem colidir com ACCESS_DENIED — artefato do sistema de arquivos daqui,
+                # não do motor: no Linux (produção) o rename é atômico para quem lê. Só no Windows,
+                # e só para PermissionError, a requisição é repetida; o que se prova continua
+                # sendo: todas 200 ao final, um arquivo de cache, nenhum `.tmp`.
+                for tentativa in range(3):
+                    try:
+                        r = c.get(caminho)
+                        break
+                    except PermissionError:
+                        if os.name != "nt" or tentativa == 2:
+                            raise
+                        time.sleep(0.05)
                 codigos.append(r.status_code)
                 _dimensoes(r.data)  # JPEG íntegro
+                r.close()  # solta o handle do arquivo (no Windows ele bloqueia a limpeza)
         except BaseException as exc:  # noqa: BLE001
             erros.append(exc)
 
