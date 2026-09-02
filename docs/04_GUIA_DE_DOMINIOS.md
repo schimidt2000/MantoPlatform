@@ -191,7 +191,12 @@ Nunca esteve escrita em lugar nenhum. São 9 ramos, em ordem:
 6. Base negativa vira 0; arredondamento `ROUND_HALF_UP` em 2 casas.
 7. **Ciclo de pagamento**: comissão comum entra pelo mês da **venda** (`sale_date`); comissão
    EducaManto entra pelo mês da **realização** (`payable_from = event.start_at.date()`, `:184`).
-   `coalesce(payable_from, sale_date)` (`:1029`) é a expressão canônica do "mês da comissão".
+   `coalesce(payable_from, sale_date, date(created_at))` (`comissoes_ops.ciclo_de_pagamento_expr`) é
+   a expressão canônica do "mês da comissão" — o terceiro degrau entrou no hotfix 267b: comissão
+   de venda gravada sem `sale_date` caía fora de TODO mês da Planilha de Pagamentos (38 linhas,
+   R$ 5.162,26, em agosto/2026). A regra de negócio "venda tem data" mora em
+   `event_ops.resolver_data_da_venda` (venda nova sem data → hoje em São Paulo; venda antiga sem
+   data não ganha data inventada — é caso do backfill em `specs/267b-hotfix-data-da-venda/`).
 8. Comissão já **paga** nunca é reescrita (`:198`) — é histórico.
 9. Se o evento é líder de grupo, o custo somado inclui os satélites (`_group_cost`, `:79`).
 

@@ -24,7 +24,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.constants import EVENT_TYPE_SHOW, RoleName
+from app.constants import EVENT_TYPE_SHOW, RoleName, now_sp
 from app.email_service import send_async, send_ensaio_alert_email, send_event_changed_email
 from app.formularios.formularios_ops import apply_event_link, clear_event_link
 from app.models import (
@@ -614,6 +614,41 @@ def _sincronizar_e_trocar_tipo(
     return avisos
 
 
+def resolver_data_da_venda(
+    informada: date | None, venda: Any, venda_anterior: Any, data_atual: date | None
+) -> date | None:
+    """Data da venda que vai para o banco (hotfix 267b).
+
+    A data da venda é o **ciclo da comissão** (`coalesce(payable_from, sale_date)` na Planilha de
+    Pagamentos): venda sem data é comissão que nunca aparece para ser paga. O formulário Jinja
+    prefilhava o campo com "hoje"; o React, interface primária desde 04/08/2026, nascia vazio — e
+    38 vendas de agosto ficaram sem ciclo, R$ 5.162,26 de comissão invisíveis na planilha. A regra
+    sai do formulário e vem para o servidor, onde vale para qualquer tela:
+
+    - data informada → vale a informada;
+    - sem venda (ou cortesia/permuta) → sem data;
+    - venda que já tinha data → mantém (editar a aba Comercial não apaga a data);
+    - venda registrada **agora** (não havia venda antes), sem data → hoje, relógio de São Paulo;
+    - venda antiga que já estava sem data → continua sem: o servidor não inventa uma data velha;
+      o legado é do backfill em `specs/267b-hotfix-data-da-venda/backfill_data_da_venda.py`.
+
+    Args:
+        informada: `sale_date` que veio no corpo, ou ``None``.
+        venda: `sale_value` que está sendo gravado agora (já zerado quando é cortesia).
+        venda_anterior: `sale_value` que o evento tinha antes desta gravação (``None`` na criação).
+        data_atual: `sale_date` que o evento tinha antes desta gravação (``None`` na criação).
+    """
+    if informada is not None:
+        return informada
+    if not venda:
+        return None
+    if data_atual is not None:
+        return data_atual
+    if not venda_anterior:
+        return now_sp().date()
+    return None
+
+
 def update_event_core(
     event: Any,
     data: dict,
@@ -679,6 +714,7 @@ def update_event_core(
     event.needs_rehearsal = bool(data.get("needs_rehearsal"))
 
     is_cortesia = bool(data.get("is_cortesia_permuta"))
+    venda_anterior, data_anterior = event.sale_value, event.sale_date
     event.is_cortesia_permuta = is_cortesia
     event.sale_value = 0 if is_cortesia else data.get("sale_value")
     event.sale_value_gross = 0 if is_cortesia else data.get("sale_value_gross")
@@ -686,7 +722,9 @@ def update_event_core(
     event.acrescimo_value = data.get("acrescimo_value")
     event.with_invoice = bool(data.get("with_invoice"))
     event.seller_id = data.get("seller_id")
-    event.sale_date = data.get("sale_date")
+    event.sale_date = resolver_data_da_venda(
+        data.get("sale_date"), event.sale_value, venda_anterior, data_anterior
+    )
     event.payment_method = data.get("payment_method")
     event.payment_installments = data.get("payment_installments")
     event.payment_due_date = data.get("payment_due_date")
@@ -866,13 +904,16 @@ def update_event_comercial(
             9 ramos do financeiro — mesmo arranjo de `calendar/group_ops.py`.
     """
     is_cortesia = bool(data.get("is_cortesia_permuta"))
+    venda_anterior, data_anterior = event.sale_value, event.sale_date
     event.is_cortesia_permuta = is_cortesia
     event.sale_value = 0 if is_cortesia else data.get("sale_value")
     event.sale_value_gross = 0 if is_cortesia else data.get("sale_value_gross")
     event.transport_value = data.get("transport_value")
     event.with_invoice = bool(data.get("with_invoice"))
     event.seller_id = data.get("seller_id")
-    event.sale_date = data.get("sale_date")
+    event.sale_date = resolver_data_da_venda(
+        data.get("sale_date"), event.sale_value, venda_anterior, data_anterior
+    )
     event.commission_rate = data.get("commission_rate")
     event.payment_method = data.get("payment_method")
     event.payment_installments = data.get("payment_installments")

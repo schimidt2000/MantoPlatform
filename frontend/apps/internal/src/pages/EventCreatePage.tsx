@@ -29,6 +29,7 @@ import {
 import { enviarComprovante, enviarContrato, enviarReembolso } from "../lib/eventAttachments";
 import { enviarObservacaoComFoto } from "../lib/observations";
 import { useFormResponseDetail } from "../lib/formulariosAdmin";
+import { hojeYmd } from "../lib/horaLocal";
 import type { SelectedFormResponse } from "../components/FormResponsePicker";
 import { ClienteBlock } from "../components/EventFormBlocks/ClienteBlock";
 import { DadosEventoBlock } from "../components/EventFormBlocks/DadosEventoBlock";
@@ -92,7 +93,10 @@ export function EventCreatePage() {
   const methods = useForm<EventFormValues>({
     resolver: zodResolver(eventSchema),
     mode: "onBlur",
-    defaultValues: DEFAULT_EVENT_FORM_VALUES,
+    // "Data da venda" nasce com hoje (hotfix 267b): o formulário clássico prefilhava e o React
+    // não — 38 vendas de agosto entraram sem data e sumiram da Planilha de Pagamentos. O
+    // servidor também assume hoje quando o campo vem vazio; aqui é para a pessoa VER a data.
+    defaultValues: { ...DEFAULT_EVENT_FORM_VALUES, sale_date: hojeYmd() },
   });
   const { handleSubmit, setError, setValue, setFocus, formState } = methods;
   const { errors, isSubmitting } = formState;

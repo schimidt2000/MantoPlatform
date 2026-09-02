@@ -196,10 +196,24 @@ def ciclo_de_pagamento_expr():
     o item era montado pelo `coalesce`, então o item de maio procurava a venda em maio, achava
     zero linhas, e a tela mostrava "pago" sobre um lote que continuava `a_pagar` no banco.
 
+    Hotfix 267b: terceiro degrau, `date(created_at)`. Uma comissão sem `sale_date` (a venda foi
+    gravada sem data — o formulário React nascia com o campo vazio) caía fora de **todo** mês da
+    Planilha de Pagamentos e nunca entrava num lote de pagamento: 38 comissões de agosto de uma
+    vendedora, R$ 5.162,26, invisíveis. A data de criação da linha é a melhor aproximação da data
+    da venda (a linha nasce quando a venda é gravada), e é o que a tela de Comissões já usava como
+    fallback (`_month_scoped_query`) — as duas telas passam a concordar. Ressalva: `created_at` é
+    UTC (`utcnow`), então uma venda gravada depois das 21h do último dia do mês pode cair no mês
+    seguinte por esse degrau — o degrau é cinto para o legado; venda nova nasce com `sale_date`
+    (`event_ops.resolver_data_da_venda`).
+
     Returns:
-        Expressão SQLAlchemy `coalesce(payable_from, sale_date)`.
+        Expressão SQLAlchemy `coalesce(payable_from, sale_date, date(created_at))`.
     """
-    return db.func.coalesce(CommissionPayment.payable_from, CommissionPayment.sale_date)
+    return db.func.coalesce(
+        CommissionPayment.payable_from,
+        CommissionPayment.sale_date,
+        db.func.date(CommissionPayment.created_at),
+    )
 
 
 def liquidar_periodo(
