@@ -29,7 +29,7 @@ acontecem só nos fluxos explícitos de criar/editar/excluir evento.
 
 | Camada | Onde | Papel |
 |---|---|---|
-| Factory Flask | `app/__init__.py` | config, 18 blueprints, guards, **7** threads de background, rota `/uploads` |
+| Factory Flask | `app/__init__.py` | config, 18 blueprints, guards, **7** threads de background (o laço do review-cleanup roda DUAS rotinas desde a 272: arquivos de revisão vencidos e retenção de `notifications`), rota `/uploads` |
 | Schema | `app/models.py` (2.577 linhas, **68 tabelas**: 63 models + 5 associações) | fonte única do banco |
 | API JSON | `app/api/` (52 módulos, **288 endpoints**) | `<dominio>_read.py` / `<dominio>_write.py` |
 | Núcleo de negócio | `app/<dominio>/<algo>_ops.py` | funções puras — sem `request`/`render_template`/`flash` |
@@ -122,6 +122,13 @@ existência.
 não renderiza) ou traz `flags.<nome>` (11 flags geradas por `_role_flags`,
 `app/api/agenda_read.py:136-161`).
 
+**Terceiro padrão (feature 272): RBAC na emissão, escopo por dono na leitura.** As notificações
+internas (`notifications`) são endereçadas por papel **quando o fato acontece**
+(`notificacoes_ops.DESTINATARIOS_POR_KIND`) e gravadas como `user_id`; os endpoints
+`/api/notificacoes*` não têm gate de papel — filtram sempre por `current_user.id` no servidor e
+devolvem 404 (não 403) para id alheio. "Ver como" **não** troca a caixa: ela é da pessoa, não do
+papel.
+
 ---
 
 ## 5. Convenções obrigatórias
@@ -160,7 +167,8 @@ As que quebram em silêncio. Leia esta seção inteira uma vez.
    Google Agenda**.
 2. **Terceiro relógio.** As tabelas `virtual_*` (feature 205) usam `now_sp()`
    (`app/constants.py:114`) até em `created_at`. Comparar `VirtualOrder.created_at` com
-   `CalendarEvent.created_at` mistura relógios com 3h de diferença.
+   `CalendarEvent.created_at` mistura relógios com 3h de diferença. `notifications.created_at`
+   (feature 272) também é `now_sp()` — comparar com `audit_logs.created_at` (UTC) erra 3 h.
 3. **`date.today()`/`utcnow()` em código de negócio é bug latente**: produção roda em UTC, então
    depois das 21h de Brasília o dia já virou. O relógio canônico é `now_sp()`.
 4. **Dinheiro é `Numeric(12,2)`/`Decimal`**, `ROUND_HALF_UP` em 2 casas. JSON trafega reais decimais.

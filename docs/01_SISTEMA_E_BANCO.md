@@ -7,7 +7,10 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-08-24** · Em branch: **261-nfc-entregas-video** (entregas anexadas
+> Última atualização: **2026-09-02** · Em branch: **272-notificacoes-internas** (tabela
+> `notifications`, migration **`b7d2e4f1a9c3`** — head; endpoints `/api/notificacoes*`; o e-mail de
+> resposta de formulário da 266 saiu). Antes: **270-miniaturas-catalogo** (variantes de miniatura por
+> largura — sem migration) e **261-nfc-entregas-video** (entregas anexadas
 > a tags NFC; migration **`e08e454c4780`** — head: tabela `nfc_tag_deliveries`; endpoints
 > `POST`/`DELETE /api/3d/nfc/<id>/entregas*` e `GET /api/nfc/<code>/entregas/<id>/media`
 > público; ver §2.2.1 e §3.13.2b). Anterior:
@@ -213,6 +216,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 | `event_logs` | `EventLog` | trilha por evento (`actor_name`, `actor_role`, `message`) | `event_id` |
 | `ensaio_materials` | `EnsaioMaterial` | materiais de ensaio (upload/link) | `event_id`, `user_id` |
 | `audit_logs` | `AuditLog` | trilha global de auditoria (usada por `app.utils.audit`) | — |
+| `notifications` | `Notification` | notificações internas por destinatário (feature 272): `kind`, `severity` (`info`\|`urgent`), texto pronto (`title`/`body`/`link_path`), referência fraca (`entity_type`/`entity_id`, sem FK), `dedupe_key`, `read_at` (NULL = não lida). `UNIQUE(user_id, dedupe_key)` é a trava de idempotência; índice **parcial** `(user_id, id) WHERE read_at IS NULL` serve o polling. `created_at` em `now_sp()`. Emissão/leitura em `app/notificacoes/notificacoes_ops.py` | `user_id` (CASCADE) |
 | `sync_logs` | `SyncLog` | histórico de sincronização com o Google Calendar | — |
 | `import_state` | `ImportState` | estado da importação de planilhas | — |
 
@@ -1095,6 +1099,30 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
   trata `incluir_loja_virtual` e `resumo_loja_virtual` tanto no pipeline de vendas quanto na DRE
   (`:155`, `:172`, `:276`, `:282`, `:332`, `:521`). Ver §3.6.
 
+### 3.13.5 Notificações internas — `notificacoes_read.py` / `notificacoes_write.py` (feature 272)
+
+RBAC: só `@api_login_required`; **nenhum gate por papel** — o RBAC aconteceu na emissão (quem foi
+endereçado) e a leitura filtra sempre por `Notification.user_id == current_user.id`. "Ver como" não
+troca a caixa. REVENDEDOR_EDUCAMANTO nem chega aqui (guarda de perfil restrito da 078 → 403).
+
+- `GET /api/notificacoes/nao-lidas` → `{unread_count}` — **o endpoint do polling** (60 s por aba
+  visível; `refetchOnWindowFocus`): um COUNT no índice parcial, zero join.
+- `GET /api/notificacoes?antes_de=<id>&limite=30&somente_nao_lidas=1` → `{items, next_before,
+  unread_count}` — keyset por `id`, nunca offset; `limite` 1..100.
+- `POST /api/notificacoes/<id>/lida` → `{id, read_at, unread_count}` — idempotente; id alheio → 404.
+- `POST /api/notificacoes/lidas` `{ate_id}` → `{marcadas, unread_count}` — `ate_id` obrigatório
+  (400 sem ele): "marcar todas" nunca engole o aviso que chegou depois de a lista ser desenhada.
+
+Produtores da v1 (`notificacoes_ops.notificar_*`, textos junto do catálogo de `kind`): resposta de
+formulário público (`formularios_write._notificar_comercial`, regime best-effort depois do fato —
+**substituiu o e-mail da 266**; `send_form_response_email` foi removida), avaliação da cliente
+(`feedback_write`, mesma transação do fato; nota ≤ 2 = `urgent`) e recusa de convite pelo talento
+(`portal_ops.reject_invite`, mesma transação; `urgent` se o evento é em ≤ 7 dias; chave por dia).
+Efeitos colaterais: `GET /api/formularios/respostas/<id>` marca lidas as notificações daquela
+resposta **para quem abriu** (um GET que escreve, de propósito); `delete_response` apaga as da
+resposta. Retenção (lida > 30 d, não lida > 180 d) no laço do review-cleanup e em `flask
+notificacoes-limpar [--execute]`.
+
 ### 3.14 Superfícies públicas (sem login)
 **Catálogo — item avulso × tema (fase 1, migration `c8f4d92e17ab`).** `catalog_items.figurino_sheet_id`
 guarda a ficha do item quando ele se contrata SOZINHO. INVARIANTE: item com elenco (um tema) tem
@@ -1200,7 +1228,24 @@ Rotas legadas que **ainda têm uso real** (não são só resíduo):
   caía na tela de login do staff e a capa não carregava. Fica sob `/catalogo/midia/` porque esse
   prefixo já é repassado pelo `frontend/server.js` e proxiado pelos três vite configs — e é
   declarada **antes** da rota abaixo, senão o `<path:filename>` dela engoliria o caminho.
-- `GET /catalogo/midia/<path:filename>` — serve as fotos do catálogo público **sem login**.
+- `GET /catalogo/midia/<path:filename>` — serve as fotos do catálogo público **sem login**
+  (`Cache-Control: public, max-age=31536000, immutable` desde a 268 — o nome é UUID).
+- `GET /catalogo/midia/t/<int:largura>/<filename>` — **variante por largura** da foto do catálogo
+  (feature 270), gerada sob demanda pelo motor de `app/catalogo/og_ops.py` (`resolve_variante`) e
+  cacheada em `uploads/catalog_thumbs/<largura>/`. Allowlist fechada `LARGURAS_PERMITIDAS =
+  (128, 320, 480, 640)`: fora dela, ou arquivo ausente, é 404 **sem gravar nada**. Declarada antes da
+  rota acima (o `<path:filename>` engoliria `t/128/x.jpg`). Mesmo `immutable` de 1 ano. Quem pede
+  é `assetUrl(path, { largura })`/`assetSrcSet()` do `@manto/api-client` — a regra de "quem tem
+  variante" é a mesma nos dois lados (`pastas_da_variante`).
+- `GET /uploads/t/<int:largura>/<path:filename>` (`app/__init__.py`, `login_required`) — variante
+  de **foto de talento** (`talent_photos/<arquivo>` apenas; `talent_docs` fica de fora de
+  propósito — miniatura de RG é PII espalhada), cache em `uploads/talent_thumbs/<largura>/`,
+  `Cache-Control: private, max-age=31536000, immutable` (**`private`**: a rota exige login, e
+  `public` deixaria um cache compartilhado servir a foto a quem não logou). O original em
+  `/uploads/talent_photos/*` ganhou o mesmo cabeçalho; o resto de `/uploads` segue sem cache longo.
+- `flask warm-thumbnails` — pré-aquece as variantes (todas as fotos de item a 128; capas e
+  personagens a 320/480/640; rostos de talento a 320/480/640). Idempotente; rodar depois de cada deploy que
+  mude a receita e depois do `compress-images --execute`.
 - `GET /portal/photo/<path:filename>` — foto de figurino que `GET /api/portal/events/<id>/figurino`
   devolve para o portal React; é rota Jinja, mas checa a mesma sessão de talento **e**, desde a
   feature 216, só serve as subpastas de `PORTAL_PHOTO_SUBFOLDERS` (`app/talent_portal/routes.py:41`).
@@ -1288,6 +1333,11 @@ Gates por módulo (todos em `app/api/`):
 | `_CAN_ENSAIO` (`app/calendar/routes.py:50`) | criar/editar/excluir ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `_CAN_ENSAIO_MATERIAL` (`app/calendar/routes.py:3627`) | materiais de ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 
+> **Terceiro padrão (feature 272): RBAC na emissão, escopo por dono na leitura.** `/api/notificacoes*`
+> não tem gate de papel: quem podia agir no fato foi decidido quando ele aconteceu
+> (`notificacoes_ops.DESTINATARIOS_POR_KIND`), e cada um lê só a própria caixa (`user_id ==
+> current_user.id`, 404 para id alheio). Não é "ausência de chave" nem `flags.<nome>` — ver §3.13.5.
+>
 > ⚠️ Estes gates **não cobrem tudo**: 83 das 288 rotas de `app/api/` não têm gate de papel além de
 > `api_login_required` (a maioria por design — leitura aberta a staff autenticado, ou RBAC por posse
 > do recurso). A intenção está declarada na **docstring de topo do módulo**, não na view. E o nome do
@@ -1304,6 +1354,7 @@ segmento** do caminho, via `UPLOADS_ROLE_BY_SUBFOLDER` (`app/__init__.py:66-71`)
 | `talent_docs/` | `CASTING`, `SUPERADMIN` |
 | `expenses/` | o **dono** do gasto **ou** financeiro (`_can_read_expense_receipt`, `app/__init__.py:94`) |
 | demais subpastas | qualquer usuário autenticado |
+| `talent_photos/` | qualquer usuário autenticado — e é a **única** subpasta com cache longo (`private, immutable`, feature 270); `GET /uploads/t/<largura>/talent_photos/<arq>` gera a variante pela mesma checagem |
 
 Devolve **404, não 403**, para não confirmar a existência do arquivo. `GET /portal/photo/<path>`
 (`app/talent_portal/routes.py:78`) é restrito às subpastas de `PORTAL_PHOTO_SUBFOLDERS`
@@ -1393,7 +1444,7 @@ primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e 
 |---|---|
 | `/api/*` | toda a API JSON (`@manto/api-client`) |
 | `/uploads/*` | mídia de `app/storage.py`; é o que `assetUrl()` devolve |
-| `/catalogo/midia/*` | fotos públicas do catálogo — casa **antes** do mount `/catalogo` |
+| `/catalogo/midia/*` | fotos públicas do catálogo — casa **antes** do mount `/catalogo`; cobre também as variantes `/catalogo/midia/t/<largura>/*` (feature 270) sem entrada nova |
 | `/catalogo/og/*` | miniatura da prévia de link (`app/catalogo/routes.py:og_image`) — feature 216 |
 | `/portal/photo/*` | foto de figurino do portal (Jinja, mesma sessão do talento) — **antes** do mount `/portal` |
 | `/google/*` | callback do OAuth do Google Calendar (`app/calendar/routes.py`), rota Jinja com `redirect_uri` fixo no Google Console |

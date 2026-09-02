@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@manto/ui";
-import { assetUrl } from "@manto/api-client";
+import { assetSrcSet, assetUrl } from "@manto/api-client";
 import {
   useApproveTalent,
   useRejectTalent,
@@ -31,8 +31,13 @@ function MosaicCard({ talent, isPending }: { talent: TalentSummary; isPending: b
       <Link to={`/talents/${talent.id}`} className="group relative block aspect-[3/4] bg-surface-2">
         {talent.photo_face_path ? (
           <img
-            src={assetUrl(talent.photo_face_path)}
+            // Grade `2 / sm 3 / md 4 / xl 5 / 2xl 6` colunas (abaixo): o card tem ~200-270px, e
+            // baixar a foto de rosto inteira para isso era ~6× de área jogada fora (feature 270).
+            src={assetUrl(talent.photo_face_path, { largura: 640 })}
+            srcSet={assetSrcSet(talent.photo_face_path, [320, 480, 640])}
+            sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 768px) 25vw, (min-width: 640px) 33vw, calc(50vw - 30px)"
             alt={talent.full_name}
+            loading="lazy"
             className="h-full w-full object-cover transition-transform group-hover:scale-105"
           />
         ) : (

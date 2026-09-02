@@ -49,6 +49,13 @@ export interface AppLayoutProps {
   renderLink: (args: RenderLinkArgs) => ReactNode;
   /** Título mostrado na barra superior do mobile. */
   mobileTitle?: string;
+  /**
+   * Ações sempre visíveis do shell (feature 272: o sino de notificações). Renderizadas DUAS vezes
+   * — na linha da marca da sidebar do desktop e à direita da barra superior do mobile, fora do
+   * drawer (um sino escondido atrás do hambúrguer não avisa nada). Só uma instância é visível por
+   * vez (`hidden lg:block` × `lg:hidden`); o app é quem garante que as duas leem o mesmo dado.
+   */
+  headerActions?: ReactNode;
   children: ReactNode;
 }
 
@@ -134,6 +141,7 @@ function AppLayout({
   footer,
   renderLink,
   mobileTitle = "Manto",
+  headerActions,
   children,
 }: AppLayoutProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -158,9 +166,14 @@ function AppLayout({
     };
   }, [drawerOpen, closeDrawer]);
 
-  const sidebarInner = (
+  // `comAcoes` só na sidebar do desktop: no drawer do mobile as ações já estão na barra superior,
+  // e uma terceira cópia dentro do drawer apareceria junto com a da barra.
+  const sidebarInner = (comAcoes: boolean) => (
     <div className="flex h-full flex-col">
-      <div className="border-b border-white/10 px-5 py-4">{brand}</div>
+      <div className="flex items-center justify-between gap-2 border-b border-white/10 px-5 py-4">
+        {brand}
+        {comAcoes && headerActions}
+      </div>
       <SidebarNav sections={sections} renderLink={renderLink} onNavigate={closeDrawer} />
       {footer && <div className="border-t border-white/10 px-3 py-3">{footer}</div>}
     </div>
@@ -174,7 +187,7 @@ function AppLayout({
           claro o token vale o próprio `sidebar-bg`, então a borda some — a sidebar escura já
           se destaca sobre a página clara sem ajuda nenhuma. */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-sidebar-line bg-sidebar-bg lg:block">
-        {sidebarInner}
+        {sidebarInner(true)}
       </aside>
 
       {/* Barra superior — mobile */}
@@ -189,6 +202,7 @@ function AppLayout({
           <Menu className="h-5 w-5" aria-hidden />
         </button>
         <span className="text-base font-semibold text-ink">{mobileTitle}</span>
+        {headerActions && <div className="ml-auto flex items-center">{headerActions}</div>}
       </header>
 
       {/* Drawer — mobile */}
@@ -222,7 +236,7 @@ function AppLayout({
               >
                 <X className="h-5 w-5" aria-hidden />
               </button>
-              {sidebarInner}
+              {sidebarInner(false)}
             </motion.aside>
           </>
         )}

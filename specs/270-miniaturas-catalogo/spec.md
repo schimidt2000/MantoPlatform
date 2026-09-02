@@ -53,7 +53,7 @@ tamanho, em vez de escrever um segundo.
 
 `GET /catalogo/midia/t/<largura>/<arquivo>` — variante por **caminho**, não por query string.
 
-A largura vem de uma allowlist fechada (`128`, `320`, `640`); qualquer outro valor é 404. Sem
+A largura vem de uma allowlist fechada (`128`, `320`, `480`, `640`); qualquer outro valor é 404. Sem
 allowlist, a rota vira um gerador de trabalho arbitrário para quem quiser pedir 10.000 tamanhos.
 
 ### Sizes escolhidos pela tela, não por convenção
@@ -61,7 +61,8 @@ allowlist, a rota vira um gerador de trabalho arbitrário para quem quiser pedir
 | Variante | Serve | Justificativa |
 |---|---|---|
 | `128` | tira de miniaturas (64 px) | 2× para telas retina |
-| `320` | card da grade em telas pequenas | grade é 2 colunas no celular |
+| `320` | card da grade em celular pequeno (≤384 px) | grade é 2 colunas no celular |
+| `480` | card da grade em celular de 390–430 px com DPR 2 | o navegador escolhe a **menor** variante ≥ `sizes × dpr`; a coluna de ~156–175 px × 2 passa de 320 em quase todo aparelho atual, e sem o 480 ele pulava direto para o 640 (*medido na verificação em tela, 375 px / DPR 2*) |
 | `640` | card da grade em desktop (~270 px) | 2× do maior card |
 | original | palco do produto | já é o teto de 1200 px depois da 268 |
 
@@ -71,8 +72,9 @@ allowlist, a rota vira um gerador de trabalho arbitrário para quem quiser pedir
 já obriga todos a usar. Com ele:
 
 - **tira de miniaturas**: `assetUrl(url, { largura: 128 })`;
-- **card da grade**: `srcset` com 320 e 640 + `sizes` refletindo a grade real
-  (`grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`);
+- **card da grade**: `srcset` com 320, 480 e 640 + `sizes` refletindo a grade real
+  (`grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`) — no celular, a **largura real da coluna**
+  (`calc(50vw - 32px)`: padding + gap), não `50vw`, porque essa diferença decide a variante;
 - **palco**: continua no original.
 
 ## Decisões

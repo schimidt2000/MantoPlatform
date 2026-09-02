@@ -20,6 +20,7 @@ from werkzeug.datastructures import FileStorage
 from app import db
 from app.cadastro.cadastro_ops import DOC_EXTS, DOC_MAX, PHOTO_EXTS, PHOTO_MAX, validate_upload
 from app.models import CalendarEvent, EventRole, FigurinoSheet, Talent, TalentMedia
+from app.notificacoes import notificacoes_ops
 from app.storage import save_file
 
 #: Máximo de fotos de atuação que um talento pode manter no portfólio.
@@ -284,11 +285,19 @@ def accept_invite(talent: Talent, role_id: int) -> EventRole | None:
 
 
 def reject_invite(talent: Talent, role_id: int) -> EventRole | None:
-    """Recusa um convite — idempotente. Mantém `talent_id` (o casting precisa saber quem recusou)."""
+    """Recusa um convite — idempotente. Mantém `talent_id` (o casting precisa saber quem recusou).
+
+    A guarda `already rejected` é real desde a 272: antes a função era "idempotente" só porque
+    regravava o mesmo valor — com notificação, regravar seria re-avisar. O aviso ao casting nasce na
+    mesma transação da recusa (regime A de `notificacoes_ops`).
+    """
     role = _owned_role(talent, role_id)
     if role is None:
         return None
+    if role.invite_status == "rejected":
+        return role
     role.invite_status = "rejected"
+    notificacoes_ops.notificar_convite_recusado(role)
     db.session.commit()
     return role
 

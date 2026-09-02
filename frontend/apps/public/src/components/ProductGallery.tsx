@@ -168,7 +168,9 @@ export function ProductGallery({ images, name, videoUrl, videoKind }: ProductGal
             >
               {item.kind === "image" ? (
                 <img
-                  src={assetUrl(item.url)}
+                  // 64px na tela → variante de 128 (2× para retina). Antes baixava o original
+                  // inteiro (~380× mais bytes do que o quadradinho precisa) — feature 270.
+                  src={assetUrl(item.url, { largura: 128 })}
                   alt={`${name} — miniatura ${i + 1}`}
                   loading="lazy"
                   className="h-full w-full object-cover"

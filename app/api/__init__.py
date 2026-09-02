@@ -45,6 +45,8 @@ from app.api import gastos_read as _gastos_read  # noqa: E402,F401
 from app.api import gastos_write as _gastos_write  # noqa: E402,F401
 from app.api import orcamento_read as _orcamento_read  # noqa: E402,F401
 from app.api import orcamento_write as _orcamento_write  # noqa: E402,F401
+from app.api import notificacoes_read as _notificacoes_read  # noqa: E402,F401
+from app.api import notificacoes_write as _notificacoes_write  # noqa: E402,F401
 from app.api import ratings_read as _ratings_read  # noqa: E402,F401
 from app.api import ratings_write as _ratings_write  # noqa: E402,F401
 from app.api import formularios_admin_read as _formularios_admin_read  # noqa: E402,F401

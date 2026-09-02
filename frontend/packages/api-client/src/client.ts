@@ -57,10 +57,56 @@ export const API_BASE = ((import.meta.env.VITE_API_BASE_URL as string | undefine
  * 154) já guardam uma URL absoluta em vez de um path relativo; prefixar `API_BASE` nesse caso
  * quebraria a URL em produção. Detecta `http://`/`https://` e devolve sem prefixar.
  */
-export function assetUrl(path: string | null | undefined): string | undefined {
+export function assetUrl(
+  path: string | null | undefined,
+  options?: AssetUrlOptions,
+): string | undefined {
   if (!path) return undefined;
   if (/^https?:\/\//i.test(path)) return path;
-  return `${API_BASE}${path}`;
+  const caminho = options?.largura ? comVariante(path, options.largura) : path;
+  return `${API_BASE}${caminho}`;
+}
+
+/** Larguras de miniatura que o Flask gera (feature 270) — allowlist fechada dos dois lados. */
+export type LarguraMiniatura = 128 | 320 | 480 | 640;
+
+export interface AssetUrlOptions {
+  /**
+   * Pede a variante desta largura em vez do arquivo original. Só existe para fotos do catálogo
+   * (`/catalogo/midia/<arquivo>`) e fotos de talento (`/uploads/talent_photos/<arquivo>`); para
+   * qualquer outro caminho — ou URL absoluta legada — devolve o original, sem quebrar nada.
+   */
+  largura?: LarguraMiniatura;
+}
+
+const VARIANTE_CATALOGO = /^\/catalogo\/midia\/([^/]+)$/;
+const VARIANTE_TALENTO = /^\/uploads\/talent_photos\/([^/]+)$/;
+
+/**
+ * Reescreve o caminho para a rota de variante (`.../t/<largura>/<arquivo>`). É a MESMA regra de
+ * `pastas_da_variante` em `app/catalogo/og_ops.py`: os dois lados precisam concordar sobre quem
+ * tem miniatura, senão o `<img>` pede uma URL que o Flask responde com 404.
+ */
+function comVariante(path: string, largura: LarguraMiniatura): string {
+  const catalogo = VARIANTE_CATALOGO.exec(path);
+  if (catalogo) return `/catalogo/midia/t/${largura}/${catalogo[1]}`;
+  const talento = VARIANTE_TALENTO.exec(path);
+  if (talento) return `/uploads/t/${largura}/talent_photos/${talento[1]}`;
+  return path;
+}
+
+/**
+ * `srcset` pronto com as variantes pedidas (`"…/t/320/x.jpg 320w, …/t/640/x.jpg 640w"`), ou
+ * `undefined` quando o caminho não tem variante — aí o `<img>` fica só com o `src`, e o
+ * navegador se comporta exatamente como antes da feature 270.
+ */
+export function assetSrcSet(
+  path: string | null | undefined,
+  larguras: readonly LarguraMiniatura[],
+): string | undefined {
+  if (!path || /^https?:\/\//i.test(path)) return undefined;
+  if (comVariante(path, larguras[0] ?? 320) === path) return undefined;
+  return larguras.map((w) => `${assetUrl(path, { largura: w })} ${w}w`).join(", ");
 }
 
 async function parseErrorBody(response: Response): Promise<ApiErrorBody> {

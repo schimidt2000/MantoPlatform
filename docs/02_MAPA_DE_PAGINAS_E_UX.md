@@ -6,7 +6,9 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-08-18** · Em branch: **239-backlog-agosto** (rodada de 11 itens do
+> Última atualização: **2026-09-02** · Em branch: **272-notificacoes-internas** (sino de notificações
+> no shell + `/notificacoes`). Antes: **270-miniaturas-catalogo** (variantes de miniatura na vitrine e no
+> Banco de Talentos). Antes: **239-backlog-agosto** (rodada de 11 itens do
 > backlog — ver `specs/239-backlog-agosto/`)
 >
 > UX nova da 239: **Catálogo** subiu para a **1ª seção do menu** (logo após Agenda), visível a
@@ -176,6 +178,23 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   papéis internos, inclusive `REVENDEDOR_EDUCAMANTO`** (o catálogo já é público, sem exigir
   login; não fazia sentido escondê-lo de quem só vê Agenda e EducaManto). "Gerenciar catálogo"
   não mudou de lugar (`admin-catalogo`, continua restrito a Comercial/Financeiro/Superadmin).
+- **Sino de notificações (feature 272)** — slot `headerActions` do `AppLayout`, renderizado na
+  **linha da marca da sidebar** (desktop) e à direita da **barra superior do mobile, fora do
+  drawer**. Badge com a contagem de não lidas (`9+` acima de 9; polling de 60 s só da contagem,
+  pausado em aba oculta, refeito ao voltar o foco). Clique abre um popover (para a direita da
+  sidebar no desktop; sob a barra no mobile): últimas 20 agrupadas por dia, ícone por `kind`
+  (formulário, estrela, recusa), vermelho quando `urgent`, "Marcar todas como lidas" (com teto
+  `ate_id`) e "Ver todas". Clicar num item marca lida (otimista) e navega para `link_path`.
+  Fecha em Esc e clique fora; foco volta ao sino; `aria-live` só quando a contagem sobe. O
+  revendedor EducaManto não vê o sino. Sem toast, sem som.
+
+#### `/notificacoes` — Notificações *(feature 272)*
+- **Acesso**: qualquer usuário interno (a caixa é do próprio usuário); **sem item de menu** — a
+  entrada é o "Ver todas" do sino (exceção registrada em `docs/04` §8).
+- **UX**: `PageHeader` com "Marcar todas como lidas"; abas **Não lidas (n)** / **Todas**; mesma
+  `NotificacaoItem` do popover, agrupada por dia; "Carregar mais" por cursor (`next_before`); na
+  aba "Não lidas" a linha sai da lista ao ser lida (200 ms, respeita `prefers-reduced-motion`).
+- **API**: `GET /api/notificacoes` · `POST /api/notificacoes/<id>/lida` · `POST /api/notificacoes/lidas`.
 
 ---
 
@@ -459,7 +478,12 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 #### `/talents` — Banco de Talentos
 - **Acesso**: todos exceto `REVENDEDOR_EDUCAMANTO`; **edição** só `CASTING`/`SUPERADMIN`.
 - **UX**: `TalentMosaic` (grade visual com foto) + `TalentFilterPanel` (status, tags, medidas,
-  passaporte/visto, idiomas). Estados `pending` × `active`.
+  passaporte/visto, idiomas). Estados `pending` × `active`. Desde a feature 270 o card baixa a
+  **variante** da foto de rosto (`srcset` 320/480/640 + `sizes` da grade de 2–6 colunas, `loading="lazy"`)
+  por `/uploads/t/<largura>/talent_photos/<arquivo>`, e tanto a variante quanto o original têm
+  `Cache-Control: private, immutable` — a segunda abertura da grade não refaz requisição de foto
+  (antes, `/uploads` respondia `no-cache` e revalidava todas). A foto de documento continua
+  inteira e sem cache longo.
 - **Aba "Emails com problema"** (feature 219, só `CASTING`/`SUPERADMIN`): fila de quem não está
   recebendo nossos emails, agrupada por endereço, com o motivo traduzido, o que fazer, contador de
   falhas e link de WhatsApp com a mensagem já escrita. `Resolver` fecha o endereço inteiro.
@@ -1532,7 +1556,10 @@ Todas as telas são **mobile-first** (Princípio VIII).
 #### `/catalogo/` — Vitrine (grade do catálogo)
 - **Objetivo**: descoberta dos Temas ativos.
 - **UX**: `ProductCard` com capa, busca e filtros; **lista de interesse** flutuante
-  (`WishlistFloat`) sempre visível.
+  (`WishlistFloat`) sempre visível. A capa do card vem em **variante** (feature 270): `src` 640 +
+  `srcset` 320/480/640 + `sizes` da grade real (`grid-cols-2 sm:3 lg:4`; no celular a coluna real,
+  `calc(50vw - 32px)`) — o navegador pede 320/480 no celular e 640 no desktop em vez do original. Na grade de categoria (`large`) o `sizes`
+  é o da grade de 2/3 colunas.
 - **API**: `GET /api/catalogo`.
 
 #### `/catalogo/categorias` e `/catalogo/categoria/:slug`
@@ -1557,6 +1584,11 @@ Todas as telas são **mobile-first** (Princípio VIII).
   - **"Adicionar à lista"** no cabeçalho adiciona o **pacote completo** como item único.
   - Botão de **copiar link do Personagem** (alvo de toque corrigido para mobile).
   - Open Graph usa a foto de `position = 0` do Tema.
+  - **Miniaturas por largura (feature 270)**: a tira de miniaturas da `ProductGallery` (64px)
+    pede `assetUrl(url, { largura: 128 })` em vez do original (antes, abrir um produto com 8
+    fotos baixava 8 originais para desenhar 8 quadradinhos); o palco continua no original.
+    `CharacterCard` usa `srcset` 320/480/640 como o `ProductCard`. Servidas por
+    `/catalogo/midia/t/<largura>/<arquivo>` (ver `docs/01` §3).
 - **API**: `GET /api/catalogo/<slug>`.
 
 #### `/catalogo/lista-desejos` — Lista de Interesse

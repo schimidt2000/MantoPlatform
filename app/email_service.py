@@ -438,58 +438,6 @@ def send_ensaio_alert_email(event, users: list) -> int:
     return sent
 
 
-# ── Email de resposta nova de formulário (feature 266) ─────────────────────────
-
-def send_form_response_email(response, users: list) -> int:
-    """Avisa o comercial que uma resposta de formulário público chegou (feature 266).
-
-    Até a 266 o único "aviso" era o link de WhatsApp que a **própria cliente** disparava depois
-    de enviar: se ela fechasse a página antes do redirect, o lead ficava salvo e invisível até
-    alguém abrir `/formularios` por iniciativa própria.
-
-    Vai só para quem pode agir no lead (COMERCIAL/SUPERADMIN, resolvido por quem chama).
-    Mandar para CASTING e FIGURINO transformaria o aviso em ruído e o time aprenderia a
-    ignorá-lo — e um aviso ignorado não avisa nada.
-
-    Args:
-        response: a ``FormResponse`` recém-salva.
-        users: usuários internos destinatários (já filtrados por papel e por ativos).
-
-    Returns:
-        Quantos e-mails saíram.
-    """
-    if not users:
-        return 0
-
-    base_url = current_app.config.get("PUBLIC_BASE_URL", "").rstrip("/")
-    link = f"{base_url}/formularios?resposta={response.id}" if base_url else ""
-    data_festa = response.event_date.strftime("%d/%m/%Y") if response.event_date else "não informada"
-
-    rows = _info_row("Contratante", response.contact_name or "não informado")
-    rows += _info_row("Telefone", response.contact_phone_display or "não informado")
-    rows += _info_row("Data da festa", data_festa)
-    rows += _info_row("Formulário", response.form_type_label)
-
-    content = (
-        _paragraph("Uma nova resposta de formulário acabou de chegar:")
-        + _info_box(rows)
-        + (_btn("Abrir a resposta →", link) if link else "")
-    )
-    html = _html_wrap(
-        content,
-        preheader=f"{response.contact_name or 'Novo lead'} — festa em {data_festa}.",
-    )
-    assunto = f"[Formulário] {response.contact_name or 'Nova resposta'} — festa em {data_festa}"
-
-    sent = 0
-    for user in users:
-        if not user.email:
-            continue
-        if _send(to=user.email, subject=assunto, html=html):
-            sent += 1
-    return sent
-
-
 # ── Email de reset de senha ────────────────────────────────────────────────────
 
 def send_password_reset_email(talent, reset_url: str) -> bool:

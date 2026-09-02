@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { assetUrl } from "@manto/api-client";
+import { assetSrcSet, assetUrl } from "@manto/api-client";
 import type { CatalogCharacter } from "../lib/catalogo";
 import { WishlistButton } from "./WishlistButton";
 
@@ -39,7 +39,10 @@ export function CharacterCard({ character, temaSlug, highlighted = false }: Char
     <div className="aspect-[4/5] overflow-hidden bg-bg-alt">
       {character.photo_url ? (
         <img
-          src={assetUrl(character.photo_url)}
+          // Mesma grade do ProductCard (`CharacterGrid`: 2 / sm 3 / lg 4 colunas) — feature 270.
+          src={assetUrl(character.photo_url, { largura: 640 })}
+          srcSet={assetSrcSet(character.photo_url, [320, 480, 640])}
+          sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, calc(50vw - 32px)"
           alt={character.name}
           loading="lazy"
           className="h-full w-full object-contain"

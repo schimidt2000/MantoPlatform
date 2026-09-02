@@ -600,6 +600,49 @@ class AuditLog(db.Model):
     created_at  = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
+class Notification(db.Model):
+    """Notificação interna por destinatário (feature 272) — o aviso que substituiu o e-mail.
+
+    Registro derivado de um fato já gravado, endereçado a pessoas concretas (resolvidas por papel
+    na emissão e congeladas como `user_id`), com texto pronto e caminho relativo da SPA. **Uma linha
+    por destinatário**: o estado "lida" é por pessoa, o sino é um COUNT indexado e o dedupe é uma
+    constraint. Referência ao objeto é **fraca** (`entity_type`/`entity_id`, sem FK): a tabela é
+    transversal a todos os domínios.
+
+    `dedupe_key` (`<kind>:<entity_id>[:<marcador>]`) + `user_id` é a UNIQUE que faz dois workers
+    emitindo o mesmo fato produzirem uma linha só. `created_at` é `now_sp` (horário de parede de
+    São Paulo), não o `utcnow` do `AuditLog` — comparar as duas tabelas erra 3 h.
+
+    O índice parcial `(user_id, id) WHERE read_at IS NULL` está declarado aqui E na migration
+    `b7d2e4f1a9c3`: um `flask db migrate` que não o visse no modelo proporia `drop_index`.
+    Emissão e leitura: `app/notificacoes/notificacoes_ops.py`.
+    """
+    __tablename__ = "notifications"
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "dedupe_key", name="uq_notifications_user_dedupe"),
+        db.Index("ix_notifications_user_id", "user_id", "id"),
+        db.Index(
+            "ix_notifications_user_unread", "user_id", "id",
+            postgresql_where=db.text("read_at IS NULL"),
+            sqlite_where=db.text("read_at IS NULL"),
+        ),
+        db.Index("ix_notifications_entity", "entity_type", "entity_id"),
+    )
+
+    id          = db.Column(db.Integer, primary_key=True)
+    user_id     = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    kind        = db.Column(db.String(40), nullable=False)
+    severity    = db.Column(db.String(10), nullable=False, default="info", server_default="info")
+    title       = db.Column(db.String(200), nullable=False)
+    body        = db.Column(db.String(500), nullable=True)
+    link_path   = db.Column(db.String(300), nullable=True)   # caminho RELATIVO da SPA interna
+    entity_type = db.Column(db.String(30), nullable=True)    # "form_response","client_feedback","event_role"
+    entity_id   = db.Column(db.Integer, nullable=True)
+    dedupe_key  = db.Column(db.String(120), nullable=False)
+    created_at  = db.Column(db.DateTime, default=now_sp, nullable=False)
+    read_at     = db.Column(db.DateTime, nullable=True)      # NULL = não lida; é o ÚNICO estado
+
+
 class EventContract(db.Model):
     __tablename__ = "event_contracts"
     __table_args__ = (

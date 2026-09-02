@@ -9,11 +9,13 @@ from typing import Any
 from flask import jsonify, request
 from flask_login import current_user
 
+from app import db
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
 from app.formularios import formularios_ops
 from app.models import Client, FormResponse
+from app.notificacoes import notificacoes_ops
 
 
 def _has_role(*names: str) -> bool:
@@ -105,6 +107,11 @@ def api_formularios_resposta_detail(response_id: int) -> Any:
     response = FormResponse.query.get(response_id)
     if response is None:
         return json_error("Resposta não encontrada", 404)
+    # Um GET que escreve, de propósito (feature 272, decisão 12): o lead é aberto por três caminhos
+    # (sino, card da Home, lista de /formularios) — marcar lida só pelo sino deixaria o badge
+    # dizendo "3" para quem já tratou os três pela lista. Só as notificações DESTE usuário.
+    if notificacoes_ops.marcar_lidas_por_objeto(current_user.id, "form_response", response.id):
+        db.session.commit()
     suggested = None
     if response.client_id is None and response.contact_phone:
         suggested = Client.query.filter_by(phone=response.contact_phone).first()

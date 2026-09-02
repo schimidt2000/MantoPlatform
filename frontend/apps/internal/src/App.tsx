@@ -51,6 +51,7 @@ import { OrcamentoHistoricoPage } from "./pages/OrcamentoHistoricoPage";
 import { OrcamentoResultadoPage } from "./pages/OrcamentoResultadoPage";
 import { AvaliacaoCastingPage } from "./pages/AvaliacaoCastingPage";
 import { FormulariosAdminPage } from "./pages/FormulariosAdminPage";
+import { NotificacoesPage } from "./pages/NotificacoesPage";
 import { Acervo3DPage } from "./pages/Acervo3DPage";
 import { Fila3DPage } from "./pages/Fila3DPage";
 import { Tags3DPage } from "./pages/Tags3DPage";
@@ -102,6 +103,8 @@ export function App() {
           <Route path="/talents" element={<TalentsListPage />} />
           <Route path="/casting/avaliacoes" element={<AvaliacaoCastingPage />} />
           <Route path="/formularios" element={<FormulariosAdminPage />} />
+          {/* Acessível pelo sino, sem item de menu (feature 272). */}
+          <Route path="/notificacoes" element={<NotificacoesPage />} />
           <Route path="/talents/:id" element={<TalentDetailPage />} />
           <Route path="/talents/:id/edit" element={<TalentEditRedirect />} />
           <Route path="/3d/acervo" element={<Acervo3DPage />} />

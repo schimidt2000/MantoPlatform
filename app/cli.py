@@ -321,6 +321,83 @@ def register_commands(app):
             click.echo("  Originais preservados em <pasta>/.originais/")
         click.echo("")
 
+    @app.cli.command("warm-thumbnails")
+    def warm_thumbnails():
+        """Pré-aquece as variantes de miniatura (feature 270): ninguém paga a primeira geração.
+
+        Sob demanda é auto-curável (foto nova nasce com variante na primeira visita), mas a
+        primeira geração roda numa thread do gunicorn — e o incidente da 263 foi exatamente
+        requisição presa segurando thread. Rode depois do deploy, e depois do
+        `compress-images --execute`: decodificar um original de 4 MB por variante é lento à toa.
+        Idempotente: o que já está em cache conta como existente e não é reescrito.
+
+        O que aquece = o que as telas pedem: TODAS as fotos do catálogo a 128 (tira de
+        miniaturas), capas de item e fotos de personagem a 320/480/640 (cards da grade), fotos
+        de rosto de talento a 320/480/640 (grade do Banco). URL absoluta (legado do Drive) não tem
+        variante e é contada à parte.
+        """
+        import time
+
+        from app.catalogo.og_ops import resolve_variante, variante_em_cache
+        from app.models import CatalogCharacter, CatalogItem, CatalogItemImage, Talent
+
+        uploads = app.config["UPLOAD_FOLDER"]
+        trabalhos: list[tuple[str, int]] = []
+        for img in CatalogItemImage.query.order_by(CatalogItemImage.id).all():
+            trabalhos.append((img.url, 128))
+        larguras_card = (320, 480, 640)
+        for item in CatalogItem.query.order_by(CatalogItem.id).all():
+            capa = item.cover_image
+            if capa:
+                trabalhos += [(capa.url, w) for w in larguras_card]
+        for ch in CatalogCharacter.query.filter(CatalogCharacter.photo_url.isnot(None)).all():
+            trabalhos += [(ch.photo_url, w) for w in larguras_card]
+        for talento in Talent.query.filter(Talent.photo_face_path.isnot(None)).all():
+            trabalhos += [(talento.photo_face_path, w) for w in larguras_card]
+        unicos = list(dict.fromkeys(trabalhos))
+
+        gerados = existentes = falhas = sem_variante = 0
+        inicio = time.monotonic()
+        for url, largura in unicos:
+            if variante_em_cache(url, largura, uploads):
+                existentes += 1
+                continue
+            if url.startswith(("http://", "https://")):
+                sem_variante += 1
+                continue
+            if resolve_variante(url, largura, uploads):
+                gerados += 1
+            else:
+                falhas += 1
+                if falhas <= 20:
+                    click.echo(f"  FALHA {largura}px {url}")
+                elif falhas == 21:
+                    click.echo("  ... (demais falhas omitidas; o total sai no resumo)")
+        click.echo(
+            f"warm-thumbnails: {gerados} geradas, {existentes} já existiam, "
+            f"{sem_variante} sem variante (URL externa), {falhas} falhas — "
+            f"{len(unicos)} pedidos em {time.monotonic() - inicio:.0f}s"
+        )
+
+    @app.cli.command("notificacoes-limpar")
+    @click.option("--execute", is_flag=True, help="apaga de verdade (padrão: só conta)")
+    def notificacoes_limpar(execute: bool):
+        """Retenção das notificações internas (feature 272), à mão.
+
+        Lida há mais de 30 dias ou não lida há mais de 180 dias sai. A mesma rotina roda sozinha
+        no laço diário do review-cleanup; este comando existe para depois de um deploy, num
+        incidente, e para o verify_272 testar a regra sem esperar 24 h. Dry-run por padrão.
+        """
+        from app.notificacoes.notificacoes_ops import contar_antigas, limpar_antigas
+
+        candidatas = contar_antigas()
+        if not execute:
+            click.echo(f"notificacoes-limpar: {candidatas} notificação(ões) seriam apagadas. "
+                       "Repita com --execute para aplicar.")
+            return
+        apagadas = limpar_antigas()
+        click.echo(f"notificacoes-limpar: {apagadas} notificação(ões) apagada(s).")
+
     @app.cli.command("migrate-drive-to-volume")
     @click.option("--dry-run", is_flag=True, help="Apenas conta o que seria migrado, sem baixar nem alterar.")
     @click.option("--limit", type=int, default=0, help="Migra no máximo N arquivos (0 = todos).")
