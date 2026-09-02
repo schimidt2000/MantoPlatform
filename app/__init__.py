@@ -288,6 +288,7 @@ def _start_review_cleanup(app):
     def _loop():
         import time
         time.sleep(30)  # aguarda o app estar pronto
+        from app.notificacoes.notificacoes_ops import limpar_antigas
         from app.revisao.cleanup import cleanup_expired_review_files
         while True:
             try:
@@ -297,6 +298,16 @@ def _start_review_cleanup(app):
                         app.logger.info(f"[review-cleanup] {removed} arquivo(s) de revisão removido(s)")
             except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
                 app.logger.warning(f"[review-cleanup] erro: {exc}")
+            try:
+                # Retenção das notificações (feature 272): segunda rotina do mesmo laço diário, sem
+                # claim atômico — apagar por idade é idempotente, três workers produzem o mesmo
+                # resultado e nenhum efeito externo (mesma justificativa deste laço em docs/04 §7).
+                with app.app_context():
+                    apagadas = limpar_antigas()
+                    if apagadas:
+                        app.logger.info(f"[review-cleanup] {apagadas} notificação(ões) antiga(s) apagada(s)")
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[review-cleanup] erro na limpeza de notificações: {exc}")
             time.sleep(INTERVAL)
 
     t = threading.Thread(target=_loop, daemon=True, name="review-cleanup")

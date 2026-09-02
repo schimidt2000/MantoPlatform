@@ -321,7 +321,14 @@ def unlink_event(response: FormResponse) -> None:
 
 
 def delete_response(response: FormResponse) -> None:
-    """Exclui uma resposta — chamador já deve ter checado a permissão (SUPERADMIN)."""
+    """Exclui uma resposta — chamador já deve ter checado a permissão (SUPERADMIN).
+
+    Leva junto as notificações dela (feature 272): referência fraca, sem FK — este é o único lugar
+    que garante que nenhum sino aponta para id morto.
+    """
+    from app.notificacoes import notificacoes_ops
+
+    notificacoes_ops.apagar_por_entidade("form_response", response.id)
     db.session.delete(response)
     db.session.commit()
 

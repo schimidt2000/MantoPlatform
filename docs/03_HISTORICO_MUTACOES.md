@@ -4,7 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-01** · Estado do repositório: pós-feature
+> Última atualização: **2026-09-02** · Estado do repositório: pós-feature
+> **272-notificacoes-internas** (tabela `notifications`, migration **`b7d2e4f1a9c3`** — head; sino no
+> shell; o e-mail de resposta de formulário da 266 saiu; em branch, empilhada sobre a 270) — antes dela
 > **270-miniaturas-catalogo** (variantes por largura na vitrine e no Banco de Talentos; sem
 > migration; em branch) — antes dela o hotfix **271-hotfix-corrida-lancamentos** (sem migration;
 > a Home degrada por painel em vez de cair; deploy de 01/09 ~17h20) — antes deles
@@ -27,8 +29,8 @@
 > **254-melhorias-video-catalogo (em produção, migration `f3a9c15d8b42`)**, antes dela a
 > sequência da remoção do Jinja **240–252 (pausada, ver `docs/PARADA_REMOCAO_JINJA.md`)**,
 > antes dela **239-backlog-agosto (11 itens)**, catalogo-fase-1, **235-educamanto 4ª rodada**,
-> 238, 237, 236 · Head de migration: **`a1c7d3e59b02`** (*origem do vínculo resposta↔cliente,
-> feature 266*) (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
+> 238, 237, 236 · Head de migration: **`b7d2e4f1a9c3`** (*tabela `notifications`,
+> feature 272*) (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
 
@@ -59,12 +61,13 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **272-notificacoes-internas** | O aviso deixa de ser e-mail e passa a morar no ERP: tabela `notifications` (uma linha por destinatário, `dedupe_key` UNIQUE por usuário, índice parcial de não lidas, `now_sp`), `notificacoes_ops.emitir()` que não comita (fato e aviso na mesma transação quando o fato ainda não comitou), três produtores (resposta de formulário — **substitui o e-mail da 266**, `send_form_response_email` removida; avaliação da cliente, nota ≤ 2 `urgent`; recusa de convite no portal), quatro endpoints sem gate de papel (escopo por dono, 404 alheio, `ate_id` obrigatório), sino no shell via slot `headerActions` + popover + `/notificacoes`, retenção 30/180 d no laço do review-cleanup | 2026-09-02 | `b7d2e4f1a9c3` | (aqui) | — |
 | **270-miniaturas-catalogo** | A vitrine e o Banco de Talentos param de baixar o arquivo inteiro para desenhar 64–270px: o motor de `og_ops` vira `Receita` (prévia OG intacta, chave `"1"`) e ganha variantes por largura — `/catalogo/midia/t/<128|320|480|640>/<arq>` (público) e `/uploads/t/<largura>/talent_photos/<arq>` (login, cache `private`) — allowlist fechada, 404 sem gravar, cache por largura em `catalog_thumbs/`/`talent_thumbs/`; `assetUrl(path, { largura })` + `assetSrcSet()` no `@manto/api-client`; tira 128, cards `srcset` 320/480/640 com `sizes` da grade; `flask warm-thumbnails`. Achado: o `.tmp` do motor era único por PID, não por thread — 8 threads corrompiam a mesma miniatura | 2026-09-01 | `—` | (aqui) | — |
 | **271-hotfix-corrida-lancamentos** | `GET /api/dashboard` deixa de cair inteiro quando um painel estoura: cada bloco (casting, figurino, ensaio, comercial, formulários, recorrentes) passa por `_bloco()` — exceção vira `rollback` + log com o nome do painel + `None` (o front já trata `None` como "sem painel", mesmo contrato do RBAC por ausência). Geração preguiçosa dos lançamentos recorrentes serializada por `pg_advisory_xact_lock` (não há UNIQUE desde a 121 — a corrida virava duplicata silenciosa); `_ensure_salary_payments` tolera `IntegrityError` da `UNIQUE(user_id, due_date)`. `models.py` deixa de declarar a `uq_recurring_entry_month` fantasma (um `flask db migrate` a recriaria e o startCommand cairia em produção) | 2026-09-01 | `—` | (aqui) | — |
 | **269-link-portal-fixo** | O endereço do Portal do Artista nas mensagens copiadas por humano deixa de vir do ambiente: a cobrança de confirmação da Home saía com `http://localhost:5000/` para quem rodava o ambiente local, e **sem link nenhum** quando `PORTAL_URL` não estava setada (no Render ela é `sync: false`, mora só no painel). `PORTAL_PUBLICO` passa a servir as duas mensagens (o convite do evento já tinha o endereço fixo). `PORTAL_URL` continua sendo a fonte dos e-mails do servidor, agora com default real (`PORTAL_BASE_URL`) | 2026-09-01 | `—` | (aqui) | — |
 | **268-imagens-catalogo** | Vitrine lenta: as 457 fotos do catálogo tinham mediana de 627 KB e picos de 4,3 MB (a recuperação da 264 gravou os bytes crus do WordPress sem passar por `save_file`) **e** eram servidas com `no-cache`, ~460 revalidações por visita. Cache longo nas duas rotas públicas de imagem (nome é UUID, então é seguro) e `flask compress-images` — que já existia com a mesma receita — passa a alcançar o catálogo, ganha dry-run padrão, backup e correção do `file_size_bytes` que estava mentindo | 2026-09-01 | `—` | (aqui) | — |
 | **267-integridade-comissao** | A comissão que bate e o vínculo que não se desfaz sozinho. `ciclo_de_pagamento_expr()`/`liquidar_periodo()` viram fonte única das **quatro** cópias que liquidavam por `sale_date` puro enquanto o item era montado por `coalesce(payable_from, sale_date)` — comissão EducaManto aparecia num mês e era liquidada por outro (docs/05 #1, P0). PATCH em bloco passa a sincronizar comissão por injeção, com `flush()` antes (#6, P1). O número exibido no evento passa a ser o que o Financeiro paga, lido da linha real com a regra canônica como reserva e guarda de evento cancelado (#5, P1), na mesma função que o gêmeo Jinja usa. Invalidação completa do cache financeiro (#2, P0). Núcleo único do vínculo evento↔resposta (`apply_event_link`/`clear_event_link`) e exclusão limpando o rastro. Deep-link do evento para `/financeiro/*` (as duas telas passaram a ler filtro da URL) | 2026-08-31 | `—` | (aqui) | — |
-| **266-costuras-funil** | O lead deixa de sumir e o sistema deixa de ser beco sem saída: card de respostas na Home (contadores do mesmo `count_status` dos cartões de `/formularios`, sob o gate que já existia), e-mail de resposta nova para COMERCIAL/SUPERADMIN, auto-associação de cliente pelo telefone (`Client.phone` é UNIQUE) com origem registrada, cliente da resposta nasce `source='formulario'`, e seis travessias de navegação sobre ids que já viajavam no payload (evento→cliente/talento/pré-contrato, ficha→resposta/avaliações, resultado do orçamento→criar evento). Corrige de carona: `delete_client` estourava FK com formulário vinculado, `futuros_sem_evento` usava relógio UTC | 2026-08-31 | `a1c7d3e59b02` | (aqui) | — |
+| **266-costuras-funil** | O lead deixa de sumir e o sistema deixa de ser beco sem saída: card de respostas na Home (contadores do mesmo `count_status` dos cartões de `/formularios`, sob o gate que já existia), e-mail de resposta nova para COMERCIAL/SUPERADMIN *(e-mail substituído pela notificação interna da 272)*, auto-associação de cliente pelo telefone (`Client.phone` é UNIQUE) com origem registrada, cliente da resposta nasce `source='formulario'`, e seis travessias de navegação sobre ids que já viajavam no payload (evento→cliente/talento/pré-contrato, ficha→resposta/avaliações, resultado do orçamento→criar evento). Corrige de carona: `delete_client` estourava FK com formulário vinculado, `futuros_sem_evento` usava relógio UTC | 2026-08-31 | `a1c7d3e59b02` | (aqui) | — |
 | **265-nfc-revisao-videos** | Revisão dos vídeos NFC dentro de `/3d/tags`: aba "Vídeos" (KPIs, busca, cards com player agrupados por evento/cliente direta/estoque, fila "Sem vídeo"), coluna Vídeo na tabela, player no diálogo e endpoint espelho admin da mídia — assistir pelo ERP **não conta acesso** e serve tag desativada. `window.confirm` da remoção virou `ConfirmDialog`. Componentes extraídos para `components/nfc/` | 2026-08-28 | `—` | (aqui) | — |
 | **264-pos-railway** | Suspensao do Railway -> producao no Render (dump 27/08), midias recuperadas (catalogo 88%, figurinos 90%, talentos 99%), backup automatico p/ Drive compartilhado, upload de documento no portal, e-mail a 42 talentos. Pegadinhas: SA sem cota no My Drive (so Shared Drive); deploy do Render limpa /tmp e mata nohup | 2026-08-28 | `—` | (aqui) | — |
 | **263-endurecimento-concorrencia** | Incidente de lentidão (11:50–11:56 de 26/08) e endurecimento: `--threads` 4→12 (36 slots), access log com bytes e duração, reciclagem de worker, pool do SQLAlchemy explícito, `preload="metadata"` no player da Revisão, timeouts no Google Maps e no proxy Node, `/health` como sensor. **Em produção em duas partes** (`56bb1c4` + `29788ee`) depois de a primeira tentativa juntar tudo e derrubar a produção. Deixou `scripts/validar_startcommand.py` | 2026-08-26 | `—` | (aqui) | — |
@@ -211,6 +214,94 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 272 — Notificações internas: o aviso deixa de ser e-mail e passa a morar no ERP            (2026-09-02 · migration `b7d2e4f1a9c3`)
+
+**Motivação, nas palavras do dono.** "Uma coisa que não gostei muito é de ficar recebendo email
+quando a cliente preenche formulário. Acho que poderíamos começar a desenvolver um sistema de
+notificações dentro do app." A 266 tinha ligado o e-mail para o lead não sumir; o dono quer o
+aviso onde ele age. Esta é a fundação, com três produtores.
+
+**O que é uma notificação aqui.** Um registro derivado de um fato que o banco já gravou, endereçado
+a **pessoas concretas** (resolvidas por papel no momento da emissão e congeladas como `user_id`),
+com texto pronto em pt-BR e um caminho relativo da SPA para agir. Uma linha por destinatário: o
+estado "lida" é por pessoa, o sino é **um** COUNT indexado e o dedupe é **uma** constraint.
+Referência ao objeto é fraca (`entity_type`/`entity_id`, sem FK) — a tabela é transversal.
+
+**Migration `b7d2e4f1a9c3`** (`down_revision a1c7d3e59b02`): tabela `notifications`,
+`UNIQUE(user_id, dedupe_key)`, índice **parcial** `(user_id, id) WHERE read_at IS NULL` (a
+contagem de não lidas é a consulta mais frequente do sistema depois desta feature e não pode
+crescer com o histórico lido — o verify registra o plano: `Index Only Scan using
+ix_notifications_user_unread`), `ix_notifications_user_id` (keyset) e `ix_notifications_entity`.
+Escrita à mão (nunca autogenerate — o drift antigo de 6 tabelas derrubaria o `startCommand`).
+Ensaiada `upgrade → downgrade → upgrade` no `manto_local`.
+
+**Emissão (`app/notificacoes/notificacoes_ops.py`).** Módulo puro — sem `flask.request`, sem
+`current_user`, porque o produtor da recusa roda sob sessão de **talento**. Catálogo no topo
+(`KIND_*`, `DESTINATARIOS_POR_KIND`) — abrir o arquivo responde "quais fatos avisam quem".
+`emitir()` **não comita** (contrato de `audit()`): é o que permite dois regimes explícitos —
+**A, atômico** (avaliação, recusa: `add; flush; notificar_x; commit` — nunca aviso sem fato) e
+**B, best-effort depois do fato** (resposta de formulário: a resposta já comitou; a notificação vai
+em transação curta com `rollback` no `except` — resposta sem aviso é aceitável, aviso sem resposta
+é impossível). Dedupe em duas camadas: SELECT prévio + SAVEPOINT (`begin_nested`) em volta de cada
+inserção — a corrida entre workers bate na UNIQUE **sem derrubar a transação do fato** (o verify
+prova: a escrita pendente do chamador sobrevive).
+
+**Os três produtores.** (1) Resposta de formulário público → COMERCIAL/SUPERADMIN, corpo com
+"cliente identificada" quando o auto-vínculo da 266 acertou; `_avisar_comercial` virou
+`_notificar_comercial`, e **`send_form_response_email` saiu do código** (não ficou atrás de flag —
+interruptor que ninguém liga é código morto). (2) Avaliação da cliente → COMERCIAL/SUPERADMIN,
+`severity="urgent"` com nota ≤ 2 — "nota baixa grita" sem e-mail: cor, não interrupção. (3) Recusa
+de convite no portal → CASTING/SUPERADMIN, `urgent` se o evento é em ≤ 7 dias; `reject_invite`
+ganhou guarda real de idempotência (antes "era idempotente" só porque regravava o mesmo valor — com
+aviso, regravar seria re-avisar); chave por dia. Efeitos colaterais deliberados: `GET
+/api/formularios/respostas/<id>` **marca lidas** as notificações daquela resposta para quem abriu
+(um GET que escreve — o lead é aberto por três caminhos e um badge dizendo "3" para quem já tratou
+os três pela lista seria o ruído do e-mail em nova roupa), e `delete_response` apaga as da resposta.
+
+**API.** Quatro endpoints sob `@api_login_required` e **nenhum gate por papel** — terceiro padrão de
+RBAC da casa (registrado em docs/00 §4 e docs/01 §4.3): o RBAC aconteceu na emissão, a leitura
+filtra por `current_user.id`, id alheio devolve 404. `ate_id` obrigatório em "marcar todas": um
+lead engolido por "marcar todas" clicado sobre uma lista de 40 s atrás seria o pior defeito possível
+desta feature. "Ver como" não troca a caixa (é da pessoa). REVENDEDOR nem chega: a guarda da 078
+devolve 403 antes da view, e o sino não é renderizado para ele.
+
+**UI.** `AppLayout` ganhou o slot `headerActions`, renderizado na linha da marca da sidebar
+(desktop) e na barra superior do mobile — **fora do drawer** (sino atrás do hambúrguer não avisa
+nada); a mesma técnica do `ThemeSwitch`, que já é montado duas vezes. Popover próprio (calcado em
+`FilterDropdown`/`KebabMenu`, `z-30`), sem Radix Popover; últimas 20 agrupadas por dia; clique =
+marcar lida otimista + navegar. Polling de 60 s **só da contagem**, pausado em aba oculta e refeito
+ao voltar o foco — exceção deliberada ao `createQueryClient`; sem SSE/WebSocket (conexão longa é
+thread do gunicorn ocupada, e o incidente de 26/08 foi requisição presa). Página `/notificacoes`
+sem item de menu. Sem toast, som ou `document.title`.
+
+**Retenção.** Lida > 30 d e não lida > 180 d saem, em lotes de 1000, como segunda rotina do laço
+diário do review-cleanup — sem 8ª thread e sem claim (apagar por idade é idempotente). CLI `flask
+notificacoes-limpar [--execute]`.
+
+**Verificação.** `specs/272-notificacoes-internas/verify_272.py` — 13/13 contra `manto_local`, toda
+escrita conferida por conexão separada: destinatários por papel (inativo, sem acesso e CASTING não
+recebem; COMERCIAL+SUPERADMIN recebe 1); e-mail inexistente; idempotência e corrida com savepoint;
+regime A com rollback atômico; regime B com produtor quebrado → POST 201; recusa com `urgent`/`info`
+e sem re-aviso; API (escopo, 404, idempotência, `ate_id`, 400, 401, 403 do revendedor); keyset com
+linha nova entre páginas; lida ao abrir a resposta só para quem abriu; exclusões (resposta e
+CASCADE de usuário); retenção; relógio `now_sp` e plano com o índice parcial. Em tela: sino com
+badge no desktop e no mobile (fora do drawer, sem rolagem horizontal), popover, clique navegando e
+decrementando na hora, `/notificacoes` com abas e "Marcar todas". `npm run typecheck` limpo nos três
+apps; `ruff` no baseline.
+
+**Pegadinhas.** `Client.phone` guarda só dígitos com DDI (`5511…`), sem `+` — o verify inicial
+criou a cliente com `+55` e o auto-vínculo não a achou. Com a tabela pequena o planejador do
+Postgres prefere Seq Scan; o verify desliga `enable_seqscan` na sessão para provar que o índice
+parcial **serve** à consulta. O `flask run` local não recarrega sozinho: rota nova exige reiniciar o
+servidor de preview.
+
+**Descartado.** Preferências por `kind` por usuário (entra **antes** da onda 3, quando o SUPERADMIN
+precisar silenciar `parcela.vence`); Web Push; digest diário; e-mail como opção; `convite.aceito`
+(boa notícia em volume é ruído); marcar como não lida/excluir/arquivar (mais decisões por linha — o
+problema do dono é excesso de decisões, não falta).
+
+---
 
 ### 270 — Miniaturas por largura: pedir o arquivo certo, não o arquivo inteiro            (2026-09-01 · sem migration)
 
@@ -496,6 +587,8 @@ correção de escrita, e merece feature própria com ensaio no dump.
 ---
 
 ### 266 — Costuras do funil: o lead aparece e tudo leva a tudo            (2026-08-31 · migration `a1c7d3e59b02`)
+
+*O e-mail de resposta nova desta feature foi **substituído pela notificação interna** na 272 (02/09/2026); o resto da entrada continua valendo como registro do que foi decidido na época.*
 
 **Contexto.** O sistema tinha os módulos completos e eles conversavam mal: o funil
 (formulário → orçamento → evento → financeiro → pós-evento) tinha degraus manuais, e a

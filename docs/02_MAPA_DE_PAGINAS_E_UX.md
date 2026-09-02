@@ -6,8 +6,9 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-09-01** · Em branch: **270-miniaturas-catalogo** (variantes de
-> miniatura na vitrine e no Banco de Talentos). Antes: **239-backlog-agosto** (rodada de 11 itens do
+> Última atualização: **2026-09-02** · Em branch: **272-notificacoes-internas** (sino de notificações
+> no shell + `/notificacoes`). Antes: **270-miniaturas-catalogo** (variantes de miniatura na vitrine e no
+> Banco de Talentos). Antes: **239-backlog-agosto** (rodada de 11 itens do
 > backlog — ver `specs/239-backlog-agosto/`)
 >
 > UX nova da 239: **Catálogo** subiu para a **1ª seção do menu** (logo após Agenda), visível a
@@ -177,6 +178,23 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
   papéis internos, inclusive `REVENDEDOR_EDUCAMANTO`** (o catálogo já é público, sem exigir
   login; não fazia sentido escondê-lo de quem só vê Agenda e EducaManto). "Gerenciar catálogo"
   não mudou de lugar (`admin-catalogo`, continua restrito a Comercial/Financeiro/Superadmin).
+- **Sino de notificações (feature 272)** — slot `headerActions` do `AppLayout`, renderizado na
+  **linha da marca da sidebar** (desktop) e à direita da **barra superior do mobile, fora do
+  drawer**. Badge com a contagem de não lidas (`9+` acima de 9; polling de 60 s só da contagem,
+  pausado em aba oculta, refeito ao voltar o foco). Clique abre um popover (para a direita da
+  sidebar no desktop; sob a barra no mobile): últimas 20 agrupadas por dia, ícone por `kind`
+  (formulário, estrela, recusa), vermelho quando `urgent`, "Marcar todas como lidas" (com teto
+  `ate_id`) e "Ver todas". Clicar num item marca lida (otimista) e navega para `link_path`.
+  Fecha em Esc e clique fora; foco volta ao sino; `aria-live` só quando a contagem sobe. O
+  revendedor EducaManto não vê o sino. Sem toast, sem som.
+
+#### `/notificacoes` — Notificações *(feature 272)*
+- **Acesso**: qualquer usuário interno (a caixa é do próprio usuário); **sem item de menu** — a
+  entrada é o "Ver todas" do sino (exceção registrada em `docs/04` §8).
+- **UX**: `PageHeader` com "Marcar todas como lidas"; abas **Não lidas (n)** / **Todas**; mesma
+  `NotificacaoItem` do popover, agrupada por dia; "Carregar mais" por cursor (`next_before`); na
+  aba "Não lidas" a linha sai da lista ao ser lida (200 ms, respeita `prefers-reduced-motion`).
+- **API**: `GET /api/notificacoes` · `POST /api/notificacoes/<id>/lida` · `POST /api/notificacoes/lidas`.
 
 ---
 

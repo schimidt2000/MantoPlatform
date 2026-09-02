@@ -428,7 +428,8 @@ review-cleanup, virtual-sweep, **email-bounce** (feature 219), **invite-reminder
 **backup-drive** (264) — as três últimas não constavam nesta contagem até a feature 266.
 A diferença que importa: **calendar-sync, virtual-sweep, email-bounce e invite-reminders fazem
 claim atômico** entre workers gunicorn; **talent-sync e review-cleanup não**. Review-cleanup
-justifica (é idempotente); talent-sync não justifica nada, e `app/talents/importer.py` lê
+justifica (é idempotente — e desde a 272 o mesmo laço roda também a retenção das notificações,
+`notificacoes_ops.limpar_antigas`, idempotente pelo mesmo motivo); talent-sync não justifica nada, e `app/talents/importer.py` lê
 `ImportState.last_row` no início (`:179`) e grava no fim (`:343`) sem lock — dois workers
 processam as mesmas linhas da planilha.
 
@@ -497,7 +498,9 @@ ligado na cópia local do banco de produção; a trava real é `MAIL_SUPPRESS_SE
 
 | Quero | Faço |
 |---|---|
-| Tela nova no ERP | rota em `internal/src/App.tsx` + item em `lib/navigation.tsx` (com `isVisible`) + módulo em `lib/` + página em `pages/` |
+| Tela nova no ERP | rota em `internal/src/App.tsx` + item em `lib/navigation.tsx` (com `isVisible`) + módulo em `lib/` + página em `pages/` — exceção: `/notificacoes` (272) não tem item de menu, a entrada é o sino |
+| Avisar alguém de um fato (em vez de e-mail) | constante `KIND_*` + entrada em `DESTINATARIOS_POR_KIND` + `notificar_x()` em `app/notificacoes/notificacoes_ops.py` + uma chamada no ponto do fato (mesma transação quando o fato ainda não comitou; em rotina de fundo, quem comita é a rodada) |
+| Algo sempre visível no shell (sino, atalho) | slot `headerActions` do `AppLayout` (`packages/ui`) — renderizado na linha da marca (desktop) e na barra superior do mobile |
 | Campo novo no evento | tipo em `lib/agenda.ts` (`EventoDetalhe`) + seção em `components/EventDetail/` + mutação via `useEventMutation` |
 | Componente compartilhado | `packages/ui/src/components/` + **export nomeado em `packages/ui/src/index.ts`** |
 

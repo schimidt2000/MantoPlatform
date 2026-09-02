@@ -379,6 +379,25 @@ def register_commands(app):
             f"{len(unicos)} pedidos em {time.monotonic() - inicio:.0f}s"
         )
 
+    @app.cli.command("notificacoes-limpar")
+    @click.option("--execute", is_flag=True, help="apaga de verdade (padrão: só conta)")
+    def notificacoes_limpar(execute: bool):
+        """Retenção das notificações internas (feature 272), à mão.
+
+        Lida há mais de 30 dias ou não lida há mais de 180 dias sai. A mesma rotina roda sozinha
+        no laço diário do review-cleanup; este comando existe para depois de um deploy, num
+        incidente, e para o verify_272 testar a regra sem esperar 24 h. Dry-run por padrão.
+        """
+        from app.notificacoes.notificacoes_ops import contar_antigas, limpar_antigas
+
+        candidatas = contar_antigas()
+        if not execute:
+            click.echo(f"notificacoes-limpar: {candidatas} notificação(ões) seriam apagadas. "
+                       "Repita com --execute para aplicar.")
+            return
+        apagadas = limpar_antigas()
+        click.echo(f"notificacoes-limpar: {apagadas} notificação(ões) apagada(s).")
+
     @app.cli.command("migrate-drive-to-volume")
     @click.option("--dry-run", is_flag=True, help="Apenas conta o que seria migrado, sem baixar nem alterar.")
     @click.option("--limit", type=int, default=0, help="Migra no máximo N arquivos (0 = todos).")

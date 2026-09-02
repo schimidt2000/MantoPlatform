@@ -17,6 +17,7 @@ from app.api import api_bp
 from app.api_utils import json_error
 from app.feedback.feedback_ops import ATTENTION_TAGS, POSITIVE_TAGS, tags_for_score
 from app.models import CalendarEvent, ClientFeedback, SiteSetting
+from app.notificacoes import notificacoes_ops
 
 # Fallback do link de review no Google quando `SiteSetting.google_review_url` está vazio.
 DEFAULT_GOOGLE_REVIEW_URL = "https://g.page/r/CUZ_o_N-Ywq8EAE/review"
@@ -98,5 +99,8 @@ def api_feedback_submit(token: str) -> Any:
         client_name=client_name,
     )
     db.session.add(feedback)
+    # Regime A (feature 272): o aviso nasce na MESMA transação da avaliação — nunca aviso sem fato.
+    db.session.flush()
+    notificacoes_ops.notificar_avaliacao_recebida(feedback, event)
     db.session.commit()
     return jsonify({"ok": True}), 201

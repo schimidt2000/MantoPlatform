@@ -14,8 +14,6 @@ from flask import current_app, jsonify, request
 from app import db, limiter
 from app.api import api_bp
 from app.api_utils import json_error
-from app.constants import RoleName
-from app.email_service import send_async, send_form_response_email
 from app.formularios.formularios_ops import (
     FORM_META,
     _attempt_auto_link,
@@ -31,7 +29,8 @@ from app.formularios.formularios_ops import (
     attempt_auto_link_client,
     ensure_event_client,
 )
-from app.models import FormFieldDefinition, FormResponse, Role, User
+from app.models import FormFieldDefinition, FormResponse
+from app.notificacoes import notificacoes_ops
 
 _INVALID_FIELDS_MESSAGE = (
     "Alguns campos precisam de atenção. Corrija os campos destacados e envie novamente."
@@ -71,28 +70,21 @@ def api_formularios_schema(form_type: str) -> Any:
     )
 
 
-def _avisar_comercial(response: FormResponse) -> None:
-    """Dispara o aviso de resposta nova para quem pode agir nela (feature 266).
+def _notificar_comercial(response: FormResponse) -> None:
+    """Notificação interna de resposta nova para quem pode agir nela (feature 272; era e-mail na 266).
 
-    Best-effort por decisão: a resposta da cliente já está gravada, e perder um lead porque o
-    SMTP caiu seria pior que não ter o aviso. O envio é assíncrono e o POST responde 201
-    independentemente do resultado.
+    Best-effort por decisão: a resposta da cliente já está gravada, e perder um lead porque o aviso
+    falhou seria pior que não ter o aviso — o POST responde 201 independentemente do resultado.
+    Regime B de `notificacoes_ops`: a resposta já foi comitada antes, então isto é uma transação
+    própria e curta; o `rollback` no `except` é obrigatório para a sessão não seguir abortada.
     """
     try:
-        destinatarios = (
-            User.query.join(User.roles)
-            .filter(
-                Role.name.in_([RoleName.COMERCIAL, RoleName.SUPERADMIN]),
-                User.is_active.is_(True),
-                User.has_access.is_(True),
-            )
-            .all()
-        )
-        if destinatarios:
-            send_async(send_form_response_email, response, destinatarios)
+        notificacoes_ops.notificar_resposta_formulario(response)
+        db.session.commit()
     except Exception:  # noqa: BLE001 — aviso nunca derruba a submissão pública
+        db.session.rollback()
         current_app.logger.exception(
-            "[formularios_write] falha ao avisar o comercial da resposta %s", response.id)
+            "[formularios_write] falha ao notificar o comercial da resposta %s", response.id)
 
 
 @api_bp.route("/formularios/<form_type>", methods=["POST"])
@@ -144,7 +136,7 @@ def api_formularios_submit(form_type: str) -> Any:
             "(resposta %s)",
             response.id)
 
-    _avisar_comercial(response)
+    _notificar_comercial(response)
 
     message = _build_message(meta["message_title"], sections)
     return jsonify({"wa_link": _whatsapp_link(message), "contact_name": contact_name}), 201

@@ -3,12 +3,14 @@ import { LogOut } from "lucide-react";
 import { AppLayout, Skeleton, ThemeSwitch, cn } from "@manto/ui";
 import { buildNavSections } from "../lib/navigation";
 import {
+  isRevendedorOnly,
   useCurrentUser,
   useImpersonate,
   useImpersonateReset,
   useLogout,
 } from "../lib/useAuth";
 import type { AuthUser } from "../lib/types";
+import { NotificacoesBell } from "./notificacoes/NotificacoesBell";
 
 /** Papéis simuláveis no "Ver como" — paridade com IMPERSONABLE_ROLES do backend. */
 const IMPERSONABLE_ROLES = ["CASTING", "FIGURINO", "COMERCIAL", "FINANCEIRO", "ENSAIO"];
@@ -151,6 +153,9 @@ export function AppShell() {
       brand={<Brand />}
       sections={buildNavSections(user, pathname)}
       footer={<SidebarFooter user={user} />}
+      // Sino de notificações (feature 272). O revendedor EducaManto não recebe nenhum `kind` da
+      // v1, então para ele o slot fica vazio.
+      headerActions={isRevendedorOnly(user) ? undefined : <NotificacoesBell />}
       renderLink={({ item, className, children, onNavigate }) => (
         <NavLink to={item.href} className={className} onClick={onNavigate}>
           {children}
