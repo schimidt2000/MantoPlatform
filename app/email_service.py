@@ -6,6 +6,7 @@ Configure as variáveis MAIL_PASSWORD (App Password) e PORTAL_URL no .env.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from zoneinfo import ZoneInfo
 
@@ -66,7 +67,35 @@ def _sender():
 
 
 def _portal_url() -> str:
+    """Base do Portal do Artista para os links dos e-mails.
+
+    O saneamento mora em `app.config._url_para_fora` (hotfix 269b): o que chega aqui já é um
+    endereço público, mesmo que a variável de ambiente do serviço esteja errada.
+    """
     return current_app.config.get("PORTAL_URL", "").rstrip("/")
+
+
+#: Link que só funciona na máquina de quem enviou. Ver `_link_local_no_corpo`.
+_RX_LINK_LOCAL = re.compile(
+    r"https?://(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[?::1\]?|host\.docker\.internal)"
+    r"(?::\d+)?",
+    re.IGNORECASE,
+)
+
+
+def _link_local_no_corpo(*textos: str) -> str | None:
+    """Primeiro link local encontrado no corpo do e-mail, ou ``None``.
+
+    Segunda linha de defesa do hotfix 269b: a config já saneia as bases conhecidas, mas um
+    caminho novo pode montar URL de outro jeito (`url_for(_external=True)`, host do request,
+    string colada à mão). E-mail com link local é inútil para quem recebe — e ainda revela o
+    endereço interno de quem enviou —, então não sai.
+    """
+    for texto in textos:
+        achado = _RX_LINK_LOCAL.search(texto or "")
+        if achado:
+            return achado.group(0)
+    return None
 
 
 # ── HTML email base ────────────────────────────────────────────────────────────
@@ -844,6 +873,16 @@ def _send(to: str, subject: str, body: str = "", html: str = "") -> bool:
     if not _emails_enabled():
         log.info("Email desativado nas configurações — pulando envio para %s: %s", to, subject)
         return False
+    # Hotfix 269b: nenhum e-mail sai com link que só existe na máquina de quem enviou. Quem pediu
+    # explicitamente `MAIL_ALLOW_LOCAL_SEND=true` está testando o próprio fluxo e é o destinatário.
+    link_local = _link_local_no_corpo(html, body)
+    if link_local and not current_app.config.get("MAIL_ALLOW_LOCAL_SEND"):
+        log.error(
+            "Email BARRADO para %s (%s): o corpo carrega o link local %s. "
+            "Confira PORTAL_URL/PUBLIC_BASE_URL no ambiente deste serviço.",
+            to, subject, link_local,
+        )
+        return False
     try:
         plain = body or _strip_html(html)
         msg = Message(
@@ -863,7 +902,6 @@ def _send(to: str, subject: str, body: str = "", html: str = "") -> bool:
 
 def _strip_html(html: str) -> str:
     """Remove tags HTML para gerar fallback plain text."""
-    import re
     text = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)

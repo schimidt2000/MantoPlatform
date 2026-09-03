@@ -4,8 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-02** · Estado do repositório: pós-hotfix
-> **267b-hotfix-data-da-venda** (sem migration; venda sem data ganha hoje no servidor, ciclo da
+> Última atualização: **2026-09-03** · Estado do repositório: pós-hotfix
+> **269b-hotfix-link-do-portal** (sem migration; endereço local em `PORTAL_URL`/`PUBLIC_BASE_URL` é
+> ignorado por quem envia e-mail de verdade, e nenhum e-mail sai com link local; em branch) — antes
+> dele **267b-hotfix-data-da-venda** (sem migration; venda sem data ganha hoje no servidor, ciclo da
 > comissão com fallback em `created_at`, backfill do legado; em branch) — antes dele
 > **272-notificacoes-internas** (tabela `notifications`, migration **`b7d2e4f1a9c3`** — head; sino no
 > shell; o e-mail de resposta de formulário da 266 saiu; EM PRODUÇÃO desde 02/09 ~16h45 junto da
@@ -217,6 +219,61 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 269b — O convite que mandava o artista para o localhost            (2026-09-03 · hotfix · sem migration)
+
+**Sintoma.** O dono recebeu um convite de evento e o botão "Acessar portal e confirmar" apontava
+para `http://localhost:5000`. Nas palavras dele: "precisamos resolver isso em definitivo, para que
+as pessoas não recebam o link localhost".
+
+**Causa.** A variável de ambiente **`PORTAL_URL` estava setada com `http://localhost:5000` na
+produção** (lido por SSH no serviço `srv-da8o06on74is73ehf4q0`; o `.env` não vai para o deploy, o
+valor mora no painel do Render, provavelmente copiado do `.env.example`, que trazia exatamente essa
+linha). A 269 tinha dado default real à variável e consertado o lado das mensagens copiadas por
+humano, mas registrou explicitamente que os e-mails do **servidor** continuariam lendo a env
+"porque um ambiente de teste precisa apontar para si" — e default só protege quem não define a
+variável. Quem definiu errado ficou sem rede.
+
+**Alcance.** Tudo que carrega o endereço do portal: convite, lembrete de confirmação (231), aviso
+de remoção, aviso de mudança do evento, anúncio do portal, boas-vindas e **redefinição de senha**.
+Convite e lembrete o artista contorna (a mensagem de WhatsApp da 269 leva o endereço certo, e muita
+gente tem o portal salvo) — a produção mostra 176 de 194 convites aceitos em agosto e 186 de 196 em
+julho. A redefinição de senha **não tem contorno**: o link é o único caminho, e ele estava morto.
+
+**Correção, em duas camadas.**
+1. `app/config.py::_url_para_fora` — `PORTAL_URL` e `PUBLIC_BASE_URL` só aceitam endereço
+   alcançável de fora (esquema http/https e host que não seja `localhost`, `127.x`, `0.0.0.0`,
+   `::1`, faixas privadas `10/192.168/172.16-31`, `host.docker.internal` ou `.local`). Valor
+   recusado cai na constante pública e deixa aviso em `AVISOS_DE_URL`, que o `create_app` grita no
+   log do deploy — config errada e invisível foi a origem disto. A permissão para apontar para si
+   usa o **mesmo sinal que já decide se o processo fala com pessoas reais** (`_suppress_mail`):
+   ambiente local continua livre, quem envia de verdade só monta link público. A necessidade
+   registrada pela 269 fica de pé sem a produção depender da variável.
+2. `email_service._send` — nenhum e-mail sai com link local no corpo, venha de onde vier
+   (`url_for(_external=True)`, host do request, string colada à mão). Só passa com
+   `MAIL_ALLOW_LOCAL_SEND=true`, que é o pedido explícito de quem testa contra si e é o próprio
+   destinatário.
+
+Também: `PORTAL_URL` saiu do `render.yaml` (não ter a variável é melhor que tê-la certa), o
+`.env.example` deixou de sugerir o valor local, e `api_notificar_pagamento` perdeu o fallback para
+`request.url_root` — que, atrás do proxy reverso, já era o endereço errado.
+
+**Verificação.** `verify_269b.py` 6/6 contra `manto_local` com o SMTP dublado: config em processo
+que envia (ignora local, 2 avisos) × processo local (mantém, sem aviso) × envio local explícito
+(volta ao público); 23 endereços aceitos/recusados um a um; `_send` recusando três formas de link
+local sem tocar no SMTP; convite de papel real do espelho com link público e, com `PORTAL_URL`
+forçada para localhost, barrado; reset de senha público. `ruff` no baseline.
+
+**Pendência do dono (painel do Render, não é código).** Apagar a variável `PORTAL_URL` do serviço
+`manto-backend`. Depois do deploy o valor já é ignorado, mas enquanto existir o log de cada boot vai
+gritar que ela foi recusada.
+
+**A lição que a 269 escreveu e esta completa.** Endereço público e fixo não deve vir de variável de
+ambiente — nem quando quem monta a mensagem é o servidor. Dar default real cobre o esquecimento;
+não cobre o preenchimento errado. Quando o dano é "pessoa de fora recebe link morto", a checagem
+tem que estar no caminho da mensagem, não só no valor padrão.
+
+---
 
 ### 267b — A venda sem data e a comissão que sumia da planilha            (2026-09-02 · hotfix · sem migration)
 

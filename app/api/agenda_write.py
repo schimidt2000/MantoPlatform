@@ -1829,7 +1829,9 @@ def api_feedback_link(event_id: int) -> Any:
     # PUBLIC_BASE_URL, não request.url_root: atrás do proxy reverso (206) o Host que chega
     # aqui é o do serviço backend (changeOrigin) — url_root geraria um link com o domínio
     # interno da Railway em vez do endereço público da plataforma.
-    base = (current_app.config.get("PUBLIC_BASE_URL") or request.url_root).rstrip("/")
+    # Sem fallback para `request.url_root`: `PUBLIC_BASE_URL` tem constante pública como default
+    # e é saneada no boot (hotfix 269b), então o fallback só poderia piorar o link.
+    base = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
     # `/catalogo/avaliar/...` e não `/avaliar/...`: este é o endereço da página React (o bundle da
     # vitrine roda com `basename="/catalogo"`). O caminho antigo continua vivo como 302 em
     # `feedback.avaliar`, para os links já enviados às clientes — o token não expira.

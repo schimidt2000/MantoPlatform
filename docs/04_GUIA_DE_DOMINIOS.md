@@ -441,6 +441,13 @@ processam as mesmas linhas da planilha.
 `invite_reminders.py` é o **molde para qualquer aviso por data** (janela de horário, máximo de
 lembretes, claim atômico); nenhuma das 7 toca cobrança de cliente — ver a spec da feature 267.
 
+**Link que sai por e-mail nunca vem do request nem de env não conferida** (hotfix 269b).
+`PORTAL_URL` e `PUBLIC_BASE_URL` passam por `config._url_para_fora`: endereço local só é aceito em
+processo que não envia e-mail de verdade, senão vale a constante pública (`PORTAL_BASE_URL` /
+`PLATFORM_BASE_URL`) e o boot grita no log. Segunda camada em `email_service._send`: corpo com link
+local não é enviado. Motivo: a env da produção estava com `http://localhost:5000` e o convite do
+artista — e o link de redefinição de senha — apontava para lá.
+
 **E-mail local é bloqueado por config, não por banco.** `SiteSetting.email_notifications_enabled` vem
 ligado na cópia local do banco de produção; a trava real é `MAIL_SUPPRESS_SEND`
 (`config.py:21-39`), checada antes (`email_service.py:538`).
