@@ -119,6 +119,50 @@ def api_reject_talent(talent_id: int) -> Any:
     return jsonify({"ok": True})
 
 
+@api_bp.route("/talents/<int:talent_id>/reset-senha", methods=["POST"])
+@api_login_required
+def api_enviar_reset_senha(talent_id: int) -> Any:
+    """Envia ao talento o link de redefinição de senha do portal (feature 274).
+
+    O artista que não consegue entrar tinha dois caminhos, e os dois podem travar: "Esqueci minha
+    senha" só funciona se ele digitar exatamente o e-mail do cadastro (e cala quando não bate), e
+    "Primeiro Acesso" recusa quem já tem senha. Este endpoint é a saída do lado de dentro, para
+    quem está com a ficha aberta e falando com a pessoa.
+
+    Gate `_can_edit_talent()` (CASTING/SUPERADMIN) — mesma régua de quem edita o cadastro. O
+    envio fica no `AuditLog`: é uma ação em nome de outra pessoa.
+    """
+    talent = _get_talent_or_404(talent_id)
+    if talent is None:
+        return json_error("Talento não encontrado", 404)
+    if not _can_edit_talent():
+        return json_error("Sem permissão", 403)
+
+    from app.email_service import send_async, send_password_reset_email
+    from app.talent_portal.portal_account_ops import PortalAccountError, enviar_reset_pelo_staff
+    from app.talent_portal.portal_links import portal_reset_url
+    from app.utils import audit
+
+    try:
+        resultado = enviar_reset_pelo_staff(
+            talent,
+            lambda t, url: send_async(send_password_reset_email, t, url),
+            portal_reset_url,
+        )
+    except PortalAccountError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message} if exc.field else None)
+
+    audit(
+        "enviou link de redefinição de senha do portal",
+        entity_type="Talent",
+        entity_id=talent.id,
+        entity_name=talent.full_name,
+        detail=f"para {resultado['email']}",
+    )
+    db.session.commit()
+    return jsonify(resultado)
+
+
 @api_bp.route("/talents/<int:talent_id>/notes", methods=["POST"])
 @api_login_required
 def api_save_talent_notes(talent_id: int) -> Any:

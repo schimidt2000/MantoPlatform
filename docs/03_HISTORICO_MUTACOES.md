@@ -4,10 +4,12 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-03** · Estado do repositório: pós-hotfix
+> Última atualização: **2026-09-03** · Estado do repositório: pós-feature
+> **274-reset-senha-pelo-casting** (sem migration; `POST /api/talents/<id>/reset-senha` e a seção
+> "Acesso ao portal" na ficha) e pós-hotfix
 > **269c-vedacoes-restantes** (sem migration; a trava de link local passou a julgar host como a
-> config, o e-mail do orçamento entrou nela, o alerta de ensaio virou link da plataforma; em
-> branch) — antes dele o merge de
+> config, o e-mail do orçamento entrou nela, o alerta de ensaio virou link da plataforma) — as duas
+> em branch — antes delas o merge de
 > **269b-hotfix-link-do-portal**, **239b-hotfix-carrinho-fora-de-sp** e
 > **273-orcamento-para-evento** — as três sem migration, no mesmo deploy de 03/09: a 269b para
 > o e-mail do portal sair com link local (a env da produção estava com `http://localhost:5000`),
@@ -226,6 +228,52 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 274 — O casting devolve o acesso ao portal para o artista            (2026-09-03 · feature · sem migration)
+
+**Motivação.** "Brenda de Lima Lopes e Tais Rangel não conseguem logar." As duas contas estavam
+boas: ativas, com senha, termos aceitos, e o login as encontra por CPF e por e-mail. O que travava
+era a recuperação, por dois motivos diferentes. A **Tais** pediu redefinição em 01/09 às 13h55 e o
+token continua lá, sem uso — ela recebeu o e-mail no auge do defeito da 269b, com o botão apontando
+para `http://localhost:5000`. A **Brenda** nunca chegou a ter token: `request_password_reset` só
+emite quando o e-mail digitado bate **exatamente** com `email_contact` e, quando não bate, não faz
+nada e não avisa (de propósito, contra enumeração de conta); o e-mail dela é
+`brendalloopes@gmail.com`, com dois L e dois O. E não havia saída pelo lado de dentro: "Primeiro
+Acesso" recusa quem já tem senha, e não existia endpoint nem botão para o casting. Outras oito
+pessoas estão na mesma fila (token pendente entre 18/08 e 02/09).
+
+**O que muda.** Seção **"Acesso ao portal"** na ficha do talento, para CASTING/SUPERADMIN (mesma
+régua de quem edita o cadastro): mostra se o artista já definiu senha, o e-mail do login e se há
+link em aberto, e traz o botão **"Enviar link de redefinição"** com confirmação. Serve para quem
+tem senha e para quem nunca teve — desde a 259 o mesmo link define a primeira. A mensagem de
+sucesso repete o endereço de destino, porque é lendo em voz alta que se acha o erro de digitação.
+Backend: `POST /api/talents/<id>/reset-senha` (`talents_write.py`),
+`portal_account_ops.enviar_reset_pelo_staff`, bloco `portal` no `GET /api/talents/<id>`, e
+`emitir_token_de_reset` como fonte única do token nos dois fluxos.
+
+**Decisões.** E-mail volta **inteiro**, não mascarado (a máscara do fluxo público existe contra
+enumeração; aqui esconderia justamente o defeito que se quer achar). Erro **é** devolvido (400 sem
+e-mail no cadastro) ao contrário do fluxo público. Segundo envio invalida o link anterior. O staff
+nunca vê nem define senha de artista. Fica no `AuditLog` — é ação em nome de outra pessoa.
+
+**Pegadinha paga na tela.** A validade saía como `datetime.utcnow()` cru: a tela dizia "vale até
+00:01" para um link que expira às 21:01. O token continua vivendo em UTC (é a comparação que decide
+validade); só a exibição converte para São Paulo, em `expiracao_para_exibir`. Mesma armadilha de
+fuso que a agenda já tinha pago.
+
+**Numeração.** O plano das ondas reservava 274 para "cliente do orçamento como FK"; aquele item e
+os seguintes andam um número. O próprio plano avisa que a numeração dele é provisória.
+
+**Verificação.** `verify_274.py` 8/8 contra `manto_local` com o SMTP dublado: envio com token e
+auditoria, talento sem senha, talento sem e-mail (400, sem token, sem envio), FINANCEIRO 403,
+inexistente 404, o link redefinindo a senha de verdade, segundo envio invalidando o primeiro, bloco
+`portal` só para quem gere talento, e a validade dentro de 1 hora em horário de São Paulo.
+`npm run typecheck` limpo; `ruff` no baseline. Em tela, na ficha da Brenda no espelho.
+
+**Descartado.** Reenvio em lote para as oito pendências (decisão do dono); trocar o e-mail do
+talento por esta seção (o cadastro já edita); qualquer forma de o staff ver ou definir a senha.
+
+---
 
 ### 269c — As vedações que faltaram na 269b            (2026-09-03 · hotfix · sem migration)
 

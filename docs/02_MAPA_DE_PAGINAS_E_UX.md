@@ -512,8 +512,16 @@ route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 - **UX**: modo edição unificado via `?edit=1`. A rota antiga `/talents/:id/edit` **redireciona**
   para cá (feature 180). Aprovar/rejeitar, notas internas + `warning_level` (nunca exibidos no
   Portal do Artista), foto de rosto/corpo, mídia de portfólio, histórico de avaliações.
+- **Acesso ao portal** (feature 274, só para quem gere talento): mostra se o artista **já definiu
+  senha**, o **e-mail do login** e se há **link em aberto** (com a validade), e traz o botão
+  **"Enviar link de redefinição"** (com confirmação). Existe porque o autoatendimento trava nos
+  dois caminhos: "Esqueci minha senha" exige o e-mail digitado **exatamente** como está no cadastro
+  e cala quando não bate, e "Primeiro Acesso" recusa quem já tem senha. A mensagem de sucesso
+  repete o endereço de destino — é lendo em voz alta que se acha o erro de digitação do cadastro
+  (caso real: `brendalloopes@gmail.com`, com dois L e dois O). Sem e-mail no cadastro o botão fica
+  desabilitado. O staff **nunca** vê nem define a senha: manda o link, o artista escolhe.
 - **API**: `GET /api/talents/<id>`, `/ratings` · `PATCH /api/talents/<id>` ·
-  `POST /api/talents/<id>/{approve,reject,notes,photo}`.
+  `POST /api/talents/<id>/{approve,reject,notes,photo,reset-senha}`.
 
 #### `/casting/avaliacoes` — Avaliação de Casting
 - **UX**: avaliações por evento/talento, com sub-notas e versionamento; modo **anônimo total**

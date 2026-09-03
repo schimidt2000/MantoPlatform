@@ -115,6 +115,20 @@ def api_talent_detail(talent_id: int) -> Any:
         talent, date_from=date_from, date_to=date_to, include_sensitive=can_edit
     )
     result["can_edit"] = can_edit
+    # Feature 274: estado da conta do portal, só para quem gere talento. É o que a pessoa que
+    # atende o artista precisa saber antes de mandar o link: se ele já definiu senha alguma vez e
+    # se existe pedido de redefinição em pé (o link vale 1 hora).
+    if can_edit:
+        from app.talent_portal.portal_account_ops import expiracao_para_exibir
+
+        expira = talent.password_reset_expires
+        result["portal"] = {
+            "tem_senha": bool(talent.password_hash),
+            # Horário de parede de São Paulo — a validade é lida por uma pessoa (ver
+            # `expiracao_para_exibir`); a comparação abaixo continua em UTC, que é como o token vive.
+            "reset_expira_em": expiracao_para_exibir(talent),
+            "reset_pendente": bool(talent.password_reset_token and expira and expira > datetime.utcnow()),
+        }
     return jsonify(result)
 
 

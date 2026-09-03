@@ -17,11 +17,14 @@ import {
   useApproveTalent,
   useRejectTalent,
   useRemoveTalentPhoto,
+  useEnviarResetSenha,
   useSaveTalentNotes,
   useTalent,
   useTalentRatings,
   useUpdateTalent,
   useUploadTalentPhoto,
+  type ResetSenhaEnviado,
+  type TalentPortalConta,
   type TalentUpdateInput,
 } from "../lib/talents";
 
@@ -159,6 +162,95 @@ function SelectField({
         ))}
       </select>
     </div>
+  );
+}
+
+/** "2026-09-03T16:40:00" → "03/09 às 16:40" (recorte de string, ver `lib/horaLocal.ts`). */
+function quando(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const [data, hora] = iso.split("T");
+  const [, mes, dia] = data.split("-");
+  return `${dia}/${mes} às ${(hora || "").slice(0, 5)}`;
+}
+
+/**
+ * Acesso ao Portal do Artista, na ficha (feature 274).
+ *
+ * Existe porque o autoatendimento tem dois becos: "Esqueci minha senha" só funciona com o e-mail
+ * digitado EXATAMENTE como está no cadastro, e cala quando não bate (de propósito, para não
+ * revelar quem é cadastrado); "Primeiro Acesso" recusa quem já tem senha. Quem erra a grafia do
+ * próprio e-mail cadastrado fica preso, e o casting não tinha o que fazer. O e-mail aparece aqui
+ * em tamanho de leitura porque conferi-lo em voz alta com o artista é o que resolve o caso.
+ */
+function AcessoAoPortal({
+  talentId,
+  nome,
+  email,
+  portal,
+}: {
+  talentId: number;
+  nome: string;
+  email: string | null;
+  portal: TalentPortalConta;
+}) {
+  const enviar = useEnviarResetSenha(talentId);
+  const [enviado, setEnviado] = useState<ResetSenhaEnviado | null>(null);
+
+  return (
+    <Section title="Acesso ao portal">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <dt className="text-muted">Senha</dt>
+        <dd className="text-ink">
+          {portal.tem_senha ? "definida pelo artista" : "nunca definida"}
+        </dd>
+        <dt className="text-muted">E-mail do login</dt>
+        <dd className="break-all text-ink">{email || "— sem e-mail no cadastro"}</dd>
+        {portal.reset_pendente && (
+          <>
+            <dt className="text-muted">Link em aberto</dt>
+            <dd className="text-ink">vale até {quando(portal.reset_expira_em)}</dd>
+          </>
+        )}
+      </dl>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!email}
+          loading={enviar.isPending}
+          onClick={() => {
+            if (!window.confirm(`Enviar o link de redefinição de senha para ${email}?`)) return;
+            setEnviado(null);
+            enviar.mutate(undefined, { onSuccess: (r) => setEnviado(r) });
+          }}
+        >
+          Enviar link de redefinição
+        </Button>
+        <span className="text-xs text-muted">
+          {portal.tem_senha
+            ? "O artista escolhe uma senha nova pelo link. Vale 1 hora."
+            : "Serve também para definir a primeira senha. Vale 1 hora."}
+        </span>
+      </div>
+
+      {enviado && (
+        <p className="mt-2 text-sm text-green" role="status">
+          Link enviado para {enviado.email}. Vale até {quando(enviado.expira_em)}. Se o artista não
+          receber, confira se este é mesmo o e-mail dele antes de reenviar.
+        </p>
+      )}
+      {enviar.isError && (
+        <p className="mt-2 text-sm text-red" role="alert">
+          {enviar.error?.message}
+        </p>
+      )}
+      {!email && (
+        <p className="mt-2 text-xs text-muted">
+          Preencha o e-mail de {nome} no cadastro para poder enviar o link.
+        </p>
+      )}
+    </Section>
   );
 }
 
@@ -522,6 +614,15 @@ export function TalentDetailPage() {
               </dl>
             )}
           </Section>
+
+          {query.data.portal && mode === "read" && (
+            <AcessoAoPortal
+              talentId={id}
+              nome={t.full_name}
+              email={t.email_contact}
+              portal={query.data.portal}
+            />
+          )}
 
           <Section title="Documentos e PIX">
             {mode === "edit" && form ? (

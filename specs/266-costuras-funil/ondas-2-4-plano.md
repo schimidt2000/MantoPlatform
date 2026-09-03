@@ -13,6 +13,11 @@
 | fundação transversal | **272** — notificações internas | spec escrita em 01/09 (`specs/272-notificacoes-internas/spec.md`), em desenvolvimento; migration provisória `b7d2e4f1a9c3` com `down_revision = a1c7d3e59b02` |
 | 2, 3, 4 | **273 a 291** (números provisórios) | **este documento** |
 
+> **Numeração andou um a partir de 274** (03/09/2026): a 273 saiu com o número planejado, mas o
+> **274 foi tomado** por `274-reset-senha-pelo-casting` (fora deste plano, nasceu de duas artistas
+> sem conseguir entrar no portal). "Cliente do orçamento como FK" e tudo que vem depois pegam o
+> próximo número livre — confira em `docs/03` na hora de abrir cada spec, como esta tabela já pedia.
+
 **Regra de leitura.** Este é o plano; a spec de cada feature nasce daqui e pode divergir — quando
 divergir, **a spec vence** e este arquivo ganha uma nota na seção da feature dizendo o que mudou e
 por quê. Os números 273+ são provisórios: o número definitivo se confere em `docs/03` na hora de

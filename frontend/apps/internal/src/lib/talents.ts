@@ -153,8 +153,26 @@ export interface TalentLastEvent {
   start_at: string | null;
 }
 
+/** Estado da conta do portal do talento (feature 274) — só vem para quem gere talento. */
+export interface TalentPortalConta {
+  /** `false` = nunca definiu senha; o mesmo link serve para definir a primeira (feature 259). */
+  tem_senha: boolean;
+  reset_expira_em: string | null;
+  reset_pendente: boolean;
+}
+
+/** Resposta de `POST /api/talents/<id>/reset-senha` (feature 274). */
+export interface ResetSenhaEnviado {
+  /** E-mail inteiro de propósito: é lendo em voz alta que se acha o erro de digitação. */
+  email: string;
+  expira_em: string;
+  tinha_senha: boolean;
+}
+
 export interface TalentDetail {
   talent: TalentProfile;
+  /** feature 274 — ausente para quem não pode editar o cadastro. */
+  portal?: TalentPortalConta;
   history: {
     items: TalentHistoryItem[];
     total_events: number;
@@ -270,6 +288,21 @@ export function useUpdateTalent(id: number) {
 }
 
 /** Salva anotação interna + nível de alerta (feature 154). */
+/**
+ * Envia ao talento o link de redefinição de senha do portal (feature 274).
+ *
+ * É a saída para quem trava no autoatendimento: "Esqueci minha senha" exige o e-mail exato do
+ * cadastro e cala quando não bate; "Primeiro Acesso" recusa quem já tem senha.
+ */
+export function useEnviarResetSenha(id: number) {
+  const queryClient = useQueryClient();
+  return useMutation<ResetSenhaEnviado, Error, void>({
+    mutationFn: () =>
+      apiFetch<ResetSenhaEnviado>(`/api/talents/${id}/reset-senha`, { method: "POST" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["talent", id] }),
+  });
+}
+
 export function useSaveTalentNotes(id: number) {
   return useTalentDetailMutation<{ notes: string; warning_level: string }>(id, (body) =>
     apiFetch<TalentDetail>(`/api/talents/${id}/notes`, {

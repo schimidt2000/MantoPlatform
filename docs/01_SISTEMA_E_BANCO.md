@@ -692,6 +692,12 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 `GET /api/talents/directory`, `/api/talents/character-suggestions`, `/api/talents/<id>`,
 `/api/talents/<id>/ratings` · `PATCH /api/talents/<id>` ·
 `POST /api/talents/<id>/{approve,reject,notes,photo}` · `DELETE /api/talents/<id>/photo`.
+**Feature 274** (sem migration): `POST /api/talents/<id>/reset-senha` manda ao talento o link de
+redefinição de senha do portal (gate `_can_edit_talent`; 400 quando o cadastro não tem e-mail;
+grava `AuditLog`), e `GET /api/talents/<id>` ganha o bloco `portal`
+(`tem_senha`, `reset_pendente`, `reset_expira_em` **em horário de São Paulo**) apenas para quem
+gere talento. O token nasce em `portal_account_ops.emitir_token_de_reset`, fonte única deste
+caminho e do "Esqueci minha senha" do artista — enviar de novo invalida o link anterior.
 Avaliações: `GET /api/ratings` · `POST /api/ratings/modo-anonimo`.
 Fila de emails devolvidos (feature 219, gate `_can_edit_talent`):
 `GET /api/talents/bounces` (agrupada por endereço, `?resolvidos=1` inclui as fechadas) ·
