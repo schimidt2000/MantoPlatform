@@ -743,6 +743,22 @@ def api_create_event() -> Any:
     d = date.fromisoformat(data["date_str"])
     st, et = _build_start_end(d, data["start_str"], data["end_str"])
 
+    # Feature 273: 1:1 entre eventos vivos também na criação — "Criar evento" duas vezes no mesmo
+    # orçamento gerava dois eventos apontando para ele (e o histórico mostrava um qualquer).
+    # Antes do Google, para não deixar um evento órfão na Agenda.
+    orc_id = data.get("orcamento_history_id")
+    if orc_id:
+        from app.calendar.orcamento_evento_ops import outro_evento_vivo_do_orcamento
+
+        outro = outro_evento_vivo_do_orcamento(orc_id, exceto_event_id=None)
+        if outro is not None:
+            return json_error(
+                f"Esse orçamento já virou o evento #{outro.id} ({outro.title}). "
+                "Abra-o pelo histórico (Ver evento) ou cancele-o antes de criar outro.",
+                409,
+                event_id=outro.id,
+            )
+
     try:
         created = _insert_event(
             CALENDAR_ID, gc_title, st, et,
@@ -1041,6 +1057,94 @@ def api_set_event_form_response(event_id: int) -> Any:
     if not set_event_form_response(event, raw) and raw is not None:
         return json_error("Esse pré-contrato já está vinculado a outro evento", 409)
     return _event_detail_json(event)
+
+
+@api_bp.route("/events/<int:event_id>/orcamento", methods=["PATCH"])
+@api_login_required
+def api_set_event_orcamento(event_id: int) -> Any:
+    """Vincula (ou desvincula) o orçamento ao evento e aplica o que foi vendido (feature 273).
+
+    Corpo: `{"orcamento_history_id": int|null, "aplicar_equipe"?: bool (padrão true),
+    "aplicar_valores_duracao"?: 1|2|3|4, "sale_date"?: "AAAA-MM-DD"}`. RBAC `_can_manage_sale` (é
+    dado de venda). Satélite → 409 + `leader_id` (o dinheiro mora no principal). Orçamento de outro
+    vendedor → 404 para quem não é superadmin (mesma regra do histórico); vínculo ATUAL de outro
+    vendedor → 409 `orcamento_de_outro` (quem não vê o orçamento não o troca nem solta). Orçamento
+    já preso a outro evento não cancelado → 409 + `event_id`. Chamar de novo com o mesmo orçamento
+    reaplica a equipe (idempotente). A resposta é o evento completo mais `relatorio_orcamento`.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_manage_sale():
+        return json_error("Sem permissão", 403)
+    if event.is_satellite:
+        return json_error(
+            "Este evento é satélite de um grupo: o orçamento é do evento principal.",
+            409,
+            leader_id=event.group_leader_id,
+        )
+
+    body = request.get_json(silent=True) or {}
+    raw = body.get("orcamento_history_id")
+    if raw is not None and (isinstance(raw, bool) or not isinstance(raw, int)):
+        return json_error("orcamento_history_id inválido", 400)
+
+    from app.calendar.orcamento_evento_ops import OrcamentoJaVinculado, set_event_orcamento
+    from app.financeiro.routes import _sync_commission_payment
+    from app.models import OrcamentoHistory
+
+    entry = None
+    if raw is not None:
+        entry = OrcamentoHistory.query.get(raw)
+        if entry is None or (not _is_superadmin() and entry.user_id != current_user.id):
+            return json_error("Orçamento não encontrado", 404)
+
+    duracao_raw = body.get("aplicar_valores_duracao")
+    if duracao_raw is not None and (
+        isinstance(duracao_raw, bool) or not isinstance(duracao_raw, int) or duracao_raw not in (1, 2, 3, 4)
+    ):
+        return json_error("aplicar_valores_duracao deve ser 1, 2, 3 ou 4", 400)
+    duracao = duracao_raw
+    sale_date_raw = body.get("sale_date")
+    if sale_date_raw is not None and not isinstance(sale_date_raw, str):
+        return json_error("Data inválida (use AAAA-MM-DD)", 400)
+    try:
+        sale_date = date.fromisoformat(sale_date_raw) if sale_date_raw else None
+    except ValueError:
+        return json_error("Data inválida (use AAAA-MM-DD)", 400)
+
+    # O vínculo atual pertence a outro vendedor? Quem não é superadmin não vê esse orçamento (o
+    # detalhe manda `orcamento: null`) e poderia trocá-lo ou soltá-lo sem saber que existe.
+    atual_id = event.orcamento_history_id
+    if atual_id and atual_id != (entry.id if entry is not None else None) and not _is_superadmin():
+        atual = OrcamentoHistory.query.get(atual_id)
+        if atual is not None and atual.user_id != current_user.id:
+            return json_error(
+                "Este evento já está vinculado ao orçamento de outro vendedor; só ele ou o superadmin podem trocar ou desvincular.",
+                409,
+                orcamento_de_outro=True,
+            )
+
+    try:
+        relatorio = set_event_orcamento(
+            event,
+            entry,
+            actor_name=current_user.name,
+            tz=_TZ_SP,
+            aplicar_equipe=bool(body.get("aplicar_equipe", True)),
+            aplicar_valores_duracao=duracao,
+            sale_date=sale_date,
+            sincronizar_comissao=_sync_commission_payment,
+        )
+    except OrcamentoJaVinculado as exc:
+        db.session.rollback()
+        return json_error(
+            "Esse orçamento já está vinculado a outro evento.", 409, event_id=exc.event_id
+        )
+    db.session.commit()
+    resposta = serialize_event_detail(event, current_user, session.get("impersonate_role"))
+    resposta["relatorio_orcamento"] = relatorio
+    return jsonify(resposta)
 
 
 # ── Upload e gestão de anexos do evento (feature 153) ────────────────────────

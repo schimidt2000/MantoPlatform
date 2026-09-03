@@ -109,9 +109,13 @@ def api_orcamento_settings_get() -> Any:
 # ══════════════════════════════════════════════════════════════════
 
 
-def _entry_summary(e: OrcamentoHistory) -> dict:
+def _entry_summary(e: OrcamentoHistory, evento: Any = None) -> dict:
+    """Linha do histórico. `evento` (feature 273) é o evento não cancelado que aponta para o
+    orçamento — o selo de convertido mais barato possível."""
     return {
         "id": e.id,
+        "event_id": evento.id if evento is not None else None,
+        "event_title": evento.title if evento is not None else None,
         "created_at": e.created_at.isoformat(),
         "client_name": e.client_name or "",
         "event_location": e.event_location or "",
@@ -194,8 +198,19 @@ def api_orcamento_historico_list() -> Any:
             )
         ]
 
+    # Feature 273: um SELECT para todos os eventos vivos das linhas da página, não um por linha.
+    from app.models import CalendarEvent
+
+    ids = [e.id for e in entries]
+    eventos_por_orc: dict[int, Any] = {}
+    if ids:
+        for ev in CalendarEvent.query.filter(
+            CalendarEvent.orcamento_history_id.in_(ids), CalendarEvent.cancelled_at.is_(None)
+        ).all():
+            eventos_por_orc.setdefault(ev.orcamento_history_id, ev)
+
     return jsonify({
-        "entries": [_entry_summary(e) for e in entries],
+        "entries": [_entry_summary(e, eventos_por_orc.get(e.id)) for e in entries],
         "is_superadmin": is_sa,
         "users": users,
     })

@@ -2298,12 +2298,24 @@ def sync_events(items: list[dict]) -> None:
                 event.needs_rehearsal = True
                 _notify_ensaio_team(event)
 
-            # Reavalia se é fora de SP quando o endereço mudou
+            # Reavalia se é fora de SP quando o endereço mudou. Feature 273: orçamento vinculado
+            # com "fora de São Paulo" marcado decide antes do endereço — e a quilometragem vendida
+            # não é zerada por um retoque no Google Agenda.
             location_changed = (location or "").strip() != (old_location or "").strip()
-            if location_changed or event.is_outside_sp is None:
+            orc_fora_sp = False
+            if event.orcamento_history_id and (location_changed or event.is_outside_sp is None):
+                from app.calendar.orcamento_evento_ops import aplicar_fora_sp_do_orcamento
+
+                orc_fora_sp = aplicar_fora_sp_do_orcamento(
+                    event, OrcamentoHistory.query.get(event.orcamento_history_id)
+                )
+            if not orc_fora_sp and (location_changed or event.is_outside_sp is None):
                 event.is_outside_sp = _lookup_sp_status(location)
 
-            if event.is_outside_sp and (location_changed or not event.travel_distance_km):
+            if orc_fora_sp:
+                if not event.travel_distance_km:
+                    _fetch_travel_data(event, SiteSetting.query.get(1))
+            elif event.is_outside_sp and (location_changed or not event.travel_distance_km):
                 settings = SiteSetting.query.get(1)
                 _fetch_travel_data(event, settings)
             elif not event.is_outside_sp:
@@ -3247,6 +3259,41 @@ def _validate_event_core(data: dict) -> dict[str, str]:
     return errors
 
 
+def _criar_acrescimos_do_orcamento(event, acr_list: list) -> int:
+    """Grava os acréscimos tipados (BV etc.) do orçamento como `EventAcrescimo` do evento.
+
+    Usado pela criação a partir do orçamento e, desde a 273, pelo vínculo posterior que aplica
+    os valores — os dois caminhos têm que produzir o mesmo evento. Percentual é calculado sobre
+    `event.sale_value` (já gravado). Sem commit. Devolve quantos criou.
+    """
+    if not acr_list:
+        return 0
+    criados = 0
+    sale_ev = Decimal(event.sale_value or 0)
+    for a in acr_list:
+        tipo = (a.get("tipo") or "").strip()
+        val = a.get("value")
+        if not tipo or not val:
+            continue
+        is_pct = bool(a.get("is_percent"))
+        val_d = Decimal(str(val))
+        amount = (
+            (sale_ev * val_d / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if is_pct else val_d
+        )
+        db.session.add(EventAcrescimo(
+            event_id=event.id,
+            tipo=tipo,
+            descricao=(a.get("descricao") or "").strip() or None,
+            is_percent=is_pct,
+            value=val_d,
+            amount_brl=amount,
+            is_bv=bool(a.get("is_bv")) or tipo == ACRESCIMO_TIPO_BV,
+        ))
+        criados += 1
+    return criados
+
+
 def _create_event_row(data: dict, *, google_event_id: str, gc_title: str) -> CalendarEvent:
     """Grava o `CalendarEvent` essencial + financeiro + acréscimos tipados + nota fiscal (sem
     arquivo) + detecção fora-de-SP (feature 152). Chamado depois que `insert_event` (Google) já
@@ -3292,29 +3339,7 @@ def _create_event_row(data: dict, *, google_event_id: str, gc_title: str) -> Cal
     db.session.add(event)
     db.session.flush()
 
-    acr_list = data.get("acrescimos") or []
-    if acr_list:
-        sale_ev = Decimal(event.sale_value or 0)
-        for a in acr_list:
-            tipo = (a.get("tipo") or "").strip()
-            val = a.get("value")
-            if not tipo or not val:
-                continue
-            is_pct = bool(a.get("is_percent"))
-            val_d = Decimal(str(val))
-            amount = (
-                (sale_ev * val_d / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                if is_pct else val_d
-            )
-            db.session.add(EventAcrescimo(
-                event_id=event.id,
-                tipo=tipo,
-                descricao=(a.get("descricao") or "").strip() or None,
-                is_percent=is_pct,
-                value=val_d,
-                amount_brl=amount,
-                is_bv=bool(a.get("is_bv")) or tipo == ACRESCIMO_TIPO_BV,
-            ))
+    _criar_acrescimos_do_orcamento(event, data.get("acrescimos") or [])
 
     if event.with_invoice:
         invoice_filename = data.get("invoice_filename")
@@ -3675,6 +3700,11 @@ def _create_event_core(
             orc_caches = _compute_performer_caches(
                 snap, horas_extra=duracao if duracao > 4 else None
             )
+            # Feature 273: a caixinha "evento fora de São Paulo" do orçamento vale mais que o
+            # endereço — e traz a quilometragem que dá base ao carrinho de transporte.
+            from app.calendar.orcamento_evento_ops import aplicar_fora_sp_do_orcamento
+
+            aplicar_fora_sp_do_orcamento(event, entry)
 
     assigned_now = _create_roles_from_input(
         event,

@@ -178,6 +178,34 @@ export interface RoleItem {
   is_presence?: boolean;
 }
 
+/** O que o orçamento vinculado vendeu (feature 273) — chips da aba Comercial e base do "Aplicar". */
+export interface OrcamentoResumo {
+  id: number;
+  client_name: string;
+  event_date: string;
+  event_location: string;
+  fora_sp: boolean;
+  km_ida: number;
+  deslocamento_cliente: boolean;
+  coordenador_qty: number;
+  maquiagens: number;
+  cantores: number;
+  personagens: string[];
+  has_show: boolean;
+  total_1h: number;
+  total_2h: number;
+  total_3h: number;
+  total_4h: number;
+}
+
+/** Relatório devolvido por `PATCH /api/events/<id>/orcamento` (feature 273). */
+export interface RelatorioOrcamento {
+  frase: string;
+  nao_casados?: string[];
+  valores_ignorados?: string;
+  [chave: string]: unknown;
+}
+
 /** Estimativa de trajeto Manto → local do evento (cache do Google Maps). */
 export interface EventTravel {
   time_minutes: number | null;
@@ -400,9 +428,17 @@ export interface EventoDetalhe {
     // feature 239 — só vem preenchido quando o usuário consegue abrir o orçamento
     // (superadmin, ou comercial dono do orçamento); demais papéis recebem null.
     orcamento_history_id: number | null;
+    /** feature 273 — há orçamento vinculado, visível ou não (o resumo só vem para quem pode abri-lo). */
+    tem_orcamento: boolean;
+    /** feature 273 — o que o orçamento vendeu; mesma visibilidade de `orcamento_history_id`. */
+    orcamento: OrcamentoResumo | null;
+    /** `google_calendar` | `platform` — o evento importado do Google entra sem venda nem orçamento. */
+    source: string;
     clients: { client_id: number; name: string | null; relation: string }[];
     form_response: { id: number; name: string; form_type: string } | null;
   };
+  /** feature 273 — só na resposta de `PATCH /api/events/<id>/orcamento`. */
+  relatorio_orcamento?: RelatorioOrcamento;
   contratos?: { id: number; file_path: string; is_signed: boolean; created_at: string | null }[];
   notas_fiscais?: {
     id: number;

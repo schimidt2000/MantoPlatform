@@ -295,6 +295,9 @@ export interface OrcamentoHistoricoEntry {
   total_4h: number;
   has_show: boolean;
   user_name: string | null;
+  /** feature 273 — evento não cancelado que aponta para este orçamento ("Ver evento"). */
+  event_id: number | null;
+  event_title: string | null;
 }
 
 export interface OrcamentoHistoricoResponse {

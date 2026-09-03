@@ -2,16 +2,18 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Pencil } from "lucide-react";
 import { Badge, Button } from "@manto/ui";
-import { assetUrl } from "@manto/api-client";
+import { ApiRequestError, assetUrl } from "@manto/api-client";
 import { MoneyInput } from "@manto/money";
-import type { EventoDetalhe } from "../../lib/agenda";
+import type { EventoDetalhe, RelatorioOrcamento } from "../../lib/agenda";
 import { useEventCreateOptions } from "../../lib/eventCreate";
 import {
   useSetEventClients,
   useSetEventFormResponse,
+  useSetEventOrcamento,
   useUpdateEventComercial,
   type EventComercialInput,
 } from "../../lib/eventInline";
+import type { OrcamentoHistoricoEntry } from "../../lib/orcamento";
 import {
   useDesagruparEvento,
   useRemoverSatelite,
@@ -19,6 +21,7 @@ import {
 } from "../../lib/eventOps";
 import { ClientPicker, type SelectedClient } from "../ClientPicker";
 import { FormResponsePicker, type SelectedFormResponse } from "../FormResponsePicker";
+import { dataBr, OrcamentoPicker } from "../OrcamentoPicker";
 import { AgruparEventosDialog } from "./AgruparEventosDialog";
 import { ColecoesComerciaisPanel } from "./ColecoesComerciaisPanel";
 import { brl, DataRow, Empty, formatDay, INPUT_CLASS, Panel } from "./parts";
@@ -469,6 +472,237 @@ function ClientesPanel({ data }: { data: EventoDetalhe }) {
   );
 }
 
+/** Chips do que o orçamento vendeu — a mesma leitura que o servidor aplica ao evento. */
+function chipsDoOrcamento(orc: NonNullable<EventoDetalhe["venda"]>["orcamento"]): string[] {
+  if (!orc) return [];
+  const chips: string[] = [];
+  if (orc.fora_sp) {
+    chips.push(
+      `Fora de SP${orc.km_ida ? ` · ${orc.km_ida} km` : ""}${orc.deslocamento_cliente ? " · deslocamento da cliente" : ""}`,
+    );
+  }
+  if (orc.coordenador_qty) {
+    chips.push(`${orc.coordenador_qty} coordenador${orc.coordenador_qty > 1 ? "es" : ""}`);
+  }
+  if (orc.maquiagens) chips.push(`Maquiagem em ${orc.maquiagens}`);
+  if (orc.cantores) chips.push(`${orc.cantores} cantor${orc.cantores > 1 ? "es" : ""}`);
+  if (orc.has_show) chips.push("Show · técnico de som");
+  return chips;
+}
+
+/**
+ * Orçamento de origem (feature 273): o evento passa a saber o que foi vendido.
+ *
+ * Com orçamento: chips do que foi vendido, "Aplicar ao evento" (fora de SP + equipe — cria o que
+ * falta, nunca remove), "Trocar", "Desvincular". Sem orçamento: busca no histórico e, em evento
+ * sem venda, a opção de aplicar também os valores da duração escolhida (D1 do plano das ondas:
+ * com venda digitada os valores ficam como estão). O evento importado do Google entra aqui
+ * "mudo", e é por este painel que ele passa a ter equipe, fora de SP e teto de cachê.
+ */
+function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
+  const venda = data.venda!;
+  const salvar = useSetEventOrcamento(data.event.id);
+  const canEdit = Boolean(data.flags.can_edit_core);
+  const orc = venda.orcamento;
+  const [escolhido, setEscolhido] = useState<OrcamentoHistoricoEntry | null>(null);
+  const [trocando, setTrocando] = useState(false);
+  const [duracao, setDuracao] = useState<string>("");
+  const [relatorio, setRelatorio] = useState<RelatorioOrcamento | null>(null);
+  // Cortesia/permuta grava venda 0 de propósito: não é "sem venda" para aplicar valores.
+  const semVenda = !venda.sale_value && !venda.is_cortesia_permuta;
+
+  function enviar(id: number | null, extra: { aplicar_valores_duracao?: number | null } = {}) {
+    setRelatorio(null);
+    salvar.mutate(
+      { orcamento_history_id: id, aplicar_equipe: true, ...extra },
+      {
+        onSuccess: (r) => {
+          setRelatorio(r.relatorio_orcamento ?? null);
+          setEscolhido(null);
+          setTrocando(false);
+          setDuracao("");
+        },
+      },
+    );
+  }
+
+  const chips = chipsDoOrcamento(orc);
+  const importadoSemVenda = venda.source === "google_calendar" && semVenda;
+  // 409 "já vinculado a outro evento" / "satélite" mandam o id do evento certo: linka em vez de
+  // deixar a comercial adivinhar.
+  const detalhesDoErro = salvar.error instanceof ApiRequestError ? salvar.error.details : undefined;
+  const eventoDoErro = [detalhesDoErro?.event_id, detalhesDoErro?.leader_id].find(
+    (v): v is number => typeof v === "number",
+  );
+  const orcamentoDeOutro = !orc && venda.tem_orcamento;
+
+  if (!canEdit) {
+    return (
+      <Panel title="Orçamento">
+        {orc ? (
+          <DataRow label={orc.client_name || "Orçamento"}>
+            <Link to={`/orcamento/${orc.id}`} className="text-blue underline">
+              Abrir orçamento
+            </Link>
+          </DataRow>
+        ) : (
+          <Empty>
+            {venda.tem_orcamento
+              ? "Vinculado a um orçamento que o seu perfil não abre."
+              : "Nenhum orçamento vinculado."}
+          </Empty>
+        )}
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel title="Orçamento">
+      {orcamentoDeOutro ? (
+        <p className="text-sm text-muted">
+          Vinculado ao orçamento de outro vendedor — só ele ou o superadmin podem trocar ou
+          desvincular.
+        </p>
+      ) : orc && !trocando ? (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium text-ink">{orc.client_name || "Sem cliente"}</span>
+            {orc.event_date && <span className="text-muted">{dataBr(orc.event_date)}</span>}
+            <Link to={`/orcamento/${orc.id}`} className="text-blue underline">
+              Abrir orçamento
+            </Link>
+          </div>
+          {chips.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {chips.map((chip) => (
+                <Badge key={chip} tone={chip.startsWith("Fora de SP") ? "gold" : "neutral"}>
+                  {chip}
+                </Badge>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              loading={salvar.isPending}
+              onClick={() => enviar(orc.id)}
+              title="Cria o que falta (coordenadores, maquiador, técnico de som), marca maquiagem e fora de SP. Nunca remove nada."
+            >
+              Aplicar ao evento
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setTrocando(true)}>
+              Trocar
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={salvar.isPending}
+              onClick={() => enviar(null)}
+            >
+              Desvincular
+            </Button>
+          </div>
+        </div>
+      ) : escolhido ? (
+        <div className="space-y-2">
+          <div className="text-sm text-ink">
+            <span className="font-medium">{escolhido.client_name || "Sem cliente"}</span>
+            {escolhido.event_date && (
+              <span className="ml-2 text-muted">{dataBr(escolhido.event_date)}</span>
+            )}
+            {escolhido.event_id != null && escolhido.event_id !== data.event.id && (
+              <span className="ml-2 text-red">já vinculado a outro evento</span>
+            )}
+          </div>
+          {semVenda && (
+            <label className="flex flex-wrap items-center gap-2 text-sm text-ink">
+              Aplicar também os valores de
+              <select
+                className={INPUT_CLASS}
+                value={duracao}
+                onChange={(e) => setDuracao(e.target.value)}
+                aria-label="Duração dos valores do orçamento"
+              >
+                <option value="">não aplicar valores</option>
+                <option value="1">1h — {brl(escolhido.total_1h)}</option>
+                <option value="2">2h — {brl(escolhido.total_2h)}</option>
+                <option value="3">3h — {brl(escolhido.total_3h)}</option>
+                <option value="4">4h — {brl(escolhido.total_4h)}</option>
+              </select>
+            </label>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              loading={salvar.isPending}
+              onClick={() =>
+                enviar(escolhido.id, {
+                  aplicar_valores_duracao: duracao ? Number(duracao) : null,
+                })
+              }
+            >
+              Vincular e aplicar
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setEscolhido(null);
+                setTrocando(false);
+              }}
+            >
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {importadoSemVenda && (
+            <p className="text-xs text-muted">
+              Evento importado do Google, sem venda: vincule o orçamento para trazer a equipe, o
+              fora de SP e, se quiser, os valores.
+            </p>
+          )}
+          <OrcamentoPicker onChange={setEscolhido} />
+          {trocando && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setTrocando(false)}>
+              Cancelar
+            </Button>
+          )}
+        </div>
+      )}
+      {salvar.isPending && <p className="mt-1 text-sm text-muted">Aplicando…</p>}
+      {salvar.isError && (
+        <p className="mt-1 text-sm text-red" role="alert">
+          {salvar.error?.message}
+          {eventoDoErro != null && (
+            <>
+              {" "}
+              <Link to={`/events/${eventoDoErro}`} className="underline">
+                Abrir esse evento
+              </Link>
+            </>
+          )}
+        </p>
+      )}
+      {relatorio && !salvar.isPending && (
+        <p className="mt-1 text-sm text-ink" role="status">
+          {relatorio.frase}
+          {(relatorio.nao_casados?.length ?? 0) > 0 && (
+            <span className="block text-xs text-muted">
+              Sem papel correspondente no evento: {relatorio.nao_casados!.join(", ")}.
+            </span>
+          )}
+        </p>
+      )}
+    </Panel>
+  );
+}
+
 /** Pré-contrato vinculado (feature 215) — vincular/desvincular sem sair da aba. */
 function PreContratoPanel({ data }: { data: EventoDetalhe }) {
   const venda = data.venda!;
@@ -571,13 +805,6 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
         )}
         {venda.sale_date && <DataRow label="Data da venda">{formatDay(venda.sale_date)}</DataRow>}
         {venda.seller && <DataRow label="Vendedor responsável">{venda.seller}</DataRow>}
-        {venda.orcamento_history_id != null && (
-          <DataRow label="Orçamento de origem">
-            <Link to={`/orcamento/${venda.orcamento_history_id}`} className="text-blue underline">
-              Abrir orçamento
-            </Link>
-          </DataRow>
-        )}
         {venda.commission_rate != null && (
           <DataRow label="Taxa de comissão">{venda.commission_rate}%</DataRow>
         )}
@@ -786,6 +1013,7 @@ export function ComercialSection({ data }: ComercialSectionProps) {
   return (
     <>
       {data.venda && <ClientesPanel data={data} />}
+      {data.venda && <OrcamentoPanel data={data} />}
       {data.venda && <PreContratoPanel data={data} />}
       <VendaPanel data={data} />
       <ColecoesComerciaisPanel data={data} />

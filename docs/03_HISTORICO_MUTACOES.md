@@ -4,7 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-02** · Estado do repositório: pós-hotfix
+> Última atualização: **2026-09-02** · Estado do repositório: pós-feature
+> **273-orcamento-para-evento** (sem migration; `PATCH /api/events/<id>/orcamento` vincula orçamento
+> a evento já criado e aplica fora de SP, equipe e valores vendidos; em branch, sobre a 239b) — antes dela
 > **239b-hotfix-carrinho-fora-de-sp** (sem migration; Geocoding classifica dentro/fora de SP,
 > edição reclassifica, marcar transporte em evento desconhecido classifica; em branch) — antes dele
 > **267b-hotfix-data-da-venda** (sem migration; venda sem data ganha hoje no servidor, ciclo da
@@ -220,6 +222,76 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 273 — Orçamento → evento: o evento passa a saber o que foi vendido            (2026-09-02 · feature · sem migration)
+
+**Motivação.** "Se o orçamento marcou 'evento fora de São Paulo', ele já conta o transporte — seria
+legal essa integração. Se vendeu maquiagem, tem que aparecer quem tem maquiagem; se foram dois
+coordenadores, tem que mostrar." Medido em produção (eventos futuros): 60 criados na plataforma
+com orçamento, **44 sem orçamento** (32 importados do Google + 12 da plataforma). A criação já
+trazia a equipe desde a 152/239; o que se perdia era (1) a caixinha "fora de SP" do orçamento —
+**8 eventos futuros** com ela marcada e `is_outside_sp` desconhecido, logo sem carrinho, mesmo
+com 110 km vendidos (evento 1267); (2) os 44 sem vínculo, que não recebiam nada, porque
+`orcamento_history_id` só era gravado na criação.
+
+**O que muda.** Módulo puro `app/calendar/orcamento_evento_ops.py`, fonte única de "o que o
+orçamento diz e como entra no evento", usado pela criação, pelo vínculo posterior e pela
+reclassificação dentro/fora de SP:
+- `aplicar_fora_sp_do_orcamento`: caixinha marcada → `is_outside_sp=True` e a quilometragem do
+  orçamento vira `travel_distance_km` quando o evento não tem; desmarcada não rebaixa. Roda na
+  criação a partir de orçamento, no vínculo e em `reclassificar_fora_de_sp` (antes do Geocoding).
+- `aplicar_equipe_do_orcamento`: recalcula a lista para a duração real do evento
+  (`_compute_performer_caches`), casa personagens por nome normalizado (marca `needs_makeup`,
+  `is_singer`, teto onde não havia), cria coordenadores até a quantidade vendida, Técnico de Som e
+  Maquiador quando faltam; o que não casa vai ao relatório (`nao_casados`). **Nunca apaga nem
+  rebaixa.**
+- `aplicar_valores_do_orcamento`: venda/transporte/nota da duração escolhida, só em evento sem
+  venda (D1); `sale_date` pela regra da 267b; comissão sincronizada por injeção.
+- `PATCH /api/events/<id>/orcamento` (`agenda_write.py`): `{orcamento_history_id|null,
+  aplicar_equipe?=true, aplicar_valores_duracao?, sale_date?}`; gate `_can_manage_sale`; satélite
+  409 + `leader_id`; orçamento alheio 404 (superadmin vê todos); preso a outro evento não cancelado
+  409 + `event_id`; `null` desvincula só o FK; reaplicar é idempotente; resposta = evento inteiro +
+  `relatorio_orcamento` (frase + contagens + `nao_casados`). Escreve `EventLog`.
+- Aba Comercial: painel **"Orçamento"** substitui a linha "Orçamento de origem" — chips do que foi
+  vendido, "Abrir orçamento", **"Aplicar ao evento"**, "Trocar", "Desvincular"; sem orçamento, busca
+  no histórico (`OrcamentoPicker`) e, em evento sem venda, opção de aplicar os valores de 1h–4h.
+- Histórico de orçamentos: "Ver evento" por linha (um `SELECT` para a página, `event_id`/
+  `event_title` em `_entry_summary`); `DELETE` de orçamento preso a evento vivo → 409 + `event_id`
+  mostrado na tela com link (antes era `IntegrityError` 500); preso só a cancelado → solta e apaga.
+- `venda` do detalhe ganha `source` e `orcamento` (resumo: fora de SP, km, coordenadores,
+  maquiagens, cantores, show, totais).
+
+**Decisões.** Nunca apagar nem rebaixar (a equipe é operação viva do casting); personagem casa
+por nome e o resto é relatado, não inventado; a caixinha manda no endereço, desmarcada não
+rebaixa; valores só sem venda; 1:1 entre eventos vivos, cancelado libera; sem migration (índice
+parcial do 1:1 fica para a 274). Escopo maior que o item 273 do plano das ondas (que deixava a
+equipe de fora) — vale a spec.
+
+**Revisão antes do commit** (workflow adversarial: 4 lentes, 2 céticos por achado). Real e
+corrigido: (1) `aplicar_fora_sp_do_orcamento` devolvia "mudou", e `reclassificar_fora_de_sp` usava
+isso como "o orçamento decidiu" — o segundo retoque de endereço, "Estimar via Google Maps" ou o
+sync do Google rebaixavam para dentro de SP e zeravam os km; agora devolve "o orçamento diz" e o
+sync consulta o orçamento antes do endereço. (2) `DELETE` com evento só cancelado ainda estourava
+a FK — solta o FK (com log) e apaga. (3) Cortesia/permuta (venda 0) recebia valores. (4)
+`aplicar_valores_duracao > 4` usava o `duracao_custom` do orçamento; bool passava como int;
+`sale_date` numérica dava 500 — tudo 400. (5) Comercial que não é dono do vínculo via o evento
+como "sem orçamento" e trocava por cima — 409 `orcamento_de_outro` + `venda.tem_orcamento`. (6)
+"Criar evento" duas vezes no mesmo orçamento — 409 no `POST`. (7) Acréscimos tipados (BV) não
+eram copiados ao aplicar valores — helper `_criar_acrescimos_do_orcamento` partilhado com a
+criação. (8) Front: data do orçamento por `new Date` mostrava o dia anterior; 409 sem link; frase e
+`nao_casados` de fontes diferentes; histórico/agenda não invalidados; 409 do DELETE mudo no
+histórico. Refutado: FINANCEIRO desvincular (decisão da spec), select só 1h–4h (spec), picker sem
+combobox (padrão da casa), ownership no `POST` (anterior à 273).
+
+**Verificação.** `verify_273.py` 15/15 contra `manto_local` (Google dublado; `limiter.enabled =
+False` para os logins). Regressão: `verify_239b` 7/7, `verify_267b` 8/8. `npm run typecheck`
+limpo; `ruff` no baseline.
+
+**Descartado.** Sincronização reversa evento → orçamento; apagar vagas que o orçamento não vendeu;
+"vincular a evento existente" a partir da página do orçamento (o caminho é a aba Comercial);
+`ensure_event_client` a partir do orçamento (espera o `client_id` da 274).
+
+---
 
 ### 239b — O carrinho que não aparecia: "fora de SP" ficava desconhecido            (2026-09-02 · hotfix · sem migration)
 

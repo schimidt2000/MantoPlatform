@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { ApiRequestError } from "@manto/api-client";
 import {
   Badge,
   Button,
@@ -203,6 +204,22 @@ export function OrcamentoHistoricoPage() {
         </div>
       )}
 
+      {del.isError && (
+        // feature 273 — o 409 "vinculado a um evento" vinha mudo: a página só lia o erro da
+        // listagem. Mostra a mensagem do servidor e o caminho até o evento a desvincular.
+        <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
+          {del.error.message}
+          {del.error instanceof ApiRequestError && typeof del.error.details.event_id === "number" && (
+            <>
+              {" "}
+              <Link to={`/events/${del.error.details.event_id}`} className="underline">
+                Ver evento
+              </Link>
+            </>
+          )}
+        </div>
+      )}
+
       {query.data && query.data.entries.length === 0 && (
         <p className="text-sm text-muted">Nenhum orçamento encontrado.</p>
       )}
@@ -240,7 +257,19 @@ export function OrcamentoHistoricoPage() {
                 {query.data!.is_superadmin && (
                   <TableCell className="text-ink">{e.user_name || "—"}</TableCell>
                 )}
-                <TableCell className="text-ink">{e.client_name || "Sem cliente"}</TableCell>
+                <TableCell className="text-ink">
+                  {e.client_name || "Sem cliente"}
+                  {e.event_id != null && (
+                    // feature 273 — o selo de convertido: o orçamento virou este evento.
+                    <Link
+                      to={`/events/${e.event_id}`}
+                      className="ml-2 text-xs text-blue underline"
+                      title={e.event_title ?? undefined}
+                    >
+                      Ver evento
+                    </Link>
+                  )}
+                </TableCell>
                 <TableCell className="text-ink">{e.event_location || "—"}</TableCell>
                 <TableCell>
                   <Badge tone={e.has_show ? "gold" : "neutral"}>{e.has_show ? "Com show" : "Sem show"}</Badge>

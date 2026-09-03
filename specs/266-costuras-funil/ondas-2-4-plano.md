@@ -160,6 +160,15 @@ emite notificação nova: esta onda cria as colunas que as ondas 3 e 4 vão ler.
 
 ### 273 — Vincular orçamento a evento já criado (inclusive importado do Google)
 
+> **Implementada em 02/09/2026 com escopo maior** — vale `specs/273-orcamento-para-evento/spec.md`.
+> Além do vínculo e dos valores, aplica a **equipe vendida** (coordenadores × quantidade, Técnico de
+> Som, Maquiador, maquiagem/teto por personagem casado pelo nome) e o **"fora de SP"** do orçamento,
+> porque foi isso que o dono pediu ("se vendeu maquiagem, tem que aparecer quem tem maquiagem"). O
+> corpo usa `aplicar_valores_duracao` (não `aplicar_duracao`) e `aplicar_equipe`; a `relationship`
+> reversa não entrou (o histórico faz um `SELECT` por página) e o `ensure_event_client` espera o
+> `client_id` da 274. O `DELETE` responde 409 como a D14 previa. O texto abaixo é o plano original.
+
+
 **Problema.** `CalendarEvent.orcamento_history_id` (`app/models.py:324`) só é gravado na criação
 (`agenda_write.py:686`); o `PATCH` em bloco exclui o campo explicitamente (`agenda_write.py:767`) e
 não há endpoint estreito. A aba Comercial só mostra "Ver orçamento" quando o vínculo existe

@@ -629,6 +629,15 @@ def reclassificar_fora_de_sp(event: Any, *, local_mudou: bool) -> None:
 
     if not local_mudou and event.is_outside_sp is not None:
         return
+    # Feature 273: orçamento vinculado com "fora de São Paulo" marcado decide antes do endereço.
+    if getattr(event, "orcamento_history_id", None):
+        from app.calendar.orcamento_evento_ops import aplicar_fora_sp_do_orcamento
+        from app.models import OrcamentoHistory
+
+        if aplicar_fora_sp_do_orcamento(event, OrcamentoHistory.query.get(event.orcamento_history_id)):
+            if not event.travel_distance_km:
+                _fetch_travel_data(event, SiteSetting.query.get(1))
+            return
     event.is_outside_sp = _lookup_sp_status(event.location or "")
     if event.is_outside_sp and (local_mudou or not event.travel_distance_km):
         _fetch_travel_data(event, SiteSetting.query.get(1))

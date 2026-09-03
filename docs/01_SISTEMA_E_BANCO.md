@@ -656,6 +656,7 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 | PATCH | `/api/events/<id>`, `/api/events/<id>/logistics`, `/api/payments/<id>` |
 | PATCH | `/api/events/<id>/basico`, `/api/events/<id>/comercial`, `/api/events/<id>/form-response` *(feature 215)* |
 | PUT | `/api/events/<id>/clients` *(feature 215)* |
+| PATCH | `/api/events/<id>/orcamento` *(feature 273: vincula/desvincula orçamento; aplica fora de SP, equipe e — sem venda — valores de 1h a 4h; 409 `event_id` se o orçamento está preso a outro evento vivo, 409 `orcamento_de_outro` se o vínculo atual é de outro vendedor; `POST /api/events` responde o mesmo 409 `event_id`)* |
 | DELETE | `/api/events/<id>`, `/api/roles/<id>`, `/api/observations/<id>`, `/api/contracts/<id>`, `/api/payments/<id>`, `/api/reimbursements/<id>` |
 | DELETE | `/api/roles/<id>/figurino-done` (desmarcar), `/api/materials/<id>` *(feature 192)* |
 
@@ -887,6 +888,14 @@ ação "Recalcular" (mudança aditiva, retrocompatível).
 (comportamento antigo). No modo `"cliente"` o veículo sai da conta (só adicionais fora-SP/show),
 a mensagem/PDF ganham a frase de responsabilidade, `_build_orcamento_prefill` grava
 `transport_value` sem o veículo e o carrinho (`casting_ops.valor_transporte_papel`) vale zero.
+**Feature 273 (sem migration)**: cada item de `GET /api/orcamento/historico` traz `event_id` /
+`event_title` do evento **não cancelado** que aponta para ele (uma consulta para a página inteira);
+`DELETE .../historico/<id>` responde **409 + `event_id`** enquanto houver evento vivo vinculado — a
+FK `calendar_event.orcamento_history_id` não tem `ondelete`, e apagar estourava `IntegrityError`;
+eventos **cancelados** que ainda apontem para o orçamento são soltos (FK nula + `EventLog`) antes
+de apagar.
+O vínculo posterior é `PATCH /api/events/<id>/orcamento` (§3.3), que aplica ao evento o que o
+orçamento vendeu (`app/calendar/orcamento_evento_ops.py`).
 
 EducaManto (feature 235 — contrato novo por responsabilidades): `GET /api/educamanto/{historico,musicals,textos,distancia,personagens-no-dia}` ·
 `POST /api/educamanto/calcular` (uma configuração; **breakdown só na resposta de SUPERADMIN** — corte no servidor), `/musicals`, `/musicals/<id>/duplicate`, `/orcamento/gerar` (**recalcula tudo no servidor**, snapshot v2, PDF por configuração) ·
