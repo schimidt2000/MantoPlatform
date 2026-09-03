@@ -17,8 +17,9 @@ import re
 import secrets
 import string
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
+from zoneinfo import ZoneInfo
 
 from app import db
 from app.models import Talent
@@ -28,6 +29,9 @@ log = logging.getLogger(__name__)
 
 #: Duração da validade de um token de redefinição de senha.
 RESET_TOKEN_TTL = timedelta(hours=1)
+
+#: Fuso de exibição. O token vive em UTC; quem lê a tela vive em São Paulo.
+_TZ_SP = ZoneInfo("America/Sao_Paulo")
 
 #: Comprimento da senha temporária gerada no primeiro acesso.
 TEMP_PASSWORD_LENGTH = 10
@@ -178,14 +182,90 @@ def request_password_reset(
         if not matches:
             return
 
-        token = secrets.token_urlsafe(32)
-        talent.password_reset_token = token
-        talent.password_reset_expires = datetime.utcnow() + RESET_TOKEN_TTL
+        token = emitir_token_de_reset(talent)
         db.session.commit()
         send_reset(talent, build_reset_url(token))
     except Exception:
         log.exception("Erro ao solicitar redefinição de senha do portal")
         db.session.rollback()
+
+
+def expiracao_para_exibir(talent: Talent) -> str | None:
+    """Validade do link como horário de parede de São Paulo, para mostrar a uma pessoa.
+
+    `password_reset_expires` é UTC ingênuo (`datetime.utcnow()`), e a comparação que decide se o
+    token vale continua em UTC. Só a exibição converte: sem isto, a tela dizia "vale até 00:01"
+    para um link que expira às 21:01 — a mesma armadilha de fuso que a plataforma já pagou na
+    agenda (`app/calendar/service.py`).
+    """
+    if not talent.password_reset_expires:
+        return None
+    return (
+        talent.password_reset_expires.replace(tzinfo=UTC)
+        .astimezone(_TZ_SP)
+        .replace(tzinfo=None)
+        .isoformat()
+    )
+
+
+def emitir_token_de_reset(talent: Talent) -> str:
+    """Grava um token novo de redefinição no talento e devolve o token (sem commit).
+
+    Fonte única do token: o pedido do próprio artista ("Esqueci minha senha") e o envio feito
+    pelo casting (feature 274) só divergem em **quem tem direito de pedir**, nunca no que é
+    gravado. Trocar o token invalida o anterior, então um segundo pedido não deixa dois links
+    vivos.
+    """
+    token = secrets.token_urlsafe(32)
+    talent.password_reset_token = token
+    talent.password_reset_expires = datetime.utcnow() + RESET_TOKEN_TTL
+    return token
+
+
+def enviar_reset_pelo_staff(
+    talent: Talent,
+    send_reset: Callable[[Talent, str], None],
+    build_reset_url: Callable[[str], str],
+) -> dict:
+    """Manda o link de redefinição para o e-mail cadastrado, a pedido de quem atende o artista.
+
+    Existe porque o autoatendimento tem dois becos sem saída que só uma pessoa de dentro
+    desfaz (feature 274): "Esqueci minha senha" exige digitar **exatamente** o e-mail que está no
+    cadastro e, quando não bate, não faz nada e não avisa (é assim de propósito, para não revelar
+    quem é cadastrado); e "Primeiro Acesso" recusa quem já tem senha. Um artista que erra a
+    grafia do próprio e-mail cadastrado — ou que não lembra qual usou — fica preso, e não havia
+    ferramenta nenhuma do lado do casting.
+
+    Diferente do fluxo público, aqui **não** se exige que o e-mail seja digitado de novo (quem
+    chama já está vendo a ficha) e o erro **é** devolvido: quem atende precisa saber que faltou
+    e-mail no cadastro.
+
+    Args:
+        talent: Talento dono da conta.
+        send_reset: Callback `(talent, reset_url)` que dispara o e-mail.
+        build_reset_url: Callback que recebe o token e devolve a URL absoluta.
+
+    Returns:
+        `{"email": ..., "expira_em": ISO, "tinha_senha": bool}` — o e-mail volta inteiro de
+        propósito: é lendo o endereço em voz alta que se descobre o erro de digitação do cadastro.
+
+    Raises:
+        PortalAccountError: Talento sem e-mail cadastrado.
+    """
+    if not (talent.email_contact or "").strip():
+        raise PortalAccountError(
+            "Este talento não tem e-mail no cadastro. Preencha o e-mail antes de enviar o link.",
+            field="email_contact",
+        )
+    tinha_senha = bool(talent.password_hash)
+    token = emitir_token_de_reset(talent)
+    db.session.commit()
+    send_reset(talent, build_reset_url(token))
+    return {
+        "email": talent.email_contact,
+        "expira_em": expiracao_para_exibir(talent),
+        "tinha_senha": tinha_senha,
+    }
 
 
 def find_talent_by_reset_token(token: str) -> Talent | None:

@@ -28,6 +28,13 @@ negado no mesmo dia). Produção reerguida no Render a partir do backup local.
    arquivo (nomes de plano mudam; o resto do blueprint fica).
 4. Preencher os envVars `sync:false` com os valores do `.env` local (backend) e o `BACKEND_URL`
    do frontend com a URL pública que o `manto-backend` ganhar (`https://manto-backend*.onrender.com`).
+   **Exceto as variáveis de endereço.** Foi copiando o `.env` local para o painel que
+   `PORTAL_URL=http://localhost:5000` entrou em produção e o convite do artista — e o link de
+   redefinição de senha — saiu apontando para o localhost do servidor (hotfix 269b, docs/03).
+   Regra: `PORTAL_URL` e `PUBLIC_BASE_URL` **não se definem** (o default do código é o endereço
+   público real); `GOOGLE_OAUTH_REDIRECT_URI` recebe a URL pública do serviço, nunca a local.
+   Desde a 269b um endereço local nessas duas é ignorado e o boot grita no log, mas o certo é não
+   criar a variável.
    `SESSION_COOKIE_DOMAIN`: **não definir** (o Node faz proxy same-origin de `/api`; cookie
    host-only basta e funciona também na URL provisória *.onrender.com).
 5. Restaurar o banco: pegar a **External Connection String** do `manto-postgres` e, da máquina do

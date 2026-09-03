@@ -18,6 +18,11 @@ Cenários:
     público; com `PORTAL_URL` local forçada (caminho que escapasse da config), nada é enviado.
  6. Redefinição de senha (`portal_reset_url`) e cobrança da Home (`portal_url` do dashboard)
     saem com o portal público.
+ 7. (269c) A trava de corpo usa o mesmo julgamento de host da config: faixa privada, IPv6 e
+    `.local` são barrados, e host público parecido (`10minutemail.com`) passa.
+ 8. (269c) `send_quote_email` — que monta a própria `Message` por causa do PDF — também passa
+    pela trava.
+ 9. (269c) O alerta de ensaio, que é interno, leva o staff ao evento na plataforma.
 
 NADA é enviado: `mail.send` é dublado em todos os cenários e o ambiente já suprime e-mail.
 
@@ -249,6 +254,70 @@ def cen_06_reset_e_cobranca() -> None:
         )
 
 
+def cen_07_faixa_privada_e_ipv6() -> None:
+    """269c: a trava de corpo passou a usar o MESMO julgamento de host da config."""
+    locais = [
+        "http://192.168.0.14:5000/portal", "http://10.1.2.3/reset", "http://172.20.10.3:5173/",
+        "http://[::1]:5000/", "http://host.docker.internal:5000/", "https://maquina.local/portal",
+        "http://127.0.0.1:5000/", "HTTP://LOCALHOST:5000/",
+    ]
+    for url in locais:
+        achado = es._link_local_no_corpo(f'<a href="{url}">x</a>')
+        _garante(achado is not None, f"deixou passar host local: {url}")
+
+    publicos = [
+        "https://portal.mantoproducoes.com.br/", "https://app.mantoproducoes.com.br/events/1",
+        "https://10minutemail.com/caixa", "https://172.15.0.1/ok", "https://localhost.exemplo.com/",
+    ]
+    for url in publicos:
+        achado = es._link_local_no_corpo(f'<a href="{url}">x</a>')
+        _garante(achado is None, f"barrou host público {url} (achou {achado!r})")
+
+
+def cen_08_orcamento_ao_cliente_tambem_passa_pela_trava() -> None:
+    """269c: `send_quote_email` monta a própria Message por causa do PDF e escapava da trava."""
+    with app.app_context():
+        es._emails_enabled = lambda: True
+        app.config["MAIL_ALLOW_LOCAL_SEND"] = False
+        enviados.clear()
+        original = es._html_wrap
+        try:
+            es._html_wrap = lambda conteudo, preheader="": (
+                f'<html><body>{conteudo}<a href="http://localhost:5000/orcamento">ver</a></body></html>'
+            )
+            ok = es.send_quote_email(to="cliente@exemplo.com", client_name="Fulana", pdf_bytes=b"%PDF-1.4 fake")
+            _garante(ok is False, "orçamento com link local foi enviado ao cliente")
+            _garante(enviados == [], f"SMTP chamado mesmo assim: {enviados}")
+            es._html_wrap = original
+            ok = es.send_quote_email(to="cliente@exemplo.com", client_name="Fulana", pdf_bytes=b"%PDF-1.4 fake")
+            _garante(ok is True and len(enviados) == 1, f"orçamento limpo deveria sair: {ok} {enviados}")
+        finally:
+            es._html_wrap = original
+
+
+def cen_09_alerta_de_ensaio_vai_para_a_plataforma() -> None:
+    """269c: e-mail interno mandava o staff para o Portal do Artista."""
+    from app.models import CalendarEvent, User
+
+    with app.app_context():
+        evento = CalendarEvent.query.filter(CalendarEvent.title.isnot(None)).order_by(CalendarEvent.id.desc()).first()
+        usuario = User.query.filter(User.email.isnot(None), User.email != "").first()
+        _garante(evento is not None and usuario is not None, "espelho sem evento ou sem usuário")
+
+        capturados: list[str] = []
+        original = es._send
+        try:
+            es._send = lambda to, subject, body="", html="": (capturados.append(html) or True)
+            enviadas = es.send_ensaio_alert_email(evento, [usuario])
+        finally:
+            es._send = original
+        _garante(enviadas == 1 and capturados, f"alerta não saiu: {enviadas}")
+        html = capturados[0]
+        _garante(f"{PLATFORM_BASE_URL}/events/{evento.id}" in html, "alerta não aponta para o evento na plataforma")
+        _garante("portal.mantoproducoes.com.br" not in html, "alerta interno ainda manda o staff para o portal")
+        _garante("localhost" not in html.lower(), "alerta com link local")
+
+
 def main() -> int:
     print("Hotfix 269b — link do portal nos e-mails")
     cenario("1. processo que envia de verdade ignora PORTAL_URL/PUBLIC_BASE_URL locais", cen_01_producao_ignora_valor_local)
@@ -257,6 +326,9 @@ def main() -> int:
     cenario("4. _send barra corpo com link local e não chama o SMTP", cen_04_send_barra_link_local)
     cenario("5. convite de papel real: link público, e barrado se escapar", cen_05_convite_real_do_espelho)
     cenario("6. redefinição de senha e cobrança da Home com portal público", cen_06_reset_e_cobranca)
+    cenario("7. (269c) faixa privada, IPv6 e .local barrados; host público parecido passa", cen_07_faixa_privada_e_ipv6)
+    cenario("8. (269c) orçamento ao cliente (com PDF) também passa pela trava", cen_08_orcamento_ao_cliente_tambem_passa_pela_trava)
+    cenario("9. (269c) alerta de ensaio leva o staff à plataforma, não ao portal", cen_09_alerta_de_ensaio_vai_para_a_plataforma)
     ok = sum(1 for _, passou, _ in resultados if passou)
     print(f"{ok}/{len(resultados)} OK")
     return 0 if ok == len(resultados) else 1
