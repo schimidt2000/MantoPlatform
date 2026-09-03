@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import type { EventoDetalhe } from "./agenda";
 
@@ -23,7 +23,7 @@ function useEventPatch<TBody>(
   eventId: number,
   path: string,
   method: "PATCH" | "PUT",
-  { touchesAgenda = false }: { touchesAgenda?: boolean } = {},
+  { touchesAgenda = false, invalidar = [] }: { touchesAgenda?: boolean; invalidar?: QueryKey[] } = {},
 ) {
   const queryClient = useQueryClient();
   return useMutation<EventPatchResult, Error, TBody>({
@@ -41,6 +41,7 @@ function useEventPatch<TBody>(
         // data/hora, a lista de "ocupados" da busca de casting mudou junto.
         queryClient.invalidateQueries({ queryKey: ["casting-options", eventId] });
       }
+      for (const chave of invalidar) queryClient.invalidateQueries({ queryKey: chave });
     },
   });
 }
@@ -106,4 +107,27 @@ export function useSetEventFormResponse(eventId: number) {
     "/form-response",
     "PATCH",
   );
+}
+
+/** Corpo de `PATCH /api/events/<id>/orcamento` (feature 273). */
+export interface SetOrcamentoBody {
+  orcamento_history_id: number | null;
+  /** Aplica fora de SP + equipe vendida (padrão do servidor: true). Idempotente. */
+  aplicar_equipe?: boolean;
+  /** 1..4 (tabela) — só faz efeito em evento SEM venda (cortesia/permuta conta como venda). */
+  aplicar_valores_duracao?: number | null;
+  sale_date?: string | null;
+}
+
+/**
+ * Vincula/desvincula o orçamento e aplica o que foi vendido (feature 273). A resposta é o evento
+ * inteiro mais `relatorio_orcamento` (o que foi criado/marcado), e o cache do evento é atualizado
+ * como em qualquer outro PATCH estreito.
+ */
+export function useSetEventOrcamento(eventId: number) {
+  // Fora de SP e papéis novos mudam a agenda; "Ver evento" muda a linha do histórico.
+  return useEventPatch<SetOrcamentoBody>(eventId, "/orcamento", "PATCH", {
+    touchesAgenda: true,
+    invalidar: [["orcamento-historico"]],
+  });
 }

@@ -51,6 +51,13 @@ function TrajetoCard({ data }: { data: EventoDetalhe }) {
           )}
         </div>
         {travel.is_outside_sp && <Badge tone="gold">Viagem fora de SP</Badge>}
+        {travel.is_outside_sp === null && (
+          // Endereço que nem o CEP nem o Google Maps classificaram (hotfix 239b): "Estimar via
+          // Google Maps" tenta de novo; o carrinho no casting continua disponível.
+          <Badge tone="neutral" className="font-normal">
+            Dentro ou fora de SP: não identificado
+          </Badge>
+        )}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {canEdit && (

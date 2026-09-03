@@ -905,7 +905,17 @@ def serialize_event_detail(
                 )
                 if owns_orcamento:
                     orcamento_history_id = event.orcamento_history_id
+        # Feature 273: o que o orçamento vendeu (chips da aba Comercial + botão "Aplicar").
+        orcamento_resumo = None
+        if orcamento_history_id:
+            from app.calendar.orcamento_evento_ops import resumo_do_orcamento
+
+            entry_orc = OrcamentoHistory.query.get(orcamento_history_id)
+            if entry_orc is not None:
+                orcamento_resumo = resumo_do_orcamento(entry_orc)
         data["venda"] = {
+            "source": event.source,
+            "orcamento": orcamento_resumo,
             "sale_value": _money(event.sale_value),
             "sale_value_gross": _money(event.sale_value_gross),
             "transport_value": _money(event.transport_value),
@@ -920,6 +930,9 @@ def serialize_event_detail(
             "payment_installments": event.payment_installments,
             "payment_due_date": event.payment_due_date.isoformat() if event.payment_due_date else None,
             "orcamento_history_id": orcamento_history_id,
+            # feature 273 — há vínculo, visível ou não: o painel avisa "orçamento de outro
+            # vendedor" em vez de fingir que não há nada e oferecer a busca.
+            "tem_orcamento": bool(event.orcamento_history_id),
             # feature 184 — necessários para pré-preencher/salvar o formulário de edição de evento.
             "clients": [
                 {

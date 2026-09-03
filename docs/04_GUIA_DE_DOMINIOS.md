@@ -133,6 +133,12 @@ tratamento de comissão (pendente vira `cancelado`; paga gera estorno negativo) 
    vira aviso.
 10. `cache_cap` em `EventRole` é **teto** vindo do orçamento: `casting_ops.py:68` trunca para
     não-superadmin e gera nota de auditoria quando ultrapassado.
+11. **O que o orçamento diz sobre o evento entra por um lugar só** (feature 273):
+    `app/calendar/orcamento_evento_ops.py` — fora de SP + quilometragem, equipe vendida com teto
+    (coordenadores × quantidade, Técnico de Som, Maquiador, maquiagem/cantor por personagem casado
+    pelo nome) e, em evento sem venda, os valores. Usado na criação, no vínculo posterior
+    (`PATCH /events/<id>/orcamento`) e em `reclassificar_fora_de_sp`. **Nunca apaga nem rebaixa**
+    o que o casting fez à mão; o que não casa vai ao relatório, não vira vaga nova.
 
 ### Armadilhas
 

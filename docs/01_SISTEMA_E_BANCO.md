@@ -231,7 +231,12 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 **Feature 239 — regras de negócio novas do Casting/Agenda.**
 
 - **Carrinho de transporte fora de SP** (`app/calendar/casting_ops.py`). `EventRole.does_transport`
-  marca quem leva um veículo no evento (só existe com `event.is_outside_sp`; gate de quem marca =
+  marca quem leva um veículo no evento (só existe com `event.is_outside_sp` — e, desde o hotfix
+  239b, também quando a classificação é **desconhecida** (`NULL`): marcar grava
+  `is_outside_sp=True` e tenta a estimativa de trajeto; só `False` recusa. A classificação vem de
+  `_lookup_sp_status`: CEP → ViaCEP; senão **Geocoding do Google** (`maps.cidade_do_endereco`);
+  senão texto; e é refeita nas edições React quando o endereço muda ou estava desconhecida
+  (`event_ops.reclassificar_fora_de_sp`). Gate de quem marca =
   `_can_edit_event()`, mesmo de quem escala). O valor **nunca** é gravado à parte: o teto do cachê
   sobe pela parcela e o que se paga fica todo em `cache_value` (um número só), então planilha de
   pagamentos, custo do evento, KPI e DRE seguem sem qualquer mudança de código.
@@ -645,12 +650,13 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 | POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` |
 | POST | `/api/roles/<id>/assign`, `/api/roles/<id>/invite`, `/api/roles/<id>/figurino-done`, `/api/roles/<id>/dismiss`, `/api/roles/<id>/restore` |
 | POST | `/api/roles/<id>/payment-status`, `/api/roles/<id>/figurino-sheet` *(feature 192)* |
-| POST\|DELETE | `/api/roles/<id>/transporte` *(feature 239 — marca/desmarca o carrinho de transporte; `POST` recusa com 400 fora de `event.is_outside_sp`, `DELETE` não tem essa guarda para permitir limpar marcação de evento que deixou de ser fora de SP)* |
-| POST | `/api/events/<id>/travel-estimate`, `/api/events/<id>/materials`, `/api/events/<id>/feedback-link` *(feature 192)* |
+| POST\|DELETE | `/api/roles/<id>/transporte` *(feature 239 — marca/desmarca o carrinho de transporte; `POST` recusa com 400 só quando `event.is_outside_sp` é `False` — desconhecido vira `True` ao marcar (hotfix 239b); `DELETE` não tem essa guarda para permitir limpar marcação de evento que deixou de ser fora de SP)* |
+| POST | `/api/events/<id>/travel-estimate` *(desde o hotfix 239b também reclassifica dentro/fora de SP)*, `/api/events/<id>/materials`, `/api/events/<id>/feedback-link` *(feature 192)* |
 | POST | `/api/contracts/<id>/toggle-signed`, `/api/reimbursements/<id>/collect` |
 | PATCH | `/api/events/<id>`, `/api/events/<id>/logistics`, `/api/payments/<id>` |
 | PATCH | `/api/events/<id>/basico`, `/api/events/<id>/comercial`, `/api/events/<id>/form-response` *(feature 215)* |
 | PUT | `/api/events/<id>/clients` *(feature 215)* |
+| PATCH | `/api/events/<id>/orcamento` *(feature 273: vincula/desvincula orçamento; aplica fora de SP, equipe e — sem venda — valores de 1h a 4h; 409 `event_id` se o orçamento está preso a outro evento vivo, 409 `orcamento_de_outro` se o vínculo atual é de outro vendedor; `POST /api/events` responde o mesmo 409 `event_id`)* |
 | DELETE | `/api/events/<id>`, `/api/roles/<id>`, `/api/observations/<id>`, `/api/contracts/<id>`, `/api/payments/<id>`, `/api/reimbursements/<id>` |
 | DELETE | `/api/roles/<id>/figurino-done` (desmarcar), `/api/materials/<id>` *(feature 192)* |
 
@@ -882,6 +888,14 @@ ação "Recalcular" (mudança aditiva, retrocompatível).
 (comportamento antigo). No modo `"cliente"` o veículo sai da conta (só adicionais fora-SP/show),
 a mensagem/PDF ganham a frase de responsabilidade, `_build_orcamento_prefill` grava
 `transport_value` sem o veículo e o carrinho (`casting_ops.valor_transporte_papel`) vale zero.
+**Feature 273 (sem migration)**: cada item de `GET /api/orcamento/historico` traz `event_id` /
+`event_title` do evento **não cancelado** que aponta para ele (uma consulta para a página inteira);
+`DELETE .../historico/<id>` responde **409 + `event_id`** enquanto houver evento vivo vinculado — a
+FK `calendar_event.orcamento_history_id` não tem `ondelete`, e apagar estourava `IntegrityError`;
+eventos **cancelados** que ainda apontem para o orçamento são soltos (FK nula + `EventLog`) antes
+de apagar.
+O vínculo posterior é `PATCH /api/events/<id>/orcamento` (§3.3), que aplica ao evento o que o
+orçamento vendeu (`app/calendar/orcamento_evento_ops.py`).
 
 EducaManto (feature 235 — contrato novo por responsabilidades): `GET /api/educamanto/{historico,musicals,textos,distancia,personagens-no-dia}` ·
 `POST /api/educamanto/calcular` (uma configuração; **breakdown só na resposta de SUPERADMIN** — corte no servidor), `/musicals`, `/musicals/<id>/duplicate`, `/orcamento/gerar` (**recalcula tudo no servidor**, snapshot v2, PDF por configuração) ·

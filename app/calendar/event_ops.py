@@ -614,6 +614,35 @@ def _sincronizar_e_trocar_tipo(
     return avisos
 
 
+def reclassificar_fora_de_sp(event: Any, *, local_mudou: bool) -> None:
+    """Refaz a classificação dentro/fora de SP e a estimativa de trajeto (hotfix 239b).
+
+    Até aqui só a criação e o sync do Google classificavam; as duas edições React
+    (`update_event_core`, `update_event_dados`) trocavam o endereço e deixavam `is_outside_sp`
+    como estava. Regra: endereço que mudou reclassifica; endereço igual só reclassifica se a
+    classificação era desconhecida (cura sem custo — o Geocoding só roda quando há o que
+    descobrir). A estimativa de trajeto nasce junto quando o evento é fora de SP e ainda não tem
+    distância — é ela que dá base à parcela do veículo no teto do carrinho.
+    """
+    from app.calendar.routes import _fetch_travel_data, _lookup_sp_status
+    from app.models import SiteSetting
+
+    if not local_mudou and event.is_outside_sp is not None:
+        return
+    # Feature 273: orçamento vinculado com "fora de São Paulo" marcado decide antes do endereço.
+    if getattr(event, "orcamento_history_id", None):
+        from app.calendar.orcamento_evento_ops import aplicar_fora_sp_do_orcamento
+        from app.models import OrcamentoHistory
+
+        if aplicar_fora_sp_do_orcamento(event, OrcamentoHistory.query.get(event.orcamento_history_id)):
+            if not event.travel_distance_km:
+                _fetch_travel_data(event, SiteSetting.query.get(1))
+            return
+    event.is_outside_sp = _lookup_sp_status(event.location or "")
+    if event.is_outside_sp and (local_mudou or not event.travel_distance_km):
+        _fetch_travel_data(event, SiteSetting.query.get(1))
+
+
 def resolver_data_da_venda(
     informada: date | None, venda: Any, venda_anterior: Any, data_atual: date | None
 ) -> date | None:
@@ -711,6 +740,9 @@ def update_event_core(
     event.end_at = et
     event.location = data["location"] or None
     event.description = data["description"] or None
+    reclassificar_fora_de_sp(
+        event, local_mudou=(event.location or "").strip() != (old_location or "").strip()
+    )
     event.needs_rehearsal = bool(data.get("needs_rehearsal"))
 
     is_cortesia = bool(data.get("is_cortesia_permuta"))
@@ -841,6 +873,9 @@ def update_event_basics(
     event.end_at = et
     event.location = data["location"] or None
     event.description = data["description"] or None
+    reclassificar_fora_de_sp(
+        event, local_mudou=(event.location or "").strip() != (old_location or "").strip()
+    )
 
     db.session.add(EventLog(
         event_id=event.id,

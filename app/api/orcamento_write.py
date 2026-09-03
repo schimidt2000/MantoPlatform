@@ -116,6 +116,26 @@ def api_orcamento_historico_delete(entry_id: int) -> Any:
     if entry is None:
         return json_error("Orçamento não encontrado", 404)
     from app import db
+    from app.calendar.orcamento_evento_ops import outro_evento_vivo_do_orcamento
+
+    # Feature 273 (D14 do plano das ondas): orçamento preso a evento vivo não se apaga — antes a
+    # FK sem `ondelete` estourava em 500; agora é 409 com o evento, para desvincular lá primeiro.
+    vivo = outro_evento_vivo_do_orcamento(entry.id, exceto_event_id=None)
+    if vivo is not None:
+        return json_error(
+            "Este orçamento está vinculado a um evento. Desvincule na aba Comercial do evento antes de excluir.",
+            409,
+            event_id=vivo.id,
+        )
+    # Cancelado libera o orçamento — mas a linha cancelada (224) continua apontando para ele e a
+    # FK não tem `ondelete`: solta antes de apagar, com rastro no histórico de cada evento.
+    from zoneinfo import ZoneInfo
+
+    from app.calendar.orcamento_evento_ops import desvincular_eventos_cancelados
+
+    desvincular_eventos_cancelados(
+        entry.id, actor_name=current_user.name, tz=ZoneInfo("America/Sao_Paulo")
+    )
 
     db.session.delete(entry)
     db.session.commit()
