@@ -39,9 +39,12 @@ if not os.environ.get("DATABASE_URL"):
     os.environ["DATABASE_URL"] = (REPO_ROOT / ".local-db-url").read_text(encoding="utf-8").strip()
 os.environ["MAIL_SUPPRESS_SEND"] = "true"
 
-from app import create_app, db  # noqa: E402
+from app import (  # noqa: E402
+    create_app,
+    db,
+    limiter,  # noqa: E402
+)
 from app import email_service as es  # noqa: E402
-from app import limiter  # noqa: E402
 from app.config import PORTAL_BASE_URL  # noqa: E402
 from app.constants import RoleName, now_sp  # noqa: E402
 from app.models import Role, Talent, User  # noqa: E402
