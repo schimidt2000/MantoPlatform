@@ -1,5 +1,8 @@
+import logging
 import os
+import re
 import secrets
+from urllib.parse import urlsplit
 
 _WEAK_SECRET = "dev-secret-key"
 
@@ -12,6 +15,67 @@ PLATFORM_BASE_URL = "https://app.mantoproducoes.com.br"
 # Endereço do Portal do Artista. É o que os talentos — pessoas de FORA — recebem por e-mail e
 # por WhatsApp, então tem valor fixo e não pode depender de a env estar setada.
 PORTAL_BASE_URL = "https://portal.mantoproducoes.com.br"
+
+#: Hosts que só existem dentro da máquina/rede de quem roda o processo. Link com qualquer um
+#: deles é lixo para quem está do outro lado do e-mail.
+_HOST_LOCAL = re.compile(
+    r"^(?:localhost"
+    r"|127(?:\.\d{1,3}){3}"
+    r"|0\.0\.0\.0"
+    r"|::1"
+    r"|10(?:\.\d{1,3}){3}"
+    r"|192\.168(?:\.\d{1,3}){2}"
+    r"|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}"
+    r"|host\.docker\.internal"
+    r"|.+\.local"
+    r")$",
+    re.IGNORECASE,
+)
+
+#: Valores de env recusados por não serem alcançáveis de fora — `create_app` grita cada um no log
+#: do deploy, porque config errada que ninguém vê é a origem deste hotfix (269b).
+AVISOS_DE_URL: list[str] = []
+
+
+def _url_para_fora(valor: str | None, padrao: str, nome: str, *, permitir_local: bool) -> str:
+    """Base de URL destinada a **gente de fora** — endereço local nunca passa.
+
+    A 269 deu default real a `PORTAL_URL`/`PUBLIC_BASE_URL` e resolveu o lado das mensagens
+    copiadas por humano, mas manteve a env como fonte dos e-mails do servidor "porque um ambiente
+    de teste precisa apontar para si". O que faltava: **em produção a env estava errada**
+    (`PORTAL_URL=http://localhost:5000` no painel do Render, valor igual ao do `.env.example`), e
+    todo convite, lembrete e link de redefinição de senha saiu para artista de verdade apontando
+    para o computador de quem enviou.
+
+    A trava usa o mesmo sinal que já decide se este processo pode falar com pessoas reais
+    (`_suppress_mail`): quem **não** envia e-mail de verdade (ambiente local) continua podendo
+    apontar para si mesmo; quem envia só monta link público. Assim a necessidade legítima que a
+    269 registrou é preservada sem deixar a produção depender de a variável estar certa.
+
+    Args:
+        valor: Conteúdo da variável de ambiente (pode ser ``None`` ou vazio).
+        padrao: Constante pública deste repositório, usada quando `valor` não serve.
+        nome: Nome da variável, para a mensagem de log.
+        permitir_local: ``True`` num processo que não alcança pessoas reais (dev/local).
+
+    Returns:
+        A URL base sem barra final: `valor` quando for pública (ou local em ambiente local),
+        senão `padrao`.
+    """
+    bruto = (valor or "").strip().rstrip("/")
+    if not bruto:
+        return padrao
+    partes = urlsplit(bruto)
+    host = (partes.hostname or "").strip("[]")
+    publica = partes.scheme in ("http", "https") and bool(host) and not _HOST_LOCAL.match(host)
+    if publica or permitir_local:
+        return bruto
+    AVISOS_DE_URL.append(
+        f"{nome}={bruto!r} não é um endereço alcançável de fora e foi IGNORADA; "
+        f"os links vão sair com {padrao}. Corrija (ou apague) essa variável no painel do serviço."
+    )
+    logging.getLogger(__name__).error("[config] %s", AVISOS_DE_URL[-1])
+    return padrao
 
 
 def _db_url() -> str:
@@ -137,6 +201,10 @@ class Config:
     # Trava de ambiente: impede que um processo local/de teste apontado para o espelho da
     # produção envie e-mail real para artista e cliente. Ver `_suppress_mail`.
     MAIL_SUPPRESS_SEND = _suppress_mail()
+    # Pedido explícito de "quero enviar de verdade daqui" (hotfix 269b): além de destravar o
+    # envio local, é o único jeito de deixar sair um e-mail com link local — de propósito, para
+    # quem testa o fluxo contra o próprio ambiente e é o próprio destinatário.
+    MAIL_ALLOW_LOCAL_SEND = os.getenv("MAIL_ALLOW_LOCAL_SEND", "").lower() == "true"
 
     # A mesma trava, para o Google Agenda: o token também vem do banco espelhado e o calendário
     # é fixo, então um processo local cria compromisso — e convite — de verdade. Ver
@@ -169,16 +237,26 @@ class Config:
     # aviso de ensaio). Default REAL, não vazio (feature 269): no Render a variável é
     # `sync: false` — vive só no painel —, e se alguém esquecer de setá-la os e-mails saem sem
     # link, falhando em silêncio. Mesmo raciocínio de `PUBLIC_BASE_URL` logo abaixo.
-    # O ambiente local sobrescreve pelo `.env` e continua apontando para si.
-    PORTAL_URL = os.getenv("PORTAL_URL") or PORTAL_BASE_URL
+    # **Hotfix 269b**: default real não bastava — a variável estava *setada com valor local* na
+    # produção, e o convite do artista saía apontando para `http://localhost:5000`. Agora um
+    # endereço não-alcançável só é aceito em processo que não envia e-mail de verdade; ver
+    # `_url_para_fora`. O ambiente local continua podendo apontar para si.
+    PORTAL_URL = _url_para_fora(
+        os.getenv("PORTAL_URL"), PORTAL_BASE_URL, "PORTAL_URL", permitir_local=MAIL_SUPPRESS_SEND
+    )
 
     # URL base pública (feature 205) — usada para montar o `redirect_url` do checkout, o endereço
     # do webhook que a InfinitePay chama e o destino do 301 da raiz do Flask. Precisa ser
     # alcançável pela internet: sem ela, a operadora não tem para onde devolver a família nem
     # para onde avisar o pagamento. Passou a apontar fixo para `PLATFORM_BASE_URL` (antes o
     # default era vazio, o que gerava URL quebrada em qualquer ambiente sem o env definido);
-    # continua sobrescritível por `PUBLIC_BASE_URL` para dev/staging (ex.: túnel ngrok).
-    PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL") or PLATFORM_BASE_URL
+    # continua sobrescritível por `PUBLIC_BASE_URL` para dev/staging (ex.: túnel ngrok) — que é
+    # público e passa na checagem do hotfix 269b; endereço local aqui quebraria o retorno do
+    # checkout e o webhook da operadora do mesmo jeito que quebrou o link do portal.
+    PUBLIC_BASE_URL = _url_para_fora(
+        os.getenv("PUBLIC_BASE_URL"), PLATFORM_BASE_URL, "PUBLIC_BASE_URL",
+        permitir_local=MAIL_SUPPRESS_SEND,
+    )
 
     # Intervalo (segundos) da varredura que expira as reservas virtuais (feature 205, FR-057).
     VIRTUAL_SWEEP_INTERVAL = int(os.getenv("VIRTUAL_SWEEP_INTERVAL", "60"))

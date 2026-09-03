@@ -19,7 +19,7 @@ from flask_login import login_required, current_user
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from datetime import datetime
-from .config import Config, PLATFORM_BASE_URL  # se seu config.py está na raiz
+from .config import AVISOS_DE_URL, Config, PLATFORM_BASE_URL  # se seu config.py está na raiz
 from .constants import RoleName
 
 from .email_service import mail
@@ -480,6 +480,16 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     app.jinja_env.filters['urlencode'] = _url_quote
+
+    # Hotfix 269b: os endereços que saem para gente de fora ficam registrados no log do deploy —
+    # foi uma variável errada e invisível (`PORTAL_URL=http://localhost:5000` no painel do Render)
+    # que mandou convite e redefinição de senha para o localhost do remetente.
+    for _aviso in AVISOS_DE_URL:
+        app.logger.error("[config] %s", _aviso)
+    app.logger.info(
+        "[links externos] portal=%s plataforma=%s",
+        app.config.get("PORTAL_URL"), app.config.get("PUBLIC_BASE_URL"),
+    )
 
     from app.money import format_brl
     app.jinja_env.filters['brl'] = format_brl

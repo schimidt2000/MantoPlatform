@@ -67,8 +67,12 @@ services:
         sync: false
       - key: TALENTS_SHEET_NAME
         sync: false
-      - key: PORTAL_URL
-        sync: false
+      # PORTAL_URL foi REMOVIDA de propósito (hotfix 269b): o default do código é o portal real
+      # (`PORTAL_BASE_URL`, app/config.py) e é ele que o artista recebe por e-mail. A variável
+      # existia aqui como `sync: false`, foi preenchida no painel com `http://localhost:5000` e
+      # ninguém viu — todo convite e link de redefinição de senha saiu apontando para lá. Um
+      # endereço local agora é ignorado por qualquer processo que envie e-mail de verdade, mas o
+      # jeito de não errar é não ter a variável.
       - key: AUDIT_AGENT_TOKEN
         sync: false
       - key: MARKETING_AGENT_TOKEN
