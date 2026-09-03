@@ -103,12 +103,13 @@ O Google OAuth exige que a URI de redirecionamento esteja registrada no Console 
 
 ## O que muda entre local e produção
 
-| Variável | Local | Produção (Railway) |
-|----------|-------|--------------------|
+| Variável | Local | Produção (Render) |
+|----------|-------|-------------------|
 | `FLASK_ENV` | `development` | `production` |
-| `DATABASE_URL` | SQLite (ausente) | PostgreSQL Railway |
-| `PORTAL_URL` | `http://localhost:5000` | URL pública Railway |
-| `GOOGLE_OAUTH_REDIRECT_URI` | `http://localhost:5000/google/callback` | URL pública + `/google/callback` |
+| `DATABASE_URL` | SQLite (ausente) | PostgreSQL do Render |
+| `PORTAL_URL` | `http://localhost:5000` (opcional) | **não definir** — o default é `PORTAL_BASE_URL` (`https://portal.mantoproducoes.com.br`); valor local é ignorado por quem envia e-mail de verdade (269b) |
+| `PUBLIC_BASE_URL` | (ausente) | **não definir** — default `PLATFORM_BASE_URL` |
+| `GOOGLE_OAUTH_REDIRECT_URI` | `http://localhost:5000/google/callback` | URL pública + `/google/callback` — nunca copiar o valor local |
 | `USE_S3` | `false` (arquivos locais) | `false` ou `true` conforme config |
 | `SECRET_KEY` | Qualquer valor | Chave segura gerada |
 

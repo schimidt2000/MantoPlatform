@@ -4,7 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-03** · Estado do repositório: pós-merge de
+> Última atualização: **2026-09-03** · Estado do repositório: pós-hotfix
+> **269c-vedacoes-restantes** (sem migration; a trava de link local passou a julgar host como a
+> config, o e-mail do orçamento entrou nela, o alerta de ensaio virou link da plataforma; em
+> branch) — antes dele o merge de
 > **269b-hotfix-link-do-portal**, **239b-hotfix-carrinho-fora-de-sp** e
 > **273-orcamento-para-evento** — as três sem migration, no mesmo deploy de 03/09: a 269b para
 > o e-mail do portal sair com link local (a env da produção estava com `http://localhost:5000`),
@@ -223,6 +226,42 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 269c — As vedações que faltaram na 269b            (2026-09-03 · hotfix · sem migration)
+
+**De onde veio.** Varredura adversarial de tudo que a Manto manda para fora, rodada logo depois
+da 269b: 4 frentes (e-mail, outros canais, config, frontend), 55 achados, 110 conferências. A
+maioria era o próprio defeito da 269b, já em produção. Três eram buracos **na trava que a 269b
+acabara de subir**, e é o que esta entrada fecha.
+
+**Correções.** (1) A trava de corpo tinha uma lista de hosts mais curta que a da config:
+`http://192.168.0.14:5000`, `http://10.1.2.3/` e `https://maquina.local/` passavam. Agora
+`config.host_e_local()` é fonte única dos dois lados, e a busca lê qualquer URL absoluta.
+(2) `send_quote_email` — o e-mail do orçamento para a **cliente** — monta a própria `Message`
+por causa do PDF e era o único caminho para fora sem vedação; a checagem virou
+`_bloqueia_link_local()`, chamada nos dois lugares. (3) O alerta de ensaio é interno e mandava o
+staff para o Portal do Artista (herança de copiar o e-mail do convite); agora abre o evento em
+`PUBLIC_BASE_URL/events/<id>`. (4) O comunicado do portal escrevia o endereço à mão ao lado de um
+`href` vindo da config — no dia do defeito, o texto dizia uma coisa e o link levava para outra.
+
+**A documentação que ensinava o erro.** `docs/CONTINGENCIA_RENDER.md`, passo 4, mandava
+"preencher os envVars `sync:false` com os valores do `.env` local" — foi assim que
+`PORTAL_URL=http://localhost:5000` entrou no painel do Render. O passo agora diz quais variáveis
+nunca vêm do `.env`. O `DEVELOPMENT.md` deixou de ensinar o valor local para produção (e de
+falar em Railway).
+
+**Verificação.** `verify_269b.py` 9/9 (mesmo arquivo, cenários 7-9): faixa privada, IPv6 e
+`.local` barrados enquanto host público parecido (`10minutemail.com`, `172.15.0.1`) passa;
+orçamento com PDF barrado com link local e enviado sem ele; alerta de ensaio apontando para a
+plataforma. `ruff` limpo.
+
+**Backlog que a varredura deixou** (em `specs/269c-vedacoes-restantes/spec.md`): a URL gravada na
+**tag NFC física** e mais dois links copiados da tela ainda saem de `window.location.origin`;
+`GOOGLE_OAUTH_REDIRECT_URI` sem validação e o `redirect_uri` do OAuth vindo de header;
+`BACKEND_URL` do Node caindo em silêncio para localhost e `og:url` montado do `x-forwarded-host`;
+envs numéricas sem guarda; `validar_startcommand.py` ainda validando o `railway.json`.
+
+---
 
 ### 269b — O convite que mandava o artista para o localhost            (2026-09-03 · hotfix · sem migration)
 

@@ -13,6 +13,8 @@ from zoneinfo import ZoneInfo
 from flask import current_app
 from flask_mail import Mail, Message
 
+from app.config import PLATFORM_BASE_URL, host_e_local
+
 log = logging.getLogger(__name__)
 mail = Mail()
 
@@ -75,12 +77,8 @@ def _portal_url() -> str:
     return current_app.config.get("PORTAL_URL", "").rstrip("/")
 
 
-#: Link que só funciona na máquina de quem enviou. Ver `_link_local_no_corpo`.
-_RX_LINK_LOCAL = re.compile(
-    r"https?://(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[?::1\]?|host\.docker\.internal)"
-    r"(?::\d+)?",
-    re.IGNORECASE,
-)
+#: Qualquer URL absoluta no corpo; o host é julgado por `config.host_e_local` (269c).
+_RX_URL_ABSOLUTA = re.compile(r"https?://(\[[^\]]+\]|[^/\s\"\'>:]+)(?::\d+)?", re.IGNORECASE)
 
 
 def _link_local_no_corpo(*textos: str) -> str | None:
@@ -90,12 +88,32 @@ def _link_local_no_corpo(*textos: str) -> str | None:
     caminho novo pode montar URL de outro jeito (`url_for(_external=True)`, host do request,
     string colada à mão). E-mail com link local é inútil para quem recebe — e ainda revela o
     endereço interno de quem enviou —, então não sai.
+
+    O julgamento do host é o **mesmo** da config (`host_e_local`), inclusive faixas privadas: na
+    269b esta lista era mais curta e deixava passar `http://192.168.0.14:5000` (269c).
     """
     for texto in textos:
-        achado = _RX_LINK_LOCAL.search(texto or "")
-        if achado:
-            return achado.group(0)
+        for achado in _RX_URL_ABSOLUTA.finditer(texto or ""):
+            if host_e_local(achado.group(1)):
+                return achado.group(0)
     return None
+
+
+def _bloqueia_link_local(to: str, subject: str, *corpos: str) -> bool:
+    """`True` (e registra o motivo) quando este e-mail não pode sair por carregar link local.
+
+    Vale para **todo** e-mail que vai para fora, inclusive os que montam a `Message` por conta
+    própria para anexar arquivo — `send_quote_email` fazia isso e escapava da trava (269c).
+    """
+    link_local = _link_local_no_corpo(*corpos)
+    if not link_local or current_app.config.get("MAIL_ALLOW_LOCAL_SEND"):
+        return False
+    log.error(
+        "Email BARRADO para %s (%s): o corpo carrega o link local %s. "
+        "Confira PORTAL_URL/PUBLIC_BASE_URL no ambiente deste serviço.",
+        to, subject, link_local,
+    )
+    return True
 
 
 # ── HTML email base ────────────────────────────────────────────────────────────
@@ -408,8 +426,9 @@ def send_portal_announcement_email(talent) -> bool:
         )
         + _btn("Acessar o portal agora →", login_url)
         + _paragraph(
-            f'Ou copie o endereço: <a href="{login_url}" style="color:#2d1f6e;">'
-            f'portal.mantoproducoes.com.br</a>'
+            # O texto sai da MESMA variável do href: escrito à mão, ele dizia o endereço certo
+            # enquanto o link levava para o localhost (269c).
+            f'Ou copie o endereço: <a href="{login_url}" style="color:#2d1f6e;">{login_url}</a>'
         )
         + _alert_box(
             "Em caso de dúvidas para acessar, responda este email ou fale com nossa equipe — vamos te ajudar.",
@@ -438,7 +457,10 @@ def send_ensaio_alert_email(event, users: list) -> int:
         event.start_at.strftime("%d/%m/%Y às %H:%M")
         if event.start_at else "a confirmar"
     )
-    portal_url = _portal_url()
+    # Este e-mail é INTERNO: quem recebe abre o evento na plataforma, não no Portal do Artista
+    # (até a 269c o botão mandava o staff para o portal — herança de copiar o e-mail do convite).
+    base_plataforma = (current_app.config.get("PUBLIC_BASE_URL") or PLATFORM_BASE_URL).rstrip("/")
+    evento_url = f"{base_plataforma}/events/{event.id}"
 
     rows = _info_row("Evento", event.title)
     rows += _info_row("Data", start_str)
@@ -459,7 +481,7 @@ def send_ensaio_alert_email(event, users: list) -> int:
                 "<strong>Criar ensaio</strong>.",
                 color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
             )
-            + (_btn("Acessar a plataforma →", portal_url) if portal_url else "")
+            + _btn("Abrir o evento na plataforma →", evento_url)
         )
         html = _html_wrap(content, preheader=f"{event.title} precisa de ensaio — agende pela plataforma.")
         if _send(to=user.email, subject=f"[Ensaio necessário] {event.title}", html=html):
@@ -625,6 +647,10 @@ def send_quote_email(to: str, client_name: str, pdf_bytes: bytes) -> bool:
         )
         if not _emails_enabled():
             log.info("Email desativado nas configurações — pulando envio de orçamento para %s", to)
+            return False
+        # Este e-mail monta a `Message` sozinho por causa do PDF anexo, então precisa chamar a
+        # trava explicitamente — em 269b ele era o único caminho para fora sem ela (269c).
+        if _bloqueia_link_local(to, "Proposta Comercial", html, plain):
             return False
         mail.send(msg)
         log.info("Orçamento enviado para %s", to)
@@ -875,13 +901,7 @@ def _send(to: str, subject: str, body: str = "", html: str = "") -> bool:
         return False
     # Hotfix 269b: nenhum e-mail sai com link que só existe na máquina de quem enviou. Quem pediu
     # explicitamente `MAIL_ALLOW_LOCAL_SEND=true` está testando o próprio fluxo e é o destinatário.
-    link_local = _link_local_no_corpo(html, body)
-    if link_local and not current_app.config.get("MAIL_ALLOW_LOCAL_SEND"):
-        log.error(
-            "Email BARRADO para %s (%s): o corpo carrega o link local %s. "
-            "Confira PORTAL_URL/PUBLIC_BASE_URL no ambiente deste serviço.",
-            to, subject, link_local,
-        )
+    if _bloqueia_link_local(to, subject, html, body):
         return False
     try:
         plain = body or _strip_html(html)

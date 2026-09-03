@@ -32,6 +32,16 @@ _HOST_LOCAL = re.compile(
     re.IGNORECASE,
 )
 
+def host_e_local(host: str | None) -> bool:
+    """`True` quando o host só existe na máquina ou na rede de quem roda o processo.
+
+    Fonte única da pergunta "este endereço serve para alguém de fora?" — usada pela config e pela
+    trava de corpo do `email_service`. A 269b tinha duas listas parecidas em lugares diferentes, e
+    a do e-mail era a mais curta: um link `http://192.168.0.14:5000` passava (269c).
+    """
+    return bool(host) and bool(_HOST_LOCAL.match(host.strip("[]").strip()))
+
+
 #: Valores de env recusados por não serem alcançáveis de fora — `create_app` grita cada um no log
 #: do deploy, porque config errada que ninguém vê é a origem deste hotfix (269b).
 AVISOS_DE_URL: list[str] = []
@@ -66,8 +76,8 @@ def _url_para_fora(valor: str | None, padrao: str, nome: str, *, permitir_local:
     if not bruto:
         return padrao
     partes = urlsplit(bruto)
-    host = (partes.hostname or "").strip("[]")
-    publica = partes.scheme in ("http", "https") and bool(host) and not _HOST_LOCAL.match(host)
+    host = partes.hostname or ""
+    publica = partes.scheme in ("http", "https") and bool(host) and not host_e_local(host)
     if publica or permitir_local:
         return bruto
     AVISOS_DE_URL.append(
