@@ -13,6 +13,7 @@ import unicodedata
 from sqlalchemy import or_
 
 from app.models import EventRole, Talent
+from app.storage import COMPRESS_EXTS, formatos_aceitos
 
 PAGE_SIZE = 60
 
@@ -446,8 +447,11 @@ _PHOTO_FIELDS = {
     "cnh": "cnh_file_path",
 }
 _DOC_PHOTO_TYPES = {"doc", "cnh"}
-_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
-_DOC_EXTS = _IMAGE_EXTS + (".pdf",)
+#: Derivado da fonte única (`app/storage.py`), nunca escrito à mão: a allowlist de upload já
+#: aceitava `.heic` e esta tupla não, então a foto nativa do iPhone tomava "Use JPG, PNG ou WEBP"
+#: mesmo depois de o servidor aprender a converter.
+_IMAGE_EXTS = frozenset(COMPRESS_EXTS)
+_DOC_EXTS = _IMAGE_EXTS | {".pdf"}
 
 
 def save_talent_photo(talent: Talent, *, photo_type: str, file_storage) -> str | None:
@@ -462,9 +466,12 @@ def save_talent_photo(talent: Talent, *, photo_type: str, file_storage) -> str |
     import os
     import uuid as _uuid
 
+    from flask import current_app
     from werkzeug.utils import secure_filename
 
-    from app.storage import delete_file, save_file
+    from app.catalogo.og_ops import invalidar_variantes
+    from app.storage import ImagemNaoConvertida, delete_file, save_file
+
 
     field_name = _PHOTO_FIELDS.get(photo_type)
     if field_name is None:
@@ -476,14 +483,18 @@ def save_talent_photo(talent: Talent, *, photo_type: str, file_storage) -> str |
     ext = os.path.splitext(secure_filename(file_storage.filename))[1].lower()
     allowed = _DOC_EXTS if is_doc else _IMAGE_EXTS
     if ext not in allowed:
-        return "Use JPG, PNG, WEBP ou PDF." if is_doc else "Use JPG, PNG ou WEBP."
+        return f"Formato não aceito. Envie {formatos_aceitos(allowed)}."
 
     subfolder = "talent_docs" if is_doc else "talent_photos"
     filename = f"talent_{talent.id}_{photo_type}_{_uuid.uuid4().hex[:8]}{ext}"
     old_path = getattr(talent, field_name)
-    url_path = save_file(file_storage, subfolder, filename)
+    try:
+        url_path = save_file(file_storage, subfolder, filename)
+    except ImagemNaoConvertida:
+        return "Não conseguimos ler esta foto. Envie em JPG, PNG ou WEBP."
     if old_path:
         delete_file(old_path)
+        invalidar_variantes(old_path, current_app.config["UPLOAD_FOLDER"])
     setattr(talent, field_name, url_path)
     return None
 

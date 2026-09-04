@@ -515,6 +515,75 @@ def send_password_reset_email(talent, reset_url: str) -> bool:
     )
 
 
+# ── Reenvio de fotos perdidas na migração (feature 293) ───────────────────────
+
+def send_foto_pendente_email(talent, *, faltas: list[str], acao_url: str, validade_dias: int) -> bool:
+    """Pede ao artista que reenvie pelo portal os arquivos perdidos na migração de agosto.
+
+    O tom é deliberado: a mensagem **assume a causa** ("na mudança do nosso servidor alguns
+    arquivos se perderam") em vez de pedir uma "atualização cadastral". A campanha de 28/08/2026
+    usou o segundo tom, saiu em texto puro, sem botão e com um link de senha que valia uma hora —
+    e nenhuma das 42 pessoas respondeu. Aqui o e-mail diz o que faltou **daquela pessoa**, tem um
+    botão só, e o link já leva à tela de envio depois de criar a senha.
+
+    Args:
+        talent: Dono da conta.
+        faltas: Rótulos em pt-BR do que sumiu (vêm de `midia_ops.ARQUIVOS_DO_TALENTO`).
+        acao_url: Link pronto — de redefinição, com `?destino=/fotos-documentos`.
+        validade_dias: Validade real do link, para o texto nunca mentir sobre o prazo.
+
+    Returns:
+        `True` se a mensagem saiu.
+    """
+    if not talent.email_contact:
+        return False
+
+    first_name = (talent.artistic_name or talent.full_name or "").split()[0]
+    itens = "".join(f'<li style="margin:2px 0;">{falta}</li>' for falta in faltas)
+    # Import local: `portal_links` é a fonte única da base do portal, e nunca `url_for(_external)`
+    # (ver o cabeçalho daquele módulo — o host vem do request e é escolhível pelo atacante).
+    from app.talent_portal.portal_links import portal_base_url
+
+    base = portal_base_url()
+
+    content = (
+        _greeting(first_name)
+        + _paragraph(
+            "Na mudança do nosso servidor, em agosto, alguns arquivos do seu cadastro se "
+            "perderam. <strong>Tudo o que você preencheu continua salvo</strong> — só os "
+            "arquivos abaixo precisam ser reenviados."
+        )
+        + _info_box(
+            '<tr><td style="padding:2px 0;font-size:13px;color:#1a1a2e;">'
+            f'<strong>O que falta no seu cadastro:</strong><ul style="margin:8px 0 0;'
+            f'padding-left:18px;color:#555;">{itens}</ul></td></tr>'
+        )
+        + _paragraph(
+            "É rápido: o botão abaixo abre o portal, você cria sua senha e cai direto na tela "
+            "de envio das fotos."
+        )
+        + _btn("Enviar minhas fotos →", acao_url)
+        + _paragraph(
+            f'Se o botão não funcionar, copie e cole: <a href="{acao_url}" style="color:#2d1f6e;">{acao_url}</a>'
+        )
+        + _alert_box(
+            f"Este link vale por <strong>{validade_dias} dias</strong>. Se ele expirar, entre em "
+            f'<a href="{base}" style="color:#0c4a6e;">{base}</a> e toque em '
+            "<strong>Esqueci minha senha</strong> para receber um novo.",
+            color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
+        )
+    )
+
+    return _send(
+        to=talent.email_contact,
+        subject="📸 Faltam arquivos no seu cadastro da Manto",
+        html=_html_wrap(
+            content,
+            preheader="Alguns arquivos do seu cadastro se perderam na mudança de servidor.",
+        ),
+    )
+
+
 # ── Confirmação do email do cadastro público ──────────────────────────────────
 
 def send_cadastro_confirmation_email(talent, confirm_url: str) -> bool:

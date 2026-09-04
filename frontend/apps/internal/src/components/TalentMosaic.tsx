@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Button } from "@manto/ui";
+import { Button, Foto } from "@manto/ui";
 import { assetSrcSet, assetUrl } from "@manto/api-client";
 import {
   useApproveTalent,
@@ -29,20 +29,19 @@ function MosaicCard({ talent, isPending }: { talent: TalentSummary; isPending: b
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-panel shadow-sm">
       <Link to={`/talents/${talent.id}`} className="group relative block aspect-[3/4] bg-surface-2">
-        {talent.photo_face_path ? (
-          <img
-            // Grade `2 / sm 3 / md 4 / xl 5 / 2xl 6` colunas (abaixo): o card tem ~200-270px, e
-            // baixar a foto de rosto inteira para isso era ~6× de área jogada fora (feature 270).
-            src={assetUrl(talent.photo_face_path, { largura: 640 })}
-            srcSet={assetSrcSet(talent.photo_face_path, [320, 480, 640])}
-            sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 768px) 25vw, (min-width: 640px) 33vw, calc(50vw - 30px)"
-            alt={talent.full_name}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-4xl text-muted">👤</div>
-        )}
+        <Foto
+          // Grade `2 / sm 3 / md 4 / xl 5 / 2xl 6` colunas (abaixo): o card tem ~200-270px, e
+          // baixar a foto de rosto inteira para isso era ~6× de área jogada fora (feature 270).
+          src={assetUrl(talent.photo_face_path, { largura: 640 })}
+          srcSet={assetSrcSet(talent.photo_face_path, [320, 480, 640])}
+          sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 768px) 25vw, (min-width: 640px) 33vw, calc(50vw - 30px)"
+          alt={talent.full_name}
+          loading="lazy"
+          className="h-full w-full object-cover transition-transform group-hover:scale-105"
+          fallback={
+            <div className="flex h-full w-full items-center justify-center text-4xl text-muted">👤</div>
+          }
+        />
         {talent.warning_level && (
           <span
             className={`absolute right-2 top-2 h-3 w-3 rounded-full ring-2 ring-white ${WARNING_COLORS[talent.warning_level] ?? "bg-muted"}`}

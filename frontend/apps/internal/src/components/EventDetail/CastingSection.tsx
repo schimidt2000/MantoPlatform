@@ -238,7 +238,7 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
             className="flex-none"
           >
             <AvatarThumb
-              src={role.talent.photo_url ? assetUrl(role.talent.photo_url) : null}
+              src={role.talent.photo_url ? assetUrl(role.talent.photo_url, { largura: 128 }) : null}
               name={role.talent.name}
               shape="circle"
               size="lg"

@@ -7,7 +7,10 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-09-02** · Em branch: **272-notificacoes-internas** (tabela
+> Última atualização: **2026-09-03** · Em branch: **292-fotos-que-somem** + **293-atualizacao-cadastral**
+> (sem migration; `<Foto>` com fallback de 404, variante por largura em `figurino_photos`, `pillow-heif`
+> convertendo HEIC, os 9 caminhos de upload cru passando por `save_file`, `MANTO_SEM_THREADS`, e os
+> comandos `midia-orfa`/`fix-heic`/`campanha-fotos`). Antes: **272-notificacoes-internas** (tabela
 > `notifications`, migration **`b7d2e4f1a9c3`** — head; endpoints `/api/notificacoes*`; o e-mail de
 > resposta de formulário da 266 saiu). Antes: **270-miniaturas-catalogo** (variantes de miniatura por
 > largura — sem migration) e **261-nfc-entregas-video** (entregas anexadas
@@ -1258,14 +1261,37 @@ Rotas legadas que **ainda têm uso real** (não são só resíduo):
   é `assetUrl(path, { largura })`/`assetSrcSet()` do `@manto/api-client` — a regra de "quem tem
   variante" é a mesma nos dois lados (`pastas_da_variante`).
 - `GET /uploads/t/<int:largura>/<path:filename>` (`app/__init__.py`, `login_required`) — variante
-  de **foto de talento** (`talent_photos/<arquivo>` apenas; `talent_docs` fica de fora de
-  propósito — miniatura de RG é PII espalhada), cache em `uploads/talent_thumbs/<largura>/`,
+  de **foto de talento** (270) e de **figurino** (292). A allowlist de subpasta é
+  `og_ops.SUBPASTAS_COM_VARIANTE` (`talent_photos`, `figurino_photos`); `talent_docs` fica de fora
+  de propósito — miniatura de RG é PII espalhada. Cache em `uploads/talent_thumbs/<largura>/` e
+  `uploads/figurino_variantes/<largura>/` (**não** `figurino_thumbs`, que é o legado das
+  miniaturas do Drive e candidata a `rm -rf` de limpeza).
   `Cache-Control: private, max-age=31536000, immutable` (**`private`**: a rota exige login, e
-  `public` deixaria um cache compartilhado servir a foto a quem não logou). O original em
-  `/uploads/talent_photos/*` ganhou o mesmo cabeçalho; o resto de `/uploads` segue sem cache longo.
-- `flask warm-thumbnails` — pré-aquece as variantes (todas as fotos de item a 128; capas e
-  personagens a 320/480/640; rostos de talento a 320/480/640). Idempotente; rodar depois de cada deploy que
-  mude a receita e depois do `compress-images --execute`.
+  `public` deixaria um cache compartilhado servir a foto a quem não logou). Os originais em
+  `/uploads/talent_photos/*` e `/uploads/figurino_photos/*` ganharam o mesmo cabeçalho; o resto de
+  `/uploads` segue sem cache longo — lá o arquivo pode ser regravado no mesmo caminho.
+  ⚠️ O `immutable` no figurino só é seguro porque a **rotação passou a gravar caminho novo**
+  (`figurino_ops.rotate_figurino_photo`): regravar por cima serviria a orientação antiga por um ano.
+- `flask warm-thumbnails [--familia catalogo|talento|figurino|todas] [--largura N]` — pré-aquece as
+  variantes: catálogo a 128 e capas/personagens a 320/480/640; **talento a 128** (o avatar da
+  produção e dos comboboxes — a largura que faltava) e 320/480/640; **figurino** nas quatro.
+  Idempotente; rodar depois de cada deploy que mude a receita e depois do `compress-images
+  --execute`. `--familia` existe para não competir com o app pela CPU logo após um deploy.
+- `flask midia-orfa [--familia …] [--csv] [--rapido]` — inventário que cruza **banco × disco** e
+  diz, por arquivo, **por que** a foto não aparece: `sumiu` · `não é imagem` · `formato ilegível` ·
+  `URL externa` · `campo vazio`. Roda igual no `manto_local` e no Shell do Render, e é a resposta
+  para "isto está consertado em todos os ambientes?".
+- `flask fix-heic [--execute]` — converte para JPEG o que já está em disco num formato que o
+  navegador não abre (HEIC/HEIF/AVIF/TIFF/BMP, extensão que mente), **atualiza a coluna**, apaga o
+  original e invalida as variantes. O `compress-images` **não** resolve isso: ele mantém o formato
+  de propósito, e reescrever um `.heic` produz um JPEG dentro de um arquivo `.heic`.
+- `flask campanha-fotos [--enviar] [--limite N] [--pausa S] [--id N]` — pede aos talentos o reenvio
+  do que se perdeu (293). Dry-run por padrão; dedup no `AuditLog` (`action="campanha_fotos_292"`);
+  pula devolução permanente em aberto e entrega essas pessoas como lista de WhatsApp; uma conexão
+  SMTP para o lote.
+- ⚠️ **`MANTO_SEM_THREADS=1`** na frente de qualquer `flask <comando>` no Shell do Render: sem
+  isso, `create_app()` sobe o auto-import de talentos (que **escreve no banco** a partir da
+  planilha), o sync da agenda e o backup para o Drive.
 - `GET /portal/photo/<path:filename>` — foto de figurino que `GET /api/portal/events/<id>/figurino`
   devolve para o portal React; é rota Jinja, mas checa a mesma sessão de talento **e**, desde a
   feature 216, só serve as subpastas de `PORTAL_PHOTO_SUBFOLDERS` (`app/talent_portal/routes.py:41`).
@@ -1374,7 +1400,7 @@ segmento** do caminho, via `UPLOADS_ROLE_BY_SUBFOLDER` (`app/__init__.py:66-71`)
 | `talent_docs/` | `CASTING`, `SUPERADMIN` |
 | `expenses/` | o **dono** do gasto **ou** financeiro (`_can_read_expense_receipt`, `app/__init__.py:94`) |
 | demais subpastas | qualquer usuário autenticado |
-| `talent_photos/` | qualquer usuário autenticado — e é a **única** subpasta com cache longo (`private, immutable`, feature 270); `GET /uploads/t/<largura>/talent_photos/<arq>` gera a variante pela mesma checagem |
+| `talent_photos/` e `figurino_photos/` | qualquer usuário autenticado — são as **únicas** subpastas com cache longo (`private, immutable`, features 270 e 292) e com variante; `GET /uploads/t/<largura>/<subpasta>/<arq>` gera pela mesma checagem. A lista é `og_ops.SUBPASTAS_COM_VARIANTE`, e o `client.ts` espelha a MESMA regra — o `verify_292` lê os dois e compara |
 
 Devolve **404, não 403**, para não confirmar a existência do arquivo. `GET /portal/photo/<path>`
 (`app/talent_portal/routes.py:78`) é restrito às subpastas de `PORTAL_PHOTO_SUBFOLDERS`

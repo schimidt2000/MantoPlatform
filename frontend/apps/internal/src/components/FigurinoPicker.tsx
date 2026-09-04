@@ -119,7 +119,7 @@ export function FigurinoPicker({
     return ordered.map((sheet) => ({
       value: String(sheet.id),
       label: sheet.character_name,
-      imageUrl: sheet.photo_url ? assetUrl(sheet.photo_url) : null,
+      imageUrl: sheet.photo_url ? assetUrl(sheet.photo_url, { largura: 128 }) : null,
       imageShape: "square" as const,
       fallbackIcon: "👗",
     }));

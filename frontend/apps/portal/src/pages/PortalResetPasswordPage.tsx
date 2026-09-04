@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { Button, Skeleton } from "@manto/ui";
+import { comDestino, DESTINO_PARAM, destinoSeguro } from "../lib/destino";
 import { AuthCard, AuthLink } from "../components/AuthCard";
 import { FormError, FormField } from "../components/FormField";
 import { PasswordChecklist } from "../components/PasswordChecklist";
@@ -12,6 +13,10 @@ import { newPasswordSchema, type NewPasswordForm } from "../lib/passwordSchema";
 
 /** Redefinição de senha a partir do token enviado por e-mail (`/reset-password/:token`). */
 export function PortalResetPasswordPage() {
+  // O destino atravessa a redefinição: o link do e-mail traz `?destino=/fotos-documentos`, e a
+  // pessoa precisa cair lá depois de criar a senha — não na agenda (feature 293).
+  const [params] = useSearchParams();
+  const destino = destinoSeguro(params.get(DESTINO_PARAM));
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const tokenCheck = useResetTokenCheck(token);
@@ -57,7 +62,8 @@ export function PortalResetPasswordPage() {
         footer={<AuthLink to="/forgot-password">Pedir um novo link</AuthLink>}
       >
         <p className="text-sm text-ink">
-          Este link de redefinição é inválido ou já expirou. Peça um novo — os links valem 1 hora.
+          Este link de redefinição é inválido ou já expirou. Peça um novo na tela de login, em
+          &quot;Esqueci minha senha&quot;.
         </p>
       </AuthCard>
     );
@@ -69,7 +75,10 @@ export function PortalResetPasswordPage() {
         <div className="space-y-4 text-sm text-ink">
           <CheckCircle2 className="h-10 w-10 text-green" aria-hidden="true" />
           <p>Tudo certo! Sua nova senha já está valendo.</p>
-          <Button className="w-full" onClick={() => navigate("/login", { replace: true })}>
+          <Button
+            className="w-full"
+            onClick={() => navigate(comDestino("/login", destino), { replace: true })}
+          >
             Ir para o login
           </Button>
         </div>

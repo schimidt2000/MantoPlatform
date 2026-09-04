@@ -15,6 +15,11 @@ google-auth-oauthlib==1.2.3
 google-api-python-client==2.188.0
 python-docx==1.1.2
 Pillow==12.1.1
+# Decodifica HEIC/HEIF — o formato nativo da câmera do iPhone, que a allowlist de upload aceita
+# desde sempre e que nenhum navegador renderiza. Sem esta lib a foto era gravada CRUA e sumia da
+# tela sem erro nenhum (feature 292). Há wheel manylinux para cp311, então o `pip install` do
+# Render não compila `libheif` do zero.
+pillow-heif==1.6.0
 reportlab==4.2.5
 pypdf==5.1.0
 requests==2.32.5

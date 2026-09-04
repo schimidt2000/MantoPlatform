@@ -1,10 +1,29 @@
-import os
-from flask import Blueprint, request, render_template, redirect, url_for, current_app, flash, session
+from flask import Blueprint, request, render_template, redirect, url_for, flash, session
 from flask_login import login_user, logout_user, login_required
 from werkzeug.utils import secure_filename
 from ..models import User, db
 from flask_login import current_user
 from app import limiter
+from app.storage import (
+    ALLOWED_IMAGE_EXTENSIONS,
+    ImagemNaoConvertida,
+    delete_file,
+    formatos_aceitos,
+    is_allowed_extension,
+    save_file,
+)
+
+#: Teto do avatar. Antes o único limite era o `MAX_CONTENT_LENGTH` global de 512 MB.
+AVATAR_MAX_BYTES = 5 * 1024 * 1024
+
+
+def _tamanho(file_storage) -> int:
+    """Bytes do upload, sem consumir o stream."""
+    file_storage.stream.seek(0, 2)
+    tamanho = file_storage.stream.tell()
+    file_storage.stream.seek(0)
+    return tamanho
+
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -101,15 +120,26 @@ def profile():
         # Foto de perfil
         photo = request.files.get("profile_photo")
         if photo and photo.filename:
-            ext = os.path.splitext(photo.filename)[1].lower()
-            if ext not in ('.jpg', '.jpeg', '.png', '.gif', '.webp'):
-                errors.append("Formato inválido. Use JPG, PNG, GIF ou WebP.")
+            if not is_allowed_extension(photo.filename, ALLOWED_IMAGE_EXTENSIONS):
+                errors.append(f"Formato inválido. Use {formatos_aceitos(ALLOWED_IMAGE_EXTENSIONS)}.")
+            elif _tamanho(photo) > AVATAR_MAX_BYTES:
+                errors.append("Foto muito grande. O limite é 5 MB.")
             else:
-                profiles_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], "profiles")
-                os.makedirs(profiles_dir, exist_ok=True)
-                filename = f"user_{current_user.id}{ext}"
-                photo.save(os.path.join(profiles_dir, filename))
-                current_user.profile_photo = f"profiles/{filename}"
+                # `save_file` (e não `photo.save`) por três motivos: comprime como todo o resto do
+                # sistema, gera nome novo — o `user_<id>.<ext>` fixo deixava o navegador com o
+                # avatar antigo em cache e sobrava um `user_5.heic` órfão quando a conversão
+                # mudava a extensão — e **devolve** o caminho, em vez de montá-lo à mão.
+                anterior = current_user.profile_photo
+                try:
+                    url = save_file(photo, "profiles")
+                except ImagemNaoConvertida:
+                    url = None
+                    errors.append("Não conseguimos ler esta foto. Envie em JPG ou PNG.")
+                if url:
+                    # A coluna guarda `profiles/<arquivo>` sem o `/uploads/` (ver base.html).
+                    current_user.profile_photo = url[len("/uploads/"):]
+                    if anterior:
+                        delete_file(f"/uploads/{anterior}")
 
         # Troca de senha (opcional)
         new_pw = request.form.get("new_password", "").strip()

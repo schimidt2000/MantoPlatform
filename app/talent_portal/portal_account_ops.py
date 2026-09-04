@@ -27,8 +27,15 @@ from app.talent_portal.portal_ops import find_talent_by_login
 
 log = logging.getLogger(__name__)
 
-#: Duração da validade de um token de redefinição de senha.
+#: Duração da validade de um token de redefinição de senha pedido pela própria pessoa.
 RESET_TOKEN_TTL = timedelta(hours=1)
+
+#: Validade do link mandado num disparo em lote (feature 293). Uma hora é o certo para quem
+#: acabou de clicar em "esqueci minha senha" e está olhando a caixa de entrada; num e-mail que sai
+#: para dezenas de pessoas ao mesmo tempo, é a garantia de que quem abrir à tarde recebe "link
+#: inválido". Foi exatamente assim que a campanha de 28/08/2026 terminou sem nenhuma resposta.
+#: O token continua de uso único e é sobrescrito a cada emissão nova.
+CAMPANHA_RESET_TTL = timedelta(days=7)
 
 #: Fuso de exibição. O token vive em UTC; quem lê a tela vive em São Paulo.
 _TZ_SP = ZoneInfo("America/Sao_Paulo")
@@ -208,17 +215,22 @@ def expiracao_para_exibir(talent: Talent) -> str | None:
     )
 
 
-def emitir_token_de_reset(talent: Talent) -> str:
+def emitir_token_de_reset(talent: Talent, ttl: timedelta = RESET_TOKEN_TTL) -> str:
     """Grava um token novo de redefinição no talento e devolve o token (sem commit).
 
-    Fonte única do token: o pedido do próprio artista ("Esqueci minha senha") e o envio feito
-    pelo casting (feature 274) só divergem em **quem tem direito de pedir**, nunca no que é
-    gravado. Trocar o token invalida o anterior, então um segundo pedido não deixa dois links
-    vivos.
+    Fonte única do token: o pedido do próprio artista ("Esqueci minha senha"), o envio feito pelo
+    casting (feature 274) e o disparo em lote (feature 293) só divergem em **quem tem direito de
+    pedir** e em **quanto tempo o link vale**, nunca no que é gravado. Trocar o token invalida o
+    anterior, então um segundo pedido não deixa dois links vivos.
+
+    Args:
+        talent: Dono da conta.
+        ttl: Validade do link. O default preserva a hora do autoatendimento; a campanha passa
+            `CAMPANHA_RESET_TTL` porque um lote não é lido no minuto seguinte.
     """
     token = secrets.token_urlsafe(32)
     talent.password_reset_token = token
-    talent.password_reset_expires = datetime.utcnow() + RESET_TOKEN_TTL
+    talent.password_reset_expires = datetime.utcnow() + ttl
     return token
 
 
@@ -226,6 +238,7 @@ def enviar_reset_pelo_staff(
     talent: Talent,
     send_reset: Callable[[Talent, str], None],
     build_reset_url: Callable[[str], str],
+    ttl: timedelta = RESET_TOKEN_TTL,
 ) -> dict:
     """Manda o link de redefinição para o e-mail cadastrado, a pedido de quem atende o artista.
 
@@ -258,7 +271,7 @@ def enviar_reset_pelo_staff(
             field="email_contact",
         )
     tinha_senha = bool(talent.password_hash)
-    token = emitir_token_de_reset(talent)
+    token = emitir_token_de_reset(talent, ttl)
     db.session.commit()
     send_reset(talent, build_reset_url(token))
     return {

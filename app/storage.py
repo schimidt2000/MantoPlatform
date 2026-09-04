@@ -22,12 +22,14 @@ from typing import BinaryIO
 
 from flask import current_app
 
+from app import imaging
+
 logger = logging.getLogger(__name__)
 
-# Extensões que passam por compressão automática (GIF excluído — pode ser animado)
-_COMPRESS_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
-_MAX_PX = 1200   # lado máximo em pixels
-_QUALITY = 85    # qualidade JPEG (0-100)
+# As constantes de compressão vivem logo abaixo da allowlist de extensões: `COMPRESS_EXTS` é
+# DERIVADO dela, e não uma segunda lista escrita à mão (ver o comentário lá embaixo).
+MAX_PX = 1200   # lado máximo em pixels
+QUALITY = 85    # qualidade JPEG (0-100)
 
 # ── Allowlist de extensões aceitas em upload ─────────────────────────────────
 # Fonte única de "o que pode subir". Todo arquivo enviado por usuário cai em
@@ -47,6 +49,13 @@ _QUALITY = 85    # qualidade JPEG (0-100)
 ALLOWED_IMAGE_EXTENSIONS: frozenset[str] = frozenset(
     {".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".bmp", ".tif", ".tiff", ".avif"}
 )
+
+#: Extensões que passam por compressão automática. **Derivado**, nunca uma segunda lista: por
+#: quatro meses `.heic` esteve na allowlist acima e fora da lista de compressão escrita à mão, de
+#: modo que toda foto de iPhone era gravada crua — e o navegador não abre HEIC. Com a derivação,
+#: acrescentar um formato ali passa a trazer a compressão junto. GIF fica de fora (pode ser
+#: animado, e o Pillow salvaria só o primeiro quadro).
+COMPRESS_EXTS: frozenset[str] = ALLOWED_IMAGE_EXTENSIONS - {".gif"}
 
 #: Documentos comprobatórios: foto do papel ou PDF (contrato, comprovante).
 ALLOWED_DOCUMENT_EXTENSIONS: frozenset[str] = ALLOWED_IMAGE_EXTENSIONS | {".pdf"}
@@ -103,6 +112,19 @@ def is_allowed_extension(filename: str | None, allowed: frozenset[str]) -> bool:
     return extension_of(filename) in allowed
 
 
+def formatos_aceitos(allowed: frozenset[str]) -> str:
+    """Lista legível de extensões para uma mensagem de erro ("JPG, PNG ou WEBP").
+
+    Existe para a mensagem acompanhar a allowlist sozinha: por muito tempo três telas diziam
+    "Use JPG, PNG ou WEBP" com a lista escrita à mão no texto, e continuaram dizendo isso depois
+    que a allowlist mudou.
+    """
+    nomes = sorted({e.lstrip(".").upper() for e in allowed})
+    if len(nomes) == 1:
+        return nomes[0]
+    return ", ".join(nomes[:-1]) + " ou " + nomes[-1]
+
+
 def is_inline_safe(filename: str | None) -> bool:
     """Diz se o arquivo pode ser servido inline (sem `Content-Disposition: attachment`).
 
@@ -116,45 +138,129 @@ def is_inline_safe(filename: str | None) -> bool:
     return extension_of(filename) in INLINE_SAFE_EXTENSIONS
 
 
-def _compress_image(file_obj: BinaryIO, ext: str) -> tuple[io.BytesIO, str] | None:
-    """Redimensiona e comprime imagem. Retorna (BytesIO, extensão) ou None se não for imagem."""
-    if ext not in _COMPRESS_EXTS:
+class ImagemNaoConvertida(Exception):
+    """A imagem precisava ser convertida para ser exibível e a conversão falhou.
+
+    Só nasce para as extensões de `imaging.EXTS_QUE_EXIGEM_CONVERSAO` (HEIC de iPhone, TIFF, AVIF,
+    BMP): guardar o original desses formatos é guardar um arquivo que nenhum navegador abre — a
+    foto "some" da tela sem erro nenhum, e só reaparece num inventário meses depois. Para JPEG e
+    PNG a falha continua silenciosa de propósito: lá a compressão é otimização e o original já é
+    exibível.
+    """
+
+
+def comprimir_bytes(
+    dados: bytes,
+    ext: str,
+    *,
+    manter_formato: bool = False,
+    pular_se_pequena: int = 0,
+) -> tuple[bytes, str] | None:
+    """Reduz uma imagem para `MAX_PX`/`QUALITY` e devolve `(bytes, extensão)`.
+
+    Args:
+        dados: Bytes da imagem original.
+        ext: Extensão do arquivo de origem (com ponto, minúscula).
+        manter_formato: Preserva a extensão de entrada em vez de converter para `.jpg`. É o que o
+            `flask compress-images` precisa: lá a URL já está gravada no banco, e mudar a extensão
+            quebraria toda referência existente.
+        pular_se_pequena: Se maior que zero, devolve ``None`` quando a imagem já cabe em `MAX_PX`
+            **e** pesa menos que este número de bytes — reprocessar não ganharia nada.
+
+    Returns:
+        `(bytes, extensão)`, ou ``None`` quando não há nada a fazer (extensão fora de
+        `COMPRESS_EXTS`, imagem já pequena, ou falha de decodificação).
+
+    Raises:
+        ImagemNaoConvertida: A extensão exige conversão e a imagem não pôde ser decodificada.
+    """
+    if ext not in COMPRESS_EXTS:
+        return None
+
+    img = imaging.abrir(dados)
+    if img is None:
+        if ext in imaging.EXTS_QUE_EXIGEM_CONVERSAO:
+            raise ImagemNaoConvertida(ext)
+        logger.warning("compressão de imagem falhou; mantendo original (%s)", ext)
         return None
 
     try:
-        from PIL import Image, ImageOps
+        precisa_reduzir = max(img.width, img.height) > MAX_PX
+        if not precisa_reduzir and pular_se_pequena and len(dados) < pular_se_pequena:
+            return None
+        if precisa_reduzir:
+            from PIL import Image
 
-        file_obj.seek(0)
-        img = Image.open(file_obj)
-
-        # Corrige orientação EXIF (fotos de celular chegam rotacionadas)
-        img = ImageOps.exif_transpose(img)
-
-        # Redimensiona mantendo proporção
-        if max(img.width, img.height) > _MAX_PX:
-            img.thumbnail((_MAX_PX, _MAX_PX), Image.LANCZOS)
-
-        # PNG com transparência real → mantém PNG comprimido
-        if img.mode == "RGBA":
-            alpha = img.getchannel("A")
-            if alpha.getextrema()[0] < 255:
-                out = io.BytesIO()
-                img.save(out, format="PNG", optimize=True)
-                out.seek(0)
-                return out, ".png"
-
-        # Tudo o mais → JPEG
-        if img.mode not in ("RGB",):
-            img = img.convert("RGB")
+            img.thumbnail((MAX_PX, MAX_PX), Image.LANCZOS)
 
         out = io.BytesIO()
-        img.save(out, format="JPEG", quality=_QUALITY, optimize=True)
-        out.seek(0)
-        return out, ".jpg"
+        # PNG com transparência REAL continua PNG: virar JPEG pintaria o fundo de branco.
+        if imaging.tem_transparencia_real(img):
+            img.save(out, format="PNG", optimize=True)
+            return out.getvalue(), ".png"
 
-    except Exception as exc:  # noqa: BLE001 — compressão é otimização; original segue válido
+        if manter_formato and ext in (".png", ".webp"):
+            formato = "PNG" if ext == ".png" else "WEBP"
+            img.save(out, format=formato, optimize=True, quality=QUALITY)
+            return out.getvalue(), ext
+
+        imaging.para_rgb(img).save(out, format="JPEG", quality=QUALITY, optimize=True)
+        return out.getvalue(), ext if manter_formato and ext in (".jpg", ".jpeg") else ".jpg"
+    except Exception as exc:  # noqa: BLE001
+        if ext in imaging.EXTS_QUE_EXIGEM_CONVERSAO:
+            raise ImagemNaoConvertida(ext) from exc
         logger.warning("compressão de imagem falhou; salvando original: %s", exc)
         return None
+
+
+def _compress_image(file_obj: BinaryIO, ext: str) -> tuple[io.BytesIO, str] | None:
+    """Redimensiona e comprime um upload. Retorna `(BytesIO, extensão)` ou `None`.
+
+    Raises:
+        ImagemNaoConvertida: formato que o navegador não abre e que não pôde ser convertido.
+    """
+    file_obj.seek(0)
+    resultado = comprimir_bytes(file_obj.read(), ext)
+    file_obj.seek(0)
+    if resultado is None:
+        return None
+    dados, nova_ext = resultado
+    return io.BytesIO(dados), nova_ext
+
+
+def caminho_local(url_publica: str | None) -> str | None:
+    """URL pública de um arquivo servido pelo Flask -> caminho absoluto em disco.
+
+    Inverso de `save_file`. Cobre as duas formas que o banco guarda: `/uploads/<sub>/<arq>` e a
+    reescrita pública do catálogo (`/catalogo/midia/<arq>`, que mora em `catalog_photos/`).
+
+    Returns:
+        O caminho absoluto, ou ``None`` para URL externa (legado do Drive), vazia, ou quando o
+        armazenamento é S3 — em nenhum desses casos existe arquivo local para apontar.
+    """
+    if not url_publica or url_publica.startswith(("http://", "https://")):
+        return None
+    if current_app.config.get("USE_S3"):
+        return None
+    rel = url_publica.lstrip("/")
+    # A capa de campanha é servida pela mesma rota pública do catálogo, mas mora em outra pasta.
+    if rel.startswith("catalogo/midia/campanhas/"):
+        rel = "virtual_covers/" + rel.rsplit("/", 1)[-1]
+    elif rel.startswith("catalogo/midia/"):
+        rel = "catalog_photos/" + rel[len("catalogo/midia/"):]
+    elif rel.startswith("uploads/"):
+        rel = rel[len("uploads/"):]
+    return os.path.join(current_app.config["UPLOAD_FOLDER"], rel)
+
+
+def save_bytes(dados: bytes, subfolder: str, ext: str) -> str:
+    """Grava bytes já prontos sob um nome novo e devolve a URL pública.
+
+    Existe para quem já tem a imagem em memória e **precisa de um caminho novo**: girar a foto de
+    um figurino regravando por cima deixaria a variante em cache (chaveada pela URL) e o cache do
+    navegador (`immutable`, um ano) presos na orientação antiga.
+    """
+    return save_file(io.BytesIO(dados), subfolder, f"{_uuid.uuid4().hex}{ext}")
 
 
 def save_file(file_obj: BinaryIO, subfolder: str, filename: str | None = None) -> str:

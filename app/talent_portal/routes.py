@@ -19,9 +19,13 @@ que esta rota confere.
 
 from flask import Blueprint, abort, current_app, send_from_directory, session
 
+from app.catalogo.og_ops import SUBPASTAS_COM_VARIANTE
 from app.storage import is_inline_safe
 
 portal_bp = Blueprint("portal", __name__, url_prefix="/portal")
+
+#: Um ano, o mesmo teto de `/uploads` (`app/__init__.py:_CACHE_FOTOS_TALENTO`).
+_CACHE_FOTOS = 31_536_000
 
 # Subpastas de `uploads/` que `/portal/photo/<caminho>` pode servir. A rota só checa se existe
 # uma sessão de talento — sem esta lista ela entregava a árvore INTEIRA de uploads (documento de
@@ -68,4 +72,11 @@ def portal_photo(filename: str):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     if not inline:
         resp.headers["Content-Type"] = "application/octet-stream"
+    if filename.replace("\\", "/").split("/", 1)[0].lower() in SUBPASTAS_COM_VARIANTE:
+        # O portal é aberto no celular, em 4G, e sem isto revalidava TODA foto a cada visita —
+        # o mesmo defeito que a 268 corrigiu no catálogo e a 270 nas fotos de talento, aqui
+        # ainda de pé. `immutable` é seguro pelo mesmo motivo: o nome é o UUID de `save_file`,
+        # então trocar a foto troca a URL. `figurino_thumbs` (legado do Drive) fica fora — lá o
+        # arquivo pode ser regravado no mesmo caminho pelo sync.
+        resp.headers["Cache-Control"] = f"private, max-age={_CACHE_FOTOS}, immutable"
     return resp

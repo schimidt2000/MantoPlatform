@@ -4,7 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-03** · Estado do repositório: pós-feature
+> Última atualização: **2026-09-03** · Estado do repositório: pós-features
+> **292-fotos-que-somem** e **293-atualizacao-cadastral** (as duas sem migration, em branch: a
+> foto que some vira iniciais, figurino ganha miniatura por largura, HEIC passa a ser convertido
+> e o pedido de reenvio sai por `flask campanha-fotos` em dry-run) — antes delas pós-feature
 > **274-reset-senha-pelo-casting** (sem migration; `POST /api/talents/<id>/reset-senha` e a seção
 > "Acesso ao portal" na ficha) e pós-hotfix
 > **269c-vedacoes-restantes** (sem migration; a trava de link local passou a julgar host como a
@@ -73,6 +76,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **292/293-fotos-que-somem** | A migração do Railway trouxe o banco e não os arquivos: 40 talentos e 64 fichas de figurino apontam para fotos que não existem mais, e o campo nunca ficou NULL — o front montava um `<img>` que respondia 404. `<Foto>` com fallback (o `onError` do React não basta: `error` de imagem não borbulha e o 404 do cache dispara antes do commit), variante por largura para `figurino_photos`, cache longo no `/portal/photo`, rotação gravando caminho novo, `pillow-heif` + `COMPRESS_EXTS` derivado, os 9 caminhos que gravavam cru passando por `save_file`, `MANTO_SEM_THREADS`, e os comandos `midia-orfa`/`fix-heic`/`campanha-fotos` (dry-run, dedup no `AuditLog`, link de 7 dias com deep link para `/fotos-documentos`) | 2026-09-03 | — | (aqui) | — |
 | **239b-hotfix-carrinho-fora-de-sp** | O botão "🚗 Marcar transporte" não aparecia na maioria dos eventos: `is_outside_sp` só era classificado por CEP ou pela palavra "São Paulo" no endereço, e endereço real de festa não tem nenhum dos dois — 55 dos 104 eventos futuros estavam `NULL` (Porto Feliz, Jundiaí, Alphaville, Belém do Pará…) e `NULL` valia como "não é fora". Geocoding do Google entra entre o CEP e o texto (`maps.cidade_do_endereco`), as edições React reclassificam (`reclassificar_fora_de_sp`), "Estimar via Google Maps" reclassifica, desconhecido mostra o botão e marcar classifica como fora; script de reclassificação com dry-run | 2026-09-02 | `—` | (aqui) | — |
 | **267b-hotfix-data-da-venda** | Comissão de agosto da vendedora aparecia como R$ 303,94 na Planilha de Pagamentos (e R$ 5.466,20 na tela de Comissões): 38 vendas sem `sale_date` desde que o React virou a interface primária (04/08) — o formulário Jinja prefilhava a data, o React nascia vazio — e o ciclo `coalesce(payable_from, sale_date)` excluía linha sem data de todo mês. Regra vai para o servidor (`resolver_data_da_venda`: venda nova sem data → hoje; venda antiga sem data não ganha data inventada), ciclo ganha `date(created_at)` como cinto, React volta a prefilhar, backfill com dry-run para 47 eventos | 2026-09-02 | `—` | (aqui) | — |
 | **272-notificacoes-internas** | O aviso deixa de ser e-mail e passa a morar no ERP: tabela `notifications` (uma linha por destinatário, `dedupe_key` UNIQUE por usuário, índice parcial de não lidas, `now_sp`), `notificacoes_ops.emitir()` que não comita (fato e aviso na mesma transação quando o fato ainda não comitou), três produtores (resposta de formulário — **substitui o e-mail da 266**, `send_form_response_email` removida; avaliação da cliente, nota ≤ 2 `urgent`; recusa de convite no portal), quatro endpoints sem gate de papel (escopo por dono, 404 alheio, `ate_id` obrigatório), sino no shell via slot `headerActions` + popover + `/notificacoes`, retenção 30/180 d no laço do review-cleanup | 2026-09-02 | `b7d2e4f1a9c3` | (aqui) | — |
@@ -228,6 +232,94 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 292 e 293 — A foto que sumiu: iniciais no lugar do quadrado quebrado, e o pedido de reenvio            (2026-09-03 · features · sem migration)
+
+**Motivação.** "Algumas pessoas não estão aparecendo a miniatura, na produção do evento e no
+combobox de criação." Medido em produção (SSH no Render + Postgres): a migração de 28/08 trouxe o
+dump do banco e **não trouxe o volume de uploads**. A recuperação re-baixou do Drive tudo que era
+`google_form`; quem se cadastrou pelo formulário público (`public_form`) não tinha cópia em lugar
+nenhum. Sobraram **40 talentos sem foto de rosto**, 38 sem foto de corpo, 48 sem documento/CNH,
+**64 fichas de figurino**, 66 fotos do catálogo (9 delas capa de item ativo) e 237 personagens —
+estes últimos todos em item inativo. **Nenhum campo ficou NULL**: a linha continua apontando para
+`/uploads/…`, o Flask responde 404 e o `AvatarThumb` — que só mostra iniciais quando o campo é
+`null` — pintava um `<img>` quebrado.
+
+> Correção de premissa que o dono trouxe: não era "quem veio da planilha antiga". É o contrário —
+> quem veio da planilha foi recuperado do Drive.
+
+**292 — o conserto visual e o pipeline.**
+- **`<Foto>`** (`@manto/ui`): `<img>` com fallback. **O `onError` do React sozinho não resolve, e
+  isso foi medido na tela**: `error` de imagem não borbulha e o React o escuta na raiz; quando o
+  404 vem do cache do navegador ele dispara enquanto o elemento ainda está sendo criado, sem
+  caminho até a raiz. A decisão ficou num efeito, com ouvinte no próprio elemento e checagem de
+  `complete`/`naturalWidth`. `AvatarThumb` passa a usar `<Foto>`, o que cobre de graça a produção
+  do evento, o Combobox inteiro (talento e figurino) e a grade do Banco.
+- **Variante por largura para `figurino_photos`** (a 270 só cobria catálogo e talento): as famílias
+  viraram uma tabela única em `og_ops` (`PREFIXOS_COM_VARIANTE`/`SUBPASTAS_COM_VARIANTE`), com a
+  regex irmã em `client.ts` e um cenário de verify que **lê o TS e compara com o Python** — a
+  concordância entre os dois lados deixou de ser promessa em comentário. Cache em
+  `figurino_variantes`, não na `figurino_thumbs` legada do Drive (que é candidata a `rm -rf`).
+- **Cache longo** também em `figurino_photos` e na rota `/portal/photo`, que não tinha nenhum e
+  revalidava toda foto a cada visita no celular.
+- **Rotação de figurino grava caminho novo** e invalida as variantes: com `immutable` de um ano,
+  regravar por cima serviria a orientação antiga para sempre. De quebra sai a recompressão em
+  `quality=92, subsampling=0`, que fazia o arquivo **crescer** a cada giro.
+- **`app/imaging.py`**: um decodificador só, com `pillow-heif`. O `.heic` do iPhone era aceito na
+  allowlist, gravado **cru** e invisível no navegador; agora vira JPEG, e o que não converte é
+  **recusado** em vez de virar arquivo que ninguém vê. `COMPRESS_EXTS` passa a ser derivado da
+  allowlist, e as três listas próprias (cadastro, talento, figurino) derivam dela — era essa
+  divergência que fazia o servidor recusar o formato que ele já sabia converter.
+- **Os 9 caminhos que gravavam o original cru** passam por `save_file`: observação de evento,
+  contrato, pagamento, NF, reembolso, comprovante de gasto, adiantamento de salário, material de
+  ensaio e avatar de usuário. Teto por arquivo onde não havia (gasto 10 MB, avatar 5 MB) e nome
+  único onde dois homônimos se sobrescreviam em silêncio.
+- **`MANTO_SEM_THREADS=1`** desliga as threads de fundo: sem isso, todo `flask <comando>` no Shell
+  do Render sobe uma importação de planilha que **escreve no banco** e um backup para o Drive.
+- **Comandos**: `flask midia-orfa` (inventário que diz, por arquivo, **por que** a foto não
+  aparece: sumiu / não é imagem / formato ilegível / URL externa / vazio), `flask fix-heic`
+  (converte o que já está em disco num formato invisível — inclusive um PDF renomeado de `.jpg` e
+  27 figurinos que são PNG com nome `.jpg`), e `warm-thumbnails` com `--familia`/`--largura`,
+  aquecendo talento a **128** (a largura que faltava, e o motivo de `talent_thumbs/128` estar
+  vazia) e figurino.
+
+**293 — o pedido de reenvio.** As mesmas 40 pessoas já receberam um e-mail em 28/08 e **nenhuma
+respondeu**. Três razões, todas endereçadas: o texto pedia "atualização cadastral" (parecia cobrança
+de rotina, e não conserto de um problema nosso); não havia botão; e o link de senha valia **1 hora**
+num disparo em lote. Agora: `send_foto_pendente_email` assume a causa, diz **o que falta daquela
+pessoa**, tem um botão só, e o link leva direto a `/fotos-documentos` com
+`emitir_token_de_reset(ttl=CAMPANHA_RESET_TTL)` de 7 dias. O portal ganhou **deep link**
+(`?destino=`, validado pela mesma regra do `_safe_next`) — sem ele o botão caía na agenda e a
+pessoa não achava onde subir a foto. `flask campanha-fotos` é **dry-run por padrão**, dedupa pelo
+`AuditLog` (zero migration, sobrevive a redeploy — o controle anterior era um `.txt` numa máquina
+só), pula quem tem devolução permanente **em aberto** e entrega essas pessoas numa lista de
+WhatsApp com o `wa.me` pronto, usa **uma conexão SMTP** para o lote e aceita `--limite` para uma
+primeira onda pequena.
+
+**Pegadinhas pagas.** A tela "Fotos e Documentos" do portal mostrava um `<img>` quebrado rotulado
+"foto de rosto atual" — o artista abria o destino do e-mail e concluía que já tinha foto; agora lê
+"Você ainda não tem foto de rosto". `save_receipt` devolve `expenses/<arq>` **sem** `/uploads/`,
+que é a string exata comparada por `_can_read_expense_receipt`: mudar isso tornaria todo
+comprovante ilegível para quem não é FINANCEIRO. Quatro sites montavam a URL do arquivo à mão
+(`advance.proof`, `inv.file`, `profile_photo`) — com a conversão de extensão, uma URL remontada
+passa a apontar para arquivo inexistente.
+
+**Numeração.** 275–291 estão reservados pelo plano das ondas do funil
+(`specs/266-costuras-funil/ondas-2-4-plano.md`), então estas features tomaram 292 e 293.
+
+**Verificação.** `verify_292.py` 13/13 e `verify_293.py` 7/7 contra o `manto_local`;
+`check_img_sem_fallback.py` como guarda de regressão para o próximo `<img>` cru;
+`npx tsc --noEmit` limpo nos três apps; `ruff` no baseline. Em tela: a produção do evento mostra as
+iniciais no lugar do quadrado quebrado, a grade de figurino baixa **32 KB** no lugar de 446 KB por
+card, e o percurso do portal fecha ponta a ponta — link do e-mail → senha → `/fotos-documentos` →
+upload de 1800×2400 gravado como 900×1200 com 11 KB.
+
+**Fora de escopo (decisão do dono).** Vitrine pública, personagens do catálogo, acervo 3D e
+portfólio do talento — embora **9 capas de item ativo** estejam quebradas hoje. Os arquivos
+perdidos não voltam: não há de onde. As 64 fichas de figurino não têm `drive_url` e só voltam por
+foto nova.
+
+---
 
 ### 274 — O casting devolve o acesso ao portal para o artista            (2026-09-03 · feature · sem migration)
 

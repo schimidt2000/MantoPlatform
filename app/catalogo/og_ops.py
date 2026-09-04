@@ -54,11 +54,31 @@ CACHE_SUBFOLDER = "catalog_og"
 THUMBS_SUBFOLDER = "catalog_thumbs"
 TALENT_MEDIA_SUBFOLDER = "talent_photos"
 TALENT_THUMBS_SUBFOLDER = "talent_thumbs"
+FIGURINO_MEDIA_SUBFOLDER = "figurino_photos"
+#: Pasta PRÓPRIA, e não a `figurino_thumbs` que já existe: aquela é o legado das miniaturas
+#: baixadas do Drive (`app/figurino/drive_service.py`), está em `PORTAL_PHOTO_SUBFOLDERS` e é a
+#: primeira candidata a um `rm -rf` de limpeza de legado — que levaria este cache junto.
+FIGURINO_THUMBS_SUBFOLDER = "figurino_variantes"
 
-#: Prefixos de URL que têm variante. `assetUrl(path, { largura })` no frontend aplica a MESMA
-#: regra (`@manto/api-client`): os dois lados precisam concordar sobre quem tem miniatura.
-_PREFIXO_CATALOGO = "/catalogo/midia/"
-_PREFIXO_TALENTO = f"/uploads/{TALENT_MEDIA_SUBFOLDER}/"
+#: Quem tem miniatura, como tabela: `(prefixo público, pasta de origem, raiz do cache)`.
+#: `assetUrl(path, { largura })` no frontend aplica a MESMA regra (`@manto/api-client`) — os dois
+#: lados precisam concordar, senão o `<img>` pede uma URL que o Flask responde com 404. O verify
+#: da feature 292 lê o `client.ts` e compara com esta tabela, para a concordância deixar de ser
+#: uma promessa em comentário.
+_FAMILIAS: tuple[tuple[str, str, str], ...] = (
+    ("/catalogo/midia/", MEDIA_SUBFOLDER, THUMBS_SUBFOLDER),
+    (f"/uploads/{TALENT_MEDIA_SUBFOLDER}/", TALENT_MEDIA_SUBFOLDER, TALENT_THUMBS_SUBFOLDER),
+    (f"/uploads/{FIGURINO_MEDIA_SUBFOLDER}/", FIGURINO_MEDIA_SUBFOLDER, FIGURINO_THUMBS_SUBFOLDER),
+)
+
+#: Prefixos públicos com variante — o que o frontend precisa espelhar.
+PREFIXOS_COM_VARIANTE: tuple[str, ...] = tuple(prefixo for prefixo, _, _ in _FAMILIAS)
+
+#: Subpastas de `/uploads` com variante — o que a rota `uploaded_variant` aceita. `talent_docs`
+#: fica de fora de propósito: é identidade civil, e miniatura de RG espalha PII sem ninguém pedir.
+SUBPASTAS_COM_VARIANTE: frozenset[str] = frozenset(
+    origem for prefixo, origem, _ in _FAMILIAS if prefixo.startswith("/uploads/")
+)
 
 #: O nome do cache é ``{digest}_{largura}x{altura}.jpg``. As dimensões moram no NOME porque
 #: `og:image:width`/`og:image:height` são pedidas a cada prévia, e reabrir o JPEG só para medi-lo
@@ -170,18 +190,16 @@ def _decode_opaque(raw: bytes, source_url: str) -> Any:
     Returns:
         Um ``PIL.Image.Image`` em modo RGB, ou ``None`` se a imagem não puder ser decodificada.
     """
-    try:
-        from PIL import Image, ImageOps
+    from app import imaging
 
-        img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw)))
-        if img.mode in ("RGBA", "LA", "P"):
-            img = img.convert("RGBA")
-            flat = Image.new("RGB", img.size, (255, 255, 255))
-            flat.paste(img, mask=img.getchannel("A"))
-            return flat
-        return img if img.mode == "RGB" else img.convert("RGB")
+    img = imaging.abrir(raw)
+    if img is None:
+        logger.warning("og: falha ao decodificar %s", source_url)
+        return None
+    try:
+        return imaging.para_rgb(img)
     except Exception as exc:  # noqa: BLE001 — imagem corrompida não pode derrubar a página
-        logger.warning("og: falha ao decodificar %s: %s", source_url, exc)
+        logger.warning("og: falha ao converter %s: %s", source_url, exc)
         return None
 
 
@@ -304,28 +322,20 @@ def resolve_thumbnail(source_url: str | None, uploads_folder: str) -> Thumbnail 
 def pastas_da_variante(source_url: str, uploads_folder: str) -> tuple[str, str] | None:
     """Pasta de origem e pasta-raiz de cache para a URL, ou ``None`` se ela não tem variante.
 
-    Só duas famílias têm miniatura (decisões 6 e 7 da spec): fotos do catálogo e fotos de rosto/
-    corpo de talento. URL absoluta (legado do Drive, feature 154) não entra — a variante nunca
-    baixa de fora, e o `assetUrl` do frontend também a deixa passar intacta. A foto de documento
-    (`talent_docs`) fica de fora de propósito: é identidade civil, e cópias reduzidas espalham PII
-    por mais um lugar no disco sem ninguém precisar delas.
+    As famílias estão em `_FAMILIAS`: fotos do catálogo, fotos de rosto/corpo de talento e fotos
+    de figurino (esta última entrou na 292 — o Banco de Figurinos é a outra tela do sistema com
+    centenas de fotos de uma vez). URL absoluta (legado do Drive, feature 154) não entra — a
+    variante nunca baixa de fora, e o `assetUrl` do frontend também a deixa passar intacta. A foto
+    de documento (`talent_docs`) fica de fora de propósito: é identidade civil, e cópias reduzidas
+    espalham PII por mais um lugar no disco sem ninguém precisar delas.
     """
-    if source_url.startswith(_PREFIXO_CATALOGO):
-        resto = source_url[len(_PREFIXO_CATALOGO):]
+    for prefixo, origem, cache in _FAMILIAS:
+        if not source_url.startswith(prefixo):
+            continue
+        resto = source_url[len(prefixo):]
         if "/" in resto or not resto:
             return None
-        return (
-            os.path.join(uploads_folder, MEDIA_SUBFOLDER),
-            os.path.join(uploads_folder, THUMBS_SUBFOLDER),
-        )
-    if source_url.startswith(_PREFIXO_TALENTO):
-        resto = source_url[len(_PREFIXO_TALENTO):]
-        if "/" in resto or not resto:
-            return None
-        return (
-            os.path.join(uploads_folder, TALENT_MEDIA_SUBFOLDER),
-            os.path.join(uploads_folder, TALENT_THUMBS_SUBFOLDER),
-        )
+        return os.path.join(uploads_folder, origem), os.path.join(uploads_folder, cache)
     return None
 
 
@@ -365,3 +375,27 @@ def variante_em_cache(source_url: str, largura: int, uploads_folder: str) -> Thu
     return find_cached(
         source_url, os.path.join(pastas[1], str(largura)), receita_variante(largura)
     )
+
+
+def invalidar_variantes(source_url: str | None, uploads_folder: str) -> int:
+    """Apaga do disco todas as variantes já geradas para uma URL. Devolve quantas removeu.
+
+    Necessário sempre que o arquivo de origem deixa de ser usado — trocar a foto de um figurino,
+    girar a foto (que agora grava um caminho novo), ou converter um HEIC para JPEG. Sem isto o
+    cache fica com um arquivo órfão por largura, para sempre: o digest é `md5(receita|url)` e nada
+    o alcança depois que a URL sai do banco. Num volume de 10 GB isso é lixo que só cresce.
+    """
+    pastas = pastas_da_variante(source_url or "", uploads_folder)
+    if pastas is None:
+        return 0
+    removidas = 0
+    for largura in LARGURAS_PERMITIDAS:
+        cache_folder = os.path.join(pastas[1], str(largura))
+        digest = cache_digest(source_url, receita_variante(largura))
+        for caminho in glob.glob(os.path.join(cache_folder, f"{digest}_*.jpg")):
+            try:
+                os.remove(caminho)
+                removidas += 1
+            except OSError as exc:  # arquivo já sumiu ou está travado — não é motivo de erro
+                logger.warning("og: falha ao remover variante %s: %s", caminho, exc)
+    return removidas

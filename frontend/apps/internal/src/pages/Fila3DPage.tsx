@@ -127,7 +127,7 @@ function RolesList({ entry }: { entry: Fila3DEntry }) {
           className="flex items-center gap-2 rounded-md border border-line bg-surface-2/60 px-2 py-1"
         >
           <AvatarThumb
-            src={assetUrl(role.talent_photo_url)}
+            src={assetUrl(role.talent_photo_url, { largura: 128 })}
             name={role.character_name}
             shape="square"
             size="sm"

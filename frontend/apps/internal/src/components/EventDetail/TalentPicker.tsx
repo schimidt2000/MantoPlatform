@@ -57,7 +57,7 @@ export function TalentPicker({
         value: String(talent.id),
         label: talent.name,
         description: talent.availability?.info || talent.artistic_name || null,
-        imageUrl: talent.photo_url ? assetUrl(talent.photo_url) : null,
+        imageUrl: talent.photo_url ? assetUrl(talent.photo_url, { largura: 128 }) : null,
         imageShape: "circle" as const,
         badge: <OcupadoBadge talent={talent} />,
       })),

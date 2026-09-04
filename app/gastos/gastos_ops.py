@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import calendar as cal_mod
 import logging
-import os
+import uuid
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -34,7 +34,12 @@ from app.models import (
     SpecialExpense,
     User,
 )
-from app.storage import ALLOWED_DOCUMENT_EXTENSIONS, is_allowed_extension
+from app.storage import (
+    ALLOWED_DOCUMENT_EXTENSIONS,
+    ImagemNaoConvertida,
+    is_allowed_extension,
+    save_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -145,8 +150,17 @@ def search_events_by_date(day: date) -> list[CalendarEvent]:
     )
 
 
+#: Teto por arquivo do comprovante de gasto. Sem ele o único limite era o
+#: `MAX_CONTENT_LENGTH` global de 512 MB, que existe para os vídeos da Revisão de Mídia — um
+#: "comprovante" de 400 MB comia 4% do volume de 10 GB numa requisição.
+RECEIPT_MAX_BYTES = 10 * 1024 * 1024
+
+
 def save_receipt(file: FileStorage, upload_dir: str) -> str | None:
-    """Salva o comprovante em `upload_dir`; retorna caminho relativo 'expenses/<arquivo>'.
+    """Salva o comprovante; retorna o caminho relativo `expenses/<arquivo>`.
+
+    O `upload_dir` continua na assinatura por compatibilidade com os chamadores — o destino real
+    sai de `save_file`, que resolve `UPLOAD_FOLDER/expenses` (o mesmo lugar).
 
     Recusa (devolvendo None) qualquer extensão fora de `ALLOWED_DOCUMENT_EXTENSIONS`: a nota
     fiscal é foto ou PDF, e o arquivo é servido por `/uploads` no mesmo origin das SPAs — um
@@ -159,10 +173,22 @@ def save_receipt(file: FileStorage, upload_dir: str) -> str | None:
     fname = secure_filename(file.filename)
     if not fname:
         return None
-    unique = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{fname}"
-    os.makedirs(upload_dir, exist_ok=True)
-    file.save(os.path.join(upload_dir, unique))
-    return f"expenses/{unique}"
+    file.stream.seek(0, 2)
+    tamanho = file.stream.tell()
+    file.stream.seek(0)
+    if tamanho > RECEIPT_MAX_BYTES:
+        return None
+    # Dois comprovantes enviados no mesmo segundo colidiam: o carimbo de tempo sozinho não é
+    # único. O sufixo aleatório é o mesmo remédio de `_save_bounded_upload`.
+    unique = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}_{fname}"
+    try:
+        url = save_file(file, "expenses", unique)
+    except ImagemNaoConvertida:
+        return None
+    # A coluna guarda `expenses/<arquivo>` SEM o `/uploads/` — é essa a string que
+    # `_can_read_upload` compara para decidir se quem pede é o dono do gasto. Devolver a URL
+    # inteira aqui tornaria todo comprovante ilegível para quem não é FINANCEIRO.
+    return url[len("/uploads/"):] if url.startswith("/uploads/") else url
 
 
 def _validate_expense_data(data: dict, *, require_receipt: bool) -> dict:

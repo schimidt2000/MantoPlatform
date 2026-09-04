@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from werkzeug.datastructures import FileStorage
 
 from app.models import Talent
-from app.storage import save_file
+from app.storage import COMPRESS_EXTS, save_file
 from app.talents.importer import (
     _parse_passport_status,
     normalize_tags,
@@ -20,7 +20,12 @@ from app.talents.importer import (
 )
 
 # Limites de upload (por arquivo). O teto global da requisição é MAX_CONTENT_LENGTH.
-PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+#: Derivadas da fonte única (`app/storage.py`), nunca escritas à mão — ver o mesmo cuidado em
+#: `talent_ops` e `figurino_ops`. O `accept=` do formulário continua estreito de propósito: com
+#: `accept="image/jpeg"` o Safari do iPhone converte HEIC para JPEG sozinho, e alargá-lo faria o
+#: aparelho passar a mandar 3 MB de HEIC para o servidor converter. Servidor largo, cliente
+#: estreito.
+PHOTO_EXTS = set(COMPRESS_EXTS)
 DOC_EXTS = PHOTO_EXTS | {".pdf"}
 PHOTO_MAX = 8 * 1024 * 1024  # 8 MB
 DOC_MAX = 10 * 1024 * 1024  # 10 MB

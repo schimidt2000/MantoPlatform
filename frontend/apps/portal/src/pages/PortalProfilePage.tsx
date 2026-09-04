@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle, FileUpload, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, FileUpload, Foto, Skeleton } from "@manto/ui";
 import { Camera, ChevronRight, ExternalLink, FileText, Trash2 } from "lucide-react";
 import { FormError, FormField, FormSuccess } from "../components/FormField";
 import {
@@ -228,10 +228,15 @@ function PortfolioSection({ profile }: { profile: PortalProfile }) {
             <ul className="grid grid-cols-3 gap-2">
               {photos.map((item) => (
                 <li key={item.id} className="relative">
-                  <img
+                  <Foto
                     src={assetUrl(item.file_url)}
                     alt={item.label || "Foto de atuação"}
                     className="aspect-square w-full rounded-md object-cover"
+                    fallback={
+                      <div className="flex aspect-square w-full items-center justify-center rounded-md bg-surface-2 px-1 text-center text-[10px] leading-tight text-muted">
+                        arquivo não encontrado
+                      </div>
+                    }
                   />
                   <button
                     type="button"

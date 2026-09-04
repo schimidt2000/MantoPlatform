@@ -770,25 +770,34 @@ def create_app():
         """
         return redirect(PLATFORM_BASE_URL, code=301)
 
-    # ── Auto-import de talentos da planilha ────────────────────────
-    _start_talent_sync(app)
+    # ── Threads de fundo ───────────────────────────────────────────
+    # `MANTO_SEM_THREADS=1` desliga TODAS elas. Existe para o Shell do Render: um `flask
+    # <comando>` de manutenção chama `create_app()` e, sem esta trava, sobe junto uma importação
+    # de talentos que ESCREVE no banco a partir da planilha, uma sincronização de agenda e um
+    # backup que envia para o Google Drive — três efeitos colaterais que ninguém pediu ao rodar
+    # `flask midia-orfa`. Em desenvolvimento o `FLASK_ENV` já segura a maioria; em produção, não.
+    if os.getenv("MANTO_SEM_THREADS") == "1":
+        app.logger.info("MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo")
+    else:
+        # ── Auto-import de talentos da planilha ────────────────────
+        _start_talent_sync(app)
 
-    # ── Sincronização automática da agenda (cron interno) ──────────
-    _start_calendar_sync(app)
-    _start_review_cleanup(app)
+        # ── Sincronização automática da agenda (cron interno) ──────
+        _start_calendar_sync(app)
+        _start_review_cleanup(app)
 
-    # ── Expiração das reservas da Loja de Interações Virtuais ──────
-    _start_virtual_sweep(app)
+        # ── Expiração das reservas da Loja de Interações Virtuais ──
+        _start_virtual_sweep(app)
 
-    # ── Devoluções de email viram fila de contato do casting ───────
-    _start_email_bounce_sweep(app)
+        # ── Devoluções de email viram fila de contato do casting ───
+        _start_email_bounce_sweep(app)
 
-    # ── Cobrança de confirmação de convite ─────────────────────────
-    _start_invite_reminders(app)
+        # ── Cobrança de confirmação de convite ─────────────────────
+        _start_invite_reminders(app)
 
-    # ── Backup automático para o Google Drive (feature 264) ────────────
-    from app.backup_drive import start_backup_thread
-    start_backup_thread(app)
+        # ── Backup automático para o Google Drive (feature 264) ────
+        from app.backup_drive import start_backup_thread
+        start_backup_thread(app)
 
     # ── Comandos CLI de manutenção ─────────────────────────────────
     from app.cli import register_commands
@@ -796,7 +805,7 @@ def create_app():
 
     # Import local: `app.storage` só depende do `current_app`, mas mantê-lo fora do topo do
     # pacote evita reintroduzir ciclo de import na inicialização.
-    from app.catalogo.og_ops import LARGURAS_PERMITIDAS, TALENT_MEDIA_SUBFOLDER, resolve_variante
+    from app.catalogo.og_ops import LARGURAS_PERMITIDAS, SUBPASTAS_COM_VARIANTE, resolve_variante
     from app.storage import is_inline_safe
 
     @app.route("/uploads/<path:filename>")
@@ -824,33 +833,36 @@ def create_app():
         resp.headers["X-Content-Type-Options"] = "nosniff"
         if not inline:
             resp.headers["Content-Type"] = "application/octet-stream"
-        if _subpasta_do_upload(filename) == TALENT_MEDIA_SUBFOLDER:
-            # Só a subpasta das fotos de talento (feature 270) — ver `_CACHE_FOTOS_TALENTO`.
+        if _subpasta_do_upload(filename) in SUBPASTAS_COM_VARIANTE:
+            # Só as subpastas de foto operacional (talento na 270, figurino na 292): o nome é um
+            # UUID gerado por `save_file`, então trocar a imagem troca a URL e o `immutable` é
+            # seguro. Contrato, comprovante e documento continuam fora — lá o arquivo pode ser
+            # substituído no mesmo caminho. Ver `_CACHE_FOTOS_TALENTO`.
             resp.headers["Cache-Control"] = f"private, max-age={_CACHE_FOTOS_TALENTO}, immutable"
         return resp
 
     @app.route("/uploads/t/<int:largura>/<path:filename>")
     @login_required
     def uploaded_variant(largura: int, filename: str):
-        """Variante de ``largura`` px de uma foto de talento (feature 270) — grade do Banco.
+        """Variante de ``largura`` px de uma foto de talento (270) ou de figurino (292).
 
-        Só `talent_photos/<arquivo>`: `/uploads` serve documento e contrato, e miniatura de RG é
-        PII espalhada sem necessidade (`doc_photo_path` fica de fora de propósito). Mesmo
-        despacho por subpasta do `uploaded_file`; fora da allowlist de larguras ou da subpasta
-        é 404 e nada é gravado.
+        Só as subpastas de `SUBPASTAS_COM_VARIANTE`: `/uploads` serve documento e contrato, e
+        miniatura de RG é PII espalhada sem necessidade (`talent_docs` fica de fora de propósito).
+        Mesmo despacho por subpasta do `uploaded_file`; fora da allowlist de larguras ou da
+        subpasta é 404 e nada é gravado.
         """
         relative_path = filename.replace("\\", "/").lstrip("/")
         subpasta, _, nome = relative_path.partition("/")
         if (
             largura not in LARGURAS_PERMITIDAS
-            or subpasta != TALENT_MEDIA_SUBFOLDER
+            or subpasta not in SUBPASTAS_COM_VARIANTE
             or not nome
             or "/" in nome
             or not _can_read_upload(current_user, relative_path)
         ):
             abort(404)
         thumb = resolve_variante(
-            f"/uploads/{TALENT_MEDIA_SUBFOLDER}/{nome}", largura, app.config["UPLOAD_FOLDER"]
+            f"/uploads/{subpasta}/{nome}", largura, app.config["UPLOAD_FOLDER"]
         )
         if not thumb:
             abort(404)

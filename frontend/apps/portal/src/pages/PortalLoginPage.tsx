@@ -3,9 +3,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, useReducedMotion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@manto/ui";
 import { AuthLink } from "../components/AuthCard";
+import { DESTINO_PARAM, destinoSeguro } from "../lib/destino";
 import { usePortalLogin } from "../lib/portalAuth";
 
 const loginSchema = z.object({
@@ -17,6 +18,8 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export function PortalLoginPage() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const destino = destinoSeguro(params.get(DESTINO_PARAM));
   const login = usePortalLogin();
   const reduceMotion = useReducedMotion();
   const [formError, setFormError] = useState<string | null>(null);
@@ -31,8 +34,10 @@ export function PortalLoginPage() {
     setFormError(null);
     login.mutate(values, {
       // Troca de senha e aceite de termos agora são telas deste app (feature 191): navega
-      // sempre para a agenda e deixa o `OnboardingGate` interceptar se houver etapa pendente.
-      onSuccess: () => navigate("/agenda", { replace: true }),
+      // para a agenda (ou para o destino pedido, feature 293) e deixa o `OnboardingGate`
+      // interceptar se houver etapa pendente — quem nunca aceitou os termos aceita primeiro e
+      // só então cai no destino.
+      onSuccess: () => navigate(destino ?? "/agenda", { replace: true }),
       onError: (error) => setFormError(error.message),
     });
   });

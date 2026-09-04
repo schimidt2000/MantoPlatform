@@ -1,6 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { assetUrl } from "@manto/api-client";
-import { Card, CardContent, PageHeader, Skeleton } from "@manto/ui";
+import { Card, CardContent, Foto, PageHeader, Skeleton } from "@manto/ui";
 import { useFigurino } from "../lib/portalFigurino";
 
 export function PortalFigurinoPage() {
@@ -52,13 +52,12 @@ export function PortalFigurinoPage() {
               {query.data.is_coordinator && sheet.talent_name && (
                 <p className="-mt-2 text-sm text-muted">{sheet.talent_name}</p>
               )}
-              {sheet.photo_url && (
-                <img
-                  src={assetUrl(sheet.photo_url)}
-                  alt={`Referência de ${sheet.character_name}`}
-                  className="w-full rounded-md object-cover"
-                />
-              )}
+              <Foto
+                src={assetUrl(sheet.photo_url)}
+                alt={`Referência de ${sheet.character_name}`}
+                className="w-full rounded-md object-cover"
+                fallback={null}
+              />
               {sheet.pieces.length > 0 && (
                 <ul className="list-inside list-disc text-sm text-ink">
                   {sheet.pieces.map((piece) => (
