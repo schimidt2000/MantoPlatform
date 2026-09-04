@@ -4,12 +4,13 @@ import {
   Button,
   Card,
   CardContent,
+  Foto,
   PageHeader,
   Skeleton,
   FilterDropdown,
   CheckboxList,
 } from "@manto/ui";
-import { assetUrl, API_BASE } from "@manto/api-client";
+import { assetSrcSet, assetUrl, API_BASE } from "@manto/api-client";
 import { Pencil, Printer } from "lucide-react";
 import {
   useFigurinoSheets,
@@ -51,17 +52,22 @@ function FigurinoCard({ sheet, canEdit, linkedCharacterName, onQuickLink }: Figu
     <Card>
       <CardContent className="space-y-2 p-2">
         <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md bg-surface-2">
-          {sheet.photo_url ? (
-            <img
-              src={assetUrl(sheet.photo_url)}
-              alt={sheet.character_name}
-              className="h-full w-full object-cover object-top"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-3xl" aria-hidden="true">
-              📷
-            </div>
-          )}
+          {/* Grade `2 / sm 3 / lg 4 / xl 5 / 2xl 6`: os breakpoints NÃO são os do Banco de
+              Talentos (lá o salto é em `md`), então o `sizes` também não pode ser o de lá —
+              copiado cru, o navegador pediria 640 na faixa de 768 a 1023px. */}
+          <Foto
+            src={assetUrl(sheet.photo_url, { largura: 640 })}
+            srcSet={assetSrcSet(sheet.photo_url, [320, 480, 640])}
+            sizes="(min-width: 1536px) 16vw, (min-width: 1280px) 20vw, (min-width: 1024px) 25vw, (min-width: 640px) 33vw, calc(50vw - 30px)"
+            alt={sheet.character_name}
+            loading="lazy"
+            className="h-full w-full object-cover object-top"
+            fallback={
+              <div className="flex h-full w-full items-center justify-center text-3xl" aria-hidden="true">
+                📷
+              </div>
+            }
+          />
           {/* Manutenção aberta (feature 225b) — sobre a foto de propósito: quem separa figurino
               olha a imagem, não o texto. É o que impede um boneco quebrado de ir para a festa. */}
           {sheet.manutencao && (

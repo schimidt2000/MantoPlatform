@@ -36,7 +36,7 @@ function talentOptions(talents: AssignableTalent[]): ComboboxOption[] {
   return talents.map((t) => ({
     value: String(t.id),
     label: t.name,
-    imageUrl: t.photo_face_path ? assetUrl(t.photo_face_path) : null,
+    imageUrl: t.photo_face_path ? assetUrl(t.photo_face_path, { largura: 128 }) : null,
     imageShape: "circle" as const,
   }));
 }

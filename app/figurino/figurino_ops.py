@@ -9,8 +9,10 @@ dois adaptadores finos — o handler Jinja (`app/figurino/routes.py`) e os endpo
 
 import json
 import logging
+import os
 
 from app.models import EventRole, FigurinoMissingDismissal, FigurinoSheet
+from app.storage import COMPRESS_EXTS, formatos_aceitos
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +291,10 @@ def associate_missing_character(character_name_norm: str, *, sheet_id: int) -> i
     return updated
 
 
-_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+#: Derivado da fonte única (`app/storage.py`) e não escrito à mão: era uma tupla própria com
+#: quatro extensões, então uma foto HEIC de iPhone tomava "Use JPG, PNG ou WEBP" mesmo depois de o
+#: servidor aprender a converter. Ver o mesmo cuidado em `cadastro_ops` e `talent_ops`.
+_IMAGE_EXTS = frozenset(COMPRESS_EXTS)
 
 
 def save_figurino_photo(sheet: FigurinoSheet, *, file_storage) -> str | None:
@@ -299,20 +304,27 @@ def save_figurino_photo(sheet: FigurinoSheet, *, file_storage) -> str | None:
     Returns:
         Mensagem de erro amigável, ou `None` em caso de sucesso.
     """
-    import os
     from datetime import datetime
 
-    from app.storage import delete_file, save_file
+    from flask import current_app
+
+    from app.catalogo.og_ops import invalidar_variantes
+    from app.storage import ImagemNaoConvertida, delete_file, save_file
 
     if file_storage is None or not file_storage.filename:
         return "Nenhum arquivo selecionado."
     ext = os.path.splitext(file_storage.filename)[1].lower()
     if ext not in _IMAGE_EXTS:
-        return "Use JPG, PNG ou WEBP."
+        return f"Formato não aceito. Envie {formatos_aceitos(_IMAGE_EXTS)}."
 
-    if sheet.photo_filename:
-        delete_file(sheet.photo_filename)
-    sheet.photo_filename = save_file(file_storage, "figurino_photos")
+    anterior = sheet.photo_filename
+    try:
+        sheet.photo_filename = save_file(file_storage, "figurino_photos")
+    except ImagemNaoConvertida:
+        return "Não conseguimos ler esta foto. Envie em JPG, PNG ou WEBP."
+    if anterior:
+        delete_file(anterior)
+        invalidar_variantes(anterior, current_app.config["UPLOAD_FOLDER"])
     sheet.updated_at = datetime.utcnow()
     return None
 
@@ -321,45 +333,67 @@ def remove_figurino_photo(sheet: FigurinoSheet) -> None:
     """Remove a foto de uma ficha de figurino (ação nova, feature 155). No-op seguro se vazia."""
     from datetime import datetime
 
+    from flask import current_app
+
+    from app.catalogo.og_ops import invalidar_variantes
     from app.storage import delete_file
 
     if sheet.photo_filename:
         delete_file(sheet.photo_filename)
+        invalidar_variantes(sheet.photo_filename, current_app.config["UPLOAD_FOLDER"])
         sheet.photo_filename = None
         sheet.updated_at = datetime.utcnow()
 
 
 def rotate_figurino_photo(sheet: FigurinoSheet, *, direction: str) -> str | None:
-    """Gira 90° a foto de uma ficha de figurino. Paridade exata com `rotate_photo` — só
-    funciona para foto local (`/uploads/...`), mesma limitação de hoje.
+    """Gira 90° a foto de uma ficha de figurino, gravando um arquivo NOVO.
+
+    Regravar por cima era o que se fazia antes, e virou defeito quando `figurino_photos` ganhou
+    miniatura por largura e cache de um ano (feature 292): o digest da variante é
+    ``md5(receita|url)`` e o `immutable` do navegador é chaveado pela URL, então uma foto girada
+    continuaria sendo servida na orientação antiga — no cache de variante para sempre, e no
+    navegador de quem já a viu por um ano. Caminho novo resolve os dois de uma vez.
+
+    De quebra some a recompressão em ``quality=92, subsampling=0``, que ficava acima do q85 do
+    resto do sistema e fazia o arquivo **crescer** a cada rotação.
 
     Returns:
         Mensagem de erro amigável, ou `None` em caso de sucesso.
     """
-    import os
+    import io as _io
     from datetime import datetime
 
     from flask import current_app
 
+    from app import imaging
+    from app.catalogo.og_ops import invalidar_variantes
+    from app.storage import MAX_PX, QUALITY, caminho_local, delete_file, save_bytes
+
     if not sheet.photo_filename:
         return "Sem foto para girar."
-    photo_url = sheet.photo_filename
-    if not photo_url.startswith("/uploads/"):
+    anterior = sheet.photo_filename
+    abs_path = caminho_local(anterior)
+    if abs_path is None:
         return "Formato de foto não suportado para rotação."
 
-    rel_path = photo_url[len("/uploads/") :]
-    abs_path = os.path.join(current_app.config["UPLOAD_FOLDER"], rel_path)
+    img = imaging.abrir(open(abs_path, "rb")) if os.path.exists(abs_path) else None
+    if img is None:
+        return "Não conseguimos abrir o arquivo desta foto para girar."
 
     try:
         from PIL import Image
 
-        img = Image.open(abs_path)
         degrees = -90 if direction == "cw" else 90
-        img = img.rotate(degrees, expand=True)
-        if img.mode in ("RGBA", "LA", "P"):
-            img = img.convert("RGB")
-        img.save(abs_path, format="JPEG", quality=92, subsampling=0)
+        img = imaging.para_rgb(img.rotate(degrees, expand=True))
+        if max(img.width, img.height) > MAX_PX:
+            img.thumbnail((MAX_PX, MAX_PX), Image.LANCZOS)
+        buffer = _io.BytesIO()
+        img.save(buffer, format="JPEG", quality=QUALITY, optimize=True)
+
+        sheet.photo_filename = save_bytes(buffer.getvalue(), "figurino_photos", ".jpg")
         sheet.updated_at = datetime.utcnow()
+        delete_file(anterior)
+        invalidar_variantes(anterior, current_app.config["UPLOAD_FOLDER"])
     except Exception as exc:  # noqa: BLE001 — falha ao girar não pode quebrar a requisição
         logger.warning("falha ao girar foto da ficha de figurino %s: %s", sheet.id, exc)
         return f"Erro ao girar foto: {exc}"

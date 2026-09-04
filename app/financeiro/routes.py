@@ -35,7 +35,9 @@ from app.constants import RoleName, EDUCAMANTO_TITLE_PREFIX
 from app.storage import (
     ALLOWED_DOCUMENT_EXTENSIONS,
     ALLOWED_INVOICE_EXTENSIONS,
+    ImagemNaoConvertida,
     is_allowed_extension,
+    save_file,
 )
 
 logger = logging.getLogger(__name__)
@@ -583,9 +585,6 @@ def nf_emitir(invoice_id: int):
     tarefa de emissão. Mantém a data de emissão informada na venda; se vier ``issue_date`` no form,
     atualiza.
     """
-    import os
-
-    from flask import current_app
     from werkzeug.utils import secure_filename
 
     from app.utils import audit
@@ -615,8 +614,12 @@ def nf_emitir(invoice_id: int):
             flash("Arquivo da nota acima de 10 MB.", "error")
             return back
         fname = f"nf_{inv.id}_{secure_filename(nf_file.filename)}"
-        nf_file.save(os.path.join(current_app.config["UPLOAD_INVOICES"], fname))
-        inv.file = f"/uploads/invoices/{fname}"
+        # Retorno de `save_file`, não string montada: a extensão pode mudar na conversão.
+        try:
+            inv.file = save_file(nf_file, "invoices", fname)
+        except ImagemNaoConvertida:
+            flash("Não conseguimos ler este arquivo. Envie em PDF, XML, JPG ou PNG.", "error")
+            return back
 
     inv.status = "emitida"
     inv.issued_at = datetime.now(TZ_SP).replace(tzinfo=None)
@@ -1203,9 +1206,6 @@ def salary_advance(sp_id: int):
     o líquido (salário − soma dos adiantamentos). Comprovante é obrigatório; a soma não pode exceder o
     salário. Não altera o custo de salário do balanço.
     """
-    import os
-
-    from flask import current_app
     from werkzeug.utils import secure_filename
 
     from app.money import parse_brl
@@ -1251,8 +1251,12 @@ def salary_advance(sp_id: int):
     db.session.add(advance)
     db.session.flush()  # garante advance.id para nomear o arquivo
     fname = f"adv_{sp.id}_{advance.id}_{secure_filename(proof.filename)}"
-    proof.save(os.path.join(current_app.config["UPLOAD_PAYMENTS"], fname))
-    advance.proof = f"/uploads/payments/{fname}"
+    try:
+        advance.proof = save_file(proof, "payments", fname)
+    except ImagemNaoConvertida:
+        db.session.rollback()
+        flash("Não conseguimos ler este comprovante. Envie em PDF, JPG ou PNG.", "error")
+        return back
 
     audit("payment", "salary_payment", sp.id, sp.user.name if sp.user else "—",
           f"Adiantamento de salário adicionado: R$ {adv}")

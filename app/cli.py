@@ -74,7 +74,6 @@ def register_commands(app):
         **Dry-run por padrão.** Sem `--execute` só mede e relata.
         """
         import click
-        from PIL import Image, ImageOps
 
         from app import db
         from app.models import (
@@ -84,72 +83,41 @@ def register_commands(app):
             Talent,
             User,
         )
+        from app.storage import COMPRESS_EXTS, MAX_PX, QUALITY, caminho_local, comprimir_bytes
+
+        # Sem cópia das constantes: `MAX_PX`/`QUALITY`/`COMPRESS_EXTS` e a tradução URL→disco
+        # vivem em `app/storage.py`, junto do upload. Enquanto eram duas listas, mudar uma e
+        # esquecer a outra fazia o comando e o upload discordarem em silêncio.
 
         USE_S3 = app.config.get("USE_S3", False)
-        MAX_PX = 1200
-        QUALITY = 85
-        IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+        IMAGE_EXTS = COMPRESS_EXTS
 
         def _compress_bytes(data: bytes, ext: str) -> bytes | None:
-            """Retorna bytes comprimidos ou None se não precisar/falhar."""
-            if ext not in IMAGE_EXTS:
-                return None
+            """Bytes comprimidos, ou None quando não precisa (ou não deu).
+
+            Duas regras que só existem aqui e por isso são parâmetros, não default: **manter o
+            formato** (a URL já está no banco; mudar a extensão quebraria toda referência) e
+            **pular quem já é pequena** (reprocessar 150 KB não ganha nada e custa um decode).
+            """
             try:
-                img = Image.open(io.BytesIO(data))
-                img = ImageOps.exif_transpose(img)
-
-                needs_resize = max(img.width, img.height) > MAX_PX
-                if not needs_resize and len(data) < 150 * 1024:
-                    return None  # já está pequena o suficiente
-
-                if needs_resize:
-                    img.thumbnail((MAX_PX, MAX_PX), Image.LANCZOS)
-
-                # PNG com transparência real → mantém PNG
-                if img.mode == "RGBA":
-                    alpha = img.getchannel("A")
-                    if alpha.getextrema()[0] < 255:
-                        out = io.BytesIO()
-                        img.save(out, format="PNG", optimize=True)
-                        return out.getvalue()
-
-                if img.mode != "RGB":
-                    img = img.convert("RGB")
-
-                out = io.BytesIO()
-                # Mantém formato original para não mudar extensão/URL
-                fmt = "PNG" if ext == ".png" else "JPEG"
-                if fmt == "JPEG":
-                    img.save(out, format="JPEG", quality=QUALITY, optimize=True)
-                else:
-                    img.save(out, format="PNG", optimize=True)
-                return out.getvalue()
-            except Exception as exc:  # noqa: BLE001 — imagem corrompida: mantém original
-                logger.warning("[migrate-drive] falha ao comprimir imagem: %s", exc)
+                resultado = comprimir_bytes(
+                    data, ext, manter_formato=True, pular_se_pequena=150 * 1024
+                )
+            except Exception as exc:  # noqa: BLE001 — imagem ilegível: mantém o original
+                logger.warning("compress-images: falha ao comprimir: %s", exc)
                 return None
+            return None if resultado is None else resultado[0]
 
         def _caminho_local(url: str) -> str | None:
-            """Traduz a URL pública no caminho em disco.
+            """Traduz a URL pública no caminho em disco (ver `storage.caminho_local`).
 
-            A regra geral é `instance/<url>` — `/uploads/talent_photos/x.jpg` mora em
-            `instance/uploads/talent_photos/x.jpg`. As fotos do catálogo são a exceção: a URL
-            pública é `/catalogo/midia/<arquivo>` (rota que existe para NÃO exigir login), mas o
-            arquivo mora em `uploads/catalog_photos/`. Sem esta tradução o comando resolvia para
-            `instance/catalogo/midia/...`, que não existe, e PULAVA a vitrine inteira em silêncio
-            — o motivo de o comando existir desde sempre e nunca ter tocado o catálogo.
+            O comentário histórico continua valendo: `/catalogo/midia/<arquivo>` é a rota pública
+            (existe para NÃO exigir login), mas o arquivo mora em `uploads/catalog_photos/`. Sem
+            essa tradução o comando resolvia para `instance/catalogo/midia/...`, que não existe, e
+            PULAVA a vitrine inteira em silêncio.
             """
-            if not url:
-                return None
-            base = app.config.get("UPLOAD_FOLDER") or os.path.join("instance", "uploads")
-            if url.startswith("/catalogo/midia/campanhas/"):
-                return os.path.abspath(
-                    os.path.join(base, "virtual_covers", url.rsplit("/", 1)[-1])
-                )
-            if url.startswith("/catalogo/midia/"):
-                return os.path.abspath(
-                    os.path.join(base, "catalog_photos", url.rsplit("/", 1)[-1])
-                )
-            return os.path.abspath(os.path.join("instance", url.lstrip("/")))
+            caminho = caminho_local(url)
+            return None if caminho is None else os.path.abspath(caminho)
 
         def _compress_local(url: str) -> tuple[int, int] | None:
             """Comprime arquivo local. Retorna (bytes_antes, bytes_depois) ou None."""
@@ -322,8 +290,16 @@ def register_commands(app):
         click.echo("")
 
     @app.cli.command("warm-thumbnails")
-    def warm_thumbnails():
-        """Pré-aquece as variantes de miniatura (feature 270): ninguém paga a primeira geração.
+    @click.option(
+        "--familia",
+        type=click.Choice(["catalogo", "talento", "figurino", "todas"]),
+        default="todas",
+        help="aquece so uma familia (o deploy ja compete com o app por CPU nos 3 workers)",
+    )
+    @click.option("--largura", type=int, default=None, help="aquece so esta largura")
+    @click.option("--falhas", type=int, default=100, help="quantas falhas imprimir")
+    def warm_thumbnails(familia: str, largura: int | None, falhas: int):
+        """Pré-aquece as variantes de miniatura (features 270 e 292).
 
         Sob demanda é auto-curável (foto nova nasce com variante na primeira visita), mas a
         primeira geração roda numa thread do gunicorn — e o incidente da 263 foi exatamente
@@ -331,53 +307,253 @@ def register_commands(app):
         `compress-images --execute`: decodificar um original de 4 MB por variante é lento à toa.
         Idempotente: o que já está em cache conta como existente e não é reescrito.
 
-        O que aquece = o que as telas pedem: TODAS as fotos do catálogo a 128 (tira de
-        miniaturas), capas de item e fotos de personagem a 320/480/640 (cards da grade), fotos
-        de rosto de talento a 320/480/640 (grade do Banco). URL absoluta (legado do Drive) não tem
-        variante e é contada à parte.
+        O que aquece = o que as telas pedem. **Catálogo**: todas as fotos a 128 (tira de
+        miniaturas), capas e personagens a 320/480/640 (cards). **Talento**: foto de rosto a 128
+        (o avatar da produção e dos comboboxes — a largura que faltava, e o motivo de
+        `talent_thumbs/128` estar vazia em produção) e a 320/480/640 (grade do Banco).
+        **Figurino**: foto da ficha nas quatro larguras (feature 292). URL absoluta (legado do
+        Drive) não tem variante e é contada à parte.
+
+        `--familia` existe porque a rodada completa passou de ~2.500 para ~4.500 decodificações:
+        depois de um deploy dá para aquecer só o que mudou, sem competir com o app pela CPU.
         """
         import time
 
         from app.catalogo.og_ops import resolve_variante, variante_em_cache
-        from app.models import CatalogCharacter, CatalogItem, CatalogItemImage, Talent
+        from app.models import (
+            CatalogCharacter,
+            CatalogItem,
+            CatalogItemImage,
+            FigurinoSheet,
+            Talent,
+        )
 
         uploads = app.config["UPLOAD_FOLDER"]
-        trabalhos: list[tuple[str, int]] = []
-        for img in CatalogItemImage.query.order_by(CatalogItemImage.id).all():
-            trabalhos.append((img.url, 128))
         larguras_card = (320, 480, 640)
-        for item in CatalogItem.query.order_by(CatalogItem.id).all():
-            capa = item.cover_image
-            if capa:
-                trabalhos += [(capa.url, w) for w in larguras_card]
-        for ch in CatalogCharacter.query.filter(CatalogCharacter.photo_url.isnot(None)).all():
-            trabalhos += [(ch.photo_url, w) for w in larguras_card]
-        for talento in Talent.query.filter(Talent.photo_face_path.isnot(None)).all():
-            trabalhos += [(talento.photo_face_path, w) for w in larguras_card]
+        trabalhos: list[tuple[str, int]] = []
+
+        def quer(nome: str) -> bool:
+            return familia in (nome, "todas")
+
+        if quer("catalogo"):
+            for img in CatalogItemImage.query.order_by(CatalogItemImage.id).all():
+                trabalhos.append((img.url, 128))
+            for item in CatalogItem.query.order_by(CatalogItem.id).all():
+                capa = item.cover_image
+                if capa:
+                    trabalhos += [(capa.url, w) for w in larguras_card]
+            for ch in CatalogCharacter.query.filter(CatalogCharacter.photo_url.isnot(None)).all():
+                trabalhos += [(ch.photo_url, w) for w in larguras_card]
+        if quer("talento"):
+            for talento in Talent.query.filter(Talent.photo_face_path.isnot(None)).all():
+                trabalhos += [(talento.photo_face_path, w) for w in (128, *larguras_card)]
+        if quer("figurino"):
+            # `photo_url` (property) e nao `photo_filename`: ela normaliza o legado de nome nu
+            # para `/uploads/figurino_photos/<x>`, que e a forma que tem variante.
+            for ficha in FigurinoSheet.query.order_by(FigurinoSheet.id).all():
+                if ficha.photo_url:
+                    trabalhos += [(ficha.photo_url, w) for w in (128, *larguras_card)]
+
+        if largura is not None:
+            trabalhos = [t for t in trabalhos if t[1] == largura]
         unicos = list(dict.fromkeys(trabalhos))
 
-        gerados = existentes = falhas = sem_variante = 0
+        gerados = existentes = sem_variante = falhou = 0
+        por_familia: dict[str, list[int]] = {}
         inicio = time.monotonic()
-        for url, largura in unicos:
-            if variante_em_cache(url, largura, uploads):
+        for url, w in unicos:
+            if "figurino_photos" in url:
+                rotulo = "figurino"
+            elif "talent_photos" in url:
+                rotulo = "talento"
+            else:
+                rotulo = "catalogo"
+            contadores = por_familia.setdefault(rotulo, [0, 0])
+            if variante_em_cache(url, w, uploads):
                 existentes += 1
                 continue
             if url.startswith(("http://", "https://")):
                 sem_variante += 1
                 continue
-            if resolve_variante(url, largura, uploads):
+            if resolve_variante(url, w, uploads):
                 gerados += 1
+                contadores[0] += 1
             else:
-                falhas += 1
-                if falhas <= 20:
-                    click.echo(f"  FALHA {largura}px {url}")
-                elif falhas == 21:
+                falhou += 1
+                contadores[1] += 1
+                if falhou <= falhas:
+                    click.echo(f"  FALHA {w}px {url}")
+                elif falhou == falhas + 1:
                     click.echo("  ... (demais falhas omitidas; o total sai no resumo)")
+        for nome, (ok, ruim) in sorted(por_familia.items()):
+            click.echo(f"  {nome:>9}: {ok} geradas, {ruim} falhas")
         click.echo(
             f"warm-thumbnails: {gerados} geradas, {existentes} já existiam, "
-            f"{sem_variante} sem variante (URL externa), {falhas} falhas — "
+            f"{sem_variante} sem variante (URL externa), {falhou} falhas — "
             f"{len(unicos)} pedidos em {time.monotonic() - inicio:.0f}s"
         )
+
+    @app.cli.command("midia-orfa")
+    @click.option(
+        "--familia",
+        type=click.Choice(
+            ["talento", "figurino", "catalogo", "personagem", "portfolio",
+             "acervo3d", "usuario", "todas"]
+        ),
+        default="todas",
+    )
+    @click.option("--csv", "como_csv", is_flag=True, help="uma linha por problema, para relatório")
+    @click.option(
+        "--rapido", is_flag=True, help="não abre os arquivos (só confere se existem)"
+    )
+    def midia_orfa(familia: str, como_csv: bool, rapido: bool):
+        """Diz, arquivo por arquivo, POR QUE uma foto não aparece na tela.
+
+        A migração Railway → Render (28/08/2026) trouxe o banco e não trouxe o volume de uploads.
+        **Nenhum campo ficou NULL** — a linha continua apontando para `/uploads/...` e o Flask
+        responde 404 — então qualquer consulta escrita com ``IS NULL`` subconta o estrago. O
+        critério certo é cruzar o caminho gravado com o disco, que é o que este comando faz.
+
+        Roda igual em qualquer ambiente, e é essa a graça: no `manto_local` acusa quase tudo
+        (o disco de dev tem uma fração dos arquivos) e no Shell do Render dá o número real. É a
+        resposta para "isto está consertado em todos os ambientes?".
+
+        Somente leitura. No Shell do Render use `MANTO_SEM_THREADS=1` na frente.
+        """
+        from app.talents.midia_ops import MOTIVO_OK, inventario, resumo
+
+        achados = inventario(familia=familia, conferir_conteudo=not rapido)
+        problemas = [a for a in achados if a.problema]
+
+        if como_csv:
+            click.echo("familia;id;nome;coluna;url;motivo")
+            for a in problemas:
+                nome = (a.nome or "").replace(";", ",")
+                click.echo(f"{a.familia};{a.registro_id};{nome};{a.coluna};{a.url};{a.motivo}")
+            return
+
+        click.echo("")
+        click.echo(f"{'-' * 72}")
+        click.echo("  Inventário de mídia — banco cruzado com o disco")
+        click.echo(f"{'-' * 72}")
+        for nome_familia, motivos in sorted(resumo(achados).items()):
+            total = sum(motivos.values())
+            ok = motivos.get(MOTIVO_OK, 0)
+            click.echo(f"  {nome_familia:>11}: {total:>5} referências, {ok:>5} íntegras")
+            for motivo, quantos in sorted(motivos.items()):
+                if motivo != MOTIVO_OK:
+                    click.echo(f"  {'':>11}  {quantos:>5}  {motivo}")
+        click.echo(f"{'-' * 72}")
+        click.echo(f"  Total com problema: {len(problemas)}")
+        click.echo("  Use --csv para a lista completa (colável no relatório).")
+        click.echo(f"{'-' * 72}")
+        click.echo("")
+        for a in problemas[:40]:
+            click.echo(f"  {a.familia:>11} #{a.registro_id:<5} {a.motivo:<32} {a.nome[:34]}")
+        if len(problemas) > 40:
+            click.echo(f"  ... e mais {len(problemas) - 40} (use --csv)")
+        click.echo("")
+
+    @app.cli.command("fix-heic")
+    @click.option("--execute", is_flag=True, help="converte de verdade (padrão: só lista)")
+    def fix_heic(execute: bool):
+        """Converte para JPEG o que está em disco num formato que o navegador não abre.
+
+        O `compress-images` **não** resolve isto: ele mantém o formato e a extensão de propósito
+        (a URL já está gravada no banco), então reescrever um `.heic` produz um JPEG dentro de um
+        arquivo `.heic` — e o `send_from_directory` continua declarando `image/heic` pelo nome.
+        Aqui o arquivo vira `<uuid>.jpg`, **a coluna é atualizada**, o original sai do disco e as
+        variantes antigas são invalidadas.
+
+        Pega três coisas de uma vez: HEIC/HEIF/AVIF/TIFF/BMP gravados antes de o servidor saber
+        converter, arquivos cuja extensão mente (existe um PDF gravado como `.jpg` em produção) e
+        qualquer imagem que o navegador recusaria.
+
+        **Dry-run por padrão**, imprimindo o mapa `antigo → novo`: é a única reversão possível
+        depois do `--execute`, então leia linha a linha antes.
+        """
+        from app import db, imaging
+        from app.catalogo.og_ops import invalidar_variantes
+        from app.storage import (
+            MAX_PX,
+            QUALITY,
+            caminho_local,
+            delete_file,
+            save_bytes,
+        )
+        from app.talents.midia_ops import (
+            MOTIVO_ILEGIVEL,
+            MOTIVO_NAO_E_IMAGEM,
+            inventario,
+        )
+
+        uploads = app.config["UPLOAD_FOLDER"]
+        alvos = [
+            a for a in inventario()
+            if a.motivo in (MOTIVO_ILEGIVEL, MOTIVO_NAO_E_IMAGEM)
+        ]
+        if not alvos:
+            click.echo("fix-heic: nada a converter — todo arquivo em disco é exibível.")
+            return
+
+        modelos = {
+            "talento": "Talent",
+            "figurino": "FigurinoSheet",
+            "catalogo": "CatalogItemImage",
+            "personagem": "CatalogCharacter",
+            "portfolio": "TalentMedia",
+            "acervo3d": "Acervo3DItem",
+            "usuario": "User",
+        }
+        import app.models as m
+
+        convertidos = falhas = 0
+        for a in alvos:
+            caminho = caminho_local(a.url)
+            if caminho is None or not os.path.exists(caminho):
+                continue
+            with open(caminho, "rb") as handle:
+                dados = handle.read()
+            img = imaging.abrir(dados)
+            if img is None:
+                click.echo(f"  ILEGÍVEL  {a.familia} #{a.registro_id} {a.url}")
+                falhas += 1
+                continue
+
+            if not execute:
+                click.echo(f"  {a.url}  ->  <uuid>.jpg   ({a.familia} #{a.registro_id})")
+                convertidos += 1
+                continue
+
+            from PIL import Image
+
+            frame = imaging.para_rgb(img)
+            if max(frame.width, frame.height) > MAX_PX:
+                frame.thumbnail((MAX_PX, MAX_PX), Image.LANCZOS)
+            buffer = io.BytesIO()
+            frame.save(buffer, format="JPEG", quality=QUALITY, optimize=True)
+
+            subpasta = a.url.strip("/").split("/")[1] if a.url.startswith("/uploads/") else (
+                "catalog_photos"
+            )
+            nova = save_bytes(buffer.getvalue(), subpasta, ".jpg")
+            # A coluna do catálogo guarda a URL pública `/catalogo/midia/<arq>`, não `/uploads/`.
+            if a.url.startswith("/catalogo/midia/"):
+                nova = "/catalogo/midia/" + nova.rsplit("/", 1)[-1]
+            registro = getattr(m, modelos[a.familia]).query.get(a.registro_id)
+            coluna = "photo_filename" if a.coluna == "photo_url" and a.familia == "figurino" else a.coluna
+            setattr(registro, coluna, nova)
+            db.session.commit()
+            delete_file(a.url)
+            invalidar_variantes(a.url, uploads)
+            click.echo(f"  {a.url}  ->  {nova}")
+            convertidos += 1
+
+        click.echo("")
+        click.echo(f"  Convertidos: {convertidos}   Ilegíveis (sem conserto): {falhas}")
+        if not execute:
+            click.echo("  DRY-RUN — nada foi escrito. Repita com --execute para aplicar.")
+        click.echo("")
 
     @app.cli.command("notificacoes-limpar")
     @click.option("--execute", is_flag=True, help="apaga de verdade (padrão: só conta)")

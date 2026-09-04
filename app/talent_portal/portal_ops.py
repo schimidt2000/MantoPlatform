@@ -417,6 +417,27 @@ def get_figurino(
     return sheet_items
 
 
+def _salvar_ou_recusar(validated: FileStorage, subfolder: str, filename: str | None = None) -> str:
+    """`save_file` que transforma "não consegui converter" num erro que o artista entende.
+
+    HEIC, HEIF, AVIF e TIFF são aceitos no upload (é o formato nativo da câmera do iPhone), mas o
+    navegador não abre nenhum deles: guardar o original quando a conversão falha é guardar uma foto
+    invisível — a pessoa sobe, vê "enviado com sucesso", e a foto continua sem aparecer. Um erro na
+    hora é melhor que isso.
+
+    Raises:
+        PortalUploadError: A imagem não pôde ser convertida para um formato exibível.
+    """
+    from app.storage import ImagemNaoConvertida
+
+    try:
+        return save_file(validated, subfolder, filename) if filename else save_file(validated, subfolder)
+    except ImagemNaoConvertida as exc:
+        raise PortalUploadError(
+            "Não conseguimos ler esta foto. Tente enviar em JPG ou PNG."
+        ) from exc
+
+
 def update_photo(talent: Talent, kind: str, file: FileStorage) -> Talent:
     """Substitui a foto de rosto ou corpo inteiro do talento.
 
@@ -431,11 +452,22 @@ def update_photo(talent: Talent, kind: str, file: FileStorage) -> Talent:
     validated, error = validate_upload(file, PHOTO_EXTS, PHOTO_MAX, required=True, label="Foto")
     if error:
         raise PortalUploadError(error)
-    url = save_file(validated, "talent_photos")
+    anterior = talent.photo_full_path if kind == "full" else talent.photo_face_path
+    url = _salvar_ou_recusar(validated, "talent_photos")
     if kind == "full":
         talent.photo_full_path = url
     else:
         talent.photo_face_path = url
+    if anterior:
+        # A foto antiga sai do disco junto com as miniaturas dela: sem isso, cada troca de foto
+        # deixa até quatro variantes órfãs que nada mais alcança (o digest é da URL antiga).
+        from flask import current_app
+
+        from app.catalogo.og_ops import invalidar_variantes
+        from app.storage import delete_file
+
+        delete_file(anterior)
+        invalidar_variantes(anterior, current_app.config["UPLOAD_FOLDER"])
     db.session.commit()
     return talent
 
@@ -458,7 +490,7 @@ def update_document(talent: Talent, file: FileStorage, kind: str = "cnh") -> Tal
     validated, error = validate_upload(file, DOC_EXTS, DOC_MAX, required=True, label=label)
     if error:
         raise PortalUploadError(error)
-    novo = save_file(validated, "talent_docs")
+    novo = _salvar_ou_recusar(validated, "talent_docs")
     if kind == "cnh":
         talent.cnh_file_path = novo
     else:
@@ -633,7 +665,7 @@ def add_portfolio_photo(talent: Talent, file: FileStorage, label: str | None = N
         talent_id=talent.id,
         media_type="photo",
         label=(label or "").strip() or None,
-        file_path=save_file(validated, "talent_photos", filename),
+        file_path=_salvar_ou_recusar(validated, "talent_photos", filename),
     )
     db.session.add(item)
     db.session.commit()

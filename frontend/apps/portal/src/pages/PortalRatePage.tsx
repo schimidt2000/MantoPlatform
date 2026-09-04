@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useReducedMotion } from "framer-motion";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, Foto, Skeleton } from "@manto/ui";
 import { CheckCircle2 } from "lucide-react";
 import { FormError, FormSuccess } from "../components/FormField";
 import { StarRating } from "../components/StarRating";
@@ -77,13 +77,12 @@ function ScoreBlock({
   return (
     <div className="space-y-2 border-b border-line pb-3 last:border-0 last:pb-0">
       <div className="flex items-center gap-3">
-        {photoUrl && (
-          <img
-            src={assetUrl(photoUrl)}
-            alt=""
-            className="h-10 w-10 shrink-0 rounded-full object-cover"
-          />
-        )}
+        <Foto
+          src={assetUrl(photoUrl)}
+          alt=""
+          className="h-10 w-10 shrink-0 rounded-full object-cover"
+          fallback={null}
+        />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-ink">{label}</p>
           {sublabel && <p className="truncate text-xs text-muted">{sublabel}</p>}

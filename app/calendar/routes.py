@@ -41,7 +41,9 @@ from app.storage import (
     ALLOWED_IMAGE_EXTENSIONS,
     ALLOWED_INVOICE_EXTENSIONS,
     ALLOWED_MATERIAL_EXTENSIONS,
+    ImagemNaoConvertida,
     is_allowed_extension,
+    save_file,
 )
 # Notificadores de logística movidos para event_ops (feature 149); reimportados com alias para os
 # call sites existentes (sync inclusive) seguirem inalterados. Dependência unidirecional routes→event_ops.
@@ -692,7 +694,9 @@ def _save_bounded_upload(
 
     Args:
         file_storage: o ``FileStorage`` recebido do form (ou None).
-        upload_dir: diretório absoluto onde salvar (ex.: ``current_app.config["UPLOAD_PAYMENTS"]``).
+        upload_dir: mantido por compatibilidade com os 6 chamadores; o destino real vem de
+            ``subpath`` (``save_file`` resolve ``UPLOAD_FOLDER/<subpath>``, que é exatamente o
+            que essas constantes apontam).
         subpath: segmento usado no caminho público (``/uploads/<subpath>/<nome>``).
         max_mb: limite de tamanho em megabytes.
         allowed: allowlist de extensões (padrão: documento — imagem ou PDF).
@@ -715,8 +719,19 @@ def _save_bounded_upload(
     # sobrescreverem o binário anterior em silêncio — dois EventPayment apontando para o mesmo
     # arquivo e o original do primeiro perdido, sem rastro para auditoria.
     unique = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}_{fname}"
-    file_storage.save(os.path.join(upload_dir, unique))
-    return f"/uploads/{subpath}/{unique}"
+    # `save_file` e não `file_storage.save`: até a feature 292 este caminho gravava o original
+    # cru, então o comprovante fotografado por um celular moderno entrava com 4 a 12 MB no volume
+    # de 10 GB. PDF e XML continuam intactos — `_compress_image` devolve `None` para extensão
+    # fora de `COMPRESS_EXTS` e nem abre o arquivo.
+    # **Devolver o retorno**, nunca remontar a string: quando a imagem é convertida (HEIC → JPG) a
+    # extensão muda, e uma URL montada à mão passaria a apontar para um arquivo inexistente.
+    try:
+        return save_file(file_storage, subpath, unique)
+    except ImagemNaoConvertida:
+        # Mesmo contrato do resto da função: upload inválido devolve None e o chamador avisa.
+        # Só chega aqui HEIC/TIFF corrompido — o formato exibível nunca levanta.
+        current_app.logger.warning("upload recusado: imagem ilegível em %s", subpath)
+        return None
 
 
 def _save_nf_file(file_storage) -> str | None:
@@ -3068,9 +3083,14 @@ def _save_file_upload(
     file.stream.seek(0)
     if size > 20 * 1024 * 1024:
         return None
-    name = secure_filename(file.filename)
-    file.save(os.path.join(upload_dir, name))
-    return f"/uploads/{subpath}/{name}"
+    # Prefixo único: sem ele dois arquivos chamados "contrato.pdf" se sobrescreviam em silêncio.
+    # O irmão `_save_bounded_upload` já resolvia isso desde a 153; aqui o conserto faltava.
+    name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}_{secure_filename(file.filename)}"
+    try:
+        return save_file(file, subpath, name)
+    except ImagemNaoConvertida:
+        current_app.logger.warning("upload recusado: imagem ilegível em %s", subpath)
+        return None
 
 
 # ─── CRIAÇÃO DE EVENTO — núcleo compartilhado (feature 152) ──────────────────────
@@ -3829,8 +3849,20 @@ def _parse_create_event_form() -> dict:
         inv_size = invoice_file.stream.seek(0, 2)
         invoice_file.stream.seek(0)
         if inv_size <= 20 * 1024 * 1024:
-            invoice_filename = secure_filename(invoice_file.filename)
-            invoice_file.save(os.path.join(current_app.config["UPLOAD_INVOICES"], invoice_filename))
+            # Nome único: `secure_filename` puro fazia duas "NFSe.pdf" se sobrescreverem em
+            # silêncio. E `save_file` para a nota fotografada passar pela mesma compressão do
+            # resto do sistema (PDF e XML seguem intactos).
+            invoice_filename = (
+                f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}_"
+                f"{secure_filename(invoice_file.filename)}"
+            )
+            try:
+                invoice_filename = save_file(
+                    invoice_file, "invoices", invoice_filename
+                ).rsplit("/", 1)[-1]
+            except ImagemNaoConvertida:
+                flash("Nota fiscal não anexada: não conseguimos ler o arquivo.", "error")
+                invoice_filename = None
 
     # Observações texto/link/imagem — imagem resolvida em caminho aqui (fora do núcleo).
     obs_types = request.form.getlist("obs_type[]")
@@ -4061,18 +4093,23 @@ def ensaio_upload_material(event_id: int):
         return redirect(url_for("calendar.event_detail", event_id=event_id))
 
     filename = secure_filename(file.filename)
-    save_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], "ensaio_materials")
-    os.makedirs(save_dir, exist_ok=True)
     # prefixo com event_id para evitar colisões
     unique_name = f"{event_id}_{int(datetime.utcnow().timestamp())}_{filename}"
-    file.save(os.path.join(save_dir, unique_name))
+    try:
+        url = save_file(file, "ensaio_materials", unique_name)
+    except ImagemNaoConvertida:
+        flash("Não conseguimos ler esta imagem. Envie em JPG ou PNG.", "error")
+        return redirect(url_for("calendar.event_detail", event_id=event_id))
 
+    # A coluna guarda `ensaio_materials/<arquivo>` SEM o `/uploads/` neste caminho Jinja, e o
+    # gêmeo JSON (`event_ops.add_ensaio_file`) guarda COM. A divergência é anterior a esta
+    # feature; aqui só entra a compressão, sem mexer no formato que os leitores já esperam.
     db.session.add(EnsaioMaterial(
         event_id=event_id,
         user_id=current_user.id,
         material_type="file",
         label=label or filename,
-        file_path=f"ensaio_materials/{unique_name}",
+        file_path=url[len("/uploads/"):] if url.startswith("/uploads/") else url,
     ))
     db.session.commit()
     flash("Arquivo adicionado.", "success")

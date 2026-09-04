@@ -1,7 +1,7 @@
 import { Outlet, NavLink, Link } from "react-router-dom";
 import { CalendarDays, History, MailQuestion, User } from "lucide-react";
 import { assetUrl } from "@manto/api-client";
-import { Button, ThemeSwitch } from "@manto/ui";
+import { Button, Foto, ThemeSwitch } from "@manto/ui";
 import { useCurrentTalent, usePortalLogout } from "../lib/portalAuth";
 import { useAgenda } from "../lib/portalAgenda";
 import { usePendingRatings } from "../lib/portalRatings";
@@ -44,17 +44,16 @@ export function PortalShell() {
     <div className="flex min-h-screen flex-col bg-bg">
       <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-panel px-4 py-3">
         <Link to="/perfil" className="flex min-h-[44px] min-w-0 flex-1 items-center gap-3">
-          {talent?.photo_face_url ? (
-            <img
-              src={assetUrl(talent.photo_face_url)}
-              alt=""
-              className="h-9 w-9 shrink-0 rounded-full object-cover"
-            />
-          ) : (
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
-              {(talent?.artistic_name || talent?.full_name || "?").charAt(0).toUpperCase()}
-            </span>
-          )}
+          <Foto
+            src={assetUrl(talent?.photo_face_url)}
+            alt=""
+            className="h-9 w-9 shrink-0 rounded-full object-cover"
+            fallback={
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
+                {(talent?.artistic_name || talent?.full_name || "?").charAt(0).toUpperCase()}
+              </span>
+            }
+          />
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-ink">
               {talent?.artistic_name || talent?.full_name}

@@ -8,6 +8,7 @@ import {
   CardTitle,
   DenseCard,
   FileUpload,
+  Foto,
   MetricBadge,
   Skeleton,
 } from "@manto/ui";
@@ -412,17 +413,18 @@ export function TalentDetailPage() {
         <div className="space-y-4">
           <Card className="overflow-hidden">
             <div className="aspect-[3/4] bg-surface-2">
-              {t.photo_face_path ? (
-                <img
-                  src={assetUrl(t.photo_face_path)}
-                  alt={t.full_name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-5xl text-muted">
-                  👤
-                </div>
-              )}
+              {/* Coluna de 380px: com DPR 2 são 760px, acima da maior variante (640). O card da
+                  ficha é onde se julga o rosto — aqui o original é o tamanho certo. */}
+              <Foto
+                src={assetUrl(t.photo_face_path)}
+                alt={t.full_name}
+                className="h-full w-full object-cover"
+                fallback={
+                  <div className="flex h-full w-full items-center justify-center text-5xl text-muted">
+                    👤
+                  </div>
+                }
+              />
             </div>
             {mode === "edit" && (
               <CardContent className="p-3">
@@ -453,10 +455,15 @@ export function TalentDetailPage() {
                 onRemoveExisting={() => removePhoto.mutate("full")}
               />
             ) : t.photo_full_path ? (
-              <img
+              <Foto
                 src={assetUrl(t.photo_full_path)}
                 alt="Corpo inteiro"
                 className="max-h-[520px] w-full rounded-md object-contain"
+                fallback={
+                  <p className="text-sm text-muted">
+                    A foto de corpo inteiro está no cadastro, mas o arquivo não foi encontrado.
+                  </p>
+                }
               />
             ) : (
               <p className="text-sm text-muted">Nenhuma foto de corpo inteiro cadastrada.</p>
@@ -497,10 +504,15 @@ export function TalentDetailPage() {
                 Abrir PDF
               </a>
             ) : t.doc_photo_path ? (
-              <img
+              <Foto
                 src={assetUrl(t.doc_photo_path)}
                 alt="Documento com foto"
                 className="max-h-80 w-full rounded-md object-contain"
+                fallback={
+                  <p className="text-sm text-muted">
+                    O documento está no cadastro, mas o arquivo não foi encontrado.
+                  </p>
+                }
               />
             ) : (
               <p className="text-sm text-muted">Nenhum documento cadastrado.</p>

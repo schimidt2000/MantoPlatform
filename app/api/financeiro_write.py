@@ -30,7 +30,12 @@ from app.models import (
     SpecialExpense,
     db,
 )
-from app.storage import ALLOWED_DOCUMENT_EXTENSIONS, is_allowed_extension
+from app.storage import (
+    ALLOWED_DOCUMENT_EXTENSIONS,
+    ImagemNaoConvertida,
+    is_allowed_extension,
+    save_file,
+)
 
 _VALID_PAYMENT_STATUS = {"nao_pago", "pago", "no_banco"}
 
@@ -418,9 +423,19 @@ def api_salary_advance(sp_id: int) -> Any:
     advance = SalaryAdvance(salary_payment_id=sp.id, amount=adv, advance_date=adv_date)
     db.session.add(advance)
     db.session.flush()
+    # `advance.proof` recebe o RETORNO de `save_file`, nunca uma string montada: quando a
+    # imagem é convertida (HEIC → JPG) a extensão muda, e o caminho remontado à mão
+    # apontaria para um arquivo que não existe.
     fname = f"adv_{sp.id}_{advance.id}_{secure_filename(proof.filename)}"
-    proof.save(os.path.join(current_app.config["UPLOAD_PAYMENTS"], fname))
-    advance.proof = f"/uploads/payments/{fname}"
+    try:
+        advance.proof = save_file(proof, "payments", fname)
+    except ImagemNaoConvertida:
+        db.session.rollback()
+        return json_error(
+            "Não conseguimos ler este comprovante. Envie em PDF, JPG ou PNG.",
+            400,
+            {"advance_proof": "Arquivo ilegível"},
+        )
 
     audit(
         "payment",

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { Button, Card, CardContent, PageHeader } from "@manto/ui";
+import { Button, Card, CardContent, Foto, PageHeader } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import {
   useCreateFigurinoSheet,
@@ -234,11 +234,16 @@ function FigurinoPhotoField({ sheetId, photoUrl }: { sheetId: number; photoUrl: 
   return (
     <div>
       <label className="mb-1 block text-xs font-medium text-muted">Foto</label>
-      {displayUrl ? (
-        <img src={displayUrl} alt="Foto do figurino" className="mb-2 h-32 w-32 rounded-md object-cover" />
-      ) : (
-        <p className="mb-2 text-sm text-muted">Nenhuma foto enviada.</p>
-      )}
+      <Foto
+        src={displayUrl}
+        alt="Foto do figurino"
+        className="mb-2 h-32 w-32 rounded-md object-cover"
+        fallback={
+          <p className="mb-2 text-sm text-muted">
+            {photoUrl ? "A foto está na ficha, mas o arquivo não foi encontrado." : "Nenhuma foto enviada."}
+          </p>
+        }
+      />
       <div className="flex flex-wrap items-center gap-2">
         <input
           ref={inputRef}

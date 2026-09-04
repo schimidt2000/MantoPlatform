@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { assetUrl, ApiRequestError } from "@manto/api-client";
-import { Card, CardContent, CardHeader, CardTitle, FileUpload, Button } from "@manto/ui";
+import { Card, CardContent, CardHeader, CardTitle, FileUpload, Foto, Button } from "@manto/ui";
 import { useCurrentTalent } from "../lib/portalAuth";
 import { useDocumentUpload, usePhotoUpload } from "../lib/portalProfile";
 
@@ -8,6 +8,15 @@ const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp";
 const PHOTO_MAX = 8 * 1024 * 1024;
 const DOC_ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
 const DOC_MAX = 10 * 1024 * 1024;
+
+/** Aviso no lugar da prévia quando não há foto — ou quando o arquivo dela não existe mais. */
+function SemFoto({ texto }: { texto: string }) {
+  return (
+    <p className="rounded-md bg-surface-2 px-3 py-2 text-sm text-muted">
+      {texto} Envie uma abaixo — ela aparece aqui assim que subir.
+    </p>
+  );
+}
 
 export function PortalFotosDocumentosPage() {
   const { data: talent } = useCurrentTalent();
@@ -65,13 +74,16 @@ export function PortalFotosDocumentosPage() {
           <CardTitle>Foto de rosto</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {talent?.photo_face_url && (
-            <img
-              src={assetUrl(talent.photo_face_url)}
-              alt="Foto de rosto atual"
-              className="h-32 w-32 rounded-md object-cover"
-            />
-          )}
+          {/* O campo do banco vem preenchido mesmo quando o arquivo se perdeu na migração de
+              agosto. Sem o fallback, esta tela — que é o destino do e-mail de atualização
+              cadastral — mostrava um quadrado quebrado rotulado "foto de rosto atual", e o
+              artista concluía que já tinha foto. */}
+          <Foto
+            src={assetUrl(talent?.photo_face_url)}
+            alt="Foto de rosto atual"
+            className="h-32 w-32 rounded-md object-cover"
+            fallback={<SemFoto texto="Você ainda não tem foto de rosto." />}
+          />
           <FileUpload
             label="Nova foto de rosto"
             accept={PHOTO_ACCEPT}
@@ -89,13 +101,12 @@ export function PortalFotosDocumentosPage() {
           <CardTitle>Foto de corpo inteiro</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {talent?.photo_full_url && (
-            <img
-              src={assetUrl(talent.photo_full_url)}
-              alt="Foto de corpo inteiro atual"
-              className="h-40 w-32 rounded-md object-cover"
-            />
-          )}
+          <Foto
+            src={assetUrl(talent?.photo_full_url)}
+            alt="Foto de corpo inteiro atual"
+            className="h-40 w-32 rounded-md object-cover"
+            fallback={<SemFoto texto="Você ainda não tem foto de corpo inteiro." />}
+          />
           <FileUpload
             label="Nova foto de corpo inteiro"
             accept={PHOTO_ACCEPT}

@@ -73,14 +73,17 @@ export type LarguraMiniatura = 128 | 320 | 480 | 640;
 export interface AssetUrlOptions {
   /**
    * Pede a variante desta largura em vez do arquivo original. Só existe para fotos do catálogo
-   * (`/catalogo/midia/<arquivo>`) e fotos de talento (`/uploads/talent_photos/<arquivo>`); para
-   * qualquer outro caminho — ou URL absoluta legada — devolve o original, sem quebrar nada.
+   * (`/catalogo/midia/<arquivo>`), de talento (`/uploads/talent_photos/<arquivo>`) e de figurino
+   * (`/uploads/figurino_photos/<arquivo>`, feature 292); para qualquer outro caminho — inclusive
+   * a reescrita do portal (`/portal/photo/...`) e URL absoluta legada do Drive — devolve o
+   * original, sem quebrar nada.
    */
   largura?: LarguraMiniatura;
 }
 
 const VARIANTE_CATALOGO = /^\/catalogo\/midia\/([^/]+)$/;
-const VARIANTE_TALENTO = /^\/uploads\/talent_photos\/([^/]+)$/;
+/** Subpastas de `/uploads` com variante — espelha `SUBPASTAS_COM_VARIANTE` do `og_ops.py`. */
+const VARIANTE_UPLOADS = /^\/uploads\/(talent_photos|figurino_photos)\/([^/]+)$/;
 
 /**
  * Reescreve o caminho para a rota de variante (`.../t/<largura>/<arquivo>`). É a MESMA regra de
@@ -90,8 +93,8 @@ const VARIANTE_TALENTO = /^\/uploads\/talent_photos\/([^/]+)$/;
 function comVariante(path: string, largura: LarguraMiniatura): string {
   const catalogo = VARIANTE_CATALOGO.exec(path);
   if (catalogo) return `/catalogo/midia/t/${largura}/${catalogo[1]}`;
-  const talento = VARIANTE_TALENTO.exec(path);
-  if (talento) return `/uploads/t/${largura}/talent_photos/${talento[1]}`;
+  const upload = VARIANTE_UPLOADS.exec(path);
+  if (upload) return `/uploads/t/${largura}/${upload[1]}/${upload[2]}`;
   return path;
 }
 

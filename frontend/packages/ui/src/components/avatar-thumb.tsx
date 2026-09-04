@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "../lib/cn";
+import { Foto } from "./foto";
 
 export type AvatarThumbShape = "circle" | "square";
 export type AvatarThumbSize = "sm" | "md" | "lg";
@@ -34,8 +35,9 @@ function initialsOf(name: string): string {
 /**
  * Miniatura de foto com placeholder elegante (feature 195, Princípio X.2).
  *
- * Circular para pessoas e quadrada para figurinos/personagens. Sem foto salva, renderiza as
- * iniciais do nome (ou `fallbackIcon`) sobre o fundo neutro do tema — nunca uma imagem quebrada.
+ * Circular para pessoas e quadrada para figurinos/personagens. Sem foto salva — **e também
+ * quando a foto está no banco mas o arquivo responde 404** (feature 292) — renderiza as iniciais
+ * do nome (ou `fallbackIcon`) sobre o fundo neutro do tema. Nunca uma imagem quebrada.
  */
 export function AvatarThumb({
   src,
@@ -59,11 +61,13 @@ export function AvatarThumb({
         className,
       )}
     >
-      {src ? (
-        <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
-      ) : (
-        (fallbackIcon ?? initials ?? null)
-      )}
+      <Foto
+        src={src}
+        alt=""
+        loading="lazy"
+        className="h-full w-full object-cover"
+        fallback={fallbackIcon ?? initials ?? null}
+      />
     </span>
   );
 }
