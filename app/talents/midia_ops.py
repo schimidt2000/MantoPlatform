@@ -22,8 +22,9 @@ MOTIVO_OK = "ok"
 MOTIVO_VAZIO = "campo vazio"
 MOTIVO_EXTERNO = "URL externa (Drive)"
 MOTIVO_SUMIU = "arquivo sumiu do disco"
-MOTIVO_NAO_E_IMAGEM = "arquivo não é imagem"
+MOTIVO_NAO_E_IMAGEM = "arquivo não é imagem (PDF com nome de foto)"
 MOTIVO_ILEGIVEL = "formato que o navegador não abre"
+MOTIVO_FORMATO_OCULTO = "formato ilegível escondido numa extensão de imagem"
 
 #: `(coluna, rótulo em pt-BR, subpasta esperada)`. O rótulo é o que o artista lê no e-mail de
 #: atualização cadastral — por isso mora aqui, junto da coluna, e não numa segunda lista.
@@ -78,13 +79,18 @@ def classificar(url: str | None, *, conferir_conteudo: bool = True) -> str:
     if not conferir_conteudo or ext == ".pdf":
         return MOTIVO_OK
 
-    # A extensão pode estar mentindo: existe pelo menos um PDF gravado como `.jpg` em produção,
-    # e ele é servido como `image/jpeg` — existe, tem bytes, e nenhum navegador desenha.
+    # A extensão mente com frequência, e de duas formas diferentes — medidas na produção em
+    # 03/09/2026: 28 PDFs gravados como `.jpg` (servidos como `image/jpeg`; o navegador não
+    # desenha e também não oferece download) e 5 HEIC de iPhone gravados como `.jpg` (o Pillow
+    # abre, o Chrome não). Conferir só "o Pillow consegue abrir?" deixa o segundo caso passar.
     with open(caminho, "rb") as handle:
         dados = handle.read()
     if dados.startswith(b"%PDF"):
         return MOTIVO_NAO_E_IMAGEM
-    return MOTIVO_OK if imaging.abrir(dados) is not None else MOTIVO_NAO_E_IMAGEM
+    formato = imaging.formato_de(dados)
+    if formato is None:
+        return MOTIVO_NAO_E_IMAGEM
+    return MOTIVO_OK if formato in imaging.FORMATOS_EXIBIVEIS else MOTIVO_FORMATO_OCULTO
 
 
 def faltas_do_talento(talent: Any) -> list[str]:

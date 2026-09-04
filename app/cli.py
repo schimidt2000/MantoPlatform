@@ -465,9 +465,15 @@ def register_commands(app):
         Aqui o arquivo vira `<uuid>.jpg`, **a coluna é atualizada**, o original sai do disco e as
         variantes antigas são invalidadas.
 
-        Pega três coisas de uma vez: HEIC/HEIF/AVIF/TIFF/BMP gravados antes de o servidor saber
-        converter, arquivos cuja extensão mente (existe um PDF gravado como `.jpg` em produção) e
-        qualquer imagem que o navegador recusaria.
+        Pega três casos, todos medidos na produção em 03/09/2026:
+
+        - **PDF com nome de foto** (28 arquivos, quase todos documento de talento): o Flask declara
+          `image/jpeg` pelo nome e o navegador não abre nem oferece download. Aqui só a **extensão**
+          muda, para `.pdf` — rasterizar um documento seria perder o documento.
+        - **Formato ilegível escondido numa extensão de imagem** (5 HEIC de iPhone gravados como
+          `.jpg`): o Pillow abre, o Chrome não. Vira JPEG de verdade.
+        - **Extensão que o navegador não abre** (`.heic`, `.tiff`…), gravada antes de o servidor
+          saber converter.
 
         **Dry-run por padrão**, imprimindo o mapa `antigo → novo`: é a única reversão possível
         depois do `--execute`, então leia linha a linha antes.
@@ -482,6 +488,7 @@ def register_commands(app):
             save_bytes,
         )
         from app.talents.midia_ops import (
+            MOTIVO_FORMATO_OCULTO,
             MOTIVO_ILEGIVEL,
             MOTIVO_NAO_E_IMAGEM,
             inventario,
@@ -490,7 +497,7 @@ def register_commands(app):
         uploads = app.config["UPLOAD_FOLDER"]
         alvos = [
             a for a in inventario()
-            if a.motivo in (MOTIVO_ILEGIVEL, MOTIVO_NAO_E_IMAGEM)
+            if a.motivo in (MOTIVO_ILEGIVEL, MOTIVO_NAO_E_IMAGEM, MOTIVO_FORMATO_OCULTO)
         ]
         if not alvos:
             click.echo("fix-heic: nada a converter — todo arquivo em disco é exibível.")
@@ -514,29 +521,42 @@ def register_commands(app):
                 continue
             with open(caminho, "rb") as handle:
                 dados = handle.read()
-            img = imaging.abrir(dados)
-            if img is None:
+
+            # Um PDF gravado com nome de foto não deve virar JPEG: rasterizar um documento é
+            # perder o documento. O conserto é a EXTENSÃO — com `.pdf`, o `send_from_directory`
+            # declara `application/pdf` e o navegador abre no visualizador.
+            e_pdf = dados.startswith(b"%PDF")
+            img = None if e_pdf else imaging.abrir(dados)
+            if not e_pdf and img is None:
                 click.echo(f"  ILEGÍVEL  {a.familia} #{a.registro_id} {a.url}")
                 falhas += 1
                 continue
 
+            nova_ext = ".pdf" if e_pdf else ".jpg"
             if not execute:
-                click.echo(f"  {a.url}  ->  <uuid>.jpg   ({a.familia} #{a.registro_id})")
+                click.echo(
+                    f"  {a.url}  ->  <uuid>{nova_ext}   ({a.familia} #{a.registro_id}"
+                    f"{' — é PDF, só troca a extensão' if e_pdf else ''})"
+                )
                 convertidos += 1
                 continue
 
-            from PIL import Image
+            if e_pdf:
+                conteudo = dados
+            else:
+                from PIL import Image
 
-            frame = imaging.para_rgb(img)
-            if max(frame.width, frame.height) > MAX_PX:
-                frame.thumbnail((MAX_PX, MAX_PX), Image.LANCZOS)
-            buffer = io.BytesIO()
-            frame.save(buffer, format="JPEG", quality=QUALITY, optimize=True)
+                frame = imaging.para_rgb(img)
+                if max(frame.width, frame.height) > MAX_PX:
+                    frame.thumbnail((MAX_PX, MAX_PX), Image.LANCZOS)
+                buffer = io.BytesIO()
+                frame.save(buffer, format="JPEG", quality=QUALITY, optimize=True)
+                conteudo = buffer.getvalue()
 
             subpasta = a.url.strip("/").split("/")[1] if a.url.startswith("/uploads/") else (
                 "catalog_photos"
             )
-            nova = save_bytes(buffer.getvalue(), subpasta, ".jpg")
+            nova = save_bytes(conteudo, subpasta, nova_ext)
             # A coluna do catálogo guarda a URL pública `/catalogo/midia/<arq>`, não `/uploads/`.
             if a.url.startswith("/catalogo/midia/"):
                 nova = "/catalogo/midia/" + nova.rsplit("/", 1)[-1]

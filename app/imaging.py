@@ -71,6 +71,31 @@ def abrir(origem: BinaryIO | bytes) -> Any:
         return None
 
 
+#: Formatos que o navegador desenha num `<img>`. Fora daqui, o arquivo precisa ser convertido —
+#: não basta ter extensão de imagem. Um HEIC gravado como `.jpg` é servido com `image/jpeg`, o
+#: Pillow abre sem reclamar (com `pillow-heif`) e o Chrome não desenha nada.
+FORMATOS_EXIBIVEIS: frozenset[str] = frozenset({"JPEG", "PNG", "WEBP", "GIF"})
+
+
+def formato_de(origem: BinaryIO | bytes) -> str | None:
+    """Formato real dos bytes (`"JPEG"`, `"HEIF"`, `"TIFF"`…), ou ``None`` se não for imagem.
+
+    Sem `exif_transpose`: aquela função devolve uma imagem NOVA, com `format` já perdido — e é
+    justamente o `format` que diz se o navegador vai conseguir desenhar o arquivo.
+    """
+    suporte_heif()
+    try:
+        from PIL import Image
+
+        fp = io.BytesIO(origem) if isinstance(origem, bytes) else origem
+        if not isinstance(origem, bytes):
+            fp.seek(0)
+        with Image.open(fp) as img:
+            return img.format
+    except Exception:  # noqa: BLE001 — "não é imagem" é resposta, não erro
+        return None
+
+
 def para_rgb(img: Any) -> Any:
     """Achata transparência sobre branco e devolve a imagem em RGB (JPEG não tem canal alfa)."""
     from PIL import Image

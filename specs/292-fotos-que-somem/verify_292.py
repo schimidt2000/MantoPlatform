@@ -459,7 +459,12 @@ def c13_classificacao_dos_motivos():
 
     with app.test_request_context():
         pdf_disfarcado = f"{PREFIX}disfarce.jpg"
+        # HEIC de iPhone gravado com nome `.jpg`: o Pillow abre, o navegador NÃO. Conferir só
+        # "o Pillow consegue abrir?" deixaria este caso passar como íntegro — e ele some da tela
+        # do mesmo jeito. Cinco deles estavam em produção, invisíveis ao classificador antigo.
+        heic_disfarcado = f"{PREFIX}heic_disfarce.jpg"
         _grava(og_ops.TALENT_MEDIA_SUBFOLDER, pdf_disfarcado, b"%PDF-1.5\n" + b"z" * 500)
+        _grava(og_ops.TALENT_MEDIA_SUBFOLDER, heic_disfarcado, _imagem(300, 300, formato="HEIF"))
         casos = {
             None: midia_ops.MOTIVO_VAZIO,
             "": midia_ops.MOTIVO_VAZIO,
@@ -469,6 +474,9 @@ def c13_classificacao_dos_motivos():
             ),
             f"/uploads/{og_ops.TALENT_MEDIA_SUBFOLDER}/{pdf_disfarcado}": (
                 midia_ops.MOTIVO_NAO_E_IMAGEM
+            ),
+            f"/uploads/{og_ops.TALENT_MEDIA_SUBFOLDER}/{heic_disfarcado}": (
+                midia_ops.MOTIVO_FORMATO_OCULTO
             ),
             f"/uploads/{og_ops.TALENT_MEDIA_SUBFOLDER}/{estado['rosto_nome']}": (
                 midia_ops.MOTIVO_OK
