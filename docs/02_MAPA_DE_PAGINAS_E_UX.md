@@ -6,8 +6,12 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-09-02** · Em branch: **272-notificacoes-internas** (sino de notificações
-> no shell + `/notificacoes`). Antes: **270-miniaturas-catalogo** (variantes de miniatura na vitrine e no
+> Última atualização: **2026-09-03** · Em branch: **292-fotos-que-somem** + **293-atualizacao-cadastral**:
+> foto que responde 404 vira **iniciais** em vez de quadrado quebrado em toda superfície de talento e
+> figurino (`<Foto>` de `@manto/ui`), o Banco de Figurinos passa a baixar miniatura por largura, a tela
+> `/fotos-documentos` do portal diz "você ainda não tem foto" no lugar da prévia quebrada, e o portal
+> ganha **deep link** (`?destino=`) para o botão do e-mail de reenvio cair na tela certa.
+> Antes: **272-notificacoes-internas** (sino de notificações no shell + `/notificacoes`). Antes: **270-miniaturas-catalogo** (variantes de miniatura na vitrine e no
 > Banco de Talentos). Antes: **239-backlog-agosto** (rodada de 11 itens do
 > backlog — ver `specs/239-backlog-agosto/`)
 >

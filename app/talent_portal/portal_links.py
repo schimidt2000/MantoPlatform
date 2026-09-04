@@ -12,6 +12,8 @@ Por isso a base vem SEMPRE da config, nunca do request.
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from flask import current_app
 
 #: Caminho da tela de redefinição no portal React (`PORTAL_URL`).
@@ -19,6 +21,10 @@ RESET_PATH = "/reset-password"
 
 #: Caminho da rota Jinja legada, servida pelo próprio Flask — usado só no fallback.
 LEGACY_RESET_PATH = "/portal/reset-password"
+
+#: Tela do portal onde o artista reenvia foto e documento. É o destino do e-mail da feature 293:
+#: sem ele o link cai na agenda, e a pessoa que veio consertar a foto não acha onde fazer isso.
+FOTOS_PATH = "/fotos-documentos"
 
 
 def portal_base_url() -> str:
@@ -34,11 +40,14 @@ def portal_base_url() -> str:
     return (current_app.config.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
 
 
-def portal_reset_url(token: str) -> str:
+def portal_reset_url(token: str, destino: str | None = None) -> str:
     """URL de redefinição de senha enviada por e-mail ao talento.
 
     Args:
         token: Token de redefinição já persistido no `Talent`.
+        destino: Caminho interno do portal para onde levar depois que a senha for criada
+            (ex.: `/fotos-documentos`). Só caminho relativo — a validação final é do lado do
+            React, pela mesma regra do `_safe_next` do backend: começa com `/` e não com `//`.
 
     Returns:
         `{PORTAL_URL}/reset-password/{token}` quando o portal React está configurado; sem
@@ -46,6 +55,11 @@ def portal_reset_url(token: str) -> str:
         funcionando em ambiente onde o front novo ainda não foi publicado).
     """
     portal_url = (current_app.config.get("PORTAL_URL") or "").strip().rstrip("/")
-    if portal_url:
-        return f"{portal_url}{RESET_PATH}/{token}"
-    return f"{portal_base_url()}{LEGACY_RESET_PATH}/{token}"
+    if not portal_url:
+        # A rota Jinja legada não conhece `?destino=`; ignorá-lo aqui é melhor que gerar um link
+        # com um parâmetro que ninguém lê.
+        return f"{portal_base_url()}{LEGACY_RESET_PATH}/{token}"
+    url = f"{portal_url}{RESET_PATH}/{token}"
+    if destino and destino.startswith("/") and not destino.startswith("//"):
+        url += f"?destino={quote(destino, safe='')}"
+    return url

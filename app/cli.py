@@ -555,6 +555,188 @@ def register_commands(app):
             click.echo("  DRY-RUN — nada foi escrito. Repita com --execute para aplicar.")
         click.echo("")
 
+    @app.cli.command("campanha-fotos")
+    @click.option("--enviar", is_flag=True, help="envia de verdade (padrão: só mostra)")
+    @click.option("--limite", type=int, default=None, help="manda só para os N primeiros")
+    @click.option("--pausa", type=float, default=3.0, help="segundos entre um envio e o próximo")
+    @click.option(
+        "--id",
+        "ids",
+        type=int,
+        multiple=True,
+        help="restringe a estes talentos (repetível) — para reenviar a uma pessoa só",
+    )
+    def campanha_fotos(enviar: bool, limite: int | None, pausa: float, ids: tuple[int, ...]):
+        """Pede aos talentos que reenviem pelo portal os arquivos perdidos na migração (293).
+
+        **Dry-run por padrão**: lista quem receberia, o que falta de cada um, quem é pulado e por
+        quê, e imprime um e-mail renderizado por inteiro para conferência. Só com `--enviar` sai
+        mensagem.
+
+        Três cuidados que a campanha de 28/08/2026 não teve e que explicam o resultado dela:
+
+        1. **Link que dura.** O token vai com `CAMPANHA_RESET_TTL` (7 dias) em vez da hora do
+           autoatendimento — quem abre o e-mail à tarde não recebe "link inválido" — e já leva
+           para a tela de fotos (`?destino=`).
+        2. **Dedup que sobrevive a redeploy.** Cada envio grava uma linha no `AuditLog`; rodar de
+           novo não reenvia. Antes o controle era um `.txt` na máquina de uma pessoa só.
+        3. **Sem queimar o remetente.** Uma conexão SMTP para o lote todo, `--pausa` entre as
+           mensagens e `--limite` para mandar uma primeira onda pequena. A reputação do
+           joao@ carrega convite de evento, redefinição de senha e nota fiscal.
+
+        Quem tem devolução permanente registrada não recebe e-mail — sai numa lista de WhatsApp
+        com o link `wa.me` pronto, porque para essas pessoas o e-mail já provou que não chega.
+
+        No Shell do Render, use `MANTO_SEM_THREADS=1` na frente.
+        """
+        import time
+
+        from app import db
+        from app.email_service import mail, send_foto_pendente_email
+        from app.models import AuditLog, EmailBounce, Talent
+        from app.talent_portal.portal_account_ops import (
+            CAMPANHA_RESET_TTL,
+            emitir_token_de_reset,
+        )
+        from app.talent_portal.portal_links import FOTOS_PATH, portal_reset_url
+        from app.talents.midia_ops import faltas_do_talento
+        from app.utils import audit
+
+        ACAO = "campanha_fotos_292"
+        validade_dias = CAMPANHA_RESET_TTL.days
+
+        consulta = Talent.query.filter_by(status="active")
+        if ids:
+            # `--id` existe para o caso concreto de reenviar a uma pessoa só depois que o casting
+            # corrigiu o e-mail dela — e é o que permite verificar o comando sem tocar em quem
+            # não faz parte do teste.
+            consulta = consulta.filter(Talent.id.in_(ids))
+        ativos = consulta.order_by(Talent.full_name).all()
+        pendentes = [(t, faltas_do_talento(t)) for t in ativos]
+        pendentes = [(t, f) for t, f in pendentes if f]
+
+        emails = [(t.email_contact or "").strip().lower() for t, _ in pendentes]
+        mortos = {
+            b.email.lower()
+            for b in EmailBounce.query.filter(
+                EmailBounce.is_permanent.is_(True),
+                EmailBounce.resolved_at.is_(None),
+                db.func.lower(EmailBounce.email).in_([e for e in emails if e]),
+            ).all()
+        }
+        ja_recebeu = {
+            linha.entity_id
+            for linha in AuditLog.query.filter_by(entity_type="Talent", action=ACAO).all()
+        }
+
+        vao_receber, sem_email, com_bounce, repetidos = [], [], [], []
+        for talento, faltas in pendentes:
+            endereco = (talento.email_contact or "").strip()
+            if not endereco:
+                sem_email.append((talento, faltas))
+            elif endereco.lower() in mortos:
+                com_bounce.append((talento, faltas))
+            elif talento.id in ja_recebeu:
+                repetidos.append((talento, faltas))
+            else:
+                vao_receber.append((talento, faltas))
+
+        if limite is not None:
+            vao_receber = vao_receber[:limite]
+
+        def bloco(titulo: str, itens: list, extra=None) -> None:
+            click.echo("")
+            click.echo(f"  {titulo} ({len(itens)})")
+            click.echo(f"  {'-' * 70}")
+            for talento, faltas in itens:
+                senha = "tem senha" if talento.password_hash else "SEM SENHA"
+                click.echo(f"  #{talento.id:<5} {(talento.full_name or '')[:34]:<34} {senha}")
+                click.echo(f"        {talento.email_contact or '(sem e-mail)'}")
+                click.echo(f"        falta: {', '.join(faltas)}")
+                if extra:
+                    click.echo(f"        {extra(talento)}")
+
+        bloco("VÃO RECEBER", vao_receber)
+        bloco(
+            "PULADOS — devolução permanente, MANDAR POR WHATSAPP",
+            com_bounce,
+            lambda t: f"WhatsApp: https://wa.me/{t.whatsapp_number or '(sem telefone)'}",
+        )
+        bloco("PULADOS — já receberam nesta campanha", repetidos)
+        bloco("PULADOS — sem e-mail no cadastro", sem_email)
+
+        sem_termo = [t for t, _ in vao_receber if not t.terms_accepted_at]
+        if sem_termo:
+            click.echo("")
+            click.echo(
+                f"  Aviso: {len(sem_termo)} de {len(vao_receber)} ainda não aceitaram os termos. "
+                "O portal vai pedir o aceite ANTES de mostrar a tela de fotos."
+            )
+
+        if not enviar:
+            if vao_receber:
+                talento, faltas = vao_receber[0]
+                token = emitir_token_de_reset(talento, CAMPANHA_RESET_TTL)
+                db.session.rollback()  # dry-run não grava token nenhum
+                url = portal_reset_url(token, FOTOS_PATH)
+                click.echo("")
+                click.echo(f"  {'=' * 70}")
+                click.echo(f"  EXEMPLO — o que {talento.full_name} receberia:")
+                click.echo(f"  {'=' * 70}")
+                click.echo("  Assunto: 📸 Faltam arquivos no seu cadastro da Manto")
+                click.echo(f"  Para:    {talento.email_contact}")
+                click.echo(f"  Falta:   {', '.join(faltas)}")
+                click.echo(f"  Botão:   {url}")
+                click.echo(f"  Validade do link: {validade_dias} dias")
+            click.echo("")
+            click.echo("  DRY-RUN — nenhum e-mail saiu. Repita com --enviar para disparar.")
+            click.echo("")
+            return
+
+        enviados = falhou = 0
+        # Uma conexão SMTP para o lote inteiro: `_send` abre uma por mensagem, e 40 conexões
+        # seguidas ao Gmail em poucos segundos é padrão de burst.
+        with mail.connect():
+            for indice, (talento, faltas) in enumerate(vao_receber):
+                try:
+                    token = emitir_token_de_reset(talento, CAMPANHA_RESET_TTL)
+                    db.session.commit()
+                    ok = send_foto_pendente_email(
+                        talento,
+                        faltas=faltas,
+                        acao_url=portal_reset_url(token, FOTOS_PATH),
+                        validade_dias=validade_dias,
+                    )
+                except Exception as exc:  # noqa: BLE001 — uma falha não pode parar a fila
+                    db.session.rollback()
+                    click.echo(f"  ERRO   #{talento.id} {talento.full_name}: {exc}")
+                    falhou += 1
+                    continue
+
+                if ok:
+                    # Marca DEPOIS do envio dar certo: e-mail que não saiu não gasta a vez
+                    # (mesmo cuidado de `invite_reminders`).
+                    audit(
+                        action=ACAO,
+                        entity_type="Talent",
+                        entity_id=talento.id,
+                        entity_name=talento.full_name,
+                        detail=f"Reenvio pedido: {', '.join(faltas)}",
+                    )
+                    db.session.commit()
+                    enviados += 1
+                    click.echo(f"  enviado  #{talento.id} {talento.email_contact}")
+                else:
+                    falhou += 1
+                    click.echo(f"  NAO SAIU #{talento.id} {talento.email_contact}")
+                if pausa and indice < len(vao_receber) - 1:
+                    time.sleep(pausa)
+
+        click.echo("")
+        click.echo(f"  Enviados: {enviados}   Falhas: {falhou}")
+        click.echo(f"  Para mandar à mão (WhatsApp): {len(com_bounce)}")
+        click.echo("")
+
     @app.cli.command("notificacoes-limpar")
     @click.option("--execute", is_flag=True, help="apaga de verdade (padrão: só conta)")
     def notificacoes_limpar(execute: bool):
