@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@manto/api-client";
+import { ApiRequestError, apiFetch } from "@manto/api-client";
 
-const ME_KEY = ["portal", "auth", "me"] as const;
+/** Chave da consulta do talento logado. Exportada porque o `main.tsx` a limpa ao perder a sessão. */
+export const ME_KEY = ["portal", "auth", "me"] as const;
 
 /** Etapa de onboarding que o talento precisa concluir antes de usar o portal. */
 export type PortalPendingStep = "change_password" | "accept_terms";
@@ -19,15 +20,24 @@ export interface PortalTalent {
   pending_steps: PortalPendingStep[];
 }
 
-/** Busca o talento autenticado atual. `null` quando não há sessão. */
+/**
+ * Busca o talento autenticado atual. `null` quando não há sessão.
+ *
+ * Só o **401** vira `null`. Antes o `catch` engolia tudo, e com isso "sua sessão expirou",
+ * "o servidor caiu" e "o celular está sem rede" produziam exatamente o mesmo estado — o motivo
+ * de um relato de portal quebrado nunca chegar com o dado que o resolveria. Erro de rede ou de
+ * servidor agora **propaga**, para a tela poder dizer a verdade e oferecer "tentar de novo"
+ * em vez de mandar a pessoa para o login sem motivo.
+ */
 export function useCurrentTalent() {
   return useQuery<PortalTalent | null>({
     queryKey: ME_KEY,
     queryFn: async () => {
       try {
         return await apiFetch<PortalTalent>("/api/portal/auth/me");
-      } catch {
-        return null;
+      } catch (erro) {
+        if (erro instanceof ApiRequestError && erro.status === 401) return null;
+        throw erro;
       }
     },
   });

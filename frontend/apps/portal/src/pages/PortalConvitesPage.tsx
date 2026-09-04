@@ -4,6 +4,7 @@ import { CacheLine } from "../components/CacheLine";
 import { FormError } from "../components/FormField";
 import { formatDateTime, formatRelativeDay, formatWeekday } from "../lib/format";
 import { useAcceptInvite, useAgenda, useRejectInvite, type PortalRole } from "../lib/portalAgenda";
+import { ErroDeCarregamento } from "../components/ErroDeCarregamento";
 
 /**
  * Um convite pendente, com o cachê em destaque.
@@ -98,11 +99,12 @@ export function PortalConvitesPage() {
 
   if (agendaQuery.isError) {
     return (
-      <div className="p-4">
-        <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          Não foi possível carregar seus convites.
-        </div>
-      </div>
+      <ErroDeCarregamento
+        erro={agendaQuery.error}
+        oQue="seus convites"
+        aoTentarDeNovo={() => void agendaQuery.refetch()}
+        carregando={agendaQuery.isFetching}
+      />
     );
   }
 

@@ -4,7 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-03** · Estado do repositório: pós-features
+> Última atualização: **2026-09-04** · Estado do repositório: pós-feature
+> **294-portal-diz-o-erro** (sem migration; o portal para de imprimir uma frase só para toda
+> falha — 401 vira login com destino, erro de rede deixa de parecer logout) — antes dela
+> pós-features
 > **292-fotos-que-somem** e **293-atualizacao-cadastral** (as duas sem migration, em branch: a
 > foto que some vira iniciais, figurino ganha miniatura por largura, HEIC passa a ser convertido
 > e o pedido de reenvio sai por `flask campanha-fotos` em dry-run) — antes delas pós-feature
@@ -76,6 +79,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **294-portal-diz-o-erro** | Print de artista com o cabeçalho logado e "Não foi possível carregar sua agenda": servidor exonerado em três níveis (ORM, gunicorn no ar, caminho público com a sessão real — 200 em 175 ms). O defeito era o portal jogar fora o motivo: `useCurrentTalent` fazia `catch { return null }` e a tela tinha uma frase só para toda falha. Agora 401 em qualquer consulta zera a sessão e leva ao login com `?destino=`, erro de rede/servidor deixa de parecer logout, e `ErroDeCarregamento` mostra causa, botão de tentar de novo e o código do erro | 2026-09-04 | — | (aqui) | — |
 | **292/293-fotos-que-somem** | A migração do Railway trouxe o banco e não os arquivos: 40 talentos e 64 fichas de figurino apontam para fotos que não existem mais, e o campo nunca ficou NULL — o front montava um `<img>` que respondia 404. `<Foto>` com fallback (o `onError` do React não basta: `error` de imagem não borbulha e o 404 do cache dispara antes do commit), variante por largura para `figurino_photos`, cache longo no `/portal/photo`, rotação gravando caminho novo, `pillow-heif` + `COMPRESS_EXTS` derivado, os 9 caminhos que gravavam cru passando por `save_file`, `MANTO_SEM_THREADS`, e os comandos `midia-orfa`/`fix-heic`/`campanha-fotos` (dry-run, dedup no `AuditLog`, link de 7 dias com deep link para `/fotos-documentos`) | 2026-09-03 | — | (aqui) | — |
 | **239b-hotfix-carrinho-fora-de-sp** | O botão "🚗 Marcar transporte" não aparecia na maioria dos eventos: `is_outside_sp` só era classificado por CEP ou pela palavra "São Paulo" no endereço, e endereço real de festa não tem nenhum dos dois — 55 dos 104 eventos futuros estavam `NULL` (Porto Feliz, Jundiaí, Alphaville, Belém do Pará…) e `NULL` valia como "não é fora". Geocoding do Google entra entre o CEP e o texto (`maps.cidade_do_endereco`), as edições React reclassificam (`reclassificar_fora_de_sp`), "Estimar via Google Maps" reclassifica, desconhecido mostra o botão e marcar classifica como fora; script de reclassificação com dry-run | 2026-09-02 | `—` | (aqui) | — |
 | **267b-hotfix-data-da-venda** | Comissão de agosto da vendedora aparecia como R$ 303,94 na Planilha de Pagamentos (e R$ 5.466,20 na tela de Comissões): 38 vendas sem `sale_date` desde que o React virou a interface primária (04/08) — o formulário Jinja prefilhava a data, o React nascia vazio — e o ciclo `coalesce(payable_from, sale_date)` excluía linha sem data de todo mês. Regra vai para o servidor (`resolver_data_da_venda`: venda nova sem data → hoje; venda antiga sem data não ganha data inventada), ciclo ganha `date(created_at)` como cinto, React volta a prefilhar, backfill com dry-run para 47 eventos | 2026-09-02 | `—` | (aqui) | — |
@@ -232,6 +236,54 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 294 — O portal que não sabia dizer o que deu errado            (2026-09-04 · feature · sem migration)
+
+**Motivação.** Um artista (Eduardo Assis, talento 112) mandou print do portal com o cabeçalho
+logado e, no lugar da agenda, `Não foi possível carregar sua agenda.` O dono lembrou que "há algum
+tempo" isso acontece "em certos navegadores, até com funcionário" — e nunca fechou.
+
+Investiguei o servidor até o fim e **exonerei**: `get_agenda` devolve os dados dele no ORM; o
+gunicorn que está no ar responde **200 em 34 ms** com a sessão real dele; e o caminho público
+inteiro (Cloudflare → Node → gunicorn), com user-agent de Android, responde **200 em 175 ms**.
+Também descartei `/api/*` caindo no fallback da SPA (devolve 401 JSON), Cloudflare cacheando a API
+(`DYNAMIC`, `vary: Cookie`), bundles diferentes entre `portal.` e `app.` (é o mesmo arquivo) e
+config de sessão (permanente, 31 dias, Secure/HttpOnly/Lax).
+
+**O defeito era não haver diagnóstico.** Duas coisas, juntas, garantiam que nenhum relato chegasse
+com o dado que o resolveria:
+
+```ts
+catch { return null; }   // useCurrentTalent: 401, 500 e celular sem rede viravam a MESMA coisa
+```
+
+e a tela imprimindo uma frase só para qualquer falha. Com isso, "sua sessão caiu" era
+indistinguível de "o servidor caiu" — e o `staleTime` de 30 s permitia o estado do print: cabeçalho
+desenhado do cache, conteúdo em erro. O artista não tinha o que fazer, e quem recebia o relato não
+tinha o que investigar.
+
+**O que muda.**
+- `createQueryClient(opcoes)` ganha `aoPerderSessao`, chamado por um `QueryCache.onError` quando
+  **qualquer** consulta toma 401. No portal ele zera o talento em cache, e o `RequireTalentAuth`
+  leva a pessoa ao login **guardando o destino** (o `?destino=` da 293) — ela volta para onde
+  estava depois de entrar. O beco sem saída deixa de existir.
+- `useCurrentTalent` só transforma **401** em `null`. Erro de rede ou de servidor **propaga**.
+- `RequireTalentAuth` passa a tratar `isError` antes de `!talent`: uma queda de sinal **não é**
+  logout. Antes, o `catch` engolia a falha e a pessoa era expulsa para o login sem entender por
+  quê — o relato "o portal me desloga sozinho" nasce daí.
+- `ErroDeCarregamento` (novo): diz se foi falta de conexão ou erro do servidor, oferece **Tentar de
+  novo**, e mostra o **código do erro** — é o que transforma "o portal não abre" num relato
+  investigável. Usado na agenda, nos convites e no histórico.
+
+**Verificado em tela**, os três caminhos: 401 na agenda leva a `/login?destino=%2Fagenda`; com o
+Flask derrubado a pessoa **continua logada** e lê "erro 500" com botão; e o botão recupera a tela
+sem recarregar.
+
+**O que este conserto NÃO faz.** Não descobre por que a sessão do Eduardo caiu — isso acontece no
+aparelho dele e o servidor não tem como ver. O que muda é que, da próxima vez, ou o portal se
+recupera sozinho (401 → login → destino), ou o relato chega com um número.
+
+---
 
 ### 292 e 293 — A foto que sumiu: iniciais no lugar do quadrado quebrado, e o pedido de reenvio            (2026-09-03 · features · sem migration)
 

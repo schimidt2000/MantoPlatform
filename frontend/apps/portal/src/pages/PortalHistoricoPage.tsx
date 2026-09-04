@@ -3,6 +3,7 @@ import { formatBRL } from "@manto/money";
 import { RatingLink } from "../components/RatingLink";
 import { formatShortDate } from "../lib/format";
 import { useHistorico, type PortalHistoricoItem } from "../lib/portalHistorico";
+import { ErroDeCarregamento } from "../components/ErroDeCarregamento";
 
 function TotalCard({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
@@ -68,11 +69,12 @@ export function PortalHistoricoPage() {
 
   if (historicoQuery.isError || !historicoQuery.data) {
     return (
-      <div className="p-4">
-        <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          Não foi possível carregar seu histórico.
-        </div>
-      </div>
+      <ErroDeCarregamento
+        erro={historicoQuery.error}
+        oQue="seu histórico"
+        aoTentarDeNovo={() => void historicoQuery.refetch()}
+        carregando={historicoQuery.isFetching}
+      />
     );
   }
 

@@ -6,6 +6,7 @@ import { CacheLine } from "../components/CacheLine";
 import { RatingLink } from "../components/RatingLink";
 import { formatDateTime, formatRelativeDay, formatWeekday } from "../lib/format";
 import { useAckEventChange, useAgenda, type PortalRole } from "../lib/portalAgenda";
+import { ErroDeCarregamento } from "../components/ErroDeCarregamento";
 
 function RoleCard({ role, upcoming = false }: { role: PortalRole; upcoming?: boolean }) {
   const ackChange = useAckEventChange();
@@ -116,11 +117,12 @@ export function PortalAgendaPage() {
 
   if (agendaQuery.isError) {
     return (
-      <div className="p-4">
-        <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          Não foi possível carregar sua agenda.
-        </div>
-      </div>
+      <ErroDeCarregamento
+        erro={agendaQuery.error}
+        oQue="sua agenda"
+        aoTentarDeNovo={() => void agendaQuery.refetch()}
+        carregando={agendaQuery.isFetching}
+      />
     );
   }
 
