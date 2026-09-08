@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Valida o `startCommand` do `manto-backend` no `render.yaml` com o parser REAL do gunicorn.
 
 Existe por causa da queda de producao de 26/08/2026 (ainda no Railway): a flag
