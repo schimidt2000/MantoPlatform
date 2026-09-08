@@ -1,5 +1,7 @@
 # 05 — Dívida Técnica
 
+> **2026-09-08 (feature 296)**: §10 resolvida; pendências operacionais 21-33 registradas ao fim do §10.
+>
 > Achados de uma auditoria de leitura de 2026-08-06 sobre ~44k linhas de Python e ~46k de TypeScript,
 > priorizados por **impacto**, não por elegância. Cada item tem `arquivo:linha` e uma ação concreta.
 >
@@ -36,7 +38,7 @@
 | 17 | **P4** | `app/calendar/routes.py:2424`, `:2365` | código morto puro | apagar |
 | 18 | **P5** | `app/models.py` | 13 models centrais sem docstring; dois fusos sem anotação | §7 |
 | 19 | **P5** | `app/api/` | 288 endpoints, **1** com contrato JSON documentado | §7 |
-| 20 | **P5** | raiz + `.claude/skills/` | 3 fontes de instrução concorrentes e erradas | §10 |
+| ~~20~~ | ~~P5~~ | ✅ **RESOLVIDO na feature 296** — eram 8 fontes (4 de doc/skill + os 4 arquivos de deploy do Railway), todas apagadas ou reescritas; pendências operacionais novas ao fim do §10 | — |
 
 ---
 
@@ -234,8 +236,8 @@ exclusão. **Documentar a decisão no docstring de `_delete_event_flow`.**
 | `travel_estimate` (51 l.) | `app/calendar/routes.py:2424` — perdeu o decorator, sem chamador; a que roda é `_fetch_travel_data` (`:2377`) | apagar e corrigir a referência de `agenda_read.py:444` |
 | `_is_outside_sp` | `app/calendar/routes.py:2365` — sem referência no repositório inteiro | apagar |
 | `Modal.tsx` local | `frontend/apps/internal/src/components/Modal.tsx:15` afirma que "não existe equivalente em `@manto/ui`" — **falso desde a 187**; e o Modal local não prende foco nem usa portal | migrar os 4 consumidores (`CatalogBulkActionBar`, `AdminCatalogoListPage`, `FigurinoListPage`, `GastosExtrasPage`) para `Dialog` e apagar |
-| `docs/changelog.html` (70 KB) | declarado congelado, mas continua em `docs/` e cai em qualquer `Glob('docs/*')` | mover para `docs/archive/` ou apagar (o conteúdo está coberto pelo 03) |
-| `CLAUDE OLD.md` (23 KB) | raiz, **mesmo título de primeira linha** do vigente | mover para `docs/archive/CLAUDE_2026-07.md` ou apagar |
+| ~~`docs/changelog.html`~~ | ✅ RESOLVIDO na 296 — movido para `docs/archive/changelog.html` | — |
+| ~~`CLAUDE OLD.md`~~ | ✅ RESOLVIDO — arquivado em `docs/archive/CLAUDE_2026-07.md` (agosto); a constituição 2.1.0 foi para `docs/archive/constitution-2.1.0.md` na 296 | — |
 
 ---
 
@@ -418,27 +420,38 @@ os imports.
 
 ---
 
-## 10. Instruções concorrentes (remover antes de qualquer coisa)
+## 10. Instruções concorrentes — ✅ RESOLVIDO na feature 296 (2026-09-08)
 
-Três fontes de instrução com aparência de autoridade contradizem o CLAUDE.md. São o item de menor
-esforço e maior efeito da lista, porque envenenam **toda** sessão futura.
+A auditoria de 06/08 achou três fontes de instrução contradizendo o `CLAUDE.md`; a revisão do harness
+de 08/09 achou oito e fechou todas: as 4 skills genéricas soltas de março (`architecture.md`,
+`autonomy.md`, `python-quality.md`, `ui-ux.md` — não carregavam por não terem `SKILL.md` e prescreviam
+`src/`+repository, pytest/TDD, CSS vanilla e "Posso prosseguir?") saíram para
+`~/.claude/archive/`; `CLAUDE OLD.md` já estava em `docs/archive/`; `DEVELOPMENT.md` foi reescrito
+(branch `dev` morta e apagada; Railway só como história; migrations à mão); e `railway.json`,
+`nixpacks.toml`, `frontend/railway.json` e `frontend/nixpacks.toml` — quatro arquivos de deploy que
+não deployavam nada e que `scripts/validar_startcommand.py` ainda validava — foram apagados no mesmo
+commit em que o validador passou a ler o `render.yaml`. As correções do próprio `CLAUDE.md` (typecheck
+das três SPAs, `scripts/db/` gitignored, ponteiro para `docs/00`) entraram na reescrita. Nada em
+`.claude/` era versionado (`.gitignore` tinha `.claude/`); desde a 296 só `settings.local.json` fica
+fora.
 
-| Arquivo | Problema | Ação |
-|---|---|---|
-| `.claude/skills/architecture.md` | Prescreve `src/<feature>/{models,service,repository}.py` com classes `OrderRepository`/`OrderService` injetadas por construtor e a regra "API → Service → Repository". **Contradiz frontalmente** a arquitetura real (`app/<blueprint>/<dominio>_ops.py` com funções puras, sem repository) e usa `total: float` para dinheiro, quando o projeto exige `Decimal` | apagar ou reescrever para o padrão real. Uma skill genérica dentro de um projeto com arquitetura própria e forte é **uma instrução errada com aparência de autoridade**, e mais específica (ativável) que o CLAUDE.md |
-| `.claude/skills/autonomy.md:11` | Exige bloco "PLANO DE IMPLEMENTAÇÃO" com pergunta "Posso prosseguir?", execução um arquivo por vez e "criar testes (TDD)". Contradiz o CLAUDE.md (`:19-20`, "vá direto ao ponto", "NÃO execute rotinas extras de auto-verificação") e **pressupõe uma suíte de testes que não existe** | alinhar ao CLAUDE.md ou apagar |
-| `CLAUDE OLD.md` (23 KB, raiz) | Mesmo título de primeira linha do vigente; indistinguível numa busca | arquivar |
-| `DEVELOPMENT.md:14` | "Nunca commitar direto no `main`. Todo desenvolvimento vai para `dev`" — não existe branch `dev` como tronco; o fluxo real é branch de feature → merge em `main` → deploy automático | atualizar ou absorver no CLAUDE.md |
+### Pendências operacionais registradas na 296
 
-### Correções no próprio CLAUDE.md
-
-| Linha | Problema | Correção |
-|---|---|---|
-| `:55` | `npx tsc --noEmit` "dentro de `apps/internal` ou `apps/public`" — esquece `apps/portal`, que é buildado em produção | `cd frontend && npm run typecheck` (cobre os três, `frontend/package.json:18`) |
-| `:54` | A regra **NÃO-NEGOCIÁVEL** de verificação aponta para `.\scripts\db\run-local.ps1`, e `/scripts/db/` é **gitignored** (`.gitignore:41`) | registrar a condição na própria regra: "`scripts/db/` não é versionado (contém caminhos e credenciais locais)" e documentar o conteúdo esperado dos scripts — isso importa mais que a linha de comando |
-| — | O CLAUDE.md nunca diz que o frontend tem **três** SPAs nem que existem `frontend/packages/{ui,api-client,money}` | apontar para `docs/00_MAPA_DO_SISTEMA.md` |
-
----
+| # | Prio | Onde | O quê | Ação |
+|---|---|---|---|---|
+| 21 | **P1** | painel do Render, `manto-backend` | `AUDIT_AGENT_TOKEN` e `MARKETING_AGENT_TOKEN` não foram preenchidos na migração de 28/08: `/api/audit-agent/*` e `/api/marketing-agent/*` respondem 404 e as rodadas semanais (221, 256) estão paradas | o dono preenche no painel a partir de `.audit-agent-token`/`.marketing-agent-token` (locais), fora do horário — mudar env redeploya (janela de 502) |
+| 22 | **P2** | `render.yaml`, bloco `manto-frontend` | sem `healthCheckPath` e sem `watchPatterns`: cada push (inclusive só de docs) rebuilda os dois serviços e abre ~1 min de 502 na porta pública | decisão do dono; `healthCheckPath: /` (o `server.js` responde a SPA) e `watchPatterns` excluindo `docs/`/`specs/` — cada um em commit isolado, fora do horário, Events abertos (comportamento de serviço sem disco não conferido) |
+| 23 | **P2** | `app/models.py` × banco | drift antigo que `flask db check` acusa no `manto_local`: `remove_index ix_calendar_events_cancelled_at`, `remove_constraint UNIQUE(clients.phone)`, `add_fk` em `ensaio_materials` (event_id, user_id) e `talent_media.talent_id`, índices em `figurino_producoes` e `special_expenses` | decidir de que lado está a verdade item a item ANTES de qualquer migration que toque essas tabelas; nunca autogenerate (o `flask db upgrade` do start executaria em produção) |
+| 24 | **P2** | pasta do repositório | sincronizada pelo Google Drive Desktop (`.tmp.drive*` na raiz): `.git/`, `instance/`, `.env`, tokens e `backups/*.dump` vão para a nuvem do dono | confirmar intenção; excluir `.git/`, `instance/` e `backups/` do sync |
+| 25 | **P3** | `render.yaml:buildCommand` do frontend | `npm install` (o antigo `nixpacks.toml` usava `npm ci`, que exige lockfile em sincronia) | alinhar para `npm ci` em commit isolado, ou manter e registrar |
+| 26 | **P3** | `.specify/templates/*.md` | adaptados à Manto no lugar (cabeçalho "ADAPTADO PARA A MANTO"); o `speckit.manifest.json` deixa de conferir para eles, e um `specify init --force` os sobrescreveria | reaplicar após qualquer atualização do Spec Kit; `overrides/` não é honrado por todas as skills |
+| 27 | **P3** | `.claude/settings.json` | além dos `deny` (`flask db migrate`, `git add -A`, `git add .`, `git push --force`), nenhum portão da constituição é executado por máquina — typecheck, ruff e verify dependem do agente | avaliar hook de pré-commit local (fora do escopo da 296) |
+| 28 | **P3** | Google Cloud Console | host registrado em `GOOGLE_OAUTH_REDIRECT_URI` de produção não conferido nesta revisão (`app.mantoproducoes.com.br` ou `manto-backend.onrender.com`) | conferir no painel do Render e no Console; então fixar no `.env.example` |
+| 29 | **P3** | `docs/04_GUIA_DE_DOMINIOS.md` | última revisão 2026-08-06 (pós-216); as 80 features seguintes não passaram por ele | varredura por domínio na próxima feature que tocar cada um |
+| 30 | **P3** | `docs/02_MAPA_DE_PAGINAS_E_UX.md` | cabeçalho virou changelog encadeado de ~30 linhas | trocar por uma linha "última atualização · última feature" e deixar o histórico no `docs/03` |
+| 31 | **P4** | `.railway-db-url`, `scripts/db/backup-railway.ps1` | nomes herdados do Railway — apontam para o Postgres do Render desde 28/08 (7 consumidores + Tarefa Agendada leem o nome) | renomear só com todos os consumidores e a Tarefa Agendada na mesma passada |
+| 32 | **P4** | ~282 branches `NNN-*` locais e remotas nunca apagadas | o alocador do Spec Kit lê branches: apagar branch sem pasta em `specs/` pode fazer um número voltar | apagar em lote só as que têm pasta correspondente em `specs/` |
+| 33 | **P4** | `docs/planos.md`, `docs/EspecificacoesEducamanto.md` | conteúdo comercial dentro de `docs/` | mover para `docs/negocio/` quando alguém tocar neles |
 
 ## 11. Ordem sugerida de ataque
 
@@ -472,7 +485,7 @@ esforço e maior efeito da lista, porque envenenam **toda** sessão futura.
 `app/educamanto/pdf_textos.py` (custos de técnicos, áreas X/Y do som), custos de
 iluminação/cenário por musical (colunas zeradas) e a divisão personagens×produção dos musicais
 além de Uma Aventura Animal; textos das responsabilidades aguardam revisão do dono. **Não fazer
-merge para `main` antes disso** — Railway faz deploy automático do main.
+merge para `main` antes disso** — o Render faz deploy automático da `main`.
 
 ## Baixa da feature 236-cache-por-duracao (2026-08-14, branch)
 

@@ -5,6 +5,9 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-09-08** · Estado do repositório: pós-feature
+> **296-revisao-harness** (sem migration; harness revisado para o Render — constituição 3.0.0 com a
+> esteira em dois níveis, `CLAUDE.md`/`DEVELOPMENT.md` reescritos, `.claude/` versionado, arquivos de
+> deploy do Railway apagados, validador lendo o `render.yaml`) — antes dela pós-feature
 > **295-cookie-de-sessao-orfao** (sem migration; o cookie `session` do domínio `.mantoproducoes.com.br`
 > que a 144 criou para o `beta.*` continuava nos navegadores e vencia o cookie bom por ser mais
 > antigo — 401 permanente sem login que resolvesse; o servidor passa a recolhê-lo na própria
@@ -83,6 +86,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **296-revisao-harness** | Revisão do harness pós-Railway: constituição 3.0.0 (esteira em dois níveis, Regra Zero de numeração em `specs/`, XIII RBAC e XIV configuração/efeito externo novos, seção Operação e Deploy, Portões reescritos), `CLAUDE.md` e `DEVELOPMENT.md` reescritos, Spec Kit funcional num clone limpo (scripts bash versionados, templates adaptados, `.claude/` versionado com skills `manto-verify`/`manto-deploy`/`manto-conferir-tela` e `deny` no `settings.json`), `validar_startcommand.py` lendo o `render.yaml`, `railway.json`/`nixpacks.toml` apagados, `docs/00`/`01`/`05` com o Render como presente | 2026-09-08 | — | (aqui) | — |
 | **295-cookie-de-sessao-orfao** | A causa raiz que a 294 tornou visível: a feature 144 gravou cookies `session` no domínio `.mantoproducoes.com.br` para o `beta.*`; o beta morreu, a variável foi desligada, e o cookie ficou nos navegadores. Quem logou naquele período manda DOIS `session` na mesma requisição e o Werkzeug entrega o primeiro — com o mesmo `Path`, o mais antigo (RFC 6265 §5.4), que é o órfão. Login grava o cookie bom, a requisição seguinte é lida pelo órfão, 401 para sempre — e nenhum login conserta, porque o servidor não escreve mais naquele domínio. `after_request` recolhe o órfão quando chegam dois `session` e ninguém se autenticou (a sessão que funciona nunca é tocada; a 401 já carrega a cura), `SESSION_COOKIE_DOMINIOS_OBSOLETOS` com o domínio do beta no padrão, e o ERP passa a wirar `aoPerderSessao` como o portal já fazia | 2026-09-08 | — | (aqui) | — |
 | **294-portal-diz-o-erro** | Print de artista com o cabeçalho logado e "Não foi possível carregar sua agenda": servidor exonerado em três níveis (ORM, gunicorn no ar, caminho público com a sessão real — 200 em 175 ms). O defeito era o portal jogar fora o motivo: `useCurrentTalent` fazia `catch { return null }` e a tela tinha uma frase só para toda falha. Agora 401 em qualquer consulta zera a sessão e leva ao login com `?destino=`, erro de rede/servidor deixa de parecer logout, e `ErroDeCarregamento` mostra causa, botão de tentar de novo e o código do erro | 2026-09-04 | — | (aqui) | — |
 | **292/293-fotos-que-somem** | A migração do Railway trouxe o banco e não os arquivos: 40 talentos e 64 fichas de figurino apontam para fotos que não existem mais, e o campo nunca ficou NULL — o front montava um `<img>` que respondia 404. `<Foto>` com fallback (o `onError` do React não basta: `error` de imagem não borbulha e o 404 do cache dispara antes do commit), variante por largura para `figurino_photos`, cache longo no `/portal/photo`, rotação gravando caminho novo, `pillow-heif` + `COMPRESS_EXTS` derivado, os 9 caminhos que gravavam cru passando por `save_file`, `MANTO_SEM_THREADS`, e os comandos `midia-orfa`/`fix-heic`/`campanha-fotos` (dry-run, dedup no `AuditLog`, link de 7 dias com deep link para `/fotos-documentos`) | 2026-09-03 | — | (aqui) | — |
@@ -241,6 +245,73 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 296 — Revisão do harness: Render como presente, esteira em dois níveis, harness versionado            (2026-09-08 · harness · sem migration)
+
+**Contexto.** A produção migrou para o Render em 28/08 (264), mas o harness — o que cada sessão do
+Claude Code lê antes de agir — parou em 30/07: `CLAUDE.md` não dizia que push na `main` é deploy nem
+mandava ler `docs/00`; a constituição (2.2.0) dizia Railway na Stack, prometia 8 comandos com sintaxe
+`/speckit.X` que não existe (as skills instaladas são `/speckit-X`) e tinha perdido a regra de RBAC;
+`DEVELOPMENT.md` mandava para a branch `dev` (morta desde 23/04, 887 commits atrás da `main`) e
+ensinava `flask db migrate`; `.specify/scripts/bash/` (o que todas as skills chamam) estava untracked
+e `.claude/` inteiro gitignored; `feature.json` apontava para a 256; `railway.json`/`nixpacks.toml`
+seguiam na raiz e `scripts/validar_startcommand.py` validava eles, não o `render.yaml`. As regras
+operacionais que evitam incidente (push = deploy, `/health` público mente, `startCommand` sozinho,
+ensaio de migração destrutiva, `FLASK_ENV`/`MANTO_SEM_THREADS`, espelho com credenciais reais) viviam
+só na memória do agente. Uma auditoria multi-agente (4 auditores → verificação em 2 lentes → crítico →
+arquiteto) confirmou 148 achados e refutou 5. Última esteira completa do Spec Kit antes disto: 255.
+
+**O que mudou.** Constituição **3.0.0** (Sync Impact Report no topo; Princípio VI em dois níveis —
+FEATURE com os 8 comandos com hífen, CORREÇÃO com spec curta + verify + `docs/03` — e Regra Zero de
+numeração em `specs/`; VIII = `verify_NNN.py` em `specs/NNN-nome/` com os cinco modos de passar verde
+sem testar; XIII RBAC e XIV configuração/efeito externo novos; seção Operação e Deploy; Portões
+reescritos; Governança com emenda, versionamento e conformidade). `CLAUDE.md` reescrito (regras de
+trabalho + ponteiros para `docs/00`, ≈160 linhas). `DEVELOPMENT.md` reescrito para o Render e para a
+esteira real (branches, dois níveis, `manto_local` com as duas variáveis, tabela local × Render,
+migrations à mão + ensaio destrutivo, esqueleto do verify, publicar, operar). Spec Kit: `scripts/bash/`
+versionado, `scripts/powershell/` removido, hooks de auto-commit desligados (`extensions.yml`),
+templates adaptados no lugar, `feature.json` → 296, `constitution OLD.md` → `docs/archive/`.
+`.claude/` versionado (só `settings.local.json` fica fora): 7 symlinks mortos e 4 skills genéricas
+fora; skills `manto-verify`, `manto-deploy`, `manto-conferir-tela` criadas; `settings.json` podado
+(122 → 47 allow) com `deny` para `flask db migrate`, `git add -A`, `git add .`, `git push --force`;
+`launch.json` sobe o backend com `MANTO_SEM_THREADS=1`/`FLASK_ENV=development`. Deploy:
+`validar_startcommand.py` lê o bloco `manto-backend` do `render.yaml` (sem PyYAML) e exige o
+`healthCheckPath`; os 4 arquivos do Railway apagados; `render.yaml` com cabeçalho de fonte única, as
+lições do `nixpacks.toml` acima do `startCommand` e o aviso do frontend sem healthcheck. Docs:
+`docs/00` (§2 hospedagem/deploy, §6 itens 15/17 e cinco armadilhas novas 18-22, §9, §10 mapa completo),
+`docs/01` §5 reescrita (§5.3 vira a casa única de operação no Render), `docs/05` §10 resolvida e
+pendências operacionais novas, `CONTINGENCIA_RENDER.md` vira registro histórico, `.env.example`
+refeito, `docs/changelog.html` → `docs/archive/`.
+
+**Decisões do dono (08/09).** Esteira em dois níveis; versionar `.claude/` parcialmente; apagar os
+arquivos do Railway e a branch `dev` (tag `arquivo/dev-2026-04-23` antes, depois do push); `deny` no
+`settings.json`.
+
+**Correções por referência (append-only).** (a) 264: o appeal foi negado no mesmo dia — a perda dos
+arquivos do volume é definitiva, não "até o appeal responder". (b) 265, pegadinha (1): o número da
+feature nasce em `specs/` (alocador do Spec Kit: `max(specs/, branches, refs remotos) + 1`), não no
+`docs/03` — este documento registra, não reserva; hotfix herda o número com sufixo. (c) O backup
+noturno local já aponta para o Postgres do Render desde 28/08 (nome `.railway-db-url` herdado).
+
+**Pegadinhas.** (1) `.specify/templates/overrides/` não é honrado por todas as skills
+(`speckit-checklist` lê o caminho direto) — templates se editam no lugar, marcados "ADAPTADO PARA A
+MANTO". (2) A branch do Nível 1 é criada pelo hook `before_specify`
+(`.specify/extensions/git/scripts/bash/create-new-feature.sh`), não pelo script homônimo em
+`.specify/scripts/bash/`, que é órfão. (3) `/speckit-constitution` trata o arquivo como template e
+sobrescreve — a 3.0.0 foi escrita à mão no formato que a skill exige (Sync Impact Report, headings
+`#/##/###`, Governança completa). (4) `python script.py` não lê o `.env` (só `run.py` chama
+`load_dotenv`): `FLASK_ENV`/`MANTO_SEM_THREADS` sempre explícitos. (5) `.gitignore` e `render.yaml`
+mudam na mesma rodada — citação por entrada/chave, não por linha. (6) Script combinado grande no Bash
+tool pode não executar por erro de parse; arquivo grande vai pelo Write tool.
+
+**Verificação.** `check-prerequisites.sh --json --paths-only` na 296 (exit 0); o alocador em dry-run
+devolve 297; `validar_startcommand.py` verde lendo o `render.yaml`; `grep -rin railway` nos arquivos
+revisados só em frases históricas; `git ls-files .claude/skills .specify/scripts/bash
+.specify/templates` completo; `git ls-files | grep -i "settings.local\|db-url"` vazio; typecheck e
+`ruff` intocados (só comentários em `app/config.py`). Pós-push: sonda
+`/api/formularios/comum/schema` com JSON.
+
+---
 
 ### 295 — O cookie órfão que trancava o usuário para fora            (2026-09-08 · feature · sem migration)
 
