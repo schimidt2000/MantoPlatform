@@ -1,6 +1,6 @@
 # Feature 296 — Revisão do harness: Render como presente, esteira em dois níveis, harness versionado
 
-**Branch**: `296-revisao-harness` (da `main`) · **Created**: 2026-09-08 · **Status**: Em andamento ·
+**Branch**: `296-revisao-harness` (da `main`) · **Created**: 2026-09-08 · **Status**: Entregue (tabela de verificação executada em 08/09/2026 — alocador 297, check-prerequisites exit 0, validador verde, typecheck das 3 SPAs e ruff dos tocados limpos, clone limpo conferido) ·
 **Migration**: nenhuma · **Nível**: 2 (correção/harness — só documentação, configuração do Spec Kit e
 arquivos de deploy; nenhuma linha de comportamento do sistema muda)
 
