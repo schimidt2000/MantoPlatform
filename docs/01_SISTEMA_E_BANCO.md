@@ -7,7 +7,9 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-09-03** · Em branch: **292-fotos-que-somem** + **293-atualizacao-cadastral**
+> Última atualização: **2026-09-08** · **296-revisao-harness** (sem migration; §5 reescrita para o
+> Render — serviços, disco, backup, acesso ao servidor, `/health` público; `railway.json`/`nixpacks.toml`
+> removidos, o validador lê o `render.yaml`). Antes: **2026-09-03** · Em branch: **292-fotos-que-somem** + **293-atualizacao-cadastral**
 > (sem migration; `<Foto>` com fallback de 404, variante por largura em `figurino_photos`, `pillow-heif`
 > convertendo HEIC, os 9 caminhos de upload cru passando por `save_file`, `MANTO_SEM_THREADS`, e os
 > comandos `midia-orfa`/`fix-heic`/`campanha-fotos`). Antes: **272-notificacoes-internas** (tabela
@@ -150,7 +152,7 @@ agenda da Manto Produções.
                └──────────────┬───────────────┘
                               ▼
                ┌──────────────────────────────┐
-               │ app/models.py (SQLAlchemy)   │  → PostgreSQL (Railway)
+               │ app/models.py (SQLAlchemy)   │  → PostgreSQL (Render)
                └──────────────────────────────┘
 ```
 
@@ -161,11 +163,11 @@ chamam `*_ops` e serializam.
 | Camada | Stack |
 |---|---|
 | Backend | Python 3 · Flask · Flask-Login · Flask-Migrate (Alembic escrito à mão) · SQLAlchemy |
-| Banco | PostgreSQL (produção Railway e cópia local `manto_local`); SQLite só para uso casual de dev |
+| Banco | PostgreSQL (produção no Render — serviço `manto-postgres`, `render.yaml`; cópia local `manto_local`); SQLite só faz o app subir |
 | Frontend | React + TypeScript + Vite + Tailwind CSS + shadcn/ui + Framer Motion + TanStack Query |
 | Pacotes internos | `@manto/ui` (design system), `@manto/api-client` (`apiFetch`/`assetUrl`), `@manto/money` (`formatBRL`/`parseBRL`) |
 | Integrações | Google Calendar API (OAuth 2.0), Google Sheets API (service account), Google Maps Distance Matrix, ClickSign, Vimeo/Drive (mídia) |
-| Storage | `app/storage.py` — abstração local (`instance/uploads/`) ou S3/volume em produção |
+| Storage | `app/storage.py` — `instance/uploads/` local e o disco persistente do `manto-backend` em produção (`USE_S3=false`; não há S3/R2) |
 
 ### 1.1 Escopo migrado vs. legado
 
@@ -607,9 +609,9 @@ nunca sai pela API: a leitura devolve só `infinitepay_webhook_configured`), `ta
   feature 239, **head atual**).
 - Features **186**, **187**, **199** e **203** não geraram migration (reusaram colunas existentes).
 - Os papéis `ARTISTA_3D` e `MARKETING` **não** vêm por migration: papéis são linhas de `roles`
-  semeadas por `seed.py` (mesmo tratamento de `REVENDEDOR_EDUCAMANTO`), e o Railway roda
+  semeadas por `seed.py` (mesmo tratamento de `REVENDEDOR_EDUCAMANTO`), e o Render roda
   `flask db upgrade && python seed.py` no start.
-- Produção aplica `flask db upgrade && python seed.py` no start (ver `railway.json`).
+- Produção aplica `flask db upgrade && python seed.py` no start (`startCommand` do `render.yaml`).
 
 ---
 
@@ -747,14 +749,15 @@ o pedido foi salvo.
 | GET | `/api/financeiro/pagamentos/export` | CSV |
 
 **Agente auditor financeiro — `audit_agent.py` (feature 221).** Endpoints para o auditor
-semanal que roda FORA do Railway (Claude Code local): `GET
+semanal que roda FORA do servidor (Claude Code na máquina do dono): `GET
 /api/audit-agent/<token>/file/<path>` (download read-only de comprovante; escopo
 `payments/expenses/invoices/contracts` + allowlist de extensão; `safe_join`) e `POST
 /api/audit-agent/<token>/report` (envia o relatório por e-mail — destinatários restritos a
 usuários internos ativos). `GET /api/audit-agent/<token>/orphan-attachments` (hotfix 257): arquivos das pastas
 `payments`/`contracts`/`invoices` sem linha no banco, com data de envio, tamanho e eventos
-candidatos — somente leitura, não re-vincula nada. Token via env `AUDIT_AGENT_TOKEN`; inválido/ausente → **404**
-(molde do webhook InfinitePay). Nenhum endpoint escreve no banco. Pipeline do auditor em
+candidatos — somente leitura, não re-vincula nada. Token via env `AUDIT_AGENT_TOKEN` (painel do Render, `sync: false` — **ausente desde a migração de
+28/08/2026**, ver `docs/05`); inválido/ausente → **404** (molde do webhook InfinitePay; 404 aqui é
+configuração, não bug de rota). Nenhum endpoint escreve no banco. Pipeline do auditor em
 `scripts/auditor/` (ver `specs/221-agente-auditor-financeiro/spec.md`).
 
 #### Agente de marketing (feature 256) — `app/api/marketing_agent.py` + `app/marketing/desempenho_ops.py`
@@ -773,8 +776,10 @@ este agente **escreve** — e só o que `desempenho_ops` permite:
   skipped_manual / skipped_currency). `mode=local` só em `FLASK_ENV=development`.
 - `POST /api/marketing-agent/<token>/report` — envia o HTML por e-mail (destinatários restritos a
   usuários internos ativos; `send_audit_report_email(..., preheader=…)`) e marca `report_sent`.
-- Env **`MARKETING_AGENT_TOKEN`** (Railway) = arquivo local `.marketing-agent-token`. Sem o env,
-  tudo responde 404 (interruptor geral).
+- Env **`MARKETING_AGENT_TOKEN`** (painel do Render, serviço `manto-backend`, `sync: false`) = arquivo
+  local `.marketing-agent-token`. Sem o env, tudo responde 404 (interruptor geral — 404 aqui é
+  configuração, não bug de rota). **Ausente no painel desde a migração de 28/08/2026**: a rodada
+  semanal está parada (`docs/05`).
 
 Schema (migration `c4d1e7b2a9f3`): `marketing_agent_runs`, `marketing_import_files`,
 `marketing_post_metrics` (única por plataforma+post+`snapshot_date`), `marketing_campaign_metrics`
@@ -1431,7 +1436,7 @@ a autorização real está sempre no servidor.
 
 ---
 
-## 5. Arquitetura de Build e Deploy (Railway)
+## 5. Arquitetura de Build e Deploy (Render)
 
 ### 5.1 Monorepo do frontend
 ```
@@ -1484,7 +1489,8 @@ o mesmo valor como `basename` ao React Router (`apps/public/src/App.tsx` usa
 `frontend/server.js` deixou de ser só um servidor estático: com o React consolidado como interface
 primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e repassa ao Flask, via
 `http-proxy`, as rotas que ainda são do backend — **antes** de qualquer fallback de SPA. Alvo em
-`BACKEND_URL` (variável do serviço frontend no Railway; default `http://localhost:5000`).
+`BACKEND_URL` (envVar `sync: false` do serviço `manto-frontend` no Render — `render.yaml`; default
+`http://localhost:5000`).
 
 | Filtro | Por que existe |
 |---|---|
@@ -1500,27 +1506,33 @@ primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e 
 | `/static/*` | CSS/JS das páginas Jinja públicas acima (bundles Vite usam `/assets` — sem colisão) |
 | `/figurinos/<id>/print`, `/figurinos/print-event/<id>` | páginas Jinja de impressão que a SPA interna linka; regex restrito ao sub-path |
 
-> ⚠️ **`BACKEND_URL` precisa do esquema.** `mantoplatform.railway.internal` (como o painel do
-> Railway exibe o domínio privado) fazia o `http-proxy` estourar `TypeError` **síncrono** dentro
-> de `proxy.web`, fora do callback de erro — exceção não capturada que **matava o processo a cada
-> chamada de API**. `resolveBackendUrl` agora normaliza e valida, e `proxy.web` roda em
-> `try/catch`; valor inválido vira 502 com os SPAs de pé. Ainda assim, defina explicitamente:
-> `https://mantoplatform-production.up.railway.app`.
->
-> A rede privada (`http://mantoplatform.railway.internal:<porta>`) **não funciona hoje**: o
-> gunicorn sobe com `--bind 0.0.0.0` (só IPv4) e a rede privada do Railway é IPv6-only. Para
-> migrar para ela, troque o bind para `[::]:$PORT` em `railway.json` e `nixpacks.toml`.
+> ⚠️ **`/health` NÃO está nesta lista.** Na URL pública ele cai no fallback da SPA e devolve
+> `index.html` com 200 mesmo com o Flask morto; o `healthCheckPath` do `render.yaml` funciona porque o
+> Render bate direto no serviço. Sonda de backend vivo é um endpoint sob `/api/` devolvendo JSON (§5.3).
+
+> ⚠️ **`BACKEND_URL` precisa do esquema.** Um valor sem `https://` (como o painel do Railway exibia o
+> domínio privado) fazia o `http-proxy` estourar `TypeError` **síncrono** dentro de `proxy.web`, fora
+> do callback de erro — exceção não capturada que **matava o processo a cada chamada de API**.
+> `resolveBackendUrl` normaliza e valida, e `proxy.web` roda em `try/catch`; valor inválido vira 502
+> com os SPAs de pé. A **fonte de verdade** do valor é o envVar `BACKEND_URL` do serviço
+> `manto-frontend` no painel do Render (`sync: false` no `render.yaml`) — hoje a URL pública do
+> `manto-backend`, `https://manto-backend.onrender.com`; se o serviço for renomeado, o valor muda no
+> painel e esta linha fica velha. No Render o frontend fala com o backend pela URL pública; não há
+> rede privada configurada, e o bind do gunicorn (`--bind 0.0.0.0:$PORT`) mora dentro do
+> `startCommand` do `render.yaml`.
 
 ### 5.2.2 Domínios e roteamento por host (feature 206)
 
-Os **três** domínios customizados apontam para o serviço `manto-frontend-internal` (porta 8080). O
-serviço do Flask não tem domínio próprio: é alcançado só pelo `mantoplatform-production.up.railway.app`
-que o proxy usa como `BACKEND_URL`.
+Os domínios customizados ativos (`app`, `portal`, `alo`) são custom domains do serviço `manto-frontend`
+no Render — CNAME para `manto-frontend.onrender.com`, DNS na Hostinger, TLS emitido pelo Render. O
+serviço do Flask não tem domínio próprio: é alcançado só pela URL pública `manto-backend.onrender.com`,
+que o proxy usa como `BACKEND_URL`. O `beta.*` não foi migrado (está fora do ar) — e deixou um cookie
+para trás (abaixo).
 
 | Domínio | Raiz entrega | Observação |
 |---|---|---|
 | `app.mantoproducoes.com.br` | `apps/internal` (ERP) | URL principal da plataforma |
-| `beta.mantoproducoes.com.br` | `apps/internal` (ERP) | endereço histórico, mesmo conteúdo |
+| `beta.mantoproducoes.com.br` | — | **fora do ar** desde a migração (não cadastrado no Render); só história |
 | `portal.mantoproducoes.com.br` | **302 → `/portal/`** | endereço que os talentos conhecem |
 | `alo.mantoproducoes.com.br` | **302 → `/catalogo/v/<caminho>`** | Loja de Interações Virtuais (224d) — `alo.…/<slug>` abre a campanha; a **raiz vai para `/catalogo/v`**, a landing da loja (224e). Já apontou para `/catalogo/`, o catálogo de eventos, e isso entregava outro produto a quem chegava pelo endereço da loja |
 
@@ -1557,16 +1569,16 @@ Dois detalhes que não são negociáveis nessa regra:
 
 O bloco de proxy roda antes, então `/api` e mídia continuam indo ao Flask também nesse host.
 
-> ⚠️ **Domínio removido do Railway = certificado curinga + HSTS.** Quando `portal.*` deixou de
-> estar cadastrado, a borda passou a apresentar o certificado `*.up.railway.app`, que não cobre o
-> host — e, com HSTS ativo, o browser nem oferece exceção. O diagnóstico rápido é ler o **SAN** do
-> certificado: `*.up.railway.app` significa "o Railway não reconhece este hostname" (cadastro
-> ausente ou CNAME apontando para o alvo antigo), e não "Let's Encrypt ainda emitindo". Cada
-> domínio customizado recebe um alvo de CNAME único — ao recadastrar, o CNAME **precisa** ser
-> atualizado para o novo valor.
+> ⚠️ **Domínio não cadastrado no host = certificado errado + HSTS.** Aprendido no Railway: quando
+> `portal.*` deixou de estar cadastrado, a borda passou a apresentar o certificado curinga do
+> provedor, que não cobre o hostname — e, com HSTS ativo, o browser nem oferece exceção. O
+> diagnóstico rápido é ler o **SAN** do certificado: curinga do provedor significa "o host não
+> reconhece este hostname" (cadastro ausente ou CNAME apontando para o alvo antigo), não
+> "certificado ainda emitindo". Ao (re)cadastrar um domínio no Render, o CNAME precisa apontar para
+> `manto-frontend.onrender.com`.
 
 Os filtros espelham os `server.proxy` dos três `vite.config.ts`, inclusive `changeOrigin: true` —
-sem ele, um `BACKEND_URL` de domínio público faria o roteador de borda do Railway devolver a
+sem ele, um `BACKEND_URL` de domínio público faria o roteador de borda do host devolver a
 requisição para o próprio serviço frontend, em laço. `xfwd: true` envia os `X-Forwarded-*`. Falha
 de conexão com o backend responde **502**, sem derrubar os SPAs.
 
@@ -1574,72 +1586,102 @@ de conexão com o backend responde **502**, sem derrubar os SPAs.
 > `API_BASE`/`assetUrl()` geram URL absoluta do Flask e o browser fura o proxy — inclusive para
 > `/uploads` e `/figurinos/<id>/print`.
 
-### 5.3 Serviços no Railway
+### 5.3 Serviços no Render (`render.yaml`)
 
-**Serviço backend** (raiz do repo — `railway.json` + `nixpacks.toml`, que precisam ficar
-**idênticos**; o `railway.json` tem precedência):
+O deploy é o blueprint `render.yaml` na raiz — o **único** arquivo que descreve produção. Os
+arquivos `railway.json`/`nixpacks.toml` (raiz e `frontend/`) foram removidos na feature 296; o que
+eles ensinavam está abaixo. Três recursos, todos em Oregon: `manto-postgres` (basic-1gb),
+`manto-backend` (python, plano standard) e `manto-frontend` (node, starter). `autoDeploy: true` nos
+dois serviços web — **push na `main` é o deploy** (~60s até o bundle novo). Os envVars com
+`sync: false` são preenchidos um a um no painel pelo dono, nunca copiando o `.env` inteiro (hotfix
+269b); `PORTAL_URL`, `PUBLIC_BASE_URL` e `SESSION_COOKIE_DOMAIN` **não se definem** (o default do
+código é o endereço público real; cookie host-only basta e funciona também na URL `*.onrender.com`).
+
+**Serviço backend** — `manto-backend`: `rootDir: .`, `buildCommand: pip install -r requirements.txt`,
+`startCommand`:
 ```
 flask db upgrade && python seed.py && gunicorn run:app \
   --workers 3 --worker-class gthread --threads 12 --bind 0.0.0.0:$PORT \
   --timeout 120 --graceful-timeout 120 --max-requests 800 --max-requests-jitter 100 \
   --access-logfile - --access-logformat '%(h)s %(m)s %(U)s %(s)s %(b)s %(D)s'
 ```
-Healthcheck: `/health` — devolve JSON com `threads` e `db_pool_em_uso`/`db_pool_disponivel`, e é
-**sempre 200 por construção** (é ele que gateia o deploy; healthcheck que falha sob carga só
-antecipa a queda). `sync_worker.py` não roda durante o build da imagem.
 
-**Access log** (desde 26/08/2026): cada linha é `IP MÉTODO CAMINHO STATUS BYTES MICROSSEGUNDOS` —
-ex.: `152.233.76.9 GET /api/orcamento/historico 200 94458 70973` (94 KB em 71 ms). Antes disso
-**nenhuma requisição de produção era registrada**, e por isso o incidente de lentidão de 26/08
-não pôde ser atribuído a um endpoint específico. `%(b)s` (bytes) é o campo que teria nomeado o
-culpado.
+- **Healthcheck**: `healthCheckPath: /health` — o Render bate **direto no serviço**, sem passar pelo
+  Node; é ele que gateia a troca de container. Devolve JSON com `threads` e
+  `db_pool_em_uso`/`db_pool_disponivel` e é sempre 200 por construção (healthcheck que falha sob
+  carga só antecipa a queda). ⚠️ **Na URL pública `/health` não prova nada**: não está em
+  `BACKEND_PREFIXES` (§5.2.1), cai no fallback da SPA e responde 200 com `index.html` mesmo com o
+  Flask morto. Backend vivo se prova por um endpoint `/api/` devolvendo JSON — ex.:
+  `/api/formularios/comum/schema`; como o start é `flask db upgrade && …`, JSON também prova que a
+  migration aplicou.
+- **Disco persistente**: 10 GB montados em `/opt/render/project/src/instance` — **só no backend**. É
+  o único caminho que sobrevive a um deploy: `uploads/` (mídia, comprovantes, contratos),
+  `nfc_media/`, `virtual_videos/`, `catalog_thumbs/`, `talent_thumbs/`, `.secret_key`,
+  `backup_drive_folder.txt`. Não há S3/R2 em produção (`USE_S3=false`). O conjunto de arquivos local
+  é outro: comandos de mídia (`fix-heic → compress-images → warm-thumbnails`, `midia-orfa`) rodam LÁ.
+- **Container efêmero**: todo deploy troca o container — mata processos `nohup`, limpa `/tmp`, e
+  `/tmp` é tmpfs (RAM): um tar grande ali estourou 2 GB e o kernel matou o container (exit 137).
+  Temporário grande vai para a raiz de `instance/` (`_tmp_no_disco()`, `app/backup_drive.py`).
+  Rodada longa só quando não há push na fila.
+- **Backup da produção**: o próprio backend sobe uma thread (`app/backup_drive.py`) que manda
+  `pg_dump` 2×/dia (05h/17h UTC) e mídia 1×/dia (06h UTC; full no dia 1, incremental nos demais)
+  para um **Drive compartilhado** do Workspace (`BACKUP_DRIVE_FOLDER_ID` ou
+  `instance/backup_drive_folder.txt`; sem id = desligado com log). Conta de serviço não tem cota no
+  My Drive — só Shared Drive. Retenção pela lixeira do Drive. Além disso a máquina do dono dumpa o
+  banco toda noite (02:00) em `backups/` (`scripts/db/backup-railway.ps1`, nome herdado).
+- **Acesso ao servidor**: `ssh -i ~/.ssh/render_manto_ed25519 srv-da8o06on74is73ehf4q0@ssh.oregon.render.com`
+  (backend; o frontend é `srv-da8nvsgn74is73ehe9a0`, sem disco). A sessão já vem com as env vars do
+  serviço. Comando de app: `cd /opt/render/project/src && MANTO_SEM_THREADS=1 PYTHONPATH=$PWD
+  .venv/bin/flask <cmd>` — `MANTO_SEM_THREADS=1` desliga as threads de fundo (auto-import de
+  talentos, sync, backup) e `PYTHONPATH` é necessário porque o Python 3.11 (safe-path) não põe o CWD
+  no `sys.path`. Plano B quando o classificador bloqueia um script por SSH: Shell do painel do Render.
+- **Access log** (desde 26/08/2026): `IP MÉTODO CAMINHO STATUS BYTES MICROSSEGUNDOS`. Antes disso
+  nenhuma requisição de produção era registrada; `%(b)s` (bytes) é o campo que nomeia o culpado num
+  incidente de lentidão.
+- **Concorrência**: teto `workers × threads` = **36 requisições simultâneas**. Cada download de mídia
+  segura uma thread do primeiro ao último byte, na velocidade de quem assiste — com 4 threads, dois
+  ou três vídeos travavam um worker inteiro e o site parava **sem gerar um único 5xx** (incidente
+  de 26/08). `--timeout 120` **não é deadline de requisição** com `gthread` (o heartbeat sai da
+  thread principal). Subir `--threads` **exige** subir o pool do SQLAlchemy junto (`app/config.py`,
+  `SQLALCHEMY_ENGINE_OPTIONS`, hoje `pool_size 10 + max_overflow 10` = 20 por worker; cada worker
+  consome pelas 12 threads de requisição MAIS as 6 de background) — `scripts/validar_startcommand.py`
+  confere. As 6 threads de fundo sobem uma vez por worker (3 cópias de cada; desperdício conhecido).
+  Assinatura de diagnóstico: **CPU plana + p99 alto + 0% de erro = requisição presa segurando
+  thread, não carga**; o 502 nasce no proxy Node quando o Flask não responde.
 
-> ⚠️ **Mexer neste comando derruba a produção quando dá errado.** Em 26/08/2026 uma primeira
-> tentativa deixou o serviço fora do ar até o rollback: a flag `--access-log-format` **não
-> existe** (o certo é `--access-logformat`), o gunicorn recusou os argumentos, nunca subiu, e o
-> healthcheck falhou por 4min51s. Três fatos que tornam isto perigoso:
-> 1. **gunicorn não RODA no Windows** — mas o **parser** dele roda, com stubs. Use
->    `scripts/validar_startcommand.py` **antes de todo push** que mexa nesta linha: ele
->    reproduz exatamente a recusa de argumento que derruba o deploy.
-> 2. **O serviço tem volume**, então o Railway NÃO sobrepõe deploys: derruba o container antigo
->    antes de subir o novo. Um start que falha não "mantém a versão anterior" — deixa fora.
-> 3. `restartPolicyMaxRetries: 3` (`railway.json`): depois de três tentativas, o Railway desiste.
->
-> Regra: mudança no `startCommand` vai **sozinha**, num commit só dela, com os logs de
-> *Deployments* abertos.
+> ⚠️ **Mexer no `startCommand` derruba a produção quando dá errado.** Em 26/08/2026 (ainda no
+> Railway) a flag `--access-log-format` — que **não existe**; o certo é `--access-logformat` — fez o
+> gunicorn recusar os argumentos e nunca subir; o healthcheck falhou por 4min51s. No Render a
+> mecânica é a mesma: (1) **gunicorn não RODA no Windows**, mas o parser roda —
+> `scripts/validar_startcommand.py` lê o `startCommand` do `render.yaml` e reproduz a recusa; rode-o
+> **antes de todo push** que mexa nessa linha; (2) **o serviço tem disco**, então o container antigo
+> cai antes de o novo responder: start que falha não "mantém a versão anterior" — deixa fora. Regra:
+> mudança no `startCommand` vai **sozinha**, num commit só dela, fora do horário, com os Events do
+> Render abertos. (Política de retry do Render não conferida; não conte com ela.)
 
-**Concorrência.** O teto é `workers × threads` = **36 requisições simultâneas** (era 12). Isso
-importa porque **cada download de mídia segura uma thread do primeiro ao último byte**, na
-velocidade da rede de quem assiste: com 4 threads, dois ou três vídeos travavam um worker inteiro
-e o site parava **sem gerar um único 5xx** (as requisições não falhavam, ficavam na fila) — foi o
-incidente de lentidão de 26/08. Ao mexer nisto:
-- `--timeout 120` **não é deadline de requisição** com `worker-class gthread` — o heartbeat sai da
-  thread principal, não das threads de trabalho. Requisição pendurada só morre no restart.
-- Subir `--threads` **exige** subir o pool do SQLAlchemy junto (`app/config.py`,
-  `SQLALCHEMY_ENGINE_OPTIONS`, hoje `pool_size 10 + max_overflow 10` = 20 por worker). Cada
-  worker consome conexões pelas 12 threads de requisição MAIS as 6 threads de background que ele
-  sobe (`_start_*` no fim de `create_app`). O validador confere essa coerência.
-- As 6 threads de background sobem **uma vez por worker** (3 cópias de cada, incluindo a sync de
-  13 meses da agenda a cada 10 min). Desperdício conhecido, ainda não resolvido.
-- A correção definitiva, que não mexe no `startCommand`, é **tirar o arquivo grande do processo
-  web**: servir mídia por URL assinada em vez de `send_file`. Ainda em aberto.
+**Serviço frontend** — `manto-frontend`: `runtime: node`, `rootDir: frontend`,
+`buildCommand: npm install && npm run build` (compila os **três** SPAs — `frontend/package.json`),
+`startCommand: npm run start` → `node server.js`. Variáveis: `BACKEND_URL` (origem pública do
+Flask, `sync: false` — §5.2.1), `VITE_API_BASE_URL` **vazia** no build, `PORTAL_HOSTS`/`ALO_HOSTS`
+(§5.2.2). ⚠️ **Sem `healthCheckPath` e sem `watchPatterns`**: cada push (inclusive só de docs)
+rebuilda os dois serviços e abre ~1 min de 502 na porta pública enquanto o container troca.
+Ausência conhecida — decisão pendente do dono (`docs/05`); acrescentar muda o pipeline e vai em
+commit isolado. (`npm install` está no blueprint; `npm ci` seria mais seguro — também em `docs/05`.)
 
-**Serviço frontend** (`Root Directory = frontend` — `frontend/railway.json` +
-`frontend/nixpacks.toml`):
-- setup: `nodejs_20` · install: `npm ci` · build: `npm run build` (compila os **três** SPAs —
-  `internal`, `public` e `portal`; ver `frontend/package.json:16`)
-- start: `npm run start` → `node server.js`
-- variáveis: `BACKEND_URL` (origem do Flask, ver §5.2.1) e `VITE_API_BASE_URL` **vazia** no build
-
-> ⚠️ Um *Build Command* / *Start Command* customizado no painel do Railway **tem precedência**
-> sobre o `nixpacks.toml`. Os dois campos precisam ficar vazios.
+**Variáveis que sobrevivem da migração** (`docs/CONTINGENCIA_RENDER.md`, passo 4):
+`GOOGLE_OAUTH_REDIRECT_URI` recebe a URL pública registrada no Google Cloud Console +
+`/google/callback`, nunca a local; `AUDIT_AGENT_TOKEN` e `MARKETING_AGENT_TOKEN` **não foram
+preenchidos** na migração — os agentes semanais respondem 404 desde 28/08 (`docs/05`); `TALENTS_*`,
+`FIGURINO_DRIVE_FOLDER_ID` e `GOOGLE_SHEETS_CREDENTIALS` ficaram vazios de propósito (integrações
+de planilha aposentadas). Rate limit em memória por worker e threads de background ×3 são
+trade-offs herdados, documentados acima.
 
 ### 5.4 Dev local
 
 | Alvo | Comando |
 |---|---|
 | Backend (SQLite casual) | `python run.py` |
-| Backend contra a cópia real | `.\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`) — ⚠️ **`/scripts/db/` é gitignored** (`.gitignore:41`): contém caminhos e credenciais locais, e num clone limpo não existe. É lá também que vivem os `verify_<feature>.py`, que fazem as vezes de teste automatizado (não há `tests/` nem pytest) |
+| Backend contra a cópia real | `$env:MANTO_SEM_THREADS='1'; $env:FLASK_ENV='development'; .\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`). ⚠️ **O espelho traz o token do Google e as credenciais de e-mail reais** — sem as duas variáveis o `create_app()` sobe as threads de fundo e escreve na agenda da empresa; as travas `_suppress_mail`/`_suppress_calendar_invites` (`app/config.py`) cobrem só e-mail e convite. `/scripts/db/` é gitignored (entrada `/scripts/db/`): contém caminhos e credenciais locais; o conteúdo esperado está em `DEVELOPMENT.md`. Verificação funcional = `specs/NNN-nome/verify_NNN.py` (versionado; os anteriores à 266 em `scripts/db/`) — não há `tests/` nem pytest |
 | Frontend staff | `cd frontend && npm run dev:internal` |
 | Frontend público | `cd frontend && npm run dev:public` |
 | Frontend portal | `cd frontend && npm run dev:portal` |
