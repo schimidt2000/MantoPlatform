@@ -1,131 +1,113 @@
-# Feature Specification: [FEATURE NAME]
+<!-- ADAPTADO PARA A MANTO (2026-09-08) — reaplicar após qualquer atualização do Spec Kit; para este
+     arquivo o hash em .specify/integrations/speckit.manifest.json deixa de conferir de propósito. -->
+# Feature [NNN] — [TÍTULO CURTO, EM PT-BR, QUE DIZ O QUE MUDA PARA QUEM USA]
 
-**Feature Branch**: `[###-feature-name]`
+**Branch**: `[NNN-nome-curto]` (da `main`) · **Created**: [AAAA-MM-DD] · **Status**: Rascunho ·
+**Migration**: nenhuma | `<rev>` (aditiva | destrutiva — destrutiva exige ensaio em banco descartável,
+`DEVELOPMENT.md` §Migrations) · **Nível**: 1 (feature) | 2 (correção) — constituição, Princípio VI
 
-**Created**: [DATE]
+**Input**: pedido do dono: "$ARGUMENTS"
 
-**Status**: Draft
+## O pedido, nas palavras do dono *(obrigatório)*
 
-**Input**: User description: "$ARGUMENTS"
+[Cite o pedido. Se veio de incidente ou print, descreva o sintoma como a pessoa viu — é o que
+diz se a feature resolveu.]
 
-## User Scenarios & Testing *(mandatory)*
+## Cenários e Verificação *(obrigatório)*
 
 <!--
-  IMPORTANT: User stories should be PRIORITIZED as user journeys ordered by importance.
-  Each user story/journey must be INDEPENDENTLY TESTABLE - meaning if you implement just ONE of them,
-  you should still have a viable MVP (Minimum Viable Product) that delivers value.
-
-  Assign priorities (P1, P2, P3, etc.) to each story, where P1 is the most critical.
-  Think of each story as a standalone slice of functionality that can be:
-  - Developed independently
-  - Tested independently
-  - Deployed independently
-  - Demonstrated to users independently
+  Histórias PRIORIZADAS (P1 = MVP) e INDEPENDENTES: cada uma implementável, verificável e
+  entregável sozinha. Cada história nomeia o cenário do verify_NNN.py que a prova (Princípio VIII).
 -->
 
-### User Story 1 - [Brief Title] (Priority: P1)
+### História 1 — [Título] (Prioridade: P1)
 
-[Describe this user journey in plain language]
+[Jornada em linguagem simples: quem, faz o quê, e o que muda para essa pessoa.]
 
-**Why this priority**: [Explain the value and why it has this priority level]
+**Por que esta prioridade**: [valor para quem usa]
 
-**Independent Test**: [Describe how this can be tested independently - e.g., "Can be fully tested by [specific action] and delivers [specific value]"]
+**Verificação**: cenário [N] do `verify_NNN.py` — [o que ele prova, contra `manto_local`]
 
-**Acceptance Scenarios**:
+**Cenários de aceite**:
 
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
-2. **Given** [initial state], **When** [action], **Then** [expected outcome]
+1. **Dado** [estado inicial], **Quando** [ação], **Então** [resultado esperado]
+2. **Dado** [estado inicial], **Quando** [ação], **Então** [resultado esperado]
 
 ---
 
-### User Story 2 - [Brief Title] (Priority: P2)
+### História 2 — [Título] (Prioridade: P2)
 
-[Describe this user journey in plain language]
+[Jornada]
 
-**Why this priority**: [Explain the value and why it has this priority level]
+**Por que esta prioridade**: [valor]
 
-**Independent Test**: [Describe how this can be tested independently]
+**Verificação**: cenário [N] do `verify_NNN.py`
 
-**Acceptance Scenarios**:
+**Cenários de aceite**:
 
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
-
----
-
-### User Story 3 - [Brief Title] (Priority: P3)
-
-[Describe this user journey in plain language]
-
-**Why this priority**: [Explain the value and why it has this priority level]
-
-**Independent Test**: [Describe how this can be tested independently]
-
-**Acceptance Scenarios**:
-
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
+1. **Dado** [estado inicial], **Quando** [ação], **Então** [resultado esperado]
 
 ---
 
-[Add more user stories as needed, each with an assigned priority]
+[Mais histórias, cada uma com prioridade]
 
-### Edge Cases
+### Casos de borda
 
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right edge cases.
--->
+- O que acontece quando [condição de fronteira]?
+- Como o sistema trata [erro / dado ausente / concorrência]?
 
-- What happens when [boundary condition]?
-- How does system handle [error scenario]?
+## Requisitos *(obrigatório)*
 
-## Requirements *(mandatory)*
+### Requisitos funcionais
 
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right functional requirements.
--->
+- **FR-001**: O sistema DEVE [capacidade específica e testável]
+- **FR-002**: O sistema DEVE [capacidade]
+- **FR-003**: [Quem] DEVE poder [interação-chave]
 
-### Functional Requirements
+*Marcação de dúvida (máx. 3 na spec inteira)*:
 
-- **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
-- **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]
-- **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]
-- **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
-- **FR-005**: System MUST [behavior, e.g., "log all security events"]
+- **FR-00X**: O sistema DEVE [...] [NEEDS CLARIFICATION: pergunta específica]
 
-*Example of marking unclear requirements:*
+### Entidades *(se houver dados)*
 
-- **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
-- **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
+- **[Entidade]**: [o que representa, atributos-chave, relações] — modelo em `app/models.py`,
+  migration à mão
 
-### Key Entities *(include if feature involves data)*
+### RBAC *(obrigatório se houver endpoint novo ou alterado)*
 
-- **[Entity 1]**: [What it represents, key attributes without implementation]
-- **[Entity 2]**: [What it represents, relationships to other entities]
+- `[MÉTODO /api/...]` — papéis: [...] (Princípio XIII); linha na tabela de `docs/01` §4.3
 
-## Success Criteria *(mandatory)*
+## Verificação (`verify_NNN.py`) *(obrigatório — Princípio VIII)*
 
-<!--
-  ACTION REQUIRED: Define measurable success criteria.
-  These must be technology-agnostic and measurable.
--->
+<!-- Esta seção é o que faz o /speckit-tasks gerar a tarefa do verify ANTES do núcleo. -->
 
-### Measurable Outcomes
+Arquivo: `specs/NNN-nome/verify_NNN.py`, contra `manto_local` (`DATABASE_URL` de `.local-db-url`,
+`FLASK_ENV=development`, `MANTO_SEM_THREADS=1`). Login só por `POST /api/auth/login`; escrita
+conferida por conexão separada; limpeza no `finally`.
 
-- **SC-001**: [Measurable metric, e.g., "Users can complete account creation in under 2 minutes"]
-- **SC-002**: [Measurable metric, e.g., "System handles 1000 concurrent users without degradation"]
-- **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
-- **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
+| # | Cenário | O que prova | Deve falhar? |
+|---|---|---|---|
+| 1 | [...] | [...] | não |
+| N | [papel sem permissão tenta] | 403/404 | **sim** |
+| N+1 | limpeza | usuários e registros descartáveis apagados (`roles.clear()` antes do usuário) | — |
 
-## Assumptions
+Conferência de tela (se tocar UI): [telas a abrir no Browser pane; superfície pública em
+viewport mobile 375×812].
 
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right assumptions based on reasonable defaults
-  chosen when the feature description did not specify certain details.
--->
+## Critérios de sucesso *(obrigatório)*
 
-- [Assumption about target users, e.g., "Users have stable internet connectivity"]
-- [Assumption about scope boundaries, e.g., "Mobile support is out of scope for v1"]
-- [Assumption about data/environment, e.g., "Existing authentication system will be reused"]
-- [Dependency on existing system/service, e.g., "Requires access to the existing user profile API"]
+- **SC-001**: [métrica mensurável do ponto de vista de quem usa, sem tecnologia]
+- **SC-002**: [...]
+
+## Fora de escopo
+
+- [o que NÃO entra, para a spec não crescer no implement]
+
+## Docs a atualizar
+
+`docs/01` [§], `docs/02` [tela], `docs/03` (entrada no topo); [`docs/00` / `04` / `05` se a mudança
+tocar topologia, invariante de domínio ou dívida].
+
+## Premissas
+
+- [defaults assumidos onde o pedido não disse]
