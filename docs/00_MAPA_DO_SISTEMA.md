@@ -5,8 +5,9 @@
 > cada tipo de tarefa — para você não varrer 83 KB de documentação antes de escrever a primeira
 > linha.
 >
-> Última revisão: **2026-08-06** · Estado do repositório: pós-feature **216** ·
-> Head de migration: `e7a1c94f20b3` (confira com `flask db heads`).
+> Última revisão: **2026-09-08** · Estado do repositório: pós-feature **296** (revisão do harness;
+> produção no **Render** desde 28/08/2026) · Head de migration: `b7d2e4f1a9c3` (confira com
+> `flask db heads`).
 
 ---
 
@@ -39,9 +40,11 @@ acontecem só nos fluxos explícitos de criar/editar/excluir evento.
 | SPA Público | `frontend/apps/public` (28) | vitrine `/catalogo`, formulários, loja virtual |
 | Pacotes | `frontend/packages/{ui,api-client,money}` (21) | design system, `apiFetch`/`assetUrl`, dinheiro |
 | Servidor de produção | `frontend/server.js` | serve os 3 bundles + proxy reverso para o Flask |
+| Hospedagem | Render — `render.yaml` (raiz) | `manto-backend` (python, disco persistente, healthcheck), `manto-frontend` (node, **sem** healthcheck), `manto-postgres`; detalhe em `docs/01` §5 |
+| Deploy | push na `main` | auto-deploy nos dois serviços, ~60s, ~1 min de 502 na porta pública; regras em `CLAUDE.md` §2 e constituição §Operação |
 
 **Regra de roteamento que quebra tudo se ignorada:** o Node só devolve ao Flask os prefixos de
-`BACKEND_PREFIXES` (`frontend/server.js:176`) e os regexes de `BACKEND_PATTERNS` (`:193`). Rota fora
+`BACKEND_PREFIXES` (`frontend/server.js:192`) e os regexes de `BACKEND_PATTERNS` (`:237`). Rota fora
 dessa lista cai no fallback da SPA e devolve `index.html` **com status 200** — a chamada "funciona",
 o `JSON.parse` estoura e o erro vira lista vazia em silêncio.
 
@@ -148,7 +151,7 @@ digitou — aponte no campo (`ApiRequestError.fields`).
 **Contrato de erro da API** — envelope único `{"error": {"message": str, "fields": {campo: msg}}}`
 via `json_error` (`app/api_utils.py:16`). `api_login_required` devolve **401 JSON**, nunca redirect.
 
-**Novo módulo em `app/api/`** só existe se for importado em `app/api/__init__.py` (linhas 12-60) —
+**Novo módulo em `app/api/`** só existe se for importado em `app/api/__init__.py` (linhas 12-68) —
 sem isso a rota não é registrada e **não há erro nenhum**.
 
 **Novo componente em `@manto/ui`** só existe se for exportado em `packages/ui/src/index.ts`.
@@ -202,14 +205,35 @@ As que quebram em silêncio. Leia esta seção inteira uma vez.
 14. **`CatalogItem` tem DOIS FKs vindos de `CatalogCharacter`** desde a 209 (`catalog_item_id` e
     `own_item_id`, `app/models.py:1915`) — sem `foreign_keys` explícito o mapper quebra no boot com
     `AmbiguousForeignKeysError` (`app/models.py:1853`).
-15. **Migrations são escritas à mão** (Alembic, 115 arquivos, head único). Railway roda
-    `flask db upgrade && python seed.py` no start; **papéis novos vêm por `seed.py`, não por
+15. **Migrations são escritas à mão** (Alembic, head único; `flask db migrate` é proibido — o drift
+    antigo entraria e derrubaria o start). O Render roda `flask db upgrade && python seed.py` no
+    start (`startCommand` do `render.yaml`); **papéis novos vêm por `seed.py`, não por
     migration**.
 16. **`Dialog` centraliza por flex, nunca por `translate`** (`packages/ui/src/components/dialog.tsx:45-58`)
     — o Framer Motion escreve `transform` inline e vence a classe.
-17. **`BACKEND_URL` precisa do esquema** (`https://…`); sem ele o `http-proxy` estoura `TypeError`
-    síncrono e mata o processo. A rede privada do Railway é IPv6-only; o gunicorn sobe com
-    `--bind 0.0.0.0`.
+17. **`BACKEND_URL` precisa do esquema** (`https://manto-backend.onrender.com`); sem ele o `http-proxy`
+    estoura `TypeError` síncrono e mata o processo. É envVar `sync: false` do `manto-frontend`
+    (`render.yaml`). Backend vivo se prova por um endpoint `/api/` — nunca pelo `/health` público,
+    que cai no fallback da SPA (`docs/01` §5.3).
+18. **Rota pública nova precisa entrar no proxy.** O Node só devolve ao Flask `BACKEND_PREFIXES` e
+    `BACKEND_PATTERNS` (`frontend/server.js`); rota fora da lista cai no fallback da SPA com 200 (§2).
+    Entra no mesmo commit da rota.
+19. **Cookie de sessão é mudança de DUAS partes.** Trocar `SESSION_COOKIE_DOMAIN` exige inscrever o
+    domínio antigo em `Config.SESSION_COOKIE_DOMINIOS_OBSOLETOS` (`app/config.py`). Desligar a
+    variável não recolhe o cookie já gravado: ele viaja na frente do host-only, o Werkzeug lê o
+    primeiro, e a pessoa fica em 401 para sempre — e todo teste de agente passa, porque cliente
+    limpo não tem o órfão (feature 295).
+20. **Contratos imutáveis — URLs gravadas fora do software.** `/nfc/<code>` está gravado em tags NFC
+    físicas já entregues (`NFC_PREFIX`, `frontend/server.js`); `/avaliar/<token>` e `/cadastro`
+    circulam em mensagens já enviadas. Renomear prefixo quebra coisa que já saiu daqui, sem sintoma
+    no código.
+21. **Campo novo do payload é opcional no React.** Backend e bundle ficam em versões diferentes por
+    minutos em todo deploy (e por horas quando o cache morde): `data.campo_novo.x` derruba a árvore
+    inteira (tela branca). Tipar `campo?:` e sair com `null`. `tsc` limpo não pega isso.
+22. **`onError` de `<img>` não pega 404 vindo do cache** (o evento não borbulha e dispara antes do
+    commit): use `<Foto>` de `@manto/ui`, que decide num `useEffect` por `complete && naturalWidth
+    === 0`. E hook criado com id de `useState` fica preso ao valor antigo dentro do próprio
+    `onSuccess` — passe o id por argumento.
 
 ---
 
@@ -256,14 +280,18 @@ Inventário completo, com o que é morto, o que é duplicado e como fatiar: **`d
 
 ## 9. Como se verifica trabalho aqui
 
-**Não existe suíte de testes.** Não há `tests/`, não há `pytest` (`pyproject.toml:2` declara isso).
-O que faz as vezes de teste são scripts `scripts/db/verify_<feature>.py` rodados contra a cópia local
-do Postgres de produção (`manto_local`) via `.\scripts\db\run-local.ps1`.
-
-⚠️ **`scripts/db/` não é versionado** (`.gitignore:41`). Num clone limpo esse caminho não existe.
+**Não existe suíte de testes.** Não há `tests/`, não há `pytest` (`pyproject.toml` declara isso).
+O que faz as vezes de teste são os `specs/NNN-nome/verify_NNN.py` (versionados; os anteriores à 266
+em `scripts/db/`, que é gitignored), rodados contra a cópia local do Postgres de produção
+(`manto_local`) com `DATABASE_URL` de `.local-db-url`, `FLASK_ENV=development` e
+`MANTO_SEM_THREADS=1` — o espelho traz credenciais reais (`docs/01` §5.4). Esqueleto e os cinco
+modos de um verify passar verde sem testar nada: `DEVELOPMENT.md` §Escrever um verify e a skill
+`manto-verify`.
 
 Typecheck do frontend: `cd frontend && npm run typecheck` — cobre os **três** apps
-(`frontend/package.json:18`). Não use `npx tsc --noEmit` app a app: esquece o portal.
+(`frontend/package.json`). Não use `npx tsc --noEmit` app a app: esquece o portal. `tsc` limpo não
+é verificação de UI: abra a tela (skill `manto-conferir-tela` — inputs no Browser pane não chegam
+ao react-hook-form sem o setter nativo + `dispatchEvent`; Radix ignora `.click()`).
 
 Produção é PostgreSQL. Verificação contra o SQLite vazio de `instance/` não pega bugs Postgres-only.
 
@@ -274,16 +302,24 @@ Produção é PostgreSQL. Verificação contra o SQLite vazio de `instance/` nã
 | Documento | Contém | Custo |
 |---|---|---|
 | `00_MAPA_DO_SISTEMA.md` | este arquivo: topologia, RBAC, convenções, armadilhas, por onde começar | ~5k tokens |
-| `01_SISTEMA_E_BANCO.md` | schema por domínio, inventário de endpoints, tabela de gates de RBAC, build e deploy | ~25k |
+| `01_SISTEMA_E_BANCO.md` | schema por domínio, inventário de endpoints, tabela de gates de RBAC, build/deploy e operação no Render (§5) | ~25k |
 | `02_MAPA_DE_PAGINAS_E_UX.md` | uma entrada por tela: objetivo, acesso, UX, API consumida, vínculos | ~25k |
-| `03_HISTORICO_MUTACOES.md` | **índice** de 43 features + as 12 mais recentes (append-only) | ~4k o índice |
+| `03_HISTORICO_MUTACOES.md` | **índice** de features + as mais recentes (append-only) | ~4k o índice |
 | `docs/historico/*.md` | entradas arquivadas por faixa de feature — leia só por `offset` | — |
-| `04_GUIA_DE_DOMINIOS.md` | fluxos, invariantes e armadilhas por domínio | ~12k |
-| `05_DIVIDA_TECNICA.md` | achados priorizados, com arquivo:linha e ação concreta | ~9k |
+| `04_GUIA_DE_DOMINIOS.md` | fluxos, invariantes e armadilhas por domínio (última revisão 2026-08-06) | ~12k |
+| `05_DIVIDA_TECNICA.md` | achados priorizados, com arquivo:linha e ação concreta; pendências operacionais | ~9k |
+| `render.yaml` (raiz) | **não é doc, é o que roda**: blueprint de produção; prevalece sobre qualquer texto | — |
+| `CONTINGENCIA_RENDER.md` | registro histórico da migração Railway → Render (28/08/2026); não é runbook | ~2k |
+| `PLANO_REMOCAO_JINJA.md`, `PARADA_REMOCAO_JINJA.md`, `PLANO_EXTRACAO_CALENDAR.md` | planos **pausados** por decisão do dono; leia a PARADA antes de retomar | — |
+| `archive/` | morto: `CLAUDE_2026-07.md`, `constitution-2.1.0.md`, `changelog.html` (congelado) | — |
+| `planos.md`, `EspecificacoesEducamanto.md` | conteúdo comercial (pacotes/planos), não é doc de sistema | — |
 
 **Fonte única por tipo de fato** (para as cópias não divergirem): contrato de API e schema só no 01;
-fluxo de tela só no 02; motivação/decisão/pegadinha histórica só no 03; fluxo e invariante de domínio
-só no 04; dívida só no 05.
+infra/deploy/operação só no 01 §5 (o `render.yaml` prevalece sobre o texto); fluxo de tela só no 02;
+motivação/decisão/pegadinha histórica só no 03; fluxo e invariante de domínio só no 04; dívida só no
+05. Regras de trabalho do agente: `CLAUDE.md`; princípios: constituição; procedimento: `DEVELOPMENT.md`.
+Citação `arquivo:linha` se confere contra HEAD na hora de escrever — arquivo que muda na mesma
+rodada (`.gitignore`, `render.yaml`) se cita pela entrada/chave, não pela linha.
 
 Arquivos de leitura cara, para planejar o orçamento de token: `app/models.py` ≈ 39k tokens ·
 `app/calendar/routes.py` ≈ 49k · `app/financeiro/routes.py` ≈ 21k · `app/marketing/virtuais_ops.py`

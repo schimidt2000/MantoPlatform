@@ -6,7 +6,10 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-09-04** · **294-portal-diz-o-erro**: o portal deixa de imprimir uma
+> Última atualização: **2026-09-08** · **295-cookie-de-sessao-orfao**: o ERP passa a wirar
+> `aoPerderSessao` como o portal já fazia — 401 em qualquer consulta zera a sessão e leva ao login
+> (o cookie órfão do `beta.*` é recolhido pelo servidor na própria resposta 401). Antes:
+> **2026-09-04** · **294-portal-diz-o-erro**: o portal deixa de imprimir uma
 > frase só para toda falha — sessão expirada leva ao login guardando o destino, erro de rede/servidor
 > mostra a causa com botão de tentar de novo e o código do erro (`ErroDeCarregamento`), e uma queda
 > de sinal não desloga mais ninguém. Antes: **292-fotos-que-somem** + **293-atualizacao-cadastral**:

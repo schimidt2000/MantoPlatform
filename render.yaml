@@ -1,8 +1,9 @@
-# Blueprint do Render — contingencia da suspensao do Railway (28/08/2026).
-# "New +" -> "Blueprint" -> selecionar este repo -> Apply cria os 3 recursos abaixo.
-# Os envVars com sync:false ficam vazios de proposito (segredos preenchidos a parte,
-# a partir do .env local do dono — nunca em chat/commit).
-# Espelha o railway.json: mesmo startCommand do gunicorn, mesmo healthcheck /health.
+# Blueprint de PRODUÇÃO da Manto no Render — FONTE ÚNICA do deploy desde 28/08/2026.
+# Todo push na `main` redeploya os dois serviços web (autoDeploy abaixo, ~60s). Não há staging.
+# Contrato de deploy e operação: docs/01_SISTEMA_E_BANCO.md §5. Como publicar: DEVELOPMENT.md.
+# História da migração (Railway banido em 28/08/2026): docs/03, entrada 264; registro do incidente
+# em docs/CONTINGENCIA_RENDER.md. Os envVars com sync:false ficam vazios de propósito (segredos
+# preenchidos no painel, a partir do .env local do dono — nunca em chat/commit).
 
 databases:
   - name: manto-postgres
@@ -19,6 +20,14 @@ services:
     region: oregon
     rootDir: .
     buildCommand: pip install -r requirements.txt
+    # MEXER NESTA LINHA DERRUBA A PRODUÇÃO QUANDO DÁ ERRADO (26/08/2026: a flag
+    # `--access-log-format` não existe — o certo é `--access-logformat` — e o gunicorn nunca subiu).
+    # Rode `python scripts/validar_startcommand.py` ANTES do push e faça a mudança em commit
+    # sozinho, fora do horário, com os Events do Render abertos: o serviço tem disco, o container
+    # antigo cai antes de o novo responder, e start que falha deixa a produção fora.
+    # --threads 12 (não 4): streaming de mídia é I/O-bound e cada download segura uma thread do
+    # primeiro ao último byte; com 4 threads, dois ou três vídeos travavam um worker inteiro.
+    # Subir threads exige subir o pool do SQLAlchemy junto (app/config.py) — o validador confere.
     startCommand: flask db upgrade && python seed.py && gunicorn run:app --workers 3 --worker-class gthread --threads 12 --bind 0.0.0.0:$PORT --timeout 120 --graceful-timeout 120 --max-requests 800 --max-requests-jitter 100 --access-logfile - --access-logformat '%(h)s %(m)s %(U)s %(s)s %(b)s %(D)s'
     healthCheckPath: /health
     autoDeploy: true
@@ -78,6 +87,10 @@ services:
       - key: MARKETING_AGENT_TOKEN
         sync: false
 
+  # Ausência conhecida, não esquecimento: o frontend NÃO tem `healthCheckPath` nem
+  # `watchPatterns`. Consequência: cada push troca o container e abre ~1 min de 502 na porta
+  # pública (o backend tem healthcheck; este não). Decisão pendente do dono (docs/05). Acrescentar
+  # muda o pipeline — commit sozinho, fora do horário, Events abertos.
   - type: web
     name: manto-frontend
     runtime: node

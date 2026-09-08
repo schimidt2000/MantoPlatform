@@ -22,18 +22,34 @@ client_secret*.json
 # VS Code
 .vscode/
 
-# Claude Code
-.claude/
+# Claude Code: skills (speckit-* e manto-*), settings.json (permissões e deny do projeto) e
+# launch.json são HARNESS e versionam (feature 296). Fora do git só o que é pessoal desta máquina.
+.claude/settings.local.json
 
 # Backups / cópias do banco (contêm dados reais — CPF, e-mail) — NUNCA versionar
 backups/
 *.dump
 *.sql.gz
-.railway-db-url
-.local-db-url
+# Segredos de banco. O glob cobre as CÓPIAS renomeadas: `.railway-db-url.railway-suspenso-2808`
+# ficou fora do padrão exato e era um `git add -A` de distância de virar uma senha de Postgres
+# publicada no GitHub.
+.railway-db-url*
+.local-db-url*
 
 # Ferramentas locais de banco (caminhos/setup pessoais) — remova esta linha para versionar
 /scripts/db/
+/scripts/oneoff/
+
+# Trabalho da recuperação pós-Railway: listas com nome, e-mail e telefone de artista, o mapa de
+# renomeação do `fix-heic` e o dry-run da campanha (que traz um token de redefinição no exemplo).
+# Nada disso pode ir para um repositório.
+/recuperacao/
+/.tmp.driveupload/
+/.tmp.drivedownload/
+
+# `ct/` era um index.html buildado baixado de produção para conferência (08/09/2026) — lixo de
+# conferência nunca é fonte; o que sobrar desse tipo vai para Desktop\Manto_Platform_arquivo.
+/ct/
 
 # Agente auditor financeiro (feature 221): token e artefatos de rodada — NUNCA versionar
 # (runs/ contém comprovantes baixados; data/ tem a memória com extrações)

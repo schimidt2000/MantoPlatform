@@ -1,3 +1,5 @@
+# ATENÇÃO: o que as skills leem é `.specify/extensions.yml` (lá os hooks de auto-commit estão
+# desligados). Este arquivo só governa `/speckit-git-commit`, que a Manto não usa.
 # Git Branching Workflow Extension Configuration
 # Copied to .specify/extensions/git/git-config.yml on install
 

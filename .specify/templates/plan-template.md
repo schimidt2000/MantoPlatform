@@ -1,113 +1,109 @@
-# Implementation Plan: [FEATURE]
+<!-- ADAPTADO PARA A MANTO (2026-09-08) — reaplicar após qualquer atualização do Spec Kit; para este
+     arquivo o hash em .specify/integrations/speckit.manifest.json deixa de conferir de propósito. -->
+# Plano de implementação: [FEATURE]
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Branch**: `[NNN-nome]` | **Data**: [AAAA-MM-DD] | **Spec**: [spec.md](./spec.md)
 
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+**Input**: `/specs/[NNN-nome]/spec.md`
 
-**Note**: This template is filled in by the `/speckit-plan` command; its definition describes the execution workflow.
+**Nota**: preenchido pelo `/speckit-plan`. A constituição (`.specify/memory/constitution.md`,
+v3+) é lida em tempo de execução — o Constitution Check abaixo é o que ela cobra.
 
-## Summary
+## Resumo
 
-[Extract from feature spec: primary requirement + technical approach from research]
+[requisito principal da spec + abordagem técnica escolhida na pesquisa]
 
-## Technical Context
+## Contexto técnico
 
 <!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
+  Stack real da Manto, já preenchida. Troque só o que a feature muda; marque NEEDS CLARIFICATION
+  onde não souber.
 -->
 
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]
+**Linguagem/Versão**: Python 3.11 (Flask + SQLAlchemy) no backend; TypeScript + React 18 (Vite)
+no frontend
 
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
+**Dependências principais**: Flask, SQLAlchemy, Alembic (migrations à mão); React, TanStack
+Query, Tailwind CSS, shadcn/ui (`@manto/ui`), Framer Motion, `@manto/api-client`
+(`apiFetch`/`assetUrl`), `@manto/money`
 
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+**Armazenamento**: PostgreSQL — produção no Render (`manto-postgres`, `render.yaml`); verificação
+contra a cópia `manto_local`. Arquivos no disco persistente do `manto-backend` (`app/storage.py`)
 
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]
+**Verificação**: `specs/NNN-nome/verify_NNN.py` contra `manto_local` (login só pela API; escrita
+por conexão separada); `cd frontend && npm run typecheck` (três SPAs); tela aberta no Browser
+pane; superfície pública em viewport mobile
 
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Plataforma-alvo**: web — Render (Flask API JSON + 3 SPAs servidas por `frontend/server.js`);
+staff em desktop, público e portal em smartphone
 
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]
+**Tipo de projeto**: SPA desacoplada (API JSON + React)
 
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]
+**Metas de desempenho**: [específicas da feature, ou N/A]
 
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]
+**Restrições**: [ex.: URL imutável; sem login; 320–430px sem rolagem; `useReducedMotion`; rota
+pública nova precisa entrar em `BACKEND_PREFIXES` de `frontend/server.js`]
 
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Escala/escopo**: [tabelas, colunas, endpoints, telas]
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+*GATE: aprovado antes da Phase 0; reavaliado após a Phase 1.*
 
-[Gates determined based on constitution file]
+| Princípio / seção | Como o plano cumpre (ou por que não se aplica) |
+|---|---|
+| I. Reutilizar antes de criar | [o que já existe e é reusado: `_ops`, hooks, componentes, gates] |
+| II. Padrões de código | type hints/docstrings; TS estrito; constantes; `ruff check` nos tocados |
+| III. Camadas / API First | `_ops.py` puro; `_read`/`_write` só RBAC + serialização; import em `app/api/__init__.py`; `BACKEND_PREFIXES` se rota pública |
+| IV. Não quebrar o que funciona | mudança aditiva? pontos compartilhados conferidos? |
+| V. UI/UX com feedback | TanStack Query; loading nos botões; erro no campo; toasts pt-BR |
+| VI. Esteira (Nível 1) | esteira completa; artefatos mínimos em `specs/NNN-nome/` |
+| VII. Living Spec | spec atualizada antes do código |
+| VIII. Verify antes do núcleo | `verify_NNN.py` na fase Foundational, falhando pelos motivos certos |
+| IX. Dinheiro BRL | `@manto/money`; `Numeric/Decimal` |
+| X. Mobile-first público | [se toca superfície pública] |
+| XI. Framer Motion | [se toca UI] |
+| XII. Combobox / Maps | [se lista > 10 itens ou endereço] |
+| XIII. RBAC declarado | papéis por endpoint; linha em `docs/01` §4.3 |
+| XIV. Config / efeito externo | env nova com default real; trava `_suppress_*` se escreve fora |
+| Stack | migration à mão (`down_revision` = head); sem Jinja novo; sem segredo |
+| Operação e Deploy | [toca `startCommand`? migração destrutiva → ensaio em banco descartável] |
 
-## Project Structure
+## Estrutura do projeto
 
-### Documentation (this feature)
+### Documentação (esta feature)
 
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit-plan command output)
-├── research.md          # Phase 0 output (/speckit-plan command)
-├── data-model.md        # Phase 1 output (/speckit-plan command)
-├── quickstart.md        # Phase 1 output (/speckit-plan command)
-├── contracts/           # Phase 1 output (/speckit-plan command)
-└── tasks.md             # Phase 2 output (/speckit-tasks command - NOT created by /speckit-plan)
+specs/[NNN-nome]/
+├── spec.md              # /speckit-specify
+├── plan.md              # este arquivo (/speckit-plan)
+├── research.md          # Phase 0
+├── data-model.md        # Phase 1
+├── quickstart.md        # Phase 1
+├── contracts/           # Phase 1
+├── checklists/          # /speckit-checklist
+├── tasks.md             # /speckit-tasks
+└── verify_NNN.py        # Princípio VIII — escrito antes do núcleo
 ```
 
-### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
+### Código (caminhos reais — apague o que não usar)
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
-
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+app/models.py                               # models; migration à mão em migrations/versions/
+app/<dominio>/<nome>_ops.py                 # núcleo de negócio puro (sem flask.request)
+app/api/<dominio>_read.py | _write.py       # endpoints; registrar em app/api/__init__.py
+app/constants.py, app/config.py             # constantes; config com default real
+frontend/apps/<internal|public|portal>/src/{pages,components,lib}/
+frontend/packages/{ui,api-client,money}/    # componente novo: exportar em packages/ui/src/index.ts
+frontend/server.js                          # BACKEND_PREFIXES / mounts, só se houver rota pública nova
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Decisão de estrutura**: [onde cada parte da feature mora e por quê]
 
-## Complexity Tracking
+## Rastreamento de complexidade
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
+> Preencher SÓ se o Constitution Check tiver violação a justificar.
 
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+| Violação | Por que é necessária | Alternativa mais simples rejeitada porque |
+|---|---|---|
+| [ex.: import tardio de `calendar/routes.py`] | [necessidade] | [por que o `_ops` não basta hoje] |
