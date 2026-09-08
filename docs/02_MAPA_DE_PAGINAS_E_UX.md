@@ -164,6 +164,15 @@ Diálogo mais alto que a janela faz o **container rolar**. Regra geral: não cen
 Roteador: `apps/internal/src/App.tsx`. Todas as rotas autenticadas ficam dentro de uma *layout
 route* `RequireAuth` → `AppShell` (feature 173). `*` redireciona para `/`.
 
+**Sessão que cai no meio do uso (feature 295).** `main.tsx` passa `aoPerderSessao` ao
+`createQueryClient` — o que o portal já fazia desde a 294 e o ERP não. Sem isso, o 401 de uma
+consulta qualquer não chegava a lugar nenhum: o login popula o cache do `/api/auth/me`
+(`setQueryData(ME_KEY, user)`) e o `useCurrentUser` **engole** o 401 do próprio `me` num
+`catch { return null }`, então a casca continuava desenhada a partir do cache enquanto cada tela
+imprimia "Não foi possível carregar…" por conta própria. Agora um 401 em qualquer consulta zera o
+`ME_KEY`, o `RequireAuth` vê `user` nulo e leva ao `/login` — em vez da tela logada com conteúdo
+quebrado, que custou várias rodadas de investigação em cima do servidor.
+
 ### A.1 Acesso
 
 #### `/login` — Login

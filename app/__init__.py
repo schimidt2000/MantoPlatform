@@ -596,6 +596,66 @@ def create_app():
             )
         return resp
 
+    # ── O cookie de sessão fantasma (feature 295) ──────────────────────────────
+    #
+    # A feature 144 ligou `SESSION_COOKIE_DOMAIN=".mantoproducoes.com.br"` para a SPA em
+    # `beta.*` compartilhar a sessão com `app.*`. O beta saiu do ar e a variável foi
+    # desligada — mas o cookie que ela criou ficou nos navegadores. Quem logou naquele
+    # período carrega DOIS cookies `session`: o do domínio pai, órfão, e o host-only de
+    # hoje. O navegador manda os dois na mesma requisição e o Werkzeug lê só o primeiro
+    # (`request.cookies.get`), que com o mesmo `Path` é o mais ANTIGO — o órfão. Resultado:
+    # o login grava o cookie bom, a requisição seguinte é lida pelo órfão e responde 401.
+    # Para sempre, porque o servidor não escreve mais naquele domínio e portanto não tem
+    # como sobrescrevê-lo. A única saída era apagar cookie pelo inspetor do navegador.
+    #
+    # Recolher o órfão é trabalho do servidor. A resposta carimba a exclusão em dois momentos:
+    #
+    #  a) TODO login (`marca_para_recolher_cookie_orfao`), porque ali o servidor está reescrevendo
+    #     a sessão e qualquer cookie de mesmo nome em outro domínio é obsoleto por definição. Sem
+    #     isto o recolhimento ainda funciona, mas só na requisição seguinte: a pessoa loga, a
+    #     primeira consulta é lida pelo órfão, toma 401 e volta para o login. Cura, cobrando um
+    #     login extra de quem já estava perdido.
+    #  b) Fora do login, quando chegam dois `session` E ninguém se autenticou na requisição — a
+    #     sessão que está funcionando nunca é tocada, e a quebrada se cura sozinha, inclusive na
+    #     própria resposta 401.
+    #
+    # O `delete_cookie` precisa repetir nome, domínio e path do original, senão o navegador cria um
+    # cookie novo em vez de apagar o velho.
+    @app.after_request
+    def _recolhe_cookie_de_sessao_orfao(resp):
+        obsoletos = app.config.get("SESSION_COOKIE_DOMINIOS_OBSOLETOS") or []
+        if not obsoletos:
+            return resp
+
+        from .session_cookies import FLAG_RECOLHER
+
+        nome = app.config.get("SESSION_COOKIE_NAME") or "session"
+        if not getattr(g, FLAG_RECOLHER, False):
+            if len(request.cookies.getlist(nome)) < 2:
+                return resp
+            # O portal autentica por `session["talent_id"]`, fora do Flask-Login — os dois testes
+            # cobrem staff e artista. Se qualquer um respondeu, a sessão desta requisição serve.
+            if current_user.is_authenticated or session.get("talent_id"):
+                return resp
+
+        ativo = app.config.get("SESSION_COOKIE_DOMAIN")
+        for dominio in obsoletos:
+            if ativo and dominio.lstrip(".") == str(ativo).lstrip("."):
+                continue  # é o cookie legítimo desta instalação, não um órfão
+            resp.delete_cookie(
+                nome,
+                domain=dominio,
+                path=app.config.get("SESSION_COOKIE_PATH") or "/",
+                secure=bool(app.config.get("SESSION_COOKIE_SECURE")),
+                httponly=True,
+                samesite=app.config.get("SESSION_COOKIE_SAMESITE"),
+            )
+        app.logger.warning(
+            f"[sessao] {len(request.cookies.getlist(nome))} cookies '{nome}' na mesma "
+            f"requisição {request.path} — órfão recolhido de {', '.join(obsoletos)}"
+        )
+        return resp
+
     # ── Acesso restrito do Revendedor EducaManto (feature 078) ────────────────
     @app.before_request
     def _revendedor_guard():

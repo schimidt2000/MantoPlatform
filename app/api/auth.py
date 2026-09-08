@@ -15,6 +15,7 @@ from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import IMPERSONABLE_ROLES, RoleName
 from app.models import SiteSetting, User
+from app.session_cookies import marca_para_recolher_cookie_orfao
 
 
 def _is_educamanto_responsavel(user: User) -> bool:
@@ -62,6 +63,7 @@ def api_login() -> Any:
 
     session.clear()
     login_user(user)
+    marca_para_recolher_cookie_orfao()
     return jsonify(serialize_user(user))
 
 

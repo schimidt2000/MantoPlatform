@@ -18,6 +18,7 @@ from app.api import api_bp
 from app.api_utils import json_error
 from app.email_service import send_async, send_password_reset_email, send_welcome_email
 from app.models import Talent
+from app.session_cookies import marca_para_recolher_cookie_orfao
 from app.talent_portal import portal_account_ops, portal_ops
 from app.talent_portal.portal_links import portal_reset_url
 from app.talent_portal.portal_account_ops import PortalAccountError
@@ -91,6 +92,7 @@ def api_portal_login() -> Any:
     session.clear()
     session["talent_id"] = talent.id
     session.permanent = True
+    marca_para_recolher_cookie_orfao()
 
     # `must_redirect_to_classic` (fatia 176) foi removido: troca de senha e aceite de termos são
     # telas React desde a 191 (`pending_steps`), e o portal Jinja deixou de ser destino de login —

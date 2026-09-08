@@ -1524,6 +1524,18 @@ que o proxy usa como `BACKEND_URL`.
 | `portal.mantoproducoes.com.br` | **302 → `/portal/`** | endereço que os talentos conhecem |
 | `alo.mantoproducoes.com.br` | **302 → `/catalogo/v/<caminho>`** | Loja de Interações Virtuais (224d) — `alo.…/<slug>` abre a campanha; a **raiz vai para `/catalogo/v`**, a landing da loja (224e). Já apontou para `/catalogo/`, o catálogo de eventos, e isso entregava outro produto a quem chegava pelo endereço da loja |
 
+> ⚠️ **O `beta.*` deixou um cookie para trás (feature 295).** O endereço histórico está fora do ar,
+> mas a feature 144 ligou `SESSION_COOKIE_DOMAIN=".mantoproducoes.com.br"` para ele compartilhar
+> sessão com o `app.*`. Desligar a variável **não recolhe** o cookie que ela já gravou: quem logou
+> naquele período continua mandando DOIS `session` na mesma requisição, e o Werkzeug entrega o
+> primeiro — com o mesmo `Path`, o mais antigo (RFC 6265 §5.4), que é o órfão. O login grava o
+> cookie bom, a requisição seguinte é lida pelo órfão e responde 401 **para sempre**, porque o
+> servidor não escreve mais naquele domínio e não tem como sobrescrevê-lo. O `after_request`
+> `_recolhe_cookie_de_sessao_orfao` (`app/__init__.py`) recolhe o órfão quando chegam dois
+> `session` e ninguém se autenticou — na própria resposta 401, antes de a pessoa conseguir logar.
+> **Trocar o domínio do cookie de sessão é mudança de duas partes:** muda-se `SESSION_COOKIE_DOMAIN`
+> e inscreve-se o domínio antigo em `Config.SESSION_COOKIE_DOMINIOS_OBSOLETOS`.
+
 `ALO_HOSTS` (env do serviço frontend, default `alo.mantoproducoes.com.br`) faz o mesmo pela loja
 virtual: é o endereço curto que vai em story e link de bio, no lugar de
 `app.mantoproducoes.com.br/catalogo/v/<slug>`. Vale a mesma mecânica e as mesmas ressalvas do

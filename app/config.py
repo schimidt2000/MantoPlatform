@@ -194,6 +194,19 @@ class Config:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
 
+    # Domínios em que ESTA instalação já gravou cookie de sessão e não grava mais (feature 295).
+    # Um cookie assim vira fantasma: o servidor não tem como sobrescrevê-lo (não escreve mais
+    # naquele domínio) e o navegador o envia junto do cookie bom, na frente dele. Ver o
+    # recolhimento em `app/__init__.py` e a história em `ProductionConfig.SESSION_COOKIE_DOMAIN`.
+    # Lista separada por vírgula; vazio desliga o recolhimento.
+    SESSION_COOKIE_DOMINIOS_OBSOLETOS = [
+        dominio.strip()
+        for dominio in os.getenv(
+            "SESSION_COOKIE_DOMINIOS_OBSOLETOS", ".mantoproducoes.com.br"
+        ).split(",")
+        if dominio.strip()
+    ]
+
     # Limite global de upload/requisição (defesa contra DoS por arquivo gigante).
     # 512 MB para acomodar vídeos do módulo de Revisão (feature 088); as demais rotas
     # mantêm limites menores por arquivo (10–20 MB) validados nelas próprias.
@@ -338,6 +351,15 @@ class ProductionConfig(Config):
     # é preciso SameSite="None". Ausente (ex.: dev/localhost) = cookie host-only, como hoje.
     # ATENÇÃO: definir isto amplia o alcance do cookie de sessão do ERP atual para todos os
     # subdomínios — só use subdomínios confiáveis sob este domínio.
+    #
+    # ATENÇÃO MAIOR (feature 295): DESLIGAR esta variável não recolhe o cookie que ela já criou.
+    # O beta saiu do ar, a variável foi removida do painel, e todo navegador que tinha logado
+    # naquele período continuou guardando um `session` de domínio `.mantoproducoes.com.br` que o
+    # servidor nunca mais conseguiu sobrescrever. Ele viaja junto do cookie host-only e chega
+    # ANTES dele, e o Werkzeug lê o primeiro — a pessoa loga, a requisição seguinte responde 401,
+    # e não há login que resolva. Só apagar cookie no inspetor do navegador, o que nenhum artista
+    # do portal vai fazer. Por isso trocar o domínio do cookie de sessão é mudança de duas partes:
+    # muda-se aqui E inscreve-se o domínio antigo em `Config.SESSION_COOKIE_DOMINIOS_OBSOLETOS`.
     SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN") or None
 
     # PostgreSQL — obrigatório em produção

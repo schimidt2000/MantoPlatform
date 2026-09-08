@@ -4,6 +4,7 @@ from werkzeug.utils import secure_filename
 from ..models import User, db
 from flask_login import current_user
 from app import limiter
+from app.session_cookies import marca_para_recolher_cookie_orfao
 from app.storage import (
     ALLOWED_IMAGE_EXTENSIONS,
     ImagemNaoConvertida,
@@ -52,6 +53,7 @@ def login():
 
     session.clear()
     login_user(user)
+    marca_para_recolher_cookie_orfao()
 
     if user.must_change_password:
         return redirect(url_for("auth.change_password"))

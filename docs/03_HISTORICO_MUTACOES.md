@@ -4,7 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-04** · Estado do repositório: pós-feature
+> Última atualização: **2026-09-08** · Estado do repositório: pós-feature
+> **295-cookie-de-sessao-orfao** (sem migration; o cookie `session` do domínio `.mantoproducoes.com.br`
+> que a 144 criou para o `beta.*` continuava nos navegadores e vencia o cookie bom por ser mais
+> antigo — 401 permanente sem login que resolvesse; o servidor passa a recolhê-lo na própria
+> resposta 401, e o ERP passa a wirar `aoPerderSessao`) — antes dela pós-feature
 > **294-portal-diz-o-erro** (sem migration; o portal para de imprimir uma frase só para toda
 > falha — 401 vira login com destino, erro de rede deixa de parecer logout) — antes dela
 > pós-features
@@ -79,6 +83,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **295-cookie-de-sessao-orfao** | A causa raiz que a 294 tornou visível: a feature 144 gravou cookies `session` no domínio `.mantoproducoes.com.br` para o `beta.*`; o beta morreu, a variável foi desligada, e o cookie ficou nos navegadores. Quem logou naquele período manda DOIS `session` na mesma requisição e o Werkzeug entrega o primeiro — com o mesmo `Path`, o mais antigo (RFC 6265 §5.4), que é o órfão. Login grava o cookie bom, a requisição seguinte é lida pelo órfão, 401 para sempre — e nenhum login conserta, porque o servidor não escreve mais naquele domínio. `after_request` recolhe o órfão quando chegam dois `session` e ninguém se autenticou (a sessão que funciona nunca é tocada; a 401 já carrega a cura), `SESSION_COOKIE_DOMINIOS_OBSOLETOS` com o domínio do beta no padrão, e o ERP passa a wirar `aoPerderSessao` como o portal já fazia | 2026-09-08 | — | (aqui) | — |
 | **294-portal-diz-o-erro** | Print de artista com o cabeçalho logado e "Não foi possível carregar sua agenda": servidor exonerado em três níveis (ORM, gunicorn no ar, caminho público com a sessão real — 200 em 175 ms). O defeito era o portal jogar fora o motivo: `useCurrentTalent` fazia `catch { return null }` e a tela tinha uma frase só para toda falha. Agora 401 em qualquer consulta zera a sessão e leva ao login com `?destino=`, erro de rede/servidor deixa de parecer logout, e `ErroDeCarregamento` mostra causa, botão de tentar de novo e o código do erro | 2026-09-04 | — | (aqui) | — |
 | **292/293-fotos-que-somem** | A migração do Railway trouxe o banco e não os arquivos: 40 talentos e 64 fichas de figurino apontam para fotos que não existem mais, e o campo nunca ficou NULL — o front montava um `<img>` que respondia 404. `<Foto>` com fallback (o `onError` do React não basta: `error` de imagem não borbulha e o 404 do cache dispara antes do commit), variante por largura para `figurino_photos`, cache longo no `/portal/photo`, rotação gravando caminho novo, `pillow-heif` + `COMPRESS_EXTS` derivado, os 9 caminhos que gravavam cru passando por `save_file`, `MANTO_SEM_THREADS`, e os comandos `midia-orfa`/`fix-heic`/`campanha-fotos` (dry-run, dedup no `AuditLog`, link de 7 dias com deep link para `/fotos-documentos`) | 2026-09-03 | — | (aqui) | — |
 | **239b-hotfix-carrinho-fora-de-sp** | O botão "🚗 Marcar transporte" não aparecia na maioria dos eventos: `is_outside_sp` só era classificado por CEP ou pela palavra "São Paulo" no endereço, e endereço real de festa não tem nenhum dos dois — 55 dos 104 eventos futuros estavam `NULL` (Porto Feliz, Jundiaí, Alphaville, Belém do Pará…) e `NULL` valia como "não é fora". Geocoding do Google entra entre o CEP e o texto (`maps.cidade_do_endereco`), as edições React reclassificam (`reclassificar_fora_de_sp`), "Estimar via Google Maps" reclassifica, desconhecido mostra o botão e marcar classifica como fora; script de reclassificação com dry-run | 2026-09-02 | `—` | (aqui) | — |
@@ -236,6 +241,92 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 295 — O cookie órfão que trancava o usuário para fora            (2026-09-08 · feature · sem migration)
+
+**Motivação.** O dono logou no `app.` pelo Firefox do Mac e caiu no estado da 294 no ERP: login
+passa, a casca desenha, e **toda** tela de dado responde `Não foi possível carregar…`. Hard refresh
+(`Cmd+Shift+R`) devolvia a tela de login e o ciclo recomeçava. Rodadas anteriores de investigação
+não acharam nada — corretamente, porque não havia nada errado no servidor.
+
+**O que o servidor mostrava.** Backend vivo (`/api/auth/me` sem sessão → 401 JSON com o envelope
+certo), os três endpoints das telas que falhavam existindo e respondendo 401 (`/api/agenda`,
+`/api/gastos`, `/api/talents` — nenhum 404 de rota morta), proxy do Node funcionando, e todo teste
+em cliente limpo passando. Esse último fato é o que fecha o caso: **se o servidor mandasse um
+cookie inválido, quebraria para todo mundo.** O que atrapalhava já estava no navegador.
+
+**A causa.** O inspetor do Firefox mostrou **dois** cookies `session` para o mesmo site:
+
+| Nome | Domain | Origem |
+|---|---|---|
+| `session` | `.mantoproducoes.com.br` | feature 144, época do `beta.*` |
+| `session` | `app.mantoproducoes.com.br` | o login de hoje (host-only) |
+
+A 144 ligou `SESSION_COOKIE_DOMAIN` para o `beta.*` compartilhar sessão com o `app.*`. O beta saiu
+do ar e a variável foi desligada — mas **desligar não recolhe o cookie que ela já criou**. O
+navegador manda os dois na mesma requisição e o Werkzeug entrega só o primeiro; com o mesmo `Path`
+o primeiro é o mais **antigo** (RFC 6265 §5.4), que é o órfão. Medido:
+
+```
+parse_cookie('session=ORFAO; session=BOM').getlist('session') -> ['ORFAO', 'BOM']
+parse_cookie('session=ORFAO; session=BOM').get('session')     -> 'ORFAO'   # é este que o Flask lê
+```
+
+Daí: o login grava o cookie bom, a requisição seguinte é lida pelo órfão, sessão vazia, 401. **Para
+sempre** — nenhum login futuro corrige, porque o servidor não escreve mais naquele domínio e
+portanto não tem como sobrescrevê-lo. A única saída era apagar cookie pelo inspetor do navegador,
+o que nenhum artista do portal vai fazer. E o portal usa o **mesmo** cookie `session` no mesmo
+host: o print do Eduardo Assis que originou a 294 ("em certos navegadores, até com funcionário")
+tem toda a cara de ser este mesmo defeito, com o servidor sendo exonerado — corretamente — três
+vezes.
+
+**O conserto.** `after_request` que recolhe o órfão (`app/__init__.py`), disparando em dois
+momentos:
+
+- **em todo login** (`marca_para_recolher_cookie_orfao`, em `app/session_cookies.py`, chamada pelos
+  três pontos que abrem sessão: `api/auth.py`, `api/portal_auth.py` e o Jinja `auth/routes.py`).
+  Ali o servidor está reescrevendo a sessão, então qualquer cookie de mesmo nome em outro domínio é
+  obsoleto por definição — e é o único momento em que dá para afirmar isso com **um** cookie só no
+  pote. Sem esta metade o recolhimento ainda funciona, mas só na requisição seguinte: a pessoa
+  loga, a primeira consulta é lida pelo órfão, toma 401, e com o `aoPerderSessao` agora ligado o
+  ERP a manda **de volta para a tela de login**. Cura, cobrando um segundo login de quem já estava
+  perdido;
+- **fora do login**, quando chegam **dois ou mais `session`** E **ninguém se autenticou** na
+  requisição (`current_user` **ou** `session["talent_id"]`, porque o portal não usa Flask-Login).
+  As duas condições existem para não causar dano: com um cookie só não há como saber que ele é
+  órfão — recolher apagaria a sessão legítima de quem está com cookie vencido —, e uma sessão que
+  está funcionando nunca pode ser tocada.
+
+O carimbo repete nome, domínio e path do original (senão o navegador cria um cookie novo em vez de
+apagar o velho) e viaja também na **própria resposta 401**: o navegador se cura antes de a pessoa
+conseguir logar. `Config.SESSION_COOKIE_DOMINIOS_OBSOLETOS` já traz `.mantoproducoes.com.br` no
+padrão — depender de env nova no painel do Render é exatamente como `AUDIT_AGENT_TOKEN` e
+`MARKETING_AGENT_TOKEN` ficaram sem preencher.
+
+O ERP passou a wirar `aoPerderSessao` (`apps/internal/src/main.tsx`), que existia desde a 294 mas
+só o portal usava — por isso o ERP mostrava "não foi possível carregar" em vez de mandar ao login.
+
+**Pegadinhas encontradas ao verificar** (as duas fizeram o teste passar sem testar nada):
+
+1. `app.test_client()` **reescreve `HTTP_COOKIE` a partir do próprio cookie jar**: com o jar vazio
+   ele apaga o cabeçalho que você montou; com o jar cheio, deduplica por nome. Nos dois casos o
+   cenário desta feature deixa de existir. Precisa de `test_client(use_cookies=False)`.
+2. Segurar um `app.app_context()` por fora das requisições faz o `g` **sobreviver de uma para a
+   outra** — e o Flask-Login guarda o usuário no `g`. O login da preparação vazava para todos os
+   cenários e `/api/auth/me` respondia 200 até para o cookie órfão sozinho.
+
+**Regra que fica.** Trocar o domínio do cookie de sessão é mudança de **duas** partes: muda-se
+`SESSION_COOKIE_DOMAIN` **e** inscreve-se o domínio antigo em `SESSION_COOKIE_DOMINIOS_OBSOLETOS`.
+Sem a segunda metade, todo navegador que logou no regime anterior fica trancado para fora sem
+mensagem que ajude.
+
+**Verificação.** `specs/295-cookie-de-sessao-orfao/verify_295.py` — 9/9 contra o `manto_local`,
+incluindo o defeito reproduzido (órfão na frente → 401), a cura na própria 401, a cura já na
+resposta do login (sem cobrar login extra e sem atropelar a gravação do cookie novo), a sessão que
+funciona permanecendo intocada, o domínio ativo jamais recolhido, e o caminho completo de quem está
+preso (órfão sozinho → login → cura na requisição seguinte).
+
+---
 
 ### 294 — O portal que não sabia dizer o que deu errado            (2026-09-04 · feature · sem migration)
 

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import type { AuthUser } from "./types";
 
-const ME_KEY = ["auth", "me"] as const;
+export const ME_KEY = ["auth", "me"] as const;
 
 interface LoginCredentials {
   email: string;
