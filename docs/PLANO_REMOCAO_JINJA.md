@@ -1,5 +1,8 @@
 # Plano de remoção do sistema Jinja legado
 
+> **Nota (2026-09-08):** as menções a Railway abaixo são de antes de 28/08/2026 — a produção está
+> no Render desde então (`docs/03`, entrada 264). O que ainda vale sobre deploy mora em `docs/01` §5.3.
+
 > # ⏸️ TRABALHO PAUSADO EM 20/08/2026
 >
 > **Antes de retomar qualquer coisa deste plano, leia
@@ -84,7 +87,7 @@ devolve ao Flask apenas estes caminhos:
 
 Todo o resto cai nos bundles React. Ou seja: **as 175 rotas removíveis já não são alcançáveis pelo
 endereço que as pessoas usam.** Elas só respondem se alguém bater direto no domínio do serviço
-Flask no Railway, que não é divulgado.
+Flask (hoje `manto-backend.onrender.com`, no Render), que não é divulgado.
 
 Isso muda a natureza do trabalho: não é uma migração, é a remoção de código que já está fora de
 circulação. O risco não está em "quebrar uma tela" — está nas seis armadilhas abaixo.
@@ -195,7 +198,7 @@ python -c "from app import create_app; create_app()"
 ```
 
 O Flask registra blueprints na importação. Um `ImportError` ou um endpoint órfão derruba o app
-inteiro no start — e o Railway só tenta 3 vezes antes de desistir.
+inteiro no start — e o serviço tem disco persistente: start que falha deixa a produção fora (`docs/01` §5.3).
 
 ---
 
@@ -538,7 +541,7 @@ Lista de intocáveis, para consulta rápida durante a execução:
 - **Servir arquivo:** `/uploads/<path>`, `/catalogo/midia/*`, `/catalogo/og/*`, `/portal/photo/*` —
   cerca de 70 pontos de chamada nos três apps passam por `assetUrl()`
 - **OAuth:** `/google/connect`, `/google/callback`
-- **`/health`** — o `railway.json` faz healthcheck nele; sem ele o deploy não sobe
+- **`/health`** — o `render.yaml` (`healthCheckPath`) faz healthcheck nele; sem ele o deploy não sobe
 - `/robots.txt` e o `/` (301 para a plataforma React)
 - **Páginas de erro** 403/404/500 + `style.css`, `giphy.gif`, `source.gif`, `apple-touch-icon-*`
 - **`figurino_print.html`** + `/figurinos/<id>/print` + `/figurinos/print-event/<id>` — a SPA
@@ -681,7 +684,7 @@ CLI), já que o catálogo tem CRUD próprio e completo na SPA. Aí sim `git rm -
 — este é rastreado pelo git, ao contrário do CSV do Kommo.
 
 O CSV do Kommo é trivial: trocar `@click.argument("path", default=...)` por `@click.argument("path")`
-em `app/cli.py:20` e o arquivo pode sair. Nunca foi versionado, então nunca esteve no Railway.
+em `app/cli.py:20` e o arquivo pode sair. Nunca foi versionado, então nunca esteve em produção.
 
 ---
 

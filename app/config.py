@@ -90,7 +90,8 @@ def _url_para_fora(valor: str | None, padrao: str, nome: str, *, permitir_local:
 
 def _db_url() -> str:
     url = os.getenv("DATABASE_URL", "sqlite:///manto.db")
-    # Railway fornece postgres:// mas SQLAlchemy 2.x exige postgresql://
+    # Provedores de Postgres entregam `postgres://` (o Railway entregava; a normalização fica) e o
+    # SQLAlchemy 2.x exige `postgresql://`
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
     return url
@@ -365,7 +366,7 @@ class ProductionConfig(Config):
     # PostgreSQL — obrigatório em produção
     # DATABASE_URL deve ser definida no .env
     # pool_size/max_overflow explícitos: sem eles valem os defaults do SQLAlchemy (5 + 10), que
-    # ficam APERTADOS depois que o gunicorn passou a 12 threads por worker (railway.json). Cada
+    # ficam APERTADOS depois que o gunicorn passou a 12 threads por worker (`startCommand` do render.yaml). Cada
     # worker consome conexões por 12 threads de requisição MAIS as 6 threads de background
     # (`_start_*` no fim de create_app), ou seja até 18 usuários simultâneos do pool. 10 + 10 = 20
     # cobre isso com folga; × 3 workers = 60 conexões no pior caso. Um download de mídia segura a
