@@ -1,0 +1,49 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "manto-backend-local",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-Command",
+        "$env:MANTO_SEM_THREADS = '1'; $env:FLASK_ENV = 'development'; $env:DATABASE_URL = (Get-Content .local-db-url -Raw).Trim(); if (Test-Path .audit-agent-token) { $env:AUDIT_AGENT_TOKEN = (Get-Content .audit-agent-token -Raw).Trim() }; $env:PYTHONPATH = (Get-Location).Path; $env:FLASK_APP = 'app:create_app'; .venv\\Scripts\\python.exe -m flask run --port 5000"
+      ],
+      "port": 5000
+    },
+    {
+      "name": "manto-backend-local-sem-google",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-Command",
+        "$env:MANTO_SEM_THREADS = '1'; $env:FLASK_ENV = 'development'; $env:DATABASE_URL = (Get-Content .local-db-url -Raw).Trim(); $env:PYTHONPATH = (Get-Location).Path; .venv\\Scripts\\python.exe scripts\\db\\run-local-sem-google.py"
+      ],
+      "port": 5000
+    },
+    {
+      "name": "manto-prod-server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["frontend/server.js"],
+      "port": 3000
+    },
+    {
+      "name": "manto-internal",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend/apps/internal"],
+      "port": 5173
+    },
+    {
+      "name": "manto-portal",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend/apps/portal"],
+      "port": 5174
+    },
+    {
+      "name": "manto-public",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend/apps/public"],
+      "port": 5175
+    }
+  ]
+}

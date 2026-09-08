@@ -22,8 +22,9 @@ client_secret*.json
 # VS Code
 .vscode/
 
-# Claude Code
-.claude/
+# Claude Code: skills (speckit-* e manto-*), settings.json (permissões e deny do projeto) e
+# launch.json são HARNESS e versionam (feature 296). Fora do git só o que é pessoal desta máquina.
+.claude/settings.local.json
 
 # Backups / cópias do banco (contêm dados reais — CPF, e-mail) — NUNCA versionar
 backups/
