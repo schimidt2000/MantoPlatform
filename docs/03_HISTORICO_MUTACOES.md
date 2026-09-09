@@ -4,7 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-08** · Estado do repositório: pós-feature
+> Última atualização: **2026-09-09** · Estado do repositório: pós-feature
+> **297-nfc-moldura-e-menu** (migration `c9f4a2b71e60`; os vídeos das tags NFC passam a ser
+> convertidos para 1080 com a moldura da Manto gravada, a página pública vira menu com vídeo de
+> abertura e recado da cliente, e o gerenciador mostra o estado da conversão) — antes dela pós-feature
 > **296-revisao-harness** (sem migration; harness revisado para o Render — constituição 3.0.0 com a
 > esteira em dois níveis, `CLAUDE.md`/`DEVELOPMENT.md` reescritos, `.claude/` versionado, arquivos de
 > deploy do Railway apagados, validador lendo o `render.yaml`) — antes dela pós-feature
@@ -86,6 +89,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **297-nfc-moldura-e-menu** | Os vídeos das tags NFC não tocavam porque eram os arquivos CRUS da câmera (4K, até 76 Mbps, 147 MB para 16 s) — íntegros e servidos certo, mas impossíveis de carregar em rede móvel. Pipeline de conversão em thread de fundo (1080 de largura, H.264+AAC, ~15 MB por 30 s) com a **moldura PNG do sistema gravada na borda** por `scale2ref` (uma moldura serve a qualquer tamanho); guarda um MESTRE sem moldura para reprocessar sem pedir o vídeo de volta. `/nfc/<code>` vira máquina de cenas — capa (o toque é o que libera o áudio), abertura, menu de três botões e mensagem especial com **recado da cliente**, que toca o sino da 272. Corrige de carona: corrida entre substituir e converter, `aspect-video` em vídeo vertical, MIME `video/m4v` inexistente, `errorhandler(429)` ausente (13 rotas públicas devolviam HTML cru) e o upload da tag sem isenção do prazo do proxy | 2026-09-09 | `c9f4a2b71e60` | (aqui) | — |
 | **296-revisao-harness** | Revisão do harness pós-Railway: constituição 3.0.0 (esteira em dois níveis, Regra Zero de numeração em `specs/`, XIII RBAC e XIV configuração/efeito externo novos, seção Operação e Deploy, Portões reescritos), `CLAUDE.md` e `DEVELOPMENT.md` reescritos, Spec Kit funcional num clone limpo (scripts bash versionados, templates adaptados, `.claude/` versionado com skills `manto-verify`/`manto-deploy`/`manto-conferir-tela` e `deny` no `settings.json`), `validar_startcommand.py` lendo o `render.yaml`, `railway.json`/`nixpacks.toml` apagados, `docs/00`/`01`/`05` com o Render como presente | 2026-09-08 | — | (aqui) | — |
 | **295-cookie-de-sessao-orfao** | A causa raiz que a 294 tornou visível: a feature 144 gravou cookies `session` no domínio `.mantoproducoes.com.br` para o `beta.*`; o beta morreu, a variável foi desligada, e o cookie ficou nos navegadores. Quem logou naquele período manda DOIS `session` na mesma requisição e o Werkzeug entrega o primeiro — com o mesmo `Path`, o mais antigo (RFC 6265 §5.4), que é o órfão. Login grava o cookie bom, a requisição seguinte é lida pelo órfão, 401 para sempre — e nenhum login conserta, porque o servidor não escreve mais naquele domínio. `after_request` recolhe o órfão quando chegam dois `session` e ninguém se autenticou (a sessão que funciona nunca é tocada; a 401 já carrega a cura), `SESSION_COOKIE_DOMINIOS_OBSOLETOS` com o domínio do beta no padrão, e o ERP passa a wirar `aoPerderSessao` como o portal já fazia | 2026-09-08 | — | (aqui) | — |
 | **294-portal-diz-o-erro** | Print de artista com o cabeçalho logado e "Não foi possível carregar sua agenda": servidor exonerado em três níveis (ORM, gunicorn no ar, caminho público com a sessão real — 200 em 175 ms). O defeito era o portal jogar fora o motivo: `useCurrentTalent` fazia `catch { return null }` e a tela tinha uma frase só para toda falha. Agora 401 em qualquer consulta zera a sessão e leva ao login com `?destino=`, erro de rede/servidor deixa de parecer logout, e `ErroDeCarregamento` mostra causa, botão de tentar de novo e o código do erro | 2026-09-04 | — | (aqui) | — |
@@ -245,6 +249,102 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 297 — A luminária vira portal: vídeo leve com moldura, menu na tag e o recado da cliente            (2026-09-09 · migration `c9f4a2b71e60`)
+
+**Contexto.** O dono mandou um print da aba Vídeos de `/3d/tags` com os dez cards exibindo "O vídeo
+não pode ser executado porque o arquivo está corrompido", junto de três pedidos: moldura automática
+no vídeo, um menu na página pública da tag, e um recado que a cliente pudesse escrever de volta.
+
+A investigação desmontou a premissa da queixa. Os dez arquivos estavam **íntegros**: as caixas MP4
+fechavam no tamanho exato, eram H.264 + AAC com `moov` no início, e a rota pública os servia com
+`206`, `video/mp4` e os bytes certos. O que estava errado era o **peso**: eram os arquivos crus da
+câmera — 1080x1920 e **2160x3840**, de **23 a 76 Mbps**, de 42 a 147 MB para 14 a 42 segundos. Um
+deles tem 16 segundos e 147 MB. Nenhum celular em 4G carrega isso, e dez decodificadores 4K na
+mesma tela esgotam o navegador (o `MEDIA_ERR_DECODE` que o Firefox traduz como "corrompido"). Desde
+22/08 houve ~45 acessos reais a essas tags: essas pessoas provavelmente nunca conseguiram assistir.
+
+Isso mudou a natureza do pedido: a moldura não é enfeite sobre um pipeline que funciona — ela entra
+de carona no processamento que precisava existir de qualquer jeito.
+
+**O que mudou.**
+
+*(a) Conversão.* `app/impressoes3d/video_ops.py` (novo, núcleo puro e agnóstico de domínio) sonda e
+converte com o `ffmpeg` que **já existe** no contêiner do Render. Cadeia:
+`scale='if(gt(iw,1080),1080,iw)':-2,setsar=1` e, para a moldura, `scale2ref` — que redimensiona o
+PNG ao tamanho exato do vídeo já normalizado, e é isso que faz **uma** moldura servir a qualquer
+vídeo. Saída `crf 23 -maxrate 5M -movflags +faststart`, medida em ~14,5 MB por 30 s.
+
+*(b) Fila.* `add_delivery` não converte mais: grava o cru em `nfc_media/entrada/`, cria a linha em
+`pendente` e devolve. A thread `nfc-video` (`app/__init__.py`, molde do `virtual-sweep`) drena a
+fila **um vídeo por vez**, com `nice -n 19` e `-threads 1` — o contêiner tem UMA CPU, dividida com
+os três workers do gunicorn. O claim entre workers é `UPDATE ... WHERE processing_status =
+'pendente'` na própria linha da entrega, com o `AND` repetido depois do subselect (sem ele, dois
+workers que escolhessem a mesma linha fariam os dois o `UPDATE`).
+
+*(c) Dois arquivos, não três.* Guarda-se o **mestre** 1080p sem moldura e o **entregue** com ela;
+sem moldura, os dois são o mesmo arquivo. Guardar o cru daria a mesma reversibilidade custando 150
+MB por vídeo e estouraria a cota do backup de mídia no Drive (já em 6,5 dos 15 GB da conta de
+serviço).
+
+*(d) Página pública.* `/nfc/<code>` vira máquina de cenas — `capa → abertura → menu → mensagem →
+agradecimento` — com `AnimatePresence mode="wait"` sobre o palco de céu estrelado da 255, que nunca
+desmonta (a estrela só recua nas cenas de vídeo). O menu tem "Ver a mensagem especial" (só quando há
+entrega pronta), Spotify e Instagram, os dois últimos com URL vinda do servidor.
+
+*(e) Recado.* `nfc_tag_messages` + `nfc_recados_ops.py`. O `client_id` é **fotografia** do vínculo
+no instante do envio, não referência viva: a tag pode ser reassociada amanhã, e o recado pertence a
+quem o recebeu hoje. Avisa pelo sino interno da 272 (`KIND_RECADO_NFC` → ARTISTA_3D/SUPERADMIN, os
+mesmos papéis que podem abrir o link).
+
+*(f) Gerenciador.* Card com vídeo em `aspect-[9/16]` (era `aspect-video`, que espremia todo vídeo
+vertical), estado do processamento com botão de tentar de novo, peso e duração, selo de recados, e o
+diálogo de cadastro da moldura e da abertura.
+
+**Regra de negócio.** Entrega em fila ou que falhou **não existe para o mundo lá fora**: sai do
+`deliveries` público e a rota de mídia devolve o mesmo 404 genérico de sempre. Recado enviado a
+código inexistente ou tag desativada responde `201` e **não grava nada** — a leitura já é
+indistinguível por contrato desde a 255 (SC-006), e uma escrita que respondesse diferente viraria
+oráculo de quais códigos existem.
+
+**Correções que entraram de carona.** (1) Substituir um vídeo enquanto o anterior estava na fila
+apagava o arquivo e a linha que o worker tinha na mão — agora é recusado com `400` e motivo à vista.
+(2) `delivery_mime_type` produzia `video/m4v`, MIME que não existe, e com `nosniff` global o
+navegador não tinha como se salvar; o tipo passa a ser gravado na conversão. (3) Não havia
+`errorhandler(429)`: o `flask-limiter` devolvia HTML cru e as **treze** rotas públicas com limite de
+taxa mostravam "Ocorreu um erro inesperado". (4) O upload da tag não casava `MEDIA_PATTERNS` no
+`frontend/server.js` e herdava o prazo de 180 s do proxy — o irmão da Loja Virtual escapava por
+acaso, porque a URL dele termina em `/video`.
+
+**Pegadinhas.** (1) O `ffmpeg` do contêiner **não está declarado no `render.yaml`** — vem da imagem
+base do runtime Python (dívida 34 do `docs/05`); o código checa `ffmpeg_disponivel()` e degrada
+entregando o vídeo como veio. (2) O ffmpeg desta máquina é LGPL e **não tem `libx264`**, só
+`libopenh264` — `encoder_disponivel()` escolhe em vez de fixar. (3) `shutil.which("nice")` acha o
+`nice.EXE` do Git para Windows, que **embaralha os argumentos** e faz o ffmpeg responder "Filter not
+found"; o teste é `os.name == "posix"`. (4) Arquivo temporário com extensão `.parcial` faz o ffmpeg
+não deduzir o contêiner — `-f mp4` é obrigatório. (5) O `manto_local` desta máquina tem **1 tag e
+nenhuma entrega** contra 35 tags e 10 vídeos da produção: o verify cria as próprias fixtures.
+(6) O temporário do upload dos arquivos de sistema usa sufixo `.entrada`, e não `.parcial`, porque
+`.parcial` é o temporário do próprio conversor: com o mesmo nome, o ffmpeg lia e escrevia no mesmo
+arquivo e a rota respondia 500. **Só apareceu ao abrir a tela** — virou o cenário 14 do verify.
+(7) No Windows, apagar um arquivo que o `send_file` acabou de servir dá `WinError 32` (o Linux da
+produção desliga o arquivo aberto sem reclamar); o código só loga e segue, e o ponteiro no banco é
+zerado de qualquer forma.
+
+**Verificação.** `specs/297-nfc-moldura-e-menu/verify_297.py` (14/14 no `manto_local`): conversão de
+4K para 1080 com o peso caindo pela metade ou mais, `206` + `video/mp4` na rota pública, moldura
+mudando a borda **sem** invadir o miolo (comparação de pixels entre entregue e mestre), envio sem
+moldura, payload do menu completo, recado gravado com tag e cliente por **conexão separada** mais a
+notificação do sino, recado vazio e gigante recusados, leitura de recados exigindo papel
+(401/403/200), listagem do ERP com estado e peso, os três payloads públicos indistinguíveis, entrega
+em processamento invisível para a cliente, segundo envio na fila recusado, vídeo deitado recebendo
+moldura sem deformar, e limpeza. As requisições HTTP rodam **fora** de `app.app_context()` — dentro
+dele o `g` sobrevive entre requisições e o teste de "sem sessão" respondia 200.
+
+**Pendência do dono.** Os dez vídeos em produção só passam a tocar depois de
+`flask nfc-reprocessar --execute` no Shell do Render, fora do horário (o `--dry-run` mede antes).
+
+---
 
 ### 296 — Revisão do harness: Render como presente, esteira em dois níveis, harness versionado            (2026-09-08 · harness · sem migration)
 

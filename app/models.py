@@ -865,6 +865,13 @@ class SiteSetting(db.Model):
     # de lock dos dois acima — aqui ele é o que impede os 3 workers de mandarem o mesmo e-mail
     # três vezes, que é exatamente o spam que a feature existe para evitar.
     invite_reminder_run_at = db.Column(db.DateTime, nullable=True)
+    # ── Tags NFC: moldura e vídeo de abertura (feature 297) ──────────────────
+    # Dois arquivos ÚNICOS do sistema, guardados em `nfc_media/sistema/` com nome fixo, no mesmo
+    # molde de `logo_path` acima: o banco guarda o caminho, o disco guarda o arquivo.
+    # `nfc_frame_path` NULL = nenhuma moldura cadastrada; todo envio sai sem moldura, com aviso.
+    # `nfc_intro_video_path` NULL = a página da tag pula a capa e abre direto no menu.
+    nfc_frame_path = db.Column(db.String(300), nullable=True)
+    nfc_intro_video_path = db.Column(db.String(300), nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
@@ -2364,6 +2371,13 @@ class NfcTagDelivery(db.Model):
     __tablename__ = "nfc_tag_deliveries"
     __table_args__ = (
         db.Index("ix_nfc_tag_deliveries_tag_id", "tag_id"),
+        # A fila de conversão (feature 297) é sempre minúscula perto da tabela; o índice parcial
+        # existe para o claim atômico não varrer tudo a cada 20 segundos, em cada worker.
+        db.Index(
+            "ix_nfc_tag_deliveries_fila", "processing_status",
+            postgresql_where=db.text("processing_status <> 'pronto'"),
+            sqlite_where=db.text("processing_status <> 'pronto'"),
+        ),
     )
 
     id         = db.Column(db.Integer, primary_key=True)
@@ -2383,10 +2397,84 @@ class NfcTagDelivery(db.Model):
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
+    # ── Conversão e moldura (feature 297) ────────────────────────────────────
+    # Até aqui a tabela não sabia NADA sobre o arquivo que apontava: nem peso, nem duração, nem
+    # tipo. Foi por isso que ninguém percebeu que a equipe vinha subindo arquivos crus de câmera
+    # (4K, até 76 Mbps, 147 MB) que celular nenhum conseguia carregar. As colunas abaixo existem
+    # tanto para converter quanto para que o defeito seja VISÍVEL na tela da próxima vez.
+    #
+    # `source_file_path` é o arquivo cru recebido, em `nfc_media/entrada/`. Vive só entre o envio
+    # e o fim da conversão. Fica em coluna, e não em memória, porque um deploy no meio do caminho
+    # mata o processo e alguém precisa saber o que sobrou para limpar.
+    source_file_path = db.Column(db.String(500), nullable=True)
+    # `master_file_path` é a versão 1080p SEM moldura, em `nfc_media/mestres/`. É a origem de todo
+    # reprocessamento: trocar a moldura depois não pede o vídeo de volta à equipe. Guardamos o
+    # mestre e não o arquivo cru porque o cru custaria de 42 a 147 MB por vídeo e estouraria a cota
+    # do backup no Drive, que já usa 6,5 GB dos 15 GB da conta de serviço.
+    master_file_path = db.Column(db.String(500), nullable=True)
+    mime_type = db.Column(db.String(60), nullable=True)
+    file_size_bytes = db.Column(db.BigInteger, nullable=True)
+    duration_seconds = db.Column(db.Numeric(7, 2), nullable=True)
+    width = db.Column(db.Integer, nullable=True)
+    height = db.Column(db.Integer, nullable=True)
+    # A moldura está GRAVADA neste arquivo (decisão do dono em 09/09), não desenhada pela página.
+    has_frame = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+    # `pendente` → `processando` → `pronto` | `falhou`. O default é `pronto` para que as entregas
+    # que já existiam quando esta migration rodou continuem visíveis sem nenhum UPDATE de linha:
+    # elas são vídeos crus que funcionam mal, não vídeos ausentes. Quem as converte é o comando
+    # `flask nfc reprocessar`, rodado à mão depois do deploy.
+    processing_status = db.Column(
+        db.String(20), default="pronto", nullable=False, server_default="pronto"
+    )
+    processing_error = db.Column(db.String(500), nullable=True)
+    processed_at = db.Column(db.DateTime, nullable=True)
+
     tag = db.relationship(
         "NfcTag", lazy=True,
         backref=db.backref("deliveries", lazy=True, cascade="all, delete-orphan"),
     )
+
+
+class NfcTagMessage(db.Model):
+    """O recado que a cliente escreve de volta, na página da tag (feature 297).
+
+    É a primeira via de volta do presente: até aqui a luminária só falava. A cliente assiste à
+    mensagem especial, escreve, e o sistema agradece na hora.
+
+    `client_id` é uma FOTOGRAFIA do vínculo no instante do envio, não uma referência viva. A tag
+    pode ser reassociada a outra cliente depois (o `PATCH` de gestão permite), e o recado pertence
+    a quem o recebeu naquele dia — reler o vínculo pela tag mentiria sobre o passado.
+
+    O que esta tabela NÃO guarda, de propósito: IP, impressão do navegador, e-mail e telefone. É a
+    menor superfície de dado pessoal que ainda cumpre o pedido; o controle de abuso é o limite de
+    taxa da rota pública, que o flask-limiter faz em memória sem persistir nada.
+    """
+
+    __tablename__ = "nfc_tag_messages"
+    __table_args__ = (
+        db.Index("ix_nfc_tag_messages_tag", "tag_id", "created_at"),
+        db.Index("ix_nfc_tag_messages_client", "client_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    tag_id = db.Column(
+        db.Integer, db.ForeignKey("nfc_tags.id", ondelete="CASCADE"), nullable=False
+    )
+    client_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True
+    )
+    author_name = db.Column(db.String(120), nullable=True)
+    message = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_sp, nullable=False)
+    # NULL = não lido. Mesma convenção de `notifications` (feature 272) — data em vez de booleano,
+    # porque saber QUANDO a equipe leu vale mais do que saber apenas que leu.
+    read_at = db.Column(db.DateTime, nullable=True)
+
+    tag = db.relationship(
+        "NfcTag", lazy=True,
+        backref=db.backref("messages", lazy=True, cascade="all, delete-orphan"),
+    )
+    client = db.relationship("Client", lazy=True)
 
 
 # ── Gestão de Marketing e Frequência (feature 204) ──────────────────────────

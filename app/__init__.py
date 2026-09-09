@@ -364,6 +364,71 @@ def _start_virtual_sweep(app):
     app.logger.info(f"[virtual-sweep] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _start_nfc_video_worker(app):
+    """Thread que converte os vídeos das tags NFC, um de cada vez (feature 297).
+
+    Por que existe: os vídeos chegavam crus da câmera (4K, até 76 Mbps, 147 MB) e nenhuma cliente
+    em rede móvel conseguia assistir. Converter na própria requisição prenderia quem enviou por
+    minutos, então a rota só grava o arquivo e enfileira; quem converte é este laço.
+
+    Por que UM de cada vez, e não uma piscina de trabalhadores: o contêiner do Render tem **uma
+    CPU**, compartilhada com os três workers do gunicorn que atendem o ERP. Duas conversões
+    simultâneas não terminariam mais rápido — apenas deixariam o sistema lento para todo mundo. O
+    ffmpeg ainda roda em `nice -n 19` com uma linha de execução só (`video_ops`).
+
+    Os três workers do gunicorn sobem esta thread cada um. Quem impede o trabalho em triplicata é
+    o claim atômico de `reivindicar_proxima_entrega`, não o startup — mesmo desenho do
+    `virtual-sweep` acima, com a trava na linha do trabalho em vez de em `site_settings`.
+
+    O laço drena a fila inteira a cada ciclo: depois de converter um vídeo, tenta o próximo na
+    hora. Só volta a dormir quando não há mais nada — é o que faz três envios seguidos não
+    esperarem três ciclos de relógio.
+    """
+    import os as _os
+    import threading
+
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    INTERVAL = app.config.get("NFC_VIDEO_WORKER_INTERVAL", 20)
+
+    def _loop():
+        import time
+
+        time.sleep(25)  # deixa o app subir e o `flask db upgrade` do start terminar
+        from app.impressoes3d import nfc_ops, video_ops
+
+        with app.app_context():
+            if not video_ops.ffmpeg_disponivel():
+                app.logger.warning(
+                    "[nfc-video] ffmpeg ausente neste contêiner — os vídeos serão entregues como "
+                    "vierem. Ver docs/05 (o ffmpeg não é declarado no render.yaml)."
+                )
+        while True:
+            try:
+                with app.app_context():
+                    # Primeiro devolve à fila o que um deploy deixou preso no meio do caminho.
+                    presas = nfc_ops.destravar_presas()
+                    if presas:
+                        app.logger.info(f"[nfc-video] {presas} entrega(s) destravada(s)")
+                    while True:
+                        entrega = nfc_ops.processar_proxima()
+                        if entrega is None:
+                            break
+                        app.logger.info(
+                            "[nfc-video] entrega %s → %s (%s bytes)",
+                            entrega.id, entrega.processing_status, entrega.file_size_bytes,
+                        )
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[nfc-video] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_loop, daemon=True, name="nfc-video")
+    t.start()
+    app.logger.info(f"[nfc-video] thread iniciada (intervalo: {INTERVAL}s)")
+
+
 def _start_email_bounce_sweep(app):
     """Thread que lê as devoluções de email na caixa do remetente (feature 219).
 
@@ -515,6 +580,19 @@ def create_app():
     if not app.config.get("NFC_MEDIA_FOLDER"):
         app.config["NFC_MEDIA_FOLDER"] = os.path.join(_instance, "nfc_media")
     os.makedirs(app.config["NFC_MEDIA_FOLDER"], exist_ok=True)
+    # Subpastas da conversão de vídeo (feature 297). O arquivo ENTREGUE continua na raiz de
+    # `nfc_media`, com os mesmos nomes de sempre — quem muda de lugar é só o que é novo:
+    #   entrada/  o arquivo cru recebido, que vive entre o envio e o fim da conversão
+    #   mestres/  a versão 1080p sem moldura, origem de todo reprocessamento
+    #   sistema/  a moldura PNG e o vídeo de abertura, dois arquivos únicos de toda a plataforma
+    # Ficam DENTRO de `nfc_media` de propósito: o backup de mídia empacota essa pasta inteira
+    # (`app/backup_drive.py`), então as três entram no pacote sem tocar em mais nada.
+    app.config["NFC_ENTRADA_FOLDER"] = os.path.join(app.config["NFC_MEDIA_FOLDER"], "entrada")
+    app.config["NFC_MESTRES_FOLDER"] = os.path.join(app.config["NFC_MEDIA_FOLDER"], "mestres")
+    app.config["NFC_SISTEMA_FOLDER"] = os.path.join(app.config["NFC_MEDIA_FOLDER"], "sistema")
+    os.makedirs(app.config["NFC_ENTRADA_FOLDER"], exist_ok=True)
+    os.makedirs(app.config["NFC_MESTRES_FOLDER"], exist_ok=True)
+    os.makedirs(app.config["NFC_SISTEMA_FOLDER"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_CONTRACTS"], exist_ok=True)
     os.makedirs(app.config["UPLOAD_PAYMENTS"], exist_ok=True)
@@ -808,6 +886,20 @@ def create_app():
             return _api_json_error(message, 413)
         return message, 413
 
+    @app.errorhandler(429)
+    def too_many_requests(e):
+        """Excesso de requisições — o envelope que faltava (feature 297).
+
+        Sem este handler, o `flask-limiter` responde com o HTML padrão dele. O `parseErrorBody`
+        do `@manto/api-client` tenta ler JSON, falha, e a pessoa vê "Ocorreu um erro inesperado"
+        — que não diz o que fazer. As treze rotas públicas com limite de taxa (cadastro,
+        formulários, avaliação, login do portal, recado da tag) sofriam disso em silêncio.
+        """
+        message = "Muitas tentativas em pouco tempo. Aguarde um instante e tente de novo."
+        if request.path.startswith("/api/"):
+            return _api_json_error(message, 429)
+        return message, 429
+
     @app.route("/robots.txt")
     def robots_txt():
         """Nega rastreamento de tudo — sistema interno, não deve ser indexado (feature 127)."""
@@ -854,6 +946,9 @@ def create_app():
 
         # ── Cobrança de confirmação de convite ─────────────────────
         _start_invite_reminders(app)
+
+        # ── Conversão dos vídeos das tags NFC (feature 297) ────────
+        _start_nfc_video_worker(app)
 
         # ── Backup automático para o Google Drive (feature 264) ────
         from app.backup_drive import start_backup_thread

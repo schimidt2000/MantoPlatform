@@ -983,8 +983,8 @@ no máximo 5 itens, descartando predições sem `description`.
 
 | Método | Rota | O que faz |
 |---|---|---|
-| `GET` | `/api/nfc/<code>` | **PÚBLICO, sem login** (padrão `catalogo_read.py`). Resolve o código gravado na tag física. **Sempre 200, mesmo shape**: tag ativa → `{product: {name, photo_url}, campaign: null, deliveries: [...], instagram_url}` + incrementa `access_count`/`last_accessed_at` (melhor-esforço, falha não derruba a resposta); inexistente **ou** desativada → `{product: null, campaign: null, deliveries: [], instagram_url}` — indistinguíveis de propósito. Lookup case-insensitive. `instagram_url` vem de `MANTO_INSTAGRAM_URL` (`app/constants.py`). `deliveries` (feature 261) é `[{kind, title, media_url}]` das entregas ativas da tag — hoje no máximo 1 vídeo; `media_url` já no formato `/api/nfc/<code>/entregas/<id>/media`, pronto para `assetUrl()`. TODO o conteúdo da página é do servidor. |
-| `GET` | `/api/nfc/<code>/entregas/<id>/media` | **PÚBLICO, sem login** (feature 261). Serve o arquivo da entrega — espelha `GET /api/virtuais/pedidos/<token>/video` (feature 205): `send_file(conditional=True)` (suporte a `Range`/`206`). Código inexistente, tag desativada, entrega de outra tag e entrega inativa devolvem o **mesmo 404 genérico** — nenhum vaza mais que o outro. |
+| `GET` | `/api/nfc/<code>` | **PÚBLICO, sem login** (padrão `catalogo_read.py`). Resolve o código gravado na tag física. **Sempre 200, mesmo shape**: tag ativa → `{product: {name, photo_url}, campaign: null, deliveries: [...], instagram_url}` + incrementa `access_count`/`last_accessed_at` (melhor-esforço, falha não derruba a resposta); inexistente **ou** desativada → `{product: null, campaign: null, deliveries: [], instagram_url}` — indistinguíveis de propósito. Lookup case-insensitive. `instagram_url` vem de `MANTO_INSTAGRAM_URL` (`app/constants.py`). `deliveries` (feature 261) é `[{kind, title, media_url, width, height}]` das entregas ativas **e com conversão PRONTA** (feature 297 — entrega em fila ou que falhou não existe para o mundo lá fora); `media_url` já no formato `/api/nfc/<code>/entregas/<id>/media`, pronto para `assetUrl()`; `width`/`height` deixam a página reservar a altura do palco antes de o vídeo carregar. A feature 297 acrescentou ao payload `spotify_url` (`MANTO_SPOTIFY_URL`), `intro_video_url` (o vídeo de abertura, `null` quando não cadastrado) e `aceita_recado` — os três viajam **também no payload vazio**, porque o menu genérico precisa dos botões externos e qualquer diferença viraria oráculo de existência. TODO o conteúdo da página é do servidor. |
+| `GET` | `/api/nfc/<code>/entregas/<id>/media` | **PÚBLICO, sem login** (feature 261). Serve o arquivo da entrega — espelha `GET /api/virtuais/pedidos/<token>/video` (feature 205): `send_file(conditional=True)` (suporte a `Range`/`206`). Código inexistente, tag desativada, entrega de outra tag, entrega inativa **e entrega ainda em conversão** (feature 297) devolvem o **mesmo 404 genérico** — nenhum vaza mais que o outro. |
 | `GET` | `/api/3d/nfc` | Lista de gestão (ordem: item + `sequence`), cada linha com `item` aninhado, `event` resumido, `client` (vínculo direto), `client_name`/`client_direct` resolvidos (**cliente direta → contratante do evento**, `client_of_event` de `agenda_read.py`) e `video_delivery` (feature 261: `{id, kind, title, file_name, created_at}` ou `null`). |
 | `POST` | `/api/3d/nfc/lote` | Gera lote avulso (JSON `{item_id, quantity}` 1–999), tags sem evento (estoque). 400 com `fields` se o item não tem `nfc_prefix`. |
 | `PATCH` | `/api/3d/nfc/<id>` | Edita **só** os mutáveis: `event_id` e `client_id` (`null` desassocia; sentinela = não alterar; independentes entre si), `is_active`, `notes`. `code` e `sequence` são imutáveis por contrato. |
@@ -992,12 +992,34 @@ no máximo 5 itens, descartando predições sem `description`.
 | `DELETE` | `/api/3d/nfc/<tag_id>/entregas/<id>` | **Feature 261.** Remove a entrega (linha + arquivo do disco). Sem confirmação no servidor — a UI confirma antes de chamar. |
 | `GET` | `/api/3d/nfc/<tag_id>/entregas/<id>/media` | **Feature 265 — espelho ADMIN da mídia.** Mesmo `send_file(conditional=True, max_age=86400)` do público, mas: gate `ARTISTA_3D`/`SUPERADMIN`, busca por `tag_id` (não por código), serve **inclusive tag desativada** (auditável por dentro) e **NUNCA incrementa `access_count`** — o incremento mora só em `resolve_code`, que este endpoint não chama. É o `src` de todos os players do ERP (`adminNfcVideoUrl` em `apps/internal/src/lib/nfc.ts`); revisar pela URL pública inflava a métrica das clientes. 404 genérico para entrega inexistente/de outra tag. Sem `audit()` (leitura) e sem limiter próprio (autenticado). |
 
-- **RBAC**: os `/api/3d/nfc*` (tag, entregas e mídia admin) exigem `ARTISTA_3D` ou `SUPERADMIN`
-  (`require_3d_access`, reuso da feature 200). **Não existe DELETE de tag** — tag física
-  entregue é eterna; entregas (vídeo/foto/link) SÃO removíveis — são conteúdo anexado, não a tag.
+| `POST` | `/api/3d/nfc/<tag_id>/entregas/<id>/reprocessar` | **Feature 297.** Devolve o vídeo à fila de conversão. JSON `{com_moldura?}` — omitido mantém a escolha atual da entrega. Parte do MESTRE sem moldura; nas entregas anteriores à 297 (que não têm mestre) parte do próprio arquivo entregue. `409` com `fields` se já estiver `pendente`/`processando`. |
+| `PUT`/`DELETE` | `/api/3d/nfc/moldura` | **Feature 297.** Cadastra (multipart `file`) ou remove a moldura PNG **única do sistema**, gravada na borda de todo vídeo enviado com a caixinha marcada. `400` com `fields` para extensão fora de `.png` e para **PNG sem transparência real** (`imaging.tem_transparencia_real`) — moldura opaca cobriria o vídeo inteiro. Nome fixo `moldura.png` em `nfc_media/sistema/` (molde de `logo_path`). |
+| `GET` | `/api/3d/nfc/moldura` | **Feature 297.** Serve a moldura para a prévia no ERP; `max_age` de 5 min porque o arquivo é sobrescrito no lugar. |
+| `PUT`/`DELETE` | `/api/3d/nfc/abertura` | **Feature 297.** Cadastra ou remove o vídeo de abertura da página pública. Passa pela MESMA conversão dos vídeos de tag (sem moldura): é servido a todo mundo que encosta o celular numa luminária. Nome fixo `abertura.mp4`. |
+| `GET` | `/api/3d/nfc/<tag_id>/recados` | **Feature 297.** Recados que as clientes escreveram nessa tag: `{items: [{id, message, author_name, created_at, read_at}], unread_count}`. Conteúdo privado de quem recebeu a peça. |
+| `POST` | `/api/3d/nfc/<tag_id>/recados/lidos` | **Feature 297.** Marca todos como lidos; devolve `{marcados}`. |
+| `POST` | `/api/nfc/<code>/recados` | **Feature 297 — PÚBLICO, sem login**, `@limiter.limit("10 per hour")`. JSON `{message, author_name?}`. `400` com `fields` para texto vazio ou acima de 1000 caracteres. **Responde `201` mesmo para código inexistente ou tag desativada, sem gravar nada** — a leitura já é indistinguível por contrato (SC-006 da 255) e uma escrita que respondesse diferente viraria oráculo de quais códigos existem. Notifica o sino em transação própria, melhor-esforço. |
+| `GET` | `/api/nfc/abertura/video` | **Feature 297 — PÚBLICO, sem login.** Serve o vídeo de abertura (`send_file(conditional=True, max_age=3600)`); `404` no envelope quando nenhum foi cadastrado. Três segmentos, então não conflita com `GET /api/nfc/<code>`. O `?v=` é ignorado — existe só para furar cache do navegador. |
+
+- **RBAC**: os `/api/3d/nfc*` (tag, entregas, mídia admin, moldura, abertura e recados) exigem
+  `ARTISTA_3D` ou `SUPERADMIN` (`require_3d_access`, reuso da feature 200). **Não existe DELETE de
+  tag** — tag física entregue é eterna; entregas (vídeo/foto/link) SÃO removíveis — são conteúdo
+  anexado, não a tag. As duas únicas rotas públicas de ESCRITA do domínio são o recado (acima) e
+  nada mais.
 - **Onde o vídeo mora**: `Config.NFC_MEDIA_FOLDER` (padrão `instance/nfc_media`), irmã de
   `uploads`, nunca dentro — mesmo racional de `VIRTUAL_VIDEO_FOLDER` (§3.13, feature 205). Ver
-  §2.2.1 para o schema completo de `nfc_tag_deliveries`.
+  §2.2.1 para o schema completo de `nfc_tag_deliveries`. **Desde a feature 297 há três subpastas**
+  (todas dentro de `nfc_media`, para entrarem sozinhas no backup de mídia): `entrada/` guarda o
+  arquivo cru entre o envio e o fim da conversão; `mestres/` guarda a versão 1080p **sem** moldura,
+  que é a origem de todo reprocessamento; `sistema/` guarda os dois arquivos únicos da plataforma,
+  `moldura.png` e `abertura.mp4`. O arquivo ENTREGUE continua na raiz, com os nomes de sempre.
+- **Conversão de vídeo (feature 297)**: todo vídeo enviado é convertido para 1080 de largura,
+  H.264 + AAC com índice no início, ~15 MB por 30 s. Roda numa thread de fundo (`nfc-video`,
+  `app/__init__.py`), **um vídeo por vez**, com `nice -n 19` e uma linha de execução só — o
+  contêiner tem UMA CPU, dividida com os três workers do gunicorn. O claim entre workers é um
+  `UPDATE ... WHERE processing_status = 'pendente'` na própria linha da entrega. O `ffmpeg` vem da
+  imagem base do runtime Python do Render e **não está declarado no `render.yaml`** (dívida em
+  `docs/05`): sem ele, o vídeo é entregue como veio e o motivo fica em `processing_error`.
 - **Serving da página**: `frontend/server.js` serve `/nfc/*` com o bundle da vitrine **sem
   reescrever a URL** (`NFC_PREFIX`, mesmo mecanismo de `CADASTRO_PREFIX`); o React Router roda
   sem o basename `/catalogo` (`isRootSurface` em `apps/public/src/App.tsx`).

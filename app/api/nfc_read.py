@@ -24,8 +24,8 @@ from app.api import api_bp
 from app.api.agenda_read import client_of_event
 from app.api.impressoes3d_read import require_3d_access
 from app.api_utils import api_login_required, json_error
-from app.constants import MANTO_INSTAGRAM_URL
-from app.impressoes3d import nfc_ops
+from app.constants import MANTO_INSTAGRAM_URL, MANTO_SPOTIFY_URL
+from app.impressoes3d import nfc_ops, nfc_recados_ops
 from app.models import NfcTag, NfcTagDelivery
 
 
@@ -39,8 +39,45 @@ def api_nfc_resolve(code: str) -> Any:
     é a lista de vídeo/foto/link anexados — hoje só vídeo, no máximo um.
     """
     payload = nfc_ops.resolve_code(code)
+    # Os três links e o vídeo de abertura viajam TAMBÉM no payload vazio (código inexistente, tag
+    # desativada): o menu genérico precisa dos dois botões externos, e qualquer diferença entre os
+    # payloads viraria um oráculo de quais códigos existem (SC-006 da feature 255).
     payload["instagram_url"] = MANTO_INSTAGRAM_URL
+    payload["spotify_url"] = MANTO_SPOTIFY_URL
+    payload["intro_video_url"] = nfc_ops.url_publica_da_abertura()
+    payload["aceita_recado"] = True
     return jsonify(payload)
+
+
+@api_bp.route("/nfc/abertura/video")
+@limiter.limit("120 per minute")
+def api_nfc_abertura_video() -> Any:
+    """Serve o vídeo de abertura da página da tag — PÚBLICO, sem login (feature 297).
+
+    Um arquivo só, o mesmo para todas as luminárias. Não conflita com `GET /api/nfc/<code>`: são
+    três segmentos contra dois. O `?v=` que a página manda é ignorado aqui — ele existe só para
+    furar o cache do navegador quando o dono troca o arquivo, que tem nome fixo.
+
+    `max_age` curto de propósito: o arquivo é sobrescrito no lugar, então cache longo mostraria a
+    abertura antiga por um dia inteiro.
+    """
+    caminho = nfc_ops.abertura_path()
+    if not caminho:
+        return json_error("Arquivo não encontrado", 404)
+    return send_file(caminho, mimetype="video/mp4", conditional=True, max_age=3600)
+
+
+@api_bp.route("/3d/nfc/moldura")
+@api_login_required
+def api_3d_nfc_moldura() -> Any:
+    """Serve a moldura PNG para a PRÉVIA no ERP (feature 297). Gate ARTISTA_3D/SUPERADMIN."""
+    denied = require_3d_access()
+    if denied:
+        return denied
+    caminho = nfc_ops.moldura_path()
+    if not caminho:
+        return json_error("Arquivo não encontrado", 404)
+    return send_file(caminho, mimetype="image/png", conditional=True, max_age=300)
 
 
 @api_bp.route("/nfc/<code>/entregas/<int:delivery_id>/media")
@@ -59,8 +96,11 @@ def api_nfc_delivery_media(code: str, delivery_id: int) -> Any:
     if tag is None or not tag.is_active:
         return json_error("Arquivo não encontrado", 404)
 
+    # `entrega_pronta` (feature 297) inclui a checagem de `is_active` e acrescenta a de conversão:
+    # entrega em fila ou que falhou responde o MESMO 404 genérico de sempre, e não um vídeo pela
+    # metade.
     delivery = next(
-        (d for d in tag.deliveries if d.id == delivery_id and d.is_active), None
+        (d for d in tag.deliveries if d.id == delivery_id and nfc_ops.entrega_pronta(d)), None
     )
     if delivery is None:
         return json_error("Arquivo não encontrado", 404)
@@ -114,7 +154,7 @@ def api_3d_nfc_delivery_media(tag_id: int, delivery_id: int) -> Any:
     )
 
 
-def _serialize_admin_tag(tag: NfcTag) -> dict[str, Any]:
+def _serialize_admin_tag(tag: NfcTag, contagens: dict[int, dict[str, int]] | None = None) -> dict[str, Any]:
     """Linha da lista do ERP: payload do ops + nome da cliente resolvido.
 
     Precedência: cliente DIRETA da tag (campanha/brinde sem show) → contratante do evento.
@@ -130,6 +170,11 @@ def _serialize_admin_tag(tag: NfcTag) -> dict[str, Any]:
         client_name, _phone = client_of_event(tag.event) if tag.event else (None, None)
         entry["client_name"] = client_name
         entry["client_direct"] = False
+    # Feature 297: o selo de recados no card. As contagens chegam prontas de UMA consulta agregada
+    # feita pela listagem — sem isso seriam 35 consultas para desenhar uma tela.
+    numeros = (contagens or {}).get(tag.id) or {"total": 0, "nao_lidos": 0}
+    entry["messages_count"] = numeros["total"]
+    entry["messages_unread"] = numeros["nao_lidos"]
     return entry
 
 
@@ -140,4 +185,30 @@ def api_3d_nfc_list() -> Any:
     denied = require_3d_access()
     if denied:
         return denied
-    return jsonify({"tags": [_serialize_admin_tag(t) for t in nfc_ops.list_tags()]})
+    contagens = nfc_recados_ops.contagens_por_tag()
+    return jsonify(
+        {"tags": [_serialize_admin_tag(t, contagens) for t in nfc_ops.list_tags()]}
+    )
+
+
+@api_bp.route("/3d/nfc/<int:tag_id>/recados")
+@api_login_required
+def api_3d_nfc_recados(tag_id: int) -> Any:
+    """Recados que as clientes escreveram na página desta tag (feature 297).
+
+    Conteúdo privado de quem recebeu a luminária: gate ARTISTA_3D/SUPERADMIN, os mesmos papéis que
+    o sino avisa.
+    """
+    denied = require_3d_access()
+    if denied:
+        return denied
+    tag = NfcTag.query.get(tag_id)
+    if tag is None:
+        return json_error("Tag NFC não encontrada", 404)
+    recados = nfc_recados_ops.listar_recados(tag_id)
+    return jsonify(
+        {
+            "items": [nfc_recados_ops.serializar(r) for r in recados],
+            "unread_count": sum(1 for r in recados if r.read_at is None),
+        }
+    )

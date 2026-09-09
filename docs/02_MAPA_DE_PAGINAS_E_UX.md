@@ -6,7 +6,11 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-09-08** · **295-cookie-de-sessao-orfao**: o ERP passa a wirar
+> Última atualização: **2026-09-09** · **297-nfc-moldura-e-menu**: `/nfc/<code>` deixa de ser uma
+> tela só e vira máquina de cenas (capa → abertura com som → menu de três botões → mensagem
+> especial → recado da cliente); a aba Vídeos de `/3d/tags` mostra o vídeo em pé, o estado da
+> conversão, peso, duração e os recados, e ganha o diálogo "Moldura e abertura" — antes dela
+> **295-cookie-de-sessao-orfao**: o ERP passa a wirar
 > `aoPerderSessao` como o portal já fazia — 401 em qualquer consulta zera a sessão e leva ao login
 > (o cookie órfão do `beta.*` é recolhido pelo servidor na própria resposta 401). Antes:
 > **2026-09-04** · **294-portal-diz-o-erro**: o portal deixa de imprimir uma
@@ -870,13 +874,25 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
       mexe nos KPIs.
     - **Busca** por código, nº, produto, evento ou cliente (filtra cards e lista sem vídeo).
     - **Cards com player**, agrupados por **evento (data desc) → "Clientes diretas (sem show)"
-      → "Estoque"** (espelha a precedência da tabela). Cada card: vídeo
-      (`preload="metadata"` — obrigatório num grid com N players), título (fallback "Sem
-      título — a página usa a copy padrão"), nº + código + `CopyButton` da URL pública,
-      produto, cliente, data do envio, badge "Inativa" quando for o caso (tag desativada com
-      vídeo continua auditável por dentro — lá fora ela dá 404), e ações "Gerenciar vídeo"
+      → "Estoque"** (espelha a precedência da tabela). Cada card: vídeo em **`aspect-[9/16]` com
+      `object-contain`** *(feature 297 — era `aspect-video`, que espremia todo vídeo vertical e foi
+      o que o dono viu no print)*, `preload="metadata"` (obrigatório num grid com N players),
+      título (fallback "Sem título — a página usa a copy padrão"), nº + código + `CopyButton` da
+      URL pública, produto, cliente, data do envio, **peso e duração**, selo "com moldura", selo de
+      **recados não lidos** (abre a lista da tag), badge "Inativa" quando for o caso (tag desativada
+      com vídeo continua auditável por dentro — lá fora ela dá 404), e ações "Gerenciar vídeo"
       (abre o diálogo) e **"Ver na tabela"** (troca para a aba Tags, `scrollIntoView` +
       highlight `bg-gold-soft` de ~2s na linha — efêmero, não vai para a URL).
+    - **Estado da conversão** *(feature 297)*: entrega em `pendente`/`processando` mostra
+      "Preparando…" no lugar do player, e a lista faz polling de 3 s que **para sozinho** quando
+      nenhuma entrega está mais na fila; `falhou` mostra o motivo e um botão "Tentar de novo"
+      (`POST .../reprocessar`).
+    - **"Moldura e abertura"** *(feature 297)*, no cabeçalho do painel: diálogo dos dois arquivos
+      ÚNICOS da plataforma. A moldura tem prévia sobre fundo xadrez (é o que deixa a transparência
+      visível — PNG opaco cobriria o vídeo inteiro e o servidor o recusa), aviso quando a proporção
+      foge de 9:16, e "Salvar" explícito; o vídeo de abertura sobe assim que é escolhido, com barra
+      de progresso. Estado vazio de cada um diz o efeito: sem moldura os vídeos saem sem moldura;
+      sem abertura a página da tag abre direto no menu.
     - **Seção "Sem vídeo"**: tabela compacta das tags **ativas** ainda sem vídeo (a fila de
       trabalho do revisor), cada linha com "Enviar vídeo" (abre o diálogo direto no estado de
       upload) e "Ver na tabela". Vazio: "Todas as tags ativas têm vídeo."
@@ -894,11 +910,10 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
   física, imutável e eterna**. Servida pelo bundle da vitrine via `NFC_PREFIX` no
   `frontend/server.js` (mesmo mecanismo do `/cadastro`; `isRootSurface` no `App.tsx` roda o
   Router sem basename e sem o `WishlistFloat`).
-- **Objetivo**: a cliente encosta o celular na luminária e cai aqui. V1 é o "portal fechado":
-  identidade Manto + Instagram; com a feature 261, uma tag pode ganhar um **vídeo pessoal** entre
-  a arte e o CTA. Todo o conteúdo vem de `GET /api/nfc/<code>` — a página evolui (campanhas,
-  fotos do evento) sem regravar tag nenhuma (`campaign: null` é o gancho; `deliveries` é o
-  gancho da 261).
+- **Objetivo**: a cliente encosta o celular na luminária e cai aqui. V1 era o "portal fechado"
+  (identidade + Instagram); a 261 acrescentou um **vídeo pessoal**; a **297 transformou a tela
+  única numa máquina de cenas**. Todo o conteúdo vem de `GET /api/nfc/<code>` — a página evolui
+  (campanhas, fotos do evento) sem regravar tag nenhuma (`campaign: null` é o gancho).
 - **UX** (mobile-first de verdade — o acesso nasce de um toque NFC, geralmente à noite ao lado
   da luminária acesa; 2ª rodada, redesenhada com a foto da peça física em mãos):
   - **Retrato da luminária**: céu noturno (gradiente roxo da paleta) com 12 estrelinhas
@@ -909,18 +924,39 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
     "respirando". Com `useReducedMotion`: estrela já acesa, nada pisca.
   - A arte substitui a foto do produto do acervo (a luminária É a estrela); modo genérico usa o
     mesmo palco.
-  - Copy provisória: eyebrow "Manto Produções" + "A magia da Manto também na sua casa" + **sem
-    vídeo**: "Este é o portal da sua luminária. Em breve, ele se abrirá bem aqui…" (placeholder
-    inalterado). **Com vídeo** *(feature 261)*: o parágrafo dá lugar a um card arredondado
-    (paleta `lamp`/`gold` do `tailwind.config.ts`, zero cor hardcoded) com o título da entrega
-    (fallback "Um vídeo especial para você") e um `<video controls playsInline
-    preload="metadata">` (`src` via `assetUrl(media_url)`, largura do `max-w-md`) — entra na
-    MESMA coreografia de fases (`enter()`) das linhas ao redor, respeitando
-    `useReducedMotion`. O CTA do Instagram continua abaixo, intacto.
-  - CTA "Seguir @mantoproducoes" (URL vem do servidor; botão só renderiza com o dado na mão —
-    nunca botão morto), toque ≥ 44px, sem rolagem horizontal de 320 a 430px.
-  - **Código inexistente ou tag desativada = mesma página em modo genérico** — nunca uma tela
-    de erro, nunca a confirmação de que um código existe (SC-006).
+  - **As quatro cenas** *(feature 297)*, sobre o palco que NUNCA desmonta (a estrela só recua nas
+    cenas de vídeo, como assinatura):
+
+    ```text
+    capa ──toque──▶ abertura ──fim/pular──▶ menu ──▶ mensagem ──envio──▶ agradecimento
+      │                                      ▲         │                      │
+      └── sem vídeo de abertura, ou aparelho ┘         └──────voltar──────────┘
+          que já viu: entra direto no menu
+    ```
+
+    `AnimatePresence mode="wait"` com `key` da cena (molde de `ProductGallery.tsx`); com
+    `useReducedMotion` a troca é instantânea e **nenhum conteúdo depende da animação para existir**.
+  - **Capa** — um único convite grande ("Tocar para abrir"). Ela existe por uma razão técnica que
+    virou vantagem: navegador de celular não deixa vídeo começar sozinho **com áudio**. O toque da
+    cliente é o que libera o som, e é o mesmo gesto que abre o portal. Só aparece na primeira visita
+    daquele aparelho (`localStorage`, chave `manto_nfc_abertura_vista`, memória **global** — a
+    abertura é a mesma em todas as luminárias) e só quando há `intro_video_url`.
+  - **Abertura** — `<video autoPlay playsInline controls>` do vídeo do sistema, com "Pular" sempre
+    visível. `onEnded` e `onError` levam ao menu pelo mesmo caminho: abertura quebrada não pode
+    prender ninguém numa capa eterna.
+  - **Menu** — três botões `min-h-[48px]`: "Ver a mensagem especial" (**só quando há entrega
+    pronta**), "Ouvir no Spotify" e "Seguir @mantoproducoes". Os dois externos com
+    `rel="noopener noreferrer"` e URL vinda do servidor (botão sem destino é botão morto).
+  - **Mensagem** — o vídeo da cliente em `aspect-[9/16]` com `object-contain`, palco com altura
+    reservada pelas dimensões `width`/`height` que o payload manda (antes o layout pulava quando os
+    metadados chegavam). Abaixo, o **recado**: textarea obrigatória com contador (máx. 1000), nome
+    opcional, erro por campo via `fieldErrorsFrom`, e um caminho de volta ao menu sempre visível.
+    Enviar troca a cena para o **agradecimento**, sem sair da página. Sair da mensagem não apaga
+    rascunho não enviado.
+  - **Código inexistente ou tag desativada = o MESMO menu**, apenas sem "Ver a mensagem especial" —
+    nunca uma tela de erro, nunca a confirmação de que um código existe (SC-006). Os links do menu
+    viajam também no payload vazio justamente por isso.
+  - Toque ≥ 44px em tudo, sem rolagem horizontal de 320 a 430px.
 
 ---
 

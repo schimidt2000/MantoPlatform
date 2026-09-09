@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Nfc } from "lucide-react";
 import {
   Badge,
+  type BadgeProps,
   Button,
   Card,
   CardContent,
@@ -26,7 +27,82 @@ import { GerarLoteForm } from "../components/nfc/GerarLoteForm";
 import { NfcVideosPanel } from "../components/nfc/NfcVideosPanel";
 import { VideoDialog } from "../components/nfc/VideoDialog";
 import { publicUrl } from "../components/nfc/helpers";
-import { useAtualizarNfcTag, useNfcTags, type NfcTag } from "../lib/nfc";
+import {
+  useAtualizarNfcTag,
+  useNfcTags,
+  type NfcProcessingStatus,
+  type NfcTag,
+} from "../lib/nfc";
+
+/**
+ * Coluna "Vídeo" da tabela: a conversão roda em fundo e a entrega nasce `pendente`, então
+ * "com vídeo" só vale quando o arquivo entregue está pronto. Chamar de "com vídeo" o que ainda
+ * está convertendo mandaria a equipe entregar a peça antes de a página da cliente tocar algo.
+ */
+const ROTULO_VIDEO: Record<
+  NfcProcessingStatus,
+  { texto: string; tone: NonNullable<BadgeProps["tone"]>; acao: string; titulo: string }
+> = {
+  pendente: {
+    texto: "preparando",
+    tone: "gold",
+    acao: "Ver o preparo do vídeo",
+    titulo: "Na fila de conversão",
+  },
+  processando: {
+    texto: "preparando",
+    tone: "gold",
+    acao: "Ver o preparo do vídeo",
+    titulo: "Convertendo agora",
+  },
+  pronto: {
+    texto: "com vídeo",
+    tone: "blue",
+    acao: "Assistir o vídeo",
+    titulo: "Assistir sem contar acesso",
+  },
+  falhou: {
+    texto: "falhou",
+    tone: "red",
+    acao: "Ver o erro do vídeo",
+    titulo: "A conversão falhou — abra para ver o motivo",
+  },
+};
+
+interface CelulaVideoProps {
+  tag: NfcTag;
+  onAbrir: () => void;
+}
+
+/** Uma palavra por tag: sem vídeo · preparando · com vídeo · falhou. */
+function CelulaVideo({ tag, onAbrir }: CelulaVideoProps) {
+  const reduceMotion = useReducedMotion();
+  const entrega = tag.video_delivery;
+
+  if (!entrega) return <Badge tone="neutral">sem vídeo</Badge>;
+
+  const rotulo = ROTULO_VIDEO[entrega.processing_status];
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      aria-label={`${rotulo.acao} da tag nº ${tag.sequence}`}
+      title={rotulo.titulo}
+    >
+      {/* `key` no status: a lista faz polling durante a conversão, e sem a troca animada
+          "preparando" vira "com vídeo" sem ninguém perceber que ficou pronto. */}
+      <motion.span
+        key={entrega.processing_status}
+        initial={reduceMotion ? false : { opacity: 0, y: -2 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+        className="inline-flex"
+      >
+        <Badge tone={rotulo.tone}>{rotulo.texto}</Badge>
+      </motion.span>
+    </button>
+  );
+}
 
 /**
  * Tags NFC (`/3d/tags`, feature 255) — a ponte entre a tag física e o sistema.
@@ -219,18 +295,7 @@ export function Tags3DPage() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            {tag.video_delivery ? (
-                              <button
-                                type="button"
-                                onClick={() => setVideoTagId(tag.id)}
-                                aria-label={`Assistir o vídeo da tag nº ${tag.sequence}`}
-                                title="Assistir sem contar acesso"
-                              >
-                                <Badge tone="blue">com vídeo</Badge>
-                              </button>
-                            ) : (
-                              <Badge tone="neutral">sem vídeo</Badge>
-                            )}
+                            <CelulaVideo tag={tag} onAbrir={() => setVideoTagId(tag.id)} />
                           </TableCell>
                           <TableCell align="right">
                             <span

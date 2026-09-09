@@ -10,6 +10,81 @@ logger = logging.getLogger(__name__)
 
 
 def register_commands(app):
+    @app.cli.command("nfc-reprocessar")
+    @click.option("--execute", is_flag=True, help="converte de verdade (padrão: só lista)")
+    @click.option("--id", "delivery_id", type=int, default=None, help="só esta entrega")
+    @click.option("--sem-moldura", is_flag=True, help="reprocessa SEM aplicar a moldura")
+    def nfc_reprocessar(execute, delivery_id, sem_moldura):
+        """Converte os vídeos das tags NFC que ainda estão no formato cru da câmera (feature 297).
+
+        Os dez vídeos que existiam antes desta feature são arquivos de 42 a 147 MB, a até 76 Mbps:
+        nenhuma cliente em rede móvel consegue assistir. Este comando os coloca na fila de
+        conversão, um a um, e converte na hora — não espera a thread de fundo.
+
+        Sem `--execute` ele só mede e lista, sem escrever nada. É como se roda a primeira vez.
+
+        No Shell do Render, fora do horário da equipe::
+
+            cd /opt/render/project/src && MANTO_SEM_THREADS=1 PYTHONPATH=$PWD \\
+              .venv/bin/flask nfc-reprocessar --execute
+        """
+        import os
+
+        from app.impressoes3d import nfc_ops, video_ops
+        from app.models import NfcTagDelivery
+
+        if not video_ops.ffmpeg_disponivel():
+            click.echo("ffmpeg indisponível neste servidor — nada a fazer.")
+            return
+
+        q = NfcTagDelivery.query.filter(NfcTagDelivery.processing_status == "pronto")
+        if delivery_id:
+            q = q.filter(NfcTagDelivery.id == delivery_id)
+        entregas = q.order_by(NfcTagDelivery.id).all()
+        # Já convertidas têm mestre e largura conhecida; as antigas não têm nem uma coisa nem outra.
+        alvos = [d for d in entregas if delivery_id or d.width is None or d.width > 1080]
+        if not alvos:
+            click.echo("Nenhuma entrega para reprocessar.")
+            return
+
+        total_antes = 0
+        for d in alvos:
+            caminho = os.path.join(app.config["NFC_MEDIA_FOLDER"], d.file_path or "")
+            tamanho = os.path.getsize(caminho) if d.file_path and os.path.exists(caminho) else 0
+            total_antes += tamanho
+            click.echo(
+                f"  entrega {d.id} (tag {d.tag.code if d.tag else '?'}): "
+                f"{tamanho / 1048576:.1f} MB, {d.width or '?'}x{d.height or '?'}"
+            )
+        click.echo(f"{len(alvos)} entrega(s), {total_antes / 1048576:.1f} MB hoje.")
+
+        if not execute:
+            click.echo("Modo de medição (sem --execute): nada foi alterado.")
+            return
+
+        total_depois = 0
+        for d in alvos:
+            try:
+                nfc_ops.reprocessar_delivery(d, com_moldura=not sem_moldura)
+            except nfc_ops.NfcValidationError as exc:
+                click.echo(f"  entrega {d.id}: pulada ({exc.message})")
+                continue
+            pronta = nfc_ops.processar_proxima()
+            if pronta is None:
+                click.echo(f"  entrega {d.id}: outro processo pegou a fila; siga adiante")
+                continue
+            total_depois += pronta.file_size_bytes or 0
+            click.echo(
+                f"  entrega {pronta.id}: {pronta.processing_status}, "
+                f"{(pronta.file_size_bytes or 0) / 1048576:.1f} MB"
+                + (f" — {pronta.processing_error}" if pronta.processing_error else "")
+            )
+        economia = total_antes - total_depois
+        click.echo(
+            f"Antes {total_antes / 1048576:.1f} MB → depois {total_depois / 1048576:.1f} MB "
+            f"(liberou {economia / 1048576:.1f} MB)."
+        )
+
     @app.cli.command("cleanup-review-files")
     def cleanup_review_files():
         """Remove os arquivos de revisão vencidos (mantém registro e comentários) — feature 090."""

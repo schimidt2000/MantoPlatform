@@ -91,6 +91,39 @@ MANTO_INSTAGRAM_URL = "https://www.instagram.com/mantoproducoes"
 NFC_DELIVERY_VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".webm", ".m4v"})
 NFC_DELIVERY_VIDEO_MAX_BYTES = 250 * 1024 * 1024
 
+# Feature 297: perfil da Manto no Spotify, botão do menu da página da tag. Mora aqui pelo mesmo
+# motivo do Instagram acima — endereço público é constante de código, nunca variável de ambiente
+# (Princípio XIV; foi variável de endereço no painel que pôs `localhost` em produção, hotfix 269b).
+# O `?si=` que veio no link compartilhado foi retirado de propósito: é um token de rastreio de
+# quem compartilhou, não faz parte do endereço do artista.
+MANTO_SPOTIFY_URL = "https://open.spotify.com/intl-pt/artist/0z8ipgKyD5dqKjKniqM5Cn"
+
+# Feature 297: conversão do vídeo da tag. Os arquivos crus da câmera chegavam com 4K e até
+# 76 Mbps — 147 MB para 16 segundos — e nenhum celular em rede móvel conseguia assistir. Todo
+# vídeo passa a ser reduzido a 1080 de largura com `crf 23`, que mede ~15 MB por 30 s (medição em
+# `specs/297-nfc-moldura-e-menu/research.md`, decisão D3).
+NFC_VIDEO_LARGURA_MAXIMA = 1080
+NFC_VIDEO_CRF = 23
+NFC_VIDEO_MAXRATE = "5M"
+NFC_VIDEO_BUFSIZE = "10M"
+NFC_VIDEO_AUDIO_BITRATE = "128k"
+# Teto de tempo do ffmpeg por vídeo. Um vídeo de 40 s converte em poucos minutos dividindo a
+# única CPU do contêiner com o ERP; 30 minutos é o ponto em que algo deu errado, não demora.
+NFC_VIDEO_TIMEOUT_SEGUNDOS = 30 * 60
+# Entrega presa em `processando` por mais que isto voltou a `pendente`: é o que acontece quando um
+# deploy troca o contêiner no meio de uma conversão (o processo morre, a linha fica).
+NFC_PROCESSAMENTO_PRESO_MINUTOS = 30
+
+# Feature 297: a moldura é PNG e só PNG — ela precisa de canal alfa para vazar o meio do vídeo,
+# e JPEG não tem. `imaging.tem_transparencia_real` recusa um PNG opaco, que cobriria a imagem
+# inteira em vez de emoldurá-la.
+NFC_MOLDURA_EXTENSOES = frozenset({".png"})
+
+# Feature 297: recado que a cliente escreve na página da tag. O teto existe para o campo ser um
+# recado e não um romance — e para o corpo da requisição pública ter tamanho previsível.
+NFC_MENSAGEM_MAX_CHARS = 1000
+NFC_MENSAGEM_AUTOR_MAX_CHARS = 120
+
 
 # Feature 225b: o que a oficina está fazendo com a peça. `producao` cria algo que não existe;
 # `manutencao` mexe no que já existe — conserto de defeito, ajuste para um evento, adaptação.
