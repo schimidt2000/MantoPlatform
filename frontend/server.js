@@ -548,6 +548,12 @@ const MEDIA_PATTERNS = [
   /^\/catalogo\/(?:midia|og)(?:[/?]|$)/,
   /^\/portal\/photo(?:[/?]|$)/,
   /\/(?:media|video|pdf)(?:[/?]|$)/,
+  // Upload da entrega de tag NFC: SOBE arquivo de até 250 MB, e subida doméstica passa dos 180 s.
+  // O padrão genérico acima isenta só o DOWNLOAD (a URL de leitura termina em `/media`); a rota de
+  // envio termina em `/entregas` e herdava o prazo, então o proxy cortava o arquivo no meio.
+  // O irmão da Loja Virtual (POST /api/virtuais/producao/<id>/video) já escapa, mas por
+  // coincidência do nome — cai no `/video` do padrão genérico, não por regra pensada para upload.
+  /^\/api\/3d\/nfc\/\d+\/entregas(?:[/?]|$)/,
 ];
 
 /** True se a URL entrega arquivo — nestas o proxy NÃO pode ter prazo. */

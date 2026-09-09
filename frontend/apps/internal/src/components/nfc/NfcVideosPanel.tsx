@@ -1,19 +1,23 @@
 import { useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { Frame } from "lucide-react";
 import {
   Badge,
   Button,
   Card,
   CardContent,
   DenseCard,
+  type DenseCardStat,
   formatShortDate,
   Input,
   Table,
   TableCell,
   TableRow,
 } from "@manto/ui";
-import type { NfcTag } from "../../lib/nfc";
+import type { NfcProcessingStatus, NfcTag } from "../../lib/nfc";
+import { MolduraDialog } from "./MolduraDialog";
 import { NfcVideoCard } from "./NfcVideoCard";
+import { RecadosDaTag } from "./RecadosDaTag";
 
 export interface NfcVideosPanelProps {
   tags: NfcTag[];
@@ -30,6 +34,9 @@ interface VideoGroup {
   subtitle?: string;
   tags: NfcTag[];
 }
+
+/** Entrega que ainda não virou vídeo entregável — o que o KPI "Preparando" conta (feature 297). */
+const STATUS_PREPARANDO: readonly NfcProcessingStatus[] = ["pendente", "processando"];
 
 function normaliza(texto: string): string {
   return texto.toLowerCase();
@@ -51,10 +58,25 @@ function combinaBusca(tag: NfcTag, busca: string): boolean {
  * tags ativas sem vídeo, cada uma com o botão de enviar direto. Os grupos espelham a
  * precedência que a tabela já usa (evento > cliente direta > estoque). Tags inativas com
  * vídeo continuam visíveis (badge "Inativa") — auditáveis por dentro, invisíveis lá fora.
+ *
+ * A 297 acrescentou o KPI da fila de conversão ("Preparando", que só aparece quando há fila),
+ * os recados de uma tag e os arquivos únicos do sistema (moldura e vídeo de abertura).
  */
 export function NfcVideosPanel({ tags, onManage, onShowInTable }: NfcVideosPanelProps) {
   const reduceMotion = useReducedMotion();
   const [busca, setBusca] = useState("");
+  /** Tag cujos recados estão abertos; `null` = nenhum painel aberto (a query nem dispara). */
+  const [tagRecados, setTagRecados] = useState<number | null>(null);
+  const [molduraAberta, setMolduraAberta] = useState(false);
+
+  /**
+   * Abre os recados de uma tag. Aceita a tag inteira ou só o id porque os dois formatos
+   * convivem nos callbacks desta tela (`onManage` recebe a tag, `onShowInTable` recebe o id) —
+   * o card chama do jeito que for natural para ele e o painel guarda sempre o id.
+   */
+  function abrirRecados(alvo: NfcTag | number): void {
+    setTagRecados(typeof alvo === "number" ? alvo : alvo.id);
+  }
 
   const kpis = useMemo(() => {
     const ativas = tags.filter((t) => t.is_active);
@@ -63,8 +85,39 @@ export function NfcVideosPanel({ tags, onManage, onShowInTable }: NfcVideosPanel
       comVideo: ativas.filter((t) => t.video_delivery).length,
       semVideo: ativas.filter((t) => !t.video_delivery).length,
       nuncaAcessadas: ativas.filter((t) => t.access_count === 0).length,
+      // Sobre TODAS as tags, e não só as ativas: a fila é a da conversão em fundo, e uma tag
+      // desativada com vídeo em processamento ocupa a mesma fila — sumir com ela aqui faria o
+      // painel dizer "nada preparando" enquanto o servidor ainda converte.
+      preparando: tags.filter(
+        (t) => t.video_delivery !== null && STATUS_PREPARANDO.includes(t.video_delivery.processing_status),
+      ).length,
     };
   }, [tags]);
+
+  const stats: DenseCardStat[] = [
+    { label: "Tags ativas", value: kpis.ativas },
+    { label: "Com vídeo", value: kpis.comVideo },
+    { label: "Sem vídeo", value: kpis.semVideo },
+    { label: "Nunca acessadas", value: kpis.nuncaAcessadas },
+  ];
+  if (kpis.preparando > 0) {
+    stats.push({
+      label: "Preparando",
+      // O KPI só existe enquanto há fila, então ele ENTRA na faixa no meio da leitura (o polling
+      // de `useNfcTags` remonta a lista sozinho). A transição vive no valor porque a célula é
+      // desenhada pelo DenseCard — sem ela o número simplesmente aparece do nada.
+      value: (
+        <motion.span
+          initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="inline-block"
+        >
+          {kpis.preparando}
+        </motion.span>
+      ),
+    });
+  }
 
   const { grupos, semVideo } = useMemo(() => {
     const visiveis = tags.filter((t) => combinaBusca(t, busca));
@@ -126,12 +179,14 @@ export function NfcVideosPanel({ tags, onManage, onShowInTable }: NfcVideosPanel
   return (
     <div className="space-y-4">
       <DenseCard
-        stats={[
-          { label: "Tags ativas", value: kpis.ativas },
-          { label: "Com vídeo", value: kpis.comVideo },
-          { label: "Sem vídeo", value: kpis.semVideo },
-          { label: "Nunca acessadas", value: kpis.nuncaAcessadas },
-        ]}
+        title="Vídeos das tags"
+        headerRight={
+          <Button variant="outline" size="sm" onClick={() => setMolduraAberta(true)}>
+            <Frame className="h-4 w-4" aria-hidden="true" />
+            Moldura e abertura
+          </Button>
+        }
+        stats={stats}
       />
 
       <Input
@@ -167,7 +222,13 @@ export function NfcVideosPanel({ tags, onManage, onShowInTable }: NfcVideosPanel
             </div>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {grupo.tags.map((tag) => (
-                <NfcVideoCard key={tag.id} tag={tag} onManage={onManage} onShowInTable={onShowInTable} />
+                <NfcVideoCard
+                  key={tag.id}
+                  tag={tag}
+                  onManage={onManage}
+                  onShowInTable={onShowInTable}
+                  onVerRecados={abrirRecados}
+                />
               ))}
             </div>
           </section>
@@ -233,6 +294,13 @@ export function NfcVideosPanel({ tags, onManage, onShowInTable }: NfcVideosPanel
           )}
         </section>
       </motion.div>
+
+      {/* Montado só com tag escolhida: é o `tagId` que liga a query de recados (`useRecadosDaTag`). */}
+      {tagRecados !== null && (
+        <RecadosDaTag tagId={tagRecados} onFechar={() => setTagRecados(null)} />
+      )}
+
+      <MolduraDialog aberto={molduraAberta} onFechar={() => setMolduraAberta(false)} />
     </div>
   );
 }
