@@ -234,6 +234,16 @@ As que quebram em silêncio. Leia esta seção inteira uma vez.
     commit): use `<Foto>` de `@manto/ui`, que decide num `useEffect` por `complete && naturalWidth
     === 0`. E hook criado com id de `useState` fica preso ao valor antigo dentro do próprio
     `onSuccess` — passe o id por argumento.
+23. **"Vídeo corrompido" quase nunca é corrupção: meça o peso primeiro** (feature 297). Os dez
+    vídeos das tags NFC eram arquivos crus de câmera — 4K, até 76 Mbps, 147 MB para 16 segundos —
+    íntegros, H.264 válido, servidos com `206` correto. O que falhava era a decodificação: dez
+    players 4K na mesma tela esgotam o navegador, e nenhuma cliente em 4G carrega isso. Antes de
+    suspeitar de codec, MIME ou proxy, rode `ffprobe` e olhe resolução, bitrate e tamanho.
+24. **O `ffmpeg` existe no contêiner do Render mas NÃO está no `render.yaml`** (`/usr/bin/ffmpeg`,
+    5.1.9, com `libx264`): ele vem da imagem base do runtime Python. Todo código que depende dele
+    checa `video_ops.ffmpeg_disponivel()` e degrada com segurança. Dívida 34 do `docs/05`. Na
+    máquina de desenvolvimento o ffmpeg é LGPL e **não** tem `libx264` — só `libopenh264`; por isso
+    `video_ops.encoder_disponivel()` escolhe em vez de fixar.
 
 ---
 
