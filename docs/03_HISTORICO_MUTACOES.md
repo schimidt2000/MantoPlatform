@@ -329,9 +329,13 @@ nenhuma entrega** contra 35 tags e 10 vídeos da produção: o verify cria as pr
 arquivo e a rota respondia 500. **Só apareceu ao abrir a tela** — virou o cenário 14 do verify.
 (7) No Windows, apagar um arquivo que o `send_file` acabou de servir dá `WinError 32` (o Linux da
 produção desliga o arquivo aberto sem reclamar); o código só loga e segue, e o ponteiro no banco é
-zerado de qualquer forma.
+zerado de qualquer forma. (8) **O flask-limiter só lê `RATELIMIT_ENABLED` no `init_app`**: mexer em
+`app.config` depois disso não desliga nada. O verify vinha passando por pouco com o limitador ligado
+sem ninguém saber, e estourou o limite de login (10/minuto) quando ganhou três cenários a mais —
+falhando por motivo que não tinha nada a ver com a feature. Desliga-se pelo objeto
+(`limiter.enabled = False`), e o cenário que testa o 429 chama `limiter.reset()` no fim.
 
-**Verificação.** `specs/297-nfc-moldura-e-menu/verify_297.py` (14/14 no `manto_local`): conversão de
+**Verificação.** `specs/297-nfc-moldura-e-menu/verify_297.py` (18/18 no `manto_local`): conversão de
 4K para 1080 com o peso caindo pela metade ou mais, `206` + `video/mp4` na rota pública, moldura
 mudando a borda **sem** invadir o miolo (comparação de pixels entre entregue e mestre), envio sem
 moldura, payload do menu completo, recado gravado com tag e cliente por **conexão separada** mais a

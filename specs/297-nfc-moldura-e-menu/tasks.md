@@ -319,18 +319,18 @@ esta máquina não conseguiu fazer, e uma função que ficou sem uso.
       `AnimatePresence mode="wait"` nunca troca de cena; o Claude in Chrome não está conectado. O
       controle é a própria estrela que acende, código da feature 255 que roda em produção e aqui
       também congela. Roteiro em `quickstart.md` §3
-- [ ] T046 Cenário novo no `verify_297.py`: com `RATELIMIT_ENABLED` LIGADO, o 11º recado da mesma
+- [X] T046 Cenário novo no `verify_297.py`: com o limitador LIGADO, o 11º recado da mesma
       origem devolve `429` **no envelope JSON** com mensagem em pt-BR, per FR-013 (partial). Hoje o
       verify desliga o limitador para poder repetir envios, e o comportamento só foi comprovado por
       sondagem manual
-- [ ] T047 Cenário novo no `verify_297.py`: sem moldura cadastrada (`nfc_frame_path = NULL`), o
+- [X] T047 Cenário novo no `verify_297.py`: sem moldura cadastrada (`nfc_frame_path = NULL`), o
       envio com a caixinha marcada entrega o vídeo **sem moldura**, com `has_frame = false` e o
       motivo em `processing_error`, per FR-006 (partial)
-- [ ] T048 Cenário novo no `verify_297.py`: `POST .../reprocessar` devolve a entrega a `pendente` e
+- [X] T048 Cenário novo no `verify_297.py`: `POST .../reprocessar` devolve a entrega a `pendente` e
       uma segunda chamada é recusada com `409`; depois de processar, o vídeo parte do MESTRE,
       per FR-007 (partial)
 - [ ] T049 Depois do deploy, rodar `flask nfc-reprocessar --execute` no Shell do Render (fora do
       horário, `--dry-run` antes) e registrar em `docs/03` os números reais de antes e depois,
       per SC-002 · SC-007 · FR-018 (missing). É ação do dono; o comando já está testado localmente
-- [ ] T050 Remover `_remove_delivery_file` de `app/impressoes3d/nfc_ops.py` — ficou sem nenhum uso
+- [X] T050 Remover `_remove_delivery_file` de `app/impressoes3d/nfc_ops.py` — ficou sem nenhum uso
       quando `remove_delivery` passou a apagar os três arquivos da entrega (unrequested)
