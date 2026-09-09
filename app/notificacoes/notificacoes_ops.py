@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 KIND_FORM_RESPONSE = "form_response.nova"
 KIND_AVALIACAO = "avaliacao.recebida"
 KIND_CONVITE_RECUSADO = "convite.recusado"
+KIND_RECADO_NFC = "recado_nfc.novo"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -54,6 +55,9 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     KIND_FORM_RESPONSE: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
     KIND_AVALIACAO: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
     KIND_CONVITE_RECUSADO: (RoleName.CASTING, RoleName.SUPERADMIN),
+    # Os mesmos papéis que podem LER o recado no ERP. Avisar quem não pode abrir o link seria
+    # produzir ruído com um beco sem saída no fim.
+    KIND_RECADO_NFC: (RoleName.ARTISTA_3D, RoleName.SUPERADMIN),
 }
 
 SEVERIDADES = ("info", "urgent")
@@ -255,6 +259,30 @@ def notificar_convite_recusado(role: EventRole) -> int:
         entidade=("event_role", role.id),
         dedupe_key=f"{KIND_CONVITE_RECUSADO}:{role.id}:{agora:%Y%m%d}",
         severity="urgent" if urgente else "info",
+    )
+
+
+def notificar_recado_nfc(recado) -> int:
+    """Cliente escreveu um recado na página da luminária → ARTISTA_3D/SUPERADMIN (feature 297).
+
+    Regime B (transação curta, melhor-esforço): quem chama comita o recado ANTES e trata a falha
+    daqui sem desfazer nada. Um aviso que não sai é um aborrecimento; um recado que se perde por
+    causa do aviso seria uma promessa quebrada com quem escreveu.
+
+    O corpo traz o começo do texto porque o valor está justamente no que a pessoa disse — uma
+    notificação que só diz "há um recado novo" obriga a abrir a tela para descobrir se importa.
+    """
+    _garante_id(recado)
+    tag = recado.tag
+    autor = recado.author_name or "Alguém"
+    numero = f"nº {tag.sequence}" if tag else "tag"
+    return emitir(
+        KIND_RECADO_NFC,
+        title=f"{autor} deixou um recado na luminária {numero}",
+        body=recado.message[:200],
+        link_path="/3d/tags?aba=videos",
+        entidade=("nfc_tag_message", recado.id),
+        dedupe_key=f"{KIND_RECADO_NFC}:{recado.id}",
     )
 
 

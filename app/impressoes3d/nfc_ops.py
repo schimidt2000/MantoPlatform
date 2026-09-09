@@ -16,7 +16,7 @@ import logging
 import os
 import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from flask import current_app
@@ -28,10 +28,21 @@ from app.constants import (
     NFC_DELIVERY_VIDEO_EXTENSIONS,
     NFC_DELIVERY_VIDEO_MAX_BYTES,
     NFC_MAX_CODE_ATTEMPTS,
+    NFC_MOLDURA_EXTENSOES,
+    NFC_PROCESSAMENTO_PRESO_MINUTOS,
     NFC_SUFFIX_ALPHABET,
     NFC_SUFFIX_LENGTH,
 )
-from app.models import Acervo3DItem, CalendarEvent, Client, Event3DGift, NfcTag, NfcTagDelivery
+from app.impressoes3d import video_ops
+from app.models import (
+    Acervo3DItem,
+    CalendarEvent,
+    Client,
+    Event3DGift,
+    NfcTag,
+    NfcTagDelivery,
+    SiteSetting,
+)
 from app.storage import extension_of
 from app.utils import audit
 
@@ -173,12 +184,29 @@ def sync_event_gift_tags(event: CalendarEvent, item: Acervo3DItem) -> list[NfcTa
 
 
 def _serialize_public_delivery(code: str, delivery: NfcTagDelivery) -> dict[str, Any]:
-    """Entrega no payload público — só o que a página precisa para exibir, nada de caminho de disco."""
+    """Entrega no payload público — só o que a página precisa para exibir, nada de caminho de disco.
+
+    `width`/`height` entraram na feature 297 para a página reservar a altura do palco ANTES de o
+    vídeo carregar. Sem eles o layout pulava quando os metadados chegavam, o que numa página que
+    abre com uma animação de luz acendendo é um tranco visível.
+    """
     return {
         "kind": delivery.kind,
         "title": delivery.title,
         "media_url": f"/api/nfc/{code}/entregas/{delivery.id}/media",
+        "width": delivery.width,
+        "height": delivery.height,
     }
+
+
+def entrega_pronta(delivery: NfcTagDelivery) -> bool:
+    """A entrega pode ser mostrada à cliente?
+
+    Entrega em conversão (`pendente`/`processando`) ou que falhou não existe para o mundo lá fora:
+    a página mostra o estado de sempre, como se ainda não houvesse vídeo, e a rota de mídia devolve
+    o mesmo 404 genérico de sempre. Um vídeo pela metade seria pior que vídeo nenhum.
+    """
+    return bool(delivery.is_active) and delivery.processing_status == "pronto"
 
 
 def resolve_code(raw_code: str) -> dict[str, Any]:
@@ -197,7 +225,7 @@ def resolve_code(raw_code: str) -> dict[str, Any]:
         return {"product": None, "campaign": None, "deliveries": []}
 
     deliveries = sorted(
-        (d for d in tag.deliveries if d.is_active), key=lambda d: (d.sort_order, d.id)
+        (d for d in tag.deliveries if entrega_pronta(d)), key=lambda d: (d.sort_order, d.id)
     )
     payload: dict[str, Any] = {
         "product": {"name": tag.item.name, "photo_url": tag.item.photo_url},
@@ -372,6 +400,18 @@ def _serialize_admin_video_delivery(tag: NfcTag) -> dict[str, Any] | None:
         "title": delivery.title,
         "file_name": delivery.file_path,
         "created_at": delivery.created_at.isoformat() if delivery.created_at else None,
+        # Feature 297: o que o ERP precisa para mostrar o estado da conversão e o peso. Antes disto
+        # a tela não tinha como saber que estava exibindo um arquivo de 147 MB.
+        "processing_status": delivery.processing_status,
+        "processing_error": delivery.processing_error,
+        "processed_at": delivery.processed_at.isoformat() if delivery.processed_at else None,
+        "file_size_bytes": delivery.file_size_bytes,
+        "duration_seconds": (
+            float(delivery.duration_seconds) if delivery.duration_seconds is not None else None
+        ),
+        "width": delivery.width,
+        "height": delivery.height,
+        "has_frame": bool(delivery.has_frame),
     }
 
 
@@ -383,9 +423,23 @@ def _delivery_folder() -> str:
 
 
 def delivery_mime_type(delivery: NfcTagDelivery) -> str:
-    """MIME do arquivo da entrega, deduzido da extensão (mesma fórmula de `virtuais_ops`)."""
+    """MIME do arquivo da entrega.
+
+    Desde a feature 297 o tipo é GRAVADO na conversão, e não readivinhado a cada requisição. A
+    dedução por extensão fica como reserva para as entregas anteriores à migration e para o caso
+    de degradação sem conversor — e ela tem defeito conhecido: `.m4v` produzia `video/m4v`, um
+    MIME que não existe, e com `X-Content-Type-Options: nosniff` o navegador não tinha como se
+    salvar sozinho.
+    """
+    if delivery.mime_type:
+        return delivery.mime_type
     extensao = extension_of(delivery.file_path)
-    return f"video/{extensao.lstrip('.').replace('mov', 'quicktime')}" if extensao else "video/mp4"
+    if not extensao:
+        return "video/mp4"
+    sufixo = extensao.lstrip(".").lower()
+    conhecidos = {"mp4": "video/mp4", "webm": "video/webm", "mov": "video/quicktime",
+                  "m4v": "video/x-m4v"}
+    return conhecidos.get(sufixo, "video/mp4")
 
 
 def delivery_media_path(delivery: NfcTagDelivery) -> str | None:
@@ -399,31 +453,34 @@ def delivery_media_path(delivery: NfcTagDelivery) -> str | None:
     return os.path.join(_delivery_folder(), delivery.file_path)
 
 
-def _remove_delivery_file(delivery: NfcTagDelivery) -> None:
-    """Apaga o arquivo da entrega do disco, sem derrubar o fluxo se ele já não existir."""
-    caminho = delivery_media_path(delivery)
-    if not caminho:
-        return
-    try:
-        if os.path.exists(caminho):
-            os.remove(caminho)
-    except OSError as exc:  # noqa: BLE001 — arquivo órfão não pode travar a exclusão da linha
-        logger.warning("nfc_ops: falha ao remover arquivo de entrega %s: %s", caminho, exc)
-
-
 def add_delivery(
-    tag: NfcTag, file_obj: Any, *, kind: str = "video", title: str | None = None
+    tag: NfcTag,
+    file_obj: Any,
+    *,
+    kind: str = "video",
+    title: str | None = None,
+    com_moldura: bool = True,
 ) -> NfcTagDelivery:
-    """Salva o arquivo e cria a entrega — se já existe entrega ativa do mesmo `kind`, substitui.
+    """Recebe o arquivo e ENFILEIRA a conversão — se já existe entrega ativa do mesmo `kind`, substitui.
 
-    "Substitui" = apaga arquivo e linha antigos antes de criar a nova: por ora é 1 vídeo ativo
-    por tag (a TABELA é extensível; este comportamento é o de hoje, não uma limitação do schema).
-    O arquivo só é considerado salvo depois de escrito por inteiro e não-vazio no disco — criar a
-    linha antes disso deixaria a página pública apontar para um vídeo que não existe.
+    Mudou na feature 297: a requisição **não** converte. Ela grava o arquivo cru em
+    `nfc_media/entrada/`, cria a linha em `pendente` e devolve. A conversão acontece depois, na
+    thread de fundo, um vídeo por vez. Converter aqui prenderia quem enviou por minutos e seguraria
+    uma thread do gunicorn com a única CPU do contêiner ocupada.
+
+    `com_moldura` grava a escolha da caixinha do diálogo (marcada por padrão). Ela é decidida agora
+    porque o arquivo já sobe: o processamento lê a intenção da linha, não da requisição.
+
+    Args:
+        tag: a tag que recebe a entrega.
+        file_obj: o arquivo enviado (stream do multipart).
+        kind: espécie de entrega; hoje só `"video"`.
+        title: título exibido na página pública; vazio usa a copy padrão.
+        com_moldura: gravar a moldura do sistema no vídeo entregue.
 
     Raises:
-        NfcValidationError: `kind` não suportado, arquivo ausente, extensão fora da allowlist ou
-            acima do limite de tamanho.
+        NfcValidationError: `kind` não suportado, arquivo ausente, extensão fora da allowlist,
+            acima do limite de tamanho, ou já existe conversão em andamento nesta tag.
     """
     if kind not in NFC_DELIVERY_KINDS:
         raise NfcValidationError("kind", "Tipo de entrega não suportado.")
@@ -439,10 +496,22 @@ def add_delivery(
             f"Formato não suportado (use {', '.join(sorted(NFC_DELIVERY_VIDEO_EXTENSIONS))}).",
         )
 
-    pasta = _delivery_folder()
+    # CORRIDA REAL, e não hipotética: substituir apaga o arquivo e a linha da entrega anterior. Se
+    # essa anterior estiver NA FILA, o worker já está com o caminho dela na mão e vai escrever num
+    # arquivo que acabou de sumir, para uma linha que já não existe. Enquanto a conversão anterior
+    # não terminar, o envio novo é recusado com o motivo à vista.
+    anterior = next((d for d in tag.deliveries if d.kind == kind and d.is_active), None)
+    if anterior is not None and anterior.processing_status in ("pendente", "processando"):
+        raise NfcValidationError(
+            "file",
+            "Ainda estamos preparando o vídeo anterior desta tag. Aguarde ele ficar pronto para "
+            "enviar outro.",
+        )
+
+    pasta = _pasta_entrada()
     os.makedirs(pasta, exist_ok=True)
-    nome_final = f"{uuid.uuid4().hex}{extensao}"
-    caminho = os.path.join(pasta, nome_final)
+    nome_bruto = f"{uuid.uuid4().hex}{extensao}"
+    caminho = os.path.join(pasta, nome_bruto)
 
     tamanho = 0
     try:
@@ -471,13 +540,18 @@ def add_delivery(
         _apagar_arquivo(caminho)
         raise NfcValidationError("file", "O vídeo chegou vazio. Tente enviar de novo.")
 
-    anterior = next((d for d in tag.deliveries if d.kind == kind and d.is_active), None)
     if anterior is not None:
-        _remove_delivery_file(anterior)
+        _remover_arquivos_da_entrega(anterior)
         db.session.delete(anterior)
 
     delivery = NfcTagDelivery(
-        tag_id=tag.id, kind=kind, title=(title or "").strip() or None, file_path=nome_final,
+        tag_id=tag.id,
+        kind=kind,
+        title=(title or "").strip() or None,
+        file_path=None,               # ainda não há o que servir: a conversão preenche
+        source_file_path=nome_bruto,
+        has_frame=bool(com_moldura),
+        processing_status="pendente",
     )
     db.session.add(delivery)
     audit(
@@ -486,6 +560,473 @@ def add_delivery(
     )
     db.session.commit()
     return delivery
+
+
+# ── Fila de conversão (feature 297) ──────────────────────────────────────────
+
+
+def _pasta_entrada() -> str:
+    return current_app.config["NFC_ENTRADA_FOLDER"]
+
+
+def _pasta_mestres() -> str:
+    return current_app.config["NFC_MESTRES_FOLDER"]
+
+
+def _pasta_sistema() -> str:
+    return current_app.config["NFC_SISTEMA_FOLDER"]
+
+
+def _remover_arquivos_da_entrega(delivery: NfcTagDelivery) -> None:
+    """Apaga do disco os três arquivos que uma entrega pode ter: entregue, mestre e cru."""
+    for pasta, nome in (
+        (_delivery_folder(), delivery.file_path),
+        (_pasta_mestres(), delivery.master_file_path),
+        (_pasta_entrada(), delivery.source_file_path),
+    ):
+        if not nome:
+            continue
+        caminho = os.path.join(pasta, nome)
+        try:
+            if os.path.exists(caminho):
+                os.remove(caminho)
+        except OSError as exc:  # noqa: BLE001 — órfão não pode travar a exclusão da linha
+            logger.warning("nfc_ops: falha ao remover %s: %s", caminho, exc)
+
+
+def moldura_path() -> str | None:
+    """Caminho da moldura do sistema no disco, ou None se não houver uma cadastrada."""
+    settings = SiteSetting.query.get(1)
+    nome = settings.nfc_frame_path if settings else None
+    if not nome:
+        return None
+    caminho = os.path.join(_pasta_sistema(), nome)
+    return caminho if os.path.exists(caminho) else None
+
+
+def abertura_path() -> str | None:
+    """Caminho do vídeo de abertura no disco, ou None se não houver um cadastrado."""
+    settings = SiteSetting.query.get(1)
+    nome = settings.nfc_intro_video_path if settings else None
+    if not nome:
+        return None
+    caminho = os.path.join(_pasta_sistema(), nome)
+    return caminho if os.path.exists(caminho) else None
+
+
+def _marca_de_versao(caminho: str | None) -> int | None:
+    """Data de modificação do arquivo, em segundos, para furar cache do navegador.
+
+    Moldura e abertura têm nome FIXO e são sobrescritas no lugar (molde do `logo_path`). Sem uma
+    marca na URL, quem já viu a versão antiga continuaria vendo — e o dono trocaria o arquivo sem
+    entender por que nada mudou.
+    """
+    if not caminho or not os.path.exists(caminho):
+        return None
+    return int(os.path.getmtime(caminho))
+
+
+def estado_dos_arquivos_de_sistema() -> dict[str, Any]:
+    """O que o ERP precisa saber sobre a moldura e o vídeo de abertura."""
+    moldura = moldura_path()
+    abertura = abertura_path()
+    marca_moldura = _marca_de_versao(moldura)
+    marca_abertura = _marca_de_versao(abertura)
+    return {
+        "moldura_url": f"/api/3d/nfc/moldura?v={marca_moldura}" if moldura else None,
+        "moldura_atualizada_em": (
+            datetime.utcfromtimestamp(marca_moldura).isoformat() if marca_moldura else None
+        ),
+        "abertura_url": f"/api/nfc/abertura/video?v={marca_abertura}" if abertura else None,
+        "abertura_atualizada_em": (
+            datetime.utcfromtimestamp(marca_abertura).isoformat() if marca_abertura else None
+        ),
+    }
+
+
+def url_publica_da_abertura() -> str | None:
+    """URL do vídeo de abertura para o payload público, com marca de versão, ou None."""
+    marca = _marca_de_versao(abertura_path())
+    return f"/api/nfc/abertura/video?v={marca}" if marca else None
+
+
+def reivindicar_proxima_entrega() -> NfcTagDelivery | None:
+    """Toma para si UMA entrega da fila, de forma atômica entre os três workers do gunicorn.
+
+    O `AND processing_status = 'pendente'` depois do subselect não é redundância: sem ele, dois
+    workers que escolhessem a mesma linha no subselect fariam os dois o `UPDATE`. Com ele, só um
+    recebe `rowcount == 1`; o outro recebe zero e volta a dormir. Mesmo espírito do claim de
+    `app/calendar/sync.py`, mas na linha do trabalho em vez de em `site_settings` — aqui a unidade
+    de trabalho é o registro, não o ciclo.
+    """
+    linha = db.session.execute(
+        db.text(
+            "UPDATE nfc_tag_deliveries SET processing_status = 'processando', updated_at = :agora"
+            " WHERE id = (SELECT id FROM nfc_tag_deliveries"
+            "             WHERE processing_status = 'pendente' ORDER BY id LIMIT 1)"
+            "   AND processing_status = 'pendente'"
+            " RETURNING id"
+        ),
+        {"agora": datetime.utcnow()},
+    ).fetchone()
+    db.session.commit()
+    if linha is None:
+        return None
+    return db.session.get(NfcTagDelivery, linha[0])
+
+
+def destravar_presas() -> int:
+    """Devolve à fila o que ficou preso em `processando`.
+
+    Acontece quando um deploy troca o contêiner no meio de uma conversão: o processo morre, a linha
+    fica marcada para sempre. Passado o prazo, ela volta a `pendente` e alguém pega de novo.
+    """
+    limite = datetime.utcnow() - timedelta(minutes=NFC_PROCESSAMENTO_PRESO_MINUTOS)
+    resultado = db.session.execute(
+        db.text(
+            "UPDATE nfc_tag_deliveries SET processing_status = 'pendente'"
+            " WHERE processing_status = 'processando' AND updated_at < :limite"
+        ),
+        {"limite": limite},
+    )
+    db.session.commit()
+    return resultado.rowcount or 0
+
+
+def processar_entrega(delivery: NfcTagDelivery) -> NfcTagDelivery:
+    """Converte o arquivo cru de uma entrega e a deixa pronta para a cliente.
+
+    Produz até dois arquivos: o MESTRE (1080p sem moldura, guardado para reprocessar depois) e o
+    ENTREGUE (o mestre com a moldura gravada). Sem moldura, os dois são o mesmo arquivo e só um
+    existe no disco.
+
+    Nunca levanta por falta de ffmpeg ou por falha de conversão: nesses casos entrega o arquivo
+    como ele veio, registra o motivo em `processing_error` e marca `pronto`. Perder o vídeo da
+    cliente porque o conversor falhou seria trocar um problema por outro pior.
+    """
+    origem = (
+        os.path.join(_pasta_entrada(), delivery.source_file_path)
+        if delivery.source_file_path
+        else None
+    )
+    if not origem or not os.path.exists(origem):
+        # Reprocessamento: a origem passa a ser o mestre; e, se nem ele existe (as entregas
+        # anteriores à feature 297), o próprio arquivo entregue hoje.
+        origem = _origem_de_reprocessamento(delivery)
+    if not origem or not os.path.exists(origem):
+        delivery.processing_status = "falhou"
+        delivery.processing_error = "O arquivo de origem não está mais no disco."
+        db.session.commit()
+        return delivery
+
+    quer_moldura = bool(delivery.has_frame)
+    moldura = moldura_path() if quer_moldura else None
+    avisos: list[str] = []
+    if quer_moldura and not moldura:
+        avisos.append("Nenhuma moldura cadastrada — o vídeo foi entregue sem moldura.")
+
+    if not video_ops.ffmpeg_disponivel():
+        return _entregar_sem_converter(
+            delivery, origem,
+            "O conversor de vídeo não está disponível neste servidor — o arquivo foi entregue "
+            "como veio.",
+        )
+
+    nome_base = uuid.uuid4().hex
+    caminho_mestre = os.path.join(_pasta_mestres(), f"{nome_base}.mp4")
+    try:
+        info_mestre = video_ops.converter(origem, caminho_mestre)
+    except video_ops.VideoIndisponivel as exc:
+        return _entregar_sem_converter(delivery, origem, str(exc))
+
+    if moldura:
+        caminho_entregue = os.path.join(_delivery_folder(), f"{nome_base}.mp4")
+        try:
+            info = video_ops.converter(origem, caminho_entregue, moldura=moldura)
+        except video_ops.VideoIndisponivel as exc:
+            avisos.append(f"A moldura não pôde ser aplicada: {exc}")
+            caminho_entregue = os.path.join(_delivery_folder(), f"{nome_base}.mp4")
+            os.replace(caminho_mestre, caminho_entregue)
+            info = info_mestre
+            caminho_mestre = caminho_entregue
+            quer_moldura = False
+    else:
+        # Sem moldura, mestre e entregue são o MESMO arquivo: guardar duas cópias idênticas
+        # dobraria o disco sem dar nada em troca.
+        caminho_entregue = os.path.join(_delivery_folder(), f"{nome_base}.mp4")
+        os.replace(caminho_mestre, caminho_entregue)
+        caminho_mestre = caminho_entregue
+        info = info_mestre
+
+    _apagar_arquivos_antigos(delivery)
+    delivery.file_path = os.path.basename(caminho_entregue)
+    delivery.master_file_path = (
+        os.path.basename(caminho_mestre) if caminho_mestre != caminho_entregue else None
+    )
+    delivery.mime_type = "video/mp4"
+    delivery.file_size_bytes = info.tamanho_bytes
+    delivery.duration_seconds = round(info.duracao_segundos, 2)
+    delivery.width = info.largura
+    delivery.height = info.altura
+    delivery.has_frame = bool(quer_moldura and moldura)
+    delivery.processing_status = "pronto"
+    delivery.processing_error = " ".join(avisos) or None
+    delivery.processed_at = datetime.utcnow()
+    _limpar_entrada(delivery)
+    db.session.commit()
+    return delivery
+
+
+def _origem_de_reprocessamento(delivery: NfcTagDelivery) -> str | None:
+    """De onde parte um reprocessamento: o mestre; na falta dele, o próprio arquivo entregue.
+
+    As dez entregas que existiam antes da feature 297 não têm mestre — elas SÃO o arquivo cru da
+    câmera. Reprocessá-las parte do que existe, com a perda de qualidade que o dono aceitou em
+    troca de um vídeo que a cliente consiga assistir.
+    """
+    if delivery.master_file_path:
+        caminho = os.path.join(_pasta_mestres(), delivery.master_file_path)
+        if os.path.exists(caminho):
+            return caminho
+    if delivery.file_path:
+        caminho = os.path.join(_delivery_folder(), delivery.file_path)
+        if os.path.exists(caminho):
+            return caminho
+    return None
+
+
+def _entregar_sem_converter(
+    delivery: NfcTagDelivery, origem: str, motivo: str
+) -> NfcTagDelivery:
+    """Degradação segura: entrega o arquivo como veio e registra por quê.
+
+    O vídeo da cliente nunca se perde porque o conversor faltou. A tela mostra o motivo, e o
+    comando de reprocessamento resolve quando o conversor voltar.
+    """
+    extensao = extension_of(origem) or ".mp4"
+    nome = f"{uuid.uuid4().hex}{extensao}"
+    destino = os.path.join(_delivery_folder(), nome)
+    try:
+        os.replace(origem, destino)
+    except OSError as exc:
+        delivery.processing_status = "falhou"
+        delivery.processing_error = f"{motivo} E o arquivo não pôde ser movido: {exc}"
+        db.session.commit()
+        return delivery
+    _apagar_arquivos_antigos(delivery)
+    delivery.file_path = nome
+    delivery.master_file_path = None
+    delivery.mime_type = None
+    delivery.file_size_bytes = os.path.getsize(destino)
+    delivery.has_frame = False
+    delivery.processing_status = "pronto"
+    delivery.processing_error = motivo
+    delivery.processed_at = datetime.utcnow()
+    delivery.source_file_path = None
+    db.session.commit()
+    return delivery
+
+
+def _apagar_arquivos_antigos(delivery: NfcTagDelivery) -> None:
+    """Remove os arquivos da versão ANTERIOR desta entrega, depois que a nova já existe no disco."""
+    for pasta, nome in (
+        (_delivery_folder(), delivery.file_path),
+        (_pasta_mestres(), delivery.master_file_path),
+    ):
+        if not nome:
+            continue
+        caminho = os.path.join(pasta, nome)
+        try:
+            if os.path.exists(caminho):
+                os.remove(caminho)
+        except OSError as exc:  # noqa: BLE001 — órfão é aceitável; perder o vídeo novo não
+            logger.warning("nfc_ops: falha ao remover versão antiga %s: %s", caminho, exc)
+
+
+def _limpar_entrada(delivery: NfcTagDelivery) -> None:
+    """Apaga o arquivo cru depois da conversão bem-sucedida e esquece o caminho."""
+    if not delivery.source_file_path:
+        return
+    caminho = os.path.join(_pasta_entrada(), delivery.source_file_path)
+    try:
+        if os.path.exists(caminho):
+            os.remove(caminho)
+    except OSError as exc:  # noqa: BLE001 — o cru é descartável por definição
+        logger.warning("nfc_ops: falha ao remover o arquivo cru %s: %s", caminho, exc)
+    delivery.source_file_path = None
+
+
+def processar_proxima() -> NfcTagDelivery | None:
+    """Toma uma entrega da fila e a converte. Devolve None quando a fila está vazia.
+
+    É o corpo de um ciclo da thread de fundo, e também o que o `verify_297.py` chama à mão — com
+    `MANTO_SEM_THREADS=1` não há thread nenhuma, e a verificação precisa ser determinística.
+    """
+    delivery = reivindicar_proxima_entrega()
+    if delivery is None:
+        return None
+    try:
+        return processar_entrega(delivery)
+    except Exception as exc:  # noqa: BLE001 — a fila nunca pode morrer por um vídeo ruim
+        logger.warning("nfc_ops: falha ao processar entrega %s: %s", delivery.id, exc)
+        db.session.rollback()
+        delivery = db.session.get(NfcTagDelivery, delivery.id)
+        if delivery is not None:
+            delivery.processing_status = "falhou"
+            delivery.processing_error = str(exc)[:500]
+            db.session.commit()
+        return delivery
+
+
+def reprocessar_delivery(
+    delivery: NfcTagDelivery, *, com_moldura: bool | None = None
+) -> NfcTagDelivery:
+    """Devolve uma entrega à fila, opcionalmente trocando a escolha da moldura.
+
+    Raises:
+        NfcValidationError: a entrega já está na fila (não faz sentido enfileirar duas vezes) ou
+            não há mais de onde partir.
+    """
+    if delivery.processing_status in ("pendente", "processando"):
+        raise NfcValidationError(
+            "delivery", "Este vídeo já está na fila de preparação."
+        )
+    if _origem_de_reprocessamento(delivery) is None and not delivery.source_file_path:
+        raise NfcValidationError(
+            "delivery", "Não há arquivo de origem para refazer este vídeo."
+        )
+    if com_moldura is not None:
+        delivery.has_frame = bool(com_moldura)
+    delivery.processing_status = "pendente"
+    delivery.processing_error = None
+    db.session.commit()
+    return delivery
+
+
+def salvar_arquivo_de_sistema(file_obj: Any, *, tipo: str) -> str:
+    """Guarda a moldura ou o vídeo de abertura, com nome fixo, no molde de `logo_path`.
+
+    Nome fixo significa sobrescrever no mesmo caminho — o mesmo que o logotipo do sistema faz. Em
+    troca, quem já viu o arquivo pode ficar com a versão antiga em cache; por isso as rotas que
+    servem esses dois arquivos mandam prazo curto e um parâmetro de versão.
+
+    Args:
+        file_obj: o arquivo enviado.
+        tipo: `"moldura"` ou `"abertura"`.
+
+    Returns:
+        O nome do arquivo gravado.
+
+    Raises:
+        NfcValidationError: extensão fora da allowlist, PNG sem transparência real, ou vídeo acima
+            do limite.
+    """
+    nome_original = getattr(file_obj, "filename", "") or ""
+    if not nome_original:
+        raise NfcValidationError("file", "Escolha o arquivo.")
+    extensao = extension_of(nome_original)
+
+    if tipo == "moldura":
+        if extensao not in NFC_MOLDURA_EXTENSOES:
+            raise NfcValidationError("file", "A moldura precisa ser um PNG.")
+        from app import imaging
+
+        file_obj.seek(0)
+        try:
+            imagem = imaging.abrir(file_obj)
+        except Exception as exc:  # noqa: BLE001 — arquivo corrompido ou não-imagem
+            raise NfcValidationError("file", "Não foi possível ler este PNG.") from exc
+        if not imaging.tem_transparencia_real(imagem.convert("RGBA")):
+            raise NfcValidationError(
+                "file",
+                "Este PNG não tem fundo transparente — ele cobriria o vídeo inteiro em vez de "
+                "emoldurá-lo.",
+            )
+        nome_final = "moldura.png"
+    elif tipo == "abertura":
+        if extensao not in NFC_DELIVERY_VIDEO_EXTENSIONS:
+            raise NfcValidationError(
+                "file",
+                f"Formato não suportado (use {', '.join(sorted(NFC_DELIVERY_VIDEO_EXTENSIONS))}).",
+            )
+        nome_final = "abertura.mp4"
+    else:  # pragma: no cover — chamada interna com literal
+        raise NfcValidationError("file", "Tipo de arquivo de sistema desconhecido.")
+
+    pasta = _pasta_sistema()
+    os.makedirs(pasta, exist_ok=True)
+    destino = os.path.join(pasta, nome_final)
+    # Sufixo `.entrada`, e NÃO `.parcial`: o `video_ops.converter` usa `<destino>.parcial` como o
+    # temporário DELE. Com o mesmo nome, o ffmpeg leria e escreveria no mesmo arquivo e a conversão
+    # morria com FileNotFoundError. Achado abrindo a tela, não pelo verify.
+    parcial = f"{destino}.entrada"
+
+    tamanho = 0
+    try:
+        file_obj.seek(0)
+        with open(parcial, "wb") as saida:
+            while True:
+                pedaco = file_obj.read(1024 * 1024)
+                if not pedaco:
+                    break
+                tamanho += len(pedaco)
+                if tamanho > NFC_DELIVERY_VIDEO_MAX_BYTES:
+                    raise NfcValidationError(
+                        "file",
+                        f"Arquivo acima do limite de "
+                        f"{NFC_DELIVERY_VIDEO_MAX_BYTES // (1024 * 1024)} MB.",
+                    )
+                saida.write(pedaco)
+    except NfcValidationError:
+        _apagar_arquivo(parcial)
+        raise
+    except OSError as exc:
+        _apagar_arquivo(parcial)
+        raise NfcValidationError("file", "Não foi possível guardar o arquivo agora.") from exc
+
+    if tamanho == 0:
+        _apagar_arquivo(parcial)
+        raise NfcValidationError("file", "O arquivo chegou vazio.")
+
+    # O vídeo de abertura passa pela MESMA conversão dos vídeos de tag, sem moldura: ele é servido
+    # a todo mundo que encosta o celular numa luminária, então precisa ser leve pelo mesmo motivo.
+    if tipo == "abertura" and video_ops.ffmpeg_disponivel():
+        try:
+            video_ops.converter(parcial, destino)
+            _apagar_arquivo(parcial)
+        except video_ops.VideoIndisponivel as exc:
+            logger.warning("nfc_ops: abertura não convertida (%s); guardando como veio", exc)
+            os.replace(parcial, destino)
+    else:
+        os.replace(parcial, destino)
+
+    settings = SiteSetting.query.get(1)
+    if tipo == "moldura":
+        settings.nfc_frame_path = nome_final
+    else:
+        settings.nfc_intro_video_path = nome_final
+    audit("edit", "SiteSetting", 1, tipo, f"Arquivo de sistema das tags NFC atualizado: {tipo}")
+    db.session.commit()
+    return nome_final
+
+
+def remover_arquivo_de_sistema(*, tipo: str) -> None:
+    """Apaga a moldura ou o vídeo de abertura e zera o ponteiro no banco."""
+    settings = SiteSetting.query.get(1)
+    nome = settings.nfc_frame_path if tipo == "moldura" else settings.nfc_intro_video_path
+    if nome:
+        caminho = os.path.join(_pasta_sistema(), nome)
+        try:
+            if os.path.exists(caminho):
+                os.remove(caminho)
+        except OSError as exc:  # noqa: BLE001 — o ponteiro some de qualquer forma
+            logger.warning("nfc_ops: falha ao remover %s: %s", caminho, exc)
+    if tipo == "moldura":
+        settings.nfc_frame_path = None
+    else:
+        settings.nfc_intro_video_path = None
+    audit("edit", "SiteSetting", 1, tipo, f"Arquivo de sistema das tags NFC removido: {tipo}")
+    db.session.commit()
 
 
 def _apagar_arquivo(caminho: str) -> None:
@@ -498,9 +1039,13 @@ def _apagar_arquivo(caminho: str) -> None:
 
 
 def remove_delivery(delivery: NfcTagDelivery) -> None:
-    """Apaga a entrega — linha e arquivo do disco. Sem confirmação aqui: é o endpoint quem decide."""
+    """Apaga a entrega — linha e arquivos do disco. Sem confirmação aqui: é o endpoint quem decide.
+
+    São até TRÊS arquivos desde a feature 297 (entregue, mestre e cru), e não um só: apagar apenas
+    o entregue deixaria o mestre ocupando disco para sempre, invisível.
+    """
     tag = delivery.tag
-    _remove_delivery_file(delivery)
+    _remover_arquivos_da_entrega(delivery)
     db.session.delete(delivery)
     audit(
         "delete", "NfcTag", tag.id, tag.code,
