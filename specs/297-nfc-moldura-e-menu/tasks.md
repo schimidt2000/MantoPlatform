@@ -329,8 +329,8 @@ esta máquina não conseguiu fazer, e uma função que ficou sem uso.
 - [X] T048 Cenário novo no `verify_297.py`: `POST .../reprocessar` devolve a entrega a `pendente` e
       uma segunda chamada é recusada com `409`; depois de processar, o vídeo parte do MESTRE,
       per FR-007 (partial)
-- [ ] T049 Depois do deploy, rodar `flask nfc-reprocessar --execute` no Shell do Render (fora do
+- [X] T049 Depois do deploy, rodar `flask nfc-reprocessar --execute` no Shell do Render (fora do
       horário, `--dry-run` antes) e registrar em `docs/03` os números reais de antes e depois,
-      per SC-002 · SC-007 · FR-018 (missing). É ação do dono; o comando já está testado localmente
+      per SC-002 · SC-007 · FR-018 (missing). **Feito em 09/09 às 22h**: 935,3 MB → 143,4 MB entregues, dez de dez com moldura, em 42,8 minutos. Números em `docs/03`
 - [X] T050 Remover `_remove_delivery_file` de `app/impressoes3d/nfc_ops.py` — ficou sem nenhum uso
       quando `remove_delivery` passou a apagar os três arquivos da entrega (unrequested)

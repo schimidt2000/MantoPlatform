@@ -365,8 +365,30 @@ A produção nunca ficou fora: o contêiner voltou sozinho e a sonda respondeu 2
 perdeu foi o trabalho, não dado — cada entrega é independente e o arquivo antigo só é apagado depois
 que o novo existe.
 
-**Pendência do dono.** Os dez vídeos em produção só passam a tocar depois de
-`flask nfc-reprocessar --execute` no Shell do Render, fora do horário (sem `--execute` ele mede).
+**Os dez vídeos, convertidos (09/09, 21h a 22h).** Depois da correção acima, a fila drenou em
+**42,8 minutos** — contra quase três horas para um vídeo e meio na primeira tentativa. Resultado:
+
+| Medida | Antes | Depois |
+|---|---|---|
+| Soma dos arquivos entregues | 935,3 MB | **143,4 MB** |
+| Maior arquivo | 146,7 MB | 22,1 MB |
+| Menor arquivo | 42,0 MB | 6,5 MB |
+| Resolução | 1080x1920 e 2160x3840 | 1080x1920 nos dez |
+| Com moldura gravada | 0 | **10 de 10** |
+| Pasta `nfc_media` inteira | 935 MB | 302 MB (entregues + mestres + sistema) |
+
+O SC-007 pedia queda de pelo menos 70%, para menos de 300 MB. Chegou a **68%** e 302 MB — dois
+pontos e dois megabytes aquém, porque agora se guarda um mestre por vídeo. Fica registrado como
+número real, não arredondado.
+
+**Pegadinha do reinício.** Cada reinício de contêiner no meio de uma conversão deixa dois órfãos no
+disco: o `.parcial` do arquivo que estava sendo escrito e o MESTRE do par que nunca se completou (o
+reprocessamento seguinte cria um par novo). Foram 62 MB em dois reinícios. A limpeza é segura e tem
+regra simples — arquivo que nenhuma linha de `nfc_tag_deliveries` referencia é órfão. Varrer isso no
+start ficou como dívida em `docs/05`.
+
+**Pendência do dono.** Nenhuma para os vídeos. O que falta é percorrer as cenas da página pública
+num navegador que anime (T045 do `tasks.md`).
 
 ---
 
