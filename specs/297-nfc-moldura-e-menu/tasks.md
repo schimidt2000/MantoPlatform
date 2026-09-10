@@ -311,14 +311,26 @@ a implementação satisfaz os 19 requisitos funcionais e as decisões do plano. 
 **cobertura de verificação** para o que hoje só foi comprovado à mão, uma conferência visual que
 esta máquina não conseguiu fazer, e uma função que ficou sem uso.
 
-- [ ] T045 Percorrer `/nfc/<code>` num navegador que ANIME — capa, abertura com som, menu, mensagem,
+- [~] T045 Percorrer `/nfc/<code>` num navegador que ANIME — capa, abertura com som, menu, mensagem,
       envio de recado, agradecimento, volta ao menu e segunda visita — mais a variante com "reduzir
       movimento" ligado, em viewport de celular, per FR-008 · FR-017 · Constituição X e XI (partial).
       Por que ficou de fora: o Browser pane desta sessão está recolhido e entrega ~1 quadro de
       `requestAnimationFrame` por 5,8 s, então o Framer Motion fica parado no estado inicial e o
       `AnimatePresence mode="wait"` nunca troca de cena; o Claude in Chrome não está conectado. O
       controle é a própria estrela que acende, código da feature 255 que roda em produção e aqui
-      também congela. Roteiro em `quickstart.md` §3
+      também congela. Roteiro em `quickstart.md` §3.
+
+      **PARCIALMENTE FEITO em 09/09, direto na produção** (o que não depende de animação):
+      a capa aparece na primeira visita; a segunda visita do mesmo aparelho abre direto no menu
+      (`localStorage`); os botões de Spotify e Instagram têm 48px, `target="_blank"` e
+      `rel="noopener noreferrer"` com as URLs vindas do servidor; código inexistente mostra o menu
+      genérico SEM o botão da mensagem e sem tela de erro; nenhuma rolagem horizontal.
+
+      **FALTA**: o movimento entre as cenas (capa → abertura com som → menu → mensagem → recado →
+      agradecimento) e a variante com "reduzir movimento". Quatro caminhos foram tentados para
+      destravar (frontar a aba, criar aba nova, abrir janela por script, esperar) e nenhum funciona:
+      o Chrome trata janela totalmente coberta como aba oculta e para o `requestAnimationFrame`.
+      Precisa de uma janela de navegador visível — checklist de um minuto em `quickstart.md` §3.
 - [X] T046 Cenário novo no `verify_297.py`: com o limitador LIGADO, o 11º recado da mesma
       origem devolve `429` **no envelope JSON** com mensagem em pt-BR, per FR-013 (partial). Hoje o
       verify desliga o limitador para poder repetir envios, e o comportamento só foi comprovado por
