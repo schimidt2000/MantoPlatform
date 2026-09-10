@@ -651,13 +651,21 @@ def url_publica_da_abertura() -> str | None:
 
 
 def reivindicar_proxima_entrega() -> NfcTagDelivery | None:
-    """Toma para si UMA entrega da fila, de forma atômica entre os três workers do gunicorn.
+    """Toma para si UMA entrega da fila, e só se NINGUÉM estiver convertendo neste instante.
 
-    O `AND processing_status = 'pendente'` depois do subselect não é redundância: sem ele, dois
-    workers que escolhessem a mesma linha no subselect fariam os dois o `UPDATE`. Com ele, só um
-    recebe `rowcount == 1`; o outro recebe zero e volta a dormir. Mesmo espírito do claim de
-    `app/calendar/sync.py`, mas na linha do trabalho em vez de em `site_settings` — aqui a unidade
-    de trabalho é o registro, não o ciclo.
+    Duas travas, e as duas são necessárias:
+
+    * O `AND processing_status = 'pendente'` depois do subselect impede que dois processos que
+      escolheram a MESMA linha no subselect façam os dois o `UPDATE`.
+    * O `NOT EXISTS` sobre `'processando'` impede o que aconteceu em produção em 09/09: o comando
+      `flask nfc-reprocessar` convertia um vídeo enquanto um worker do gunicorn convertia OUTRO.
+      Cada linha tinha um dono só, mas havia duas conversões simultâneas num contêiner de UMA CPU
+      — e a promessa de "um vídeo por vez" valia só dentro de cada processo. O contêiner acabou
+      reiniciado pelo Render, com o trabalho pela metade.
+
+    O par (claim + `NOT EXISTS`) roda numa instrução só, então a garantia é do banco, não do
+    Python: em qualquer instante existe no máximo uma entrega em `processando` na plataforma
+    inteira. É por isso que `destravar_presas` importa tanto — uma linha presa bloqueia a fila.
     """
     linha = db.session.execute(
         db.text(
@@ -665,6 +673,8 @@ def reivindicar_proxima_entrega() -> NfcTagDelivery | None:
             " WHERE id = (SELECT id FROM nfc_tag_deliveries"
             "             WHERE processing_status = 'pendente' ORDER BY id LIMIT 1)"
             "   AND processing_status = 'pendente'"
+            "   AND NOT EXISTS (SELECT 1 FROM nfc_tag_deliveries"
+            "                    WHERE processing_status = 'processando')"
             " RETURNING id"
         ),
         {"agora": datetime.utcnow()},
@@ -742,7 +752,14 @@ def processar_entrega(delivery: NfcTagDelivery) -> NfcTagDelivery:
     if moldura:
         caminho_entregue = os.path.join(_delivery_folder(), f"{nome_base}.mp4")
         try:
-            info = video_ops.converter(origem, caminho_entregue, moldura=moldura)
+            # A moldura é aplicada sobre o MESTRE, não sobre a origem. Parece detalhe e não é: a
+            # origem costuma ser 4K, e reler 4K uma segunda vez custa quatro vezes mais pixels
+            # para decodificar do que reler o mestre 1080p. Foi essa segunda passagem sobre o 4K
+            # que fez o reprocessamento dos dez vídeos rastejar em produção (09/09) — com `nice
+            # -n 19` numa CPU única e disputada, um vídeo levava dezenas de minutos.
+            # O custo é uma geração extra de compressão na borda emoldurada; o ganho é o
+            # reprocessamento caber numa janela de manutenção.
+            info = video_ops.converter(caminho_mestre, caminho_entregue, moldura=moldura)
         except video_ops.VideoIndisponivel as exc:
             avisos.append(f"A moldura não pôde ser aplicada: {exc}")
             caminho_entregue = os.path.join(_delivery_folder(), f"{nome_base}.mp4")

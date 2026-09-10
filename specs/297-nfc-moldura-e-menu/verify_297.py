@@ -22,7 +22,9 @@ Cenários:
  15. O 11º recado da mesma origem é barrado com `429` **no envelope JSON** da casa.
  16. Sem moldura cadastrada, o vídeo é entregue sem moldura, com o motivo à vista.
  17. Reprocessar parte do mestre, tira a moldura, e enfileirar duas vezes é recusado com `409`.
- 18. Limpeza.
+ 18. Com uma entrega em `processando`, ninguém mais reivindica — no máximo UMA conversão na
+     plataforma inteira, em qualquer instante.
+ 19. Limpeza.
 
 Os cenários 7, 8, 13, 15 e 17 DEVEM ser recusados pelo servidor — se passarem, o defeito é do verify.
 
@@ -678,6 +680,48 @@ def cen_17_reprocessar_parte_do_mestre() -> None:
     _garante(largura == 1080, f"o reprocessamento perdeu a normalização: {largura}")
 
 
+def cen_18_so_uma_conversao_por_vez_na_plataforma() -> None:
+    """Com uma entrega em `processando`, ninguém mais consegue reivindicar (incidente de 09/09).
+
+    O claim garantia um dono por LINHA, mas não impedia duas conversões simultâneas em processos
+    diferentes: o comando `flask nfc-reprocessar` convertia um vídeo enquanto um worker do gunicorn
+    convertia outro, num contêiner de UMA CPU. O Render reiniciou o contêiner com o trabalho pela
+    metade. A garantia agora é do banco, numa instrução só.
+    """
+    with app.app_context():
+        # Duas entregas pendentes de mentira, sem arquivo: o que se testa aqui é o claim.
+        a = NfcTagDelivery(tag_id=estado["tag_video_id"], kind="video",
+                           processing_status="pendente", is_active=False)
+        b = NfcTagDelivery(tag_id=estado["tag_video_id"], kind="video",
+                           processing_status="pendente", is_active=False)
+        db.session.add_all([a, b])
+        db.session.commit()
+        ids = [a.id, b.id]
+    try:
+        with app.app_context():
+            primeira = nfc_ops.reivindicar_proxima_entrega()
+            _garante(primeira is not None, "não conseguiu reivindicar a primeira entrega da fila")
+            segunda = nfc_ops.reivindicar_proxima_entrega()
+        _garante(
+            segunda is None,
+            "reivindicou uma SEGUNDA conversão com uma já em andamento — a trava não pegou",
+        )
+        com_processando = _no_banco(
+            "SELECT count(*) FROM nfc_tag_deliveries WHERE processing_status = 'processando'"
+        )
+        _garante(
+            com_processando[0] == 1,
+            f"há {com_processando[0]} entregas em processando; o invariante é no máximo 1",
+        )
+    finally:
+        with app.app_context():
+            for i in ids:
+                d = db.session.get(NfcTagDelivery, i)
+                if d is not None:
+                    db.session.delete(d)
+            db.session.commit()
+
+
 def limpar() -> None:
     db.session.rollback()
     settings = SiteSetting.query.get(1)
@@ -774,9 +818,10 @@ def main() -> int:
         cenario("15. limite de taxa devolve 429 em JSON", cen_15_limite_de_taxa_em_json)
         cenario("16. sem moldura cadastrada entrega assim mesmo", cen_16_sem_moldura_cadastrada_entrega_assim_mesmo)
         cenario("17. reprocessar parte do mestre", cen_17_reprocessar_parte_do_mestre)
+        cenario("18. só uma conversão por vez na plataforma", cen_18_so_uma_conversao_por_vez_na_plataforma)
     finally:
         with app.app_context():
-            cenario("18. limpeza", limpar)
+            cenario("19. limpeza", limpar)
 
     ok = sum(1 for _, passou, _ in resultados if passou)
     print(f"\n{ok}/{len(resultados)} OK")

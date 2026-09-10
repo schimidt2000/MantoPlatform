@@ -345,8 +345,28 @@ em processamento invisível para a cliente, segundo envio na fila recusado, víd
 moldura sem deformar, e limpeza. As requisições HTTP rodam **fora** de `app.app_context()` — dentro
 dele o `g` sobrevive entre requisições e o teste de "sem sessão" respondia 200.
 
+**Incidente no mesmo dia, e o que ele ensinou (09/09, ~20h35).** O primeiro reprocessamento dos
+dez vídeos foi disparado às 17h50 e o contêiner do Render **reiniciou sozinho** quase três horas
+depois, com 1 vídeo convertido e o segundo pela metade. Sem deploy novo e sem sinal de falta de
+memória (`oom_kill 0`, pico de 1,18 GB dos 2 GB). Duas falhas de projeto explicam:
+
+1. **"Um vídeo por vez" valia só dentro de cada processo.** O claim garantia um dono por LINHA, mas
+   nada impedia o comando `flask nfc-reprocessar` de converter um vídeo enquanto um worker do
+   gunicorn convertia outro — duas conversões simultâneas numa CPU única, com os três workers do
+   ERP disputando o mesmo processador. A trava agora é do banco, numa instrução só: o claim ganhou
+   `AND NOT EXISTS (… WHERE processing_status = 'processando')`, e o invariante "no máximo uma
+   conversão na plataforma inteira" virou o cenário 18 do verify.
+2. **A moldura era aplicada relendo o 4K.** `processar_entrega` convertia origem→mestre e depois
+   origem→entregue, decodificando o arquivo de 4K duas vezes. Passa a aplicar a moldura sobre o
+   MESTRE 1080p: quatro vezes menos pixels na segunda passagem, ao custo de uma geração extra de
+   compressão só na borda emoldurada.
+
+A produção nunca ficou fora: o contêiner voltou sozinho e a sonda respondeu 200 em 0,45 s. O que se
+perdeu foi o trabalho, não dado — cada entrega é independente e o arquivo antigo só é apagado depois
+que o novo existe.
+
 **Pendência do dono.** Os dez vídeos em produção só passam a tocar depois de
-`flask nfc-reprocessar --execute` no Shell do Render, fora do horário (o `--dry-run` mede antes).
+`flask nfc-reprocessar --execute` no Shell do Render, fora do horário (sem `--execute` ele mede).
 
 ---
 
