@@ -4,7 +4,12 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-09** · Estado do repositório: pós-feature
+> Última atualização: **2026-09-11** · Estado do repositório: pós-hotfix
+> **263b-hotfix-proxy-vazamento-sockets** (sem migration; em branch — o proxy Node do frontend
+> deixava aberto, para sempre, o socket com o backend de todo vídeo/foto que o cliente abandonava
+> no meio; 432 MB de buffer TCP no kernel mataram o contêiner por memória em 08/09 e 10/09; agora
+> `res 'close'` derruba `proxyReq`/`proxyRes`/`ReadStream`, mídia ganha prazo de inatividade de
+> 10 min e o servidor aceita upload de até 30 min) — antes dele pós-feature
 > **297-nfc-moldura-e-menu** (migration `c9f4a2b71e60`; os vídeos das tags NFC passam a ser
 > convertidos para 1080 com a moldura da Manto gravada, a página pública vira menu com vídeo de
 > abertura e recado da cliente, e o gerenciador mostra o estado da conversão) — antes dela pós-feature
@@ -89,6 +94,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **263b-hotfix-proxy-vazamento-sockets** | O `manto-frontend` morreu por memória duas vezes (08/09 e 10/09) com o processo Node em 85 MB: os outros 432 MB eram buffer de recepção TCP no kernel (`sock` do cgroup) em 142 sockets com o backend. O http-proxy só solta o upstream em `req 'aborted'`, que em Node ≥ 16 não dispara para GET cujo cliente some durante a resposta; o `proxyRes` ficava pausado e o socket em CLOSE_WAIT com a fila cheia — em mídia sem prazo nenhum desde a 263. Ganchos de `res 'close'` (`proxyReq.destroy()` e `res.on('pipe') → origem.destroy()`) e o inverso (`proxyReq 'close' → res.destroy()`, para o cliente não ficar mudo quando o Flask some), mídia com prazo de inatividade de 10 min em vez de 0, `requestTimeout` de 30 min (o default de 5 min respondia 408 a upload longo) e linha `[vida]` no log. `verify_263b` 21/21 no branch, 9/21 na `main`; três lentes adversariais sem refutação | 2026-09-11 | `—` | (aqui) | — |
 | **297-nfc-moldura-e-menu** | Os vídeos das tags NFC não tocavam porque eram os arquivos CRUS da câmera (4K, até 76 Mbps, 147 MB para 16 s) — íntegros e servidos certo, mas impossíveis de carregar em rede móvel. Pipeline de conversão em thread de fundo (1080 de largura, H.264+AAC, ~15 MB por 30 s) com a **moldura PNG do sistema gravada na borda** por `scale2ref` (uma moldura serve a qualquer tamanho); guarda um MESTRE sem moldura para reprocessar sem pedir o vídeo de volta. `/nfc/<code>` vira máquina de cenas — capa (o toque é o que libera o áudio), abertura, menu de três botões e mensagem especial com **recado da cliente**, que toca o sino da 272. Corrige de carona: corrida entre substituir e converter, `aspect-video` em vídeo vertical, MIME `video/m4v` inexistente, `errorhandler(429)` ausente (13 rotas públicas devolviam HTML cru) e o upload da tag sem isenção do prazo do proxy | 2026-09-09 | `c9f4a2b71e60` | (aqui) | — |
 | **296-revisao-harness** | Revisão do harness pós-Railway: constituição 3.0.0 (esteira em dois níveis, Regra Zero de numeração em `specs/`, XIII RBAC e XIV configuração/efeito externo novos, seção Operação e Deploy, Portões reescritos), `CLAUDE.md` e `DEVELOPMENT.md` reescritos, Spec Kit funcional num clone limpo (scripts bash versionados, templates adaptados, `.claude/` versionado com skills `manto-verify`/`manto-deploy`/`manto-conferir-tela` e `deny` no `settings.json`), `validar_startcommand.py` lendo o `render.yaml`, `railway.json`/`nixpacks.toml` apagados, `docs/00`/`01`/`05` com o Render como presente | 2026-09-08 | — | (aqui) | — |
 | **295-cookie-de-sessao-orfao** | A causa raiz que a 294 tornou visível: a feature 144 gravou cookies `session` no domínio `.mantoproducoes.com.br` para o `beta.*`; o beta morreu, a variável foi desligada, e o cookie ficou nos navegadores. Quem logou naquele período manda DOIS `session` na mesma requisição e o Werkzeug entrega o primeiro — com o mesmo `Path`, o mais antigo (RFC 6265 §5.4), que é o órfão. Login grava o cookie bom, a requisição seguinte é lida pelo órfão, 401 para sempre — e nenhum login conserta, porque o servidor não escreve mais naquele domínio. `after_request` recolhe o órfão quando chegam dois `session` e ninguém se autenticou (a sessão que funciona nunca é tocada; a 401 já carrega a cura), `SESSION_COOKIE_DOMINIOS_OBSOLETOS` com o domínio do beta no padrão, e o ERP passa a wirar `aoPerderSessao` como o portal já fazia | 2026-09-08 | — | (aqui) | — |
@@ -249,6 +255,80 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 263b — O proxy que guardava para sempre o vídeo que ninguém mais assistia            (2026-09-11 · hotfix · sem migration)
+
+**Sintoma.** Na noite de 10/09 o dono mandou os gráficos do Render: memória do `manto-frontend`
+subindo em escada de 55% para 100% (512 MB) ao longo do dia, p90 do backend com picos de 10 min,
+um upload de vídeo de tag NFC "travado em 43%" e a tela de login demorando "anos". Nas palavras
+dele: "talvez tenha alguma coisa acumulando e não saindo" — e "se esse processo de colocar a
+moldura no vídeo for muito custoso eu posso abandonar". Às 22:06 o Render matou o contêiner
+("Ran out of memory, used over 512MB") e o site voltou sozinho; o mesmo evento já tinha
+acontecido em 08/09 às 11:11, antes da 297.
+
+**Causa.** Medido por SSH no contêiner moribundo (01:03 UTC): o processo Node tinha 85 MB de RSS;
+os 432 MB restantes eram `sock` do cgroup — buffer de recepção TCP no kernel — em 142 sockets,
+com 147 descritores de socket e 27 de `apps/public/dist/index.html` abertos no processo;
+`memory.events max` = 726 446. O backend estava ocioso (threads em `futex`/`ep_poll`, `sock` de
+40 KB, nenhum ffmpeg): a conversão da 297 não tinha nada a ver, e não havia o que abandonar.
+
+O vazamento é do proxy (`frontend/server.js`, http-proxy 1.18.1), reproduzido localmente com o
+arquivo da `main` intacto. O http-proxy só solta a conexão com o Flask em `req.on('aborted')`, e
+em Node ≥ 16 o `req` de um GET é consumido e destruído no primeiro tick (autoDestroy) — quando o
+celular some no meio da RESPOSTA, nada mais dispara em `req`. O `proxyRes.pipe(res)` vê `res`
+fechar, faz `unpipe` e PAUSA `proxyRes`; pausado, o Node para de ler o socket do Flask, o kernel
+enche a fila de recepção (até 6 MB) e ninguém a esvazia: o socket fica em CLOSE_WAIT com os dados
+dentro até o processo morrer. Em rota `/api` o `proxyTimeout` de 180 s — que é de INATIVIDADE,
+não de duração — limpava; em mídia, que a 263 isentou com prazo 0, era para sempre. Cada vídeo
+aberto e abandonado (aba Vídeos com dez players, barra arrastada, `/nfc/<code>` fechada) deixava
+até 6 MB presos; 142 × ~3 MB = a escada. A 297 acelerou de 3,7 dias para 29 h porque a página
+pública passou a tocar vídeo. Upload abortado NÃO vaza (corpo incompleto ⇒ `'aborted'` dispara);
+o "travou em 43%" foi consequência: sem memória para socket, o contêiner nem fechava o TLS com o
+backend (`write ECONNRESET` no log das 21:50). Nas 24 h anteriores, zero linha `[proxy]` — o
+vazamento é silencioso.
+
+**Correção (só `frontend/server.js`).**
+1. `proxy.on('proxyReq')` registra `res.once('close')` → `proxyReq.destroy()` quando
+   `res.writableFinished` é false — solta o Flask também quando o cliente some depois de mandar
+   o corpo e antes da resposta.
+2. `res.on('pipe')` no handler destrói qualquer origem pipada em `res` no mesmo caso: o
+   `proxyRes` do Flask e o `ReadStream` do serve-handler (os 27 `index.html`).
+3. O inverso: `proxyReq.once('close')` → `res.destroy()` quando `res.writableEnded` é false. Se é
+   o Flask que some antes de terminar (prazo, worker reciclado, deploy no meio de um download), o
+   http-proxy destruía o `proxyRes` sem `end` e o cliente ficava mudo — sem EOF, o player não
+   refaz o `Range`. Achado por duas lentes da verificação adversarial; pré-existente em `/api`.
+4. Mídia deixa de ter prazo 0: `MEDIA_PROXY_TIMEOUT_MS` = 10 min de inatividade do socket com o
+   Flask (transferência que flui nunca dispara; o Chromium fecha sozinho a conexão de mídia ociosa
+   em ~15 s e reabre com `Range` ao dar play). O comentário passa a dizer o que o prazo mede.
+5. `server.requestTimeout` = 30 min (o default de 5 min do Node respondia 408 a qualquer upload
+   mais longo — defeito latente da 297; medido: upload de 330 s dá 408 na `main`, 200 no branch)
+   e `headersTimeout` = 60 s explícito.
+6. Linha `[vida]` a cada 5 min no log: conexões, clientes que sumiram, RSS, recursos vivos por
+   tipo e `sock`/total do cgroup — o que teria mostrado a escada na primeira hora.
+
+**Verificação.** `verify_263b.py` 21/21 contra o `server.js` do branch e 9/21 contra o da `main`
+(`--antes`), falhando exatamente nos cenários de abandono: 5 downloads de mídia abandonados →
+`main` deixa 5 sockets ESTABLISHED com o backend aos 12 s, o branch solta em 0,5 s; backend que
+já terminou (0,6 MB) → `main` 5 CLOSE_WAIT, branch 0; rota `/api` idem; cliente que some antes da
+resposta → `main` responde para ninguém e deixa CLOSE_WAIT, branch fecha antes de o backend
+responder; backend que morre no meio → `main` deixa o cliente mudo, branch entrega EOF em 0,5 s.
+Fluxos legítimos iguais nos dois: download de 40 MB por Range (206, bytes exatos), upload de
+20 MB com backend lento (200), JSON, SPA `/` e `/nfc/<code>`, redirect `/f/`, 502 com backend
+fora do ar. Não usa `manto_local`: o "banco" é `harness/upstream.js`, um backend falso que conta
+o que acontece com cada conexão. Três lentes adversariais independentes (regressão, eficácia,
+produção — 870 requisições legítimas sem erro, 200 abandonos em série, handles 249 × 349 na
+`main`, APIs conferidas na doc do Node 20) não refutaram. Node local 24.18; produção roda 20.20.2
+(mesma semântica de autoDestroy desde o 16).
+
+**Como conferir em produção.** Por SSH no `manto-frontend`, depois de abrir e fechar a aba
+Vídeos: `egrep "^(sock|anon) " /sys/fs/cgroup/memory.stat` — `sock` volta a poucos MB; no log,
+`[vida] … sumiram=N … sock=XMB` com `sumiram` subindo e `sock` estável. **O gráfico de memória
+do Render conta buffer TCP do kernel**: RSS baixo com memória em 100% é socket preso, não heap.
+
+**Fora de escopo.** `BACKEND_URL` pela URL pública (a rede privada do Render existe — hostname
+interno em Connect → Internal — mas mudar mexe em `Host`, cookie e `X-Forwarded-*`; registrado no
+docs/05); `keepAliveTimeout` de 5 s vs o idle do edge; cancelar o body do `fetch` do OG em 404;
+medir os descritores de `index.html` (cobertos pelo mesmo gancho, sem cenário próprio).
 
 ### 297 — A luminária vira portal: vídeo leve com moldura, menu na tag e o recado da cliente            (2026-09-09 · migration `c9f4a2b71e60`)
 
