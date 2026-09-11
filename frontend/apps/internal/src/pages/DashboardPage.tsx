@@ -30,6 +30,7 @@ import type {
 } from "../lib/types";
 import { SectorPanel, getUrgency } from "../components/SectorPanel";
 import { EncerrarFormularioDialog } from "../components/formularios/EncerrarFormularioDialog";
+import { mensagemDaApi, useManterEntreRepetidos } from "../lib/formulariosAdmin";
 import { HomeOverview, type HomeOverviewItem } from "../components/HomeOverview";
 import { HomePerformance, type PerformancePeriod } from "../components/HomePerformance";
 
@@ -484,6 +485,8 @@ function FormularioSemDestinoRow({
   const distancia = distanciaDaData(linha.dias_ate_a_data);
   const vezes = linha.formularios?.length ?? 1;
   const id = linha.representante_id;
+  const [repetidosAbertos, setRepetidosAbertos] = useState(false);
+  const reduceMotion = useReducedMotion();
   const detalhe = [linha.tipo_rotulo ?? "Formulário", chegouHa(linha.dias_desde_chegada)]
     .filter(Boolean)
     .join(" · ");
@@ -512,9 +515,16 @@ function FormularioSemDestinoRow({
             </MetricBadge>
           )}
           {linha.repetido && (
-            <MetricBadge tone="gold" size="xs">
-              preencheu {vezes} vezes
-            </MetricBadge>
+            <button
+              type="button"
+              onClick={() => setRepetidosAbertos((v) => !v)}
+              aria-expanded={repetidosAbertos}
+              className="cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <MetricBadge tone="gold" size="xs">
+                preencheu {vezes} vezes {repetidosAbertos ? "▴" : "▾"}
+              </MetricBadge>
+            </button>
           )}
           {linha.outro_com_evento && (
             <MetricBadge tone="neutral" size="xs">
@@ -536,6 +546,68 @@ function FormularioSemDestinoRow({
           </Link>
         </Button>
       </div>
+      <AnimatePresence initial={false}>
+        {linha.repetido && repetidosAbertos && (
+          <motion.div
+            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="basis-full overflow-hidden"
+          >
+            <RepetidosDaLinha linha={linha} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * Os formulários da mesma cliente, cada um com "Este é o que vale" (feature 298). Escolher um
+ * encerra os outros como "Repetido" — continuam guardados e dá para reabrir pela tela Formulários.
+ */
+function RepetidosDaLinha({ linha }: { linha: LinhaFormulario }) {
+  const manter = useManterEntreRepetidos();
+  return (
+    <div className="pt-2">
+      <ul className="space-y-1.5 border-l-2 border-line pl-3">
+        {(linha.formularios ?? []).map((f) => {
+          const escolhendoEste = manter.isPending && manter.variables === f.id;
+          return (
+            <li key={f.id} className="flex flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 text-ink">
+                {f.tipo_rotulo ?? "Formulário"} ·{" "}
+                {f.data_informada ? formatShortDate(f.data_informada) : "sem data"}
+                <span className="text-muted"> · {chegouHa(f.dias_desde_chegada)}</span>
+              </span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button asChild variant="ghost" size="sm">
+                  <Link to={`/formularios?resposta=${f.id}`}>Ver</Link>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  loading={escolhendoEste}
+                  onClick={() => manter.mutate(f.id)}
+                >
+                  Este é o que vale
+                </Button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {manter.isError ? (
+        <p role="alert" className="mt-1.5 text-xs text-red">
+          {mensagemDaApi(manter.error, "Não foi possível encerrar os repetidos. Tente novamente.")}
+        </p>
+      ) : (
+        <p className="mt-1.5 text-xs text-muted">
+          Os outros são encerrados como “Repetido” e continuam guardados.
+        </p>
+      )}
     </div>
   );
 }

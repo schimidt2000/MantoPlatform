@@ -218,6 +218,22 @@ export function useEncerrarFormulario() {
   });
 }
 
+/**
+ * "Este é o que vale" (feature 298): mantém o formulário e encerra como "Repetido" os outros sem
+ * destino do mesmo telefone. Recarrega todos os detalhes — os encerrados também mudaram.
+ */
+export function useManterEntreRepetidos() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<{ response?: FormResponseSummary; encerrados?: number[] }>(
+        `/api/formularios/respostas/${id}/manter-entre-repetidos`,
+        { method: "POST" },
+      ),
+    onSettled: () => invalidarDestinoDeFormulario(queryClient),
+  });
+}
+
 /** Desfaz o encerramento (feature 298). 409 quando outra pessoa já reabriu. */
 export function useReabrirFormulario() {
   const queryClient = useQueryClient();

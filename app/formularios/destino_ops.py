@@ -12,10 +12,12 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy.orm import joinedload
 
+from app import db
 from app.constants import (
     FORM_CLOSE_NOTE_MAX,
     FORM_CLOSE_REASON_LABELS,
     FORM_CLOSE_REASON_OUTRO,
+    FORM_CLOSE_REASON_REPETIDO,
     FORM_CLOSE_REASONS,
     FORM_COR_AMARELO_ATE_DIAS,
     FORM_COR_VERMELHO_ATE_DIAS,
@@ -28,6 +30,7 @@ from app.formularios.formularios_ops import (
     condicao_sem_destino,
     contar_por_destino,
     corte_de_chegada,
+    destino_de,
     dia_sp,
     iso_utc,
     limpar_encerramento,
@@ -68,6 +71,16 @@ class FormularioNaoEncerrado(Exception):
 
 class FormularioInexistente(LookupError):
     """O formulário sumiu entre a checagem do endpoint e o bloqueio (excluído por outra pessoa)."""
+
+
+class SemTelefone(Exception):
+    """Sem telefone não há "mesma cliente": nada a agrupar nem a encerrar como repetido (422)."""
+
+    MENSAGEM = "Este formulário não tem telefone: não há repetidos para encerrar."
+
+    def __init__(self) -> None:
+        self.message = self.MENSAGEM
+        super().__init__(self.message)
 
 
 def motivos_encerramento() -> list[dict]:
@@ -142,6 +155,51 @@ def encerrar(response_id: int, motivo: str | None, frase: str | None, usuario) -
     detalhe = f"motivo={motivo}" + (f"; frase={frase}" if frase else "")
     audit("formulario.encerrado", "form_response", response.id, response.contact_name, detalhe)
     return response
+
+
+def manter_entre_repetidos(response_id: int, usuario) -> list[int]:
+    """Mantém este formulário e encerra como "repetido" os outros sem destino do mesmo telefone.
+
+    Uma transação, com o mantido e os demais bloqueados (``FOR UPDATE``): duas pessoas escolhendo
+    formulários diferentes da mesma cliente não encerram os dois. Sem commit.
+
+    Returns:
+        Os ids encerrados — lista vazia quando já não havia repetido (outra pessoa resolveu antes).
+
+    Raises:
+        FormularioInexistente: o formulário foi excluído no meio do caminho.
+        FormularioJaTemDestino: o escolhido já não está sem destino.
+        SemTelefone: o escolhido não tem telefone.
+    """
+    mantido = bloquear_formulario(response_id)
+    if mantido is None:
+        raise FormularioInexistente()
+    corte = corte_de_chegada()
+    if destino_de(mantido, corte) != "sem_destino":
+        raise FormularioJaTemDestino()
+    if not mantido.contact_phone:
+        raise SemTelefone()
+    outros = (
+        FormResponse.query.filter(
+            condicao_sem_destino(corte),
+            FormResponse.contact_phone == mantido.contact_phone,
+            FormResponse.id != mantido.id,
+        )
+        .order_by(FormResponse.id)
+        .with_for_update()
+        .populate_existing()
+        .all()
+    )
+    for f in outros:
+        gravar_encerramento(f, FORM_CLOSE_REASON_REPETIDO, None, usuario.id)
+        audit(
+            "formulario.encerrado",
+            "form_response",
+            f.id,
+            f.contact_name,
+            f"motivo={FORM_CLOSE_REASON_REPETIDO}; mantido={mantido.id}",
+        )
+    return [f.id for f in outros]
 
 
 def reabrir(response_id: int) -> FormResponse:
@@ -246,6 +304,45 @@ def _ordenar(linhas: list[dict], *, mais_proxima_primeiro: bool) -> list[dict]:
     return com_data + sem_data
 
 
+def _telefones_com_evento(telefones: list[str], corte: datetime) -> set[str]:
+    """Telefones que já têm, desde o corte, outro formulário ligado a evento — uma consulta só."""
+    if not telefones:
+        return set()
+    linhas = (
+        db.session.query(FormResponse.contact_phone)
+        .filter(
+            FormResponse.contact_phone.in_(telefones),
+            FormResponse.created_at >= corte,
+            FormResponse.event_id.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+    return {t for (t,) in linhas}
+
+
+def _agrupar(formularios: list[FormResponse], corte: datetime, hoje: date) -> list[dict]:
+    """Uma linha por telefone (feature 298): a cliente que preencheu 2 vezes é UMA tarefa.
+
+    ``formularios`` chega do mais recente para o mais antigo, então o primeiro de cada grupo é o
+    representante. Sem telefone, cada formulário é a sua própria linha. O telefone é o normalizado
+    no envio — celular antigo sem o 9º dígito não agrupa (risco aceito, R9).
+    """
+    grupos: dict[str, list[FormResponse]] = {}
+    for f in formularios:
+        chave = f"tel:{f.contact_phone}" if f.contact_phone else f"id:{f.id}"
+        grupos.setdefault(chave, []).append(f)
+    com_evento = _telefones_com_evento(
+        [fs[0].contact_phone for fs in grupos.values() if fs[0].contact_phone], corte
+    )
+    linhas = []
+    for fs in grupos.values():
+        linha = _linha(fs, hoje)
+        linha["outro_com_evento"] = fs[0].contact_phone in com_evento
+        linhas.append(linha)
+    return linhas
+
+
 def listar_sem_destino(hoje_sp: date | None = None) -> dict:
     """Bloco ``formularios`` da Home: contagens, motivos e os dois grupos de linhas.
 
@@ -260,7 +357,7 @@ def listar_sem_destino(hoje_sp: date | None = None) -> dict:
         .order_by(FormResponse.created_at.desc())
         .all()
     )
-    linhas = [_linha([f], hoje) for f in formularios]
+    linhas = _agrupar(formularios, corte, hoje)
     return {
         "contagens": contar_por_destino(corte),
         "motivos_encerramento": motivos_encerramento(),

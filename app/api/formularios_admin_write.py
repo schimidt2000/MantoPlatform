@@ -5,8 +5,8 @@ feature). Reusa, sem duplicar, o núcleo já extraído em `app/formularios/formu
 
 RBAC (função no início de cada view — constituição XIII; tabela em `docs/01` §4.3):
   * `_require_vendas` (COMERCIAL, FINANCEIRO, SUPERADMIN): associar/desassociar cliente,
-    vincular/desvincular evento e, desde a 298, encerrar, reabrir, manter entre repetidos,
-    confirmar/descartar sugestão e usar a cliente do evento.
+    vincular/desvincular evento e, desde a 298, encerrar, reabrir, manter entre repetidos
+    (422 sem telefone), confirmar/descartar sugestão e usar a cliente do evento.
   * `_require_superadmin`: excluir resposta e o editor de estrutura.
 Conflito de destino (feature 298) → 409 "Este formulário já tem destino." em todos os caminhos.
 """
@@ -59,6 +59,33 @@ def api_formularios_encerrar(response_id: int) -> Any:
         return json_error(exc.message, 409)
     db.session.commit()
     return jsonify({"response": _resumo(response)})
+
+
+@api_bp.route(
+    "/formularios/respostas/<int:response_id>/manter-entre-repetidos", methods=["POST"]
+)
+@api_login_required
+def api_formularios_manter_entre_repetidos(response_id: int) -> Any:
+    """Mantém este formulário e encerra como repetido os outros sem destino do mesmo telefone."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    try:
+        encerrados = destino_ops.manter_entre_repetidos(response_id, current_user)
+    except destino_ops.FormularioInexistente:
+        db.session.rollback()
+        return json_error("Resposta não encontrada", 404)
+    except destino_ops.SemTelefone as exc:
+        db.session.rollback()
+        return json_error(exc.message, 422)
+    except formularios_ops.FormularioJaTemDestino as exc:
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    db.session.commit()
+    mantido = db.session.get(FormResponse, response_id)
+    return jsonify({"response": _resumo(mantido), "encerrados": encerrados})
 
 
 @api_bp.route("/formularios/respostas/<int:response_id>/reabrir", methods=["POST"])

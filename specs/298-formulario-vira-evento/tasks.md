@@ -356,12 +356,12 @@ formulários sem destino na Home e filtros por destino`.
 
 **Verificação da história (obrigatória)**: cenário 5 do `verify_298.py` em PASS.
 
-- [ ] T029 [US3] Em `app/formularios/destino_ops.py`, `listar_sem_destino` passa a agrupar por
+- [X] T029 [US3] Em `app/formularios/destino_ops.py`, `listar_sem_destino` passa a agrupar por
   `contact_phone`:
   - sem telefone → `chave="id:<id>"` sozinho;
   - representante = `created_at` mais recente; `repetido`; `formularios[]` com tipos misturados;
   - `outro_com_evento`, numa consulta em lote por `contact_phone IN (...)`.
-- [ ] T030 [US3] Em `app/formularios/destino_ops.py`, `manter_entre_repetidos(response_id, usuario) ->
+- [X] T030 [US3] Em `app/formularios/destino_ops.py`, `manter_entre_repetidos(response_id, usuario) ->
   list[int]`:
   - bloqueia o mantido e os demais sem destino do mesmo telefone desde o corte;
   - 409 se o mantido já tem destino; `SemTelefone` → 422;
@@ -369,7 +369,7 @@ formulários sem destino na Home e filtros por destino`.
 
   Em `app/api/formularios_admin_write.py`, criar `POST .../manter-entre-repetidos`, com
   `_require_vendas`.
-- [ ] T031 [US3] No front:
+- [X] T031 [US3] No front:
   - hook `useManterEntreRepetidos()` em `frontend/apps/internal/src/lib/formulariosAdmin.ts`;
   - em `frontend/apps/internal/src/pages/DashboardPage.tsx`, as marcas na ordem fixa; a expansão
     (`motion.div` com `useReducedMotion`, molde `ListaTruncada` `:193-224`) lista os formulários com
