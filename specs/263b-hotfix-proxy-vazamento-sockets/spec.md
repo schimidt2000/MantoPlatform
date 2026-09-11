@@ -1,7 +1,8 @@
 # Hotfix 263b — O proxy que guardava para sempre o vídeo que ninguém mais assistia
 
 **Branch**: `263b-hotfix-proxy-vazamento-sockets` (da `main`) · **Created**: 2026-09-11
-**Status**: Entregue — `verify_263b.py` 21/21 (aguardando push) · **Migration**: nenhuma
+**Status**: **EM PRODUÇÃO desde 2026-09-11 03:14** (merge `2914e98`) — `verify_263b.py` 21/21 ·
+**Migration**: nenhuma
 
 Filho da **263-endurecimento-concorrencia** (26/08/2026), que criou o `proxyTimeout` do proxy
 Node e isentou a mídia com prazo zero — a isenção é o que deixou este vazamento sem limite.
@@ -155,6 +156,11 @@ máquina; os trechos internos usados são iguais nas duas linhas); se o gunicorn
 upload > 5 min de parede (o `--timeout 120` é batimento do worker, não prazo de requisição).
 
 ## Como conferir em produção
+
+Conferido logo após o deploy (11/09 03:16): contêiner novo com Node 20.20.2, 78 MB de memória e
+4 KB de `sock`; 5 downloads do vídeo de abertura abandonados a 1 MB → `sock 0`, TCP inuse 2, 19
+descritores no node em 5 s. Antes do push, o contêiner reiniciado às 22:06 já tinha voltado a
+acumular 185 MB de `sock` em 70 sockets (02:14).
 
 Por SSH no `manto-frontend` (`srv-da8nvsgn74is73ehe9a0`), depois de abrir e fechar a aba Vídeos
 de `/3d/tags` algumas vezes: `egrep "^(sock|anon) " /sys/fs/cgroup/memory.stat` — `sock` volta a

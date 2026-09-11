@@ -5,7 +5,8 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-09-11** · Estado do repositório: pós-hotfix
-> **263b-hotfix-proxy-vazamento-sockets** (sem migration; em branch — o proxy Node do frontend
+> **263b-hotfix-proxy-vazamento-sockets** (sem migration; **EM PRODUÇÃO desde 11/09/2026 03:14**,
+> merge `2914e98` — o proxy Node do frontend
 > deixava aberto, para sempre, o socket com o backend de todo vídeo/foto que o cliente abandonava
 > no meio; 432 MB de buffer TCP no kernel mataram o contêiner por memória em 08/09 e 10/09; agora
 > `res 'close'` derruba `proxyReq`/`proxyRes`/`ReadStream`, mídia ganha prazo de inatividade de
@@ -319,6 +320,13 @@ o que acontece com cada conexão. Três lentes adversariais independentes (regre
 produção — 870 requisições legítimas sem erro, 200 abandonos em série, handles 249 × 349 na
 `main`, APIs conferidas na doc do Node 20) não refutaram. Node local 24.18; produção roda 20.20.2
 (mesma semântica de autoDestroy desde o 16).
+
+**Em produção desde 11/09/2026 03:14** (merge `2914e98`, deploy dos dois serviços; contêiner novo
+do frontend com Node 20.20.2, 78 MB de memória e 4 KB de `sock`). Prova feita em seguida contra a
+produção: 5 downloads do vídeo de abertura (`/api/nfc/abertura/video`, Range) abandonados a 1 MB
+→ `sock 0`, TCP inuse 2 e 19 descritores no node em 5 s — antes do hotfix cada um ficaria preso
+com MBs de fila no kernel. Antes do push, o contêiner reiniciado às 22:06 já tinha voltado a
+acumular 185 MB de `sock` em 70 sockets (02:14).
 
 **Como conferir em produção.** Por SSH no `manto-frontend`, depois de abrir e fechar a aba
 Vídeos: `egrep "^(sock|anon) " /sys/fs/cgroup/memory.stat` — `sock` volta a poucos MB; no log,
