@@ -1,6 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@manto/ui";
-import { useClientSearch, useQuickCreateClient, type ClientSummary } from "../lib/clientes";
+import {
+  useClientSearch,
+  useQuickCreateClient,
+  type ClientSummary,
+  type QuickCreateClientInput,
+} from "../lib/clientes";
 import type { ClientLinkInput } from "../lib/eventCreate";
 
 /** Cliente já escolhido — o vínculo persistido mais o nome, que é só de exibição. */
@@ -12,17 +17,22 @@ const FIELD = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm t
 
 /** Cadastro rápido de cliente inline (feature 184) — nome/telefone/empresa, sem sair do
  * formulário de evento. Reaproveita `useQuickCreateClient()` (feature 165): cria ou aproveita um
- * cliente já existente pelo telefone informado. */
+ * cliente já existente pelo telefone informado. Desde a 298 também leva e-mail e CPF/CNPJ, e pode
+ * nascer preenchido com os dados do formulário da cliente (`inicial`). */
 function QuickCreateClientForm({
+  inicial,
   onCreated,
   onCancel,
 }: {
+  inicial?: Partial<QuickCreateClientInput>;
   onCreated: (client: ClientSummary) => void;
   onCancel: () => void;
 }) {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [company, setCompany] = useState("");
+  const [name, setName] = useState(inicial?.name ?? "");
+  const [phone, setPhone] = useState(inicial?.phone ?? "");
+  const [company, setCompany] = useState(inicial?.company ?? "");
+  const [email, setEmail] = useState(inicial?.email ?? "");
+  const [documento, setDocumento] = useState(inicial?.cnpj ?? inicial?.cpf ?? "");
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; phone?: string }>({});
   const create = useQuickCreateClient();
 
@@ -33,8 +43,17 @@ function QuickCreateClientForm({
     setFieldErrors(errors);
     if (errors.name || errors.phone) return;
 
+    // CNPJ tem 14 dígitos; o resto vai como CPF e o servidor valida.
+    const doc = documento.trim();
+    const ehCnpj = doc.replace(/\D/g, "").length === 14;
     create.mutate(
-      { name: name.trim(), phone: phone.trim(), company: company.trim() || undefined },
+      {
+        name: name.trim(),
+        phone: phone.trim(),
+        company: company.trim() || undefined,
+        email: email.trim() || undefined,
+        ...(doc ? (ehCnpj ? { cnpj: doc } : { cpf: doc }) : {}),
+      },
       { onSuccess: (result) => onCreated(result) },
     );
   };
@@ -72,6 +91,26 @@ function QuickCreateClientForm({
             aria-label="Empresa"
           />
         </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted">E-mail (opcional)</label>
+          <input
+            className={FIELD}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            aria-label="E-mail"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted">CPF ou CNPJ (opcional)</label>
+          <input
+            className={FIELD}
+            inputMode="numeric"
+            value={documento}
+            onChange={(e) => setDocumento(e.target.value)}
+            aria-label="CPF ou CNPJ"
+          />
+        </div>
       </div>
       {create.isError && <p className="text-xs text-red">Não foi possível cadastrar o cliente.</p>}
       <div className="flex justify-end gap-2">
@@ -95,13 +134,20 @@ export function ClientPicker({
   value,
   onChange,
   relationOptions,
+  cadastroRapidoInicial,
 }: {
   value: SelectedClient[];
   onChange: (next: SelectedClient[]) => void;
   relationOptions: string[];
+  /** Feature 298: dados do formulário para o cadastro rápido, que então abre sozinho. */
+  cadastroRapidoInicial?: Partial<QuickCreateClientInput>;
 }) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
+  // Os dados chegam depois (a consulta do formulário é assíncrona): abre quando chegam.
+  useEffect(() => {
+    if (cadastroRapidoInicial) setCreating(true);
+  }, [cadastroRapidoInicial]);
   const search = useClientSearch(query);
   const results = search.data ?? [];
   const selectedIds = new Set(value.map((c) => c.client_id));
@@ -181,6 +227,7 @@ export function ClientPicker({
 
       {creating ? (
         <QuickCreateClientForm
+          inicial={cadastroRapidoInicial}
           onCreated={(client) => {
             addClient(client);
             setCreating(false);

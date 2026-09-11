@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Button } from "@manto/ui";
 import type { ObservationInput } from "../../lib/eventCreate";
-import { BlockCard, HELP } from "./shared";
+import { BlockCard, HELP, SeloDoFormulario } from "./shared";
 
 export interface ObservacoesBlockProps {
   observations: ObservationInput[];
@@ -46,6 +46,7 @@ export function ObservacoesBlock({
               <span className="text-ink">
                 {o.label && <span className="mr-2 text-xs text-muted">{o.label}</span>}
                 {o.obs_type === "image" ? `📷 ${o.file?.name ?? "foto"}` : o.content}
+                {o.do_formulario && <SeloDoFormulario />}
               </span>
               <Button type="button" variant="ghost" size="sm" onClick={() => removeObservation(i)}>
                 ✕

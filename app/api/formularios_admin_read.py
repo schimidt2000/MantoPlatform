@@ -162,6 +162,36 @@ def api_formularios_resposta_detail(response_id: int) -> Any:
     })
 
 
+@api_bp.route("/formularios/respostas/<int:response_id>/para-evento")
+@api_login_required
+def api_formularios_para_evento(response_id: int) -> Any:
+    """O formulário traduzido para o cadastro de evento (feature 298) — só leitura.
+
+    Gate de quem cria evento, não de quem vê formulário: FINANCEIRO vê a lista, mas não cria
+    evento. Não marca o aviso como lido — abrir o cadastro ainda não dá destino ao formulário.
+    """
+    if not _pode_criar_evento():
+        return json_error("Sem permissão", 403)
+    response = FormResponse.query.get(response_id)
+    if response is None:
+        return json_error("Resposta não encontrada", 404)
+    if response.event_id is not None:
+        return json_error(
+            formularios_ops.FormularioJaTemDestino.MENSAGEM, 409, event_id=response.event_id
+        )
+    from app.formularios import pre_evento_ops
+
+    return jsonify({
+        "form_response": {
+            "id": response.id,
+            "form_type": response.form_type,
+            "form_type_label": response.form_type_label,
+            "contact_name": response.contact_name,
+        },
+        **pre_evento_ops.extrair_para_evento(response),
+    })
+
+
 @api_bp.route("/formularios/editor/<form_type>")
 @api_login_required
 def api_formularios_editor_get(form_type: str) -> Any:

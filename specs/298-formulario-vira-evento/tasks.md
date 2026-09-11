@@ -426,7 +426,7 @@ nada sozinho e sem botão desabilitado.
 **Verificação da história (obrigatória)**: cenários 11 e 12 do `verify_298.py` em PASS; cadastro
 aberto a partir de um formulário do site, um da carga WhatsForm e um corporativo, **sem salvar**.
 
-- [ ] T035 [US5] Criar `app/formularios/pre_evento_ops.py` com `extrair_para_evento(response) -> dict`
+- [X] T035 [US5] Criar `app/formularios/pre_evento_ops.py` com `extrair_para_evento(response) -> dict`
   (`contracts/pre-evento.md`):
   - **Leitura das chaves:** constante `SINONIMOS` (chaves nativas e slugs WhatsForm), lida com
     `_valor(response, *chaves)`.
@@ -443,14 +443,14 @@ aberto a partir de um formulário do site, um da carga WhatsForm e um corporativ
   - **`eventos_da_cliente`:** desde o corte, não cancelados, fora de ensaio, **não satélite**, sem
     formulário, com cliente do mesmo telefone.
   - **Nunca** valor, vendedor nem título.
-- [ ] T036 [US5] Em `app/api/formularios_admin_read.py`, `GET .../para-evento`:
+- [X] T036 [US5] Em `app/api/formularios_admin_read.py`, `GET .../para-evento`:
   - gate pelo conjunto `_CAN_CREATE` (import tardio de `app.calendar.routes`, sem duplicar a regra);
   - 403, 404, e 409 se já tem evento;
   - só leitura, sem `marcar_lidas_por_objeto`.
-- [ ] T037 [P] [US5] Em `frontend/apps/internal/src/lib/formulariosAdmin.ts`, tipos `ParaEvento`,
+- [X] T037 [P] [US5] Em `frontend/apps/internal/src/lib/formulariosAdmin.ts`, tipos `ParaEvento`,
   `AlertaFormulario` e `ObservacaoRotulada` (campos opcionais), e o hook `useParaEvento(id)` (query
   `["formularios-para-evento", id]`).
-- [ ] T038 [US5] Props opcionais nos blocos do cadastro (usa os tipos da T037), sem mudar quem não as
+- [X] T038 [US5] Props opcionais nos blocos do cadastro (usa os tipos da T037), sem mudar quem não as
   passa:
   - `frontend/apps/internal/src/components/EventFormBlocks/{DadosEventoBlock,PagamentoBlock,ClienteBlock,ObservacoesBlock}.tsx`
     aceitam `doFormulario?: ReadonlySet<string>` e `alertas?: AlertaFormulario[]`: a marca "do
@@ -458,7 +458,7 @@ aberto a partir de um formulário do site, um da carga WhatsForm e um corporativ
   - `ClienteBlock` repassa `cadastroRapidoInicial?` ao `frontend/apps/internal/src/components/ClientPicker.tsx`,
     que abre o cadastro rápido sozinho (`creating`), e o `QuickCreateClientForm` ganha email e
     CPF/CNPJ, que o `QuickCreateClientInput` já aceita (`lib/clientes.ts:100-110`).
-- [ ] T039 [US5] Em `frontend/apps/internal/src/pages/EventCreatePage.tsx`, com `?form_response_id=`,
+- [X] T039 [US5] Em `frontend/apps/internal/src/pages/EventCreatePage.tsx`, com `?form_response_id=`,
   trocar `useFormResponseDetail` (`:61-67`) por `useParaEvento`:
   - **Preenchimento:**
     - efeito chaveado por `[paraEvento.data?.form_response?.id]`, com `setValue` campo a campo (ou
@@ -478,7 +478,7 @@ aberto a partir de um formulário do site, um da carga WhatsForm e um corporativ
     `divergencia_cliente`, mostrar as duas clientes antes de navegar.
   - **Erros:** 409 vira mensagem inline, e o botão não reenvia.
   - Corrigir o comentário de RBAC (`:58-60`).
-- [ ] T040 [US5] Em `frontend/apps/internal/src/lib/eventCreate.ts` (`useCreateEvent`/`useUpdateEvent`
+- [X] T040 [US5] Em `frontend/apps/internal/src/lib/eventCreate.ts` (`useCreateEvent`/`useUpdateEvent`
   `:187-212`) e `frontend/apps/internal/src/lib/eventInline.ts` (`useSetEventFormResponse`
   `:104-110`), invalidar `["dashboard"]`, `["formularios-respostas"]` e o sino, com
   `invalidarDestinoDeFormulario` (T025).

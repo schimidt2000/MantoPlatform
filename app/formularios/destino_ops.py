@@ -390,27 +390,23 @@ def _ordenar(linhas: list[dict], *, mais_proxima_primeiro: bool) -> list[dict]:
     return com_data + sem_data
 
 
-def _eventos_candidatos(
-    formularios: list[FormResponse],
-) -> dict[int, list[tuple[int, CalendarEvent]]]:
-    """Por formulário: os eventos da mesma cliente a até 3 dias da data informada (R10).
+def eventos_livres_por_telefone(telefones: set[str]) -> list[tuple[CalendarEvent, set[str]]]:
+    """Eventos que ainda podem receber formulário, das clientes com esses telefones (R10).
 
-    Três consultas para a lista inteira, não uma por linha: as fichas dos telefones, os eventos
-    dessas fichas que ainda podem receber formulário (não cancelado, fora de ensaio, não satélite,
-    sem formulário) e os pares já descartados. A cliente do evento é a contratante denormalizada
-    ou qualquer uma das associadas (`event_clients`).
+    Livre = não cancelado, fora de ensaio, não satélite e sem formulário ligado. A cliente do
+    evento é a contratante denormalizada ou qualquer uma das associadas (`event_clients`). Três
+    consultas, qualquer que seja o número de telefones — serve à sugestão da Home e ao aviso do
+    cadastro de evento (`pre_evento_ops`), para as duas regras não divergirem.
 
     Returns:
-        ``{id do formulário: [(dias de diferença, evento), ...]}`` — diferença = evento − data
-        informada, negativa quando o evento vem antes.
+        ``[(evento, telefones das clientes dele que estão em ``telefones``), ...]``.
     """
-    com_data = [f for f in formularios if f.contact_phone and f.event_date]
-    if not com_data:
-        return {}
-    fichas = Client.query.filter(Client.phone.in_({f.contact_phone for f in com_data})).all()
+    if not telefones:
+        return []
+    fichas = Client.query.filter(Client.phone.in_(telefones)).all()
     telefone_da_ficha = {c.id: c.phone for c in fichas}
     if not telefone_da_ficha:
-        return {}
+        return []
     ids = list(telefone_da_ficha)
     tem_formulario = exists().where(FormResponse.event_id == CalendarEvent.id)
     eventos = CalendarEvent.query.filter(
@@ -427,7 +423,7 @@ def _eventos_candidatos(
         ~tem_formulario,
     ).all()
     if not eventos:
-        return {}
+        return []
     telefones_do_evento: dict[int, set[str]] = {}
     for ev in eventos:
         if ev.client_id in telefone_da_ficha:
@@ -437,6 +433,27 @@ def _eventos_candidatos(
     ).all()
     for ec in associacoes:
         telefones_do_evento.setdefault(ec.event_id, set()).add(telefone_da_ficha[ec.client_id])
+    return [(ev, telefones_do_evento.get(ev.id, set())) for ev in eventos]
+
+
+def _eventos_candidatos(
+    formularios: list[FormResponse],
+) -> dict[int, list[tuple[int, CalendarEvent]]]:
+    """Por formulário: os eventos livres da mesma cliente a até 3 dias da data informada (R10).
+
+    Os eventos livres vêm em lote (`eventos_livres_por_telefone`), mais uma consulta para os pares
+    já descartados — nunca uma consulta por linha.
+
+    Returns:
+        ``{id do formulário: [(dias de diferença, evento), ...]}`` — diferença = evento − data
+        informada, negativa quando o evento vem antes.
+    """
+    com_data = [f for f in formularios if f.contact_phone and f.event_date]
+    if not com_data:
+        return {}
+    livres = eventos_livres_por_telefone({f.contact_phone for f in com_data})
+    if not livres:
+        return {}
     descartados = {
         (fid, eid)
         for fid, eid in db.session.query(
@@ -445,10 +462,10 @@ def _eventos_candidatos(
     }
     resultado: dict[int, list[tuple[int, CalendarEvent]]] = {}
     for f in com_data:
-        for ev in eventos:
+        for ev, telefones in livres:
             if ev.start_at is None or (f.id, ev.id) in descartados:
                 continue
-            if f.contact_phone not in telefones_do_evento.get(ev.id, ()):
+            if f.contact_phone not in telefones:
                 continue
             diferenca = (ev.start_at.date() - f.event_date).days
             if abs(diferenca) <= FORM_SUGESTAO_JANELA_DIAS:

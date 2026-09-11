@@ -3,10 +3,29 @@ import { useFormContext } from "react-hook-form";
 import { MoneyInput } from "@manto/money";
 import { FileUpload } from "@manto/ui";
 import type { EventFormValues } from "../../lib/eventFormSchema";
+import type { AlertaFormulario } from "../../lib/formulariosAdmin";
 import { GoogleAddressInput } from "../GoogleAddressInput";
-import { FIELD, FIELD_ERROR, LABEL, HELP, FieldError, BlockCard } from "./shared";
+import {
+  FIELD,
+  FIELD_ERROR,
+  LABEL,
+  HELP,
+  AlertasDoCampo,
+  DoFormulario,
+  FieldError,
+  BlockCard,
+} from "./shared";
 
 export interface DadosEventoBlockProps {
+  /** Feature 298: campos que vieram do formulário da cliente (marca "do formulário"). */
+  doFormulario?: ReadonlySet<string>;
+  /** Feature 298: o que não entrou do formulário, com o texto da cliente, mostrado no campo. */
+  alertas?: AlertaFormulario[];
+  /**
+   * Feature 298: data suspeita vinda do formulário. A caixa "A data está certa" dispensa a
+   * conferência — o Salvar nunca fica desabilitado por causa dela.
+   */
+  confirmacaoDaData?: { marcada: boolean; onChange: (marcada: boolean) => void };
   hasReembolso: boolean;
   onHasReembolsoChange: (value: boolean) => void;
   reembolsoDescription: string;
@@ -30,6 +49,9 @@ export function DadosEventoBlock({
   reembolsoInvoiceFile,
   onReembolsoInvoiceFileChange,
   existingReembolsoNote,
+  doFormulario,
+  alertas,
+  confirmacaoDaData,
 }: DadosEventoBlockProps) {
   const {
     register,
@@ -48,7 +70,7 @@ export function DadosEventoBlock({
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className={LABEL} htmlFor="date">
-            Data *
+            Data * <DoFormulario campo="date" doFormulario={doFormulario} />
           </label>
           <input
             id="date"
@@ -57,10 +79,22 @@ export function DadosEventoBlock({
             {...register("date")}
           />
           <FieldError message={errors.date?.message} />
+          <AlertasDoCampo campo="date" alertas={alertas} />
+          {confirmacaoDaData && (
+            <label className="mt-1.5 flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                className="h-5 w-5"
+                checked={confirmacaoDaData.marcada}
+                onChange={(e) => confirmacaoDaData.onChange(e.target.checked)}
+              />
+              A data está certa (conferi com a cliente)
+            </label>
+          )}
         </div>
         <div>
           <label className={LABEL} htmlFor="event_type">
-            Tipo
+            Tipo <DoFormulario campo="event_type" doFormulario={doFormulario} />
           </label>
           <select id="event_type" className={FIELD} {...register("event_type")}>
             <option value="">— Selecionar —</option>
@@ -69,12 +103,13 @@ export function DadosEventoBlock({
             <option value="R&I">R&amp;I — Receptivo e Interativo</option>
             <option value="VM">VM — Visita Mágica</option>
           </select>
+          <AlertasDoCampo campo="event_type" alertas={alertas} />
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className={LABEL} htmlFor="start">
-            Horário de início *
+            Horário de início * <DoFormulario campo="start" doFormulario={doFormulario} />
           </label>
           <input
             id="start"
@@ -83,10 +118,11 @@ export function DadosEventoBlock({
             {...register("start")}
           />
           <FieldError message={errors.start?.message} />
+          <AlertasDoCampo campo="start" alertas={alertas} />
         </div>
         <div>
           <label className={LABEL} htmlFor="end">
-            Horário de fim *
+            Horário de fim * <DoFormulario campo="end" doFormulario={doFormulario} />
           </label>
           <input
             id="end"
@@ -98,11 +134,12 @@ export function DadosEventoBlock({
           {!errors.end && overnight && (
             <p className={HELP}>↪ termina no dia seguinte</p>
           )}
+          <AlertasDoCampo campo="end" alertas={alertas} />
         </div>
       </div>
       <div>
         <label className={LABEL} htmlFor="location">
-          Local/Endereço do evento
+          Local/Endereço do evento <DoFormulario campo="location" doFormulario={doFormulario} />
         </label>
         {/* Autocomplete do Google Places (feature 195, Princípio X.3) — evita erro de logística e
             cálculo de distância impreciso. `setValue` no lugar do `register` porque o valor vem do
@@ -116,6 +153,7 @@ export function DadosEventoBlock({
         <p className={HELP}>
           Comece a digitar e escolha uma sugestão do Google Maps para gravar o endereço completo.
         </p>
+        <AlertasDoCampo campo="location" alertas={alertas} />
       </div>
       <div>
         <label className={LABEL} htmlFor="description">

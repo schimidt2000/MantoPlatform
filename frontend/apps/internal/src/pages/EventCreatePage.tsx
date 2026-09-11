@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, useReducedMotion } from "framer-motion";
-import { Button, PageHeader, Skeleton, Card, CardContent } from "@manto/ui";
+import { Button, PageHeader, Skeleton, Card, CardContent, formatShortDate } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { ApiRequestError } from "@manto/api-client";
 import { useCurrentUser } from "../lib/useAuth";
@@ -28,7 +28,14 @@ import {
 } from "../lib/eventCreate";
 import { enviarComprovante, enviarContrato, enviarReembolso } from "../lib/eventAttachments";
 import { enviarObservacaoComFoto } from "../lib/observations";
-import { useFormResponseDetail } from "../lib/formulariosAdmin";
+import {
+  mensagemDaApi,
+  useLinkEvent,
+  useParaEvento,
+  type AlertaFormulario,
+  type DivergenciaCliente,
+} from "../lib/formulariosAdmin";
+import { SeloDoFormulario } from "../components/EventFormBlocks/shared";
 import { hojeYmd } from "../lib/horaLocal";
 import type { SelectedFormResponse } from "../components/FormResponsePicker";
 import { ClienteBlock } from "../components/EventFormBlocks/ClienteBlock";
@@ -55,16 +62,18 @@ export function EventCreatePage() {
   const [searchParams] = useSearchParams();
   const orcamentoIdParam = searchParams.get("orcamento_id");
   const orcamentoId = orcamentoIdParam ? Number(orcamentoIdParam) : null;
-  // Pré-preenchimento a partir de uma resposta de formulário (tela `/formularios` → "Criar
-  // evento com os dados desta resposta"). Reusa o detalhe já exposto pela API, com o mesmo
-  // RBAC (_require_vendas) de quem cria evento — sem endpoint novo.
+  // Pré-preenchimento a partir de um formulário (Home "Criar evento", tela `/formularios`). A
+  // feature 298 trocou o detalhe da resposta (que só dava a data e a cliente) pelo `para-evento`:
+  // tudo o que a cliente escreveu, traduzido para o cadastro, com as marcas e os alertas. O RBAC
+  // é o de quem cria evento (`_CAN_CREATE`: COMERCIAL e SUPERADMIN), o mesmo do `POST /api/events`.
   const formResponseIdParam = searchParams.get("form_response_id");
   const formResponseId = formResponseIdParam ? Number(formResponseIdParam) : null;
 
   const currentUser = useCurrentUser();
   const options = useEventCreateOptions();
   const prefill = useOrcamentoPrefill(orcamentoId);
-  const formResponsePrefill = useFormResponseDetail(formResponseId);
+  const paraEvento = useParaEvento(formResponseId);
+  const ligar = useLinkEvent(formResponseId ?? 0);
   const createEvent = useCreateEvent();
 
   const [serverError, setServerError] = useState<string | null>(null);
@@ -83,6 +92,17 @@ export function EventCreatePage() {
   const [contractFile, setContractFile] = useState<File | null>(null);
   const [contractSigned, setContractSigned] = useState(false);
   const [observations, setObservations] = useState<ObservationInput[]>([]);
+  // Feature 298: o que veio do formulário (marca "do formulário"), os alertas no campo e a data
+  // suspeita, que pede conferência sem nunca desabilitar o Salvar.
+  const [doFormulario, setDoFormulario] = useState<ReadonlySet<string>>(new Set());
+  const [alertas, setAlertas] = useState<AlertaFormulario[]>([]);
+  const [dataDoFormulario, setDataDoFormulario] = useState<string | null>(null);
+  const [dataConfirmada, setDataConfirmada] = useState(false);
+  const [vinculado, setVinculado] = useState<{
+    eventId: number;
+    divergencia: DivergenciaCliente;
+  } | null>(null);
+  const formularioAplicado = useRef<number | null>(null);
 
   const [createdEventId, setCreatedEventId] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -98,7 +118,7 @@ export function EventCreatePage() {
     // servidor também assume hoje quando o campo vem vazio; aqui é para a pessoa VER a data.
     defaultValues: { ...DEFAULT_EVENT_FORM_VALUES, sale_date: hojeYmd() },
   });
-  const { handleSubmit, setError, setValue, setFocus, formState } = methods;
+  const { handleSubmit, setError, setValue, setFocus, clearErrors, watch, formState } = methods;
   const { errors, isSubmitting } = formState;
 
   // Pré-fill do orçamento: campos essenciais + elenco a partir dos cachês (feature 152, US4).
@@ -130,29 +150,93 @@ export function EventCreatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill.data?.orcamento_id]);
 
-  // Pré-fill da resposta de formulário: já deixa o pré-contrato vinculado, a data do evento
-  // preenchida e o cliente associado (quando a resposta já tem um) na lista de clientes.
+  // Pré-fill do formulário (feature 298): campo a campo com `setValue`, NUNCA um `reset` — que
+  // zeraria a data da venda (hotfix 267b) e o vendedor. Valor, vendedor e título não vêm do
+  // formulário. Chaveado pelo id e guardado num ref: o StrictMode roda o efeito duas vezes, e
+  // observações e personagens seriam somados em dobro.
   useEffect(() => {
-    const r = formResponsePrefill.data?.response;
-    if (!r) return;
-    setFormResponse({ id: r.id, name: r.contact_name, form_type: r.form_type_label });
-    if (r.event_date) setValue("date", r.event_date.slice(0, 10));
-    if (r.client_id) {
-      setClients((current) =>
-        current.some((c) => c.client_id === r.client_id)
+    const p = paraEvento.data;
+    const fr = p?.form_response;
+    if (!p || !fr || formularioAplicado.current === fr.id) return;
+    formularioAplicado.current = fr.id;
+    const v = p.valores ?? {};
+    const sujo = { shouldDirty: true } as const;
+    setFormResponse({ id: fr.id, name: fr.contact_name ?? "", form_type: fr.form_type_label ?? "" });
+    if (v.date) setValue("date", v.date, sujo);
+    if (v.start) setValue("start", v.start, sujo);
+    if (v.end) setValue("end", v.end, sujo);
+    if (v.location) setValue("location", v.location, sujo);
+    if (v.event_type) setValue("event_type", v.event_type, sujo);
+    if (v.payment_method) setValue("payment_method", v.payment_method, sujo);
+    if (v.payment_installments) {
+      setValue("payment_installments", String(v.payment_installments), sujo);
+    }
+    const doForm = v.clients ?? [];
+    if (doForm.length > 0) {
+      setClients((current) => [
+        ...current,
+        ...doForm
+          .filter((c) => !current.some((atual) => atual.client_id === c.client_id))
+          .map((c) => ({
+            client_id: c.client_id,
+            name: c.name ?? fr.contact_name ?? "Cliente",
+            relation: c.relation ?? "Contratante",
+          })),
+      ]);
+    }
+    const personagens = v.characters ?? [];
+    if (personagens.length > 0) {
+      setCharacters((current) =>
+        current.length > 0
           ? current
-          : [
-              ...current,
-              {
-                client_id: r.client_id!,
-                name: r.client_name ?? r.contact_name,
-                relation: "Contratante",
-              },
-            ],
+          : personagens.map((name) => ({
+              role_id: null,
+              name,
+              figurino_sheet_id: null,
+              cache_value: null,
+              needs_makeup: false,
+              is_singer: false,
+              talent_id: null,
+            })),
       );
     }
+    // Tema, aniversariante, espaço, briefing… viram observações rotuladas, nunca a descrição
+    // (que vai para o Google Agenda).
+    const notas = (p.observacoes ?? []).filter((o) => o.text?.trim());
+    if (notas.length > 0) {
+      setObservations((current) => [
+        ...current,
+        ...notas.map((o) => ({
+          obs_type: "text" as const,
+          content: o.text!.trim(),
+          label: o.label ?? "",
+          do_formulario: true,
+        })),
+      ]);
+    }
+    setDoFormulario(new Set(p.origem ?? []));
+    setAlertas(p.alertas ?? []);
+    setDataDoFormulario(v.date ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formResponsePrefill.data?.response?.id]);
+  }, [paraEvento.data?.form_response?.id]);
+
+  const dataAtual = watch("date");
+  const alertaDaData = alertas.find((a) => a.campo === "date" && a.motivo === "data_suspeita");
+  // A conferência só vale enquanto a data é a que veio do formulário: trocou, está conferida.
+  const pedeConferirData = Boolean(alertaDaData) && dataAtual === dataDoFormulario;
+  const eventosDaCliente = paraEvento.data?.eventos_da_cliente ?? [];
+
+  /** "Ligar a este evento": a cliente já tem a festa na agenda sem formulário (FR-013). */
+  const ligarAoEvento = (eventId: number) =>
+    ligar.mutate(eventId, {
+      onSuccess: (resultado) => {
+        if (resultado.divergencia_cliente) {
+          setVinculado({ eventId, divergencia: resultado.divergencia_cliente });
+          return;
+        }
+        navigate(`/events/${eventId}`);
+      },
+    });
 
   // Default do vendedor: o próprio usuário, se ele estiver na lista de vendedores.
   useEffect(() => {
@@ -277,6 +361,15 @@ export function EventCreatePage() {
   const onSubmit = handleSubmit(
     (values) => {
       setServerError(null);
+      // Data suspeita do formulário (feature 298): o Salvar nunca fica desabilitado. Salvar sem
+      // trocar a data nem marcar "A data está certa" aponta o campo com a explicação, e o efeito
+      // de foco (chaveado em `submitCount`) leva até ele.
+      if (pedeConferirData && !dataConfirmada) {
+        setError("date", {
+          message: `${alertaDaData?.mensagem ?? "A data informada parece errada."} Troque a data ou marque “A data está certa”.`,
+        });
+        return;
+      }
       const payload: EventCreateInput = {
         title: values.title,
         event_type: values.event_type,
@@ -457,6 +550,66 @@ export function EventCreatePage() {
           </div>
         )}
 
+        {formResponseId != null && paraEvento.isLoading && <Skeleton className="mt-4 h-14 w-full" />}
+        {paraEvento.isError && (
+          <div className="mt-4 rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
+            Não deu para trazer os dados do formulário:{" "}
+            {mensagemDaApi(paraEvento.error, "tente abrir de novo.")}
+          </div>
+        )}
+        {paraEvento.data?.form_response && (
+          <div className="mt-4 rounded-md bg-accent-soft px-4 py-3 text-sm text-ink" role="status">
+            Preenchido a partir do formulário de{" "}
+            <strong>{paraEvento.data.form_response.contact_name ?? "cliente"}</strong> — confira os
+            campos com o selo <SeloDoFormulario />. Valor, vendedor e título ficam com você.
+          </div>
+        )}
+        {eventosDaCliente.length > 0 && !vinculado && (
+          <div className="mt-3 space-y-2 rounded-md bg-gold-50 px-4 py-3 text-sm text-ink">
+            <p>
+              Esta cliente já tem evento na agenda sem formulário. Se for a mesma festa, ligue em vez
+              de criar outro:
+            </p>
+            <ul className="space-y-1.5">
+              {eventosDaCliente.map((ev) => (
+                <li key={ev.event_id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0">
+                    {ev.titulo ?? "Evento"} ·{" "}
+                    <span className="tabular-nums">{formatShortDate(ev.data ?? null)}</span>
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    loading={ligar.isPending && ligar.variables === ev.event_id}
+                    onClick={() => ligarAoEvento(ev.event_id)}
+                  >
+                    Ligar a este evento
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            {ligar.isError && (
+              <p role="alert" className="text-xs text-red">
+                {mensagemDaApi(ligar.error, "Não foi possível ligar. Tente novamente.")}
+              </p>
+            )}
+          </div>
+        )}
+        {vinculado && (
+          <div role="status" className="mt-3 space-y-2 rounded-md bg-gold-50 px-4 py-3 text-sm text-ink">
+            <p>
+              Formulário ligado. A cliente do formulário (
+              <strong>{vinculado.divergencia.formulario.nome ?? "sem nome"}</strong>) não é a cliente
+              do evento (<strong>{vinculado.divergencia.evento.nome ?? "sem nome"}</strong>) — o
+              evento não foi alterado.
+            </p>
+            <Button type="button" size="sm" onClick={() => navigate(`/events/${vinculado.eventId}`)}>
+              Abrir o evento
+            </Button>
+          </div>
+        )}
+
         <FormProvider {...methods}>
           <form ref={formRef} onSubmit={onSubmit} noValidate className="mt-4 space-y-4">
             <ClienteBlock
@@ -465,9 +618,25 @@ export function EventCreatePage() {
               relationOptions={opts.client_relation_tipos}
               formResponse={formResponse}
               onFormResponseChange={setFormResponse}
+              doFormulario={doFormulario}
+              alertas={alertas}
+              cadastroRapidoInicial={paraEvento.data?.valores?.quick_create_client ?? undefined}
             />
 
             <DadosEventoBlock
+              doFormulario={doFormulario}
+              alertas={alertas}
+              confirmacaoDaData={
+                pedeConferirData
+                  ? {
+                      marcada: dataConfirmada,
+                      onChange: (marcada) => {
+                        setDataConfirmada(marcada);
+                        if (marcada) clearErrors("date");
+                      },
+                    }
+                  : undefined
+              }
               hasReembolso={hasReembolso}
               onHasReembolsoChange={setHasReembolso}
               reembolsoDescription={reembolsoDescription}
@@ -531,6 +700,11 @@ export function EventCreatePage() {
               </Card>
             )}
 
+            {doFormulario.has("characters") && (
+              <p className="-mb-2 text-xs text-muted">
+                Personagens sugeridos a partir do formulário <SeloDoFormulario /> — confira.
+              </p>
+            )}
             <ElencoBlock
               characters={characters}
               onCharactersChange={setCharacters}
@@ -541,7 +715,12 @@ export function EventCreatePage() {
 
             <ValoresBlock sellers={opts.sellers} />
 
-            <PagamentoBlock proofs={paymentProofs} onProofsChange={setPaymentProofs} />
+            <PagamentoBlock
+              proofs={paymentProofs}
+              onProofsChange={setPaymentProofs}
+              doFormulario={doFormulario}
+              alertas={alertas}
+            />
 
             <ContratoBlock
               contractFile={contractFile}

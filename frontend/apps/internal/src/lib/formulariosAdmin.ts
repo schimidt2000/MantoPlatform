@@ -145,6 +145,80 @@ function invalidateResponse(queryClient: QueryClient, id: number) {
   invalidarDestinoDeFormulario(queryClient, id);
 }
 
+// ── Dados do formulário para o cadastro de evento (feature 298) ──────────────────
+// Contrato em `specs/298-formulario-vira-evento/contracts/pre-evento.md`. Tudo opcional: servidor
+// e site sobem separados e ficam ~1 min em versões diferentes em todo deploy.
+
+/** O que não entrou do formulário (ou entrou e pede conferência), mostrado no próprio campo. */
+export interface AlertaFormulario {
+  /** Campo do evento: `date`, `start`, `end`, `location`, `event_type`, `payment_method`, `clients`. */
+  campo?: string;
+  motivo?: string;
+  /** Explicação em pt-BR, escrita pelo servidor — a tela não conhece os códigos de motivo. */
+  mensagem?: string;
+  /** O que a cliente escreveu, para a comercial decidir. */
+  texto_da_cliente?: string | null;
+}
+
+export interface ObservacaoRotulada {
+  label?: string;
+  text?: string;
+}
+
+export interface EventoDaCliente {
+  event_id: number;
+  titulo?: string;
+  data?: string | null;
+}
+
+export interface ValoresDoFormulario {
+  date?: string;
+  start?: string;
+  end?: string;
+  location?: string;
+  event_type?: string;
+  payment_method?: string;
+  payment_installments?: number | null;
+  clients?: { client_id: number; relation?: string; name?: string }[];
+  /** Só quando não há ficha nem cliente pelo telefone: abre o cadastro rápido já preenchido. */
+  quick_create_client?: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    cpf?: string;
+    cnpj?: string;
+  } | null;
+  characters?: string[];
+}
+
+export interface ParaEvento {
+  form_response?: {
+    id: number;
+    form_type?: string;
+    form_type_label?: string;
+    contact_name?: string;
+  };
+  valores?: ValoresDoFormulario;
+  /** Campos preenchidos a partir do formulário — recebem a marca "do formulário". */
+  origem?: string[];
+  observacoes?: ObservacaoRotulada[];
+  alertas?: AlertaFormulario[];
+  /** Eventos da cliente sem formulário desde o corte: "não é um destes?" antes de criar outro. */
+  eventos_da_cliente?: EventoDaCliente[];
+}
+
+/**
+ * O formulário traduzido para o cadastro de evento (feature 298). Só leitura: não marca aviso
+ * como lido. 403 para quem não cria evento; 409 quando o formulário já tem destino.
+ */
+export function useParaEvento(id: number | null) {
+  return useQuery<ParaEvento>({
+    queryKey: ["formularios-para-evento", id],
+    queryFn: () => apiFetch<ParaEvento>(`/api/formularios/respostas/${id}/para-evento`),
+    enabled: id != null,
+  });
+}
+
 /** Mensagem da API em pt-BR, ou o texto de reserva quando a falha não veio do servidor. */
 export function mensagemDaApi(erro: unknown, reserva: string): string {
   return erro instanceof ApiRequestError && erro.message ? erro.message : reserva;
