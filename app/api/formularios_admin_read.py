@@ -153,6 +153,7 @@ def api_formularios_resposta_detail(response_id: int) -> Any:
         # Feature 298: os motivos vêm do servidor (a tela não tem cópia) e as flags dizem o que a
         # tela oferece — o servidor recusa o resto do mesmo jeito.
         "motivos_encerramento": destino_ops.motivos_encerramento(),
+        "sugestao": destino_ops.sugestao_para(response) if destino == "sem_destino" else None,
         "flags": {
             "pode_encerrar": destino == "sem_destino",
             "pode_reabrir": destino == "encerrados",

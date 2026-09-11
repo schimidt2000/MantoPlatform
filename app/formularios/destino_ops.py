@@ -10,6 +10,8 @@ repetidos e sugestão.
 
 from datetime import UTC, date, datetime
 
+from sqlalchemy import exists, not_, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import joinedload
 
 from app import db
@@ -22,10 +24,13 @@ from app.constants import (
     FORM_COR_AMARELO_ATE_DIAS,
     FORM_COR_VERMELHO_ATE_DIAS,
     FORM_DATA_SUSPEITA_ANOS,
+    FORM_SUGESTAO_JANELA_DIAS,
     now_sp,
 )
 from app.formularios.formularios_ops import (
     FormularioJaTemDestino,
+    VinculoResultado,
+    apply_event_link,
     bloquear_formulario,
     condicao_sem_destino,
     contar_por_destino,
@@ -36,8 +41,17 @@ from app.formularios.formularios_ops import (
     limpar_encerramento,
     tipo_rotulo,
 )
-from app.models import FormResponse
+from app.models import (
+    CalendarEvent,
+    Client,
+    EventClient,
+    FormResponse,
+    FormResponseDismissedEvent,
+)
 from app.utils import audit
+
+#: Mesmo recorte de `formularios_ops._real_event_candidates`: ensaio é evento de agenda, não festa.
+_PREFIXO_ENSAIO = "🟧 ENSAIO%"
 
 
 class ValidacaoEncerramento(Exception):
@@ -77,6 +91,26 @@ class SemTelefone(Exception):
     """Sem telefone não há "mesma cliente": nada a agrupar nem a encerrar como repetido (422)."""
 
     MENSAGEM = "Este formulário não tem telefone: não há repetidos para encerrar."
+
+    def __init__(self) -> None:
+        self.message = self.MENSAGEM
+        super().__init__(self.message)
+
+
+class SugestaoIndisponivel(LookupError):
+    """O evento sugerido não vale mais: sumiu, foi cancelado, mudou de data ou foi descartado (404)."""
+
+    MENSAGEM = "Esta sugestão não vale mais: o evento foi cancelado, excluído ou mudou de data."
+
+    def __init__(self) -> None:
+        self.message = self.MENSAGEM
+        super().__init__(self.message)
+
+
+class EventoJaTemFormulario(Exception):
+    """Outra pessoa ligou outro formulário a este evento enquanto a sugestão estava na tela (409)."""
+
+    MENSAGEM = "Este evento já tem outro formulário."
 
     def __init__(self) -> None:
         self.message = self.MENSAGEM
@@ -202,6 +236,58 @@ def manter_entre_repetidos(response_id: int, usuario) -> list[int]:
     return [f.id for f in outros]
 
 
+def confirmar_sugestao(response_id: int, event_id: int) -> VinculoResultado:
+    """ "Parece ser este evento, é?" → sim: liga pelo núcleo, como decisão humana — sem commit.
+
+    Formulário e evento ficam bloqueados: dois cliques, ou duas pessoas, não ligam dois
+    formulários ao mesmo evento. O evento precisa continuar candidato (R10).
+
+    Raises:
+        FormularioInexistente: o formulário foi excluído no meio do caminho.
+        SugestaoIndisponivel: o evento sumiu, foi cancelado ou deixou de ser candidato.
+        FormularioJaTemDestino: o formulário ganhou destino em outro lugar.
+        EventoJaTemFormulario: o evento ganhou outro formulário.
+    """
+    response = bloquear_formulario(response_id)
+    if response is None:
+        raise FormularioInexistente()
+    event = (
+        db.session.query(CalendarEvent)
+        .filter(CalendarEvent.id == event_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if event is None or event.cancelled_at is not None:
+        raise SugestaoIndisponivel()
+    if destino_de(response, corte_de_chegada()) != "sem_destino":
+        raise FormularioJaTemDestino()
+    if db.session.query(exists().where(FormResponse.event_id == event.id)).scalar():
+        raise EventoJaTemFormulario()
+    candidatos = _eventos_candidatos([response]).get(response.id, [])
+    if all(ev.id != event.id for _, ev in candidatos):
+        raise SugestaoIndisponivel()
+    return apply_event_link(response, event, source="manual")
+
+
+def descartar_sugestao(response_id: int, event_id: int, usuario) -> None:
+    """ "Não é este": o par nunca mais é sugerido — definitivo e idempotente, sem commit (R17).
+
+    ``ON CONFLICT DO NOTHING``: o segundo clique (ou a segunda pessoa) não vira erro. Ligar à mão
+    pela tela Formulários continua possível.
+    """
+    comando = (
+        pg_insert(FormResponseDismissedEvent)
+        .values(
+            form_response_id=response_id,
+            event_id=event_id,
+            dismissed_by_id=usuario.id,
+            dismissed_at=now_sp(),
+        )
+        .on_conflict_do_nothing(constraint="uq_form_response_dismissed_event")
+    )
+    db.session.execute(comando)
+
+
 def reabrir(response_id: int) -> FormResponse:
     """Desfaz o encerramento, com a linha bloqueada — sem commit.
 
@@ -304,6 +390,91 @@ def _ordenar(linhas: list[dict], *, mais_proxima_primeiro: bool) -> list[dict]:
     return com_data + sem_data
 
 
+def _eventos_candidatos(
+    formularios: list[FormResponse],
+) -> dict[int, list[tuple[int, CalendarEvent]]]:
+    """Por formulário: os eventos da mesma cliente a até 3 dias da data informada (R10).
+
+    Três consultas para a lista inteira, não uma por linha: as fichas dos telefones, os eventos
+    dessas fichas que ainda podem receber formulário (não cancelado, fora de ensaio, não satélite,
+    sem formulário) e os pares já descartados. A cliente do evento é a contratante denormalizada
+    ou qualquer uma das associadas (`event_clients`).
+
+    Returns:
+        ``{id do formulário: [(dias de diferença, evento), ...]}`` — diferença = evento − data
+        informada, negativa quando o evento vem antes.
+    """
+    com_data = [f for f in formularios if f.contact_phone and f.event_date]
+    if not com_data:
+        return {}
+    fichas = Client.query.filter(Client.phone.in_({f.contact_phone for f in com_data})).all()
+    telefone_da_ficha = {c.id: c.phone for c in fichas}
+    if not telefone_da_ficha:
+        return {}
+    ids = list(telefone_da_ficha)
+    tem_formulario = exists().where(FormResponse.event_id == CalendarEvent.id)
+    eventos = CalendarEvent.query.filter(
+        or_(
+            CalendarEvent.client_id.in_(ids),
+            CalendarEvent.id.in_(
+                select(EventClient.event_id).where(EventClient.client_id.in_(ids))
+            ),
+        ),
+        CalendarEvent.cancelled_at.is_(None),
+        CalendarEvent.group_leader_id.is_(None),
+        CalendarEvent.parent_event_id.is_(None),
+        not_(CalendarEvent.title.like(_PREFIXO_ENSAIO)),
+        ~tem_formulario,
+    ).all()
+    if not eventos:
+        return {}
+    telefones_do_evento: dict[int, set[str]] = {}
+    for ev in eventos:
+        if ev.client_id in telefone_da_ficha:
+            telefones_do_evento.setdefault(ev.id, set()).add(telefone_da_ficha[ev.client_id])
+    associacoes = EventClient.query.filter(
+        EventClient.event_id.in_([ev.id for ev in eventos]), EventClient.client_id.in_(ids)
+    ).all()
+    for ec in associacoes:
+        telefones_do_evento.setdefault(ec.event_id, set()).add(telefone_da_ficha[ec.client_id])
+    descartados = {
+        (fid, eid)
+        for fid, eid in db.session.query(
+            FormResponseDismissedEvent.form_response_id, FormResponseDismissedEvent.event_id
+        ).filter(FormResponseDismissedEvent.form_response_id.in_([f.id for f in com_data]))
+    }
+    resultado: dict[int, list[tuple[int, CalendarEvent]]] = {}
+    for f in com_data:
+        for ev in eventos:
+            if ev.start_at is None or (f.id, ev.id) in descartados:
+                continue
+            if f.contact_phone not in telefones_do_evento.get(ev.id, ()):
+                continue
+            diferenca = (ev.start_at.date() - f.event_date).days
+            if abs(diferenca) <= FORM_SUGESTAO_JANELA_DIAS:
+                resultado.setdefault(f.id, []).append((diferenca, ev))
+    return resultado
+
+
+def _sugestoes(formularios: list[FormResponse]) -> dict[int, dict]:
+    """A melhor sugestão de cada formulário: menor diferença; empate → o evento mais cedo."""
+    sugestoes = {}
+    for fid, candidatos in _eventos_candidatos(formularios).items():
+        diferenca, ev = min(candidatos, key=lambda c: (abs(c[0]), c[1].start_at))
+        sugestoes[fid] = {
+            "event_id": ev.id,
+            "titulo": ev.title,
+            "data": ev.start_at.date().isoformat(),
+            "dias_diferenca": diferenca,
+        }
+    return sugestoes
+
+
+def sugestao_para(response: FormResponse) -> dict | None:
+    """A sugestão de um formulário só (detalhe da tela Formulários), no formato da linha da Home."""
+    return _sugestoes([response]).get(response.id)
+
+
 def _telefones_com_evento(telefones: list[str], corte: datetime) -> set[str]:
     """Telefones que já têm, desde o corte, outro formulário ligado a evento — uma consulta só."""
     if not telefones:
@@ -335,10 +506,13 @@ def _agrupar(formularios: list[FormResponse], corte: datetime, hoje: date) -> li
     com_evento = _telefones_com_evento(
         [fs[0].contact_phone for fs in grupos.values() if fs[0].contact_phone], corte
     )
+    sugestoes = _sugestoes([fs[0] for fs in grupos.values()])
     linhas = []
     for fs in grupos.values():
         linha = _linha(fs, hoje)
         linha["outro_com_evento"] = fs[0].contact_phone in com_evento
+        # A sugestão é do representante: é nele que "Ligar" e "Não é este" agem.
+        linha["sugestao"] = sugestoes.get(fs[0].id)
         linhas.append(linha)
     return linhas
 

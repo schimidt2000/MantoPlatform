@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { ApiRequestError, apiFetch } from "@manto/api-client";
 import { invalidarNotificacoes } from "./notificacoes";
-import type { MotivoEncerramento } from "./types";
+import type { MotivoEncerramento, SugestaoDeEvento } from "./types";
 
 export interface FormResponseSummary {
   id: number;
@@ -105,6 +105,8 @@ export interface DetalheResposta {
   can_edit_structure: boolean;
   /** Opcionais (feature 298): servidor e site sobem separados. */
   motivos_encerramento?: MotivoEncerramento[];
+  /** Evento da cliente a até 3 dias — só quando o formulário está sem destino. */
+  sugestao?: SugestaoDeEvento | null;
   flags?: FlagsDoFormulario;
 }
 
@@ -231,6 +233,30 @@ export function useManterEntreRepetidos() {
         { method: "POST" },
       ),
     onSettled: () => invalidarDestinoDeFormulario(queryClient),
+  });
+}
+
+/** "Parece ser este evento, é?" → "Ligar" (feature 298). Pode voltar `divergencia_cliente`. */
+export function useConfirmarSugestao() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, eventId }: { id: number; eventId: number }) =>
+      apiFetch<ResultadoVinculo>(`/api/formularios/respostas/${id}/sugestao/${eventId}/confirmar`, {
+        method: "POST",
+      }),
+    onSettled: (_data, _erro, { id }) => invalidarDestinoDeFormulario(queryClient, id),
+  });
+}
+
+/** "Não é este" (feature 298): definitivo — a sugestão não volta para este formulário. */
+export function useDescartarSugestao() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, eventId }: { id: number; eventId: number }) =>
+      apiFetch<{ ok?: boolean }>(`/api/formularios/respostas/${id}/sugestao/${eventId}/descartar`, {
+        method: "POST",
+      }),
+    onSettled: (_data, _erro, { id }) => invalidarDestinoDeFormulario(queryClient, id),
   });
 }
 

@@ -387,7 +387,7 @@ confirmação.
 
 **Verificação da história (obrigatória)**: cenário 8 do `verify_298.py` em PASS.
 
-- [ ] T032 [US4] Em `app/formularios/destino_ops.py`, `sugerir_eventos(linhas) -> None` (R10):
+- [X] T032 [US4] Em `app/formularios/destino_ops.py`, `sugerir_eventos(linhas) -> None` (R10):
   - **uma** consulta de candidatos para todos os telefones:
     - `cancelled_at IS NULL`, fora de ensaio e **não satélite** (`group_leader_id IS NULL`);
     - `NOT EXISTS` formulário ligado;
@@ -395,7 +395,7 @@ confirmação.
     - sem par descartado;
   - em Python: |dias| ≤ `FORM_SUGESTAO_JANELA_DIAS`, menor diferença, empate → o mais cedo;
   - chamar dentro de `listar_sem_destino`, mais a irmã `sugestao_para(response)` para o detalhe.
-- [ ] T033 [US4] Em `app/formularios/destino_ops.py`:
+- [X] T033 [US4] Em `app/formularios/destino_ops.py`:
   - `confirmar_sugestao(response_id, event_id)`: bloqueia; valida que o evento continua candidato
     (404/409); chama `apply_event_link(..., source="manual")` e devolve `VinculoResultado`;
   - `descartar_sugestao(response_id, event_id, usuario)`: `INSERT … ON CONFLICT DO NOTHING` (ou
@@ -403,7 +403,7 @@ confirmação.
 
   Em `app/api/formularios_admin_write.py`, criar `POST .../sugestao/<event_id>/confirmar` e
   `.../descartar`. O detalhe ganha `sugestao`.
-- [ ] T034 [US4] No front:
+- [X] T034 [US4] No front:
   - hooks `useConfirmarSugestao()` e `useDescartarSugestao()`;
   - em `frontend/apps/internal/src/pages/DashboardPage.tsx`, a faixa "Parece ser o evento de DD/MM —
     [Ligar] [Não é este]", com entrada e saída em `motion` e `useReducedMotion`:

@@ -30,7 +30,13 @@ import type {
 } from "../lib/types";
 import { SectorPanel, getUrgency } from "../components/SectorPanel";
 import { EncerrarFormularioDialog } from "../components/formularios/EncerrarFormularioDialog";
-import { mensagemDaApi, useManterEntreRepetidos } from "../lib/formulariosAdmin";
+import { SugestaoDeEventoFaixa } from "../components/formularios/SugestaoDeEventoFaixa";
+import {
+  mensagemDaApi,
+  useManterEntreRepetidos,
+  type DivergenciaCliente,
+  type ResultadoVinculo,
+} from "../lib/formulariosAdmin";
 import { HomeOverview, type HomeOverviewItem } from "../components/HomeOverview";
 import { HomePerformance, type PerformancePeriod } from "../components/HomePerformance";
 
@@ -474,11 +480,13 @@ function FormularioSemDestinoRow({
   linha,
   podeCriarEvento,
   onEncerrar,
+  onLigado,
 }: {
   linha: LinhaFormulario;
   podeCriarEvento: boolean;
   /** Ausente quando o servidor não mandou os motivos (versão antiga no meio do deploy). */
   onEncerrar?: () => void;
+  onLigado?: (resultado: ResultadoVinculo, formularioId: number) => void;
 }) {
   const severidade = linha.severidade ?? "cinza";
   const nome = linha.cliente?.nome ?? linha.nome_no_formulario ?? "Sem nome";
@@ -546,6 +554,16 @@ function FormularioSemDestinoRow({
           </Link>
         </Button>
       </div>
+      <AnimatePresence initial={false}>
+        {linha.sugestao && (
+          <SugestaoDeEventoFaixa
+            key={linha.sugestao.event_id}
+            formularioId={id}
+            sugestao={linha.sugestao}
+            onLigado={(resultado) => onLigado?.(resultado, id)}
+          />
+        )}
+      </AnimatePresence>
       <AnimatePresence initial={false}>
         {linha.repetido && repetidosAbertos && (
           <motion.div
@@ -625,11 +643,13 @@ function GrupoFormularios({
   linhas,
   podeCriarEvento,
   onEncerrar,
+  onLigado,
 }: {
   titulo: string;
   linhas: LinhaFormulario[];
   podeCriarEvento: boolean;
   onEncerrar?: (linha: LinhaFormulario) => void;
+  onLigado?: (resultado: ResultadoVinculo, formularioId: number) => void;
 }) {
   const [expandida, setExpandida] = useState(false);
   const reduceMotion = useReducedMotion();
@@ -651,6 +671,7 @@ function GrupoFormularios({
               linha={linha}
               podeCriarEvento={podeCriarEvento}
               onEncerrar={onEncerrar ? () => onEncerrar(linha) : undefined}
+              onLigado={onLigado}
             />
           </motion.div>
         ))}
@@ -692,6 +713,17 @@ function FormulariosPanel({
   const [encerrando, setEncerrando] = useState<LinhaFormulario | null>(null);
   // Sem motivos (servidor antigo no meio do deploy) a ação não aparece em vez de abrir vazia.
   const aoEncerrar = motivos.length > 0 ? setEncerrando : undefined;
+  // A linha ligada sai da lista; a divergência de cliente precisa sobreviver a ela, então mora
+  // aqui no painel e não na linha.
+  const [divergente, setDivergente] = useState<{
+    formularioId: number;
+    divergencia: DivergenciaCliente;
+  } | null>(null);
+  const aoLigar = (resultado: ResultadoVinculo, formularioId: number) => {
+    if (resultado.divergencia_cliente) {
+      setDivergente({ formularioId, divergencia: resultado.divergencia_cliente });
+    }
+  };
 
   return (
     <SectorPanel
@@ -701,6 +733,21 @@ function FormulariosPanel({
       open={open}
       onOpenChange={onOpenChange}
     >
+      {divergente && (
+        <div role="status" className="mb-3 space-y-2 rounded-md bg-gold-50 px-3 py-2 text-sm text-ink">
+          <p>
+            Formulário ligado. A cliente do formulário (
+            <strong>{divergente.divergencia.formulario.nome ?? "sem nome"}</strong>) não é a cliente
+            do evento (<strong>{divergente.divergencia.evento.nome ?? "sem nome"}</strong>) — o evento
+            não foi alterado.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="ghost" onClick={() => setDivergente(null)}>
+              Manter assim
+            </Button>
+          </div>
+        </div>
+      )}
       {aChegar.length === 0 && jaPassou.length === 0 ? (
         <p className="py-2 text-sm text-muted">Nenhum formulário esperando evento ✓</p>
       ) : (
@@ -711,6 +758,7 @@ function FormulariosPanel({
               linhas={aChegar}
               podeCriarEvento={podeCriarEvento}
               onEncerrar={aoEncerrar}
+              onLigado={aoLigar}
             />
           )}
           {jaPassou.length > 0 && (
@@ -719,6 +767,7 @@ function FormulariosPanel({
               linhas={jaPassou}
               podeCriarEvento={podeCriarEvento}
               onEncerrar={aoEncerrar}
+              onLigado={aoLigar}
             />
           )}
         </div>

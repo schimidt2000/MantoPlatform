@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Button,
   Card,
@@ -23,6 +23,7 @@ import {
 } from "@manto/ui";
 import { FormFieldEditor } from "../components/FormFieldEditor";
 import { EncerrarFormularioDialog } from "../components/formularios/EncerrarFormularioDialog";
+import { SugestaoDeEventoFaixa } from "../components/formularios/SugestaoDeEventoFaixa";
 import { useClientSearch } from "../lib/clientes";
 import { useGastosEventos } from "../lib/gastos";
 import { useCurrentUser } from "../lib/useAuth";
@@ -460,11 +461,19 @@ function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () 
     );
   }
 
+  const sugestao = detalhe.data?.sugestao;
+
   return (
     <div className="space-y-2">
       <MetricBadge tone="gold" size="sm">
         Sem evento
       </MetricBadge>
+      {/* Mesma sugestão da Home (feature 298): a cliente já tem evento a até 3 dias. */}
+      <AnimatePresence initial={false}>
+        {sugestao && (
+          <SugestaoDeEventoFaixa key={sugestao.event_id} formularioId={id} sugestao={sugestao} />
+        )}
+      </AnimatePresence>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
           type="date"

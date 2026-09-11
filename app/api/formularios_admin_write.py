@@ -25,7 +25,7 @@ from app.api.formularios_admin_read import (
 )
 from app.api_utils import api_login_required, json_error
 from app.formularios import destino_ops, formularios_ops
-from app.models import FormFieldDefinition, FormResponse
+from app.models import CalendarEvent, FormFieldDefinition, FormResponse
 
 
 def _resumo(response: FormResponse) -> dict:
@@ -86,6 +86,56 @@ def api_formularios_manter_entre_repetidos(response_id: int) -> Any:
     db.session.commit()
     mantido = db.session.get(FormResponse, response_id)
     return jsonify({"response": _resumo(mantido), "encerrados": encerrados})
+
+
+@api_bp.route(
+    "/formularios/respostas/<int:response_id>/sugestao/<int:event_id>/confirmar",
+    methods=["POST"],
+)
+@api_login_required
+def api_formularios_confirmar_sugestao(response_id: int, event_id: int) -> Any:
+    """"Parece ser este evento, é?" → sim: liga o formulário ao evento sugerido (feature 298)."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    try:
+        resultado = destino_ops.confirmar_sugestao(response_id, event_id)
+    except destino_ops.FormularioInexistente:
+        db.session.rollback()
+        return json_error("Resposta não encontrada", 404)
+    except destino_ops.SugestaoIndisponivel as exc:
+        db.session.rollback()
+        return json_error(exc.message, 404)
+    except (formularios_ops.FormularioJaTemDestino, destino_ops.EventoJaTemFormulario) as exc:
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    db.session.commit()
+    response = db.session.get(FormResponse, response_id)
+    return jsonify({
+        "response": _resumo(response),
+        "divergencia_cliente": resultado.divergencia_cliente,
+    })
+
+
+@api_bp.route(
+    "/formularios/respostas/<int:response_id>/sugestao/<int:event_id>/descartar",
+    methods=["POST"],
+)
+@api_login_required
+def api_formularios_descartar_sugestao(response_id: int, event_id: int) -> Any:
+    """"Não é este": a sugestão não volta para este formulário (definitivo e idempotente)."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    if db.session.get(CalendarEvent, event_id) is None:
+        return json_error("Evento não encontrado", 404)
+    destino_ops.descartar_sugestao(response_id, event_id, current_user)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @api_bp.route("/formularios/respostas/<int:response_id>/reabrir", methods=["POST"])
