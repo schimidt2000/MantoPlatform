@@ -2,14 +2,26 @@
 
 Não confundir com `app/api/formularios_write.py` (fluxo público `/f/*`, intocado nesta
 feature). Reusa, sem duplicar, o núcleo já extraído em `app/formularios/formularios_ops.py`.
+
+RBAC (função no início de cada view — constituição XIII; tabela em `docs/01` §4.3):
+  * `_require_vendas` (COMERCIAL, FINANCEIRO, SUPERADMIN): associar/desassociar cliente,
+    vincular/desvincular evento e, desde a 298, encerrar, reabrir, manter entre repetidos,
+    confirmar/descartar sugestão e usar a cliente do evento.
+  * `_require_superadmin`: excluir resposta e o editor de estrutura.
+Conflito de destino (feature 298) → 409 "Este formulário já tem destino." em todos os caminhos.
 """
 
 from typing import Any
 
 from flask import jsonify, request
 
+from app import db
 from app.api import api_bp
-from app.api.formularios_admin_read import _require_superadmin, _require_vendas
+from app.api.formularios_admin_read import (
+    _require_superadmin,
+    _require_vendas,
+    _response_summary,
+)
 from app.api_utils import api_login_required, json_error
 from app.formularios import formularios_ops
 from app.models import FormFieldDefinition, FormResponse
@@ -62,10 +74,19 @@ def api_formularios_vincular_evento(response_id: int) -> Any:
     if not event_id:
         return json_error("Selecione um evento válido.", 400, fields={"event_id": "obrigatório"})
     try:
-        event = formularios_ops.link_event(response, int(event_id))
+        event, resultado = formularios_ops.link_event(response, int(event_id))
     except formularios_ops.FormValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
-    return jsonify({"event_id": event.id, "event_title": event.title})
+    except formularios_ops.FormularioJaTemDestino as exc:
+        # Até a 298 este caminho SOBRESCREVIA o vínculo; agora recusa como todos os outros.
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    return jsonify({
+        "response": _response_summary(response, formularios_ops.corte_de_chegada()),
+        "divergencia_cliente": resultado.divergencia_cliente,
+        "event_id": event.id,
+        "event_title": event.title,
+    })
 
 
 @api_bp.route("/formularios/respostas/<int:response_id>/desvincular-evento", methods=["POST"])

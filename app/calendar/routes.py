@@ -3613,17 +3613,27 @@ def _link_form_response(form_response_id: int | None, event_id: int) -> None:
 
     Marca o vínculo como decisão humana (``manual`` + ``locked``): o evento foi criado a
     partir desta resposta, então a automação nunca deve religá-la em outro lugar.
+
+    Feature 298: passa pelo NÚCLEO (``apply_event_link``) — antes gravava os campos à mão, sem
+    trazer a cliente nem apagar o aviso. Formulário já ligado a outro evento levanta
+    ``FormularioJaTemDestino`` (defesa: o ``POST /api/events`` já barrou antes do Google, com o
+    formulário bloqueado). A rota Jinja de criação não tem essa guarda prévia, mas `/events` não
+    passa pelo `server.js` — só o host do backend a alcança.
     """
     if form_response_id is None:
         return
-    from app.models import FormResponse
+    from app.formularios.formularios_ops import (
+        FormularioJaTemDestino,
+        apply_event_link,
+        bloquear_formulario,
+    )
 
-    fr = FormResponse.query.get(form_response_id)
-    if fr and fr.event_id is None:
-        fr.event_id = event_id
-        fr.event_link_source = "manual"
-        fr.event_link_ambiguous = False
-        fr.event_link_locked = True
+    fr = bloquear_formulario(form_response_id)
+    if fr is None or fr.event_id == event_id:
+        return
+    if fr.event_id is not None:
+        raise FormularioJaTemDestino()
+    apply_event_link(fr, db.session.get(CalendarEvent, event_id), source="manual")
 
 
 def _create_reembolso_entry(

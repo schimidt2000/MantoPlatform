@@ -644,6 +644,26 @@ def _client_pairs_from_json(raw: list) -> list[tuple[int, str]]:
     return pairs
 
 
+def _guarda_formulario_da_criacao(form_response_id: Any) -> Any:
+    """409 quando o formulário da criação já tem evento; bloqueia a linha até o commit (298).
+
+    Devolve a resposta de erro, ou ``None`` para seguir. Id ausente ou inválido não é assunto
+    desta guarda: segue, e o núcleo de criação ignora o que não existir.
+    """
+    if form_response_id is None:
+        return None
+    try:
+        fid = int(form_response_id)
+    except (TypeError, ValueError):
+        return None
+    from app.formularios.formularios_ops import FormularioJaTemDestino, bloquear_formulario
+
+    fr = bloquear_formulario(fid)
+    if fr is not None and fr.event_id is not None:
+        return json_error(FormularioJaTemDestino.MENSAGEM, 409, event_id=fr.event_id)
+    return None
+
+
 def _build_create_event_data(body: dict) -> dict:
     """Converte o corpo JSON de `POST /api/events` no `data` esperado pelo núcleo de criação
     (feature 152, `app/calendar/routes.py`). Sem nenhum campo de arquivo — money/ids já vêm como
@@ -724,6 +744,16 @@ def api_create_event() -> Any:
         return json_error("Sem permissão", 403)
 
     body = request.get_json(silent=True) or {}
+
+    # Feature 298: "Criar evento a partir do formulário" com um formulário que já tem evento é
+    # recusado ANTES de tudo — antes da validação e, sobretudo, antes do Google. O formulário fica
+    # BLOQUEADO (`FOR UPDATE`) até o commit do `_create_event_core`: dois cliques, ou duas pessoas,
+    # não passam juntos pela guarda e não deixam uma festa duplicada na Agenda. Custo aceito: a
+    # linha fica presa durante a chamada ao Google (~1 s). Nada comita entre aqui e o núcleo.
+    guarda = _guarda_formulario_da_criacao(body.get("form_response_id"))
+    if guarda is not None:
+        return guarda
+
     data = _build_create_event_data(body)
 
     from app.calendar.routes import _validate_event_core
@@ -772,15 +802,26 @@ def api_create_event() -> Any:
         )
 
     from app.calendar.routes import _create_event_core
+    from app.formularios.formularios_ops import FormularioJaTemDestino
 
-    event, conflicts = _create_event_core(
-        data,
-        google_event_id=created["id"],
-        gc_title=gc_title,
-        actor_name=current_user.name,
-        actor_id=current_user.id,
-        actor_role=", ".join(r.name for r in current_user.roles),
-    )
+    try:
+        event, conflicts = _create_event_core(
+            data,
+            google_event_id=created["id"],
+            gc_title=gc_title,
+            actor_name=current_user.name,
+            actor_id=current_user.id,
+            actor_role=", ".join(r.name for r in current_user.roles),
+        )
+    except FormularioJaTemDestino as exc:
+        # Defesa: com o formulário bloqueado pela guarda acima, isto não deveria acontecer.
+        from app import db
+
+        db.session.rollback()
+        current_app.logger.error(
+            "[agenda] formulário %s ganhou destino durante a criação; evento Google %s órfão",
+            data.get("form_response_id"), created.get("id"))
+        return json_error(exc.message, 409)
 
     impersonate = session.get("impersonate_role")
     result = serialize_event_detail(event, current_user, impersonate)
@@ -864,6 +905,15 @@ def api_update_event(event_id: int) -> Any:
         EventTypeChangeBlocked,
         update_event_core,
     )
+    from app.formularios.formularios_ops import FormularioJaTemDestino, bloquear_formulario
+
+    # Feature 298: pré-contrato de OUTRO evento é recusado antes de qualquer gravação (antes era
+    # ignorado em silêncio no meio do núcleo). O núcleo também recusa, como defesa.
+    fid = data.get("form_response_id")
+    if fid is not None:
+        fr = bloquear_formulario(fid)
+        if fr is not None and fr.event_id not in (None, event.id):
+            return json_error(FormularioJaTemDestino.MENSAGEM, 409)
 
     # Por injeção, não import: `event_ops` não pode depender de `app.financeiro` (a régua de 9
     # ramos da comissão é do outro domínio). Mesmo contrato do endpoint estreito `/comercial`.
@@ -884,6 +934,11 @@ def api_update_event(event_id: int) -> Any:
     # salvamento ficou gravado, mas o usuário precisa saber que o tipo continua o de antes —
     # sair de SHOW apaga ensaio e vaga de som para sempre e não pode rodar "no escuro".
     except EventTypeChangeBlocked as exc:
+        return json_error(exc.message, 409)
+    except FormularioJaTemDestino as exc:
+        from app import db
+
+        db.session.rollback()
         return json_error(exc.message, 409)
 
     result = _event_detail_json(event).get_json()
@@ -1053,9 +1108,18 @@ def api_set_event_form_response(event_id: int) -> Any:
         return json_error("form_response_id inválido", 400)
 
     from app.calendar.event_ops import set_event_form_response
+    from app.formularios.formularios_ops import FormularioJaTemDestino
 
-    if not set_event_form_response(event, raw) and raw is not None:
-        return json_error("Esse pré-contrato já está vinculado a outro evento", 409)
+    try:
+        vinculou = set_event_form_response(event, raw)
+    except FormularioJaTemDestino as exc:
+        # Mesma mensagem de todos os caminhos de vínculo (feature 298, FR-018).
+        from app import db
+
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    if not vinculou and raw is not None:
+        return json_error("Pré-contrato não encontrado", 404)
     return _event_detail_json(event)
 
 

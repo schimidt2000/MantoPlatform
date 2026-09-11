@@ -27,7 +27,6 @@ from app.formularios.formularios_ops import (
     _validate_dynamic,
     _whatsapp_link,
     attempt_auto_link_client,
-    ensure_event_client,
 )
 from app.models import FormFieldDefinition, FormResponse
 from app.notificacoes import notificacoes_ops
@@ -115,18 +114,16 @@ def api_formularios_submit(form_type: str) -> Any:
         _parse_event_date(f.get("data_evento")), sections)
 
     try:
-        result = _attempt_auto_link(response)
-        if result in ("auto_date", "auto_client"):
-            response.event_link_source = result
-        elif result == "ambiguous":
-            response.event_link_ambiguous = True
+        # A cliente pelo telefone vem ANTES do vínculo de evento (feature 298): o núcleo de
+        # vínculo leva a cliente do evento para o formulário, e se rodasse primeiro a origem
+        # ficaria 'evento' e o `fill_client_from_response` (que completa CPF/CNPJ e endereço na
+        # ficha) nunca rodaria. Evento, cliente do evento e aviso ficam por conta do núcleo.
         client_result = attempt_auto_link_client(response)
         if client_result:
             response.client_link_source = client_result
-            # Só quando o evento também foi identificado nesta passada: é o que o caminho
-            # manual (`link_event`) já faz, e é o que faz o evento aparecer na ficha dela.
-            if response.event_id is not None and response.event is not None:
-                ensure_event_client(response.event, response.client_id)
+        result = _attempt_auto_link(response)
+        if result == "ambiguous":
+            response.event_link_ambiguous = True
         if result or client_result:
             db.session.commit()
     except Exception:  # noqa: BLE001 — best-effort, a resposta já foi salva antes disso

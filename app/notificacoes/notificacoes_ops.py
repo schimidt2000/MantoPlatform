@@ -355,6 +355,44 @@ def marcar_lidas_por_objeto(user_id: int, entity_type: str, entity_id: int) -> i
     return resultado.rowcount or 0
 
 
+def marcar_lidas_por_entidade(entity_type: str, entity_id: int, kind: str | None = None) -> int:
+    """Marca lidas, para TODOS os destinatários, as notificações de um objeto (feature 298).
+
+    É o "o aviso some sozinho": quando o formulário ganha destino (vira evento ou é encerrado),
+    ninguém mais precisa ser avisado dele. Marcar como lida — e não apagar — preserva o histórico
+    de `/notificacoes`, deixa lida a que já estava lida, e a retenção de 30 dias limpa sozinha.
+    **Sem commit**: roda dentro da transação do fato (o vínculo, o encerramento).
+    """
+    condicoes = [
+        Notification.entity_type == entity_type,
+        Notification.entity_id == entity_id,
+        Notification.read_at.is_(None),
+    ]
+    if kind:
+        condicoes.append(Notification.kind == kind)
+    resultado = db.session.execute(update(Notification).where(*condicoes).values(read_at=now_sp()))
+    return resultado.rowcount or 0
+
+
+def marcar_lidas_por_entidades(entity_type: str, entity_ids, kind: str | None = None) -> int:
+    """Mesmo efeito de `marcar_lidas_por_entidade`, em lote (`entity_id IN (…)`), sem commit.
+
+    `entity_ids` pode ser lista ou subconsulta — é o que as correções únicas por CLI usam.
+    """
+    condicoes = [
+        Notification.entity_type == entity_type,
+        Notification.entity_id.in_(entity_ids),
+        Notification.read_at.is_(None),
+    ]
+    if kind:
+        condicoes.append(Notification.kind == kind)
+    resultado = db.session.execute(
+        update(Notification).where(*condicoes).values(read_at=now_sp()),
+        execution_options={"synchronize_session": False},
+    )
+    return resultado.rowcount or 0
+
+
 def apagar_por_entidade(entity_type: str, entity_id: int) -> int:
     """Apaga as notificações de um objeto — para a exclusão do objeto não deixar link morto."""
     resultado = db.session.execute(

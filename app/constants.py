@@ -367,6 +367,48 @@ VIRTUAL_REFUND_REASON_LABELS = {
     ),
 }
 
+# ── Destino do formulário (feature 298) ───────────────────────────────────────────────────────
+# Corte padrão de "o que é tarefa": a data de início do sistema (`SiteSetting.release_date`) manda;
+# esta constante só vale quando ela está vazia na configuração. Os formulários de 2023 a maio/2026
+# foram importados de propósito como HISTÓRICO de cliente — antes deste corte, nada vira pendência.
+CORTE_FORMULARIOS_PADRAO = date(2026, 6, 1)
+
+# Motivos de encerramento. `FORM_CLOSE_REASON_LABELS` é a ÚNICA fonte dos textos: a API manda a
+# lista pronta (`motivos_encerramento`) e a tela só desenha o que recebe — um motivo novo aqui
+# aparece sozinho no diálogo (Princípio I; mesmo padrão de `status_labels` do figurino).
+FORM_CLOSE_REASON_DESISTIU = "desistiu"
+FORM_CLOSE_REASON_REPETIDO = "repetido"
+FORM_CLOSE_REASON_ERRADO = "preenchido_errado"
+FORM_CLOSE_REASON_TESTE = "teste"
+FORM_CLOSE_REASON_OUTRO = "outro"  # exige frase
+FORM_CLOSE_REASONS = (
+    FORM_CLOSE_REASON_DESISTIU,
+    FORM_CLOSE_REASON_REPETIDO,
+    FORM_CLOSE_REASON_ERRADO,
+    FORM_CLOSE_REASON_TESTE,
+    FORM_CLOSE_REASON_OUTRO,
+)
+FORM_CLOSE_REASON_LABELS = {
+    FORM_CLOSE_REASON_DESISTIU: "A cliente desistiu",
+    FORM_CLOSE_REASON_REPETIDO: "Repetido",
+    FORM_CLOSE_REASON_ERRADO: "Preenchido errado",
+    FORM_CLOSE_REASON_TESTE: "Teste",
+    FORM_CLOSE_REASON_OUTRO: "Outro",
+}
+FORM_CLOSE_NOTE_MAX = 300
+
+# Janelas da lista da Home (decididas pelo dono no clarify de 10/09): sugestão de evento da mesma
+# cliente a até 3 dias; vermelho de 0 a 7 dias; amarelo de 8 a 30 e em todo "já passou"; data
+# informada mais de 2 anos à frente (ou antes da chegada) é suspeita.
+FORM_SUGESTAO_JANELA_DIAS = 3
+FORM_COR_VERMELHO_ATE_DIAS = 7
+FORM_COR_AMARELO_ATE_DIAS = 30
+FORM_DATA_SUSPEITA_ANOS = 2
+
+# O tipo exibido na linha: "Pré-contrato" (o `form_type_label` antigo) vale para os dois tipos no
+# vocabulário da feature — a linha diz "Festa" ou "Corporativo".
+FORM_TIPO_ROTULOS = {"comum": "Festa", "corporativo": "Corporativo"}
+
 VIRTUAL_NOTIFICATION_KIND_COMPRA = "compra_confirmada"
 VIRTUAL_NOTIFICATION_KIND_VIDEO = "video_pronto"
 VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO = "cancelamento"

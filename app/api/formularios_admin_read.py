@@ -2,8 +2,16 @@
 
 Não confundir com `app/api/formularios_write.py` (fluxo público `/f/*`, intocado nesta
 feature). Reusa, sem duplicar, o núcleo já extraído em `app/formularios/formularios_ops.py`.
+
+RBAC (função no início de cada view — constituição XIII; tabela em `docs/01` §4.3):
+  * `_require_vendas` (COMERCIAL, FINANCEIRO, SUPERADMIN, pelo papel REAL — o "Ver como" não se
+    aplica aqui, dívida 3.5): lista, busca e detalhe.
+  * `_can_create_event_papel` (COMERCIAL, SUPERADMIN — o `_CAN_CREATE` da agenda): dados do
+    formulário para o cadastro de evento (feature 298).
+  * `_require_superadmin`: editor de estrutura.
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
 from flask import jsonify, request
@@ -12,7 +20,7 @@ from flask_login import current_user
 from app import db
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
-from app.constants import RoleName
+from app.constants import FORM_CLOSE_REASON_LABELS, RoleName
 from app.formularios import formularios_ops
 from app.models import Client, FormResponse
 from app.notificacoes import notificacoes_ops
@@ -35,7 +43,17 @@ def _require_superadmin() -> Any:
     return None
 
 
-def _response_summary(r: FormResponse) -> dict:
+def _iso_utc(instante: datetime | None) -> str | None:
+    """`created_at`/`closed_at` são UTC ingênuo: sai com `+00:00` para o navegador converter certo.
+
+    Sem o fuso, `new Date(iso)` lia como hora local e a coluna "Recebida em" mostrava 3 h a mais
+    (corrigido de carona na feature 298).
+    """
+    return instante.replace(tzinfo=UTC).isoformat() if instante else None
+
+
+def _response_summary(r: FormResponse, corte: datetime) -> dict:
+    """Resumo de uma resposta. ``corte`` vem calculado UMA vez por requisição (sem N+1)."""
     return {
         "id": r.id,
         "form_type": r.form_type,
@@ -54,13 +72,21 @@ def _response_summary(r: FormResponse) -> dict:
         "event_link_source": r.event_link_source,
         "event_link_ambiguous": r.event_link_ambiguous,
         "event_link_locked": r.event_link_locked,
-        "created_at": r.created_at.isoformat(),
+        "created_at": _iso_utc(r.created_at),
+        # Feature 298: o destino (mesma regra das contagens, calculada no núcleo) e o encerramento.
+        "destino": formularios_ops.destino_de(r, corte),
+        "tipo_rotulo": formularios_ops.tipo_rotulo(r.form_type),
+        "closed_reason": r.closed_reason,
+        "closed_reason_label": FORM_CLOSE_REASON_LABELS.get(r.closed_reason or ""),
+        "closed_note": r.closed_note,
+        "closed_by_name": r.closed_by.name if r.closed_by else None,
+        "closed_at": _iso_utc(r.closed_at),
     }
 
 
-def _response_detail(r: FormResponse) -> dict:
+def _response_detail(r: FormResponse, corte: datetime) -> dict:
     return {
-        **_response_summary(r),
+        **_response_summary(r, corte),
         "data_sections": r.data_sections,
         "event_title": r.event.title if r.event else None,
     }
@@ -79,9 +105,10 @@ def api_formularios_respostas_list() -> Any:
     if denied:
         return denied
     filtro = (request.args.get("filtro") or "").strip()
+    corte = formularios_ops.corte_de_chegada()
     responses = formularios_ops.list_responses(filtro=filtro)
     return jsonify({
-        "responses": [_response_summary(r) for r in responses],
+        "responses": [_response_summary(r, corte) for r in responses],
         "counts": formularios_ops.count_status(),
     })
 
@@ -94,7 +121,8 @@ def api_formularios_respostas_search() -> Any:
     if denied:
         return denied
     results = formularios_ops.search_responses(request.args.get("q") or "")
-    return jsonify({"responses": [_response_summary(r) for r in results]})
+    corte = formularios_ops.corte_de_chegada()
+    return jsonify({"responses": [_response_summary(r, corte) for r in results]})
 
 
 @api_bp.route("/formularios/respostas/<int:response_id>")
@@ -116,7 +144,7 @@ def api_formularios_resposta_detail(response_id: int) -> Any:
     if response.client_id is None and response.contact_phone:
         suggested = Client.query.filter_by(phone=response.contact_phone).first()
     return jsonify({
-        "response": _response_detail(response),
+        "response": _response_detail(response, formularios_ops.corte_de_chegada()),
         "suggested_client": (
             {"id": suggested.id, "name": suggested.name} if suggested else None
         ),

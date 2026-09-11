@@ -69,11 +69,11 @@ compartilhado e fica na fase Foundational.
 
 ## Phase 1: Setup
 
-- [ ] T001 Commitar os artefatos de especificação na branch `298-formulario-vira-evento`:
+- [X] T001 Commitar os artefatos de especificação na branch `298-formulario-vira-evento`:
   - arquivos: `specs/298-formulario-vira-evento/{spec,plan,research,data-model,quickstart,tasks}.md`,
     `contracts/*.md`, `checklists/*.md` e `.specify/feature.json`;
   - mensagem: `docs(298): spec, plano, contratos e tarefas`.
-- [ ] T002 Acrescentar em `app/constants.py`, perto de `VIRTUAL_REFUND_REASON_*` (`:361-368`), as
+- [X] T002 Acrescentar em `app/constants.py`, perto de `VIRTUAL_REFUND_REASON_*` (`:361-368`), as
   constantes de `data-model.md` §3, cada bloco com o porquê:
   - `CORTE_FORMULARIOS_PADRAO = date(2026, 6, 1)`;
   - `FORM_CLOSE_REASON_DESISTIU`, `_REPETIDO`, `_ERRADO`, `_TESTE`, `_OUTRO`, mais
@@ -89,7 +89,7 @@ compartilhado e fica na fase Foundational.
 
 **⚠️ CRITICAL**: nenhuma história começa antes desta fase terminar.
 
-- [ ] T003 Em `app/models.py`, classe `FormResponse` (`:1923-1977`):
+- [X] T003 Em `app/models.py`, classe `FormResponse` (`:1923-1977`):
   - acrescentar `closed_reason` String(30), `closed_note` String(300), `closed_by_id` (FK
     `users.id`, `ondelete="SET NULL"`) e `closed_at` DateTime (UTC, `nullable=True`), com o
     relacionamento `closed_by`;
@@ -100,7 +100,7 @@ compartilhado e fica na fase Foundational.
   - criar a classe `FormResponseDismissedEvent`, sem backref (ou com `passive_deletes=True`), com
     `UniqueConstraint("form_response_id", "event_id", name="uq_form_response_dismissed_event")`. A
     docstring explica que as exclusões contam com o CASCADE do banco.
-- [ ] T004 Escrever à mão a migration `migrations/versions/<rev>_formulario_destino.py`:
+- [X] T004 Escrever à mão a migration `migrations/versions/<rev>_formulario_destino.py`:
   - `down_revision = "c9f4a2b71e60"`, docstring no formato de `c9f4a2b71e60_nfc_moldura_e_recados.py`;
   - `add_column` das 4 colunas via `batch_alter_table`, com FK nomeada;
   - índice parcial;
@@ -109,7 +109,7 @@ compartilhado e fica na fase Foundational.
 
   Aplicar com `.\.venv\Scripts\python.exe -m flask db upgrade` no `manto_local` e conferir que
   `flask db heads` mostra só a revision nova. Nunca `flask db migrate`.
-- [ ] T005 Escrever `specs/298-formulario-vira-evento/verify_298.py` com as **17 linhas** da tabela da
+- [X] T005 Escrever `specs/298-formulario-vira-evento/verify_298.py` com as **17 linhas** da tabela da
   spec, a partir do esqueleto de `specs/297-nfc-moldura-e-menu/verify_297.py`.
   - **Ambiente.** `setdefault` de `FLASK_ENV`, `MANTO_SEM_THREADS` e `DATABASE_URL`;
     `limiter.enabled = False`; `_engine_externo` + `_no_banco` para a conexão separada; `_usuario()`
@@ -146,7 +146,7 @@ compartilhado e fica na fase Foundational.
   - **Rodar agora.** Ele deve FALHAR nos cenários não construídos. Salvar a saída em
     `specs/298-formulario-vira-evento/verify_298_primeira_falha.txt`, que vai no commit da
     Foundational.
-- [ ] T006 Em `app/formularios/formularios_ops.py`, o corte e as partições, sem mudar ainda a forma de
+- [X] T006 Em `app/formularios/formularios_ops.py`, o corte e as partições, sem mudar ainda a forma de
   `count_status` (R1, R2, R28):
   - `corte_de_chegada() -> datetime`: `SiteSetting.release_date` ou `CORTE_FORMULARIOS_PADRAO`,
     meia-noite em `America/Sao_Paulo` convertida para UTC ingênuo;
@@ -155,13 +155,13 @@ compartilhado e fica na fase Foundational.
   - `destino_de(response, corte) -> str`, com as mesmas regras das condições (`data-model.md` §4 e §8);
   - `contar_por_destino(corte) -> dict` com `{total, sem_destino, com_evento, encerrados, historico,
     corte}`, numa query só.
-- [ ] T007 [P] Em `app/notificacoes/notificacoes_ops.py`:
+- [X] T007 [P] Em `app/notificacoes/notificacoes_ops.py`:
   - `marcar_lidas_por_entidade(entity_type: str, entity_id: int, kind: str | None = None) -> int`:
     UPDATE `read_at = now_sp()` com `read_at IS NULL`, sem filtro de usuário e sem commit (molde
     `:343-355`);
   - `marcar_lidas_por_entidades(entity_type, ids_subquery, kind) -> int`: a mesma coisa em lote, para
     o comando da T049.
-- [ ] T008 Em `app/formularios/formularios_ops.py`, estender o núcleo `apply_event_link(response, event,
+- [X] T008 Em `app/formularios/formularios_ops.py`, estender o núcleo `apply_event_link(response, event,
   *, source="manual", decisao_humana=True) -> VinculoResultado` (R4, R5, R26, R27):
   - **Encerramento:** limpa as 4 colunas quando `closed_at` existe.
   - **Cliente**, pelo helper `_cliente_do_evento_para(response, event)`, que escolhe o `EventClient`
@@ -178,35 +178,35 @@ compartilhado e fica na fase Foundational.
     `db.session.query(...).with_for_update()`, e a exceção `FormularioJaTemDestino`.
   - **Callers sem mudança:** `update_event_core` e `set_event_form_response` já chamam o núcleo
     (`event_ops.py:767-771`, `:1011-1014`), e os ajustes de 409 são da T013.
-- [ ] T009 Em `app/formularios/formularios_ops.py`, os caminhos pelo núcleo:
+- [X] T009 Em `app/formularios/formularios_ops.py`, os caminhos pelo núcleo:
   - `link_event`: bloqueia; `FormularioJaTemDestino` se `event_id` já existe (não sobrescreve mais);
     chama o núcleo, comita e devolve o resultado.
   - `_attempt_auto_link` (`:651`): `apply_event_link(..., source="auto_date", decisao_humana=False)`.
     A regra de casamento não muda (FR-011).
   - `retry_auto_link_pending` (`:689-714`): acrescenta `FormResponse.closed_at.is_(None)` e usa o
     núcleo com `decisao_humana=False`.
-- [ ] T010 Em `app/api/formularios_write.py:113-139`, no envio público (R22):
+- [X] T010 Em `app/api/formularios_write.py:113-139`, no envio público (R22):
   - `attempt_auto_link_client` roda **antes** de `_attempt_auto_link`, preservando `auto_phone` e o
     `fill_client_from_response`;
   - remover a regravação de `event_link_source` (`:119-120`) e o `ensure_event_client` duplicado
     (`:128-129`), que o núcleo já faz.
-- [ ] T011 Em `app/calendar/routes.py`, `_link_form_response` (`:3611-3626`) passa a usar
+- [X] T011 Em `app/calendar/routes.py`, `_link_form_response` (`:3611-3626`) passa a usar
   `bloquear_formulario` + `apply_event_link(response, event, source="manual")`. Se o formulário já tem
   evento, levanta `FormularioJaTemDestino` (defesa; a guarda da T012 barra antes). Sem refatoração
   lateral. Anotar num comentário que a rota Jinja de criação fica sem a guarda, porque `/events` não
   passa pelo `server.js`.
-- [ ] T012 Em `app/api/agenda_write.py`, `POST /api/events` (`:713-788`): com `form_response_id`,
+- [X] T012 Em `app/api/agenda_write.py`, `POST /api/events` (`:713-788`): com `form_response_id`,
   `bloquear_formulario` **antes** do `_insert_event` (`:763`), sem nenhum commit até o do
   `_create_event_core`.
   - Formulário já com evento → 409 "Este formulário já tem destino.", sem tocar o Google.
   - `FormularioJaTemDestino` vinda da T011 → 409.
   - Comentar o custo: a linha fica presa durante a chamada ao Google.
-- [ ] T013 Em `app/calendar/event_ops.py` (`update_event_core` `:767-771`; `set_event_form_response`
+- [X] T013 Em `app/calendar/event_ops.py` (`update_event_core` `:767-771`; `set_event_form_response`
   `:1011-1016`): formulário ligado a **outro** evento levanta `FormularioJaTemDestino` (hoje: silêncio
   e `False`), com `bloquear_formulario`. Em `app/api/agenda_write.py`, os dois `PATCH`
   (`/events/<id>` e `/events/<id>/form-response`, `:1036-1058`) mapeiam para 409 com a mensagem
   padrão.
-- [ ] T014 Em `app/api/formularios_admin_write.py`, `POST .../vincular-evento` (`:50-68`):
+- [X] T014 Em `app/api/formularios_admin_write.py`, `POST .../vincular-evento` (`:50-68`):
   `FormularioJaTemDestino` → 409; resposta `{"response": <resumo>, "divergencia_cliente": ...}`.
 
   Em `app/api/formularios_admin_read.py`, `_response_summary` (`:38-58`):
@@ -221,7 +221,9 @@ compartilhado e fica na fase Foundational.
 **Checkpoint**:
 - A migration está no `manto_local`, o núcleo único de vínculo está pronto e o Google fica fora do
   verify.
-- Os cenários 10 e 14a passam, porque são partes do núcleo; os demais falham pelos motivos certos.
+- Todos os cenários falham pelos motivos certos (endpoint que ainda não existe, bloco da Home no
+  formato antigo). Os cenários 10 e 14a exercitam o núcleo, mas dependem do `encerrar` da US2 no
+  meio do roteiro: passam ao fim da US2, não aqui (corrigido na implementação, 11/09).
 - Commit `feat(298): núcleo único de vínculo, corte e encerramento no banco`, com a primeira falha em
   anexo.
 

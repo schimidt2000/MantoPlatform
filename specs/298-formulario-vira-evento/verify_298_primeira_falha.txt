@@ -1,0 +1,102 @@
+﻿.\.venv\Scripts\python.exe : [2026-09-11 13:17:40,534] INFO in __init__: [links externos] 
+portal=https://portal.mantoproducoes.com.br plataforma=https://app.mantoproducoes.com.br
+At line:1 char:448
++ ... UTF8 = '1'; .\.venv\Scripts\python.exe specs\298-formulario-vira-even ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([2026-09-11 13:...roducoes.com.br:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\flask_limiter\extension.py:333: UserWarning: Using the 
+in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for 
+production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about 
+configuring the storage backend.
+[2026-09-11 13:17:41,522] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+C:\Users\schim\Desktop\Manto_Platform\specs\298-formulario-vira-evento\verify_298.py:278: DeprecationWarning: 
+datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to 
+represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  agora = datetime.utcnow()
+C:\Users\schim\Desktop\Manto_Platform\specs\298-formulario-vira-evento\verify_298.py:161: LegacyAPIWarning: The 
+Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The 
+method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: 
+https://sqlalche.me/e/b8d9)
+  settings = SiteSetting.query.get(1)
+[2026-09-11 13:17:42,640] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:42,836] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:42,983] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:43,127] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:43,275] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:43,420] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:43,616] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:43,746] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:43,895] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:44,041] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:44,178] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:44,314] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:44,451] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:44,584] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:44,712] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:44,879] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-09-11 13:17:45,027] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+Feature 298 — o formulário vira evento, contra manto_local
+  FALHA  1. antes do corte fica fora; data de início vazia = 01/06: bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  FALHA  2. grupo, cor, tipo, distância, ordem e papel: bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  FALHA  3. data passada → 'já passou': bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  FALHA  4. corporativo: bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  FALHA  5. mesmo telefone numa linha; escolher encerra o repetido: bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  FALHA  6. encerrar com motivo: 'outro' sem frase → 404
+  FALHA  7. reabrir: reabrir → 404
+  FALHA  8. sugestão: empate, descarte e confirmação: bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  FALHA  9. cliente vem junto; divergência: cliente do evento não veio: (None, None)
+  FALHA  10. cancelado, excluído, desvincular e histórico: encerrar I3 → 404
+  FALHA  11. dados para o cadastro nos dois formatos: para-evento 4061 → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA  12. alertas do cadastro: para-evento 4064 → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA  13. contagens somam e batem com a Home: contagens: {'ambiguos': 150, 'futuros_sem_evento': 41, 'sem_cliente': 93, 'sem_evento': 1354, 'total': 1538}
+  FALHA  14a. sync e segundo vínculo recusado (Google fora): encerrar L1 → 404
+  FALHA  14b. aviso que não nasce e comandos de correção: formulário que já nasce ligado gerou 6 aviso(s)
+  FALHA  15. papéis sem permissão recebem 403 (DEVEM falhar): CASTING encerrando → 404 (esperado exatamente 403)
+  OK     16. limpeza
+
+1/17 OK · chamadas ao Google: 0
+  - 1. antes do corte fica fora; data de início vazia = 01/06: AssertionError: bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  - 2. grupo, cor, tipo, distância, ordem e papel: AssertionError: bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  - 3. data passada → 'já passou': AssertionError: bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  - 4. corporativo: AssertionError: bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  - 5. mesmo telefone numa linha; escolher encerra o repetido: AssertionError: bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  - 6. encerrar com motivo: AssertionError: 'outro' sem frase → 404
+  - 7. reabrir: AssertionError: reabrir → 404
+  - 8. sugestão: empate, descarte e confirmação: AssertionError: bloco sem as listas: ['ambiguos', 'futuros_sem_evento', 'sem_cliente', 'sem_evento', 'total']
+  - 9. cliente vem junto; divergência: AssertionError: cliente do evento não veio: (None, None)
+  - 10. cancelado, excluído, desvincular e histórico: AssertionError: encerrar I3 → 404
+  - 11. dados para o cadastro nos dois formatos: }
+  - 12. alertas do cadastro: }
+  - 13. contagens somam e batem com a Home: AssertionError: contagens: {'ambiguos': 150, 'futuros_sem_evento': 41, 'sem_cliente': 93, 'sem_evento': 1354, 'total': 1538}
+  - 14a. sync e segundo vínculo recusado (Google fora): AssertionError: encerrar L1 → 404
+  - 14b. aviso que não nasce e comandos de correção: AssertionError: formulário que já nasce ligado gerou 6 aviso(s)
+  - 15. papéis sem permissão recebem 403 (DEVEM falhar): AssertionError: CASTING encerrando → 404 (esperado exatamente 403)
