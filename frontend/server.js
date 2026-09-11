@@ -33,6 +33,7 @@
  *                               Router (Banco de Figurinos) e um proxy amplo roubaria o deep link.
  */
 import fs from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,6 +98,59 @@ const BACKEND_URL = resolveBackendUrl(process.env.BACKEND_URL);
  */
 const proxy = httpProxy.createProxyServer({ changeOrigin: true, xfwd: true });
 
+/* ── Ciclo de vida da conexão com o Flask (incidente de 10/09/2026, hotfix 263b) ─────────────
+ *
+ * O Render matou este contêiner por memória duas vezes (08/09 11:11 e 10/09 22:06) com o
+ * processo Node em 85 MB de RSS. Os outros 432 MB do limite de 512 MB eram `sock` do cgroup —
+ * buffer de recepção TCP no kernel — em 142 sockets deste processo com o backend, e a memória
+ * subia em escada a cada vídeo que alguém abria e abandonava: a aba Vídeos de `/3d/tags` com dez
+ * players, a barra arrastada no celular, a página `/nfc/<code>` fechada no meio.
+ *
+ * Mecanismo, reproduzido e medido localmente antes do conserto (5 aborts = 5 sockets presos aos
+ * 200 s, zero linha de log): o http-proxy 1.18.1 só solta o upstream em `req.on('aborted')`. Em
+ * Node moderno o `req` de um GET é consumido e destruído assim que o corpo (vazio) termina — no
+ * primeiro tick —, então, quando o cliente some no meio da RESPOSTA, nada mais dispara em `req`.
+ * O `proxyRes.pipe(res)` vê `res` fechar, faz `unpipe` e PAUSA `proxyRes`; pausado, o Node para
+ * de ler o socket do Flask, o kernel enche a fila de recepção (até 6 MB) e ninguém a esvazia: o
+ * socket fica em CLOSE_WAIT com os dados dentro até o processo morrer. Em rota normal o
+ * `proxyTimeout` de 180 s (inatividade) limpava; em mídia, que tinha prazo 0, era para sempre.
+ *
+ * O único sinal confiável é `res 'close'` com `writableFinished === false`. Dois ganchos:
+ *  - aqui, `proxyReq.destroy()` derruba a conexão com o Flask — cobre também o cliente que some
+ *    DEPOIS de mandar o corpo inteiro e ANTES de o Flask responder, quando ainda não há `proxyRes`;
+ *  - no handler do servidor, `res.on('pipe')` destrói QUALQUER origem pipada em `res`: o
+ *    `proxyRes` do Flask e o `ReadStream` do serve-handler (27 descritores de `index.html` presos
+ *    no mesmo incidente, mesmo padrão).
+ * `destroy()` é idempotente: quando o `'aborted'` nativo também dispara (upload interrompido), a
+ * segunda chamada é inofensiva. Um upload interrompido continua sendo tratado pelo http-proxy
+ * como ECONNRESET, não como 502 — o `badGateway` abaixo não é chamado nesse caso.
+ *
+ * NÃO usar `req.on('close')` para isso: em Node ≥ 16 ele sai quando o CORPO termina de ser lido,
+ * e mataria toda requisição no começo da resposta. NÃO confiar em `req.on('aborted')`: está
+ * deprecado e é mudo depois de o corpo chegar inteiro.
+ */
+let clientesQueSumiram = 0;
+
+proxy.on("proxyReq", (proxyReq, req, res) => {
+  const soltar = () => {
+    if (res.writableFinished) return;
+    clientesQueSumiram += 1;
+    proxyReq.destroy();
+  };
+  if (res.destroyed) soltar();
+  else res.once("close", soltar);
+
+  // O caminho inverso: quando é o FLASK que some antes de terminar (prazo de inatividade, worker
+  // reciclado, deploy no meio de um download), o http-proxy destrói o `proxyRes` sem `end`, o
+  // pipe nunca chama `res.end()` e o cliente fica MUDO — sem EOF nem erro, o player não refaz o
+  // `Range` e a aba fica travada. Derrubar `res` é o sinal que falta. `writableEnded`, e não
+  // `writableFinished`: resposta que o pipe já encerrou e ainda drena para um cliente lento não
+  // pode ser derrubada (o Flask fecha a conexão logo depois do último byte — `connection: close`).
+  proxyReq.once("close", () => {
+    if (!res.writableEnded && !res.destroyed) res.destroy();
+  });
+});
+
 const SPA_REWRITE = [{ source: "**", destination: "/index.html" }];
 
 /**
@@ -125,7 +179,14 @@ const CACHE_HEADERS = [
   },
 ];
 
-/** Opções do `serve-handler` compartilhadas pelos três apps. */
+/**
+ * Opções do `serve-handler` compartilhadas pelos três apps.
+ *
+ * NÃO ligar `etag: true` sem tratar o 304: o serve-handler 6.1.7 abre o `ReadStream` do arquivo
+ * ANTES de comparar o ETag e, no caminho 304, responde sem `pipe` e sem `destroy` — o gancho de
+ * `res 'pipe'` do handler (hotfix 263b) não alcança esse stream, e cada 304 vazaria um descritor.
+ * Com `etag` desligado (o padrão) o caminho não existe; o cache é por `Cache-Control` acima.
+ */
 const SERVE_OPTIONS = { rewrites: SPA_REWRITE, cleanUrls: false, headers: CACHE_HEADERS };
 
 /** Apps montados sob um prefixo de URL, avaliados na ordem antes do app da raiz. */
@@ -533,15 +594,30 @@ function matchesPrefix(url, prefix) {
   return url === prefix || url.startsWith(`${prefix}/`) || url.startsWith(`${prefix}?`);
 }
 
-/* ── Prazo do proxy (incidente 26/08/2026) ───────────────────────────────────────────────────
+/* ── Prazo do proxy (incidente 26/08/2026; mídia revista no hotfix 263b, 11/09/2026) ───────
  *
  * O proxy nascia sem `proxyTimeout`: uma requisição presa no Flask segurava a conexão daqui
- * para sempre, e o usuário ficava com a ampulheta eterna. Agora há prazo — MENOS para mídia,
+ * para sempre, e o usuário ficava com a ampulheta eterna. Agora há prazo — MAIOR para mídia,
  * que legitimamente leva minutos (vídeo de centenas de MB em 4G) e não pode ser cortada no meio.
  * O prazo é folgado de propósito: existe requisição pesada legítima (PDF, exportação, fan-out
  * para o Google Calendar), e cortar cedo trocaria um problema raro por um frequente.
+ *
+ * O que o prazo mede — e isto importa: `proxyTimeout` vira `proxyReq.setTimeout`, que é o
+ * timeout de INATIVIDADE do socket com o Flask (rearmado a cada byte lido ou escrito), não a
+ * duração total da requisição. Transferência que flui, por mais lenta que seja, nunca o dispara;
+ * só dispara socket PARADO — cliente que sumiu sem avisar, vídeo pausado com o buffer cheio,
+ * Flask que parou de responder. A isenção da mídia (prazo 0) nasceu lendo o prazo como duração
+ * ("vídeo de centenas de MB leva minutos"), e a 297 estendeu a mesma leitura ao upload da tag;
+ * foi esse zero que deixou os sockets de vídeo abandonados viverem para sempre (ver "Ciclo de
+ * vida da conexão com o Flask"). Dez minutos parado é folga de sobra para celular trocando de
+ * rede; abaixo de 120 s não seria. Vídeo pausado nem chega perto: medido no Chromium, o player
+ * enche o buffer, para de ler e FECHA sozinho a conexão ociosa uns 15 s depois — ao dar play,
+ * reabre com `Range` de onde parou. O prazo é rede de segurança para cliente que não faça isso, e
+ * quando ele dispara o cliente é derrubado junto (gancho `proxyReq 'close'` acima), para o
+ * player refazer o pedido em vez de ficar mudo.
  */
 const PROXY_TIMEOUT_MS = 180_000;
+const MEDIA_PROXY_TIMEOUT_MS = 600_000;
 
 const MEDIA_PATTERNS = [
   /^\/uploads(?:[/?]|$)/,
@@ -556,7 +632,7 @@ const MEDIA_PATTERNS = [
   /^\/api\/3d\/nfc\/\d+\/entregas(?:[/?]|$)/,
 ];
 
-/** True se a URL entrega arquivo — nestas o proxy NÃO pode ter prazo. */
+/** True se a URL transporta arquivo — nestas vale o prazo de inatividade longo, nunca zero. */
 function isMediaRequest(url) {
   return MEDIA_PATTERNS.some((pattern) => pattern.test(url));
 }
@@ -570,6 +646,17 @@ function isBackendRequest(url) {
 }
 
 const server = http.createServer((req, res) => {
+  // Ver "Ciclo de vida da conexão com o Flask": tudo que é `origem.pipe(res)` — o `proxyRes` do
+  // Flask e o `ReadStream` do serve-handler — morre junto com `res` quando o cliente some antes
+  // do fim. Sem isto o pipe só faz `unpipe`, pausa a origem e deixa socket/descritor abertos.
+  res.on("pipe", (origem) => {
+    const soltar = () => {
+      if (!res.writableFinished) origem.destroy();
+    };
+    if (res.destroyed) soltar();
+    else res.once("close", soltar);
+  });
+
   // Regras de proxy para o backend Flask — antes dos SPAs, senão o fallback de `/catalogo` e
   // `/portal` devolveria `index.html` no lugar da mídia.
   if (req.url && isBackendRequest(req.url)) {
@@ -598,7 +685,7 @@ const server = http.createServer((req, res) => {
         res,
         {
           target: BACKEND_URL,
-          proxyTimeout: isMediaRequest(req.url) ? 0 : PROXY_TIMEOUT_MS,
+          proxyTimeout: isMediaRequest(req.url) ? MEDIA_PROXY_TIMEOUT_MS : PROXY_TIMEOUT_MS,
         },
         badGateway,
       );
@@ -703,6 +790,52 @@ const server = http.createServer((req, res) => {
   }
   return handler(req, res, { public: INTERNAL_DIR, ...SERVE_OPTIONS });
 });
+
+/* ── Prazos do servidor HTTP de entrada (hotfix 263b) ────────────────────────────────────────
+ *
+ * `requestTimeout` é o prazo do Node para receber a REQUISIÇÃO INTEIRA (cabeçalhos + corpo) e
+ * vale 5 min por padrão desde o Node 18: um upload de entrega NFC que leve mais que isso (250 MB
+ * a 5 Mbps são ~7 min) recebia 408 no meio, por mais que o prazo do proxy estivesse isento — o
+ * `proxyTimeout` só cuida do socket com o Flask, e este é o socket do CLIENTE. Trinta minutos
+ * cobrem a pior subida doméstica plausível e continuam finitos; a defesa contra requisição lenta
+ * maliciosa fica com o proxy do Render, que está na frente. `headersTimeout` fica explícito
+ * porque precisa ser <= `requestTimeout`.
+ */
+server.requestTimeout = 30 * 60 * 1000;
+server.headersTimeout = 60 * 1000;
+
+/**
+ * Sinal de vida a cada 5 min no log: conexões de entrada, clientes que sumiram no meio, RSS do
+ * processo, recursos vivos por tipo e — no Linux — o `sock` e o total do cgroup, que é o número
+ * que o gráfico de memória do Render mostra. É a linha que teria denunciado a escada de 29 h do
+ * incidente de 10/09/2026 na primeira hora. Leitura que falhar (fora do Linux, sem cgroup v2) é
+ * silenciosa; `unref()` para o timer não segurar o processo.
+ */
+function lerCgroup(arquivo) {
+  try {
+    return readFileSync(arquivo, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function sinalDeVida() {
+  const recursos = {};
+  for (const tipo of process.getActiveResourcesInfo()) recursos[tipo] = (recursos[tipo] ?? 0) + 1;
+  server.getConnections((err, conexoes) => {
+    const memoria = [`rss=${Math.round(process.memoryUsage().rss / 1048576)}MB`];
+    const atual = lerCgroup("/sys/fs/cgroup/memory.current");
+    if (atual) memoria.push(`cgroup=${Math.round(Number(atual) / 1048576)}MB`);
+    const sock = /^sock (\d+)$/m.exec(lerCgroup("/sys/fs/cgroup/memory.stat") ?? "");
+    if (sock) memoria.push(`sock=${Math.round(Number(sock[1]) / 1048576)}MB`);
+    console.log(
+      `[vida] conexoes=${err ? "?" : conexoes} sumiram=${clientesQueSumiram} ${memoria.join(" ")} ` +
+        `recursos=${JSON.stringify(recursos)}`,
+    );
+  });
+}
+
+setInterval(sinalDeVida, 5 * 60 * 1000).unref();
 
 server.listen(PORT, () => {
   const mounts = MOUNTED_APPS.map(({ prefix }) => `${prefix}/*`).join(", ");

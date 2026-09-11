@@ -1543,6 +1543,19 @@ primária, ele é a **única porta de entrada** (`app.mantoproducoes.com.br`) e 
 > rede privada configurada, e o bind do gunicorn (`--bind 0.0.0.0:$PORT`) mora dentro do
 > `startCommand` do `render.yaml`.
 
+> ⚠️ **O proxy solta o Flask quando o cliente some (hotfix 263b, 11/09/2026).** O http-proxy só
+> desliga o upstream em `req.on('aborted')`, que em Node ≥ 16 não dispara para um GET cujo cliente
+> some durante a resposta; sem os ganchos de `res 'close'` do `server.js` (`proxyReq.destroy()` e
+> `res.on('pipe') → origem.destroy()`; e o inverso, `proxyReq 'close' → res.destroy()`, para o
+> cliente não ficar mudo quando o Flask some), cada vídeo/foto abandonado deixava um socket em CLOSE_WAIT
+> com até 6 MB de fila no kernel — 432 MB de `sock` no cgroup e o contêiner morto por memória em
+> 08/09 e 10/09. **O gráfico de memória do Render conta buffer TCP do kernel**, não só o processo:
+> RSS baixo com memória em 100% é socket preso. `proxyTimeout` é prazo de INATIVIDADE do socket
+> com o Flask (180 s em rota normal, 10 min em mídia — nunca zero), e `server.requestTimeout` é
+> 30 min porque o default de 5 min do Node respondia 408 a upload longo. A linha `[vida]` do log
+> (a cada 5 min) traz `conexoes`, `sumiram`, `rss`, `cgroup` e `sock`; por SSH,
+> `egrep "^(sock|anon) " /sys/fs/cgroup/memory.stat` é a leitura direta.
+
 ### 5.2.2 Domínios e roteamento por host (feature 206)
 
 Os domínios customizados ativos (`app`, `portal`, `alo`) são custom domains do serviço `manto-frontend`
