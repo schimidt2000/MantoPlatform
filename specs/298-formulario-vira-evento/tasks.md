@@ -300,7 +300,7 @@ formulários sem destino na Home e filtros por destino`.
 
 **Verificação da história (obrigatória)**: cenários 6, 7, 10, 14a e 15 do `verify_298.py` em PASS.
 
-- [ ] T022 [US2] Em `app/formularios/destino_ops.py`, funções `encerrar(response_id, motivo, frase,
+- [X] T022 [US2] Em `app/formularios/destino_ops.py`, funções `encerrar(response_id, motivo, frase,
   usuario)` e `reabrir(response_id, usuario)`, com `bloquear_formulario` e sem commit:
   - **Validação:** motivo ∈ `FORM_CLOSE_REASONS`; frase obrigatória em `outro`, até
     `FORM_CLOSE_NOTE_MAX`. Erro levanta `ValidacaoEncerramento(campo, mensagem)`.
@@ -311,14 +311,14 @@ formulários sem destino na Home e filtros por destino`.
       "form_response", id, contact_name, "motivo=...; frase=...")` (`app/utils.py:46`).
   - **Reabrir:** exige que o formulário esteja encerrado (senão, conflito "não está mais
     encerrado"). Limpa as 4 colunas e grava `audit("formulario.reaberto", ...)`. Sem reemitir aviso.
-- [ ] T023 [US2] Em `app/api/formularios_admin_write.py`, criar `POST .../encerrar` e `.../reabrir`, com
+- [X] T023 [US2] Em `app/api/formularios_admin_write.py`, criar `POST .../encerrar` e `.../reabrir`, com
   `_require_vendas`: 400 com `fields`, 404, 409 (mensagem de cada caso), 422 no histórico, 200 com
   `{"response"}` e commit. Registrar no `RBAC:` do topo.
-- [ ] T024 [US2] Em `app/api/formularios_admin_read.py`, o detalhe (`:100-124`) ganha:
+- [X] T024 [US2] Em `app/api/formularios_admin_read.py`, o detalhe (`:100-124`) ganha:
   - `motivos_encerramento`;
   - `flags: {pode_encerrar, pode_reabrir, pode_criar_evento}`: `pode_encerrar` só em `sem_destino`,
     `pode_reabrir` só em `encerrados`, `pode_criar_evento` pelo conjunto `_CAN_CREATE`.
-- [ ] T025 [US2] Nas libs do front:
+- [X] T025 [US2] Nas libs do front:
   - `frontend/apps/internal/src/lib/notificacoes.ts` exporta `invalidarNotificacoes(qc)` (prefixo
     `["notificacoes"]`);
   - `frontend/apps/internal/src/lib/formulariosAdmin.ts` ganha:
@@ -328,7 +328,7 @@ formulários sem destino na Home e filtros por destino`.
     - a atualização de `useLinkEvent` (`:112-122`) para o retorno `{response, divergencia_cliente}`.
 
     `invalidateResponse` passa a chamar o helper.
-- [ ] T026 [US2] Criar `frontend/apps/internal/src/components/formularios/EncerrarFormularioDialog.tsx`
+- [X] T026 [US2] Criar `frontend/apps/internal/src/components/formularios/EncerrarFormularioDialog.tsx`
   (usa os hooks da T025):
   - `Dialog` de `@manto/ui`;
   - `<select>` nativo montado a partir de `motivos_encerramento` recebidos por prop (**sem mapa em
@@ -337,10 +337,10 @@ formulários sem destino na Home e filtros por destino`.
   - erro da API apontado e com foco no campo;
   - botão "Encerrando…" enquanto envia;
   - 409 e 422 viram mensagem inline, e a lista é invalidada.
-- [ ] T027 [US2] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`, ação secundária "Encerrar…" em
+- [X] T027 [US2] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`, ação secundária "Encerrar…" em
   `FormularioSemDestinoRow`, que abre o diálogo com os motivos do bloco. A linha sai pela animação da
   T020.
-- [ ] T028 [US2] Em `frontend/apps/internal/src/pages/FormulariosAdminPage.tsx`, seção "Destino" no
+- [X] T028 [US2] Em `frontend/apps/internal/src/pages/FormulariosAdminPage.tsx`, seção "Destino" no
   `ResponseDetailDialog` (`:501-612`):
   - encerrado: motivo, frase, quem e quando, e o botão "Reabrir";
   - sem destino: botão "Encerrar";

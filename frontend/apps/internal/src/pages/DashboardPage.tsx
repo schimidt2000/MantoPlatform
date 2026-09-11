@@ -29,6 +29,7 @@ import type {
   UnconfirmedInviteRef,
 } from "../lib/types";
 import { SectorPanel, getUrgency } from "../components/SectorPanel";
+import { EncerrarFormularioDialog } from "../components/formularios/EncerrarFormularioDialog";
 import { HomeOverview, type HomeOverviewItem } from "../components/HomeOverview";
 import { HomePerformance, type PerformancePeriod } from "../components/HomePerformance";
 
@@ -471,9 +472,12 @@ function chegouHa(dias: number | undefined): string {
 function FormularioSemDestinoRow({
   linha,
   podeCriarEvento,
+  onEncerrar,
 }: {
   linha: LinhaFormulario;
   podeCriarEvento: boolean;
+  /** Ausente quando o servidor não mandou os motivos (versão antiga no meio do deploy). */
+  onEncerrar?: () => void;
 }) {
   const severidade = linha.severidade ?? "cinza";
   const nome = linha.cliente?.nome ?? linha.nome_no_formulario ?? "Sem nome";
@@ -520,11 +524,18 @@ function FormularioSemDestinoRow({
         </div>
         {detalhe && <div className="text-muted">{detalhe}</div>}
       </div>
-      <Button asChild variant={podeCriarEvento ? "default" : "outline"} size="sm" className="shrink-0">
-        <Link to={podeCriarEvento ? `/events/new?form_response_id=${id}` : `/formularios?resposta=${id}`}>
-          {podeCriarEvento ? "Criar evento" : "Abrir"}
-        </Link>
-      </Button>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {onEncerrar && (
+          <Button type="button" variant="ghost" size="sm" onClick={onEncerrar}>
+            Encerrar…
+          </Button>
+        )}
+        <Button asChild variant={podeCriarEvento ? "default" : "outline"} size="sm">
+          <Link to={podeCriarEvento ? `/events/new?form_response_id=${id}` : `/formularios?resposta=${id}`}>
+            {podeCriarEvento ? "Criar evento" : "Abrir"}
+          </Link>
+        </Button>
+      </div>
     </div>
   );
 }
@@ -541,10 +552,12 @@ function GrupoFormularios({
   titulo,
   linhas,
   podeCriarEvento,
+  onEncerrar,
 }: {
   titulo: string;
   linhas: LinhaFormulario[];
   podeCriarEvento: boolean;
+  onEncerrar?: (linha: LinhaFormulario) => void;
 }) {
   const [expandida, setExpandida] = useState(false);
   const reduceMotion = useReducedMotion();
@@ -562,7 +575,11 @@ function GrupoFormularios({
             transition={{ duration: 0.25, ease: "easeOut" }}
             className="-mx-4 overflow-hidden border-b border-line last:border-b-0"
           >
-            <FormularioSemDestinoRow linha={linha} podeCriarEvento={podeCriarEvento} />
+            <FormularioSemDestinoRow
+              linha={linha}
+              podeCriarEvento={podeCriarEvento}
+              onEncerrar={onEncerrar ? () => onEncerrar(linha) : undefined}
+            />
           </motion.div>
         ))}
       </AnimatePresence>
@@ -599,6 +616,10 @@ function FormulariosPanel({
   const jaPassou = summary.ja_passou ?? [];
   const podeCriarEvento = summary.pode_criar_evento ?? false;
   const desde = diaMes(summary.contagens?.corte);
+  const motivos = summary.motivos_encerramento ?? [];
+  const [encerrando, setEncerrando] = useState<LinhaFormulario | null>(null);
+  // Sem motivos (servidor antigo no meio do deploy) a ação não aparece em vez de abrir vazia.
+  const aoEncerrar = motivos.length > 0 ? setEncerrando : undefined;
 
   return (
     <SectorPanel
@@ -617,6 +638,7 @@ function FormulariosPanel({
               titulo="A data informada ainda vai chegar"
               linhas={aChegar}
               podeCriarEvento={podeCriarEvento}
+              onEncerrar={aoEncerrar}
             />
           )}
           {jaPassou.length > 0 && (
@@ -624,6 +646,7 @@ function FormulariosPanel({
               titulo="A data informada já passou"
               linhas={jaPassou}
               podeCriarEvento={podeCriarEvento}
+              onEncerrar={aoEncerrar}
             />
           )}
         </div>
@@ -634,6 +657,13 @@ function FormulariosPanel({
           <Link to="/formularios">Abrir formulários</Link>
         </Button>
       </div>
+      <EncerrarFormularioDialog
+        formularioId={encerrando?.representante_id ?? null}
+        nome={encerrando?.cliente?.nome ?? encerrando?.nome_no_formulario}
+        motivos={motivos}
+        open={encerrando !== null}
+        onClose={() => setEncerrando(null)}
+      />
     </SectorPanel>
   );
 }

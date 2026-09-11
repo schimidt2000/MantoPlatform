@@ -1,5 +1,13 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@manto/api-client";
+import {
+  type QueryClient,
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { ApiRequestError, apiFetch } from "@manto/api-client";
+import { invalidarNotificacoes } from "./notificacoes";
+import type { MotivoEncerramento } from "./types";
 
 export interface FormResponseSummary {
   id: number;
@@ -84,31 +92,60 @@ export function useSearchFormResponses(q: string) {
   });
 }
 
+/** O que o detalhe pode oferecer — o servidor recusa o resto do mesmo jeito (feature 298). */
+export interface FlagsDoFormulario {
+  pode_encerrar?: boolean;
+  pode_reabrir?: boolean;
+  pode_criar_evento?: boolean;
+}
+
+export interface DetalheResposta {
+  response: FormResponseDetail;
+  suggested_client: { id: number; name: string } | null;
+  can_edit_structure: boolean;
+  /** Opcionais (feature 298): servidor e site sobem separados. */
+  motivos_encerramento?: MotivoEncerramento[];
+  flags?: FlagsDoFormulario;
+}
+
 /** Detalhe completo de uma resposta + sugestão de cliente. */
 export function useFormResponseDetail(id: number | null) {
-  return useQuery<{
-    response: FormResponseDetail;
-    suggested_client: { id: number; name: string } | null;
-    can_edit_structure: boolean;
-  }>({
+  return useQuery<DetalheResposta>({
     queryKey: ["formularios-resposta-detalhe", id],
-    queryFn: () =>
-      apiFetch(`/api/formularios/respostas/${id}`),
+    queryFn: () => apiFetch<DetalheResposta>(`/api/formularios/respostas/${id}`),
     enabled: id != null,
   });
 }
 
-function invalidateResponse(queryClient: ReturnType<typeof useQueryClient>, id: number) {
-  queryClient.invalidateQueries({ queryKey: ["formularios-resposta-detalhe", id] });
-  queryClient.invalidateQueries({ queryKey: ["formularios-respostas"] });
-  // A Home mostra os mesmos contadores (feature 266). A chave dela é ["dashboard", periodo] —
-  // invalidar o prefixo pega todos os períodos. Sem isso, o `staleTime` de 30s com
-  // `refetchOnWindowFocus: false` deixa o número velho NA TELA, e um contador que não acompanha
-  // a ação parece que a ação não salvou.
-  queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+/**
+ * Recarrega tudo que mostra o destino de um formulário (feature 298): detalhe, lista, busca,
+ * Home, métricas de cliente e o sino — ligar ou encerrar apaga o aviso para todos.
+ *
+ * A chave da Home é ["dashboard", periodo]: invalidar o prefixo pega todos os períodos. Sem isso,
+ * o `staleTime` de 30 s com `refetchOnWindowFocus: false` deixa a linha resolvida NA TELA, e uma
+ * lista que não acompanha a ação parece que a ação não salvou. A busca tem chave própria
+ * (`formularios-respostas-search` não é filha de `formularios-respostas`).
+ */
+export function invalidarDestinoDeFormulario(queryClient: QueryClient, id?: number) {
+  void queryClient.invalidateQueries({
+    queryKey: id != null ? ["formularios-resposta-detalhe", id] : ["formularios-resposta-detalhe"],
+  });
+  void queryClient.invalidateQueries({ queryKey: ["formularios-respostas"] });
+  void queryClient.invalidateQueries({ queryKey: ["formularios-respostas-search"] });
+  void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
   // A ficha da cliente pode ter acabado de ganhar/perder uma festa no histórico, e o gráfico
   // de origem muda quando a associação cria uma cliente nova.
-  queryClient.invalidateQueries({ queryKey: ["clientes-metricas"] });
+  void queryClient.invalidateQueries({ queryKey: ["clientes-metricas"] });
+  invalidarNotificacoes(queryClient);
+}
+
+function invalidateResponse(queryClient: QueryClient, id: number) {
+  invalidarDestinoDeFormulario(queryClient, id);
+}
+
+/** Mensagem da API em pt-BR, ou o texto de reserva quando a falha não veio do servidor. */
+export function mensagemDaApi(erro: unknown, reserva: string): string {
+  return erro instanceof ApiRequestError && erro.message ? erro.message : reserva;
 }
 
 /** Associa a resposta a um cliente existente ou cria um a partir dos dados dela. */
@@ -133,16 +170,63 @@ export function useDissociateClient(id: number) {
   });
 }
 
-/** Vincula manualmente a resposta a um evento da agenda. */
+/** Cliente do formulário que não é nenhuma das clientes do evento (feature 298, FR-015). */
+export interface DivergenciaCliente {
+  formulario: { id: number | null; nome: string | null };
+  evento: { id: number | null; nome: string | null };
+}
+
+/** Resposta de ligar formulário a evento — opcional campo a campo (servidor e site sobem separados). */
+export interface ResultadoVinculo {
+  response?: FormResponseSummary;
+  divergencia_cliente?: DivergenciaCliente | null;
+  event_id?: number;
+  event_title?: string;
+}
+
+/** Vincula manualmente a resposta a um evento da agenda (409 se ela já tem evento — feature 298). */
 export function useLinkEvent(id: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (eventId: number) =>
-      apiFetch<{ event_id: number; event_title: string }>(`/api/formularios/respostas/${id}/vincular-evento`, {
+      apiFetch<ResultadoVinculo>(`/api/formularios/respostas/${id}/vincular-evento`, {
         method: "POST",
         body: JSON.stringify({ event_id: eventId }),
       }),
-    onSuccess: () => invalidateResponse(queryClient, id),
+    // `onSettled`: o 409 também recarrega — o formulário ganhou destino em outro lugar.
+    onSettled: () => invalidateResponse(queryClient, id),
+  });
+}
+
+/**
+ * Encerra com motivo (feature 298). O id vai nas variáveis: uma instância serve à lista inteira
+ * da Home, sem hook por linha.
+ */
+export function useEncerrarFormulario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, motivo, frase }: { id: number; motivo: string; frase?: string }) =>
+      apiFetch<{ response?: FormResponseSummary }>(`/api/formularios/respostas/${id}/encerrar`, {
+        method: "POST",
+        body: JSON.stringify({ motivo, frase: frase ?? "" }),
+      }),
+    onSettled: (_data, erro, { id }) => {
+      // 400 é campo inválido: nada mudou no servidor. 409/422 recarregam — o destino mudou.
+      if (erro instanceof ApiRequestError && erro.status === 400) return;
+      invalidarDestinoDeFormulario(queryClient, id);
+    },
+  });
+}
+
+/** Desfaz o encerramento (feature 298). 409 quando outra pessoa já reabriu. */
+export function useReabrirFormulario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<{ response?: FormResponseSummary }>(`/api/formularios/respostas/${id}/reabrir`, {
+        method: "POST",
+      }),
+    onSettled: (_data, _erro, id) => invalidarDestinoDeFormulario(queryClient, id),
   });
 }
 

@@ -6,8 +6,8 @@ feature). Reusa, sem duplicar, o núcleo já extraído em `app/formularios/formu
 RBAC (função no início de cada view — constituição XIII; tabela em `docs/01` §4.3):
   * `_require_vendas` (COMERCIAL, FINANCEIRO, SUPERADMIN, pelo papel REAL — o "Ver como" não se
     aplica aqui, dívida 3.5): lista, busca e detalhe.
-  * `_can_create_event_papel` (COMERCIAL, SUPERADMIN — o `_CAN_CREATE` da agenda): dados do
-    formulário para o cadastro de evento (feature 298).
+  * `_pode_criar_evento` (COMERCIAL, SUPERADMIN — o `_CAN_CREATE` da agenda): a flag do detalhe
+    e os dados do formulário para o cadastro de evento (feature 298).
   * `_require_superadmin`: editor de estrutura.
 """
 
@@ -21,7 +21,7 @@ from app import db
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import FORM_CLOSE_REASON_LABELS, RoleName
-from app.formularios import formularios_ops
+from app.formularios import destino_ops, formularios_ops
 from app.models import Client, FormResponse
 from app.notificacoes import notificacoes_ops
 
@@ -41,6 +41,13 @@ def _require_superadmin() -> Any:
     if not _has_role(RoleName.SUPERADMIN):
         return json_error("Sem permissão", 403)
     return None
+
+
+def _pode_criar_evento() -> bool:
+    """Criar evento é da agenda (`_CAN_CREATE`); a lista de papéis não se repete aqui (298)."""
+    from app.calendar.routes import _CAN_CREATE
+
+    return _has_role(*_CAN_CREATE)
 
 
 def _response_summary(r: FormResponse, corte: datetime) -> dict:
@@ -135,12 +142,22 @@ def api_formularios_resposta_detail(response_id: int) -> Any:
     suggested = None
     if response.client_id is None and response.contact_phone:
         suggested = Client.query.filter_by(phone=response.contact_phone).first()
+    corte = formularios_ops.corte_de_chegada()
+    destino = formularios_ops.destino_de(response, corte)
     return jsonify({
-        "response": _response_detail(response, formularios_ops.corte_de_chegada()),
+        "response": _response_detail(response, corte),
         "suggested_client": (
             {"id": suggested.id, "name": suggested.name} if suggested else None
         ),
         "can_edit_structure": _has_role(RoleName.SUPERADMIN),
+        # Feature 298: os motivos vêm do servidor (a tela não tem cópia) e as flags dizem o que a
+        # tela oferece — o servidor recusa o resto do mesmo jeito.
+        "motivos_encerramento": destino_ops.motivos_encerramento(),
+        "flags": {
+            "pode_encerrar": destino == "sem_destino",
+            "pode_reabrir": destino == "encerrados",
+            "pode_criar_evento": _pode_criar_evento(),
+        },
     })
 
 

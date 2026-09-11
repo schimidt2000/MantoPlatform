@@ -185,6 +185,8 @@ export interface LinhaFormulario {
 export interface MotivoEncerramento {
   codigo: string;
   rotulo: string;
+  /** Este motivo exige a frase ("Outro") — a tela não conhece os códigos. */
+  pede_frase?: boolean;
 }
 
 /** Bloco `formularios` do `/api/dashboard` (feature 298) — contrato em `contracts/dashboard-formularios.md`. */

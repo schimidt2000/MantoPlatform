@@ -14,6 +14,7 @@ Conflito de destino (feature 298) → 409 "Este formulário já tem destino." em
 from typing import Any
 
 from flask import jsonify, request
+from flask_login import current_user
 
 from app import db
 from app.api import api_bp
@@ -23,8 +24,62 @@ from app.api.formularios_admin_read import (
     _response_summary,
 )
 from app.api_utils import api_login_required, json_error
-from app.formularios import formularios_ops
+from app.formularios import destino_ops, formularios_ops
 from app.models import FormFieldDefinition, FormResponse
+
+
+def _resumo(response: FormResponse) -> dict:
+    return _response_summary(response, formularios_ops.corte_de_chegada())
+
+
+@api_bp.route("/formularios/respostas/<int:response_id>/encerrar", methods=["POST"])
+@api_login_required
+def api_formularios_encerrar(response_id: int) -> Any:
+    """Encerra com motivo um formulário sem destino (feature 298): sai da Home e fica guardado."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    body = request.get_json(silent=True) or {}
+    try:
+        response = destino_ops.encerrar(
+            response_id, body.get("motivo"), body.get("frase"), current_user
+        )
+    except destino_ops.ValidacaoEncerramento as exc:
+        return json_error(exc.message, 400, fields={exc.campo: exc.message})
+    except destino_ops.FormularioInexistente:
+        db.session.rollback()
+        return json_error("Resposta não encontrada", 404)
+    except destino_ops.FormularioDoHistorico as exc:
+        db.session.rollback()
+        return json_error(exc.message, 422)
+    except formularios_ops.FormularioJaTemDestino as exc:
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    db.session.commit()
+    return jsonify({"response": _resumo(response)})
+
+
+@api_bp.route("/formularios/respostas/<int:response_id>/reabrir", methods=["POST"])
+@api_login_required
+def api_formularios_reabrir(response_id: int) -> Any:
+    """Desfaz o encerramento (feature 298): o formulário volta para a Home, sem reacender aviso."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    try:
+        response = destino_ops.reabrir(response_id)
+    except destino_ops.FormularioInexistente:
+        db.session.rollback()
+        return json_error("Resposta não encontrada", 404)
+    except destino_ops.FormularioNaoEncerrado as exc:
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    db.session.commit()
+    return jsonify({"response": _resumo(response)})
 
 
 @api_bp.route("/formularios/respostas/<int:response_id>/associar", methods=["POST"])

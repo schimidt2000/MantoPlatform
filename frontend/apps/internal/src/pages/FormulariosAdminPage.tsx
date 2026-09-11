@@ -22,6 +22,7 @@ import {
   TabsTrigger,
 } from "@manto/ui";
 import { FormFieldEditor } from "../components/FormFieldEditor";
+import { EncerrarFormularioDialog } from "../components/formularios/EncerrarFormularioDialog";
 import { useClientSearch } from "../lib/clientes";
 import { useGastosEventos } from "../lib/gastos";
 import { useCurrentUser } from "../lib/useAuth";
@@ -31,7 +32,9 @@ import {
   useDissociateClient,
   useFormResponseDetail,
   useFormResponses,
+  mensagemDaApi,
   useLinkEvent,
+  useReabrirFormulario,
   useSearchFormResponses,
   useUnlinkEvent,
   type FormResponseSummary,
@@ -514,8 +517,85 @@ function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () 
         Criar evento com os dados desta resposta
       </Button>
       {linkEvent.isError && (
-        <p className="text-sm text-red">Não foi possível vincular o evento. Tente novamente.</p>
+        <p className="text-sm text-red">
+          {mensagemDaApi(linkEvent.error, "Não foi possível vincular o evento. Tente novamente.")}
+        </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Destino do formulário (feature 298): encerrado (motivo, frase, quem e quando, "Reabrir"), sem
+ * destino ("Encerrar…") ou os estados que não pedem ação. As ações obedecem às `flags` do
+ * servidor, que recusa o resto do mesmo jeito.
+ */
+function DestinoSection({ id }: { id: number }) {
+  const detalhe = useFormResponseDetail(id);
+  const reabrir = useReabrirFormulario();
+  const [encerrando, setEncerrando] = useState(false);
+
+  const response = detalhe.data?.response;
+  const flags = detalhe.data?.flags;
+  const motivos = detalhe.data?.motivos_encerramento ?? [];
+  if (!response) return null;
+
+  if (response.destino === "encerrados") {
+    const quemQuando = [response.closed_by_name, response.closed_at && formatDateTime(response.closed_at)]
+      .filter(Boolean)
+      .join(" · ");
+    return (
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <MetricBadge tone="neutral" size="sm">
+            Encerrado · {response.closed_reason_label ?? "sem motivo"}
+          </MetricBadge>
+          {quemQuando && <span className="text-xs text-muted">{quemQuando}</span>}
+        </div>
+        {response.closed_note && <p className="text-sm text-ink">“{response.closed_note}”</p>}
+        {flags?.pode_reabrir && (
+          <Button size="sm" variant="outline" loading={reabrir.isPending} onClick={() => reabrir.mutate(id)}>
+            Reabrir
+          </Button>
+        )}
+        {reabrir.isError && (
+          <p className="text-sm text-red">
+            {mensagemDaApi(reabrir.error, "Não foi possível reabrir. Tente novamente.")}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (response.destino === "historico") {
+    return (
+      <p className="text-sm text-muted">
+        Chegou antes do início do sistema: é histórico da cliente e não precisa de destino.
+      </p>
+    );
+  }
+
+  if (response.event_id) {
+    return <p className="text-sm text-muted">Virou evento — veja a seção Evento acima.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted">
+        Sem destino: crie ou ligue um evento acima, ou encerre com um motivo se não vai virar festa.
+      </p>
+      {flags?.pode_encerrar && motivos.length > 0 && (
+        <Button size="sm" variant="outline" onClick={() => setEncerrando(true)}>
+          Encerrar…
+        </Button>
+      )}
+      <EncerrarFormularioDialog
+        formularioId={id}
+        nome={response.contact_name}
+        motivos={motivos}
+        open={encerrando}
+        onClose={() => setEncerrando(false)}
+      />
     </div>
   );
 }
@@ -599,6 +679,11 @@ function ResponseDetailDialog({
                 id={id}
                 onPrefillEvent={() => navigate(`/events/new?form_response_id=${id}`)}
               />
+            </div>
+
+            <div className="border-t border-line pt-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Destino</p>
+              <DestinoSection id={id} />
             </div>
 
             {canEditStructure && (

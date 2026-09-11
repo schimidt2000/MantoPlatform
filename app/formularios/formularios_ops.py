@@ -385,8 +385,11 @@ def dissociate_client(response: FormResponse) -> None:
     db.session.commit()
 
 
-def _limpar_encerramento(response: FormResponse) -> None:
-    """Ligar a um evento desfaz o encerramento: um evento real vence o motivo (feature 298)."""
+def limpar_encerramento(response: FormResponse) -> None:
+    """Zera as 4 colunas de encerramento, sem commit (feature 298).
+
+    Ligar a um evento desfaz o encerramento (um evento real vence o motivo); reabrir também.
+    """
     response.closed_reason = None
     response.closed_note = None
     response.closed_by_id = None
@@ -485,7 +488,7 @@ def apply_event_link(
     Returns:
         ``VinculoResultado`` com a divergência de cliente, quando houver.
     """
-    _limpar_encerramento(response)
+    limpar_encerramento(response)
     response.event_id = event.id
     response.event_link_source = source
     response.event_link_ambiguous = False
