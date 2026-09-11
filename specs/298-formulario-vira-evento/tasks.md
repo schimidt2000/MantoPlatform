@@ -527,17 +527,17 @@ apagado e correções únicas`.
 
 ## Phase 9: Polimento e transversais
 
-- [ ] T046 `cd frontend && npm run typecheck` limpo (três SPAs) e `.\.venv\Scripts\ruff.exe check` nos
+- [X] T046 `cd frontend && npm run typecheck` limpo (três SPAs) e `.\.venv\Scripts\ruff.exe check` nos
   Python tocados. `ruff format` só em `destino_ops.py` e `pre_evento_ops.py`.
-- [ ] T047 `verify_298.py` **17/17**, com o cenário 15 recusado (403 exato), o controle 200 e a escrita
+- [X] T047 `verify_298.py` **17/17**, com o cenário 15 recusado (403 exato), o controle 200 e a escrita
   por conexão separada. Saída anotada no commit.
-- [ ] T048 Conferência de tela no Browser pane (skill `manto-conferir-tela`), com print para o dono:
+- [X] T048 Conferência de tela no Browser pane (skill `manto-conferir-tela`), com print para o dono:
   - Home: com e sem pendência, estreita, repetida, sugestão, "Não é este", saída animada, movimento
     reduzido, e como FINANCEIRO;
   - tela Formulários: cartões, encerrar "Outro" sem frase, reabrir, divergência;
   - cadastro a partir de um formulário do site, um da carga WhatsForm e um corporativo (data 2049,
     "Boleto", Salvar sem confirmar marca o campo), **sem salvar**.
-- [ ] T049 [P] `docs/01_SISTEMA_E_BANCO.md`:
+- [X] T049 [P] `docs/01_SISTEMA_E_BANCO.md`:
   - head da migration no cabeçalho;
   - §2.7 `form_responses` e a tabela de descartes;
   - endpoints novos e alterados (`:1188-1203`), inclusive os dois `PATCH` de evento e o envio
@@ -545,21 +545,21 @@ apagado e correções únicas`.
   - §3.2, o bloco `formularios`;
   - §4.3 RBAC, uma linha por endpoint;
   - notificações e os dois comandos.
-- [ ] T050 [P] `docs/02_MAPA_DE_PAGINAS_E_UX.md`: Home (`:226-271`), `/formularios` (`:1331-1374`) e
+- [X] T050 [P] `docs/02_MAPA_DE_PAGINAS_E_UX.md`: Home (`:226-271`), `/formularios` (`:1331-1374`) e
   `/events/new` (`:283-332`).
-- [ ] T051 [P] `docs/04_GUIA_DE_DOMINIOS.md`, na linha de Formulários (`:412`): a invariante do
+- [X] T051 [P] `docs/04_GUIA_DE_DOMINIOS.md`, na linha de Formulários (`:412`): a invariante do
   destino, o corte pela chegada, o núcleo único de vínculo, e a correção da citação de
   `_attempt_auto_link`.
-- [ ] T052 [P] `docs/05_DIVIDA_TECNICA.md`:
+- [X] T052 [P] `docs/05_DIVIDA_TECNICA.md`:
   - registrar a limpeza de dados pendente (datas 2029–2049, comprovantes sem valor, evento 309);
   - o agrupamento que falha com celular antigo sem o 9º dígito;
   - a rota Jinja de criação de evento sem a guarda de 409;
   - atualizar 4.2.
-- [ ] T053 `docs/03_HISTORICO_MUTACOES.md`: entrada no topo "298 — O formulário vira evento"
+- [X] T053 `docs/03_HISTORICO_MUTACOES.md`: entrada no topo "298 — O formulário vira evento"
   (motivação; decisões de 10/09 e 11/09; pegadinhas: `created_at` em UTC, três caminhos fora do
   núcleo, Google antes do banco, dois vocabulários de chave, `formatRelativeDay` com o relógio do
   navegador), mais a linha no índice.
-- [ ] T054 Executar a parte local do `quickstart.md` (§1–§3), inclusive os dois comandos no
+- [X] T054 Executar a parte local do `quickstart.md` (§1–§3), inclusive os dois comandos no
   `manto_local` (sem e com `--execute`, conferindo por consulta).
 - [ ] T055 Commit `docs(298): documentação viva`, por caminho. Depois `/speckit-converge`. Quando o dono
   pedir o push, seguir a skill `manto-deploy`:

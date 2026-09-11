@@ -4,7 +4,12 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-11** · Estado do repositório: pós-hotfix
+> Última atualização: **2026-09-11** · Estado do repositório: pós-feature
+> **298-formulario-vira-evento** (migration `e5a1c7d93b20`; em branch, deploy quando o dono pedir —
+> a Home deixa de contar o histórico importado e mostra só os formulários que chegaram desde 01/06
+> sem destino; encerrar com motivo, repetidos numa linha, sugestão de evento, cadastro de evento
+> preenchido a partir do formulário, núcleo único de vínculo e 409 antes do Google) — antes dela
+> pós-hotfix
 > **263b-hotfix-proxy-vazamento-sockets** (sem migration; em branch — o proxy Node do frontend
 > deixava aberto, para sempre, o socket com o backend de todo vídeo/foto que o cliente abandonava
 > no meio; 432 MB de buffer TCP no kernel mataram o contêiner por memória em 08/09 e 10/09; agora
@@ -62,8 +67,9 @@
 > **254-melhorias-video-catalogo (em produção, migration `f3a9c15d8b42`)**, antes dela a
 > sequência da remoção do Jinja **240–252 (pausada, ver `docs/PARADA_REMOCAO_JINJA.md`)**,
 > antes dela **239-backlog-agosto (11 itens)**, catalogo-fase-1, **235-educamanto 4ª rodada**,
-> 238, 237, 236 · Head de migration: **`b7d2e4f1a9c3`** (*tabela `notifications`,
-> feature 272*) (confira com `flask db heads` — não versione o head em prosa fora deste cabeçalho).
+> 238, 237, 236 · Head de migration: **`e5a1c7d93b20`** (*encerramento em `form_responses` e
+> `form_response_dismissed_events`, feature 298*) (confira com `flask db heads` — não versione o
+> head em prosa fora deste cabeçalho).
 
 ## Como ler isto sem gastar a janela de contexto
 
@@ -94,6 +100,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **298-formulario-vira-evento** | A Home dizia "1.347 formulários sem evento" contando o histórico importado do WhatsForm; desde 01/06 eram 36, e 7 deles já tinham o evento da cliente na agenda. Corte pela CHEGADA do formulário (meia-noite de SP da `release_date`; `created_at` é UTC ingênuo); todo formulário desde o corte tem destino — evento, encerrado com motivo ou a lista da Home ("Formulários sem evento na agenda", dois grupos, cor por urgência dita também em palavras, uma linha por telefone com "Este é o que vale", sugestão de evento a ±3 dias com descarte definitivo). Núcleo ÚNICO de vínculo (três caminhos gravavam `event_id` à mão; `link_event` sobrescrevia), cliente nos dois sentidos sem trocar ninguém, aviso do sino apagado para todos, 409 "já tem destino" em todos os caminhos — no `POST /api/events` ANTES do Google, com `FOR UPDATE`. Cadastro de evento preenchido pelo formulário nos dois vocabulários (site e WhatsForm) com selo "do formulário", alertas no campo e Salvar nunca desabilitado. Dois comandos de correção única pós-deploy | 2026-09-11 | `e5a1c7d93b20` | (aqui) | — |
 | **263b-hotfix-proxy-vazamento-sockets** | O `manto-frontend` morreu por memória duas vezes (08/09 e 10/09) com o processo Node em 85 MB: os outros 432 MB eram buffer de recepção TCP no kernel (`sock` do cgroup) em 142 sockets com o backend. O http-proxy só solta o upstream em `req 'aborted'`, que em Node ≥ 16 não dispara para GET cujo cliente some durante a resposta; o `proxyRes` ficava pausado e o socket em CLOSE_WAIT com a fila cheia — em mídia sem prazo nenhum desde a 263. Ganchos de `res 'close'` (`proxyReq.destroy()` e `res.on('pipe') → origem.destroy()`) e o inverso (`proxyReq 'close' → res.destroy()`, para o cliente não ficar mudo quando o Flask some), mídia com prazo de inatividade de 10 min em vez de 0, `requestTimeout` de 30 min (o default de 5 min respondia 408 a upload longo) e linha `[vida]` no log. `verify_263b` 21/21 no branch, 9/21 na `main`; três lentes adversariais sem refutação | 2026-09-11 | `—` | (aqui) | — |
 | **297-nfc-moldura-e-menu** | Os vídeos das tags NFC não tocavam porque eram os arquivos CRUS da câmera (4K, até 76 Mbps, 147 MB para 16 s) — íntegros e servidos certo, mas impossíveis de carregar em rede móvel. Pipeline de conversão em thread de fundo (1080 de largura, H.264+AAC, ~15 MB por 30 s) com a **moldura PNG do sistema gravada na borda** por `scale2ref` (uma moldura serve a qualquer tamanho); guarda um MESTRE sem moldura para reprocessar sem pedir o vídeo de volta. `/nfc/<code>` vira máquina de cenas — capa (o toque é o que libera o áudio), abertura, menu de três botões e mensagem especial com **recado da cliente**, que toca o sino da 272. Corrige de carona: corrida entre substituir e converter, `aspect-video` em vídeo vertical, MIME `video/m4v` inexistente, `errorhandler(429)` ausente (13 rotas públicas devolviam HTML cru) e o upload da tag sem isenção do prazo do proxy | 2026-09-09 | `c9f4a2b71e60` | (aqui) | — |
 | **296-revisao-harness** | Revisão do harness pós-Railway: constituição 3.0.0 (esteira em dois níveis, Regra Zero de numeração em `specs/`, XIII RBAC e XIV configuração/efeito externo novos, seção Operação e Deploy, Portões reescritos), `CLAUDE.md` e `DEVELOPMENT.md` reescritos, Spec Kit funcional num clone limpo (scripts bash versionados, templates adaptados, `.claude/` versionado com skills `manto-verify`/`manto-deploy`/`manto-conferir-tela` e `deny` no `settings.json`), `validar_startcommand.py` lendo o `render.yaml`, `railway.json`/`nixpacks.toml` apagados, `docs/00`/`01`/`05` com o Render como presente | 2026-09-08 | — | (aqui) | — |
@@ -255,6 +262,102 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 298 — O formulário vira evento            (2026-09-11 · feature · migration `e5a1c7d93b20`)
+
+**Motivação.** Conversa com o dono em 10/09. A cliente é atendida no WhatsApp/Kommo, preenche o
+pré-contrato (que gera o contrato no Clicksign) e alguém precisa lançar o evento na agenda — é aí
+que se perdia, historicamente. A Home dizia **1.347** formulários sem evento porque contava a carga
+histórica do WhatsForm (2023 a maio/2026, importada de propósito como histórico da cliente); desde
+01/06 eram **36** (17 com a data informada por vir, 19 já passada). 11 dos 36 eram de clientes que
+preencheram mais de uma vez; **7** já tinham o evento da cliente na agenda com data igual ou quase
+(23/07 no formulário, 22/07 na agenda) — só não estavam ligados. 85 de 178 estavam "sem cliente",
+quase sempre porque ligar ao evento não trazia a cliente. E a comercial não lia o sino (11 de 12
+avisos sem abrir).
+
+**Decisões do dono (10/09 e 11/09).**
+- Vocabulário: **Formulário** (o pré-contrato), **Evento** (a festa na agenda), **Data informada**.
+  Nunca "festa sem evento".
+- Corte pela data de **chegada** do formulário (≥ `release_date` em SP; vazia = 01/06/2026). O que
+  chegou antes é histórico e nunca é tarefa.
+- Todo formulário desde o corte tem **destino**: evento, encerrado com motivo (desistiu, repetido,
+  preenchido errado, teste, outro + frase) ou a lista da Home. Evento **cancelado** mantém o
+  vínculo; **excluído** ou desvinculado devolve à lista.
+- Home: painel próprio depois do Comercial, dois grupos, vermelho 0–7 dias, amarelo 8–30 e todo
+  "já passou", cinza > 30 ou data suspeita; urgência também em palavras; 6 linhas e "Mostrar
+  todas"; linha resolvida sai animada ("sem animação onde não der, tudo bem").
+- Mesma cliente (telefone) = uma linha, "preencheu N vezes", "Este é o que vale" encerra os outros
+  como repetido. Sugestão: evento livre da cliente a ±3 dias, menor diferença, empate → o mais
+  cedo; "Não é este" pede confirmação e é definitivo.
+- "Criar evento" preenche tudo o que a cliente escreveu, nos dois vocabulários — nunca valor,
+  vendedor nem título —, com selo "do formulário" e alertas; o Salvar **nunca** fica desabilitado
+  (data suspeita: `setError` no campo, foco e rolagem).
+- Cliente nos dois sentidos, sem trocar ninguém quando divergem (a comercial escolhe "usar a
+  cliente do evento"); aviso do sino apagado para todos ao ganhar destino; reabrir não reacende;
+  formulário que já chega ligado não avisa.
+- Encerram e reabrem COMERCIAL, FINANCEIRO e SUPERADMIN; os dados para o cadastro são de quem cria
+  evento. Lista de motivos servida pelo servidor; campos novos opcionais no React (servidor e site
+  sobem separados). O verify pode criar evento de teste só com "[TESTE verify 298] pode apagar" no
+  título — e troca o `insert_event` por stub. Deploy fica para depois.
+
+**O que mudou.** Contratos e endpoints em `docs/01` §2, §3.2, §3.14 e §4.3; telas em `docs/02`
+(Home, `/events/new`, `/formularios`); invariantes em `docs/04` (Formulários). Oito commits por
+história: `21f5fb1` núcleo (migration, `apply_event_link` único, guardas de 409) · `eafe948`
+painel da Home e cartões por destino · `e6d4a55` encerrar/reabrir · `b7eb5b2` repetidos ·
+`1ab8745` sugestão · `5df1cc3` cadastro a partir do formulário · `1d3c782` divergência, sino e os
+dois comandos · correção da hora do WhatsForm achada na conferência de tela.
+
+**Pegadinhas.**
+1. **`FormResponse.created_at` é UTC ingênuo** (`utcnow`); o resto do sistema é `now_sp`. Comparar
+   com a meia-noite "ingênua" do dia punha no mês novo o formulário que chegou às 21h da véspera em
+   Brasília. O corte é a meia-noite de SP convertida para UTC; `created_at` passou a sair com
+   `+00:00` na API (sem isso "Recebida em" mostrava 3 h a mais). `closed_at` segue o mesmo fuso.
+2. **Três caminhos gravavam `event_id` fora do núcleo** (criar evento, envio público,
+   reprocessamento do sync), cada um esquecendo uma parte (cliente, trava, aviso), e `link_event`
+   **sobrescrevia** vínculo existente enquanto a aba Comercial recusava. Tudo passa por
+   `apply_event_link` e o segundo vínculo é 409 em todos.
+3. **O `POST /api/events` escreve no Google antes do banco**: a guarda "formulário já tem evento"
+   vem antes do `insert_event`, com o formulário bloqueado (`FOR UPDATE`) até o commit — senão dois
+   cliques deixam festa duplicada na Agenda. Custo aceito: a linha fica presa durante a chamada ao
+   Google. A rota Jinja de criação não tem essa guarda prévia (dívida 43).
+4. **Dois vocabulários de chave**: metade dos formulários desde junho é da carga WhatsForm (slugs
+   do rótulo, hora dentro de `data_do_evento`). E a conferência de tela com os dados reais achou o
+   que o verify não pegaria: essa hora é a do **seletor de data-hora**, que a cliente nem sempre
+   mexe (15:03, 12:04, 04:00 na base) — o cadastro abria festa às 04:00 e jogava fora o intervalo
+   claro do período. Ela agora só vale se plausível (7h–23h, minuto múltiplo de 5) e cede ao
+   intervalo escrito.
+5. **`formatRelativeDay` (`@manto/ui`) usa o relógio do navegador** e diz "ontem/há N dias": a
+   distância da Home vem do servidor (`dias_ate_a_data`, "hoje" de SP) com formatador local.
+6. No envio público a cliente pelo telefone roda **antes** do vínculo de evento: o núcleo leva a
+   cliente do evento para o formulário, e se rodasse primeiro a origem viraria `evento` e o
+   preenchimento de CPF/CNPJ e endereço na ficha nunca rodaria.
+7. O `verify_266` testa os contadores que a 298 substituiu e falha agora (dívida 44).
+
+**Verificação.** `verify_298.py` **17/17** contra o `manto_local`
+(`specs/298-formulario-vira-evento/verify_298_saida.txt`; a primeira falha, 1/17, está em
+`verify_298_primeira_falha.txt`), com `insert_event` trocado por stub que falha — **0 chamadas ao
+Google**; o cenário 15 recusa CASTING e FINANCEIRO com 403 exato e o controle COMERCIAL recebe 200;
+escrita conferida por conexão separada. `npm run typecheck` (três SPAs) e `ruff check` limpos.
+Conferência de tela no Browser pane com os formulários reais do espelho (20 sem destino, 16
+linhas): painel com os dois grupos, marcas, faixa de sugestão ("Parece ser o evento de 22/07/2026
+— (SHOW) ANNA + ELSA" para um formulário de 23/07), expansão dos repetidos, confirmação do "Não é
+este" (cancelada), cartões de `/formularios` somando o total (20 + 116 + 0 + 1.372 = 1.508),
+detalhe com as seções Evento e Destino, e "Encerrar" com "Outro" sem frase apontando o campo
+(`aria-invalid`, foco) sem enviar nada. Cadastro de evento aberto, **sem salvar**, a partir de um
+formulário do site com data de 2049 (selo "do formulário" em 11 lugares, alertas com o texto da
+cliente, caixa "A data está certa"; salvar sem marcar deixou o campo vermelho com a explicação, o
+foco na data, o botão ativo e **zero** `POST /api/events`), de um da carga WhatsForm (17:00–18:00
+e a faixa "Ligar a este evento") e de um corporativo (CORP, endereço do evento, Briefing, alertas
+de endereço sem CEP, período "Noturno" e pagamento "Em 2x"). "Ver como FINANCEIRO": as linhas
+trocam "Criar evento" por "Abrir". Celular (375 px): sem rolagem horizontal e com as 20 ações da
+lista dentro da tela. Três ajustes saíram dela: a hora do WhatsForm (pegadinha 4), a linha de data
+suspeita que dizia "em 8241 dias" e a vírgula dobrada no endereço ("Rua Parauna,, 23") quando a
+cliente digita a vírgula no próprio campo.
+
+**Depois do deploy (quando o dono pedir).** No SSH do `manto-backend`, com `MANTO_SEM_THREADS=1`,
+primeiro contando e depois com `--execute`: `flask formularios-avisos-resolvidos` (~35 avisos em
+10/09) e `flask formularios-cliente-do-evento` (~69). Esperado: `sem_destino` ≤ 36 e o topo da
+Home deixando de somar o histórico.
 
 ### 263b — O proxy que guardava para sempre o vídeo que ninguém mais assistia            (2026-09-11 · hotfix · sem migration)
 

@@ -228,13 +228,24 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
 - **Acesso**: todos exceto `REVENDEDOR_EDUCAMANTO` puro.
 - **API**: `GET /api/dashboard` (`dashboard_service.py`).
 - **Vínculos**: cards levam a Agenda, Casting, Figurino e Financeiro.
-- **Feature 266 — painel "📝 Respostas de formulário"**: quatro linhas rótulo→número (festa futura
-  sem evento *em vermelho quando > 0*, sem evento, sem cliente, ambíguo) + botão "Abrir formulários".
-  Mesmo gate do painel Comercial, e **respeita "Ver como"** (o bloco vem `null` do servidor e a
-  seção some). Os números são os mesmos cartões de `/formularios` — vêm do mesmo `count_status()`.
-  ⚠️ Contam o que **não foi tratado**, não o que é "novo": não existe noção de lido no modelo.
-  As mutações de `/formularios` invalidam `["dashboard"]`, senão o número ficaria velho na tela
-  (`staleTime` de 30s + `refetchOnWindowFocus: false`).
+- **Feature 298 — painel "📝 Formulários sem evento na agenda"** (substituiu os quatro números da
+  266, que contavam o histórico importado e diziam 1.347): logo depois do "💼 Comercial", mesmo
+  gate, **respeita "Ver como"**. Dois grupos — "A data informada ainda vai chegar" (a mais próxima
+  em cima) e "A data informada já passou" (a mais recente em cima) —, 6 linhas e "Mostrar todas".
+  Cada linha: cliente (ou o nome escrito no formulário), data informada, distância em palavras
+  ("hoje", "amanhã", "em N dias", "passou há N dias", pelo "hoje" de SP do servidor — não o
+  `formatRelativeDay`, que usa o relógio do navegador), tipo "Festa"/"Corporativo" e "chegou há N
+  dias"; fundo vermelho (0–7 dias) ou âmbar (8–30 e todo "já passou"), sem cor com > 30 dias ou
+  data suspeita. Marcas em ordem fixa: "data suspeita", "preencheu N vezes" (abre os formulários da
+  cliente, cada um com "Este é o que vale") e "já tem outro formulário com evento". Ações: "Criar
+  evento" (COMERCIAL/SA → `/events/new?form_response_id=`) ou "Abrir" (FINANCEIRO →
+  `/formularios?resposta=`), e "Encerrar…" (diálogo com os motivos do servidor; "Outro" pede a
+  frase, com erro apontado no campo). Faixa "Parece ser o evento de DD/MM — Ligar / Não é este"
+  ("Não é este" pede confirmação e é definitivo); ligar com cliente divergente mostra as duas
+  clientes no topo do painel com "Usar a cliente do evento neste formulário". A linha resolvida
+  sai animada (sem transição com movimento reduzido). Vazio: "Nenhum formulário esperando evento
+  ✓". Card da visão geral: formulários sem destino; urgentes = os das linhas vermelhas. Toda ação
+  recarrega Home, `/formularios`, busca e sino (`invalidarDestinoDeFormulario`).
 - **Desde a 206 é a única `/` da plataforma.** O dashboard Jinja foi aposentado: a raiz do Flask
   responde 301 para `https://app.mantoproducoes.com.br`. Painéis atuais: Casting, Figurino,
   Comercial (cobranças), Contas recorrentes, Performance e Cargos dispensados — **menos** blocos
@@ -325,6 +336,19 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   Schema em `lib/eventFormSchema.ts`.
 - **Anexos**: `PendingAttachmentsPanel` guarda os arquivos escolhidos e os envia em **fase 2**,
   depois que o evento já existe (os endpoints de arquivo precisam do `event_id`).
+- **Feature 298 — a partir de um formulário** (`?form_response_id=`): lê
+  `GET /api/formularios/respostas/<id>/para-evento` (os dois vocabulários — site e carga WhatsForm)
+  e preenche **campo a campo** (nunca `reset`: data da venda e vendedor ficam) data, hora, fim,
+  local do evento (no corporativo, o endereço do evento — nunca o da empresa), tipo, pagamento,
+  cliente (ou abre sozinho o cadastro rápido, que ganhou e-mail e CPF/CNPJ, já preenchido),
+  personagens e observações rotuladas (Tema, Aniversariante, Espaço, Briefing…). Campo que veio
+  do formulário leva o selo **"do formulário"**; o que não entrou aparece no próprio campo com a
+  explicação do servidor e o texto da cliente. Valor, vendedor e título nunca vêm do formulário.
+  **Data suspeita** (antes da chegada ou a mais de 2 anos): "Adicionar à Agenda" continua ativo;
+  salvar sem trocar a data nem marcar "A data está certa" aponta o campo e rola até ele. Se a
+  cliente já tem evento sem formulário desde o corte, uma faixa oferece "Ligar a este evento"
+  (com a divergência de cliente, se houver). Formulário que já tem evento → 409 inline, sem tocar
+  o Google.
 - **API**: `GET /api/events/new/options`, `/prefill` · `POST /api/events` (+ endpoints de
   `contracts`, `payments`, `invoices`, `observations`, `reimbursements`).
 - **Vínculos entre módulos**: Catálogo → Elenco (auto-vínculo da Ficha de Figurino) ·
@@ -1343,19 +1367,19 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   `/catalogo/f/corporativo`, servidas por `apps/public` sob `/catalogo/*`), **"Copiar link"** com
   confirmação inline "✓ Copiado" (+ `aria-live`), **"Abrir"** em nova aba e, só para SUPERADMIN,
   **"✎ Editar campos deste formulário"**.
-- **Cartões de situação (feature 220)**: cinco cartões-filtro clicáveis entre os links e a
-  tabela — **Todas · Festa futura sem evento (vermelho quando > 0) · Sem evento · Sem cliente ·
-  Vínculo ambíguo** — com contagem grande (`counts` do próprio `GET /api/formularios/respostas`).
-  Clicar filtra a tabela no servidor (`?filtro=`) e limpa a busca; "Festa futura sem evento"
-  ordena pela data da festa (mais urgente primeiro) — é o caso "a cliente acha que está fechado
-  e o evento não existe".
+- **Cartões por destino (feature 298; eram os de situação da 220)**: **Todas · Sem destino (desde
+  DD/MM) (vermelho quando > 0) · Com evento · Encerrados · Histórico (antes de DD/MM)** — as
+  partições somam "Todas", "Sem destino" bate com a Home e o DD/MM vem de `counts.corte`. Clicar
+  filtra no servidor (`?filtro=`) e limpa a busca; filtro com mais de 200 respostas mostra "use a
+  busca" (`truncado`).
 - **Tabela densa de respostas** (colunas): **Contratante** (nome + telefone), **Formulário**
   (badge), **Data do evento** (`event_date`), **Recebida em** (`created_at` com **data e hora**,
   `DD/MM/AAAA HH:mm`), **Situação** (badges — verde "Cliente: `<nome>`" / âmbar "Sem cliente";
   verde "Evento vinculado · auto|manual" / âmbar "Sem evento" / **vermelho "⚠ Sem evento — festa
-  dd/mm/aaaa"** quando a festa é futura, com a linha inteira em `bg-red-50`; âmbar "Revisar
-  vínculo" quando a automação marcou ambíguo) e **Ver**. Rola dentro do próprio contêiner no
-  mobile.
+  dd/mm/aaaa"** quando a festa é futura e o formulário está sem destino, com a linha inteira em
+  `bg-red-50`; neutro "Encerrado · `<motivo>`" e "Histórico" — feature 298, que tirou o "Revisar
+  vínculo") e **Ver**. "Recebida em" sai na hora certa desde a 298 (`created_at` com `+00:00`).
+  Rola dentro do próprio contêiner no mobile.
 - **Filtros**: busca persistente por nome do contratante ou telefone (usa `…/respostas/search`
   a partir de 2 caracteres) combinada com abas **Todos / Pré-contrato / Corporativo**.
 - **Detalhe (`Dialog`)**: todos os campos preenchidos agrupados por seção; associar a cliente
@@ -1363,7 +1387,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   resposta** (`POST …/associar` sem `client_id` — reaproveita por telefone e ainda preenche
   CPF/CNPJ/endereço), desassociar; vincular/desvincular evento por data, **"Criar evento com os
   dados desta resposta"** (`/events/new?form_response_id=<id>`) e excluir (SUPERADMIN, com
-  confirmação inline).
+  confirmação inline). **Feature 298**: seção **Destino** — encerrado mostra motivo, frase, quem e
+  quando e **Reabrir**; sem destino oferece **Encerrar…**; histórico explica que não precisa de
+  destino (as ações obedecem às `flags` do servidor). A seção Evento mostra a mesma sugestão da
+  Home e, com evento ligado, a divergência de cliente com "Usar a cliente do evento neste
+  formulário"; vínculo recusado (409) aparece com a frase do servidor.
 - **Editor de campos (`Dialog`, SUPERADMIN)**: abas comum/corporativo, campos agrupados por seção
   com marca de obrigatório e etiqueta "sistema"; criar, editar, reordenar (↑/↓) e excluir. Na
   edição, **seção e tipo ficam travados** (imutáveis no backend); `options` de campos de seleção
@@ -1371,7 +1399,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   `update_field` substitui `help_text`/`placeholder`/`required`, então omitir apagaria.
 - **Vínculos**: `FormResponse` → `Client` e `CalendarEvent`; a resposta pode ser puxada no Bloco 1
   de Novo Evento (`FormResponsePicker`) ou já chegar pré-preenchida lá via
-  `?form_response_id=` (pré-contrato vinculado + data do evento + cliente associado).
+  `?form_response_id=` (desde a 298, tudo o que a cliente escreveu, com selos e alertas).
 
 #### `/admin/catalogo` — Gerenciador de Catálogo *(features 185 e 186)*
 - **Acesso**: **`SUPERADMIN`** (`_require_superadmin()`).

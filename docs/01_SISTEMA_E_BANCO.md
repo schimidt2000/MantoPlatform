@@ -7,7 +7,11 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-09-08** · **296-revisao-harness** (sem migration; §5 reescrita para o
+> Última atualização: **2026-09-11** · Em branch: **298-formulario-vira-evento** (migration
+> **`e5a1c7d93b20`** — head: encerramento em `form_responses` e a tabela
+> `form_response_dismissed_events`, §2; bloco `formularios` do `/api/dashboard` reescrito, §3.2;
+> endpoints de destino do formulário e guarda de 409 antes do Google, §3.14; RBAC, §4.3). Antes:
+> **2026-09-08** · **296-revisao-harness** (sem migration; §5 reescrita para o
 > Render — serviços, disco, backup, acesso ao servidor, `/health` público; `railway.json`/`nixpacks.toml`
 > removidos, o validador lê o `render.yaml`). Antes: **2026-09-03** · Em branch: **292-fotos-que-somem** + **293-atualizacao-cadastral**
 > (sem migration; `<Foto>` com fallback de 404, variante por largura em `figurino_photos`, `pillow-heif`
@@ -467,7 +471,8 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
 | `clients` | `Client` | cadastro comercial; identidade = `phone` normalizado (`NOT NULL UNIQUE`, só dígitos com DDI). `source` ∈ `kommo_import` \| `manual` \| `whatsform_import` (feature 193) | 1:N `events` |
-| `form_responses` | `FormResponse` | respostas dos formulários públicos de pré-contrato (`form_type` ∈ `comum` \| `corporativo`) **e** o histórico do WhatsForm importado na feature 193 | `client_id`, `event_id` (ambos indexados e nullable); `client_link_source` (feature 266: `auto_phone` \| `manual` \| `NULL`, espelha `event_link_source`) |
+| `form_responses` | `FormResponse` | respostas dos formulários públicos de pré-contrato (`form_type` ∈ `comum` \| `corporativo`) **e** o histórico do WhatsForm importado na feature 193. **Feature 298**: encerramento em `closed_reason` (`desistiu` \| `repetido` \| `preenchido_errado` \| `teste` \| `outro`), `closed_note` (≤ 300, obrigatória em `outro`), `closed_by_id`, `closed_at` (UTC ingênuo, como `created_at`); índice parcial `ix_form_responses_sem_destino` (`created_at` onde `event_id IS NULL AND closed_at IS NULL`). Invariante: `closed_at IS NOT NULL ⇒ event_id IS NULL` | `client_id`, `event_id` (ambos indexados e nullable); `closed_by_id` (`users`, `SET NULL`); `client_link_source` (feature 266: `auto_phone` \| `manual` \| `NULL`, espelha `event_link_source`; 298: `evento` quando a cliente veio do evento ligado) |
+| `form_response_dismissed_events` | `FormResponseDismissedEvent` | **Feature 298**: sugestão "parece ser este evento" descartada — o par nunca volta (definitivo, decisão do dono). `UNIQUE(form_response_id, event_id)`; **sem backref** de propósito (as exclusões de evento e de formulário contam com o `ON DELETE CASCADE`) | `form_response_id` e `event_id` (`CASCADE`), `dismissed_by_id` (`SET NULL`) |
 | `form_field_definitions` | `FormFieldDefinition` | editor de campos dos formulários (ordem, tipo, obrigatoriedade) | — |
 | `client_feedbacks` | `ClientFeedback` | avaliação pública da cliente via `feedback_token` do evento | `event_id` |
 | `orcamento_history` | `OrcamentoHistory` | histórico da calculadora de orçamento (vira `calendar_events.orcamento_history_id`) | `user_id` |
@@ -646,6 +651,19 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > motivos: aquele endpoint carrega 200 respostas inteiras para devolver 5 inteiros, e o
 > `_require_vendas` dele lê `current_user.roles` **cru** — ignora impersonação, então um SUPERADMIN
 > em "Ver como CASTING" continuaria vendo o card.
+
+> **Feature 298**: o bloco `formularios` deixou de ser os cinco contadores. Agora é
+> `{contagens, pode_criar_evento, motivos_encerramento, a_chegar[], ja_passou[]}`, montado por
+> `destino_ops.listar_sem_destino()`: os formulários que chegaram desde o corte (meia-noite de SP da
+> `release_date`, ou 01/06/2026) sem evento e sem encerramento, **uma linha por telefone**
+> (representada pelo que chegou por último), com `severidade` (`vermelho` 0–7 dias · `amarelo` 8–30
+> e todo "já passou" · `cinza` > 30 dias ou data suspeita), `dias_ate_a_data` pelo "hoje" de SP,
+> marcas `repetido`/`outro_com_evento`/`data_suspeita` e `sugestao` (evento livre da cliente a até 3
+> dias). `contagens` são as partições por destino (`sem_destino`, `com_evento`, `encerrados`,
+> `historico`, que somam `total`) mais `corte` — a mesma fonte dos cartões de `/formularios`.
+> `pode_criar_evento` = papel efetivo em `_CAN_CREATE` (respeita "Ver como"). Contrato:
+> `specs/298-formulario-vira-evento/contracts/dashboard-formularios.md`; todos os campos são
+> opcionais no tipo TS.
 
 ### 3.3 Agenda e Eventos — `agenda.py` (leitura) / `agenda_write.py` (escrita)
 | Método | Rota |
@@ -1173,6 +1191,14 @@ resposta **para quem abriu** (um GET que escreve, de propósito); `delete_respon
 resposta. Retenção (lida > 30 d, não lida > 180 d) no laço do review-cleanup e em `flask
 notificacoes-limpar [--execute]`.
 
+**Feature 298**: formulário que ganha destino (ligado a evento por qualquer caminho, ou encerrado)
+tem os avisos marcados como lidos **para todos** (`notificacoes_ops.marcar_lidas_por_entidade`, sem
+filtro de usuário, na transação do fato); reabrir não reacende; formulário que já chega ligado não
+gera aviso. Correções únicas pós-deploy, dry-run por padrão e com `MANTO_SEM_THREADS=1`:
+`flask formularios-avisos-resolvidos [--execute]` (FR-019: avisos acesos de formulário com destino,
+em lote via `marcar_lidas_por_entidades`) e `flask formularios-cliente-do-evento [--execute]`
+(FR-020: formulários desde o corte ligados a evento com cliente e ainda sem cliente).
+
 ### 3.14 Superfícies públicas (sem login)
 **Catálogo — item avulso × tema (fase 1, migration `c8f4d92e17ab`).** `catalog_items.figurino_sheet_id`
 guarda a ficha do item quando ele se contrata SOZINHO. INVARIANTE: item com elenco (um tema) tem
@@ -1201,6 +1227,37 @@ ambiguos|futuros_sem_evento` (`formularios_ops.STATUS_FILTERS`; `futuros_sem_eve
 para os cartões da tela. O vínculo automático (`_attempt_auto_link`) só vincula com **data +
 telefone confirmados**; `formularios_ops.ensure_event_client` garante a linha em `event_clients`
 (e o `client_id` denormalizado) em todo vínculo manual/associação com cliente conhecido.
+
+**Feature 298 — o formulário vira evento** (contratos em `specs/298-formulario-vira-evento/contracts/`):
+- `GET /api/formularios/respostas?filtro=` aceita as partições por destino (`sem_destino`,
+  `com_evento`, `encerrados`, `historico`; filtro antigo cai em "todas", sem erro); `counts` são as
+  partições + `corte` (AAAA-MM-DD, SP); `truncado` avisa quando o filtro passa de 200. O resumo
+  ganha `destino`, `tipo_rotulo`, `closed_reason`/`closed_reason_label`/`closed_note`/
+  `closed_by_name`/`closed_at`; `created_at` e `closed_at` saem com `+00:00`.
+- O detalhe ganha `motivos_encerramento` (`[{codigo, rotulo, pede_frase}]` — a tela não tem cópia),
+  `sugestao`, `divergencia_cliente` (recalculada a cada leitura) e `flags` (`pode_encerrar`,
+  `pode_reabrir`, `pode_criar_evento`).
+- Novos, em `formularios_admin_write`: `POST …/<id>/encerrar` `{motivo, frase}` (400 com `fields`,
+  409 destino já dado, 422 formulário do histórico) · `…/reabrir` (409 "Este formulário não está
+  mais encerrado.") · `…/manter-entre-repetidos` (encerra como `repetido` os outros sem destino do
+  mesmo telefone, uma `audit()` por formulário; 422 sem telefone) · `…/sugestao/<event_id>/confirmar`
+  (404 sugestão que não vale mais; 409) · `…/sugestao/<event_id>/descartar` (`ON CONFLICT DO
+  NOTHING`: idempotente e definitivo) · `…/usar-cliente-do-evento` (409 sem evento com cliente; o
+  evento nunca muda). Em `formularios_admin_read`: `GET …/para-evento` (o formulário traduzido para o
+  cadastro — `contracts/pre-evento.md`; 409 se já tem evento; só leitura, não apaga aviso).
+- `POST …/vincular-evento` **não sobrescreve mais**: 409 "Este formulário já tem destino." e a
+  resposta vira `{response, divergencia_cliente, event_id, event_title}`.
+- **Núcleo único de vínculo**: tela, sugestão, criar evento, aba Comercial, edição do evento, envio
+  público e reprocessamento do sync passam por `formularios_ops.apply_event_link` — desfaz o
+  encerramento, leva a cliente nos dois sentidos sem trocar ninguém quando divergem, grava
+  `event_link_locked` só em decisão humana e apaga o aviso para todos.
+- `POST /api/events` com `form_response_id` bloqueia o formulário (`FOR UPDATE`) **antes** do Google
+  e responde 409 sem tocar a agenda se ele já tem evento; `PATCH /api/events/<id>` e
+  `…/form-response` respondem 409 com a mesma mensagem (antes: silêncio no primeiro, outra frase no
+  segundo).
+- Envio público (`POST /api/formularios/<tipo>`): a cliente pelo telefone vem antes do vínculo de
+  evento (preserva `auto_phone` e o preenchimento da ficha); formulário que já chega ligado não
+  gera aviso.
 
 `GET /api/gastos/eventos?date=YYYY-MM-DD` (seletor de vínculo de evento, consumido tanto por
 Gastos Extras quanto pelo detalhe de resposta em `/formularios`) respondia **500 no Postgres** até
@@ -1397,7 +1454,9 @@ Gates por módulo (todos em `app/api/`):
 | `_can_edit_talent()` | `talents_read/write` | `CASTING`, `SUPERADMIN` |
 | `_can_view_vendas(settings)` | `financeiro_read` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` **ou** responsável EducaManto |
 | `_require_financeiro()` | `financeiro_write`, `gastos_*` | `FINANCEIRO`, `SUPERADMIN` |
-| `_require_vendas()` | `clientes_read.py:24`, `clientes_write.py:25`, `formularios_admin_read.py:24` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
+| `_require_vendas()` | `clientes_read.py:24`, `clientes_write.py:25`, `formularios_admin_read.py:34` (importado por `formularios_admin_write`) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
+| `_require_vendas()` — endpoints da 298 | `formularios_admin_write`: `…/encerrar`, `…/reabrir`, `…/manter-entre-repetidos`, `…/sugestao/<id>/confirmar`, `…/sugestao/<id>/descartar`, `…/usar-cliente-do-evento` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (papel real — o "Ver como" não se aplica, dívida §3.5) |
+| `_pode_criar_evento()` | `formularios_admin_read`: `GET …/para-evento` e a flag do detalhe (delega para `_CAN_CREATE`, sem repetir a lista) | `COMERCIAL`, `SUPERADMIN` — FINANCEIRO leva 403 |
 | `_require_vendas()` ⚠️ **homônimo, regra diferente** | `orcamento_read.py:30` (importado por `orcamento_write.py:19`) | `COMERCIAL`, `SUPERADMIN` — **FINANCEIRO leva 403** |
 | `_has_role(COMERCIAL, FIGURINO, SUPERADMIN)` | `catalogo_read.api_catalogo_elenco_busca` | busca visual de elenco / vínculo de ficha |
 | `_require_use()` / `_require_manage()` | `educamanto_*` | uso: `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO`; gestão: `COMERCIAL`, `SUPERADMIN` |
