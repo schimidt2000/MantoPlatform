@@ -53,7 +53,7 @@ leitura. Extrator puro: `app/formularios/pre_evento_ops.extrair_para_evento(resp
 | Evento | Chaves do formulário (nativo · WhatsForm) | Transformação | Alerta |
 |---|---|---|---|
 | `date` | coluna `event_date` | ISO direto | antes do dia de chegada, ou mais de 2 anos depois → `data_suspeita` |
-| `start` | `hora_evento` · hora dentro de `data_do_evento` ("AAAA-MM-DD HH:MM") | "HH:MM" | ausente → `hora_ausente` |
+| `start` | `hora_evento` · hora dentro de `data_do_evento` ("AAAA-MM-DD HH:MM") | "HH:MM". A hora escrita é forte. A de dentro da data (WhatsForm) é a do seletor de data-hora: só vale entre 7h e 23h e com minuto múltiplo de 5 (a produção tem 15:03, 12:04, 04:00), e cede ao início do intervalo escrito no período (corrigido na implementação, 11/09) | ausente ou descartada → `hora_ausente`, com o texto da data |
 | `end` | `periodo_contratacao` · `periodo_de_contratacao` | só formas inequívocas: "das X às Y", "X-Y", "Xh-Yh", "N horas" / "Nh" (início + N) | ambíguo ou contradiz a hora → `periodo_ambiguo`, com o texto |
 | `location` | comum: `logradouro, numero, complemento, bairro, cidade, estado, cep` · corporativo: `endereco_evento` / `endereco_completo_do_evento` | compõe uma linha; **nunca** `endereco_contratante` nem `endereco_empresa` | sem número ou sem CEP → `endereco_incompleto` |
 | `event_type` | `tipo_contratacao` · `tipo_de_contratacao`; corporativo → `CORP` | "Receptivo e Interativo" → `R&I`; texto com "Show" → `SHOW`; demais → vazio | não reconhecido → `tipo_sem_correspondente` |

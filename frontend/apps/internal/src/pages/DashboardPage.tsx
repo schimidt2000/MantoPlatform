@@ -491,7 +491,8 @@ function FormularioSemDestinoRow({
 }) {
   const severidade = linha.severidade ?? "cinza";
   const nome = linha.cliente?.nome ?? linha.nome_no_formulario ?? "Sem nome";
-  const distancia = distanciaDaData(linha.dias_ate_a_data);
+  // Data suspeita (ex.: 2049) não ganha distância: "em 8241 dias" é ruído — a marca já diz tudo.
+  const distancia = linha.data_suspeita ? null : distanciaDaData(linha.dias_ate_a_data);
   const vezes = linha.formularios?.length ?? 1;
   const id = linha.representante_id;
   const [repetidosAbertos, setRepetidosAbertos] = useState(false);

@@ -134,6 +134,23 @@ def _hora(texto: str) -> str | None:
     return _hhmm(*achado.groups()) if achado else None
 
 
+def _hora_plausivel(hhmm: str | None) -> str | None:
+    """A hora de dentro de ``data_do_evento`` só vale se parece hora de festa.
+
+    Na carga WhatsForm essa hora é a do seletor de data-hora, que a cliente nem sempre mexe — a
+    produção tem 15:03, 12:04 e 04:00 (medido em 11/09). Só vale entre 7h e 23h e em minuto
+    redondo (múltiplo de 5), e sempre cede ao intervalo escrito no período.
+    """
+    if not hhmm:
+        return None
+    hora, minuto = (int(x) for x in hhmm.split(":"))
+    return hhmm if _MADRUGADA <= hora <= 23 and minuto % 5 == 0 else None
+
+
+def _eh_duracao(texto: str) -> bool:
+    return bool(_RE_DURACAO.match(_normalizar(texto)))
+
+
 def _periodo(texto: str, inicio: str | None) -> tuple[str | None, str] | None:
     """Início e fim pelo período contratado, só nas formas inequívocas; ``None`` = ambíguo.
 
@@ -320,21 +337,31 @@ def extrair_para_evento(response: FormResponse) -> dict:
             escrito = response.event_date.strftime("%d/%m/%Y")
             alertas.append(_alerta("date", "data_suspeita", escrito))
 
-    inicio = _hora(_valor(campos, "hora")) or _hora(_valor(campos, "data_hora"))
-    fim = None
+    # Hora: a escrita no campo próprio é forte; a de dentro de `data_do_evento` (WhatsForm) é
+    # fraca — só vale se plausível e cede ao intervalo do período (ver `_hora_plausivel`).
+    hora_escrita = _hora(_valor(campos, "hora"))
+    data_hora = _valor(campos, "data_hora")
+    hora_da_data = _hora_plausivel(_hora(data_hora))
+    inicio, fim = hora_escrita, None
     periodo_escrito = _valor(campos, "periodo")
     if periodo_escrito:
-        periodo = _periodo(periodo_escrito, inicio)
-        # O período que contradiz a hora informada também é ambíguo: qual das duas vale?
-        if periodo is None or (inicio and periodo[0] and periodo[0] != inicio):
+        periodo = _periodo(periodo_escrito, hora_escrita or hora_da_data)
+        if periodo is None:
+            # "4 horas" sem hora de início não é período ambíguo: falta a hora (alerta abaixo).
+            if not (_eh_duracao(periodo_escrito) and not (hora_escrita or hora_da_data)):
+                alertas.append(_alerta("end", "periodo_ambiguo", periodo_escrito))
+        elif hora_escrita and periodo[0] != hora_escrita:
+            # O período que contradiz a hora ESCRITA é ambíguo: qual das duas vale?
             alertas.append(_alerta("end", "periodo_ambiguo", periodo_escrito))
         else:
-            inicio = inicio or periodo[0]
-            fim = periodo[1]
+            inicio, fim = periodo
+    inicio = inicio or hora_da_data
     usar("start", inicio)
     usar("end", fim)
     if not inicio:
-        alertas.append(_alerta("start", "hora_ausente"))
+        # Hora de seletor descartada: mostra o que estava lá, para a comercial decidir.
+        descartada = data_hora if _hora(data_hora) else None
+        alertas.append(_alerta("start", "hora_ausente", descartada))
 
     local, alerta = _local(response, campos)
     usar("location", local)
