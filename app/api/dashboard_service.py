@@ -575,12 +575,21 @@ def build_dashboard_summary(
     # Mesmo conjunto de `_require_vendas` (COMERCIAL ∪ FINANCEIRO ∪ SUPERADMIN), em variável
     # própria para os dois gates poderem divergir depois sem ninguém se perder.
     show_formularios = show_comercial
-    def _painel_formularios() -> dict[str, Any]:
-        from app.formularios import formularios_ops
 
-        # `count_status()` resolve os cinco contadores numa query só — o mesmo núcleo que
-        # alimenta os cartões de /formularios, para os dois números não poderem divergir.
-        return formularios_ops.count_status()
+    def _painel_formularios() -> dict[str, Any]:
+        from app.calendar.routes import _CAN_CREATE
+        from app.formularios import destino_ops
+
+        # Feature 298: a lista dos formulários que chegaram desde o corte e ainda não têm destino,
+        # no lugar dos quatro números (que contavam o histórico importado e diziam 1.347).
+        # As contagens vêm do MESMO núcleo dos cartões de /formularios — não podem divergir.
+        bloco = destino_ops.listar_sem_destino()
+        # A ação principal da linha depende do papel EFETIVO: "Ver como FINANCEIRO" vê "Abrir",
+        # porque criar evento é de `_CAN_CREATE` (a lista de papéis mora na agenda, não aqui).
+        bloco["pode_criar_evento"] = is_superadmin or any(
+            _effective_has_role(user, impersonate, papel) for papel in _CAN_CREATE
+        )
+        return bloco
 
     formularios = _bloco("formularios", _painel_formularios) if show_formularios else None
 

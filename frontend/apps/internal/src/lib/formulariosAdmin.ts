@@ -16,6 +16,18 @@ export interface FormResponseSummary {
   event_link_ambiguous: boolean;
   event_link_locked: boolean;
   created_at: string;
+  // Feature 298 — opcionais: servidor e site sobem separados e ficam ~1 min em versões diferentes.
+  /** Destino do formulário, calculado no servidor com a mesma regra das contagens. */
+  destino?: Destino;
+  /** "Festa" ou "Corporativo". */
+  tipo_rotulo?: string;
+  /** 'manual' | 'auto_phone' | 'evento' (veio do evento ligado). */
+  client_link_source?: string | null;
+  closed_reason?: string | null;
+  closed_reason_label?: string | null;
+  closed_note?: string | null;
+  closed_by_name?: string | null;
+  closed_at?: string | null;
 }
 
 export interface FormResponseDetail extends FormResponseSummary {
@@ -23,23 +35,36 @@ export interface FormResponseDetail extends FormResponseSummary {
   event_title: string | null;
 }
 
-/** Filtros de situação aceitos pelo backend (`formularios_ops.STATUS_FILTERS`). */
-export type StatusFilter = "" | "sem_evento" | "sem_cliente" | "ambiguos" | "futuros_sem_evento";
+/** Destino de um formulário — as partições que somam o total (feature 298). */
+export type Destino = "sem_destino" | "com_evento" | "encerrados" | "historico";
 
+/** Filtros aceitos pelo backend (`formularios_ops.STATUS_FILTERS`); vazio = todas. */
+export type StatusFilter = "" | Destino;
+
+/** Contadores dos cartões, também servidos na Home — todos opcionais pelo mesmo motivo acima. */
 export interface StatusCounts {
-  total: number;
-  sem_evento: number;
-  sem_cliente: number;
-  ambiguos: number;
-  futuros_sem_evento: number;
+  total?: number;
+  sem_destino?: number;
+  com_evento?: number;
+  encerrados?: number;
+  historico?: number;
+  /** Dia do corte (AAAA-MM-DD, São Paulo): o que chegou antes é histórico. */
+  corte?: string;
 }
 
-/** Lista as respostas de formulário mais recentes + contadores dos cartões de situação. */
+interface ListaRespostas {
+  responses: FormResponseSummary[];
+  counts: StatusCounts;
+  /** `true` quando o filtro tem mais que as 200 respostas mostradas. */
+  truncado?: boolean;
+}
+
+/** Lista as respostas de formulário mais recentes + contadores dos cartões por destino. */
 export function useFormResponses(filtro: StatusFilter = "") {
-  return useQuery<{ responses: FormResponseSummary[]; counts: StatusCounts }>({
+  return useQuery<ListaRespostas>({
     queryKey: ["formularios-respostas", filtro],
     queryFn: () =>
-      apiFetch<{ responses: FormResponseSummary[]; counts: StatusCounts }>(
+      apiFetch<ListaRespostas>(
         `/api/formularios/respostas${filtro ? `?filtro=${filtro}` : ""}`,
       ),
     // Trocar de cartão não pisca a tela: mantém lista+contadores anteriores até chegar o novo.

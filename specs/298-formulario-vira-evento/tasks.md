@@ -237,11 +237,11 @@ em palavras e a ação por papel. A tela Formulários passa a filtrar por destin
 **Verificação da história (obrigatória)**: cenários 1–4 e 13 do `verify_298.py` em PASS; Home aberta
 (com e sem pendência, estreita, como FINANCEIRO).
 
-- [ ] T015 [US1] Em `app/formularios/formularios_ops.py`, trocar a forma de `STATUS_FILTERS`,
+- [X] T015 [US1] Em `app/formularios/formularios_ops.py`, trocar a forma de `STATUS_FILTERS`,
   `_status_condition` e `count_status()` para as partições de T006, com `corte` na contagem. Isso fica
   **no mesmo commit** de T017–T021, com os consumidores. `list_responses` passa a devolver também
   `truncado`. Filtro desconhecido lista todos.
-- [ ] T016 [US1] Criar `app/formularios/destino_ops.py` com `listar_sem_destino(hoje_sp: date | None =
+- [X] T016 [US1] Criar `app/formularios/destino_ops.py` com `listar_sem_destino(hoje_sp: date | None =
   None) -> dict` (`data-model.md` §5, `contracts/dashboard-formularios.md`):
   - por formulário: `dias_ate_a_data`, `dias_desde_chegada` (em SP), `grupo`, `data_suspeita`,
     `severidade` e `tipo_rotulo`;
@@ -251,19 +251,19 @@ em palavras e a ação por papel. A tela Formulários passa a filtrar por destin
 
   Nesta fase cada linha tem um formulário só, e `sugestao` é `None`. Funções pequenas: `_severidade`,
   `_eh_data_suspeita`, `_linha`, `_motivos()`.
-- [ ] T017 [US1] Em `app/api/dashboard_service.py`, `_painel_formularios` (`:578-585`) chama
+- [X] T017 [US1] Em `app/api/dashboard_service.py`, `_painel_formularios` (`:578-585`) chama
   `listar_sem_destino()` dentro do `_bloco` e acrescenta `pode_criar_evento` = `is_superadmin` (`:508`)
   ou `_effective_has_role(user, impersonate, papel)` para algum papel de `_CAN_CREATE`
   (`calendar/routes.py:60`). Gate inalterado.
-- [ ] T018 [P] [US1] Em `app/api/formularios_admin_read.py`, `GET /api/formularios/respostas`
+- [X] T018 [P] [US1] Em `app/api/formularios_admin_read.py`, `GET /api/formularios/respostas`
   (`:69-86`) com os filtros novos, `counts` com as partições e o `corte`, e `truncado`.
-- [ ] T019 [P] [US1] Tipos do front, com **todos os campos novos opcionais**:
+- [X] T019 [P] [US1] Tipos do front, com **todos os campos novos opcionais**:
   - `frontend/apps/internal/src/lib/formulariosAdmin.ts`: `StatusFilter`, `StatusCounts` (partições +
     `corte`), `FormResponseSummary` (`destino`, `tipo_rotulo`, `closed_*`, `client_link_source`) e
     `truncado`;
   - `frontend/apps/internal/src/lib/types.ts`: `FormulariosSummary` próprio (`contagens?`,
     `pode_criar_evento?`, `motivos_encerramento?`, `a_chegar?`, `ja_passou?`) e `LinhaFormulario`.
-- [ ] T020 [US1] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`, o painel "📝 Formulários sem
+- [X] T020 [US1] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`, o painel "📝 Formulários sem
   evento na agenda" logo depois do "💼 Comercial" (`:859-879`), substituindo o painel atual (`:881-920`)
   e a `LinhaFormularios` (`:409-428`):
   - dois `PanelGroup`, cada um com a sua `ListaTruncada` de 6 linhas;
@@ -281,7 +281,7 @@ em palavras e a ação por papel. A tela Formulários passa a filtrar por destin
   - vazio "Nenhum formulário esperando evento ✓";
   - em tela estreita a linha quebra em duas, sem rolagem horizontal e **com a ação principal sempre
     visível**.
-- [ ] T021 [US1] Em `frontend/apps/internal/src/pages/FormulariosAdminPage.tsx`:
+- [X] T021 [US1] Em `frontend/apps/internal/src/pages/FormulariosAdminPage.tsx`:
   - `STATUS_CARDS` (`:171-177`) → "Todas", "Sem destino (desde DD/MM)", "Com evento", "Encerrados" e
     "Histórico (antes de DD/MM)", com o DD/MM do `counts.corte`;
   - grid (`:193`) e `countFor` com as chaves novas;

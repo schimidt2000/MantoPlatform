@@ -140,12 +140,62 @@ export interface OficinaFilaSummary {
   items: MinhaPecaRef[];
 }
 
+/** Um formulário dentro de uma linha da Home (a linha junta os do mesmo telefone). */
+export interface FormularioDaLinha {
+  id: number;
+  tipo_rotulo?: string;
+  data_informada?: string | null;
+  chegou_em?: string | null;
+  dias_desde_chegada?: number;
+}
+
+/** Evento da cliente a até 3 dias da data informada — "parece ser este evento, é?". */
+export interface SugestaoDeEvento {
+  event_id: number;
+  titulo?: string;
+  data?: string | null;
+  dias_diferenca?: number;
+}
+
 /**
- * Contadores dos cartões de situação de `/formularios`, servidos também na Home (feature 266).
- * Mesma forma do `StatusCounts` de `lib/formulariosAdmin.ts` — os dois lêem o mesmo
- * `count_status()` do servidor.
+ * Uma linha de "Formulários sem evento na agenda" (feature 298). Tudo além do id é opcional:
+ * servidor e site sobem separados e ficam ~1 min em versões diferentes em todo deploy.
  */
-export type FormulariosSummary = StatusCounts;
+export interface LinhaFormulario {
+  representante_id: number;
+  chave?: string;
+  cliente?: { id: number; nome: string } | null;
+  nome_no_formulario?: string;
+  tipo?: "comum" | "corporativo";
+  tipo_rotulo?: string;
+  data_informada?: string | null;
+  /** Negativo quando a data informada já passou; `null` sem data. */
+  dias_ate_a_data?: number | null;
+  dias_desde_chegada?: number;
+  grupo?: "a_chegar" | "ja_passou";
+  severidade?: "vermelho" | "amarelo" | "cinza";
+  data_suspeita?: boolean;
+  repetido?: boolean;
+  outro_com_evento?: boolean;
+  formularios?: FormularioDaLinha[];
+  sugestao?: SugestaoDeEvento | null;
+}
+
+/** Motivo de encerramento servido pelo servidor — a tela não tem cópia da lista. */
+export interface MotivoEncerramento {
+  codigo: string;
+  rotulo: string;
+}
+
+/** Bloco `formularios` do `/api/dashboard` (feature 298) — contrato em `contracts/dashboard-formularios.md`. */
+export interface FormulariosSummary {
+  contagens?: StatusCounts;
+  /** Papel efetivo pode criar evento (senão a ação da linha é "Abrir"). */
+  pode_criar_evento?: boolean;
+  motivos_encerramento?: MotivoEncerramento[];
+  a_chegar?: LinhaFormulario[];
+  ja_passou?: LinhaFormulario[];
+}
 
 export interface DashboardSummary {
   casting: CastingSummary | null;
@@ -160,9 +210,8 @@ export interface DashboardSummary {
   ensaio: EnsaioSummary | null;
   comercial: { pending_payments: PendingPayment[] } | null;
   /**
-   * Contadores das respostas de formulário ainda não tratadas (feature 266). Mesmo gate do
-   * bloco comercial. Não existe noção de "lida" no modelo — o que se conta é o que ainda não
-   * virou evento nem ficha, e `futuros_sem_evento` é a única urgência de verdade.
+   * Formulários que chegaram desde o corte e ainda não têm destino (feature 298). Mesmo gate do
+   * bloco comercial; `null` = sem permissão ou painel que falhou.
    */
   formularios: FormulariosSummary | null;
   financeiro: { recurring_expense_alerts: RecurringExpenseAlert[] } | null;

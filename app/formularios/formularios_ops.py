@@ -20,7 +20,7 @@ from sqlalchemy.orm import joinedload
 
 from app import db
 from app.clientes.importer import normalize_phone
-from app.constants import CORTE_FORMULARIOS_PADRAO, FORM_TIPO_ROTULOS, now_sp
+from app.constants import CORTE_FORMULARIOS_PADRAO, FORM_TIPO_ROTULOS
 from app.models import (
     CalendarEvent,
     Client,
@@ -105,6 +105,15 @@ def corte_de_chegada() -> datetime:
 def dia_sp(utc_ingenuo: datetime) -> date:
     """Dia em São Paulo de um instante gravado em UTC ingênuo (``created_at``/``closed_at``)."""
     return utc_ingenuo.replace(tzinfo=UTC).astimezone(_FUSO_SP).date()
+
+
+def iso_utc(utc_ingenuo: datetime | None) -> str | None:
+    """ISO com ``+00:00`` de um instante em UTC ingênuo, para o navegador converter certo.
+
+    Sem o fuso, ``new Date(iso)`` lia como hora local e "Recebida em" mostrava 3 h a mais
+    (corrigido de carona na feature 298).
+    """
+    return utc_ingenuo.replace(tzinfo=UTC).isoformat() if utc_ingenuo else None
 
 
 def condicao_sem_destino(corte: datetime):
@@ -259,62 +268,45 @@ def search_responses(q: str) -> list[FormResponse]:
     )
 
 
-# Filtros de situação da listagem de respostas — chaves estáveis usadas pela API e pela tela.
-STATUS_FILTERS = ("sem_evento", "sem_cliente", "ambiguos", "futuros_sem_evento")
+# Filtros da listagem = as partições por destino (feature 298). Os filtros antigos
+# (`sem_evento`, `sem_cliente`, `ambiguos`, `futuros_sem_evento`) contavam o histórico importado e
+# diziam 1.347 "sem evento"; chave antiga ou desconhecida cai em "todos", sem erro.
+STATUS_FILTERS = DESTINOS
 
 
-def _status_condition(filtro: str):
-    """Condição SQL de um filtro de situação (``None`` para filtro desconhecido/vazio)."""
-    if filtro == "sem_evento":
-        return FormResponse.event_id.is_(None)
-    if filtro == "sem_cliente":
-        return FormResponse.client_id.is_(None)
-    if filtro == "ambiguos":
-        # Ambíguo só interessa enquanto não resolvido — resposta já vinculada sai da fila.
-        return db.and_(
-            FormResponse.event_link_ambiguous.is_(True), FormResponse.event_id.is_(None)
-        )
-    if filtro == "futuros_sem_evento":
-        # `now_sp()`, nunca `date.today()`: produção roda em UTC, e das 21h à meia-noite de
-        # Brasília o "hoje" do processo já é amanhã — a festa de HOJE sairia da fila
-        # justamente no horário em que a comercial confere o dia seguinte.
-        return db.and_(
-            FormResponse.event_id.is_(None), FormResponse.event_date >= now_sp().date()
-        )
-    return None
+def _status_condition(filtro: str, corte: datetime):
+    """Condição SQL de um filtro de destino (``None`` para filtro desconhecido/vazio)."""
+    if filtro not in STATUS_FILTERS:
+        return None
+    return condicao_particao(filtro, corte)
 
 
-def count_status() -> dict[str, int]:
-    """Contadores dos cartões-resumo da tela de formulários (1 query, sem N+1)."""
-    row = db.session.query(
-        db.func.count(FormResponse.id),
-        *[
-            db.func.count(FormResponse.id).filter(_status_condition(f))
-            for f in STATUS_FILTERS
-        ],
-    ).one()
-    return {"total": row[0], **{f: row[i + 1] for i, f in enumerate(STATUS_FILTERS)}}
+def count_status(corte: datetime | None = None) -> dict:
+    """Contadores dos cartões da tela de formulários — as partições por destino e o corte."""
+    return contar_por_destino(corte)
 
 
-def list_responses(limit: int = 200, filtro: str = "") -> list[FormResponse]:
-    """Lista as respostas mais recentes (tela de índice), com filtro de situação opcional.
+def list_responses(
+    limit: int = 200, filtro: str = "", corte: datetime | None = None
+) -> tuple[list[FormResponse], bool]:
+    """Lista as respostas mais recentes (tela de índice), com filtro de destino opcional.
 
-    O cliente vinculado vem em ``joinedload``: a listagem exibe o nome dele em cada linha
-    (badge "Cliente: <nome>"), e sem isso seriam até ``limit`` queries extras (N+1).
-    ``futuros_sem_evento`` ordena pela data do evento (o mais urgente primeiro) — é a fila
-    de "festa chegando sem evento na agenda"; os demais mantêm o mais recente primeiro.
+    Cliente e quem encerrou vêm em ``joinedload``: a listagem mostra os dois em cada linha, e
+    sem isso seriam até ``limit`` queries extras (N+1).
+
+    Returns:
+        ``(respostas, truncado)`` — ``truncado`` diz que o filtro tem mais que ``limit``, para a
+        tela avisar "use a busca" em vez de fingir que a lista acabou.
     """
+    corte = corte or corte_de_chegada()
     query = FormResponse.query.options(
         joinedload(FormResponse.client), joinedload(FormResponse.closed_by)
     )
-    condition = _status_condition(filtro)
+    condition = _status_condition(filtro, corte)
     if condition is not None:
         query = query.filter(condition)
-    if filtro == "futuros_sem_evento":
-        query = query.order_by(FormResponse.event_date.asc())
-    else:
-        query = query.order_by(FormResponse.created_at.desc())
-    return query.limit(limit).all()
+    linhas = query.order_by(FormResponse.created_at.desc()).limit(limit + 1).all()
+    return linhas[:limit], len(linhas) > limit
 
 
 def ensure_event_client(event: CalendarEvent, client_id: int | None) -> None:

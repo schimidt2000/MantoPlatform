@@ -161,20 +161,38 @@ function PublicFormCard({ nome, descricao, url, canEditStructure, onEditFields }
 //  Cartões de situação + tabela de respostas
 // ══════════════════════════════════════════════════════════════════
 
-/** `true` quando a festa é hoje/futura e a resposta ainda não tem evento — o caso que não
- * pode passar despercebido (a cliente acha que está fechado e o evento não existe). */
-function isFutureWithoutEvent(r: FormResponseSummary): boolean {
-  if (r.event_id || !r.event_date) return false;
-  return r.event_date.slice(0, 10) >= new Date().toISOString().slice(0, 10);
+/** Hoje no relógio do navegador, em AAAA-MM-DD local (o `toISOString` é UTC e vira o dia às 21h). */
+function hojeLocalIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const STATUS_CARDS: { key: StatusFilter; label: string; urgent?: boolean }[] = [
-  { key: "", label: "Todas" },
-  { key: "futuros_sem_evento", label: "Festa futura sem evento", urgent: true },
-  { key: "sem_evento", label: "Sem evento" },
-  { key: "sem_cliente", label: "Sem cliente" },
-  { key: "ambiguos", label: "Vínculo ambíguo" },
-];
+/** `true` quando o formulário ainda não tem destino e a data informada é hoje ou futura — o caso
+ * que não pode passar despercebido (a cliente acha que está fechado e o evento não existe). O
+ * destino vem do servidor, com a mesma regra da Home (feature 298). */
+function isFutureWithoutEvent(r: FormResponseSummary): boolean {
+  const semDestino = r.destino ? r.destino === "sem_destino" : !r.event_id;
+  if (!semDestino || !r.event_date) return false;
+  return r.event_date.slice(0, 10) >= hojeLocalIso();
+}
+
+/** `01/06` a partir do corte AAAA-MM-DD. */
+function diaMes(iso: string | undefined): string | null {
+  const [, mes, dia] = (iso ?? "").slice(0, 10).split("-");
+  return mes && dia ? `${dia}/${mes}` : null;
+}
+
+/** Cartões por destino (feature 298): as partições somam "Todas" e batem com a Home. */
+function statusCards(corte: string | undefined): { key: StatusFilter; label: string; urgent?: boolean }[] {
+  const desde = diaMes(corte);
+  return [
+    { key: "", label: "Todas" },
+    { key: "sem_destino", label: desde ? `Sem destino (desde ${desde})` : "Sem destino", urgent: true },
+    { key: "com_evento", label: "Com evento" },
+    { key: "encerrados", label: "Encerrados" },
+    { key: "historico", label: desde ? `Histórico (antes de ${desde})` : "Histórico" },
+  ];
+}
 
 function StatusCards({
   counts,
@@ -191,7 +209,7 @@ function StatusCards({
   };
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-      {STATUS_CARDS.map(({ key, label, urgent }) => {
+      {statusCards(counts?.corte).map(({ key, label, urgent }) => {
         const count = countFor(key);
         const isActive = active === key;
         const alarming = urgent && (count ?? 0) > 0;
@@ -235,13 +253,17 @@ function SituacaoBadges({ response }: { response: FormResponseSummary }) {
         <MetricBadge tone="green">
           Evento vinculado · {response.event_link_source === "manual" ? "manual" : "auto"}
         </MetricBadge>
+      ) : response.destino === "encerrados" ? (
+        <MetricBadge tone="neutral">
+          Encerrado · {response.closed_reason_label ?? "sem motivo"}
+        </MetricBadge>
+      ) : response.destino === "historico" ? (
+        // Chegou antes do corte: é histórico da cliente, não tarefa (feature 298).
+        <MetricBadge tone="neutral">Histórico</MetricBadge>
       ) : urgent ? (
         <MetricBadge tone="red">⚠ Sem evento — festa {formatDate(response.event_date)}</MetricBadge>
       ) : (
         <MetricBadge tone="gold">Sem evento</MetricBadge>
-      )}
-      {!response.event_id && response.event_link_ambiguous && (
-        <MetricBadge tone="gold">Revisar vínculo</MetricBadge>
       )}
     </div>
   );
@@ -796,6 +818,12 @@ export function FormulariosAdminPage() {
             >
               <ResponsesTable responses={responses} onOpen={abrirResposta} />
             </motion.div>
+          )}
+
+          {!isSearching && list.data?.truncado && (
+            <p className="text-xs text-muted">
+              Mostrando as 200 mais recentes — use a busca para achar uma resposta mais antiga.
+            </p>
           )}
         </CardContent>
       </Card>

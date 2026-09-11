@@ -3,7 +3,17 @@ import { Link } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { apiFetch } from "@manto/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle, MetricBadge, PageHeader, Skeleton } from "@manto/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  MetricBadge,
+  PageHeader,
+  Skeleton,
+  formatShortDate,
+} from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { PORTAL_PUBLICO } from "../lib/eventDetail";
 import { useCurrentUser } from "../lib/useAuth";
@@ -12,6 +22,8 @@ import type {
   DashboardTaskRef,
   EnsaioEventRef,
   EnsaioSummary,
+  FormulariosSummary,
+  LinhaFormulario,
   MinhaPecaRef,
   PendingPayment,
   UnconfirmedInviteRef,
@@ -405,25 +417,224 @@ function MinhaPecaRow({ item }: { item: MinhaPecaRef }) {
   );
 }
 
-/** Uma linha "rótulo → número" do painel de formulários (feature 266). */
-function LinhaFormularios({
-  rotulo,
-  valor,
-  urgente = false,
+// ── Formulários sem evento na agenda (feature 298) ─────────────────────────────
+
+type Severidade = NonNullable<LinhaFormulario["severidade"]>;
+
+const SEVERIDADE_TOM: Record<Severidade, "red" | "gold" | "neutral"> = {
+  vermelho: "red",
+  amarelo: "gold",
+  cinza: "neutral",
+};
+
+/** Tokens de fundo que acompanham o tema escuro (`theme.css`); cinza não pinta a linha. */
+const SEVERIDADE_FUNDO: Record<Severidade, string> = {
+  vermelho: "bg-red-50",
+  amarelo: "bg-gold-50",
+  cinza: "",
+};
+
+/** `01/06` a partir de uma data AAAA-MM-DD (o corte). */
+function diaMes(iso: string | null | undefined): string | null {
+  const [, mes, dia] = (iso ?? "").slice(0, 10).split("-");
+  return mes && dia ? `${dia}/${mes}` : null;
+}
+
+/**
+ * Distância até a data informada, em palavras — a urgência nunca é dita só pela cor.
+ *
+ * Vem de `dias_ate_a_data`, calculado no servidor pelo "hoje" de São Paulo. Não é o
+ * `formatRelativeDay` da `@manto/ui`: ele diz "ontem/há N dias" (que aqui leria como "chegou") e
+ * usa o relógio do navegador.
+ */
+function distanciaDaData(dias: number | null | undefined): string | null {
+  if (dias == null) return null;
+  if (dias === 0) return "hoje";
+  if (dias === 1) return "amanhã";
+  if (dias > 1) return `em ${dias} dias`;
+  const passou = Math.abs(dias);
+  return `passou há ${passou} dia${passou !== 1 ? "s" : ""}`;
+}
+
+function chegouHa(dias: number | undefined): string {
+  if (dias == null) return "";
+  if (dias <= 0) return "chegou hoje";
+  return `chegou há ${dias} dia${dias !== 1 ? "s" : ""}`;
+}
+
+/**
+ * Uma linha da lista: quem, quando e uma ação (feature 298).
+ *
+ * Mesma estrutura das outras linhas da Home. Em tela estreita o conteúdo quebra em duas linhas e o
+ * botão desce, sem rolagem horizontal — a ação principal fica sempre à mostra.
+ */
+function FormularioSemDestinoRow({
+  linha,
+  podeCriarEvento,
 }: {
-  rotulo: string;
-  valor: number;
-  urgente?: boolean;
+  linha: LinhaFormulario;
+  podeCriarEvento: boolean;
 }) {
+  const severidade = linha.severidade ?? "cinza";
+  const nome = linha.cliente?.nome ?? linha.nome_no_formulario ?? "Sem nome";
+  const distancia = distanciaDaData(linha.dias_ate_a_data);
+  const vezes = linha.formularios?.length ?? 1;
+  const id = linha.representante_id;
+  const detalhe = [linha.tipo_rotulo ?? "Formulário", chegouHa(linha.dias_desde_chegada)]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-line py-2 last:border-b-0">
-      <dt className={urgente && valor > 0 ? "text-red" : "text-ink"}>{rotulo}</dt>
-      <dd
-        className={`tabular-nums ${urgente && valor > 0 ? "font-semibold text-red" : "text-ink"}`}
-      >
-        {valor}
-      </dd>
+    <div
+      className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2.5 text-sm ${SEVERIDADE_FUNDO[severidade]}`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-ink">
+          <span className="min-w-0 break-words">{nome}</span>
+          {linha.data_informada ? (
+            <span className="tabular-nums">{formatShortDate(linha.data_informada)}</span>
+          ) : (
+            <span className="font-normal text-muted">sem data informada</span>
+          )}
+          {distancia && (
+            <MetricBadge tone={SEVERIDADE_TOM[severidade]} size="xs">
+              {distancia}
+            </MetricBadge>
+          )}
+          {/* Marcas numa ordem fixa, para o olho achar sempre no mesmo lugar. */}
+          {linha.data_suspeita && (
+            <MetricBadge tone="neutral" size="xs">
+              data suspeita
+            </MetricBadge>
+          )}
+          {linha.repetido && (
+            <MetricBadge tone="gold" size="xs">
+              preencheu {vezes} vezes
+            </MetricBadge>
+          )}
+          {linha.outro_com_evento && (
+            <MetricBadge tone="neutral" size="xs">
+              já tem outro formulário com evento
+            </MetricBadge>
+          )}
+        </div>
+        {detalhe && <div className="text-muted">{detalhe}</div>}
+      </div>
+      <Button asChild variant={podeCriarEvento ? "default" : "outline"} size="sm" className="shrink-0">
+        <Link to={podeCriarEvento ? `/events/new?form_response_id=${id}` : `/formularios?resposta=${id}`}>
+          {podeCriarEvento ? "Criar evento" : "Abrir"}
+        </Link>
+      </Button>
     </div>
+  );
+}
+
+/**
+ * Um grupo do painel ("ainda vai chegar" / "já passou"), com as 6 primeiras linhas e o resto
+ * atrás de "Mostrar todas" — o mesmo corte da `ListaTruncada`.
+ *
+ * Não reusa a `ListaTruncada` porque a linha resolvida precisa SAIR com animação, e o
+ * `AnimatePresence` só acompanha filhos diretos com `key`. Com movimento reduzido a linha some
+ * sem transição.
+ */
+function GrupoFormularios({
+  titulo,
+  linhas,
+  podeCriarEvento,
+}: {
+  titulo: string;
+  linhas: LinhaFormulario[];
+  podeCriarEvento: boolean;
+}) {
+  const [expandida, setExpandida] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const visiveis = expandida ? linhas : linhas.slice(0, LIMITE_LINHAS_PAINEL);
+
+  return (
+    <PanelGroup title={`${titulo} (${linhas.length})`}>
+      <AnimatePresence initial={false}>
+        {visiveis.map((linha) => (
+          <motion.div
+            key={linha.representante_id}
+            initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={reduceMotion ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="-mx-4 overflow-hidden border-b border-line last:border-b-0"
+          >
+            <FormularioSemDestinoRow linha={linha} podeCriarEvento={podeCriarEvento} />
+          </motion.div>
+        ))}
+      </AnimatePresence>
+      {linhas.length > LIMITE_LINHAS_PAINEL && (
+        <button
+          type="button"
+          onClick={() => setExpandida((v) => !v)}
+          className="-mx-4 block w-[calc(100%+2rem)] cursor-pointer px-4 py-2 text-center text-xs font-medium text-accent hover:bg-surface-2"
+        >
+          {expandida ? "Mostrar menos" : `Mostrar todas as ${linhas.length}`}
+        </button>
+      )}
+    </PanelGroup>
+  );
+}
+
+/**
+ * "📝 Formulários sem evento na agenda" (feature 298): os formulários que chegaram desde o corte e
+ * ainda não viraram evento nem foram encerrados. Substitui os quatro números da 266, que contavam
+ * o histórico importado.
+ */
+function FormulariosPanel({
+  summary,
+  urgentCount,
+  open,
+  onOpenChange,
+}: {
+  summary: FormulariosSummary;
+  urgentCount: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const aChegar = summary.a_chegar ?? [];
+  const jaPassou = summary.ja_passou ?? [];
+  const podeCriarEvento = summary.pode_criar_evento ?? false;
+  const desde = diaMes(summary.contagens?.corte);
+
+  return (
+    <SectorPanel
+      title="📝 Formulários sem evento na agenda"
+      count={summary.contagens?.sem_destino ?? 0}
+      urgentCount={urgentCount}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      {aChegar.length === 0 && jaPassou.length === 0 ? (
+        <p className="py-2 text-sm text-muted">Nenhum formulário esperando evento ✓</p>
+      ) : (
+        <div className="space-y-3">
+          {aChegar.length > 0 && (
+            <GrupoFormularios
+              titulo="A data informada ainda vai chegar"
+              linhas={aChegar}
+              podeCriarEvento={podeCriarEvento}
+            />
+          )}
+          {jaPassou.length > 0 && (
+            <GrupoFormularios
+              titulo="A data informada já passou"
+              linhas={jaPassou}
+              podeCriarEvento={podeCriarEvento}
+            />
+          )}
+        </div>
+      )}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        {desde && <p className="text-xs text-muted">Formulários que chegaram desde {desde}.</p>}
+        <Button asChild variant="outline" size="sm">
+          <Link to="/formularios">Abrir formulários</Link>
+        </Button>
+      </div>
+    </SectorPanel>
   );
 }
 
@@ -531,15 +742,23 @@ function computeSectionStats(data: DashboardSummary): SectionStat[] {
 
   if (data.formularios) {
     const f = data.formularios;
+    const semDestino = f.contagens?.sem_destino ?? 0;
+    const desde = diaMes(f.contagens?.corte);
+    // Urgente = os formulários das linhas vermelhas (data informada a até 7 dias). Conta
+    // formulários, não linhas, para bater com o número do painel.
+    const urgentes = [...(f.a_chegar ?? []), ...(f.ja_passou ?? [])]
+      .filter((l) => l.severidade === "vermelho")
+      .reduce((soma, l) => soma + (l.formularios?.length ?? 1), 0);
     stats.push({
       key: "formularios",
       emoji: "📝",
       label: "Formulários",
-      // A contagem é "ainda não virou evento"; a urgência é a festa marcada chegando sem
-      // evento na agenda — a única das quatro que tem data batendo na porta.
-      count: f.sem_evento,
-      urgent: f.futuros_sem_evento,
-      detail: f.total > 0 ? `${f.total} resposta(s) recebidas` : null,
+      count: semDestino,
+      urgent: urgentes,
+      detail:
+        semDestino > 0 && desde
+          ? `${semDestino} formulário${semDestino !== 1 ? "s" : ""} sem evento desde ${desde}`
+          : null,
     });
   }
 
@@ -880,42 +1099,12 @@ export function DashboardPage() {
 
             {data.formularios && (
               <div {...propsSecao("formularios")}>
-                <SectorPanel
-                  title="📝 Respostas de formulário"
-                  count={data.formularios.sem_evento}
-                  urgentCount={data.formularios.futuros_sem_evento}
+                <FormulariosPanel
+                  summary={data.formularios}
+                  urgentCount={statPorSecao.get("formularios")?.urgent ?? 0}
                   open={painelAberto("formularios")}
                   onOpenChange={aoAlternar("formularios")}
-                >
-                  {data.formularios.total === 0 ? (
-                    <p className="py-2 text-sm text-muted">Nenhuma resposta recebida.</p>
-                  ) : (
-                    <>
-                      <dl className="text-sm">
-                        <LinhaFormularios
-                          rotulo="Festa futura sem evento"
-                          valor={data.formularios.futuros_sem_evento}
-                          urgente
-                        />
-                        <LinhaFormularios
-                          rotulo="Sem evento na agenda"
-                          valor={data.formularios.sem_evento}
-                        />
-                        <LinhaFormularios
-                          rotulo="Sem cliente associada"
-                          valor={data.formularios.sem_cliente}
-                        />
-                        <LinhaFormularios
-                          rotulo="Vínculo ambíguo"
-                          valor={data.formularios.ambiguos}
-                        />
-                      </dl>
-                      <Button asChild variant="outline" size="sm" className="mt-3">
-                        <Link to="/formularios">Abrir formulários</Link>
-                      </Button>
-                    </>
-                  )}
-                </SectorPanel>
+                />
               </div>
             )}
 

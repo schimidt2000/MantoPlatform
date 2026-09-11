@@ -11,7 +11,7 @@ RBAC (função no início de cada view — constituição XIII; tabela em `docs/
   * `_require_superadmin`: editor de estrutura.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from flask import jsonify, request
@@ -43,15 +43,6 @@ def _require_superadmin() -> Any:
     return None
 
 
-def _iso_utc(instante: datetime | None) -> str | None:
-    """`created_at`/`closed_at` são UTC ingênuo: sai com `+00:00` para o navegador converter certo.
-
-    Sem o fuso, `new Date(iso)` lia como hora local e a coluna "Recebida em" mostrava 3 h a mais
-    (corrigido de carona na feature 298).
-    """
-    return instante.replace(tzinfo=UTC).isoformat() if instante else None
-
-
 def _response_summary(r: FormResponse, corte: datetime) -> dict:
     """Resumo de uma resposta. ``corte`` vem calculado UMA vez por requisição (sem N+1)."""
     return {
@@ -72,7 +63,7 @@ def _response_summary(r: FormResponse, corte: datetime) -> dict:
         "event_link_source": r.event_link_source,
         "event_link_ambiguous": r.event_link_ambiguous,
         "event_link_locked": r.event_link_locked,
-        "created_at": _iso_utc(r.created_at),
+        "created_at": formularios_ops.iso_utc(r.created_at),
         # Feature 298: o destino (mesma regra das contagens, calculada no núcleo) e o encerramento.
         "destino": formularios_ops.destino_de(r, corte),
         "tipo_rotulo": formularios_ops.tipo_rotulo(r.form_type),
@@ -80,7 +71,7 @@ def _response_summary(r: FormResponse, corte: datetime) -> dict:
         "closed_reason_label": FORM_CLOSE_REASON_LABELS.get(r.closed_reason or ""),
         "closed_note": r.closed_note,
         "closed_by_name": r.closed_by.name if r.closed_by else None,
-        "closed_at": _iso_utc(r.closed_at),
+        "closed_at": formularios_ops.iso_utc(r.closed_at),
     }
 
 
@@ -95,21 +86,22 @@ def _response_detail(r: FormResponse, corte: datetime) -> dict:
 @api_bp.route("/formularios/respostas")
 @api_login_required
 def api_formularios_respostas_list() -> Any:
-    """Lista as respostas mais recentes + contadores de situação (cartões da tela).
+    """Lista as respostas mais recentes + contadores por destino (cartões da tela).
 
-    ``?filtro=`` aceita as chaves de `formularios_ops.STATUS_FILTERS`; valor desconhecido
-    ou ausente lista tudo. Os contadores vêm sempre no payload — a tela pinta os cartões
-    sem uma segunda chamada.
+    ``?filtro=`` aceita as partições de `formularios_ops.STATUS_FILTERS` (feature 298); valor
+    desconhecido ou ausente lista tudo. Os contadores vêm sempre no payload — a tela pinta os
+    cartões sem uma segunda chamada — e ``truncado`` avisa quando o filtro passa de 200.
     """
     denied = _require_vendas()
     if denied:
         return denied
     filtro = (request.args.get("filtro") or "").strip()
     corte = formularios_ops.corte_de_chegada()
-    responses = formularios_ops.list_responses(filtro=filtro)
+    responses, truncado = formularios_ops.list_responses(filtro=filtro, corte=corte)
     return jsonify({
         "responses": [_response_summary(r, corte) for r in responses],
-        "counts": formularios_ops.count_status(),
+        "counts": formularios_ops.count_status(corte),
+        "truncado": truncado,
     })
 
 
