@@ -147,6 +147,11 @@ def _hora_plausivel(hhmm: str | None) -> str | None:
     return hhmm if _MADRUGADA <= hora <= 23 and minuto % 5 == 0 else None
 
 
+def _sem_pontas(texto: str) -> str:
+    """Tira espaço e pontuação solta das pontas de uma parte do endereço."""
+    return (texto or "").strip(" ,;-")
+
+
 def _eh_duracao(texto: str) -> bool:
     return bool(_RE_DURACAO.match(_normalizar(texto)))
 
@@ -215,10 +220,12 @@ def _local(response: FormResponse, campos: dict[str, str]) -> tuple[str | None, 
     cidade_uf = " - ".join(x for x in (_valor(campos, "cidade"), _valor(campos, "estado")) if x)
     if not (logradouro or bairro or cidade_uf or cep):
         return None, None
-    local = ", ".join(x for x in (logradouro, numero, complemento) if x)
+    # A cliente às vezes digita a vírgula no próprio campo ("Rua Parauna,") — sem limpar, a linha
+    # saía "Rua Parauna,, 23".
+    local = ", ".join(_sem_pontas(x) for x in (logradouro, numero, complemento) if _sem_pontas(x))
     for separador, parte in ((" - ", bairro), (", ", cidade_uf), (", ", cep)):
-        if parte:
-            local = f"{local}{separador}{parte}" if local else parte
+        if _sem_pontas(parte):
+            local = f"{local}{separador}{_sem_pontas(parte)}" if local else _sem_pontas(parte)
     completo = bool(logradouro and numero and cep)
     return local, None if completo else _alerta("location", "endereco_incompleto")
 
