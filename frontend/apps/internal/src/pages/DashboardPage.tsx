@@ -34,6 +34,7 @@ import { SugestaoDeEventoFaixa } from "../components/formularios/SugestaoDeEvent
 import {
   mensagemDaApi,
   useManterEntreRepetidos,
+  useUsarClienteDoEvento,
   type DivergenciaCliente,
   type ResultadoVinculo,
 } from "../lib/formulariosAdmin";
@@ -719,6 +720,7 @@ function FormulariosPanel({
     formularioId: number;
     divergencia: DivergenciaCliente;
   } | null>(null);
+  const usarCliente = useUsarClienteDoEvento();
   const aoLigar = (resultado: ResultadoVinculo, formularioId: number) => {
     if (resultado.divergencia_cliente) {
       setDivergente({ formularioId, divergencia: resultado.divergencia_cliente });
@@ -742,10 +744,34 @@ function FormulariosPanel({
             não foi alterado.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="ghost" onClick={() => setDivergente(null)}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              loading={usarCliente.isPending}
+              onClick={() =>
+                usarCliente.mutate(divergente.formularioId, { onSuccess: () => setDivergente(null) })
+              }
+            >
+              Usar a cliente do evento neste formulário
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                usarCliente.reset();
+                setDivergente(null);
+              }}
+            >
               Manter assim
             </Button>
           </div>
+          {usarCliente.isError && (
+            <p role="alert" className="text-xs text-red">
+              {mensagemDaApi(usarCliente.error, "Não foi possível trocar a cliente. Tente novamente.")}
+            </p>
+          )}
         </div>
       )}
       {aChegar.length === 0 && jaPassou.length === 0 ? (

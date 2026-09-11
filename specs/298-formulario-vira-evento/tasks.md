@@ -495,7 +495,7 @@ correções únicas.
 
 **Verificação da história (obrigatória)**: cenários 9 e 14b do `verify_298.py` em PASS.
 
-- [ ] T041 [US6] Em `app/formularios/destino_ops.py`:
+- [X] T041 [US6] Em `app/formularios/destino_ops.py`:
   - `usar_cliente_do_evento(response_id)`: exige evento com cliente (409); usa a escolha do núcleo;
     não toca o evento;
   - `divergencia_de(response) -> dict | None`: formulário e evento com cliente, e a do formulário fora
@@ -503,18 +503,18 @@ correções únicas.
 
   Em `app/api/formularios_admin_write.py`, criar `POST .../usar-cliente-do-evento`. O detalhe ganha
   `divergencia_cliente`.
-- [ ] T042 [US6] Em `app/notificacoes/notificacoes_ops.py`, `notificar_resposta_formulario` (`:195-212`)
+- [X] T042 [US6] Em `app/notificacoes/notificacoes_ops.py`, `notificar_resposta_formulario` (`:195-212`)
   devolve 0 sem emitir quando `response.event_id` já existe (FR-016), com o porquê comentado.
-- [ ] T043 [US6] Em `frontend/apps/internal/src/lib/formulariosAdmin.ts`, hook
+- [X] T043 [US6] Em `frontend/apps/internal/src/lib/formulariosAdmin.ts`, hook
   `useUsarClienteDoEvento()`. Em `frontend/apps/internal/src/pages/FormulariosAdminPage.tsx`, o aviso da
   divergência no detalhe e depois do vínculo pela `EventoSection` (lido do `data` do `useLinkEvent`),
   com o botão "Usar a cliente do evento neste formulário".
-- [ ] T044 [US6] Em `app/cli.py`, criar `flask formularios-avisos-resolvidos [--execute]` (FR-019):
+- [X] T044 [US6] Em `app/cli.py`, criar `flask formularios-avisos-resolvidos [--execute]` (FR-019):
   - conta os `Notification` com `kind=notificacoes_ops.KIND_FORM_RESPONSE`, não lidos, de formulário
     com evento ou encerrado;
   - com `--execute`, `marcar_lidas_por_entidades` em lote e commit;
   - saída em pt-BR; molde de dry-run em `app/cli.py:835-852`.
-- [ ] T045 [US6] Em `app/cli.py`, criar `flask formularios-cliente-do-evento [--execute]` (FR-020):
+- [X] T045 [US6] Em `app/cli.py`, criar `flask formularios-cliente-do-evento [--execute]` (FR-020):
   - seleção: formulários desde o corte, com evento, `client_id IS NULL`, e evento com cliente;
   - conta sem `--execute`;
   - com `--execute`, aplica `_cliente_do_evento_para` (T008) com `client_link_source='evento'` e

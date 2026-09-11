@@ -38,6 +38,8 @@ import {
   useReabrirFormulario,
   useSearchFormResponses,
   useUnlinkEvent,
+  useUsarClienteDoEvento,
+  type DivergenciaCliente,
   type FormResponseSummary,
   type StatusCounts,
   type StatusFilter,
@@ -436,6 +438,38 @@ function ClienteSection({ id }: { id: number }) {
   );
 }
 
+/**
+ * Cliente do formulário ≠ cliente do evento (feature 298, FR-015). Ligar nunca troca ninguém: o
+ * evento fica como está, e a comercial decide trazer a cliente do evento para o formulário.
+ */
+function DivergenciaDeCliente({
+  id,
+  divergencia,
+}: {
+  id: number;
+  divergencia: DivergenciaCliente | null;
+}) {
+  const usar = useUsarClienteDoEvento();
+  if (!divergencia) return null;
+  return (
+    <div role="status" className="space-y-2 rounded-md bg-gold-50 px-3 py-2 text-sm text-ink">
+      <p>
+        A cliente do formulário (<strong>{divergencia.formulario.nome ?? "sem nome"}</strong>) não é
+        a cliente do evento (<strong>{divergencia.evento.nome ?? "sem nome"}</strong>). O evento não
+        foi alterado.
+      </p>
+      <Button size="sm" variant="outline" loading={usar.isPending} onClick={() => usar.mutate(id)}>
+        Usar a cliente do evento neste formulário
+      </Button>
+      {usar.isError && (
+        <p role="alert" className="text-xs text-red">
+          {mensagemDaApi(usar.error, "Não foi possível trocar a cliente. Tente novamente.")}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () => void }) {
   const detalhe = useFormResponseDetail(id);
   const linkEvent = useLinkEvent(id);
@@ -450,13 +484,20 @@ function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () 
 
   if (response.event_id) {
     return (
-      <div className="flex items-center justify-between gap-2">
-        <MetricBadge tone="green" size="sm">
-          {response.event_title ?? "Evento vinculado"}
-        </MetricBadge>
-        <Button size="sm" variant="ghost" loading={unlinkEvent.isPending} onClick={() => unlinkEvent.mutate()}>
-          Desvincular
-        </Button>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <MetricBadge tone="green" size="sm">
+            {response.event_title ?? "Evento vinculado"}
+          </MetricBadge>
+          <Button size="sm" variant="ghost" loading={unlinkEvent.isPending} onClick={() => unlinkEvent.mutate()}>
+            Desvincular
+          </Button>
+        </div>
+        {/* Recalculada a cada leitura do detalhe; logo depois de ligar, vale a resposta do vínculo. */}
+        <DivergenciaDeCliente
+          id={id}
+          divergencia={detalhe.data?.divergencia_cliente ?? linkEvent.data?.divergencia_cliente ?? null}
+        />
       </div>
     );
   }

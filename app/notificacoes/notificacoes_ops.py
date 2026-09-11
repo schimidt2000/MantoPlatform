@@ -197,6 +197,10 @@ def notificar_resposta_formulario(response: FormResponse) -> int:
 
     Regime B: chamada depois de a resposta já estar comitada; quem chama comita em transação curta.
     """
+    # Feature 298: formulário que já chega ligado a um evento (vínculo automático no envio) tem
+    # destino — o aviso nasceria só para ser apagado. A Home é o lembrete do que falta.
+    if response.event_id is not None:
+        return 0
     _garante_id(response)
     data = response.event_date.strftime("%d/%m/%Y") if response.event_date else "data não informada"
     corpo = f"{response.form_type_label} · festa em {data}"

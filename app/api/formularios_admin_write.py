@@ -138,6 +138,32 @@ def api_formularios_descartar_sugestao(response_id: int, event_id: int) -> Any:
     return jsonify({"ok": True})
 
 
+@api_bp.route(
+    "/formularios/respostas/<int:response_id>/usar-cliente-do-evento", methods=["POST"]
+)
+@api_login_required
+def api_formularios_usar_cliente_do_evento(response_id: int) -> Any:
+    """Divergência de cliente → o formulário passa a ter a cliente do evento (FR-015).
+
+    O evento nunca é alterado: quem decide que a cliente do evento é a certa é a comercial.
+    """
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    try:
+        response = destino_ops.usar_cliente_do_evento(response_id)
+    except destino_ops.FormularioInexistente:
+        db.session.rollback()
+        return json_error("Resposta não encontrada", 404)
+    except destino_ops.SemClienteDoEvento as exc:
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    db.session.commit()
+    return jsonify({"response": _resumo(response)})
+
+
 @api_bp.route("/formularios/respostas/<int:response_id>/reabrir", methods=["POST"])
 @api_login_required
 def api_formularios_reabrir(response_id: int) -> Any:

@@ -32,6 +32,7 @@ from app.formularios.formularios_ops import (
     VinculoResultado,
     apply_event_link,
     bloquear_formulario,
+    cliente_do_evento_para,
     condicao_sem_destino,
     contar_por_destino,
     corte_de_chegada,
@@ -111,6 +112,16 @@ class EventoJaTemFormulario(Exception):
     """Outra pessoa ligou outro formulário a este evento enquanto a sugestão estava na tela (409)."""
 
     MENSAGEM = "Este evento já tem outro formulário."
+
+    def __init__(self) -> None:
+        self.message = self.MENSAGEM
+        super().__init__(self.message)
+
+
+class SemClienteDoEvento(Exception):
+    """ "Usar a cliente do evento" sem evento, ou com evento sem cliente — nada a trazer (409)."""
+
+    MENSAGEM = "Este formulário não está ligado a um evento com cliente."
 
     def __init__(self) -> None:
         self.message = self.MENSAGEM
@@ -286,6 +297,28 @@ def descartar_sugestao(response_id: int, event_id: int, usuario) -> None:
         .on_conflict_do_nothing(constraint="uq_form_response_dismissed_event")
     )
     db.session.execute(comando)
+
+
+def usar_cliente_do_evento(response_id: int) -> FormResponse:
+    """Resolve a divergência de cliente: o formulário passa a ter a cliente do evento (FR-015).
+
+    Mesma escolha do núcleo (`cliente_do_evento_para`: a ficha com o telefone do formulário,
+    senão a contratante). O evento NUNCA é alterado. Formulário bloqueado; sem commit.
+
+    Raises:
+        FormularioInexistente: o formulário foi excluído no meio do caminho.
+        SemClienteDoEvento: o formulário não tem evento, ou o evento não tem cliente.
+    """
+    response = bloquear_formulario(response_id)
+    if response is None:
+        raise FormularioInexistente()
+    event = response.event
+    client_id = cliente_do_evento_para(response, event) if event is not None else None
+    if client_id is None:
+        raise SemClienteDoEvento()
+    response.client_id = client_id
+    response.client_link_source = "evento"
+    return response
 
 
 def reabrir(response_id: int) -> FormResponse:

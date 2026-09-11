@@ -154,6 +154,8 @@ def api_formularios_resposta_detail(response_id: int) -> Any:
         # tela oferece — o servidor recusa o resto do mesmo jeito.
         "motivos_encerramento": destino_ops.motivos_encerramento(),
         "sugestao": destino_ops.sugestao_para(response) if destino == "sem_destino" else None,
+        # Recalculada a cada leitura (FR-015): some sozinha quando alguém acerta a cliente.
+        "divergencia_cliente": formularios_ops.divergencia_de_cliente(response),
         "flags": {
             "pode_encerrar": destino == "sem_destino",
             "pode_reabrir": destino == "encerrados",

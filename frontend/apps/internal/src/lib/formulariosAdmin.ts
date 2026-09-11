@@ -107,6 +107,8 @@ export interface DetalheResposta {
   motivos_encerramento?: MotivoEncerramento[];
   /** Evento da cliente a até 3 dias — só quando o formulário está sem destino. */
   sugestao?: SugestaoDeEvento | null;
+  /** Cliente do formulário ≠ cliente do evento ligado; recalculada a cada leitura. */
+  divergencia_cliente?: DivergenciaCliente | null;
   flags?: FlagsDoFormulario;
 }
 
@@ -331,6 +333,22 @@ export function useDescartarSugestao() {
         method: "POST",
       }),
     onSettled: (_data, _erro, { id }) => invalidarDestinoDeFormulario(queryClient, id),
+  });
+}
+
+/**
+ * Divergência de cliente → "Usar a cliente do evento neste formulário" (feature 298, FR-015).
+ * O evento não muda; 409 quando o formulário não está ligado a evento com cliente.
+ */
+export function useUsarClienteDoEvento() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<{ response?: FormResponseSummary }>(
+        `/api/formularios/respostas/${id}/usar-cliente-do-evento`,
+        { method: "POST" },
+      ),
+    onSettled: (_data, _erro, id) => invalidarDestinoDeFormulario(queryClient, id),
   });
 }
 
