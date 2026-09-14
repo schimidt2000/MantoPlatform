@@ -346,9 +346,9 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   explicação do servidor e o texto da cliente. Valor, vendedor e título nunca vêm do formulário.
   **Data suspeita** (antes da chegada ou a mais de 2 anos): "Adicionar à Agenda" continua ativo;
   salvar sem trocar a data nem marcar "A data está certa" aponta o campo e rola até ele. Se a
-  cliente já tem evento sem formulário desde o corte, uma faixa oferece "Ligar a este evento"
-  (com a divergência de cliente, se houver). Formulário que já tem evento → 409 inline, sem tocar
-  o Google.
+  cliente já tem evento sem formulário desde o corte, uma faixa oferece "Ligar a este evento".
+  Se a cliente do formulário diverge da do evento, o aviso oferece "Usar a cliente do evento neste
+  formulário" e "Abrir o evento". Formulário que já tem evento → 409 inline, sem tocar o Google.
 - **API**: `GET /api/events/new/options`, `/prefill` · `POST /api/events` (+ endpoints de
   `contracts`, `payments`, `invoices`, `observations`, `reimbursements`).
 - **Vínculos entre módulos**: Catálogo → Elenco (auto-vínculo da Ficha de Figurino) ·
@@ -1386,7 +1386,8 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   existente (busca), associar ao cliente sugerido por telefone, **criar cliente a partir da
   resposta** (`POST …/associar` sem `client_id` — reaproveita por telefone e ainda preenche
   CPF/CNPJ/endereço), desassociar; vincular/desvincular evento por data, **"Criar evento com os
-  dados desta resposta"** (`/events/new?form_response_id=<id>`) e excluir (SUPERADMIN, com
+  dados desta resposta"** (`/events/new?form_response_id=<id>`; só para quem cria evento, pela
+  flag `pode_criar_evento` — o FINANCEIRO não vê) e excluir (SUPERADMIN, com
   confirmação inline). **Feature 298**: seção **Destino** — encerrado mostra motivo, frase, quem e
   quando e **Reabrir**; sem destino oferece **Encerrar…**; histórico explica que não precisa de
   destino (as ações obedecem às `flags` do servidor). A seção Evento mostra a mesma sugestão da

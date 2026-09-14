@@ -305,7 +305,11 @@ avisos sem abrir).
 história: `21f5fb1` núcleo (migration, `apply_event_link` único, guardas de 409) · `eafe948`
 painel da Home e cartões por destino · `e6d4a55` encerrar/reabrir · `b7eb5b2` repetidos ·
 `1ab8745` sugestão · `5df1cc3` cadastro a partir do formulário · `1d3c782` divergência, sino e os
-dois comandos · correção da hora do WhatsForm achada na conferência de tela.
+dois comandos · correção da hora do WhatsForm achada na conferência de tela · convergência
+(T056–T060). O plano previa um arquivo novo no front, o diálogo de encerramento; saíram dois. O
+segundo é `components/formularios/SugestaoDeEventoFaixa.tsx`, a faixa "Parece ser o evento de…"
+com o "Não é este" confirmado. A Home e o detalhe de `/formularios` usam a mesma faixa, porque uma
+cópia em cada tela acabaria divergindo.
 
 **Pegadinhas.**
 1. **`FormResponse.created_at` é UTC ingênuo** (`utcnow`); o resto do sistema é `now_sp`. Comparar

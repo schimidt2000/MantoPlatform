@@ -563,9 +563,13 @@ function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () 
       {effectiveDate && !eventos.isLoading && !eventos.isError && eventos.data?.events.length === 0 && (
         <p className="text-xs text-muted">Nenhum evento nessa data.</p>
       )}
-      <Button size="sm" variant="outline" onClick={onPrefillEvent}>
-        Criar evento com os dados desta resposta
-      </Button>
+      {/* Só quem cria evento (`_CAN_CREATE`): o FINANCEIRO abria o cadastro e levava 403 do
+          `para-evento`. Sem `flags` (servidor antigo) o botão continua, como antes da 298. */}
+      {detalhe.data?.flags?.pode_criar_evento !== false && (
+        <Button size="sm" variant="outline" onClick={onPrefillEvent}>
+          Criar evento com os dados desta resposta
+        </Button>
+      )}
       {linkEvent.isError && (
         <p className="text-sm text-red">
           {mensagemDaApi(linkEvent.error, "Não foi possível vincular o evento. Tente novamente.")}

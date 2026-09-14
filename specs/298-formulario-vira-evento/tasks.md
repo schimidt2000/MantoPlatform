@@ -606,3 +606,11 @@ apagado e correções únicas`.
 - **Publicação:** só quando o dono pedir (merge + push = deploy). O deploy fica para depois, por
   decisão do dono. Os campos opcionais no React protegem a janela em que servidor e site ficam em
   versões diferentes.
+
+## Phase 10: Convergence
+
+- [X] T056 CRITICAL — Quebrar `extrair_para_evento` (`app/formularios/pre_evento_ops.py`, ~65 linhas) em funções de até ~30 linhas: extrair o horário (hora escrita, hora de dentro da data, período e alerta de hora ausente) e a montagem de local, tipo, pagamento e clientes, sem mudar o resultado (`verify_298` cenários 11 e 12 em PASS) per Constitution II (contradicts)
+- [X] T057 CRITICAL — Tirar o preenchimento pelo formulário de dentro do `useEffect` de `frontend/apps/internal/src/pages/EventCreatePage.tsx` (~70 linhas) para funções nomeadas de até ~30 linhas (clientes, personagens e observações do formulário), mantendo o `setValue` campo a campo e a guarda do ref contra o StrictMode per Constitution II (contradicts)
+- [X] T058 Mostrar "Criar evento com os dados desta resposta" no detalhe de `frontend/apps/internal/src/pages/FormulariosAdminPage.tsx` só quando `flags.pode_criar_evento` não for `false` (sem `flags`, servidor antigo, o botão continua): hoje FINANCEIRO vê o botão, abre `/events/new` (a rota não tem guarda de papel) e recebe 403 do `para-evento` per contracts/api-formularios.md (flags) e T028 (partial)
+- [X] T059 Oferecer "Usar a cliente do evento neste formulário" (`useUsarClienteDoEvento`) no aviso de divergência que aparece depois do "Ligar a este evento" em `frontend/apps/internal/src/pages/EventCreatePage.tsx`, ao lado de "Abrir o evento" per FR-015 (partial)
+- [X] T060 Registrar na entrada 298 do `docs/03_HISTORICO_MUTACOES.md` o componente compartilhado `frontend/apps/internal/src/components/formularios/SugestaoDeEventoFaixa.tsx`, que o plano não previa (o plano dizia que o diálogo de encerramento era o único arquivo novo do front): a mesma faixa serve à Home e ao detalhe da tela Formulários per plan: decisão de estrutura (unrequested)

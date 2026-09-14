@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { FormProvider, useForm } from "react-hook-form";
+import { FormProvider, useForm, type UseFormSetValue } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button, PageHeader, Skeleton, Card, CardContent, formatShortDate } from "@manto/ui";
@@ -32,8 +32,11 @@ import {
   mensagemDaApi,
   useLinkEvent,
   useParaEvento,
+  useUsarClienteDoEvento,
   type AlertaFormulario,
   type DivergenciaCliente,
+  type ObservacaoRotulada,
+  type ValoresDoFormulario,
 } from "../lib/formulariosAdmin";
 import { SeloDoFormulario } from "../components/EventFormBlocks/shared";
 import { hojeYmd } from "../lib/horaLocal";
@@ -55,6 +58,76 @@ type PendingAttachment =
   | { id: string; kind: "reimbursement"; description: string; amount: number; file: File | null }
   | { id: string; kind: "observation-image"; content: string; label: string; file: File };
 
+type ClienteDoCadastro = ClientLinkInput & { name: string };
+
+/**
+ * Pré-fill do formulário (feature 298): campo a campo com `setValue`, NUNCA um `reset` — que
+ * zeraria a data da venda (hotfix 267b) e o vendedor. Valor, vendedor e título não vêm do
+ * formulário.
+ */
+function preencherCamposDoFormulario(setValue: UseFormSetValue<EventFormValues>, v: ValoresDoFormulario) {
+  const sujo = { shouldDirty: true } as const;
+  if (v.date) setValue("date", v.date, sujo);
+  if (v.start) setValue("start", v.start, sujo);
+  if (v.end) setValue("end", v.end, sujo);
+  if (v.location) setValue("location", v.location, sujo);
+  if (v.event_type) setValue("event_type", v.event_type, sujo);
+  if (v.payment_method) setValue("payment_method", v.payment_method, sujo);
+  if (v.payment_installments) {
+    setValue("payment_installments", String(v.payment_installments), sujo);
+  }
+}
+
+/** As clientes do formulário somadas às já escolhidas, sem repetir a ficha. */
+function somarClientesDoFormulario(
+  atuais: ClienteDoCadastro[],
+  doFormulario: NonNullable<ValoresDoFormulario["clients"]>,
+  nomeDoContato: string | undefined,
+): ClienteDoCadastro[] {
+  const novas = doFormulario.filter((c) => !atuais.some((atual) => atual.client_id === c.client_id));
+  if (novas.length === 0) return atuais;
+  return [
+    ...atuais,
+    ...novas.map((c) => ({
+      client_id: c.client_id,
+      name: c.name ?? nomeDoContato ?? "Cliente",
+      relation: c.relation ?? "Contratante",
+    })),
+  ];
+}
+
+/** Os personagens pedidos entram só com o elenco vazio: o do orçamento prevalece. */
+function personagensDoFormulario(atuais: CharacterInput[], nomes: string[]): CharacterInput[] {
+  if (atuais.length > 0 || nomes.length === 0) return atuais;
+  return nomes.map((name) => ({
+    role_id: null,
+    name,
+    figurino_sheet_id: null,
+    cache_value: null,
+    needs_makeup: false,
+    is_singer: false,
+    talent_id: null,
+  }));
+}
+
+/**
+ * Tema, aniversariante, espaço, briefing… viram observações rotuladas, nunca a descrição (que vai
+ * para o Google Agenda).
+ */
+function somarObservacoesDoFormulario(atuais: ObservationInput[], notas: ObservacaoRotulada[]): ObservationInput[] {
+  const comTexto = notas.filter((o) => o.text?.trim());
+  if (comTexto.length === 0) return atuais;
+  return [
+    ...atuais,
+    ...comTexto.map((o) => ({
+      obs_type: "text" as const,
+      content: o.text!.trim(),
+      label: o.label ?? "",
+      do_formulario: true,
+    })),
+  ];
+}
+
 export function EventCreatePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -74,6 +147,7 @@ export function EventCreatePage() {
   const prefill = useOrcamentoPrefill(orcamentoId);
   const paraEvento = useParaEvento(formResponseId);
   const ligar = useLinkEvent(formResponseId ?? 0);
+  const usarCliente = useUsarClienteDoEvento();
   const createEvent = useCreateEvent();
 
   const [serverError, setServerError] = useState<string | null>(null);
@@ -150,70 +224,20 @@ export function EventCreatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill.data?.orcamento_id]);
 
-  // Pré-fill do formulário (feature 298): campo a campo com `setValue`, NUNCA um `reset` — que
-  // zeraria a data da venda (hotfix 267b) e o vendedor. Valor, vendedor e título não vêm do
-  // formulário. Chaveado pelo id e guardado num ref: o StrictMode roda o efeito duas vezes, e
-  // observações e personagens seriam somados em dobro.
+  // Pré-fill do formulário (feature 298) — as regras de cada parte estão nas funções acima.
+  // Chaveado pelo id e guardado num ref: o StrictMode roda o efeito duas vezes, e observações e
+  // personagens seriam somados em dobro.
   useEffect(() => {
     const p = paraEvento.data;
     const fr = p?.form_response;
     if (!p || !fr || formularioAplicado.current === fr.id) return;
     formularioAplicado.current = fr.id;
     const v = p.valores ?? {};
-    const sujo = { shouldDirty: true } as const;
     setFormResponse({ id: fr.id, name: fr.contact_name ?? "", form_type: fr.form_type_label ?? "" });
-    if (v.date) setValue("date", v.date, sujo);
-    if (v.start) setValue("start", v.start, sujo);
-    if (v.end) setValue("end", v.end, sujo);
-    if (v.location) setValue("location", v.location, sujo);
-    if (v.event_type) setValue("event_type", v.event_type, sujo);
-    if (v.payment_method) setValue("payment_method", v.payment_method, sujo);
-    if (v.payment_installments) {
-      setValue("payment_installments", String(v.payment_installments), sujo);
-    }
-    const doForm = v.clients ?? [];
-    if (doForm.length > 0) {
-      setClients((current) => [
-        ...current,
-        ...doForm
-          .filter((c) => !current.some((atual) => atual.client_id === c.client_id))
-          .map((c) => ({
-            client_id: c.client_id,
-            name: c.name ?? fr.contact_name ?? "Cliente",
-            relation: c.relation ?? "Contratante",
-          })),
-      ]);
-    }
-    const personagens = v.characters ?? [];
-    if (personagens.length > 0) {
-      setCharacters((current) =>
-        current.length > 0
-          ? current
-          : personagens.map((name) => ({
-              role_id: null,
-              name,
-              figurino_sheet_id: null,
-              cache_value: null,
-              needs_makeup: false,
-              is_singer: false,
-              talent_id: null,
-            })),
-      );
-    }
-    // Tema, aniversariante, espaço, briefing… viram observações rotuladas, nunca a descrição
-    // (que vai para o Google Agenda).
-    const notas = (p.observacoes ?? []).filter((o) => o.text?.trim());
-    if (notas.length > 0) {
-      setObservations((current) => [
-        ...current,
-        ...notas.map((o) => ({
-          obs_type: "text" as const,
-          content: o.text!.trim(),
-          label: o.label ?? "",
-          do_formulario: true,
-        })),
-      ]);
-    }
+    preencherCamposDoFormulario(setValue, v);
+    setClients((atuais) => somarClientesDoFormulario(atuais, v.clients ?? [], fr.contact_name));
+    setCharacters((atuais) => personagensDoFormulario(atuais, v.characters ?? []));
+    setObservations((atuais) => somarObservacoesDoFormulario(atuais, p.observacoes ?? []));
     setDoFormulario(new Set(p.origem ?? []));
     setAlertas(p.alertas ?? []);
     setDataDoFormulario(v.date ?? null);
@@ -598,15 +622,41 @@ export function EventCreatePage() {
         )}
         {vinculado && (
           <div role="status" className="mt-3 space-y-2 rounded-md bg-gold-50 px-4 py-3 text-sm text-ink">
-            <p>
-              Formulário ligado. A cliente do formulário (
-              <strong>{vinculado.divergencia.formulario.nome ?? "sem nome"}</strong>) não é a cliente
-              do evento (<strong>{vinculado.divergencia.evento.nome ?? "sem nome"}</strong>) — o
-              evento não foi alterado.
-            </p>
-            <Button type="button" size="sm" onClick={() => navigate(`/events/${vinculado.eventId}`)}>
-              Abrir o evento
-            </Button>
+            {usarCliente.isSuccess ? (
+              <p>
+                Formulário ligado, agora com a cliente do evento (
+                <strong>{vinculado.divergencia.evento.nome ?? "sem nome"}</strong>).
+              </p>
+            ) : (
+              <p>
+                Formulário ligado. A cliente do formulário (
+                <strong>{vinculado.divergencia.formulario.nome ?? "sem nome"}</strong>) não é a
+                cliente do evento (<strong>{vinculado.divergencia.evento.nome ?? "sem nome"}</strong>)
+                — o evento não foi alterado.
+              </p>
+            )}
+            {/* Mesma saída da Home e de `/formularios` (FR-015): a comercial escolhe, nada troca sozinho. */}
+            <div className="flex flex-wrap gap-2">
+              {!usarCliente.isSuccess && formResponseId !== null && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  loading={usarCliente.isPending}
+                  onClick={() => usarCliente.mutate(formResponseId)}
+                >
+                  Usar a cliente do evento neste formulário
+                </Button>
+              )}
+              <Button type="button" size="sm" onClick={() => navigate(`/events/${vinculado.eventId}`)}>
+                Abrir o evento
+              </Button>
+            </div>
+            {usarCliente.isError && (
+              <p role="alert" className="text-xs text-red">
+                {mensagemDaApi(usarCliente.error, "Não foi possível trocar a cliente. Tente novamente.")}
+              </p>
+            )}
           </div>
         )}
 

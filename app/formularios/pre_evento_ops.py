@@ -12,6 +12,7 @@ Contrato: ``specs/298-formulario-vira-evento/contracts/pre-evento.md``.
 """
 
 import re
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from app.formularios.destino_ops import eh_data_suspeita, eventos_livres_por_telefone
@@ -321,31 +322,36 @@ def _eventos_da_cliente(response: FormResponse) -> list[dict]:
     ]
 
 
-def extrair_para_evento(response: FormResponse) -> dict:
-    """``{valores, origem, observacoes, alertas, eventos_da_cliente}`` para o cadastro de evento.
+@dataclass
+class _Preenchido:
+    """O que vai para o cadastro: os valores confiáveis, a ordem em que entraram e os alertas."""
 
-    Campo sem valor confiável fica fora de ``valores``, com um alerta que traz o texto da
-    cliente. A data suspeita entra, com alerta: o cadastro pede conferência sem desabilitar o
-    Salvar.
-    """
-    campos = _campos(response)
-    valores: dict = {}
-    origem: list[str] = []
-    alertas: list[dict] = []
+    valores: dict = field(default_factory=dict)
+    origem: list[str] = field(default_factory=list)
+    alertas: list[dict] = field(default_factory=list)
 
-    def usar(campo: str, valor) -> None:
+    def usar(self, campo: str, valor) -> None:
         if valor not in (None, "", []):
-            valores[campo] = valor
-            origem.append(campo)
+            self.valores[campo] = valor
+            self.origem.append(campo)
 
-    if response.event_date:
-        usar("date", response.event_date.isoformat())
-        if eh_data_suspeita(response.event_date, dia_sp(response.created_at)):
-            escrito = response.event_date.strftime("%d/%m/%Y")
-            alertas.append(_alerta("date", "data_suspeita", escrito))
+    def alertar(self, *alertas: dict | None) -> None:
+        self.alertas.extend(a for a in alertas if a)
 
-    # Hora: a escrita no campo próprio é forte; a de dentro de `data_do_evento` (WhatsForm) é
-    # fraca — só vale se plausível e cede ao intervalo do período (ver `_hora_plausivel`).
+
+def _data(response: FormResponse, p: _Preenchido) -> None:
+    """A data informada entra mesmo suspeita, com alerta: o cadastro pede conferência."""
+    if not response.event_date:
+        return
+    p.usar("date", response.event_date.isoformat())
+    if eh_data_suspeita(response.event_date, dia_sp(response.created_at)):
+        p.alertar(_alerta("date", "data_suspeita", response.event_date.strftime("%d/%m/%Y")))
+
+
+def _horario(campos: dict[str, str], p: _Preenchido) -> None:
+    """Início e fim. A hora escrita no campo próprio é forte; a de dentro de `data_do_evento`
+    (WhatsForm) é fraca — só vale se plausível e cede ao intervalo do período (`_hora_plausivel`).
+    """
     hora_escrita = _hora(_valor(campos, "hora"))
     data_hora = _valor(campos, "data_hora")
     hora_da_data = _hora_plausivel(_hora(data_hora))
@@ -356,39 +362,54 @@ def extrair_para_evento(response: FormResponse) -> dict:
         if periodo is None:
             # "4 horas" sem hora de início não é período ambíguo: falta a hora (alerta abaixo).
             if not (_eh_duracao(periodo_escrito) and not (hora_escrita or hora_da_data)):
-                alertas.append(_alerta("end", "periodo_ambiguo", periodo_escrito))
+                p.alertar(_alerta("end", "periodo_ambiguo", periodo_escrito))
         elif hora_escrita and periodo[0] != hora_escrita:
             # O período que contradiz a hora ESCRITA é ambíguo: qual das duas vale?
-            alertas.append(_alerta("end", "periodo_ambiguo", periodo_escrito))
+            p.alertar(_alerta("end", "periodo_ambiguo", periodo_escrito))
         else:
             inicio, fim = periodo
     inicio = inicio or hora_da_data
-    usar("start", inicio)
-    usar("end", fim)
+    p.usar("start", inicio)
+    p.usar("end", fim)
     if not inicio:
         # Hora de seletor descartada: mostra o que estava lá, para a comercial decidir.
-        descartada = data_hora if _hora(data_hora) else None
-        alertas.append(_alerta("start", "hora_ausente", descartada))
+        p.alertar(_alerta("start", "hora_ausente", data_hora if _hora(data_hora) else None))
 
-    local, alerta = _local(response, campos)
-    usar("location", local)
+
+def _cadastro(response: FormResponse, campos: dict[str, str], p: _Preenchido) -> None:
+    """Local, tipo, pagamento e clientes — cada um com o seu alerta quando não dá para confiar."""
+    local, alerta_local = _local(response, campos)
+    p.usar("location", local)
     tipo, alerta_tipo = _tipo(response, campos)
-    usar("event_type", tipo)
+    p.usar("event_type", tipo)
     forma, parcelas, alerta_pagamento = _pagamento(campos)
-    usar("payment_method", forma)
+    p.usar("payment_method", forma)
     if parcelas:
-        valores["payment_installments"] = parcelas
+        p.valores["payment_installments"] = parcelas
     clientes, rapido, alerta_cliente = _clientes(response, campos)
-    usar("clients", clientes)
-    valores["quick_create_client"] = rapido or None
-    alertas.extend(a for a in (alerta, alerta_tipo, alerta_pagamento, alerta_cliente) if a)
-    nomes, personagens_escritos = _personagens(campos)
-    usar("characters", nomes)
+    p.usar("clients", clientes)
+    p.valores["quick_create_client"] = rapido or None
+    p.alertar(alerta_local, alerta_tipo, alerta_pagamento, alerta_cliente)
 
+
+def extrair_para_evento(response: FormResponse) -> dict:
+    """``{valores, origem, observacoes, alertas, eventos_da_cliente}`` para o cadastro de evento.
+
+    Campo sem valor confiável fica fora de ``valores``, com um alerta que traz o texto da
+    cliente. A data suspeita entra, com alerta: o cadastro pede conferência sem desabilitar o
+    Salvar.
+    """
+    campos = _campos(response)
+    p = _Preenchido()
+    _data(response, p)
+    _horario(campos, p)
+    _cadastro(response, campos, p)
+    nomes, personagens_escritos = _personagens(campos)
+    p.usar("characters", nomes)
     return {
-        "valores": valores,
-        "origem": origem,
+        "valores": p.valores,
+        "origem": p.origem,
         "observacoes": _observacoes(campos, personagens_escritos),
-        "alertas": alertas,
+        "alertas": p.alertas,
         "eventos_da_cliente": _eventos_da_cliente(response),
     }
