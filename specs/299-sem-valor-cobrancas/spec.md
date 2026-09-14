@@ -115,6 +115,18 @@ Respostas do dono no `/speckit-clarify`:
   antes de a linha virar "Sinal pendente"? → A: nenhum. Vale na hora, como hoje: sem comprovante de
   pelo menos metade do valor, a linha já diz "Sinal pendente".
 
+Respostas do dono no `/speckit-plan`, sobre as decisões que a pesquisa de desenho levantou:
+
+- Q: As listas "Cobranças" e "Evento sem valor de venda" ficam em dois painéis ou num painel
+  Comercial só? → A: dois painéis, "Cobranças" e "Sem valor", cada um com o nome do seu card no topo.
+- Q: Com data combinada e cronograma de parcelas, qual data vale como vencimento? → A: a data
+  combinada. As parcelas só contam quando não há data combinada.
+- Q: Venda com data combinada (faturada para 30 dias, por exemplo) aparece como "Sinal pendente"
+  sem comprovante? → A: não. A data combinada substitui a regra da metade.
+- Q: Evento lançado com "valor a definir" que ganha valor semanas depois: em que mês entra a
+  comissão? → A: no mês em que o valor entra. A data da venda continua a do cadastro nos
+  relatórios; só o ciclo da comissão anda, do jeito que a EducaManto já adia comissão.
+
 ## Cenários e Verificação *(obrigatório)*
 
 ### História 1 — O grupo é cobrado como uma venda só (Prioridade: P1)
@@ -152,7 +164,7 @@ pede o que já foi pago.
 
 ### História 2 — A Home mostra o evento que ainda não tem valor (Prioridade: P1)
 
-A comercial vê, no painel Comercial, a lista "Evento sem valor de venda": as vendas desde 01/06 que
+A comercial vê, no painel "Sem valor", a lista "Evento sem valor de venda": as vendas desde 01/06 que
 estão sem valor, passadas e futuras. Cada linha mostra a cliente, a data do evento com a distância em
 palavras ("em 12 dias", "aconteceu há 38 dias") e a ação "Pôr o valor", que abre o evento na aba
 Comercial. Compromisso interno, cortesia, ensaio e os outros eventos de um grupo não aparecem.
@@ -211,6 +223,8 @@ aparecer.
    ele sai da lista "sem valor" e passa a ser cobrado normalmente.
 6. **Dado** um evento de R$ 0,01, **Quando** alguém aplica os valores de um orçamento, **Então** o
    orçamento é aplicado como num evento sem valor.
+7. **Dado** um evento com data da venda em agosto e valor a definir, **Quando** alguém põe o valor em
+   setembro, **Então** a data da venda continua em agosto e a comissão entra no ciclo de setembro.
 
 ---
 
@@ -251,6 +265,10 @@ somem até a véspera.
     da primeira parcela não recebida.
 11. **Dado** saldos que vencem em 2, 3 e 31 dias, **Quando** a Home abre, **Então** o primeiro fica
     vermelho, o segundo amarelo e o terceiro cinza.
+12. **Dado** uma venda faturada sem comprovante, com data combinada daqui a 30 dias, **Quando** a Home
+    abre, **Então** a linha diz "Vence em 30 dias", e não "Sinal pendente".
+13. **Dado** uma venda com data combinada em 20/10 e parcela não recebida em 05/10, **Quando** a Home
+    abre, **Então** o vencimento é 20/10, com a marca "data combinada".
 
 ---
 
@@ -295,6 +313,12 @@ confia no resto.
 - **Evento com pedido de exclusão pendente**: continua nas listas até ser excluído.
 - **Venda lançada hoje sem comprovante do sinal**: já aparece como "Sinal pendente", em amarelo, e
   conta no total. O comprovante pode ser anexado no próprio cadastro.
+- **Outro evento do grupo aberto pela edição completa**: "Valor a definir" aparece marcado e travado,
+  com o link para o principal; salvar não grava nada da venda nesse evento.
+- **Evento de R$ 0,01 aberto pela edição completa**: abre com o valor à mostra e "Valor a definir"
+  desmarcado; uma troca de título não apaga o R$ 0,01.
+- **Marcar "Valor a definir" num evento que já tinha valor**: a tela avisa, no próprio lugar, que o
+  valor será apagado e a comissão a pagar, cancelada.
 - **Ensaio com título fora do padrão** ("🟧 - ENSAIO EDUCAMANTO"): fica fora pelo marcador laranja.
 - **Venda cujo título começa com 🟧 ou 🟠 por engano**: fica fora das duas listas. É o custo aceito
   da regra do marcador; o título se corrige na agenda.
@@ -335,11 +359,13 @@ confia no resto.
   - os outros eventos de um grupo, e o grupo cujo principal é cortesia;
   - as vendas da Loja Virtual.
 - **FR-007**: Cada linha DEVE mostrar:
-  - a cliente; sem cliente, o título do evento; no grupo, o nome do grupo e quantos eventos ele tem;
+  - a cliente; sem cliente, o título do evento; no grupo, o nome do grupo e quantos eventos não
+    cancelados ele tem;
   - a data do evento, com a distância em palavras;
   - "a definir" ou o valor simbólico ("R$ 0,01 (valor simbólico)");
   - o recebido, quando houver comprovante;
-  - a ação "Pôr o valor", que abre o evento na aba Comercial.
+  - a ação "Pôr o valor", que abre o evento na aba Comercial. Quem não pode editar a venda (o
+    FINANCEIRO) vê "Abrir", como na 298.
 - **FR-008**: A lista DEVE ter dois grupos, como a 298. "Ainda vai acontecer" vem com o mais próximo
   primeiro. "Já aconteceu" vem com o mais recente primeiro.
 - **FR-009**: A cor DEVE seguir a régua da 298, com a urgência também em palavras. Ela é mais larga
@@ -365,10 +391,13 @@ confia no resto.
   valor simbólico aparece como está, com a marca "valor simbólico".
 - **FR-016**: O vendedor DEVE continuar obrigatório no cadastro, com ou sem valor.
 - **FR-017**: A data da venda DEVE continuar a informada no cadastro, que por padrão é o dia do
-  cadastro. Pôr o valor depois não a troca.
+  cadastro. Pôr o valor depois não a troca, nem uma edição que deixe o campo vazio.
 - **FR-018**: O valor simbólico DEVE contar como "sem venda" também em dois pontos da aba Comercial:
   em "Aplicar valores do orçamento" e no aviso "importado do Google sem venda". Assim a comercial
   consegue pôr o valor pelo orçamento.
+- **FR-031**: Quando a comissão de uma venda nasce num mês posterior ao da data da venda (o valor
+  entrou depois), ela DEVE entrar no ciclo de pagamento do mês em que o valor foi posto, e nunca num
+  mês já fechado. A data da venda não muda.
 
 **Cobranças**
 
@@ -378,12 +407,14 @@ confia no resto.
   o valor simbólico.
 - **FR-020**: Toda venda com saldo DEVE aparecer, com o vencimento do saldo. Isso inclui a que já
   recebeu metade e está a mais de 2 dias do evento, que hoje fica escondida.
-- **FR-021**: O vencimento do saldo DEVE ser a data combinada, quando preenchida, qualquer que seja a
-  forma de pagamento. Sem data combinada, vence 2 dias antes da data do evento ou do grupo. Com
-  cronograma de parcelas, vence na primeira parcela não recebida.
+- **FR-021**: O vencimento do saldo DEVE seguir esta ordem:
+  1. a data combinada, quando preenchida, qualquer que seja a forma de pagamento;
+  2. sem data combinada e com cronograma de parcelas, a primeira parcela não recebida do principal;
+  3. senão, 2 dias antes da data do evento ou do grupo.
 - **FR-022**: A linha DEVE dizer "Sinal pendente" quando o recebido for menor que a metade do valor
   menos R$ 1,00. Vale desde o dia em que a venda é lançada, sem prazo para o comprovante chegar,
-  porque a política é sinal no fechamento.
+  porque a política é sinal no fechamento. Não vale quando a venda tem data combinada: a data
+  combinada substitui a regra da metade.
 - **FR-023**: Diferença menor que R$ 1,00 NÃO é dívida: não gera linha nem "Sinal pendente".
 - **FR-024**: Cada linha DEVE mostrar:
   - a cliente (a Contratante; senão, a primeira cliente; senão, o título do evento);
@@ -401,13 +432,15 @@ confia no resto.
   - cinza: vence em mais de 30 dias.
 
   A ordem é pelo vencimento, o mais antigo primeiro.
-- **FR-027**: Quem vê o painel Comercial (COMERCIAL, FINANCEIRO e SUPERADMIN) DEVE continuar vendo
-  todas as cobranças.
+- **FR-027**: Quem vê os painéis "Cobranças" e "Sem valor" (COMERCIAL, FINANCEIRO e SUPERADMIN) DEVE
+  continuar vendo todas as cobranças.
 
 **Home**
 
-- **FR-028**: As duas listas DEVEM ficar no painel Comercial. Cada uma tem contador, 6 linhas e
-  "Mostrar todas". O topo ganha os cards "Sem valor" e "Cobranças", e card e painel usam o mesmo nome.
+- **FR-028**: As duas listas DEVEM ficar em dois painéis, "Cobranças" e "Sem valor", no lugar do
+  painel "Comercial" de hoje. Cada um tem contador, 6 linhas e "Mostrar todas". O topo ganha os
+  cards "Cobranças" e "Sem valor", cada um com o mesmo nome do seu painel, e clicar no card abre o
+  painel.
 - **FR-029**: "N pendências no total", no topo, DEVE somar:
   - das listas comerciais (Cobranças, Sem valor e os Formulários da 298), só as linhas vermelhas e
     amarelas; as cinza são informação e não entram;
@@ -429,8 +462,8 @@ Nenhuma entidade nova e nenhuma migration. A feature usa as que existem:
 ### RBAC *(obrigatório se houver endpoint novo ou alterado)*
 
 - `GET /api/dashboard`: o bloco comercial ganha a lista "sem valor", as cobranças mudam de regra e o
-  total do topo muda de conta. Papéis: COMERCIAL, FINANCEIRO e SUPERADMIN, sem mudança. A linha em
-  `docs/01` §4.3 é atualizada.
+  total do topo muda de conta. Papéis: COMERCIAL, FINANCEIRO e SUPERADMIN, sem mudança. O `docs/01`
+  §4.3 ganha a linha dessa rota, que ainda não existe.
 - `POST /api/events` e `PATCH /api/events/<id>`: a validação do valor muda (valor a definir). Os
   papéis continuam os de hoje.
 - A leitura do evento (a cobrança da aba Comercial) passa a somar o grupo (FR-003). Os papéis que veem
@@ -450,12 +483,12 @@ com "[TESTE verify 299] pode apagar" no título, e a chamada ao Google trocada p
 | 2 | Vazio, zero, R$ 0,01 e R$ 0,99 contra R$ 1,00; eventos a 7, 8 e 31 dias | os quatro primeiros entram em "sem valor" e R$ 1,00 não; 7 dias vermelho, 8 amarelo, 31 cinza | não |
 | 3 | Cancelado, ensaio, cortesia, título com 🟧 e com 🟠, Loja Virtual | nenhum entra em "sem valor" | não |
 | 4 | Grupo: principal com valor; principal sem valor; principal cortesia | outros eventos fora; uma linha do grupo; grupo fora | não |
-| 5 | Valor a definir | cadastro com a marca cria sem valor e o evento entra na lista; sem valor e sem marca → 400 no campo; pôr o valor pela aba Comercial tira da lista | não |
+| 5 | Valor a definir | cadastro com a marca cria sem valor e o evento entra na lista; sem valor e sem marca → 400 no campo; pôr o valor pela aba Comercial tira da lista; valor posto num mês depois do da data da venda → comissão no ciclo do mês do valor | não |
 | 6 | Evento sem valor na edição completa; orçamento num evento de R$ 0,01 | a edição salva o título; o orçamento é aplicado | não |
 | 7 | Caso 344 (3.078 + 3.078 de 5.508) e grupo de 10.000 (2.000 + 3.000) | o 344 sai de Cobranças; o outro vira uma linha, "falta R$ 5.000,00" | não |
 | 8 | Grupo com eventos em 20/06 e 21/06 | a data do grupo é 20/06 e o vencimento 18/06 | não |
-| 9 | Vencimento | 2 dias antes; data combinada à vista; data combinada depois do evento; parcela | não |
-| 10 | Centavos e sinal | saldo de R$ 0,50 fora; sinal R$ 0,50 abaixo da metade não é "Sinal pendente"; venda lançada hoje sem comprovante já é "Sinal pendente" | não |
+| 9 | Vencimento | 2 dias antes; data combinada à vista; data combinada depois do evento; parcela; data combinada vence a parcela | não |
+| 10 | Centavos e sinal | saldo de R$ 0,50 fora; sinal R$ 0,50 abaixo da metade não é "Sinal pendente"; venda lançada hoje sem comprovante já é "Sinal pendente"; faturada com data combinada e sem comprovante não é "Sinal pendente" | não |
 | 11 | Metade paga e evento a 20 dias | aparece, com vencimento (hoje fica escondida) | não |
 | 12 | R$ 0,01, cortesia com valor (dado antigo), Loja Virtual | nenhum em Cobranças | não |
 | 13 | Conteúdo e cor da linha | cliente ou título, data do evento e vencimento; nenhum selo em inglês; vence em 2 dias vermelho, em 3 amarelo, em 31 cinza | não |
@@ -514,7 +547,7 @@ Conferência de tela:
 
 - `docs/01`: o contrato do bloco comercial de `GET /api/dashboard`, a validação do valor em
   `POST/PATCH /api/events`, a cobrança da leitura do evento e o §4.3.
-- `docs/02`: a Home (painel Comercial com as duas listas e o total do topo), o cadastro e a edição
+- `docs/02`: a Home (os painéis "Cobranças" e "Sem valor" e o total do topo), o cadastro e a edição
   com "Valor a definir", e a aba Comercial com "A definir" e a cobrança do grupo.
 - `docs/03`: entrada no topo.
 - `docs/04`: os invariantes. O grupo é uma venda só na cobrança; o que é "sem valor"; o marcador

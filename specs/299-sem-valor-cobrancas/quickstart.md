@@ -1,0 +1,85 @@
+# Quickstart — como provar a feature 299 de ponta a ponta
+
+## 1. Ambiente local (PowerShell, na raiz do repositório)
+
+```powershell
+$env:DATABASE_URL = (Get-Content .local-db-url -Raw).Trim()
+$env:FLASK_ENV = 'development'
+$env:MANTO_SEM_THREADS = '1'
+$env:PYTHONUTF8 = '1'
+```
+
+Não há migration. Conferir que o `release_date` do espelho é 01/06/2026: o verify confere sozinho e
+falha com a mensagem "corte do espelho diferente de 01/06".
+
+## 2. Verificação automática
+
+```powershell
+.\.venv\Scripts\python.exe specs\299-sem-valor-cobrancas\verify_299.py
+```
+
+- **Resultado**: `17/17 OK` e código de saída 0.
+- **Google**: a saída imprime as chamadas ao Google falso (`insert` e `update`).
+  - Nenhuma chegou ao Google real: `service.insert_event` e `load_credentials` estouram se forem
+    chamados.
+  - Os eventos de teste levam "[TESTE verify 299] pode apagar" no título e `v299-` no
+    `google_event_id`.
+- **Cenário 16, o que DEVE ser recusado**:
+  - CASTING recebe o dashboard sem o bloco `comercial` e o detalhe do evento sem `cobranca`/`venda`;
+  - FINANCEIRO recebe exatamente 403 ao criar evento e ao editar tudo, e nada é gravado;
+  - como controle, COMERCIAL cria com 201 e FINANCEIRO vê a mesma cobrança na Home.
+
+Regressões, rodar de novo e esperar o mesmo verde de antes:
+
+```powershell
+.\.venv\Scripts\python.exe specs\298-formulario-vira-evento\verify_298.py
+.\.venv\Scripts\python.exe specs\273-orcamento-para-evento\verify_273.py
+.\.venv\Scripts\python.exe specs\174-redesenho-fidelidade-visual\verify_174.py
+```
+
+- **`verify_298`**: continua 17/17. O `formularios` só ganha `para_agir`, por acréscimo.
+- **`verify_273`**: a cortesia continua sem receber os valores do orçamento.
+- **`verify_174`**: `comercial.pending_payments` continua sendo lista.
+
+```powershell
+cd frontend; npm run typecheck; cd ..
+.\.venv\Scripts\ruff.exe check app\financeiro\cobranca_ops.py app\api\dashboard_service.py app\api\agenda_read.py app\api\agenda_write.py app\calendar\event_ops.py app\calendar\routes.py app\calendar\orcamento_evento_ops.py app\financeiro\comissoes_ops.py app\formularios\destino_ops.py app\constants.py
+```
+
+## 3. Conferência de tela (Browser pane, skill `manto-conferir-tela`)
+
+1. **Home, como COMERCIAL**, no computador e a 375 px:
+   - os painéis "Cobranças" e "Sem valor", com os cards do topo de mesmo nome;
+   - cores e selos em português, sem `URGENT`/`WARN`/`INFO`;
+   - "Mostrar todas";
+   - estado vazio;
+   - o total do topo sem as linhas cinza;
+   - nenhuma rolagem horizontal;
+   - movimento reduzido ligado.
+2. **Home, como FINANCEIRO** ("Ver como"): a linha "sem valor" oferece "Abrir".
+3. **Regressão da 298**: o painel de Formulários igual ao de antes, com o texto "passou há N dias",
+   repetidos e sugestão.
+4. **Cadastro de evento**:
+   - "Valor a definir" esconde os valores;
+   - salvar sem valor e sem a marca aponta o campo e leva o foco até ele;
+   - com a marca, salva e o evento aparece em "Sem valor".
+5. **Edição completa**:
+   - de um evento importado do Google sem valor, abre marcada e salva só o título;
+   - de um evento de R$ 0,01, abre desmarcada;
+   - de um outro evento de grupo, a marca vem travada, com o link para o principal.
+6. **Aba Comercial**:
+   - "A definir" no lugar de R$ 0,00;
+   - no principal de um grupo, "Recebido X de Y" com os comprovantes dos outros eventos;
+   - no outro evento, o texto do grupo e o link para o principal.
+
+## 4. Depois do deploy (quando o dono pedir)
+
+Sem comando pós-deploy. Conferir na produção:
+- o painel "Sem valor" com as vendas sem valor desde 01/06 (6 em 14/09, menos as que ganharam valor)
+  e nenhum "🟧 VISITA TECNICA" ou "🟠 GRAVAÇÃO";
+- o grupo 344 fora de "Cobranças";
+- nenhuma linha por centavos;
+- as vendas com metade paga aparecendo com vencimento.
+
+Avisar a equipe no dia: as cobranças crescem (as escondidas aparecem) e o total do topo cai (as
+cinza deixam de contar).
