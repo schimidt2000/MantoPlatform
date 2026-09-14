@@ -11,14 +11,16 @@ from __future__ import annotations
 import json
 import re
 import urllib.parse
-from datetime import date, datetime
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import not_
 from sqlalchemy.orm import joinedload
 
 from app import db
 from app.clientes.importer import normalize_phone
-from app.constants import now_sp
+from app.constants import CORTE_FORMULARIOS_PADRAO, FORM_TIPO_ROTULOS
 from app.models import (
     CalendarEvent,
     Client,
@@ -44,6 +46,144 @@ class FormValidationError(Exception):
         super().__init__(message)
         self.field = field
         self.message = message
+
+
+class FormularioJaTemDestino(Exception):
+    """O formulário já tem destino — ligado a um evento ou encerrado (feature 298).
+
+    Vira 409 em todos os caminhos, com a MESMA mensagem: tela Formulários, sugestão, criar evento,
+    aba Comercial e edição do evento. Antes cada caminho fazia uma coisa — um sobrescrevia o
+    vínculo, outro ignorava em silêncio, outro recusava com texto próprio.
+    """
+
+    MENSAGEM = "Este formulário já tem destino."
+
+    def __init__(self, mensagem: str | None = None) -> None:
+        self.message = mensagem or self.MENSAGEM
+        super().__init__(self.message)
+
+
+@dataclass
+class VinculoResultado:
+    """O que o núcleo de vínculo devolve a quem chamou (feature 298).
+
+    ``divergencia_cliente`` vem preenchida quando a cliente do formulário não é nenhuma das
+    clientes do evento: o núcleo não mexe em nada nesse caso (FR-015) e a tela oferece a troca.
+    """
+
+    divergencia_cliente: dict | None = None
+
+
+# ── Destino do formulário (feature 298) ──────────────────────────────
+
+_FUSO_SP = ZoneInfo("America/Sao_Paulo")
+
+#: Partições que se excluem e somam o total — a MESMA regra serve os cartões da tela Formulários e
+#: a lista da Home (FR-017: os dois números não podem divergir).
+DESTINOS = ("sem_destino", "com_evento", "encerrados", "historico")
+
+
+def corte_dia_sp() -> date:
+    """Dia do corte de "o que é tarefa": a data de início do sistema, ou 01/06/2026 se vazia."""
+    settings = SiteSetting.query.get(1)
+    if settings is not None and settings.release_date:
+        return settings.release_date
+    return CORTE_FORMULARIOS_PADRAO
+
+
+def corte_de_chegada() -> datetime:
+    """Meia-noite de São Paulo do dia do corte, em UTC ingênuo — o fuso de ``created_at``.
+
+    ``FormResponse.created_at`` é gravado com ``utcnow``: comparar com a meia-noite "ingênua" do
+    dia punha no mês novo o formulário que chegou às 21h da véspera em Brasília. Por isso não se
+    reusa o ``dashboard_cutoff`` das cobranças, que além disso cai em ``date.today()`` (UTC).
+    """
+    inicio_sp = datetime.combine(corte_dia_sp(), time.min, tzinfo=_FUSO_SP)
+    return inicio_sp.astimezone(UTC).replace(tzinfo=None)
+
+
+def dia_sp(utc_ingenuo: datetime) -> date:
+    """Dia em São Paulo de um instante gravado em UTC ingênuo (``created_at``/``closed_at``)."""
+    return utc_ingenuo.replace(tzinfo=UTC).astimezone(_FUSO_SP).date()
+
+
+def iso_utc(utc_ingenuo: datetime | None) -> str | None:
+    """ISO com ``+00:00`` de um instante em UTC ingênuo, para o navegador converter certo.
+
+    Sem o fuso, ``new Date(iso)`` lia como hora local e "Recebida em" mostrava 3 h a mais
+    (corrigido de carona na feature 298).
+    """
+    return utc_ingenuo.replace(tzinfo=UTC).isoformat() if utc_ingenuo else None
+
+
+def condicao_sem_destino(corte: datetime):
+    """Chegou desde o corte, sem evento e sem encerramento — o que vira tarefa na Home."""
+    return db.and_(
+        FormResponse.created_at >= corte,
+        FormResponse.event_id.is_(None),
+        FormResponse.closed_at.is_(None),
+    )
+
+
+def condicao_particao(nome: str, corte: datetime):
+    """Condição SQL de uma partição de ``DESTINOS`` (``None`` para nome desconhecido)."""
+    desde_o_corte = FormResponse.created_at >= corte
+    if nome == "historico":
+        return FormResponse.created_at < corte
+    if nome == "com_evento":
+        return db.and_(desde_o_corte, FormResponse.event_id.isnot(None))
+    if nome == "encerrados":
+        return db.and_(
+            desde_o_corte, FormResponse.event_id.is_(None), FormResponse.closed_at.isnot(None)
+        )
+    if nome == "sem_destino":
+        return condicao_sem_destino(corte)
+    return None
+
+
+def destino_de(response: FormResponse, corte: datetime) -> str:
+    """A partição de um formulário, em Python, com as MESMAS regras de ``condicao_particao``."""
+    if response.created_at < corte:
+        return "historico"
+    if response.event_id is not None:
+        return "com_evento"
+    if response.closed_at is not None:
+        return "encerrados"
+    return "sem_destino"
+
+
+def contar_por_destino(corte: datetime | None = None) -> dict:
+    """Contagens por partição numa query só, mais o dia do corte (rótulos "desde DD/MM")."""
+    corte = corte or corte_de_chegada()
+    row = db.session.query(
+        db.func.count(FormResponse.id),
+        *[db.func.count(FormResponse.id).filter(condicao_particao(p, corte)) for p in DESTINOS],
+    ).one()
+    contagens: dict = {"total": row[0], **{p: row[i + 1] for i, p in enumerate(DESTINOS)}}
+    contagens["corte"] = dia_sp(corte).isoformat()
+    return contagens
+
+
+def tipo_rotulo(form_type: str) -> str:
+    """Tipo exibido na linha: "Festa" ou "Corporativo" (o ``form_type_label`` diz "Pré-contrato")."""
+    return FORM_TIPO_ROTULOS.get(form_type, FORM_TIPO_ROTULOS["comum"])
+
+
+def bloquear_formulario(response_id: int) -> FormResponse | None:
+    """Relê o formulário com ``SELECT … FOR UPDATE``, sem commit (feature 298).
+
+    Duas pessoas agindo no mesmo formulário passam a esperar uma pela outra, e a segunda enxerga
+    o destino que a primeira deu — checar ``event_id`` só em Python deixava as duas passarem. O
+    bloqueio dura até o commit (ou rollback) de quem chamou; ``populate_existing`` porque o objeto
+    pode já estar na sessão com valores velhos.
+    """
+    return (
+        db.session.query(FormResponse)
+        .filter(FormResponse.id == response_id)
+        .with_for_update()
+        .populate_existing()
+        .one_or_none()
+    )
 
 
 def _field_value_by_key(sections: list[dict], field_key: str) -> str:
@@ -118,7 +258,9 @@ def search_responses(q: str) -> list[FormResponse]:
     from sqlalchemy import or_
 
     return (
-        FormResponse.query.options(joinedload(FormResponse.client))
+        FormResponse.query.options(
+            joinedload(FormResponse.client), joinedload(FormResponse.closed_by)
+        )
         .filter(or_(*conditions))
         .order_by(FormResponse.created_at.desc())
         .limit(10)
@@ -126,60 +268,45 @@ def search_responses(q: str) -> list[FormResponse]:
     )
 
 
-# Filtros de situação da listagem de respostas — chaves estáveis usadas pela API e pela tela.
-STATUS_FILTERS = ("sem_evento", "sem_cliente", "ambiguos", "futuros_sem_evento")
+# Filtros da listagem = as partições por destino (feature 298). Os filtros antigos
+# (`sem_evento`, `sem_cliente`, `ambiguos`, `futuros_sem_evento`) contavam o histórico importado e
+# diziam 1.347 "sem evento"; chave antiga ou desconhecida cai em "todos", sem erro.
+STATUS_FILTERS = DESTINOS
 
 
-def _status_condition(filtro: str):
-    """Condição SQL de um filtro de situação (``None`` para filtro desconhecido/vazio)."""
-    if filtro == "sem_evento":
-        return FormResponse.event_id.is_(None)
-    if filtro == "sem_cliente":
-        return FormResponse.client_id.is_(None)
-    if filtro == "ambiguos":
-        # Ambíguo só interessa enquanto não resolvido — resposta já vinculada sai da fila.
-        return db.and_(
-            FormResponse.event_link_ambiguous.is_(True), FormResponse.event_id.is_(None)
-        )
-    if filtro == "futuros_sem_evento":
-        # `now_sp()`, nunca `date.today()`: produção roda em UTC, e das 21h à meia-noite de
-        # Brasília o "hoje" do processo já é amanhã — a festa de HOJE sairia da fila
-        # justamente no horário em que a comercial confere o dia seguinte.
-        return db.and_(
-            FormResponse.event_id.is_(None), FormResponse.event_date >= now_sp().date()
-        )
-    return None
+def _status_condition(filtro: str, corte: datetime):
+    """Condição SQL de um filtro de destino (``None`` para filtro desconhecido/vazio)."""
+    if filtro not in STATUS_FILTERS:
+        return None
+    return condicao_particao(filtro, corte)
 
 
-def count_status() -> dict[str, int]:
-    """Contadores dos cartões-resumo da tela de formulários (1 query, sem N+1)."""
-    row = db.session.query(
-        db.func.count(FormResponse.id),
-        *[
-            db.func.count(FormResponse.id).filter(_status_condition(f))
-            for f in STATUS_FILTERS
-        ],
-    ).one()
-    return {"total": row[0], **{f: row[i + 1] for i, f in enumerate(STATUS_FILTERS)}}
+def count_status(corte: datetime | None = None) -> dict:
+    """Contadores dos cartões da tela de formulários — as partições por destino e o corte."""
+    return contar_por_destino(corte)
 
 
-def list_responses(limit: int = 200, filtro: str = "") -> list[FormResponse]:
-    """Lista as respostas mais recentes (tela de índice), com filtro de situação opcional.
+def list_responses(
+    limit: int = 200, filtro: str = "", corte: datetime | None = None
+) -> tuple[list[FormResponse], bool]:
+    """Lista as respostas mais recentes (tela de índice), com filtro de destino opcional.
 
-    O cliente vinculado vem em ``joinedload``: a listagem exibe o nome dele em cada linha
-    (badge "Cliente: <nome>"), e sem isso seriam até ``limit`` queries extras (N+1).
-    ``futuros_sem_evento`` ordena pela data do evento (o mais urgente primeiro) — é a fila
-    de "festa chegando sem evento na agenda"; os demais mantêm o mais recente primeiro.
+    Cliente e quem encerrou vêm em ``joinedload``: a listagem mostra os dois em cada linha, e
+    sem isso seriam até ``limit`` queries extras (N+1).
+
+    Returns:
+        ``(respostas, truncado)`` — ``truncado`` diz que o filtro tem mais que ``limit``, para a
+        tela avisar "use a busca" em vez de fingir que a lista acabou.
     """
-    query = FormResponse.query.options(joinedload(FormResponse.client))
-    condition = _status_condition(filtro)
+    corte = corte or corte_de_chegada()
+    query = FormResponse.query.options(
+        joinedload(FormResponse.client), joinedload(FormResponse.closed_by)
+    )
+    condition = _status_condition(filtro, corte)
     if condition is not None:
         query = query.filter(condition)
-    if filtro == "futuros_sem_evento":
-        query = query.order_by(FormResponse.event_date.asc())
-    else:
-        query = query.order_by(FormResponse.created_at.desc())
-    return query.limit(limit).all()
+    linhas = query.order_by(FormResponse.created_at.desc()).limit(limit + 1).all()
+    return linhas[:limit], len(linhas) > limit
 
 
 def ensure_event_client(event: CalendarEvent, client_id: int | None) -> None:
@@ -258,29 +385,122 @@ def dissociate_client(response: FormResponse) -> None:
     db.session.commit()
 
 
+def limpar_encerramento(response: FormResponse) -> None:
+    """Zera as 4 colunas de encerramento, sem commit (feature 298).
+
+    Ligar a um evento desfaz o encerramento (um evento real vence o motivo); reabrir também.
+    """
+    response.closed_reason = None
+    response.closed_note = None
+    response.closed_by_id = None
+    response.closed_at = None
+
+
+def _ids_clientes_do_evento(event: CalendarEvent) -> set[int]:
+    ids = {ec.client_id for ec in EventClient.query.filter_by(event_id=event.id).all()}
+    if event.client_id:
+        ids.add(event.client_id)
+    return ids
+
+
+def cliente_do_evento_para(response: FormResponse, event: CalendarEvent) -> int | None:
+    """A cliente do evento que o formulário deve receber (feature 298, FR-015).
+
+    Prefere a ficha com o MESMO telefone do formulário (é quem preencheu); na falta, a
+    contratante denormalizada do evento; na falta, a primeira associada.
+    """
+    vinculos = EventClient.query.filter_by(event_id=event.id).all()
+    if response.contact_phone:
+        for ec in vinculos:
+            if ec.client is not None and ec.client.phone == response.contact_phone:
+                return ec.client_id
+    if event.client_id:
+        return event.client_id
+    return vinculos[0].client_id if vinculos else None
+
+
+def _ref_cliente(client_id: int | None) -> dict:
+    cliente = db.session.get(Client, client_id) if client_id else None
+    return {"id": client_id, "nome": cliente.name if cliente else None}
+
+
+def divergencia_de_cliente(
+    response: FormResponse, event: CalendarEvent | None = None
+) -> dict | None:
+    """Cliente do formulário que não é nenhuma das clientes do evento; ``None`` se não divergem.
+
+    "Divergem" exige as duas preenchidas: formulário sem cliente, ou evento sem nenhuma, não é
+    divergência — nesses casos o núcleo simplesmente leva a que falta.
+    """
+    event = event or response.event
+    if event is None or response.client_id is None:
+        return None
+    ids = _ids_clientes_do_evento(event)
+    if not ids or response.client_id in ids:
+        return None
+    return {
+        "formulario": _ref_cliente(response.client_id),
+        "evento": _ref_cliente(cliente_do_evento_para(response, event)),
+    }
+
+
+def _levar_cliente(response: FormResponse, event: CalendarEvent) -> VinculoResultado:
+    """A cliente nos dois sentidos, sem trocar ninguém (feature 298, FR-015).
+
+    Até a 298 só existia formulário→evento, e quando o evento já tinha outra cliente a do
+    formulário entrava como "Outros" — mexia no evento justamente quando as duas divergiam.
+    """
+    if response.client_id is None:
+        client_id = cliente_do_evento_para(response, event)
+        if client_id is not None:
+            response.client_id = client_id
+            response.client_link_source = "evento"
+        return VinculoResultado()
+    if not _ids_clientes_do_evento(event):
+        ensure_event_client(event, response.client_id)
+        return VinculoResultado()
+    return VinculoResultado(divergencia_cliente=divergencia_de_cliente(response, event))
+
+
 def apply_event_link(
-    response: FormResponse, event: CalendarEvent, *, source: str = "manual"
-) -> None:
-    """Grava o vínculo resposta→evento, **sem commit** (feature 267).
+    response: FormResponse,
+    event: CalendarEvent,
+    *,
+    source: str = "manual",
+    decisao_humana: bool = True,
+) -> VinculoResultado:
+    """Núcleo ÚNICO do vínculo resposta→evento, **sem commit** (features 267 e 298).
 
-    Núcleo único dos quatro pontos que escreviam esse vínculo à mão. Até a 267, o caminho da
-    agenda gravava só o `event_id` — sem `event_link_locked`, então o reprocessamento do próximo
-    ciclo de sync (a cada 10 min) religava a resposta e desfazia a decisão humana em silêncio;
-    e sem `ensure_event_client`, então o evento não aparecia na ficha da cliente.
+    Até a 298, três caminhos gravavam o vínculo à mão (criar evento, envio público e o
+    reprocessamento do sync) e cada um esquecia uma parte. Agora todos entram aqui, e o vínculo
+    sempre: desfaz o encerramento, leva a cliente nos dois sentidos (sem trocar ninguém quando
+    divergem) e apaga, para TODOS os destinatários, o aviso "nova resposta" desse formulário.
 
-    Sem commit de propósito: quem chama pode estar dentro de um laço ou de uma transação maior
-    (um `*_ops` que commita dentro de laço quebra a transação única do request).
+    Sem commit de propósito: quem chama pode estar dentro de um laço ou de uma transação maior.
 
     Args:
         response: a resposta a vincular.
-        event: o evento de destino (objeto, não id — `ensure_event_client` precisa dele).
+        event: o evento de destino (objeto, não id).
         source: origem do vínculo, ``"manual"`` por padrão.
+        decisao_humana: grava ``event_link_locked``. O automático passa ``False``: se o evento for
+            excluído, a resposta volta para a fila e pode ser religada ao evento recriado.
+
+    Returns:
+        ``VinculoResultado`` com a divergência de cliente, quando houver.
     """
+    limpar_encerramento(response)
     response.event_id = event.id
     response.event_link_source = source
     response.event_link_ambiguous = False
-    response.event_link_locked = True
-    ensure_event_client(event, response.client_id)
+    if decisao_humana:
+        response.event_link_locked = True
+    resultado = _levar_cliente(response, event)
+    from app.notificacoes import notificacoes_ops
+
+    notificacoes_ops.marcar_lidas_por_entidade(
+        "form_response", response.id, notificacoes_ops.KIND_FORM_RESPONSE
+    )
+    return resultado
 
 
 def clear_event_link(response: FormResponse) -> None:
@@ -295,23 +515,47 @@ def clear_event_link(response: FormResponse) -> None:
     response.event_link_locked = True
 
 
-def link_event(response: FormResponse, event_id: int) -> CalendarEvent:
-    """Associa manualmente a resposta a um evento existente da agenda (feature 126).
+def link_event(
+    response: FormResponse, event_id: int
+) -> tuple[CalendarEvent, VinculoResultado]:
+    """Associa manualmente a resposta a um evento existente da agenda (features 126 e 298).
 
-    ⚠️ Este wrapper **sobrescreve** um vínculo existente. O caminho da agenda
-    (`event_ops.set_event_form_response`) faz o contrário: **recusa** com 409 uma resposta já
-    presa a outro evento. Por isso os dois compartilham o NÚCLEO (`apply_event_link`) e não o
-    wrapper — delegar aqui mudaria o contrato da API.
+    Até a 298 este wrapper SOBRESCREVIA um vínculo existente. Agora recusa: formulário com evento
+    levanta ``FormularioJaTemDestino`` (409), a mesma regra de todos os caminhos (FR-018). A tela
+    nunca oferecia ligar um formulário já ligado, então nenhum uso legítimo dependia disso.
 
     Raises:
         FormValidationError: evento não encontrado.
+        FormularioJaTemDestino: o formulário já tem evento.
     """
     event = CalendarEvent.query.get(event_id)
     if not event:
         raise FormValidationError("event_id", "Evento não encontrado.")
-    apply_event_link(response, event)
+    bloqueado = bloquear_formulario(response.id)
+    if bloqueado is None or bloqueado.event_id is not None:
+        raise FormularioJaTemDestino()
+    resultado = apply_event_link(bloqueado, event)
     db.session.commit()
-    return event
+    return event, resultado
+
+
+def vincular_formulario_ao_evento(
+    event: CalendarEvent, form_response_id: int | None
+) -> VinculoResultado | None:
+    """Caminho da edição do evento: liga o pré-contrato escolhido, **sem commit** (184 → 298).
+
+    ``None`` não desliga (contrato antigo do PATCH em bloco — a tela manda o id atual em toda
+    gravação). Formulário já ligado a ESTE evento: nada a fazer. Ligado a OUTRO: antes era
+    ignorado em silêncio; agora levanta ``FormularioJaTemDestino``.
+    """
+    if form_response_id is None:
+        return None
+    response = bloquear_formulario(form_response_id)
+    if response is None or response.event_id == event.id:
+        return None
+    if response.event_id is not None:
+        raise FormularioJaTemDestino()
+    return apply_event_link(response, event)
 
 
 def unlink_event(response: FormResponse) -> None:
@@ -637,7 +881,12 @@ def _attempt_auto_link(response: FormResponse) -> str | None:
     commit — quem chama decide quando salvar), ``"ambiguous"`` se há candidato na data
     mas sem confirmação pelo telefone, ou ``None`` se não havia evento na data.
     """
-    if response.event_id is not None or response.event_link_locked or not response.event_date:
+    if (
+        response.event_id is not None
+        or response.event_link_locked
+        or response.closed_at is not None
+        or not response.event_date
+    ):
         return None
 
     candidates = _real_event_candidates(response.event_date)
@@ -648,7 +897,10 @@ def _attempt_auto_link(response: FormResponse) -> str | None:
 
     matched = [e for e in candidates if response.contact_phone in _event_client_phones(e.id)]
     if len(matched) == 1:
-        response.event_id = matched[0].id
+        # Pelo núcleo (feature 298): o vínculo automático também leva a cliente e apaga o aviso,
+        # mas NÃO grava decisão humana — excluído o evento, a resposta volta para a fila e a
+        # automação pode religá-la ao evento recriado.
+        apply_event_link(response, matched[0], source="auto_date", decisao_humana=False)
         return "auto_date"
     return "ambiguous"
 
@@ -698,15 +950,15 @@ def retry_auto_link_pending() -> int:
         FormResponse.event_id.is_(None),
         FormResponse.event_link_locked.is_(False),
         FormResponse.event_date.isnot(None),
+        # Encerrado já tem destino (feature 298): religar ou marcar ambíguo desfaria a decisão.
+        FormResponse.closed_at.is_(None),
     ).all()
     if not pending:
         return 0
     linked = 0
     for response in pending:
         result = _attempt_auto_link(response)
-        if result in ("auto_date", "auto_client"):
-            response.event_link_source = result
-            response.event_link_ambiguous = False
+        if result == "auto_date":
             linked += 1
         elif result == "ambiguous":
             response.event_link_ambiguous = True

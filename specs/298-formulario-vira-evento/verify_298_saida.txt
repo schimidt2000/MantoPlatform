@@ -1,0 +1,55 @@
+﻿.venv\Scripts\python.exe : [2026-09-11 14:09:01,873] INFO in __init__: [links externos] 
+portal=https://portal.mantoproducoes.com.br plataforma=https://app.mantoproducoes.com.br
+At line:1 char:448
++ ... UTF8 = '1'; .venv\Scripts\python.exe specs/298-formulario-vira-evento ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([2026-09-11 14:...roducoes.com.br:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\flask_limiter\extension.py:333: UserWarning: Using the 
+in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for 
+production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about 
+configuring the storage backend.
+  warnings.warn(
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: 
+urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+[2026-09-11 14:09:02,762] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+C:\Users\schim\Desktop\Manto_Platform\specs\298-formulario-vira-evento\verify_298.py:278: DeprecationWarning: 
+datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to 
+represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  agora = datetime.utcnow()
+C:\Users\schim\Desktop\Manto_Platform\specs\298-formulario-vira-evento\verify_298.py:161: LegacyAPIWarning: The 
+Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The 
+method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: 
+https://sqlalche.me/e/b8d9)
+  settings = SiteSetting.query.get(1)
+C:\Users\schim\Desktop\Manto_Platform\specs\298-formulario-vira-evento\verify_298.py:401: LegacyAPIWarning: The 
+Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The 
+method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: 
+https://sqlalche.me/e/b8d9)
+  settings = SiteSetting.query.get(1)
+C:\Users\schim\Desktop\Manto_Platform\specs\298-formulario-vira-evento\verify_298.py:570: DeprecationWarning: 
+datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to 
+represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  db.session.get(CalendarEvent, e["ev10_I1"]).cancelled_at = datetime.utcnow()
+Feature 298 — o formulário vira evento, contra manto_local
+  OK     1. antes do corte fica fora; data de início vazia = 01/06
+  OK     2. grupo, cor, tipo, distância, ordem e papel
+  OK     3. data passada → 'já passou'
+  OK     4. corporativo
+  OK     5. mesmo telefone numa linha; escolher encerra o repetido
+  OK     6. encerrar com motivo
+  OK     7. reabrir
+  OK     8. sugestão: empate, descarte e confirmação
+  OK     9. cliente vem junto; divergência
+  OK     10. cancelado, excluído, desvincular e histórico
+  OK     11. dados para o cadastro nos dois formatos
+  OK     12. alertas do cadastro
+  OK     13. contagens somam e batem com a Home
+  OK     14a. sync e segundo vínculo recusado (Google fora)
+  OK     14b. aviso que não nasce e comandos de correção
+  OK     15. papéis sem permissão recebem 403 (DEVEM falhar)
+  OK     16. limpeza
+
+17/17 OK · chamadas ao Google: 0

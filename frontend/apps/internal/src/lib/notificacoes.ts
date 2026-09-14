@@ -1,4 +1,5 @@
 import {
+  type QueryClient,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -44,6 +45,15 @@ interface NaoLidas {
 
 const NAO_LIDAS_KEY = ["notificacoes", "nao-lidas"] as const;
 const LISTA_KEY = ["notificacoes", "lista"] as const;
+
+/**
+ * Recarrega contagem e listas do sino. Serve às ações de OUTRAS telas que apagam avisos no
+ * servidor (feature 298: formulário que ganha destino apaga o aviso para todos) — sem isso o
+ * badge segue dizendo "3" até o próximo polling.
+ */
+export function invalidarNotificacoes(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
+}
 
 /** Intervalo do polling da contagem. 60 s é "imediato" para um lead respondido em horas. */
 export const POLL_MS = 60_000;

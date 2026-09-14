@@ -1944,9 +1944,10 @@ class FormResponse(db.Model):
     event_date = db.Column(db.Date, nullable=True, index=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=True, index=True)
     # Origem do vínculo com a cliente (feature 266): 'auto_phone' (deduzido pelo telefone no
-    # envio) | 'manual' (associado pela tela) | None (sem vínculo, ou anterior à 266). Existe
-    # porque telefone compartilhado — a mãe que reserva pela amiga — produz match único e errado:
-    # sem a origem, a comercial não sabe qual vínculo merece conferência.
+    # envio) | 'manual' (associado pela tela) | 'evento' (veio do evento ligado — feature 298) |
+    # None (sem vínculo, ou anterior à 266). Existe porque telefone compartilhado — a mãe que
+    # reserva pela amiga — produz match único e errado: sem a origem, a comercial não sabe qual
+    # vínculo merece conferência.
     client_link_source = db.Column(db.String(20), nullable=True)
     event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True, index=True)
     # Vínculo automático de evento (feature 126): 'auto_date' | 'auto_client' | 'manual' | None.
@@ -1957,9 +1958,31 @@ class FormResponse(db.Model):
     # nunca mais tenta vincular essa resposta sozinha depois disso (não sobrescreve decisão).
     event_link_locked = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Encerramento com motivo (feature 298): o destino do formulário que NÃO virou evento — a
+    # cliente desistiu, preencheu repetido ou errado. `closed_at` é a coluna que define
+    # "encerrado"; invariante: encerrado nunca tem `event_id` (ligar a um evento limpa as quatro).
+    # UTC, como `created_at` desta tabela — o serializador manda as duas com `+00:00`.
+    closed_reason = db.Column(db.String(30), nullable=True)
+    closed_note = db.Column(db.String(300), nullable=True)
+    closed_by_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    closed_at = db.Column(db.DateTime, nullable=True)
+
+    # Índice PARCIAL da fila "sem destino" (a lista da Home, feature 298): a fila é minúscula perto
+    # do histórico importado. Espelha a migration — um `flask db migrate` que não o visse aqui
+    # proporia `drop_index`.
+    __table_args__ = (
+        db.Index(
+            "ix_form_responses_sem_destino", "created_at",
+            postgresql_where=db.text("event_id IS NULL AND closed_at IS NULL"),
+            sqlite_where=db.text("event_id IS NULL AND closed_at IS NULL"),
+        ),
+    )
 
     client = db.relationship("Client", lazy=True)
     event = db.relationship("CalendarEvent", lazy=True, backref=db.backref("form_responses", lazy=True))
+    closed_by = db.relationship("User", lazy=True, foreign_keys=[closed_by_id])
 
     @property
     def data_sections(self) -> list:
@@ -1975,6 +1998,37 @@ class FormResponse(db.Model):
     def form_type_label(self) -> str:
         """Rótulo amigável do tipo de formulário."""
         return "Corporativo" if self.form_type == "corporativo" else "Pré-contrato"
+
+
+class FormResponseDismissedEvent(db.Model):
+    """Sugestão "parece ser este evento" que a comercial descartou (feature 298, FR-010).
+
+    O par formulário↔evento descartado nunca volta como sugestão — o descarte é definitivo por
+    decisão do dono (a ligação à mão continua possível pela tela Formulários).
+
+    **Sem backref, de propósito**: a exclusão de evento (`calendar/routes._delete_event`) e a de
+    formulário (`formularios_ops.delete_response`) contam com o `ON DELETE CASCADE` do banco. Um
+    backref comum faria o ORM tentar anular as FKs NOT NULL antes do DELETE e quebraria as duas.
+    """
+
+    __tablename__ = "form_response_dismissed_events"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "form_response_id", "event_id", name="uq_form_response_dismissed_event"
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    form_response_id = db.Column(
+        db.Integer, db.ForeignKey("form_responses.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False
+    )
+    dismissed_by_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    dismissed_at = db.Column(db.DateTime, default=now_sp, nullable=False)
 
 
 class FormFieldDefinition(db.Model):

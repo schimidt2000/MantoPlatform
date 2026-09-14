@@ -197,6 +197,10 @@ def notificar_resposta_formulario(response: FormResponse) -> int:
 
     Regime B: chamada depois de a resposta já estar comitada; quem chama comita em transação curta.
     """
+    # Feature 298: formulário que já chega ligado a um evento (vínculo automático no envio) tem
+    # destino — o aviso nasceria só para ser apagado. A Home é o lembrete do que falta.
+    if response.event_id is not None:
+        return 0
     _garante_id(response)
     data = response.event_date.strftime("%d/%m/%Y") if response.event_date else "data não informada"
     corpo = f"{response.form_type_label} · festa em {data}"
@@ -351,6 +355,44 @@ def marcar_lidas_por_objeto(user_id: int, entity_type: str, entity_id: int) -> i
             Notification.entity_id == entity_id,
         )
         .values(read_at=now_sp())
+    )
+    return resultado.rowcount or 0
+
+
+def marcar_lidas_por_entidade(entity_type: str, entity_id: int, kind: str | None = None) -> int:
+    """Marca lidas, para TODOS os destinatários, as notificações de um objeto (feature 298).
+
+    É o "o aviso some sozinho": quando o formulário ganha destino (vira evento ou é encerrado),
+    ninguém mais precisa ser avisado dele. Marcar como lida — e não apagar — preserva o histórico
+    de `/notificacoes`, deixa lida a que já estava lida, e a retenção de 30 dias limpa sozinha.
+    **Sem commit**: roda dentro da transação do fato (o vínculo, o encerramento).
+    """
+    condicoes = [
+        Notification.entity_type == entity_type,
+        Notification.entity_id == entity_id,
+        Notification.read_at.is_(None),
+    ]
+    if kind:
+        condicoes.append(Notification.kind == kind)
+    resultado = db.session.execute(update(Notification).where(*condicoes).values(read_at=now_sp()))
+    return resultado.rowcount or 0
+
+
+def marcar_lidas_por_entidades(entity_type: str, entity_ids, kind: str | None = None) -> int:
+    """Mesmo efeito de `marcar_lidas_por_entidade`, em lote (`entity_id IN (…)`), sem commit.
+
+    `entity_ids` pode ser lista ou subconsulta — é o que as correções únicas por CLI usam.
+    """
+    condicoes = [
+        Notification.entity_type == entity_type,
+        Notification.entity_id.in_(entity_ids),
+        Notification.read_at.is_(None),
+    ]
+    if kind:
+        condicoes.append(Notification.kind == kind)
+    resultado = db.session.execute(
+        update(Notification).where(*condicoes).values(read_at=now_sp()),
+        execution_options={"synchronize_session": False},
     )
     return resultado.rowcount or 0
 

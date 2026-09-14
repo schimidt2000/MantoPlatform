@@ -3,7 +3,17 @@ import { Link } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { apiFetch } from "@manto/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle, MetricBadge, PageHeader, Skeleton } from "@manto/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  MetricBadge,
+  PageHeader,
+  Skeleton,
+  formatShortDate,
+} from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { PORTAL_PUBLICO } from "../lib/eventDetail";
 import { useCurrentUser } from "../lib/useAuth";
@@ -12,11 +22,22 @@ import type {
   DashboardTaskRef,
   EnsaioEventRef,
   EnsaioSummary,
+  FormulariosSummary,
+  LinhaFormulario,
   MinhaPecaRef,
   PendingPayment,
   UnconfirmedInviteRef,
 } from "../lib/types";
 import { SectorPanel, getUrgency } from "../components/SectorPanel";
+import { EncerrarFormularioDialog } from "../components/formularios/EncerrarFormularioDialog";
+import { SugestaoDeEventoFaixa } from "../components/formularios/SugestaoDeEventoFaixa";
+import {
+  mensagemDaApi,
+  useManterEntreRepetidos,
+  useUsarClienteDoEvento,
+  type DivergenciaCliente,
+  type ResultadoVinculo,
+} from "../lib/formulariosAdmin";
 import { HomeOverview, type HomeOverviewItem } from "../components/HomeOverview";
 import { HomePerformance, type PerformancePeriod } from "../components/HomePerformance";
 
@@ -405,25 +426,393 @@ function MinhaPecaRow({ item }: { item: MinhaPecaRef }) {
   );
 }
 
-/** Uma linha "rótulo → número" do painel de formulários (feature 266). */
-function LinhaFormularios({
-  rotulo,
-  valor,
-  urgente = false,
+// ── Formulários sem evento na agenda (feature 298) ─────────────────────────────
+
+type Severidade = NonNullable<LinhaFormulario["severidade"]>;
+
+const SEVERIDADE_TOM: Record<Severidade, "red" | "gold" | "neutral"> = {
+  vermelho: "red",
+  amarelo: "gold",
+  cinza: "neutral",
+};
+
+/** Tokens de fundo que acompanham o tema escuro (`theme.css`); cinza não pinta a linha. */
+const SEVERIDADE_FUNDO: Record<Severidade, string> = {
+  vermelho: "bg-red-50",
+  amarelo: "bg-gold-50",
+  cinza: "",
+};
+
+/** `01/06` a partir de uma data AAAA-MM-DD (o corte). */
+function diaMes(iso: string | null | undefined): string | null {
+  const [, mes, dia] = (iso ?? "").slice(0, 10).split("-");
+  return mes && dia ? `${dia}/${mes}` : null;
+}
+
+/**
+ * Distância até a data informada, em palavras — a urgência nunca é dita só pela cor.
+ *
+ * Vem de `dias_ate_a_data`, calculado no servidor pelo "hoje" de São Paulo. Não é o
+ * `formatRelativeDay` da `@manto/ui`: ele diz "ontem/há N dias" (que aqui leria como "chegou") e
+ * usa o relógio do navegador.
+ */
+function distanciaDaData(dias: number | null | undefined): string | null {
+  if (dias == null) return null;
+  if (dias === 0) return "hoje";
+  if (dias === 1) return "amanhã";
+  if (dias > 1) return `em ${dias} dias`;
+  const passou = Math.abs(dias);
+  return `passou há ${passou} dia${passou !== 1 ? "s" : ""}`;
+}
+
+function chegouHa(dias: number | undefined): string {
+  if (dias == null) return "";
+  if (dias <= 0) return "chegou hoje";
+  return `chegou há ${dias} dia${dias !== 1 ? "s" : ""}`;
+}
+
+/**
+ * Uma linha da lista: quem, quando e uma ação (feature 298).
+ *
+ * Mesma estrutura das outras linhas da Home. Em tela estreita o conteúdo quebra em duas linhas e o
+ * botão desce, sem rolagem horizontal — a ação principal fica sempre à mostra.
+ */
+function FormularioSemDestinoRow({
+  linha,
+  podeCriarEvento,
+  onEncerrar,
+  onLigado,
 }: {
-  rotulo: string;
-  valor: number;
-  urgente?: boolean;
+  linha: LinhaFormulario;
+  podeCriarEvento: boolean;
+  /** Ausente quando o servidor não mandou os motivos (versão antiga no meio do deploy). */
+  onEncerrar?: () => void;
+  onLigado?: (resultado: ResultadoVinculo, formularioId: number) => void;
 }) {
+  const severidade = linha.severidade ?? "cinza";
+  const nome = linha.cliente?.nome ?? linha.nome_no_formulario ?? "Sem nome";
+  // Data suspeita (ex.: 2049) não ganha distância: "em 8241 dias" é ruído — a marca já diz tudo.
+  const distancia = linha.data_suspeita ? null : distanciaDaData(linha.dias_ate_a_data);
+  const vezes = linha.formularios?.length ?? 1;
+  const id = linha.representante_id;
+  const [repetidosAbertos, setRepetidosAbertos] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const detalhe = [linha.tipo_rotulo ?? "Formulário", chegouHa(linha.dias_desde_chegada)]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-line py-2 last:border-b-0">
-      <dt className={urgente && valor > 0 ? "text-red" : "text-ink"}>{rotulo}</dt>
-      <dd
-        className={`tabular-nums ${urgente && valor > 0 ? "font-semibold text-red" : "text-ink"}`}
-      >
-        {valor}
-      </dd>
+    <div
+      className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2.5 text-sm ${SEVERIDADE_FUNDO[severidade]}`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-ink">
+          <span className="min-w-0 break-words">{nome}</span>
+          {linha.data_informada ? (
+            <span className="tabular-nums">{formatShortDate(linha.data_informada)}</span>
+          ) : (
+            <span className="font-normal text-muted">sem data informada</span>
+          )}
+          {distancia && (
+            <MetricBadge tone={SEVERIDADE_TOM[severidade]} size="xs">
+              {distancia}
+            </MetricBadge>
+          )}
+          {/* Marcas numa ordem fixa, para o olho achar sempre no mesmo lugar. */}
+          {linha.data_suspeita && (
+            <MetricBadge tone="neutral" size="xs">
+              data suspeita
+            </MetricBadge>
+          )}
+          {linha.repetido && (
+            <button
+              type="button"
+              onClick={() => setRepetidosAbertos((v) => !v)}
+              aria-expanded={repetidosAbertos}
+              className="cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <MetricBadge tone="gold" size="xs">
+                preencheu {vezes} vezes {repetidosAbertos ? "▴" : "▾"}
+              </MetricBadge>
+            </button>
+          )}
+          {linha.outro_com_evento && (
+            <MetricBadge tone="neutral" size="xs">
+              já tem outro formulário com evento
+            </MetricBadge>
+          )}
+        </div>
+        {detalhe && <div className="text-muted">{detalhe}</div>}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {onEncerrar && (
+          <Button type="button" variant="ghost" size="sm" onClick={onEncerrar}>
+            Encerrar…
+          </Button>
+        )}
+        <Button asChild variant={podeCriarEvento ? "default" : "outline"} size="sm">
+          <Link to={podeCriarEvento ? `/events/new?form_response_id=${id}` : `/formularios?resposta=${id}`}>
+            {podeCriarEvento ? "Criar evento" : "Abrir"}
+          </Link>
+        </Button>
+      </div>
+      <AnimatePresence initial={false}>
+        {linha.sugestao && (
+          <SugestaoDeEventoFaixa
+            key={linha.sugestao.event_id}
+            formularioId={id}
+            sugestao={linha.sugestao}
+            onLigado={(resultado) => onLigado?.(resultado, id)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence initial={false}>
+        {linha.repetido && repetidosAbertos && (
+          <motion.div
+            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="basis-full overflow-hidden"
+          >
+            <RepetidosDaLinha linha={linha} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+/**
+ * Os formulários da mesma cliente, cada um com "Este é o que vale" (feature 298). Escolher um
+ * encerra os outros como "Repetido" — continuam guardados e dá para reabrir pela tela Formulários.
+ */
+function RepetidosDaLinha({ linha }: { linha: LinhaFormulario }) {
+  const manter = useManterEntreRepetidos();
+  return (
+    <div className="pt-2">
+      <ul className="space-y-1.5 border-l-2 border-line pl-3">
+        {(linha.formularios ?? []).map((f) => {
+          const escolhendoEste = manter.isPending && manter.variables === f.id;
+          return (
+            <li key={f.id} className="flex flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 text-ink">
+                {f.tipo_rotulo ?? "Formulário"} ·{" "}
+                {f.data_informada ? formatShortDate(f.data_informada) : "sem data"}
+                <span className="text-muted"> · {chegouHa(f.dias_desde_chegada)}</span>
+              </span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button asChild variant="ghost" size="sm">
+                  <Link to={`/formularios?resposta=${f.id}`}>Ver</Link>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  loading={escolhendoEste}
+                  onClick={() => manter.mutate(f.id)}
+                >
+                  Este é o que vale
+                </Button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {manter.isError ? (
+        <p role="alert" className="mt-1.5 text-xs text-red">
+          {mensagemDaApi(manter.error, "Não foi possível encerrar os repetidos. Tente novamente.")}
+        </p>
+      ) : (
+        <p className="mt-1.5 text-xs text-muted">
+          Os outros são encerrados como “Repetido” e continuam guardados.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Um grupo do painel ("ainda vai chegar" / "já passou"), com as 6 primeiras linhas e o resto
+ * atrás de "Mostrar todas" — o mesmo corte da `ListaTruncada`.
+ *
+ * Não reusa a `ListaTruncada` porque a linha resolvida precisa SAIR com animação, e o
+ * `AnimatePresence` só acompanha filhos diretos com `key`. Com movimento reduzido a linha some
+ * sem transição.
+ */
+function GrupoFormularios({
+  titulo,
+  linhas,
+  podeCriarEvento,
+  onEncerrar,
+  onLigado,
+}: {
+  titulo: string;
+  linhas: LinhaFormulario[];
+  podeCriarEvento: boolean;
+  onEncerrar?: (linha: LinhaFormulario) => void;
+  onLigado?: (resultado: ResultadoVinculo, formularioId: number) => void;
+}) {
+  const [expandida, setExpandida] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const visiveis = expandida ? linhas : linhas.slice(0, LIMITE_LINHAS_PAINEL);
+
+  return (
+    <PanelGroup title={`${titulo} (${linhas.length})`}>
+      <AnimatePresence initial={false}>
+        {visiveis.map((linha) => (
+          <motion.div
+            key={linha.representante_id}
+            initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={reduceMotion ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="-mx-4 overflow-hidden border-b border-line last:border-b-0"
+          >
+            <FormularioSemDestinoRow
+              linha={linha}
+              podeCriarEvento={podeCriarEvento}
+              onEncerrar={onEncerrar ? () => onEncerrar(linha) : undefined}
+              onLigado={onLigado}
+            />
+          </motion.div>
+        ))}
+      </AnimatePresence>
+      {linhas.length > LIMITE_LINHAS_PAINEL && (
+        <button
+          type="button"
+          onClick={() => setExpandida((v) => !v)}
+          className="-mx-4 block w-[calc(100%+2rem)] cursor-pointer px-4 py-2 text-center text-xs font-medium text-accent hover:bg-surface-2"
+        >
+          {expandida ? "Mostrar menos" : `Mostrar todas as ${linhas.length}`}
+        </button>
+      )}
+    </PanelGroup>
+  );
+}
+
+/**
+ * "📝 Formulários sem evento na agenda" (feature 298): os formulários que chegaram desde o corte e
+ * ainda não viraram evento nem foram encerrados. Substitui os quatro números da 266, que contavam
+ * o histórico importado.
+ */
+function FormulariosPanel({
+  summary,
+  urgentCount,
+  open,
+  onOpenChange,
+}: {
+  summary: FormulariosSummary;
+  urgentCount: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const aChegar = summary.a_chegar ?? [];
+  const jaPassou = summary.ja_passou ?? [];
+  const podeCriarEvento = summary.pode_criar_evento ?? false;
+  const desde = diaMes(summary.contagens?.corte);
+  const motivos = summary.motivos_encerramento ?? [];
+  const [encerrando, setEncerrando] = useState<LinhaFormulario | null>(null);
+  // Sem motivos (servidor antigo no meio do deploy) a ação não aparece em vez de abrir vazia.
+  const aoEncerrar = motivos.length > 0 ? setEncerrando : undefined;
+  // A linha ligada sai da lista; a divergência de cliente precisa sobreviver a ela, então mora
+  // aqui no painel e não na linha.
+  const [divergente, setDivergente] = useState<{
+    formularioId: number;
+    divergencia: DivergenciaCliente;
+  } | null>(null);
+  const usarCliente = useUsarClienteDoEvento();
+  const aoLigar = (resultado: ResultadoVinculo, formularioId: number) => {
+    if (resultado.divergencia_cliente) {
+      setDivergente({ formularioId, divergencia: resultado.divergencia_cliente });
+    }
+  };
+
+  return (
+    <SectorPanel
+      title="📝 Formulários sem evento na agenda"
+      count={summary.contagens?.sem_destino ?? 0}
+      urgentCount={urgentCount}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      {divergente && (
+        <div role="status" className="mb-3 space-y-2 rounded-md bg-gold-50 px-3 py-2 text-sm text-ink">
+          <p>
+            Formulário ligado. A cliente do formulário (
+            <strong>{divergente.divergencia.formulario.nome ?? "sem nome"}</strong>) não é a cliente
+            do evento (<strong>{divergente.divergencia.evento.nome ?? "sem nome"}</strong>) — o evento
+            não foi alterado.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              loading={usarCliente.isPending}
+              onClick={() =>
+                usarCliente.mutate(divergente.formularioId, { onSuccess: () => setDivergente(null) })
+              }
+            >
+              Usar a cliente do evento neste formulário
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                usarCliente.reset();
+                setDivergente(null);
+              }}
+            >
+              Manter assim
+            </Button>
+          </div>
+          {usarCliente.isError && (
+            <p role="alert" className="text-xs text-red">
+              {mensagemDaApi(usarCliente.error, "Não foi possível trocar a cliente. Tente novamente.")}
+            </p>
+          )}
+        </div>
+      )}
+      {aChegar.length === 0 && jaPassou.length === 0 ? (
+        <p className="py-2 text-sm text-muted">Nenhum formulário esperando evento ✓</p>
+      ) : (
+        <div className="space-y-3">
+          {aChegar.length > 0 && (
+            <GrupoFormularios
+              titulo="A data informada ainda vai chegar"
+              linhas={aChegar}
+              podeCriarEvento={podeCriarEvento}
+              onEncerrar={aoEncerrar}
+              onLigado={aoLigar}
+            />
+          )}
+          {jaPassou.length > 0 && (
+            <GrupoFormularios
+              titulo="A data informada já passou"
+              linhas={jaPassou}
+              podeCriarEvento={podeCriarEvento}
+              onEncerrar={aoEncerrar}
+              onLigado={aoLigar}
+            />
+          )}
+        </div>
+      )}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        {desde && <p className="text-xs text-muted">Formulários que chegaram desde {desde}.</p>}
+        <Button asChild variant="outline" size="sm">
+          <Link to="/formularios">Abrir formulários</Link>
+        </Button>
+      </div>
+      <EncerrarFormularioDialog
+        formularioId={encerrando?.representante_id ?? null}
+        nome={encerrando?.cliente?.nome ?? encerrando?.nome_no_formulario}
+        motivos={motivos}
+        open={encerrando !== null}
+        onClose={() => setEncerrando(null)}
+      />
+    </SectorPanel>
   );
 }
 
@@ -531,15 +920,23 @@ function computeSectionStats(data: DashboardSummary): SectionStat[] {
 
   if (data.formularios) {
     const f = data.formularios;
+    const semDestino = f.contagens?.sem_destino ?? 0;
+    const desde = diaMes(f.contagens?.corte);
+    // Urgente = os formulários das linhas vermelhas (data informada a até 7 dias). Conta
+    // formulários, não linhas, para bater com o número do painel.
+    const urgentes = [...(f.a_chegar ?? []), ...(f.ja_passou ?? [])]
+      .filter((l) => l.severidade === "vermelho")
+      .reduce((soma, l) => soma + (l.formularios?.length ?? 1), 0);
     stats.push({
       key: "formularios",
       emoji: "📝",
       label: "Formulários",
-      // A contagem é "ainda não virou evento"; a urgência é a festa marcada chegando sem
-      // evento na agenda — a única das quatro que tem data batendo na porta.
-      count: f.sem_evento,
-      urgent: f.futuros_sem_evento,
-      detail: f.total > 0 ? `${f.total} resposta(s) recebidas` : null,
+      count: semDestino,
+      urgent: urgentes,
+      detail:
+        semDestino > 0 && desde
+          ? `${semDestino} formulário${semDestino !== 1 ? "s" : ""} sem evento desde ${desde}`
+          : null,
     });
   }
 
@@ -880,42 +1277,12 @@ export function DashboardPage() {
 
             {data.formularios && (
               <div {...propsSecao("formularios")}>
-                <SectorPanel
-                  title="📝 Respostas de formulário"
-                  count={data.formularios.sem_evento}
-                  urgentCount={data.formularios.futuros_sem_evento}
+                <FormulariosPanel
+                  summary={data.formularios}
+                  urgentCount={statPorSecao.get("formularios")?.urgent ?? 0}
                   open={painelAberto("formularios")}
                   onOpenChange={aoAlternar("formularios")}
-                >
-                  {data.formularios.total === 0 ? (
-                    <p className="py-2 text-sm text-muted">Nenhuma resposta recebida.</p>
-                  ) : (
-                    <>
-                      <dl className="text-sm">
-                        <LinhaFormularios
-                          rotulo="Festa futura sem evento"
-                          valor={data.formularios.futuros_sem_evento}
-                          urgente
-                        />
-                        <LinhaFormularios
-                          rotulo="Sem evento na agenda"
-                          valor={data.formularios.sem_evento}
-                        />
-                        <LinhaFormularios
-                          rotulo="Sem cliente associada"
-                          valor={data.formularios.sem_cliente}
-                        />
-                        <LinhaFormularios
-                          rotulo="Vínculo ambíguo"
-                          valor={data.formularios.ambiguos}
-                        />
-                      </dl>
-                      <Button asChild variant="outline" size="sm" className="mt-3">
-                        <Link to="/formularios">Abrir formulários</Link>
-                      </Button>
-                    </>
-                  )}
-                </SectorPanel>
+                />
               </div>
             )}
 

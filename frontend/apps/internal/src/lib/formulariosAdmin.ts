@@ -1,5 +1,13 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@manto/api-client";
+import {
+  type QueryClient,
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { ApiRequestError, apiFetch } from "@manto/api-client";
+import { invalidarNotificacoes } from "./notificacoes";
+import type { MotivoEncerramento, SugestaoDeEvento } from "./types";
 
 export interface FormResponseSummary {
   id: number;
@@ -16,6 +24,18 @@ export interface FormResponseSummary {
   event_link_ambiguous: boolean;
   event_link_locked: boolean;
   created_at: string;
+  // Feature 298 — opcionais: servidor e site sobem separados e ficam ~1 min em versões diferentes.
+  /** Destino do formulário, calculado no servidor com a mesma regra das contagens. */
+  destino?: Destino;
+  /** "Festa" ou "Corporativo". */
+  tipo_rotulo?: string;
+  /** 'manual' | 'auto_phone' | 'evento' (veio do evento ligado). */
+  client_link_source?: string | null;
+  closed_reason?: string | null;
+  closed_reason_label?: string | null;
+  closed_note?: string | null;
+  closed_by_name?: string | null;
+  closed_at?: string | null;
 }
 
 export interface FormResponseDetail extends FormResponseSummary {
@@ -23,23 +43,36 @@ export interface FormResponseDetail extends FormResponseSummary {
   event_title: string | null;
 }
 
-/** Filtros de situação aceitos pelo backend (`formularios_ops.STATUS_FILTERS`). */
-export type StatusFilter = "" | "sem_evento" | "sem_cliente" | "ambiguos" | "futuros_sem_evento";
+/** Destino de um formulário — as partições que somam o total (feature 298). */
+export type Destino = "sem_destino" | "com_evento" | "encerrados" | "historico";
 
+/** Filtros aceitos pelo backend (`formularios_ops.STATUS_FILTERS`); vazio = todas. */
+export type StatusFilter = "" | Destino;
+
+/** Contadores dos cartões, também servidos na Home — todos opcionais pelo mesmo motivo acima. */
 export interface StatusCounts {
-  total: number;
-  sem_evento: number;
-  sem_cliente: number;
-  ambiguos: number;
-  futuros_sem_evento: number;
+  total?: number;
+  sem_destino?: number;
+  com_evento?: number;
+  encerrados?: number;
+  historico?: number;
+  /** Dia do corte (AAAA-MM-DD, São Paulo): o que chegou antes é histórico. */
+  corte?: string;
 }
 
-/** Lista as respostas de formulário mais recentes + contadores dos cartões de situação. */
+interface ListaRespostas {
+  responses: FormResponseSummary[];
+  counts: StatusCounts;
+  /** `true` quando o filtro tem mais que as 200 respostas mostradas. */
+  truncado?: boolean;
+}
+
+/** Lista as respostas de formulário mais recentes + contadores dos cartões por destino. */
 export function useFormResponses(filtro: StatusFilter = "") {
-  return useQuery<{ responses: FormResponseSummary[]; counts: StatusCounts }>({
+  return useQuery<ListaRespostas>({
     queryKey: ["formularios-respostas", filtro],
     queryFn: () =>
-      apiFetch<{ responses: FormResponseSummary[]; counts: StatusCounts }>(
+      apiFetch<ListaRespostas>(
         `/api/formularios/respostas${filtro ? `?filtro=${filtro}` : ""}`,
       ),
     // Trocar de cartão não pisca a tela: mantém lista+contadores anteriores até chegar o novo.
@@ -59,31 +92,138 @@ export function useSearchFormResponses(q: string) {
   });
 }
 
+/** O que o detalhe pode oferecer — o servidor recusa o resto do mesmo jeito (feature 298). */
+export interface FlagsDoFormulario {
+  pode_encerrar?: boolean;
+  pode_reabrir?: boolean;
+  pode_criar_evento?: boolean;
+}
+
+export interface DetalheResposta {
+  response: FormResponseDetail;
+  suggested_client: { id: number; name: string } | null;
+  can_edit_structure: boolean;
+  /** Opcionais (feature 298): servidor e site sobem separados. */
+  motivos_encerramento?: MotivoEncerramento[];
+  /** Evento da cliente a até 3 dias — só quando o formulário está sem destino. */
+  sugestao?: SugestaoDeEvento | null;
+  /** Cliente do formulário ≠ cliente do evento ligado; recalculada a cada leitura. */
+  divergencia_cliente?: DivergenciaCliente | null;
+  flags?: FlagsDoFormulario;
+}
+
 /** Detalhe completo de uma resposta + sugestão de cliente. */
 export function useFormResponseDetail(id: number | null) {
-  return useQuery<{
-    response: FormResponseDetail;
-    suggested_client: { id: number; name: string } | null;
-    can_edit_structure: boolean;
-  }>({
+  return useQuery<DetalheResposta>({
     queryKey: ["formularios-resposta-detalhe", id],
-    queryFn: () =>
-      apiFetch(`/api/formularios/respostas/${id}`),
+    queryFn: () => apiFetch<DetalheResposta>(`/api/formularios/respostas/${id}`),
     enabled: id != null,
   });
 }
 
-function invalidateResponse(queryClient: ReturnType<typeof useQueryClient>, id: number) {
-  queryClient.invalidateQueries({ queryKey: ["formularios-resposta-detalhe", id] });
-  queryClient.invalidateQueries({ queryKey: ["formularios-respostas"] });
-  // A Home mostra os mesmos contadores (feature 266). A chave dela é ["dashboard", periodo] —
-  // invalidar o prefixo pega todos os períodos. Sem isso, o `staleTime` de 30s com
-  // `refetchOnWindowFocus: false` deixa o número velho NA TELA, e um contador que não acompanha
-  // a ação parece que a ação não salvou.
-  queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+/**
+ * Recarrega tudo que mostra o destino de um formulário (feature 298): detalhe, lista, busca,
+ * Home, métricas de cliente e o sino — ligar ou encerrar apaga o aviso para todos.
+ *
+ * A chave da Home é ["dashboard", periodo]: invalidar o prefixo pega todos os períodos. Sem isso,
+ * o `staleTime` de 30 s com `refetchOnWindowFocus: false` deixa a linha resolvida NA TELA, e uma
+ * lista que não acompanha a ação parece que a ação não salvou. A busca tem chave própria
+ * (`formularios-respostas-search` não é filha de `formularios-respostas`).
+ */
+export function invalidarDestinoDeFormulario(queryClient: QueryClient, id?: number) {
+  void queryClient.invalidateQueries({
+    queryKey: id != null ? ["formularios-resposta-detalhe", id] : ["formularios-resposta-detalhe"],
+  });
+  void queryClient.invalidateQueries({ queryKey: ["formularios-respostas"] });
+  void queryClient.invalidateQueries({ queryKey: ["formularios-respostas-search"] });
+  void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
   // A ficha da cliente pode ter acabado de ganhar/perder uma festa no histórico, e o gráfico
   // de origem muda quando a associação cria uma cliente nova.
-  queryClient.invalidateQueries({ queryKey: ["clientes-metricas"] });
+  void queryClient.invalidateQueries({ queryKey: ["clientes-metricas"] });
+  invalidarNotificacoes(queryClient);
+}
+
+function invalidateResponse(queryClient: QueryClient, id: number) {
+  invalidarDestinoDeFormulario(queryClient, id);
+}
+
+// ── Dados do formulário para o cadastro de evento (feature 298) ──────────────────
+// Contrato em `specs/298-formulario-vira-evento/contracts/pre-evento.md`. Tudo opcional: servidor
+// e site sobem separados e ficam ~1 min em versões diferentes em todo deploy.
+
+/** O que não entrou do formulário (ou entrou e pede conferência), mostrado no próprio campo. */
+export interface AlertaFormulario {
+  /** Campo do evento: `date`, `start`, `end`, `location`, `event_type`, `payment_method`, `clients`. */
+  campo?: string;
+  motivo?: string;
+  /** Explicação em pt-BR, escrita pelo servidor — a tela não conhece os códigos de motivo. */
+  mensagem?: string;
+  /** O que a cliente escreveu, para a comercial decidir. */
+  texto_da_cliente?: string | null;
+}
+
+export interface ObservacaoRotulada {
+  label?: string;
+  text?: string;
+}
+
+export interface EventoDaCliente {
+  event_id: number;
+  titulo?: string;
+  data?: string | null;
+}
+
+export interface ValoresDoFormulario {
+  date?: string;
+  start?: string;
+  end?: string;
+  location?: string;
+  event_type?: string;
+  payment_method?: string;
+  payment_installments?: number | null;
+  clients?: { client_id: number; relation?: string; name?: string }[];
+  /** Só quando não há ficha nem cliente pelo telefone: abre o cadastro rápido já preenchido. */
+  quick_create_client?: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    cpf?: string;
+    cnpj?: string;
+  } | null;
+  characters?: string[];
+}
+
+export interface ParaEvento {
+  form_response?: {
+    id: number;
+    form_type?: string;
+    form_type_label?: string;
+    contact_name?: string;
+  };
+  valores?: ValoresDoFormulario;
+  /** Campos preenchidos a partir do formulário — recebem a marca "do formulário". */
+  origem?: string[];
+  observacoes?: ObservacaoRotulada[];
+  alertas?: AlertaFormulario[];
+  /** Eventos da cliente sem formulário desde o corte: "não é um destes?" antes de criar outro. */
+  eventos_da_cliente?: EventoDaCliente[];
+}
+
+/**
+ * O formulário traduzido para o cadastro de evento (feature 298). Só leitura: não marca aviso
+ * como lido. 403 para quem não cria evento; 409 quando o formulário já tem destino.
+ */
+export function useParaEvento(id: number | null) {
+  return useQuery<ParaEvento>({
+    queryKey: ["formularios-para-evento", id],
+    queryFn: () => apiFetch<ParaEvento>(`/api/formularios/respostas/${id}/para-evento`),
+    enabled: id != null,
+  });
+}
+
+/** Mensagem da API em pt-BR, ou o texto de reserva quando a falha não veio do servidor. */
+export function mensagemDaApi(erro: unknown, reserva: string): string {
+  return erro instanceof ApiRequestError && erro.message ? erro.message : reserva;
 }
 
 /** Associa a resposta a um cliente existente ou cria um a partir dos dados dela. */
@@ -108,16 +248,119 @@ export function useDissociateClient(id: number) {
   });
 }
 
-/** Vincula manualmente a resposta a um evento da agenda. */
+/** Cliente do formulário que não é nenhuma das clientes do evento (feature 298, FR-015). */
+export interface DivergenciaCliente {
+  formulario: { id: number | null; nome: string | null };
+  evento: { id: number | null; nome: string | null };
+}
+
+/** Resposta de ligar formulário a evento — opcional campo a campo (servidor e site sobem separados). */
+export interface ResultadoVinculo {
+  response?: FormResponseSummary;
+  divergencia_cliente?: DivergenciaCliente | null;
+  event_id?: number;
+  event_title?: string;
+}
+
+/** Vincula manualmente a resposta a um evento da agenda (409 se ela já tem evento — feature 298). */
 export function useLinkEvent(id: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (eventId: number) =>
-      apiFetch<{ event_id: number; event_title: string }>(`/api/formularios/respostas/${id}/vincular-evento`, {
+      apiFetch<ResultadoVinculo>(`/api/formularios/respostas/${id}/vincular-evento`, {
         method: "POST",
         body: JSON.stringify({ event_id: eventId }),
       }),
-    onSuccess: () => invalidateResponse(queryClient, id),
+    // `onSettled`: o 409 também recarrega — o formulário ganhou destino em outro lugar.
+    onSettled: () => invalidateResponse(queryClient, id),
+  });
+}
+
+/**
+ * Encerra com motivo (feature 298). O id vai nas variáveis: uma instância serve à lista inteira
+ * da Home, sem hook por linha.
+ */
+export function useEncerrarFormulario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, motivo, frase }: { id: number; motivo: string; frase?: string }) =>
+      apiFetch<{ response?: FormResponseSummary }>(`/api/formularios/respostas/${id}/encerrar`, {
+        method: "POST",
+        body: JSON.stringify({ motivo, frase: frase ?? "" }),
+      }),
+    onSettled: (_data, erro, { id }) => {
+      // 400 é campo inválido: nada mudou no servidor. 409/422 recarregam — o destino mudou.
+      if (erro instanceof ApiRequestError && erro.status === 400) return;
+      invalidarDestinoDeFormulario(queryClient, id);
+    },
+  });
+}
+
+/**
+ * "Este é o que vale" (feature 298): mantém o formulário e encerra como "Repetido" os outros sem
+ * destino do mesmo telefone. Recarrega todos os detalhes — os encerrados também mudaram.
+ */
+export function useManterEntreRepetidos() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<{ response?: FormResponseSummary; encerrados?: number[] }>(
+        `/api/formularios/respostas/${id}/manter-entre-repetidos`,
+        { method: "POST" },
+      ),
+    onSettled: () => invalidarDestinoDeFormulario(queryClient),
+  });
+}
+
+/** "Parece ser este evento, é?" → "Ligar" (feature 298). Pode voltar `divergencia_cliente`. */
+export function useConfirmarSugestao() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, eventId }: { id: number; eventId: number }) =>
+      apiFetch<ResultadoVinculo>(`/api/formularios/respostas/${id}/sugestao/${eventId}/confirmar`, {
+        method: "POST",
+      }),
+    onSettled: (_data, _erro, { id }) => invalidarDestinoDeFormulario(queryClient, id),
+  });
+}
+
+/** "Não é este" (feature 298): definitivo — a sugestão não volta para este formulário. */
+export function useDescartarSugestao() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, eventId }: { id: number; eventId: number }) =>
+      apiFetch<{ ok?: boolean }>(`/api/formularios/respostas/${id}/sugestao/${eventId}/descartar`, {
+        method: "POST",
+      }),
+    onSettled: (_data, _erro, { id }) => invalidarDestinoDeFormulario(queryClient, id),
+  });
+}
+
+/**
+ * Divergência de cliente → "Usar a cliente do evento neste formulário" (feature 298, FR-015).
+ * O evento não muda; 409 quando o formulário não está ligado a evento com cliente.
+ */
+export function useUsarClienteDoEvento() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<{ response?: FormResponseSummary }>(
+        `/api/formularios/respostas/${id}/usar-cliente-do-evento`,
+        { method: "POST" },
+      ),
+    onSettled: (_data, _erro, id) => invalidarDestinoDeFormulario(queryClient, id),
+  });
+}
+
+/** Desfaz o encerramento (feature 298). 409 quando outra pessoa já reabriu. */
+export function useReabrirFormulario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<{ response?: FormResponseSummary }>(`/api/formularios/respostas/${id}/reabrir`, {
+        method: "POST",
+      }),
+    onSettled: (_data, _erro, id) => invalidarDestinoDeFormulario(queryClient, id),
   });
 }
 

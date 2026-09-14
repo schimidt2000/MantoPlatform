@@ -4,7 +4,17 @@ import { Button } from "@manto/ui";
 import { MoneyInput } from "@manto/money";
 import type { EventFormValues } from "../../lib/eventFormSchema";
 import type { PendingPaymentProof } from "../../lib/eventCreate";
-import { FIELD, FIELD_ERROR, HELP, LABEL, FieldError, BlockCard } from "./shared";
+import type { AlertaFormulario } from "../../lib/formulariosAdmin";
+import {
+  FIELD,
+  FIELD_ERROR,
+  HELP,
+  LABEL,
+  AlertasDoCampo,
+  DoFormulario,
+  FieldError,
+  BlockCard,
+} from "./shared";
 
 const PAYMENT_METHODS = [
   { value: "avista", label: "À vista (PIX)" },
@@ -19,10 +29,20 @@ export interface PagamentoBlockProps {
   /** Resumo dos comprovantes já salvos (feature 184, edição) — gestão completa (editar valor,
    * excluir) continua na tela de detalhe do evento. */
   existingNote?: ReactNode;
+  /** Feature 298: a forma de pagamento veio do formulário (marca "do formulário"). */
+  doFormulario?: ReadonlySet<string>;
+  /** Feature 298: forma escrita pela cliente que o cadastro não tem, com o texto dela. */
+  alertas?: AlertaFormulario[];
 }
 
 /** Bloco 5 — Forma de pagamento e comprovantes (feature 184). */
-export function PagamentoBlock({ proofs, onProofsChange, existingNote }: PagamentoBlockProps) {
+export function PagamentoBlock({
+  proofs,
+  onProofsChange,
+  existingNote,
+  doFormulario,
+  alertas,
+}: PagamentoBlockProps) {
   const {
     register,
     watch,
@@ -61,7 +81,9 @@ export function PagamentoBlock({ proofs, onProofsChange, existingNote }: Pagamen
             {m.label}
           </button>
         ))}
+        <DoFormulario campo="payment_method" doFormulario={doFormulario} />
       </div>
+      <AlertasDoCampo campo="payment_method" alertas={alertas} />
 
       {paymentMethod === "pix_parcelado" && (
         <div>

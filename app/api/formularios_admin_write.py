@@ -2,17 +2,187 @@
 
 Não confundir com `app/api/formularios_write.py` (fluxo público `/f/*`, intocado nesta
 feature). Reusa, sem duplicar, o núcleo já extraído em `app/formularios/formularios_ops.py`.
+
+RBAC (função no início de cada view — constituição XIII; tabela em `docs/01` §4.3):
+  * `_require_vendas` (COMERCIAL, FINANCEIRO, SUPERADMIN): associar/desassociar cliente,
+    vincular/desvincular evento e, desde a 298, encerrar, reabrir, manter entre repetidos
+    (422 sem telefone), confirmar/descartar sugestão e usar a cliente do evento.
+  * `_require_superadmin`: excluir resposta e o editor de estrutura.
+Conflito de destino (feature 298) → 409 "Este formulário já tem destino." em todos os caminhos.
 """
 
 from typing import Any
 
 from flask import jsonify, request
+from flask_login import current_user
 
+from app import db
 from app.api import api_bp
-from app.api.formularios_admin_read import _require_superadmin, _require_vendas
+from app.api.formularios_admin_read import (
+    _require_superadmin,
+    _require_vendas,
+    _response_summary,
+)
 from app.api_utils import api_login_required, json_error
-from app.formularios import formularios_ops
-from app.models import FormFieldDefinition, FormResponse
+from app.formularios import destino_ops, formularios_ops
+from app.models import CalendarEvent, FormFieldDefinition, FormResponse
+
+
+def _resumo(response: FormResponse) -> dict:
+    return _response_summary(response, formularios_ops.corte_de_chegada())
+
+
+@api_bp.route("/formularios/respostas/<int:response_id>/encerrar", methods=["POST"])
+@api_login_required
+def api_formularios_encerrar(response_id: int) -> Any:
+    """Encerra com motivo um formulário sem destino (feature 298): sai da Home e fica guardado."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    body = request.get_json(silent=True) or {}
+    try:
+        response = destino_ops.encerrar(
+            response_id, body.get("motivo"), body.get("frase"), current_user
+        )
+    except destino_ops.ValidacaoEncerramento as exc:
+        return json_error(exc.message, 400, fields={exc.campo: exc.message})
+    except destino_ops.FormularioInexistente:
+        db.session.rollback()
+        return json_error("Resposta não encontrada", 404)
+    except destino_ops.FormularioDoHistorico as exc:
+        db.session.rollback()
+        return json_error(exc.message, 422)
+    except formularios_ops.FormularioJaTemDestino as exc:
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    db.session.commit()
+    return jsonify({"response": _resumo(response)})
+
+
+@api_bp.route(
+    "/formularios/respostas/<int:response_id>/manter-entre-repetidos", methods=["POST"]
+)
+@api_login_required
+def api_formularios_manter_entre_repetidos(response_id: int) -> Any:
+    """Mantém este formulário e encerra como repetido os outros sem destino do mesmo telefone."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    try:
+        encerrados = destino_ops.manter_entre_repetidos(response_id, current_user)
+    except destino_ops.FormularioInexistente:
+        db.session.rollback()
+        return json_error("Resposta não encontrada", 404)
+    except destino_ops.SemTelefone as exc:
+        db.session.rollback()
+        return json_error(exc.message, 422)
+    except formularios_ops.FormularioJaTemDestino as exc:
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    db.session.commit()
+    mantido = db.session.get(FormResponse, response_id)
+    return jsonify({"response": _resumo(mantido), "encerrados": encerrados})
+
+
+@api_bp.route(
+    "/formularios/respostas/<int:response_id>/sugestao/<int:event_id>/confirmar",
+    methods=["POST"],
+)
+@api_login_required
+def api_formularios_confirmar_sugestao(response_id: int, event_id: int) -> Any:
+    """"Parece ser este evento, é?" → sim: liga o formulário ao evento sugerido (feature 298)."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    try:
+        resultado = destino_ops.confirmar_sugestao(response_id, event_id)
+    except destino_ops.FormularioInexistente:
+        db.session.rollback()
+        return json_error("Resposta não encontrada", 404)
+    except destino_ops.SugestaoIndisponivel as exc:
+        db.session.rollback()
+        return json_error(exc.message, 404)
+    except (formularios_ops.FormularioJaTemDestino, destino_ops.EventoJaTemFormulario) as exc:
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    db.session.commit()
+    response = db.session.get(FormResponse, response_id)
+    return jsonify({
+        "response": _resumo(response),
+        "divergencia_cliente": resultado.divergencia_cliente,
+    })
+
+
+@api_bp.route(
+    "/formularios/respostas/<int:response_id>/sugestao/<int:event_id>/descartar",
+    methods=["POST"],
+)
+@api_login_required
+def api_formularios_descartar_sugestao(response_id: int, event_id: int) -> Any:
+    """"Não é este": a sugestão não volta para este formulário (definitivo e idempotente)."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    if db.session.get(CalendarEvent, event_id) is None:
+        return json_error("Evento não encontrado", 404)
+    destino_ops.descartar_sugestao(response_id, event_id, current_user)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@api_bp.route(
+    "/formularios/respostas/<int:response_id>/usar-cliente-do-evento", methods=["POST"]
+)
+@api_login_required
+def api_formularios_usar_cliente_do_evento(response_id: int) -> Any:
+    """Divergência de cliente → o formulário passa a ter a cliente do evento (FR-015).
+
+    O evento nunca é alterado: quem decide que a cliente do evento é a certa é a comercial.
+    """
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    try:
+        response = destino_ops.usar_cliente_do_evento(response_id)
+    except destino_ops.FormularioInexistente:
+        db.session.rollback()
+        return json_error("Resposta não encontrada", 404)
+    except destino_ops.SemClienteDoEvento as exc:
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    db.session.commit()
+    return jsonify({"response": _resumo(response)})
+
+
+@api_bp.route("/formularios/respostas/<int:response_id>/reabrir", methods=["POST"])
+@api_login_required
+def api_formularios_reabrir(response_id: int) -> Any:
+    """Desfaz o encerramento (feature 298): o formulário volta para a Home, sem reacender aviso."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    if FormResponse.query.get(response_id) is None:
+        return json_error("Resposta não encontrada", 404)
+    try:
+        response = destino_ops.reabrir(response_id)
+    except destino_ops.FormularioInexistente:
+        db.session.rollback()
+        return json_error("Resposta não encontrada", 404)
+    except destino_ops.FormularioNaoEncerrado as exc:
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    db.session.commit()
+    return jsonify({"response": _resumo(response)})
 
 
 @api_bp.route("/formularios/respostas/<int:response_id>/associar", methods=["POST"])
@@ -62,10 +232,19 @@ def api_formularios_vincular_evento(response_id: int) -> Any:
     if not event_id:
         return json_error("Selecione um evento válido.", 400, fields={"event_id": "obrigatório"})
     try:
-        event = formularios_ops.link_event(response, int(event_id))
+        event, resultado = formularios_ops.link_event(response, int(event_id))
     except formularios_ops.FormValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
-    return jsonify({"event_id": event.id, "event_title": event.title})
+    except formularios_ops.FormularioJaTemDestino as exc:
+        # Até a 298 este caminho SOBRESCREVIA o vínculo; agora recusa como todos os outros.
+        db.session.rollback()
+        return json_error(exc.message, 409)
+    return jsonify({
+        "response": _response_summary(response, formularios_ops.corte_de_chegada()),
+        "divergencia_cliente": resultado.divergencia_cliente,
+        "event_id": event.id,
+        "event_title": event.title,
+    })
 
 
 @api_bp.route("/formularios/respostas/<int:response_id>/desvincular-evento", methods=["POST"])

@@ -851,6 +851,77 @@ def register_commands(app):
         apagadas = limpar_antigas()
         click.echo(f"notificacoes-limpar: {apagadas} notificação(ões) apagada(s).")
 
+    @app.cli.command("formularios-avisos-resolvidos")
+    @click.option("--execute", is_flag=True, help="marca de verdade (padrão: só conta)")
+    def formularios_avisos_resolvidos(execute: bool):
+        """Marca como lidos os avisos "nova resposta" de formulários que já têm destino (298).
+
+        Correção única depois do deploy (FR-019): até a 298 o aviso só se apagava para quem abria
+        o formulário, e ficaram acesos avisos de formulários já ligados a evento. Daqui para a
+        frente o núcleo de vínculo e o encerramento apagam sozinhos. Dry-run por padrão; em
+        produção, com MANTO_SEM_THREADS=1.
+        """
+        from sqlalchemy import select
+
+        from app import db
+        from app.models import FormResponse, Notification
+        from app.notificacoes.notificacoes_ops import (
+            KIND_FORM_RESPONSE,
+            marcar_lidas_por_entidades,
+        )
+
+        com_destino = select(FormResponse.id).where(
+            db.or_(FormResponse.event_id.isnot(None), FormResponse.closed_at.isnot(None))
+        )
+        acesos = Notification.query.filter(
+            Notification.kind == KIND_FORM_RESPONSE,
+            Notification.entity_type == "form_response",
+            Notification.entity_id.in_(com_destino),
+            Notification.read_at.is_(None),
+        ).count()
+        if not execute:
+            click.echo(f"formularios-avisos-resolvidos: {acesos} aviso(s) aceso(s) de formulário "
+                       "com destino. Repita com --execute para marcar como lidos.")
+            return
+        marcados = marcar_lidas_por_entidades("form_response", com_destino, KIND_FORM_RESPONSE)
+        db.session.commit()
+        click.echo(f"formularios-avisos-resolvidos: {marcados} aviso(s) marcado(s) como lido(s).")
+
+    @app.cli.command("formularios-cliente-do-evento")
+    @click.option("--execute", is_flag=True, help="grava de verdade (padrão: só conta)")
+    def formularios_cliente_do_evento(execute: bool):
+        """Dá a cliente do evento aos formulários ligados que continuam sem cliente (298).
+
+        Correção única depois do deploy (FR-020): até a 298, ligar o formulário ao evento não
+        trazia a cliente de volta, e ~69 formulários desde o corte ficaram "sem cliente" com o
+        evento tendo uma. Usa a mesma escolha do núcleo (`cliente_do_evento_para`: a ficha do
+        mesmo telefone, senão a contratante). O evento não é alterado. Dry-run por padrão.
+        """
+        from app import db
+        from app.formularios.formularios_ops import cliente_do_evento_para, corte_de_chegada
+        from app.models import FormResponse
+
+        candidatos = FormResponse.query.filter(
+            FormResponse.created_at >= corte_de_chegada(),
+            FormResponse.event_id.isnot(None),
+            FormResponse.client_id.is_(None),
+        ).all()
+        pares = [
+            (fr, cliente_do_evento_para(fr, fr.event)) for fr in candidatos if fr.event is not None
+        ]
+        pares = [(fr, client_id) for fr, client_id in pares if client_id is not None]
+        if not execute:
+            click.echo(f"formularios-cliente-do-evento: {len(pares)} de {len(candidatos)} "
+                       "formulário(s) ligados e sem cliente ganhariam a cliente do evento. "
+                       "Repita com --execute para gravar.")
+            return
+        for fr, client_id in pares:
+            fr.client_id = client_id
+            fr.client_link_source = "evento"
+        db.session.commit()
+        click.echo(f"formularios-cliente-do-evento: {len(pares)} formulário(s) receberam a "
+                   "cliente do evento.")
+
     @app.cli.command("migrate-drive-to-volume")
     @click.option("--dry-run", is_flag=True, help="Apenas conta o que seria migrado, sem baixar nem alterar.")
     @click.option("--limit", type=int, default=0, help="Migra no máximo N arquivos (0 = todos).")

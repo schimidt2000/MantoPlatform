@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import type { EventoDetalhe } from "./agenda";
+import { invalidarDestinoDeFormulario } from "./formulariosAdmin";
 
 /** Ficha de figurino selecionável no elenco — `photo_url` alimenta a miniatura quadrada da busca. */
 export interface FigurinoSheetOption {
@@ -95,6 +96,8 @@ export interface ObservationInput {
   /** Só para `obs_type === "image"` (feature 184) — enviado na fase 2, via
    * `POST /events/<id>/observations` multipart. */
   file?: File | null;
+  /** Veio do formulário da cliente (feature 298) — só exibição, não vai no payload. */
+  do_formulario?: boolean;
 }
 
 export interface ClientLinkInput {
@@ -189,9 +192,11 @@ export function useCreateEvent() {
   return useMutation<EventCreateResult, Error, EventCreateInput>({
     mutationFn: (body) =>
       apiFetch<EventCreateResult>("/api/events", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => {
+    onSuccess: (_result, body) => {
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+      // Evento criado a partir de formulário (feature 298): ele sai da Home e o aviso some.
+      if (body.form_response_id) invalidarDestinoDeFormulario(queryClient, body.form_response_id);
     },
   });
 }
@@ -206,10 +211,12 @@ export function useUpdateEvent(eventId: number) {
         method: "PATCH",
         body: JSON.stringify(body),
       }),
-    onSuccess: (updated) => {
+    onSuccess: (updated, body) => {
       queryClient.setQueryData(["event", eventId], updated);
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+      // Pré-contrato ligado na edição (feature 298): some da Home e da fila de Formulários.
+      if (body.form_response_id) invalidarDestinoDeFormulario(queryClient, body.form_response_id);
     },
   });
 }

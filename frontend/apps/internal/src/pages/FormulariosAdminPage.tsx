@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Button,
   Card,
@@ -22,6 +22,8 @@ import {
   TabsTrigger,
 } from "@manto/ui";
 import { FormFieldEditor } from "../components/FormFieldEditor";
+import { EncerrarFormularioDialog } from "../components/formularios/EncerrarFormularioDialog";
+import { SugestaoDeEventoFaixa } from "../components/formularios/SugestaoDeEventoFaixa";
 import { useClientSearch } from "../lib/clientes";
 import { useGastosEventos } from "../lib/gastos";
 import { useCurrentUser } from "../lib/useAuth";
@@ -31,9 +33,13 @@ import {
   useDissociateClient,
   useFormResponseDetail,
   useFormResponses,
+  mensagemDaApi,
   useLinkEvent,
+  useReabrirFormulario,
   useSearchFormResponses,
   useUnlinkEvent,
+  useUsarClienteDoEvento,
+  type DivergenciaCliente,
   type FormResponseSummary,
   type StatusCounts,
   type StatusFilter,
@@ -161,20 +167,38 @@ function PublicFormCard({ nome, descricao, url, canEditStructure, onEditFields }
 //  Cartões de situação + tabela de respostas
 // ══════════════════════════════════════════════════════════════════
 
-/** `true` quando a festa é hoje/futura e a resposta ainda não tem evento — o caso que não
- * pode passar despercebido (a cliente acha que está fechado e o evento não existe). */
-function isFutureWithoutEvent(r: FormResponseSummary): boolean {
-  if (r.event_id || !r.event_date) return false;
-  return r.event_date.slice(0, 10) >= new Date().toISOString().slice(0, 10);
+/** Hoje no relógio do navegador, em AAAA-MM-DD local (o `toISOString` é UTC e vira o dia às 21h). */
+function hojeLocalIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const STATUS_CARDS: { key: StatusFilter; label: string; urgent?: boolean }[] = [
-  { key: "", label: "Todas" },
-  { key: "futuros_sem_evento", label: "Festa futura sem evento", urgent: true },
-  { key: "sem_evento", label: "Sem evento" },
-  { key: "sem_cliente", label: "Sem cliente" },
-  { key: "ambiguos", label: "Vínculo ambíguo" },
-];
+/** `true` quando o formulário ainda não tem destino e a data informada é hoje ou futura — o caso
+ * que não pode passar despercebido (a cliente acha que está fechado e o evento não existe). O
+ * destino vem do servidor, com a mesma regra da Home (feature 298). */
+function isFutureWithoutEvent(r: FormResponseSummary): boolean {
+  const semDestino = r.destino ? r.destino === "sem_destino" : !r.event_id;
+  if (!semDestino || !r.event_date) return false;
+  return r.event_date.slice(0, 10) >= hojeLocalIso();
+}
+
+/** `01/06` a partir do corte AAAA-MM-DD. */
+function diaMes(iso: string | undefined): string | null {
+  const [, mes, dia] = (iso ?? "").slice(0, 10).split("-");
+  return mes && dia ? `${dia}/${mes}` : null;
+}
+
+/** Cartões por destino (feature 298): as partições somam "Todas" e batem com a Home. */
+function statusCards(corte: string | undefined): { key: StatusFilter; label: string; urgent?: boolean }[] {
+  const desde = diaMes(corte);
+  return [
+    { key: "", label: "Todas" },
+    { key: "sem_destino", label: desde ? `Sem destino (desde ${desde})` : "Sem destino", urgent: true },
+    { key: "com_evento", label: "Com evento" },
+    { key: "encerrados", label: "Encerrados" },
+    { key: "historico", label: desde ? `Histórico (antes de ${desde})` : "Histórico" },
+  ];
+}
 
 function StatusCards({
   counts,
@@ -191,7 +215,7 @@ function StatusCards({
   };
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-      {STATUS_CARDS.map(({ key, label, urgent }) => {
+      {statusCards(counts?.corte).map(({ key, label, urgent }) => {
         const count = countFor(key);
         const isActive = active === key;
         const alarming = urgent && (count ?? 0) > 0;
@@ -235,13 +259,17 @@ function SituacaoBadges({ response }: { response: FormResponseSummary }) {
         <MetricBadge tone="green">
           Evento vinculado · {response.event_link_source === "manual" ? "manual" : "auto"}
         </MetricBadge>
+      ) : response.destino === "encerrados" ? (
+        <MetricBadge tone="neutral">
+          Encerrado · {response.closed_reason_label ?? "sem motivo"}
+        </MetricBadge>
+      ) : response.destino === "historico" ? (
+        // Chegou antes do corte: é histórico da cliente, não tarefa (feature 298).
+        <MetricBadge tone="neutral">Histórico</MetricBadge>
       ) : urgent ? (
         <MetricBadge tone="red">⚠ Sem evento — festa {formatDate(response.event_date)}</MetricBadge>
       ) : (
         <MetricBadge tone="gold">Sem evento</MetricBadge>
-      )}
-      {!response.event_id && response.event_link_ambiguous && (
-        <MetricBadge tone="gold">Revisar vínculo</MetricBadge>
       )}
     </div>
   );
@@ -410,6 +438,38 @@ function ClienteSection({ id }: { id: number }) {
   );
 }
 
+/**
+ * Cliente do formulário ≠ cliente do evento (feature 298, FR-015). Ligar nunca troca ninguém: o
+ * evento fica como está, e a comercial decide trazer a cliente do evento para o formulário.
+ */
+function DivergenciaDeCliente({
+  id,
+  divergencia,
+}: {
+  id: number;
+  divergencia: DivergenciaCliente | null;
+}) {
+  const usar = useUsarClienteDoEvento();
+  if (!divergencia) return null;
+  return (
+    <div role="status" className="space-y-2 rounded-md bg-gold-50 px-3 py-2 text-sm text-ink">
+      <p>
+        A cliente do formulário (<strong>{divergencia.formulario.nome ?? "sem nome"}</strong>) não é
+        a cliente do evento (<strong>{divergencia.evento.nome ?? "sem nome"}</strong>). O evento não
+        foi alterado.
+      </p>
+      <Button size="sm" variant="outline" loading={usar.isPending} onClick={() => usar.mutate(id)}>
+        Usar a cliente do evento neste formulário
+      </Button>
+      {usar.isError && (
+        <p role="alert" className="text-xs text-red">
+          {mensagemDaApi(usar.error, "Não foi possível trocar a cliente. Tente novamente.")}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () => void }) {
   const detalhe = useFormResponseDetail(id);
   const linkEvent = useLinkEvent(id);
@@ -424,22 +484,37 @@ function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () 
 
   if (response.event_id) {
     return (
-      <div className="flex items-center justify-between gap-2">
-        <MetricBadge tone="green" size="sm">
-          {response.event_title ?? "Evento vinculado"}
-        </MetricBadge>
-        <Button size="sm" variant="ghost" loading={unlinkEvent.isPending} onClick={() => unlinkEvent.mutate()}>
-          Desvincular
-        </Button>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <MetricBadge tone="green" size="sm">
+            {response.event_title ?? "Evento vinculado"}
+          </MetricBadge>
+          <Button size="sm" variant="ghost" loading={unlinkEvent.isPending} onClick={() => unlinkEvent.mutate()}>
+            Desvincular
+          </Button>
+        </div>
+        {/* Recalculada a cada leitura do detalhe; logo depois de ligar, vale a resposta do vínculo. */}
+        <DivergenciaDeCliente
+          id={id}
+          divergencia={detalhe.data?.divergencia_cliente ?? linkEvent.data?.divergencia_cliente ?? null}
+        />
       </div>
     );
   }
+
+  const sugestao = detalhe.data?.sugestao;
 
   return (
     <div className="space-y-2">
       <MetricBadge tone="gold" size="sm">
         Sem evento
       </MetricBadge>
+      {/* Mesma sugestão da Home (feature 298): a cliente já tem evento a até 3 dias. */}
+      <AnimatePresence initial={false}>
+        {sugestao && (
+          <SugestaoDeEventoFaixa key={sugestao.event_id} formularioId={id} sugestao={sugestao} />
+        )}
+      </AnimatePresence>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
           type="date"
@@ -488,12 +563,93 @@ function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () 
       {effectiveDate && !eventos.isLoading && !eventos.isError && eventos.data?.events.length === 0 && (
         <p className="text-xs text-muted">Nenhum evento nessa data.</p>
       )}
-      <Button size="sm" variant="outline" onClick={onPrefillEvent}>
-        Criar evento com os dados desta resposta
-      </Button>
-      {linkEvent.isError && (
-        <p className="text-sm text-red">Não foi possível vincular o evento. Tente novamente.</p>
+      {/* Só quem cria evento (`_CAN_CREATE`): o FINANCEIRO abria o cadastro e levava 403 do
+          `para-evento`. Sem `flags` (servidor antigo) o botão continua, como antes da 298. */}
+      {detalhe.data?.flags?.pode_criar_evento !== false && (
+        <Button size="sm" variant="outline" onClick={onPrefillEvent}>
+          Criar evento com os dados desta resposta
+        </Button>
       )}
+      {linkEvent.isError && (
+        <p className="text-sm text-red">
+          {mensagemDaApi(linkEvent.error, "Não foi possível vincular o evento. Tente novamente.")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Destino do formulário (feature 298): encerrado (motivo, frase, quem e quando, "Reabrir"), sem
+ * destino ("Encerrar…") ou os estados que não pedem ação. As ações obedecem às `flags` do
+ * servidor, que recusa o resto do mesmo jeito.
+ */
+function DestinoSection({ id }: { id: number }) {
+  const detalhe = useFormResponseDetail(id);
+  const reabrir = useReabrirFormulario();
+  const [encerrando, setEncerrando] = useState(false);
+
+  const response = detalhe.data?.response;
+  const flags = detalhe.data?.flags;
+  const motivos = detalhe.data?.motivos_encerramento ?? [];
+  if (!response) return null;
+
+  if (response.destino === "encerrados") {
+    const quemQuando = [response.closed_by_name, response.closed_at && formatDateTime(response.closed_at)]
+      .filter(Boolean)
+      .join(" · ");
+    return (
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <MetricBadge tone="neutral" size="sm">
+            Encerrado · {response.closed_reason_label ?? "sem motivo"}
+          </MetricBadge>
+          {quemQuando && <span className="text-xs text-muted">{quemQuando}</span>}
+        </div>
+        {response.closed_note && <p className="text-sm text-ink">“{response.closed_note}”</p>}
+        {flags?.pode_reabrir && (
+          <Button size="sm" variant="outline" loading={reabrir.isPending} onClick={() => reabrir.mutate(id)}>
+            Reabrir
+          </Button>
+        )}
+        {reabrir.isError && (
+          <p className="text-sm text-red">
+            {mensagemDaApi(reabrir.error, "Não foi possível reabrir. Tente novamente.")}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (response.destino === "historico") {
+    return (
+      <p className="text-sm text-muted">
+        Chegou antes do início do sistema: é histórico da cliente e não precisa de destino.
+      </p>
+    );
+  }
+
+  if (response.event_id) {
+    return <p className="text-sm text-muted">Virou evento — veja a seção Evento acima.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted">
+        Sem destino: crie ou ligue um evento acima, ou encerre com um motivo se não vai virar festa.
+      </p>
+      {flags?.pode_encerrar && motivos.length > 0 && (
+        <Button size="sm" variant="outline" onClick={() => setEncerrando(true)}>
+          Encerrar…
+        </Button>
+      )}
+      <EncerrarFormularioDialog
+        formularioId={id}
+        nome={response.contact_name}
+        motivos={motivos}
+        open={encerrando}
+        onClose={() => setEncerrando(false)}
+      />
     </div>
   );
 }
@@ -577,6 +733,11 @@ function ResponseDetailDialog({
                 id={id}
                 onPrefillEvent={() => navigate(`/events/new?form_response_id=${id}`)}
               />
+            </div>
+
+            <div className="border-t border-line pt-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Destino</p>
+              <DestinoSection id={id} />
             </div>
 
             {canEditStructure && (
@@ -796,6 +957,12 @@ export function FormulariosAdminPage() {
             >
               <ResponsesTable responses={responses} onOpen={abrirResposta} />
             </motion.div>
+          )}
+
+          {!isSearching && list.data?.truncado && (
+            <p className="text-xs text-muted">
+              Mostrando as 200 mais recentes — use a busca para achar uma resposta mais antiga.
+            </p>
           )}
         </CardContent>
       </Card>

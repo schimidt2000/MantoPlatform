@@ -1,6 +1,7 @@
-import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import type { EventoDetalhe } from "./agenda";
+import { invalidarDestinoDeFormulario } from "./formulariosAdmin";
 
 /**
  * Edição pontual por bloco da tela de detalhe (feature 215).
@@ -23,7 +24,16 @@ function useEventPatch<TBody>(
   eventId: number,
   path: string,
   method: "PATCH" | "PUT",
-  { touchesAgenda = false, invalidar = [] }: { touchesAgenda?: boolean; invalidar?: QueryKey[] } = {},
+  {
+    touchesAgenda = false,
+    invalidar = [],
+    aoSalvar,
+  }: {
+    touchesAgenda?: boolean;
+    invalidar?: QueryKey[];
+    /** Recarga que não cabe numa lista de chaves (ex.: tudo o que mostra o destino do formulário). */
+    aoSalvar?: (queryClient: QueryClient) => void;
+  } = {},
 ) {
   const queryClient = useQueryClient();
   return useMutation<EventPatchResult, Error, TBody>({
@@ -42,6 +52,7 @@ function useEventPatch<TBody>(
         queryClient.invalidateQueries({ queryKey: ["casting-options", eventId] });
       }
       for (const chave of invalidar) queryClient.invalidateQueries({ queryKey: chave });
+      aoSalvar?.(queryClient);
     },
   });
 }
@@ -100,12 +111,16 @@ export function useSetEventClients(eventId: number) {
   return useEventPatch<EventClientsInput>(eventId, "/clients", "PUT");
 }
 
-/** Vincula (`id`) ou desvincula (`null`) o pré-contrato exibido na aba Comercial. */
+/**
+ * Vincula (`id`) ou desvincula (`null`) o pré-contrato exibido na aba Comercial. Desde a 298, ligar
+ * ou soltar o formulário muda a lista da Home, a tela Formulários e o sino: recarrega os três.
+ */
 export function useSetEventFormResponse(eventId: number) {
   return useEventPatch<{ form_response_id: number | null }>(
     eventId,
     "/form-response",
     "PATCH",
+    { aoSalvar: (queryClient) => invalidarDestinoDeFormulario(queryClient) },
   );
 }
 

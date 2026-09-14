@@ -26,7 +26,13 @@ from zoneinfo import ZoneInfo
 
 from app.constants import EVENT_TYPE_SHOW, RoleName, now_sp
 from app.email_service import send_async, send_ensaio_alert_email, send_event_changed_email
-from app.formularios.formularios_ops import apply_event_link, clear_event_link
+from app.formularios.formularios_ops import (
+    FormularioJaTemDestino,
+    apply_event_link,
+    bloquear_formulario,
+    clear_event_link,
+    vincular_formulario_ao_evento,
+)
 from app.models import (
     EventClient,
     EventLog,
@@ -764,11 +770,9 @@ def update_event_core(
     EventClient.query.filter_by(event_id=event.id).delete()
     _create_client_links(event, data.get("client_pairs") or [])
 
-    form_response_id = data.get("form_response_id")
-    if form_response_id is not None:
-        fr = FormResponse.query.get(form_response_id)
-        if fr and fr.event_id is None:
-            apply_event_link(fr, event)
+    # Feature 298: pré-contrato de OUTRO evento levanta `FormularioJaTemDestino` (409) em vez de ser
+    # ignorado em silêncio; `None` continua não desligando (a tela manda o id atual em toda gravação).
+    vincular_formulario_ao_evento(event, data.get("form_response_id"))
 
     if sincronizar_comissao is not None:
         # INCONDICIONAL, como o gêmeo `update_event_comercial`. Guardar por "campo mudou"
@@ -997,7 +1001,11 @@ def set_event_form_response(event: Any, form_response_id: int | None) -> bool:
         form_response_id: Id da `FormResponse` a vincular, ou `None` para desvincular.
 
     Returns:
-        `True` se o vínculo mudou; `False` quando o id não existe ou é de outro evento.
+        `True` se o vínculo mudou; `False` quando o id não existe.
+
+    Raises:
+        FormularioJaTemDestino: a resposta é de outro evento (feature 298 — o endpoint devolve a
+            mesma mensagem de 409 de todos os caminhos de vínculo).
     """
     if form_response_id is None:
         changed = False
@@ -1008,9 +1016,11 @@ def set_event_form_response(event: Any, form_response_id: int | None) -> bool:
         db.session.commit()
         return changed
 
-    fr = FormResponse.query.get(form_response_id)
-    if fr is None or (fr.event_id is not None and fr.event_id != event.id):
+    fr = bloquear_formulario(form_response_id)
+    if fr is None:
         return False
+    if fr.event_id is not None and fr.event_id != event.id:
+        raise FormularioJaTemDestino()
     apply_event_link(fr, event)
     db.session.commit()
     return True
