@@ -359,10 +359,18 @@ lista dentro da tela. Três ajustes saíram dela: a hora do WhatsForm (pegadinha
 suspeita que dizia "em 8241 dias" e a vírgula dobrada no endereço ("Rua Parauna,, 23") quando a
 cliente digita a vírgula no próprio campo.
 
-**Depois do deploy (quando o dono pedir).** No SSH do `manto-backend`, com `MANTO_SEM_THREADS=1`,
-primeiro contando e depois com `--execute`: `flask formularios-avisos-resolvidos` (~35 avisos em
-10/09) e `flask formularios-cliente-do-evento` (~69). Esperado: `sem_destino` ≤ 36 e o topo da
-Home deixando de somar o histórico.
+**Em produção (14/09/2026).** O push saiu às 11:53 (merge `ca265c1`). A versão nova respondeu às
+11:55:41, depois de ~50 s de 502 na troca do contêiner. A migration `e5a1c7d93b20` está aplicada
+(`flask db current`). No SSH do `manto-backend`, com `MANTO_SEM_THREADS=1`, cada comando rodou
+primeiro contando e depois com `--execute`:
+- `flask formularios-avisos-resolvidos` marcou **41** avisos como lidos;
+- `flask formularios-cliente-do-evento` deu a cliente do evento a **65** formulários. Os 4 que
+  sobram estão ligados a eventos sem cliente.
+
+A recontagem deu 0 nos dois. Destinos lidos na produção: 1.551 formulários = 37 sem destino +
+142 com evento + 0 encerrados + 1.372 do histórico. A Home mostra os 37 em 32 linhas: 15 com a
+data informada por vir e 17 com ela já passada. Desde 10/09 chegou mais 1 formulário depois do
+corte (178 → 179), e os sem destino foram de 36 para 37.
 
 ### 263b — O proxy que guardava para sempre o vídeo que ninguém mais assistia            (2026-09-11 · hotfix · sem migration)
 

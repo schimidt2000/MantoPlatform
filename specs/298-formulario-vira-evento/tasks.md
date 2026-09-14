@@ -561,7 +561,7 @@ apagado e correções únicas`.
   navegador), mais a linha no índice.
 - [X] T054 Executar a parte local do `quickstart.md` (§1–§3), inclusive os dois comandos no
   `manto_local` (sem e com `--execute`, conferindo por consulta).
-- [ ] T055 Commit `docs(298): documentação viva`, por caminho. Depois `/speckit-converge`. Quando o dono
+- [X] T055 Commit `docs(298): documentação viva`, por caminho. Depois `/speckit-converge`. Quando o dono
   pedir o push, seguir a skill `manto-deploy`:
   - portão "antes de em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`,
     `migrations/versions/` sem untracked, sonda `/api/`;
