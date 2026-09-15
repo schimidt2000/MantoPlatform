@@ -859,3 +859,43 @@ escondidas; cenários 9 a 13 verdes.
   novo) → US5 (o total). Cada uma com o seu commit `feat(299): …` e os cenários do verify em verde.
 - **Publicação**: um deploy só, com a feature inteira, fora do horário e depois da conferência de
   dados do T045.
+
+## Phase 9: Convergence
+
+- [ ] T046 CRITICAL — Pôr type hints nos parâmetros que a 299 acrescentou a `_validate_event_core`
+  (`valor_atual: Decimal | None = None`, `bruto_atual: Decimal | None = None`) em
+  `app/calendar/routes.py:3222-3224` per Constitution II (contradicts)
+- [ ] T047 CRITICAL — Tirar da view `api_update_event_comercial` (`app/api/agenda_write.py:1076-1084`)
+  a regra do valor da aba Comercial (o `if not data["is_cortesia_permuta"]` e o `vazio_aceito=True`)
+  para uma função do núcleo em `app/calendar/event_ops.py`, deixando a view só chamar e serializar;
+  o `verify_299` (5i e 6) continua 17/17 per Constitution III (contradicts)
+- [ ] T048 Em `_sync_commission_payment` (`app/financeiro/comissoes_ops.py:742-753`), ignorar a linha
+  de R$ 0,00 já paga só quando a comissão calculada agora é maior que zero (calcular o `amount` antes
+  da consulta): hoje toda linha de R$ 0,00 paga é ignorada, e uma venda real com comissão de R$ 0,00
+  ganharia uma linha `a_pagar` nova a cada pagamento; os cenários 5g, 5h e 5h' do `verify_299`
+  continuam verdes per FR-031 (partial)
+- [ ] T049 Invalidar `['dashboard']` no `onSuccess` de `useDeleteEvent`
+  (`frontend/apps/internal/src/lib/eventOps.ts:65-77`), para o evento excluído sair de "Cobranças" e
+  "Sem valor" ao voltar para a Home per FR-010 (partial)
+- [ ] T050 No outro evento do grupo, usar o título do principal (`grupo.leader.title`) como texto do
+  link de "A venda está no …" em
+  `frontend/apps/internal/src/components/EventDetail/FinanceiroSection.tsx:250-257` per
+  contracts/evento-cobranca.md (partial)
+- [ ] T051 Corrigir o rodapé do painel "Sem valor"
+  (`frontend/apps/internal/src/components/home/PainelSemValor.tsx:106`), que diz "fora cortesia e
+  compromisso interno" e omite ensaio, Loja Virtual, cancelados e os outros eventos do grupo: listar
+  todas as exclusões ou tirar o texto per FR-006 (partial)
+- [ ] T052 Decidir o detalhe do card "Sem valor" ("N eventos sem valor desde …",
+  `frontend/apps/internal/src/pages/DashboardPage.tsx:789`), que nenhum requisito pede: manter e
+  registrar no `docs/02` (Home) ou tirar per FR-028 (unrequested)
+- [ ] T053 Na edição completa, não gravar 0 por cima do bruto `NULL`:
+  `frontend/apps/internal/src/pages/EventEditPage.tsx:139` hidrata `sale_value_gross ?? 0`, e uma
+  troca só de título grava 0; mandar `null` quando o bruto gravado é `NULL` e ninguém mexeu nele per
+  T029 (partial)
+- [ ] T054 Somar o `total_em_aberto` em `Decimal` a partir das vendas (`venda.saldo`), e não do `saldo`
+  já serializado em `float` (`app/financeiro/cobranca_ops.py:513`) per plan: dinheiro em Decimal até a
+  serialização (partial)
+- [ ] T055 Marcar como desatualizada a armadilha "Comissão diverge entre Jinja e React" do
+  `docs/04_GUIA_DE_DOMINIOS.md:166-170`: hoje `update_event_core` e `update_event_comercial` chamam a
+  sincronização da comissão (`app/calendar/event_ops.py:887-897, :1071-1073`), e o texto contradiz o
+  invariante 12 logo acima per Docs a atualizar: docs/04 (partial)
