@@ -1009,7 +1009,7 @@ escondidas; cenários 9 a 13 verdes.
 
 ## Phase 14: Convergence
 
-- [ ] T077 Pôr a ressalva no invariante 5 do `data-model.md` (`:105`, "O vencimento nunca fica antes
+- [X] T077 Pôr a ressalva no invariante 5 do `data-model.md` (`:105`, "O vencimento nunca fica antes
   da data da venda"): o piso da data da venda vale para a parcela e para os 2 dias antes, e a data
   combinada vale como está (`app/financeiro/cobranca_ops.py:287-298`, FR-021, R33, `data-model.md:28`
   e `docs/04` já dizem certo); a mesma ressalva no vocabulário "Vencimento do saldo" e nas Premissas

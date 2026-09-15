@@ -101,7 +101,7 @@ Transições que tiram a linha da lista (FR-010), com a animação na tela:
 3. Compromisso interno é o título que começa com 🟧 ou 🟠. Ele nunca é venda e não conta na data do
    grupo.
 4. A folga de centavos é R$ 1,00, no saldo, no sinal e no "Quitado" da página.
-5. Com data combinada ou cronograma, não há sinal pendente. O vencimento nunca fica antes da data da
-   venda.
+5. Com data combinada ou cronograma, não há sinal pendente. O vencimento pela parcela ou pelos 2
+   dias antes nunca fica antes da data da venda; a data combinada vale como está (R33).
 6. A comissão tardia (o evento já existia num mês anterior, sem valor) entra no ciclo do mês do
    valor, e a comissão paga nunca é paga de novo.

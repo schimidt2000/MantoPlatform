@@ -86,7 +86,7 @@ Números da produção em 14/09/2026 (lidos só para consulta), desde 01/06:
   cronograma de parcelas.
 - **Data combinada**: a data de pagamento acertada com a cliente.
 - **Vencimento do saldo**: a data combinada; senão, a primeira parcela ainda não coberta; senão, 2
-  dias antes do evento. Nunca antes da data da venda.
+  dias antes do evento. Nos dois últimos casos, nunca antes da data da venda (FR-021).
 - **Compromisso interno**: evento da agenda que não é venda (ensaio, visita técnica, gravação),
   marcado com o laranja 🟧 ou 🟠 no começo do título.
 - **Venda da Loja Virtual**: venda feita e paga na loja de interações virtuais (tipo "Virtual"). Ela
@@ -756,7 +756,7 @@ pronto no `quickstart.md`; o dono decide quem envia.
   - o grupo é uma venda só na cobrança;
   - o que é "sem valor";
   - o marcador laranja do compromisso interno;
-  - o vencimento do saldo (nunca antes da data da venda);
+  - o vencimento do saldo (pela parcela ou pelos 2 dias antes, nunca antes da data da venda);
   - a folga de centavos;
   - o ciclo da comissão tardia.
 - `docs/05`:
