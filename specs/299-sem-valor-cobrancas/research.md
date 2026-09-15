@@ -101,7 +101,7 @@ mesmo dia (R7, R8, R22, R25).
 ### R3 — Uma fonte para o recebido do grupo
 
 - **Decisão**:
-  - **Primitiva.** `recebido_por_evento(ids) -> dict[int, Decimal]` no `cobranca_ops`: `SUM(coalesce(amount, 0))`
+  - **Primitiva.** `comprovantes_por_evento(ids) -> dict[int, tuple[Decimal, int]]` (soma e quantidade; nome final da crítica das tarefas) no `cobranca_ops`: `SUM(coalesce(amount, 0))`
     com `GROUP BY event_id`, e `Decimal(str(x))` como `cancel_ops.py:54`.
   - **Soma do grupo.** `recebido_da_venda(eventos, mapa)` soma principal e satélites, **inclusive os
     cancelados**.
@@ -219,7 +219,7 @@ mesmo dia (R7, R8, R22, R25).
   - **Q1.** Eventos com `group_leader_id IS NULL`, `cancelled_at IS NULL` e
     `start_at >= combine(corte, time.min)`, com `selectinload` de `satellites`,
     `event_clients.client` e `installments`, e `joinedload(client)`.
-  - **Mais uma consulta.** `recebido_por_evento` sobre todos os ids, satélites inclusive.
+  - **Mais uma consulta.** `comprovantes_por_evento` sobre todos os ids, satélites inclusive.
   - **Em Python.** Reconferir `data_do_grupo >= corte` e aplicar `motivo_fora`.
 - **Porquê**: o pré-filtro é seguro, porque com o principal vivo `data_do_grupo <= start_at` do
   principal. Evita N+1 (`models.py:329-332, 348-351, 365-368, 403-405`).
@@ -391,7 +391,8 @@ mesmo dia (R7, R8, R22, R25).
 ### R22 — Comissão no mês em que o valor entra (dono, 14/09; FR-031)
 
 - **Decisão**: em `_sync_commission_payment` (`comissoes_ops.py:689-747`), para a comissão **comum**:
-  - **Linha nova.** Quando nasce com `sale_date` num mês anterior ao mês corrente de São Paulo,
+  - **Linha nova** (critério estreitado no R45: vale só quando o evento também foi cadastrado num mês
+    anterior). Quando nasce com `sale_date` num mês anterior ao mês corrente de São Paulo,
     recebe `payable_from = hoje` (SP).
   - **Sincronização.** Não volta a `NULL` nas sincronizações seguintes; hoje ela é reescrita em
     `:736`.
@@ -547,8 +548,10 @@ os marcados "dono" vieram de resposta dele.
     não fazia nada, e a vendedora nunca recebia.
   - **A regra.** Linha de valor 0,00:
     - se está `a_pagar`, é atualizada;
-    - se está `pago`/`no_banco`, não conta como existente, e nasce uma `a_pagar` nova.
-  - **A data.** Nos dois casos, `payable_from = hoje` quando a data da venda está num mês anterior.
+    - se está `pago`/`no_banco`, não conta como existente, e nasce uma `a_pagar` nova. O corte é
+      na própria consulta, com ordem por id: testar depois do `.first()` sem ordem pegaria a paga de
+      novo a cada sincronização e criaria uma `a_pagar` por vez (cenário 5h').
+  - **A data.** Nos dois casos, `payable_from = hoje` quando o valor chegou depois (R45).
   - **A detecção.** É pelo valor da linha, sem mudar a assinatura, porque os chamadores fazem
     `flush` antes de sincronizar.
   - **Por que é seguro.** Segue a intenção do dono ("nunca num mês já fechado"; "a paga nunca é paga
@@ -563,3 +566,38 @@ os marcados "dono" vieram de resposta dele.
     com `cobrancas_resumo` e `sem_valor` `null`, e nunca `comercial: null` para quem tem o papel.
   - **Na tela.** `null` (erro) aparece como aviso, e `undefined` (servidor antigo) não desenha.
   - **Porquê.** FR-032: um painel de dinheiro não pode sumir em silêncio.
+  - **Estendido no R47**: o mesmo `try` cobre o corte e a lista de cobranças.
+
+## Decisões do `/speckit-analyze` (14/09)
+
+- **R45 — Comissão tardia só quando o valor chega depois (dono).** Estreita o critério do R22.
+  - **A regra.** `payable_from = hoje` só quando o evento foi cadastrado num mês anterior ao corrente
+    de São Paulo **e** a data da venda também está num mês anterior. O `created_at` é UTC ingênuo
+    (`default=datetime.utcnow`, `models.py:257`): converter para `TZ_SP` antes de comparar o mês.
+    Sem data da venda, nunca.
+  - **Porquê.** O motivo do R22 é "nunca num mês já fechado". Com o critério antigo, a venda lançada
+    no dia 2 com a data do dia 31 iria para o ciclo do mês seguinte, embora o mês anterior só seja
+    pago no dia 5. O dono escolheu restringir ao caso em que o evento já existia, sem valor.
+  - **Alcance.** No `manto_local`, 0 das 114 vendas cadastradas de junho a agosto têm a data da venda
+    num mês anterior; em abril e maio, época da importação, foram 18 de 54.
+  - **Alternativa descartada.** Olhar se a planilha do mês da venda já foi paga: exige ler a
+    liquidação dentro da sincronização, e o dono preferiu a regra simples.
+- **R46 — "Pôr o valor" em 2 cliques (dono; SC-007).**
+  - **A regra.** A ação leva a `/events/<id>?aba=comercial&editar=venda`. O `VendaPanel` começa em
+    edição quando a URL pede e a pessoa pode editar. O `VendaForm` foca "Valor de venda final"
+    (`sale_value`; o `MoneyInput` já repassa `ref`). É ele que tira o evento de "Sem valor": o
+    `VendaForm` não deriva o líquido do bruto, e quem digitasse só "Valor antes do desconto"
+    salvaria com 200 e o evento continuaria na lista (achado da verificação das correções). Ao salvar ou cancelar, o `editar` sai da URL
+    com `replace`, para recarregar a página não reabrir a edição.
+  - **Porquê.** Hoje a aba abre só para leitura, com "Editar": seriam 3 cliques.
+  - **Sem mudança.** "Abrir cobrança" e o "Abrir" do FINANCEIRO continuam em `?aba=comercial`. Sem
+    permissão para editar, o parâmetro é ignorado.
+- **R47 — O `try` do painel comercial cobre o corte, as vendas e a lista de cobranças.** Estende o
+  R44.
+  - **O problema.** Só `vendas_desde` estava protegido. Uma falha em `listar_cobrancas`, ou na
+    leitura do corte, caía no `_bloco("comercial")` de fora, e o bloco vinha `null`: os dois painéis
+    sumiam sem aviso.
+  - **A regra.** Os três ficam no mesmo `try`, com o mesmo envelope de falha. O `_bloco` de fora fica
+    só como rede para defeito no próprio envelope, e `comercial: null` volta a significar só "sem
+    permissão".
+  - **Verificação.** O cenário 14 força a falha em `vendas_desde` e em `listar_cobrancas`.

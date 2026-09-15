@@ -95,6 +95,8 @@ Números da produção em 14/09/2026 (lidos só para consulta), desde 01/06:
   hoje 01/06/2026, e 01/06/2026 quando estiver vazia).
 - **Cobrança**: uma linha da Home para uma venda com saldo.
 - **Para agir**: linha vermelha ou amarela. A cinza é só informação.
+- **Evento sem valor de venda**: o nome da lista. Na Home, o painel e o card se chamam "Sem valor", e
+  todo texto da tela que aponta para a lista usa esse nome.
 
 ## Clarifications
 
@@ -154,6 +156,16 @@ Respostas do dono no `/speckit-checklist` (`checklists/revisao.md`):
   deploy, a lista do grupo 344 e das vendas com comprovante sem valor é levantada (só leitura) e
   conferida pelo dono.
 
+Respostas do dono no `/speckit-analyze`:
+
+- Q: Da linha "sem valor" ao valor salvo: 2 cliques, com a aba Comercial já em edição, ou 3, com o
+  "Editar" no meio? → A: 2 cliques. "Pôr o valor" abre a aba Comercial já com os valores em edição;
+  depois é digitar e salvar.
+- Q: A comissão vai para o mês do valor sempre que a data da venda é de um mês anterior, ou só quando
+  o evento já existia antes, sem valor? → A: só quando o evento já existia antes. A venda lançada
+  agora com a data de um mês anterior (por exemplo, na virada do mês) segue o ciclo da data da
+  venda, como hoje.
+
 ## Cenários e Verificação *(obrigatório)*
 
 ### História 1 — O grupo é cobrado como uma venda só (Prioridade: P1)
@@ -196,7 +208,7 @@ principal do 344 aparece quitado, e a mensagem de cobrança não pede o que já 
 A comercial vê, no painel "Sem valor", a lista "Evento sem valor de venda": as vendas desde a data de
 início que estão sem valor, passadas e futuras. Cada linha mostra a cliente, a data do evento com a
 distância em palavras ("hoje", "em 12 dias", "aconteceu há 38 dias") e a ação "Pôr o valor", que
-abre o evento na aba Comercial. Compromisso interno, cortesia, ensaio, venda da Loja Virtual e os
+abre o evento na aba Comercial já em edição. Compromisso interno, cortesia, ensaio, venda da Loja Virtual e os
 outros eventos de um grupo não aparecem.
 
 **Por que esta prioridade**: hoje 6 vendas estão sem valor e não aparecem em lugar nenhum. Ficam
@@ -440,8 +452,9 @@ confia no resto.
   - a data do evento, com a distância em palavras;
   - "a definir" (valor vazio ou zero) ou o valor simbólico ("R$ 0,01 (valor simbólico)");
   - "já recebeu R$ X", quando houver comprovante;
-  - a ação "Pôr o valor", que abre o evento na aba Comercial. Quem não edita a venda pela aba
-    Comercial (o FINANCEIRO) vê "Abrir", como na 298; dentro da aba, ele continua podendo aplicar um
+  - a ação "Pôr o valor", que abre o evento na aba Comercial já com os valores em edição e o foco no
+    valor de venda final (SC-007). Quem não edita a venda pela aba Comercial (o FINANCEIRO) vê "Abrir",
+    como na 298, e a aba abre só para leitura; dentro dela, ele continua podendo aplicar um
     orçamento, como hoje (FR-018).
 - **FR-008**: A lista DEVE ter dois grupos, como a 298. "Ainda vai acontecer" inclui o evento de
   hoje e vem com o mais próximo primeiro. "Já aconteceu" vem com o mais recente primeiro.
@@ -488,13 +501,18 @@ confia no resto.
   em "Aplicar valores do orçamento" e no aviso "importado do Google sem venda". Assim a comercial
   consegue pôr o valor pelo orçamento. Quem aplica o orçamento continua sendo quem aplica hoje
   (COMERCIAL, FINANCEIRO e SUPERADMIN), e a cortesia continua recusada.
-- **FR-031**: Uma comissão DEVE entrar no ciclo de pagamento do mês em que o valor foi posto, e nunca
-  num mês já fechado, quando nasce num mês posterior ao da data da venda. Isso inclui a venda que
-  passa de sem valor (vazio, zero ou simbólico) para valor real num mês posterior. A data da venda
-  não muda. Uma comissão já paga nunca é paga de novo nem alterada, inclusive quando alguém marca
-  "Valor a definir" e depois repõe o valor. A comissão de R$ 0,00 de uma venda simbólica não conta
-  como paga: quando o valor real entra, nasce a comissão de verdade, no mês do valor. A regra vale para as comissões que nascerem ou mudarem
-  depois da publicação; as que já existem não mudam.
+- **FR-031**: Quando o valor chega depois, a comissão DEVE entrar no ciclo de pagamento do mês em que
+  o valor foi posto, e nunca num mês já fechado. "Chega depois" quer dizer: o evento foi cadastrado
+  num mês anterior ao corrente, a data da venda também está num mês anterior, e a comissão nasce
+  agora ou passa de valor simbólico para valor real. A data da venda não muda.
+  - A venda lançada agora com a data de um mês anterior (por exemplo, na virada do mês) segue o
+    ciclo da data da venda, como hoje. A venda sem data da venda também segue como hoje.
+  - Uma comissão já paga nunca é paga de novo nem alterada, inclusive quando alguém marca "Valor a
+    definir" e depois repõe o valor.
+  - A comissão de R$ 0,00 de uma venda simbólica não conta como paga: quando o valor real entra,
+    nasce a comissão de verdade, no mês do valor.
+  - A regra vale para as comissões que nascerem ou mudarem depois da publicação; as que já existem
+    não mudam.
 
 **Cobranças**
 
@@ -569,8 +587,12 @@ confia no resto.
 - **FR-032**: Estados sem dados e com erro:
   - Cobranças sem nenhuma venda com saldo DEVE dizer "Nenhuma cobrança em aberto ✓", e o card
     mostra "Em dia ✓".
+  - "Sem valor" sem nenhum evento DEVE dizer "Todos os eventos têm valor de venda ✓" (FR-011), e o
+    card mostra "Em dia ✓".
+  - Com linhas, mas nenhuma para agir (só cinza), o número do card é 0 e o "✓" não aparece.
   - Um painel cuja lista não carregou DEVE dizer "Não foi possível carregar as cobranças" (ou "os
-    eventos sem valor"), com "Tentar de novo". Nunca mostra o "✓" nem esconde o painel em silêncio.
+    eventos sem valor"), com "Tentar de novo". Nunca mostra o "✓" nem esconde o painel em silêncio,
+    mesmo quando a falha é na leitura das vendas, que alimenta os dois painéis.
 
 ### Entidades *(se houver dados)*
 
@@ -596,6 +618,8 @@ Nenhuma entidade nova e nenhuma migration. A feature usa as que existem:
   (FR-003). A parte comercial continua visível para COMERCIAL, FINANCEIRO e SUPERADMIN.
 - `PATCH /api/events/<id>/orcamento`: o valor simbólico passa a contar como "sem venda" (FR-018). Os
   papéis continuam COMERCIAL, FINANCEIRO e SUPERADMIN.
+- `PATCH /api/events/<id>/comercial`: o valor novo entre R$ 0,01 e R$ 0,99 passa a ser recusado, e o
+  vazio continua aceito (FR-014). Os papéis continuam COMERCIAL e SUPERADMIN.
 
 ## Verificação (`verify_299.py`) *(obrigatório — Princípio VIII)*
 
@@ -611,7 +635,7 @@ com "[TESTE verify 299] pode apagar" no título, e a chamada ao Google trocada p
 | 2 | Vazio, zero, R$ 0,01 e R$ 0,99 contra R$ 1,00; eventos hoje, a 7, 8 e 31 dias e já passados | os quatro primeiros entram em "sem valor" (vazio e zero como a definir) e R$ 1,00 não; o de hoje em "ainda vai acontecer"; 7 dias vermelho, 8 amarelo, 31 cinza; ordem dos dois grupos | não |
 | 3 | Cancelado, ensaio, cortesia, título com 🟧 e com 🟠, Loja Virtual; visita técnica agrupada com um show | nenhum entra em "sem valor"; o grupo é cobrado pelo principal e a data ignora a visita | não |
 | 4 | Grupo: principal com valor; principal sem valor; principal cortesia | outros eventos fora; uma linha do grupo com "grupo de N eventos" e "já recebeu"; grupo fora | não |
-| 5 | Valor a definir | cadastro com a marca cria sem valor e o evento entra na lista; sem valor, ou abaixo de R$ 1,00, sem marca → 400 no campo; vendedor continua obrigatório; pôr o valor pela aba Comercial tira da lista e mantém a data da venda; valor posto num mês depois do da data da venda → comissão no ciclo do mês do valor; comissão já paga não é paga de novo | não |
+| 5 | Valor a definir | cadastro com a marca cria sem valor e o evento entra na lista; sem valor, ou abaixo de R$ 1,00, sem marca → 400 no campo; vendedor continua obrigatório; pôr o valor pela aba Comercial tira da lista e mantém a data da venda; valor posto agora num evento cadastrado e vendido no mês anterior → comissão no ciclo do mês do valor; venda lançada hoje com data do mês anterior → ciclo da data da venda, como hoje; comissão já paga não é paga de novo | não |
 | 6 | Edição completa e orçamento | evento sem valor salva o título; evento de R$ 0,01 salva o título mantendo o valor e recusa R$ 0,50; outro evento de grupo salva sem gravar a venda; orçamento aplicado sobre R$ 0,01 | não |
 | 7 | Caso 344 (3.078 + 3.078 de 5.508) e grupo de 10.000 (2.000 + 3.000) | o 344 sai de Cobranças; o outro vira uma linha, "falta R$ 5.000,00" | não |
 | 8 | Grupo com eventos em 20/06 e 21/06 e um cancelado em 19/06 com comprovante | a data do grupo é 20/06, o vencimento 18/06, e o comprovante do cancelado conta | não |
@@ -662,7 +686,8 @@ pronto no `quickstart.md`; o dono decide quem envia.
 - **SC-005**: Toda venda com saldo de R$ 1,00 ou mais desde a data de início aparece em Cobranças,
   com o vencimento, exceto as que o FR-019 exclui. Hoje 25 ficam escondidas.
 - **SC-006**: Nenhum texto em inglês nem código cru nas duas listas.
-- **SC-007**: Da linha "sem valor" ao valor salvo em até 2 cliques, mais a digitação.
+- **SC-007**: Da linha "sem valor" ao valor salvo em 2 cliques, mais a digitação: "Pôr o valor" abre a
+  aba Comercial já em edição, com o foco no valor de venda final, e o segundo clique é "Salvar venda".
 - **SC-008**: Depois do deploy, nenhum evento novo é gravado com valor entre R$ 0,01 e R$ 0,99: o
   cadastro, a edição e a aba Comercial recusam. A conferência é uma consulta 30 dias depois da
   publicação.

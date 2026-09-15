@@ -10,7 +10,7 @@ description: "Tasks da feature 299 — Sem valor e cobranças"
 **Pré-requisitos**:
 - [plan.md](./plan.md);
 - [spec.md](./spec.md), com as histórias e a seção "Verificação" (17 cenários; o 16 deve falhar);
-- [research.md](./research.md) (R1–R44) e [data-model.md](./data-model.md);
+- [research.md](./research.md) (R1–R47) e [data-model.md](./data-model.md);
 - os contratos:
   - [dashboard-comercial.md](./contracts/dashboard-comercial.md);
   - [evento-cobranca.md](./contracts/evento-cobranca.md);
@@ -18,7 +18,9 @@ description: "Tasks da feature 299 — Sem valor e cobranças"
 - a revisão [checklists/revisao.md](./checklists/revisao.md).
 
 **Revisão**: criticado em 14/09 por dois revisores independentes (cobertura e executabilidade).
-Foram 34 achados, todos aplicados; as duas decisões de desenho novas estão em R42–R44.
+Foram 34 achados, todos aplicados; as duas decisões de desenho novas estão em R42–R44. O
+`/speckit-analyze` (14/09) achou 16 pontos; as duas respostas do dono e a correção do painel
+comercial estão em R45–R47.
 
 **Verificação (OBRIGATÓRIA — Princípio VIII)**: `specs/299-sem-valor-cobrancas/verify_299.py` contra
 `manto_local`. Ele é escrito na fase Foundational, ANTES do núcleo, falha pelos motivos certos e passa
@@ -70,8 +72,8 @@ compartilhado e fica na fase Foundational.
 
 ## Phase 1: Setup
 
-- [ ] T001 Commitar `specs/299-sem-valor-cobrancas/tasks.md` na branch `299-sem-valor-cobrancas`
-  (`docs(299): tarefas`). Os outros artefatos já estão commitados.
+- [x] T001 Commitar `specs/299-sem-valor-cobrancas/tasks.md` na branch `299-sem-valor-cobrancas`
+  (`docs(299): tarefas`). Os outros artefatos já estão commitados. *(Feito em `1a2876b`.)*
 - [ ] T002 Acrescentar em `app/constants.py`, logo depois do bloco `FORM_COR_*` (`:404-405`), as
   constantes da 299, cada bloco com o porquê (research R2):
   - `VALOR_MINIMO_DE_VENDA = Decimal("1.00")` e `FOLGA_COBRANCA = Decimal("1.00")`, dois nomes de
@@ -84,9 +86,10 @@ compartilhado e fica na fase Foundational.
   - `MOTIVO_FORA_CANCELADO`, `_ENSAIO`, `_COMPROMISSO_INTERNO`, `_CORTESIA` e `_LOJA_VIRTUAL`.
 
   Importar `Decimal` se o módulo ainda não importa.
-- [ ] T003 Rodar `specs/299-sem-valor-cobrancas/dados_pre_deploy_299.py` (já versionado, só leitura)
+- [x] T003 Rodar `specs/299-sem-valor-cobrancas/dados_pre_deploy_299.py` (já versionado, só leitura)
   contra o `manto_local`, para garantir que ele roda antes de ser usado na produção (T045). Ele não
-  depende de código da 299.
+  depende de código da 299. *(Rodado em 14/09, e de novo depois de a consulta do SC-001 passar a
+  usar a data do grupo: 31 no `manto_local`.)*
 
 ---
 
@@ -171,16 +174,22 @@ compartilhado e fica na fase Foundational.
     - (c) com a marca e sem `seller_id` → 400 em `seller_id`;
     - (d) `PATCH /api/events/<id>/comercial` com o corpo **completo** e valor 1.500 → sai de "sem
       valor" e entra em Cobranças com "Sinal pendente"; `sale_date` mantida;
-    - (e) evento com `sale_date` no mês anterior e valor posto agora pelo `/comercial` →
-      `CommissionPayment.payable_from == hoje`;
+    - (e) evento **cadastrado** no mês anterior (`created_at = utcnow() − 35 dias`), com `sale_date`
+      no mês anterior e valor posto agora pelo `/comercial` → `CommissionPayment.payable_from ==
+      hoje` (R45);
     - (e') depois do (e), um segundo `PATCH /comercial` (outra forma de pagamento) mantém o
       `payable_from`;
     - (f) comissão real já paga, valor apagado e reposto → nenhuma linha nova;
-    - (g) evento de 0,01 com `sale_date` no mês anterior e linha `a_pagar` de 0,00 → `PATCH
+    - (g) evento de 0,01 cadastrado e vendido no mês anterior, com linha `a_pagar` de 0,00 → `PATCH
       /comercial` com 1.500 → a linha passa a ter `payable_from == hoje` e `amount` recalculado;
     - (h) o mesmo com a linha de 0,00 já `pago` → nasce uma linha `a_pagar` nova com
       `payable_from == hoje`, e a paga fica intacta;
-    - (i) `PATCH /comercial` com 0,50 num evento sem valor → 400 no campo; com o valor vazio → 200.
+    - (h') depois do (h), um segundo `PATCH /comercial` e uma chamada a
+      `_resync_pending_commissions()` não criam linha: continuam uma `a_pagar` e a paga de 0,00;
+    - (i) `PATCH /comercial` com 0,50 num evento sem valor → 400 no campo; com o valor vazio → 200;
+    - (j) controle do R45: `POST /api/events` hoje, com `sale_date` no mês anterior, valor 1.500 e o
+      mesmo vendedor do (e) → a comissão nasce com `payable_from is None` (ciclo pela data da venda,
+      como hoje).
   - **6** — Edição e orçamento:
     - (a) evento `source='google_calendar'` sem valor: `PATCH /api/events/<id>` com o título novo, a
       marca e `seller_id` → 200;
@@ -231,9 +240,10 @@ compartilhado e fica na fase Foundational.
     - `formularios.para_agir` = linhas vermelhas e amarelas de `a_chegar` + `ja_passou`;
     - `total_em_aberto` = a soma `Decimal` dos saldos;
     - os blocos de operação continuam com as mesmas chaves de antes;
-    - **falha**: trocar `app.financeiro.cobranca_ops.vendas_desde` por uma função que levanta erro e
-      conferir que `comercial is not None`, `cobrancas_resumo is None`, `sem_valor is None`,
-      `pending_payments == []` e `formularios` intacto (restaurar a função depois).
+    - **falha** (R44, R47): trocar `app.financeiro.cobranca_ops.vendas_desde` por uma função que
+      levanta erro e conferir que `comercial is not None`, `cobrancas_resumo is None`,
+      `sem_valor is None`, `pending_payments == []` e `formularios` intacto; repetir trocando
+      `cobranca_ops.listar_cobrancas`, com o mesmo resultado (restaurar as funções depois).
   - **15** — Página do grupo:
     - `GET /api/events/<principal 10k>`: `cobranca.recebido == 5000.00`, `outstanding == 5000.00`,
       `mensagens.cobranca_amount == "R$ 5.000,00"`, e `pagamentos.outros_do_grupo` com o satélite
@@ -367,16 +377,18 @@ satélite abertas.
   - trocar `compute_comercial_pending`/`serialize_comercial_pending`/`_SEVERITY_ORDER` (`:267-361`)
     por uma closure `_painel_comercial()` dentro de `build_dashboard_summary`, com acesso a `user`,
     `impersonate` e `is_superadmin`;
-  - em `build_dashboard_summary`, `hoje = now_sp().date()` e `corte = corte_dia_sp()` (import tardio
-    `from app.formularios.formularios_ops import corte_dia_sp`, como o `destino_ops` em `:581`),
-    calculados uma vez; `dashboard_cutoff` e `_base_filters` ficam intactos;
-  - `_painel_comercial` chama `cobranca_ops.vendas_desde(corte)` **num `try` próprio**, com
-    `rollback` e log como o `_bloco`:
-    - na falha, devolve `{"corte", "pode_editar_venda", "pending_payments": [],
-      "cobrancas_resumo": None, "sem_valor": None}`, e nunca `comercial: null` para quem tem
-      `show_comercial`;
-    - no sucesso, `pending_payments = cobranca_ops.listar_cobrancas(...)`, com as chaves antigas
-      mais as novas do contrato, `severity` pelo mapa e a ordem do R30;
+  - em `_painel_comercial`, `hoje = now_sp().date()`; `dashboard_cutoff` e `_base_filters` ficam
+    intactos;
+  - **um `try` próprio** (R44, R47), com `rollback` e log como o `_bloco`, cobre juntos:
+    `corte = corte_dia_sp()` (import tardio `from app.formularios.formularios_ops import
+    corte_dia_sp`, como o `destino_ops` em `:581`), `vendas = cobranca_ops.vendas_desde(corte)` e
+    `linhas = cobranca_ops.listar_cobrancas(vendas, hoje)`:
+    - na falha de qualquer um dos três, devolve `{"corte": <iso ou None>, "pode_editar_venda",
+      "pending_payments": [], "cobrancas_resumo": None, "sem_valor": None}`. Nunca
+      `comercial: null` para quem tem `show_comercial`: o `_bloco("comercial")` de fora fica só como
+      rede para defeito no próprio envelope;
+    - no sucesso, `pending_payments = linhas`, com as chaves antigas mais as novas do contrato,
+      `severity` pelo mapa e a ordem do R30;
     - `cobrancas_resumo = {**resumo_por_cor(linhas), "total_em_aberto": soma Decimal}`, num `_bloco`
       interno; na falha dele, `None`, e `pending_payments` continua lista;
   - atualizar a docstring de `build_dashboard_summary` (`:495-506`) e o comentário do gate
@@ -475,7 +487,8 @@ FINANCEIRO.
       `severidade`;
     - "a definir" (`a_definir`) ou "R$ 0,01 (valor simbólico)" (`valor_simbolico`, por `formatBRL`);
     - "já recebeu R$ X" quando `recebido > 0`;
-    - a ação "Pôr o valor" (ou "Abrir" com `pode_editar_venda === false`), levando a
+    - a ação "Pôr o valor", levando a `/events/<event_id>?aba=comercial&editar=venda` (R46,
+      SC-007); com `pode_editar_venda === false`, "Abrir", levando a
       `/events/<event_id>?aba=comercial`;
   - estados:
     - vazio: "Todos os eventos têm valor de venda ✓";
@@ -558,12 +571,21 @@ Comercial; "A definir" na aba; orçamento sobre o R$ 0,01; comissão tardia no m
   aplicar o R22/R38/R42 à comissão **comum**, sem mudar a assinatura. A detecção é pelo valor da
   linha, porque o histórico do evento some com o `flush` dos chamadores (`event_ops.py:786`,
   `orcamento_evento_ops.py:401`). A docstring registra o porquê: nunca cair em mês já fechado.
-  - **Linha nova**, com `sale_date` num mês anterior ao mês corrente de SP: `payable_from = hoje`.
+  - **"O valor chegou depois"** (R45), numa função pequena e documentada,
+    `_valor_chegou_depois(event, hoje) -> bool`: o evento foi cadastrado num mês anterior ao
+    corrente de SP **e** a `sale_date` também está num mês anterior. O `created_at` é UTC ingênuo
+    (`default=datetime.utcnow`, `models.py:257`): converter para `TZ_SP` (`constants.py:287`) antes
+    de comparar o mês. Sem `sale_date`, `False`.
+  - **Linha nova** com o valor chegando depois: `payable_from = hoje`. A venda lançada agora com a
+    data de um mês anterior (cadastro no mês corrente) fica com `payable_from` `NULL`, como hoje.
   - **Linha `a_pagar` com `amount` 0,00** (do valor simbólico) que passa a ter valor real nessa
     condição: `amount` recalculado e `payable_from = hoje`.
-  - **Linha `pago`/`no_banco` com `amount` 0,00**: não conta como `existing`. Nasce uma linha
-    `a_pagar` nova (`payable_from = hoje` se `sale_date` está num mês anterior), e a paga fica
-    intacta.
+  - **Linha `pago`/`no_banco` com `amount` 0,00**: não conta como `existing`, e o corte vai **na
+    própria consulta** (`:698-700`): excluir `status in ('pago', 'no_banco')` com `amount == 0` e
+    ordenar por `CommissionPayment.id.desc()`. Testar depois do `.first()` sem ordem pegaria a
+    linha paga de novo a cada sincronização (inclusive a do `_resync_pending_commissions`, que roda
+    em telas de leitura, `financeiro_read.py:566, :670`) e criaria uma `a_pagar` por vez. Nasce uma
+    linha `a_pagar` nova (`payable_from = hoje` na condição do R45), e a paga fica intacta.
   - **Linha paga com valor real**: nunca muda nem se duplica.
   - **Sincronização seguinte**: não reescreve para `None` um `payable_from` já gravado (hoje
     reescreve em `:736`).
@@ -585,7 +607,8 @@ Comercial; "A definir" na aba; orçamento sobre o R$ 0,01; comissão tardia no m
   - **marca**: botão de alternar "Valor a definir" (`aria-pressed`), no padrão da cortesia
     (`ValoresBlock.tsx:29-46`) e excludente com ela;
   - **valores**: escondidos pelo mesmo `AnimatePresence` (`:48-86`), com a condição `!cortesia &&
-    !aDefinir`, e o texto "O evento fica em “Evento sem valor de venda” até alguém pôr o valor.";
+    !aDefinir`, e o texto "O evento fica em “Sem valor”, na Home, até alguém pôr o valor." (o nome
+    do painel e do card da Home);
   - **aviso** no lugar ao marcar com valor ≥ R$ 1,00: "O valor de R$ X será apagado e a comissão a
     pagar, cancelada.";
   - **foco**: os dois `MoneyInput` (`:60-74`) passam por `Controller`, com `id="sale_value_gross"` /
@@ -615,6 +638,12 @@ Comercial; "A definir" na aba; orçamento sobre o R$ 0,01; comissão tardia no m
     - o quadrinho "Venda" (`:105`) sem mudança (R29);
   - `VendaForm` (`:185-376`): o 400 do `/comercial` (R43) aparece no campo de valor, com o texto do
     servidor;
+  - **aberto pela Home** (R46, SC-007): o `VendaPanel` lê `editar=venda` da URL (`useSearchParams`,
+    como a aba em `EventDetailPage.tsx:186-205`) e começa em edição quando `canEdit`. O `VendaForm`
+    recebe `focarValor` e foca "Valor de venda final" (`sale_value`, `:231`; o `MoneyInput` repassa
+    `ref`). É ele que tira o evento de "Sem valor": o form não deriva o líquido do bruto (R46). Ao
+    salvar ou cancelar, o `editar` sai da URL com `replace`. Sem `canEdit` (FINANCEIRO, satélite),
+    o parâmetro é ignorado;
   - `OrcamentoPanel` (`:511-512, 530`):
     `semVenda = venda.sem_valor ?? (!venda.sale_value && !venda.is_cortesia_permuta)`.
 
@@ -683,6 +712,12 @@ escondidas; cenários 9 a 13 verdes.
     - depois, apagar `SEVERIDADES_URGENTES`;
   - detalhe do card Cobranças: `formatBRL(cobrancas_resumo.total_em_aberto)`; "Em dia ✓" só com
     `cobrancas_resumo` presente e nenhuma linha;
+  - card Sem valor: "Em dia ✓" só com `sem_valor` presente e as duas listas vazias. Nos dois cards,
+    só linhas cinza → número 0, sem ✓ (FR-032);
+  - **o ✓ do card**: hoje o `HomeOverview` (`frontend/apps/internal/src/components/HomeOverview.tsx:35,
+    :72-75`) mostra "Em dia ✓" sempre que `count === 0`, o que poria o ✓ no card em erro e no card só
+    com linhas cinza. `HomeOverviewItem` ganha `emDia?: boolean` (ausente = `count === 0`, e os
+    painéis de operação não mudam); os cards comerciais passam `emDia` = lista presente e vazia;
   - **erro** (`cobrancas_resumo === null` ou `sem_valor === null`): card com o detalhe "Não
     carregou", sem ✓, com número e `noTotal` 0;
   - **servidor antigo** (sem `para_agir`): card e `noTotal` = `count`; sem `total_em_aberto`, a soma
@@ -709,6 +744,19 @@ escondidas; cenários 9 a 13 verdes.
   - **topo**: soma dos cards comerciais + `count` dos painéis de operação == "N pendências no total",
     e uma linha cinza semeada não muda o total;
   - **FINANCEIRO** vê "Abrir";
+  - **2 cliques** (SC-007): da linha "sem valor", "Pôr o valor" abre a aba já em edição, com o foco
+    no valor de venda final; digitar e "Salvar venda", e o corpo do `PATCH /comercial` leva
+    `sale_value` preenchido. Como FINANCEIRO, "Abrir" abre só para leitura;
+  - **saída da linha** (FR-010; História 2, cenário 7): depois de salvar o valor, voltar para a Home
+    e ver a linha sair com a animação, e sem animação com movimento reduzido. No harness, o stub do
+    dashboard devolve a lista sem a linha depois do `PATCH`;
+  - **janela de deploy** (SC-011):
+    - o bundle novo com um payload de servidor antigo (sem `sem_valor`, `cobrancas_resumo`,
+      `para_agir` nem os campos novos da linha): a Home sem erro, Cobranças com as linhas cinza e
+      sem selo (contrato, "Servidor antigo"), sem o painel "Sem valor";
+    - a `DashboardPage.tsx` da `main` (cópia temporária no harness, por `git show main:…`) com o
+      payload novo do `test_client`: o painel "Comercial" de hoje, sem erro. No fim, a cópia é
+      movida para o scratchpad;
   - **painel de Formulários da 298** igual ao de antes. Só o número do card muda de unidade (agora
     linhas para agir), e isso fica registrado no `quickstart.md` §3;
   - **cadastro** com a marca e o foco;
@@ -749,7 +797,8 @@ escondidas; cenários 9 a 13 verdes.
 - [ ] T042 [P] Marcar `specs/051-task-venda-pendente/spec.md` como superada pela 299, com uma linha
   no topo.
 - [ ] T043 `docs/03_HISTORICO_MUTACOES.md`: a entrada 299 no topo e a linha no índice, com:
-  - a motivação e as decisões do dono (15 respostas);
+  - a motivação e as decisões do dono (17 respostas: 7 no specify e no clarify, 4 no plan, 4 no
+    checklist e 2 no analyze);
   - o que mudou;
   - as pegadinhas: o `NULL` do `event_type`, o bundle antigo sem ErrorBoundary, o Google pela
     edição completa, a comissão de R$ 0,00 "paga", e o 344 e os comprovantes duplicados;
@@ -765,7 +814,7 @@ escondidas; cenários 9 a 13 verdes.
     specs/299-sem-valor-cobrancas/dados_pre_deploy_299.py`;
   - entregar a lista ao dono, que confere e corrige;
   - deploy só quando o dono pedir, fora do horário, com o aviso à equipe (`quickstart.md` §0);
-  - depois do deploy, comparar os ids da consulta do SC-001 (no mesmo script) com
+  - depois do deploy, comparar os ids da consulta do SC-001 (no mesmo script, pela data do grupo, como a Home) com
     `comercial.sem_valor` em produção (`quickstart.md` §4) e registrar a consulta do SC-008 para 30
     dias depois.
 

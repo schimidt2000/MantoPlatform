@@ -16,7 +16,7 @@ passa a tratar o grupo como uma venda só, com vencimento explícito, sem alarme
 selos em português. O cadastro aceita "Valor a definir", e a página do evento mostra o mesmo
 recebido e o mesmo saldo do grupo que a Home.
 
-**Abordagem** (detalhe em [research.md](./research.md), R1–R29):
+**Abordagem** (detalhe em [research.md](./research.md), R1–R47):
 
 1. **Um núcleo puro novo, `app/financeiro/cobranca_ops.py`.** Ele resume cada venda (evento avulso,
    ou grupo pelo principal) num `VendaResumo` em `Decimal`:
@@ -37,8 +37,8 @@ recebido e o mesmo saldo do grupo que a Home.
    - Nasce `comercial.sem_valor`.
    - O total do topo passa a usar `para_agir`, calculado no servidor.
 4. **"Valor a definir" é uma marca no corpo do POST/PATCH, e não é gravada.** O servidor grava o valor
-   vazio e pula a validação. Se a comissão nasce num mês posterior ao da data da venda, ela entra no
-   ciclo do mês do valor (`payable_from`, o mesmo mecanismo da EducaManto).
+   vazio e pula a validação. Quando o valor chega depois (o evento foi cadastrado num mês anterior,
+   R45), a comissão entra no ciclo do mês do valor (`payable_from`, o mesmo mecanismo da EducaManto).
 5. **A Home extrai da 298 as peças de lista**: grupo com 6 linhas e saída animada, cores e distância
    em palavras. Com elas monta dois painéis, "Cobranças" e "Sem valor".
 
@@ -98,8 +98,9 @@ staff em desktop
 **Escala/escopo**:
 - **Banco**: nenhuma tabela nem coluna nova.
 - **Endpoints**: nenhum novo. Mudam `GET /api/dashboard`, `GET /api/events/<id>` (e as escritas que
-  devolvem o detalhe), `POST /api/events`, `PATCH /api/events/<id>` e
-  `PATCH /api/events/<id>/orcamento` (regra do valor simbólico).
+  devolvem o detalhe), `POST /api/events`, `PATCH /api/events/<id>`,
+  `PATCH /api/events/<id>/orcamento` (regra do valor simbólico) e
+  `PATCH /api/events/<id>/comercial` (valor simbólico recusado, R43).
 - **Regra de comissão**: `_sync_commission_payment` (`payable_from`).
 - **Telas**:
   - Home: dois painéis e o total do topo;
@@ -116,9 +117,9 @@ staff em desktop
 | II. Padrões de código | Type hints e docstrings Google; funções de até ~30 linhas; constantes novas em `app/constants.py` (`VALOR_MINIMO_DE_VENDA`, `FOLGA_COBRANCA`, `SALDO_VENCE_DIAS_ANTES`, `MARCADORES_COMPROMISSO_INTERNO`, `COBRANCA_COR_*`, textos de selo); `except` sempre com log. TS estrito, sem `any`. Sai o `style` inline da `PendingPaymentRow` (`DashboardPage.tsx:356`). `ruff check` nos tocados e `ruff format` só em `cobranca_ops.py`. |
 | III. Camadas / API First | O núcleo fica em `app/financeiro/cobranca_ops.py`, puro, com "hoje" e corte por argumento. A dependência vai de financeiro para calendar, a direção permitida (`group_ops.py:29-31`). `dashboard_service` e `agenda_read` só serializam. A regra do `enabled` sai de `agenda_read` para o núcleo (`pode_copiar_cobranca`). A regra do satélite na edição completa fica em `update_event_core`, não no endpoint. Nenhum módulo novo em `app/api/`. |
 | IV. Não quebrar o que funciona | Tudo aditivo:<br>• `pending_payments` continua lista e mantém as chaves antigas, com `severity` na união antiga;<br>• as chaves antigas de `cobranca` mantêm nome e tipo;<br>• campos TS opcionais, lidos com fallback.<br><br>Consumidores conferidos: bundle antigo da Home (`DashboardPage.tsx:333-377, 908-919, 1256-1276`), `ResumoSection`, `EventHeader`, `eventDetail.ts`, `EventEditPage`, `verify_174`, `verify_273` e `verify_298`. A extração da 298 é mecânica, e o painel de Formulários é reconferido. |
-| V. UI/UX com feedback | A marca "Valor a definir" no padrão da cortesia e o aviso no lugar ao apagar um valor. O foco real chega ao campo de valor (`Controller` passando `id` e `ref`), no envio e no 400 do servidor. Estados vazios nos dois painéis. Sublista ausente esconde o painel, em vez de mostrar "✓". Botões com o carregamento de hoje. |
+| V. UI/UX com feedback | A marca "Valor a definir" no padrão da cortesia e o aviso no lugar ao apagar um valor. O foco real chega ao campo de valor (`Controller` passando `id` e `ref`), no envio e no 400 do servidor. Estados vazios nos dois painéis. Lista que falhou (`null`) mostra "Não foi possível carregar" com "Tentar de novo", nunca o "✓" (FR-032, R44, R47); lista ausente (`undefined`, servidor antigo na janela de deploy) não desenha o painel. "Pôr o valor" abre a venda já em edição, com o foco no valor de venda final (SC-007, R46). O card só mostra "Em dia ✓" com a lista vazia, nunca em erro (FR-032). Botões com o carregamento de hoje. |
 | VI. Esteira (Nível 1) | Dois domínios (comercial/financeiro e agenda) e três telas: esteira completa, com os artefatos em `specs/299-sem-valor-cobrancas/`. |
-| VII. Living Spec | A spec recebeu 7 respostas no specify e no clarify e 4 no plan (14/09). Qualquer desvio no implement volta primeiro para a `spec.md`. |
+| VII. Living Spec | A spec recebeu 17 respostas do dono em 14/09: 7 no specify e no clarify, 4 no plan, 4 no checklist e 2 no analyze. Qualquer desvio no implement volta primeiro para a `spec.md`. |
 | VIII. Verify antes do núcleo | O `verify_299.py` fica na Foundational do `tasks.md`, depois de os contratos serem congelados, e falha primeiro pelos motivos certos: bloco `sem_valor` ausente e soma por evento. São 17 cenários, e o 16 deve falhar: CASTING sem bloco comercial, e FINANCEIRO criando evento com 403 exato. |
 | IX. Dinheiro BRL | Conta em `Decimal` com `quantize(0.01, ROUND_HALF_UP)` no núcleo e `float` só na serialização. `total_em_aberto` é somado no servidor. Nenhum texto de dinheiro é montado no servidor. A tela usa `formatBRL` e `MoneyInput`. |
 | X. Mobile-first público | Não é superfície pública; mesmo assim a Home é conferida a 375 px (FR-030), com os textos de dinheiro fora de `MetricBadge`, que não quebra linha. |
@@ -140,14 +141,14 @@ contratos, o modelo de dados e o quickstart escritos: continua aprovado.
 specs/299-sem-valor-cobrancas/
 ├── spec.md              # /speckit-specify + clarify + respostas do plan (14/09)
 ├── plan.md              # este arquivo
-├── research.md          # Phase 0 — R1..R29
+├── research.md          # Phase 0 — R1..R29; checklist R30..R41; tarefas R42..R44; analyze R45..R47
 ├── data-model.md        # Phase 1 — VendaResumo, estados, linhas, comissão
 ├── quickstart.md        # Phase 1 — verify, telas, conferência em produção
 ├── contracts/
 │   ├── dashboard-comercial.md   # bloco comercial do /api/dashboard (+ formularios.para_agir)
 │   ├── evento-cobranca.md       # cobranca/venda/pagamentos do detalhe do evento; orçamento
 │   └── api-eventos-valor.md     # valor_a_definir no POST/PATCH, comissão, RBAC
-├── checklists/requirements.md
+├── checklists/{requirements,revisao}.md
 ├── tasks.md             # /speckit-tasks
 └── verify_299.py        # Princípio VIII — escrito antes do núcleo
 ```
@@ -157,7 +158,7 @@ specs/299-sem-valor-cobrancas/
 ```text
 app/constants.py                                   # VALOR_MINIMO_DE_VENDA, FOLGA_COBRANCA, SALDO_VENCE_DIAS_ANTES,
                                                    #   MARCADORES_COMPROMISSO_INTERNO, COBRANCA_COR_*, SELO_*
-app/financeiro/cobranca_ops.py          (novo)     # VendaResumo, recebido_por_evento, principal_da_venda, data_do_grupo,
+app/financeiro/cobranca_ops.py          (novo)     # VendaResumo, comprovantes_por_evento, recebido_da_venda, principal_da_venda, data_do_grupo,
                                                    #   motivo_fora_da_venda, vencimento_do_saldo, cor_por_distancia, selo,
                                                    #   vendas_desde (lote da Home), resumo_da_venda_do_evento (página),
                                                    #   pode_copiar_cobranca, listar_cobrancas, listar_sem_valor
@@ -166,9 +167,10 @@ app/calendar/event_ops.py                          # sem_valor_de_venda, aplicar
 app/calendar/routes.py                             # _validate_event_core: pula valor com a marca; valor e vendedor no satélite
 app/calendar/orcamento_evento_ops.py               # :284 e :404 — valor simbólico conta como "sem venda"
 app/financeiro/comissoes_ops.py                    # _sync_commission_payment: payable_from = hoje para comissão que nasce
-                                                   #   depois do mês da data da venda; não volta a NULL
+                                                   #   quando o valor chega depois (evento cadastrado num mês anterior, R45);
+                                                   #   não volta a NULL
 app/formularios/destino_ops.py                     # listar_sem_destino ganha para_agir (aditivo)
-app/api/dashboard_service.py                       # _painel_comercial dentro de _bloco("comercial"); compute/serialize viram
+app/api/dashboard_service.py                       # _painel_comercial com corte, vendas e cobranças num try próprio (R44, R47); compute/serialize viram
                                                    #   adaptadores; pending_payments estendido; sem_valor; cobrancas_resumo
 app/api/agenda_read.py                             # _compute_cobranca → adaptador do núcleo; venda.sem_valor/valor_simbolico;
                                                    #   pagamentos.outros_do_grupo
@@ -178,6 +180,7 @@ frontend/apps/internal/src/lib/agenda.ts           # cobranca/venda/pagamentos (
 frontend/apps/internal/src/lib/homeListas.ts  (novo)  # Severidade, tom e fundo, diaMes, distanciaDaData(vocabulário)
 frontend/apps/internal/src/components/home/{GrupoDeLinhas,LinhaDaHome,PainelCobrancas,PainelSemValor}.tsx  (novos)
 frontend/apps/internal/src/pages/DashboardPage.tsx # usa as peças extraídas; dois painéis; SectionStat.noTotal; sai PendingPaymentRow
+frontend/apps/internal/src/components/HomeOverview.tsx  # emDia opcional: o ✓ só com a lista vazia (FR-032)
 frontend/apps/internal/src/lib/eventFormSchema.ts  # valor_a_definir; refines
 frontend/apps/internal/src/components/EventFormBlocks/ValoresBlock.tsx  # marca; Controller com id/ref nos MoneyInput
 frontend/apps/internal/src/pages/{EventCreatePage,EventEditPage}.tsx    # corpo com null + marca; hidratação; foco no 400
@@ -221,7 +224,8 @@ specs/299-sem-valor-cobrancas/verify_299.py
    - Invalidação de `['dashboard']`.
 6. **Evento (front).**
    - Cadastro e edição: marca, corpo, hidratação e foco.
-   - Aba Comercial: "A definir", o valor simbólico e o grupo.
+   - Aba Comercial: "A definir", o valor simbólico, o grupo e a venda aberta em edição pelo "Pôr o
+     valor" (R46).
    - Resumo e cabeçalho.
 7. **Portões.**
    - Typecheck e ruff.
@@ -252,7 +256,8 @@ specs/299-sem-valor-cobrancas/verify_299.py
 | Home e página voltam a divergir | Uma função (`resumo_da_venda_do_evento` / `vendas_desde`) sobre a mesma primitiva de recebido; o cenário 15 compara a página com a Home |
 | N+1 na Home | Lote com `selectinload`; nada de `group_events` nem `is_group_leader` por linha; o verify roda com o volume real do espelho |
 | Evento sem tipo (venda de R$ 35.000) sumindo | Nenhuma exclusão de ensaio em SQL; `motivo_fora_da_venda` trata `None` como "não é ensaio" |
-| Comissão cair em mês já pago | `payable_from = hoje` quando a comissão nasce depois do mês da venda, sem voltar a `NULL` na sincronização seguinte (R22); cenário 5d |
+| Comissão cair em mês já pago | `payable_from = hoje` quando o valor chega depois (evento cadastrado e vendido num mês anterior), sem voltar a `NULL` na sincronização seguinte (R22, R45); cenários 5e–5h |
+| Venda lançada na virada do mês indo para o ciclo seguinte | Só adia quando o evento já existia num mês anterior (R45); controle 5j: cadastro de hoje com data do mês anterior fica com `payable_from` `NULL` |
 | Satélite passando a salvar pela edição completa (a marca abre sozinha) | `update_event_core` ignora os campos comerciais do satélite; `_validate_event_core` pula valor e vendedor no satélite; marca travada na tela |
 | Refatorar o painel da 298, em produção | Extração mecânica, sem mudar texto nem comportamento; tela de Formulários reconferida; `verify_298` de novo |
 | Verify escrevendo no Google real pela edição completa | Falsos em `routes.insert_event`, `routes.update_event` e `service.update_event`, e `load_credentials` que estoura (R27) |
@@ -261,6 +266,7 @@ specs/299-sem-valor-cobrancas/verify_299.py
 | Duas definições de "sem valor" (Financeiro com `<= 0`, Home com `< 1`) | Predicado com nome próprio; `docs/04` registra as duas para ninguém "unificar" de passagem |
 | Comprovante sem valor e o 344 duplicado enganando Cobranças no dia | Conferência de dados antes do deploy, decidida pelo dono (R41) |
 | Recusar valor abaixo de R$ 1,00 travando a edição de eventos antigos de R$ 0,01 | A edição que mantém o mesmo valor é aceita (R32); cenário 6 |
+| Os dois painéis comerciais sumindo por uma falha | Corte, vendas e lista de cobranças no mesmo `try`; `comercial: null` só para quem não tem o papel (R44, R47); o cenário 14 força a falha em `vendas_desde` e em `listar_cobrancas` |
 
 ## Rastreamento de complexidade
 

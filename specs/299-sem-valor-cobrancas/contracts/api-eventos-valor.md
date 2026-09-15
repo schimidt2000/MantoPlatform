@@ -33,18 +33,23 @@ A validação roda **antes** do Google e de qualquer escrita (`agenda_write.py:7
 **Comissão** (FR-031, `_sync_commission_payment`):
 - **Sem valor**: não nasce linha, e a linha `a_pagar` existente vira `cancelado`. Isso já é assim
   hoje.
-- **Comissão comum que nasce, ou passa de valor simbólico para valor real**, com `sale_date` num mês
-  anterior ao mês corrente de São Paulo: `payable_from = hoje`. O ciclo de pagamento
-  (`coalesce(payable_from, sale_date, created_at)`) cai no mês em que o valor entrou.
+- **Comissão comum que nasce, ou passa de valor simbólico para valor real, quando o valor chegou
+  depois** (R45): o evento foi cadastrado num mês anterior ao mês corrente de São Paulo (`created_at`,
+  UTC, convertido para SP) **e** a `sale_date` também está num mês anterior. Então `payable_from =
+  hoje`, e o ciclo de pagamento (`coalesce(payable_from, sale_date, created_at)`) cai no mês em que o
+  valor entrou.
+- **Venda lançada agora com data de um mês anterior** (cadastro no mês corrente), ou sem data da
+  venda: `payable_from` fica `NULL`, e o ciclo segue a data da venda, como hoje.
 - **Sincronizações seguintes**: não trocam esse `payable_from` de volta para `NULL`.
 - **Comissão já paga**: nunca é alterada nem duplicada, inclusive quando o valor é apagado ("Valor a
   definir") e reposto depois.
 - **Comissão de R$ 0,00 de venda simbólica** (R42): a detecção é pelo valor da linha, porque o
   histórico do evento some com o `flush` dos chamadores.
-  - **`a_pagar`**: quando o valor real entra, é atualizada, com `payable_from = hoje` se a data da
-    venda está num mês anterior.
-  - **Já `pago`/`no_banco`**: não conta como existente. Nasce uma linha `a_pagar` nova, e a paga
-    fica intacta.
+  - **`a_pagar`**: quando o valor real entra, é atualizada, com `payable_from = hoje` se o valor
+    chegou depois (R45).
+  - **Já `pago`/`no_banco`**: não conta como existente (o corte é na própria consulta, com ordem por
+    id). Nasce uma linha `a_pagar` nova, e a paga fica intacta; a sincronização seguinte não cria
+    outra.
 - **EducaManto**: continua com `payable_from = data da realização`.
 - **Comissões anteriores à publicação**: não mudam.
 
@@ -68,6 +73,9 @@ A validação roda **antes** do Google e de qualquer escrita (`agenda_write.py:7
 - **Valor novo entre R$ 0,01 e R$ 0,99** em `sale_value` ou `sale_value_gross`: **400**, com o mesmo
   texto em `error.fields`. Vale a mesma exceção do valor que já estava gravado.
 - **Tela**: o `VendaForm` mostra o erro no campo de valor.
+- **Aberto pela Home** (R46, SC-007): `?aba=comercial&editar=venda` abre o `VendaForm` direto, com o
+  foco em "Valor de venda final" (o valor que tira o evento de "Sem valor"). Ao salvar ou cancelar, o `editar` sai da URL. Sem permissão para
+  editar, o parâmetro é ignorado.
 - **Gate**: `_can_create_event`, inalterado.
 
 ## Tela (`ValoresBlock`, `EventCreatePage`, `EventEditPage`)
@@ -75,7 +83,8 @@ A validação roda **antes** do Google e de qualquer escrita (`agenda_write.py:7
 - **Marca.** Botão de alternar "Valor a definir" (`aria-pressed`), no padrão da cortesia e excludente
   com ela. Quando marcada:
   - esconde os dois valores com o mesmo `AnimatePresence`;
-  - mostra "O evento fica em “Evento sem valor de venda” até alguém pôr o valor.".
+  - mostra "O evento fica em “Sem valor”, na Home, até alguém pôr o valor." (o nome do painel e do
+    card).
 
   Vendedor, data da venda, transporte e acréscimo continuam à mostra.
 - **Aviso.** Marcar num evento que tinha valor mostra, no lugar, "O valor de R$ X será apagado e a

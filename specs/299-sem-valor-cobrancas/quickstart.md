@@ -22,7 +22,7 @@ O dono confere e corrige o que precisar **antes** de publicar.
 > A Home mudou: o painel "Comercial" virou dois — "Cobranças" e "Sem valor". Cobranças agora mostra
 > todas as vendas com dinheiro a receber, com a data de vencimento, e por isso a lista ficou maior.
 > O número do topo ficou menor porque só conta o que precisa de ação (vermelho e amarelo). Em "Sem
-> valor" estão os eventos lançados sem valor de venda: é só abrir e pôr o valor. No cadastro, quem
+> valor" estão os eventos lançados sem valor de venda: é clicar em "Pôr o valor", digitar e salvar. No cadastro, quem
 > ainda não tem o preço marca "Valor a definir" — não precisa mais pôr R$ 0,01.
 
 ## 1. Ambiente local (PowerShell, na raiz do repositório)
@@ -80,7 +80,10 @@ cd frontend; npm run typecheck; cd ..
    - estado vazio;
    - o total do topo sem as linhas cinza;
    - nenhuma rolagem horizontal;
-   - movimento reduzido ligado.
+   - movimento reduzido ligado;
+   - "Pôr o valor" em 2 cliques: a aba Comercial abre em edição, com o foco no valor de venda
+     final, e o segundo clique é "Salvar venda";
+   - de volta à Home, a linha que ganhou valor sai com a animação.
 2. **Home, como FINANCEIRO** ("Ver como"): a linha "sem valor" oferece "Abrir".
 3. **Regressão da 298**: o painel de Formulários igual ao de antes, com o texto "passou há N dias",
    repetidos e sugestão.
@@ -96,6 +99,12 @@ cd frontend; npm run typecheck; cd ..
    - "A definir" no lugar de R$ 0,00;
    - no principal de um grupo, "Recebido X de Y" com os comprovantes dos outros eventos;
    - no outro evento, o texto do grupo e o link para o principal.
+7. **Janela de deploy** (SC-011):
+   - o bundle novo com um payload de servidor antigo (sem `sem_valor`, `cobrancas_resumo`,
+     `para_agir` nem os campos novos da linha): a Home sem erro, Cobranças com as linhas cinza e sem
+     selo, sem o painel "Sem valor";
+   - a `DashboardPage.tsx` da `main`, numa cópia temporária no harness, com o payload novo: o painel
+     "Comercial" de hoje, sem erro.
 
 ## 4. Depois do deploy (quando o dono pedir)
 

@@ -15,7 +15,7 @@ Lista:
 
 import sys
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 sys.path.insert(0, ".")
@@ -109,26 +109,45 @@ def valores_simbolicos(corte: datetime) -> None:
         print("  nenhum")
 
 
+def data_do_grupo(principal: CalendarEvent) -> date | None:
+    """Data do 1º evento do grupo que não está cancelado nem é compromisso interno (como a Home)."""
+    datas = [
+        evento.start_at.date()
+        for evento in [principal] + list(principal.satellites)
+        if not evento.cancelled_at and not evento.title.lstrip().startswith(MARCADORES)
+    ]
+    return min(datas) if datas else None
+
+
+def venda_sem_valor(evento: CalendarEvent) -> bool:
+    """O principal está sem valor e não tem motivo de ficar fora (cortesia, ensaio, Loja Virtual, 🟧)."""
+    return (
+        (evento.sale_value is None or evento.sale_value < UM_REAL)
+        and not evento.is_cortesia_permuta
+        and (evento.event_type or "") not in ("ENSAIO", "VIRTUAL")
+        and not evento.title.lstrip().startswith(MARCADORES)
+    )
+
+
 def sem_valor_sc001(corte: datetime) -> None:
-    """A consulta do SC-001: vendas sem valor que o painel "Sem valor" deve mostrar."""
+    """A consulta do SC-001: vendas sem valor que o painel "Sem valor" deve mostrar.
+
+    Usa a data do grupo, como a Home: um grupo cujo primeiro evento vivo é anterior à data de início
+    fica fora, mesmo com o principal depois dela.
+    """
     print('\n=== 4. SC-001: vendas sem valor esperadas no painel "Sem valor"')
     candidatos = CalendarEvent.query.filter(
         CalendarEvent.start_at >= corte,
         CalendarEvent.cancelled_at.is_(None),
         CalendarEvent.group_leader_id.is_(None),
     ).all()
-    esperadas = [
-        e
-        for e in candidatos
-        if (e.sale_value is None or e.sale_value < UM_REAL)
-        and not e.is_cortesia_permuta
-        and (e.event_type or "") not in ("ENSAIO", "VIRTUAL")
-        and not e.title.lstrip().startswith(MARCADORES)
-    ]
-    for evento in sorted(esperadas, key=lambda e: e.start_at):
-        print(
-            f"  {evento.id} {evento.start_at:%d/%m/%Y} valor {brl(evento.sale_value)} {evento.title[:45]!r}"
-        )
+    esperadas = []
+    for evento in candidatos:
+        data = data_do_grupo(evento)
+        if data is not None and data >= corte.date() and venda_sem_valor(evento):
+            esperadas.append((data, evento))
+    for data, evento in sorted(esperadas, key=lambda par: (par[0], par[1].id)):
+        print(f"  {evento.id} {data:%d/%m/%Y} valor {brl(evento.sale_value)} {evento.title[:45]!r}")
     print(f"  total: {len(esperadas)}")
 
 

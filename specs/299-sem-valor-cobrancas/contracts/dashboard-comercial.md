@@ -2,7 +2,9 @@
 
 **Gate inalterado.** `show_comercial` (COMERCIAL, FINANCEIRO e SUPERADMIN), sempre pelo papel
 efetivo, que respeita o "Ver como" (`dashboard_service.py:507-516`). `comercial: null` significa sem
-permissão, ou que o painel inteiro falhou. CASTING recebe `null` (cenário 16).
+permissão; CASTING recebe `null` (cenário 16). Uma falha ao ler o corte ou as vendas, ou ao montar a
+lista de cobranças, **nunca** vira `comercial: null`: o bloco vem com `pending_payments: []` e
+`cobrancas_resumo`/`sem_valor` `null` (R44, R47, FR-032).
 
 **Compatibilidade** (R26, SC-011):
 - `pending_payments` é **sempre uma lista** quando `comercial` não é `null`.
@@ -37,7 +39,8 @@ permissão, ou que o painel inteiro falhou. CASTING recebe `null` (cenário 16).
   o mesmo dia de `formularios.contagens.corte`.
 - **`pode_editar_venda`**: o mesmo cálculo do `pode_criar_evento` da 298 (SUPERADMIN real, ou papel
   efetivo em `_CAN_CREATE`). Com `false`, a ação da linha "sem valor" é "Abrir".
-- **`cobrancas_resumo: null` / `sem_valor: null`**: aquela lista falhou (`_bloco` interno). A tela
+- **`cobrancas_resumo: null` / `sem_valor: null`**: aquela lista falhou (a leitura das vendas, que
+  derruba as duas, ou o `_bloco` interno daquela lista). A tela
   mostra "Não foi possível carregar …" com "Tentar de novo" (FR-032), nunca o "✓".
 - **Listas**: vêm **inteiras**. O corte em 6 linhas por lista ou grupo é da tela.
 - **`formularios.para_agir`**: aditivo. Conta as **linhas** vermelhas e amarelas de `a_chegar` mais
@@ -117,13 +120,17 @@ outros eventos já não são grupo e entram um a um.
     dois grupos), no lugar do "💼 Comercial";
   - os dois são montados com `GrupoDeLinhas` e `LinhaDaHome`, extraídos da 298, com 6 linhas por
     lista ou grupo;
-  - as ações levam a `/events/<event_id>?aba=comercial`.
+  - "Abrir cobrança" e "Abrir" levam a `/events/<event_id>?aba=comercial`; "Pôr o valor" leva a
+    `/events/<event_id>?aba=comercial&editar=venda`, que abre a venda já em edição (R46, SC-007).
 - **Cards e total**:
   - o número do card comercial é o `para_agir`, e `SectionStat.noTotal` usa o mesmo número;
   - os painéis de operação continuam com `count`;
   - o contador do painel aberto mostra todas as linhas;
   - "R$ X em aberto" vem de `cobrancas_resumo.total_em_aberto`;
-  - sem cobrança, o card mostra "Em dia ✓" e o painel "Nenhuma cobrança em aberto ✓".
+  - sem cobrança, o card mostra "Em dia ✓" e o painel "Nenhuma cobrança em aberto ✓";
+  - sem evento sem valor, o card "Sem valor" mostra "Em dia ✓" e o painel "Todos os eventos têm valor
+    de venda ✓";
+  - com linhas, mas só cinza, o número do card é 0, sem "✓".
 - **Servidor antigo** (janela de deploy):
   - sem `sem_valor`, não há painel nem card, e nunca aparece o "✓";
   - sem `severidade`, a linha fica cinza e sem selo;
