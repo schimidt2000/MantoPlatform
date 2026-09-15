@@ -16,7 +16,7 @@
 | `valor_a_definir: true`, sem cortesia | grava `sale_value` e `sale_value_gross` como `NULL`, ignora números que venham e **não** gera os erros de valor |
 | `is_cortesia_permuta: true` | a cortesia vence a marca: a venda é gravada como hoje (0 na criação e na edição) |
 | sem a marca, sem cortesia, e valor nulo, 0, ausente ou **abaixo de R$ 1,00** | **400**, com `{"error": {"message": "...", "fields": {"sale_value_gross": "Informe o valor de venda ou marque “Valor a definir”.", "sale_value": "Informe o valor de venda ou marque “Valor a definir”."}}}` |
-| `PATCH` de evento que **já** tinha valor abaixo de R$ 1,00, e o corpo manda o **mesmo** valor | aceito: outras mudanças (título, data...) salvam sem mexer no valor (FR-013). Trocar para outro valor abaixo de R$ 1,00 volta a ser 400 |
+| `PATCH` de evento que **já** tinha valor simbólico (acima de zero e abaixo de R$ 1,00), e o corpo manda o **mesmo** valor, campo a campo (R32) | aceito: outras mudanças (título, data...) salvam sem mexer no valor (FR-013). Trocar para outro valor abaixo de R$ 1,00 volta a ser 400 |
 | vendedor ausente | 400 em `seller_id`, como hoje e também na edição (FR-016), **exceto** no outro evento de um grupo |
 | `PATCH` num outro evento de grupo (satélite) | `update_event_core` **não grava** nenhum campo comercial (valores, vendedor, pagamento, cortesia, data da venda, taxa, NF, transporte, acréscimo). `_validate_event_core` pula valor e vendedor. O resto (título, data, local...) salva normalmente |
 

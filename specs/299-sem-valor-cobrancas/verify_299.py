@@ -628,12 +628,30 @@ def _cen_05_marca_do_ciclo() -> None:
         _sync_commission_payment(ev)
         db.session.commit()
     _garante(_comissoes(e["s5e"])[0][2] == dia_do_evento, "(e'') a data marcada saiu com a troca de vendedor")
+    # A volta de verdade (T071): comum → EducaManto (responsável = o próprio vendedor) → comum.
+    from app.models import SiteSetting
+
     with app.app_context():
-        ev = CalendarEvent.query.get(e["s5e"])
-        linha = CommissionPayment.query.filter_by(event_id=ev.id, status="a_pagar").one()
-        linha.notes = None  # como a linha que sai da EducaManto: data da realização, sem a marca
-        _sync_commission_payment(ev)
-        db.session.commit()
+        settings = SiteSetting.query.get(1)
+        responsavel_antes = settings.educamanto_seller_id
+        try:
+            ev = CalendarEvent.query.get(e["s5e"])
+            titulo = ev.title
+            settings.educamanto_seller_id = estado["comercial_id"]
+            ev.title = f"(EDU) {titulo}"
+            _sync_commission_payment(ev)
+            db.session.flush()
+            linha = CommissionPayment.query.filter_by(event_id=ev.id, status="a_pagar").one()
+            nota_edu, data_edu = linha.notes, linha.payable_from
+            ev.title = titulo
+            _sync_commission_payment(ev)
+            db.session.commit()
+        finally:
+            db.session.rollback()
+            SiteSetting.query.get(1).educamanto_seller_id = responsavel_antes
+            db.session.commit()
+    _garante(data_edu == dia_do_evento and NOTA_CICLO_VALOR_TARDIO not in (nota_edu or ""),
+             f"(e''') o ramo EducaManto deixou a marca do ciclo: {data_edu} {nota_edu}")
     _garante(_comissoes(e["s5e"])[0][2] is None, "(e''') a data da EducaManto passou para o ramo comum")
 
 

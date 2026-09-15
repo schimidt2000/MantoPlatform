@@ -52,7 +52,8 @@ falha com a mensagem "corte do espelho diferente de 01/06".
 - **Cenário 16, o que DEVE ser recusado**:
   - CASTING recebe o dashboard sem o bloco `comercial` e o detalhe do evento sem `cobranca`/`venda`;
   - FINANCEIRO recebe exatamente 403 ao criar evento e ao editar tudo, e nada é gravado;
-  - como controle, COMERCIAL cria com 201 e FINANCEIRO vê a mesma cobrança na Home.
+  - como controle, FINANCEIRO vê a cobrança do grupo na Home e aplica o orçamento dele (200); o
+    COMERCIAL criando com 201 fica no cenário 5(a).
 
 Regressões, rodar de novo e esperar o mesmo verde de antes:
 

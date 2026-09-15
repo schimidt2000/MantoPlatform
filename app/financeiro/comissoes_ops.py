@@ -738,6 +738,20 @@ def _com_marca_do_ciclo(notes: str | None) -> str:
     return f"{notes} | {NOTA_CICLO_VALOR_TARDIO}" if notes else NOTA_CICLO_VALOR_TARDIO
 
 
+def _sem_marca_do_ciclo(notes: str | None) -> str | None:
+    """As notas da linha sem a marca do ciclo da 299.
+
+    O ramo EducaManto regrava `payable_from` com o dia do evento: a marca, que diz "esta data é da
+    299", deixaria de ser verdade, e na volta ao ramo comum a data da EducaManto ficaria (T071).
+    """
+    from app.constants import NOTA_CICLO_VALOR_TARDIO
+
+    if not notes or NOTA_CICLO_VALOR_TARDIO not in notes:
+        return notes
+    partes = [p.strip() for p in notes.split("|")]
+    return " | ".join(p for p in partes if p and p != NOTA_CICLO_VALOR_TARDIO) or None
+
+
 def _ciclo_da_comissao_comum(
     event: CalendarEvent, existing: CommissionPayment | None, amount: Decimal
 ) -> date | None:
@@ -842,8 +856,12 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
             existing.event_title = event.title
             existing.seller_id = beneficiary.id
             existing.payable_from = payable_from
-            if marcar_ciclo:
-                existing.notes = _com_marca_do_ciclo(existing.notes)
+            # A marca acompanha a data: some quando a data deixa de ser a da 299 (T071).
+            existing.notes = (
+                _com_marca_do_ciclo(existing.notes)
+                if marcar_ciclo
+                else _sem_marca_do_ciclo(existing.notes)
+            )
         # Se já está pago, não alteramos o registro histórico
     else:
         db.session.add(CommissionPayment(

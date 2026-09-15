@@ -85,7 +85,7 @@ Transições que tiram a linha da lista (FR-010), com a animação na tela:
 | Regra | Onde | Efeito |
 |---|---|---|
 | "Valor a definir" | `aplicar_valor_a_definir` (`event_ops`) | `sale_value` e `sale_value_gross` gravados `NULL`; a marca não é gravada |
-| Valor abaixo de R$ 1,00 sem a marca | `_validate_event_core` | 400, exceto na edição que mantém o mesmo valor que o evento já tinha |
+| Valor abaixo de R$ 1,00 sem a marca | `_validate_event_core` | 400, exceto na edição que mantém o mesmo valor simbólico (R$ 0,01 a R$ 0,99) que o evento já tinha, campo a campo (R32) |
 | Data da venda | `resolver_data_da_venda(..., a_definir)` | a criação sem data vira hoje (SP); a edição sem data mantém a atual; o evento sem data que ganha valor recebe hoje (como hoje) |
 | Satélite na edição completa | `update_event_core` | nenhum campo comercial é gravado no satélite |
 | Comissão tardia | `_sync_commission_payment` | comissão comum que nasce, ou passa de simbólico para real, quando o valor chegou depois (evento cadastrado num mês anterior ao corrente e `sale_date` também num mês anterior, R45) → `payable_from = hoje`, e não volta a `NULL`; a venda lançada agora com data de um mês anterior segue a `sale_date`, como hoje; a comissão paga de valor real nunca muda nem se duplica; a linha de R$ 0,00 já paga não conta, e nasce uma `a_pagar` nova (R42), só quando a comissão calculada é maior que zero e só na comissão comum; a cortesia nunca comissiona |

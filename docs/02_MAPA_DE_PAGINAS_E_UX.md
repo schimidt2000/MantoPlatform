@@ -479,11 +479,14 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     outros eventos do grupo" (com os links), e o "Quitado" usa a folga de centavos; no satélite,
     "Este evento é parte do grupo … A venda está no <título do principal>" (link), "Recebido no
     grupo …" e "neste evento: R$ W". A cortesia diz "Recebido R$ X · cortesia ou permuta", sem
-    "falta" nem "Quitado". O chip "Recebimento" diz "valor a definir", "cortesia ou permuta" ou "no
-    principal", e o menu "Cobrança" do satélite explica que a cobrança está no principal. O
-    orçamento oferece aplicar valores também sobre o R$ 0,01; para o FINANCEIRO o painel do
-    orçamento continua só leitura (a lista de orçamentos e o vínculo são do vendedor dono). `?editar=venda` abre a venda em edição
-    (é o destino do "Pôr o valor" da Home).
+    "falta" nem "Quitado". Sem valor, "Recebido R$ X · valor de venda a definir" (com o "Inclui R$ X"
+    quando houver), e no outro evento de um grupo cujo principal está sem valor, "Recebido no grupo
+    R$ X · valor de venda a definir" — nunca "de R$ 0,00". O chip "Recebimento" diz, nesta ordem,
+    "valor a definir", "cortesia ou permuta" ou "no principal", e o menu "Cobrança" do satélite
+    explica que a cobrança está no principal. O orçamento oferece aplicar valores também sobre o
+    R$ 0,01; para o FINANCEIRO o painel do orçamento continua só leitura (a lista de orçamentos e o
+    vínculo são do vendedor dono). `?editar=venda` abre a venda em edição (é o destino do "Pôr o
+    valor" da Home).
   - **Aba Histórico**: *Avaliações dos artistas* (média + notas individuais com tags por
     critério) · *Feedback da cliente* · *Log de atividades* (accordion) — **este só existe no DOM
     para `SUPERADMIN`**.

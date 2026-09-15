@@ -524,7 +524,8 @@ confia no resto.
   - Uma comissão já paga nunca é paga de novo nem alterada, inclusive quando alguém marca "Valor a
     definir" e depois repõe o valor.
   - A comissão de R$ 0,00 de uma venda simbólica não conta como paga: quando o valor real entra,
-    nasce a comissão de verdade, no mês do valor.
+    nasce a comissão de verdade, no mês do valor. Isso vale só na comissão comum e com a comissão
+    calculada acima de zero; a EducaManto fica como antes da 299.
   - A regra vale para as comissões que nascerem ou mudarem depois da publicação; as que já existem
     não mudam de ciclo.
   - Cortesia ou permuta nunca comissiona (Session 2026-09-15), mesmo a antiga com valor gravado: a
@@ -650,7 +651,7 @@ com "[TESTE verify 299] pode apagar" no título, e a chamada ao Google trocada p
 |---|---|---|---|
 | 1 | Evento de maio sem valor; evento de maio com valor e saldo; grupo que atravessa 01/06 | nenhum aparece nas listas; o grupo vale pela data do primeiro evento | não |
 | 2 | Vazio, zero, R$ 0,01 e R$ 0,99 contra R$ 1,00; eventos hoje, a 7, 8 e 31 dias e já passados | os quatro primeiros entram em "sem valor" (vazio e zero como a definir) e R$ 1,00 não; o de hoje em "ainda vai acontecer"; 7 dias vermelho, 8 amarelo, 31 cinza; ordem dos dois grupos | não |
-| 3 | Cancelado, ensaio, cortesia, título com 🟧 e com 🟠, Loja Virtual; visita técnica agrupada com um show | nenhum entra em "sem valor"; o grupo é cobrado pelo principal e a data ignora a visita | não |
+| 3 | Cancelado, ensaio, cortesia, título com 🟧 e com 🟠, Loja Virtual; visita técnica agrupada com um show | nenhum entra em "sem valor"; o grupo com a visita aparece em "sem valor" pelo principal, e a data ignora a visita | não |
 | 4 | Grupo: principal com valor; principal sem valor; principal cortesia | outros eventos fora; uma linha do grupo com "grupo de N eventos" e "já recebeu"; grupo fora | não |
 | 5 | Valor a definir | cadastro com a marca cria sem valor e o evento entra na lista; sem valor, ou abaixo de R$ 1,00, sem marca → 400 no campo; vendedor continua obrigatório; pôr o valor pela aba Comercial tira da lista e mantém a data da venda; valor posto agora num evento cadastrado e vendido no mês anterior → comissão no ciclo do mês do valor; venda lançada hoje com data do mês anterior → ciclo da data da venda, como hoje; comissão já paga não é paga de novo | não |
 | 6 | Edição completa e orçamento | evento sem valor salva o título; evento de R$ 0,01 salva o título mantendo o valor e recusa R$ 0,50; outro evento de grupo salva sem gravar a venda; orçamento aplicado sobre R$ 0,01 | não |
