@@ -258,7 +258,13 @@ export function EventEditPage() {
         // de deixar de ser SHOW.
         needs_rehearsal: values.needs_rehearsal,
         sale_value: values.is_cortesia_permuta ? 0 : aDefinir ? null : values.sale_value,
-        sale_value_gross: values.is_cortesia_permuta ? 0 : aDefinir ? null : values.sale_value_gross,
+        // O MoneyInput não tem "vazio": o bruto gravado vazio aparece como 0. Se ninguém mexeu,
+        // volta vazio — senão trocar só o título gravaria 0 por cima do NULL.
+        sale_value_gross: values.is_cortesia_permuta
+          ? 0
+          : aDefinir || (values.valor_original_bruto === null && values.sale_value_gross === 0)
+            ? null
+            : values.sale_value_gross,
         valor_a_definir: aDefinir,
         transport_value: values.transport_value,
         acrescimo_value: values.acrescimo_value,

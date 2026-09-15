@@ -505,7 +505,7 @@ def build_dashboard_summary(
             return bloco
         bloco["pending_payments"] = linhas
         bloco["cobrancas_resumo"] = _bloco(
-            "cobrancas_resumo", lambda: cobranca_ops.resumo_das_cobrancas(linhas)
+            "cobrancas_resumo", lambda: cobranca_ops.resumo_das_cobrancas(linhas, vendas)
         )
         bloco["sem_valor"] = _bloco("sem_valor", lambda: cobranca_ops.listar_sem_valor(vendas, hoje))
         return bloco

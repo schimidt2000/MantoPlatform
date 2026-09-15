@@ -155,7 +155,8 @@ tratamento de comissão (pendente vira `cancelado`; paga gera estorno negativo) 
     - **Comissão tardia**: quando o valor chega depois (evento cadastrado e vendido num mês
       anterior), a comissão entra no ciclo do mês do valor (`payable_from = hoje`, que não volta a
       `NULL`); a venda lançada agora com a data de um mês anterior segue a data da venda. A linha de
-      R$ 0,00 já paga não conta como paga — pagar zero não é pagar —, e a comissão paga de valor
+      R$ 0,00 já paga não conta como paga quando há comissão de verdade a pagar — pagar zero não
+      é pagar; com a comissão calculada também em zero, ela vale —, e a comissão paga de valor
       real nunca é paga de novo.
 
 ### Armadilhas
@@ -163,11 +164,11 @@ tratamento de comissão (pendente vira `cancelado`; paga gera estorno negativo) 
 - **Renomear qualquer `_helper` de `routes.py` quebra a API em silêncio.** 39 símbolos privados são
   importados por 10 módulos, e os imports são **tardios** (dentro das funções) — não aparecem em
   análise estática de topo.
-- **Comissão diverge entre Jinja e React.** O handler Jinja chama `_sync_commission_payment` ao salvar
-  dados comerciais (`routes.py:914`); `event_ops.update_event_comercial` (`:490`) e
-  `update_event_core` (`:299`) gravam `sale_value`/`seller_id` e **não chamam**. Evento criado sem
-  venda e preenchido depois pelo React **nunca gera linha de comissão** —
-  `_resync_pending_commissions` só reconcilia linhas já existentes.
+- ~~Comissão diverge entre Jinja e React~~ — **desatualizado** (conferido na 299):
+  `event_ops.update_event_core` e `update_event_comercial` recebem `sincronizar_comissao` e chamam
+  `_sync_commission_payment` antes do commit, como o handler Jinja; os endpoints de
+  `app/api/agenda_write.py` passam a função. A venda preenchida depois pelo React gera a comissão,
+  no ciclo do invariante 12.
 - ~~Agrupar/desagrupar só existe no Jinja morto~~ — **desatualizado** (corrigido na 299): desde a
   feature 246 a aba Comercial agrupa, desagrupa, tira satélite e nomeia o grupo
   (`group_ops`, `PATCH|DELETE /api/events/<id>/grupo`). `_delete_event_flow` continua recusando o

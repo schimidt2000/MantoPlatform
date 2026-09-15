@@ -728,6 +728,27 @@ def erros_de_valor_de_venda(
     return erros
 
 
+def erros_do_valor_na_aba_comercial(data: dict, event: Any) -> dict[str, str]:
+    """A regra do valor do `PATCH /api/events/<id>/comercial` (feature 299, R43).
+
+    O R$ 0,01 de "segurar a data" também é recusado na aba Comercial — senão o hábito só mudaria do
+    cadastro para a aba. O vazio continua aceito ("a definir"), o valor simbólico que já estava
+    gravado passa para quem só troca a forma de pagamento, e a cortesia não tem valor a conferir.
+
+    Args:
+        data: Corpo já convertido, com `sale_value`, `sale_value_gross` e `is_cortesia_permuta`.
+        event: O evento antes da gravação — os valores gravados valem para a exceção do R32.
+
+    Returns:
+        Campo → mensagem; vazio quando o valor pode ser gravado.
+    """
+    if data.get("is_cortesia_permuta"):
+        return {}
+    return erros_de_valor_de_venda(
+        data, event.sale_value, event.sale_value_gross, vazio_aceito=True
+    )
+
+
 def resolver_data_da_venda(
     informada: date | None,
     venda: Any,

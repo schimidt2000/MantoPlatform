@@ -250,7 +250,7 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
           Este evento é parte do grupo {grupo?.display_name ?? ""}. A venda está no{" "}
           {grupo?.leader ? (
             <Link to={`/events/${grupo.leader.id}?aba=comercial`} className="text-blue underline">
-              evento principal
+              {grupo.leader.title}
             </Link>
           ) : (
             "evento principal"

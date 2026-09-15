@@ -730,6 +730,34 @@ def _ciclo_da_comissao_comum(
     return hoje if nasce_agora and _valor_chegou_depois(event, hoje) else None
 
 
+def _comissao_existente(event_id: int, *, ignorar_zero_pago: bool) -> CommissionPayment | None:
+    """A linha de comissão viva do evento: a mais recente, fora as canceladas.
+
+    Feature 299 (R42): havendo comissão de verdade a pagar agora, a linha de R$ 0,00 JÁ PAGA de
+    uma venda simbólica não conta — pagar zero não é pagar, e a comissão nasce quando o valor real
+    entra. Quando a comissão calculada também é zero (taxa 0%), a paga continua valendo: sem isso,
+    cada pagamento abriria uma linha nova de R$ 0,00. O corte vai NA CONSULTA, com ordem por id:
+    testar depois do `.first()` pegaria a paga de novo a cada sincronização (inclusive a de
+    `_resync_pending_commissions`) e criaria uma `a_pagar` por vez.
+
+    Args:
+        event_id: O evento.
+        ignorar_zero_pago: A comissão calculada agora é maior que zero.
+
+    Returns:
+        A linha, ou ``None`` quando a comissão ainda não existe.
+    """
+    consulta = CommissionPayment.query.filter_by(event_id=event_id).filter(
+        CommissionPayment.status != "cancelado"
+    )
+    if ignorar_zero_pago:
+        zero_ja_pago = CommissionPayment.status.in_(("pago", "no_banco")) & (
+            CommissionPayment.amount == 0
+        )
+        consulta = consulta.filter(~zero_ja_pago)
+    return consulta.order_by(CommissionPayment.id.desc()).first()
+
+
 def _sync_commission_payment(event: CalendarEvent) -> None:
     """Cria ou atualiza o CommissionPayment de um evento. Não faz commit."""
     # Loja Virtual não gera linha de comissão (feature 205, FR-054). O corte é aqui, na origem:
@@ -738,20 +766,6 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
 
     if is_loja_virtual(event):
         return
-
-    # Feature 299 (R42): a linha de R$ 0,00 JÁ PAGA de uma venda simbólica não conta — pagar zero
-    # não é pagar, e a comissão de verdade nasce quando o valor real entra. O corte vai NA
-    # CONSULTA, com ordem por id: testar depois do `.first()` pegaria a paga de novo a cada
-    # sincronização (inclusive a de `_resync_pending_commissions`) e criaria uma `a_pagar` por vez.
-    zero_ja_pago = CommissionPayment.status.in_(("pago", "no_banco")) & (
-        CommissionPayment.amount == 0
-    )
-    existing = (
-        CommissionPayment.query.filter_by(event_id=event.id)
-        .filter(CommissionPayment.status != "cancelado", ~zero_ja_pago)
-        .order_by(CommissionPayment.id.desc())
-        .first()
-    )
 
     settings = SiteSetting.query.get(1)
     beneficiary = _commission_beneficiary(event, settings)
@@ -764,6 +778,8 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
         # no evento recriaria a comissão que `aplicar_estorno_comissao` acabou de estornar.
         and not event.is_cancelled
     )
+    amount = _event_commission(event, settings) if should_have else 0
+    existing = _comissao_existente(event.id, ignorar_zero_pago=amount > 0)
 
     if not should_have:
         if existing and existing.status == "a_pagar":
@@ -774,7 +790,6 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
     # Comissão EducaManto (feature 109): só entra no ciclo de pagamento após a realização —
     # payable_from = data do evento. Comissão comum: ciclo pela sale_date, salvo o valor que chegou
     # depois (feature 299, `_ciclo_da_comissao_comum`).
-    amount = _event_commission(event, settings)
     is_edu_com_responsavel = event.is_educamanto and _educamanto_responsavel(settings) is not None
     if is_edu_com_responsavel and event.start_at is not None:
         payable_from = event.start_at.date()

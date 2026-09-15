@@ -292,7 +292,8 @@ do topo somava tudo, inclusive o que era só informação.
 - Valor abaixo de R$ 1,00 sem "Valor a definir" é recusado (também na aba Comercial); o evento
   que já está com R$ 0,01 salva outras mudanças sem ninguém mexer no valor.
 - Comissão tardia no mês do valor, só quando o evento já existia antes, sem valor — a venda
-  lançada na virada do mês segue a data da venda. A de R$ 0,00 "paga" não conta.
+  lançada na virada do mês segue a data da venda. A de R$ 0,00 "paga" não conta quando há
+  comissão de verdade a pagar.
 - Os dados que podem enganar as listas (344 e os outros duplicados, comprovantes sem valor) são
   conferidos pelo dono **antes** do deploy.
 
@@ -318,6 +319,8 @@ esteira: `627cad4` spec, `5b43959` plano, `72409ef` checklist, `1a2876b` tarefas
 4. **A comissão de R$ 0,00 "paga"** da venda simbólica bloqueava a de verdade. O corte vai na
    própria consulta, com ordem por id: testar depois do `.first()` duplicaria a comissão a cada
    `_resync_pending_commissions` (achado da verificação das correções do analyze; cenário 5h').
+   Na convergência o corte ficou restrito à comissão calculada acima de zero: com taxa 0%, ignorar
+   a paga abriria uma linha nova de R$ 0,00 a cada pagamento.
 5. **`created_at` é UTC ingênuo**: o mês de cadastro do R45 é tirado em São Paulo.
 6. **"Pôr o valor" foca o valor de venda final, não o bruto**: o `VendaForm` não deriva um do outro,
    e quem digitasse só o bruto salvaria e continuaria em "Sem valor".

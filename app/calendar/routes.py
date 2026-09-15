@@ -3220,7 +3220,10 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
 
 
 def _validate_event_core(
-    data: dict, valor_atual=None, bruto_atual=None, satelite: bool = False
+    data: dict,
+    valor_atual: Decimal | None = None,
+    bruto_atual: Decimal | None = None,
+    satelite: bool = False,
 ) -> dict[str, str]:
     """Valida os campos essenciais/financeiros da criação de evento (feature 152).
 

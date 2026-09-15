@@ -505,12 +505,21 @@ def resumo_por_cor(linhas: list[dict[str, Any]]) -> dict[str, Any]:
     return {"por_cor": por_cor, "para_agir": por_cor[COR_VERMELHO] + por_cor[COR_AMARELO]}
 
 
-def resumo_das_cobrancas(linhas: list[dict[str, Any]]) -> dict[str, Any]:
+def resumo_das_cobrancas(linhas: list[dict[str, Any]], vendas: list[VendaResumo]) -> dict[str, Any]:
     """O `cobrancas_resumo`: contagem por cor, `para_agir` e o dinheiro em aberto de todas as linhas.
 
-    O total soma em `Decimal` (a partir do `saldo` já arredondado) e vira `float` só no fim.
+    O total soma em `Decimal` o saldo das vendas de cada linha — não o `saldo` da linha, que já é
+    `float` de serialização — e vira `float` só no fim.
+
+    Args:
+        linhas: As linhas de `listar_cobrancas`.
+        vendas: As vendas de onde as linhas saíram (`vendas_desde`).
+
+    Returns:
+        `por_cor`, `para_agir` e `total_em_aberto`.
     """
-    total = sum((Decimal(str(linha["saldo"])) for linha in linhas), Decimal("0"))
+    saldos = {venda.principal.id: venda.saldo for venda in vendas}
+    total = sum((saldos[linha["event_id"]] for linha in linhas), Decimal("0"))
     return {**resumo_por_cor(linhas), "total_em_aberto": float(_dinheiro(total))}
 
 

@@ -59,7 +59,8 @@ export function useSyncEvent(eventId: number) {
 
 /**
  * Exclui o evento (feature 151). RBAC no servidor: `_CAN_DELETE` (Comercial/Superadmin); um evento
- * líder de grupo é recusado (409). Ao suceder, remove o cache do evento e invalida a agenda; a
+ * líder de grupo é recusado (409). Ao suceder, remove o cache do evento e invalida a agenda e a
+ * Home (feature 299: o evento excluído sai de "Cobranças" e "Sem valor" sem esperar o cache); a
  * navegação de volta fica com o componente.
  */
 export function useDeleteEvent(eventId: number) {
@@ -73,6 +74,7 @@ export function useDeleteEvent(eventId: number) {
       queryClient.removeQueries({ queryKey: ["event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }

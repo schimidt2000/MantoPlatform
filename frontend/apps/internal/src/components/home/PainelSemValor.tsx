@@ -103,7 +103,12 @@ export function PainelSemValor({
           )}
         </div>
       )}
-      {desde && <p className="mt-3 text-xs text-muted">Eventos desde {desde}, fora cortesia e compromisso interno.</p>}
+      {desde && (
+        <p className="mt-3 text-xs text-muted">
+          Eventos desde {desde}. Ficam fora: cortesia, ensaio, compromisso interno (🟧 🟠), Loja
+          Virtual, cancelados e os outros eventos de um grupo.
+        </p>
+      )}
     </>
   );
 }

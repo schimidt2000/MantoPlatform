@@ -262,7 +262,11 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     "Abrir".
   - **Cards e total**: o número dos cards comerciais — e, desde a 299, também o de Formulários — é o
     de linhas para agir (vermelhas e amarelas); "N pendências no total" soma esses números e o
-    `count` dos painéis de operação; "R$ X em aberto" soma todas as cobranças, cinza inclusive.
+    `count` dos painéis de operação; "R$ X em aberto" soma todas as cobranças, cinza inclusive. O
+    card "Sem valor" diz embaixo "N eventos sem valor desde DD/MM" (todas as linhas, cinza
+    inclusive), como o "N formulários sem evento desde DD/MM" do card de Formulários; o rodapé do
+    painel lista o que fica fora (cortesia, ensaio, compromisso interno, Loja Virtual, cancelados e
+    os outros eventos de um grupo).
   - **Estados**: vazio "Nenhuma cobrança em aberto ✓" / "Todos os eventos têm valor de venda ✓"
     (card "Em dia ✓"; só cinza = 0 sem ✓). A lista que não carregou mostra "Não foi possível
     carregar …" com "Tentar de novo": o painel nasce aberto, o cabeçalho diz "não carregou", o card
