@@ -686,6 +686,50 @@ def _event_commission(event, settings) -> Decimal:
     )
 
 
+def _valor_chegou_depois(event: CalendarEvent, hoje: date) -> bool:
+    """O valor da venda chegou depois (feature 299, R45, decisão do dono no analyze).
+
+    É o evento cadastrado num mês anterior ao corrente E com a data da venda também num mês
+    anterior — o lançado com "Valor a definir" (ou com R$ 0,01) que ganha o valor semanas depois. A
+    venda lançada agora com a data de um mês anterior (a virada do mês) NÃO é: o ciclo dela segue a
+    data da venda, como sempre. Sem data da venda, nunca.
+
+    `created_at` é UTC ingênuo (`default=datetime.utcnow`): o mês é tirado no fuso de São Paulo.
+    """
+    from datetime import UTC
+
+    from app.constants import TZ_SP
+
+    if not event.sale_date or not event.created_at:
+        return False
+    cadastro = event.created_at.replace(tzinfo=UTC).astimezone(TZ_SP).date()
+    mes_corrente = (hoje.year, hoje.month)
+    return (cadastro.year, cadastro.month) < mes_corrente and (
+        event.sale_date.year,
+        event.sale_date.month,
+    ) < mes_corrente
+
+
+def _ciclo_da_comissao_comum(
+    event: CalendarEvent, existing: CommissionPayment | None, amount: Decimal
+) -> date | None:
+    """`payable_from` da comissão comum (feature 299, R22/R42/R45).
+
+    - Comissão que NASCE agora (linha nova, ou a de R$ 0,00 da venda simbólica ganhando valor real)
+      com o valor chegando depois → hoje: entra no ciclo do mês em que o valor foi posto, nunca num
+      mês já fechado. A data da venda não muda.
+    - Uma data já gravada nunca volta a `None` nas sincronizações seguintes (antes voltava).
+    - Fora isso, `None`: o ciclo segue a data da venda, como sempre.
+    """
+    from app.constants import now_sp
+
+    if existing is not None and existing.payable_from is not None:
+        return existing.payable_from
+    nasce_agora = existing is None or (not existing.amount and amount > 0)
+    hoje = now_sp().date()
+    return hoje if nasce_agora and _valor_chegou_depois(event, hoje) else None
+
+
 def _sync_commission_payment(event: CalendarEvent) -> None:
     """Cria ou atualiza o CommissionPayment de um evento. Não faz commit."""
     # Loja Virtual não gera linha de comissão (feature 205, FR-054). O corte é aqui, na origem:
@@ -695,9 +739,19 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
     if is_loja_virtual(event):
         return
 
-    existing = CommissionPayment.query.filter_by(event_id=event.id).filter(
-        CommissionPayment.status != "cancelado"
-    ).first()
+    # Feature 299 (R42): a linha de R$ 0,00 JÁ PAGA de uma venda simbólica não conta — pagar zero
+    # não é pagar, e a comissão de verdade nasce quando o valor real entra. O corte vai NA
+    # CONSULTA, com ordem por id: testar depois do `.first()` pegaria a paga de novo a cada
+    # sincronização (inclusive a de `_resync_pending_commissions`) e criaria uma `a_pagar` por vez.
+    zero_ja_pago = CommissionPayment.status.in_(("pago", "no_banco")) & (
+        CommissionPayment.amount == 0
+    )
+    existing = (
+        CommissionPayment.query.filter_by(event_id=event.id)
+        .filter(CommissionPayment.status != "cancelado", ~zero_ja_pago)
+        .order_by(CommissionPayment.id.desc())
+        .first()
+    )
 
     settings = SiteSetting.query.get(1)
     beneficiary = _commission_beneficiary(event, settings)
@@ -718,15 +772,14 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
         return
 
     # Comissão EducaManto (feature 109): só entra no ciclo de pagamento após a realização —
-    # payable_from = data do evento. Comissão comum fica NULL (ciclo pela sale_date).
-    is_edu_com_responsavel = event.is_educamanto and _educamanto_responsavel(settings) is not None
-    payable_from = (
-        event.start_at.date()
-        if is_edu_com_responsavel and event.start_at is not None
-        else None
-    )
-
+    # payable_from = data do evento. Comissão comum: ciclo pela sale_date, salvo o valor que chegou
+    # depois (feature 299, `_ciclo_da_comissao_comum`).
     amount = _event_commission(event, settings)
+    is_edu_com_responsavel = event.is_educamanto and _educamanto_responsavel(settings) is not None
+    if is_edu_com_responsavel and event.start_at is not None:
+        payable_from = event.start_at.date()
+    else:
+        payable_from = _ciclo_da_comissao_comum(event, existing, amount)
     if existing:
         if existing.status == "a_pagar":
             existing.amount = amount

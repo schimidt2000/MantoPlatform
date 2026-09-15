@@ -523,7 +523,7 @@ Comercial; "A definir" na aba; orçamento sobre o R$ 0,01; comissão tardia no m
 
 **Verificação da história**: cenários 5 e 6 em PASS; cadastro, edição e aba Comercial abertos.
 
-- [ ] T019 [US3] Em `app/calendar/event_ops.py`:
+- [x] T019 [US3] Em `app/calendar/event_ops.py`:
   - **`aplicar_valor_a_definir(data: dict) -> None`**: com `data.get("valor_a_definir")` e sem
     cortesia, `sale_value = sale_value_gross = None`;
   - **`resolver_data_da_venda(..., a_definir: bool = False)`** (`:652-684`), estendida (R21) sem
@@ -536,7 +536,7 @@ Comercial; "A definir" na aba; orçamento sobre o R$ 0,01; comissão tardia no m
     - quando `event.is_satellite`, não grava nenhum campo comercial (a lista de
       `group_ops.SATELLITE_FIELDS_CLEARED`, `group_ops.py:47-52`), com um comentário apontando o
       `/comercial`, que já recusa satélite.
-- [ ] T020 [US3] Em `app/calendar/routes.py`:
+- [x] T020 [US3] Em `app/calendar/routes.py`:
   - `_validate_event_core` (`:3222`; blocos de valor e vendedor em `:3264-3271`) ganha os
     parâmetros opcionais `valor_atual=None`, `bruto_atual=None` e `satelite=False`;
   - pula os erros de valor quando `data.get("valor_a_definir")` ou `satelite`;
@@ -550,7 +550,7 @@ Comercial; "A definir" na aba; orçamento sobre o R$ 0,01; comissão tardia no m
     `a_definir=bool(data.get("valor_a_definir")) and not data.get("is_cortesia_permuta")` ao
     `resolver_data_da_venda`;
   - a criação Jinja (`:4008`) e o `/basico` chamam sem os parâmetros novos.
-- [ ] T021 [US3] Em `app/api/agenda_write.py`:
+- [x] T021 [US3] Em `app/api/agenda_write.py`:
   - `_build_create_event_data` (`:696-730`) e `_build_update_event_data` (`:854-878`) repassam
     `"valor_a_definir": bool(body.get("valor_a_definir"))` e chamam
     `event_ops.aplicar_valor_a_definir`;
@@ -561,13 +561,13 @@ Comercial; "A definir" na aba; orçamento sobre o R$ 0,01; comissão tardia no m
     - valor entre 0,01 e 0,99 é recusado com 400 em `sale_value`/`sale_value_gross`, salvo quando é
       igual ao gravado;
   - a ordem guarda → validação → Google (`:753-802`) não muda (o cenário 14a da 298 depende dela).
-- [ ] T022 [P] [US3] Em `app/calendar/orcamento_evento_ops.py`, em `aplicar_valores_do_orcamento`
+- [x] T022 [P] [US3] Em `app/calendar/orcamento_evento_ops.py`, em `aplicar_valores_do_orcamento`
   (`:284`) e na mensagem `valores_ignorados` (`:404`), trocar a checagem `event.sale_value` por
   `not event_ops.sem_valor_de_venda(event.sale_value)`. A trava de cortesia continua antes, porque o
   `verify_273.py:430-444` a exige.
-- [ ] T023 [P] [US3] Em `app/api/agenda_read.py`, no bloco `venda` (`:916-950`), acrescentar
+- [x] T023 [P] [US3] Em `app/api/agenda_read.py`, no bloco `venda` (`:916-950`), acrescentar
   `sem_valor`, `a_definir` e `valor_simbolico` pelos predicados do T005, fora cortesia.
-- [ ] T024 [P] [US3] Em `app/financeiro/comissoes_ops.py`, `_sync_commission_payment` (`:689-747`),
+- [x] T024 [P] [US3] Em `app/financeiro/comissoes_ops.py`, `_sync_commission_payment` (`:689-747`),
   aplicar o R22/R38/R42 à comissão **comum**, sem mudar a assinatura. A detecção é pelo valor da
   linha, porque o histórico do evento some com o `flush` dos chamadores (`event_ops.py:786`,
   `orcamento_evento_ops.py:401`). A docstring registra o porquê: nunca cair em mês já fechado.
@@ -590,7 +590,7 @@ Comercial; "A definir" na aba; orçamento sobre o R$ 0,01; comissão tardia no m
   - **Sincronização seguinte**: não reescreve para `None` um `payable_from` já gravado (hoje
     reescreve em `:736`).
   - **EducaManto**: sem mudança.
-- [ ] T025 [P] [US3] Em `frontend/apps/internal/src/lib/eventFormSchema.ts`:
+- [x] T025 [P] [US3] Em `frontend/apps/internal/src/lib/eventFormSchema.ts`:
   - campos ocultos em `DEFAULT_EVENT_FORM_VALUES` (`:75-95`): `valor_a_definir: z.boolean()`,
     `valor_original: z.number().nullable()`, `valor_original_bruto: z.number().nullable()` e
     `satelite: z.boolean()`;
@@ -599,10 +599,10 @@ Comercial; "A definir" na aba; orçamento sobre o R$ 0,01; comissão tardia no m
     do servidor;
   - o vendedor (`:22`) passa a `satelite || seller_id !== ""`;
   - `FIELD_ORDER` e `SERVER_FIELD_MAP` sem mudança.
-- [ ] T026 [P] [US3] Em `frontend/apps/internal/src/lib/eventCreate.ts` (`:119-177`), em
+- [x] T026 [P] [US3] Em `frontend/apps/internal/src/lib/eventCreate.ts` (`:119-177`), em
   `EventCreateInput`/`EventUpdateInput`: `sale_value` e `sale_value_gross` passam a `number | null`,
   e entra `valor_a_definir?: boolean`.
-- [ ] T027 [US3] Depois do T025, em
+- [x] T027 [US3] Depois do T025, em
   `frontend/apps/internal/src/components/EventFormBlocks/ValoresBlock.tsx` e `PagamentoBlock.tsx`:
   - **marca**: botão de alternar "Valor a definir" (`aria-pressed`), no padrão da cortesia
     (`ValoresBlock.tsx:29-46`) e excludente com ela;
@@ -616,12 +616,12 @@ Comercial; "A definir" na aba; orçamento sobre o R$ 0,01; comissão tardia no m
   - **satélite** (props `satelite` e `principal`): a marca fica marcada e travada; vendedor, data da
     venda (`ValoresBlock.tsx:121-145`) e forma de pagamento (`PagamentoBlock.tsx`) ficam escondidos,
     com "A venda deste grupo mora no evento principal" e o link.
-- [ ] T028 [US3] Em `frontend/apps/internal/src/pages/EventCreatePage.tsx`:
+- [x] T028 [US3] Em `frontend/apps/internal/src/pages/EventCreatePage.tsx`:
   - corpo (`:408-413`): `sale_value: cortesia ? 0 : aDefinir ? null : valor`, o mesmo para o
     `gross`, e `valor_a_definir: !cortesia && aDefinir`;
   - `onError` (`:481-493`): depois do `setError`, focar e rolar até o primeiro campo de
     `error.fields`, pela ordem de `FIELD_ORDER`.
-- [ ] T029 [US3] Em `frontend/apps/internal/src/pages/EventEditPage.tsx`:
+- [x] T029 [US3] Em `frontend/apps/internal/src/pages/EventEditPage.tsx`:
   - hidratação (`:107-138`, em especial `:125-127`):
     - `valor_a_definir = !cortesia && (sale_value == null || sale_value === 0)`;
     - `valor_original = sale_value` e `valor_original_bruto = sale_value_gross`;
@@ -630,7 +630,7 @@ Comercial; "A definir" na aba; orçamento sobre o R$ 0,01; comissão tardia no m
       `ValoresBlock`;
   - corpo (`:245-250`) como no cadastro;
   - `onError` (`:306-319`) com o mesmo foco.
-- [ ] T030 [US3] Em `frontend/apps/internal/src/components/EventDetail/ComercialSection.tsx`:
+- [x] T030 [US3] Em `frontend/apps/internal/src/components/EventDetail/ComercialSection.tsx`:
   - `VendaPanel` (`:756-828`):
     - `venda.a_definir` → "A definir";
     - `valor_simbolico` → o valor com o `Badge` "valor simbólico";

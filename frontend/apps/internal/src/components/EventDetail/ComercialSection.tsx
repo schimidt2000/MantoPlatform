@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Pencil } from "lucide-react";
 import { Badge, Button } from "@manto/ui";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
@@ -182,9 +182,24 @@ function KpiGrid({ data }: { data: EventoDetalhe }) {
  * em clientes (que têm o seu próprio painel logo acima). Cortesia/permuta zera a venda no
  * servidor, então o formulário esconde os valores quando ela está marcada.
  */
-function VendaForm({ data, onClose }: { data: EventoDetalhe; onClose: () => void }) {
+function VendaForm({
+  data,
+  onClose,
+  focarValor = false,
+}: {
+  data: EventoDetalhe;
+  onClose: () => void;
+  /** Aberto pelo "Pôr o valor" da Home: o foco já vai para o valor de venda final (feature 299). */
+  focarValor?: boolean;
+}) {
   const venda = data.venda!;
   const salvar = useUpdateEventComercial(data.event.id);
+  // O valor de venda final (e não o bruto) é o que tira o evento de "Sem valor": o formulário não
+  // deriva um do outro, e quem digitasse só o bruto salvaria e continuaria na lista (R46).
+  const refValor = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focarValor) refValor.current?.focus();
+  }, [focarValor]);
   const options = useEventCreateOptions();
   const [form, setForm] = useState<EventComercialInput>(() => ({
     sale_value: venda.sale_value,
@@ -202,6 +217,11 @@ function VendaForm({ data, onClose }: { data: EventoDetalhe; onClose: () => void
 
   const set = <K extends keyof EventComercialInput>(key: K, value: EventComercialInput[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  // O 400 do valor (feature 299, R43: R$ 0,01 não é venda) aparece no campo, com o texto do
+  // servidor — e não só como "Corrija os campos destacados" no rodapé.
+  const camposDoErro = salvar.error instanceof ApiRequestError ? salvar.error.fields : undefined;
+  const erroDoValor = camposDoErro?.sale_value ?? camposDoErro?.sale_value_gross;
 
   return (
     <div className="space-y-3">
@@ -227,15 +247,24 @@ function VendaForm({ data, onClose }: { data: EventoDetalhe; onClose: () => void
             />
           </div>
           <div>
-            <label className={LABEL_CLASS}>Valor de venda final</label>
+            <label className={LABEL_CLASS} htmlFor="venda-valor">
+              Valor de venda final
+            </label>
             <MoneyInput
-              className={MONEY_CLASS}
+              id="venda-valor"
+              ref={refValor}
+              className={`${MONEY_CLASS} ${erroDoValor ? "border-red" : ""}`}
               value={form.sale_value ?? 0}
               onValueChange={(v) => set("sale_value", v)}
               aria-label="Valor de venda final"
             />
           </div>
         </div>
+      )}
+      {erroDoValor && (
+        <p role="alert" className="text-sm text-red">
+          {erroDoValor}
+        </p>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -508,8 +537,10 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
   const [trocando, setTrocando] = useState(false);
   const [duracao, setDuracao] = useState<string>("");
   const [relatorio, setRelatorio] = useState<RelatorioOrcamento | null>(null);
-  // Cortesia/permuta grava venda 0 de propósito: não é "sem venda" para aplicar valores.
-  const semVenda = !venda.sale_value && !venda.is_cortesia_permuta;
+  // Cortesia/permuta grava venda 0 de propósito: não é "sem venda" para aplicar valores. Desde a
+  // 299 o valor simbólico (R$ 0,01) conta como "sem venda" — é pelo orçamento que ele vira venda.
+  // Sem a chave (servidor antigo), a regra de antes.
+  const semVenda = venda.sem_valor ?? (!venda.sale_value && !venda.is_cortesia_permuta);
 
   function enviar(id: number | null, extra: { aplicar_valores_duracao?: number | null } = {}) {
     setRelatorio(null);
@@ -755,7 +786,11 @@ function PreContratoPanel({ data }: { data: EventoDetalhe }) {
 /** Dados da venda: valores, acréscimos e responsável (leitura + edição inline). */
 function VendaPanel({ data }: { data: EventoDetalhe }) {
   const venda = data.venda;
-  const [editando, setEditando] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // "Pôr o valor", na Home, abre a venda já em edição (feature 299, SC-007: dois cliques — este e
+  // "Salvar venda"). Sem permissão de editar, o parâmetro é ignorado.
+  const pedeEdicao = searchParams.get("editar") === "venda";
+  const [editando, setEditando] = useState(pedeEdicao);
   if (!venda) return null;
   const bruto = venda.sale_value_gross ?? 0;
   const liquido = venda.sale_value ?? 0;
@@ -764,10 +799,25 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
   // PATCH com 409. Sem esta trava o botão existia, a pessoa preenchia e só descobria no envio.
   const canEdit = Boolean(data.flags.can_edit_core) && !data.event.is_satellite;
 
-  if (editando) {
+  // Ao salvar ou cancelar, o `editar` sai da URL (preservando a aba) — senão recarregar a página
+  // reabriria a edição.
+  const fechar = () => {
+    setEditando(false);
+    if (!pedeEdicao) return;
+    setSearchParams(
+      (atual) => {
+        const proximo = new URLSearchParams(atual);
+        proximo.delete("editar");
+        return proximo;
+      },
+      { replace: true },
+    );
+  };
+
+  if (editando && canEdit) {
     return (
       <Panel title="Comercial — dados da venda">
-        <VendaForm data={data} onClose={() => setEditando(false)} />
+        <VendaForm data={data} onClose={fechar} focarValor={pedeEdicao} />
       </Panel>
     );
   }
@@ -791,8 +841,37 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
             <span className="text-red">− {brl(desconto)}</span>
           </DataRow>
         )}
+        {/* Feature 299: vazio ou zero é "A definir", nunca "R$ 0,00"; o R$ 0,01 aparece como está,
+            marcado; no outro evento de um grupo a venda mora no principal. O quadrinho "Venda" do
+            Resultado continua com o número, porque é indicador financeiro. */}
         <DataRow label="Valor de venda final">
-          <span className="font-semibold tabular-nums">{brl(liquido)}</span>
+          {data.event.is_satellite ? (
+            <span>
+              no evento principal
+              {data.event.group?.leader && (
+                <>
+                  {" — "}
+                  <Link
+                    to={`/events/${data.event.group.leader.id}?aba=comercial`}
+                    className="text-blue underline"
+                  >
+                    abrir
+                  </Link>
+                </>
+              )}
+            </span>
+          ) : venda.a_definir ? (
+            <span className="font-semibold text-gold-ink">A definir</span>
+          ) : (
+            <span className="font-semibold tabular-nums">
+              {brl(liquido)}
+              {venda.valor_simbolico && (
+                <Badge tone="gold" className="ml-2">
+                  valor simbólico
+                </Badge>
+              )}
+            </span>
+          )}
         </DataRow>
         {venda.transport_value ? (
           <DataRow label="Transporte">{brl(venda.transport_value)}</DataRow>

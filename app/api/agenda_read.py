@@ -921,9 +921,17 @@ def serialize_event_detail(
             entry_orc = OrcamentoHistory.query.get(orcamento_history_id)
             if entry_orc is not None:
                 orcamento_resumo = resumo_do_orcamento(entry_orc)
+        from app.calendar.event_ops import sem_valor_de_venda, valor_a_definir, valor_simbolico
+
+        # Feature 299: a aba Comercial mostra "A definir" (vazio ou zero) e marca o valor
+        # simbólico. Os três ficam falsos na cortesia, que é venda zero de propósito.
+        venda_de_verdade = not event.is_cortesia_permuta
         data["venda"] = {
             "source": event.source,
             "orcamento": orcamento_resumo,
+            "sem_valor": venda_de_verdade and sem_valor_de_venda(event.sale_value),
+            "a_definir": venda_de_verdade and valor_a_definir(event.sale_value),
+            "valor_simbolico": venda_de_verdade and valor_simbolico(event.sale_value),
             "sale_value": _money(event.sale_value),
             "sale_value_gross": _money(event.sale_value_gross),
             "transport_value": _money(event.transport_value),

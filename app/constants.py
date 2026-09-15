@@ -446,6 +446,13 @@ SELO_VENCE_EM_N_DIAS = "Vence em {dias} dias"
 SELO_SINAL_PENDENTE = "Sinal pendente"
 NOTA_SEM_SINAL = "sem sinal"
 
+# O que o campo de valor diz quando o valor não fecha uma venda (feature 299). No cadastro e na
+# edição completa existe a marca "Valor a definir"; na aba Comercial, "a definir" é deixar vazio.
+MENSAGEM_VALOR_A_DEFINIR = "Informe o valor de venda ou marque “Valor a definir”."
+MENSAGEM_VALOR_SIMBOLICO = (
+    "Valor abaixo de R$ 1,00 não é venda: deixe o campo vazio (a definir) ou informe o valor."
+)
+
 # Por que uma venda fica fora das duas listas comerciais — julgado sempre pelo principal.
 MOTIVO_FORA_CANCELADO = "cancelado"
 MOTIVO_FORA_ENSAIO = "ensaio"

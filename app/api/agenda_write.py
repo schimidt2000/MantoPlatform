@@ -693,7 +693,9 @@ def _build_create_event_data(body: dict) -> dict:
     sale_date_raw = body.get("sale_date")
     payment_due_raw = body.get("payment_due_date")
 
-    return {
+    from app.calendar.event_ops import aplicar_valor_a_definir
+
+    data = {
         "title": (body.get("title") or "").strip(),
         "event_type": (body.get("event_type") or "").strip(),
         "date_str": body.get("date") or "",
@@ -704,6 +706,8 @@ def _build_create_event_data(body: dict) -> dict:
         "needs_rehearsal": bool(body.get("needs_rehearsal")),
         "sale_value": body.get("sale_value"),
         "sale_value_gross": body.get("sale_value_gross"),
+        # Feature 299: a marca não é gravada — com ela, a venda nasce vazia ("a definir").
+        "valor_a_definir": bool(body.get("valor_a_definir")),
         "transport_value": body.get("transport_value"),
         "acrescimo_value": body.get("acrescimo_value"),
         "with_invoice": bool(body.get("with_invoice")),
@@ -728,6 +732,8 @@ def _build_create_event_data(body: dict) -> dict:
         "reembolso_invoice_file_path": None,
         "observations": observations,
     }
+    aplicar_valor_a_definir(data)
+    return data
 
 
 @api_bp.route("/events", methods=["POST"])
@@ -851,7 +857,9 @@ def _build_update_event_data(body: dict) -> dict:
     sale_date_raw = body.get("sale_date")
     payment_due_raw = body.get("payment_due_date")
 
-    return {
+    from app.calendar.event_ops import aplicar_valor_a_definir
+
+    data = {
         "title": (body.get("title") or "").strip(),
         "event_type": (body.get("event_type") or "").strip(),
         "date_str": body.get("date") or "",
@@ -862,6 +870,7 @@ def _build_update_event_data(body: dict) -> dict:
         "needs_rehearsal": bool(body.get("needs_rehearsal")),
         "sale_value": body.get("sale_value"),
         "sale_value_gross": body.get("sale_value_gross"),
+        "valor_a_definir": bool(body.get("valor_a_definir")),
         "transport_value": body.get("transport_value"),
         "acrescimo_value": body.get("acrescimo_value"),
         "with_invoice": bool(body.get("with_invoice")),
@@ -876,6 +885,8 @@ def _build_update_event_data(body: dict) -> dict:
         "client_pairs": _client_pairs_from_json(body.get("clients") or []),
         "form_response_id": body.get("form_response_id"),
     }
+    aplicar_valor_a_definir(data)
+    return data
 
 
 @api_bp.route("/events/<int:event_id>", methods=["PATCH"])
@@ -896,7 +907,14 @@ def api_update_event(event_id: int) -> Any:
 
     from app.calendar.routes import _validate_event_core
 
-    errors = _validate_event_core(data)
+    # Feature 299: o valor gravado deixa o evento de R$ 0,01 salvar outras mudanças, e o outro
+    # evento de um grupo não valida (nem grava) nada da venda.
+    errors = _validate_event_core(
+        data,
+        valor_atual=event.sale_value,
+        bruto_atual=event.sale_value_gross,
+        satelite=event.is_satellite,
+    )
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
 
@@ -1052,8 +1070,18 @@ def api_update_event_comercial(event_id: int) -> Any:
     except ValueError:
         return json_error("Data inválida (use AAAA-MM-DD)", 400)
 
-    from app.calendar.event_ops import update_event_comercial
+    from app.calendar.event_ops import erros_de_valor_de_venda, update_event_comercial
     from app.financeiro.routes import _sync_commission_payment
+
+    # Feature 299 (R43): o R$ 0,01 de "segurar a data" também é recusado aqui — senão o hábito só
+    # mudaria do cadastro para a aba. Vazio continua aceito ("a definir"), e o valor simbólico que
+    # já estava gravado passa, para quem só troca a forma de pagamento.
+    if not data["is_cortesia_permuta"]:
+        erros = erros_de_valor_de_venda(
+            data, event.sale_value, event.sale_value_gross, vazio_aceito=True
+        )
+        if erros:
+            return json_error("Corrija os campos destacados", 400, fields=erros)
 
     update_event_comercial(
         event,

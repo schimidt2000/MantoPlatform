@@ -13,6 +13,7 @@ import {
   DEFAULT_EVENT_FORM_VALUES,
   FIELD_ORDER,
   SERVER_FIELD_MAP,
+  primeiroCampoDoErro,
   type EventFormValues,
 } from "../lib/eventFormSchema";
 import {
@@ -107,6 +108,9 @@ export function EventEditPage() {
   useEffect(() => {
     if (!eventQuery.data || loaded) return;
     const data = eventQuery.data;
+    const cortesia = data.venda?.is_cortesia_permuta ?? false;
+    const valorGravado = data.venda?.sale_value ?? null;
+    const satelite = Boolean(data.event.is_satellite);
     reset({
       ...DEFAULT_EVENT_FORM_VALUES,
       title: data.event.title,
@@ -122,8 +126,16 @@ export function EventEditPage() {
       // Google Agenda junto) a cada salvamento.
       description: data.event.description || "",
       needs_rehearsal: data.event.needs_rehearsal,
-      is_cortesia_permuta: data.venda?.is_cortesia_permuta ?? false,
-      sale_value: data.venda?.sale_value ?? 0,
+      is_cortesia_permuta: cortesia,
+      // Feature 299: vazio ou zero abre com "Valor a definir" marcado (o evento importado do
+      // Google salva o título sem pedir valor); o R$ 0,01 abre desmarcado, com o valor à mostra, e
+      // os valores gravados vão junto para o Zod aceitar o mesmo valor simbólico (R32). No outro
+      // evento de um grupo a marca vem marcada e travada: a venda mora no principal.
+      valor_a_definir: satelite || (!cortesia && (valorGravado == null || valorGravado === 0)),
+      valor_original: valorGravado,
+      valor_original_bruto: data.venda?.sale_value_gross ?? null,
+      satelite,
+      sale_value: valorGravado ?? 0,
       sale_value_gross: data.venda?.sale_value_gross ?? 0,
       transport_value: data.venda?.transport_value ?? 0,
       acrescimo_value: data.venda?.acrescimo_value ?? 0,
@@ -230,6 +242,9 @@ export function EventEditPage() {
   const onSubmit = handleSubmit(
     (values) => {
       setServerError(null);
+      // Feature 299: com "Valor a definir" a venda vai vazia; a cortesia vence a marca. No outro
+      // evento de um grupo o servidor ignora a venda de qualquer jeito.
+      const aDefinir = !values.is_cortesia_permuta && values.valor_a_definir;
       const payload: EventUpdateInput = {
         title: values.title,
         event_type: values.event_type,
@@ -242,8 +257,9 @@ export function EventEditPage() {
         // que o usuário marcou, senão o `|| SHOW` daqui religava o flag do evento que acabou
         // de deixar de ser SHOW.
         needs_rehearsal: values.needs_rehearsal,
-        sale_value: values.is_cortesia_permuta ? 0 : values.sale_value,
-        sale_value_gross: values.is_cortesia_permuta ? 0 : values.sale_value_gross,
+        sale_value: values.is_cortesia_permuta ? 0 : aDefinir ? null : values.sale_value,
+        sale_value_gross: values.is_cortesia_permuta ? 0 : aDefinir ? null : values.sale_value_gross,
+        valor_a_definir: aDefinir,
         transport_value: values.transport_value,
         acrescimo_value: values.acrescimo_value,
         with_invoice: values.with_invoice,
@@ -312,6 +328,12 @@ export function EventEditPage() {
               if (rhfField) setError(rhfField, { message });
             }
             setServerError(messages.join(" "));
+            // O 400 do servidor também leva o foco até o campo (feature 299, Princípio V).
+            const primeiro = primeiroCampoDoErro(error.fields);
+            if (primeiro) {
+              setFocus(primeiro);
+              document.getElementById(primeiro)?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
             return;
           }
           setServerError(error.message);
@@ -456,11 +478,16 @@ export function EventEditPage() {
               talents={opts.assignable_talents}
             />
 
-            <ValoresBlock sellers={opts.sellers} />
+            <ValoresBlock
+              sellers={opts.sellers}
+              satelite={Boolean(data.event.is_satellite)}
+              principal={data.event.group?.leader ?? null}
+            />
 
             <PagamentoBlock
               proofs={paymentProofs}
               onProofsChange={setPaymentProofs}
+              satelite={Boolean(data.event.is_satellite)}
               existingNote={
                 (data.pagamentos?.items.length ?? 0) > 0 && (
                   <p className="mb-2 text-xs text-muted">

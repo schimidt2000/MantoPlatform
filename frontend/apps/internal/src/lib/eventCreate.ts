@@ -125,8 +125,11 @@ export interface EventCreateInput {
   location: string;
   description: string;
   needs_rehearsal: boolean;
-  sale_value: number;
-  sale_value_gross: number;
+  /** `null` com "Valor a definir" (feature 299): a venda nasce vazia. */
+  sale_value: number | null;
+  sale_value_gross: number | null;
+  /** Feature 299 — a marca "Valor a definir"; o servidor não a grava, só pula o valor. */
+  valor_a_definir?: boolean;
   transport_value: number;
   acrescimo_value: number;
   with_invoice: boolean;
@@ -159,8 +162,11 @@ export interface EventUpdateInput {
   location: string;
   description: string;
   needs_rehearsal: boolean;
-  sale_value: number;
-  sale_value_gross: number;
+  /** `null` com "Valor a definir" (feature 299): a venda nasce vazia. */
+  sale_value: number | null;
+  sale_value_gross: number | null;
+  /** Feature 299 — a marca "Valor a definir"; o servidor não a grava, só pula o valor. */
+  valor_a_definir?: boolean;
   transport_value: number;
   acrescimo_value: number;
   with_invoice: boolean;
