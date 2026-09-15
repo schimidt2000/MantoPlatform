@@ -943,3 +943,34 @@ escondidas; cenários 9 a 13 verdes.
   `contracts/api-eventos-valor.md` (`:46-52`) e do `research.md` (`:545-553`) ganha "só quando a
   comissão calculada é maior que zero", e o `data-model.md` (`:91-92`) passa a apontar a regra do
   `/comercial` em `event_ops.erros_do_valor_na_aba_comercial` per Constitution VII (partial)
+
+## Phase 11: Convergence
+
+- [ ] T064 No outro evento de um grupo cujo principal está sem valor, mostrar "Recebido no grupo R$ X
+  · valor de venda a definir" no lugar de "de R$ 0,00 — falta R$ 0,00" (ramo `grupo_outro` de
+  `ResumoDoRecebido`, `frontend/apps/internal/src/components/EventDetail/FinanceiroSection.tsx:263-268`,
+  que só trata a cortesia); acrescentar a variante ao `contracts/evento-cobranca.md` (Tela) e ao
+  `docs/02` per US1/AC6 + contracts/evento-cobranca.md (partial)
+- [ ] T065 No principal sem valor, mostrar também "Inclui R$ X em comprovantes de outros eventos do
+  grupo" (`<OutrosDoGrupo>` no ramo `sem_valor` de `ResumoDoRecebido`, `FinanceiroSection.tsx:284`),
+  como os ramos normal e de cortesia fazem per contracts/evento-cobranca.md (partial)
+- [ ] T066 Em `update_event_comercial` (`app/calendar/event_ops.py:1084-1086`), manter a data da venda
+  já gravada quando o valor fica vazio (passar `a_definir` ao `resolver_data_da_venda`, fora a
+  cortesia), para nenhuma edição da aba Comercial apagar a data per FR-017 (partial)
+- [ ] T067 Trocar a adivinhação de `_data_herdada_da_educamanto` (`app/financeiro/comissoes_ops.py`,
+  data do evento + troca de vendedor) por uma marca explícita: quando `_ciclo_da_comissao_comum` grava
+  `payable_from = hoje` (valor que chegou depois), registrar isso na linha (por exemplo, uma nota
+  constante em `notes`), e no ramo comum manter a data gravada só com essa marca; sem ela, a data veio
+  da EducaManto e volta a `NULL`. Cobre o falso positivo (valor posto no dia do evento, depois troca de
+  vendedor) e o falso negativo (responsável EducaManto = vendedor) per FR-031 + contracts/api-eventos-valor.md
+  (contradicts)
+- [ ] T068 Levar para o FR-031 a regra "cortesia nunca comissiona, mesmo a antiga com valor gravado"
+  (Session 2026-09-15) e corrigir o "Fora de escopo" (`specs/299-sem-valor-cobrancas/spec.md:723-724`,
+  "Na comissão, a única mudança é o ciclo do FR-031") per Session 2026-09-15 (contradicts)
+- [ ] T069 Corrigir no `docs/02_MAPA_DE_PAGINAS_E_UX.md` a frase `:464` ("Só quem pode gerir a venda
+  (`_can_manage_sale`) vê os botões" — são COMERCIAL e SUPERADMIN, `can_edit_core`; o FINANCEIRO vê o
+  painel só para leitura) e o parêntese `:471` ("badge Quitado quando recebido ≥ venda" — agora é o
+  recebido do grupo, com a folga de R$ 1,00, e nunca na cortesia) per Docs a atualizar: docs/02
+  (contradicts)
+- [ ] T070 Acrescentar `cortesia` à lista de chaves novas de `cobranca` no `docs/01_SISTEMA_E_BANCO.md`
+  (`:741`), com a nota de que a cortesia nunca é `quitado` per Docs a atualizar: docs/01 (partial)
