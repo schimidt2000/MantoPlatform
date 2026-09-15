@@ -10,6 +10,11 @@ export interface HomeOverviewItem {
   urgent: number;
   /** Contexto extra numa linha (ex.: "R$ 12.400 em aberto", "3 sem convite"). */
   detail?: string | null;
+  /**
+   * "Em dia ✓" (feature 299). Ausente = `count === 0`, como sempre foi. Os cards comerciais
+   * contam só o que é para agir: 0 com linhas cinza, ou com a lista em erro, NÃO é "em dia".
+   */
+  emDia?: boolean;
 }
 
 interface HomeOverviewProps {
@@ -32,7 +37,7 @@ export function HomeOverview({ items, onSelect }: HomeOverviewProps) {
   return (
     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-4" role="list">
       {items.map((item, index) => {
-        const emDia = item.count === 0;
+        const emDia = item.emDia ?? item.count === 0;
         return (
           <motion.div
             key={item.key}

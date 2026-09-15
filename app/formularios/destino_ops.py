@@ -16,6 +16,8 @@ from sqlalchemy.orm import joinedload
 
 from app import db
 from app.constants import (
+    COR_AMARELO,
+    COR_VERMELHO,
     FORM_CLOSE_NOTE_MAX,
     FORM_CLOSE_REASON_LABELS,
     FORM_CLOSE_REASON_OUTRO,
@@ -591,4 +593,7 @@ def listar_sem_destino(hoje_sp: date | None = None) -> dict:
         "ja_passou": _ordenar(
             [x for x in linhas if x["grupo"] == "ja_passou"], mais_proxima_primeiro=False
         ),
+        # Feature 299: o número do card e da parte do total da Home — só as LINHAS vermelhas e
+        # amarelas; as cinza são informação. Aditivo: o bloco da 298 não muda.
+        "para_agir": sum(1 for x in linhas if x["severidade"] in (COR_VERMELHO, COR_AMARELO)),
     }

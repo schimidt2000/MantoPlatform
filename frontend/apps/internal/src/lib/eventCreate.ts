@@ -195,6 +195,8 @@ export function useCreateEvent() {
     onSuccess: (_result, body) => {
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+      // Evento novo entra em Cobranças ou em "Sem valor" (feature 299).
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       // Evento criado a partir de formulário (feature 298): ele sai da Home e o aviso some.
       if (body.form_response_id) invalidarDestinoDeFormulario(queryClient, body.form_response_id);
     },
@@ -215,6 +217,8 @@ export function useUpdateEvent(eventId: number) {
       queryClient.setQueryData(["event", eventId], updated);
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+      // Valor, data e título mudam as listas comerciais da Home (feature 299).
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       // Pré-contrato ligado na edição (feature 298): some da Home e da fila de Formulários.
       if (body.form_response_id) invalidarDestinoDeFormulario(queryClient, body.form_response_id);
     },

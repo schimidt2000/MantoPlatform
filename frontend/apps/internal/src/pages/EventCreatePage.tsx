@@ -338,6 +338,8 @@ export function EventCreatePage() {
       }
       // Semeia o cache do detalhe para a navegação seguinte já abrir com o anexo no lugar.
       queryClient.setQueryData(["event", eventId], atualizado);
+      // O comprovante muda o recebido da venda na Home (feature 299).
+      if (item.kind === "payment") queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setAttachmentStatus((s) => ({ ...s, [item.id]: "success" }));
     } catch {
       setAttachmentStatus((s) => ({ ...s, [item.id]: "error" }));

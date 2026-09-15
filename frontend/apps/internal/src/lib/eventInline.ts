@@ -74,7 +74,11 @@ export interface EventBasicsInput {
  * RBAC no servidor: Comercial/Superadmin (`flags.can_edit_core`).
  */
 export function useUpdateEventBasics(eventId: number) {
-  return useEventPatch<EventBasicsInput>(eventId, "/basico", "PATCH", { touchesAgenda: true });
+  // A Home também (feature 299): a data muda o grupo da linha e o título pode ganhar o 🟧.
+  return useEventPatch<EventBasicsInput>(eventId, "/basico", "PATCH", {
+    touchesAgenda: true,
+    invalidar: [["dashboard"]],
+  });
 }
 
 export interface EventComercialInput {
@@ -96,7 +100,10 @@ export interface EventComercialInput {
  * RBAC no servidor: Comercial/Superadmin (`flags.can_edit_core`).
  */
 export function useUpdateEventComercial(eventId: number) {
-  return useEventPatch<EventComercialInput>(eventId, "/comercial", "PATCH");
+  // Pôr o valor tira a linha de "Sem valor" (feature 299): a Home recarrega ao voltar, sem F5.
+  return useEventPatch<EventComercialInput>(eventId, "/comercial", "PATCH", {
+    invalidar: [["dashboard"]],
+  });
 }
 
 export interface EventClientsInput {
@@ -143,6 +150,7 @@ export function useSetEventOrcamento(eventId: number) {
   // Fora de SP e papéis novos mudam a agenda; "Ver evento" muda a linha do histórico.
   return useEventPatch<SetOrcamentoBody>(eventId, "/orcamento", "PATCH", {
     touchesAgenda: true,
-    invalidar: [["orcamento-historico"]],
+    // Aplicar os valores do orçamento põe a venda (feature 299): a linha sai de "Sem valor".
+    invalidar: [["orcamento-historico"], ["dashboard"]],
   });
 }

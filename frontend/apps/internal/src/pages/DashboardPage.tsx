@@ -18,6 +18,7 @@ import { formatBRL } from "@manto/money";
 import { PORTAL_PUBLICO } from "../lib/eventDetail";
 import { useCurrentUser } from "../lib/useAuth";
 import type {
+  ComercialSummary,
   DashboardSummary,
   DashboardTaskRef,
   EnsaioEventRef,
@@ -26,8 +27,14 @@ import type {
   LinhaFormulario,
   MinhaPecaRef,
   PendingPayment,
+  SemValorSummary,
   UnconfirmedInviteRef,
 } from "../lib/types";
+import { SEVERIDADE_TOM, diaMes, distanciaDaData } from "../lib/homeListas";
+import { BotaoMostrarTodas, GrupoDeLinhas, LIMITE_LINHAS_PAINEL, PanelGroup } from "../components/home/GrupoDeLinhas";
+import { LinhaDaHome } from "../components/home/LinhaDaHome";
+import { PainelCobrancas } from "../components/home/PainelCobrancas";
+import { PainelSemValor } from "../components/home/PainelSemValor";
 import { SectorPanel, getUrgency } from "../components/SectorPanel";
 import { EncerrarFormularioDialog } from "../components/formularios/EncerrarFormularioDialog";
 import { SugestaoDeEventoFaixa } from "../components/formularios/SugestaoDeEventoFaixa";
@@ -194,18 +201,6 @@ function EnsaioEventRow({ item, extra }: { item: EnsaioEventRef; extra?: string 
   );
 }
 
-/** Sub-lista com título dentro de um painel (Ensaio, Casting). */
-function PanelGroup({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="space-y-1 pt-2 first:pt-0">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted">{title}</p>
-      {children}
-    </div>
-  );
-}
-
-const LIMITE_LINHAS_PAINEL = 6;
-
 /**
  * Lista com as primeiras linhas à mostra e o resto atrás de "Mostrar todas" — as consultas já
  * vêm ordenadas por data, então o topo é sempre o mais próximo de acontecer. É o que devolve a
@@ -233,13 +228,11 @@ function ListaTruncada({ children }: { children: ReactNode[] }) {
           </motion.div>
         )}
       </AnimatePresence>
-      <button
-        type="button"
+      <BotaoMostrarTodas
+        expandida={expandida}
+        total={children.length}
         onClick={() => setExpandida((v) => !v)}
-        className="-mx-4 block w-[calc(100%+2rem)] cursor-pointer px-4 py-2 text-center text-xs font-medium text-accent hover:bg-surface-2"
-      >
-        {expandida ? "Mostrar menos" : `Mostrar todas as ${children.length}`}
-      </button>
+      />
     </>
   );
 }
@@ -330,52 +323,6 @@ function EnsaioPanel({
   );
 }
 
-const SEVERITY_TONE: Record<PendingPayment["severity"], "red" | "gold" | "neutral"> = {
-  atrasado: "red",
-  vencido: "red",
-  urgent: "red",
-  warn: "gold",
-  info: "neutral",
-};
-
-const SEVERITY_ROW_BG: Partial<Record<PendingPayment["severity"], string>> = {
-  atrasado: "rgba(228,88,88,0.06)",
-  vencido: "rgba(228,88,88,0.06)",
-  urgent: "rgba(228,88,88,0.06)",
-  warn: "rgba(245,200,66,0.06)",
-};
-
-/** Severidades do comercial que pedem ação imediata (viram o recorte "urgente"). */
-const SEVERIDADES_URGENTES: PendingPayment["severity"][] = ["atrasado", "vencido", "urgent"];
-
-function PendingPaymentRow({ item }: { item: PendingPayment }) {
-  const rowBg = SEVERITY_ROW_BG[item.severity];
-  return (
-    <div
-      className="-mx-4 flex items-center justify-between gap-3 border-b border-line px-4 py-2.5 text-sm last:border-b-0"
-      style={rowBg ? { background: rowBg } : undefined}
-    >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 font-medium text-ink">
-          <Link to={`/events/${item.event_id}`} className="hover:underline">
-            {item.event_title}
-          </Link>
-          <MetricBadge tone={SEVERITY_TONE[item.severity]} size="xs">
-            {item.severity.toUpperCase()}
-          </MetricBadge>
-        </div>
-        <div className="text-muted">
-          Recebido R$ {formatBRL(item.received)} de R$ {formatBRL(item.sale)} — falta R${" "}
-          {formatBRL(item.saldo)}
-        </div>
-      </div>
-      <Button asChild variant="outline" size="sm" className="shrink-0">
-        <Link to={`/events/${item.event_id}`}>Abrir</Link>
-      </Button>
-    </div>
-  );
-}
-
 /**
  * Uma peça de figurino sob responsabilidade de quem está logado (feature 225).
  *
@@ -427,43 +374,8 @@ function MinhaPecaRow({ item }: { item: MinhaPecaRef }) {
 }
 
 // ── Formulários sem evento na agenda (feature 298) ─────────────────────────────
-
-type Severidade = NonNullable<LinhaFormulario["severidade"]>;
-
-const SEVERIDADE_TOM: Record<Severidade, "red" | "gold" | "neutral"> = {
-  vermelho: "red",
-  amarelo: "gold",
-  cinza: "neutral",
-};
-
-/** Tokens de fundo que acompanham o tema escuro (`theme.css`); cinza não pinta a linha. */
-const SEVERIDADE_FUNDO: Record<Severidade, string> = {
-  vermelho: "bg-red-50",
-  amarelo: "bg-gold-50",
-  cinza: "",
-};
-
-/** `01/06` a partir de uma data AAAA-MM-DD (o corte). */
-function diaMes(iso: string | null | undefined): string | null {
-  const [, mes, dia] = (iso ?? "").slice(0, 10).split("-");
-  return mes && dia ? `${dia}/${mes}` : null;
-}
-
-/**
- * Distância até a data informada, em palavras — a urgência nunca é dita só pela cor.
- *
- * Vem de `dias_ate_a_data`, calculado no servidor pelo "hoje" de São Paulo. Não é o
- * `formatRelativeDay` da `@manto/ui`: ele diz "ontem/há N dias" (que aqui leria como "chegou") e
- * usa o relógio do navegador.
- */
-function distanciaDaData(dias: number | null | undefined): string | null {
-  if (dias == null) return null;
-  if (dias === 0) return "hoje";
-  if (dias === 1) return "amanhã";
-  if (dias > 1) return `em ${dias} dias`;
-  const passou = Math.abs(dias);
-  return `passou há ${passou} dia${passou !== 1 ? "s" : ""}`;
-}
+// A escala de cor, o `diaMes` e a distância em palavras moram em `lib/homeListas.ts` desde a
+// 299: as três listas comerciais (Formulários, Cobranças e Sem valor) usam as mesmas peças.
 
 function chegouHa(dias: number | undefined): string {
   if (dias == null) return "";
@@ -502,11 +414,10 @@ function FormularioSemDestinoRow({
     .join(" · ");
 
   return (
-    <div
-      className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2.5 text-sm ${SEVERIDADE_FUNDO[severidade]}`}
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-ink">
+    <LinhaDaHome
+      severidade={severidade}
+      cabecalho={
+        <>
           <span className="min-w-0 break-words">{nome}</span>
           {linha.data_informada ? (
             <span className="tabular-nums">{formatShortDate(linha.data_informada)}</span>
@@ -541,21 +452,24 @@ function FormularioSemDestinoRow({
               já tem outro formulário com evento
             </MetricBadge>
           )}
-        </div>
-        {detalhe && <div className="text-muted">{detalhe}</div>}
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        {onEncerrar && (
-          <Button type="button" variant="ghost" size="sm" onClick={onEncerrar}>
-            Encerrar…
+        </>
+      }
+      detalhe={detalhe}
+      acoes={
+        <>
+          {onEncerrar && (
+            <Button type="button" variant="ghost" size="sm" onClick={onEncerrar}>
+              Encerrar…
+            </Button>
+          )}
+          <Button asChild variant={podeCriarEvento ? "default" : "outline"} size="sm">
+            <Link to={podeCriarEvento ? `/events/new?form_response_id=${id}` : `/formularios?resposta=${id}`}>
+              {podeCriarEvento ? "Criar evento" : "Abrir"}
+            </Link>
           </Button>
-        )}
-        <Button asChild variant={podeCriarEvento ? "default" : "outline"} size="sm">
-          <Link to={podeCriarEvento ? `/events/new?form_response_id=${id}` : `/formularios?resposta=${id}`}>
-            {podeCriarEvento ? "Criar evento" : "Abrir"}
-          </Link>
-        </Button>
-      </div>
+        </>
+      }
+    >
       <AnimatePresence initial={false}>
         {linha.sugestao && (
           <SugestaoDeEventoFaixa
@@ -579,7 +493,7 @@ function FormularioSemDestinoRow({
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </LinhaDaHome>
   );
 }
 
@@ -633,12 +547,9 @@ function RepetidosDaLinha({ linha }: { linha: LinhaFormulario }) {
 }
 
 /**
- * Um grupo do painel ("ainda vai chegar" / "já passou"), com as 6 primeiras linhas e o resto
- * atrás de "Mostrar todas" — o mesmo corte da `ListaTruncada`.
- *
- * Não reusa a `ListaTruncada` porque a linha resolvida precisa SAIR com animação, e o
- * `AnimatePresence` só acompanha filhos diretos com `key`. Com movimento reduzido a linha some
- * sem transição.
+ * Um grupo do painel ("ainda vai chegar" / "já passou"). O corte em 6 linhas, o "Mostrar todas" e
+ * a saída animada da linha resolvida são do `GrupoDeLinhas`, que a 299 extraiu daqui para as listas
+ * de Cobranças e Sem valor usarem o mesmo.
  */
 function GrupoFormularios({
   titulo,
@@ -653,41 +564,17 @@ function GrupoFormularios({
   onEncerrar?: (linha: LinhaFormulario) => void;
   onLigado?: (resultado: ResultadoVinculo, formularioId: number) => void;
 }) {
-  const [expandida, setExpandida] = useState(false);
-  const reduceMotion = useReducedMotion();
-  const visiveis = expandida ? linhas : linhas.slice(0, LIMITE_LINHAS_PAINEL);
-
   return (
-    <PanelGroup title={`${titulo} (${linhas.length})`}>
-      <AnimatePresence initial={false}>
-        {visiveis.map((linha) => (
-          <motion.div
-            key={linha.representante_id}
-            initial={reduceMotion ? false : { opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={reduceMotion ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, height: 0 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
-            className="-mx-4 overflow-hidden border-b border-line last:border-b-0"
-          >
-            <FormularioSemDestinoRow
-              linha={linha}
-              podeCriarEvento={podeCriarEvento}
-              onEncerrar={onEncerrar ? () => onEncerrar(linha) : undefined}
-              onLigado={onLigado}
-            />
-          </motion.div>
-        ))}
-      </AnimatePresence>
-      {linhas.length > LIMITE_LINHAS_PAINEL && (
-        <button
-          type="button"
-          onClick={() => setExpandida((v) => !v)}
-          className="-mx-4 block w-[calc(100%+2rem)] cursor-pointer px-4 py-2 text-center text-xs font-medium text-accent hover:bg-surface-2"
-        >
-          {expandida ? "Mostrar menos" : `Mostrar todas as ${linhas.length}`}
-        </button>
+    <GrupoDeLinhas titulo={titulo} itens={linhas} chave={(linha) => linha.representante_id}>
+      {(linha) => (
+        <FormularioSemDestinoRow
+          linha={linha}
+          podeCriarEvento={podeCriarEvento}
+          onEncerrar={onEncerrar ? () => onEncerrar(linha) : undefined}
+          onLigado={onLigado}
+        />
       )}
-    </PanelGroup>
+    </GrupoDeLinhas>
   );
 }
 
@@ -825,11 +712,85 @@ type SectionKey =
   | "figurino"
   | "ensaio"
   | "comercial"
+  | "sem_valor"
   | "formularios"
   | "recorrentes";
 
 interface SectionStat extends HomeOverviewItem {
   key: SectionKey;
+  /**
+   * Quanto esta seção soma em "N pendências no total" (feature 299). Nas listas comerciais é o
+   * `para_agir` (vermelho + amarelo), o mesmo número do card; nos painéis de operação, `count`.
+   */
+  noTotal?: number;
+  /** A lista não carregou: card sem ✓ e o topo avisa, em vez de dizer "Tudo em dia". */
+  falhou?: boolean;
+}
+
+/** Linha vermelha de Cobranças — com o servidor antigo (sem `severidade`), pela `severity`. */
+function cobrancaVermelha(p: PendingPayment): boolean {
+  if (p.severidade) return p.severidade === "vermelho";
+  return p.severity === "atrasado" || p.severity === "vencido" || p.severity === "urgent";
+}
+
+/** Card de lista comercial que não carregou (FR-032): 0, sem ✓ e fora do total. */
+function cardEmFalha(key: SectionKey, emoji: string, label: string): SectionStat {
+  return { key, emoji, label, count: 0, urgent: 0, noTotal: 0, emDia: false, falhou: true, detail: "Não carregou" };
+}
+
+/** Linhas do painel "Sem valor" (os dois grupos); 0 quando a lista falhou. */
+function totalSemValor(resumo: SemValorSummary | null | undefined): number {
+  return resumo ? resumo.a_acontecer.length + resumo.ja_aconteceu.length : 0;
+}
+
+/**
+ * Cards "Cobranças" e "Sem valor" (feature 299). O número é o de linhas para agir (vermelho +
+ * amarelo), o mesmo que soma no total; o painel aberto mostra todas. Com o servidor antigo (sem
+ * `cobrancas_resumo`), a conta de antes; sem `sem_valor`, não há card.
+ */
+function statsComerciais(c: ComercialSummary): SectionStat[] {
+  const stats: SectionStat[] = [];
+  const pagamentos = c.pending_payments;
+  const resumo = c.cobrancas_resumo;
+  if (resumo === null) {
+    stats.push(cardEmFalha("comercial", "💼", "Cobranças"));
+  } else {
+    const count = resumo?.para_agir ?? pagamentos.length;
+    const emAberto = resumo?.total_em_aberto ?? pagamentos.reduce((soma, p) => soma + p.saldo, 0);
+    stats.push({
+      key: "comercial",
+      emoji: "💼",
+      label: "Cobranças",
+      count,
+      noTotal: count,
+      urgent: pagamentos.filter(cobrancaVermelha).length,
+      emDia: resumo ? pagamentos.length === 0 : undefined,
+      detail: pagamentos.length > 0 ? `R$ ${formatBRL(emAberto)} em aberto` : null,
+    });
+  }
+  if (c.sem_valor === null) {
+    stats.push(cardEmFalha("sem_valor", "🏷️", "Sem valor"));
+  } else if (c.sem_valor) {
+    const total = totalSemValor(c.sem_valor);
+    const desde = diaMes(c.corte);
+    const vermelhas = [...c.sem_valor.a_acontecer, ...c.sem_valor.ja_aconteceu].filter(
+      (l) => l.severidade === "vermelho",
+    );
+    stats.push({
+      key: "sem_valor",
+      emoji: "🏷️",
+      label: "Sem valor",
+      count: c.sem_valor.para_agir,
+      noTotal: c.sem_valor.para_agir,
+      urgent: vermelhas.length,
+      emDia: total === 0,
+      detail:
+        total > 0
+          ? `${total} evento${total !== 1 ? "s" : ""} sem valor${desde ? ` desde ${desde}` : ""}`
+          : null,
+    });
+  }
+  return stats;
 }
 
 /**
@@ -906,16 +867,7 @@ function computeSectionStats(data: DashboardSummary): SectionStat[] {
   }
 
   if (data.comercial) {
-    const pagamentos = data.comercial.pending_payments;
-    const saldoTotal = pagamentos.reduce((soma, p) => soma + p.saldo, 0);
-    stats.push({
-      key: "comercial",
-      emoji: "💼",
-      label: "Cobranças",
-      count: pagamentos.length,
-      urgent: pagamentos.filter((p) => SEVERIDADES_URGENTES.includes(p.severity)).length,
-      detail: pagamentos.length > 0 ? `R$ ${formatBRL(saldoTotal)} em aberto` : null,
-    });
+    stats.push(...statsComerciais(data.comercial));
   }
 
   if (data.formularios) {
@@ -927,11 +879,16 @@ function computeSectionStats(data: DashboardSummary): SectionStat[] {
     const urgentes = [...(f.a_chegar ?? []), ...(f.ja_passou ?? [])]
       .filter((l) => l.severidade === "vermelho")
       .reduce((soma, l) => soma + (l.formularios?.length ?? 1), 0);
+    // Feature 299: o card (e a parte do total) conta as LINHAS para agir, vermelhas e amarelas —
+    // as cinza são informação. Servidor antigo (sem `para_agir`): os formulários sem destino.
+    const paraAgir = f.para_agir ?? semDestino;
     stats.push({
       key: "formularios",
       emoji: "📝",
       label: "Formulários",
-      count: semDestino,
+      count: paraAgir,
+      noTotal: paraAgir,
+      emDia: f.para_agir !== undefined ? semDestino === 0 : undefined,
       urgent: urgentes,
       detail:
         semDestino > 0 && desde
@@ -1001,8 +958,14 @@ export function DashboardPage() {
     () => new Map(stats.map((s) => [s.key, s])),
     [stats],
   );
-  const totalPendencias = stats.reduce((soma, s) => soma + s.count, 0);
+  // "N pendências no total" (feature 299): das listas comerciais, só o que é para agir; dos painéis
+  // de operação, tudo, como antes. É a soma dos números dos cards.
+  const totalPendencias = stats.reduce((soma, s) => soma + (s.noTotal ?? s.count), 0);
   const totalUrgentes = stats.reduce((soma, s) => soma + s.urgent, 0);
+  const algumaFalhou = stats.some((s) => s.falhou);
+  const tentarDeNovo = () => {
+    void dashboard.refetch();
+  };
 
   // Abertura dos painéis: escolha explícita da pessoa vence; sem escolha, nasce aberto só quem
   // tem item urgente — é a triagem que devolve a Home legível no celular.
@@ -1061,7 +1024,7 @@ export function DashboardPage() {
           {stats.length > 0 && (
             <section aria-label="Visão geral das pendências" className="space-y-2.5">
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                {totalPendencias > 0 ? (
+                {totalPendencias > 0 || algumaFalhou ? (
                   <>
                     <span>
                       {totalPendencias} pendência{totalPendencias !== 1 ? "s" : ""} no total
@@ -1069,6 +1032,12 @@ export function DashboardPage() {
                     {totalUrgentes > 0 && (
                       <span className="rounded-full bg-red-soft px-2 py-0.5 font-medium text-red">
                         {totalUrgentes} urgente{totalUrgentes !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {/* Uma lista que não carregou não pode virar "Tudo em dia ✓" (FR-032). */}
+                    {algumaFalhou && (
+                      <span className="rounded-full bg-red-soft px-2 py-0.5 font-medium text-red">
+                        uma lista não carregou
                       </span>
                     )}
                   </>
@@ -1253,24 +1222,44 @@ export function DashboardPage() {
               </div>
             )}
 
+            {/* Feature 299: o painel "Comercial" virou dois, "Cobranças" e "Sem valor", cada um
+                com o nome do seu card. O contador do painel aberto mostra todas as linhas. */}
             {data.comercial && (
               <div {...propsSecao("comercial")}>
                 <SectorPanel
-                  title="💼 Comercial"
+                  title="💼 Cobranças"
                   count={data.comercial.pending_payments.length}
                   urgentCount={statPorSecao.get("comercial")?.urgent ?? 0}
                   open={painelAberto("comercial")}
                   onOpenChange={aoAlternar("comercial")}
                 >
-                  {data.comercial.pending_payments.length === 0 ? (
-                    <p className="py-2 text-sm text-muted">Nenhuma pendência comercial.</p>
-                  ) : (
-                    <ListaTruncada>
-                      {data.comercial.pending_payments.map((p) => (
-                        <PendingPaymentRow key={p.event_id} item={p} />
-                      ))}
-                    </ListaTruncada>
-                  )}
+                  <PainelCobrancas
+                    linhas={data.comercial.pending_payments}
+                    resumo={data.comercial.cobrancas_resumo}
+                    onTentarDeNovo={tentarDeNovo}
+                    tentando={dashboard.isFetching}
+                  />
+                </SectorPanel>
+              </div>
+            )}
+
+            {/* `undefined` = servidor antigo (sem painel); `null` = a lista falhou (aviso). */}
+            {data.comercial && data.comercial.sem_valor !== undefined && (
+              <div {...propsSecao("sem_valor")}>
+                <SectorPanel
+                  title="🏷️ Sem valor"
+                  count={totalSemValor(data.comercial.sem_valor)}
+                  urgentCount={statPorSecao.get("sem_valor")?.urgent ?? 0}
+                  open={painelAberto("sem_valor")}
+                  onOpenChange={aoAlternar("sem_valor")}
+                >
+                  <PainelSemValor
+                    resumo={data.comercial.sem_valor}
+                    corte={data.comercial.corte}
+                    podeEditarVenda={data.comercial.pode_editar_venda ?? false}
+                    onTentarDeNovo={tentarDeNovo}
+                    tentando={dashboard.isFetching}
+                  />
                 </SectorPanel>
               </div>
             )}

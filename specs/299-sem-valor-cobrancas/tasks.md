@@ -448,7 +448,7 @@ FINANCEIRO.
     interno (na falha, `sem_valor = None`);
   - acrescentar `pode_editar_venda = _pode_criar_evento(user, impersonate, is_superadmin)`, a
     função extraída no T007.
-- [ ] T013 [P] [US2] Criar `frontend/apps/internal/src/lib/homeListas.ts` (novo), puro, **copiando**
+- [x] T013 [P] [US2] Criar `frontend/apps/internal/src/lib/homeListas.ts` (novo), puro, **copiando**
   de `DashboardPage.tsx` (que só muda no T014):
   - `Severidade`;
   - os mapas de tom (`red`/`gold`/`neutral`) e de fundo (`bg-red-50`/`bg-gold-50`), de `:431-444`;
@@ -458,7 +458,7 @@ FINANCEIRO.
     em N dias".
 
   O comportamento para os formulários da 298 fica idêntico.
-- [ ] T014 [US2] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`, depois do T013, sem mudar
+- [x] T014 [US2] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`, depois do T013, sem mudar
   comportamento nem texto:
   - trocar os locais de `:431-466` pelos imports de `homeListas.ts`;
   - extrair `frontend/apps/internal/src/components/home/GrupoDeLinhas.tsx` (novo): o
@@ -469,7 +469,7 @@ FINANCEIRO.
     `:504-546` (`severidade`, `cabecalho`, `detalhe?`, `acoes`, `children?`), que desce para duas
     linhas no celular;
   - `FormulariosPanel` e `ListaTruncada` passam a usar essas peças.
-- [ ] T015 [US2] Em `frontend/apps/internal/src/lib/types.ts`, depois do T013:
+- [x] T015 [US2] Em `frontend/apps/internal/src/lib/types.ts`, depois do T013:
   - `PendingPayment` (`:67-77`) ganha os campos novos, todos opcionais;
   - nascem `LinhaSemValor`, `SemValorSummary`, `CobrancasResumo` e `ComercialSummary`, com
     `pending_payments`, `cobrancas_resumo?: CobrancasResumo | null`,
@@ -477,7 +477,7 @@ FINANCEIRO.
   - `DashboardSummary.comercial` usa `ComercialSummary`;
   - `LinhaFormulario.severidade` usa `Severidade`, de `homeListas.ts`;
   - `FormulariosSummary` ganha `para_agir?`.
-- [ ] T016 [US2] Criar `frontend/apps/internal/src/components/home/PainelSemValor.tsx` (novo), com
+- [x] T016 [US2] Criar `frontend/apps/internal/src/components/home/PainelSemValor.tsx` (novo), com
   `GrupoDeLinhas` e `LinhaDaHome`:
   - dois grupos: "Ainda vai acontecer (N)", com hoje incluído, e "Já aconteceu (N)", na ordem do
     servidor, 6 linhas por grupo;
@@ -494,12 +494,12 @@ FINANCEIRO.
     - vazio: "Todos os eventos têm valor de venda ✓";
     - erro (`sem_valor === null`): "Não foi possível carregar os eventos sem valor", com "Tentar de
       novo" (`refetch` do dashboard).
-- [ ] T017 [US2] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`:
+- [x] T017 [US2] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`:
   - `SectionKey` (`:820-829`) ganha `sem_valor`;
   - um `SectorPanel` "Sem valor" com o `PainelSemValor`, e o card "Sem valor";
   - `comercial.sem_valor === undefined` (servidor antigo) → sem painel e sem card;
   - `=== null` (erro) → painel e card presentes, em estado de erro.
-- [ ] T018 [US2] Invalidar `['dashboard']` por prefixo (R23, FR-010) em:
+- [x] T018 [US2] Invalidar `['dashboard']` por prefixo (R23, FR-010) em:
   - `useUpdateEventComercial` e `useUpdateEventBasics`, pelo parâmetro `invalidar`
     (`frontend/apps/internal/src/lib/eventInline.ts:76, :98-100`);
   - `useSetEventOrcamento` (`:142-147`);
@@ -659,7 +659,7 @@ cenários 5 e 6 verdes.
 
 **Verificação da história**: cenários 9 a 13 em PASS; painel aberto no computador e a 375 px.
 
-- [ ] T031 [US4] Criar `frontend/apps/internal/src/components/home/PainelCobrancas.tsx` (novo), com
+- [x] T031 [US4] Criar `frontend/apps/internal/src/components/home/PainelCobrancas.tsx` (novo), com
   `GrupoDeLinhas` (uma lista só, sem título) e `LinhaDaHome`:
   - **cabeçalho**:
     - o nome (`cliente ?? titulo ?? event_title`) e a marca "grupo de N eventos";
@@ -677,7 +677,7 @@ cenários 5 e 6 verdes.
       novo";
     - servidor antigo (`cobrancas_resumo === undefined`): a lista sem estado de erro; linha sem
       `severidade` fica cinza e sem selo.
-- [ ] T032 [US4] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`:
+- [x] T032 [US4] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`:
   - apagar a `PendingPaymentRow` e os mapas `SEVERITY_TONE` e `SEVERITY_ROW_BG` (`:333-376`), que
     tinham estilo inline e texto em inglês;
   - `SEVERIDADES_URGENTES` (`:349`) fica até o T034, que reescreve o `urgent` (`:916`);
@@ -695,10 +695,10 @@ escondidas; cenários 9 a 13 verdes.
 
 **Verificação da história**: cenário 14 em PASS; topo conferido na tela.
 
-- [ ] T033 [P] [US5] Em `app/formularios/destino_ops.py`, em `listar_sem_destino` (`:570-594`),
+- [x] T033 [P] [US5] Em `app/formularios/destino_ops.py`, em `listar_sem_destino` (`:570-594`),
   acrescentar `para_agir` (as linhas vermelhas e amarelas de `a_chegar` e `ja_passou`), de forma
   aditiva. O `verify_298` continua 17/17.
-- [ ] T034 [US5] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`, `computeSectionStats`
+- [x] T034 [US5] Em `frontend/apps/internal/src/pages/DashboardPage.tsx`, `computeSectionStats`
   (`:839-960`):
   - `SectionStat` (`:831-833`) ganha `noTotal`;
   - nas listas comerciais (`comercial`, `sem_valor`, `formularios`), o **número do card** e o

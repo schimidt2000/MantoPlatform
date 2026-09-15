@@ -141,6 +141,8 @@ export function useCancelarEvento(eventId: number) {
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
       queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
+      // Venda cancelada sai de Cobranças e de "Sem valor" (feature 299).
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }
@@ -242,6 +244,8 @@ function invalidarComercial(queryClient: ReturnType<typeof useQueryClient>, even
   queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
   // Acréscimo muda a BASE da comissão (o BV sai dela), então a linha a pagar é recalculada.
   queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
+  // Parcela muda o vencimento da cobrança na Home (feature 299).
+  queryClient.invalidateQueries({ queryKey: ["dashboard"] });
 }
 
 /**
