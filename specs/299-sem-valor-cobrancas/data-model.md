@@ -9,10 +9,10 @@ O que é novo é **derivado** em memória pelo núcleo `app/financeiro/cobranca_
 |---|---|---|
 | `CalendarEvent` | `sale_value` (vazio = "a definir"), `sale_value_gross`, `sale_date`, `is_cortesia_permuta`, `payment_method`, `payment_due_date` (data combinada), `event_type`, `title` (marcador), `start_at` (hora de parede de SP), `cancelled_at`, `group_leader_id`, `group_name`, `client_id` | `models.py:244-330` |
 | `EventPayment` (comprovante) | `event_id`, `amount` (nulo conta R$ 0) | `models.py:663-675` |
-| `EventInstallment` (parcela) | `event_id`, `due_date`, `amount`, `received` | `models.py:710-726` |
+| `EventInstallment` (parcela) | `event_id`, `due_date`, `amount` (a marca `received` não é usada: a cobertura vem dos comprovantes) | `models.py:710-726` |
 | `EventClient` / `Client` | contratante e cliente, pela ordem de `contratante_name` | `models.py:1841-1866`; `vendas_ops.py:81-93` |
 | `CommissionPayment` | `payable_from` passa a ser usado também pela comissão comum (R22) | `models.py:914-925`; `comissoes_ops.py:689-747` |
-| `SiteSetting.release_date` | corte (01/06/2026 em produção), via `corte_dia_sp()` | `models.py:835`; `formularios_ops.py:86-91` |
+| `SiteSetting.release_date` | a data de início (01/06/2026 em produção; reserva 01/06/2026), via `corte_dia_sp()` | `models.py:835`; `formularios_ops.py:86-91` |
 
 ## `VendaResumo` (derivado, imutável)
 
@@ -20,15 +20,15 @@ Uma venda é um evento avulso ou um grupo, sempre representado pelo **principal*
 
 | Campo | Tipo | Regra |
 |---|---|---|
-| `principal` | `CalendarEvent` | `group_leader` se existir; senão o próprio evento (R5) |
+| `principal` | `CalendarEvent` | `group_leader` se existir; senão o próprio evento (R5). Com o principal apagado, cada outro evento é uma venda avulsa |
 | `eventos` | `tuple[CalendarEvent, ...]` | principal primeiro, satélites depois, **cancelados inclusive** |
 | `valor` | `Decimal \| None` | `sale_value` do principal |
 | `recebido` | `Decimal` | soma de `EventPayment.amount` de **todos** os eventos do grupo, cancelados inclusive (R3) |
-| `data_do_grupo` | `date \| None` | menor `start_at.date()` entre os eventos **não cancelados** (R5) |
-| `vencimento` | `date \| None` | data combinada, senão 1ª parcela não recebida do principal, senão `data_do_grupo − 2` (R7) |
+| `data_do_grupo` | `date \| None` | menor `start_at.date()` entre os eventos **não cancelados e que não são compromisso interno** (R5) |
+| `vencimento` | `date \| None` | data combinada > 1ª parcela do principal que o recebido não cobre (parcelas somadas pela ordem das datas) > `data_do_grupo − 2`. Os dois últimos com piso na `sale_date` (R7, R33) |
 | `vencimento_origem` | `"data_combinada" \| "parcela" \| "politica"` | qual das três regras deu a data |
 | `cliente` | `str \| None` | `contratante_name(principal)` |
-| `motivo_fora` | `str \| None` | `cancelado`, `ensaio`, `compromisso_interno`, `cortesia` ou `loja_virtual` (R6) |
+| `motivo_fora` | `str \| None` | `cancelado`, `ensaio`, `compromisso_interno`, `cortesia` ou `loja_virtual`, julgados pelo principal (R6) |
 
 Propriedades derivadas, todas em `Decimal`:
 
@@ -36,8 +36,9 @@ Propriedades derivadas, todas em `Decimal`:
 |---|---|
 | `saldo` | `valor − recebido` (`None` sem valor) |
 | `sem_valor` | `valor is None or valor < 1,00` |
+| `a_definir` | `valor is None or valor == 0` |
 | `valor_simbolico` | `0 < valor < 1,00` |
-| `sinal_pendente` | sem data combinada **e** `recebido < valor/2 − 1,00` |
+| `sinal_pendente` | sem data combinada, sem cronograma de parcelas **e** `recebido < valor/2 − 1,00` |
 | `eventos_vivos` | quantos eventos não cancelados o grupo tem |
 | `situacao` | ver a tabela abaixo |
 
@@ -47,10 +48,10 @@ Propriedades derivadas, todas em `Decimal`:
 |---|---|---|
 | `fora` | `motivo_fora` preenchido, ou `data_do_grupo` antes do corte | em nenhuma lista |
 | `sem_valor` | `sem_valor` | "Evento sem valor de venda" |
-| `quitada` | valor ≥ 1,00 e `saldo < 1,00` (inclui recebido acima do valor) | em nenhuma lista |
+| `quitada` | valor ≥ 1,00 e `saldo < 1,00` (inclui recebido acima do valor) | em nenhuma lista; na página, "Quitado" |
 | `com_saldo` | valor ≥ 1,00 e `saldo ≥ 1,00` | "Cobranças" |
 
-Transições que tiram a linha da lista (FR-010), sem animação especial no servidor:
+Transições que tiram a linha da lista (FR-010), com a animação na tela:
 - `sem_valor` → `com_saldo` ou `quitada`: alguém põe o valor, pela aba Comercial, pelo orçamento ou
   pela edição completa.
 - `com_saldo` → `quitada`: entra um comprovante em qualquer evento do grupo.
@@ -63,19 +64,20 @@ Transições que tiram a linha da lista (FR-010), sem animação especial no ser
 | Campo | Regra |
 |---|---|
 | `dias_ate_vencimento` | `vencimento − hoje` (negativo = venceu) |
-| `severidade` | vermelho se dias ≤ 2 (inclui vencido); amarelo de 3 a 30 dias; cinza acima de 30. O sinal pendente sobe cinza para amarelo e nunca rebaixa vermelho |
-| `selo` | "Atrasado" (dias < 0) > "Vence hoje" > "Sinal pendente" > "Vence em N dias" |
-| ordem | vencimento ascendente, depois `data_do_grupo`, depois `event_id` |
+| `severidade` | vermelho se dias ≤ 2 (inclui vencido); senão amarelo se `sinal_pendente` ou dias de 3 a 30; senão cinza |
+| `selo` | vermelho: "Atrasado" (dias < 0), "Vence hoje" (0) ou "Vence em N dias"; amarelo com sinal pendente: "Sinal pendente"; demais: "Vence em N dias" |
+| `nota` | "sem sinal" quando vermelho e `sinal_pendente` |
+| ordem | por cor (vermelho, amarelo, cinza) e, dentro da cor, vencimento ascendente, depois `data_do_grupo`, depois `event_id` |
 
 **Sem valor** (`situacao == sem_valor`):
 
 | Campo | Regra |
 |---|---|
 | `dias_ate_o_evento` | `data_do_grupo − hoje` |
-| partição | `a_acontecer` (dias ≥ 0, o mais próximo primeiro) e `ja_aconteceu` (dias < 0, o mais recente primeiro) |
+| partição | `a_acontecer` (dias ≥ 0, hoje incluído, o mais próximo primeiro) e `ja_aconteceu` (dias < 0, o mais recente primeiro) |
 | `severidade` | vermelho se dias ≤ 7 (inclui o que já aconteceu); amarelo de 8 a 30; cinza acima de 30 |
 
-**Para o total do topo**: `para_agir` = linhas vermelhas + amarelas de cada lista comercial
+**Para o total do topo e o card**: `para_agir` = linhas vermelhas + amarelas de cada lista comercial
 (Cobranças, Sem valor e Formulários da 298).
 
 ## Regras de escrita (sem campo novo)
@@ -83,17 +85,21 @@ Transições que tiram a linha da lista (FR-010), sem animação especial no ser
 | Regra | Onde | Efeito |
 |---|---|---|
 | "Valor a definir" | `aplicar_valor_a_definir` (`event_ops`) | `sale_value` e `sale_value_gross` gravados `NULL`; a marca não é gravada |
-| Data da venda | `resolver_data_da_venda(..., a_definir)` | a criação sem data vira hoje (SP); a edição sem data mantém a atual |
+| Valor abaixo de R$ 1,00 sem a marca | `_validate_event_core` | 400, exceto na edição que mantém o mesmo valor que o evento já tinha |
+| Data da venda | `resolver_data_da_venda(..., a_definir)` | a criação sem data vira hoje (SP); a edição sem data mantém a atual; o evento sem data que ganha valor recebe hoje (como hoje) |
 | Satélite na edição completa | `update_event_core` | nenhum campo comercial é gravado no satélite |
-| Comissão tardia | `_sync_commission_payment` | linha nova de comissão comum com `sale_date` num mês anterior ao corrente → `payable_from = hoje`; não volta a `NULL` depois |
+| Comissão tardia | `_sync_commission_payment` | comissão comum que nasce, ou passa de simbólico para real, com `sale_date` num mês anterior ao corrente → `payable_from = hoje`, e não volta a `NULL`; a comissão paga nunca muda nem se duplica |
 | Valor simbólico no orçamento | `aplicar_valores_do_orcamento` | abaixo de R$ 1,00 conta como "sem venda"; a cortesia continua recusada |
 
 ## Invariantes (vão para o `docs/04`)
 
-1. Na cobrança, o grupo é uma venda só: o valor é o do principal e o recebido é o de todos os
-   eventos, e nada é movido de lugar.
+1. Na cobrança, o grupo é uma venda só: o valor é o do principal, o recebido é o de todos os eventos
+   e nada é movido de lugar.
 2. "Sem valor" na Home = vazio, zero ou abaixo de R$ 1,00. No Financeiro e na Auditoria continua
    `<= 0`: são duas definições de propósito.
-3. Compromisso interno é o título que começa com 🟧 ou 🟠. Ele nunca é venda.
-4. A folga de centavos é R$ 1,00, tanto para o saldo quanto para o sinal.
-5. Com data combinada, não há sinal pendente; o vencimento é a data combinada.
+3. Compromisso interno é o título que começa com 🟧 ou 🟠. Ele nunca é venda e não conta na data do
+   grupo.
+4. A folga de centavos é R$ 1,00, no saldo, no sinal e no "Quitado" da página.
+5. Com data combinada ou cronograma, não há sinal pendente. O vencimento nunca fica antes da data da
+   venda.
+6. A comissão tardia entra no ciclo do mês do valor, e a comissão paga nunca é paga de novo.

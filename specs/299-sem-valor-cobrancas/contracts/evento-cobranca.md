@@ -19,7 +19,7 @@ conta da Home (SC-003).
 |---|---|---|
 | `outstanding` | number | `max(saldo do grupo, 0)`; nunca negativo (antes: soma das parcelas, ou saldo só do evento) |
 | `due` | `"AAAA-MM-DD"` \| null | vencimento da venda (R7) |
-| `enabled` | bool | `pode_copiar_cobranca`: vencimento ≤ hoje (SP), saldo ≥ R$ 1,00, valor ≥ R$ 1,00, sem motivo de ficar fora e o evento aberto **não** é outro evento do grupo |
+| `enabled` | bool | `pode_copiar_cobranca`: vencimento ≤ hoje (SP), saldo ≥ R$ 1,00 (folga do FR-023), valor ≥ R$ 1,00, sem motivo de ficar fora e o evento aberto **não** é outro evento do grupo (FR-003) |
 | `valor`* | number \| null | valor de venda do principal |
 | `recebido`* | number | recebido do grupo |
 | `quitado`* | bool | valor ≥ R$ 1,00 e saldo < R$ 1,00 |
@@ -43,13 +43,15 @@ conta da Home (SC-003).
 
 | Chave | Tipo | Regra |
 |---|---|---|
-| `sale_value` | number \| null | sem mudança (`null` = a definir) |
+| `sale_value` | number \| null | sem mudança |
 | `sem_valor`* | bool | `sem_valor_de_venda(sale_value)`, fora cortesia |
+| `a_definir`* | bool | `sale_value` vazio ou zero, fora cortesia |
 | `valor_simbolico`* | bool | `0 < sale_value < 1,00` |
 
 **Tela**:
-- `VendaPanel`: `null` vira "A definir"; valor simbólico mostra o valor com a marca "valor
-  simbólico"; no satélite, "Valor de venda: no evento principal", com link.
+- `VendaPanel`: com `a_definir`, "A definir"; valor simbólico mostra o valor com a marca "valor
+  simbólico"; no satélite, "Valor de venda: no evento principal", com link. O quadrinho "Venda" do
+  resultado continua com o número (FR-015).
 - `OrcamentoPanel`: `semVenda = venda.sem_valor ?? (!venda.sale_value && !venda.is_cortesia_permuta)`.
 
 ## `pagamentos`

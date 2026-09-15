@@ -1,5 +1,24 @@
 # Quickstart — como provar a feature 299 de ponta a ponta
 
+## 0. Antes do deploy: conferência dos dados (decisão do dono, 14/09)
+
+Rodar no `manto-backend`, só leitura, com `MANTO_SEM_THREADS=1`, o levantamento que lista:
+- o grupo 344, com os comprovantes de cada evento, datas e valores;
+- os outros 5 casos grandes de recebido acima do valor (85, 184, 288, 309, 319);
+- as vendas desde a data de início que têm comprovante sem valor, com quanto cada uma passaria a
+  cobrar em "Cobranças".
+
+O script é o `dados_pre_deploy_299.py`, que vai para `scripts/oneoff/` no implement. O dono confere e
+corrige o que precisar **antes** de publicar.
+
+**Aviso à equipe no dia** (o dono decide quem envia):
+
+> A Home mudou: o painel "Comercial" virou dois — "Cobranças" e "Sem valor". Cobranças agora mostra
+> todas as vendas com dinheiro a receber, com a data de vencimento, e por isso a lista ficou maior.
+> O número do topo ficou menor porque só conta o que precisa de ação (vermelho e amarelo). Em "Sem
+> valor" estão os eventos lançados sem valor de venda: é só abrir e pôr o valor. No cadastro, quem
+> ainda não tem o preço marca "Valor a definir" — não precisa mais pôr R$ 0,01.
+
 ## 1. Ambiente local (PowerShell, na raiz do repositório)
 
 ```powershell

@@ -494,3 +494,45 @@ mesmo dia (R7, R8, R22, R25).
 - **Decisão**: não muda. Continua 0,00 para valor vazio, porque é a base do lucro, que é relatório
   financeiro fora de escopo. O FR-015 vale para o "Valor de venda final" do `VendaPanel`.
 - **Porquê**: escopo da spec.
+
+## Decisões do `/speckit-checklist` (14/09)
+
+A revisão de requisitos (`checklists/revisao.md`) teve 61 itens. Os ajustes abaixo entraram na spec;
+os marcados "dono" vieram de resposta dele.
+
+- **R30 — Ordem da cobrança (dono).** Por cor (vermelho, amarelo, cinza) e, dentro da cor, pelo
+  vencimento.
+  - O sinal pendente é amarelo e fica antes das cinza.
+  - Com prazo em até 2 dias, vermelho: selo do prazo e `nota: "sem sinal"`.
+  - Substitui a ordem só por vencimento do R9.
+- **R31 — Cards (dono).** O card comercial mostra `para_agir`, e a soma dos cards bate com o total. O
+  painel aberto conta todas as linhas. Substitui o "card = todas as linhas" do R15.
+- **R32 — Valor abaixo de R$ 1,00 sem a marca é recusado (dono).**
+  - Onde vale: `_validate_event_core` e o Zod.
+  - A exceção é a edição que mantém o mesmo valor simbólico que o evento já tinha: compara o corpo
+    com o valor gravado.
+  - Efeito colateral aceito: a criação Jinja também recusa.
+- **R33 — Vencimento nunca antes da data da venda.** Nos itens "parcela" e "política", `max(regra,
+  sale_date)`. A venda fechada depois do prazo nasce "Vence hoje", e não "Atrasado".
+- **R34 — Parcela coberta pelo dinheiro.** Uma parcela conta como coberta quando o recebido do grupo
+  alcança a soma acumulada das parcelas até ela, pela ordem das datas. A marca `received` da parcela
+  não é usada. Com tudo coberto e saldo restante, vale a política.
+- **R35 — Cronograma substitui a regra da metade**, como a data combinada. A faturada sem data
+  combinada segue a regra.
+- **R36 — Data do grupo sem compromisso interno.** Ela ignora os cancelados e os compromissos
+  internos, e as exclusões valem pelo principal.
+- **R37 — Principal apagado.** Os outros eventos viram vendas avulsas e entram, um a um, em "Sem
+  valor". `principal_da_venda` já cai no próprio evento.
+- **R38 — Comissão.**
+  - O FR-031 também vale quando a venda passa de simbólico para real num mês posterior.
+  - A comissão paga nunca muda nem se duplica.
+  - Só daqui para frente.
+- **R39 — Estados de tela.**
+  - Vazio: "Nenhuma cobrança em aberto ✓" no painel e "Em dia ✓" no card.
+  - Erro: `cobrancas_resumo`/`sem_valor` = `null`, e a tela mostra "Não foi possível carregar …" com
+    "Tentar de novo" (Princípio V).
+- **R40 — Zero é "a definir".** `a_definir` sai do servidor, na linha e em `venda`, e a tela não
+  compara valores.
+- **R41 — Dados antes do deploy (dono).** Levantar, só lendo a produção, o 344, os outros 5 casos
+  grandes e as vendas com comprovante sem valor, para o dono conferir.
+  - Script: `scratchpad/dados_pre_deploy_299.py`, que vai para o `quickstart.md` §0.

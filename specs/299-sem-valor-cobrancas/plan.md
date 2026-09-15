@@ -228,7 +228,10 @@ specs/299-sem-valor-cobrancas/verify_299.py
    - `verify_299` 17/17, mais `verify_298`, `verify_273` e `verify_174` de novo.
    - Telas abertas: Home no computador e a 375 px, com a regressão de Formulários; cadastro;
      edição; principal e satélite.
-8. **Docs.**
+8. **Antes do deploy** (decisão do dono, R41): levantar, só lendo a produção, o 344, os casos
+   grandes de recebido acima do valor e as vendas com comprovante sem valor. O dono confere e corrige
+   antes de publicar ([quickstart.md](./quickstart.md) §0).
+9. **Docs.**
    - `docs/01`: §3.2, §4.3 e o contrato do detalhe.
    - `docs/02`: Home, cadastro e aba Comercial.
    - `docs/04`: invariantes da cobrança e duas definições de "sem valor".
@@ -256,6 +259,8 @@ specs/299-sem-valor-cobrancas/verify_299.py
 | Bundle novo com servidor antigo: 400 em campo escondido pela marca | Falha segura (valida antes do Google); publicar fora do horário |
 | Linha resolvida continua na Home (staleTime de 30 s) | Invalidar `['dashboard']` nos hooks de venda, comprovante, orçamento, criar, editar e cancelar (R23) |
 | Duas definições de "sem valor" (Financeiro com `<= 0`, Home com `< 1`) | Predicado com nome próprio; `docs/04` registra as duas para ninguém "unificar" de passagem |
+| Comprovante sem valor e o 344 duplicado enganando Cobranças no dia | Conferência de dados antes do deploy, decidida pelo dono (R41) |
+| Recusar valor abaixo de R$ 1,00 travando a edição de eventos antigos de R$ 0,01 | A edição que mantém o mesmo valor é aceita (R32); cenário 6 |
 
 ## Rastreamento de complexidade
 
