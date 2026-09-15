@@ -807,7 +807,18 @@ def cen_15() -> None:
     cob = _detalhe(com, e["s10a"]).get("cobranca") or {}
     _garante(cob.get("quitado") is True and cob.get("enabled") is False, f"faltando 0,50: {cob}")
     cob = _detalhe(com, e["s12b"]).get("cobranca") or {}
-    _garante(cob.get("sem_valor") is False and cob.get("enabled") is False, f"cortesia: {cob}")
+    _garante(cob.get("sem_valor") is False and cob.get("enabled") is False and cob.get("cortesia") is True
+             and cob.get("quitado") is False, f"cortesia: {cob}")
+    # Cortesia nunca comissiona (dono, 15/09), nem a antiga com valor gravado e vendedor.
+    with app.app_context():
+        from app.financeiro.comissoes_ops import _sync_commission_payment
+
+        ev = CalendarEvent.query.get(e["s12b"])
+        ev.seller_id = estado["comercial_id"]
+        _sync_commission_payment(ev)
+        db.session.commit()
+    vivas = [x for x in _comissoes(e["s12b"]) if x[0] != "cancelado"]
+    _garante(not vivas, f"cortesia com valor ganhou comissão: {vivas}")
 
 
 def cen_16() -> None:

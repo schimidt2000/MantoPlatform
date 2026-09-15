@@ -115,7 +115,10 @@ export interface EventClientsInput {
  * mandar `[]` desvincula todos).
  */
 export function useSetEventClients(eventId: number) {
-  return useEventPatch<EventClientsInput>(eventId, "/clients", "PUT");
+  // A Contratante é o nome das linhas de "Cobranças" e "Sem valor" da Home (feature 299).
+  return useEventPatch<EventClientsInput>(eventId, "/clients", "PUT", {
+    invalidar: [["dashboard"]],
+  });
 }
 
 /**

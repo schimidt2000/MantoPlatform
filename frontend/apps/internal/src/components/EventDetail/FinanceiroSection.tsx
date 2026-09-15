@@ -242,6 +242,8 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
     );
   }
   const recebido = cobranca.recebido ?? 0;
+  // Cortesia ou permuta não é venda: nada de "de R$ 0,00 — falta R$ 0,00" nem "Quitado".
+  const cortesia = Boolean(cobranca.cortesia);
   if (cobranca.escopo === "grupo_outro") {
     const grupo = data.event.group;
     return (
@@ -258,10 +260,24 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
           .
         </span>
         <span className="block font-medium tabular-nums">
-          Recebido no grupo {brl(recebido)} de {brl(cobranca.valor ?? 0)}
-          {!cobranca.quitado && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
+          {cortesia ? (
+            `Recebido no grupo ${brl(recebido)} · cortesia ou permuta`
+          ) : (
+            <>
+              Recebido no grupo {brl(recebido)} de {brl(cobranca.valor ?? 0)}
+              {!cobranca.quitado && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
+            </>
+          )}
         </span>
         <span className="block text-xs text-muted tabular-nums">neste evento: {brl(doEvento)}</span>
+      </span>
+    );
+  }
+  if (cortesia) {
+    return (
+      <span className="block text-ink">
+        <span className="font-medium tabular-nums">Recebido {brl(recebido)} · cortesia ou permuta</span>
+        <OutrosDoGrupo outros={pagamentos.outros_do_grupo ?? []} />
       </span>
     );
   }

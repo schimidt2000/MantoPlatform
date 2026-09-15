@@ -157,7 +157,10 @@ tratamento de comissão (pendente vira `cancelado`; paga gera estorno negativo) 
       `NULL`); a venda lançada agora com a data de um mês anterior segue a data da venda. A linha de
       R$ 0,00 já paga não conta como paga quando há comissão de verdade a pagar — pagar zero não
       é pagar; com a comissão calculada também em zero, ela vale —, e a comissão paga de valor
-      real nunca é paga de novo.
+      real nunca é paga de novo. Essa regra vale só na comissão comum: a EducaManto fica como antes
+      da 299, e a linha que sai da EducaManto não leva a data da realização para o ramo comum.
+    - **Cortesia ou permuta nunca comissiona** (dono, 15/09): a sincronização não cria linha e
+      cancela a `a_pagar`, mesmo na cortesia antiga que tem valor gravado.
 
 ### Armadilhas
 

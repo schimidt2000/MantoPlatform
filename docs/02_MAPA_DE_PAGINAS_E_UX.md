@@ -473,12 +473,15 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   - **Feature 299 na aba Comercial**: o valor vazio ou zero aparece como "A definir" (nunca
     "R$ 0,00"), o simbólico com a marca "valor simbólico" e, no outro evento de um grupo, "no evento
     principal" com o link. O `PATCH /comercial` recusa o valor novo entre R$ 0,01 e R$ 0,99, com o
-    erro no campo. "Comprovantes de pagamento" diz "Recebido X de Y — falta Z" **do grupo**, com
-    "Inclui R$ X em comprovantes de outros eventos do grupo" (com os links), e o "Quitado" usa a folga
-    de centavos; no satélite, "Este evento é parte do grupo … A venda está no evento principal",
-    "Recebido no grupo …" e "neste evento: R$ W". O chip "Recebimento" diz "valor a definir" ou "no
+    erro no campo que o servidor nomeou (bruto ou valor final) e o foco nele. "Comprovantes de
+    pagamento" diz "Recebido X de Y — falta Z" **do grupo**, com "Inclui R$ X em comprovantes de
+    outros eventos do grupo" (com os links), e o "Quitado" usa a folga de centavos; no satélite,
+    "Este evento é parte do grupo … A venda está no <título do principal>" (link), "Recebido no
+    grupo …" e "neste evento: R$ W". A cortesia diz "Recebido R$ X · cortesia ou permuta", sem
+    "falta" nem "Quitado". O chip "Recebimento" diz "valor a definir", "cortesia ou permuta" ou "no
     principal", e o menu "Cobrança" do satélite explica que a cobrança está no principal. O
-    orçamento oferece aplicar valores também sobre o R$ 0,01. `?editar=venda` abre a venda em edição
+    orçamento oferece aplicar valores também sobre o R$ 0,01; para o FINANCEIRO o painel do
+    orçamento continua só leitura (a lista de orçamentos e o vínculo são do vendedor dono). `?editar=venda` abre a venda em edição
     (é o destino do "Pôr o valor" da Home).
   - **Aba Histórico**: *Avaliações dos artistas* (média + notas individuais com tags por
     critério) · *Feedback da cliente* · *Log de atividades* (accordion) — **este só existe no DOM

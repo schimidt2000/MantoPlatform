@@ -467,6 +467,8 @@ export interface EventoDetalhe {
     valor?: number | null;
     recebido?: number | null;
     quitado?: boolean;
+    /** Cortesia ou permuta: não é venda — sem "falta" nem "Quitado". */
+    cortesia?: boolean;
     sem_valor?: boolean;
     valor_simbolico?: boolean;
     sinal_pendente?: boolean;

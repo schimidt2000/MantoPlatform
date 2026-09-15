@@ -420,6 +420,8 @@ def _compute_cobranca(event: CalendarEvent, venda: "VendaResumo") -> dict[str, A
         "valor": _money(venda.valor),
         "recebido": _money(venda.recebido),
         "quitado": venda.quitada,
+        # Cortesia ou permuta não é venda: a página não diz "falta R$ 0,00" nem "Quitado".
+        "cortesia": venda.cortesia,
         "sem_valor": venda.sem_valor,
         "valor_simbolico": venda.valor_simbolico,
         "sinal_pendente": venda.sinal_pendente,

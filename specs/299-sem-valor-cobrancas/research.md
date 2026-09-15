@@ -551,6 +551,12 @@ os marcados "dono" vieram de resposta dele.
     - se está `pago`/`no_banco`, não conta como existente, e nasce uma `a_pagar` nova. O corte é
       na própria consulta, com ordem por id: testar depois do `.first()` sem ordem pegaria a paga de
       novo a cada sincronização e criaria uma `a_pagar` por vez (cenário 5h').
+    - **Convergências (15/09).** O corte só vale quando a comissão calculada agora é maior que zero
+      (com taxa 0%, ignorar a paga abriria uma linha de R$ 0,00 a cada pagamento, T048) e só na
+      comissão comum: a EducaManto fica como antes da 299 (T061).
+  - **Cortesia** (dono, 15/09): evento marcado como cortesia ou permuta nunca tem comissão. A
+    sincronização não cria linha e cancela a `a_pagar`; a paga fica. Se deixar de ser cortesia e
+    ganhar valor, a comissão nasce normalmente.
   - **A data.** Nos dois casos, `payable_from = hoje` quando o valor chegou depois (R45).
   - **A detecção.** É pelo valor da linha, sem mudar a assinatura, porque os chamadores fazem
     `flush` antes de sincronizar.

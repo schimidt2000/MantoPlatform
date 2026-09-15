@@ -377,6 +377,9 @@ function calcularPendencias(data: EventoDetalhe): Pendencia[] {
     if (cobranca.escopo === "grupo_outro") {
       valor = "no principal";
       ok = true;
+    } else if (cobranca.cortesia) {
+      valor = "cortesia ou permuta";
+      ok = true;
     } else if (cobranca.sem_valor) {
       valor = "valor a definir";
       ok = false;

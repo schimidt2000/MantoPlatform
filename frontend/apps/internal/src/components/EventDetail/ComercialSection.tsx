@@ -218,10 +218,18 @@ function VendaForm({
   const set = <K extends keyof EventComercialInput>(key: K, value: EventComercialInput[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  // O 400 do valor (feature 299, R43: R$ 0,01 não é venda) aparece no campo, com o texto do
-  // servidor — e não só como "Corrija os campos destacados" no rodapé.
+  // O 400 do valor (feature 299, R43: R$ 0,01 não é venda) aparece no campo que o servidor nomeou,
+  // com o texto dele — e não só como "Corrija os campos destacados" no rodapé —, e o foco vai até
+  // esse campo (o bruto vem antes, como na edição completa).
   const camposDoErro = salvar.error instanceof ApiRequestError ? salvar.error.fields : undefined;
-  const erroDoValor = camposDoErro?.sale_value ?? camposDoErro?.sale_value_gross;
+  const erroBruto = camposDoErro?.sale_value_gross;
+  const erroFinal = camposDoErro?.sale_value;
+  const erroDoValor = erroBruto ?? erroFinal;
+  const refBruto = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (camposDoErro?.sale_value_gross) refBruto.current?.focus();
+    else if (camposDoErro?.sale_value) refValor.current?.focus();
+  }, [camposDoErro]);
 
   return (
     <div className="space-y-3">
@@ -238,9 +246,13 @@ function VendaForm({
       {!form.is_cortesia_permuta && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className={LABEL_CLASS}>Valor antes do desconto</label>
+            <label className={LABEL_CLASS} htmlFor="venda-bruto">
+              Valor antes do desconto
+            </label>
             <MoneyInput
-              className={MONEY_CLASS}
+              id="venda-bruto"
+              ref={refBruto}
+              className={`${MONEY_CLASS} ${erroBruto ? "border-red" : ""}`}
               value={form.sale_value_gross ?? 0}
               onValueChange={(v) => set("sale_value_gross", v)}
               aria-label="Valor antes do desconto"
@@ -253,7 +265,7 @@ function VendaForm({
             <MoneyInput
               id="venda-valor"
               ref={refValor}
-              className={`${MONEY_CLASS} ${erroDoValor ? "border-red" : ""}`}
+              className={`${MONEY_CLASS} ${erroFinal ? "border-red" : ""}`}
               value={form.sale_value ?? 0}
               onValueChange={(v) => set("sale_value", v)}
               aria-label="Valor de venda final"

@@ -22,13 +22,14 @@ conta da Home (SC-003).
 | `enabled` | bool | `pode_copiar_cobranca`: vencimento ≤ hoje (SP), saldo ≥ R$ 1,00 (folga do FR-023), valor ≥ R$ 1,00, sem motivo de ficar fora e o evento aberto **não** é outro evento do grupo (FR-003) |
 | `valor`* | number \| null | valor de venda do principal |
 | `recebido`* | number | recebido do grupo |
-| `quitado`* | bool | valor ≥ R$ 1,00 e saldo < R$ 1,00 |
+| `quitado`* | bool | valor ≥ R$ 1,00 e saldo < R$ 1,00, fora cortesia (cortesia não é venda: nunca "Quitado"; decisão do dono, 15/09) |
+| `cortesia`* | bool | cortesia ou permuta, julgada pelo principal (segunda convergência) |
 | `sem_valor`* | bool | valor vazio, zero ou abaixo de R$ 1,00 (fora cortesia) |
 | `valor_simbolico`* | bool | `0 < valor < 1,00` |
 | `sinal_pendente`* | bool | como na Home |
-| `vencimento_origem`* | `"data_combinada" \| "parcela" \| "politica"` | |
+| `vencimento_origem`* | `"data_combinada" \| "parcela" \| "politica"` \| null | null quando nenhuma regra dá a data (sem data combinada, sem parcela descoberta e sem data do grupo, como no avulso cancelado) |
 | `escopo`* | `"evento" \| "grupo_principal" \| "grupo_outro"` | a tela escolhe o texto |
-| `grupo_tamanho`* | int | eventos não cancelados do grupo (1 no avulso) |
+| `grupo_tamanho`* | int | eventos não cancelados do grupo (1 no avulso; 0 no avulso cancelado) |
 
 \* nova e opcional.
 
@@ -69,6 +70,9 @@ conta da Home (SC-003).
 - **Outro evento do grupo**: "Este evento é parte do grupo {nome}. A venda está no {principal}.",
   seguido de "Recebido no grupo R$ X de R$ Y — falta Z" e "neste evento: R$ W".
 - **Sem valor**: "Recebido R$ X · valor de venda a definir", nunca "de R$ 0,00".
+- **Cortesia** (`cortesia`): "Recebido R$ X · cortesia ou permuta", sem "de R$ 0,00 — falta" e sem
+  "Quitado"; no outro evento do grupo, "Recebido no grupo R$ X · cortesia ou permuta". O chip
+  "Recebimento" do Resumo diz "cortesia ou permuta".
 - **Sem os campos novos** (servidor antigo): o texto de hoje.
 
 ## `mensagens`

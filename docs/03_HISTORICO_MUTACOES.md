@@ -293,7 +293,10 @@ do topo somava tudo, inclusive o que era só informação.
   que já está com R$ 0,01 salva outras mudanças sem ninguém mexer no valor.
 - Comissão tardia no mês do valor, só quando o evento já existia antes, sem valor — a venda
   lançada na virada do mês segue a data da venda. A de R$ 0,00 "paga" não conta quando há
-  comissão de verdade a pagar.
+  comissão de verdade a pagar. Cortesia nunca comissiona.
+- Na segunda convergência (15/09): o painel do orçamento continua só leitura para o FINANCEIRO (a
+  lista e o vínculo são do vendedor dono); na página, a cortesia diz "cortesia ou permuta", sem
+  "falta" nem "Quitado".
 - Os dados que podem enganar as listas (344 e os outros duplicados, comprovantes sem valor) são
   conferidos pelo dono **antes** do deploy.
 
@@ -320,7 +323,9 @@ esteira: `627cad4` spec, `5b43959` plano, `72409ef` checklist, `1a2876b` tarefas
    própria consulta, com ordem por id: testar depois do `.first()` duplicaria a comissão a cada
    `_resync_pending_commissions` (achado da verificação das correções do analyze; cenário 5h').
    Na convergência o corte ficou restrito à comissão calculada acima de zero: com taxa 0%, ignorar
-   a paga abriria uma linha nova de R$ 0,00 a cada pagamento.
+   a paga abriria uma linha nova de R$ 0,00 a cada pagamento. Na segunda, ficou só na comissão
+   comum (a EducaManto fica como antes), e a cortesia passou a nunca comissionar, mesmo a antiga
+   com valor gravado.
 5. **`created_at` é UTC ingênuo**: o mês de cadastro do R45 é tirado em São Paulo.
 6. **"Pôr o valor" foca o valor de venda final, não o bruto**: o `VendaForm` não deriva um do outro,
    e quem digitasse só o bruto salvaria e continuaria em "Sem valor".

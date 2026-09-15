@@ -710,6 +710,28 @@ def _valor_chegou_depois(event: CalendarEvent, hoje: date) -> bool:
     ) < mes_corrente
 
 
+def _data_herdada_da_educamanto(event: CalendarEvent, existing: CommissionPayment) -> bool:
+    """A data gravada na linha é a da realização, de quando a comissão era da EducaManto.
+
+    A linha que sai da EducaManto (título sem "(EDU", responsável desligado) cai no ramo comum
+    ainda com o beneficiário antigo e com `payable_from` = dia do evento. Antes da 299 o ramo comum
+    zerava essa data; mantê-la prenderia a comissão comum ao mês da realização. A data que a 299
+    grava (o dia em que o valor chegou) vem com o mesmo vendedor, então não cai aqui.
+
+    Args:
+        event: O evento, já fora do ramo EducaManto.
+        existing: A linha de comissão viva, com `payable_from` preenchido.
+
+    Returns:
+        True quando a data deve ser descartada.
+    """
+    return (
+        event.start_at is not None
+        and existing.payable_from == event.start_at.date()
+        and existing.seller_id != event.seller_id
+    )
+
+
 def _ciclo_da_comissao_comum(
     event: CalendarEvent, existing: CommissionPayment | None, amount: Decimal
 ) -> date | None:
@@ -724,6 +746,8 @@ def _ciclo_da_comissao_comum(
     from app.constants import now_sp
 
     if existing is not None and existing.payable_from is not None:
+        if _data_herdada_da_educamanto(event, existing):
+            return None
         return existing.payable_from
     nasce_agora = existing is None or (not existing.amount and amount > 0)
     hoje = now_sp().date()
@@ -777,9 +801,17 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
         # Evento cancelado (feature 224) não comissiona. Sem isto, qualquer escrita posterior
         # no evento recriaria a comissão que `aplicar_estorno_comissao` acabou de estornar.
         and not event.is_cancelled
+        # Cortesia ou permuta nunca comissiona (dono, 15/09). Hoje ela grava valor 0, mas há
+        # cortesia antiga com valor, e a regra não pode depender disso.
+        and not event.is_cortesia_permuta
     )
     amount = _event_commission(event, settings) if should_have else 0
-    existing = _comissao_existente(event.id, ignorar_zero_pago=amount > 0)
+    is_edu_com_responsavel = event.is_educamanto and _educamanto_responsavel(settings) is not None
+    # A linha de R$ 0,00 paga só deixa de contar na comissão comum: a EducaManto fica como antes da
+    # 299 (sem mudança, T024/T061).
+    existing = _comissao_existente(
+        event.id, ignorar_zero_pago=amount > 0 and not is_edu_com_responsavel
+    )
 
     if not should_have:
         if existing and existing.status == "a_pagar":
@@ -790,7 +822,6 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
     # Comissão EducaManto (feature 109): só entra no ciclo de pagamento após a realização —
     # payable_from = data do evento. Comissão comum: ciclo pela sale_date, salvo o valor que chegou
     # depois (feature 299, `_ciclo_da_comissao_comum`).
-    is_edu_com_responsavel = event.is_educamanto and _educamanto_responsavel(settings) is not None
     if is_edu_com_responsavel and event.start_at is not None:
         payable_from = event.start_at.date()
     else:

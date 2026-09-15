@@ -26,7 +26,7 @@ Uma venda é um evento avulso ou um grupo, sempre representado pelo **principal*
 | `recebido` | `Decimal` | soma de `EventPayment.amount` de **todos** os eventos do grupo, cancelados inclusive (R3) |
 | `data_do_grupo` | `date \| None` | menor `start_at.date()` entre os eventos **não cancelados e que não são compromisso interno** (R5) |
 | `vencimento` | `date \| None` | data combinada > 1ª parcela do principal que o recebido não cobre (parcelas somadas pela ordem das datas) > `data_do_grupo − 2`. Os dois últimos com piso na `sale_date` (R7, R33) |
-| `vencimento_origem` | `"data_combinada" \| "parcela" \| "politica"` | qual das três regras deu a data |
+| `vencimento_origem` | `"data_combinada" \| "parcela" \| "politica" \| None` | qual das três regras deu a data; `None` quando nenhuma dá (sem data combinada, sem parcela descoberta e sem data do grupo, como no avulso cancelado) |
 | `cliente` | `str \| None` | `contratante_name(principal)` |
 | `motivo_fora` | `str \| None` | `cancelado`, `ensaio`, `compromisso_interno`, `cortesia` ou `loja_virtual`, julgados pelo principal (R6) |
 
@@ -48,7 +48,7 @@ Propriedades derivadas, todas em `Decimal`:
 |---|---|---|
 | `fora` | `motivo_fora` preenchido, ou `data_do_grupo` antes do corte | em nenhuma lista |
 | `sem_valor` | `sem_valor` | "Evento sem valor de venda" |
-| `quitada` | valor ≥ 1,00 e `saldo < 1,00` (inclui recebido acima do valor) | em nenhuma lista; na página, "Quitado" |
+| `quitada` | valor ≥ 1,00 e `saldo < 1,00` (inclui recebido acima do valor), fora cortesia | em nenhuma lista; na página, "Quitado" (a cortesia nunca: ela é `fora`, e a página diz "cortesia ou permuta") |
 | `com_saldo` | valor ≥ 1,00 e `saldo ≥ 1,00` | "Cobranças" |
 
 Transições que tiram a linha da lista (FR-010), com a animação na tela:
@@ -88,8 +88,8 @@ Transições que tiram a linha da lista (FR-010), com a animação na tela:
 | Valor abaixo de R$ 1,00 sem a marca | `_validate_event_core` | 400, exceto na edição que mantém o mesmo valor que o evento já tinha |
 | Data da venda | `resolver_data_da_venda(..., a_definir)` | a criação sem data vira hoje (SP); a edição sem data mantém a atual; o evento sem data que ganha valor recebe hoje (como hoje) |
 | Satélite na edição completa | `update_event_core` | nenhum campo comercial é gravado no satélite |
-| Comissão tardia | `_sync_commission_payment` | comissão comum que nasce, ou passa de simbólico para real, quando o valor chegou depois (evento cadastrado num mês anterior ao corrente e `sale_date` também num mês anterior, R45) → `payable_from = hoje`, e não volta a `NULL`; a venda lançada agora com data de um mês anterior segue a `sale_date`, como hoje; a comissão paga de valor real nunca muda nem se duplica; a linha de R$ 0,00 já paga não conta, e nasce uma `a_pagar` nova (R42) |
-| Valor simbólico na aba Comercial | `api_update_event_comercial` | valor novo entre R$ 0,01 e R$ 0,99 → 400; vazio aceito (R43) |
+| Comissão tardia | `_sync_commission_payment` | comissão comum que nasce, ou passa de simbólico para real, quando o valor chegou depois (evento cadastrado num mês anterior ao corrente e `sale_date` também num mês anterior, R45) → `payable_from = hoje`, e não volta a `NULL`; a venda lançada agora com data de um mês anterior segue a `sale_date`, como hoje; a comissão paga de valor real nunca muda nem se duplica; a linha de R$ 0,00 já paga não conta, e nasce uma `a_pagar` nova (R42), só quando a comissão calculada é maior que zero e só na comissão comum; a cortesia nunca comissiona |
+| Valor simbólico na aba Comercial | `event_ops.erros_do_valor_na_aba_comercial`, chamada por `api_update_event_comercial` | valor novo entre R$ 0,01 e R$ 0,99 → 400; vazio aceito (R43) |
 | Valor simbólico no orçamento | `aplicar_valores_do_orcamento` | abaixo de R$ 1,00 conta como "sem venda"; a cortesia continua recusada |
 
 ## Invariantes (vão para o `docs/04`)

@@ -166,6 +166,19 @@ Respostas do dono no `/speckit-analyze`:
   agora com a data de um mês anterior (por exemplo, na virada do mês) segue o ciclo da data da
   venda, como hoje.
 
+### Session 2026-09-15
+
+Respostas do dono na segunda convergência (`tasks.md`, T056, T057 e T061):
+
+- Q: O FINANCEIRO deve aplicar orçamento pela aba Comercial? A lista de orçamentos só abre para
+  COMERCIAL e SUPERADMIN, e o vínculo só aceita orçamento do próprio usuário. → A: deixar como está:
+  o painel do orçamento é só leitura para o FINANCEIRO (FR-007 e FR-018 corrigidos).
+- Q: Na página do evento, a cortesia mostra "Quitado"? → A: não; a cortesia não é venda: a página
+  diz "cortesia ou permuta", sem "falta" nem "Quitado".
+- Q: A comissão de R$ 0,00 já paga vale para a EducaManto? → A: o ponto é que evento de cortesia
+  não tem comissão. A cortesia nunca comissiona (mesmo a antiga, com valor gravado; deixando de ser
+  cortesia e ganhando valor, a comissão nasce normalmente), e a EducaManto fica como antes da 299.
+
 ## Cenários e Verificação *(obrigatório)*
 
 ### História 1 — O grupo é cobrado como uma venda só (Prioridade: P1)
@@ -454,8 +467,7 @@ confia no resto.
   - "já recebeu R$ X", quando houver comprovante;
   - a ação "Pôr o valor", que abre o evento na aba Comercial já com os valores em edição e o foco no
     valor de venda final (SC-007). Quem não edita a venda pela aba Comercial (o FINANCEIRO) vê "Abrir",
-    como na 298, e a aba abre só para leitura; dentro dela, ele continua podendo aplicar um
-    orçamento, como hoje (FR-018).
+    como na 298, e a aba abre só para leitura, inclusive o painel do orçamento, como hoje (FR-018).
 - **FR-008**: A lista DEVE ter dois grupos, como a 298. "Ainda vai acontecer" inclui o evento de
   hoje e vem com o mais próximo primeiro. "Já aconteceu" vem com o mais recente primeiro.
 - **FR-009**: A cor DEVE seguir a régua da 298, mais larga que a das cobranças (FR-026) porque o
@@ -499,8 +511,10 @@ confia no resto.
   hoje.
 - **FR-018**: O valor simbólico DEVE contar como "sem venda" também em dois pontos da aba Comercial:
   em "Aplicar valores do orçamento" e no aviso "importado do Google sem venda". Assim a comercial
-  consegue pôr o valor pelo orçamento. Quem aplica o orçamento continua sendo quem aplica hoje
-  (COMERCIAL, FINANCEIRO e SUPERADMIN), e a cortesia continua recusada.
+  consegue pôr o valor pelo orçamento. Quem aplica o orçamento continua como hoje: na tela, o
+  COMERCIAL e o SUPERADMIN; para o FINANCEIRO o painel do orçamento é só leitura, porque a lista
+  de orçamentos só abre para COMERCIAL e SUPERADMIN e o vínculo só aceita orçamento do próprio
+  usuário (a API aceita o FINANCEIRO com orçamento dele). A cortesia continua recusada.
 - **FR-031**: Quando o valor chega depois, a comissão DEVE entrar no ciclo de pagamento do mês em que
   o valor foi posto, e nunca num mês já fechado. "Chega depois" quer dizer: o evento foi cadastrado
   num mês anterior ao corrente, a data da venda também está num mês anterior, e a comissão nasce

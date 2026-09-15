@@ -49,8 +49,12 @@ A validação roda **antes** do Google e de qualquer escrita (`agenda_write.py:7
     chegou depois (R45).
   - **Já `pago`/`no_banco`**: não conta como existente (o corte é na própria consulta, com ordem por
     id). Nasce uma linha `a_pagar` nova, e a paga fica intacta; a sincronização seguinte não cria
-    outra.
-- **EducaManto**: continua com `payable_from = data da realização`.
+    outra. Vale só quando a comissão calculada agora é maior que zero e só na comissão comum
+    (convergências de 15/09, T048 e T061).
+- **Cortesia ou permuta**: nunca tem comissão (dono, 15/09). Não nasce linha e a `a_pagar` vira
+  `cancelado`; a paga fica.
+- **EducaManto**: continua com `payable_from = data da realização`. A linha que sai da EducaManto
+  não leva essa data para o ramo comum (T060).
 - **Comissões anteriores à publicação**: não mudam.
 
 **Compatibilidade na janela de deploy**:
