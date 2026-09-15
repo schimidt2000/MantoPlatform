@@ -21,10 +21,11 @@ daqui importam `routes` dentro do corpo, nunca no topo.
 import logging
 import re
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.constants import EVENT_TYPE_SHOW, RoleName, now_sp
+from app.constants import EVENT_TYPE_SHOW, VALOR_MINIMO_DE_VENDA, RoleName, now_sp
 from app.email_service import send_async, send_ensaio_alert_email, send_event_changed_email
 from app.formularios.formularios_ops import (
     FormularioJaTemDestino,
@@ -647,6 +648,30 @@ def reclassificar_fora_de_sp(event: Any, *, local_mudou: bool) -> None:
     event.is_outside_sp = _lookup_sp_status(event.location or "")
     if event.is_outside_sp and (local_mudou or not event.travel_distance_km):
         _fetch_travel_data(event, SiteSetting.query.get(1))
+
+
+def sem_valor_de_venda(valor: Any) -> bool:
+    """True se o valor não fecha uma venda: vazio, zero ou simbólico (abaixo de R$ 1,00).
+
+    Fonte única do limite da feature 299 — a Home (`cobranca_ops`), o orçamento, a validação do
+    cadastro e a leitura do evento usam esta função. Mora aqui, e não no financeiro, porque o
+    orçamento (agenda) também a usa e a agenda não importa do financeiro. No Financeiro e na
+    Auditoria, "sem valor" continua sendo `<= 0`: são duas definições de propósito (docs/04).
+
+    Args:
+        valor: `sale_value` do evento (`Decimal`, número ou ``None``).
+    """
+    return valor is None or Decimal(str(valor)) < VALOR_MINIMO_DE_VENDA
+
+
+def valor_a_definir(valor: Any) -> bool:
+    """True se o valor está vazio ou zerado — o que a tela mostra como "A definir" (feature 299)."""
+    return valor is None or Decimal(str(valor)) == 0
+
+
+def valor_simbolico(valor: Any) -> bool:
+    """True se o valor está entre zero e R$ 1,00 — o R$ 0,01 de "segurar a data" (feature 299)."""
+    return valor is not None and Decimal("0") < Decimal(str(valor)) < VALOR_MINIMO_DE_VENDA
 
 
 def resolver_data_da_venda(
@@ -1420,7 +1445,7 @@ def build_ensaio_times(date_str: str, start_str: str, end_str: str) -> tuple[dat
     try:
         d = date.fromisoformat((date_str or "").strip())
     except ValueError:
-        raise EnsaioValidationError("date", "Data inválida.")
+        raise EnsaioValidationError("date", "Data inválida.") from None
 
     start = datetime.combine(d, _parse_hhmm(start_str, "start"))
     end = datetime.combine(d, _parse_hhmm(end_str, "end"))

@@ -228,6 +228,9 @@ export function EventHeader({ data }: EventHeaderProps) {
   const canDelete = Boolean(data.flags.can_delete);
   const reembolsosPendentes = data.reembolsos_pendentes_total ?? 0;
   const cobrancaLiberada = Boolean(data.cobranca?.enabled);
+  // Feature 299: no outro evento do grupo a mensagem sairia com os personagens e a data DESTE
+  // evento, mas quem cobra é o principal — o servidor já manda `enabled: false`; o título explica.
+  const cobrancaNoPrincipal = data.cobranca?.escopo === "grupo_outro";
 
   const items: KebabMenuItem[] = [];
   if (event.google_html_link && canCasting) {
@@ -252,9 +255,11 @@ export function EventHeader({ data }: EventHeaderProps) {
       items.push({
         label: "💰 Cobrança",
         disabled: !cobrancaLiberada,
-        title: cobrancaLiberada
-          ? "Copiar mensagem de cobrança do valor em aberto"
-          : "Disponível apenas na data limite de pagamento ou em atraso",
+        title: cobrancaNoPrincipal
+          ? "A cobrança deste grupo está no evento principal"
+          : cobrancaLiberada
+            ? "Copiar mensagem de cobrança do valor em aberto"
+            : "Disponível apenas na data limite de pagamento ou em atraso",
         onClick: () => copiar(buildCobrancaMsg(mensagens), "Mensagem de cobrança copiada."),
       });
       items.push({

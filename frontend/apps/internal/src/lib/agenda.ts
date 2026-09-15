@@ -436,6 +436,14 @@ export interface EventoDetalhe {
     source: string;
     clients: { client_id: number; name: string | null; relation: string }[];
     form_response: { id: number; name: string; form_type: string } | null;
+    /**
+     * Feature 299 — opcionais: o servidor antigo não manda (janela de deploy). `sem_valor` =
+     * vazio, zero ou abaixo de R$ 1,00; `a_definir` = vazio ou zero; os três já vêm `false` na
+     * cortesia, que não é "sem valor".
+     */
+    sem_valor?: boolean;
+    a_definir?: boolean;
+    valor_simbolico?: boolean;
   };
   /** feature 273 — só na resposta de `PATCH /api/events/<id>/orcamento`. */
   relatorio_orcamento?: RelatorioOrcamento;
@@ -447,7 +455,26 @@ export interface EventoDetalhe {
     status: string;
     file: string | null;
   }[];
-  cobranca?: { outstanding: number | null; due: string | null; enabled: boolean };
+  /**
+   * Cobrança da venda (feature 299: o grupo é uma venda só — a conta é a mesma da Home). As três
+   * primeiras chaves são as de sempre; as outras são opcionais porque o servidor antigo não as
+   * manda na janela de deploy, e a tela cai no texto de antes quando elas faltam.
+   */
+  cobranca?: {
+    outstanding: number | null;
+    due: string | null;
+    enabled: boolean;
+    valor?: number | null;
+    recebido?: number | null;
+    quitado?: boolean;
+    sem_valor?: boolean;
+    valor_simbolico?: boolean;
+    sinal_pendente?: boolean;
+    vencimento_origem?: "data_combinada" | "parcela" | "politica" | null;
+    /** `grupo_outro` = este evento é parte de um grupo cuja venda mora no principal. */
+    escopo?: "evento" | "grupo_principal" | "grupo_outro";
+    grupo_tamanho?: number;
+  };
   kpi?: {
     sale_value: number | null;
     cost: number | null;
@@ -469,6 +496,17 @@ export interface EventoDetalhe {
   pagamentos?: {
     items: { id: number; amount: number | null; file_path: string; created_at: string | null }[];
     received_total: number | null;
+    /**
+     * Feature 299 — um resumo por evento dos comprovantes dos OUTROS eventos do grupo (no
+     * satélite, inclui o principal), sem arquivo. Vazio no avulso; ausente no servidor antigo.
+     */
+    outros_do_grupo?: {
+      event_id: number;
+      event_title: string;
+      start_at: string | null;
+      total: number;
+      quantidade: number;
+    }[];
   };
   reembolsos?: {
     items: {

@@ -74,7 +74,7 @@ compartilhado e fica na fase Foundational.
 
 - [x] T001 Commitar `specs/299-sem-valor-cobrancas/tasks.md` na branch `299-sem-valor-cobrancas`
   (`docs(299): tarefas`). Os outros artefatos já estão commitados. *(Feito em `1a2876b`.)*
-- [ ] T002 Acrescentar em `app/constants.py`, logo depois do bloco `FORM_COR_*` (`:404-405`), as
+- [x] T002 Acrescentar em `app/constants.py`, logo depois do bloco `FORM_COR_*` (`:404-405`), as
   constantes da 299, cada bloco com o porquê (research R2):
   - `VALOR_MINIMO_DE_VENDA = Decimal("1.00")` e `FOLGA_COBRANCA = Decimal("1.00")`, dois nomes de
     propósito;
@@ -97,7 +97,7 @@ compartilhado e fica na fase Foundational.
 
 **⚠️ CRITICAL**: nenhuma história começa antes desta fase terminar.
 
-- [ ] T004 Escrever `specs/299-sem-valor-cobrancas/verify_299.py` **agora, antes do núcleo**, com os 17
+- [x] T004 Escrever `specs/299-sem-valor-cobrancas/verify_299.py` **agora, antes do núcleo**, com os 17
   cenários da tabela da spec e os nomes congelados nos três contratos.
 
   **Esqueleto**: o de `specs/298-formulario-vira-evento/verify_298.py` (`:45-155, 742-781`):
@@ -274,7 +274,7 @@ compartilhado e fica na fase Foundational.
   Rodar agora e guardar a saída em `specs/299-sem-valor-cobrancas/verify_299_primeira_falha.txt`. Tem
   de falhar pelos motivos certos (bloco `sem_valor` ausente, soma por evento, selos em inglês, 400
   ausente, `outros_do_grupo` ausente), nunca por erro de semeio.
-- [ ] T005 Em `app/calendar/event_ops.py`, perto de `resolver_data_da_venda` (`:652-684`), criar três
+- [x] T005 Em `app/calendar/event_ops.py`, perto de `resolver_data_da_venda` (`:652-684`), criar três
   predicados puros:
   - `sem_valor_de_venda(valor: Decimal | None) -> bool`: vazio, zero ou abaixo de
     `VALOR_MINIMO_DE_VENDA`;
@@ -283,7 +283,7 @@ compartilhado e fica na fase Foundational.
 
   São documentados como a fonte única do limite e usados pelo núcleo, pelo orçamento, pela
   validação e pela leitura do evento.
-- [ ] T006 Criar `app/financeiro/cobranca_ops.py` (novo; `ruff format`), puro, documentado ("uma
+- [x] T006 Criar `app/financeiro/cobranca_ops.py` (novo; `ruff format`), puro, documentado ("uma
   venda = evento avulso ou grupo pelo principal; fonte única da Home e da página do evento").
 
   **Imports**: `contratante_name`, `is_loja_virtual` e `NON_SALE_EVENT_TYPE` de
@@ -371,7 +371,7 @@ certos, com a saída guardada.
 **Verificação da história**: cenários 7, 8 e 15 do `verify_299.py` em PASS; página do principal e do
 satélite abertas.
 
-- [ ] T007 [US1] Em `app/api/dashboard_service.py`:
+- [x] T007 [US1] Em `app/api/dashboard_service.py`:
   - **extrair** `_pode_criar_evento(user, impersonate, is_superadmin: bool) -> bool` da expressão
     inline de `_painel_formularios` (`:589-591`), que passa a usá-la;
   - trocar `compute_comercial_pending`/`serialize_comercial_pending`/`_SEVERITY_ORDER` (`:267-361`)
@@ -393,7 +393,7 @@ satélite abertas.
       interno; na falha dele, `None`, e `pending_payments` continua lista;
   - atualizar a docstring de `build_dashboard_summary` (`:495-506`) e o comentário do gate
     (`:575-576`); o gate não muda.
-- [ ] T008 [US1] Em `app/api/agenda_read.py`:
+- [x] T008 [US1] Em `app/api/agenda_read.py`:
   - `_compute_cobranca` (`:401-421`) vira um adaptador de `cobranca_ops.resumo_da_venda_do_evento`,
     com o hoje de SP (`now_sp().date()`);
   - chaves antigas:
@@ -407,13 +407,13 @@ satélite abertas.
     `outros_do_grupo = cobranca_ops.outros_do_grupo(resumo, event.id)`;
   - `_serialize_mensagens` (`:635-661`) continua lendo `outstanding`/`due`; conferir que a mensagem
     sai com o saldo do grupo.
-- [ ] T009 [US1] Em `frontend/apps/internal/src/lib/agenda.ts`, acrescentar como opcionais:
+- [x] T009 [US1] Em `frontend/apps/internal/src/lib/agenda.ts`, acrescentar como opcionais:
   - em `cobranca?` (`:450`), os campos novos;
   - em `pagamentos?` (`:469-472`), `outros_do_grupo?`;
   - em `venda?` (`:414-439`), `sem_valor?`, `a_definir?` e `valor_simbolico?`.
 
   Nenhum tipo existente muda.
-- [ ] T010 [US1] Em `frontend/apps/internal/src/components/EventDetail/FinanceiroSection.tsx`, no
+- [x] T010 [US1] Em `frontend/apps/internal/src/components/EventDetail/FinanceiroSection.tsx`, no
   `PagamentosPanel` (`:207-285`), seguindo `contracts/evento-cobranca.md` (depois do T009):
   - **principal ou avulso**: "Recebido {recebido} de {valor} — falta {outstanding}"; "Quitado" por
     `cobranca.quitado`; e "Inclui R$ X em comprovantes de outros eventos do grupo", com links;
@@ -421,7 +421,7 @@ satélite abertas.
     (link por `event.group.leader`), mais "Recebido no grupo …" e "neste evento: R$ W";
   - **sem valor**: "Recebido R$ X · valor de venda a definir";
   - **sem os campos novos**: o texto de hoje.
-- [ ] T011 [US1] Depois do T009, em
+- [x] T011 [US1] Depois do T009, em
   `frontend/apps/internal/src/components/EventDetail/ResumoSection.tsx` (`:368-376`), o chip
   "Recebimento":
   - sem valor → "valor a definir";
@@ -443,7 +443,7 @@ cenários 7, 8 e 15 verdes.
 **Verificação da história**: cenários 2, 3 e 4 em PASS; painel aberto no computador, a 375 px e como
 FINANCEIRO.
 
-- [ ] T012 [US2] Em `app/api/dashboard_service.py`, em `_painel_comercial`:
+- [x] T012 [US2] Em `app/api/dashboard_service.py`, em `_painel_comercial`:
   - acrescentar `sem_valor = cobranca_ops.listar_sem_valor(vendas, hoje)`, num `_bloco("sem_valor")`
     interno (na falha, `sem_valor = None`);
   - acrescentar `pode_editar_venda = _pode_criar_evento(user, impersonate, is_superadmin)`, a

@@ -5,12 +5,12 @@ RESUMO do evento (agenda); o detalhe do evento (com RBAC financeiro) entra no In
 Reaproveita os parsers e a query de mês da view Jinja (Princípio I) — não duplica lógica.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
-from app.constants import EVENT_TYPE_SHOW, EVENT_TYPE_VIRTUAL, RoleName
+from app.constants import EVENT_TYPE_SHOW, EVENT_TYPE_VIRTUAL, RoleName, now_sp
 from app.models import (
     CalendarEvent,
     ClientFeedback,
@@ -25,6 +25,9 @@ from app.models import (
     SpecialExpense,
     User,
 )
+
+if TYPE_CHECKING:
+    from app.financeiro.cobranca_ops import VendaResumo
 
 
 def _money(value: Any) -> float | None:
@@ -398,26 +401,31 @@ def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
     }
 
 
-def _compute_cobranca(
-    event: CalendarEvent, payments: list[EventPayment]
-) -> dict[str, Any]:
-    """Saldo em aberto + data limite da cobrança — mesma política da view."""
-    today = date.today()
-    policy_due = event.start_at.date() - timedelta(days=2) if event.start_at else None
-    unreceived = [i for i in event.installments if not i.received]
-    if event.installments:
-        outstanding = sum((i.amount or 0 for i in unreceived), Decimal("0"))
-        due_dates = [i.due_date for i in unreceived if i.due_date]
-        due = min(due_dates) if due_dates else policy_due
-    else:
-        received = sum((p.amount or 0 for p in payments), Decimal("0"))
-        outstanding = Decimal(event.sale_value or 0) - received
-        due = event.payment_due_date or policy_due
-    enabled = due is not None and due <= today and outstanding > 0
+def _compute_cobranca(event: CalendarEvent, venda: "VendaResumo") -> dict[str, Any]:
+    """Cobrança da página do evento, pela MESMA conta da Home (feature 299, SC-003).
+
+    O grupo é uma venda só: o valor é o do principal e o recebido soma os comprovantes de todos os
+    eventos do grupo. Com cronograma, o saldo é valor menos recebido — as parcelas só dão a data.
+    O "hoje" é o de São Paulo (antes era o UTC do servidor).
+
+    As três chaves antigas (`outstanding`, `due`, `enabled`) mantêm nome e tipo: o bundle em cache e
+    `_serialize_mensagens` leem só elas. As novas são opcionais no TS.
+    """
+    from app.financeiro import cobranca_ops
+
     return {
-        "outstanding": _money(outstanding),
-        "due": due.isoformat() if due else None,
-        "enabled": bool(enabled),
+        "outstanding": _money(max(venda.saldo or Decimal("0"), Decimal("0"))),
+        "due": venda.vencimento.isoformat() if venda.vencimento else None,
+        "enabled": cobranca_ops.pode_copiar_cobranca(venda, event, now_sp().date()),
+        "valor": _money(venda.valor),
+        "recebido": _money(venda.recebido),
+        "quitado": venda.quitada,
+        "sem_valor": venda.sem_valor,
+        "valor_simbolico": venda.valor_simbolico,
+        "sinal_pendente": venda.sinal_pendente,
+        "vencimento_origem": venda.vencimento_origem,
+        "escopo": cobranca_ops.escopo_do_evento(venda, event),
+        "grupo_tamanho": venda.eventos_vivos,
     }
 
 
@@ -971,7 +979,11 @@ def serialize_event_detail(
             .order_by(EventInvoice.created_at.desc())
             .all()
         ]
-        data["cobranca"] = _compute_cobranca(event, payments)
+        from app.financeiro import cobranca_ops
+
+        # Uma leitura da venda para a cobrança e para os comprovantes dos outros eventos do grupo.
+        venda_do_evento = cobranca_ops.resumo_da_venda_do_evento(event)
+        data["cobranca"] = _compute_cobranca(event, venda_do_evento)
         data["acrescimos"] = _serialize_acrescimos(event)
         # Parcelas: entravam no cálculo do KPI mas nunca saíam no payload, então a tela não tinha
         # como mostrar (nem editar) o cronograma — só o formulário Jinja sabia dele (feature 253).
@@ -998,6 +1010,9 @@ def serialize_event_detail(
                 for p in payments
             ],
             "received_total": _money(sum((p.amount or 0 for p in payments), Decimal("0"))),
+            # Feature 299: os comprovantes dos OUTROS eventos do grupo, um resumo por evento — o
+            # "Recebido" da venda soma todos eles, e a tela diz de onde veio cada parte.
+            "outros_do_grupo": cobranca_ops.outros_do_grupo(venda_do_evento, event.id),
         }
         data["reembolsos"] = {
             "items": [

@@ -7,6 +7,7 @@ silent authorisation bypass at runtime.
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 # Feature 094: a partir desta data, salvar os dados de venda de um evento exige um cliente associado.
@@ -408,6 +409,49 @@ FORM_DATA_SUSPEITA_ANOS = 2
 # O tipo exibido na linha: "Pré-contrato" (o `form_type_label` antigo) vale para os dois tipos no
 # vocabulário da feature — a linha diz "Festa" ou "Corporativo".
 FORM_TIPO_ROTULOS = {"comum": "Festa", "corporativo": "Corporativo"}
+
+# ── Sem valor e cobranças (feature 299) ───────────────────────────────────────────────────────
+# Dois nomes para o mesmo R$ 1,00, de propósito: um diz o que é venda (abaixo disto é valor
+# simbólico, o R$ 0,01 de "segurar a data") e o outro é a folga da cobrança (diferença abaixo disto
+# é centavo, não dívida). Se o dono mudar um deles, o outro não muda junto por acidente.
+VALOR_MINIMO_DE_VENDA = Decimal("1.00")
+FOLGA_COBRANCA = Decimal("1.00")
+
+# Política comercial: o saldo final vence 2 dias antes do evento, salvo data combinada.
+SALDO_VENCE_DIAS_ANTES = 2
+
+# Compromisso interno (visita técnica, gravação, ensaio de título fora do padrão) é marcado pela
+# equipe com o laranja no começo do título — decisão do dono no specify da 299. O tipo vazio NÃO
+# serve para isso: o evento 395 é uma venda de R$ 35 mil sem tipo.
+MARCADORES_COMPROMISSO_INTERNO = ("🟧", "🟠")
+
+# As três cores das listas comerciais da Home — as mesmas palavras que a 298 já manda na linha
+# ("vermelho" = agir já, "amarelo" = atenção, "cinza" = informação, que não conta no total).
+COR_VERMELHO = "vermelho"
+COR_AMARELO = "amarelo"
+COR_CINZA = "cinza"
+
+# Régua de cor das cobranças (clarify da 299): o vermelho segue o prazo da política (2 dias) e o
+# amarelo vai até 30. A lista "Sem valor" usa a régua da 298 (`FORM_COR_*`), mais larga de
+# propósito: "se está sem valor de venda, precisa ter o quanto antes".
+COBRANCA_COR_VERMELHO_ATE_DIAS = 2
+COBRANCA_COR_AMARELO_ATE_DIAS = 30
+
+# Selos da cobrança, prontos em pt-BR: o servidor manda o texto e a tela não traduz código (o
+# `URGENT`/`WARN` cru na tela foi um dos motivos da feature).
+SELO_ATRASADO = "Atrasado"
+SELO_VENCE_HOJE = "Vence hoje"
+SELO_VENCE_EM_1_DIA = "Vence em 1 dia"
+SELO_VENCE_EM_N_DIAS = "Vence em {dias} dias"
+SELO_SINAL_PENDENTE = "Sinal pendente"
+NOTA_SEM_SINAL = "sem sinal"
+
+# Por que uma venda fica fora das duas listas comerciais — julgado sempre pelo principal.
+MOTIVO_FORA_CANCELADO = "cancelado"
+MOTIVO_FORA_ENSAIO = "ensaio"
+MOTIVO_FORA_COMPROMISSO_INTERNO = "compromisso_interno"
+MOTIVO_FORA_CORTESIA = "cortesia"
+MOTIVO_FORA_LOJA_VIRTUAL = "loja_virtual"
 
 VIRTUAL_NOTIFICATION_KIND_COMPRA = "compra_confirmada"
 VIRTUAL_NOTIFICATION_KIND_VIDEO = "video_pronto"

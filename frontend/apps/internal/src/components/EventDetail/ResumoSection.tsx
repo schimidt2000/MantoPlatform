@@ -366,14 +366,22 @@ function calcularPendencias(data: EventoDetalhe): Pendencia[] {
   }
 
   if (data.cobranca) {
-    const aberto = data.cobranca.outstanding ?? 0;
-    lista.push({
-      key: "cobranca",
-      label: "Recebimento",
-      valor: aberto > 0 ? `${brl(aberto)} em aberto` : "quitado",
-      ok: aberto <= 0,
-      tab: "comercial",
-    });
+    const cobranca = data.cobranca;
+    const aberto = cobranca.outstanding ?? 0;
+    // Feature 299: no outro evento de um grupo a cobrança mora no principal, e o evento sem
+    // valor de venda não está "quitado" — falta o valor. Sem as chaves novas (servidor antigo),
+    // vale a conta de antes.
+    const quitado = Boolean(cobranca.quitado) || aberto <= 0;
+    let valor = quitado ? "quitado" : `${brl(aberto)} em aberto`;
+    let ok = quitado;
+    if (cobranca.escopo === "grupo_outro") {
+      valor = "no principal";
+      ok = true;
+    } else if (cobranca.sem_valor) {
+      valor = "valor a definir";
+      ok = false;
+    }
+    lista.push({ key: "cobranca", label: "Recebimento", valor, ok, tab: "comercial" });
   }
 
   if (data.flags.can_confirm) {
