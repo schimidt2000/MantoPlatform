@@ -763,18 +763,18 @@ escondidas; cenários 9 a 13 verdes.
   - **edição**: de um evento importado; de um de R$ 0,01; de um satélite, salvando só o título sem
     escolher vendedor;
   - **aba Comercial** do principal e do satélite, com o 400 do valor simbólico no `VendaForm`.
-- [ ] T038 [P] `docs/01_SISTEMA_E_BANCO.md`:
+- [x] T038 [P] `docs/01_SISTEMA_E_BANCO.md`:
   - §3.2, a nota "Feature 299" apontando para `contracts/dashboard-comercial.md`;
   - o contrato do detalhe do evento (`cobranca`, `venda`, `pagamentos`);
   - a validação do valor em `POST/PATCH /api/events` e no `PATCH /comercial`;
   - a regra do orçamento;
   - §4.3, as linhas **novas** de `/api/dashboard` e do orçamento;
   - a nota `:1393-1397`, tirando "eventos sem valor" das lacunas.
-- [ ] T039 [P] `docs/02_MAPA_DE_PAGINAS_E_UX.md`:
+- [x] T039 [P] `docs/02_MAPA_DE_PAGINAS_E_UX.md`:
   - a Home: os painéis "Cobranças" e "Sem valor", os cards, o total do topo e os estados;
   - o cadastro e a edição com "Valor a definir";
   - a aba Comercial com "A definir", o valor simbólico recusado e a cobrança do grupo.
-- [ ] T040 [P] `docs/04_GUIA_DE_DOMINIOS.md`: os invariantes do `data-model.md`:
+- [x] T040 [P] `docs/04_GUIA_DE_DOMINIOS.md`: os invariantes do `data-model.md`:
   - o grupo é uma venda só na cobrança;
   - as duas definições de "sem valor";
   - o marcador laranja;
@@ -783,7 +783,7 @@ escondidas; cenários 9 a 13 verdes.
   - a comissão tardia e a comissão de R$ 0,00.
 
   Corrigir também o trecho `:153-154`, que diz que agrupar existe só no Jinja.
-- [ ] T041 [P] `docs/05_DIVIDA_TECNICA.md`:
+- [x] T041 [P] `docs/05_DIVIDA_TECNICA.md`:
   - remover num deploy futuro `severity` e o formato antigo de `pending_payments`;
   - a cópia Jinja da cobrança (`calendar/routes.py:1833-1850`);
   - `list_closed_sales` com `event_type != 'ENSAIO'` descartando a venda sem tipo;
@@ -794,9 +794,9 @@ escondidas; cenários 9 a 13 verdes.
   - `dashboard_cutoff` em UTC com `release_date` vazio (`dashboard_service.py:19-23`), enquanto as
     listas comerciais usam `corte_dia_sp`;
   - a consulta do SC-008, 30 dias depois do deploy.
-- [ ] T042 [P] Marcar `specs/051-task-venda-pendente/spec.md` como superada pela 299, com uma linha
+- [x] T042 [P] Marcar `specs/051-task-venda-pendente/spec.md` como superada pela 299, com uma linha
   no topo.
-- [ ] T043 `docs/03_HISTORICO_MUTACOES.md`: a entrada 299 no topo e a linha no índice, com:
+- [x] T043 `docs/03_HISTORICO_MUTACOES.md`: a entrada 299 no topo e a linha no índice, com:
   - a motivação e as decisões do dono (17 respostas: 7 no specify e no clarify, 4 no plan, 4 no
     checklist e 2 no analyze);
   - o que mudou;

@@ -70,8 +70,10 @@ A validação roda **antes** do Google e de qualquer escrita (`agenda_write.py:7
 ## `PATCH /api/events/<id>/comercial` (R43)
 
 - **Valor vazio**: aceito, e o evento fica "a definir".
-- **Valor novo entre R$ 0,01 e R$ 0,99** em `sale_value` ou `sale_value_gross`: **400**, com o mesmo
-  texto em `error.fields`. Vale a mesma exceção do valor que já estava gravado.
+- **Valor novo entre R$ 0,01 e R$ 0,99** em `sale_value` ou `sale_value_gross`: **400** em
+  `error.fields`, com o texto próprio da aba (`MENSAGEM_VALOR_SIMBOLICO`: "Valor abaixo de R$ 1,00 não
+  é venda: deixe o campo vazio (a definir) ou informe o valor." — a aba não tem a marca "Valor a
+  definir"). Vale a mesma exceção do valor que já estava gravado.
 - **Tela**: o `VendaForm` mostra o erro no campo de valor.
 - **Aberto pela Home** (R46, SC-007): `?aba=comercial&editar=venda` abre o `VendaForm` direto, com o
   foco em "Valor de venda final" (o valor que tira o evento de "Sem valor"). Ao salvar ou cancelar, o `editar` sai da URL. Sem permissão para

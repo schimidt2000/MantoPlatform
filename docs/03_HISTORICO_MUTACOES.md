@@ -4,7 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-14** · Estado do repositório: pós-feature
+> Última atualização: **2026-09-15** · Estado do repositório: pós-feature
+> **299-sem-valor-cobrancas** (sem migration; **na branch, não publicada** — a Home cobra o grupo
+> como uma venda só, mostra o evento sem valor de venda e conta no total só o que é para agir;
+> "Valor a definir" no cadastro no lugar do R$ 0,01) — antes dela pós-feature
 > **298-formulario-vira-evento** (migration `e5a1c7d93b20`; **publicada em 14/09/2026** pelo merge
 > "merge: 298 — o formulário vira evento" — a Home deixa de contar o histórico importado e mostra
 > só os formulários que chegaram desde 01/06 sem destino; encerrar com motivo, repetidos numa
@@ -101,6 +104,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **299-sem-valor-cobrancas** | A Home cobrava cada evento sozinho (o grupo 344 aparecia devendo R$ 2.430 pagos num outro evento do grupo), escondia 25 vendas com metade paga até a véspera, acusava dívida por centavos e não mostrava as 6 vendas sem valor. Núcleo único `cobranca_ops` (Home + página do evento): o grupo é uma venda só, vencimento data combinada > parcela > 2 dias antes (nunca antes da venda), folga de R$ 1,00, sinal pendente só sem data combinada e sem cronograma. Dois painéis, "Cobranças" e "Sem valor", com selos em pt-BR, cards e total só com o que é para agir e painel que nunca some em silêncio. "Valor a definir" no cadastro no lugar do R$ 0,01 (recusado também na aba Comercial); "Pôr o valor" em 2 cliques; comissão tardia no mês do valor | 2026-09-15 | `—` | (aqui) | — |
 | **298-formulario-vira-evento** | A Home dizia "1.347 formulários sem evento" contando o histórico importado do WhatsForm; desde 01/06 eram 36, e 7 deles já tinham o evento da cliente na agenda. Corte pela CHEGADA do formulário (meia-noite de SP da `release_date`; `created_at` é UTC ingênuo); todo formulário desde o corte tem destino — evento, encerrado com motivo ou a lista da Home ("Formulários sem evento na agenda", dois grupos, cor por urgência dita também em palavras, uma linha por telefone com "Este é o que vale", sugestão de evento a ±3 dias com descarte definitivo). Núcleo ÚNICO de vínculo (três caminhos gravavam `event_id` à mão; `link_event` sobrescrevia), cliente nos dois sentidos sem trocar ninguém, aviso do sino apagado para todos, 409 "já tem destino" em todos os caminhos — no `POST /api/events` ANTES do Google, com `FOR UPDATE`. Cadastro de evento preenchido pelo formulário nos dois vocabulários (site e WhatsForm) com selo "do formulário", alertas no campo e Salvar nunca desabilitado. Dois comandos de correção única pós-deploy | 2026-09-11 | `e5a1c7d93b20` | (aqui) | — |
 | **263b-hotfix-proxy-vazamento-sockets** | O `manto-frontend` morreu por memória duas vezes (08/09 e 10/09) com o processo Node em 85 MB: os outros 432 MB eram buffer de recepção TCP no kernel (`sock` do cgroup) em 142 sockets com o backend. O http-proxy só solta o upstream em `req 'aborted'`, que em Node ≥ 16 não dispara para GET cujo cliente some durante a resposta; o `proxyRes` ficava pausado e o socket em CLOSE_WAIT com a fila cheia — em mídia sem prazo nenhum desde a 263. Ganchos de `res 'close'` (`proxyReq.destroy()` e `res.on('pipe') → origem.destroy()`) e o inverso (`proxyReq 'close' → res.destroy()`, para o cliente não ficar mudo quando o Flask some), mídia com prazo de inatividade de 10 min em vez de 0, `requestTimeout` de 30 min (o default de 5 min respondia 408 a upload longo) e linha `[vida]` no log. `verify_263b` 21/21 no branch, 9/21 na `main`; três lentes adversariais sem refutação | 2026-09-11 | `—` | (aqui) | — |
 | **297-nfc-moldura-e-menu** | Os vídeos das tags NFC não tocavam porque eram os arquivos CRUS da câmera (4K, até 76 Mbps, 147 MB para 16 s) — íntegros e servidos certo, mas impossíveis de carregar em rede móvel. Pipeline de conversão em thread de fundo (1080 de largura, H.264+AAC, ~15 MB por 30 s) com a **moldura PNG do sistema gravada na borda** por `scale2ref` (uma moldura serve a qualquer tamanho); guarda um MESTRE sem moldura para reprocessar sem pedir o vídeo de volta. `/nfc/<code>` vira máquina de cenas — capa (o toque é o que libera o áudio), abertura, menu de três botões e mensagem especial com **recado da cliente**, que toca o sino da 272. Corrige de carona: corrida entre substituir e converter, `aspect-video` em vídeo vertical, MIME `video/m4v` inexistente, `errorhandler(429)` ausente (13 rotas públicas devolviam HTML cru) e o upload da tag sem isenção do prazo do proxy | 2026-09-09 | `c9f4a2b71e60` | (aqui) | — |
@@ -232,12 +236,12 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Agenda / evento / formulário de evento | 233, 231, 215, 210, 208, 192, 184 |
+| Agenda / evento / formulário de evento | 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
-| Financeiro, comissões e pagamentos | 230, 228, 226, 210c, 199, 194, 189, 187 |
+| Financeiro, comissões e pagamentos | 299, 230, 228, 226, 210c, 199, 194, 189, 187 |
 | Orçamento e EducaManto | 214, 191 (orçamento), 190 |
 | Portal do Artista | 233, 232, 231, 230, 229, 227, 216, 191 (portal) |
 | Design system, tema e acessibilidade | 228, 217, 216, 212 |
@@ -263,6 +267,81 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 299 — Sem valor e cobranças            (2026-09-15 · feature · sem migration)
+
+**Motivação.** Conversa com o dono em 10/09 (feature B do plano da 298). A cobrança da Home olhava
+só o próprio evento: no grupo 344 via R$ 3.078 recebidos de R$ 5.508 e cobrava R$ 2.430 que a
+cliente pagou num outro evento do grupo (4 comprovantes, R$ 9.955, estavam em eventos que não são o
+principal). Com metade paga, a venda só aparecia a 2 dias da festa — 25 escondidas em 14/09 —, 5
+das 15 linhas eram alarme de centavos (dois eventos de R$ 0,01 "segurando a data", três sinais com
+até R$ 0,50 a menos) e evento sem valor não aparecia em lugar nenhum (6 vendas em 14/09). O total
+do topo somava tudo, inclusive o que era só informação.
+
+**Decisões do dono (17 respostas, 14/09).**
+- O recebido do grupo vale na Home e na página do evento (o "a receber" do Financeiro fica).
+- Compromisso interno = título com 🟧/🟠 (o tipo vazio não serve: a venda 395 não tem tipo).
+- Total do topo: só vermelho + amarelo das listas comerciais; operação conta como antes. Os cards
+  comerciais mostram o mesmo número.
+- Cobranças: vermelho vencido ou até 2 dias; amarelo 3–30 ou sinal pendente; cinza > 30; em ordem
+  de cor e vencimento ("sobe com as urgentes"), com "sem sinal" no vermelho. Sem valor: régua da
+  298 ("se está sem valor de venda, precisa ter o quanto antes").
+- Sinal pendente vale na hora e não vale com data combinada nem cronograma; a data combinada
+  vence a parcela.
+- Dois painéis, "Cobranças" e "Sem valor". "Pôr o valor" em 2 cliques (a aba abre em edição).
+- Valor abaixo de R$ 1,00 sem "Valor a definir" é recusado (também na aba Comercial); o evento
+  que já está com R$ 0,01 salva outras mudanças sem ninguém mexer no valor.
+- Comissão tardia no mês do valor, só quando o evento já existia antes, sem valor — a venda
+  lançada na virada do mês segue a data da venda. A de R$ 0,00 "paga" não conta.
+- Os dados que podem enganar as listas (344 e os outros duplicados, comprovantes sem valor) são
+  conferidos pelo dono **antes** do deploy.
+
+**O que mudou.** Contratos em `docs/01` §3.2, §3.3 e §4.3; telas em `docs/02` (Home, `/events/new`,
+aba Comercial); invariante 12 da Agenda em `docs/04`; dívidas 45–55 em `docs/05`. Núcleo novo
+`app/financeiro/cobranca_ops.py`, sem migration. Commits: `7272c52` base (constantes, predicados,
+núcleo, verify escrito antes) + História 1 (Home e página somam o grupo) · `dafa04d` Home com os
+dois painéis, cards e total (Histórias 2, 4 e 5; peças da 298 extraídas para
+`components/home/`) · `2302882` "Valor a definir" (História 3: validação por campo, `/comercial`,
+orçamento sobre o simbólico, comissão R42/R45) · `57976c2` correção achada na tela. Antes deles, a
+esteira: `627cad4` spec, `5b43959` plano, `72409ef` checklist, `1a2876b` tarefas, `35ed3d8` analyze.
+
+**Pegadinhas.**
+1. **`event_type` vazio não é ensaio**: `event_type != 'ENSAIO'` em SQL descarta o `NULL` e some com
+   a venda sem tipo. O núcleo julga no Python, pelo principal (a do `/vendas` ficou: dívida 47).
+2. **O bundle em cache não tem ErrorBoundary**: `pending_payments` continua lista, com as chaves
+   antigas e `severity` na união antiga; no TS, `undefined` (servidor antigo, não desenha) é
+   diferente de `null` (a lista falhou, desenha o aviso). Conferido na tela com o payload antigo e
+   com a `DashboardPage` da `main` sobre o payload novo.
+3. **A edição completa escreve no Google**: o verify troca `routes.insert_event`,
+   `routes.update_event` e `service.update_event` por falsos que contam, e `service.insert_event` e
+   `load_credentials` estouram. 17/17 com 2 inserts e 4 updates falsos, nenhum real.
+4. **A comissão de R$ 0,00 "paga"** da venda simbólica bloqueava a de verdade. O corte vai na
+   própria consulta, com ordem por id: testar depois do `.first()` duplicaria a comissão a cada
+   `_resync_pending_commissions` (achado da verificação das correções do analyze; cenário 5h').
+5. **`created_at` é UTC ingênuo**: o mês de cadastro do R45 é tirado em São Paulo.
+6. **"Pôr o valor" foca o valor de venda final, não o bruto**: o `VendaForm` não deriva um do outro,
+   e quem digitasse só o bruto salvaria e continuaria em "Sem valor".
+7. **Só a tela achou**: com a lista em erro o painel nascia fechado e o cabeçalho do `SectorPanel`
+   dizia "Tudo em dia ✓" pela contagem 0 — o aviso ficava atrás de um ✓ falso. `falhou` no
+   `SectorPanel`, e o painel com falha nasce aberto.
+8. **Dados de produção**: comprovantes que parecem duplicados (vendas 85, 288, 309, 344) e
+   comprovantes sem valor que mudam a cobrança (274, 292). O 288, por exemplo, aparece "Quitado"
+   com R$ 11.000 recebidos de R$ 5.500, porque o mesmo PDF está nos dois eventos.
+
+**Verificação.** `specs/299-sem-valor-cobrancas/verify_299.py` 17/17 contra o `manto_local` (a
+primeira rodada, 2/17 pelos motivos certos, está em `verify_299_primeira_falha.txt`; a final em
+`verify_299_saida.txt`). `verify_298` 17/17 e `verify_273` 15/15 de novo. `verify_174` 15/18: duas
+falhas antigas (a Home Jinja responde 301 desde a 206) e a do REVENDEDOR que o `.first()` sem ordem
+às vezes pega (dívida 54). `npm run typecheck` limpo; `ruff` limpo nos arquivos tocados, fora os 8
+erros antigos de `calendar/routes.py` (dívida 55). Tela conferida no harness com fixtures reais do
+`manto_local`: Home normal, vazia, em erro, com servidor antigo e como FINANCEIRO; os 2 cliques;
+principal, satélite, R$ 0,01 e a definir; cadastro e edição; Home a 375 px sem rolagem horizontal.
+
+**Antes do deploy** (decisão do dono, R41). Rodar `specs/299-sem-valor-cobrancas/dados_pre_deploy_299.py`
+no `manto-backend` pela entrada padrão do SSH (só leitura), entregar a lista ao dono e publicar só
+quando ele pedir, fora do horário, com o aviso à equipe do `quickstart.md` §0. Sem comando
+pós-deploy. Depois do deploy: comparar os ids da consulta do SC-001 com o painel "Sem valor" e rodar a
+consulta do SC-008 30 dias depois (dívida 53).
 
 ### 298 — O formulário vira evento            (2026-09-11 · feature · migration `e5a1c7d93b20`)
 
