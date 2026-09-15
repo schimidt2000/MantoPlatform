@@ -975,3 +975,27 @@ escondidas; cenários 9 a 13 verdes.
   (contradicts)
 - [X] T070 Acrescentar `cortesia` à lista de chaves novas de `cobranca` no `docs/01_SISTEMA_E_BANCO.md`
   (`:741`), com a nota de que a cortesia nunca é `quitado` per Docs a atualizar: docs/01 (partial)
+
+## Phase 12: Convergence
+
+- [ ] T071 Tirar a marca `NOTA_CICLO_VALOR_TARDIO` das notas quando o ramo EducaManto de
+  `_sync_commission_payment` (`app/financeiro/comissoes_ops.py:831-832`) grava `payable_from` = dia do
+  evento, para a marca nunca descrever uma data da EducaManto; e trocar a simulação do `verify_299`
+  (`_cen_05_marca_do_ciclo`, que apaga a nota à mão) pela volta de verdade: comum → EducaManto →
+  comum, com a data voltando a `NULL` per FR-031 + contracts/api-eventos-valor.md (contradicts)
+- [ ] T072 No chip "Recebimento" do Resumo
+  (`frontend/apps/internal/src/components/EventDetail/ResumoSection.tsx:377-386`), olhar `sem_valor`
+  ("valor a definir") e `cortesia` ("cortesia ou permuta") antes de `escopo === "grupo_outro"` ("no
+  principal"), na ordem do contrato per contracts/evento-cobranca.md (contradicts)
+- [ ] T073 Acrescentar ao `docs/02_MAPA_DE_PAGINAS_E_UX.md` (bloco "Feature 299 na aba Comercial",
+  `:477-482`) o evento sem valor ("Recebido R$ X · valor de venda a definir", com o "Inclui R$ X"
+  quando houver) e o outro evento de um grupo cujo principal está sem valor ("Recebido no grupo R$ X ·
+  valor de venda a definir") per T064 / Docs a atualizar: docs/02 (partial)
+- [ ] T074 Corrigir no `specs/299-sem-valor-cobrancas/spec.md` o FR-031 (`:526-527`: a comissão de
+  R$ 0,00 paga não conta só na comissão comum e com a comissão calculada acima de zero; a EducaManto
+  fica como antes) e a linha 3 da tabela de verificação (`:653`: o grupo com a visita aparece em "Sem
+  valor" pelo principal, e não "é cobrado") per Constitution VII (contradicts)
+- [ ] T075 Corrigir nos artefatos a exceção do valor mantido, que vale só para o mesmo valor
+  simbólico (R$ 0,01 a R$ 0,99) que o evento já tinha (`data-model.md:88`,
+  `contracts/api-eventos-valor.md:19`), e os controles do cenário 16 no `quickstart.md:55` (FINANCEIRO
+  vê a cobrança do grupo na Home e aplica o orçamento dele) per Constitution VII (contradicts)
