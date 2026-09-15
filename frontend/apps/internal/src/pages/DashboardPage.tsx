@@ -970,7 +970,12 @@ export function DashboardPage() {
   // Abertura dos painéis: escolha explícita da pessoa vence; sem escolha, nasce aberto só quem
   // tem item urgente — é a triagem que devolve a Home legível no celular.
   const [abertos, setAbertos] = useState<Partial<Record<SectionKey, boolean>>>({});
-  const painelAberto = (key: SectionKey) => abertos[key] ?? (statPorSecao.get(key)?.urgent ?? 0) > 0;
+  // A lista que não carregou também nasce aberta (feature 299, FR-032): o aviso com "Tentar de
+  // novo" não pode ficar escondido atrás de um painel fechado.
+  const painelAberto = (key: SectionKey) => {
+    const stat = statPorSecao.get(key);
+    return abertos[key] ?? ((stat?.urgent ?? 0) > 0 || Boolean(stat?.falhou));
+  };
   const aoAlternar = (key: SectionKey) => (open: boolean) =>
     setAbertos((prev) => ({ ...prev, [key]: open }));
 
@@ -1229,6 +1234,7 @@ export function DashboardPage() {
                 <SectorPanel
                   title="💼 Cobranças"
                   count={data.comercial.pending_payments.length}
+                  falhou={statPorSecao.get("comercial")?.falhou}
                   urgentCount={statPorSecao.get("comercial")?.urgent ?? 0}
                   open={painelAberto("comercial")}
                   onOpenChange={aoAlternar("comercial")}
@@ -1249,6 +1255,7 @@ export function DashboardPage() {
                 <SectorPanel
                   title="🏷️ Sem valor"
                   count={totalSemValor(data.comercial.sem_valor)}
+                  falhou={statPorSecao.get("sem_valor")?.falhou}
                   urgentCount={statPorSecao.get("sem_valor")?.urgent ?? 0}
                   open={painelAberto("sem_valor")}
                   onOpenChange={aoAlternar("sem_valor")}

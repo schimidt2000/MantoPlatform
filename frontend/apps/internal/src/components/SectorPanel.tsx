@@ -12,6 +12,11 @@ export interface SectorPanelProps {
   /** Modo controlado (Home): o pai decide o estado para poder abrir via card da visão geral. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /**
+   * A lista do painel não carregou (feature 299, FR-032): o cabeçalho diz "não carregou" em vez do
+   * "Tudo em dia ✓" que a contagem 0 mostraria — o ✓ nunca aparece quando ninguém sabe.
+   */
+  falhou?: boolean;
 }
 
 /** Painel colapsável por setor (Casting/Figurino/Comercial/Recorrentes) — paridade com o
@@ -24,6 +29,7 @@ export function SectorPanel({
   defaultOpen = true,
   open: controlledOpen,
   onOpenChange,
+  falhou = false,
 }: SectorPanelProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const open = controlledOpen ?? internalOpen;
@@ -45,7 +51,11 @@ export function SectorPanel({
       >
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium text-ink">{title}</span>
-          {count > 0 ? (
+          {falhou ? (
+            <span className="rounded-full bg-red-soft px-2 py-0.5 text-xs font-medium text-red">
+              não carregou
+            </span>
+          ) : count > 0 ? (
             <span className="text-xs text-muted">
               {count} pendente{count !== 1 ? "s" : ""}
             </span>

@@ -1,0 +1,19 @@
+Feature 299 — sem valor e cobranças, contra manto_local
+  OK     1. corte pela data do grupo
+  OK     2. o que é sem valor; ordem e cores
+  OK     3. quem fica fora de Sem valor
+  OK     4. grupos em Sem valor
+  OK     5. valor a definir, R$ 0,01 recusado e comissão tardia
+  OK     6. edição completa e orçamento sobre o R$ 0,01
+  OK     7. grupo em Cobranças (344 e 10 mil)
+  OK     8. data do grupo e comprovante do cancelado
+  OK     9. vencimento
+  OK     10. centavos e sinal pendente
+  OK     11. metade paga a 20 dias aparece
+  OK     12. fora de Cobranças
+  OK     13. conteúdo, cor, selo, ordem e chaves antigas
+  OK     14. total, cards e falha forçada
+  OK     15. página do evento no grupo
+  OK     16. CASTING e FINANCEIRO recusados (DEVEM falhar)
+  OK     17. limpeza
+17/17 OK · Google falso: 2 insert, 4 update

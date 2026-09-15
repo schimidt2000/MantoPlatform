@@ -729,14 +729,14 @@ escondidas; cenários 9 a 13 verdes.
 
 ## Phase 8: Polimento, portões e documentação
 
-- [ ] T035 Rodar o `verify_299.py` até **17/17**, guardando a saída em `verify_299_saida.txt`. Rodar
+- [x] T035 Rodar o `verify_299.py` até **17/17**, guardando a saída em `verify_299_saida.txt`. Rodar
   de novo:
   - `verify_298.py`: 17/17;
   - `verify_273.py`: a cortesia continua sem receber valores;
   - `verify_174.py`: `pending_payments` continua lista.
-- [ ] T036 `cd frontend && npm run typecheck` limpo (três SPAs) e `ruff check` nos Python tocados
+- [x] T036 `cd frontend && npm run typecheck` limpo (três SPAs) e `ruff check` nos Python tocados
   (lista no `quickstart.md` §2); `ruff format` só em `app/financeiro/cobranca_ops.py`.
-- [ ] T037 Tela aberta de verdade (skill `manto-conferir-tela`), seguindo o `quickstart.md` §3:
+- [x] T037 Tela aberta de verdade (skill `manto-conferir-tela`), seguindo o `quickstart.md` §3:
   - **Home**, no computador e a 375 px:
     - os dois painéis, cores, selos, estados vazio e de erro;
     - o card em erro, forçando a falha no `manto_local`;
