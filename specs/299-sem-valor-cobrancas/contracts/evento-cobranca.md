@@ -85,8 +85,9 @@ grupo, porque `_serialize_mensagens` continua lendo `outstanding` e `due`.
 
 ## Outros consumidores (sem mudança de contrato)
 
-- **`ResumoSection.tsx:368-376`, chip "Recebimento"**:
+- **`ResumoSection.tsx:368-376`, chip "Recebimento"**, nesta ordem:
   - sem valor → "valor a definir";
+  - cortesia → "cortesia ou permuta" (nunca "quitado"; segunda convergência);
   - outro evento do grupo → "no principal";
   - senão, `cobranca.quitado`, com fallback para `outstanding <= 0`.
 - **`EventHeader.tsx:225-259`, menu "Cobrança"**: `enabled` vem do servidor. No outro evento do

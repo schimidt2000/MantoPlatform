@@ -1002,7 +1002,7 @@ escondidas; cenários 9 a 13 verdes.
 
 ## Phase 13: Convergence
 
-- [ ] T076 Acrescentar "cortesia → 'cortesia ou permuta'" entre "sem valor" e "outro evento do grupo"
+- [X] T076 Acrescentar "cortesia → 'cortesia ou permuta'" entre "sem valor" e "outro evento do grupo"
   na lista do chip "Recebimento" em "Outros consumidores" do `contracts/evento-cobranca.md` (`:88-91`),
   que hoje manda a cortesia para "quitado" e contradiz o bullet Cortesia do mesmo contrato, o
   `docs/02` e `ResumoSection.tsx` per contracts/evento-cobranca.md (contradicts)
