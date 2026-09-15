@@ -153,7 +153,7 @@ tratamento de comissão (pendente vira `cancelado`; paga gera estorno negativo) 
       pendente.
     - **Folga de centavos**: R$ 1,00 — no saldo, no sinal e no "Quitado" da página.
     - **Comissão tardia**: quando o valor chega depois (evento cadastrado e vendido num mês
-      anterior), a comissão entra no ciclo do mês do valor (`payable_from = hoje`, que não volta a
+      anterior), a comissão entra no ciclo do mês do valor (`payable_from = hoje`, com a marca "Ciclo: mês em que o valor foi posto" nas notas da linha, que não volta a
       `NULL`); a venda lançada agora com a data de um mês anterior segue a data da venda. A linha de
       R$ 0,00 já paga não conta como paga quando há comissão de verdade a pagar — pagar zero não
       é pagar; com a comissão calculada também em zero, ela vale —, e a comissão paga de valor

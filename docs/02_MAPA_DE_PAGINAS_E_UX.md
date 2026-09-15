@@ -461,15 +461,16 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     "Desvincular", e a frase do que a aplicação fez; sem orçamento, `OrcamentoPicker` (busca em
     `/api/orcamento/historico?q=`, mesma regra de dono do histórico) e, em evento **sem venda**, a
     opção de aplicar também os valores de 1h/2h/3h/4h; evento importado do Google sem venda ganha o
-    aviso do que o painel resolve. Só quem pode gerir a venda (`_can_manage_sale`) vê os botões; o
+    aviso do que o painel resolve. Só COMERCIAL e SUPERADMIN (`can_edit_core`) veem os botões; o
+    FINANCEIRO vê o painel só para leitura (a API, `_can_manage_sale`, aceita só o orçamento dele); o
     resumo do orçamento só vem para quem consegue abri-lo (superadmin ou o comercial dono) — para
     os demais, `venda.tem_orcamento` faz o painel dizer "vinculado ao orçamento de outro vendedor"
     em vez de oferecer a busca; o 409 "já vinculado a outro evento" vem com link para esse evento ·
     *Resultado* (grade de KPI: venda,
     custo de cachês, gastos extras, comissão e **lucro líquido** em verde/vermelho, + lista dos
     gastos extras aprovados) ·
-    *Contrato assinado* · *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado" quando
-    recebido ≥ venda) · *Reembolsos*.
+    *Contrato assinado* · *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado" pela regra
+    da 299: recebido do grupo, folga de R$ 1,00, nunca na cortesia) · *Reembolsos*.
   - **Feature 299 na aba Comercial**: o valor vazio ou zero aparece como "A definir" (nunca
     "R$ 0,00"), o simbólico com a marca "valor simbólico" e, no outro evento de um grupo, "no evento
     principal" com o link. O `PATCH /comercial` recusa o valor novo entre R$ 0,01 e R$ 0,99, com o

@@ -1082,7 +1082,12 @@ def update_event_comercial(
     event.with_invoice = bool(data.get("with_invoice"))
     event.seller_id = data.get("seller_id")
     event.sale_date = resolver_data_da_venda(
-        data.get("sale_date"), event.sale_value, venda_anterior, data_anterior
+        data.get("sale_date"),
+        event.sale_value,
+        venda_anterior,
+        data_anterior,
+        # Apagar o valor ("a definir") não apaga a data da venda (FR-017), como na edição completa.
+        a_definir=not is_cortesia and valor_a_definir(event.sale_value),
     )
     event.commission_rate = data.get("commission_rate")
     event.payment_method = data.get("payment_method")

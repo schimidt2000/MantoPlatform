@@ -460,6 +460,11 @@ MOTIVO_FORA_COMPROMISSO_INTERNO = "compromisso_interno"
 MOTIVO_FORA_CORTESIA = "cortesia"
 MOTIVO_FORA_LOJA_VIRTUAL = "loja_virtual"
 
+# A marca na comissão cujo ciclo a 299 pôs no mês em que o valor chegou (R45). É ela que diz,
+# nas sincronizações seguintes, que a data gravada é da 299 e fica; sem a marca, a data veio da
+# EducaManto e não passa para o ramo comum. Aparece para o Financeiro nas notas da linha.
+NOTA_CICLO_VALOR_TARDIO = "Ciclo: mês em que o valor foi posto"
+
 VIRTUAL_NOTIFICATION_KIND_COMPRA = "compra_confirmada"
 VIRTUAL_NOTIFICATION_KIND_VIDEO = "video_pronto"
 VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO = "cancelamento"

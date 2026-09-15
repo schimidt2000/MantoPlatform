@@ -739,7 +739,8 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > R$ 1,00 como "sem venda". No detalhe, `cobranca` sai do mesmo núcleo da Home: `outstanding` =
 > saldo do grupo, `due` = vencimento, `enabled` só no principal ou avulso, a partir do vencimento,
 > fora cortesia, simbólico e sem valor. Chaves novas, opcionais: `valor`, `recebido`, `quitado`,
-> `sem_valor`, `valor_simbolico`, `sinal_pendente`, `vencimento_origem`, `escopo`, `grupo_tamanho`.
+> `cortesia`, `sem_valor`, `valor_simbolico`, `sinal_pendente`, `vencimento_origem`, `escopo`,
+> `grupo_tamanho`; a cortesia nunca é `quitado` (a página diz "cortesia ou permuta").
 > `venda` ganha `sem_valor`/`a_definir`/`valor_simbolico`; `pagamentos` ganha `outros_do_grupo`.
 > A comissão que nasce quando o valor chega depois (evento cadastrado e vendido num mês anterior)
 > entra no ciclo do mês do valor (`payable_from`). Contratos: `specs/299-sem-valor-cobrancas/contracts/`.

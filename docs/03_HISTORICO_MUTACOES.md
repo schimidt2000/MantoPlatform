@@ -325,7 +325,8 @@ esteira: `627cad4` spec, `5b43959` plano, `72409ef` checklist, `1a2876b` tarefas
    Na convergência o corte ficou restrito à comissão calculada acima de zero: com taxa 0%, ignorar
    a paga abriria uma linha nova de R$ 0,00 a cada pagamento. Na segunda, ficou só na comissão
    comum (a EducaManto fica como antes), e a cortesia passou a nunca comissionar, mesmo a antiga
-   com valor gravado.
+   com valor gravado. Na terceira, a data de ciclo da 299 ganhou uma marca nas notas da linha: a
+   regra que adivinhava pela data do evento e pela troca de vendedor errava para os dois lados.
 5. **`created_at` é UTC ingênuo**: o mês de cadastro do R45 é tirado em São Paulo.
 6. **"Pôr o valor" foca o valor de venda final, não o bruto**: o `VendaForm` não deriva um do outro,
    e quem digitasse só o bruto salvaria e continuaria em "Sem valor".

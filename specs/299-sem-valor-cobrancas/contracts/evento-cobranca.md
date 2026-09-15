@@ -69,7 +69,10 @@ conta da Home (SC-003).
   do grupo", com os links.
 - **Outro evento do grupo**: "Este evento é parte do grupo {nome}. A venda está no {principal}.",
   seguido de "Recebido no grupo R$ X de R$ Y — falta Z" e "neste evento: R$ W".
-- **Sem valor**: "Recebido R$ X · valor de venda a definir", nunca "de R$ 0,00".
+- **Sem valor**: "Recebido R$ X · valor de venda a definir", nunca "de R$ 0,00", com o "Inclui R$ X
+  em comprovantes de outros eventos do grupo" quando houver; no outro evento de um grupo cujo
+  principal está sem valor, "Recebido no grupo R$ X · valor de venda a definir" (terceira
+  convergência, T064/T065).
 - **Cortesia** (`cortesia`): "Recebido R$ X · cortesia ou permuta", sem "de R$ 0,00 — falta" e sem
   "Quitado"; no outro evento do grupo, "Recebido no grupo R$ X · cortesia ou permuta". O chip
   "Recebimento" do Resumo diz "cortesia ou permuta".

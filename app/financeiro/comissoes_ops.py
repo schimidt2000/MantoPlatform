@@ -710,26 +710,32 @@ def _valor_chegou_depois(event: CalendarEvent, hoje: date) -> bool:
     ) < mes_corrente
 
 
-def _data_herdada_da_educamanto(event: CalendarEvent, existing: CommissionPayment) -> bool:
-    """A data gravada na linha é a da realização, de quando a comissão era da EducaManto.
+def _ciclo_marcado_pela_299(existing: CommissionPayment) -> bool:
+    """A data de ciclo gravada na linha foi posta pela regra do valor que chegou depois (R45).
 
-    A linha que sai da EducaManto (título sem "(EDU", responsável desligado) cai no ramo comum
-    ainda com o beneficiário antigo e com `payable_from` = dia do evento. Antes da 299 o ramo comum
-    zerava essa data; mantê-la prenderia a comissão comum ao mês da realização. A data que a 299
-    grava (o dia em que o valor chegou) vem com o mesmo vendedor, então não cai aqui.
+    A marca é explícita (`NOTA_CICLO_VALOR_TARDIO` nas notas) porque a data sozinha não diz de onde
+    veio: a EducaManto também grava `payable_from` (o dia do evento), e a linha que sai da
+    EducaManto cai no ramo comum com essa data. Adivinhar pela data do evento e pelo vendedor
+    errava para os dois lados (terceira convergência, T067).
 
     Args:
-        event: O evento, já fora do ramo EducaManto.
-        existing: A linha de comissão viva, com `payable_from` preenchido.
+        existing: A linha de comissão viva.
 
     Returns:
-        True quando a data deve ser descartada.
+        True quando a data é da 299 e deve ficar.
     """
-    return (
-        event.start_at is not None
-        and existing.payable_from == event.start_at.date()
-        and existing.seller_id != event.seller_id
-    )
+    from app.constants import NOTA_CICLO_VALOR_TARDIO
+
+    return NOTA_CICLO_VALOR_TARDIO in (existing.notes or "")
+
+
+def _com_marca_do_ciclo(notes: str | None) -> str:
+    """As notas da linha com a marca do ciclo da 299, sem repeti-la."""
+    from app.constants import NOTA_CICLO_VALOR_TARDIO
+
+    if NOTA_CICLO_VALOR_TARDIO in (notes or ""):
+        return notes or ""
+    return f"{notes} | {NOTA_CICLO_VALOR_TARDIO}" if notes else NOTA_CICLO_VALOR_TARDIO
 
 
 def _ciclo_da_comissao_comum(
@@ -739,16 +745,15 @@ def _ciclo_da_comissao_comum(
 
     - Comissão que NASCE agora (linha nova, ou a de R$ 0,00 da venda simbólica ganhando valor real)
       com o valor chegando depois → hoje: entra no ciclo do mês em que o valor foi posto, nunca num
-      mês já fechado. A data da venda não muda.
-    - Uma data já gravada nunca volta a `None` nas sincronizações seguintes (antes voltava).
+      mês já fechado. A data da venda não muda, e a linha ganha a marca do ciclo.
+    - A data marcada nunca volta a `None` nas sincronizações seguintes (antes voltava).
+    - Data gravada sem a marca veio da EducaManto: no ramo comum volta a `None`, como antes da 299.
     - Fora isso, `None`: o ciclo segue a data da venda, como sempre.
     """
     from app.constants import now_sp
 
     if existing is not None and existing.payable_from is not None:
-        if _data_herdada_da_educamanto(event, existing):
-            return None
-        return existing.payable_from
+        return existing.payable_from if _ciclo_marcado_pela_299(existing) else None
     nasce_agora = existing is None or (not existing.amount and amount > 0)
     hoje = now_sp().date()
     return hoje if nasce_agora and _valor_chegou_depois(event, hoje) else None
@@ -822,10 +827,14 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
     # Comissão EducaManto (feature 109): só entra no ciclo de pagamento após a realização —
     # payable_from = data do evento. Comissão comum: ciclo pela sale_date, salvo o valor que chegou
     # depois (feature 299, `_ciclo_da_comissao_comum`).
+    marcar_ciclo = False
     if is_edu_com_responsavel and event.start_at is not None:
         payable_from = event.start_at.date()
     else:
         payable_from = _ciclo_da_comissao_comum(event, existing, amount)
+        # No ramo comum, data de ciclo só existe pela regra do valor que chegou depois: a linha leva
+        # a marca, que é o que a mantém nas sincronizações seguintes (T067).
+        marcar_ciclo = payable_from is not None
     if existing:
         if existing.status == "a_pagar":
             existing.amount = amount
@@ -833,6 +842,8 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
             existing.event_title = event.title
             existing.seller_id = beneficiary.id
             existing.payable_from = payable_from
+            if marcar_ciclo:
+                existing.notes = _com_marca_do_ciclo(existing.notes)
         # Se já está pago, não alteramos o registro histórico
     else:
         db.session.add(CommissionPayment(
@@ -843,6 +854,7 @@ def _sync_commission_payment(event: CalendarEvent) -> None:
             payable_from=payable_from,
             amount=amount,
             status="a_pagar",
+            notes=_com_marca_do_ciclo(None) if marcar_ciclo else None,
         ))
 
 

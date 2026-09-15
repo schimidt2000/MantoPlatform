@@ -526,7 +526,10 @@ confia no resto.
   - A comissão de R$ 0,00 de uma venda simbólica não conta como paga: quando o valor real entra,
     nasce a comissão de verdade, no mês do valor.
   - A regra vale para as comissões que nascerem ou mudarem depois da publicação; as que já existem
-    não mudam.
+    não mudam de ciclo.
+  - Cortesia ou permuta nunca comissiona (Session 2026-09-15), mesmo a antiga com valor gravado: a
+    comissão a pagar dela é cancelada na sincronização seguinte, e a já paga fica. Deixando de ser
+    cortesia e ganhando valor, a comissão nasce normalmente.
 
 **Cobranças**
 
@@ -721,7 +724,8 @@ pronto no `quickstart.md`; o dono decide quem envia.
 - **Mover para o principal os comprovantes dos outros eventos do grupo.** A soma é na leitura.
 - **Relatórios financeiros**: "a receber" do Financeiro, funil de vendas, indicadores, DRE, comissão
   e Auditoria de Input continuam contando por evento, e o R$ 0,01 segue contando como venda neles. Na
-  comissão, a única mudança é o ciclo do FR-031.
+  comissão, as únicas mudanças são o ciclo do FR-031 e a cortesia, que nunca comissiona (FR-031,
+  Session 2026-09-15).
 - **Comissões que já existem**: as nascidas antes da publicação não mudam de ciclo.
 - **Cobrança automática** à cliente (WhatsApp ou e-mail) e o botão "Copiar cobrança" na Home.
 - **Outras mudanças de cadastro e permissão**:

@@ -1,32 +1,36 @@
-[2026-09-15 18:10:11,794] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br plataforma=https://app.mantoproducoes.com.br
+[2026-09-15 18:41:12,202] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br plataforma=https://app.mantoproducoes.com.br
 C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\flask_limiter\extension.py:333: UserWarning: Using the in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about configuring the storage backend.
   warnings.warn(
 C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported version!
   warnings.warn(
-[2026-09-15 18:10:12,671] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+[2026-09-15 18:41:13,240] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
 C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:211: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
   cancelled_at=datetime.utcnow() if opcoes.get("cancelado") else None,
 C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:212: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
   deletion_requested_at=datetime.utcnow() if opcoes.get("exclusao") else None,
 C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:304: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
   antes = datetime.utcnow() - timedelta(days=35)
-C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:620: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:652: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
   _sync_commission_payment(CalendarEvent.query.get(e["s5h"]))
-[2026-09-15 18:10:19,992] ERROR in dashboard_service: [dashboard] vendas da Home falharam; listas em aviso
+C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:623: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  ev = CalendarEvent.query.get(e["s5e"])
+C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:632: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  ev = CalendarEvent.query.get(e["s5e"])
+[2026-09-15 18:41:21,723] ERROR in dashboard_service: [dashboard] vendas da Home falharam; listas em aviso
 Traceback (most recent call last):
   File "C:\Users\schim\Desktop\Manto_Platform\app\api\dashboard_service.py", line 500, in _painel_comercial
     vendas = cobranca_ops.vendas_desde(corte)
-  File "C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py", line 778, in quebra
+  File "C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py", line 810, in quebra
     raise RuntimeError(f"verify 299: {funcao} forçada a falhar")
 RuntimeError: verify 299: vendas_desde forçada a falhar
-[2026-09-15 18:10:20,182] ERROR in dashboard_service: [dashboard] vendas da Home falharam; listas em aviso
+[2026-09-15 18:41:21,947] ERROR in dashboard_service: [dashboard] vendas da Home falharam; listas em aviso
 Traceback (most recent call last):
   File "C:\Users\schim\Desktop\Manto_Platform\app\api\dashboard_service.py", line 501, in _painel_comercial
     linhas = cobranca_ops.listar_cobrancas(vendas, hoje)
-  File "C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py", line 778, in quebra
+  File "C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py", line 810, in quebra
     raise RuntimeError(f"verify 299: {funcao} forçada a falhar")
 RuntimeError: verify 299: listar_cobrancas forçada a falhar
-C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:816: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:848: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
   ev = CalendarEvent.query.get(e["s12b"])
 Feature 299 — sem valor e cobranças, contra manto_local
   OK     1. corte pela data do grupo

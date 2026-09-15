@@ -578,6 +578,11 @@ def _cen_05_valor_posto(eid: int) -> None:
              f"(i) /comercial com 0,50 → {r.status_code}")
     r = _chamar(com, "patch", f"/api/events/{e['s5i']}/comercial", _corpo_comercial(None))
     _garante(r.status_code == 200, f"(i) /comercial vazio → {r.status_code}")
+    # FR-017 (T066): apagar o valor e deixar a data vazia na aba Comercial não apaga a data da venda.
+    r = _chamar(com, "patch", f"/api/events/{eid}/comercial", _corpo_comercial(None))
+    _garante(r.status_code == 200 and _no_banco("SELECT sale_date FROM calendar_events WHERE id=:i", i=eid)[0]
+             == estado["hoje"], "(d') apagar o valor apagou a data da venda")
+    _chamar(com, "patch", f"/api/events/{eid}/comercial", _corpo_comercial(1500))
 
 
 def _cen_05_comissao() -> None:
@@ -603,6 +608,33 @@ def _cen_05_comissao() -> None:
     _garante(r.status_code == 201, f"(j) POST → {r.status_code} {_campos_do_erro(r)}")
     linhas = _comissoes(r.get_json()["event"]["id"])
     _garante(len(linhas) == 1 and linhas[0][2] is None, f"(j) venda lançada agora com data do mês passado: {linhas}")
+    _cen_05_marca_do_ciclo()
+
+
+def _cen_05_marca_do_ciclo() -> None:
+    """T067: só a data de ciclo marcada pela 299 fica; a que veio da EducaManto volta a NULL."""
+    from app.constants import NOTA_CICLO_VALOR_TARDIO
+    from app.financeiro.comissoes_ops import _sync_commission_payment
+
+    e = _ids()
+    nota = _no_banco("SELECT notes FROM commission_payments WHERE event_id=:i AND status='a_pagar'", i=e["s5e"])[0]
+    _garante(NOTA_CICLO_VALOR_TARDIO in (nota or ""), f"(e) comissão tardia sem a marca do ciclo: {nota}")
+    with app.app_context():
+        ev = CalendarEvent.query.get(e["s5e"])
+        dia_do_evento = ev.start_at.date()
+        linha = CommissionPayment.query.filter_by(event_id=ev.id, status="a_pagar").one()
+        # O falso positivo da regra antiga: data = dia do evento e outro vendedor, mas com a marca.
+        linha.payable_from, linha.seller_id = dia_do_evento, estado["financeiro_id"]
+        _sync_commission_payment(ev)
+        db.session.commit()
+    _garante(_comissoes(e["s5e"])[0][2] == dia_do_evento, "(e'') a data marcada saiu com a troca de vendedor")
+    with app.app_context():
+        ev = CalendarEvent.query.get(e["s5e"])
+        linha = CommissionPayment.query.filter_by(event_id=ev.id, status="a_pagar").one()
+        linha.notes = None  # como a linha que sai da EducaManto: data da realização, sem a marca
+        _sync_commission_payment(ev)
+        db.session.commit()
+    _garante(_comissoes(e["s5e"])[0][2] is None, "(e''') a data da EducaManto passou para o ramo comum")
 
 
 def _cen_05_comissao_paga_de_zero(mes: str) -> None:

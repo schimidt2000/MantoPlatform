@@ -54,7 +54,9 @@ A validação roda **antes** do Google e de qualquer escrita (`agenda_write.py:7
 - **Cortesia ou permuta**: nunca tem comissão (dono, 15/09). Não nasce linha e a `a_pagar` vira
   `cancelado`; a paga fica.
 - **EducaManto**: continua com `payable_from = data da realização`. A linha que sai da EducaManto
-  não leva essa data para o ramo comum (T060).
+  não leva essa data para o ramo comum (T060): no ramo comum só fica a data com a marca
+  `NOTA_CICLO_VALOR_TARDIO` ("Ciclo: mês em que o valor foi posto") nas notas, que a regra do valor
+  que chegou depois grava (T067).
 - **Comissões anteriores à publicação**: não mudam.
 
 **Compatibilidade na janela de deploy**:

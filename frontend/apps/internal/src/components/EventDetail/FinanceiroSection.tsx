@@ -262,6 +262,9 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
         <span className="block font-medium tabular-nums">
           {cortesia ? (
             `Recebido no grupo ${brl(recebido)} · cortesia ou permuta`
+          ) : cobranca.sem_valor ? (
+            // O principal ainda sem valor: nunca "de R$ 0,00 — falta R$ 0,00" (US1/AC6).
+            `Recebido no grupo ${brl(recebido)} · valor de venda a definir`
           ) : (
             <>
               Recebido no grupo {brl(recebido)} de {brl(cobranca.valor ?? 0)}
@@ -283,8 +286,9 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
   }
   if (cobranca.sem_valor) {
     return (
-      <span className="font-medium text-ink tabular-nums">
-        Recebido {brl(recebido)} · valor de venda a definir
+      <span className="block text-ink">
+        <span className="font-medium tabular-nums">Recebido {brl(recebido)} · valor de venda a definir</span>
+        <OutrosDoGrupo outros={pagamentos.outros_do_grupo ?? []} />
       </span>
     );
   }
