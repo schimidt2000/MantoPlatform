@@ -471,7 +471,8 @@ confia no resto.
   por outro abaixo de R$ 1,00 é recusado (FR-014).
 - **FR-014**: Salvar sem valor, ou com um valor novo abaixo de R$ 1,00, e sem a marca DEVE apontar os
   campos de valor, com a explicação ("Informe o valor de venda ou marque 'Valor a definir'") e o
-  foco. O botão Salvar nunca fica desabilitado (constituição, Princípio V).
+  foco. O botão Salvar nunca fica desabilitado (constituição, Princípio V). Na aba Comercial vale a
+  mesma regra para o valor novo entre R$ 0,01 e R$ 0,99; o valor vazio continua aceito (a definir).
 - **FR-015**: Na aba Comercial, o valor vazio ou zero DEVE aparecer como "A definir", e não como
   "R$ 0,00". O valor simbólico aparece como está, com a marca "valor simbólico". O quadrinho "Venda"
   do resultado, que é a base do lucro, continua mostrando o número (R$ 0,00), porque é indicador
@@ -491,7 +492,8 @@ confia no resto.
   num mês já fechado, quando nasce num mês posterior ao da data da venda. Isso inclui a venda que
   passa de sem valor (vazio, zero ou simbólico) para valor real num mês posterior. A data da venda
   não muda. Uma comissão já paga nunca é paga de novo nem alterada, inclusive quando alguém marca
-  "Valor a definir" e depois repõe o valor. A regra vale para as comissões que nascerem ou mudarem
+  "Valor a definir" e depois repõe o valor. A comissão de R$ 0,00 de uma venda simbólica não conta
+  como paga: quando o valor real entra, nasce a comissão de verdade, no mês do valor. A regra vale para as comissões que nascerem ou mudarem
   depois da publicação; as que já existem não mudam.
 
 **Cobranças**
@@ -662,7 +664,8 @@ pronto no `quickstart.md`; o dono decide quem envia.
 - **SC-006**: Nenhum texto em inglês nem código cru nas duas listas.
 - **SC-007**: Da linha "sem valor" ao valor salvo em até 2 cliques, mais a digitação.
 - **SC-008**: Depois do deploy, nenhum evento novo é gravado com valor entre R$ 0,01 e R$ 0,99: o
-  cadastro recusa. A conferência é uma consulta 30 dias depois da publicação.
+  cadastro, a edição e a aba Comercial recusam. A conferência é uma consulta 30 dias depois da
+  publicação.
 - **SC-009**: A soma dos cards comerciais é igual à parte comercial do total do topo, nenhuma linha
   cinza das listas comerciais conta, e os painéis de operação contam como antes.
 - **SC-010**: A Home no celular (375 px) não tem rolagem horizontal.

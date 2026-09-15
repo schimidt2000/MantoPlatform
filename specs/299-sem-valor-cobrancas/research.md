@@ -535,4 +535,31 @@ os marcados "dono" vieram de resposta dele.
   compara valores.
 - **R41 — Dados antes do deploy (dono).** Levantar, só lendo a produção, o 344, os outros 5 casos
   grandes e as vendas com comprovante sem valor, para o dono conferir.
-  - Script: `scratchpad/dados_pre_deploy_299.py`, que vai para o `quickstart.md` §0.
+  - Script: `specs/299-sem-valor-cobrancas/dados_pre_deploy_299.py`, versionado (o
+    `scripts/oneoff/` é ignorado pelo git) e rodado pela entrada padrão do SSH.
+  - Inclui também a consulta do SC-001 e a lista dos eventos de valor simbólico com o bruto.
+
+## Decisões da crítica do `tasks.md` (14/09)
+
+- **R42 — A comissão de R$ 0,00 "paga" não bloqueia a comissão de verdade.**
+  - **O problema.** Uma venda de R$ 0,01 já gera uma linha de comissão de 0,00, que a liquidação do
+    mês marca como paga. Quando o valor real entra, `_sync_commission_payment` achava essa linha e
+    não fazia nada, e a vendedora nunca recebia.
+  - **A regra.** Linha de valor 0,00:
+    - se está `a_pagar`, é atualizada;
+    - se está `pago`/`no_banco`, não conta como existente, e nasce uma `a_pagar` nova.
+  - **A data.** Nos dois casos, `payable_from = hoje` quando a data da venda está num mês anterior.
+  - **A detecção.** É pelo valor da linha, sem mudar a assinatura, porque os chamadores fazem
+    `flush` antes de sincronizar.
+  - **Por que é seguro.** Segue a intenção do dono ("nunca num mês já fechado"; "a paga nunca é paga
+    de novo"): pagar zero não é pagar.
+- **R43 — A regra do R$ 0,01 também vale na aba Comercial.**
+  - **A regra.** O `PATCH /api/events/<id>/comercial` recusa o valor novo entre 0,01 e 0,99, com a
+    exceção do valor que já estava gravado; o vazio continua aceito como "a definir".
+  - **Porquê.** Sem isso, o hábito de "segurar a data" com R$ 0,01 migra do cadastro para a aba, e o
+    SC-008 falha.
+- **R44 — O envelope do painel comercial nunca some por falha interna.**
+  - **A regra.** `vendas_desde` roda num `try` próprio. Na falha, a resposta é `pending_payments = []`
+    com `cobrancas_resumo` e `sem_valor` `null`, e nunca `comercial: null` para quem tem o papel.
+  - **Na tela.** `null` (erro) aparece como aviso, e `undefined` (servidor antigo) não desenha.
+  - **Porquê.** FR-032: um painel de dinheiro não pode sumir em silêncio.

@@ -39,6 +39,12 @@ A validação roda **antes** do Google e de qualquer escrita (`agenda_write.py:7
 - **Sincronizações seguintes**: não trocam esse `payable_from` de volta para `NULL`.
 - **Comissão já paga**: nunca é alterada nem duplicada, inclusive quando o valor é apagado ("Valor a
   definir") e reposto depois.
+- **Comissão de R$ 0,00 de venda simbólica** (R42): a detecção é pelo valor da linha, porque o
+  histórico do evento some com o `flush` dos chamadores.
+  - **`a_pagar`**: quando o valor real entra, é atualizada, com `payable_from = hoje` se a data da
+    venda está num mês anterior.
+  - **Já `pago`/`no_banco`**: não conta como existente. Nasce uma linha `a_pagar` nova, e a paga
+    fica intacta.
 - **EducaManto**: continua com `payable_from = data da realização`.
 - **Comissões anteriores à publicação**: não mudam.
 
@@ -54,7 +60,15 @@ A validação roda **antes** do Google e de qualquer escrita (`agenda_write.py:7
 - A criação Jinja (`calendar/routes.py:4008`) e o `PATCH /api/events/<id>/basico` não mandam a chave.
   Como compartilham `_validate_event_core`, também passam a recusar valor abaixo de R$ 1,00 (a
   criação Jinja; o `/basico` descarta os erros de valor).
-- O `PATCH /api/events/<id>/comercial` já aceita valor nulo e continua recusando satélite com 409.
+- O `PATCH /api/events/<id>/comercial` continua aceitando valor nulo e recusando satélite com 409.
+
+## `PATCH /api/events/<id>/comercial` (R43)
+
+- **Valor vazio**: aceito, e o evento fica "a definir".
+- **Valor novo entre R$ 0,01 e R$ 0,99** em `sale_value` ou `sale_value_gross`: **400**, com o mesmo
+  texto em `error.fields`. Vale a mesma exceção do valor que já estava gravado.
+- **Tela**: o `VendaForm` mostra o erro no campo de valor.
+- **Gate**: `_can_create_event`, inalterado.
 
 ## Tela (`ValoresBlock`, `EventCreatePage`, `EventEditPage`)
 
@@ -85,4 +99,4 @@ A validação roda **antes** do Google e de qualquer escrita (`agenda_write.py:7
 | `POST /api/events` | `_can_create_event` | COMERCIAL, SUPERADMIN | `valor_a_definir`; valor abaixo de R$ 1,00 recusado sem a marca |
 | `PATCH /api/events/<id>` | `_can_create_event` | COMERCIAL, SUPERADMIN | `valor_a_definir`; satélite sem campos comerciais |
 | `PATCH /api/events/<id>/orcamento` | `_can_manage_sale` | COMERCIAL, FINANCEIRO, SUPERADMIN | o valor simbólico conta como sem venda |
-| `PATCH /api/events/<id>/comercial` | `_can_create_event` | COMERCIAL, SUPERADMIN | nenhuma (já aceita nulo) |
+| `PATCH /api/events/<id>/comercial` | `_can_create_event` | COMERCIAL, SUPERADMIN | valor novo abaixo de R$ 1,00 recusado (vazio continua aceito) |

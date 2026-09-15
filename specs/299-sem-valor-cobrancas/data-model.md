@@ -88,7 +88,8 @@ Transições que tiram a linha da lista (FR-010), com a animação na tela:
 | Valor abaixo de R$ 1,00 sem a marca | `_validate_event_core` | 400, exceto na edição que mantém o mesmo valor que o evento já tinha |
 | Data da venda | `resolver_data_da_venda(..., a_definir)` | a criação sem data vira hoje (SP); a edição sem data mantém a atual; o evento sem data que ganha valor recebe hoje (como hoje) |
 | Satélite na edição completa | `update_event_core` | nenhum campo comercial é gravado no satélite |
-| Comissão tardia | `_sync_commission_payment` | comissão comum que nasce, ou passa de simbólico para real, com `sale_date` num mês anterior ao corrente → `payable_from = hoje`, e não volta a `NULL`; a comissão paga nunca muda nem se duplica |
+| Comissão tardia | `_sync_commission_payment` | comissão comum que nasce, ou passa de simbólico para real, com `sale_date` num mês anterior ao corrente → `payable_from = hoje`, e não volta a `NULL`; a comissão paga de valor real nunca muda nem se duplica; a linha de R$ 0,00 já paga não conta, e nasce uma `a_pagar` nova (R42) |
+| Valor simbólico na aba Comercial | `api_update_event_comercial` | valor novo entre R$ 0,01 e R$ 0,99 → 400; vazio aceito (R43) |
 | Valor simbólico no orçamento | `aplicar_valores_do_orcamento` | abaixo de R$ 1,00 conta como "sem venda"; a cortesia continua recusada |
 
 ## Invariantes (vão para o `docs/04`)

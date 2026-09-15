@@ -8,8 +8,14 @@ Rodar no `manto-backend`, só leitura, com `MANTO_SEM_THREADS=1`, o levantamento
 - as vendas desde a data de início que têm comprovante sem valor, com quanto cada uma passaria a
   cobrar em "Cobranças".
 
-O script é o `dados_pre_deploy_299.py`, que vai para `scripts/oneoff/` no implement. O dono confere e
-corrige o que precisar **antes** de publicar.
+O script é o `specs/299-sem-valor-cobrancas/dados_pre_deploy_299.py`, versionado e só leitura. Ele
+lista também a consulta do SC-001 e os eventos de valor simbólico com o bruto:
+
+```bash
+ssh -i ~/.ssh/render_manto_ed25519 srv-da8o06on74is73ehf4q0@ssh.oregon.render.com 'cd /opt/render/project/src && MANTO_SEM_THREADS=1 PYTHONPATH=$PWD .venv/bin/python -' < specs/299-sem-valor-cobrancas/dados_pre_deploy_299.py
+```
+
+O dono confere e corrige o que precisar **antes** de publicar.
 
 **Aviso à equipe no dia** (o dono decide quem envia):
 
