@@ -32,7 +32,9 @@ Não testa código. Serve de portão antes do `/speckit-tasks`.
 - [x] CHK006 `scripts/validar_startcommand.py` verde se tocou o `startCommand` do `render.yaml` — não se aplica: não tocou
 - [x] CHK007 Gate de RBAC declarado em todo endpoint novo/alterado e linha em `docs/01` §4.3 — nenhum gate mudou; linhas de `/api/dashboard` e do orçamento acrescentadas
 - [x] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03` sempre; `00`/`04`/`05` se aplicável — `01`, `02`, `03`, `04` e `05`
-- [ ] CHK009 Nível 1: `/speckit-converge` sem gaps
+- [x] CHK009 Nível 1: `/speckit-converge` sem gaps — sete passadas (15/09): as seis primeiras deram
+  T046–T077, todas feitas; a sétima voltou sem nenhum achado nos dois leitores (requisitos e
+  contratos contra o código)
 - [ ] CHK010 Antes de "em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`, sonda `/api/`
 
 ## Home e visual — clareza e completude
