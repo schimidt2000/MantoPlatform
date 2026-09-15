@@ -999,3 +999,10 @@ escondidas; cenários 9 a 13 verdes.
   simbólico (R$ 0,01 a R$ 0,99) que o evento já tinha (`data-model.md:88`,
   `contracts/api-eventos-valor.md:19`), e os controles do cenário 16 no `quickstart.md:55` (FINANCEIRO
   vê a cobrança do grupo na Home e aplica o orçamento dele) per Constitution VII (contradicts)
+
+## Phase 13: Convergence
+
+- [ ] T076 Acrescentar "cortesia → 'cortesia ou permuta'" entre "sem valor" e "outro evento do grupo"
+  na lista do chip "Recebimento" em "Outros consumidores" do `contracts/evento-cobranca.md` (`:88-91`),
+  que hoje manda a cortesia para "quitado" e contradiz o bullet Cortesia do mesmo contrato, o
+  `docs/02` e `ResumoSection.tsx` per contracts/evento-cobranca.md (contradicts)
