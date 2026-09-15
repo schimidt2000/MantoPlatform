@@ -901,3 +901,42 @@ escondidas; cenários 9 a 13 verdes.
   `docs/04_GUIA_DE_DOMINIOS.md:166-170`: hoje `update_event_core` e `update_event_comercial` chamam a
   sincronização da comissão (`app/calendar/event_ops.py:887-897, :1071-1073`), e o texto contradiz o
   invariante 12 logo acima per Docs a atualizar: docs/04 (partial)
+
+## Phase 10: Convergence
+
+- [ ] T056 Tratar a cortesia na página do evento: tirar o "— falta R$ 0,00" que hoje aparece em toda
+  cortesia (`frontend/apps/internal/src/components/EventDetail/FinanceiroSection.tsx:275-283`, com
+  `quitado` falso e `outstanding` 0), e decidir o "Quitado" da cortesia antiga com valor, que a 299
+  tirou (`app/financeiro/cobranca_ops.py:159`, `and not self.cortesia`); registrar a cortesia em
+  `contracts/evento-cobranca.md` (Tela) e em `data-model.md` (`quitada`) per contracts/evento-cobranca.md
+  + FR-023 (partial)
+- [ ] T057 Alinhar o FR-007 e o FR-018 ("dentro dela, ele continua podendo aplicar um orçamento, como
+  hoje") com a tela: o `OrcamentoPanel`
+  (`frontend/apps/internal/src/components/EventDetail/ComercialSection.tsx:531-534`) só abre com
+  `can_edit_core` (COMERCIAL ou SUPERADMIN, `app/api/agenda_read.py:179`), como na `main`, e o
+  FINANCEIRO só aplica pela API. Corrigir `spec.md`, `docs/02` e o contrato para o que a tela faz, ou,
+  com o OK do dono, abrir o painel pelo mesmo gate de `_can_manage_sale` per FR-007/FR-018
+  (contradicts)
+- [ ] T058 No 400 do `PATCH /comercial`, marcar o campo que o servidor nomeou (bruto ou valor final)
+  e levar o foco até ele, como a edição completa faz com `primeiroCampoDoErro`; hoje o erro cai
+  sempre no valor final (`frontend/apps/internal/src/components/EventDetail/ComercialSection.tsx:223-266`)
+  per FR-014 (partial)
+- [ ] T059 Invalidar `['dashboard']` em `useSetEventClients`
+  (`frontend/apps/internal/src/lib/eventInline.ts:117-119`), para o nome da cliente da linha de
+  "Cobranças" e "Sem valor" trocar ao voltar para a Home per FR-010 (partial)
+- [ ] T060 Em `_ciclo_da_comissao_comum` (`app/financeiro/comissoes_ops.py:713-730`), não herdar a
+  data de realização da EducaManto quando o evento sai desse ramo (título sem "(EDU", responsável
+  EducaManto desligado): no ramo comum, só a data que a 299 gravou (valor que chegou depois) fica;
+  antes da 299 ela voltava a `NULL` per R22/T024 "EducaManto: sem mudança" (unrequested)
+- [ ] T061 Restringir à comissão comum o corte da linha de R$ 0,00 já paga
+  (`_comissao_existente`, `app/financeiro/comissoes_ops.py`): na EducaManto, uma linha paga em zero
+  por lucro zero, com o lucro corrigido depois, faria nascer uma `a_pagar` com a data do evento,
+  talvez num mês já fechado; ou registrar a regra larga no `docs/04` com o OK do dono per
+  R42/T024 (unrequested)
+- [ ] T062 Corrigir o `contracts/evento-cobranca.md`: `vencimento_origem` pode ser `null` (evento sem
+  data do grupo; `:29`, e também `data-model.md:29`), e `grupo_tamanho` é 0 no avulso cancelado, não
+  "1 no avulso" (`:31`) per contracts/evento-cobranca.md (partial)
+- [ ] T063 Levar as regras das T047 e T048 para os artefatos: o bloco R42 de
+  `contracts/api-eventos-valor.md` (`:46-52`) e do `research.md` (`:545-553`) ganha "só quando a
+  comissão calculada é maior que zero", e o `data-model.md` (`:91-92`) passa a apontar a regra do
+  `/comercial` em `event_ops.erros_do_valor_na_aba_comercial` per Constitution VII (partial)
