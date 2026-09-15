@@ -1006,3 +1006,11 @@ escondidas; cenários 9 a 13 verdes.
   na lista do chip "Recebimento" em "Outros consumidores" do `contracts/evento-cobranca.md` (`:88-91`),
   que hoje manda a cortesia para "quitado" e contradiz o bullet Cortesia do mesmo contrato, o
   `docs/02` e `ResumoSection.tsx` per contracts/evento-cobranca.md (contradicts)
+
+## Phase 14: Convergence
+
+- [ ] T077 Pôr a ressalva no invariante 5 do `data-model.md` (`:105`, "O vencimento nunca fica antes
+  da data da venda"): o piso da data da venda vale para a parcela e para os 2 dias antes, e a data
+  combinada vale como está (`app/financeiro/cobranca_ops.py:287-298`, FR-021, R33, `data-model.md:28`
+  e `docs/04` já dizem certo); a mesma ressalva no vocabulário "Vencimento do saldo" e nas Premissas
+  da `spec.md` per data-model.md: invariantes (contradicts)
