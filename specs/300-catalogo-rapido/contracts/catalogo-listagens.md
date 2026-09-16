@@ -4,11 +4,26 @@
 
 Esta feature altera **como** os dados são buscados, nunca **o que** é devolvido. Para os cinco
 endpoints abaixo, a resposta depois da mudança é **byte a byte idêntica** à de antes: mesmas
-chaves, mesmos valores, mesma ordem, mesmos nulos.
+chaves, mesmos valores, mesmos nulos.
 
 Isso não é uma promessa de comentário — é o critério do cenário 1 e do cenário 3 do
 `verify_300.py`, que captura a resposta de referência **antes** da alteração e compara campo a
 campo depois.
+
+### A única exceção, deliberada (FR-003a)
+
+**Duas ordenações mudaram**, porque nunca foram garantidas — dependiam do plano de consulta do
+banco, não de regra nenhuma:
+
+1. **`category_names` / `categories` sai em ordem alfabética.** O relationship `categories` não
+   declara `order_by`; a ordem era a que o banco entregasse. **115 dos 458 produtos** mudaram de
+   ordem no espelho — todos com **exatamente o mesmo conteúdo**.
+2. **Personagens com o mesmo `position` desempatam pelo `id`.** O `sorted` do Python é estável e
+   preservava a ordem de chegada do banco, que muda com o carregamento antecipado. Um par mudou.
+
+Nenhum dado entra ou sai; nenhuma chave muda. Foi uma troca consciente de *ordem estável por
+acaso* por *ordem estável por contrato* — a primeira quebraria sozinha no dia em que o Postgres
+mudasse de plano, e ninguém saberia por quê.
 
 | Endpoint | Gate | O que garante |
 |---|---|---|

@@ -262,3 +262,26 @@ severidade. Nenhuma violação da constituição.
 - [X] T036 Remover de `spec.md` §Docs a atualizar a condicional "`docs/01` §5 — só se o contrato de
       cache mudar": o contrato não mudou, então o item nunca se cumpre nem se descarta — per
       Spec §Docs a atualizar (contradicts)
+
+---
+
+## Phase 11: Convergence
+
+Segunda passada (16/09/2026). Os sete achados da Phase 10 estão fechados; o que sobra é coerência
+entre artefatos — a exceção de ordenação foi registrada na spec e não alcançou os dois documentos
+que um implementador futuro lê primeiro. Nenhuma violação da constituição.
+
+- [X] T037 Registrar a exceção de ordenação em
+      `specs/300-catalogo-rapido/contracts/catalogo-listagens.md`: o documento afirma resposta
+      "byte a byte idêntica" sem ressalva, e **115 produtos mudaram a ordem dos nomes de
+      categoria** (mais um par de personagens empatados) — quem ler só o contrato conclui o
+      contrário do que aconteceu — per FR-003a (contradicts)
+- [X] T038 Corrigir a invariante 1 de `specs/300-catalogo-rapido/data-model.md`, que ainda diz
+      "mesmas chaves, mesmos valores, **mesma ordem**" — a mesma contradição do T037, no documento
+      que descreve a estratégia de carga — per FR-003a (contradicts)
+- [X] T039 *(o `quickstart.md` §3 descrevia a pausa como sendo só do painel — terceiro lugar com o
+      mesmo recorte antigo, que eu tinha subdimensionado ao escrever esta tarefa; corrigido junto)*
+      Fazer a spec e o `docs/02` alcançarem o código: a pausa de 300 ms entrou **também** na
+      busca da tela de listagem (T031), e o FR-010 nomeia só a busca do painel de personagens; o
+      `docs/02` repete o recorte antigo. Ampliar o FR-010 e a linha do `docs/02` — per FR-010
+      (unrequested)

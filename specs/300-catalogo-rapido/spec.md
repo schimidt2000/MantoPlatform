@@ -252,9 +252,11 @@ comportamento de navegador (quantas requisições o campo dispara), que o verify
   quebrada.
 - **FR-009**: A tela de edição de produto DEVE obter as categorias sem carregar a lista completa de
   produtos.
-- **FR-010**: A busca de item do catálogo dentro do painel de personagens DEVE aguardar uma pausa na
-  digitação antes de consultar o servidor, e DEVE manter os resultados anteriores visíveis enquanto
-  os novos não chegam.
+- **FR-010**: **Toda busca do gerenciador que consulta o servidor** — a da tela de listagem e a do
+  painel de personagens — DEVE aguardar uma pausa na digitação antes de consultar, e DEVE manter os
+  resultados anteriores visíveis enquanto os novos não chegam. *(A busca da visão Personagens é
+  client-side e continua instantânea de propósito: atrasá-la seria travar a digitação sem que
+  nenhuma requisição fosse economizada.)*
 
 ### RBAC *(obrigatório se houver endpoint novo ou alterado)*
 

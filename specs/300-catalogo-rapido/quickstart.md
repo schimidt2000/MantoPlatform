@@ -63,7 +63,9 @@ ruff check app/api/admin_catalogo_read.py app/api/catalogo_read.py app/admin/cat
 | Modo **Árvore** | idem nas capas e nos rostos; expandir um tema não trava |
 | Modo **Personagens** | a lista monta; a animação de `layout` não salta quando a imagem chega |
 | Rolagem | as imagens fora da tela **não** são pedidas até rolar até elas |
-| Busca de personagem (painel do tema) | digitar uma palavra sem pausa gera **uma** requisição, não uma por tecla; os resultados anteriores não piscam |
+| Busca da própria listagem (campo do topo) | digitar uma palavra sem pausa gera **uma** requisição, não uma por tecla; a lista **não pisca esqueleto** a cada letra |
+| Busca de personagem (painel do tema) | idem — mesma pausa de 300 ms |
+| Busca no modo **Personagens** | continua **instantânea** de propósito: ali o filtro é client-side e não consulta o servidor |
 | Tela de edição de um produto | o seletor de categorias enche sem que a listagem completa seja baixada |
 | Produto com foto ausente | aparece o espaço reservado, nunca quadrado quebrado |
 
