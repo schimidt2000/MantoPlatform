@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
 import {
-  useAdminCatalogo,
+  useAdminCatalogoCategorias,
   useAdminCatalogoItem,
   useAdoptGalleryPhoto,
   useCatalogTagSuggestions,
@@ -38,7 +38,9 @@ export function AdminCatalogoFormPage() {
   const recemCriado =
     !avisoDispensado && Boolean((location.state as { recemCriado?: boolean } | null)?.recemCriado);
 
-  const categoriesQuery = useAdminCatalogo({});
+  // Só as categorias: isto aqui baixava os 458 produtos com todo o elenco (199 KB) para desenhar
+  // 39 opções de um seletor (feature 300).
+  const categoriesQuery = useAdminCatalogoCategorias();
   const itemQuery = useAdminCatalogoItem(id);
   const tagSuggestionsQuery = useCatalogTagSuggestions();
   const createItem = useCreateCatalogItem();

@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { assetUrl, ApiRequestError } from "@manto/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle, cn } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, cn, Foto } from "@manto/ui";
 import {
   useAdminCatalogo,
   useAdoptItemAsCharacter,
@@ -67,7 +67,16 @@ function CatalogItemSearch({
   onPick: (itemId: number) => void;
 }) {
   const [query, setQuery] = useState("");
-  const list = useAdminCatalogo({ q: query.trim() || undefined });
+  // Pausa antes de consultar (Princípio XII.5): cada tecla disparava uma varredura do catálogo
+  // inteiro cujo resultado era descartado menos os 8 primeiros. 300 ms é o mesmo intervalo que o
+  // `AgruparEventosDialog` já usa; o mínimo de 2 caracteres continua sendo o de hoje, então a
+  // tela não passa a exigir mais do que exigia.
+  const [buscaComPausa, setBuscaComPausa] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaComPausa(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+  const list = useAdminCatalogo({ q: buscaComPausa || undefined });
 
   const results = useMemo(
     () =>
@@ -105,9 +114,13 @@ function CatalogItemSearch({
                   blockedReason && "opacity-50",
                 )}
               >
-                {item.cover_url && (
-                  <img src={assetUrl(item.cover_url)} alt="" className="h-full w-full object-cover" />
-                )}
+                <Foto
+                  src={assetUrl(item.cover_url, { largura: 128 })}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                  fallback={null}
+                />
               </span>
               <span className="min-w-0 flex-1">
                 <span
@@ -382,13 +395,13 @@ export function AdminCatalogCharacterPanel({
               >
                 <div className="flex items-center gap-3">
                   <div className="relative h-12 w-12 flex-none overflow-hidden rounded-md bg-surface-2">
-                    {character.photo_url && (
-                      <img
-                        src={assetUrl(character.photo_url)}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    )}
+                    <Foto
+                      src={assetUrl(character.photo_url, { largura: 128 })}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                      fallback={null}
+                    />
                     {adoptingCharacterId === character.id && (
                       <span className="absolute inset-0 flex items-center justify-center bg-panel/70 text-xs">
                         …

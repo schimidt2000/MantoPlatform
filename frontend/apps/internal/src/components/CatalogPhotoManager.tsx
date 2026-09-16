@@ -343,10 +343,19 @@ export function CatalogPhotoManager({
                     index === 0 ? "border-gold ring-1 ring-gold" : "border-line",
                   )}
                 >
+                  {/* 320 e não 128: a célula da grade é bem maior que as miniaturas de lista.
+                      Só a foto JÁ SALVA tem variante — a recém-escolhida é um blob local, que
+                      não passa pelo Flask. Continua `<img>` (e não `<Foto>`) porque o arraste
+                      por ponteiro depende de `draggable={false}`, que `FotoProps` não repassa. */}
                   <img
-                    src={slot.kind === "existing" ? assetUrl(slot.url) : slot.previewUrl}
+                    src={
+                      slot.kind === "existing"
+                        ? assetUrl(slot.url, { largura: 320 })
+                        : slot.previewUrl
+                    }
                     alt=""
                     draggable={false}
+                    loading="lazy"
                     className="pointer-events-none h-full w-full object-cover"
                   />
 
@@ -462,7 +471,12 @@ export function CatalogPhotoManager({
               aria-label="Desfazer a remoção desta foto"
               title="Desfazer a remoção desta foto"
             >
-              <img src={assetUrl(photo.url)} alt="" className="h-full w-full object-cover opacity-50" />
+              <img
+                src={assetUrl(photo.url, { largura: 128 })}
+                alt=""
+                loading="lazy"
+                className="h-full w-full object-cover opacity-50"
+              />
               <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
                 <Undo2 className="h-4 w-4" aria-hidden="true" />
               </span>

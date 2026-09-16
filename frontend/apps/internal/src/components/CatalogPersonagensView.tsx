@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Plus, Shirt, TriangleAlert, X } from "lucide-react";
 import { assetUrl, ApiRequestError } from "@manto/api-client";
-import { Button, cn } from "@manto/ui";
+import { Button, cn, Foto } from "@manto/ui";
 import {
   useCatalogPersonagens,
   useReuseCharacter,
@@ -98,15 +98,13 @@ function PersonagemRow({
           do nome e do selo da ficha, que é o que se lê primeiro. */}
       <div className="flex flex-wrap items-start gap-3">
         <div className="h-12 w-12 flex-none overflow-hidden rounded-full bg-surface-2">
-          {personagem.photo_url ? (
-            <img
-              src={assetUrl(personagem.photo_url)}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <span className="flex h-full w-full items-center justify-center text-lg">🎭</span>
-          )}
+          <Foto
+            src={assetUrl(personagem.photo_url, { largura: 128 })}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover"
+            fallback={<span className="flex h-full w-full items-center justify-center text-lg">🎭</span>}
+          />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -284,13 +282,13 @@ function PersonagemRow({
                       }}
                     >
                       <span className="h-7 w-7 flex-none overflow-hidden rounded bg-surface-2">
-                        {tema.cover_url && (
-                          <img
-                            src={assetUrl(tema.cover_url)}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        )}
+                        <Foto
+                          src={assetUrl(tema.cover_url, { largura: 128 })}
+                          alt=""
+                          loading="lazy"
+                          className="h-full w-full object-cover"
+                          fallback={null}
+                        />
                       </span>
                       <span className="min-w-0 flex-1 truncate text-sm text-ink">{tema.name}</span>
                     </button>

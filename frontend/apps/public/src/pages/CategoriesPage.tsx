@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Skeleton } from "@manto/ui";
-import { assetUrl } from "@manto/api-client";
+import { assetSrcSet, assetUrl } from "@manto/api-client";
 import { useCategories } from "../lib/catalogo";
 
 export function CategoriesPage() {
@@ -47,8 +47,14 @@ export function CategoriesPage() {
                 className="group relative aspect-[3/4] overflow-hidden rounded-lg bg-bg-alt shadow-sm transition-transform hover:-translate-y-1 hover:shadow-lg"
               >
                 {category.cover_image_url && (
+                  // A feature 270 cobriu o `ProductCard` e esqueceu esta grade, que tem
+                  // exatamente a mesma medida (~270px no desktop, ~156px no celular) e vinha
+                  // baixando o arquivo original de cada categoria. O `sizes` espelha a grade
+                  // real: sem ele o navegador assume 100vw e pede sempre a maior variante.
                   <img
-                    src={assetUrl(category.cover_image_url)}
+                    src={assetUrl(category.cover_image_url, { largura: 640 })}
+                    srcSet={assetSrcSet(category.cover_image_url, [320, 480, 640])}
+                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, calc(50vw - 32px)"
                     alt={category.name}
                     loading="lazy"
                     className="h-full w-full object-cover"

@@ -55,6 +55,21 @@ export function useAdminCatalogo(filters: { q?: string; categoria?: string; stat
   });
 }
 
+/**
+ * Só as categorias (feature 300). O formulário de edição usava `useAdminCatalogo({})` para isto —
+ * baixava os 458 produtos com todo o elenco, 199 KB, para desenhar 39 opções.
+ *
+ * Sob o prefixo `["admin-catalogo", …]` de propósito: as mutações de categoria já invalidam esse
+ * prefixo, então o seletor acompanha sem precisar ser lembrado em cada uma.
+ */
+export function useAdminCatalogoCategorias() {
+  return useQuery<{ categories: CatalogCategoryOption[] }>({
+    queryKey: ["admin-catalogo", "categorias"],
+    queryFn: () => apiFetch<{ categories: CatalogCategoryOption[] }>("/api/admin/catalogo/categorias"),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export interface CatalogImage {
   id: number;
   url: string;
