@@ -35,7 +35,10 @@ Não testa código. Serve de portão antes do `/speckit-tasks`.
 - [x] CHK009 Nível 1: `/speckit-converge` sem gaps — sete passadas (15/09): as seis primeiras deram
   T046–T077, todas feitas; a sétima voltou sem nenhum achado nos dois leitores (requisitos e
   contratos contra o código)
-- [ ] CHK010 Antes de "em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`, sonda `/api/`
+- [x] CHK010 Antes de "em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`, sonda
+  `/api/` — publicada em 16/09/2026 ~04:40 pelo merge `2f4a738`; `/api/formularios/comum/schema` 200
+  em três sondagens e raiz 200; conferência pós-deploy na produção (só leitura): SC-001 com 7 vendas,
+  ids iguais aos esperados, e 344 e 288 fora das cobranças
 
 ## Home e visual — clareza e completude
 

@@ -4,8 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-15** · Estado do repositório: pós-feature
-> **299-sem-valor-cobrancas** (sem migration; **na branch, não publicada** — a Home cobra o grupo
+> Última atualização: **2026-09-16** · Estado do repositório: pós-feature
+> **299-sem-valor-cobrancas** (sem migration; **EM PRODUÇÃO desde 16/09/2026 ~04:40** pelo merge
+> `2f4a738` "merge: 299 — sem valor e cobranças" — a Home cobra o grupo
 > como uma venda só, mostra o evento sem valor de venda e conta no total só o que é para agir;
 > "Valor a definir" no cadastro no lugar do R$ 0,01) — antes dela pós-feature
 > **298-formulario-vira-evento** (migration `e5a1c7d93b20`; **publicada em 14/09/2026** pelo merge
