@@ -287,8 +287,9 @@ tempo varia com a máquina e transformaria o verify numa fonte de falso alarme.
 | 3 | Grade geral e maior categoria da vitrine | consultas ≤ 10 em cada; respostas idênticas | não |
 | 4 | Categorias do formulário de edição | chegam sem carregar a lista de produtos | não |
 | 5 | Papel sem permissão no endpoint do gerenciador | recusa (403/404) — o gate não afrouxou | **sim** |
-| 6 | Foto com arquivo ausente | a miniatura responde "não encontrado" sem gravar lixo no disco | não |
-| 7 | limpeza | usuário descartável apagado (`roles.clear()` antes do usuário) | — |
+| 6 | Foto com arquivo **ausente**, arquivo **corrompido** e largura fora da allowlist | nenhum devolve 200, e o cache não cresce com pedido inválido | não |
+| 7 | Seis pedidos **simultâneos** da mesma miniatura ainda não gerada | todos recebem 200 e **os mesmos bytes** — a corrida que a 270 corrigiu não volta | não |
+| 8 | limpeza | usuário descartável apagado (`roles.clear()` antes do usuário) | — |
 
 Conferência de tela: gerenciador nos três modos (Cards, Árvore, Personagens) e a tela de edição, no
 computador; vitrine — grade geral, grade de categorias, página de produto e lista de desejos — em
@@ -330,8 +331,9 @@ viewport mobile 375×812 (Princípio X).
 
 ## Docs a atualizar
 
-`docs/01` §5 (rota de miniatura já existente passa a servir também o ERP interno — só se o contrato
-de cache mudar), `docs/02` (entrada de `/admin/catalogo` e das telas da vitrine tocadas), `docs/03`
+`docs/01` §3.10 (a rota nova de categorias na tabela do gerenciador; o §4.3 já cobre o gate, porque
+a view usa o `_require_superadmin()` que já está registrado para `admin_catalogo_*`, e o contrato de
+cache da rota de miniatura **não muda**), `docs/02` (entrada de `/admin/catalogo` e das telas da vitrine tocadas), `docs/03`
 (entrada nova no topo, append-only, registrando a reversão consciente da decisão 7 da 270),
 `docs/04` (invariante: lista de catálogo carrega o acompanhamento de uma vez, nunca por item),
 `docs/05` (as três dívidas novas acima).

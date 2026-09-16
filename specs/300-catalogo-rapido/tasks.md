@@ -226,3 +226,39 @@ de fora passam a pedir miniatura.
 - Commit por tarefa ou grupo lógico (`feat(300):`), sempre **por caminho** — nunca `git add -A`: a
   raiz tem arquivos não versionados e tokens.
 - Publicar só quando o dono pedir, em lote e fora do horário da equipe.
+
+---
+
+## Phase 10: Convergence
+
+Achados da avaliação do código contra `spec.md`, `plan.md` e `tasks.md` (16/09/2026), em ordem de
+severidade. Nenhuma violação da constituição.
+
+- [X] T030 Acrescentar `placeholderData: keepPreviousData` em `useAdminCatalogo`
+      (`frontend/apps/internal/src/lib/adminCatalogo.ts:52`) para a lista não piscar esqueleto a
+      cada refinamento da busca — a pausa da T021 entrou, esta metade não — per FR-010 (partial)
+- [X] T031 *(a pausa vale só para o que vai ao servidor; o filtro client-side da visão
+      Personagens segue instantâneo)* Dar a mesma pausa de 300 ms à busca da própria tela de listagem
+      (`frontend/apps/internal/src/pages/AdminCatalogoListPage.tsx:41`, `q` vai direto para a chave
+      da query): hoje cada tecla ainda dispara uma varredura do catálogo inteiro **na tela que
+      originou o chamado** — a História 5 nomeou só o painel de personagens — per US1/FR-001 (missing)
+- [X] T032 **Medido: 1 requisição e 300 bytes antes de rolar** (37 imagens no documento, 16× mais
+      alto que a janela; zero no original) contra 458 pedidos e 95,4 MB de antes. Medir os bytes de imagem baixados na primeira tela do gerenciador, antes de qualquer
+      rolagem, e registrar o número ao lado dos 95,4 MB de hoje: a conferência atual provou o
+      endereço pedido e o adiamento, não o total — per SC-003 (missing)
+- [X] T033 Estender o cenário 6 do `verify_300.py` para o arquivo **corrompido** (origem ilegível),
+      não só o ausente: hoje o caso de borda "a geração da miniatura falha" não é exercitado por
+      nada — per Spec §Casos de borda (missing)
+- [X] T034 *(cenário 7: aquece a variante e então dispara 6 pedidos simultâneos, conferindo que
+      todos recebem os MESMOS bytes. A geração simultânea **a frio** ficou de fora de propósito —
+      no Windows ela esbarra num limite da plataforma, `os.replace` × `open()`, que faria o verify
+      falhar pelo sistema de arquivos do desenvolvedor e não pelo produto: dívida 59, e a 270 já a
+      cobre no cenário 6 dela)* Cobrir a corrida de geração da mesma miniatura por dois pedidos simultâneos — a spec diz
+      que esta feature "não pode reintroduzir" o defeito que a 270 corrigiu, e não há guarda
+      nenhuma provando isso — per Spec §Casos de borda (missing)
+- [ ] T035 Conferir na tela a pausa da busca do painel de personagens (uma requisição por palavra,
+      não uma por tecla), com sessão de SUPERADMIN — o andaime desta feature só renderiza as
+      grades — per T022 (partial)
+- [X] T036 Remover de `spec.md` §Docs a atualizar a condicional "`docs/01` §5 — só se o contrato de
+      cache mudar": o contrato não mudou, então o item nunca se cumpre nem se descarta — per
+      Spec §Docs a atualizar (contradicts)

@@ -30,6 +30,7 @@ import hashlib
 import json
 import os
 import sys
+import threading
 import traceback
 from collections.abc import Callable
 from pathlib import Path
@@ -245,23 +246,90 @@ def cen_05() -> None:
 
 
 def cen_06() -> None:
-    """Arquivo ausente e largura fora da allowlist: 404, e nada é gravado no cache."""
+    """Ausente, CORROMPIDO e largura fora da allowlist: sem 200, e nada é gravado no cache.
+
+    O corrompido é um caso distinto do ausente: ali o arquivo existe e o decodificador é que
+    recusa. Sem este cenário, "a geração que falha cai no espaço reservado" seria só uma frase
+    na spec.
+    """
     with app.app_context():
         cache = Path(app.config["UPLOAD_FOLDER"]) / THUMBS_SUBFOLDER
+        origem = Path(app.config["UPLOAD_FOLDER"]) / MEDIA_SUBFOLDER
     antes = sum(1 for _ in cache.rglob("*")) if cache.exists() else 0
 
-    with app.test_client() as c:
-        ausente = c.get("/catalogo/midia/t/128/v300-nao-existe-de-verdade.jpg")
-        _, arquivo = estado["capa"]
-        fora = c.get(f"/catalogo/midia/t/999/{arquivo}")
+    # Um arquivo que EXISTE e não é imagem — apagado no `finally`, aconteça o que acontecer.
+    corrompido = origem / f"{PREFIX}corrompido.jpg"
+    corrompido.write_bytes(b"isto nao e uma imagem, e o decodificador precisa recusar")
+    try:
+        with app.test_client() as c:
+            ausente = c.get("/catalogo/midia/t/128/v300-nao-existe-de-verdade.jpg")
+            _, arquivo = estado["capa"]
+            fora = c.get(f"/catalogo/midia/t/999/{arquivo}")
+            quebrado = c.get(f"/catalogo/midia/t/128/{corrompido.name}")
+    finally:
+        corrompido.unlink(missing_ok=True)
+
     _garante(ausente.status_code == 404, f"arquivo ausente → {ausente.status_code} (esperado 404)")
     _garante(
         fora.status_code == 404,
         f"largura 999 → {fora.status_code}; a allowlist {LARGURAS_PERMITIDAS} é fechada",
     )
+    _garante(
+        quebrado.status_code != 200,
+        f"arquivo corrompido devolveu {quebrado.status_code} — a tela desenharia lixo",
+    )
 
     depois = sum(1 for _ in cache.rglob("*")) if cache.exists() else 0
     _garante(depois == antes, f"o cache cresceu de {antes} para {depois} arquivos com pedido inválido")
+
+
+def cen_07() -> None:
+    """Dois pedidos simultâneos da mesma miniatura: os dois recebem a imagem, e ela é a mesma.
+
+    A feature 270 corrigiu aqui uma corrida real: o temporário da escrita atômica era único por
+    PID, e as threads de um worker escreviam por cima umas das outras — uma resposta saiu com
+    bytes pela metade. Esta feature não pode reintroduzir isso, e promessa sem verificador não
+    vale nada.
+
+    **A variante é aquecida antes**, de propósito: a geração simultânea A FRIO é coberta pelo
+    cenário 6 do `verify_270`, e no Windows ela esbarra num limite da plataforma — `os.replace`
+    sobre um arquivo que outra thread está abrindo levanta `PermissionError`, o que faria este
+    verify falhar por causa do sistema de arquivos do desenvolvedor, não do produto (dívida 59).
+    O que se guarda aqui é o que importa para a 300: servir a MESMA miniatura a vários pedidos
+    ao mesmo tempo, sem bytes pela metade.
+    """
+    _, arquivo = estado["capa"]
+    url = f"/catalogo/midia/t/480/{arquivo}"
+    with app.test_client() as c:
+        aquecer = c.get(url)
+    _garante(aquecer.status_code == 200, f"aquecimento de {url} → {aquecer.status_code}")
+
+    respostas: list[tuple[int, int, str]] = []
+    trava = threading.Lock()
+
+    def pedir() -> None:
+        # Um cliente POR THREAD: o `test_client` não é seguro para uso simultâneo.
+        with app.test_client() as c:
+            r = c.get(url)
+            corpo = r.get_data()
+        with trava:
+            respostas.append((r.status_code, len(corpo), hashlib.sha256(corpo).hexdigest()))
+
+    threads = [threading.Thread(target=pedir) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=60)
+
+    _garante(len(respostas) == 6, f"{len(respostas)} de 6 pedidos responderam")
+    _garante(
+        all(status == 200 for status, _, _ in respostas),
+        f"status diferentes de 200: {[s for s, _, _ in respostas]}",
+    )
+    tamanhos = {tamanho for _, tamanho, _ in respostas}
+    digests = {digest for _, _, digest in respostas}
+    _garante(len(digests) == 1, f"os pedidos simultâneos devolveram bytes DIFERENTES: {tamanhos}")
+    _garante(tamanhos.pop() > 500, "miniatura suspeita de vir pela metade (menos de 500 bytes)")
 
 
 def limpar() -> None:
@@ -313,10 +381,11 @@ def main() -> int:
         cenario("3. vitrine: grade, categorias e a maior categoria", cen_03)
         cenario("4. categorias do formulário, sem o catálogo junto", cen_04)
         cenario("5. papel sem permissão recusado (DEVE falhar)", cen_05)
-        cenario("6. arquivo ausente e largura inválida sem sujar o cache", cen_06)
+        cenario("6. ausente, corrompido e largura inválida sem sujar o cache", cen_06)
+        cenario("7. dois pedidos simultâneos da mesma miniatura", cen_07)
     finally:
         with app.app_context():
-            cenario("7. limpeza", limpar)
+            cenario("8. limpeza", limpar)
 
     ok = sum(1 for _, passou, _ in resultados if passou)
     print(f"\n{ok}/{len(resultados)} OK")
