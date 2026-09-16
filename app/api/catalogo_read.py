@@ -11,6 +11,7 @@ from typing import Any
 
 from flask import current_app, jsonify, request
 from flask_login import current_user
+from sqlalchemy.orm import selectinload
 
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
@@ -68,7 +69,9 @@ def _item_summary(item: CatalogItem) -> dict[str, Any]:
         "name": item.name,
         "slug": item.slug,
         "cover_image_url": cover.url if cover else None,
-        "categories": [c.name for c in item.categories],
+        # Alfabética por contrato, não por acaso: `categories` não tem `order_by` e a ordem
+        # dependia do plano de consulta (feature 300).
+        "categories": sorted(c.name for c in item.categories),
         # Tags entram na busca client-side da vitrine (feature 209): é o que faz "alice"
         # achar o Coelho Branco — as tags já carregam esse vocabulário.
         "tags": item.tags_list,
@@ -93,7 +96,15 @@ def api_catalogo_list() -> Any:
     """Grade geral do catálogo — itens ativos + categorias com contagem (paridade com `catalogo_bp.index`)."""
     from app.formularios.formularios_ops import DEFAULT_WHATSAPP_NUMBER, _whatsapp_target
 
-    items = CatalogItem.query.filter_by(is_active=True).order_by(CatalogItem.name.asc()).all()
+    # `categories` (agrupamento) e `images` (a capa) são tocados item a item logo abaixo — eram
+    # 917 consultas numa abertura, medido. `cover_image` é property sobre `images[0]`: pedir a
+    # capa carrega a coleção inteira de fotos do produto.
+    items = (
+        CatalogItem.query.filter_by(is_active=True)
+        .options(selectinload(CatalogItem.categories), selectinload(CatalogItem.images))
+        .order_by(CatalogItem.name.asc())
+        .all()
+    )
 
     items_by_category: dict[int, list[CatalogItem]] = {}
     for item in items:
@@ -118,7 +129,14 @@ def api_catalogo_list() -> Any:
 @api_bp.route("/catalogo/categorias")
 def api_catalogo_categorias() -> Any:
     """Grade de categorias com item ativo (paridade com `catalogo_bp.categorias`)."""
-    items = CatalogItem.query.filter_by(is_active=True).order_by(CatalogItem.name.asc()).all()
+    # Esta view carrega o catálogo inteiro só para descobrir QUAIS categorias têm item ativo e
+    # qual é a capa de cada uma — eram 492 consultas para devolver 39 categorias, medido.
+    items = (
+        CatalogItem.query.filter_by(is_active=True)
+        .options(selectinload(CatalogItem.categories), selectinload(CatalogItem.images))
+        .order_by(CatalogItem.name.asc())
+        .all()
+    )
 
     items_by_category: dict[int, list[CatalogItem]] = {}
     for item in items:
@@ -142,9 +160,12 @@ def api_catalogo_categoria_detail(slug: str) -> Any:
     dimensões da miniatura (capa do primeiro item, mesma regra de `_category_summary`).
     """
     category = CatalogCategory.query.filter_by(slug=slug).first()
+    # O pior caso da vitrine: aqui `_item_summary` toca `images` E `categories` por item, sem nada
+    # pré-carregado — eram 182 consultas na maior categoria (90 itens), medido.
     items = (
         CatalogItem.query.filter_by(is_active=True)
         .filter(CatalogItem.categories.any(CatalogCategory.id == category.id))
+        .options(selectinload(CatalogItem.categories), selectinload(CatalogItem.images))
         .order_by(CatalogItem.name.asc())
         .all()
         if category
