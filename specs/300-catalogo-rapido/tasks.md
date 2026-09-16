@@ -178,7 +178,10 @@ de fora passam a pedir miniatura.
 - [X] T023 `cd frontend && npm run typecheck` limpo (três SPAs — `npx tsc` app a app não satisfaz o
       portão) e `ruff check` nos três arquivos Python tocados. `ruff format` em nenhum: todos são
       legado.
-- [ ] T024 Conferência de tela final pelo `quickstart.md` §3: gerenciador nos três modos e tela de
+- [ ] T024 **PARCIAL — mesma trava da T022/T035.** Conferidos: Cards e Árvore (37 de 37 imagens em
+      `/t/128/`, nenhuma no original, 1 requisição e 300 bytes antes de rolar) e a vitrine inteira
+      em 375×812. **Faltam** o modo Personagens e a tela de edição: os dois exigem sessão de
+      SUPERADMIN, que eu não crio (não digito senha em formulário). Original: conferência de tela final pelo `quickstart.md` §3: gerenciador nos três modos e tela de
       edição no computador; vitrine inteira em 375×812.
 - [X] T025 *(a rota entrou no §3.10; o §4.3 já cobria — `_require_superadmin()` para
       `admin_catalogo_*`, e a view nova usa esse mesmo gate nesse mesmo módulo)* `docs/01` §4.3: linha do gate de `GET /api/admin/catalogo/categorias` (SUPERADMIN).
@@ -188,7 +191,8 @@ de fora passam a pedir miniatura.
       carrega o acompanhamento de uma vez, nunca por item) e `docs/05` (as três dívidas novas: as
       demais telas internas sem miniatura, as capas de campanha virtual que não casam com o regex de
       variante, e o pacote JavaScript sem divisão por página).
-- [ ] T027 `quickstart.md` executado de ponta a ponta, com os números do "depois" anotados ao lado
+- [X] T027 *(§1 verify 8/8, §2 portões verdes, §3 telas — salvo o que depende de sessão, §4 números
+      do "depois" anotados; §5 só faz sentido depois do deploy)* `quickstart.md` executado de ponta a ponta, com os números do "depois" anotados ao lado
       dos do "antes".
 
 **Checkpoint**: portões da constituição verdes e documentação viva atualizada.
