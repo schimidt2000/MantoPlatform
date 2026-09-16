@@ -908,7 +908,7 @@ consome a barra invertida de `\uXXXX` como escape, e por isso o filtro por tag n
 ### 3.10 Gerenciador de catálogo — `admin_catalogo_read.py` / `admin_catalogo_write.py`
 | Método | Rota |
 |---|---|
-| GET | `/api/admin/catalogo`, `/api/admin/catalogo/<item_id>`, `/api/admin/catalogo/tags`, **`/api/admin/catalogo/personagens`** (feature 235 — personagens por identidade, com os temas de cada um) |
+| GET | `/api/admin/catalogo`, `/api/admin/catalogo/<item_id>`, `/api/admin/catalogo/tags`, **`/api/admin/catalogo/personagens`** (feature 235 — personagens por identidade, com os temas de cada um), **`/api/admin/catalogo/categorias`** (feature 300 — só a lista de categorias, para o seletor do formulário de edição; antes ele chamava a listagem inteira, 458 produtos com todo o elenco, para desenhar 39 opções. SUPERADMIN, mesmo gate do `POST` no mesmo caminho) |
 | POST | `/api/admin/catalogo`, `/api/admin/catalogo/categorias`, `/api/admin/catalogo/<item_id>/toggle-ativo` |
 | PATCH/DELETE | `/api/admin/catalogo/<item_id>` |
 | POST | `/api/admin/catalogo/<item_id>/personagens` · **`/api/admin/catalogo/<item_id>/personagens/reaproveitar`** (feature 235 — `{"figurino_sheet_id"}`: põe no elenco deste tema um personagem que já existe; 400 se a ficha já estiver no tema) |
