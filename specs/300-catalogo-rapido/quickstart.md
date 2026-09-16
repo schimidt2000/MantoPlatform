@@ -78,17 +78,24 @@ ruff check app/api/admin_catalogo_read.py app/api/catalogo_read.py app/admin/cat
 
 ## 4. A medição, para comparar com o antes
 
-Os números de referência (espelho de 16/09/2026, antes da mudança):
+Medido no espelho em 16/09/2026 (458 produtos, 457 ativos), pelo HTTP, com o ouvinte de SQL:
 
-| Caminho | Consultas | Tempo |
+| Caminho | Antes | Depois |
 |---|---|---|
-| `GET /api/admin/catalogo` | 1.846 | 1,56 s |
-| `GET /api/admin/catalogo/personagens` | 474 | 854 ms |
-| `GET /api/catalogo` | 916 | 661 ms |
-| `GET /api/catalogo/categoria/<maior>` | 182 | 124 ms |
+| `GET /api/admin/catalogo` | 1.847 | **6** |
+| `GET /api/admin/catalogo/personagens` | 474 | **6** |
+| `GET /api/catalogo` | 917 | **4** |
+| `GET /api/catalogo/categorias` | 492 | **4** |
+| `GET /api/catalogo/categoria/<maior>` | 182 | **4** |
 
-Depois da mudança, cada um deve ficar **abaixo de 10 consultas** e não crescer se o catálogo
-crescer — que é a propriedade que importa, mais do que o número exato.
+*(O gerenciador mede 1.847 pelo HTTP e 1.846 chamando a função direto: a diferença de 1 é o
+`user_loader` da requisição autenticada. Os caminhos públicos não têm login e batem exatamente.)*
+
+O que importa não é o número exato, e sim a propriedade: **a contagem não cresce com a quantidade
+de produtos**. O teto de 10 é a aferição prática disso.
+
+Conferido junto: as respostas seguem **idênticas** à referência, hash a hash — inclusive a da visão
+Personagens, que caiu de 474 para 6 consultas com o mesmo sha256.
 
 ## 5. Depois do deploy (obrigatório)
 

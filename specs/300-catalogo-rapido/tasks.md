@@ -94,7 +94,8 @@ tela só é pedido ao rolar.
 - [X] T010 [P] [US2] `frontend/apps/internal/src/components/AdminCatalogCharacterPanel.tsx:109` e
       `:387`.
 - [X] T011 [P] [US2] `frontend/apps/internal/src/components/CatalogPhotoManager.tsx:347` e `:465`.
-- [ ] T012 [US2] Rodar o verify (cenários 2 e 6) e abrir os três modos do gerenciador: conferir no
+- [X] T012 [US2] *(37 de 37 imagens em `/t/128/`, nenhuma no original, nenhuma carregada num
+      documento 16× mais alto que a janela)* Rodar o verify (cenários 2 e 6) e abrir os três modos do gerenciador: conferir no
       inspetor que o endereço pedido é `/catalogo/midia/t/128/...`; que as imagens fora da tela só
       chegam ao rolar; que a animação de `layout` do modo Personagens não salta quando a imagem
       chega; e que um produto com arquivo ausente cai no espaço reservado.
@@ -118,7 +119,8 @@ de fora passam a pedir miniatura.
       grade real, no mesmo padrão que o `ProductCard` já usa. Preservar o `loading="lazy"` de `:53`.
 - [X] T015 [P] [US3] `frontend/apps/public/src/pages/WishlistPage.tsx:69` — quadrado de 64 px:
       `{ largura: 128 }`. É o caso de ~380× que motivou a 270.
-- [ ] T016 [US3] Rodar o verify (cenário 3) e abrir em 375×812: grade geral, grade de categorias,
+- [X] T016 [US3] *(grade de categorias com `srcset` e o navegador escolhendo 320 sozinho; lista de
+      desejos em `/t/128/`; palco no original; 375 sem rolagem horizontal)* Rodar o verify (cenário 3) e abrir em 375×812: grade geral, grade de categorias,
       página de produto (a **foto grande continua no original** — decisão 9 da 270) e lista de
       desejos. Sem rolagem horizontal.
 
@@ -160,7 +162,11 @@ de fora passam a pedir miniatura.
       de 300 ms antes de consultar (mesmo intervalo do `AgruparEventosDialog`), mantendo o mínimo de
       2 caracteres de hoje, com `placeholderData: keepPreviousData` para a lista não piscar
       (padrão de `agenda.ts` e `formulariosAdmin.ts`).
-- [ ] T022 [US5] Abrir o painel e digitar uma palavra de 6 letras sem pausa: uma requisição, não
+- [ ] T022 [US5] **PENDENTE — não conferido na tela.** O campo vive dentro do painel de
+      personagens, que exige sessão de SUPERADMIN; o andaime desta feature renderiza só as duas
+      grades, que recebem dados por prop. A pausa foi conferida por leitura de código (`setTimeout`
+      de 300 ms alimentando a chave da query), **não na tela** — e não registro como conferido o
+      que não conferi. Fica para quem tiver sessão. Original: abrir o painel e digitar uma palavra de 6 letras sem pausa: uma requisição, não
       seis; os resultados anteriores permanecem enquanto os novos não chegam.
 
 **Checkpoint**: as cinco histórias entregues.
@@ -169,13 +175,14 @@ de fora passam a pedir miniatura.
 
 ## Phase 8: Polimento e transversais
 
-- [ ] T023 `cd frontend && npm run typecheck` limpo (três SPAs — `npx tsc` app a app não satisfaz o
+- [X] T023 `cd frontend && npm run typecheck` limpo (três SPAs — `npx tsc` app a app não satisfaz o
       portão) e `ruff check` nos três arquivos Python tocados. `ruff format` em nenhum: todos são
       legado.
 - [ ] T024 Conferência de tela final pelo `quickstart.md` §3: gerenciador nos três modos e tela de
       edição no computador; vitrine inteira em 375×812.
-- [ ] T025 `docs/01` §4.3: linha do gate de `GET /api/admin/catalogo/categorias` (SUPERADMIN).
-- [ ] T026 Docs por fonte única: `docs/02` (entradas de `/admin/catalogo` e das telas da vitrine
+- [X] T025 *(a rota entrou no §3.10; o §4.3 já cobria — `_require_superadmin()` para
+      `admin_catalogo_*`, e a view nova usa esse mesmo gate nesse mesmo módulo)* `docs/01` §4.3: linha do gate de `GET /api/admin/catalogo/categorias` (SUPERADMIN).
+- [X] T026 *(dívidas 56, 57 e 58; `docs/04` ganhou a linha de Catálogo, que não existia)* Docs por fonte única: `docs/02` (entradas de `/admin/catalogo` e das telas da vitrine
       tocadas), `docs/03` (entrada nova no topo, append-only, registrando a reversão consciente da
       decisão 7 da 270 e os números antes/depois), `docs/04` (invariante: listagem de catálogo
       carrega o acompanhamento de uma vez, nunca por item) e `docs/05` (as três dívidas novas: as
