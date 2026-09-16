@@ -808,7 +808,12 @@ escondidas; cenários 9 a 13 verdes.
   Atualizar o cabeçalho. Commit `docs(299): documentação viva`, por caminho.
 - [X] T044 `/speckit-converge`; o que ele apontar vira tarefa nova no fim deste arquivo. *(Rodado
   em 15/09: 10 achados, T046–T055 na Phase 9.)*
-- [ ] T045 **Antes do deploy** (decisão do dono, R41):
+- [X] T045 **Antes do deploy** (decisão do dono, R41): *(Feito em 16/09/2026. Levantamento rodado na
+  produção, só leitura, e a lista entregue ao dono: duplicatas prováveis em 85, 288 e 309; sobra em
+  344, 184 e 319; comprovante sem valor escondendo pagamento em 274 e 292; 3 eventos de R$ 0,01.
+  Deploy pelo merge `2f4a738` às ~04:40, fora do horário. Conferência pós-deploy: SC-001 com 7 vendas,
+  ids iguais aos esperados, 344 e 288 fora das cobranças, 42 cobranças e R$ 135.980,47 em aberto. A
+  consulta do SC-008 ficou registrada como dívida 53, para 30 dias depois.)*
   - rodar o levantamento no `manto-backend`, só leitura:
     `ssh -i ~/.ssh/render_manto_ed25519 srv-da8o06on74is73ehf4q0@ssh.oregon.render.com 'cd
     /opt/render/project/src && MANTO_SEM_THREADS=1 PYTHONPATH=$PWD .venv/bin/python -' <
