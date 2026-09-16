@@ -665,6 +665,24 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > `specs/298-formulario-vira-evento/contracts/dashboard-formularios.md`; todos os campos são
 > opcionais no tipo TS.
 
+> **Feature 299**: o bloco `comercial` deixou de ser só `{pending_payments}`. Agora é
+> `{corte, pode_editar_venda, pending_payments[], cobrancas_resumo, sem_valor}`, montado por
+> `app/financeiro/cobranca_ops.py` — núcleo novo e puro, **fonte única da Home e da página do
+> evento**. O grupo é uma venda só: valor do principal, recebido de todos os eventos do grupo
+> (cancelados inclusive); vencimento = data combinada > 1ª parcela que o recebido não cobre > 2 dias
+> antes do 1º evento vivo e sem 🟧/🟠 (os dois últimos nunca antes da data da venda); folga de
+> centavos de R$ 1,00; sinal pendente só sem data combinada e sem cronograma. `pending_payments`
+> continua sendo a lista de cobranças, com as chaves antigas (bundle em cache) mais `cliente`,
+> `data_evento`, `vencimento(_origem)`, `dias_ate_vencimento`, `sinal_pendente`, `severidade`
+> (`vermelho` ≤ 2 dias · `amarelo` 3–30 ou sinal pendente · `cinza` > 30), `selo` em pt-BR, `nota`
+> e `grupo_comercial`; `severity` passa a ser derivada da cor. `sem_valor` traz
+> `a_acontecer[]`/`ja_aconteceu[]` (vazio, zero ou abaixo de R$ 1,00, desde a data de início, fora
+> cortesia, ensaio, 🟧/🟠, Loja Virtual e outro evento de grupo; régua da 298) com `por_cor` e
+> `para_agir`; `cobrancas_resumo` traz `por_cor`, `para_agir` e `total_em_aberto`. Falha interna
+> **nunca** vira `comercial: null`: a lista que falhou vem `null` e a tela mostra o aviso; `null` no
+> bloco continua significando "sem permissão". `formularios` ganhou `para_agir`. Contrato:
+> `specs/299-sem-valor-cobrancas/contracts/dashboard-comercial.md`.
+
 ### 3.3 Agenda e Eventos — `agenda.py` (leitura) / `agenda_write.py` (escrita)
 | Método | Rota |
 |---|---|
@@ -710,6 +728,22 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > tabela `EventRole` (fonte de verdade) quando o evento já tem roles de personagem, caindo para o
 > parse do título só em evento sem nenhuma — decisão 6, para o texto livre do título nunca mais ser
 > a única fonte de quem é personagem.
+>
+> **Feature 299 — valor da venda e cobrança do grupo.** `POST /api/events` e
+> `PATCH /api/events/<id>` aceitam `valor_a_definir` (não gravado): com ele, sem cortesia, a venda
+> grava `NULL` e os erros de valor não saem. Sem ele, valor vazio, zero ou abaixo de R$ 1,00 → 400
+> em `sale_value`/`sale_value_gross`, com a exceção do valor simbólico que o evento já tinha, campo a
+> campo (`event_ops.erros_de_valor_de_venda`). No outro evento de um grupo, a edição completa não
+> valida nem grava nada da venda. `PATCH /api/events/<id>/comercial` recusa o valor novo entre
+> R$ 0,01 e R$ 0,99 (vazio = "a definir"). `PATCH /api/events/<id>/orcamento` trata valor abaixo de
+> R$ 1,00 como "sem venda". No detalhe, `cobranca` sai do mesmo núcleo da Home: `outstanding` =
+> saldo do grupo, `due` = vencimento, `enabled` só no principal ou avulso, a partir do vencimento,
+> fora cortesia, simbólico e sem valor. Chaves novas, opcionais: `valor`, `recebido`, `quitado`,
+> `cortesia`, `sem_valor`, `valor_simbolico`, `sinal_pendente`, `vencimento_origem`, `escopo`,
+> `grupo_tamanho`; a cortesia nunca é `quitado` (a página diz "cortesia ou permuta").
+> `venda` ganha `sem_valor`/`a_definir`/`valor_simbolico`; `pagamentos` ganha `outros_do_grupo`.
+> A comissão que nasce quando o valor chega depois (evento cadastrado e vendido num mês anterior)
+> entra no ciclo do mês do valor (`payable_from`). Contratos: `specs/299-sem-valor-cobrancas/contracts/`.
 
 ### 3.4 Talentos — `talents_read.py` / `talents_write.py`
 `GET /api/talents/directory`, `/api/talents/character-suggestions`, `/api/talents/<id>`,
@@ -1392,9 +1426,10 @@ sendo fonte única — agora com um consumidor só, `/api/dashboard`.
 
 > ⚠️ **Blocos de tarefa que existiam só na home Jinja não têm equivalente em `/api/dashboard`**:
 > reembolsos pendentes, ensaios pendentes/agendados/órfãos, presença pendente, notas fiscais a
-> emitir, eventos sem valor, eventos sem cliente e pré-contratos sem cliente / que precisam de
+> emitir, eventos sem cliente e pré-contratos sem cliente / que precisam de
 > revisão. O template `app/templates/home.html` ficou órfão. Reconstruí-los no React é trabalho
-> em aberto, não coberto pela 206.
+> em aberto, não coberto pela 206. (Os eventos sem valor voltaram na feature 299, no painel "Sem
+> valor"; o ensaio voltou na 206.)
 
 ---
 
@@ -1448,6 +1483,8 @@ Gates por módulo (todos em `app/api/`):
 | `_can_create_event()` / `_can_edit_event()` / `_can_delete()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT`/`_CAN_DELETE` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` |
 | `_can_casting()` | `agenda_write` (remover cargo) | `CASTING`, `SUPERADMIN` |
 | `_can_manage_sale()` | `agenda_write` (nota fiscal) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
+| `_can_manage_sale()` | `PATCH /api/events/<id>/orcamento` (feature 273; na 299 o valor simbólico passou a contar como "sem venda") | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
+| `show_comercial` (papel efetivo, respeita "Ver como") | `GET /api/dashboard` — blocos `comercial` e `formularios` (feature 299: o conteúdo mudou, o gate não); o detalhe do evento usa o mesmo corte para `cobranca`/`venda`/`pagamentos` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_can_confirm()` | `agenda_write` | `COMERCIAL`, `SUPERADMIN` |
 | `_is_superadmin()` | dispensar/restaurar cargo, excluir ficha | `SUPERADMIN` |
 | `_can_edit_figurino()` | `figurino_write` | `FIGURINO`, `SUPERADMIN` |

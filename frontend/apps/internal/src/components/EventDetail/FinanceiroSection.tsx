@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { Badge, Button } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import { MoneyInput } from "@manto/money";
@@ -203,6 +204,105 @@ function PagamentoItem({
   );
 }
 
+type Pagamentos = NonNullable<EventoDetalhe["pagamentos"]>;
+
+/** "Inclui R$ X em comprovantes de outros eventos do grupo", com o link de cada um. */
+function OutrosDoGrupo({ outros }: { outros: NonNullable<Pagamentos["outros_do_grupo"]> }) {
+  if (outros.length === 0) return null;
+  const soma = outros.reduce((acc, item) => acc + item.total, 0);
+  return (
+    <div className="mt-1 text-xs text-muted">
+      Inclui {brl(soma)} em comprovantes de outros eventos do grupo:
+      <ul className="mt-0.5 space-y-0.5">
+        {outros.map((item) => (
+          <li key={item.event_id} className="break-words">
+            <Link to={`/events/${item.event_id}?aba=comercial`} className="text-blue underline">
+              {item.event_title}
+            </Link>{" "}
+            <span className="tabular-nums">({brl(item.total)})</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * A linha "Recebido X de Y" (feature 299): a conta é a do GRUPO, a mesma da Home. Sem as chaves
+ * novas (servidor antigo, na janela de deploy), vale o texto de antes — só o próprio evento.
+ */
+function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamentos: Pagamentos }) {
+  const cobranca = data.cobranca;
+  const doEvento = pagamentos.received_total ?? 0;
+  if (!cobranca || cobranca.escopo === undefined) {
+    return (
+      <span className="font-medium text-ink tabular-nums">
+        Recebido {brl(doEvento)} de {brl(data.venda?.sale_value ?? 0)}
+      </span>
+    );
+  }
+  const recebido = cobranca.recebido ?? 0;
+  // Cortesia ou permuta não é venda: nada de "de R$ 0,00 — falta R$ 0,00" nem "Quitado".
+  const cortesia = Boolean(cobranca.cortesia);
+  if (cobranca.escopo === "grupo_outro") {
+    const grupo = data.event.group;
+    return (
+      <span className="space-y-0.5 text-ink">
+        <span className="block">
+          Este evento é parte do grupo {grupo?.display_name ?? ""}. A venda está no{" "}
+          {grupo?.leader ? (
+            <Link to={`/events/${grupo.leader.id}?aba=comercial`} className="text-blue underline">
+              {grupo.leader.title}
+            </Link>
+          ) : (
+            "evento principal"
+          )}
+          .
+        </span>
+        <span className="block font-medium tabular-nums">
+          {cortesia ? (
+            `Recebido no grupo ${brl(recebido)} · cortesia ou permuta`
+          ) : cobranca.sem_valor ? (
+            // O principal ainda sem valor: nunca "de R$ 0,00 — falta R$ 0,00" (US1/AC6).
+            `Recebido no grupo ${brl(recebido)} · valor de venda a definir`
+          ) : (
+            <>
+              Recebido no grupo {brl(recebido)} de {brl(cobranca.valor ?? 0)}
+              {!cobranca.quitado && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
+            </>
+          )}
+        </span>
+        <span className="block text-xs text-muted tabular-nums">neste evento: {brl(doEvento)}</span>
+      </span>
+    );
+  }
+  if (cortesia) {
+    return (
+      <span className="block text-ink">
+        <span className="font-medium tabular-nums">Recebido {brl(recebido)} · cortesia ou permuta</span>
+        <OutrosDoGrupo outros={pagamentos.outros_do_grupo ?? []} />
+      </span>
+    );
+  }
+  if (cobranca.sem_valor) {
+    return (
+      <span className="block text-ink">
+        <span className="font-medium tabular-nums">Recebido {brl(recebido)} · valor de venda a definir</span>
+        <OutrosDoGrupo outros={pagamentos.outros_do_grupo ?? []} />
+      </span>
+    );
+  }
+  return (
+    <span className="block text-ink">
+      <span className="font-medium tabular-nums">
+        Recebido {brl(recebido)} de {brl(cobranca.valor ?? 0)}
+        {!cobranca.quitado && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
+      </span>
+      <OutrosDoGrupo outros={pagamentos.outros_do_grupo ?? []} />
+    </span>
+  );
+}
+
 /** Comprovantes de pagamento + status do faturamento. */
 function PagamentosPanel({ data }: { data: EventoDetalhe }) {
   const eventId = data.event.id;
@@ -213,9 +313,11 @@ function PagamentosPanel({ data }: { data: EventoDetalhe }) {
   const pagamentos = data.pagamentos;
   if (!pagamentos) return null;
 
-  const recebido = pagamentos.received_total ?? 0;
+  // "Quitado" vem do servidor, com a folga de centavos e o grupo (feature 299); sem a chave
+  // (servidor antigo), a conta de antes, só com o próprio evento.
   const total = data.venda?.sale_value ?? 0;
-  const quitado = total > 0 && recebido >= total;
+  const quitado =
+    data.cobranca?.quitado ?? (total > 0 && (pagamentos.received_total ?? 0) >= total);
 
   return (
     <Panel
@@ -223,9 +325,7 @@ function PagamentosPanel({ data }: { data: EventoDetalhe }) {
       actions={quitado ? <Badge tone="green">Quitado ✓</Badge> : null}
     >
       <div className="mb-2 rounded-md border border-line bg-green-soft/30 px-3 py-2 text-sm">
-        <span className="font-medium text-ink tabular-nums">
-          Recebido {brl(recebido)} de {brl(total)}
-        </span>
+        <ResumoDoRecebido data={data} pagamentos={pagamentos} />
       </div>
       {pagamentos.items.length === 0 ? (
         <Empty>Nenhum pagamento registrado.</Empty>

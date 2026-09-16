@@ -1,0 +1,119 @@
+# Contrato — "Valor a definir" no cadastro e na edição (feature 299)
+
+## `POST /api/events` e `PATCH /api/events/<id>`
+
+**Gate inalterado**: `_can_create_event()` = COMERCIAL ou SUPERADMIN (`agenda_write.py:84-88, 743-744,
+891-892`). FINANCEIRO recebe 403 exato nos dois (cenário 16).
+
+**Corpo** — uma chave nova, opcional e **não gravada**:
+
+```json
+{ "valor_a_definir": true, "sale_value": null, "sale_value_gross": null, "seller_id": 2, "...": "..." }
+```
+
+| Situação | O que o servidor faz |
+|---|---|
+| `valor_a_definir: true`, sem cortesia | grava `sale_value` e `sale_value_gross` como `NULL`, ignora números que venham e **não** gera os erros de valor |
+| `is_cortesia_permuta: true` | a cortesia vence a marca: a venda é gravada como hoje (0 na criação e na edição) |
+| sem a marca, sem cortesia, e valor nulo, 0, ausente ou **abaixo de R$ 1,00** | **400**, com `{"error": {"message": "...", "fields": {"sale_value_gross": "Informe o valor de venda ou marque “Valor a definir”.", "sale_value": "Informe o valor de venda ou marque “Valor a definir”."}}}` |
+| `PATCH` de evento que **já** tinha valor simbólico (acima de zero e abaixo de R$ 1,00), e o corpo manda o **mesmo** valor, campo a campo (R32) | aceito: outras mudanças (título, data...) salvam sem mexer no valor (FR-013). Trocar para outro valor abaixo de R$ 1,00 volta a ser 400 |
+| vendedor ausente | 400 em `seller_id`, como hoje e também na edição (FR-016), **exceto** no outro evento de um grupo |
+| `PATCH` num outro evento de grupo (satélite) | `update_event_core` **não grava** nenhum campo comercial (valores, vendedor, pagamento, cortesia, data da venda, taxa, NF, transporte, acréscimo). `_validate_event_core` pula valor e vendedor. O resto (título, data, local...) salva normalmente |
+
+A validação roda **antes** do Google e de qualquer escrita (`agenda_write.py:761` antes de `:792`;
+`:899` antes de `:922`). Um 400 não deixa evento órfão na Agenda.
+
+**Data da venda** (FR-017, `resolver_data_da_venda(..., a_definir)`):
+- **Criação** com a marca e sem `sale_date`: hoje em São Paulo.
+- **Criação** com `sale_date`: a informada.
+- **Edição** com `sale_date` vazio: mantém a data que o evento já tinha.
+- **Evento sem data da venda** (o importado do Google) que ganha valor: hoje, como já acontece
+  (`event_ops.py:682-683`).
+
+**Comissão** (FR-031, `_sync_commission_payment`):
+- **Sem valor**: não nasce linha, e a linha `a_pagar` existente vira `cancelado`. Isso já é assim
+  hoje.
+- **Comissão comum que nasce, ou passa de valor simbólico para valor real, quando o valor chegou
+  depois** (R45): o evento foi cadastrado num mês anterior ao mês corrente de São Paulo (`created_at`,
+  UTC, convertido para SP) **e** a `sale_date` também está num mês anterior. Então `payable_from =
+  hoje`, e o ciclo de pagamento (`coalesce(payable_from, sale_date, created_at)`) cai no mês em que o
+  valor entrou.
+- **Venda lançada agora com data de um mês anterior** (cadastro no mês corrente), ou sem data da
+  venda: `payable_from` fica `NULL`, e o ciclo segue a data da venda, como hoje.
+- **Sincronizações seguintes**: não trocam esse `payable_from` de volta para `NULL`.
+- **Comissão já paga**: nunca é alterada nem duplicada, inclusive quando o valor é apagado ("Valor a
+  definir") e reposto depois.
+- **Comissão de R$ 0,00 de venda simbólica** (R42): a detecção é pelo valor da linha, porque o
+  histórico do evento some com o `flush` dos chamadores.
+  - **`a_pagar`**: quando o valor real entra, é atualizada, com `payable_from = hoje` se o valor
+    chegou depois (R45).
+  - **Já `pago`/`no_banco`**: não conta como existente (o corte é na própria consulta, com ordem por
+    id). Nasce uma linha `a_pagar` nova, e a paga fica intacta; a sincronização seguinte não cria
+    outra. Vale só quando a comissão calculada agora é maior que zero e só na comissão comum
+    (convergências de 15/09, T048 e T061).
+- **Cortesia ou permuta**: nunca tem comissão (dono, 15/09). Não nasce linha e a `a_pagar` vira
+  `cancelado`; a paga fica.
+- **EducaManto**: continua com `payable_from = data da realização`. A linha que sai da EducaManto
+  não leva essa data para o ramo comum (T060): no ramo comum só fica a data com a marca
+  `NOTA_CICLO_VALOR_TARDIO` ("Ciclo: mês em que o valor foi posto") nas notas, que a regra do valor
+  que chegou depois grava (T067).
+- **Comissões anteriores à publicação**: não mudam.
+
+**Compatibilidade na janela de deploy**:
+- **Bundle antigo, servidor novo**: a chave não chega. O Zod antigo exige valor maior que 0, e o
+  servidor novo passa a recusar valor abaixo de R$ 1,00. Quem digitar R$ 0,01 no site antigo recebe
+  o 400 no campo.
+- **Bundle novo, servidor antigo**: os adaptadores antigos descartam a chave. O 400 volta em
+  `sale_value`/`sale_value_gross` antes do Google. É falha segura: basta salvar de novo depois do
+  deploy.
+
+**Sem mudança**:
+- A criação Jinja (`calendar/routes.py:4008`) e o `PATCH /api/events/<id>/basico` não mandam a chave.
+  Como compartilham `_validate_event_core`, também passam a recusar valor abaixo de R$ 1,00 (a
+  criação Jinja; o `/basico` descarta os erros de valor).
+- O `PATCH /api/events/<id>/comercial` continua aceitando valor nulo e recusando satélite com 409.
+
+## `PATCH /api/events/<id>/comercial` (R43)
+
+- **Valor vazio**: aceito, e o evento fica "a definir".
+- **Valor novo entre R$ 0,01 e R$ 0,99** em `sale_value` ou `sale_value_gross`: **400** em
+  `error.fields`, com o texto próprio da aba (`MENSAGEM_VALOR_SIMBOLICO`: "Valor abaixo de R$ 1,00 não
+  é venda: deixe o campo vazio (a definir) ou informe o valor." — a aba não tem a marca "Valor a
+  definir"). Vale a mesma exceção do valor que já estava gravado.
+- **Tela**: o `VendaForm` mostra o erro no campo de valor.
+- **Aberto pela Home** (R46, SC-007): `?aba=comercial&editar=venda` abre o `VendaForm` direto, com o
+  foco em "Valor de venda final" (o valor que tira o evento de "Sem valor"). Ao salvar ou cancelar, o `editar` sai da URL. Sem permissão para
+  editar, o parâmetro é ignorado.
+- **Gate**: `_can_create_event`, inalterado.
+
+## Tela (`ValoresBlock`, `EventCreatePage`, `EventEditPage`)
+
+- **Marca.** Botão de alternar "Valor a definir" (`aria-pressed`), no padrão da cortesia e excludente
+  com ela. Quando marcada:
+  - esconde os dois valores com o mesmo `AnimatePresence`;
+  - mostra "O evento fica em “Sem valor”, na Home, até alguém pôr o valor." (o nome do painel e do
+    card).
+
+  Vendedor, data da venda, transporte e acréscimo continuam à mostra.
+- **Aviso.** Marcar num evento que tinha valor mostra, no lugar, "O valor de R$ X será apagado e a
+  comissão a pagar, cancelada.".
+- **Validação no navegador.** O Zod recusa valor abaixo de R$ 1,00 sem a marca, com o mesmo texto do
+  servidor. Na edição, a exceção é o valor abaixo de R$ 1,00 igual ao que o evento já tinha.
+- **Hidratação da edição.**
+  - A marca abre marcada quando `sale_value` é `null` ou 0 e não há cortesia.
+  - O valor simbólico abre **desmarcado**, com o valor à mostra.
+  - No satélite, a marca abre marcada e travada, com o link para o principal.
+- **Foco.** Os dois `MoneyInput` passam por `Controller`, com `id` e `ref`. No envio bloqueado e no
+  400 do servidor, a tela foca e rola até o primeiro campo de `error.fields`, na ordem de
+  `FIELD_ORDER`. O Salvar nunca fica desabilitado.
+
+## RBAC — linhas para `docs/01` §4.3
+
+| Rota | Gate | Papéis | Muda na 299 |
+|---|---|---|---|
+| `GET /api/dashboard` | `show_comercial` (papel efetivo, "Ver como") para os blocos `comercial` e `formularios` | COMERCIAL, FINANCEIRO, SUPERADMIN | linha **nova** na tabela (hoje não existe); o conteúdo do bloco muda |
+| `GET /api/events/<id>` | `show_comercial` para `cobranca`, `venda`, `pagamentos` e `mensagens` | COMERCIAL, FINANCEIRO, SUPERADMIN | a cobrança passa a somar o grupo |
+| `POST /api/events` | `_can_create_event` | COMERCIAL, SUPERADMIN | `valor_a_definir`; valor abaixo de R$ 1,00 recusado sem a marca |
+| `PATCH /api/events/<id>` | `_can_create_event` | COMERCIAL, SUPERADMIN | `valor_a_definir`; satélite sem campos comerciais |
+| `PATCH /api/events/<id>/orcamento` | `_can_manage_sale` | COMERCIAL, FINANCEIRO, SUPERADMIN | o valor simbólico conta como sem venda |
+| `PATCH /api/events/<id>/comercial` | `_can_create_event` | COMERCIAL, SUPERADMIN | valor novo abaixo de R$ 1,00 recusado (vazio continua aceito) |

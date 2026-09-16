@@ -12,8 +12,8 @@ from flask import current_app
 from sqlalchemy import and_, func, not_
 
 from app import db
-from app.constants import EVENT_TYPE_SHOW, RoleName
-from app.models import CalendarEvent, EventPayment, EventRole, SiteSetting
+from app.constants import EVENT_TYPE_SHOW, RoleName, now_sp
+from app.models import CalendarEvent, EventRole, SiteSetting
 
 
 def dashboard_cutoff() -> datetime:
@@ -264,103 +264,6 @@ def serialize_unconfirmed_ref(role: EventRole) -> dict[str, Any]:
     }
 
 
-_SEVERITY_ORDER = {"atrasado": 0, "vencido": 1, "urgent": 2, "warn": 3, "info": 4}
-
-
-def compute_comercial_pending(cutoff: datetime) -> list[dict[str, Any]]:
-    """Cobranças pendentes (saldo em aberto) por evento.
-
-    Extraída de `app/__init__.py::home()` (política: à vista, ou 50% no ato + 50% até 2 dias
-    antes do evento; `futuro`/`faturado` têm data combinada própria via `payment_due_date`) —
-    fonte única para Jinja e API, mesmo padrão de `compute_casting_tasks`.
-
-    Args:
-        cutoff: data de corte das tarefas (mesma usada pelas demais consultas do dashboard).
-
-    Returns:
-        Lista de pendências (``event`` é o objeto ``CalendarEvent`` cru), ordenada por
-        severidade e depois por data do evento. Use `serialize_comercial_pending` para o JSON.
-    """
-    from zoneinfo import ZoneInfo
-
-    f = _base_filters(cutoff)
-    today_sp = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
-    sale_events = (
-        CalendarEvent.query.filter(
-            CalendarEvent.sale_value.isnot(None),
-            CalendarEvent.sale_value > 0,
-            f["future_events"],
-            f["exclude_ensaios"],
-            f["not_cancelled"],
-        )
-        .order_by(CalendarEvent.start_at.asc())
-        .all()
-    )
-    received_by_event = dict(
-        db.session.query(
-            EventPayment.event_id,
-            func.coalesce(func.sum(EventPayment.amount), 0),
-        )
-        .filter(EventPayment.event_id.in_([e.id for e in sale_events] or [0]))
-        .group_by(EventPayment.event_id)
-        .all()
-    )
-
-    pending: list[dict[str, Any]] = []
-    for ev in sale_events:
-        sale = float(ev.sale_value)
-        received = float(received_by_event.get(ev.id, 0))
-        saldo = sale - received
-        if saldo <= 0:
-            continue
-        ev_date = ev.start_at.date() if ev.start_at else None
-        is_past = bool(ev_date and ev_date < today_sp)
-        due_date = None
-        if ev.payment_method in ("futuro", "faturado") and ev.payment_due_date:
-            due_date = ev.payment_due_date
-            severity = "vencido" if due_date <= today_sp else "info"
-        elif is_past:
-            severity = "atrasado"
-        else:
-            days_left = (ev_date - today_sp).days if ev_date else None
-            if days_left is not None and days_left <= 2:
-                severity = "urgent"
-            elif received < sale * 0.5:
-                severity = "warn"
-            else:
-                continue
-        pending.append(
-            {
-                "event": ev,
-                "sale": sale,
-                "received": received,
-                "saldo": saldo,
-                "severity": severity,
-                "due_date": due_date,
-                "is_past": is_past,
-            }
-        )
-
-    pending.sort(key=lambda p: (_SEVERITY_ORDER[p["severity"]], p["event"].start_at or datetime.max))
-    return pending
-
-
-def serialize_comercial_pending(item: dict[str, Any]) -> dict[str, Any]:
-    """Serializa um item de `compute_comercial_pending` para o JSON do dashboard."""
-    ev = item["event"]
-    due_date = item["due_date"]
-    return {
-        "event_id": ev.id,
-        "event_title": ev.title,
-        "start_at": ev.start_at.isoformat() if ev.start_at else None,
-        "sale": item["sale"],
-        "received": item["received"],
-        "saldo": item["saldo"],
-        "severity": item["severity"],
-        "due_date": due_date.isoformat() if due_date else None,
-    }
-
-
 def compute_performance(start_dt: datetime | None, end_dt: datetime | None) -> dict[str, Any]:
     """Agregado de Performance (SUPERADMIN): casting/figurino done/total e entrada total.
 
@@ -463,6 +366,20 @@ def _effective_has_role(user: Any, impersonate: str | None, name: str) -> bool:
     return any(r.name.upper() == name.upper() for r in user.roles)
 
 
+def _pode_criar_evento(user: Any, impersonate: str | None, is_superadmin: bool) -> bool:
+    """Se o papel EFETIVO cria evento (`_CAN_CREATE`): "Ver como FINANCEIRO" vê "Abrir".
+
+    Decide a ação principal das linhas comerciais da Home — criar o evento a partir do formulário
+    (298) e pôr o valor na aba Comercial (299): o `PATCH /comercial` tem o mesmo gate da criação.
+    A lista de papéis mora na agenda, não aqui.
+    """
+    from app.calendar.routes import _CAN_CREATE
+
+    return is_superadmin or any(
+        _effective_has_role(user, impersonate, papel) for papel in _CAN_CREATE
+    )
+
+
 def _bloco(nome: str, montar: Any) -> Any:
     """Monta um painel da Home isolando a falha dele (feature 271).
 
@@ -502,7 +419,10 @@ def build_dashboard_summary(
         perf_end: fim do período customizado (ISO date), quando ``perf_range="custom"``.
 
     Returns:
-        Dicionário no formato de `data-model.md` (seções ``None`` = sem permissão).
+        Dicionário no formato de `data-model.md` (seções ``None`` = sem permissão). O bloco
+        ``comercial`` (feature 299) segue `specs/299-sem-valor-cobrancas/contracts/
+        dashboard-comercial.md`: para quem tem o papel ele nunca vem ``None`` por falha interna —
+        a lista que falhou vem ``None`` e a tela mostra o aviso, em vez de sumir com o painel.
     """
     cutoff = dashboard_cutoff()
     is_superadmin = _is_real_superadmin(user) and not impersonate
@@ -559,36 +479,53 @@ def build_dashboard_summary(
 
     financeiro = _bloco("recorrentes", _painel_recorrentes) if show_financeiro else None
 
-    comercial = (
-        _bloco(
-            "comercial",
-            lambda: {
-                "pending_payments": [
-                    serialize_comercial_pending(p) for p in compute_comercial_pending(cutoff)
-                ]
-            },
+    def _painel_comercial() -> dict[str, Any]:
+        # Feature 299: Cobranças e "Sem valor" saem do mesmo núcleo da página do evento — o grupo
+        # é uma venda só. O corte é a data de início (`corte_dia_sp`), o mesmo dos formulários,
+        # e não o `cutoff` dos painéis de operação (que vira hoje quando a configuração está vazia).
+        from app.financeiro import cobranca_ops
+        from app.formularios.formularios_ops import corte_dia_sp
+
+        hoje = now_sp().date()
+        bloco: dict[str, Any] = {
+            "corte": None,
+            "pode_editar_venda": _pode_criar_evento(user, impersonate, is_superadmin),
+            "pending_payments": [],
+            "cobrancas_resumo": None,
+            "sem_valor": None,
+        }
+        try:
+            corte = corte_dia_sp()
+            bloco["corte"] = corte.isoformat()
+            vendas = cobranca_ops.vendas_desde(corte)
+            linhas = cobranca_ops.listar_cobrancas(vendas, hoje)
+        except Exception:  # noqa: BLE001 — as duas listas viram aviso; o painel não some (R47)
+            db.session.rollback()
+            current_app.logger.exception("[dashboard] vendas da Home falharam; listas em aviso")
+            return bloco
+        bloco["pending_payments"] = linhas
+        bloco["cobrancas_resumo"] = _bloco(
+            "cobrancas_resumo", lambda: cobranca_ops.resumo_das_cobrancas(linhas, vendas)
         )
-        if show_comercial
-        else None
-    )
+        bloco["sem_valor"] = _bloco("sem_valor", lambda: cobranca_ops.listar_sem_valor(vendas, hoje))
+        return bloco
+
+    # O `_bloco` de fora fica só como rede para defeito no próprio envelope: falha das vendas e
+    # das listas já vira `None` NA LISTA, e `comercial: null` continua significando "sem permissão".
+    comercial = _bloco("comercial", _painel_comercial) if show_comercial else None
 
     # Mesmo conjunto de `_require_vendas` (COMERCIAL ∪ FINANCEIRO ∪ SUPERADMIN), em variável
     # própria para os dois gates poderem divergir depois sem ninguém se perder.
     show_formularios = show_comercial
 
     def _painel_formularios() -> dict[str, Any]:
-        from app.calendar.routes import _CAN_CREATE
         from app.formularios import destino_ops
 
         # Feature 298: a lista dos formulários que chegaram desde o corte e ainda não têm destino,
         # no lugar dos quatro números (que contavam o histórico importado e diziam 1.347).
         # As contagens vêm do MESMO núcleo dos cartões de /formularios — não podem divergir.
         bloco = destino_ops.listar_sem_destino()
-        # A ação principal da linha depende do papel EFETIVO: "Ver como FINANCEIRO" vê "Abrir",
-        # porque criar evento é de `_CAN_CREATE` (a lista de papéis mora na agenda, não aqui).
-        bloco["pode_criar_evento"] = is_superadmin or any(
-            _effective_has_role(user, impersonate, papel) for papel in _CAN_CREATE
-        )
+        bloco["pode_criar_evento"] = _pode_criar_evento(user, impersonate, is_superadmin)
         return bloco
 
     formularios = _bloco("formularios", _painel_formularios) if show_formularios else None

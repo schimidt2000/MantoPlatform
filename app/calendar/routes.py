@@ -3219,14 +3219,26 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
     }
 
 
-def _validate_event_core(data: dict) -> dict[str, str]:
+def _validate_event_core(
+    data: dict,
+    valor_atual: Decimal | None = None,
+    bruto_atual: Decimal | None = None,
+    satelite: bool = False,
+) -> dict[str, str]:
     """Valida os campos essenciais/financeiros da criação de evento (feature 152).
 
     Espera valores já normalizados pelo adaptador (money/ids já convertidos para número —
     Princípio VII; datas/horários continuam string ISO/"HH:MM" cru, mesmo formato nos dois
     adaptadores). Devolve um mapa campo→mensagem (vazio = válido); o wrapper Jinja converte os
     valores em lista para manter o flash de hoje.
+
+    Feature 299: valor abaixo de R$ 1,00 (inclusive vazio e zero) é recusado sem a marca "Valor a
+    definir"; a edição passa `valor_atual`/`bruto_atual` para o evento de R$ 0,01 salvar outras
+    mudanças sem mexer no valor (`event_ops.erros_de_valor_de_venda`). No outro evento de um grupo
+    (`satelite`) nada da venda é validado — nada da venda é gravado.
     """
+    from app.calendar.event_ops import erros_de_valor_de_venda
+
     errors: dict[str, str] = {}
     title = (data.get("title") or "").strip()
     if not title:
@@ -3261,13 +3273,10 @@ def _validate_event_core(data: dict) -> dict[str, str]:
     if st and et and et == st:
         errors["event_time"] = "Horário de fim deve ser diferente do início."
 
-    if not data.get("is_cortesia_permuta"):
-        if (data.get("sale_value_gross") or 0) <= 0:
-            errors["sale_value_gross"] = "Informe o valor antes do desconto."
-        if (data.get("sale_value") or 0) <= 0:
-            errors["sale_value"] = "Informe o valor de venda."
+    if not (data.get("is_cortesia_permuta") or data.get("valor_a_definir") or satelite):
+        errors.update(erros_de_valor_de_venda(data, valor_atual, bruto_atual))
 
-    if not data.get("seller_id"):
+    if not data.get("seller_id") and not satelite:
         errors["seller_id"] = "Selecione o vendedor responsável."
 
     installments = data.get("payment_installments")
@@ -3345,7 +3354,15 @@ def _create_event_row(data: dict, *, google_event_id: str, gc_title: str) -> Cal
         sale_value_gross=None if is_cortesia else data.get("sale_value_gross"),
         # Venda registrada sem data nasce com a data de hoje (hotfix 267b) — era o que o
         # formulário Jinja fazia pelo prefill; agora é regra de servidor, para qualquer tela.
-        sale_date=resolver_data_da_venda(data.get("sale_date"), venda, None, None),
+        sale_date=resolver_data_da_venda(
+            data.get("sale_date"),
+            venda,
+            None,
+            None,
+            # Feature 299: lançado com "Valor a definir" nasce com a data de hoje (a venda fechou).
+            a_definir=bool(data.get("valor_a_definir")) and not is_cortesia,
+            criando=True,
+        ),
         transport_value=data.get("transport_value"),
         acrescimo_value=data.get("acrescimo_value"),
         with_invoice=bool(data.get("with_invoice")),

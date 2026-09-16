@@ -139,19 +139,43 @@ tratamento de comissão (pendente vira `cancelado`; paga gera estorno negativo) 
     pelo nome) e, em evento sem venda, os valores. Usado na criação, no vínculo posterior
     (`PATCH /events/<id>/orcamento`) e em `reclassificar_fora_de_sp`. **Nunca apaga nem rebaixa**
     o que o casting fez à mão; o que não casa vai ao relatório, não vira vaga nova.
+12. **Venda e cobrança: o grupo é uma venda só** (feature 299, `app/financeiro/cobranca_ops.py`,
+    fonte única da Home e da página do evento). O valor é o do principal e o recebido é a soma dos
+    comprovantes de TODOS os eventos do grupo, cancelados inclusive; nada é movido de lugar. A data
+    do grupo é a do 1º evento não cancelado e que não é compromisso interno.
+    - **"Sem valor" tem duas definições, de propósito**: na Home, vazio, zero ou abaixo de R$ 1,00
+      (`event_ops.sem_valor_de_venda`); no Financeiro e na Auditoria, `<= 0`. Não unificar de
+      passagem.
+    - **Compromisso interno** é o título que começa com 🟧 ou 🟠: nunca é venda e não conta na data
+      do grupo. O tipo vazio NÃO é ensaio — a venda 395, de R$ 35 mil, não tem tipo.
+    - **Vencimento do saldo**: data combinada > 1ª parcela que o recebido não cobre > 2 dias antes;
+      os dois últimos nunca antes da data da venda. Com data combinada ou cronograma, não há sinal
+      pendente.
+    - **Folga de centavos**: R$ 1,00 — no saldo, no sinal e no "Quitado" da página.
+    - **Comissão tardia**: quando o valor chega depois (evento cadastrado e vendido num mês
+      anterior), a comissão entra no ciclo do mês do valor (`payable_from = hoje`, com a marca "Ciclo: mês em que o valor foi posto" nas notas da linha, que não volta a
+      `NULL`); a venda lançada agora com a data de um mês anterior segue a data da venda. A linha de
+      R$ 0,00 já paga não conta como paga quando há comissão de verdade a pagar — pagar zero não
+      é pagar; com a comissão calculada também em zero, ela vale —, e a comissão paga de valor
+      real nunca é paga de novo. Essa regra vale só na comissão comum: a EducaManto fica como antes
+      da 299, e a linha que sai da EducaManto não leva a data da realização para o ramo comum.
+    - **Cortesia ou permuta nunca comissiona** (dono, 15/09): a sincronização não cria linha e
+      cancela a `a_pagar`, mesmo na cortesia antiga que tem valor gravado.
 
 ### Armadilhas
 
 - **Renomear qualquer `_helper` de `routes.py` quebra a API em silêncio.** 39 símbolos privados são
   importados por 10 módulos, e os imports são **tardios** (dentro das funções) — não aparecem em
   análise estática de topo.
-- **Comissão diverge entre Jinja e React.** O handler Jinja chama `_sync_commission_payment` ao salvar
-  dados comerciais (`routes.py:914`); `event_ops.update_event_comercial` (`:490`) e
-  `update_event_core` (`:299`) gravam `sale_value`/`seller_id` e **não chamam**. Evento criado sem
-  venda e preenchido depois pelo React **nunca gera linha de comissão** —
-  `_resync_pending_commissions` só reconcilia linhas já existentes.
-- **Agrupar/desagrupar só existe no Jinja morto**, mas `_delete_event_flow` recusa líder de grupo e
-  não há endpoint de desagrupar: evento agrupado é **inexcluível pelo produto**.
+- ~~Comissão diverge entre Jinja e React~~ — **desatualizado** (conferido na 299):
+  `event_ops.update_event_core` e `update_event_comercial` recebem `sincronizar_comissao` e chamam
+  `_sync_commission_payment` antes do commit, como o handler Jinja; os endpoints de
+  `app/api/agenda_write.py` passam a função. A venda preenchida depois pelo React gera a comissão,
+  no ciclo do invariante 12.
+- ~~Agrupar/desagrupar só existe no Jinja morto~~ — **desatualizado** (corrigido na 299): desde a
+  feature 246 a aba Comercial agrupa, desagrupa, tira satélite e nomeia o grupo
+  (`group_ops`, `PATCH|DELETE /api/events/<id>/grupo`). `_delete_event_flow` continua recusando o
+  líder de grupo: para excluir, desagrupar antes.
 - **Acréscimos tipados (`EventAcrescimo`), notas fiscais (`EventInvoice`) e parcelas
   (`EventInstallment`) só têm implementação de ESCRITA no handler Jinja** `_handle_update_comercial`
   (`routes.py:712`). A API lê esses dados mas não os grava.

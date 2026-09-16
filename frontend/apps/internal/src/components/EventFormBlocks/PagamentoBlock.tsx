@@ -33,38 +33,31 @@ export interface PagamentoBlockProps {
   doFormulario?: ReadonlySet<string>;
   /** Feature 298: forma escrita pela cliente que o cadastro não tem, com o texto dela. */
   alertas?: AlertaFormulario[];
+  /**
+   * Feature 299: outro evento de um grupo — a forma de pagamento é a do principal e não é gravada
+   * aqui. Os comprovantes continuam: eles contam para a venda do grupo.
+   */
+  satelite?: boolean;
 }
 
-/** Bloco 5 — Forma de pagamento e comprovantes (feature 184). */
-export function PagamentoBlock({
-  proofs,
-  onProofsChange,
-  existingNote,
+/** A forma de pagamento, com as parcelas e a data combinada (feature 184). */
+function FormaDePagamento({
   doFormulario,
   alertas,
-}: PagamentoBlockProps) {
+}: {
+  doFormulario?: ReadonlySet<string>;
+  alertas?: AlertaFormulario[];
+}) {
   const {
     register,
     watch,
     setValue,
     formState: { errors },
   } = useFormContext<EventFormValues>();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const paymentMethod = watch("payment_method");
 
-  const addProofFile = (file: File | null) => {
-    if (!file) return;
-    onProofsChange([...proofs, { file, amount: 0 }]);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const updateProofAmount = (index: number, amount: number) =>
-    onProofsChange(proofs.map((p, i) => (i === index ? { ...p, amount } : p)));
-
-  const removeProof = (index: number) => onProofsChange(proofs.filter((_, i) => i !== index));
-
   return (
-    <BlockCard title="Forma de pagamento e comprovantes" id="bloco-pagamento">
+    <>
       <div className="flex flex-wrap gap-2">
         {PAYMENT_METHODS.map((m) => (
           <button
@@ -113,6 +106,42 @@ export function PagamentoBlock({
             {...register("payment_due_date")}
           />
         </div>
+      )}
+    </>
+  );
+}
+
+/** Bloco 5 — Forma de pagamento e comprovantes (feature 184). */
+export function PagamentoBlock({
+  proofs,
+  onProofsChange,
+  existingNote,
+  doFormulario,
+  alertas,
+  satelite = false,
+}: PagamentoBlockProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const addProofFile = (file: File | null) => {
+    if (!file) return;
+    onProofsChange([...proofs, { file, amount: 0 }]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const updateProofAmount = (index: number, amount: number) =>
+    onProofsChange(proofs.map((p, i) => (i === index ? { ...p, amount } : p)));
+
+  const removeProof = (index: number) => onProofsChange(proofs.filter((_, i) => i !== index));
+
+  return (
+    <BlockCard title="Forma de pagamento e comprovantes" id="bloco-pagamento">
+      {satelite ? (
+        <p className="text-sm text-muted">
+          A forma de pagamento é a do evento principal. Os comprovantes deste evento contam para a
+          venda do grupo.
+        </p>
+      ) : (
+        <FormaDePagamento doFormulario={doFormulario} alertas={alertas} />
       )}
 
       <div className="border-t border-line pt-3">

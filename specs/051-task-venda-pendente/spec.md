@@ -1,5 +1,8 @@
 # Feature Specification: Alertas de eventos sem valor de venda
 
+> **Superada pela feature 299** (2026-09-15): a lista "Evento sem valor de venda" da Home (painel
+> "Sem valor") é `specs/299-sem-valor-cobrancas/`. Esta spec nunca foi entregue.
+
 **Feature Branch**: `051-task-venda-pendente`
 
 **Created**: 2026-06-15

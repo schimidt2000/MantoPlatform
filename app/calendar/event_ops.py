@@ -21,10 +21,18 @@ daqui importam `routes` dentro do corpo, nunca no topo.
 import logging
 import re
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.constants import EVENT_TYPE_SHOW, RoleName, now_sp
+from app.constants import (
+    EVENT_TYPE_SHOW,
+    MENSAGEM_VALOR_A_DEFINIR,
+    MENSAGEM_VALOR_SIMBOLICO,
+    VALOR_MINIMO_DE_VENDA,
+    RoleName,
+    now_sp,
+)
 from app.email_service import send_async, send_ensaio_alert_email, send_event_changed_email
 from app.formularios.formularios_ops import (
     FormularioJaTemDestino,
@@ -649,8 +657,106 @@ def reclassificar_fora_de_sp(event: Any, *, local_mudou: bool) -> None:
         _fetch_travel_data(event, SiteSetting.query.get(1))
 
 
+def sem_valor_de_venda(valor: Any) -> bool:
+    """True se o valor não fecha uma venda: vazio, zero ou simbólico (abaixo de R$ 1,00).
+
+    Fonte única do limite da feature 299 — a Home (`cobranca_ops`), o orçamento, a validação do
+    cadastro e a leitura do evento usam esta função. Mora aqui, e não no financeiro, porque o
+    orçamento (agenda) também a usa e a agenda não importa do financeiro. No Financeiro e na
+    Auditoria, "sem valor" continua sendo `<= 0`: são duas definições de propósito (docs/04).
+
+    Args:
+        valor: `sale_value` do evento (`Decimal`, número ou ``None``).
+    """
+    return valor is None or Decimal(str(valor)) < VALOR_MINIMO_DE_VENDA
+
+
+def valor_a_definir(valor: Any) -> bool:
+    """True se o valor está vazio ou zerado — o que a tela mostra como "A definir" (feature 299)."""
+    return valor is None or Decimal(str(valor)) == 0
+
+
+def valor_simbolico(valor: Any) -> bool:
+    """True se o valor está entre zero e R$ 1,00 — o R$ 0,01 de "segurar a data" (feature 299)."""
+    return valor is not None and Decimal("0") < Decimal(str(valor)) < VALOR_MINIMO_DE_VENDA
+
+
+def aplicar_valor_a_definir(data: dict) -> None:
+    """Com a marca "Valor a definir" (e sem cortesia), a venda vai vazia para o banco (feature 299).
+
+    A marca não é gravada: "a definir" É o valor vazio. Ela só existe no corpo para o cadastro não
+    exigir um número que ainda não existe — no lugar do R$ 0,01 de "segurar a data". A cortesia
+    vence a marca.
+    """
+    if data.get("valor_a_definir") and not data.get("is_cortesia_permuta"):
+        data["sale_value"] = None
+        data["sale_value_gross"] = None
+
+
+def _mesmo_valor(novo: Any, atual: Any) -> bool:
+    """O valor que chegou é o que já estava gravado (vazio e zero contam como o mesmo)."""
+    return Decimal(str(novo or 0)) == Decimal(str(atual or 0))
+
+
+def erros_de_valor_de_venda(
+    data: dict, valor_atual: Any = None, bruto_atual: Any = None, *, vazio_aceito: bool = False
+) -> dict[str, str]:
+    """Valor que não fecha uma venda → erro no campo (feature 299, FR-014).
+
+    Sem `vazio_aceito` (cadastro e edição completa, sem a marca): vazio, zero e abaixo de R$ 1,00
+    são recusados. Com `vazio_aceito` (aba Comercial, R43): vazio e zero são "a definir"; só o
+    valor entre R$ 0,01 e R$ 0,99 é recusado.
+
+    Exceção (R32), campo a campo: o evento que já está com valor simbólico salva outras mudanças
+    sem ninguém mexer no valor — o campo que chega igual ao gravado passa. Sem ela, o bruto vazio
+    de um evento de R$ 0,01 travaria até a troca de título.
+
+    Args:
+        data: Corpo já convertido, com `sale_value` e `sale_value_gross`.
+        valor_atual: `sale_value` gravado (``None`` na criação).
+        bruto_atual: `sale_value_gross` gravado (``None`` na criação).
+        vazio_aceito: Regra da aba Comercial.
+    """
+    simbolico_gravado = valor_simbolico(valor_atual)
+    mensagem = MENSAGEM_VALOR_SIMBOLICO if vazio_aceito else MENSAGEM_VALOR_A_DEFINIR
+    erros: dict[str, str] = {}
+    for campo, atual in (("sale_value_gross", bruto_atual), ("sale_value", valor_atual)):
+        novo = data.get(campo)
+        recusado = valor_simbolico(novo) if vazio_aceito else sem_valor_de_venda(novo)
+        if recusado and not (simbolico_gravado and _mesmo_valor(novo, atual)):
+            erros[campo] = mensagem
+    return erros
+
+
+def erros_do_valor_na_aba_comercial(data: dict, event: Any) -> dict[str, str]:
+    """A regra do valor do `PATCH /api/events/<id>/comercial` (feature 299, R43).
+
+    O R$ 0,01 de "segurar a data" também é recusado na aba Comercial — senão o hábito só mudaria do
+    cadastro para a aba. O vazio continua aceito ("a definir"), o valor simbólico que já estava
+    gravado passa para quem só troca a forma de pagamento, e a cortesia não tem valor a conferir.
+
+    Args:
+        data: Corpo já convertido, com `sale_value`, `sale_value_gross` e `is_cortesia_permuta`.
+        event: O evento antes da gravação — os valores gravados valem para a exceção do R32.
+
+    Returns:
+        Campo → mensagem; vazio quando o valor pode ser gravado.
+    """
+    if data.get("is_cortesia_permuta"):
+        return {}
+    return erros_de_valor_de_venda(
+        data, event.sale_value, event.sale_value_gross, vazio_aceito=True
+    )
+
+
 def resolver_data_da_venda(
-    informada: date | None, venda: Any, venda_anterior: Any, data_atual: date | None
+    informada: date | None,
+    venda: Any,
+    venda_anterior: Any,
+    data_atual: date | None,
+    *,
+    a_definir: bool = False,
+    criando: bool = False,
 ) -> date | None:
     """Data da venda que vai para o banco (hotfix 267b).
 
@@ -672,9 +778,18 @@ def resolver_data_da_venda(
         venda: `sale_value` que está sendo gravado agora (já zerado quando é cortesia).
         venda_anterior: `sale_value` que o evento tinha antes desta gravação (``None`` na criação).
         data_atual: `sale_date` que o evento tinha antes desta gravação (``None`` na criação).
+        a_definir: Veio a marca "Valor a definir" (feature 299). Na criação, o evento nasce com a
+            data de hoje — a venda fechou, só o preço não; na edição, a data que já existia fica
+            (marcar a definir não apaga a data da venda). O importado do Google sem data continua
+            sem: ganha a data no dia em que o valor for posto.
+        criando: A gravação é a criação do evento.
     """
     if informada is not None:
         return informada
+    if a_definir:
+        if data_atual is not None:
+            return data_atual
+        return now_sp().date() if criando else None
     if not venda:
         return None
     if data_atual is not None:
@@ -682,6 +797,36 @@ def resolver_data_da_venda(
     if not venda_anterior:
         return now_sp().date()
     return None
+
+
+def _gravar_venda_da_edicao(event: Any, data: dict) -> None:
+    """Campos comerciais da edição completa — nunca no outro evento de um grupo (feature 299).
+
+    A venda do grupo mora no principal: o `/comercial` já recusa satélite com 409, mas a edição
+    completa gravava (e a marca "Valor a definir", que abre marcada no satélite, faria isso toda
+    vez). No satélite, título, data e local salvam; a venda fica como está (vazia).
+    """
+    if event.is_satellite:
+        return
+    is_cortesia = bool(data.get("is_cortesia_permuta"))
+    venda_anterior, data_anterior = event.sale_value, event.sale_date
+    event.is_cortesia_permuta = is_cortesia
+    event.sale_value = 0 if is_cortesia else data.get("sale_value")
+    event.sale_value_gross = 0 if is_cortesia else data.get("sale_value_gross")
+    event.transport_value = data.get("transport_value")
+    event.acrescimo_value = data.get("acrescimo_value")
+    event.with_invoice = bool(data.get("with_invoice"))
+    event.seller_id = data.get("seller_id")
+    event.sale_date = resolver_data_da_venda(
+        data.get("sale_date"),
+        event.sale_value,
+        venda_anterior,
+        data_anterior,
+        a_definir=bool(data.get("valor_a_definir")) and not is_cortesia,
+    )
+    event.payment_method = data.get("payment_method")
+    event.payment_installments = data.get("payment_installments")
+    event.payment_due_date = data.get("payment_due_date")
 
 
 def update_event_core(
@@ -751,21 +896,7 @@ def update_event_core(
     )
     event.needs_rehearsal = bool(data.get("needs_rehearsal"))
 
-    is_cortesia = bool(data.get("is_cortesia_permuta"))
-    venda_anterior, data_anterior = event.sale_value, event.sale_date
-    event.is_cortesia_permuta = is_cortesia
-    event.sale_value = 0 if is_cortesia else data.get("sale_value")
-    event.sale_value_gross = 0 if is_cortesia else data.get("sale_value_gross")
-    event.transport_value = data.get("transport_value")
-    event.acrescimo_value = data.get("acrescimo_value")
-    event.with_invoice = bool(data.get("with_invoice"))
-    event.seller_id = data.get("seller_id")
-    event.sale_date = resolver_data_da_venda(
-        data.get("sale_date"), event.sale_value, venda_anterior, data_anterior
-    )
-    event.payment_method = data.get("payment_method")
-    event.payment_installments = data.get("payment_installments")
-    event.payment_due_date = data.get("payment_due_date")
+    _gravar_venda_da_edicao(event, data)
 
     EventClient.query.filter_by(event_id=event.id).delete()
     _create_client_links(event, data.get("client_pairs") or [])
@@ -951,7 +1082,12 @@ def update_event_comercial(
     event.with_invoice = bool(data.get("with_invoice"))
     event.seller_id = data.get("seller_id")
     event.sale_date = resolver_data_da_venda(
-        data.get("sale_date"), event.sale_value, venda_anterior, data_anterior
+        data.get("sale_date"),
+        event.sale_value,
+        venda_anterior,
+        data_anterior,
+        # Apagar o valor ("a definir") não apaga a data da venda (FR-017), como na edição completa.
+        a_definir=not is_cortesia and valor_a_definir(event.sale_value),
     )
     event.commission_rate = data.get("commission_rate")
     event.payment_method = data.get("payment_method")
@@ -1420,7 +1556,7 @@ def build_ensaio_times(date_str: str, start_str: str, end_str: str) -> tuple[dat
     try:
         d = date.fromisoformat((date_str or "").strip())
     except ValueError:
-        raise EnsaioValidationError("date", "Data inválida.")
+        raise EnsaioValidationError("date", "Data inválida.") from None
 
     start = datetime.combine(d, _parse_hhmm(start_str, "start"))
     end = datetime.combine(d, _parse_hhmm(end_str, "end"))

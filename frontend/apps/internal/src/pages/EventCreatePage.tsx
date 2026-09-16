@@ -13,6 +13,7 @@ import {
   DEFAULT_EVENT_FORM_VALUES,
   FIELD_ORDER,
   SERVER_FIELD_MAP,
+  primeiroCampoDoErro,
   type EventFormValues,
 } from "../lib/eventFormSchema";
 import {
@@ -338,6 +339,8 @@ export function EventCreatePage() {
       }
       // Semeia o cache do detalhe para a navegação seguinte já abrir com o anexo no lugar.
       queryClient.setQueryData(["event", eventId], atualizado);
+      // O comprovante muda o recebido da venda na Home (feature 299).
+      if (item.kind === "payment") queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setAttachmentStatus((s) => ({ ...s, [item.id]: "success" }));
     } catch {
       setAttachmentStatus((s) => ({ ...s, [item.id]: "error" }));
@@ -394,6 +397,9 @@ export function EventCreatePage() {
         });
         return;
       }
+      // Feature 299: com "Valor a definir" a venda vai vazia (o servidor grava NULL e o evento nasce
+      // em "Sem valor"); a cortesia vence a marca.
+      const aDefinir = !values.is_cortesia_permuta && values.valor_a_definir;
       const payload: EventCreateInput = {
         title: values.title,
         event_type: values.event_type,
@@ -405,8 +411,9 @@ export function EventCreatePage() {
         // "SHOW sempre pede ensaio" é regra do servidor (feature 239): `_create_event_row`
         // liga o flag sozinho, e o cliente manda só o que o usuário marcou.
         needs_rehearsal: values.needs_rehearsal,
-        sale_value: values.is_cortesia_permuta ? 0 : values.sale_value,
-        sale_value_gross: values.is_cortesia_permuta ? 0 : values.sale_value_gross,
+        sale_value: values.is_cortesia_permuta ? 0 : aDefinir ? null : values.sale_value,
+        sale_value_gross: values.is_cortesia_permuta ? 0 : aDefinir ? null : values.sale_value_gross,
+        valor_a_definir: aDefinir,
         transport_value: values.transport_value,
         acrescimo_value: values.acrescimo_value,
         with_invoice: values.with_invoice,
@@ -487,6 +494,12 @@ export function EventCreatePage() {
               if (rhfField) setError(rhfField, { message });
             }
             setServerError(messages.join(" "));
+            // O 400 do servidor também leva o foco até o campo (feature 299, Princípio V).
+            const primeiro = primeiroCampoDoErro(error.fields);
+            if (primeiro) {
+              setFocus(primeiro);
+              document.getElementById(primeiro)?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
             return;
           }
           setServerError(error.message);

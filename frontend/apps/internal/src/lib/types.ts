@@ -1,6 +1,7 @@
 /** Tipos dos recursos da API consumidos pela Fundação (data-model.md). */
 
 import type { StatusCounts } from "./formulariosAdmin";
+import type { Severidade } from "./homeListas";
 
 /** Usuário autenticado — resposta de /api/auth/me e /api/auth/login. */
 export interface AuthUser {
@@ -64,7 +65,18 @@ export interface RecurringExpenseAlert {
   amount: number | null;
 }
 
-/** Cobrança pendente (saldo em aberto) de um evento — feature 174. */
+/** A marca "grupo de N eventos" (feature 299): o grupo é uma venda só, na linha do principal. */
+export interface GrupoComercial {
+  nome: string;
+  /** Eventos não cancelados do grupo. */
+  eventos: number;
+}
+
+/**
+ * Uma cobrança (saldo em aberto) — feature 174, refeita na 299 (o grupo é uma venda só). As chaves
+ * antigas continuam com o mesmo nome e tipo; as novas são **todas opcionais**, porque servidor e
+ * site ficam alguns instantes em versões diferentes em todo deploy.
+ */
 export interface PendingPayment {
   event_id: number;
   event_title: string;
@@ -74,6 +86,75 @@ export interface PendingPayment {
   saldo: number;
   severity: "atrasado" | "vencido" | "urgent" | "warn" | "info";
   due_date: string | null;
+  titulo?: string;
+  /** Contratante > 1ª cliente; `null` → a tela mostra o título. */
+  cliente?: string | null;
+  /** Data do grupo (1º evento não cancelado e que não é compromisso interno). */
+  data_evento?: string | null;
+  vencimento?: string | null;
+  vencimento_origem?: "data_combinada" | "parcela" | "politica" | null;
+  /** Negativo = venceu. */
+  dias_ate_vencimento?: number;
+  sinal_pendente?: boolean;
+  severidade?: Severidade;
+  /** Pronto, em pt-BR ("Atrasado", "Vence hoje", "Vence em N dias", "Sinal pendente"). */
+  selo?: string;
+  /** "sem sinal" na linha vermelha com sinal pendente. */
+  nota?: string | null;
+  grupo_comercial?: GrupoComercial | null;
+}
+
+/** Contagem por cor de uma lista comercial e o `para_agir` (vermelho + amarelo). */
+export interface ResumoPorCor {
+  por_cor: Record<Severidade, number>;
+  para_agir: number;
+}
+
+/** `comercial.cobrancas_resumo` (feature 299): o número do card e o dinheiro em aberto. */
+export interface CobrancasResumo extends ResumoPorCor {
+  /** Saldo de TODAS as linhas de Cobranças, inclusive as cinza. */
+  total_em_aberto: number;
+}
+
+/** Uma linha de "Evento sem valor de venda" (feature 299). */
+export interface LinhaSemValor {
+  event_id: number;
+  titulo: string;
+  cliente: string | null;
+  grupo_comercial: GrupoComercial | null;
+  data_evento: string | null;
+  /** 0 = hoje; negativo = já aconteceu. */
+  dias_ate_o_evento: number;
+  valor: number | null;
+  /** Vazio ou zero → "a definir". */
+  a_definir: boolean;
+  /** Entre R$ 0,01 e R$ 0,99 → o valor com "(valor simbólico)". */
+  valor_simbolico: boolean;
+  recebido: number;
+  severidade: Severidade;
+}
+
+/** `comercial.sem_valor` (feature 299): os dois grupos, na ordem do servidor. */
+export interface SemValorSummary extends ResumoPorCor {
+  a_acontecer: LinhaSemValor[];
+  ja_aconteceu: LinhaSemValor[];
+}
+
+/**
+ * Bloco `comercial` do `/api/dashboard` — contrato em
+ * `specs/299-sem-valor-cobrancas/contracts/dashboard-comercial.md`.
+ *
+ * Nas listas novas, `undefined` é o servidor antigo (não desenha painel nem card) e `null` é a
+ * lista que falhou (desenha o aviso com "Tentar de novo", nunca o "✓").
+ */
+export interface ComercialSummary {
+  pending_payments: PendingPayment[];
+  cobrancas_resumo?: CobrancasResumo | null;
+  sem_valor?: SemValorSummary | null;
+  /** Data de início (AAAA-MM-DD). */
+  corte?: string | null;
+  /** Papel efetivo edita a venda (senão a ação da linha "sem valor" é "Abrir"). */
+  pode_editar_venda?: boolean;
 }
 
 /** Painel Performance (SUPERADMIN real, nunca durante impersonação) — feature 174. */
@@ -173,7 +254,7 @@ export interface LinhaFormulario {
   dias_ate_a_data?: number | null;
   dias_desde_chegada?: number;
   grupo?: "a_chegar" | "ja_passou";
-  severidade?: "vermelho" | "amarelo" | "cinza";
+  severidade?: Severidade;
   data_suspeita?: boolean;
   repetido?: boolean;
   outro_com_evento?: boolean;
@@ -197,6 +278,8 @@ export interface FormulariosSummary {
   motivos_encerramento?: MotivoEncerramento[];
   a_chegar?: LinhaFormulario[];
   ja_passou?: LinhaFormulario[];
+  /** Feature 299 — linhas vermelhas e amarelas: o número do card e da parte do total. */
+  para_agir?: number;
 }
 
 export interface DashboardSummary {
@@ -210,7 +293,7 @@ export interface DashboardSummary {
   /** Fila do setor de figurino: pedidos sem dono. Gate por PAPEL (FIGURINO/SA). */
   figurino_oficina: OficinaFilaSummary | null;
   ensaio: EnsaioSummary | null;
-  comercial: { pending_payments: PendingPayment[] } | null;
+  comercial: ComercialSummary | null;
   /**
    * Formulários que chegaram desde o corte e ainda não têm destino (feature 298). Mesmo gate do
    * bloco comercial; `null` = sem permissão ou painel que falhou.

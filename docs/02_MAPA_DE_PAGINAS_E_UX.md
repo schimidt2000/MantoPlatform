@@ -246,6 +246,34 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   sai animada (sem transição com movimento reduzido). Vazio: "Nenhum formulário esperando evento
   ✓". Card da visão geral: formulários sem destino; urgentes = os das linhas vermelhas. Toda ação
   recarrega Home, `/formularios`, busca e sino (`invalidarDestinoDeFormulario`).
+- **Feature 299 — o painel "💼 Comercial" virou dois, "💼 Cobranças" e "🏷️ Sem valor"**, cada um
+  com o card de mesmo nome no topo (mesmo gate `show_comercial`, respeita "Ver como"). O grupo é uma
+  venda só: a linha é a do principal, com a marca "grupo de N eventos".
+  - **Cobranças**: toda venda com saldo de R$ 1,00 ou mais desde a data de início, em ordem de cor
+    e, na cor, de vencimento. A linha diz a cliente (ou o título), "evento DD/MM/AAAA", o selo em
+    pt-BR ("Atrasado", "Vence hoje", "Vence em N dias", "Sinal pendente"; "sem sinal" ao lado no
+    vermelho), "vence DD/MM" (+ "(data combinada)" e "venceu há N dias") e "Recebido R$ X de R$ Y —
+    falta R$ Z"; ação "Abrir cobrança" (`?aba=comercial`).
+  - **Sem valor** (a lista "Evento sem valor de venda"): dois grupos, "Ainda vai acontecer" (hoje
+    incluído, o mais próximo em cima) e "Já aconteceu" (o mais recente em cima), com a régua da 298
+    (vermelho até 7 dias); "a definir" ou "R$ 0,01 (valor simbólico)", "já recebeu R$ X". Ação "Pôr
+    o valor" → `/events/<id>?aba=comercial&editar=venda`, que abre a venda já em edição com o foco
+    no valor de venda final (dois cliques até salvar); quem não edita a venda (FINANCEIRO) vê
+    "Abrir".
+  - **Cards e total**: o número dos cards comerciais — e, desde a 299, também o de Formulários — é o
+    de linhas para agir (vermelhas e amarelas); "N pendências no total" soma esses números e o
+    `count` dos painéis de operação; "R$ X em aberto" soma todas as cobranças, cinza inclusive. O
+    card "Sem valor" diz embaixo "N eventos sem valor desde DD/MM" (todas as linhas, cinza
+    inclusive), como o "N formulários sem evento desde DD/MM" do card de Formulários; o rodapé do
+    painel lista o que fica fora (cortesia, ensaio, compromisso interno, Loja Virtual, cancelados e
+    os outros eventos de um grupo).
+  - **Estados**: vazio "Nenhuma cobrança em aberto ✓" / "Todos os eventos têm valor de venda ✓"
+    (card "Em dia ✓"; só cinza = 0 sem ✓). A lista que não carregou mostra "Não foi possível
+    carregar …" com "Tentar de novo": o painel nasce aberto, o cabeçalho diz "não carregou", o card
+    "Não carregou" e o topo "uma lista não carregou" — nunca o ✓.
+  - As peças de lista (`components/home/GrupoDeLinhas`, `LinhaDaHome`, `lib/homeListas.ts`) são as
+    do painel de Formulários, extraídas. A linha resolvida sai ao voltar para a Home: os hooks de
+    venda, comprovante, orçamento, parcela, criar, editar e cancelar invalidam `['dashboard']`.
 - **Desde a 206 é a única `/` da plataforma.** O dashboard Jinja foi aposentado: a raiz do Flask
   responde 301 para `https://app.mantoproducoes.com.br`. Painéis atuais: Casting, Figurino,
   Comercial (cobranças), Contas recorrentes, Performance e Cargos dispensados — **menos** blocos
@@ -325,6 +353,14 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
      entre 05/08 e 02/09/2026 e sumiram da Planilha de Pagamentos. O servidor também assume hoje
      quando uma venda nova chega sem data (`event_ops.resolver_data_da_venda`); o prefill é para
      a pessoa ver a data que vai valer.
+     **Feature 299 — "Valor a definir"**: botão no padrão da cortesia (e excludente com ela) que
+     esconde os valores e avisa que o evento fica em "Sem valor" na Home; marcar num evento que tinha
+     valor avisa, no lugar, que o valor será apagado e a comissão a pagar, cancelada. Sem a marca, o
+     valor precisa ser de R$ 1,00 ou mais — o R$ 0,01 de "segurar a data" é recusado no navegador e
+     no servidor — e o foco chega ao campo de valor também no 400 do servidor (os `MoneyInput`
+     passam por `Controller`, com `id` e `ref`). Na edição, o evento vazio ou zero abre marcado; o de
+     R$ 0,01 abre desmarcado e salva sem mexer no valor; o outro evento de um grupo abre com a marca
+     travada e o link para o principal, sem vendedor, data da venda nem forma de pagamento.
   5. **Forma de pagamento e comprovantes** (`PagamentoBlock`) — campos condicionais: *Faturado* →
      vencimento; *Dividido no PIX* → parcelas (2–12). Múltiplos comprovantes, cada um com valor.
   6. **Contrato** (`ContratoBlock`) — upload do arquivo + "Contrato já assinado".
@@ -425,15 +461,32 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     "Desvincular", e a frase do que a aplicação fez; sem orçamento, `OrcamentoPicker` (busca em
     `/api/orcamento/historico?q=`, mesma regra de dono do histórico) e, em evento **sem venda**, a
     opção de aplicar também os valores de 1h/2h/3h/4h; evento importado do Google sem venda ganha o
-    aviso do que o painel resolve. Só quem pode gerir a venda (`_can_manage_sale`) vê os botões; o
+    aviso do que o painel resolve. Só COMERCIAL e SUPERADMIN (`can_edit_core`) veem os botões; o
+    FINANCEIRO vê o painel só para leitura (a API, `_can_manage_sale`, aceita só o orçamento dele); o
     resumo do orçamento só vem para quem consegue abri-lo (superadmin ou o comercial dono) — para
     os demais, `venda.tem_orcamento` faz o painel dizer "vinculado ao orçamento de outro vendedor"
     em vez de oferecer a busca; o 409 "já vinculado a outro evento" vem com link para esse evento ·
     *Resultado* (grade de KPI: venda,
     custo de cachês, gastos extras, comissão e **lucro líquido** em verde/vermelho, + lista dos
     gastos extras aprovados) ·
-    *Contrato assinado* · *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado" quando
-    recebido ≥ venda) · *Reembolsos*.
+    *Contrato assinado* · *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado" pela regra
+    da 299: recebido do grupo, folga de R$ 1,00, nunca na cortesia) · *Reembolsos*.
+  - **Feature 299 na aba Comercial**: o valor vazio ou zero aparece como "A definir" (nunca
+    "R$ 0,00"), o simbólico com a marca "valor simbólico" e, no outro evento de um grupo, "no evento
+    principal" com o link. O `PATCH /comercial` recusa o valor novo entre R$ 0,01 e R$ 0,99, com o
+    erro no campo que o servidor nomeou (bruto ou valor final) e o foco nele. "Comprovantes de
+    pagamento" diz "Recebido X de Y — falta Z" **do grupo**, com "Inclui R$ X em comprovantes de
+    outros eventos do grupo" (com os links), e o "Quitado" usa a folga de centavos; no satélite,
+    "Este evento é parte do grupo … A venda está no <título do principal>" (link), "Recebido no
+    grupo …" e "neste evento: R$ W". A cortesia diz "Recebido R$ X · cortesia ou permuta", sem
+    "falta" nem "Quitado". Sem valor, "Recebido R$ X · valor de venda a definir" (com o "Inclui R$ X"
+    quando houver), e no outro evento de um grupo cujo principal está sem valor, "Recebido no grupo
+    R$ X · valor de venda a definir" — nunca "de R$ 0,00". O chip "Recebimento" diz, nesta ordem,
+    "valor a definir", "cortesia ou permuta" ou "no principal", e o menu "Cobrança" do satélite
+    explica que a cobrança está no principal. O orçamento oferece aplicar valores também sobre o
+    R$ 0,01; para o FINANCEIRO o painel do orçamento continua só leitura (a lista de orçamentos e o
+    vínculo são do vendedor dono). `?editar=venda` abre a venda em edição (é o destino do "Pôr o
+    valor" da Home).
   - **Aba Histórico**: *Avaliações dos artistas* (média + notas individuais com tags por
     critério) · *Feedback da cliente* · *Log de atividades* (accordion) — **este só existe no DOM
     para `SUPERADMIN`**.

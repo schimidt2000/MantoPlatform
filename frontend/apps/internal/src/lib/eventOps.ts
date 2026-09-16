@@ -59,7 +59,8 @@ export function useSyncEvent(eventId: number) {
 
 /**
  * Exclui o evento (feature 151). RBAC no servidor: `_CAN_DELETE` (Comercial/Superadmin); um evento
- * líder de grupo é recusado (409). Ao suceder, remove o cache do evento e invalida a agenda; a
+ * líder de grupo é recusado (409). Ao suceder, remove o cache do evento e invalida a agenda e a
+ * Home (feature 299: o evento excluído sai de "Cobranças" e "Sem valor" sem esperar o cache); a
  * navegação de volta fica com o componente.
  */
 export function useDeleteEvent(eventId: number) {
@@ -73,6 +74,7 @@ export function useDeleteEvent(eventId: number) {
       queryClient.removeQueries({ queryKey: ["event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }
@@ -141,6 +143,8 @@ export function useCancelarEvento(eventId: number) {
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
       queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
+      // Venda cancelada sai de Cobranças e de "Sem valor" (feature 299).
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }
@@ -242,6 +246,8 @@ function invalidarComercial(queryClient: ReturnType<typeof useQueryClient>, even
   queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
   // Acréscimo muda a BASE da comissão (o BV sai dela), então a linha a pagar é recalculada.
   queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
+  // Parcela muda o vencimento da cobrança na Home (feature 299).
+  queryClient.invalidateQueries({ queryKey: ["dashboard"] });
 }
 
 /**

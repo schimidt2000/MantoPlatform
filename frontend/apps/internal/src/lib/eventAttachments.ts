@@ -44,12 +44,18 @@ export function enviarReembolso(
   });
 }
 
-function useEventMutation<TVars>(eventId: number, mutationFn: (vars: TVars) => Promise<EventoDetalhe>) {
+function useEventMutation<TVars>(
+  eventId: number,
+  mutationFn: (vars: TVars) => Promise<EventoDetalhe>,
+  { mudaCobranca = false }: { mudaCobranca?: boolean } = {},
+) {
   const queryClient = useQueryClient();
   return useMutation<EventoDetalhe, Error, TVars>({
     mutationFn,
     onSuccess: (updated) => {
       queryClient.setQueryData(["event", eventId], updated);
+      // Comprovante muda o recebido do grupo: a linha de Cobranças sai ou muda (feature 299).
+      if (mudaCobranca) queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }
@@ -105,21 +111,28 @@ export interface AddPaymentInput {
 }
 
 export function useAddPayment(eventId: number) {
-  return useEventMutation<AddPaymentInput>(eventId, (input) => enviarComprovante(eventId, input));
+  return useEventMutation<AddPaymentInput>(eventId, (input) => enviarComprovante(eventId, input), {
+    mudaCobranca: true,
+  });
 }
 
 export function useEditPayment(eventId: number) {
-  return useEventMutation<{ paymentId: number; amount: number }>(eventId, ({ paymentId, amount }) =>
-    apiFetch<EventoDetalhe>(`/api/payments/${paymentId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ amount }),
-    }),
+  return useEventMutation<{ paymentId: number; amount: number }>(
+    eventId,
+    ({ paymentId, amount }) =>
+      apiFetch<EventoDetalhe>(`/api/payments/${paymentId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ amount }),
+      }),
+    { mudaCobranca: true },
   );
 }
 
 export function useDeletePayment(eventId: number) {
-  return useEventMutation<number>(eventId, (paymentId) =>
-    apiFetch<EventoDetalhe>(`/api/payments/${paymentId}`, { method: "DELETE" }),
+  return useEventMutation<number>(
+    eventId,
+    (paymentId) => apiFetch<EventoDetalhe>(`/api/payments/${paymentId}`, { method: "DELETE" }),
+    { mudaCobranca: true },
   );
 }
 

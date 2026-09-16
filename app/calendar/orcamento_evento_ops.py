@@ -278,10 +278,12 @@ def aplicar_valores_do_orcamento(event: Any, entry: OrcamentoHistory, *, duracao
     Returns:
         ``True`` quando aplicou.
     """
-    from app.calendar.event_ops import resolver_data_da_venda
+    from app.calendar.event_ops import resolver_data_da_venda, sem_valor_de_venda
     from app.calendar.routes import _build_orcamento_prefill
 
-    if event.sale_value or getattr(event, "is_cortesia_permuta", False):
+    # Feature 299: o valor simbólico (o R$ 0,01 de "segurar a data") conta como "sem venda" — é
+    # pelo orçamento que a comercial põe o valor de verdade.
+    if not sem_valor_de_venda(event.sale_value) or getattr(event, "is_cortesia_permuta", False):
         # Cortesia/permuta grava venda 0 de propósito — não é "sem venda".
         return False
     if duracao not in DURACOES_TABELA:
@@ -401,7 +403,9 @@ def set_event_orcamento(
                 db.session.flush()
                 sincronizar_comissao(event)
         else:
-            if event.sale_value:
+            from app.calendar.event_ops import sem_valor_de_venda
+
+            if not sem_valor_de_venda(event.sale_value):
                 relatorio["valores_ignorados"] = "evento já tem venda"
             elif getattr(event, "is_cortesia_permuta", False):
                 relatorio["valores_ignorados"] = "evento é cortesia/permuta"

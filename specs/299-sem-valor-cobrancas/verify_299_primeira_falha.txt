@@ -1,0 +1,70 @@
+[2026-09-14 23:25:30,078] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br plataforma=https://app.mantoproducoes.com.br
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\flask_limiter\extension.py:333: UserWarning: Using the in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about configuring the storage backend.
+  warnings.warn(
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+[2026-09-14 23:25:31,038] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:388: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  settings = SiteSetting.query.get(1)
+C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:210: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  cancelled_at=datetime.utcnow() if opcoes.get("cancelado") else None,
+C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:211: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  deletion_requested_at=datetime.utcnow() if opcoes.get("exclusao") else None,
+C:\Users\schim\Desktop\Manto_Platform\specs\299-sem-valor-cobrancas\verify_299.py:303: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  antes = datetime.utcnow() - timedelta(days=35)
+[2026-09-14 23:25:32,254] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:32,503] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:32,659] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:32,813] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:32,983] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:33,115] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:33,261] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:33,426] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:33,596] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:33,765] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:33,916] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:34,072] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:34,225] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:34,381] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:34,549] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:34,746] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:34,988] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:35,132] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:35,259] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:35,399] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-14 23:25:35,575] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+Feature 299 — sem valor e cobranças, contra manto_local
+  FALHA  1. corte pela data do grupo: bloco `sem_valor` ausente
+  FALHA  2. o que é sem valor; ordem e cores: bloco `sem_valor` ausente
+  FALHA  3. quem fica fora de Sem valor: bloco `sem_valor` ausente
+  FALHA  4. grupos em Sem valor: bloco `sem_valor` ausente
+  FALHA  5. valor a definir, R$ 0,01 recusado e comissão tardia: (a) POST com a marca → 400 {'sale_value': 'Informe o valor de venda.', 'sale_value_gross': 'Informe o valor antes do desconto.'}
+  FALHA  6. edição completa e orçamento sobre o R$ 0,01: (a) importado sem valor, troca de título → 400 {'sale_value': 'Informe o valor de venda.', 'sale_value_gross': 'Informe o valor antes do desconto.'}
+  FALHA  7. grupo em Cobranças (344 e 10 mil): réplica do 344 (3.078 + 3.078 de 5.508) ainda em Cobranças
+  FALHA  8. data do grupo e comprovante do cancelado: data None vencimento None
+  FALHA  9. vencimento: s9a fora de Cobranças
+  FALHA  10. centavos e sinal pendente: s10b: sinal_pendente=None
+  FALHA  11. metade paga a 20 dias aparece: metade paga e evento a 20 dias continua escondida
+  FALHA  12. fora de Cobranças: s12a não deveria estar em Cobranças
+  FALHA  13. conteúdo, cor, selo, ordem e chaves antigas: selo fora do conjunto: None
+  FALHA  14. total, cards e falha forçada: cobrancas_resumo/sem_valor ausentes
+  FALHA  15. página do evento no grupo: [<class 'decimal.ConversionSyntax'>]
+  OK     16. CASTING e FINANCEIRO recusados (DEVEM falhar)
+  OK     17. limpeza
+
+2/17 OK · Google falso: 0 insert, 0 update
+  - 1. corte pela data do grupo: AssertionError: bloco `sem_valor` ausente
+  - 2. o que é sem valor; ordem e cores: AssertionError: bloco `sem_valor` ausente
+  - 3. quem fica fora de Sem valor: AssertionError: bloco `sem_valor` ausente
+  - 4. grupos em Sem valor: AssertionError: bloco `sem_valor` ausente
+  - 5. valor a definir, R$ 0,01 recusado e comissão tardia: AssertionError: (a) POST com a marca → 400 {'sale_value': 'Informe o valor de venda.', 'sale_value_gross': 'Informe o valor antes do desconto.'}
+  - 6. edição completa e orçamento sobre o R$ 0,01: AssertionError: (a) importado sem valor, troca de título → 400 {'sale_value': 'Informe o valor de venda.', 'sale_value_gross': 'Informe o valor antes do desconto.'}
+  - 7. grupo em Cobranças (344 e 10 mil): AssertionError: réplica do 344 (3.078 + 3.078 de 5.508) ainda em Cobranças
+  - 8. data do grupo e comprovante do cancelado: AssertionError: data None vencimento None
+  - 9. vencimento: AssertionError: s9a fora de Cobranças
+  - 10. centavos e sinal pendente: AssertionError: s10b: sinal_pendente=None
+  - 11. metade paga a 20 dias aparece: AssertionError: metade paga e evento a 20 dias continua escondida
+  - 12. fora de Cobranças: AssertionError: s12a não deveria estar em Cobranças
+  - 13. conteúdo, cor, selo, ordem e chaves antigas: AssertionError: selo fora do conjunto: None
+  - 14. total, cards e falha forçada: AssertionError: cobrancas_resumo/sem_valor ausentes
+  - 15. página do evento no grupo: decimal.InvalidOperation: [<class 'decimal.ConversionSyntax'>]

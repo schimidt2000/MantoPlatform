@@ -125,8 +125,11 @@ export interface EventCreateInput {
   location: string;
   description: string;
   needs_rehearsal: boolean;
-  sale_value: number;
-  sale_value_gross: number;
+  /** `null` com "Valor a definir" (feature 299): a venda nasce vazia. */
+  sale_value: number | null;
+  sale_value_gross: number | null;
+  /** Feature 299 — a marca "Valor a definir"; o servidor não a grava, só pula o valor. */
+  valor_a_definir?: boolean;
   transport_value: number;
   acrescimo_value: number;
   with_invoice: boolean;
@@ -159,8 +162,11 @@ export interface EventUpdateInput {
   location: string;
   description: string;
   needs_rehearsal: boolean;
-  sale_value: number;
-  sale_value_gross: number;
+  /** `null` com "Valor a definir" (feature 299): a venda nasce vazia. */
+  sale_value: number | null;
+  sale_value_gross: number | null;
+  /** Feature 299 — a marca "Valor a definir"; o servidor não a grava, só pula o valor. */
+  valor_a_definir?: boolean;
   transport_value: number;
   acrescimo_value: number;
   with_invoice: boolean;
@@ -195,6 +201,8 @@ export function useCreateEvent() {
     onSuccess: (_result, body) => {
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+      // Evento novo entra em Cobranças ou em "Sem valor" (feature 299).
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       // Evento criado a partir de formulário (feature 298): ele sai da Home e o aviso some.
       if (body.form_response_id) invalidarDestinoDeFormulario(queryClient, body.form_response_id);
     },
@@ -215,6 +223,8 @@ export function useUpdateEvent(eventId: number) {
       queryClient.setQueryData(["event", eventId], updated);
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+      // Valor, data e título mudam as listas comerciais da Home (feature 299).
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       // Pré-contrato ligado na edição (feature 298): some da Home e da fila de Formulários.
       if (body.form_response_id) invalidarDestinoDeFormulario(queryClient, body.form_response_id);
     },
