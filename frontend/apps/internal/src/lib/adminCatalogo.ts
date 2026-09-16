@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 
 /** Resumo de um Personagem dentro da listagem de Temas (feature 186) — sem precisar do detalhe. */
@@ -52,6 +52,10 @@ export function useAdminCatalogo(filters: { q?: string; categoria?: string; stat
   return useQuery<CatalogListResponse>({
     queryKey: ["admin-catalogo", filters],
     queryFn: () => apiFetch<CatalogListResponse>(`/api/admin/catalogo?${params.toString()}`),
+    // Segura a lista anterior enquanto a nova não chega: cada filtro ou letra digitada é uma
+    // chave nova, e sem isto a tela pisca esqueleto a cada refinamento (mesmo padrão de
+    // `agenda.ts` e `formulariosAdmin.ts`).
+    placeholderData: keepPreviousData,
   });
 }
 

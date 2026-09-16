@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button, PageHeader, Skeleton } from "@manto/ui";
 import {
@@ -36,10 +36,19 @@ export function AdminCatalogoListPage() {
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<Set<number>>(new Set());
   const [linkingCharacter, setLinkingCharacter] = useState<CatalogCharacterSummary | null>(null);
 
+  // A pausa vale só para o que vai ao SERVIDOR. O mesmo `q` alimenta o filtro client-side da
+  // visão Personagens (`busca={q}`, mais abaixo), que continua instantâneo — atrasar aquilo
+  // seria travar a digitação de graça.
+  const [buscaComPausa, setBuscaComPausa] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaComPausa(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
   // No modo Personagens a busca é client-side: a lista de temas precisa vir INTEIRA, porque é
   // dela que sai o "usar em outro tema" — filtrar no servidor esconderia o tema de destino.
   const query = useAdminCatalogo(
-    viewMode === "personagens" ? {} : { q, categoria, status },
+    viewMode === "personagens" ? {} : { q: buscaComPausa, categoria, status },
   );
   const toggleActive = useToggleCatalogItemActive();
   const deleteItem = useDeleteCatalogItem();
