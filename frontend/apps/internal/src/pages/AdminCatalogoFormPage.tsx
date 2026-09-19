@@ -41,6 +41,10 @@ export function AdminCatalogoFormPage() {
   // Só as categorias: isto aqui baixava os 458 produtos com todo o elenco (199 KB) para desenhar
   // 39 opções de um seletor (feature 300).
   const categoriesQuery = useAdminCatalogoCategorias();
+  // Segura o aviso de erro enquanto a nova tentativa roda: ao refazer uma consulta que nunca teve
+  // dado, o TanStack v5 volta o estado para `pending`, e o aviso desmontava junto com o próprio
+  // botão — o cartão ficava mudo justamente durante a tentativa (segunda revisão da 300).
+  const [tentandoCategorias, setTentandoCategorias] = useState(false);
   const itemQuery = useAdminCatalogoItem(id);
   const tagSuggestionsQuery = useCatalogTagSuggestions();
   const createItem = useCreateCatalogItem();
@@ -264,15 +268,18 @@ export function AdminCatalogoFormPage() {
           {/* Sem isto, uma falha deixava o cartão vazio e mudo — e na janela de deploy (bundle
               novo com backend antigo) o GET de categorias responde 405. As categorias MARCADAS
               não se perdem: vêm do detalhe do produto, não desta lista. */}
-          {categoriesQuery.isError && (
+          {(categoriesQuery.isError || tentandoCategorias) && !categoriesQuery.data && (
             <p className="flex flex-wrap items-center gap-2 text-sm text-red" role="alert">
               Não foi possível carregar as categorias.
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                loading={categoriesQuery.isFetching}
-                onClick={() => categoriesQuery.refetch()}
+                loading={tentandoCategorias}
+                onClick={() => {
+                  setTentandoCategorias(true);
+                  void categoriesQuery.refetch().finally(() => setTentandoCategorias(false));
+                }}
               >
                 Tentar de novo
               </Button>

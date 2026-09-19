@@ -240,7 +240,9 @@ export function AdminCatalogoListPage() {
         </p>
       )}
 
-      {viewMode === "personagens" && <CatalogPersonagensView temas={items} busca={q} />}
+      {viewMode === "personagens" && (
+        <CatalogPersonagensView temas={items} temasCarregando={query.isPending} busca={q} />
+      )}
 
       {atualizando && items.length > 0 && viewMode !== "personagens" && (
         <p className="text-xs text-muted" role="status">

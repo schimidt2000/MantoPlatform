@@ -21,6 +21,11 @@ type Filtro = "todos" | "sem_ficha" | "varios_temas";
 interface CatalogPersonagensViewProps {
   /** Temas disponíveis para receber um personagem (a lista já carregada da tela). */
   temas: CatalogListItem[];
+  /**
+   * A lista de temas ainda não chegou. Sem isto, "usar em outro tema" afirmava "Nenhum tema
+   * disponível" durante o carregamento — o que é falso (segunda revisão da 300).
+   */
+  temasCarregando?: boolean;
   busca: string;
 }
 
@@ -69,12 +74,14 @@ function Contador({
 function PersonagemRow({
   personagem,
   temas,
+  temasCarregando,
   onAdd,
   adicionando,
   erro,
 }: {
   personagem: CatalogPersonagem;
   temas: CatalogListItem[];
+  temasCarregando: boolean;
   onAdd: (temaId: number) => void;
   adicionando: boolean;
   erro: string | null;
@@ -296,7 +303,9 @@ function PersonagemRow({
                 ))}
                 {opcoes.length === 0 && (
                   <li className="px-1.5 py-1 text-[11px] text-muted">
-                    Nenhum tema disponível — ele já está em todos os que batem com a busca.
+                    {temasCarregando
+                      ? "Carregando temas…"
+                      : "Nenhum tema disponível — ele já está em todos os que batem com a busca."}
                   </li>
                 )}
               </ul>
@@ -321,7 +330,11 @@ function PersonagemRow({
  * reaproveitado — sem ela não há como afirmar que dois personagens de temas diferentes são o
  * mesmo.
  */
-export function CatalogPersonagensView({ temas, busca }: CatalogPersonagensViewProps) {
+export function CatalogPersonagensView({
+  temas,
+  temasCarregando = false,
+  busca,
+}: CatalogPersonagensViewProps) {
   const query = useCatalogPersonagens();
   const reuse = useReuseCharacter();
   const reduceMotion = useReducedMotion();
@@ -421,6 +434,7 @@ export function CatalogPersonagensView({ temas, busca }: CatalogPersonagensViewP
               <PersonagemRow
                 personagem={personagem}
                 temas={temas}
+                temasCarregando={temasCarregando}
                 adicionando={
                   reuse.isPending &&
                   reuse.variables?.figurinoSheetId === personagem.figurino_sheet_id
