@@ -327,3 +327,28 @@ derrubado.** Tratamento de cada um:
       (em produção, 97% quente — aquecimento opcional), e a ordem alfabética e "a janela de deploy
       não quebra nada" precisam sair de spec, contrato, data-model, research, quickstart,
       `docs/02`, `docs/03` e `docs/04`; dívida 60 registrada — per crítico
+
+---
+
+## Phase 13: Segunda revisão, só das correções (18/09/2026)
+
+Revisão adversarial apenas do diff das correções (`e11a813..18f51bd`): três revisores (estado,
+ordem no backend e fechamento dos 9 achados originais), três céticos por achado. **4 achados,
+todos baixos, todos confirmados** — nenhum bloqueante: as correções não introduziram defeito sério.
+
+- [X] T047 "Tentar de novo" das categorias: ao refazer uma consulta que nunca teve dado, o TanStack
+      v5 volta o estado para `pending`, e o aviso desmontava junto com o próprio botão — o cartão
+      ficava mudo justamente durante a tentativa. Estado local segura o aviso e mostra o
+      carregamento no botão — per revisão 2 (A)
+- [X] T048 Modo Personagens: "usar em outro tema" afirmava "Nenhum tema disponível" enquanto a
+      lista ainda carregava; agora diz "Carregando temas…" (`temasCarregando={query.isPending}`) —
+      per revisão 2 (B)
+- [X] T049 Desempate `(position, id)` só na listagem, não nos outros três serializadores do
+      elenco: registrado como dívida 61 — não ocorre hoje (0 de 458), e corrigir agora ampliaria o
+      raio para endpoints que o verify não cobre — per revisão 2 (C)
+- [X] T050 *(243 fotos de personagem na produção, só 44 existem no disco — 199 perdidas na
+      migração do Railway, 404 sem gerar nada, confirmado por `test -f` no disco; as 44 aquecidas
+      antes do deploy, uma por vez, pela rota pública)* As fotos de PERSONAGEM nunca foram aquecidas a 128 — o laço do comando só faz 320/480/640,
+      e nenhuma tela da `main` as pedia a 128. O "97% quente" era contagem agregada de arquivos, que
+      não diz QUAIS fotos têm variante. Aquecer as 243 da produção antes do deploy, uma por vez, pela
+      rota pública, e corrigir o que a documentação afirmava — per revisão 2 (D)

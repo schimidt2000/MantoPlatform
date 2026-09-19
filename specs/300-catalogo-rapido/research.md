@@ -129,6 +129,12 @@ e ~460 em cada largura de capa — o `warm-thumbnails` da 270 já tinha aquecido
 da 263 não existe lá, e o aquecimento vira higiene opcional. A lição fica: número de cache do
 espelho não diz nada sobre o disco da produção, que tem vida própria.
 
+**Segunda correção (18/09/2026, segunda revisão):** a primeira correção também errou, por outro
+caminho. Os 2.628 eram contagem agregada da **galeria**; as **fotos de personagem** nunca tinham
+sido aquecidas a 128. Das 243 da produção, só 44 existem no disco (199 perdidas na migração do
+Railway, 404 sem gerar nada); as 44 foram aquecidas antes do deploy, uma por vez, pela rota
+pública. Contagem agregada não diz QUAIS arquivos estão lá.
+
 ---
 
 ## R7 — O critério do `verify_300.py`

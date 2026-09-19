@@ -349,11 +349,15 @@ de categorias e lista de desejos pedindo variante em 375×812 sem rolagem horizo
 original, e o gerenciador com **37 de 37 imagens em `/t/128/`, nenhuma no original e nenhuma
 carregada** num documento 16× mais alto que a janela.
 
-**Depois do deploy.** Nada obrigatório. A premissa original ("cache frio, 9 arquivos") era do
-**espelho local**; na produção, conferido por SSH antes do deploy, o cache já tinha 2.628 variantes
-de 128 px para 2.715 originais (97%) — o `warm-thumbnails` da 270 tinha feito o serviço, e o risco
-do incidente da 263 não existe lá. Rodar de novo é higiene opcional, por SSH no `manto-backend` e
-com a fila de push vazia. Lição: número de cache do espelho não diz nada sobre o disco da produção.
+**Depois do deploy.** Nada obrigatório — o aquecimento foi feito **antes**. A premissa original
+("cache frio, 9 arquivos") era do **espelho local**. Na produção a galeria já estava quente (2.628
+variantes de 128 px, do `warm-thumbnails` da 270), mas essa contagem agregada escondia que as
+**fotos de personagem** nunca tinham sido aquecidas a 128 — o comando não as cobre, e nenhuma tela
+da `main` as pedia nesse tamanho (pego na segunda revisão). Das 243 fotos de personagem da
+produção, **só 44 existem no disco**: as outras 199 se perderam na migração do Railway (ver 292) e
+respondem 404 sem gerar nada — na tela, viram o 🎭 do `<Foto>` em vez de imagem quebrada. As 44
+foram aquecidas antes do deploy, uma por vez, pela rota pública. Duas lições: número de cache do
+espelho não diz nada sobre o disco da produção, e contagem agregada não diz QUAIS arquivos estão lá.
 
 ### 299 — Sem valor e cobranças            (2026-09-15 · feature · sem migration)
 

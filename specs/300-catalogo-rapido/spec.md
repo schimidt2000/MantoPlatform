@@ -340,14 +340,15 @@ cache da rota de miniatura **não muda**), `docs/02` (entrada de `/admin/catalog
 
 ## Premissas
 
-- **O cache de miniaturas da PRODUÇÃO já está quente — o aquecimento virou higiene opcional**
-  (corrigido em 18/09/2026). A premissa original ("cache frio, 9 arquivos") foi medida no **espelho
-  local** e generalizada sem medir a produção. Conferido por SSH, somente leitura: **2.628
-  variantes de 128 px para 2.715 originais (97%)** e ~460 em cada largura de capa — o
-  `warm-thumbnails` da 270 já tinha feito o serviço. O risco do incidente da 263 (centenas de
-  gerações numa thread do gunicorn) **não existe lá**; as ~87 que faltam, parte delas de fotos
-  perdidas na migração do Railway, geram-se sob demanda sem custo relevante. Se rodar, é por SSH no
-  `manto-backend`, com `MANTO_SEM_THREADS=1` e sem push na fila.
+- **O cache de miniaturas da PRODUÇÃO: galeria quente, fotos de personagem aquecidas antes do
+  deploy** (corrigido duas vezes em 18/09/2026). A premissa original ("cache frio, 9 arquivos")
+  foi medida no **espelho local**. Na produção, conferido por SSH: 2.628 variantes de 128 px para
+  2.715 originais — mas essa contagem agregada é da **galeria** (o `warm-thumbnails` da 270 gera
+  128 de toda foto de galeria) e não dizia nada das **fotos de personagem**, que o comando nunca
+  aqueceu a 128 e nenhuma tela da `main` pedia nesse tamanho (a segunda revisão pegou). Das **243
+  fotos de personagem** da produção, **só 44 existem no disco** — 199 se perderam na migração do
+  Railway (`docs/03` 292) e respondem 404 sem gerar nada. As 44 foram aquecidas **antes do
+  deploy**, uma por vez, pela rota pública de variante. Não sobra geração simultânea a temer.
 - **A largura de 128px basta para as caixas do gerenciador** (32 a 64 pixels), cobrindo telas de
   alta densidade. A vitrine usa as larguras que a feature 270 já definiu para cada grade.
 - **Nada no banco muda**: sem migration, sem coluna nova, sem campo novo na resposta.

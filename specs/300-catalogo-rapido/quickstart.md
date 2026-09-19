@@ -101,11 +101,13 @@ Personagens, que caiu de 474 para 6 consultas com o mesmo sha256.
 
 ## 5. Depois do deploy
 
-**O aquecimento é opcional.** A premissa original ("cache frio") foi medida no espelho local; na
-produção, conferido por SSH em 18/09/2026, o cache já tinha 2.628 variantes de 128 px para 2.715
-originais (97%) e ~460 em cada largura de capa. As que faltam geram-se sob demanda, sem risco.
+**Nada obrigatório — o aquecimento foi feito antes do deploy.** A galeria da produção já estava
+quente (2.628 variantes de 128 px). As fotos de personagem não estavam — o `warm-thumbnails` não as
+cobre a 128, e `--largura 128` não as alcança —, então as 44 que existem no disco foram aquecidas em
+18/09/2026 pela rota pública (`/catalogo/midia/t/128/<arquivo>`), uma por vez. As outras 199 fotos
+de personagem se perderam na migração do Railway e respondem 404 sem gerar nada.
 
-Se quiser rodar mesmo assim, com a **fila de push vazia** (um deploy troca o contêiner e mataria a rodada), no `manto-backend`:
+Para rodar o comando da galeria mesmo assim, com a **fila de push vazia** (um deploy troca o contêiner e mataria a rodada), no `manto-backend`:
 
 ```bash
 cd /opt/render/project/src && MANTO_SEM_THREADS=1 PYTHONPATH=$PWD .venv/bin/flask warm-thumbnails
