@@ -261,6 +261,23 @@ export function AdminCatalogoFormPage() {
           <CardTitle>Categorias</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          {/* Sem isto, uma falha deixava o cartão vazio e mudo — e na janela de deploy (bundle
+              novo com backend antigo) o GET de categorias responde 405. As categorias MARCADAS
+              não se perdem: vêm do detalhe do produto, não desta lista. */}
+          {categoriesQuery.isError && (
+            <p className="flex flex-wrap items-center gap-2 text-sm text-red" role="alert">
+              Não foi possível carregar as categorias.
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                loading={categoriesQuery.isFetching}
+                onClick={() => categoriesQuery.refetch()}
+              >
+                Tentar de novo
+              </Button>
+            </p>
+          )}
           {categoriesQuery.data && (
             <div className="flex flex-wrap gap-1.5">
               {categoriesQuery.data.categories.map((c) => (

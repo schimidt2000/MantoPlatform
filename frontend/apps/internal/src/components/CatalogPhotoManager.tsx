@@ -343,19 +343,15 @@ export function CatalogPhotoManager({
                     index === 0 ? "border-gold ring-1 ring-gold" : "border-line",
                   )}
                 >
-                  {/* 320 e não 128: a célula da grade é bem maior que as miniaturas de lista.
-                      Só a foto JÁ SALVA tem variante — a recém-escolhida é um blob local, que
-                      não passa pelo Flask. Continua `<img>` (e não `<Foto>`) porque o arraste
-                      por ponteiro depende de `draggable={false}`, que `FotoProps` não repassa. */}
+                  {/* ORIGINAL de propósito, e não a variante de 320: o cache de produção só tem
+                      320 das CAPAS, e esta grade mostra todas as fotos do produto de uma vez — a
+                      primeira abertura geraria de 9 a 17 variantes ao mesmo tempo dentro de
+                      threads do gunicorn, a assinatura do incidente da 263. É um produto por vez,
+                      não 458; o problema que a 300 resolve não mora aqui (revisão pré-deploy). */}
                   <img
-                    src={
-                      slot.kind === "existing"
-                        ? assetUrl(slot.url, { largura: 320 })
-                        : slot.previewUrl
-                    }
+                    src={slot.kind === "existing" ? assetUrl(slot.url) : slot.previewUrl}
                     alt=""
                     draggable={false}
-                    loading="lazy"
                     className="pointer-events-none h-full w-full object-cover"
                   />
 

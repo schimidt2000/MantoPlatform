@@ -40,9 +40,11 @@ def _item_summary(item: CatalogItem) -> dict:
         "slug": item.slug,
         "is_active": item.is_active,
         "cover_url": item.cover_image.url if item.cover_image else None,
-        # Em ordem alfabética: `categories` não declara `order_by`, então a ordem era a que o
-        # banco entregasse — estável por acaso, não por contrato (feature 300).
-        "category_names": sorted(c.name for c in item.categories),
+        # Por `id`, explícito: `categories` não declara `order_by`, e com o carregamento antecipado
+        # a ordem deixaria de ser a que o banco entregava item a item. Medido no espelho: por `id`
+        # reproduz EXATAMENTE a ordem que a produção servia (0 de 458 produtos mudam) — a
+        # alfabética mudaria 123 (feature 300, revisão pré-deploy).
+        "category_names": [c.name for c in sorted(item.categories, key=lambda c: c.id)],
         # Cobertura de fichas do elenco — o "termômetro" do gerenciador.
         "characters_total": len(characters),
         "characters_com_ficha": sum(1 for c in characters if c.figurino_sheet_id),

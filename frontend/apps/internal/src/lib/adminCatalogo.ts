@@ -44,7 +44,10 @@ export interface CatalogListResponse {
   categories: CatalogCategoryOption[];
 }
 
-export function useAdminCatalogo(filters: { q?: string; categoria?: string; status?: string }) {
+export function useAdminCatalogo(
+  filters: { q?: string; categoria?: string; status?: string },
+  opcoes: { manterAnterior?: boolean } = {},
+) {
   const params = new URLSearchParams();
   if (filters.q) params.set("q", filters.q);
   if (filters.categoria) params.set("categoria", filters.categoria);
@@ -54,8 +57,9 @@ export function useAdminCatalogo(filters: { q?: string; categoria?: string; stat
     queryFn: () => apiFetch<CatalogListResponse>(`/api/admin/catalogo?${params.toString()}`),
     // Segura a lista anterior enquanto a nova não chega: cada filtro ou letra digitada é uma
     // chave nova, e sem isto a tela pisca esqueleto a cada refinamento (mesmo padrão de
-    // `agenda.ts` e `formulariosAdmin.ts`).
-    placeholderData: keepPreviousData,
+    // `agenda.ts` e `formulariosAdmin.ts`). Quem usa a lista como FONTE de opções — e não como
+    // o que está sendo filtrado — desliga: ali uma lista velha oferece a escolha errada.
+    placeholderData: opcoes.manterAnterior === false ? undefined : keepPreviousData,
   });
 }
 

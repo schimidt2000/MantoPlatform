@@ -47,8 +47,12 @@ export function AdminCatalogoListPage() {
 
   // No modo Personagens a busca é client-side: a lista de temas precisa vir INTEIRA, porque é
   // dela que sai o "usar em outro tema" — filtrar no servidor esconderia o tema de destino.
+  // Sem "manter a anterior" no modo Personagens: ali a lista é FONTE das opções do "usar em outro
+  // tema", e receber por um instante a lista filtrada dos Cards oferecia opções que trocavam no
+  // lugar quando a lista inteira chegava (revisão pré-deploy da 300).
   const query = useAdminCatalogo(
     viewMode === "personagens" ? {} : { q: buscaComPausa, categoria, status },
+    { manterAnterior: viewMode !== "personagens" },
   );
   const toggleActive = useToggleCatalogItemActive();
   const deleteItem = useDeleteCatalogItem();
@@ -115,6 +119,11 @@ export function AdminCatalogoListPage() {
   }
 
   const items: CatalogListItem[] = query.data?.items ?? [];
+  // Enquanto o que está na tela ainda é o filtro ANTERIOR (placeholder, ou a pausa da busca que
+  // ainda não disparou), a lista não pode dizer "nenhum produto" nem contar fichas como se fosse a
+  // atual: esmaece e avisa (revisão pré-deploy da 300).
+  const atualizando =
+    query.isPlaceholderData || (viewMode !== "personagens" && buscaComPausa !== q.trim());
 
   // Termômetro de cobertura de fichas (feature 209): soma sobre o recorte filtrado atual.
   const fichaTotais = items.reduce(
@@ -213,12 +222,12 @@ export function AdminCatalogoListPage() {
         </div>
       )}
 
-      {query.data && items.length === 0 && viewMode !== "personagens" && (
+      {query.data && !atualizando && items.length === 0 && viewMode !== "personagens" && (
         <p className="text-sm text-muted">Nenhum produto encontrado.</p>
       )}
 
       {/* No modo Personagens quem conta as fichas é o termômetro da própria visão. */}
-      {query.data && viewMode !== "personagens" && fichaTotais.personagens > 0 && (
+      {query.data && !atualizando && viewMode !== "personagens" && fichaTotais.personagens > 0 && (
         <p className="text-sm text-muted">
           👗 Fichas de figurino do elenco:{" "}
           <span className="font-semibold text-ink">
@@ -233,36 +242,53 @@ export function AdminCatalogoListPage() {
 
       {viewMode === "personagens" && <CatalogPersonagensView temas={items} busca={q} />}
 
-      {items.length > 0 && viewMode === "cards" && (
-        <CatalogCardGrid
-          items={items}
-          selectedIds={selectedTemaIds}
-          onToggleSelect={toggleTemaSelect}
-          onToggleActive={(item) => toggleActive.mutate(item.id)}
-          onDelete={(item) => {
-            if (window.confirm(`Excluir "${item.name}" definitivamente?`)) {
-              deleteItem.mutate(item.id);
-            }
-          }}
-        />
+      {atualizando && items.length > 0 && viewMode !== "personagens" && (
+        <p className="text-xs text-muted" role="status">
+          Atualizando…
+        </p>
       )}
 
-      {items.length > 0 && viewMode === "tree" && (
-        <CatalogTreeView
-          items={items}
-          selectedCharacterIds={selectedCharacterIds}
-          onToggleCharacterSelect={toggleCharacterSelect}
-          onToggleCharacterActive={(character) =>
-            toggleCharacterActive.mutate({ id: character.id, isActive: !character.is_active })
-          }
-          onDeleteCharacter={(character) => {
-            if (window.confirm(`Excluir "${character.name}" definitivamente?`)) {
-              deleteCharacter.mutate(character.id);
+      {/* Esmaecida e sem clique enquanto mostra o filtro anterior: um clique aqui agiria sobre um
+          produto que talvez nem esteja no resultado novo. */}
+      <div
+        aria-busy={atualizando}
+        className={
+          atualizando
+            ? "pointer-events-none opacity-60 motion-safe:transition-opacity"
+            : "motion-safe:transition-opacity"
+        }
+      >
+        {items.length > 0 && viewMode === "cards" && (
+          <CatalogCardGrid
+            items={items}
+            selectedIds={selectedTemaIds}
+            onToggleSelect={toggleTemaSelect}
+            onToggleActive={(item) => toggleActive.mutate(item.id)}
+            onDelete={(item) => {
+              if (window.confirm(`Excluir "${item.name}" definitivamente?`)) {
+                deleteItem.mutate(item.id);
+              }
+            }}
+          />
+        )}
+
+        {items.length > 0 && viewMode === "tree" && (
+          <CatalogTreeView
+            items={items}
+            selectedCharacterIds={selectedCharacterIds}
+            onToggleCharacterSelect={toggleCharacterSelect}
+            onToggleCharacterActive={(character) =>
+              toggleCharacterActive.mutate({ id: character.id, isActive: !character.is_active })
             }
-          }}
-          onQuickLinkCharacter={setLinkingCharacter}
-        />
-      )}
+            onDeleteCharacter={(character) => {
+              if (window.confirm(`Excluir "${character.name}" definitivamente?`)) {
+                deleteCharacter.mutate(character.id);
+              }
+            }}
+            onQuickLinkCharacter={setLinkingCharacter}
+          />
+        )}
+      </div>
 
       <CatalogBulkActionBar
         count={viewMode === "cards" ? selectedTemaIds.size : selectedCharacterIds.size}

@@ -54,8 +54,11 @@ const EMPTY_DRAFT: DraftState = { name: "", videoUrl: "", figurinoSheetId: null,
  * quem organiza o catálogo não tinha como saber a diferença (caso Cinderella: a versão
  * Desenho é um tema com elenco próprio e sumia da busca sem explicação). O backend valida
  * as mesmas regras de novo.
+ *
+ * Exportado para a conferência de tela da feature 300: a lógica de tempo desta busca — pausa ×
+ * lista anterior × ida ao servidor — só se prova rodando, e o painel inteiro exige sessão.
  */
-function CatalogItemSearch({
+export function CatalogItemSearch({
   temaId,
   actionLabel,
   pending,
@@ -95,6 +98,14 @@ function CatalogItemSearch({
     [list.data, temaId],
   );
 
+  // Linha com botão só quando ela corresponde ao que está digitado AGORA. Sem esta guarda, a
+  // combinação pausa + "manter a lista anterior" mostrava, com o botão Adotar/Vincular ativo,
+  // os 8 primeiros itens do catálogo SEM FILTRO (enquanto a pausa não dispara) ou os resultados
+  // da busca ANTERIOR (enquanto a nova não chega) — e a lista trocava as linhas no lugar, então o
+  // clique mirado num item podia cair em outro (revisão pré-deploy da 300). Não basta olhar
+  // `isPlaceholderData`: o catálogo sem filtro é dado real, não placeholder.
+  const buscando = buscaComPausa !== query.trim() || list.isPlaceholderData || list.isLoading;
+
   return (
     <div className="space-y-2">
       <input
@@ -106,7 +117,7 @@ function CatalogItemSearch({
       />
       {query.trim().length >= 2 && (
         <ul className="max-h-56 divide-y divide-line overflow-y-auto rounded-md border border-line">
-          {results.map(({ item, blockedReason }) => (
+          {!buscando && !list.isError && results.map(({ item, blockedReason }) => (
             <li key={item.id} className="flex items-center gap-2 p-2">
               <span
                 className={cn(
@@ -142,7 +153,13 @@ function CatalogItemSearch({
               )}
             </li>
           ))}
-          {results.length === 0 && !list.isLoading && (
+          {buscando && <li className="p-2 text-xs text-muted">Buscando…</li>}
+          {!buscando && list.isError && (
+            <li className="p-2 text-xs text-red" role="alert">
+              Não foi possível buscar agora. Tente de novo em instantes.
+            </li>
+          )}
+          {!buscando && !list.isError && results.length === 0 && (
             <li className="p-2 text-xs text-muted">Nenhum item encontrado para “{query}”.</li>
           )}
         </ul>

@@ -69,9 +69,10 @@ def _item_summary(item: CatalogItem) -> dict[str, Any]:
         "name": item.name,
         "slug": item.slug,
         "cover_image_url": cover.url if cover else None,
-        # Alfabética por contrato, não por acaso: `categories` não tem `order_by` e a ordem
-        # dependia do plano de consulta (feature 300).
-        "categories": sorted(c.name for c in item.categories),
+        # Por `id`, explícito — reproduz exatamente a ordem que a produção servia (0 de 458 mudam;
+        # a alfabética mudaria 123). Aqui importa mais que em qualquer lugar: o card da vitrine
+        # mostra só as 3 primeiras, então a ordem decide QUAIS etiquetas a cliente vê (feature 300).
+        "categories": [c.name for c in sorted(item.categories, key=lambda c: c.id)],
         # Tags entram na busca client-side da vitrine (feature 209): é o que faz "alice"
         # achar o Coelho Branco — as tags já carregam esse vocabulário.
         "tags": item.tags_list,
