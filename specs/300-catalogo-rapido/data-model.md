@@ -71,12 +71,11 @@ Não é preciso reescrever o laço nem mudar a forma do resultado.
 
 ## Invariantes que a feature preserva
 
-1. **A resposta não muda.** Mesmas chaves, mesmos valores, mesmos nulos — em todos os endpoints
-   listados. É o que o verify compara contra uma referência capturada antes da mudança.
-   **Exceção deliberada (FR-003a):** duas ordenações que *nunca foram garantidas* passam a ser
-   explícitas — nomes de categoria em ordem alfabética (`categories` não declara `order_by`) e
-   personagens empatados em `position` desempatando pelo `id`. 115 produtos mudaram de ordem, com
-   o conteúdo idêntico. Detalhe em `contracts/catalogo-listagens.md`.
+1. **A resposta não muda.** Mesmas chaves, mesmos valores, mesma ordem, mesmos nulos — em todos os
+   endpoints listados. É o que o verify compara contra uma referência capturada **no código da
+   `main`**. As duas ordenações que dependiam do plano de consulta (nomes de categoria, sem
+   `order_by`, e personagens empatados em `position`) são **explícitas por `id`**, o que reproduz a
+   produção exatamente: 0 de 458 produtos mudam. Detalhe em `contracts/catalogo-listagens.md`.
 2. **O tipo de um item continua sendo a presença de elenco** (`kind` = tema/avulso), derivado em
    serialização, não em coluna.
 3. **A capa continua sendo a primeira foto** (`position` 0) — a ordem de `images` é significativa e

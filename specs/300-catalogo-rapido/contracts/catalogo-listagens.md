@@ -4,26 +4,22 @@
 
 Esta feature altera **como** os dados são buscados, nunca **o que** é devolvido. Para os cinco
 endpoints abaixo, a resposta depois da mudança é **byte a byte idêntica** à de antes: mesmas
-chaves, mesmos valores, mesmos nulos.
+chaves, mesmos valores, mesma ordem, mesmos nulos.
 
 Isso não é uma promessa de comentário — é o critério do cenário 1 e do cenário 3 do
 `verify_300.py`, que captura a resposta de referência **antes** da alteração e compara campo a
 campo depois.
 
-### A única exceção, deliberada (FR-003a)
+### A ordem é explícita — e igual à da produção (FR-003a)
 
-**Duas ordenações mudaram**, porque nunca foram garantidas — dependiam do plano de consulta do
-banco, não de regra nenhuma:
+Duas ordenações dependiam do plano de consulta do banco, e o carregamento antecipado as mudaria:
+os nomes de categoria (`categories` não declara `order_by`) e os personagens empatados em
+`position`. As duas passaram a ser **explícitas por `id`**, o que reproduz **exatamente** a ordem
+que a produção servia: medido no código da `main` contra o mesmo espelho, **0 de 458 produtos**
+mudam. Não há exceção — a resposta é idêntica, e agora por contrato, não por acaso.
 
-1. **`category_names` / `categories` sai em ordem alfabética.** O relationship `categories` não
-   declara `order_by`; a ordem era a que o banco entregasse. **115 dos 458 produtos** mudaram de
-   ordem no espelho — todos com **exatamente o mesmo conteúdo**.
-2. **Personagens com o mesmo `position` desempatam pelo `id`.** O `sorted` do Python é estável e
-   preservava a ordem de chegada do banco, que muda com o carregamento antecipado. Um par mudou.
-
-Nenhum dado entra ou sai; nenhuma chave muda. Foi uma troca consciente de *ordem estável por
-acaso* por *ordem estável por contrato* — a primeira quebraria sozinha no dia em que o Postgres
-mudasse de plano, e ninguém saberia por quê.
+*(A primeira versão ordenava alfabeticamente, e a revisão pré-deploy pegou antes de publicar: 123
+produtos mudariam, e o card da vitrine mostra só as 3 primeiras etiquetas.)*
 
 | Endpoint | Gate | O que garante |
 |---|---|---|
@@ -33,10 +29,11 @@ mudasse de plano, e ninguém saberia por quê.
 | `GET /api/catalogo/categorias` | público | `categories[]`, idêntico |
 | `GET /api/catalogo/categoria/<slug>` | público | `category{}` + `items[]` (+ `og_image` sob `?og=1`), idênticos |
 
-**Consequência para o frontend**: nenhum tipo TypeScript muda, nenhuma tela precisa tratar campo
-novo, e não existe a janela de incompatibilidade entre backend e bundle que a constituição alerta
-(campo novo opcional no React). Backend e frontend desta feature são independentes e podem ser
-conferidos em qualquer ordem.
+**Consequência para o frontend**: nenhum tipo TypeScript muda e nenhuma tela precisa tratar campo
+novo. **A janela de incompatibilidade existe, porém, para o endpoint novo**: com o bundle novo e o
+backend antigo (o provável, porque o Node sobe antes do Python), `GET /api/admin/catalogo/categorias`
+responde 405 por cerca de um minuto. O formulário mostra o erro com "Tentar de novo", e as
+categorias marcadas não se perdem — vêm do detalhe do produto.
 
 ## O único acréscimo: categorias sem o catálogo junto
 

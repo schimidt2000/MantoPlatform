@@ -1491,8 +1491,9 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
     que está fora da tela só é pedido ao rolar. **As duas buscas que consultam o servidor** — a da
     própria listagem e a do painel de personagens — esperam 300 ms antes de consultar, e a lista
     deixa de piscar esqueleto a cada letra; a busca da visão Personagens é client-side e segue
-    instantânea. **A ordem dos nomes de categoria no card agora é alfabética**: antes vinha na
-    ordem que o banco entregasse, que não era garantida.
+    instantânea. A ordem dos nomes de categoria **não muda** — é a mesma de sempre, agora fixada
+    por `id` em vez de depender do plano de consulta do banco. Enquanto a busca ou o filtro ainda
+    não responderam, a grade fica esmaecida com "Atualizando…" em vez de dizer "nenhum produto".
 - **API**: `GET /api/admin/catalogo` (+ `/tags`, `/personagens`, **`/categorias`** — feature 300,
   só as categorias para o seletor do formulário de edição) ·
   `POST /api/admin/catalogo/<id>/personagens/reaproveitar` ·

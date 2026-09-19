@@ -99,13 +99,13 @@ de produtos**. O teto de 10 é a aferição prática disso.
 Conferido junto: as respostas seguem **idênticas** à referência, hash a hash — inclusive a da visão
 Personagens, que caiu de 474 para 6 consultas com o mesmo sha256.
 
-## 5. Depois do deploy (obrigatório)
+## 5. Depois do deploy
 
-O cache de miniaturas está frio (9 arquivos gerados em 128 px). Sem aquecer, a primeira pessoa a
-abrir a tela paga a geração de centenas de miniaturas dentro de uma thread do gunicorn — a
-assinatura exata do incidente da feature 263.
+**O aquecimento é opcional.** A premissa original ("cache frio") foi medida no espelho local; na
+produção, conferido por SSH em 18/09/2026, o cache já tinha 2.628 variantes de 128 px para 2.715
+originais (97%) e ~460 em cada largura de capa. As que faltam geram-se sob demanda, sem risco.
 
-Com a **fila de push vazia** (um deploy troca o contêiner e mataria a rodada), no `manto-backend`:
+Se quiser rodar mesmo assim, com a **fila de push vazia** (um deploy troca o contêiner e mataria a rodada), no `manto-backend`:
 
 ```bash
 cd /opt/render/project/src && MANTO_SEM_THREADS=1 PYTHONPATH=$PWD .venv/bin/flask warm-thumbnails

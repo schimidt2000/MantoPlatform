@@ -162,7 +162,9 @@ de fora passam a pedir miniatura.
       de 300 ms antes de consultar (mesmo intervalo do `AgruparEventosDialog`), mantendo o mínimo de
       2 caracteres de hoje, com `placeholderData: keepPreviousData` para a lista não piscar
       (padrão de `agenda.ts` e `formulariosAdmin.ts`).
-- [ ] T022 [US5] **PENDENTE — não conferido na tela.** O campo vive dentro do painel de
+- [X] T022 [US5] *(conferido em 18/09 no componente real `CatalogItemSearch`, sem sessão: pedidos
+      ao servidor `""`, `"co"`, `"coe"` — uma consulta por palavra, não por tecla; ver T040)*
+      **Estava PENDENTE — não conferido na tela.** O campo vive dentro do painel de
       personagens, que exige sessão de SUPERADMIN; o andaime desta feature renderiza só as duas
       grades, que recebem dados por prop. A pausa foi conferida por leitura de código (`setTimeout`
       de 300 ms alimentando a chave da query), **não na tela** — e não registro como conferido o
@@ -260,7 +262,7 @@ severidade. Nenhuma violação da constituição.
       cobre no cenário 6 dela)* Cobrir a corrida de geração da mesma miniatura por dois pedidos simultâneos — a spec diz
       que esta feature "não pode reintroduzir" o defeito que a 270 corrigiu, e não há guarda
       nenhuma provando isso — per Spec §Casos de borda (missing)
-- [ ] T035 Conferir na tela a pausa da busca do painel de personagens (uma requisição por palavra,
+- [X] T035 *(conferido em 18/09 — ver T040)* Conferir na tela a pausa da busca do painel de personagens (uma requisição por palavra,
       não uma por tecla), com sessão de SUPERADMIN — o andaime desta feature só renderiza as
       grades — per T022 (partial)
 - [X] T036 Remover de `spec.md` §Docs a atualizar a condicional "`docs/01` §5 — só se o contrato de
@@ -289,3 +291,39 @@ que um implementador futuro lê primeiro. Nenhuma violação da constituição.
       busca da tela de listagem (T031), e o FR-010 nomeia só a busca do painel de personagens; o
       `docs/02` repete o recorte antigo. Ampliar o FR-010 e a linha do `docs/02` — per FR-010
       (unrequested)
+
+---
+
+## Phase 12: Revisão pré-deploy (18/09/2026)
+
+Revisão adversarial antes de publicar — cinco revisores, um por dimensão de risco; três céticos
+por achado, com lentes distintas; um crítico de completude. **9 achados, os 9 confirmados, nenhum
+derrubado.** Tratamento de cada um:
+
+- [X] T040 Busca Adotar/Vincular mostrava linhas de OUTRA busca, ou do catálogo sem filtro, com o
+      botão ativo — e trocava as linhas no lugar, então o clique mirado num item caía em outro.
+      Estado `buscando` (pausa não disparada, lista anterior ou carregando): botão só quando a
+      linha corresponde ao texto digitado agora; mais estado de erro. **Provado na tela com o
+      componente real**, sem sessão (`fetch` falso, atraso realista): 72 amostras, **0
+      violações**; pedidos ao servidor `""`, `"co"`, `"coe"` — per revisão #1 (high)
+- [X] T041 Nomes de categoria ordenados por `id`, não alfabético: medido no código da `main`, por
+      `id` reproduz a produção em **458 de 458** — a alfabética mudaria 123 produtos, e o card da
+      vitrine mostra só as 3 primeiras etiquetas. FR-003a revisto; `referencia_300.json`
+      recapturada **no código da `main`** (a anterior já tinha a ordem nova); verify 8/8 contra
+      ela — per revisão #2 e #4
+- [X] T042 Grade de fotos da edição volta a pedir o original: o cache de produção só tem 320 das
+      capas, e a primeira abertura geraria de 9 a 17 variantes simultâneas no gunicorn — per
+      revisão #3 e crítico
+- [X] T043 Listagem esmaecida, sem clique e com "Atualizando…" enquanto mostra o filtro anterior;
+      sem "Nenhum produto encontrado" nem termômetro de fichas falsos na janela — per revisão #6
+- [X] T044 Modo Personagens sem "manter a lista anterior" (`useAdminCatalogo` ganhou a opção
+      `manterAnterior`): ali a lista é FONTE das opções do "usar em outro tema" — per revisão #7
+- [X] T045 Formulário de edição com erro visível e "Tentar de novo" nas categorias (Princípio V).
+      A janela de 405 do deploy fica documentada: sem perda de dado, porque as categorias marcadas
+      vêm do detalhe do produto — per revisão #5, #8 e #9
+- [X] T046 *(varredura por "alfabétic", "frio", "9 arquivos", "nada quebra" e "não existe a janela"
+      na spec e nos `docs/`: toda ocorrência restante está em contexto de correção ou é de outra
+      feature)* Corrigir a documentação que ficou falsa: a premissa "cache frio" era do espelho local
+      (em produção, 97% quente — aquecimento opcional), e a ordem alfabética e "a janela de deploy
+      não quebra nada" precisam sair de spec, contrato, data-model, research, quickstart,
+      `docs/02`, `docs/03` e `docs/04`; dívida 60 registrada — per crítico

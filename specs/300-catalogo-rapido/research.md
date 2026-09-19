@@ -122,6 +122,13 @@ em que requisição presa segurando thread derrubou a produção. Um deploy troc
 a rodada, por isso a exigência de fila vazia. O comando só grava arquivo de imagem em disco; não
 escreve no banco.
 
+**Correção (18/09/2026, revisão pré-deploy):** a premissa desta decisão estava errada. Os "9
+arquivos" foram medidos no **espelho local** e generalizados para a produção sem medir. Conferido
+por SSH, somente leitura: a produção tinha **2.628 variantes de 128 px para 2.715 originais (97%)**
+e ~460 em cada largura de capa — o `warm-thumbnails` da 270 já tinha aquecido. O risco do incidente
+da 263 não existe lá, e o aquecimento vira higiene opcional. A lição fica: número de cache do
+espelho não diz nada sobre o disco da produção, que tem vida própria.
+
 ---
 
 ## R7 — O critério do `verify_300.py`

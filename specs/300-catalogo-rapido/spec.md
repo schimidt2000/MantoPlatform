@@ -207,9 +207,12 @@ comportamento de navegador (quantas requisições o campo dispara), que o verify
   imagem. A feature 270 já corrigiu a corrida de escrita (arquivo temporário por thread, e quem
   perde a corrida recebe a miniatura de quem ganhou) — esta feature **não pode reintroduzir** esse
   defeito.
-- **Durante a janela do deploy**, com bundle antigo e servidor novo (ou o contrário): nada quebra. O
-  caminho do arquivo original e o da miniatura **já existem os dois em produção** desde a feature
-  270, então qualquer combinação de versões pede um endereço que responde.
+- **Durante a janela do deploy**, com bundle antigo e servidor novo (ou o contrário): as imagens não
+  quebram — o caminho do original e o da miniatura **já existem os dois em produção** desde a 270. A
+  **única** coisa que quebra, por cerca de um minuto, é o endpoint novo: com o bundle novo e o
+  backend antigo, `GET /api/admin/catalogo/categorias` responde **405** (o caminho só existia para
+  `POST`). O formulário de edição mostra "Não foi possível carregar as categorias" com "Tentar de
+  novo", e **as categorias já marcadas não se perdem** — vêm do detalhe do produto, não desta lista.
 - **Texto alternativo das imagens**: permanece como está hoje (decorativo nas miniaturas de lista,
   onde o nome já aparece ao lado em texto). Esta feature não altera acessibilidade.
 
@@ -227,18 +230,13 @@ comportamento de navegador (quantas requisições o campo dispara), que o verify
   mesmos valores, mesma ordem, mesmos nulos. Nenhum endpoint existente muda de forma. *(O endpoint
   novo do FR-009 não conflita com isto: ele acrescenta um caminho, sem alterar nenhum dos que já
   existem.)*
-- **FR-003a** *(exceção deliberada, descoberta na implementação)*: duas ordenações **não eram
-  garantidas** e passam a ser explícitas, porque dependiam do plano de consulta do banco e não de
-  regra nenhuma:
-  1. os nomes de categoria de um produto passam a sair em **ordem alfabética** (antes vinham na
-     ordem que o banco entregasse — `categories` não declara ordenação);
-  2. dois personagens com o **mesmo `position`** passam a desempatar pelo `id` (antes ficavam na
-     ordem de chegada do banco).
-
-  Medido no espelho: **115 produtos** mudam a ordem dos nomes de categoria e **um** muda a ordem de
-  dois personagens empatados — em todos, **o conteúdo é o mesmo**, só a ordem muda. Nenhum dado
-  entra ou sai. É uma troca consciente: ordem estável por contrato no lugar de ordem estável por
-  acaso, que quebraria sozinha no dia em que o banco mudasse de plano.
+- **FR-003a** *(revisto na revisão pré-deploy de 18/09/2026)*: as duas ordenações que dependiam do
+  plano de consulta passam a ser **explícitas e iguais às da produção** — nomes de categoria por
+  `id`, e personagens empatados em `position` desempatando pelo `id`. Medido no código da `main`
+  contra o mesmo espelho: **0 de 458 produtos** mudam de ordem, e a resposta é byte a byte idêntica
+  à que a produção servia. *(A primeira versão ordenava os nomes de categoria alfabeticamente, e a
+  revisão adversarial pegou o custo antes do deploy: 123 produtos mudariam — e como o card da
+  vitrine mostra só as 3 primeiras etiquetas, a cliente veria etiquetas diferentes.)*
 - **FR-004**: Toda imagem cuja **maior dimensão renderizada seja de até 64 pixels** nas listas do
   gerenciador DEVE pedir a miniatura de 128 px — que cobre telas de densidade 2× —, nunca o arquivo
   original.
@@ -342,13 +340,14 @@ cache da rota de miniatura **não muda**), `docs/02` (entrada de `/admin/catalog
 
 ## Premissas
 
-- **O aquecimento das miniaturas roda logo depois do deploy, por esta sessão, via SSH** (decisão do
-  dono, 16/09/2026). O cache está frio (9 arquivos gerados em 128px). Sem `flask warm-thumbnails`, a
-  primeira pessoa a abrir a tela paga a geração de centenas de miniaturas dentro de uma thread do
-  servidor — a assinatura exata do incidente da feature 263. O comando já existe e já cobre as
-  larguras necessárias; roda no `manto-backend` com `MANTO_SEM_THREADS=1` e **sem push na fila**,
-  porque um deploy troca o contêiner e mataria a rodada. Ele só grava arquivo de imagem em disco —
-  não escreve no banco.
+- **O cache de miniaturas da PRODUÇÃO já está quente — o aquecimento virou higiene opcional**
+  (corrigido em 18/09/2026). A premissa original ("cache frio, 9 arquivos") foi medida no **espelho
+  local** e generalizada sem medir a produção. Conferido por SSH, somente leitura: **2.628
+  variantes de 128 px para 2.715 originais (97%)** e ~460 em cada largura de capa — o
+  `warm-thumbnails` da 270 já tinha feito o serviço. O risco do incidente da 263 (centenas de
+  gerações numa thread do gunicorn) **não existe lá**; as ~87 que faltam, parte delas de fotos
+  perdidas na migração do Railway, geram-se sob demanda sem custo relevante. Se rodar, é por SSH no
+  `manto-backend`, com `MANTO_SEM_THREADS=1` e sem push na fila.
 - **A largura de 128px basta para as caixas do gerenciador** (32 a 64 pixels), cobrindo telas de
   alta densidade. A vitrine usa as larguras que a feature 270 já definiu para cada grade.
 - **Nada no banco muda**: sem migration, sem coluna nova, sem campo novo na resposta.
