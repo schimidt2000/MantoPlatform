@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 
 /** Resumo de um Personagem dentro da listagem de Temas (feature 186) — sem precisar do detalhe. */
@@ -44,7 +44,10 @@ export interface CatalogListResponse {
   categories: CatalogCategoryOption[];
 }
 
-export function useAdminCatalogo(filters: { q?: string; categoria?: string; status?: string }) {
+export function useAdminCatalogo(
+  filters: { q?: string; categoria?: string; status?: string },
+  opcoes: { manterAnterior?: boolean } = {},
+) {
   const params = new URLSearchParams();
   if (filters.q) params.set("q", filters.q);
   if (filters.categoria) params.set("categoria", filters.categoria);
@@ -52,6 +55,26 @@ export function useAdminCatalogo(filters: { q?: string; categoria?: string; stat
   return useQuery<CatalogListResponse>({
     queryKey: ["admin-catalogo", filters],
     queryFn: () => apiFetch<CatalogListResponse>(`/api/admin/catalogo?${params.toString()}`),
+    // Segura a lista anterior enquanto a nova não chega: cada filtro ou letra digitada é uma
+    // chave nova, e sem isto a tela pisca esqueleto a cada refinamento (mesmo padrão de
+    // `agenda.ts` e `formulariosAdmin.ts`). Quem usa a lista como FONTE de opções — e não como
+    // o que está sendo filtrado — desliga: ali uma lista velha oferece a escolha errada.
+    placeholderData: opcoes.manterAnterior === false ? undefined : keepPreviousData,
+  });
+}
+
+/**
+ * Só as categorias (feature 300). O formulário de edição usava `useAdminCatalogo({})` para isto —
+ * baixava os 458 produtos com todo o elenco, 199 KB, para desenhar 39 opções.
+ *
+ * Sob o prefixo `["admin-catalogo", …]` de propósito: as mutações de categoria já invalidam esse
+ * prefixo, então o seletor acompanha sem precisar ser lembrado em cada uma.
+ */
+export function useAdminCatalogoCategorias() {
+  return useQuery<{ categories: CatalogCategoryOption[] }>({
+    queryKey: ["admin-catalogo", "categorias"],
+    queryFn: () => apiFetch<{ categories: CatalogCategoryOption[] }>("/api/admin/catalogo/categorias"),
+    staleTime: 5 * 60 * 1000,
   });
 }
 

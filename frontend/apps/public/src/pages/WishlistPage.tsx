@@ -65,8 +65,10 @@ export function WishlistPage() {
               >
                 <div className="h-16 w-16 flex-none overflow-hidden rounded-md bg-bg-alt">
                   {item.cover && (
+                    // Quadrado de 64px baixando o arquivo inteiro — é literalmente o desperdício
+                    // de ~380× que motivou a feature 270, e que ficou de fora dela.
                     <img
-                      src={assetUrl(item.cover)}
+                      src={assetUrl(item.cover, { largura: 128 })}
                       alt={item.name}
                       loading="lazy"
                       className="h-full w-full object-cover"

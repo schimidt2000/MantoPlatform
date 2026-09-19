@@ -105,6 +105,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **300-catalogo-rapido** | "Clico em Gerenciar catálogo e demora muito para carregar." Eram **duas** causas independentes, e o tamanho da resposta (199 KB) não era nenhuma delas: (1) **uma consulta ao banco por produto, várias vezes** — nenhum ponto do caminho do catálogo tinha carregamento antecipado, e `cover_image` é property sobre `images[0]`, então pedir a capa carrega a coleção inteira de fotos: 1.846 consultas no gerenciador (2.320 na aba Personagens), 917 na vitrine, 492 na grade de categorias; (2) **458 capas em tamanho original dentro de caixas de 32 a 64 px** — 95,4 MB pedidos de uma vez, sem carregamento sob demanda, porque a decisão 7 da 270 deixara o ERP interno fora das miniaturas. `selectinload` no ponto que precisa (não no `models.py`), `assetUrl(url, { largura })` nos 8 pontos de render do gerenciador e nas 2 lacunas que a 270 deixou na vitrine (grade de categorias e lista de desejos), `<Foto>` com `loading="lazy"`, `GET /api/admin/catalogo/categorias` (a edição baixava 199 KB para desenhar 39 opções) e pausa de 300 ms nas duas buscas que consultam o servidor (a da listagem e a do elenco). **Sem paginação — medido que não é preciso.** Achado de passagem: a ordem de `category_names` e de personagens empatados nunca foi garantida; virou explícita **por `id`, o que reproduz a produção em 458 de 458**. A revisão pré-deploy (9 achados, todos confirmados) pegou que a primeira escolha — ordem alfabética — trocaria as etiquetas de 123 cards da vitrine, e que a busca Adotar/Vincular mostrava linhas de outra busca com o botão ativo | 2026-09-16 | `—` | (aqui) | — |
 | **299-sem-valor-cobrancas** | A Home cobrava cada evento sozinho (o grupo 344 aparecia devendo R$ 2.430 pagos num outro evento do grupo), escondia 25 vendas com metade paga até a véspera, acusava dívida por centavos e não mostrava as 6 vendas sem valor. Núcleo único `cobranca_ops` (Home + página do evento): o grupo é uma venda só, vencimento data combinada > parcela > 2 dias antes (nunca antes da venda), folga de R$ 1,00, sinal pendente só sem data combinada e sem cronograma. Dois painéis, "Cobranças" e "Sem valor", com selos em pt-BR, cards e total só com o que é para agir e painel que nunca some em silêncio. "Valor a definir" no cadastro no lugar do R$ 0,01 (recusado também na aba Comercial); "Pôr o valor" em 2 cliques; comissão tardia no mês do valor | 2026-09-15 | `—` | (aqui) | — |
 | **298-formulario-vira-evento** | A Home dizia "1.347 formulários sem evento" contando o histórico importado do WhatsForm; desde 01/06 eram 36, e 7 deles já tinham o evento da cliente na agenda. Corte pela CHEGADA do formulário (meia-noite de SP da `release_date`; `created_at` é UTC ingênuo); todo formulário desde o corte tem destino — evento, encerrado com motivo ou a lista da Home ("Formulários sem evento na agenda", dois grupos, cor por urgência dita também em palavras, uma linha por telefone com "Este é o que vale", sugestão de evento a ±3 dias com descarte definitivo). Núcleo ÚNICO de vínculo (três caminhos gravavam `event_id` à mão; `link_event` sobrescrevia), cliente nos dois sentidos sem trocar ninguém, aviso do sino apagado para todos, 409 "já tem destino" em todos os caminhos — no `POST /api/events` ANTES do Google, com `FOR UPDATE`. Cadastro de evento preenchido pelo formulário nos dois vocabulários (site e WhatsForm) com selo "do formulário", alertas no campo e Salvar nunca desabilitado. Dois comandos de correção única pós-deploy | 2026-09-11 | `e5a1c7d93b20` | (aqui) | — |
 | **263b-hotfix-proxy-vazamento-sockets** | O `manto-frontend` morreu por memória duas vezes (08/09 e 10/09) com o processo Node em 85 MB: os outros 432 MB eram buffer de recepção TCP no kernel (`sock` do cgroup) em 142 sockets com o backend. O http-proxy só solta o upstream em `req 'aborted'`, que em Node ≥ 16 não dispara para GET cujo cliente some durante a resposta; o `proxyRes` ficava pausado e o socket em CLOSE_WAIT com a fila cheia — em mídia sem prazo nenhum desde a 263. Ganchos de `res 'close'` (`proxyReq.destroy()` e `res.on('pipe') → origem.destroy()`) e o inverso (`proxyReq 'close' → res.destroy()`, para o cliente não ficar mudo quando o Flask some), mídia com prazo de inatividade de 10 min em vez de 0, `requestTimeout` de 30 min (o default de 5 min respondia 408 a upload longo) e linha `[vida]` no log. `verify_263b` 21/21 no branch, 9/21 na `main`; três lentes adversariais sem refutação | 2026-09-11 | `—` | (aqui) | — |
@@ -268,6 +269,95 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 300 — Catálogo rápido: a tela abre sem ficar esperando   (2026-09-16 · feature · sem migration)
+
+> **ENTREGUE NA BRANCH `300-catalogo-rapido`, AINDA NÃO PUBLICADA.** Falta o merge na `main` (que é
+> o deploy). O `warm-thumbnails` deixou de ser obrigatório — ver "Depois do deploy".
+
+**Problema.** O dono: *"a página de gerenciamento do catálogo está extremamente lenta… não sei se
+por conta das fotos"*. A suspeita estava certa pela metade, e a metade que faltava era maior.
+Medido no espelho (458 produtos, 2.674 fotos), antes de qualquer alteração:
+
+| Onde | Consultas | Tempo |
+|---|---|---|
+| `GET /api/admin/catalogo` | 1.846 | 1,56 s |
+| `GET /api/admin/catalogo/personagens` | 474 | 854 ms |
+| **aba Personagens aberta** (dispara os dois) | **2.320** | — |
+| `GET /api/catalogo` | 917 | 661 ms |
+| `GET /api/catalogo/categorias` | 492 | 305 ms |
+| `GET /api/catalogo/categoria/<maior>` | 182 | 124 ms |
+
+**Duas causas independentes, e o JSON não era nenhuma delas** — 199 KB é irrisório.
+
+1. **Uma consulta por produto, várias vezes.** Não existia um `joinedload`/`selectinload` em todo o
+   caminho do catálogo; todos os relationships são `lazy=True`. A armadilha que multiplica tudo:
+   `CatalogItem.cover_image` **não é coluna, é property sobre `images[0]`** — pedir "só a capa"
+   carrega a coleção inteira de fotos daquele produto. Na visão Personagens o custo vinha do laço
+   dos avulsos, que tocava `item.characters` uma vez por produto só para um teste de verdade/falso.
+2. **Foto grande em caixa pequena.** Cada capa é leve (a 268 já comprimiu), mas eram **458 de uma
+   vez, em tamanho original, em caixas de 32 a 64 px** — 95,4 MB assim que a tela abria, sem
+   `loading="lazy"`. A miniatura de 128 px existe desde a 270 e custa <10% dos bytes; o gerenciador
+   era o único lugar do sistema que nunca a pedia.
+
+**Solução.** `selectinload` **no ponto que precisa** — as três listagens do gerenciador e da
+vitrine —, nunca no `models.py`: mudar o `lazy=` do modelo resolveria numa linha e alteraria o
+comportamento de todo o sistema, inclusive escrita e telas que não pediram nada. Do lado do
+cliente, `assetUrl(url, { largura: 128 })` nos 8 pontos de render do gerenciador, `<Foto>` do
+`@manto/ui` (que já traz `loading="lazy"` e o espaço reservado para a foto que sumiu do disco) e,
+na vitrine, as **duas lacunas que a 270 deixou**: a grade de categorias (640 + `srcset`, mesmo
+tamanho do `ProductCard`) e a lista de desejos (128 num quadrado de 64 px — literalmente o
+desperdício de ~380× que motivou aquela feature). Mais `GET /api/admin/catalogo/categorias`, porque
+abrir um produto para editar baixava a listagem inteira para desenhar 39 opções, e uma pausa de
+300 ms nas **duas** buscas que consultam o servidor — a do topo da própria listagem e a do painel
+de elenco, que varria o catálogo a cada tecla para descartar tudo menos 8 —, com a lista deixando
+de piscar esqueleto a cada letra. A busca do modo Personagens segue instantânea de propósito: ali
+o filtro é client-side e não consulta nada.
+
+**Decisões que valem lembrar.** **Sem paginação** — medido que não é preciso (o catálogo inteiro
+sai em menos de 0,11 s depois do carregamento antecipado) e a visão Personagens **precisa** da
+lista inteira para o "usar em outro tema" funcionar. A **decisão 7 da 270** ("o resto do ERP
+interno não entra: as telas internas mostram poucas imagens por vez") foi revertida de propósito,
+**só para as listas do catálogo** — a premissa é falsa aqui (são 458, não poucas) e continua
+verdadeira no resto (dívida 56). A **decisão 9 da 270** segue de pé: o palco do produto continua
+servindo o arquivo original, conferido na tela.
+
+**Achado de passagem — a ordem nunca foi garantida.** Com o carregamento antecipado, a resposta
+mudou: nomes de categoria e um par de personagens empatados em `position` trocaram de ordem. Era
+ordem vinda do *plano de consulta*, não de regra nenhuma (`categories` não declara `order_by`; com
+empate, o `sorted` estável do Python preservava a ordem de chegada do banco). A ordem virou
+explícita por **`id`** — e, medido no código da `main` contra o mesmo espelho, isso reproduz
+**exatamente** o que a produção servia: 0 de 458 produtos mudam.
+
+**A primeira escolha foi a errada, e a revisão pegou.** Antes do deploy, uma revisão adversarial
+(cinco revisores por dimensão de risco, três céticos por achado, um crítico de completude) achou
+**9 problemas, todos confirmados**. Os três que valem lembrar: (1) eu tinha ordenado as categorias
+**alfabeticamente**, o que mudaria 123 produtos — e o card da vitrine mostra só as 3 primeiras
+etiquetas, então a cliente veria etiquetas diferentes; (2) a busca Adotar/Vincular, com a pausa e a
+"lista anterior" que eu mesmo introduzi, mostrava linhas de OUTRA busca **com o botão ativo**, e o
+clique mirado num item podia cair em outro — corrigido e provado na tela com o componente real (72
+amostras, 0 violações); (3) a grade de fotos da edição passaria a gerar de 9 a 17 variantes de uma
+vez dentro do gunicorn — voltou a pedir o original.
+
+**Verificação.** `verify_300.py` **8/8** contra o `manto_local`. O critério é **contagem de
+consultas** com ouvinte de SQL, nunca relógio (que varia com a máquina e ensina a equipe a ignorar
+o verify), e a resposta é comparada por **sha256 contra uma referência capturada ANTES da primeira
+alteração** (`referencia_300.json`) — sem ela, "a resposta não muda" seria promessa sem
+verificador. Depois: 6 consultas no gerenciador, 6 na visão Personagens (era 474, **com o hash
+idêntico**), 4 na vitrine. Typecheck limpo nas três SPAs, `ruff` limpo, e as telas abertas: grade
+de categorias e lista de desejos pedindo variante em 375×812 sem rolagem horizontal, palco no
+original, e o gerenciador com **37 de 37 imagens em `/t/128/`, nenhuma no original e nenhuma
+carregada** num documento 16× mais alto que a janela.
+
+**Depois do deploy.** Nada obrigatório — o aquecimento foi feito **antes**. A premissa original
+("cache frio, 9 arquivos") era do **espelho local**. Na produção a galeria já estava quente (2.628
+variantes de 128 px, do `warm-thumbnails` da 270), mas essa contagem agregada escondia que as
+**fotos de personagem** nunca tinham sido aquecidas a 128 — o comando não as cobre, e nenhuma tela
+da `main` as pedia nesse tamanho (pego na segunda revisão). Das 243 fotos de personagem da
+produção, **só 44 existem no disco**: as outras 199 se perderam na migração do Railway (ver 292) e
+respondem 404 sem gerar nada — na tela, viram o 🎭 do `<Foto>` em vez de imagem quebrada. As 44
+foram aquecidas antes do deploy, uma por vez, pela rota pública. Duas lições: número de cache do
+espelho não diz nada sobre o disco da produção, e contagem agregada não diz QUAIS arquivos estão lá.
 
 ### 299 — Sem valor e cobranças            (2026-09-15 · feature · sem migration)
 

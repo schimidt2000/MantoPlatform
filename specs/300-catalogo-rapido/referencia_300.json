@@ -1,0 +1,49 @@
+{
+  "capturado_em": "2026-09-18 21:30:02",
+  "espelho": "manto_local",
+  "volume": {
+    "catalog_items": 458,
+    "catalog_items_ativos": 457,
+    "catalog_categories": 39
+  },
+  "maior_categoria_slug": "filmes-series",
+  "endpoints": {
+    "GET /api/admin/catalogo": {
+      "sha256": "ab63aa5e5da949ac3eca1d4d6f78aa78afefe48489d81674fa3edcd3547da124",
+      "queries": 1846,
+      "ms_na_captura": 1310,
+      "tamanho_json_bytes": 201958,
+      "n_items": 458,
+      "n_categories": 39
+    },
+    "GET /api/admin/catalogo/personagens": {
+      "sha256": "c1bac62cbd0f60eec86843d58c16214a105812485584ecc550f677e4512f99a8",
+      "queries": 474,
+      "ms_na_captura": 368,
+      "tamanho_json_bytes": 95793,
+      "n_personagens": 226
+    },
+    "GET /api/catalogo": {
+      "sha256": "b51e20ab0fe47ffa24ed799dfb78ca35c7b02bfa184e215f3235636b6a78d6a4",
+      "queries": 917,
+      "ms_na_captura": 639,
+      "tamanho_json_bytes": 183915,
+      "n_items": 457,
+      "n_categories": 39
+    },
+    "GET /api/catalogo/categorias": {
+      "sha256": "668eacc40b4b04eeb5b2e0ce34f514dd35f71b3a0fa3a05678587f3a6bc0cd3c",
+      "queries": 492,
+      "ms_na_captura": 339,
+      "tamanho_json_bytes": 5775,
+      "n_categories": 39
+    },
+    "GET /api/catalogo/categoria/filmes-series": {
+      "sha256": "359b8d8f80e934ac785a302e413139402d7db3b30730a93132b5e12e67e4eda5",
+      "queries": 182,
+      "ms_na_captura": 148,
+      "tamanho_json_bytes": 35489,
+      "n_items": 90
+    }
+  }
+}

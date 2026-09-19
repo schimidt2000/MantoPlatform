@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { assetUrl } from "@manto/api-client";
+import { Foto } from "@manto/ui";
 import { KebabMenu } from "./KebabMenu";
 import type { CatalogCharacterSummary, CatalogListItem } from "../lib/adminCatalogo";
 
@@ -43,11 +44,13 @@ function CharacterRow({
         aria-label={`Selecionar ${character.name}`}
       />
       <div className="h-8 w-8 flex-none overflow-hidden rounded-full bg-surface-2">
-        {character.photo_url ? (
-          <img src={assetUrl(character.photo_url)} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <span className="flex h-full w-full items-center justify-center text-sm">🎭</span>
-        )}
+        <Foto
+          src={assetUrl(character.photo_url, { largura: 128 })}
+          alt=""
+          loading="lazy"
+          className="h-full w-full object-cover"
+          fallback={<span className="flex h-full w-full items-center justify-center text-sm">🎭</span>}
+        />
       </div>
       <span className="min-w-0 flex-1 truncate text-sm text-ink">{character.name}</span>
       {character.figurino_sheet_id ? (
@@ -124,9 +127,13 @@ export function CatalogTreeView({
                 )}
               </button>
               <div className="h-10 w-10 flex-none overflow-hidden rounded-md bg-surface-2">
-                {item.cover_url && (
-                  <img src={assetUrl(item.cover_url)} alt="" className="h-full w-full object-cover" />
-                )}
+                <Foto
+                  src={assetUrl(item.cover_url, { largura: 128 })}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                  fallback={null}
+                />
               </div>
               <Link
                 to={`/admin/catalogo/${item.id}/editar`}

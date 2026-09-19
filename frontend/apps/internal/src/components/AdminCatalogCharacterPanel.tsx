@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { assetUrl, ApiRequestError } from "@manto/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle, cn } from "@manto/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, cn, Foto } from "@manto/ui";
 import {
   useAdminCatalogo,
   useAdoptItemAsCharacter,
@@ -54,8 +54,11 @@ const EMPTY_DRAFT: DraftState = { name: "", videoUrl: "", figurinoSheetId: null,
  * quem organiza o catálogo não tinha como saber a diferença (caso Cinderella: a versão
  * Desenho é um tema com elenco próprio e sumia da busca sem explicação). O backend valida
  * as mesmas regras de novo.
+ *
+ * Exportado para a conferência de tela da feature 300: a lógica de tempo desta busca — pausa ×
+ * lista anterior × ida ao servidor — só se prova rodando, e o painel inteiro exige sessão.
  */
-function CatalogItemSearch({
+export function CatalogItemSearch({
   temaId,
   actionLabel,
   pending,
@@ -67,7 +70,16 @@ function CatalogItemSearch({
   onPick: (itemId: number) => void;
 }) {
   const [query, setQuery] = useState("");
-  const list = useAdminCatalogo({ q: query.trim() || undefined });
+  // Pausa antes de consultar (Princípio XII.5): cada tecla disparava uma varredura do catálogo
+  // inteiro cujo resultado era descartado menos os 8 primeiros. 300 ms é o mesmo intervalo que o
+  // `AgruparEventosDialog` já usa; o mínimo de 2 caracteres continua sendo o de hoje, então a
+  // tela não passa a exigir mais do que exigia.
+  const [buscaComPausa, setBuscaComPausa] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaComPausa(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+  const list = useAdminCatalogo({ q: buscaComPausa || undefined });
 
   const results = useMemo(
     () =>
@@ -86,6 +98,14 @@ function CatalogItemSearch({
     [list.data, temaId],
   );
 
+  // Linha com botão só quando ela corresponde ao que está digitado AGORA. Sem esta guarda, a
+  // combinação pausa + "manter a lista anterior" mostrava, com o botão Adotar/Vincular ativo,
+  // os 8 primeiros itens do catálogo SEM FILTRO (enquanto a pausa não dispara) ou os resultados
+  // da busca ANTERIOR (enquanto a nova não chega) — e a lista trocava as linhas no lugar, então o
+  // clique mirado num item podia cair em outro (revisão pré-deploy da 300). Não basta olhar
+  // `isPlaceholderData`: o catálogo sem filtro é dado real, não placeholder.
+  const buscando = buscaComPausa !== query.trim() || list.isPlaceholderData || list.isLoading;
+
   return (
     <div className="space-y-2">
       <input
@@ -97,7 +117,7 @@ function CatalogItemSearch({
       />
       {query.trim().length >= 2 && (
         <ul className="max-h-56 divide-y divide-line overflow-y-auto rounded-md border border-line">
-          {results.map(({ item, blockedReason }) => (
+          {!buscando && !list.isError && results.map(({ item, blockedReason }) => (
             <li key={item.id} className="flex items-center gap-2 p-2">
               <span
                 className={cn(
@@ -105,9 +125,13 @@ function CatalogItemSearch({
                   blockedReason && "opacity-50",
                 )}
               >
-                {item.cover_url && (
-                  <img src={assetUrl(item.cover_url)} alt="" className="h-full w-full object-cover" />
-                )}
+                <Foto
+                  src={assetUrl(item.cover_url, { largura: 128 })}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                  fallback={null}
+                />
               </span>
               <span className="min-w-0 flex-1">
                 <span
@@ -129,7 +153,13 @@ function CatalogItemSearch({
               )}
             </li>
           ))}
-          {results.length === 0 && !list.isLoading && (
+          {buscando && <li className="p-2 text-xs text-muted">Buscando…</li>}
+          {!buscando && list.isError && (
+            <li className="p-2 text-xs text-red" role="alert">
+              Não foi possível buscar agora. Tente de novo em instantes.
+            </li>
+          )}
+          {!buscando && !list.isError && results.length === 0 && (
             <li className="p-2 text-xs text-muted">Nenhum item encontrado para “{query}”.</li>
           )}
         </ul>
@@ -382,13 +412,13 @@ export function AdminCatalogCharacterPanel({
               >
                 <div className="flex items-center gap-3">
                   <div className="relative h-12 w-12 flex-none overflow-hidden rounded-md bg-surface-2">
-                    {character.photo_url && (
-                      <img
-                        src={assetUrl(character.photo_url)}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    )}
+                    <Foto
+                      src={assetUrl(character.photo_url, { largura: 128 })}
+                      alt=""
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                      fallback={null}
+                    />
                     {adoptingCharacterId === character.id && (
                       <span className="absolute inset-0 flex items-center justify-center bg-panel/70 text-xs">
                         …

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import os
 
+from sqlalchemy.orm import selectinload
+
 from app import db
 from app.admin.catalog_ops import CatalogValidationError
 from app.catalogo.importer import _rewrite_public_url, _slugify
@@ -360,7 +362,16 @@ def list_catalog_characters() -> dict:
     from app.figurino.producao_ops import alertas_por_ficha
 
     characters = CatalogCharacter.query.all()
-    temas = {t.id: t for t in CatalogItem.query.all()}
+    # `characters` e `images` vêm carregados de uma vez: o laço dos avulsos, mais abaixo, toca
+    # `item.characters` uma vez POR PRODUTO só para decidir se o item tem elenco — eram 474
+    # consultas numa abertura, medido. O laço não muda; o que muda é quando os dados chegam.
+    temas = {
+        t.id: t
+        for t in CatalogItem.query.options(
+            selectinload(CatalogItem.characters),
+            selectinload(CatalogItem.images),
+        ).all()
+    }
     sheets = {s.id: s for s in FigurinoSheet.query.all()}
     alertas = alertas_por_ficha()
 

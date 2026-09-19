@@ -7,12 +7,13 @@ from typing import Any
 
 from flask import jsonify, request
 from flask_login import current_user
+from sqlalchemy.orm import selectinload
 
 from app.admin import catalog_ops
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
-from app.models import CatalogCategory, CatalogItem
+from app.models import CatalogCategory, CatalogCharacter, CatalogItem
 
 
 def _has_role(*names: str) -> bool:
@@ -27,7 +28,10 @@ def _require_superadmin() -> Any:
 
 
 def _item_summary(item: CatalogItem) -> dict:
-    characters = sorted(item.characters, key=lambda c: c.position)
+    # Desempate explícito pelo `id`: quando dois personagens têm o mesmo `position`, o `sorted`
+    # é estável e preservava a ordem em que o banco devolveu — que muda conforme o plano de
+    # consulta. A ordem da tela não pode depender disso (feature 300).
+    characters = sorted(item.characters, key=lambda c: (c.position, c.id))
     # Reverso da página própria (feature 209): este item é a página de algum personagem?
     as_char = item.as_character
     return {
@@ -36,7 +40,11 @@ def _item_summary(item: CatalogItem) -> dict:
         "slug": item.slug,
         "is_active": item.is_active,
         "cover_url": item.cover_image.url if item.cover_image else None,
-        "category_names": [c.name for c in item.categories],
+        # Por `id`, explícito: `categories` não declara `order_by`, e com o carregamento antecipado
+        # a ordem deixaria de ser a que o banco entregava item a item. Medido no espelho: por `id`
+        # reproduz EXATAMENTE a ordem que a produção servia (0 de 458 produtos mudam) — a
+        # alfabética mudaria 123 (feature 300, revisão pré-deploy).
+        "category_names": [c.name for c in sorted(item.categories, key=lambda c: c.id)],
         # Cobertura de fichas do elenco — o "termômetro" do gerenciador.
         "characters_total": len(characters),
         "characters_com_ficha": sum(1 for c in characters if c.figurino_sheet_id),
@@ -88,7 +96,20 @@ def api_admin_catalogo_list() -> Any:
     elif status == "inativo":
         query = query.filter_by(is_active=False)
 
-    items = query.order_by(CatalogItem.name.asc()).all()
+    # Carrega de uma vez o que `_item_summary` pede item a item. Sem isto são 4 a 6 consultas por
+    # produto — 1.846 numa abertura, medido no espelho. A mais cara é a capa: `cover_image` é
+    # property sobre `images[0]`, então pedir a capa carrega a coleção INTEIRA de fotos do produto.
+    items = (
+        query.options(
+            selectinload(CatalogItem.images),
+            selectinload(CatalogItem.characters),
+            selectinload(CatalogItem.categories),
+            selectinload(CatalogItem.figurino_sheet),
+            selectinload(CatalogItem.as_character).selectinload(CatalogCharacter.tema),
+        )
+        .order_by(CatalogItem.name.asc())
+        .all()
+    )
     categories = CatalogCategory.query.order_by(CatalogCategory.name.asc()).all()
     return jsonify(
         {
@@ -96,6 +117,28 @@ def api_admin_catalogo_list() -> Any:
             "categories": [{"id": c.id, "name": c.name} for c in categories],
         }
     )
+
+
+@api_bp.route("/admin/catalogo/categorias")
+@api_login_required
+def api_admin_catalogo_categorias() -> Any:
+    """Só as categorias, para o seletor do formulário de edição (feature 300).
+
+    O formulário chamava a listagem inteira — 458 produtos com todo o elenco, 199 KB — para
+    desenhar 39 opções. O caminho já existia para `POST` (criar categoria) e o gate é o mesmo.
+
+    Devolve TODAS as categorias, inclusive as sem produto ativo: o formulário precisa poder
+    escolher qualquer uma. É o que distingue este endpoint do público `/api/catalogo/categorias`,
+    que filtra por categoria com item ativo.
+
+    Returns:
+        ``{"categories": [{"id": int, "name": str}]}``, em ordem alfabética.
+    """
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    categories = CatalogCategory.query.order_by(CatalogCategory.name.asc()).all()
+    return jsonify({"categories": [{"id": c.id, "name": c.name} for c in categories]})
 
 
 @api_bp.route("/admin/catalogo/<int:item_id>")

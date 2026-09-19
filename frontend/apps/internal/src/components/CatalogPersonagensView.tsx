@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Plus, Shirt, TriangleAlert, X } from "lucide-react";
 import { assetUrl, ApiRequestError } from "@manto/api-client";
-import { Button, cn } from "@manto/ui";
+import { Button, cn, Foto } from "@manto/ui";
 import {
   useCatalogPersonagens,
   useReuseCharacter,
@@ -21,6 +21,11 @@ type Filtro = "todos" | "sem_ficha" | "varios_temas";
 interface CatalogPersonagensViewProps {
   /** Temas disponíveis para receber um personagem (a lista já carregada da tela). */
   temas: CatalogListItem[];
+  /**
+   * A lista de temas ainda não chegou. Sem isto, "usar em outro tema" afirmava "Nenhum tema
+   * disponível" durante o carregamento — o que é falso (segunda revisão da 300).
+   */
+  temasCarregando?: boolean;
   busca: string;
 }
 
@@ -69,12 +74,14 @@ function Contador({
 function PersonagemRow({
   personagem,
   temas,
+  temasCarregando,
   onAdd,
   adicionando,
   erro,
 }: {
   personagem: CatalogPersonagem;
   temas: CatalogListItem[];
+  temasCarregando: boolean;
   onAdd: (temaId: number) => void;
   adicionando: boolean;
   erro: string | null;
@@ -98,15 +105,13 @@ function PersonagemRow({
           do nome e do selo da ficha, que é o que se lê primeiro. */}
       <div className="flex flex-wrap items-start gap-3">
         <div className="h-12 w-12 flex-none overflow-hidden rounded-full bg-surface-2">
-          {personagem.photo_url ? (
-            <img
-              src={assetUrl(personagem.photo_url)}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <span className="flex h-full w-full items-center justify-center text-lg">🎭</span>
-          )}
+          <Foto
+            src={assetUrl(personagem.photo_url, { largura: 128 })}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover"
+            fallback={<span className="flex h-full w-full items-center justify-center text-lg">🎭</span>}
+          />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -284,13 +289,13 @@ function PersonagemRow({
                       }}
                     >
                       <span className="h-7 w-7 flex-none overflow-hidden rounded bg-surface-2">
-                        {tema.cover_url && (
-                          <img
-                            src={assetUrl(tema.cover_url)}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        )}
+                        <Foto
+                          src={assetUrl(tema.cover_url, { largura: 128 })}
+                          alt=""
+                          loading="lazy"
+                          className="h-full w-full object-cover"
+                          fallback={null}
+                        />
                       </span>
                       <span className="min-w-0 flex-1 truncate text-sm text-ink">{tema.name}</span>
                     </button>
@@ -298,7 +303,9 @@ function PersonagemRow({
                 ))}
                 {opcoes.length === 0 && (
                   <li className="px-1.5 py-1 text-[11px] text-muted">
-                    Nenhum tema disponível — ele já está em todos os que batem com a busca.
+                    {temasCarregando
+                      ? "Carregando temas…"
+                      : "Nenhum tema disponível — ele já está em todos os que batem com a busca."}
                   </li>
                 )}
               </ul>
@@ -323,7 +330,11 @@ function PersonagemRow({
  * reaproveitado — sem ela não há como afirmar que dois personagens de temas diferentes são o
  * mesmo.
  */
-export function CatalogPersonagensView({ temas, busca }: CatalogPersonagensViewProps) {
+export function CatalogPersonagensView({
+  temas,
+  temasCarregando = false,
+  busca,
+}: CatalogPersonagensViewProps) {
   const query = useCatalogPersonagens();
   const reuse = useReuseCharacter();
   const reduceMotion = useReducedMotion();
@@ -423,6 +434,7 @@ export function CatalogPersonagensView({ temas, busca }: CatalogPersonagensViewP
               <PersonagemRow
                 personagem={personagem}
                 temas={temas}
+                temasCarregando={temasCarregando}
                 adicionando={
                   reuse.isPending &&
                   reuse.variables?.figurinoSheetId === personagem.figurino_sheet_id

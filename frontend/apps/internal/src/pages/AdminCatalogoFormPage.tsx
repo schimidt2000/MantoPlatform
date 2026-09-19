@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
 import {
-  useAdminCatalogo,
+  useAdminCatalogoCategorias,
   useAdminCatalogoItem,
   useAdoptGalleryPhoto,
   useCatalogTagSuggestions,
@@ -38,7 +38,13 @@ export function AdminCatalogoFormPage() {
   const recemCriado =
     !avisoDispensado && Boolean((location.state as { recemCriado?: boolean } | null)?.recemCriado);
 
-  const categoriesQuery = useAdminCatalogo({});
+  // Só as categorias: isto aqui baixava os 458 produtos com todo o elenco (199 KB) para desenhar
+  // 39 opções de um seletor (feature 300).
+  const categoriesQuery = useAdminCatalogoCategorias();
+  // Segura o aviso de erro enquanto a nova tentativa roda: ao refazer uma consulta que nunca teve
+  // dado, o TanStack v5 volta o estado para `pending`, e o aviso desmontava junto com o próprio
+  // botão — o cartão ficava mudo justamente durante a tentativa (segunda revisão da 300).
+  const [tentandoCategorias, setTentandoCategorias] = useState(false);
   const itemQuery = useAdminCatalogoItem(id);
   const tagSuggestionsQuery = useCatalogTagSuggestions();
   const createItem = useCreateCatalogItem();
@@ -259,6 +265,26 @@ export function AdminCatalogoFormPage() {
           <CardTitle>Categorias</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          {/* Sem isto, uma falha deixava o cartão vazio e mudo — e na janela de deploy (bundle
+              novo com backend antigo) o GET de categorias responde 405. As categorias MARCADAS
+              não se perdem: vêm do detalhe do produto, não desta lista. */}
+          {(categoriesQuery.isError || tentandoCategorias) && !categoriesQuery.data && (
+            <p className="flex flex-wrap items-center gap-2 text-sm text-red" role="alert">
+              Não foi possível carregar as categorias.
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                loading={tentandoCategorias}
+                onClick={() => {
+                  setTentandoCategorias(true);
+                  void categoriesQuery.refetch().finally(() => setTentandoCategorias(false));
+                }}
+              >
+                Tentar de novo
+              </Button>
+            </p>
+          )}
           {categoriesQuery.data && (
             <div className="flex flex-wrap gap-1.5">
               {categoriesQuery.data.categories.map((c) => (

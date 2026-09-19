@@ -1485,7 +1485,17 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
       precisa vir inteira, porque é dela que sai o destino do "usar em outro tema".
   - Indicador **"Sem ficha vinculada"** nos Personagens pendentes.
   - Filtros: busca, categoria e status (todos/ativos/inativos).
-- **API**: `GET /api/admin/catalogo` (+ `/tags`, `/personagens`) ·
+  - **Feature 300 — a tela abre sem esperar.** Nada mudou no que se vê; mudou o que se pede. As
+    miniaturas (capa de 64px, capa de 40px e rosto de 32px) passaram a pedir a variante de 128px
+    em vez do arquivo original — eram 458 originais, 95,4 MB, baixados de uma vez ao abrir — e o
+    que está fora da tela só é pedido ao rolar. **As duas buscas que consultam o servidor** — a da
+    própria listagem e a do painel de personagens — esperam 300 ms antes de consultar, e a lista
+    deixa de piscar esqueleto a cada letra; a busca da visão Personagens é client-side e segue
+    instantânea. A ordem dos nomes de categoria **não muda** — é a mesma de sempre, agora fixada
+    por `id` em vez de depender do plano de consulta do banco. Enquanto a busca ou o filtro ainda
+    não responderam, a grade fica esmaecida com "Atualizando…" em vez de dizer "nenhum produto".
+- **API**: `GET /api/admin/catalogo` (+ `/tags`, `/personagens`, **`/categorias`** — feature 300,
+  só as categorias para o seletor do formulário de edição) ·
   `POST /api/admin/catalogo/<id>/personagens/reaproveitar` ·
   `POST /api/admin/catalogo/personagens/mover-em-massa` ·
   `PATCH|DELETE /api/admin/catalogo/personagens/<id>` ·

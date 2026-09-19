@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { assetUrl } from "@manto/api-client";
-import { Card, CardContent } from "@manto/ui";
+import { Card, CardContent, Foto } from "@manto/ui";
 import { KebabMenu } from "./KebabMenu";
 import type { CatalogListItem } from "../lib/adminCatalogo";
 
@@ -37,14 +37,17 @@ export function CatalogCardGrid({
               onChange={() => onToggleSelect(item.id)}
               aria-label={`Selecionar ${item.name}`}
             />
+            {/* Caixa de 64px: pede a variante de 128 (retina), não o arquivo inteiro — eram 458
+                originais baixados de uma vez ao abrir a tela. `Foto` cobre a foto que está no
+                banco mas sumiu do disco (66 casos da migração do Railway). */}
             <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-surface-2">
-              {item.cover_url && (
-                <img
-                  src={assetUrl(item.cover_url)}
-                  alt={item.name}
-                  className="h-full w-full object-cover"
-                />
-              )}
+              <Foto
+                src={assetUrl(item.cover_url, { largura: 128 })}
+                alt={item.name}
+                loading="lazy"
+                className="h-full w-full object-cover"
+                fallback={null}
+              />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">

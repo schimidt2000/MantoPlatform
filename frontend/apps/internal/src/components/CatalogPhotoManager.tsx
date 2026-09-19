@@ -343,6 +343,11 @@ export function CatalogPhotoManager({
                     index === 0 ? "border-gold ring-1 ring-gold" : "border-line",
                   )}
                 >
+                  {/* ORIGINAL de propósito, e não a variante de 320: o cache de produção só tem
+                      320 das CAPAS, e esta grade mostra todas as fotos do produto de uma vez — a
+                      primeira abertura geraria de 9 a 17 variantes ao mesmo tempo dentro de
+                      threads do gunicorn, a assinatura do incidente da 263. É um produto por vez,
+                      não 458; o problema que a 300 resolve não mora aqui (revisão pré-deploy). */}
                   <img
                     src={slot.kind === "existing" ? assetUrl(slot.url) : slot.previewUrl}
                     alt=""
@@ -462,7 +467,12 @@ export function CatalogPhotoManager({
               aria-label="Desfazer a remoção desta foto"
               title="Desfazer a remoção desta foto"
             >
-              <img src={assetUrl(photo.url)} alt="" className="h-full w-full object-cover opacity-50" />
+              <img
+                src={assetUrl(photo.url, { largura: 128 })}
+                alt=""
+                loading="lazy"
+                className="h-full w-full object-cover opacity-50"
+              />
               <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
                 <Undo2 className="h-4 w-4" aria-hidden="true" />
               </span>
