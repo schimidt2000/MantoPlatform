@@ -203,11 +203,16 @@ de fora passam a pedir miniatura.
 
 ## Phase 9: Depois do deploy (não antes)
 
-- [ ] T028 Com a **fila de push vazia**, rodar `flask warm-thumbnails` por SSH no `manto-backend`
+- [X] T028 *(feito ANTES do deploy, e de outro jeito: a galeria já estava quente; as 44 fotos de
+      personagem que existem no disco foram aquecidas uma por vez pela rota pública — ver T050)*
+      Com a **fila de push vazia**, rodar `flask warm-thumbnails` por SSH no `manto-backend`
       (`MANTO_SEM_THREADS=1`, `PYTHONPATH=$PWD`). Sem isto, a primeira pessoa a abrir a tela paga a
       geração de centenas de miniaturas dentro de uma thread do gunicorn — a assinatura exata do
       incidente da feature 263. Um deploy troca o contêiner e mataria a rodada.
-- [ ] T029 Sondar o backend por um endpoint `/api/` devolvendo JSON (nunca `/health` na URL pública,
+- [ ] T029 **PARCIAL.** Feito: sonda `/api/` com JSON; backend novo provado pela virada de 405 para
+      401 em `GET /api/admin/catalogo/categorias`; bundle novo com os textos da 300; vitrine com as
+      três respostas **idênticas** às de antes do deploy e tempo caindo 50–61%. **Falta** abrir o
+      gerenciador em produção — exige sessão de SUPERADMIN, e fica com o dono. Original: sondar o backend por um endpoint `/api/` devolvendo JSON (nunca `/health` na URL pública,
       que cai no fallback da SPA e responde 200 com o Flask morto) e abrir o gerenciador em produção.
 
 ---

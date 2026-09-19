@@ -4,7 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-16** · Estado do repositório: pós-feature
+> Última atualização: **2026-09-18** · Estado do repositório: pós-feature
+> **300-catalogo-rapido** (sem migration; **EM PRODUÇÃO desde 18/09/2026 ~22:01** pelo merge
+> `5b327ed` "merge: 300 — catálogo rápido" — o gerenciador e a vitrine do catálogo deixam de fazer
+> uma consulta ao banco por produto e de baixar a foto inteira para caixa pequena; as respostas da
+> vitrine saíram idênticas às de antes do deploy, conferido na própria produção) — antes dela pós-feature
 > **299-sem-valor-cobrancas** (sem migration; **EM PRODUÇÃO desde 16/09/2026 ~04:40** pelo merge
 > `2f4a738` "merge: 299 — sem valor e cobranças" — a Home cobra o grupo
 > como uma venda só, mostra o evento sem valor de venda e conta no total só o que é para agir;
@@ -272,8 +276,26 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 300 — Catálogo rápido: a tela abre sem ficar esperando   (2026-09-16 · feature · sem migration)
 
-> **ENTREGUE NA BRANCH `300-catalogo-rapido`, AINDA NÃO PUBLICADA.** Falta o merge na `main` (que é
-> o deploy). O `warm-thumbnails` deixou de ser obrigatório — ver "Depois do deploy".
+> **EM PRODUÇÃO desde 18/09/2026 ~22:01** (merge `5b327ed`, push às 21:59). O backend novo se provou
+> sem sessão: `GET /api/admin/catalogo/categorias` respondia **405** no antigo (o caminho só existia
+> para POST) e passou a **401** no novo, depois de ~1 min de 502 na troca de contêiner. O bundle novo
+> traz os textos que só existem na 300.
+
+**Na produção.** A vitrine foi medida por GET público **antes e depois do deploy**, com hash do JSON
+canônico: as três respostas saíram **idênticas** — a prova do FR-003 no servidor real, não no
+espelho. E o tempo, com os workers já quentes (8 amostras; o piso da rede daqui ao Render é 357 ms):
+
+| Endpoint | Antes | Depois |
+|---|---|---|
+| `/api/catalogo` | 1.857 ms | **825 ms** (−56%) |
+| `/api/catalogo/categorias` | 1.073 ms | **415 ms** (−61%) |
+| `/api/catalogo/categoria/<maior>` | 722 ms | **364 ms** (−50%) |
+
+As duas últimas ficaram praticamente no piso da rede: o servidor quase não gasta tempo. A produção
+era ~3× mais lenta que o espelho **por causa** do N+1 — lá cada uma das 917 consultas atravessa a
+rede até o Postgres gerenciado. *(A primeira medição depois do deploy deu +16% na página de
+categoria: eram só 3 amostras num contêiner recém-subido, cada uma num worker frio compilando as
+consultas novas. Refeita com os workers quentes, caiu à metade.)*
 
 **Problema.** O dono: *"a página de gerenciamento do catálogo está extremamente lenta… não sei se
 por conta das fotos"*. A suspeita estava certa pela metade, e a metade que faltava era maior.
