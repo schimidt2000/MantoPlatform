@@ -2,6 +2,19 @@
 
 Cada ação reusa o núcleo em `app/calendar/casting_ops.py` (mesma lógica do handler Jinja) e
 devolve o evento no formato de leitura da feature 145. As ações Jinja seguem intactas.
+
+RBAC: **não há gate único de módulo** — cada view chama o seu, no início, e eles diferem entre si.
+Os do evento vivem aqui: `_is_superadmin()` (dispensar/restaurar cargo), `_can_manage_sale()`
+(COMERCIAL, FINANCEIRO, SUPERADMIN — dado de venda, inclusive o vínculo com o orçamento),
+`_can_confirm()`, `_can_delete()` e `_can_request_delete()`. Ensaio e grupo têm gates próprios,
+declarados junto das suas views mais abaixo. A tabela completa fica em `docs/01` §4.3.
+
+Autoria, desde a feature 301, em `PATCH /events/<id>/orcamento`: **vincular** um orçamento a
+evento que ainda não tem é livre para quem tem o módulo de Orçamento (COMERCIAL ou SUPERADMIN) —
+FINANCEIRO passa em `_can_manage_sale()` mas não tem o módulo, e continua levando 404 ao apontar
+orçamento que não é dele. **Trocar, desvincular ou re-aplicar** sobre vínculo de outra pessoa é
+409 `orcamento_de_outro`: a venda é de quem fez o orçamento que já está no evento. São os três
+verbos, não dois — aplicar escreve `sale_date`, que decide o mês da comissão (hotfix 267b).
 """
 
 from datetime import date, datetime
@@ -1152,11 +1165,22 @@ def api_set_event_orcamento(event_id: int) -> Any:
 
     Corpo: `{"orcamento_history_id": int|null, "aplicar_equipe"?: bool (padrão true),
     "aplicar_valores_duracao"?: 1|2|3|4, "sale_date"?: "AAAA-MM-DD"}`. RBAC `_can_manage_sale` (é
-    dado de venda). Satélite → 409 + `leader_id` (o dinheiro mora no principal). Orçamento de outro
-    vendedor → 404 para quem não é superadmin (mesma regra do histórico); vínculo ATUAL de outro
-    vendedor → 409 `orcamento_de_outro` (quem não vê o orçamento não o troca nem solta). Orçamento
-    já preso a outro evento não cancelado → 409 + `event_id`. Chamar de novo com o mesmo orçamento
-    reaplica a equipe (idempotente). A resposta é o evento completo mais `relatorio_orcamento`.
+    dado de venda). Satélite → 409 + `leader_id` (o dinheiro mora no principal).
+
+    Autoria, revista na feature 301 — quem manda é o **autor do orçamento que já está no evento**,
+    nunca o do orçamento alvo:
+
+    * **vincular** em evento SEM orçamento: livre para quem tem o módulo de Orçamento (COMERCIAL
+      ou SUPERADMIN). FINANCEIRO passa neste gate mas não tem o módulo, e continua levando 404 ao
+      apontar orçamento que não é dele — a 301 não alarga o acesso dele (spec, §Fora de escopo);
+    * **trocar, desvincular ou re-aplicar** sobre vínculo de outra pessoa → 409
+      `orcamento_de_outro`, nomeando o autor. Os três verbos, não só os dois primeiros: aplicar
+      escreve `sale_value` e `sale_date`, e `sale_date` decide o mês da comissão (hotfix 267b).
+      O caso "re-aplicar" escapava da guarda antiga (o id pedido é igual ao atual) e só não vazava
+      porque o 404 do alvo vinha antes.
+
+    Orçamento já preso a outro evento não cancelado → 409 + `event_id`. Reaplicar no próprio
+    vínculo é idempotente. A resposta é o evento completo mais `relatorio_orcamento`.
     """
     event = CalendarEvent.query.get(event_id)
     if event is None:
@@ -1179,10 +1203,18 @@ def api_set_event_orcamento(event_id: int) -> Any:
     from app.financeiro.routes import _sync_commission_payment
     from app.models import OrcamentoHistory
 
+    # Feature 301 — o alvo não precisa mais ser do próprio: com a visibilidade restaurada, negar
+    # com "não encontrado" seria mentir sobre algo que a pessoa vê na tela (FR-010). O que fica é
+    # o recorte por MÓDULO: só quem tem o de Orçamento aponta orçamento alheio. Sem esta condição
+    # o FINANCEIRO — que passa no `_can_manage_sale` e hoje só é barrado por este 404 — ganharia
+    # de brinde o poder de vincular a venda de qualquer vendedor (SC-005).
+    tem_modulo_orcamento = _is_superadmin() or any(
+        r.name.upper() == RoleName.COMERCIAL for r in current_user.roles
+    )
     entry = None
     if raw is not None:
         entry = OrcamentoHistory.query.get(raw)
-        if entry is None or (not _is_superadmin() and entry.user_id != current_user.id):
+        if entry is None or (not tem_modulo_orcamento and entry.user_id != current_user.id):
             return json_error("Orçamento não encontrado", 404)
 
     duracao_raw = body.get("aplicar_valores_duracao")
@@ -1199,14 +1231,19 @@ def api_set_event_orcamento(event_id: int) -> Any:
     except ValueError:
         return json_error("Data inválida (use AAAA-MM-DD)", 400)
 
-    # O vínculo atual pertence a outro vendedor? Quem não é superadmin não vê esse orçamento (o
-    # detalhe manda `orcamento: null`) e poderia trocá-lo ou soltá-lo sem saber que existe.
+    # Feature 301 — a venda é de quem fez o orçamento que está no evento. A guarda cobre os TRÊS
+    # verbos: trocar (id diferente), desvincular (`null`) e RE-APLICAR (id igual ao atual). O
+    # terceiro escapava da condição antiga `atual_id != entry.id`, e só não vazava porque o 404 do
+    # alvo barrava antes — ao derrubá-lo, re-aplicar reescreveria `sale_value` e `sale_date` de
+    # uma venda alheia, mudando o mês da comissão de outra pessoa (hotfix 267b).
     atual_id = event.orcamento_history_id
-    if atual_id and atual_id != (entry.id if entry is not None else None) and not _is_superadmin():
+    if atual_id and not _is_superadmin():
         atual = OrcamentoHistory.query.get(atual_id)
         if atual is not None and atual.user_id != current_user.id:
+            autor = (atual.user.name if atual.user else None) or "Vendedor não identificado"
             return json_error(
-                "Este evento já está vinculado ao orçamento de outro vendedor; só ele ou o superadmin podem trocar ou desvincular.",
+                f"Este evento está vinculado ao orçamento de {autor}; "
+                "só ele ou o superadmin podem trocar, desvincular ou re-aplicar.",
                 409,
                 orcamento_de_outro=True,
             )

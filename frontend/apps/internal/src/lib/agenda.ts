@@ -181,6 +181,15 @@ export interface RoleItem {
 /** O que o orçamento vinculado vendeu (feature 273) — chips da aba Comercial e base do "Aplicar". */
 export interface OrcamentoResumo {
   id: number;
+  /** feature 301 — quem FEZ o orçamento. Não confundir com `venda.seller`, o vendedor do EVENTO. */
+  autor: string;
+  /**
+   * feature 301 — o servidor diz se esta pessoa pode trocar, desvincular ou re-aplicar o vínculo.
+   * A tela NUNCA deduz isso da ausência do orçamento no payload: com a visibilidade restaurada o
+   * orçamento vem sempre, essa dedução seria eternamente falsa, e os botões apareceriam para todo
+   * mundo — para o servidor recusar depois do clique.
+   */
+  pode_gerir: boolean;
   client_name: string;
   event_date: string;
   event_location: string;
@@ -425,12 +434,17 @@ export interface EventoDetalhe {
     payment_method: string | null;
     payment_installments: number | null;
     payment_due_date: string | null;
-    // feature 239 — só vem preenchido quando o usuário consegue abrir o orçamento
-    // (superadmin, ou comercial dono do orçamento); demais papéis recebem null.
+    // feature 239, revista na 301 — vem preenchido para quem tem o módulo de Orçamento
+    // (COMERCIAL ou SUPERADMIN), seja o orçamento de quem for: não há mais checagem de dono
+    // na leitura. FINANCEIRO passa no gate do evento mas não tem o módulo, e recebe null.
     orcamento_history_id: number | null;
-    /** feature 273 — há orçamento vinculado, visível ou não (o resumo só vem para quem pode abri-lo). */
+    /** feature 273 — há orçamento vinculado, visível ou não para quem lê (ver `orcamento`). */
     tem_orcamento: boolean;
-    /** feature 273 — o que o orçamento vendeu; mesma visibilidade de `orcamento_history_id`. */
+    /**
+     * feature 273 — o que o orçamento vendeu. Mesma visibilidade de `orcamento_history_id`:
+     * quem tem o módulo de Orçamento recebe, de quem quer que seja o orçamento. Quem pode
+     * MEXER no vínculo é outra pergunta, e quem responde é `OrcamentoResumo.pode_gerir`.
+     */
     orcamento: OrcamentoResumo | null;
     /** `google_calendar` | `platform` — o evento importado do Google entra sem venda nem orçamento. */
     source: string;

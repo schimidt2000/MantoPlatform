@@ -114,6 +114,17 @@ existentes nas views Jinja de origem (ver `research.md`).
 
 ## Orçamentos — histórico + PDF (mesmo par `orcamento_read.py`/`orcamento_write.py`) — US4
 
+> ⚠️ **REGRA SUPERADA pela feature 301 (21/09/2026).** A restrição por dono descrita abaixo
+> ("demais só o próprio") **nunca deveria ter entrado**: ela tinha sido removida de propósito em
+> 20/05/2026 (commit `6b191e4`, "todos veem todos os orçamentos"), e este contrato descreveu o
+> código de dois meses antes — `routes.py:714`, no dia em que isto foi escrito, já não tinha o
+> filtro. A migração implementou o contrato fielmente e a regressão durou dois meses, alcançando
+> também a aba Comercial do evento (239) e o vínculo orçamento↔evento (273).
+>
+> **A regra vigente está em `docs/01` §3.13 e §4.3**: o histórico é do time inteiro para quem
+> passa em `_require_vendas()`; a única checagem de dono que resta é o `DELETE`. Esta seção fica
+> como registro histórico — não copie nada dela.
+
 ### `GET /api/orcamento/historico`
 
 - RBAC: COMERCIAL ou SUPERADMIN — SUPERADMIN vê de todos os usuários, demais só o próprio

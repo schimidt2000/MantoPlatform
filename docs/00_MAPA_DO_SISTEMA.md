@@ -107,12 +107,12 @@ Fonte: `app/constants.py:231-243`. Tabela completa de gates por endpoint: `docs/
 
 **"Ver como" (impersonação).** `IMPERSONABLE_ROLES` = CASTING, FIGURINO, COMERCIAL, FINANCEIRO,
 ENSAIO (`app/constants.py:254`). ⚠️ **Não é uniforme**: `session['impersonate_role']` é consultado em
-agenda/dashboard/auth (`app/api/agenda.py:138`, `agenda_write.py:85`, `dashboard.py:23`,
+agenda/dashboard/auth (`app/api/agenda.py:138`, `agenda_write.py` — `_can_create_event`, `dashboard.py:23`,
 `auth.py:38`) mas **ignorado** pelas ~12 cópias de `_has_role` em `app/api/`. Com "Ver como" ativo, a
 agenda respeita o papel simulado e clientes/financeiro/admin não.
 
 **Armadilha de nome:** `_require_vendas()` significa conjuntos **diferentes** conforme o arquivo —
-`{COMERCIAL, SUPERADMIN}` em `app/api/orcamento_read.py:30`, `{COMERCIAL, FINANCEIRO, SUPERADMIN}`
+`{COMERCIAL, SUPERADMIN}` em `app/api/orcamento_read.py` (`_require_vendas`), `{COMERCIAL, FINANCEIRO, SUPERADMIN}`
 em `clientes_read.py:24`, `clientes_write.py:25` e `formularios_admin_read.py:24`. Ler o nome do gate
 não basta: abra o arquivo.
 
@@ -123,7 +123,7 @@ existência.
 
 **No frontend, RBAC nunca é decidido no cliente:** ou o payload traz a chave (bloco ausente = seção
 não renderiza) ou traz `flags.<nome>` (11 flags geradas por `_role_flags`,
-`app/api/agenda_read.py:136-161`).
+`app/api/agenda_read.py` — `_role_flags`).
 
 **Terceiro padrão (feature 272): RBAC na emissão, escopo por dono na leitura.** As notificações
 internas (`notifications`) são endereçadas por papel **quando o fato acontece**

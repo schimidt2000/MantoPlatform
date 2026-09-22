@@ -171,20 +171,20 @@ export function OrcamentoHistoricoPage() {
             <option value="1">Com show</option>
             <option value="0">Sem show</option>
           </select>
-          {query.data?.is_superadmin && (
-            <select
-              className={FIELD}
-              value={draft.user_id}
-              onChange={(e) => setDraft({ ...draft, user_id: e.target.value })}
-            >
-              <option value="">Todos os vendedores</option>
-              {query.data.users.map((u) => (
-                <option key={u.id} value={String(u.id)}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
-          )}
+          {/* feature 301 — o seletor deixa de ser privilégio do superadmin (FR-005). A lista
+              abre em "Todos os vendedores" de propósito: não nasce filtrada (FR-012). */}
+          <select
+            className={FIELD}
+            value={draft.user_id}
+            onChange={(e) => setDraft({ ...draft, user_id: e.target.value })}
+          >
+            <option value="">Todos os vendedores</option>
+            {(query.data?.users ?? []).map((u) => (
+              <option key={u.id} value={String(u.id)}>
+                {u.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="mt-3 flex gap-2">
           <Button size="sm" onClick={applyFilters}>
@@ -229,7 +229,7 @@ export function OrcamentoHistoricoPage() {
           <thead>
             <TableRow head>
               <TableCell as="th">Data/Hora</TableCell>
-              {query.data.is_superadmin && <TableCell as="th">Vendedor</TableCell>}
+              <TableCell as="th">Vendedor</TableCell>
               <TableCell as="th">Cliente</TableCell>
               <TableCell as="th">Local</TableCell>
               <TableCell as="th">Tipo</TableCell>
@@ -254,9 +254,9 @@ export function OrcamentoHistoricoPage() {
             {query.data.entries.map((e) => (
               <TableRow key={e.id}>
                 <TableCell className="whitespace-nowrap text-ink">{formatDateTime(e.created_at)}</TableCell>
-                {query.data!.is_superadmin && (
-                  <TableCell className="text-ink">{e.user_name || "—"}</TableCell>
-                )}
+                <TableCell className="text-ink">
+                  {e.user_name || "Vendedor não identificado"}
+                </TableCell>
                 <TableCell className="text-ink">
                   {e.client_name || "Sem cliente"}
                   {e.event_id != null && (
@@ -291,16 +291,22 @@ export function OrcamentoHistoricoPage() {
                     <Button asChild size="sm" variant="ghost">
                       <Link to={`/events/new?orcamento_id=${e.id}`}>Criar evento</Link>
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      loading={del.isPending}
-                      onClick={() => {
-                        if (window.confirm("Excluir este orçamento?")) del.mutate(e.id);
-                      }}
-                    >
-                      Excluir
-                    </Button>
+                    {/* feature 301 — a lista virou do time inteiro, e "Excluir" continua sendo
+                        do autor (FR-006). Sem esta guarda o botão apareceria sobre orçamento
+                        alheio e só falharia depois do confirm(). Quem decide é o servidor: a
+                        tela só lê a chave (FR-007). */}
+                    {e.pode_excluir && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        loading={del.isPending}
+                        onClick={() => {
+                          if (window.confirm("Excluir este orçamento?")) del.mutate(e.id);
+                        }}
+                      >
+                        Excluir
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

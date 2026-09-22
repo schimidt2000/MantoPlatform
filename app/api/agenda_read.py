@@ -1,8 +1,22 @@
 """Serialização de leitura da Agenda/Eventos (feature 145, US1).
 
-Fonte única do formato JSON de leitura consumido pela SPA React. Nesta fatia cobre apenas o
-RESUMO do evento (agenda); o detalhe do evento (com RBAC financeiro) entra no Incremento B.
-Reaproveita os parsers e a query de mês da view Jinja (Princípio I) — não duplica lógica.
+Fonte única do formato JSON de leitura consumido pela SPA React: o RESUMO do evento
+(`serialize_event_summary`) e o DETALHE (`serialize_event_detail`, que já mora aqui — o
+"Incremento B" prometido pela 145 foi entregue). Reaproveita os parsers e a query de mês da view
+Jinja (Princípio I) — não duplica lógica.
+
+RBAC: este módulo **não tem rota nem gate próprio** — quem gateia é a view que o chama
+(`api_event_detail`, em `agenda.py`). O que ele faz é decidir, por papel, QUAIS BLOCOS entram no
+JSON, e a fonte disso é `_role_flags(user, impersonate)`: `show_comercial` (COMERCIAL, FINANCEIRO
+ou SUPERADMIN) libera venda/cobrança/contratos; `show_financeiro` (FINANCEIRO ou SUPERADMIN), o
+bloco financeiro; `is_comercial`, quem tem o módulo de Orçamento. As flags respeitam a
+impersonação do "Ver como" — o superadmin vendo "como Casting" não recebe o que Casting não vê.
+
+Bloco ausente = seção que não renderiza: é assim que o RBAC chega à tela, nunca por decisão do
+React (Princípio XIII). Desde a feature 301, `venda.orcamento` sai para quem tem o módulo de
+Orçamento **seja o orçamento de quem for** — não há mais checagem de dono aqui; o que ainda depende
+de autoria é `pode_gerir`, que diz se a pessoa pode mexer no vínculo. FINANCEIRO continua sem o
+orçamento e só com `tem_orcamento`. Tabela de gates em `docs/01` §4.3.
 """
 
 from datetime import UTC, date, datetime
@@ -154,9 +168,9 @@ def _role_flags(user: Any, impersonate: str | None) -> dict[str, bool]:
         # aqui a flag passa pela impersonação, então o superadmin vendo "como Casting" não vê o
         # painel, embora a API ainda aceitasse o comando dele.
         "can_group": has(RoleName.COMERCIAL) or has(RoleName.FINANCEIRO) or is_superadmin,
-        # feature 239 — usado para decidir se o link do orçamento de origem é visível (só quem
-        # consegue de fato abrir GET /api/orcamento/historico/<id>: superadmin, ou o comercial
-        # dono do orçamento — ver _get_entry_or_none em app/api/orcamento_read.py).
+        # feature 239, revista na 301 — quem tem o módulo de Orçamento (`_require_vendas` em
+        # `orcamento_read.py`: COMERCIAL ou SUPERADMIN) e por isso consegue abrir qualquer
+        # orçamento do histórico, seja de quem for. Não há mais checagem de dono na leitura.
         "is_comercial": has(RoleName.COMERCIAL),
         "show_financeiro": has(RoleName.FINANCEIRO) or is_superadmin,
         "show_ensaio": has(RoleName.ENSAIO) or has(RoleName.CASTING) or is_superadmin,
@@ -898,23 +912,13 @@ def serialize_event_detail(
     # Bloco comercial (venda, contratos, cobrança) — COMERCIAL/FINANCEIRO/SUPERADMIN.
     if flags["show_comercial"]:
         form_response = event.form_responses[0] if event.form_responses else None
-        # feature 239 — só entra no payload quando o usuário consegue de fato abrir o orçamento
-        # (mesmo RBAC de GET /api/orcamento/historico/<id>: superadmin vê qualquer um; comercial
-        # não-superadmin só o que ele mesmo criou). Demais papéis (ex.: FINANCEIRO) recebem null
-        # e o React simplesmente não mostra o link.
+        # feature 239, revista na 301 (FR-009) — entra no payload para quem tem o módulo de
+        # Orçamento, seja o orçamento de quem for. A checagem de dono que morava aqui era herança
+        # da regressão da 177 e escondia do comercial o que o colega vendeu. FINANCEIRO passa no
+        # gate deste endpoint, mas não tem o módulo: continua recebendo `null` e só `tem_orcamento`.
         orcamento_history_id: int | None = None
-        if event.orcamento_history_id:
-            if flags["is_superadmin"]:
-                orcamento_history_id = event.orcamento_history_id
-            elif flags["is_comercial"]:
-                owns_orcamento = (
-                    OrcamentoHistory.query.filter_by(
-                        id=event.orcamento_history_id, user_id=user.id
-                    ).first()
-                    is not None
-                )
-                if owns_orcamento:
-                    orcamento_history_id = event.orcamento_history_id
+        if event.orcamento_history_id and (flags["is_superadmin"] or flags["is_comercial"]):
+            orcamento_history_id = event.orcamento_history_id
         # Feature 273: o que o orçamento vendeu (chips da aba Comercial + botão "Aplicar").
         orcamento_resumo = None
         if orcamento_history_id:
@@ -923,6 +927,13 @@ def serialize_event_detail(
             entry_orc = OrcamentoHistory.query.get(orcamento_history_id)
             if entry_orc is not None:
                 orcamento_resumo = resumo_do_orcamento(entry_orc)
+                # feature 301 (FR-007/FR-011) — o servidor diz se esta pessoa pode mexer no
+                # vínculo; a tela não deduz. Antes ela inferia "é de outro" da AUSÊNCIA do
+                # orçamento no payload, dedução que agora seria sempre falsa: os botões
+                # apareceriam para todo mundo e o servidor recusaria depois do clique.
+                orcamento_resumo["pode_gerir"] = bool(
+                    flags["is_superadmin"] or entry_orc.user_id == user.id
+                )
         from app.calendar.event_ops import sem_valor_de_venda, valor_a_definir, valor_simbolico
 
         # Feature 299: a aba Comercial mostra "A definir" (vazio ou zero) e marca o valor
@@ -948,8 +959,10 @@ def serialize_event_detail(
             "payment_installments": event.payment_installments,
             "payment_due_date": event.payment_due_date.isoformat() if event.payment_due_date else None,
             "orcamento_history_id": orcamento_history_id,
-            # feature 273 — há vínculo, visível ou não: o painel avisa "orçamento de outro
-            # vendedor" em vez de fingir que não há nada e oferecer a busca.
+            # feature 273, revista na 301 — há vínculo, visível ou não para quem lê. Desde a
+            # 301 o único caso de "há, mas você não vê" é quem não tem o módulo de Orçamento
+            # (FINANCEIRO): é esta chave que faz o painel dizer "vinculado a um orçamento que o
+            # seu perfil não abre", em vez de fingir que não há nada e oferecer a busca.
             "tem_orcamento": bool(event.orcamento_history_id),
             # feature 184 — necessários para pré-preencher/salvar o formulário de edição de evento.
             "clients": [

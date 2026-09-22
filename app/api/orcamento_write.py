@@ -1,6 +1,19 @@
 """Endpoints de ESCRITA da Calculadora de Orçamento, Config. de Preços e Histórico (migração
 177, US2/US4/US5).
 
+RBAC: dois gates, importados de `orcamento_read.py` e chamados no início de cada view — não há
+regra única para o módulo. `_require_vendas()` (COMERCIAL ou SUPERADMIN; **FINANCEIRO leva 403**)
+cobre `POST /orcamento/calcular`, `POST /orcamento/salvar`,
+`GET /orcamento/historico/<id>/pdf` (é **leitura**, apesar do nome do módulo),
+`POST /orcamento/historico/<id>/enviar-email` e `DELETE /orcamento/historico/<id>`.
+`_require_superadmin()` cobre a Config. de Preços (`/orcamento/settings*`).
+
+Checagem de DONO existe em **um** lugar só, desde a feature 301: o `DELETE`, por
+`_get_entry_para_excluir`. PDF e e-mail usam `_get_entry`, que confere só existência — reenviar o
+orçamento de outra pessoa é permitido e **auditado**. No `DELETE`, a checagem de dono vem **antes**
+da guarda 409 de evento vivo, e fica assim: antecipar o 409 confirmaria a existência do orçamento e
+do evento para quem não é o autor (Princípio XIII: 404, não 403). Tabela de gates em `docs/01` §4.3.
+
 Reusa, sem duplicar, o núcleo já extraído em `app/orcamento/quote_ops.py` e os módulos puros
 `app/orcamento/settings.py` — os endpoints aqui só validam RBAC, parseiam o corpo JSON e
 serializam.
@@ -8,12 +21,13 @@ serializam.
 
 from typing import Any
 
-from flask import Response, jsonify, request
+from flask import Response, current_app, jsonify, request
 from flask_login import current_user
 
 from app.api import api_bp
 from app.api.orcamento_read import (
-    _get_entry_or_none,
+    _get_entry,
+    _get_entry_para_excluir,
     _has_role,
     _require_superadmin,
     _require_vendas,
@@ -63,7 +77,7 @@ def api_orcamento_historico_pdf(entry_id: int) -> Any:
     denied = _require_vendas()
     if denied:
         return denied
-    entry = _get_entry_or_none(entry_id, _has_role(RoleName.SUPERADMIN))
+    entry = _get_entry(entry_id)
     if entry is None:
         return json_error("Orçamento não encontrado", 404)
     from app.orcamento.pdf import gerar_orcamento_pdf
@@ -85,7 +99,7 @@ def api_orcamento_historico_enviar_email(entry_id: int) -> Any:
     denied = _require_vendas()
     if denied:
         return denied
-    entry = _get_entry_or_none(entry_id, _has_role(RoleName.SUPERADMIN))
+    entry = _get_entry(entry_id)
     if entry is None:
         return json_error("Orçamento não encontrado", 404)
 
@@ -102,17 +116,47 @@ def api_orcamento_historico_enviar_email(entry_id: int) -> Any:
     ok = send_quote_email(to=recipient, client_name=quote.get("client_name") or "", pdf_bytes=pdf_bytes)
     if not ok:
         return json_error("Falha ao enviar e-mail. Verifique as configurações de e-mail do sistema.", 502)
+
+    # Feature 301 (FR-013): o reenvio é a única ação deste módulo que sai da empresa, e agora
+    # qualquer pessoa do comercial reenvia o orçamento de qualquer colega. Registra-se só o
+    # alheio — o próprio não responde pergunta nenhuma — e só depois do envio dar certo.
+    if entry.user_id != current_user.id:
+        from app import db
+        from app.utils import audit
+
+        try:
+            audit(
+                "enviou orçamento de outro vendedor",
+                entity_type="orcamento",
+                entity_id=entry.id,
+                entity_name=entry.client_name or "",
+                detail=f"para {recipient}; orçamento de {entry.user.name if entry.user else '?'}",
+            )
+            # `audit()` só faz `add` — sem este commit a linha morre no fim da requisição, e um
+            # verify que confira pela mesma sessão a "vê" no autoflush (hotfix 257).
+            db.session.commit()
+        except Exception:  # noqa: BLE001
+            # O e-mail já saiu e não se desfaz: falha de auditoria não vira falha de envio.
+            db.session.rollback()
+            current_app.logger.exception(
+                "301: auditoria do reenvio não persistiu (orçamento %s, ator %s, destino %s)",
+                entry.id, current_user.id, recipient,
+            )
     return jsonify({"sent": True})
 
 
 @api_bp.route("/orcamento/historico/<int:entry_id>", methods=["DELETE"])
 @api_login_required
 def api_orcamento_historico_delete(entry_id: int) -> Any:
-    """Exclui um orçamento do histórico (dono ou SUPERADMIN)."""
+    """Exclui um orçamento do histórico (autor ou SUPERADMIN).
+
+    Única trava de autoria do módulo (feature 301, FR-006). A guarda 409 de evento vivo vem
+    DEPOIS desta checagem: quem não é o autor leva 404 e nunca chega no 409.
+    """
     denied = _require_vendas()
     if denied:
         return denied
-    entry = _get_entry_or_none(entry_id, _has_role(RoleName.SUPERADMIN))
+    entry = _get_entry_para_excluir(entry_id, _has_role(RoleName.SUPERADMIN))
     if entry is None:
         return json_error("Orçamento não encontrado", 404)
     from app import db

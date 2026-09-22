@@ -724,7 +724,12 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > vaga extra com nome ~"maquiad" **e** talento atribuído) e `venda.orcamento_history_id`, que só
 > vem preenchido quando quem lê consegue de fato abrir o orçamento (superadmin, ou o comercial
 > dono daquele orçamento) — demais papéis (ex.: FINANCEIRO) recebem `null` e o React omite o link
-> "Orçamento de origem" na aba Comercial. `characters` (usado por telas legadas) passou a vir da
+> "Orçamento de origem" na aba Comercial.
+> **⚠️ A parte "o comercial dono daquele orçamento" foi SUPERADA pela feature 301 (21/09/2026)**:
+> não há mais checagem de dono aqui — `venda.orcamento_history_id` e `venda.orcamento` saem para
+> quem tem o módulo de Orçamento (COMERCIAL ou SUPERADMIN), seja o orçamento de quem for. O que
+> depende de autoria é a chave `pode_gerir`, que diz se a pessoa pode mexer no vínculo. FINANCEIRO
+> continua com `null` e só `tem_orcamento`. A regra vigente está em §3.13. `characters` (usado por telas legadas) passou a vir da
 > tabela `EventRole` (fonte de verdade) quando o evento já tem roles de personagem, caindo para o
 > parse do título só em evento sem nenhuma — decisão 6, para o texto livre do título nunca mais ser
 > a única fonte de quem é personagem.
@@ -962,6 +967,24 @@ eventos **cancelados** que ainda apontem para o orçamento são soltos (FK nula 
 de apagar.
 O vínculo posterior é `PATCH /api/events/<id>/orcamento` (§3.3), que aplica ao evento o que o
 orçamento vendeu (`app/calendar/orcamento_evento_ops.py`).
+
+**Feature 301 (sem migration) — escopo do histórico, escrito aqui para não se perder de novo.**
+O histórico de orçamentos é **do time inteiro**: quem passa em `_require_vendas()` de
+`orcamento_read.py` (COMERCIAL ou SUPERADMIN) lista, abre, recalcula, baixa o PDF e reenvia o
+e-mail de **qualquer** orçamento, seja de quem for. Não há checagem de dono na listagem nem no
+detalhe (`_get_entry` confere só existência), e `GET /api/orcamento/historico` devolve
+`user_name` e `pode_excluir` por linha, mais `users` sempre populada para o filtro por vendedor;
+a chave `is_superadmin` **saiu** do payload. Sobra **uma** trava de autoria: o
+`DELETE .../historico/<id>`, por `_get_entry_para_excluir` — e nele a autoria é resolvida
+**antes** da guarda 409 de evento vivo, de propósito (quem não é autor leva 404 e não confirma a
+existência do registro, Princípio XIII). Reenviar o orçamento **de outra pessoa** grava uma linha
+em `audit_logs` (`entity_type="orcamento"`), com commit próprio e em `try/except`: o e-mail já
+saiu, então falha de auditoria não vira falha de envio.
+
+Isso restaura o que o commit `6b191e4` (20/05/2026) havia decidido e a migração 177 desfez sem
+querer, ao copiar de um contrato desatualizado — a restrição viveu dois meses e contaminou a aba
+Comercial do evento (239) e o vínculo orçamento↔evento (273). **Quem reescrever o módulo não deve
+reintroduzir o filtro por `user_id`.**
 
 EducaManto (feature 235 — contrato novo por responsabilidades): `GET /api/educamanto/{historico,musicals,textos,distancia,personagens-no-dia}` ·
 `POST /api/educamanto/calcular` (uma configuração; **breakdown só na resposta de SUPERADMIN** — corte no servidor), `/musicals`, `/musicals/<id>/duplicate`, `/orcamento/gerar` (**recalcula tudo no servidor**, snapshot v2, PDF por configuração) ·
@@ -1483,8 +1506,8 @@ Gates por módulo (todos em `app/api/`):
 | `_can_create_event()` / `_can_edit_event()` / `_can_delete()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT`/`_CAN_DELETE` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` |
 | `_can_casting()` | `agenda_write` (remover cargo) | `CASTING`, `SUPERADMIN` |
 | `_can_manage_sale()` | `agenda_write` (nota fiscal) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
-| `_can_manage_sale()` | `PATCH /api/events/<id>/orcamento` (feature 273; na 299 o valor simbólico passou a contar como "sem venda") | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
-| `show_comercial` (papel efetivo, respeita "Ver como") | `GET /api/dashboard` — blocos `comercial` e `formularios` (feature 299: o conteúdo mudou, o gate não); o detalhe do evento usa o mesmo corte para `cobranca`/`venda`/`pagamentos` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
+| `_can_manage_sale()` | `PATCH /api/events/<id>/orcamento` (feature 273; na 299 o valor simbólico passou a contar como "sem venda") | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`. **Autoria (feature 301)**: *vincular* em evento sem orçamento é livre para quem tem o módulo de Orçamento (COMERCIAL/SUPERADMIN) — FINANCEIRO passa neste gate mas leva **404** ao apontar orçamento que não é dele; *trocar, desvincular ou re-aplicar* sobre vínculo de outra pessoa → **409 `orcamento_de_outro`**, nomeando o autor. Os três verbos: `aplicar` escreve `sale_date`, que decide o mês da comissão |
+| `show_comercial` (papel efetivo, respeita "Ver como") | `GET /api/dashboard` — blocos `comercial` e `formularios` (feature 299: o conteúdo mudou, o gate não); o detalhe do evento usa o mesmo corte para `cobranca`/`venda`/`pagamentos`. **Feature 301**: passado este gate, `venda.orcamento` e `orcamento_history_id` saem para quem tem o **módulo de Orçamento** (COMERCIAL ou SUPERADMIN), sem checagem de dono; FINANCEIRO passa no gate mas fica só com `tem_orcamento`. A chave `pode_gerir`, essa sim, depende da autoria do orçamento vinculado | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_can_confirm()` | `agenda_write` | `COMERCIAL`, `SUPERADMIN` |
 | `_is_superadmin()` | dispensar/restaurar cargo, excluir ficha | `SUPERADMIN` |
 | `_can_edit_figurino()` | `figurino_write` | `FIGURINO`, `SUPERADMIN` |
@@ -1494,7 +1517,7 @@ Gates por módulo (todos em `app/api/`):
 | `_require_vendas()` | `clientes_read.py:24`, `clientes_write.py:25`, `formularios_admin_read.py:34` (importado por `formularios_admin_write`) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_require_vendas()` — endpoints da 298 | `formularios_admin_write`: `…/encerrar`, `…/reabrir`, `…/manter-entre-repetidos`, `…/sugestao/<id>/confirmar`, `…/sugestao/<id>/descartar`, `…/usar-cliente-do-evento` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (papel real — o "Ver como" não se aplica, dívida §3.5) |
 | `_pode_criar_evento()` | `formularios_admin_read`: `GET …/para-evento` e a flag do detalhe (delega para `_CAN_CREATE`, sem repetir a lista) | `COMERCIAL`, `SUPERADMIN` — FINANCEIRO leva 403 |
-| `_require_vendas()` ⚠️ **homônimo, regra diferente** | `orcamento_read.py:30` (importado por `orcamento_write.py:19`) | `COMERCIAL`, `SUPERADMIN` — **FINANCEIRO leva 403** |
+| `_require_vendas()` ⚠️ **homônimo, regra diferente** | `orcamento_read.py` (importado por `orcamento_write.py`) | `COMERCIAL`, `SUPERADMIN` — **FINANCEIRO leva 403**. Gate de **módulo**: passado ele, **não há** checagem de dono (feature 301) — exceto no `DELETE .../historico/<id>`, por `_get_entry_para_excluir` (autor ou SUPERADMIN). A regra de escopo está em §3.13 |
 | `_has_role(COMERCIAL, FIGURINO, SUPERADMIN)` | `catalogo_read.api_catalogo_elenco_busca` | busca visual de elenco / vínculo de ficha |
 | `_require_use()` / `_require_manage()` | `educamanto_*` | uso: `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO`; gestão: `COMERCIAL`, `SUPERADMIN` |
 | `require_3d_access()` | `impressoes3d_read/write` | `ARTISTA_3D`, `SUPERADMIN` |

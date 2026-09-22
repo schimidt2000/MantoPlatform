@@ -26,7 +26,7 @@
 | ~~5~~ | ~~P1~~ | ✅ **RESOLVIDO na feature 267** — `comissoes_ops.comissao_exibida_do_evento` serve a API e o gêmeo Jinja; lê a linha real, cai na regra canônica e zera evento cancelado | — |
 | ~~6~~ | ~~P1~~ | ✅ **RESOLVIDO na feature 267** — `update_event_core` recebe `sincronizar_comissao` por injeção. *(`update_event_comercial` já sincronizava; este item estava parcialmente desatualizado)* | — |
 | 7 | **P1** | `app/api/agenda_write.py:926` e `:995` | Figurino/Casting podem registrar pagamento de cachê e reembolso | ~4 linhas |
-| 8 | **P1** | `app/api/orcamento_read.py:30` vs `clientes_read.py:24` | `_require_vendas` com dois significados; FINANCEIRO passa ou não conforme o arquivo | ~30 linhas |
+| 8 | **P1** | `app/api/orcamento_read.py` vs `clientes_read.py` (ambos `_require_vendas`) | `_require_vendas` com dois significados; FINANCEIRO passa ou não conforme o arquivo | ~30 linhas |
 | 9 | **P1** | `app/api/` (12 cópias) | "Ver como" é respeitado na agenda e ignorado em clientes/financeiro/admin | ~40 linhas |
 | 10 | **P2** | `app/financeiro/routes.py:120` | núcleo de cálculo dentro de arquivo de rotas Jinja | §9.2 |
 | 11 | **P2** | `app/calendar/routes.py` | 39 símbolos privados exportados para 10 módulos | §9.1 |
@@ -156,12 +156,12 @@ a chamada duplicada do handler Jinja.
 pagamento de cachê e reembolso a cobrar da cliente. As próprias docstrings assumem que o gate veio do
 dispatcher grosso do Jinja — nunca foi pensado para essas ações.
 
-**Ação:** trocar pelo gate financeiro explícito (`_can_manage_sale`, `agenda_write.py:52`) e
+**Ação:** trocar pelo gate financeiro explícito (`_can_manage_sale`, em `app/api/agenda_write.py`) e
 justificar na docstring **pelo risco da ação**, não por paridade com o Jinja.
 
 ### 3.4 `_require_vendas` com dois significados
 
-`app/api/orcamento_read.py:30` = `{COMERCIAL, SUPERADMIN}`; `clientes_read.py:24`,
+`app/api/orcamento_read.py` (`_require_vendas`) = `{COMERCIAL, SUPERADMIN}`; `clientes_read.py`,
 `clientes_write.py:25`, `formularios_admin_read.py:24` = `{COMERCIAL, FINANCEIRO, SUPERADMIN}`. Lendo
 `denied = _require_vendas()` dentro de uma view é **impossível** saber se FINANCEIRO passa.
 
@@ -171,7 +171,8 @@ redefinido por arquivo.
 
 ### 3.5 Impersonação respeitada só em metade do sistema
 
-`session['impersonate_role']` é consultado em `app/api/agenda.py:138`, `agenda_write.py:85`/`:585`,
+`session['impersonate_role']` é consultado em `app/api/agenda.py:138`, `agenda_write.py`
+(`_can_create_event`/`_can_edit_event`),
 `dashboard.py:23` e `auth.py:38` — e **ignorado** pelas ~12 cópias de `_has_role` em `app/api/`
 (`admin_catalogo_read:18`, `admin_catalogo_write:18`, `admin_config_read:21`, `admin_config_write:20`,
 `admin_users_read:20`, `admin_users_write:20`, `catalogo_read:227`, `clientes_read:19`,
@@ -292,7 +293,7 @@ serializa (já feito em `lib/agenda.ts:5`, ausente em `financeiro.ts`, `gastos.t
 | Item | Onde | Ação |
 |---|---|---|
 | **37 `window.confirm()` sobrevivem** (36 no painel interno, 1 no portal) apesar de o Princípio V pedir confirmação em diálogo. O alerta nativo não respeita o tema, não formata valor, não tem estado de carregando nem lugar para o erro da API — e no celular nasce colado no topo, fácil de tocar errado. A trilha já existe desde a 228: `ConfirmDialog` do `@manto/ui` (promovido de `GastosRecorrentesPage`, adotado na exclusão em lote de Pagamentos) | `EventDetail/FinanceiroSection.tsx` (3), `AdminCatalogoListPage.tsx` (6), `TalentDetailPage.tsx`, `RevisaoSpacePage.tsx`, `PortalProfilePage.tsx`… | trocar por `ConfirmDialog` **por tela**, priorizando o que apaga dinheiro ou registro (contrato, comprovante, reembolso, exclusão de personagem/produto). Nenhuma migração em massa: cada troca precisa de `pending` e `error` ligados na mutation certa |
-| `flags: Record<string, boolean>` gateia 26 call sites sem tipagem — `data.flags.can_edit_cor` compila e esconde o botão em silêncio | `frontend/.../lib/agenda.ts:229` | `Record<EventFlag, boolean>` com a união fechada das 11 flags de `app/api/agenda_read.py:136-161` |
+| `flags: Record<string, boolean>` gateia 26 call sites sem tipagem — `data.flags.can_edit_cor` compila e esconde o botão em silêncio | `frontend/.../lib/agenda.ts:229` | `Record<EventFlag, boolean>` com a união fechada das 11 flags de `app/api/agenda_read.py` (`_role_flags`) |
 | `@manto/ui` sem README — **não existe um único `.md` em `frontend/`**. Reflexo: `DenseCard` em 2 arquivos, `CopyButton` em 2, `Table` em 11 contra **8 páginas com `<table>` cru** | `packages/ui/src/index.ts` | `frontend/packages/ui/README.md` com uma linha por componente: o que é, quando **não** usar, props obrigatórias. As distinções já existem nas docstrings |
 | Metade dos módulos de `lib/` sem docstring de módulo, incluindo os maiores (`financeiro.ts` 478 l., `gastos.ts` 442, `orcamento.ts` 388, `adminCatalogo.ts` 384) | — | cabeçalho de 4-6 linhas no padrão de `lib/impressoes3d.ts:1`: domínio, endpoints, RBAC do servidor, chaves de cache |
 | Sem convenção de chave de cache: 3 estilos convivendo (literais inline repetidas 9×, constantes com nomes inconsistentes, chaves hierárquicas) | `lib/adminCatalogo.ts:147` | fixar `[dominio, recurso, ...params]` + uma constante `<DOMINIO>_KEYS` por módulo; documentar em `frontend/CONVENCOES.md` junto com a regra do invalidate por prefixo |
@@ -479,6 +480,7 @@ fora.
 | 59 | **P4** | `app/catalogo/og_ops.py`, escrita atômica da variante (observado na 300, código da 270) | **só no Windows**: seis pedidos simultâneos da MESMA variante ainda não gerada fazem um deles estourar `PermissionError` ao abrir a miniatura recém-gravada — `os.replace` sobre arquivo que outra thread está abrindo é proibido no Windows, ao contrário do POSIX. Rastreio em `send_file` (`catalogo/routes.py:74`). **Produção é Linux, onde não acontece**; a 300 não tocou neste código | se um dia importar (ou se alguém rodar o servidor no Windows), envolver o `send_file` da variante em retry curto, ou servir os bytes já em memória em vez de reabrir o arquivo. Enquanto isso, o `verify_300` aquece a variante antes de medir concorrência, e a geração a frio simultânea segue coberta pelo cenário 6 do `verify_270` |
 | 58 | **P3** | `frontend/apps/internal` (registrado na 300) | o app interno carrega TODAS as telas num pacote só (1,3 MB, nenhum `lazy()`/`Suspense` no repositório inteiro) — pesa em qualquer tela, não só no catálogo | feature própria: `React.lazy` por rota no `App.tsx` + `Suspense` com o Skeleton que já existe; medir antes e depois |
 | 60 | **P4** | `app/cli.py`, `warm-thumbnails`, família catálogo (observado na 300) | o laço de `CatalogCharacter` aquece só as larguras de card (320/480/640), não a de 128 — e a 300 passou a pedir 128 das fotos de personagem em três telas internas e na lista de desejos. **Hoje não pesa**: das 243 fotos de personagem da produção só 44 existem no disco (199 perdidas na migração do Railway), e as 44 foram aquecidas a 128 antes do deploy da 300 (18/09/2026). Foto de personagem NOVA gera sob demanda até o comando incluir 128 | incluir 128 no laço de personagem (`for w in (128, *larguras_card)`, como já é para talento e figurino) quando alguém mexer no comando |
+| 62 | **P3** | `docs/00`, `docs/04`, `docs/05`, `docs/PLANO_*` — 22 citações (medido na 301) | citações `arquivo:linha` para `app/api/agenda_read.py` e `agenda_write.py` apontam para linha errada: `agenda_read.py:127` promete `_role_flags` e entrega o laço `by_day`; `:245`/`:247` prometem assinatura de função e entregam campos de talento; `agenda_write.py:926`/`:995` prometem os endpoints de pagamento e reembolso, que hoje estão ~600 linhas abaixo. **Já estavam erradas antes da 301** — conferido contra `e7aa940`, a linha citada também não batia lá; os blocos `RBAC:` da 301 (+13 linhas em cada arquivo) só aumentaram o desvio. Perigo concreto: a §3.3 mandava trocar um gate frouxo por `_can_manage_sale` citando `agenda_write.py:52`, e essa linha passou a cair justamente no gate condenado | citar **arquivo + nome do símbolo**, que não envelhece (foi o que a 301 fez nas 4 citações que ela própria deslocou). Um passe varrendo `docs/*.md` com o script de conferência contra HEAD resolve a classe inteira |
 | 61 | **P4** | `app/api/admin_catalogo_read.py:199` (detalhe do admin), `app/api/catalogo_read.py:216` (detalhe da vitrine) e `:290` (elenco-busca) — registrado na 300 | a listagem ordena o elenco por `(position, id)`; estes três ainda ordenam só por `position` sobre a ordem física do banco. Com dois personagens empatados em `position`, depois de um UPDATE que mude a ordem física (vincular ficha, trocar foto, ativar), a Árvore do gerenciador e o formulário de edição podem mostrar o par em ordens diferentes. **Não acontece hoje**: 0 de 458 no espelho | usar `(c.position, c.id)` nos três pontos, para uma regra só em todas as telas |
 
 ## 11. Ordem sugerida de ataque

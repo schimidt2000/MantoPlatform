@@ -295,6 +295,8 @@ export interface OrcamentoHistoricoEntry {
   total_4h: number;
   has_show: boolean;
   user_name: string | null;
+  /** feature 301 — o servidor decide quem pode excluir; a tela nunca compara ids (Princípio XIII). */
+  pode_excluir: boolean;
   /** feature 273 — evento não cancelado que aponta para este orçamento ("Ver evento"). */
   event_id: number | null;
   event_title: string | null;
@@ -302,7 +304,7 @@ export interface OrcamentoHistoricoEntry {
 
 export interface OrcamentoHistoricoResponse {
   entries: OrcamentoHistoricoEntry[];
-  is_superadmin: boolean;
+  /** Vendedores do filtro — sempre populado desde a feature 301 (antes, só para superadmin). */
   users: { id: number; name: string }[];
 }
 
@@ -316,7 +318,13 @@ export interface OrcamentoHistoricoFilters {
   has_show?: string;
 }
 
-/** Histórico de orçamentos salvos — SUPERADMIN vê todos, demais só os próprios. */
+/**
+ * Histórico de orçamentos salvos — **do time inteiro** desde a feature 301, para quem passa no
+ * gate do módulo (`_require_vendas()`: COMERCIAL ou SUPERADMIN; FINANCEIRO leva 403). Não há
+ * filtro por autor e a lista não nasce filtrada; `user_id` é filtro opcional disponível a
+ * qualquer autorizado. A única trava de autoria que resta é o `DELETE`, e a tela a lê pela chave
+ * `pode_excluir` — nunca comparando ids (Princípio XIII).
+ */
 export function useOrcamentoHistorico(filters: OrcamentoHistoricoFilters) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
