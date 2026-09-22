@@ -26,6 +26,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.constants import (
+    DEPARTURE_DEFAULT_LOCATION,
     EVENT_TYPE_SHOW,
     MENSAGEM_VALOR_A_DEFINIR,
     MENSAGEM_VALOR_SIMBOLICO,
@@ -89,6 +90,36 @@ def resolve_makeup_location(selection: Any, custom: Any) -> str | None:
     if loc == "outro":
         loc = (custom or "").strip()
     return loc or None
+
+
+#: Como cada preset de `CalendarEvent.makeup_location` se lê em português. O banco guarda o
+#: código ("manto"/"local") ou um endereço livre digitado pela produção; **nenhum dos dois códigos
+#: pode chegar ao artista** — e chegava: o e-mail de convite mandava "Maquiagem: 14:00 — manto".
+MAKEUP_LOCATION_LABELS = {"manto": "Manto Produções", "local": "No local do evento"}
+
+
+def makeup_location_label(value: str | None) -> str | None:
+    """Traduz o local de maquiagem guardado para o texto que uma pessoa lê (feature 302).
+
+    Inverso de `resolve_makeup_location`, e mora colada a ela de propósito: o módulo que codifica é
+    o que decodifica. Serve as três superfícies em que o artista lê a escalação — o portal, o
+    e-mail de convite e a mensagem de WhatsApp copiada pelo casting.
+
+    Não é um `dict` cego porque o formulário permite endereço livre: valor fora dos presets sai
+    como está. O `makeupLocationLabel` de `LogisticaSection.tsx` faz a mesma tradução em
+    TypeScript, e continua existindo — aquele é o formulário, que precisa distinguir preset de
+    endereço livre para montar o `<select>`. A duplicação está registrada em `docs/05`.
+
+    Args:
+        value: O valor gravado em `CalendarEvent.makeup_location`, ou `None`.
+
+    Returns:
+        O texto legível, ou `None` quando não há local definido.
+    """
+    if not value:
+        return None
+    limpo = value.strip()
+    return MAKEUP_LOCATION_LABELS.get(limpo, limpo)
 
 
 def toggle_confirmed(event: Any, *, actor_name: str, actor_id: int, tz: ZoneInfo) -> bool:
@@ -169,15 +200,22 @@ def save_logistics(
         )
     if event.departure_location != old_departure_loc and old_departure_loc is not None:
         logistics_changes.append(
-            f"Local de saída: {old_departure_loc} → {event.departure_location or 'Manto Produções'}"
+            f"Local de saída: {old_departure_loc} → "
+            f"{event.departure_location or DEPARTURE_DEFAULT_LOCATION}"
         )
     if event.makeup_time != old_makeup_time and old_makeup_time is not None:
         logistics_changes.append(
             f"Horário de maquiagem: {old_makeup_time} → {event.makeup_time or 'não definido'}"
         )
     if event.makeup_location != old_makeup_location and old_makeup_location is not None:
+        # Traduzido nas DUAS pontas: esta frase não fica no banco, ela é lida pelo artista — vai
+        # para `EventRole.change_description` (o aviso "Este evento teve uma alteração" do card do
+        # portal) e para o corpo de `send_event_changed_email`. Sem isto, a 302 consertaria o
+        # código cru na tela, no e-mail de convite e no WhatsApp, e deixaria o artista lendo
+        # "Local de maquiagem: manto → local" na quarta superfície.
         logistics_changes.append(
-            f"Local de maquiagem: {old_makeup_location} → {event.makeup_location or 'não definido'}"
+            f"Local de maquiagem: {makeup_location_label(old_makeup_location)} → "
+            f"{makeup_location_label(event.makeup_location) or 'não definido'}"
         )
     rehearsal_just_activated = event.needs_rehearsal and not old_needs_rehearsal
     if rehearsal_just_activated:

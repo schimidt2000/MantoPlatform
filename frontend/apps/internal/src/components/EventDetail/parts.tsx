@@ -39,6 +39,27 @@ export function formatTime(iso: string | null): string {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * Rótulo legível do local de maquiagem (os dois presets + endereço livre).
+ *
+ * Saiu de dentro de `LogisticaSection` na feature 302 porque a mensagem de convite do WhatsApp
+ * (`CastingSection`) passou a precisar dela: até então mandava `📍 Local: manto`, o código do
+ * banco, para o artista. É extração de alcance, não promoção — continua sendo do app interno.
+ *
+ * A tradução equivalente do servidor é `makeup_location_label`, em `app/calendar/event_ops.py`,
+ * que serve o portal e o e-mail de convite. As duas existem porque esta aqui também alimenta o
+ * `<select>` do formulário, que precisa distinguir preset de endereço livre; a duplicação está
+ * registrada em `docs/05`. Note que o texto do preset "local" difere de propósito: aqui é a opção
+ * de um formulário ("Local do evento"), lá é uma frase corrida que o artista lê no celular ("No
+ * local do evento").
+ */
+export function makeupLocationLabel(loc: string | null): string {
+  if (!loc) return "—";
+  if (loc === "manto") return "Manto Produções";
+  if (loc === "local") return "Local do evento";
+  return loc;
+}
+
 /** Faixa horária do evento ("05/07/2026 12:00 — 16:00"). */
 export function formatRange(startIso: string | null, endIso: string | null): string {
   if (!startIso) return "";

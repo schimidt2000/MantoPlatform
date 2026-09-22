@@ -559,3 +559,9 @@ FINDING_MOEDA_NAO_BRL = "moeda_nao_brl"
 FINDING_META_ATRASADA = "meta_atrasada"
 FINDING_SEM_ATRIBUICAO = "sem_atribuicao"
 FINDING_SEVERITIES = ["critico", "atencao", "info"]
+
+# Feature 302: local de saída padrão do evento. O literal já vivia em três lugares
+# (o diff de `save_logistics`, o e-mail de convite e o formulário interno, que pré-preenche o
+# campo com ele). Virou constante para o portal não acrescentar a quarta cópia — e para a
+# divergência, se alguém mudar o nome da empresa, aparecer num lugar só.
+DEPARTURE_DEFAULT_LOCATION = "Manto Produções"

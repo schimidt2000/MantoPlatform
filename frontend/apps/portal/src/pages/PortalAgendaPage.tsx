@@ -3,12 +3,13 @@ import { Link } from "react-router-dom";
 import { MailQuestion, Shirt } from "lucide-react";
 import { Card, CardContent, Button, Skeleton } from "@manto/ui";
 import { CacheLine } from "../components/CacheLine";
-import { RatingLink } from "../components/RatingLink";
-import { formatDateTime, formatRelativeDay, formatWeekday } from "../lib/format";
+import { formatDateTimeRange, formatRelativeDay, formatWeekday } from "../lib/format";
 import { useAckEventChange, useAgenda, type PortalRole } from "../lib/portalAgenda";
 import { ErroDeCarregamento } from "../components/ErroDeCarregamento";
+import { AntesDoEvento } from "../components/AntesDoEvento";
+import { RoleLine } from "../components/RoleLine";
 
-function RoleCard({ role, upcoming = false }: { role: PortalRole; upcoming?: boolean }) {
+function RoleCard({ role }: { role: PortalRole }) {
   const ackChange = useAckEventChange();
   // Sem isto o "Ciente" falhava em silêncio: o spinner sumia, nada mudava na tela e o
   // artista concluía que tinha confirmado a leitura da alteração (Princípio V).
@@ -27,14 +28,11 @@ function RoleCard({ role, upcoming = false }: { role: PortalRole; upcoming?: boo
                 portal para ler, quase sempre no celular e na rua. 12px fica para rótulo
                 decorativo, não para dado operacional. */}
             <p className="text-sm text-muted">
-              {formatWeekday(role.start_at)}, {formatDateTime(role.start_at)}
+              {formatWeekday(role.start_at)}, {formatDateTimeRange(role.start_at, role.end_at)}
               {role.location ? ` · ${role.location}` : ""}
             </p>
-            {/* "amanhã" / "em 5 dias" só ajuda no que ainda vai acontecer — no histórico vira ruído. */}
-            {upcoming && (
-              <p className="text-sm font-medium text-accent">{formatRelativeDay(role.start_at)}</p>
-            )}
-            <p className="text-sm text-muted">Personagem: {role.character_name}</p>
+            <p className="text-sm font-medium text-accent">{formatRelativeDay(role.start_at)}</p>
+            <RoleLine role={role} />
           </div>
         </div>
 
@@ -67,7 +65,7 @@ function RoleCard({ role, upcoming = false }: { role: PortalRole; upcoming?: boo
             pode estar aqui e na aba Convites. Sem esta linha, a repetição parece defeito. Só
             `pending` tem o que responder — `null` é convite que o casting nunca enviou, e nesse
             caso o artista não tem o que fazer além de saber que está escalado. */}
-        {upcoming && role.invite_status === "pending" && (
+        {role.invite_status === "pending" && (
           <Link
             to="/convites"
             className="flex min-h-[44px] items-center gap-2 text-sm font-medium text-gold-ink"
@@ -77,8 +75,13 @@ function RoleCard({ role, upcoming = false }: { role: PortalRole; upcoming?: boo
           </Link>
         )}
 
-        {/* Situação de pagamento só no histórico: em evento futuro, "a receber" é óbvio e vira ruído. */}
-        <CacheLine role={role} payment={!upcoming} />
+        {/* Situação de pagamento não entra: esta tela só lista o que ainda vai acontecer, e
+            "a receber" num evento futuro é óbvio. A aba Histórico é quem mostra pago/a receber. */}
+        <CacheLine role={role} />
+
+        {/* Recolhido, e ausente quando não há ensaio nem logística — o card de quem não tem nada
+            a preparar continua do tamanho de antes. */}
+        <AntesDoEvento bloco={role.before_event} />
 
         {/* No celular não existe hover, então o título estilizado como link não anunciava
             nada — esta linha é o caminho explícito (e com 44px de alvo) para o figurino.
@@ -94,10 +97,6 @@ function RoleCard({ role, upcoming = false }: { role: PortalRole; upcoming?: boo
           </Link>
         )}
 
-        {/* Avaliar só faz sentido no que já passou — e é aqui que faltava (feature 229). A aba
-            Histórico tinha o botão, esta seção não; as duas se chamam "Histórico", então quem
-            estava olhando a Agenda concluía que não havia como avaliar. */}
-        {!upcoming && <RatingLink eventId={role.event_id} />}
       </CardContent>
     </Card>
   );
@@ -131,6 +130,13 @@ export function PortalAgendaPage() {
 
   return (
     <div className="space-y-6 p-4">
+      {/* A seção "Histórico" saiu daqui na 302, e isso desfaz de propósito metade da feature 229.
+          A 229 pôs o link de avaliar também nesta tela porque "as duas listas se chamam Histórico,
+          então ela não tinha por que procurar a segunda" — a causa era a DUPLICAÇÃO DE NOME, e o
+          link foi o remédio do sintoma. Com uma lista só chamada Histórico, o contador vermelho na
+          barra de baixo volta a ser caminho não-ambíguo. O artista mais ativo do espelho tinha 75
+          apresentações desenhadas aqui como cards inteiros, abaixo dos próximos eventos.
+          `agenda.history` continua vindo no payload de propósito — ver `portal_ops.get_agenda`. */}
       <section>
         <h2 className="mb-2 text-sm font-semibold uppercase text-muted">Próximos eventos</h2>
         {agenda.upcoming.length === 0 ? (
@@ -138,19 +144,6 @@ export function PortalAgendaPage() {
         ) : (
           <div className="space-y-3">
             {agenda.upcoming.map((role) => (
-              <RoleCard key={role.role_id} role={role} upcoming />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-2 text-sm font-semibold uppercase text-muted">Histórico</h2>
-        {agenda.history.length === 0 ? (
-          <p className="text-sm text-muted">Nenhum evento passado ainda.</p>
-        ) : (
-          <div className="space-y-3">
-            {agenda.history.map((role) => (
               <RoleCard key={role.role_id} role={role} />
             ))}
           </div>

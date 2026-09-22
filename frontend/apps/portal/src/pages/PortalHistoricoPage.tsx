@@ -1,5 +1,6 @@
 import { Card, CardContent, Skeleton } from "@manto/ui";
 import { formatBRL } from "@manto/money";
+import { RoleLine } from "../components/RoleLine";
 import { RatingLink } from "../components/RatingLink";
 import { formatShortDate } from "../lib/format";
 import { useHistorico, type PortalHistoricoItem } from "../lib/portalHistorico";
@@ -27,11 +28,15 @@ function HistoricoRow({ item }: { item: PortalHistoricoItem }) {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate font-medium text-ink">{item.title}</p>
+            {/* Só a data, sem hora — e a omissão é deliberada (302). Esta linha nunca mostrou
+                horário nenhum, então aqui não há "horário final faltando": pôr a faixa
+                significaria acrescentar o horário de INÍCIO de um evento que já aconteceu, que
+                ninguém pediu e que não ajuda a preparar nada. */}
             <p className="text-xs text-muted">
               {formatShortDate(item.start_at)}
               {item.location ? ` · ${item.location}` : ""}
             </p>
-            <p className="text-xs text-muted">Personagem: {item.character_name}</p>
+            <RoleLine role={item} className="text-xs text-muted" />
           </div>
           <div className="shrink-0 text-right">
             <p className="text-sm font-semibold text-ink">R$ {formatBRL(item.cache_total)}</p>

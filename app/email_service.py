@@ -14,6 +14,7 @@ from flask import current_app
 from flask_mail import Mail, Message
 
 from app.config import PLATFORM_BASE_URL, host_e_local
+from app.constants import DEPARTURE_DEFAULT_LOCATION
 
 log = logging.getLogger(__name__)
 mail = Mail()
@@ -218,19 +219,31 @@ def send_invite_email(role) -> bool:
     )
     portal_url = _portal_url()
 
+    # Import local: `app.calendar.event_ops` importa ESTE módulo no topo (send_async e os e-mails
+    # de alteração), então importá-lo aqui em cima fecharia o ciclo. A tradução mora lá de
+    # propósito, colada à função que CODIFICA o mesmo valor (feature 302).
+    from app.calendar.event_ops import makeup_location_label
+
     rows = _info_row("Evento", event.title)
-    rows += _info_row("Personagem", role.character_name)
+    # 40% das escalações são cargo (Coordenador, Técnico de Som, Maquiador, Foto/Vídeo,
+    # Transporte) e o e-mail chamava todas de "Personagem" — e o e-mail é o PRIMEIRO contato do
+    # artista com a escalação, antes do portal (feature 302).
+    rows += _info_row(
+        "Função" if role.role_type == "extra" else "Personagem", role.character_name
+    )
     rows += _info_row("Data", start_str)
     if event.location:
         rows += _info_row("Local", event.location)
     # Logística (só inclui o que estiver definido — sem linhas vazias)
     if event.departure_time:
-        saida = f"{event.departure_time} — {event.departure_location or 'Manto Produções'}"
+        saida = f"{event.departure_time} — {event.departure_location or DEPARTURE_DEFAULT_LOCATION}"
         rows += _info_row("Saída", saida)
     if event.makeup_time:
         maq = event.makeup_time
-        if event.makeup_location:
-            maq += f" — {event.makeup_location}"
+        # Sem a tradução, o artista recebia literalmente "Maquiagem: 14:00 — manto".
+        local_maq = makeup_location_label(event.makeup_location)
+        if local_maq:
+            maq += f" — {local_maq}"
         rows += _info_row("Maquiagem", maq)
     if role.cache_value:
         cache_str = f"R$ {role.cache_value:,.0f}"

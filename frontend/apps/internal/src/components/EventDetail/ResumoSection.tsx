@@ -343,6 +343,29 @@ function calcularPendencias(data: EventoDetalhe): Pendencia[] {
     });
   }
 
+  // Feature 302: o artista passou a ver maquiagem e saída no card do Portal, então a ausência
+  // delas deixou de ser invisível e virou um card vazio na mão de quem vai trabalhar. O hábito de
+  // preencher existiu de maio a agosto/2026 e parou: NENHUM dos 64 eventos futuros do espelho tem
+  // logística. Este chip é o que transforma a feature em mudança real, em vez de campo bonito e
+  // vazio — hoje ele acenderia em 11 eventos, pouco o bastante para ser lido.
+  const futuro = Boolean(data.event.start_at) && new Date(data.event.start_at!) > new Date();
+  const escaladosComTalento = roles.filter((r) => r.talent && !r.dismissed).length;
+  if (data.flags.can_edit_event && futuro && escaladosComTalento > 0) {
+    // A HORA é o critério, não o local: o formulário pré-preenche "Local de saída" com "Manto
+    // Produções", então local sozinho é resíduo e não informa nada a ninguém.
+    const faltando = [
+      !data.event.makeup_time && "maquiagem",
+      !data.event.departure_time && "saída",
+    ].filter(Boolean);
+    lista.push({
+      key: "logistica",
+      label: "Logística",
+      valor: faltando.length === 0 ? "definida" : `sem ${faltando.join(" e ")}`,
+      ok: faltando.length === 0,
+      tab: "producao",
+    });
+  }
+
   const conflitos = roles.filter((r) => r.availability?.status === "conflict").length;
   if (conflitos > 0) {
     lista.push({
