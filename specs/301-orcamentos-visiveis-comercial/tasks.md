@@ -330,3 +330,27 @@ lugares que a implementação não alcançou, e **citação `arquivo:linha` desl
 - [X] T033 **LOW** Decidir sobre a chave `autor` extra no 409 de
       `app/api/agenda_write.py:1236`: nenhum artefato a pede (a mensagem já nomeia o autor, e é ela
       que a tela mostra). Remover, ou registrá-la no contrato — per contracts §PATCH (`unrequested`)
+
+---
+
+## Phase 8: Convergence (2ª rodada)
+
+A rodada 1 foi corrigida item a item e a 2ª achou **mais dois resíduos das mesmas duas classes**
+— sinal de que caçar de um em um deixaria cauda. Fechadas por **varredura da classe inteira**:
+
+- **Textos que ensinam a regra antiga** (`grep` por "dono do orçamento", "comercial dono",
+  "SUPERADMIN vê todos", "só os próprios" em `app/`, `frontend/` e `docs/00–02,04,05`): sobrava
+  **um** no domínio Orçamento. Os demais acertos são de **Gastos Extras** e do portal — domínios
+  onde "só os próprios" é decisão registrada (features 013, 179) e está correto, explicitamente
+  fora do escopo desta feature.
+- **Módulos de API tocados sem bloco `RBAC:` de topo**: sobrava **um**. `orcamento_evento_ops.py`
+  não entra — é `_ops` puro, sem rota (Princípio XIII trata de rota).
+
+- [X] T034 **HIGH** Reescrever os comentários de `venda.orcamento_history_id`, `tem_orcamento` e
+      `orcamento` em `frontend/apps/internal/src/lib/agenda.ts`, que ainda diziam "superadmin, ou
+      comercial **dono** do orçamento" e "só vem para quem pode abri-lo" — falso contra
+      `agenda_read.py` desde a T010, no arquivo que a T011 editou — per FR-015 (`contradicts`)
+- [X] T035 **MEDIUM** Criar o bloco `RBAC:` no topo de `app/api/agenda_write.py`, o último módulo
+      de API tocado sem ele: os cinco gates do evento, a nota de que ensaio e grupo têm os seus, e
+      a regra de autoria da 301 no `PATCH /events/<id>/orcamento` — per Constituição XIII
+      (`missing`)

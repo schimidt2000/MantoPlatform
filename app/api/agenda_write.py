@@ -2,6 +2,19 @@
 
 Cada ação reusa o núcleo em `app/calendar/casting_ops.py` (mesma lógica do handler Jinja) e
 devolve o evento no formato de leitura da feature 145. As ações Jinja seguem intactas.
+
+RBAC: **não há gate único de módulo** — cada view chama o seu, no início, e eles diferem entre si.
+Os do evento vivem aqui: `_is_superadmin()` (dispensar/restaurar cargo), `_can_manage_sale()`
+(COMERCIAL, FINANCEIRO, SUPERADMIN — dado de venda, inclusive o vínculo com o orçamento),
+`_can_confirm()`, `_can_delete()` e `_can_request_delete()`. Ensaio e grupo têm gates próprios,
+declarados junto das suas views mais abaixo. A tabela completa fica em `docs/01` §4.3.
+
+Autoria, desde a feature 301, em `PATCH /events/<id>/orcamento`: **vincular** um orçamento a
+evento que ainda não tem é livre para quem tem o módulo de Orçamento (COMERCIAL ou SUPERADMIN) —
+FINANCEIRO passa em `_can_manage_sale()` mas não tem o módulo, e continua levando 404 ao apontar
+orçamento que não é dele. **Trocar, desvincular ou re-aplicar** sobre vínculo de outra pessoa é
+409 `orcamento_de_outro`: a venda é de quem fez o orçamento que já está no evento. São os três
+verbos, não dois — aplicar escreve `sale_date`, que decide o mês da comissão (hotfix 267b).
 """
 
 from datetime import date, datetime
