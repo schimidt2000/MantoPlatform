@@ -21,7 +21,7 @@ abertos em julho — o checklist trata isso como risco conhecido, não hipotéti
 - [X] CHK006 `scripts/validar_startcommand.py` verde se tocou o `startCommand` do `render.yaml` — — não se aplica: não tocou o `startCommand`
 - [X] CHK007 Gate de RBAC declarado em todo endpoint novo/alterado e linha em `docs/01` §4.3 — ✅ blocos `RBAC:` criados em `orcamento_read`, `orcamento_write` e `agenda_read`; linhas de `_require_vendas()` e `_can_manage_sale()` atualizadas em `docs/01` §4.3
 - [X] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03` sempre; `00`/`04`/`05` se aplicável — ✅ `docs/01` §3.13 e §4.3, `docs/02` (histórico, picker e aba Comercial), `docs/03` (entrada no topo + índice)
-- [ ] CHK009 Nível 1: `/speckit-converge` sem gaps — ⬜ pendente — `/speckit-converge` ainda não rodou
+- [X] CHK009 Nível 1: `/speckit-converge` sem gaps — ✅ **4 rodadas**: 8 → 2 → 2 → 1 lacuna confirmada, 5 derrubadas na refutação. As 13 foram fechadas (fases 7 a 10 do tasks.md). A 4ª só achou resíduo das próprias correções, e a classe recorrente (citação de linha deslocada) foi encerrada por medição, não por mais uma rodada
 - [ ] CHK010 Antes de "em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`, sonda `/api/` — ⬜ pendente — só na publicação
 
 ## Durabilidade da regra (o que impede a volta)

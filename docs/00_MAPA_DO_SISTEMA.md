@@ -107,7 +107,7 @@ Fonte: `app/constants.py:231-243`. Tabela completa de gates por endpoint: `docs/
 
 **"Ver como" (impersonação).** `IMPERSONABLE_ROLES` = CASTING, FIGURINO, COMERCIAL, FINANCEIRO,
 ENSAIO (`app/constants.py:254`). ⚠️ **Não é uniforme**: `session['impersonate_role']` é consultado em
-agenda/dashboard/auth (`app/api/agenda.py:138`, `agenda_write.py:85`, `dashboard.py:23`,
+agenda/dashboard/auth (`app/api/agenda.py:138`, `agenda_write.py` — `_can_create_event`, `dashboard.py:23`,
 `auth.py:38`) mas **ignorado** pelas ~12 cópias de `_has_role` em `app/api/`. Com "Ver como" ativo, a
 agenda respeita o papel simulado e clientes/financeiro/admin não.
 

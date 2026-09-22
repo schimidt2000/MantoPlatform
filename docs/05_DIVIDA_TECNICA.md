@@ -156,7 +156,7 @@ a chamada duplicada do handler Jinja.
 pagamento de cachê e reembolso a cobrar da cliente. As próprias docstrings assumem que o gate veio do
 dispatcher grosso do Jinja — nunca foi pensado para essas ações.
 
-**Ação:** trocar pelo gate financeiro explícito (`_can_manage_sale`, `agenda_write.py:52`) e
+**Ação:** trocar pelo gate financeiro explícito (`_can_manage_sale`, em `app/api/agenda_write.py`) e
 justificar na docstring **pelo risco da ação**, não por paridade com o Jinja.
 
 ### 3.4 `_require_vendas` com dois significados
@@ -171,7 +171,8 @@ redefinido por arquivo.
 
 ### 3.5 Impersonação respeitada só em metade do sistema
 
-`session['impersonate_role']` é consultado em `app/api/agenda.py:138`, `agenda_write.py:85`/`:585`,
+`session['impersonate_role']` é consultado em `app/api/agenda.py:138`, `agenda_write.py`
+(`_can_create_event`/`_can_edit_event`),
 `dashboard.py:23` e `auth.py:38` — e **ignorado** pelas ~12 cópias de `_has_role` em `app/api/`
 (`admin_catalogo_read:18`, `admin_catalogo_write:18`, `admin_config_read:21`, `admin_config_write:20`,
 `admin_users_read:20`, `admin_users_write:20`, `catalogo_read:227`, `clientes_read:19`,
@@ -479,6 +480,7 @@ fora.
 | 59 | **P4** | `app/catalogo/og_ops.py`, escrita atômica da variante (observado na 300, código da 270) | **só no Windows**: seis pedidos simultâneos da MESMA variante ainda não gerada fazem um deles estourar `PermissionError` ao abrir a miniatura recém-gravada — `os.replace` sobre arquivo que outra thread está abrindo é proibido no Windows, ao contrário do POSIX. Rastreio em `send_file` (`catalogo/routes.py:74`). **Produção é Linux, onde não acontece**; a 300 não tocou neste código | se um dia importar (ou se alguém rodar o servidor no Windows), envolver o `send_file` da variante em retry curto, ou servir os bytes já em memória em vez de reabrir o arquivo. Enquanto isso, o `verify_300` aquece a variante antes de medir concorrência, e a geração a frio simultânea segue coberta pelo cenário 6 do `verify_270` |
 | 58 | **P3** | `frontend/apps/internal` (registrado na 300) | o app interno carrega TODAS as telas num pacote só (1,3 MB, nenhum `lazy()`/`Suspense` no repositório inteiro) — pesa em qualquer tela, não só no catálogo | feature própria: `React.lazy` por rota no `App.tsx` + `Suspense` com o Skeleton que já existe; medir antes e depois |
 | 60 | **P4** | `app/cli.py`, `warm-thumbnails`, família catálogo (observado na 300) | o laço de `CatalogCharacter` aquece só as larguras de card (320/480/640), não a de 128 — e a 300 passou a pedir 128 das fotos de personagem em três telas internas e na lista de desejos. **Hoje não pesa**: das 243 fotos de personagem da produção só 44 existem no disco (199 perdidas na migração do Railway), e as 44 foram aquecidas a 128 antes do deploy da 300 (18/09/2026). Foto de personagem NOVA gera sob demanda até o comando incluir 128 | incluir 128 no laço de personagem (`for w in (128, *larguras_card)`, como já é para talento e figurino) quando alguém mexer no comando |
+| 62 | **P3** | `docs/00`, `docs/04`, `docs/05`, `docs/PLANO_*` — 22 citações (medido na 301) | citações `arquivo:linha` para `app/api/agenda_read.py` e `agenda_write.py` apontam para linha errada: `agenda_read.py:127` promete `_role_flags` e entrega o laço `by_day`; `:245`/`:247` prometem assinatura de função e entregam campos de talento; `agenda_write.py:926`/`:995` prometem os endpoints de pagamento e reembolso, que hoje estão ~600 linhas abaixo. **Já estavam erradas antes da 301** — conferido contra `e7aa940`, a linha citada também não batia lá; os blocos `RBAC:` da 301 (+13 linhas em cada arquivo) só aumentaram o desvio. Perigo concreto: a §3.3 mandava trocar um gate frouxo por `_can_manage_sale` citando `agenda_write.py:52`, e essa linha passou a cair justamente no gate condenado | citar **arquivo + nome do símbolo**, que não envelhece (foi o que a 301 fez nas 4 citações que ela própria deslocou). Um passe varrendo `docs/*.md` com o script de conferência contra HEAD resolve a classe inteira |
 | 61 | **P4** | `app/api/admin_catalogo_read.py:199` (detalhe do admin), `app/api/catalogo_read.py:216` (detalhe da vitrine) e `:290` (elenco-busca) — registrado na 300 | a listagem ordena o elenco por `(position, id)`; estes três ainda ordenam só por `position` sobre a ordem física do banco. Com dois personagens empatados em `position`, depois de um UPDATE que mude a ordem física (vincular ficha, trocar foto, ativar), a Árvore do gerenciador e o formulário de edição podem mostrar o par em ordens diferentes. **Não acontece hoje**: 0 de 458 no espelho | usar `(c.position, c.id)` nos três pontos, para uma regra só em todas as telas |
 
 ## 11. Ordem sugerida de ataque

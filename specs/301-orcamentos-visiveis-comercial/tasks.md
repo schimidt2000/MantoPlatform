@@ -376,3 +376,28 @@ resíduo; os demais acertos são de Gastos Extras e do portal, corretos.
       citavam `agenda_read.py:136-161` para `_role_flags` — faixa deslocada para `:149` pelo bloco
       `RBAC:` da T026, a mesma classe que a T029 abriu. Passaram a citar arquivo + nome da função —
       per FR-014, CLAUDE.md §0 (`partial`)
+
+---
+
+## Phase 10: Convergence (4ª rodada) — e fim da iteração
+
+**1 confirmada, 2 derrubadas** (8 → 2 → 2 → 1). A única era, pela **terceira vez**, a mesma classe:
+citação `arquivo:linha` que os blocos `RBAC:` desta feature deslocaram.
+
+Parei de iterar aqui, conforme a regra declarada antes da rodada: a 4ª só achou resíduo das minhas
+próprias edições, e cada correção pontual vinha gerando a próxima. Em vez de uma 5ª rodada, fechei
+a **classe inteira por medição**: um script conferiu, contra `e7aa940`, toda citação
+`arquivo:linha` nos `docs/` que aponta para os 10 arquivos que a 301 tocou.
+
+Resultado: **4 citações quebradas por esta feature** (corrigidas) e **22 que já estavam erradas
+antes** — conferido, a linha citada também não batia em `e7aa940`. Estas últimas não se consertam
+aqui (§8 do CLAUDE.md: sem refatoração lateral); foram **registradas como dívida 62** em `docs/05`,
+com o script de conferência como remédio.
+
+- [X] T038 **MEDIUM** Corrigir as 4 citações que os blocos `RBAC:` da 301 deslocaram —
+      `docs/05:159` (`_can_manage_sale`, de `:52` para `:66`), `docs/00:110` e `docs/05:174`
+      (`_CAN_CREATE`, de `:85` para `:98`) — passando a citar arquivo + símbolo — per FR-014,
+      CLAUDE.md §0 (`partial`)
+- [X] T039 **MEDIUM** Registrar em `docs/05` (dívida 62) as 22 citações de linha já erradas antes
+      da 301 nos arquivos que ela tocou, com a medição e o remédio — per Constituição §Docs
+      (`unrequested` pré-existente, registrado em vez de silenciado)
