@@ -26,6 +26,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.constants import (
+    DEPARTURE_DEFAULT_LOCATION,
     EVENT_TYPE_SHOW,
     MENSAGEM_VALOR_A_DEFINIR,
     MENSAGEM_VALOR_SIMBOLICO,
@@ -89,6 +90,36 @@ def resolve_makeup_location(selection: Any, custom: Any) -> str | None:
     if loc == "outro":
         loc = (custom or "").strip()
     return loc or None
+
+
+#: Como cada preset de `CalendarEvent.makeup_location` se lê em português. O banco guarda o
+#: código ("manto"/"local") ou um endereço livre digitado pela produção; **nenhum dos dois códigos
+#: pode chegar ao artista** — e chegava: o e-mail de convite mandava "Maquiagem: 14:00 — manto".
+MAKEUP_LOCATION_LABELS = {"manto": "Manto Produções", "local": "No local do evento"}
+
+
+def makeup_location_label(value: str | None) -> str | None:
+    """Traduz o local de maquiagem guardado para o texto que uma pessoa lê (feature 302).
+
+    Inverso de `resolve_makeup_location`, e mora colada a ela de propósito: o módulo que codifica é
+    o que decodifica. Serve as três superfícies em que o artista lê a escalação — o portal, o
+    e-mail de convite e a mensagem de WhatsApp copiada pelo casting.
+
+    Não é um `dict` cego porque o formulário permite endereço livre: valor fora dos presets sai
+    como está. O `makeupLocationLabel` de `LogisticaSection.tsx` faz a mesma tradução em
+    TypeScript, e continua existindo — aquele é o formulário, que precisa distinguir preset de
+    endereço livre para montar o `<select>`. A duplicação está registrada em `docs/05`.
+
+    Args:
+        value: O valor gravado em `CalendarEvent.makeup_location`, ou `None`.
+
+    Returns:
+        O texto legível, ou `None` quando não há local definido.
+    """
+    if not value:
+        return None
+    limpo = value.strip()
+    return MAKEUP_LOCATION_LABELS.get(limpo, limpo)
 
 
 def toggle_confirmed(event: Any, *, actor_name: str, actor_id: int, tz: ZoneInfo) -> bool:
@@ -169,7 +200,8 @@ def save_logistics(
         )
     if event.departure_location != old_departure_loc and old_departure_loc is not None:
         logistics_changes.append(
-            f"Local de saída: {old_departure_loc} → {event.departure_location or 'Manto Produções'}"
+            f"Local de saída: {old_departure_loc} → "
+            f"{event.departure_location or DEPARTURE_DEFAULT_LOCATION}"
         )
     if event.makeup_time != old_makeup_time and old_makeup_time is not None:
         logistics_changes.append(

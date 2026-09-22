@@ -15,10 +15,12 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_
+from sqlalchemy.orm import selectinload
 from werkzeug.datastructures import FileStorage
 
 from app import db
 from app.cadastro.cadastro_ops import DOC_EXTS, DOC_MAX, PHOTO_EXTS, PHOTO_MAX, validate_upload
+from app.constants import DEPARTURE_DEFAULT_LOCATION
 from app.models import CalendarEvent, EventRole, FigurinoSheet, Talent, TalentMedia
 from app.notificacoes import notificacoes_ops
 from app.storage import save_file
@@ -165,7 +167,107 @@ def events_with_visible_figurino(talent: Talent, roles: list[EventRole]) -> set[
     return com_ficha
 
 
-def _role_summary(role: EventRole, has_figurino: bool = False) -> dict:
+def _com_evento():
+    """Carrega o evento junto das escalações, em vez de um SELECT por linha.
+
+    `EventRole.event` é backref `lazy=True`, então serializar N escalações dispara N consultas —
+    isso já era assim **antes** da feature 302, e ficaria pior ao ler os ensaios no laço.
+
+    É função, e não constante de módulo, porque um backref só vira atributo da classe **depois**
+    que o SQLAlchemy configura os mappers: montar a opção no import quebra o `create_app()` com
+    `AttributeError`. Chamar aqui adia isso para o primeiro uso, quando os mappers já existem.
+    """
+    return selectinload(EventRole.event)
+
+
+def _antes_do_evento(roles: list[EventRole]) -> dict[int, dict]:
+    """Bloco "Antes do evento" de cada evento destas escalações, em UMA consulta de ensaios.
+
+    Ler `event.ensaios` dentro do laço de serialização seria um SELECT por escalação (a relação é
+    `lazy=True`), e a agenda de um talento antigo tem centenas de linhas — o mesmo motivo que fez
+    `events_with_visible_figurino` existir, dez linhas acima. Aqui os ensaios de TODOS os eventos
+    da rodada vêm de uma vez, indexados por `parent_event_id`.
+
+    Regras que moram aqui, e não na tela:
+
+    * **a hora é que faz a linha existir**, não o local: o formulário interno pré-preenche "Local
+      de saída" com o padrão, então há eventos com local e sem horário nenhum. "Saída: Manto
+      Produções" sem hora é ruído com cara de informação;
+    * o local de maquiagem sai **traduzido** — o banco guarda `"manto"`/`"local"`;
+    * ensaio **já realizado** não entra: o bloco é preparação, e o ensaio cai 2 a 4 dias antes do
+      show, então todo show passa por uma janela em que o ensaio é passado e ele é futuro;
+    * a `description` do ensaio fica **fora**: medida no espelho, ela guarda endereço (23 das 40
+      preenchidas começam com "Evento em: <local do show>"), e mostrá-la mandaria o artista para o
+      lugar errado.
+
+    Args:
+        roles: Escalações já carregadas (convites pendentes + eventos futuros). O histórico não
+            passa por aqui — preparação não se aplica ao que já aconteceu.
+
+    Returns:
+        `{event_id: bloco}`, só para os eventos que têm algo a mostrar. Evento ausente do dict =
+        `before_event` nulo = a tela não desenha a seção.
+    """
+    from app.calendar.event_ops import makeup_location_label
+
+    eventos = {r.event.id: r.event for r in roles if r.event is not None}
+    if not eventos:
+        return {}
+
+    agora = now_sp()
+    ensaios_por_pai: dict[int, list[dict]] = {}
+    filhos = (
+        CalendarEvent.query.filter(
+            CalendarEvent.parent_event_id.in_(eventos.keys()),
+            CalendarEvent.event_type == "ENSAIO",
+            CalendarEvent.cancelled_at.is_(None),
+            CalendarEvent.start_at >= agora,
+        )
+        # A relação `ensaios` não tem `order_by`: o Postgres devolve em ordem arbitrária, e ela
+        # muda depois de um UPDATE — o artista veria os dois ensaios trocando de lugar.
+        .order_by(CalendarEvent.start_at.asc())
+        .all()
+    )
+    for filho in filhos:
+        ensaios_por_pai.setdefault(filho.parent_event_id, []).append(
+            {
+                "start_at": filho.start_at.isoformat() if filho.start_at else None,
+                "end_at": filho.end_at.isoformat() if filho.end_at else None,
+                "location": filho.location,
+            }
+        )
+
+    blocos: dict[int, dict] = {}
+    for event_id, event in eventos.items():
+        ensaios = ensaios_por_pai.get(event_id, [])
+        maquiagem = (
+            {
+                "time": event.makeup_time,
+                "location": makeup_location_label(event.makeup_location),
+            }
+            if event.makeup_time
+            else None
+        )
+        saida = (
+            {
+                "time": event.departure_time,
+                "location": event.departure_location or DEPARTURE_DEFAULT_LOCATION,
+            }
+            if event.departure_time
+            else None
+        )
+        if maquiagem or saida or ensaios:
+            blocos[event_id] = {
+                "makeup": maquiagem,
+                "departure": saida,
+                "rehearsals": ensaios,
+            }
+    return blocos
+
+
+def _role_summary(
+    role: EventRole, has_figurino: bool = False, before_event: dict | None = None
+) -> dict:
     """Serializa uma escalação do próprio talento — inclui sempre o cachê dele.
 
     O cachê acompanha *todas* as listagens (convite pendente, evento futuro e histórico), não só
@@ -202,6 +304,16 @@ def _role_summary(role: EventRole, has_figurino: bool = False) -> dict:
         # ainda falta responder o convite — senão o mesmo evento aparece em "Próximos" e em
         # "Convites" sem explicação. `None` = convite nunca enviado (nada a responder).
         "invite_status": role.invite_status,
+        # Vai o CÓDIGO do modelo, não o rótulo pronto — mesma convenção de `payment_status` e
+        # `invite_status`, que a tela também traduz. 289 das 731 escalações com talento são cargo
+        # (Coordenador, Técnico de Som, Maquiador, Foto/Vídeo, Transporte) e as três telas do
+        # portal escreviam "Personagem: Coordenador" (feature 302).
+        "role_type": role.role_type,
+        # Bloco "Antes do evento" (302): ensaio, maquiagem e saída. `None` quando não há NADA a
+        # mostrar — a tela testa um nulo, não três coleções, e a regra de "o que conta como algo a
+        # mostrar" fica no servidor. Sempre `None` no histórico: preparação é para o que ainda vai
+        # acontecer.
+        "before_event": before_event,
     }
 
 
@@ -229,6 +341,7 @@ def get_agenda(talent: Talent) -> dict:
 
     pending_invites = (
         EventRole.query.filter_by(talent_id=talent.id, invite_status="pending")
+        .options(_com_evento())
         .join(CalendarEvent)
         .filter(nao_cancelado)
         .order_by(CalendarEvent.start_at.asc())
@@ -241,6 +354,7 @@ def get_agenda(talent: Talent) -> dict:
     # embora a planilha de pagamentos o pague. Eram 26 cargos futuros e 97 passados assim.
     upcoming = (
         EventRole.query.filter(EventRole.talent_id == talent.id, nao_recusada())
+        .options(_com_evento())
         .join(CalendarEvent)
         .filter(nao_cancelado, CalendarEvent.start_at >= now)
         .order_by(CalendarEvent.start_at.asc())
@@ -249,6 +363,7 @@ def get_agenda(talent: Talent) -> dict:
 
     past = (
         EventRole.query.filter(EventRole.talent_id == talent.id, nao_recusada())
+        .options(_com_evento())
         .join(CalendarEvent)
         .filter(nao_cancelado, CalendarEvent.start_at < now)
         .order_by(CalendarEvent.start_at.desc())
@@ -257,15 +372,23 @@ def get_agenda(talent: Talent) -> dict:
 
     # Uma varredura só para as três listas — ver `events_with_visible_figurino`.
     com_ficha = events_with_visible_figurino(talent, pending_invites + upcoming + past)
+    # Uma consulta só para os dois blocos que precisam de preparação. O histórico fica de fora de
+    # propósito: preparação é para o que ainda vai acontecer, e anexá-la custaria a varredura
+    # sobre as centenas de linhas do histórico de um talento antigo, por nada.
+    antes = _antes_do_evento(pending_invites + upcoming)
 
     # `cache_total`/`payment_status` já vêm de `_role_summary` — antes eram anexados só aqui, que
     # era exatamente a razão de o cachê sumir nas outras duas listas.
-    def resumo(role: EventRole) -> dict:
-        return _role_summary(role, has_figurino=role.event_id in com_ficha)
+    def resumo(role: EventRole, *, preparacao: bool = False) -> dict:
+        return _role_summary(
+            role,
+            has_figurino=role.event_id in com_ficha,
+            before_event=antes.get(role.event_id) if preparacao else None,
+        )
 
     return {
-        "pending_invites": [resumo(r) for r in pending_invites],
-        "upcoming": [resumo(r) for r in upcoming],
+        "pending_invites": [resumo(r, preparacao=True) for r in pending_invites],
+        "upcoming": [resumo(r, preparacao=True) for r in upcoming],
         "history": [resumo(r) for r in past],
     }
 
@@ -770,6 +893,7 @@ def get_historico(talent: Talent) -> dict[str, Any]:
     # não aconteceu — e que a planilha de pagamentos também não paga.
     past = (
         EventRole.query.filter(EventRole.talent_id == talent.id, nao_recusada())
+        .options(_com_evento())
         .join(CalendarEvent)
         .filter(CalendarEvent.cancelled_at.is_(None), CalendarEvent.start_at < now_sp())
         .order_by(CalendarEvent.start_at.desc())

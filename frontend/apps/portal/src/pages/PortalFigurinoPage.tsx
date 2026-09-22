@@ -2,6 +2,7 @@ import { useParams, Link } from "react-router-dom";
 import { assetUrl } from "@manto/api-client";
 import { Card, CardContent, Foto, PageHeader, Skeleton } from "@manto/ui";
 import { useFigurino } from "../lib/portalFigurino";
+import { formatLongDate, formatWeekday } from "../lib/format";
 
 export function PortalFigurinoPage() {
   const params = useParams<{ eventId: string }>();
@@ -19,6 +20,19 @@ export function PortalFigurinoPage() {
           </Link>
         }
       />
+
+      {/* A ficha abria sem dizer de que evento era: quem tem duas escalações na mesma semana
+          não sabia qual estava vendo. O payload já trazia nome e data — a tela é que os ignorava.
+          Só a DATA, sem hora: o horário está no card de onde a pessoa veio, e repeti-lo aqui seria
+          mais um lugar para divergir. */}
+      {query.data && (
+        <div>
+          <p className="font-medium text-ink">{query.data.event.title}</p>
+          <p className="text-sm text-muted">
+            {formatWeekday(query.data.event.start_at)}, {formatLongDate(query.data.event.start_at)}
+          </p>
+        </div>
+      )}
 
       {query.isLoading && <Skeleton className="h-64 w-full" />}
 

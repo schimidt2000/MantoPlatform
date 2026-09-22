@@ -25,7 +25,7 @@ arquivo — se alguma tarefa abaixo parecer pedir migration, a tarefa está erra
 
 ## Phase 1: Setup
 
-- [ ] T001 Acrescentar `DEPARTURE_DEFAULT_LOCATION = "Manto Produções"` em `app/constants.py`, com
+- [X] T001 Acrescentar `DEPARTURE_DEFAULT_LOCATION = "Manto Produções"` em `app/constants.py`, com
       comentário dizendo que o literal já existia em três lugares e que esta constante os
       substitui (R4)
 
@@ -35,24 +35,24 @@ arquivo — se alguma tarefa abaixo parecer pedir migration, a tarefa está erra
 
 **⚠️ CRITICAL**: nenhuma história começa antes desta fase terminar.
 
-- [ ] T002 **`specs/302-portal-detalhes-do-evento/verify_302.py`** — os 22 cenários da seção
+- [X] T002 **`specs/302-portal-detalhes-do-evento/verify_302.py`** — os 22 cenários da seção
       "Verificação" da spec. Login por `POST /api/portal/auth/login` (talentos T e U) e
       `POST /api/auth/login` (staff do cenário 13); requisições **fora** de `app.app_context()`;
       cenário 13 conferido por **conexão separada**; três cenários que DEVEM falhar. Escrito AGORA
       e falhando nos cenários ainda não construídos
-- [ ] T003 No `verify_302.py`, o **arranjo**: assumir uma `EventRole` existente com
+- [X] T003 No `verify_302.py`, o **arranjo**: assumir uma `EventRole` existente com
       `talent_id IS NULL` (nunca criar role com `character_name` inventado — o sync do Google
       apaga a role e manda e-mail de remoção a gente de verdade) e semear os ensaios com `INSERT`
       direto no banco, com `google_event_id` descartável — **nunca** por
       `POST /api/events/<id>/ensaios`, que cria evento no Google Agenda da empresa (R13)
-- [ ] T004 No `verify_302.py`, a **limpeza no `finally`**: apagar os descartáveis (`roles.clear()`
+- [X] T004 No `verify_302.py`, a **limpeza no `finally`**: apagar os descartáveis (`roles.clear()`
       antes do usuário) **e restaurar os eventos reais do espelho** — a vaga assumida volta a
       `talent_id` nulo e os campos de logística ao valor original (spec §Verificação, cenário 14)
-- [ ] T005 `MAKEUP_LOCATION_LABELS` + `makeup_location_label()` em `app/calendar/event_ops.py`,
+- [X] T005 `MAKEUP_LOCATION_LABELS` + `makeup_location_label()` em `app/calendar/event_ops.py`,
       **colados em `resolve_makeup_location` (`:83-91`)** — o módulo que codifica é o que
       decodifica. Docstring explica que é o inverso daquela função e que serve portal, e-mail e
       WhatsApp (R4)
-- [ ] T006 [P] Trocar o literal `'Manto Produções'` pela constante em `app/calendar/event_ops.py`
+- [X] T006 [P] Trocar o literal `'Manto Produções'` pela constante em `app/calendar/event_ops.py`
       (no diff de `save_logistics`) e em `app/email_service.py` (linha da Saída) — troca de
       literal por constante, zero mudança de comportamento
 
@@ -68,16 +68,16 @@ credencial ou endereço inválido, o verify está errado — conserte o verify, 
 **Teste independente**: abrir `/portal/agenda` como um talento com evento futuro e ler a faixa.
 Não depende de nenhuma outra história.
 
-- [ ] T007 [US1] `formatDateTimeRange(start, end)` em
+- [X] T007 [US1] `formatDateTimeRange(start, end)` em
       `frontend/apps/portal/src/lib/format.ts`, ao lado de `formatDateTime` — sem `end`, cai em
       `formatDateTime`. **Quando o fim é em outro dia, a saída diz isso** (FR-002a): comparar as
       datas por recorte de string, **nunca** por `new Date().toISOString()` (horário de parede de
       São Paulo). Comentário registra por que o `formatRange` do app interno **não** foi promovido
       (R5)
-- [ ] T008 [US1] Usar `formatDateTimeRange` na linha principal de
+- [X] T008 [US1] Usar `formatDateTimeRange` na linha principal de
       `frontend/apps/portal/src/pages/PortalAgendaPage.tsx`
-- [ ] T009 [P] [US1] Idem em `frontend/apps/portal/src/pages/PortalConvitesPage.tsx`
-- [ ] T010 [P] [US1] **Não** mexer na linha de data de
+- [X] T009 [P] [US1] Idem em `frontend/apps/portal/src/pages/PortalConvitesPage.tsx`
+- [X] T010 [P] [US1] **Não** mexer na linha de data de
       `frontend/apps/portal/src/pages/PortalHistoricoPage.tsx`: ela mostra só a data, sem hora, e
       continua assim (FR-001). Deixar um comentário dizendo que a omissão é deliberada — sem ele,
       a próxima pessoa "completa" a tela e acrescenta um horário de início que ninguém pediu
@@ -93,33 +93,33 @@ Não depende de nenhuma outra história.
 **Teste independente**: semear um ensaio num show futuro com o talento escalado e abrir as duas
 telas.
 
-- [ ] T011 [US2] `_antes_do_evento(roles) -> dict[int, dict]` em
+- [X] T011 [US2] `_antes_do_evento(roles) -> dict[int, dict]` em
       `app/talent_portal/portal_ops.py` — **uma** consulta de ensaios para todos os eventos da
       rodada, indexada por `parent_event_id`. Filtra `event_type == "ENSAIO"`,
       `cancelled_at IS NULL` e **ensaio já realizado** (FR-004a); ordena por `start_at` crescente,
       porque a relação `ensaios` não tem `order_by` e o Postgres devolve ordem arbitrária (R12).
       Item leva `start_at`, `end_at` e `location` — **sem `description`**, com o comentário
       dizendo por quê (R9)
-- [ ] T012 [US2] `_role_summary` (`portal_ops.py:168-205`) ganha o parâmetro `before_event` e a
+- [X] T012 [US2] `_role_summary` (`portal_ops.py:168-205`) ganha o parâmetro `before_event` e a
       chave homônima; `None` quando não há nada a mostrar (R1)
-- [ ] T013 [US2] `get_agenda` (`portal_ops.py:208-270`) chama `_antes_do_evento` para
+- [X] T013 [US2] `get_agenda` (`portal_ops.py:208-270`) chama `_antes_do_evento` para
       `pending_invites + upcoming` e passa `None` no histórico; `get_historico`
       (`portal_ops.py:751-801`) passa `None` (R11)
-- [ ] T014 [US2] Em `app/talent_portal/portal_ops.py`, `.options(selectinload(EventRole.event))`
+- [X] T014 [US2] Em `app/talent_portal/portal_ops.py`, `.options(selectinload(EventRole.event))`
       nas três consultas de `get_agenda` e na de `get_historico` —
       **tarefa própria de propósito**: o N+1 de `role.event` **já existia**
       antes desta feature, e precisa aparecer no diff como decisão, não como efeito colateral
       (R7). Precedente no repo: `app/api/admin_catalogo_read.py:104`
-- [ ] T015 [P] [US2] Tipos em `frontend/apps/portal/src/lib/portalAgenda.ts`:
+- [X] T015 [P] [US2] Tipos em `frontend/apps/portal/src/lib/portalAgenda.ts`:
       `PortalRehearsal`, `PortalBeforeEvent`, e `before_event?: PortalBeforeEvent | null` em
       `PortalRole` — **opcional** (FR-013b): na janela de bundle novo com servidor velho o campo
       não existe, e a tela tem de se comportar como hoje
-- [ ] T016 [US2] Componente `frontend/apps/portal/src/components/AntesDoEvento.tsx` — recolhido por
+- [X] T016 [US2] Componente `frontend/apps/portal/src/components/AntesDoEvento.tsx` — recolhido por
       padrão, devolve `null` quando não há bloco, alvo de toque ≥44px, rótulo anunciável por leitor
       de tela e estado aberto/fechado audível (FR-009e). Nome visível **"Antes do evento"**, um só,
       no bloco e no controle (FR-009d). Molde: `CacheLine.tsx`
-- [ ] T017 [US2] Renderizar `<AntesDoEvento>` no card de `PortalAgendaPage.tsx`
-- [ ] T018 [US2] Renderizar `<AntesDoEvento>` no card de `PortalConvitesPage.tsx` (FR-009a) — é
+- [X] T017 [US2] Renderizar `<AntesDoEvento>` no card de `PortalAgendaPage.tsx`
+- [X] T018 [US2] Renderizar `<AntesDoEvento>` no card de `PortalConvitesPage.tsx` (FR-009a) — é
       onde a informação muda uma decisão que ainda não foi tomada
 
 **Checkpoint**: cenários 2, 3, 4c, 6c, 7, 11, 12 verdes; bloco conferido nas duas telas.
@@ -132,14 +132,14 @@ telas.
 
 **Teste independente**: gravar logística num evento com elenco e abrir o card.
 
-- [ ] T019 [US3] Em `_antes_do_evento` (`app/talent_portal/portal_ops.py`), montar `makeup` e
+- [X] T019 [US3] Em `_antes_do_evento` (`app/talent_portal/portal_ops.py`), montar `makeup` e
       `departure` — **cada um existe só se
       houver horário** (FR-006a); o local é companhia. `makeup.location` passa por
       `makeup_location_label`; `departure.location` cai em `DEPARTURE_DEFAULT_LOCATION` quando
       vazio
-- [ ] T020 [US3] Ordenar os itens do bloco na **ordem cronológica real** — ensaio, maquiagem,
+- [X] T020 [US3] Ordenar os itens do bloco na **ordem cronológica real** — ensaio, maquiagem,
       saída (FR-009c) — em `frontend/apps/portal/src/components/AntesDoEvento.tsx`
-- [ ] T021 [US3] Renderizar as duas linhas em `AntesDoEvento.tsx`, cada uma omitida quando ausente
+- [X] T021 [US3] Renderizar as duas linhas em `AntesDoEvento.tsx`, cada uma omitida quando ausente
 
 **Checkpoint**: cenários 4, 5, 5b, 8b verdes.
 
@@ -152,12 +152,12 @@ campos já saem em `app/api/agenda_read.py`.
 
 **Teste independente**: abrir um evento futuro com elenco e sem logística.
 
-- [ ] T022 [US4] Chip **Logística** em `calcularPendencias`
+- [X] T022 [US4] Chip **Logística** em `calcularPendencias`
       (`frontend/apps/internal/src/components/EventDetail/ResumoSection.tsx`), no molde dos chips
       existentes. Condição: pode editar o evento **e** evento futuro **e** ao menos uma vaga com
       talento e não dispensada **e** falta horário de maquiagem ou de saída. Comparar data por
       `start_at`, nunca por `toISOString()`
-- [ ] T023 [US4] Alerta em linha dentro do painel "Logística & trajeto"
+- [X] T023 [US4] Alerta em linha dentro do painel "Logística & trajeto"
       (`frontend/apps/internal/src/components/EventDetail/LogisticaSection.tsx`), mesma condição,
       dizendo quantas pessoas estão escaladas e que o Portal do Artista mostra esses horários no
       card. Apontar para a saída sugerida que o `TrajetoCard` já exibe ao lado. Sem `Dialog` — não
@@ -173,19 +173,19 @@ campos já saem em `app/api/agenda_read.py`.
 
 **Teste independente**: abrir as três telas do portal e copiar um convite de Coordenador.
 
-- [ ] T024 [US5] `"role_type": role.role_type` em `_role_summary`
+- [X] T024 [US5] `"role_type": role.role_type` em `_role_summary`
       (`app/talent_portal/portal_ops.py`) — o código do modelo, não o rótulo pronto, como já fazem
       `payment_status` e `invite_status` (R6)
-- [ ] T025 [P] [US5] `role_type?: "character" | "extra"` em
+- [X] T025 [P] [US5] `role_type?: "character" | "extra"` em
       `frontend/apps/portal/src/lib/portalAgenda.ts` — **opcional** (FR-013b)
-- [ ] T026 [US5] Componente `frontend/apps/portal/src/components/RoleLine.tsx` — fonte única do
+- [X] T026 [US5] Componente `frontend/apps/portal/src/components/RoleLine.tsx` — fonte única do
       rótulo, no molde de `CacheLine.tsx`. Sem `role_type` no payload, comporta-se como hoje
-- [ ] T027 [US5] Usar `<RoleLine>` em `PortalAgendaPage.tsx`, `PortalConvitesPage.tsx` e
+- [X] T027 [US5] Usar `<RoleLine>` em `PortalAgendaPage.tsx`, `PortalConvitesPage.tsx` e
       `PortalHistoricoPage.tsx` — os três lugares que hoje repetem a string `Personagem:`
-- [ ] T028 [P] [US5] E-mail de convite (`app/email_service.py`): rótulo por `role.role_type` e
+- [X] T028 [P] [US5] E-mail de convite (`app/email_service.py`): rótulo por `role.role_type` e
       local da maquiagem por `makeup_location_label` — hoje o artista recebe
       `Maquiagem: 14:00 — manto` (FR-012a)
-- [ ] T029 [P] [US5] Mensagem de WhatsApp: rótulo por `role_type` em
+- [X] T029 [P] [US5] Mensagem de WhatsApp: rótulo por `role_type` em
       `frontend/apps/internal/src/lib/eventDetail.ts` e local **traduzido** vindo de
       `frontend/apps/internal/src/components/EventDetail/CastingSection.tsx`, que hoje passa
       `event.makeup_location` cru (FR-012b). Reusar o `makeupLocationLabel` que já existe em
@@ -201,14 +201,14 @@ campos já saem em `app/api/agenda_read.py`.
 
 **Teste independente**: abrir `/portal/agenda` como um talento com muitas apresentações passadas.
 
-- [ ] T030 [US6] Remover a `<section>` do Histórico de
+- [X] T030 [US6] Remover a `<section>` do Histórico de
       `frontend/apps/portal/src/pages/PortalAgendaPage.tsx`
-- [ ] T031 [US6] Limpar o que a remoção deixou órfão, **à mão**: o `tsc` não ajuda aqui. Remover
+- [X] T031 [US6] Limpar o que a remoção deixou órfão, **à mão**: o `tsc` não ajuda aqui. Remover
       só a seção não orfana import nenhum (o card continua usando `RatingLink`, `CacheLine` e
       `formatRelativeDay` pelos dois ramos da prop que distingue futuro de passado); os imports só
       ficam órfãos depois que os ramos mortos saírem, e a prop sempre verdadeira o `noUnusedLocals`
       nunca acusa. Conferir que `formatRelativeDay` **continua** em uso
-- [ ] T032 [US6] **Não** remover `history` do payload de `get_agenda` (FR-013a). Deixar comentário
+- [X] T032 [US6] **Não** remover `history` do payload de `get_agenda` (FR-013a). Deixar comentário
       no `portal_ops.py` explicando que a lista continua sendo enviada de propósito, com o motivo
       (servidor e site sobem separados) e que a remoção é do ciclo seguinte — senão a próxima
       pessoa "limpa" e derruba o portal de quem não recarregou
@@ -219,13 +219,13 @@ campos já saem em `app/api/agenda_read.py`.
 
 ## Phase 9: US7 — A ficha de figurino diz de que evento é (P3)
 
-- [ ] T033 [US7] Declaração de RBAC no topo de `app/api/portal_figurino.py` — é o único dos cinco
+- [X] T033 [US7] Declaração de RBAC no topo de `app/api/portal_figurino.py` — é o único dos cinco
       módulos do portal sem ela; usar a mesma forma em prosa dos outros quatro. **Não** mexer no
       403: decisão registrada do dono
-- [ ] T034 [P] [US7] **Nada a mudar no payload da ficha**: `title` e `start_at` já saem
+- [X] T034 [P] [US7] **Nada a mudar no payload da ficha**: `title` e `start_at` já saem
       (`app/api/portal_figurino.py`). Conferir isso e seguir — a tarefa existe para que ninguém
       acrescente `end_at` "por simetria": FR-014 pede nome e data, e a hora já está no card
-- [ ] T035 [US7] Cabeçalho com nome e data do evento em
+- [X] T035 [US7] Cabeçalho com nome e data do evento em
       `frontend/apps/portal/src/pages/PortalFigurinoPage.tsx`, usando `formatLongDate`, que **já
       existe** em `format.ts` e não era usada por ninguém (Princípio I)
 
@@ -236,9 +236,9 @@ a ficha é conferida **na tela** — a US7 não tem cenário de API próprio, po
 
 ## Phase 10: Polish e documentação
 
-- [ ] T036 `ruff check` nos Python tocados (`portal_ops.py`, `event_ops.py`, `email_service.py`,
+- [X] T036 `ruff check` nos Python tocados (`portal_ops.py`, `event_ops.py`, `email_service.py`,
       `portal_figurino.py`, `constants.py`); `cd frontend && npm run typecheck` limpo nas três SPAs
-- [ ] T037 Conferência de tela do quickstart §3, **em viewport mobile 375×812** e varrendo
+- [X] T037 Conferência de tela do quickstart §3, **em viewport mobile 375×812** e varrendo
       320–430px: Agenda, Convites, Histórico, ficha de figurino, e a tela interna do evento nos
       dois estados do chip. `tsc` limpo não prova card
 - [ ] T038 [P] `docs/01` — contrato de `GET /api/portal/agenda` e de

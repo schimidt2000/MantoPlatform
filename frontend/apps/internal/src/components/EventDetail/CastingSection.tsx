@@ -15,7 +15,15 @@ import {
   useToggleTransporte,
 } from "../../lib/casting";
 import { buildConviteMsg, useSetPaymentStatus } from "../../lib/eventDetail";
-import { brl, Empty, formatDay, formatTime, INPUT_CLASS, Panel } from "./parts";
+import {
+  brl,
+  Empty,
+  formatDay,
+  formatTime,
+  INPUT_CLASS,
+  makeupLocationLabel,
+  Panel,
+} from "./parts";
 import { TalentPicker } from "./TalentPicker";
 
 const PAYMENT_LABELS: Record<PaymentStatus, string> = {
@@ -121,7 +129,9 @@ function CopyInviteButton({ role, data }: { role: RoleItem; data: EventoDetalhe 
           .join(" - "),
         location: event.location,
         makeupTime: event.makeup_time,
-        makeupLocation: event.makeup_location,
+        // Traduzido AQUI, não no texto: o banco guarda o código, e a mensagem saía com
+        // "📍 Local: manto" para o artista (feature 302).
+        makeupLocation: event.makeup_location ? makeupLocationLabel(event.makeup_location) : null,
       },
       role.cache_value ? `R$ ${formatBRL(role.cache_value)}` : "",
     );

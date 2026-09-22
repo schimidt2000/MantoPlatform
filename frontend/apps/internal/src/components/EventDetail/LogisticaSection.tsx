@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { TriangleAlert } from "lucide-react";
 import { Badge, Button } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import type { EventoDetalhe } from "../../lib/agenda";
@@ -9,15 +10,7 @@ import {
   useTravelEstimate,
 } from "../../lib/eventDetail";
 import { useSaveLogistics } from "../../lib/eventOps";
-import { Empty, INPUT_CLASS, Panel } from "./parts";
-
-/** Rótulo legível do local de maquiagem (os dois presets + endereço livre). */
-function makeupLocationLabel(loc: string | null): string {
-  if (!loc) return "—";
-  if (loc === "manto") return "Manto Produções";
-  if (loc === "local") return "Local do evento";
-  return loc;
-}
+import { Empty, INPUT_CLASS, Panel, makeupLocationLabel } from "./parts";
 
 /** Card do trajeto: tempo/distância em cache do Google Maps + saída sugerida. */
 function TrajetoCard({ data }: { data: EventoDetalhe }) {
@@ -345,12 +338,45 @@ export interface LogisticaSectionProps {
   data: EventoDetalhe;
 }
 
+/**
+ * Aviso de logística faltante (feature 302).
+ *
+ * O chip da faixa de pendências descobre; este alerta explica e diz por que importa agora. Mesma
+ * condição do chip, de propósito: dois textos que acendem em momentos diferentes seriam duas
+ * regras, e uma delas ficaria errada. A saída sugerida pelo trajeto já está no card ao lado —
+ * quem precisa preencher não tem de calcular nada.
+ */
+function AvisoLogisticaFaltando({ data }: { data: EventoDetalhe }) {
+  const futuro = Boolean(data.event.start_at) && new Date(data.event.start_at!) > new Date();
+  const escalados = (data.elenco ?? []).filter((r) => r.talent && !r.dismissed).length;
+  if (!futuro || escalados === 0) return null;
+  if (data.event.makeup_time && data.event.departure_time) return null;
+
+  // `amber` NÃO existe na paleta (o design system usa `gold` no lugar dele): `bg-amber-soft`
+  // nunca foi gerada pelo Tailwind, e um aviso com ela sai sem fundo nenhum — já aconteceu com o
+  // badge "Pendente" de Gastos Extras. `gold-soft`/`gold-ink` é o par real.
+  return (
+    <div
+      className="mb-3 flex items-start gap-2 rounded-md bg-gold-soft px-3 py-2 text-sm text-gold-ink"
+      role="status"
+    >
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <span>
+        {escalados === 1 ? "1 pessoa escalada" : `${escalados} pessoas escaladas`} e a logística
+        ainda não foi definida. O Portal do Artista mostra o horário de maquiagem e de saída no
+        card do evento — sem eles, quem vai trabalhar descobre por WhatsApp ou não descobre.
+      </span>
+    </div>
+  );
+}
+
 /** Logística & trajeto + materiais de ensaio (coluna esquerda, feature 190). */
 export function LogisticaSection({ data }: LogisticaSectionProps) {
   const canEdit = Boolean(data.flags.can_edit_event);
   return (
     <>
       <Panel title="Logística & trajeto">
+        {canEdit && <AvisoLogisticaFaltando data={data} />}
         <div className="grid gap-3 lg:grid-cols-2">
           <div>{canEdit ? <LogisticaForm data={data} /> : <LogisticaLeitura data={data} />}</div>
           <TrajetoCard data={data} />

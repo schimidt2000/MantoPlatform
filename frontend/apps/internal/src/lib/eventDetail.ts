@@ -293,7 +293,10 @@ export function buildConviteMsg(role: RoleItem, ctx: ConviteContext, cache: stri
     `Ola, ${role.talent?.first_name ?? ""}! Voce tem um convite da Manto Producoes. 🎉`,
     "",
     `🎪 *${ctx.title}*`,
-    `👤 Personagem: *${role.character_name}*`,
+    // 40% das escalações são cargo (Coordenador, Técnico de Som, Maquiador, Foto/Vídeo,
+    // Transporte) e a mensagem chamava todas de "Personagem" — feature 302. O WhatsApp e o
+    // e-mail são o que o artista lê ANTES do portal.
+    `👤 ${role.role_type === "extra" ? "Função" : "Personagem"}: *${role.character_name}*`,
   ];
   if (ctx.dateLabel) linhas.push(`📅 ${ctx.dateLabel}`);
   if (ctx.timeLabel) linhas.push(`🕐 ${ctx.timeLabel}`);

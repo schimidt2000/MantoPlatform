@@ -1,7 +1,20 @@
 """Endpoint de Ficha de Figurino do Portal do Artista (feature 176).
 
+RBAC = "é o dono do recurso": a sessão de talento é conferida por `@portal_api_login_required`
+(401 sem ela) e a ficha só sai para quem tem o que ver naquele evento — o intérprete vê os
+próprios personagens, o coordenador vê o elenco inteiro. O `event_id` vem do cliente, mas não
+manda em nada: quem decide é `portal_ops.get_figurino`, que parte do talento da sessão e devolve
+`None` quando ele não está escalado. Não há papéis dentro do portal.
+
+Era o único dos cinco módulos do portal sem esta declaração (feature 302).
+
+**Recusa com 403, e não 404**, o que confirma a um estranho que o evento existe — o Princípio XIII
+pede 404. Fica assim por decisão registrada do dono na 302: trocar mudaria a mensagem que o
+artista lê ("Você não está escalado neste evento") e não tem relação com o que a feature resolve.
+Está em `docs/05`; não "conserte" de passagem.
+
 Só orquestra e serializa — a regra de negócio (resolução da ficha por personagem/evento) mora
-em `app/talent_portal/portal_ops.py`, sem duplicar lógica com a view Jinja legada.
+em `app/talent_portal/portal_ops.py`.
 """
 
 from typing import Any

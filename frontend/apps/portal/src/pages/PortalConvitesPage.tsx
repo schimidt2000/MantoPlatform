@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Button, Card, CardContent, Skeleton } from "@manto/ui";
+import { AntesDoEvento } from "../components/AntesDoEvento";
 import { CacheLine } from "../components/CacheLine";
+import { RoleLine } from "../components/RoleLine";
 import { FormError } from "../components/FormField";
-import { formatDateTime, formatRelativeDay, formatWeekday } from "../lib/format";
+import { formatDateTimeRange, formatRelativeDay, formatWeekday } from "../lib/format";
 import { useAcceptInvite, useAgenda, useRejectInvite, type PortalRole } from "../lib/portalAgenda";
 import { ErroDeCarregamento } from "../components/ErroDeCarregamento";
 
@@ -27,14 +29,19 @@ function InviteCard({ role }: { role: PortalRole }) {
         <div className="space-y-0.5">
           <p className="font-medium text-ink">{role.title}</p>
           <p className="text-sm text-muted">
-            {formatWeekday(role.start_at)}, {formatDateTime(role.start_at)}
+            {formatWeekday(role.start_at)}, {formatDateTimeRange(role.start_at, role.end_at)}
           </p>
           {role.location && <p className="text-sm text-muted">{role.location}</p>}
           <p className="text-sm font-medium text-accent">{formatRelativeDay(role.start_at)}</p>
-          <p className="text-sm text-muted">Personagem: {role.character_name}</p>
+          <RoleLine role={role} />
         </div>
 
         <CacheLine role={role} variant="destaque" />
+
+        {/* Aqui o bloco não é conveniência, é insumo da decisão: 2 dos 4 convites pendentes do
+            espelho são de eventos que JÁ têm ensaio marcado, e a pessoa aceitava sem saber que
+            ia ter de ensaiar. É o mesmo argumento que desceu o cachê para esta tela. */}
+        <AntesDoEvento bloco={role.before_event} />
 
         {erro && <FormError>{erro.message}</FormError>}
 

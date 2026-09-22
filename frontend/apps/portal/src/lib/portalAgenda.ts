@@ -36,6 +36,38 @@ export interface PortalRole {
    * avisar que falta responder — só `pending` tem o que responder.
    */
   invite_status: string | null;
+  /**
+   * `character` = personagem · `extra` = cargo (Coordenador, Técnico de Som, Maquiador,
+   * Foto/Vídeo, Transporte). Vem o código do modelo, não o rótulo pronto — mesma convenção de
+   * `payment_status` e `invite_status`. Opcional porque backend e bundle sobem como serviços
+   * separados: na janela de site novo com servidor velho o campo não existe, e a tela tem de se
+   * comportar como antes em vez de quebrar.
+   */
+  role_type?: "character" | "extra";
+  /**
+   * Bloco "Antes do evento": ensaio, maquiagem e saída. `null` quando não há NADA a mostrar — a
+   * tela testa este nulo e não renderiza a seção. Presente em convites pendentes e eventos
+   * futuros; sempre nulo no histórico, porque preparação é para o que ainda vai acontecer.
+   * Opcional pelo mesmo motivo de `role_type`.
+   */
+  before_event?: PortalBeforeEvent | null;
+}
+
+/** Um ensaio marcado para o evento — costuma cair 2 a 4 dias antes dele. */
+export interface PortalRehearsal {
+  start_at: string | null;
+  end_at: string | null;
+  location: string | null;
+}
+
+/** O que o artista precisa saber ANTES do evento. Cada parte some quando não foi definida. */
+export interface PortalBeforeEvent {
+  /** `null` quando não há horário de maquiagem — o horário é que faz a linha existir. */
+  makeup: { time: string | null; location: string | null } | null;
+  /** `null` quando não há horário de saída. O local vem com o padrão quando está vazio. */
+  departure: { time: string | null; location: string | null } | null;
+  /** Lista, sempre: um evento pode ter mais de um ensaio, e esconder o segundo seria mentir. */
+  rehearsals: PortalRehearsal[];
 }
 
 export interface PortalAgenda {
