@@ -15,7 +15,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Load, selectinload
 from werkzeug.datastructures import FileStorage
 
 from app import db
@@ -167,7 +167,7 @@ def events_with_visible_figurino(talent: Talent, roles: list[EventRole]) -> set[
     return com_ficha
 
 
-def _com_evento():
+def _com_evento() -> Load:
     """Carrega o evento junto das escalações, em vez de um SELECT por linha.
 
     `EventRole.event` é backref `lazy=True`, então serializar N escalações dispara N consultas —
@@ -277,6 +277,17 @@ def _role_summary(
 
     Não é vazamento: `_role_summary` só é chamado a partir de consultas já filtradas por
     `talent_id` da sessão, então é sempre o cachê do próprio dono da sessão.
+
+    Args:
+        role: A escalação, com o evento já carregado (ver `_com_evento`).
+        has_figurino: Existe ficha de figurino que ESTA pessoa pode ver neste evento.
+        before_event: O bloco "Antes do evento" já pronto, ou `None`. Vem **de fora** de
+            propósito: montá-lo aqui custaria uma consulta por escalação, e quem chama já tem os
+            blocos da agenda inteira numa consulta só (`_antes_do_evento`). É a mesma razão pela
+            qual `has_figurino` também chega pronto.
+
+    Returns:
+        O dicionário da escalação, tal como o portal o recebe.
     """
     event = role.event
     cache_value = float(role.cache_value or 0)

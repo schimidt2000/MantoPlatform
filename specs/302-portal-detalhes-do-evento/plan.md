@@ -107,10 +107,10 @@ app/constants.py                                    # DEPARTURE_DEFAULT_LOCATION
 app/calendar/event_ops.py                           # MAKEUP_LOCATION_LABELS + makeup_location_label
 app/email_service.py                                # rótulo Função/Personagem + local traduzido
 app/talent_portal/portal_ops.py                     # _antes_do_evento + _role_summary + selectinload
-app/api/portal_figurino.py                          # bloco RBAC: de topo + end_at
+app/api/portal_figurino.py                          # só a declaração de RBAC (sem end_at: FR-014 pede nome e DATA)
 
 frontend/apps/portal/src/lib/portalAgenda.ts        # tipos novos (before_event OPCIONAL)
-frontend/apps/portal/src/lib/portalFigurino.ts      # end_at
+frontend/apps/portal/src/lib/portalFigurino.ts      # (sem mudança — o tipo já bastava)
 frontend/apps/portal/src/lib/format.ts              # formatDateTimeRange
 frontend/apps/portal/src/components/RoleLine.tsx    # NOVO — Personagem: / Função:
 frontend/apps/portal/src/components/AntesDoEvento.tsx  # NOVO — o bloco recolhível

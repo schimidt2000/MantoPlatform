@@ -208,8 +208,14 @@ def save_logistics(
             f"Horário de maquiagem: {old_makeup_time} → {event.makeup_time or 'não definido'}"
         )
     if event.makeup_location != old_makeup_location and old_makeup_location is not None:
+        # Traduzido nas DUAS pontas: esta frase não fica no banco, ela é lida pelo artista — vai
+        # para `EventRole.change_description` (o aviso "Este evento teve uma alteração" do card do
+        # portal) e para o corpo de `send_event_changed_email`. Sem isto, a 302 consertaria o
+        # código cru na tela, no e-mail de convite e no WhatsApp, e deixaria o artista lendo
+        # "Local de maquiagem: manto → local" na quarta superfície.
         logistics_changes.append(
-            f"Local de maquiagem: {old_makeup_location} → {event.makeup_location or 'não definido'}"
+            f"Local de maquiagem: {makeup_location_label(old_makeup_location)} → "
+            f"{makeup_location_label(event.makeup_location) or 'não definido'}"
         )
     rehearsal_just_activated = event.needs_rehearsal and not old_needs_rehearsal
     if rehearsal_just_activated:

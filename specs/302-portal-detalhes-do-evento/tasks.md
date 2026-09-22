@@ -40,14 +40,21 @@ arquivo — se alguma tarefa abaixo parecer pedir migration, a tarefa está erra
       `POST /api/auth/login` (staff do cenário 13); requisições **fora** de `app.app_context()`;
       cenário 13 conferido por **conexão separada**; três cenários que DEVEM falhar. Escrito AGORA
       e falhando nos cenários ainda não construídos
-- [X] T003 No `verify_302.py`, o **arranjo**: assumir uma `EventRole` existente com
-      `talent_id IS NULL` (nunca criar role com `character_name` inventado — o sync do Google
-      apaga a role e manda e-mail de remoção a gente de verdade) e semear os ensaios com `INSERT`
-      direto no banco, com `google_event_id` descartável — **nunca** por
-      `POST /api/events/<id>/ensaios`, que cria evento no Google Agenda da empresa (R13)
-- [X] T004 No `verify_302.py`, a **limpeza no `finally`**: apagar os descartáveis (`roles.clear()`
-      antes do usuário) **e restaurar os eventos reais do espelho** — a vaga assumida volta a
-      `talent_id` nulo e os campos de logística ao valor original (spec §Verificação, cenário 14)
+- [X] T003 No `verify_302.py`, o **arranjo**: **tudo descartável** — evento, cargo, ensaio e os
+      dois talentos nascem e morrem no arquivo, com prefixo próprio. Ensaio entra por `INSERT`
+      direto, com `google_event_id` descartável, **nunca** por `POST /api/events/<id>/ensaios`,
+      que cria evento no Google Agenda da empresa (R13).
+      **Esta tarefa foi reescrita na convergência.** Ela mandava *assumir uma `EventRole`
+      existente com `talent_id IS NULL`*, por medo da regra do `CLAUDE.md` §4 ("nunca semeie role
+      com `character_name` inventado — o sync do Google apaga a role e manda e-mail de remoção a
+      gente de verdade"). Lido de novo, assumir linha de produção é o caminho **mais** arriscado:
+      escreve um talento de teste no espelho e depende da limpeza rodar para desfazer. O que a
+      regra proíbe é pendurar cargo inventado em evento **REAL**, e isso não acontece aqui
+- [X] T004 No `verify_302.py`, a **limpeza no `finally`**: apagar tudo que tem o prefixo —
+      ensaios (filhos) antes dos pais, por causa da FK para a própria tabela, e `roles.clear()`
+      antes do usuário de staff. **Não há o que restaurar**, porque nada de produção é tocado
+      (ver T003); a redação anterior, que mandava devolver a vaga assumida a `talent_id` nulo,
+      pertencia ao arranjo antigo
 - [X] T005 `MAKEUP_LOCATION_LABELS` + `makeup_location_label()` em `app/calendar/event_ops.py`,
       **colados em `resolve_makeup_location` (`:83-91`)** — o módulo que codifica é o que
       decodifica. Docstring explica que é o inverso daquela função e que serve portal, e-mail e
@@ -255,7 +262,7 @@ a ficha é conferida **na tela** — a US7 não tem cenário de API próprio, po
       (3) a tradução do local de maquiagem em Python e em TypeScript; (4) a ficha de figurino
       recusando com 403 onde o Princípio XIII manda 404; (5) o formatador de horário duplicado
       entre portal e app interno; (6) marcar ensaio não avisar o elenco
-- [ ] T042 `verify_302.py` → **22/22 OK**; `git status --short` limpo;
+- [X] T042 `verify_302.py` → **22/22 OK**; `git status --short` limpo;
       `migrations/versions/` sem untracked (não deve haver nenhum — a feature não tem migration)
 
 ---
@@ -301,3 +308,77 @@ futuros tem logística preenchida.
 
 **Tudo entrega num deploy só** (regra da casa: publicar em lote, fora do horário), mas a ordem
 acima é a que mantém a branch entregável a cada parada.
+
+---
+
+## Phase 11: Convergência
+
+> **Nota de processo, para quem ler depois:** o `/speckit-converge` é read-only por contrato — ele
+> deveria **só** anexar tarefas, e `/speckit-implement` as completaria. Aqui os oito achados foram
+> **corrigidos na própria rodada**, porque sete eram de uma a cinco linhas e um era defeito de
+> produto saindo para artista. Ficam registrados marcados, com o que foi feito, em vez de
+> reaparecerem como fila fantasma. A divergência do processo está dita aqui de propósito.
+>
+> A avaliação cruzou os 28 FR contra o código e **nenhum requisito ficou sem implementação**. Os
+> vãos foram de outra natureza: dois cenários de verify que passavam a vazio, uma quarta superfície
+> vazando o código do banco, um componente reimplementado que já existia, e artefatos descrevendo
+> o contrário do que o código faz.
+
+- [X] T043 **CRITICAL · contradicts** — o cenário 6b do `verify_302.py` **não provava nada**.
+      `"Manto Produções" in html` é verdade em todo e-mail (está no `<title>` e no rodapé de
+      `_html_wrap`) e `">manto<"` nunca casa, porque `_info_row` renderiza `>09:00 — manto</td>`.
+      Apagar a tradução deixava o cenário verde. Agora olha a **linha da maquiagem**
+      (`"— Manto Produções<"` presente, `"— manto<"` ausente), e isso foi **provado por mutação**:
+      com `makeup_location_label` removida do e-mail, o verify cai para 21/22
+- [X] T044 **HIGH · partial** — FR-007/SC-004 vazavam por uma **quarta superfície** que a spec não
+      previu: `save_logistics` (`app/calendar/event_ops.py`) montava
+      `f"Local de maquiagem: {old} → {new}"` com o **código cru**, e essa frase vira
+      `EventRole.change_description` — o aviso "Este evento teve uma alteração" do card do portal —
+      e o corpo de `send_event_changed_email`. O artista lia "Local de maquiagem: manto → local".
+      Agora as duas pontas passam por `makeup_location_label`
+- [X] T045 **HIGH · contradicts** — o cenário 12 (ensaio órfão) comparava `it["event_id"]` (o id do
+      SHOW) com o id do ensaio órfão: nunca iguais, asserção impossível de falhar. E o órfão nascia
+      com o mesmo `location` de todos os outros ensaios, indistinguível. Agora tem local próprio
+      (`LOCAL_ORFAO`) e ganhou o controle anti-vazio. **Honestidade registrada na docstring**: com
+      a consulta atual (`parent_event_id.in_(...)`) ele ainda não pode falhar — é trava para a
+      mudança imaginável, não prova do presente
+- [X] T046 **MEDIUM · missing (Princípio I e XI)** — `AntesDoEvento` reimplementou à mão um
+      recolhível que **já existe**: `AccordionRow` de `@manto/ui` (feature 187), com altura animada
+      por Framer Motion, `useReducedMotion`, `aria-expanded` e `aria-controls`. A versão própria
+      ficou sem animação nenhuma, contra o Princípio XI que o próprio `plan.md` citou. Trocado; o
+      alvo de 44px passou a vir pelo `summary`, que é quem dá altura ao botão. Conferido na tela:
+      44px, `aria-expanded` alternando, conteúdo e ordem iguais
+- [X] T047 **MEDIUM · contradicts** — T003 e T004 estavam marcadas feitas descrevendo o
+      **oposto** do que o verify faz: mandavam assumir uma `EventRole` de produção e restaurá-la.
+      O verify cria tudo descartável, de propósito e com o motivo na docstring. As duas tarefas, a
+      linha do cenário 14 e a nota da spec foram reescritas para descrever o que existe
+- [X] T048 **LOW · contradicts** — FR-015 dizia "**nem** saída **nem** maquiagem preenchidas"
+      (as duas faltando), e o código acende quando **qualquer uma** falta. O comportamento é o
+      certo — logística pela metade deixa o elenco no escuro do mesmo jeito —, então quem mudou foi
+      o requisito
+- [X] T049 **LOW · contradicts** — o mapa de código do `plan.md` prometia `end_at` no payload da
+      ficha de figurino, que o contrato e a T034 **proíbem**. O código estava certo; o plano é que
+      ficou mentindo para quem o lesse depois
+- [X] T050 **LOW · partial** — quatro itens de conformidade: `_com_evento()` sem anotação de
+      retorno e `_role_summary` com parâmetros novos sem `Args:`/`Returns:` (constituição II);
+      `AntesDoEvento` fazendo `rehearsals.length` sem guarda, contra o próprio FR-013b; e
+      `docs/01` §4.3 sem linha nenhuma para o portão do portal, apesar de a feature ter quitado a
+      declaração que faltava em `portal_figurino.py`
+
+### Aceito sem mudar, com o motivo
+
+- **O cenário 4b não testa FR-002a.** Ele prova que o payload leva as duas datas; a regra do "dia
+  seguinte" mora em `format.ts` e **não tem cobertura automatizada** — o repositório não tem
+  runner de teste de frontend (constituição: não há pytest nem equivalente em TS). Foi conferida
+  **na tela**, e está escrito aqui para ninguém supor cobertura que não existe.
+- **A ficha de figurino usa `formatWeekday` além de `formatLongDate`.** T035 nomeava só o segundo.
+  É uma palavra a mais ("sexta-feira, 23 de outubro de 2026") que ninguém pediu e que ninguém
+  perde nada por ter.
+- **O cenário 13b roda dentro de `app.app_context()`**, contra a regra do próprio módulo. Precisa
+  de `db.engine` para escutar as consultas, e não testa permissão — a exceção agora está comentada
+  na docstring do cenário.
+- **A prop `payment` de `CacheLine` ficou órfã**: quem a passava era o card do histórico da Agenda,
+  que saiu na US6. A tela Histórico desenha o cachê inline e nunca importou `CacheLine`, apesar de
+  a docstring dele dizer que é "fonte única para Convites, Agenda e Histórico". **Não foi mexido**:
+  unificar as duas rendições é melhoria real, não conserto, e mexeria numa tela fora do pedido.
+  Registrado aqui; vale como candidato à próxima feature que tocar o Histórico.

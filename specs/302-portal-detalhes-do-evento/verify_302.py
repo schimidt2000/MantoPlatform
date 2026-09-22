@@ -83,6 +83,8 @@ from app.models import CalendarEvent, EventRole, Role, Talent, User  # noqa: E40
 
 PREFIX = "__v302_"
 SENHA = "verify-302-senha"
+#: Local exclusivo do ensaio orfao — e o que permite reconhece-lo se ele vazar para um card.
+LOCAL_ORFAO = f"{PREFIX}ORFAO — nao deve aparecer"
 
 app = create_app()
 app.config["TESTING"] = True
@@ -328,7 +330,7 @@ def preparar() -> None:
     _ensaio(ev_cancel, dias=37)
 
     # Ensaio órfão: sem pai, não pertence a evento nenhum.
-    estado["en_orfao"] = _ensaio(None, dias=26).id
+    estado["en_orfao"] = _ensaio(None, dias=26, local=LOCAL_ORFAO).id
 
     estado["ev_u"] = _evento("doU", dias=41, talent_id=u.id).id
     estado["ev_logistica"] = _evento("logistica", dias=42, talent_id=t.id).id
@@ -493,9 +495,17 @@ def cen_06b_email_de_convite() -> None:
         "Personagem" not in html,
         "o e-mail ainda chama um Coordenador de 'Personagem' (FR-012a)",
     )
+    # A asserção tem de olhar para a LINHA da maquiagem, não para o documento. `"Manto Produções"
+    # in html` é verdade sempre — está no `<title>` e no rodapé de todo e-mail (`_html_wrap`) — e
+    # `">manto<"` nunca casa, porque `_info_row` renderiza `>09:00 — manto</td>`, com a hora
+    # colada. As duas versões anteriores desta linha passavam verdes com a tradução removida.
     _garante(
-        "Manto Produções" in html and ">manto<" not in html,
-        "o e-mail ainda manda o código `manto` como local de maquiagem",
+        "— Manto Produções<" in html,
+        f"o e-mail não traduziu o local da maquiagem na linha dela. HTML: {html[:400]!r}",
+    )
+    _garante(
+        "— manto<" not in html,
+        "o e-mail ainda manda o código `manto` cru como local de maquiagem",
     )
 
 
@@ -581,15 +591,27 @@ def cen_11_evento_cancelado() -> None:
 
 
 def cen_12_ensaio_orfao() -> None:
+    """O ensaio sem `parent_event_id` não pertence a evento nenhum e não pode aparecer.
+
+    A primeira versão deste cenário comparava `it["event_id"]` (o id do SHOW) com o id do ensaio
+    órfão — nunca iguais, então a asserção não podia falhar. E o órfão nascia com o mesmo
+    `location` de todos os outros ensaios, o que o tornava indistinguível mesmo numa comparação
+    direta. Agora ele tem **local próprio**, e o que se procura é esse local em qualquer bloco.
+
+    Honestidade sobre o alcance: com a consulta atual (`parent_event_id.in_(...)`) um órfão não
+    tem como entrar, então este cenário **não falha hoje por mais errado que o resto fique**. Ele
+    é uma trava para a mudança que se pode imaginar — alguém trocar o filtro por `event_type ==
+    "ENSAIO"` e uma janela de datas, o que traria todo ensaio solto para o card de todo mundo.
+    """
     ag = _agenda(estado["t_email"])
     _ausente(ag, estado["en_orfao"])
+    _bloco_existe(ag)  # sem bloco nenhum, a varredura abaixo não prova nada
     for lista in ("pending_invites", "upcoming", "history"):
         for it in ag[lista]:
             for en in (it.get("before_event") or {}).get("rehearsals") or []:
                 _garante(
-                    en.get("location") != f"{PREFIX}R. Olga Camelini, 147"
-                    or it["event_id"] != estado["en_orfao"],
-                    "ensaio órfão apareceu num card",
+                    en.get("location") != LOCAL_ORFAO,
+                    f"o ensaio órfão apareceu no card do evento {it['event_id']}",
                 )
 
 
@@ -625,7 +647,14 @@ def cen_13_logistica_persiste() -> None:
 
 
 def cen_13b_consulta_nao_cresce() -> None:
-    """A agenda de quem tem 13 escalações não pode custar mais consultas que a de quem tem 1."""
+    """A agenda de quem tem 13 escalações não pode custar mais consultas que a de quem tem 1.
+
+    **Exceção declarada à regra do módulo**: este é o único cenário que roda as requisições
+    DENTRO de `app.app_context()`, porque precisa de `db.engine` para escutar as consultas. A
+    regra existe para cenários de **permissão** (contexto persistente vaza a sessão entre
+    requisições e faz o cenário passar por engano); aqui não se testa permissão nenhuma, e cada
+    `_medir` abre o seu próprio `test_client` com login próprio.
+    """
     contagem = {"n": 0}
 
     def _conta(conn, cursor, statement, parameters, context, executemany):  # noqa: ANN001

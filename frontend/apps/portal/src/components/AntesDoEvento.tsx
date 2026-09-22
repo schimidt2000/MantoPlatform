@@ -1,5 +1,5 @@
-import { useId, useState } from "react";
-import { CalendarClock, ChevronDown } from "lucide-react";
+import { CalendarClock } from "lucide-react";
+import { AccordionRow } from "@manto/ui";
 import type { PortalBeforeEvent } from "../lib/portalAgenda";
 import { formatDateTimeRange } from "../lib/format";
 
@@ -18,64 +18,59 @@ import { formatDateTimeRange } from "../lib/format";
  *
  * O nome é um só, no bloco e no controle: "Antes do evento". Dois nomes para a mesma coisa é como
  * se descobre, tarde, que duas pessoas achavam que estavam falando de telas diferentes.
+ *
+ * A expansão é o `AccordionRow` de `@manto/ui` (feature 187), não um `useState` próprio: ele já
+ * traz altura animada com Framer Motion respeitando `useReducedMotion`, mais `aria-expanded` e
+ * `aria-controls` — foi escrito para a "Resumo por Vendedor" do financeiro, mas é genérico. A
+ * primeira versão desta tela reimplementou tudo isso à mão e ficou sem animação nenhuma. O alvo
+ * de toque de 44px vem pelo `summary`, que é quem dá altura ao botão.
  */
 export function AntesDoEvento({ bloco }: { bloco: PortalBeforeEvent | null | undefined }) {
-  const [aberto, setAberto] = useState(false);
-  const painelId = useId();
-
   if (!bloco) return null;
-  const { makeup, departure, rehearsals } = bloco;
+  // `?? []` pelo mesmo motivo que os campos novos nascem opcionais (FR-013b): o site e a API
+  // sobem como serviços separados, e um bloco vindo de uma versão diferente do servidor pode não
+  // trazer a lista. `undefined.length` aqui derrubaria a árvore inteira e o card viraria tela
+  // branca no celular — que é exatamente o acidente que esta feature se deu ao trabalho de evitar
+  // do outro lado, mantendo `history` no payload.
+  const { makeup, departure } = bloco;
+  const rehearsals = bloco.rehearsals ?? [];
   if (!makeup && !departure && rehearsals.length === 0) return null;
 
   return (
-    <div className="rounded-md border border-line bg-surface-2">
-      {/* `min-h-[44px]` e a linha inteira clicável: o alvo de toque mínimo vale para o dedo de
-          quem está na rua, não só para o cursor. `aria-expanded` + `aria-controls` são o que faz
-          um leitor de tela anunciar o que o botão abre e se já está aberto. */}
-      <button
-        type="button"
-        onClick={() => setAberto((v) => !v)}
-        aria-expanded={aberto}
-        aria-controls={painelId}
-        className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm font-medium text-ink"
+    <div className="rounded-md border border-line bg-surface-2 px-3">
+      <AccordionRow
+        summary={
+          <span className="flex min-h-[44px] items-center gap-2 text-sm font-medium text-ink">
+            <CalendarClock className="h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
+            Antes do evento
+          </span>
+        }
+        contentClassName="space-y-2"
       >
-        <CalendarClock className="h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
-        Antes do evento
-        <ChevronDown
-          className={`ml-auto h-4 w-4 shrink-0 text-muted transition-transform ${
-            aberto ? "rotate-180" : ""
-          }`}
-          aria-hidden="true"
-        />
-      </button>
-
-      {aberto && (
-        <div id={painelId} className="space-y-2 border-t border-line px-3 py-2.5">
-          {rehearsals.map((ensaio, i) => (
-            <div key={`${ensaio.start_at}-${i}`}>
-              <p className="text-sm text-ink">
-                <span className="font-medium">Ensaio</span>{" "}
-                {formatDateTimeRange(ensaio.start_at, ensaio.end_at)}
-              </p>
-              {ensaio.location && <p className="text-sm text-muted">{ensaio.location}</p>}
-            </div>
-          ))}
-
-          {makeup?.time && (
+        {rehearsals.map((ensaio, i) => (
+          <div key={`${ensaio.start_at}-${i}`}>
             <p className="text-sm text-ink">
-              <span className="font-medium">Maquiagem</span> {makeup.time}
-              {makeup.location ? ` — ${makeup.location}` : ""}
+              <span className="font-medium">Ensaio</span>{" "}
+              {formatDateTimeRange(ensaio.start_at, ensaio.end_at)}
             </p>
-          )}
+            {ensaio.location && <p className="text-sm text-muted">{ensaio.location}</p>}
+          </div>
+        ))}
 
-          {departure?.time && (
-            <p className="text-sm text-ink">
-              <span className="font-medium">Saída</span> {departure.time}
-              {departure.location ? ` — ${departure.location}` : ""}
-            </p>
-          )}
-        </div>
-      )}
+        {makeup?.time && (
+          <p className="text-sm text-ink">
+            <span className="font-medium">Maquiagem</span> {makeup.time}
+            {makeup.location ? ` — ${makeup.location}` : ""}
+          </p>
+        )}
+
+        {departure?.time && (
+          <p className="text-sm text-ink">
+            <span className="font-medium">Saída</span> {departure.time}
+            {departure.location ? ` — ${departure.location}` : ""}
+          </p>
+        )}
+      </AccordionRow>
     </div>
   );
 }

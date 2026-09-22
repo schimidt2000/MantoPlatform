@@ -167,7 +167,7 @@ eventos futuros — o valor só se realiza junto com a História 4.
 ### História 4 — A produção descobre que deixou o elenco no escuro (Prioridade: P2)
 
 Quem cuida do evento abre a página dele e é avisado, na própria seção de logística, que há gente
-escalada e nem saída nem maquiagem definidas. O aviso apaga quando a logística é salva.
+escalada e faltando o horário de saída ou o de maquiagem. O aviso apaga quando a logística é salva.
 
 **Por que esta prioridade**: sem ela, as Histórias 3 mostra linha vazia para todo mundo. É o que
 transforma a feature em mudança real em vez de campo bonito e vazio.
@@ -361,8 +361,10 @@ final no payload da ficha).
   na janela de tela nova com servidor velho, o card se comporta como hoje em vez de quebrar.
 - **FR-014**: A ficha de figurino DEVE mostrar o nome e a data do evento a que pertence.
 - **FR-015**: A página interna do evento DEVE avisar quem cuida do evento quando houver pelo menos
-  uma pessoa escalada, o evento ainda não tiver acontecido e nem saída nem maquiagem estiverem
-  preenchidas; o aviso DEVE desaparecer assim que a logística for salva.
+  uma pessoa escalada, o evento ainda não tiver acontecido e **faltar o horário de saída ou o de
+  maquiagem** — basta uma das duas faltar, não precisa faltarem as duas. Logística pela metade
+  deixa o elenco no escuro do mesmo jeito: quem sabe a hora da maquiagem e não a da saída ainda
+  precisa perguntar. O aviso DEVE desaparecer assim que a logística for salva.
 - **FR-016**: Nenhuma mudança DEVE alterar quem pode ver o quê: o portal continua entregando
   apenas dados da pessoa autenticada, e as permissões internas ficam como estão.
 
@@ -421,7 +423,7 @@ conexão separada; limpeza no `finally`.
 | 12 | Ensaio sem vínculo com show | não aparece em card nenhum (caso de borda) | não |
 | 13 | Evento futuro com elenco e sem logística | o aviso interno acende; salva a logística e ele apaga (FR-015) — **conferido por conexão separada** | não |
 | 13b | Contagem de consultas da agenda com 3 e com 5 escalações | o número **não cresce** com o número de escalações — o bloco custa uma consulta para a agenda inteira | não |
-| 14 | limpeza | descartáveis apagados (`roles.clear()` antes do usuário) **e eventos reais do espelho restaurados** — a vaga assumida volta a `talent_id` nulo e os campos de logística ao valor original. Este verify toca linha de produção, não só linha criada por ele | — |
+| 14 | limpeza | tudo que tem o prefixo apagado: ensaios (filhos) antes dos pais, por causa da FK para a própria tabela, e `roles.clear()` antes do usuário de staff. **Nada de produção a restaurar** — o verify não toca linha real | — |
 
 **Os dois pontos em que este verify passa verde sem testar nada** — ambos obrigatórios de tratar:
 
@@ -438,8 +440,12 @@ cria o evento **no Google Agenda da empresa** — as travas de ambiente cobrem e
 isto. O cenário insere o evento-filho direto, com `google_event_id` descartável, e apaga no
 `finally`.
 
-**Nunca semear `EventRole` com `character_name` inventado** — o sync do Google apaga a role e manda
-e-mail de remoção para gente de verdade. Assumir role existente com `talent_id IS NULL`.
+**Nunca pendurar cargo inventado em evento REAL** — o sync do Google apaga a role e manda e-mail
+de remoção para gente de verdade. A primeira redação desta linha mandava *assumir uma role
+existente com `talent_id IS NULL`*; a convergência inverteu, porque escrever um talento de teste
+numa linha de produção é o caminho **mais** arriscado dos dois: depende da limpeza rodar para
+desfazer. O verify cria tudo com prefixo próprio — evento, cargo, ensaio e dois talentos — e nada
+de produção é tocado.
 
 **Conferência de tela** (obrigatória, `tsc` limpo não prova card): portal em **viewport mobile
 375×812**, logado como um talento que tenha um evento futuro **com ensaio** — Agenda (faixa

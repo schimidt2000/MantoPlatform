@@ -1551,6 +1551,7 @@ Gates por módulo (todos em `app/api/`):
 | `require_marketing_access()` | `marketing_read/write` | `MARKETING`, `SUPERADMIN` |
 | `_CAN_ENSAIO` (`app/calendar/routes.py:50`) | criar/editar/excluir ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `_CAN_ENSAIO_MATERIAL` (`app/calendar/routes.py:3627`) | materiais de ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
+| `portal_api_login_required` ⚠️ **exceção declarada à regra do decorator** | todos os `app/api/portal_*.py` | **nenhum papel** — o Portal do Artista não tem papéis. O modelo é "é o dono do recurso": o decorator só confere a sessão de talento (401 sem ela), e cada consulta parte do `talent_id` da sessão, nunca de um id vindo do cliente. Cada módulo declara isso no topo; `portal_figurino.py` era o único dos cinco sem a declaração e a ganhou na **302**. Onde o recurso é de outra pessoa, o portal recusa — a ficha de figurino de evento em que o talento não está escalado devolve **403**, e não o 404 que o Princípio XIII pediria (decisão registrada na 302, `docs/05`) |
 
 > **Terceiro padrão (feature 272): RBAC na emissão, escopo por dono na leitura.** `/api/notificacoes*`
 > não tem gate de papel: quem podia agir no fato foi decidido quando ele aconteceu
