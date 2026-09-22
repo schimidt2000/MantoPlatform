@@ -123,7 +123,7 @@ existência.
 
 **No frontend, RBAC nunca é decidido no cliente:** ou o payload traz a chave (bloco ausente = seção
 não renderiza) ou traz `flags.<nome>` (11 flags geradas por `_role_flags`,
-`app/api/agenda_read.py:136-161`).
+`app/api/agenda_read.py` — `_role_flags`).
 
 **Terceiro padrão (feature 272): RBAC na emissão, escopo por dono na leitura.** As notificações
 internas (`notifications`) são endereçadas por papel **quando o fato acontece**

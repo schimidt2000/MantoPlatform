@@ -354,3 +354,25 @@ A rodada 1 foi corrigida item a item e a 2ª achou **mais dois resíduos das mes
       de API tocado sem ele: os cinco gates do evento, a nota de que ensaio e grupo têm os seus, e
       a regra de autoria da 301 no `PATCH /events/<id>/orcamento` — per Constituição XIII
       (`missing`)
+
+---
+
+## Phase 9: Convergence (3ª rodada)
+
+**2 confirmadas, 3 derrubadas** (8 → 2 → 2 nas três rodadas). As duas são efeito colateral das
+edições da própria convergência, e uma delas expôs um defeito no meu método de varredura.
+
+**Por que a varredura da fase 8 não pegou**: ela era `grep` por linha, e a frase
+`"orçamento de outro vendedor"` quebra entre `outro` e `vendedor` num comentário de 100 colunas.
+Busca por **prosa** neste repositório precisa normalizar antes de casar — juntar linhas, remover
+prefixo de comentário, tirar acento e caixa. Refeita assim, a varredura achou **exatamente um**
+resíduo; os demais acertos são de Gastos Extras e do portal, corretos.
+
+- [X] T036 **MEDIUM** Reescrever o comentário de `tem_orcamento` em `app/api/agenda_read.py`, que
+      dizia que o painel avisa "orçamento de outro vendedor" — frase que a tela não mostra mais, e
+      causa que a T010 eliminou para o COMERCIAL: o único caso restante é quem não tem o módulo —
+      per FR-015 (`contradicts`)
+- [X] T037 **MEDIUM** Corrigir `docs/00_MAPA_DO_SISTEMA.md` e `docs/05_DIVIDA_TECNICA.md`, que
+      citavam `agenda_read.py:136-161` para `_role_flags` — faixa deslocada para `:149` pelo bloco
+      `RBAC:` da T026, a mesma classe que a T029 abriu. Passaram a citar arquivo + nome da função —
+      per FR-014, CLAUDE.md §0 (`partial`)

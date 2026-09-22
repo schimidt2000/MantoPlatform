@@ -959,8 +959,10 @@ def serialize_event_detail(
             "payment_installments": event.payment_installments,
             "payment_due_date": event.payment_due_date.isoformat() if event.payment_due_date else None,
             "orcamento_history_id": orcamento_history_id,
-            # feature 273 — há vínculo, visível ou não: o painel avisa "orçamento de outro
-            # vendedor" em vez de fingir que não há nada e oferecer a busca.
+            # feature 273, revista na 301 — há vínculo, visível ou não para quem lê. Desde a
+            # 301 o único caso de "há, mas você não vê" é quem não tem o módulo de Orçamento
+            # (FINANCEIRO): é esta chave que faz o painel dizer "vinculado a um orçamento que o
+            # seu perfil não abre", em vez de fingir que não há nada e oferecer a busca.
             "tem_orcamento": bool(event.orcamento_history_id),
             # feature 184 — necessários para pré-preencher/salvar o formulário de edição de evento.
             "clients": [
