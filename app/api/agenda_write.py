@@ -1233,7 +1233,6 @@ def api_set_event_orcamento(event_id: int) -> Any:
                 "só ele ou o superadmin podem trocar, desvincular ou re-aplicar.",
                 409,
                 orcamento_de_outro=True,
-                autor=autor,
             )
 
     try:

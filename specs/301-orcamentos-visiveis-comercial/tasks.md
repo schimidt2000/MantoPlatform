@@ -278,3 +278,55 @@ Polimento (T017–T025)
   (a raiz tem tokens e arquivos não versionados). Docs em `docs(301):`.
 - **Deploy**: comum. Não toca `startCommand`, `render.yaml`, volume nem migration; sem backfill e
   sem passo manual no Shell do Render.
+
+---
+
+## Phase 7: Convergence
+
+Achados do `/speckit-converge` (2026-09-22): 10 grupos de intenção avaliados contra o código, com
+passada adversarial. **17 lacunas confirmadas, que são 8 distintas** — o JSDoc obsoleto foi
+reportado por seis grupos independentes.
+
+O padrão dos achados é o próprio assunto da feature: **texto que ensina a regra antiga**, em três
+lugares que a implementação não alcançou, e **citação `arquivo:linha` deslocada** por ela mesma.
+
+- [X] T026 **CRITICAL** Criar o bloco `RBAC:` no topo de `app/api/agenda_read.py`, no formato de
+      `app/api/notificacoes_write.py:1-7` e dos irmãos que a T004/T006 já receberam: o módulo é de
+      serialização e não tem rota própria (o gate é da view que o chama), `_role_flags` (`:135`) é
+      a fonte das flags e respeita a impersonação, `show_comercial` = COMERCIAL/FINANCEIRO/SA, e
+      desde a 301 `venda.orcamento` sai para quem tem o módulo de Orçamento, sem checagem de dono.
+      Aproveitar para corrigir a linha-resumo, que ainda anuncia o detalhe do evento como trabalho
+      futuro ("entra no Incremento B") embora `serialize_event_detail` (`:677`) more aqui —
+      per tasks.md T010 (FR-014), Constituição XIII (`missing`)
+- [X] T027 **HIGH** Reescrever o JSDoc de `useOrcamentoHistorico` em
+      `frontend/apps/internal/src/lib/orcamento.ts:321`, que ainda afirma "SUPERADMIN vê todos,
+      demais só os próprios" — falso contra o endpoint desde a T003, e no arquivo que a T007
+      editou, onde os comentários vizinhos (`:298`, `:307`) já citam a 301 — per FR-015
+      (`contradicts`)
+- [X] T028 **HIGH** Pôr nota de regra superada no parágrafo da feature 239 em
+      `docs/01_SISTEMA_E_BANCO.md:724-727`, que ainda ensina que `venda.orcamento_history_id` "só
+      vem preenchido quando quem lê consegue de fato abrir o orçamento (superadmin, ou o comercial
+      dono daquele orçamento)". Mesmo padrão da nota aplicada ao contrato da 177 — per FR-015
+      (`contradicts`)
+- [X] T029 **MEDIUM** Corrigir as três citações que o bloco `RBAC:` da T004 deslocou:
+      `_require_vendas` saiu de `orcamento_read.py:30` para `:43`, e `docs/00_MAPA_DO_SISTEMA.md:115`,
+      `docs/05_DIVIDA_TECNICA.md:29` e `docs/05_DIVIDA_TECNICA.md:164` seguem apontando para `:30`.
+      Preferir citar só o arquivo e o nome da função, que não envelhece — per CLAUDE.md §0
+      ("citação arquivo:linha se confere contra HEAD") (`partial`)
+- [X] T030 **MEDIUM** Completar a linha `show_comercial` de `docs/01` §4.3 (`:1505`) com a regra da
+      301 para o detalhe do evento: passado o gate, `venda.orcamento` sai para quem tem o módulo de
+      Orçamento, sem checagem de dono; FINANCEIRO segue só com `tem_orcamento` — per FR-014
+      (`partial`)
+- [X] T031 **MEDIUM** Corrigir a seção do `PATCH` em
+      `specs/301-orcamentos-visiveis-comercial/contracts/api-endpoints.md`: o 404 passou a ter
+      **duas** causas (alvo inexistente **e** quem não tem o módulo de Orçamento apontando orçamento
+      alheio), e a linha da tabela ainda diz "qualquer COMERCIAL" sem a ressalva do FINANCEIRO —
+      per contracts §PATCH (`contradicts`)
+- [X] T032 **MEDIUM** Trocar a contagem por conteúdo no cenário 5 de
+      `specs/301-orcamentos-visiveis-comercial/verify_301.py`: hoje `_qtd_auditoria` só conta
+      linhas, e SC-008 exige que o reenvio seja **reconstituível** — quem enviou, qual orçamento e
+      para qual endereço. Ler `actor_name` e `detail` por conexão separada e aferi-los —
+      per SC-008 (`partial`)
+- [X] T033 **LOW** Decidir sobre a chave `autor` extra no 409 de
+      `app/api/agenda_write.py:1236`: nenhum artefato a pede (a mensagem já nomeia o autor, e é ela
+      que a tela mostra). Remover, ou registrá-la no contrato — per contracts §PATCH (`unrequested`)

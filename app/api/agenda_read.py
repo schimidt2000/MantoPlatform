@@ -1,8 +1,22 @@
 """Serialização de leitura da Agenda/Eventos (feature 145, US1).
 
-Fonte única do formato JSON de leitura consumido pela SPA React. Nesta fatia cobre apenas o
-RESUMO do evento (agenda); o detalhe do evento (com RBAC financeiro) entra no Incremento B.
-Reaproveita os parsers e a query de mês da view Jinja (Princípio I) — não duplica lógica.
+Fonte única do formato JSON de leitura consumido pela SPA React: o RESUMO do evento
+(`serialize_event_summary`) e o DETALHE (`serialize_event_detail`, que já mora aqui — o
+"Incremento B" prometido pela 145 foi entregue). Reaproveita os parsers e a query de mês da view
+Jinja (Princípio I) — não duplica lógica.
+
+RBAC: este módulo **não tem rota nem gate próprio** — quem gateia é a view que o chama
+(`api_event_detail`, em `agenda.py`). O que ele faz é decidir, por papel, QUAIS BLOCOS entram no
+JSON, e a fonte disso é `_role_flags(user, impersonate)`: `show_comercial` (COMERCIAL, FINANCEIRO
+ou SUPERADMIN) libera venda/cobrança/contratos; `show_financeiro` (FINANCEIRO ou SUPERADMIN), o
+bloco financeiro; `is_comercial`, quem tem o módulo de Orçamento. As flags respeitam a
+impersonação do "Ver como" — o superadmin vendo "como Casting" não recebe o que Casting não vê.
+
+Bloco ausente = seção que não renderiza: é assim que o RBAC chega à tela, nunca por decisão do
+React (Princípio XIII). Desde a feature 301, `venda.orcamento` sai para quem tem o módulo de
+Orçamento **seja o orçamento de quem for** — não há mais checagem de dono aqui; o que ainda depende
+de autoria é `pode_gerir`, que diz se a pessoa pode mexer no vínculo. FINANCEIRO continua sem o
+orçamento e só com `tem_orcamento`. Tabela de gates em `docs/01` §4.3.
 """
 
 from datetime import UTC, date, datetime

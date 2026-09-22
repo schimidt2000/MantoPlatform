@@ -242,6 +242,17 @@ def _qtd_auditoria(orc_id: int) -> int:
     )[0][0]
 
 
+def _ultima_auditoria(orc_id: int):
+    """A linha em si, não a contagem. SC-008 pede que o reenvio seja **reconstituível** — quem
+    enviou, qual orçamento e para quem —, e contar linhas prova só que existe alguma."""
+    linhas = _no_banco(
+        "SELECT actor_name, detail FROM audit_logs WHERE entity_type = 'orcamento'"
+        " AND entity_id = :i ORDER BY id DESC LIMIT 1",
+        i=orc_id,
+    )
+    return linhas[0] if linhas else None
+
+
 def preparar() -> None:
     limpar()
     a = _usuario("a", RoleName.COMERCIAL)
@@ -249,7 +260,7 @@ def preparar() -> None:
     f = _usuario("f", RoleName.FINANCEIRO)
     estado.update(
         a_email=a.email, a_id=a.id, a_nome=a.name,
-        b_email=b.email, b_id=b.id,
+        b_email=b.email, b_id=b.id, b_nome=b.name,
         f_email=f.email,
     )
 
@@ -394,6 +405,15 @@ def cen_05_email_de_outro_auditado() -> None:
         depois == antes + 1,
         f"auditoria do reenvio alheio não persistiu ({antes}→{depois}) — `audit()` só faz `add`, "
         "a view precisa commitar (FR-013, hotfix 257)",
+    )
+    linha = _ultima_auditoria(estado["orc_leitura"])
+    _garante(linha is not None, "auditoria gravada mas ilegível")
+    ator, detalhe = linha[0], linha[1] or ""
+    _garante(ator == estado["b_nome"], f"ator errado na auditoria: {ator!r} ≠ {estado['b_nome']!r}")
+    _garante(DESTINO in detalhe, f"o destinatário não está no registro: {detalhe!r}")
+    _garante(
+        estado["a_nome"] in detalhe,
+        f"o registro não diz de quem era o orçamento: {detalhe!r} (SC-008 pede reconstituível)",
     )
     # O próprio orçamento não gera linha.
     antes_b = _qtd_auditoria(estado["orc_de_b"])

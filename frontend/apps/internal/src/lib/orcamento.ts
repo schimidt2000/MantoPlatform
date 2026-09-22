@@ -318,7 +318,13 @@ export interface OrcamentoHistoricoFilters {
   has_show?: string;
 }
 
-/** Histórico de orçamentos salvos — SUPERADMIN vê todos, demais só os próprios. */
+/**
+ * Histórico de orçamentos salvos — **do time inteiro** desde a feature 301, para quem passa no
+ * gate do módulo (`_require_vendas()`: COMERCIAL ou SUPERADMIN; FINANCEIRO leva 403). Não há
+ * filtro por autor e a lista não nasce filtrada; `user_id` é filtro opcional disponível a
+ * qualquer autorizado. A única trava de autoria que resta é o `DELETE`, e a tela a lê pela chave
+ * `pode_excluir` — nunca comparando ids (Princípio XIII).
+ */
 export function useOrcamentoHistorico(filters: OrcamentoHistoricoFilters) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {

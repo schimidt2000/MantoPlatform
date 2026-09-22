@@ -26,7 +26,7 @@
 | ~~5~~ | ~~P1~~ | ✅ **RESOLVIDO na feature 267** — `comissoes_ops.comissao_exibida_do_evento` serve a API e o gêmeo Jinja; lê a linha real, cai na regra canônica e zera evento cancelado | — |
 | ~~6~~ | ~~P1~~ | ✅ **RESOLVIDO na feature 267** — `update_event_core` recebe `sincronizar_comissao` por injeção. *(`update_event_comercial` já sincronizava; este item estava parcialmente desatualizado)* | — |
 | 7 | **P1** | `app/api/agenda_write.py:926` e `:995` | Figurino/Casting podem registrar pagamento de cachê e reembolso | ~4 linhas |
-| 8 | **P1** | `app/api/orcamento_read.py:30` vs `clientes_read.py:24` | `_require_vendas` com dois significados; FINANCEIRO passa ou não conforme o arquivo | ~30 linhas |
+| 8 | **P1** | `app/api/orcamento_read.py` vs `clientes_read.py` (ambos `_require_vendas`) | `_require_vendas` com dois significados; FINANCEIRO passa ou não conforme o arquivo | ~30 linhas |
 | 9 | **P1** | `app/api/` (12 cópias) | "Ver como" é respeitado na agenda e ignorado em clientes/financeiro/admin | ~40 linhas |
 | 10 | **P2** | `app/financeiro/routes.py:120` | núcleo de cálculo dentro de arquivo de rotas Jinja | §9.2 |
 | 11 | **P2** | `app/calendar/routes.py` | 39 símbolos privados exportados para 10 módulos | §9.1 |
@@ -161,7 +161,7 @@ justificar na docstring **pelo risco da ação**, não por paridade com o Jinja.
 
 ### 3.4 `_require_vendas` com dois significados
 
-`app/api/orcamento_read.py:30` = `{COMERCIAL, SUPERADMIN}`; `clientes_read.py:24`,
+`app/api/orcamento_read.py` (`_require_vendas`) = `{COMERCIAL, SUPERADMIN}`; `clientes_read.py`,
 `clientes_write.py:25`, `formularios_admin_read.py:24` = `{COMERCIAL, FINANCEIRO, SUPERADMIN}`. Lendo
 `denied = _require_vendas()` dentro de uma view é **impossível** saber se FINANCEIRO passa.
 

@@ -724,7 +724,12 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > vaga extra com nome ~"maquiad" **e** talento atribuído) e `venda.orcamento_history_id`, que só
 > vem preenchido quando quem lê consegue de fato abrir o orçamento (superadmin, ou o comercial
 > dono daquele orçamento) — demais papéis (ex.: FINANCEIRO) recebem `null` e o React omite o link
-> "Orçamento de origem" na aba Comercial. `characters` (usado por telas legadas) passou a vir da
+> "Orçamento de origem" na aba Comercial.
+> **⚠️ A parte "o comercial dono daquele orçamento" foi SUPERADA pela feature 301 (21/09/2026)**:
+> não há mais checagem de dono aqui — `venda.orcamento_history_id` e `venda.orcamento` saem para
+> quem tem o módulo de Orçamento (COMERCIAL ou SUPERADMIN), seja o orçamento de quem for. O que
+> depende de autoria é a chave `pode_gerir`, que diz se a pessoa pode mexer no vínculo. FINANCEIRO
+> continua com `null` e só `tem_orcamento`. A regra vigente está em §3.13. `characters` (usado por telas legadas) passou a vir da
 > tabela `EventRole` (fonte de verdade) quando o evento já tem roles de personagem, caindo para o
 > parse do título só em evento sem nenhuma — decisão 6, para o texto livre do título nunca mais ser
 > a única fonte de quem é personagem.
@@ -1502,7 +1507,7 @@ Gates por módulo (todos em `app/api/`):
 | `_can_casting()` | `agenda_write` (remover cargo) | `CASTING`, `SUPERADMIN` |
 | `_can_manage_sale()` | `agenda_write` (nota fiscal) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_can_manage_sale()` | `PATCH /api/events/<id>/orcamento` (feature 273; na 299 o valor simbólico passou a contar como "sem venda") | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`. **Autoria (feature 301)**: *vincular* em evento sem orçamento é livre para quem tem o módulo de Orçamento (COMERCIAL/SUPERADMIN) — FINANCEIRO passa neste gate mas leva **404** ao apontar orçamento que não é dele; *trocar, desvincular ou re-aplicar* sobre vínculo de outra pessoa → **409 `orcamento_de_outro`**, nomeando o autor. Os três verbos: `aplicar` escreve `sale_date`, que decide o mês da comissão |
-| `show_comercial` (papel efetivo, respeita "Ver como") | `GET /api/dashboard` — blocos `comercial` e `formularios` (feature 299: o conteúdo mudou, o gate não); o detalhe do evento usa o mesmo corte para `cobranca`/`venda`/`pagamentos` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
+| `show_comercial` (papel efetivo, respeita "Ver como") | `GET /api/dashboard` — blocos `comercial` e `formularios` (feature 299: o conteúdo mudou, o gate não); o detalhe do evento usa o mesmo corte para `cobranca`/`venda`/`pagamentos`. **Feature 301**: passado este gate, `venda.orcamento` e `orcamento_history_id` saem para quem tem o **módulo de Orçamento** (COMERCIAL ou SUPERADMIN), sem checagem de dono; FINANCEIRO passa no gate mas fica só com `tem_orcamento`. A chave `pode_gerir`, essa sim, depende da autoria do orçamento vinculado | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_can_confirm()` | `agenda_write` | `COMERCIAL`, `SUPERADMIN` |
 | `_is_superadmin()` | dispensar/restaurar cargo, excluir ficha | `SUPERADMIN` |
 | `_can_edit_figurino()` | `figurino_write` | `FIGURINO`, `SUPERADMIN` |

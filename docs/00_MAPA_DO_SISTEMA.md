@@ -112,7 +112,7 @@ agenda/dashboard/auth (`app/api/agenda.py:138`, `agenda_write.py:85`, `dashboard
 agenda respeita o papel simulado e clientes/financeiro/admin não.
 
 **Armadilha de nome:** `_require_vendas()` significa conjuntos **diferentes** conforme o arquivo —
-`{COMERCIAL, SUPERADMIN}` em `app/api/orcamento_read.py:30`, `{COMERCIAL, FINANCEIRO, SUPERADMIN}`
+`{COMERCIAL, SUPERADMIN}` em `app/api/orcamento_read.py` (`_require_vendas`), `{COMERCIAL, FINANCEIRO, SUPERADMIN}`
 em `clientes_read.py:24`, `clientes_write.py:25` e `formularios_admin_read.py:24`. Ler o nome do gate
 não basta: abra o arquivo.
 

@@ -30,7 +30,7 @@ vínculo passa a olhar o orçamento já vinculado — nunca o alvo.**
 
 ## Orçamento — histórico
 
-Gate de módulo em todos: `_require_vendas()` de `app/api/orcamento_read.py:30` —
+Gate de módulo em todos: `_require_vendas()` de `app/api/orcamento_read.py` —
 **COMERCIAL** ou **SUPERADMIN**. FINANCEIRO leva **403** (é o homônimo já marcado em `docs/01`
 §4.3 como "regra diferente"; não confundir com o `_require_vendas()` de `clientes_read.py`, que
 aceita FINANCEIRO). **Inalterado por esta feature.**
@@ -101,8 +101,8 @@ aceita FINANCEIRO). **Inalterado por esta feature.**
 - **Dono**: **MANTIDA** (FR-006). Só o autor ou o SUPERADMIN. É a única trava de dono que sobrevive
   no módulo, e é decisão explícita de `6b191e4`, tomada no mesmo commit que liberou a visualização.
 - **409 + `event_id`** (feature 273) continua valendo enquanto houver evento vivo vinculado, mas
-  vem **depois** da checagem de dono, não antes: em `orcamento_write.py` o dono é resolvido em
-  `:115` (404) e `outro_evento_vivo_do_orcamento` só em `:124`. Quem não é o autor leva 404 e nunca
+  vem **depois** da checagem de dono, não antes: em `orcamento_write.py` o dono é resolvido dentro
+  de `_get_entry_para_excluir` (404) e `outro_evento_vivo_do_orcamento` só algumas linhas abaixo. Quem não é o autor leva 404 e nunca
   chega no 409. **Não reordenar** — o 409 carrega o `event_id`, então antecipá-lo confirmaria a
   existência do orçamento e do evento para quem não é autor (Princípio XIII: 404, não 403).
 - **Armadilha de implementação**: os quatro endpoints acima e este compartilham hoje
@@ -132,7 +132,7 @@ aceita FINANCEIRO). **Inalterado por esta feature.**
 
 | Chave | Origem | Por quê |
 |---|---|---|
-| `autor` | `resumo_do_orcamento` (`_ops` puro) — é dado do orçamento | sem o nome, a recusa não cumpre FR-010 ("dizer quem pode agir"). **Não** se chama `vendedor`: o mesmo bloco `venda` já traz `venda.seller` (`agenda_read.py:943`), o vendedor **do evento** — que pode ser outra pessoa. Autor sem nome recordável: a chave traz `"Vendedor não identificado"`, e a trava continua no `user_id`, nunca no nome |
+| `autor` | `resumo_do_orcamento` (`_ops` puro) — é dado do orçamento | sem o nome, a recusa não cumpre FR-010 ("dizer quem pode agir"). **Não** se chama `vendedor`: o mesmo bloco `venda` já traz `venda.seller`, o vendedor **do evento** — que pode ser outra pessoa. Autor sem nome recordável: a chave traz `"Vendedor não identificado"`, e a trava continua no `user_id`, nunca no nome |
 | `pode_gerir` | **a view** (`agenda_read.py`) — é RBAC, não cabe no `_ops` (Princípio III) | `true` se quem pede é o autor do orçamento vinculado, ou SUPERADMIN |
 
 > **Por que `pode_gerir` é obrigatório e não cosmético**: `ComercialSection.tsx:580` hoje deduz
@@ -159,11 +159,13 @@ aceita FINANCEIRO). **Inalterado por esta feature.**
 
 | Evento está… | Ação pedida | Quem pode |
 |---|---|---|
-| **sem** orçamento vinculado | vincular qualquer orçamento | **qualquer COMERCIAL** — o 404-por-dono sobre o **alvo** morre |
+| **sem** orçamento vinculado | vincular qualquer orçamento | **COMERCIAL ou SUPERADMIN** — o 404-por-dono sobre o **alvo** morre para quem tem o módulo de Orçamento; FINANCEIRO passa no gate mas segue no 404 |
 | vinculado a orçamento **meu** | trocar · desvincular · re-aplicar | eu (inalterado) |
 | vinculado a orçamento **de outro** | trocar · desvincular · **re-aplicar** | só o autor dele ou SUPERADMIN → **409** |
 
-- **404**: só se o orçamento alvo **não existe**.
+- **404**: duas causas, e o cliente não as distingue de propósito — (a) o orçamento alvo **não
+  existe**; (b) quem pede **não tem o módulo de Orçamento** (FINANCEIRO) e apontou orçamento que
+  não é dele. A segunda é o que impede a feature de alargar o acesso do FINANCEIRO (SC-005).
 - **409 `orcamento_de_outro`**: a mensagem passa a **nomear o autor** e a dizer que só ele ou o
   superadmin podem mexer (FR-010).
 - **409 `OrcamentoJaVinculado`**: inalterado — o orçamento já está em outro evento vivo.
