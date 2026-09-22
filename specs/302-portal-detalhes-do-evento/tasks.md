@@ -365,6 +365,27 @@ acima é a que mantém a branch entregável a cada parada.
       `docs/01` §4.3 sem linha nenhuma para o portão do portal, apesar de a feature ter quitado a
       declaração que faltava em `portal_figurino.py`
 
+- [X] T051 **MEDIUM · contradicts (achado da própria rodada 1)** — a asserção nova do cenário 6b
+      ancorava em `"— Manto Produções<"`, e a linha de **Saída** do mesmo e-mail termina
+      exatamente assim: mesmo texto padrão, mesmo travessão. A fixture do cenário não tem horário
+      de saída, então a asserção era honesta **por acidente** — bastaria alguém acrescentar saída
+      àquele evento para ela voltar a passar sozinha. Ancorada na hora da maquiagem
+      (`">09:00 — Manto Produções<"`). Achado ao escrever o roteiro da rodada 2, antes de rodá-la
+
+## Rodada 2 — convergido
+
+Feita depois de `0f3d0c4`, mirando o que as **correções da rodada 1** poderiam ter introduzido —
+que é onde esta esteira costuma achar o próximo defeito. **Nenhum vão novo.** O que foi conferido:
+
+| Risco levantado | Resultado |
+|---|---|
+| `AccordionRow` com `px-3` fora e `pb-3 pl-6` dentro criando recuo duplo | não: `cn` é `twMerge`, e `space-y-2` não conflita com o padding — as três classes sobrevivem, e o recuo alinha o conteúdo sob o rótulo |
+| `border-b border-line` do `AccordionRow` aparecendo dentro do card arredondado | não: ele é filho único, então `last:border-0` zera |
+| `summary` com elemento interativo dentro do `<button>` (HTML inválido) | não: é um `<span>` com ícone e texto |
+| `makeup_location_label(old)` devolvendo `None` e escrevendo "None" no aviso | não pode: `save_logistics` grava `makeup_location or None`, então o banco só tem NULL ou texto não-vazio, e a condição já exclui NULL |
+| `LOCAL_ORFAO` quebrando outro cenário que conte ensaios | não: 22/22 |
+| chave perdida no payload | não: 18 chaves — as 16 de sempre mais `role_type` e `before_event`, exatamente o contrato |
+
 ### Aceito sem mudar, com o motivo
 
 - **O cenário 4b não testa FR-002a.** Ele prova que o payload leva as duas datas; a regra do "dia

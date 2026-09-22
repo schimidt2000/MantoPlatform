@@ -499,9 +499,13 @@ def cen_06b_email_de_convite() -> None:
     # in html` é verdade sempre — está no `<title>` e no rodapé de todo e-mail (`_html_wrap`) — e
     # `">manto<"` nunca casa, porque `_info_row` renderiza `>09:00 — manto</td>`, com a hora
     # colada. As duas versões anteriores desta linha passavam verdes com a tradução removida.
+    # Prefixado com a HORA da maquiagem de propósito: a linha de **Saída** do mesmo e-mail também
+    # termina em "— Manto Produções<" (mesmo texto padrão, mesmo travessão), e sem a hora esta
+    # asserção passaria por causa dela — tautologia de novo, por outro caminho. Esta fixture não
+    # tem horário de saída, mas a próxima pode ter.
     _garante(
-        "— Manto Produções<" in html,
-        f"o e-mail não traduziu o local da maquiagem na linha dela. HTML: {html[:400]!r}",
+        ">09:00 — Manto Produções<" in html,
+        f"o e-mail não traduziu o local NA LINHA DA MAQUIAGEM. HTML: {html[:400]!r}",
     )
     _garante(
         "— manto<" not in html,
