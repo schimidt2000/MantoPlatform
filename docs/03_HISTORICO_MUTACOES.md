@@ -5,6 +5,9 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-09-22** · Estado do repositório: pós-feature
+> **302-portal-detalhes-do-evento** (sem migration; **entregue, ainda não publicada** — o artista
+> passa a ver o horário de término, o ensaio, a maquiagem e a saída no card do Portal, e a
+> produção é avisada quando deixa elenco escalado sem logística) — antes dela pós-feature
 > **301-orcamentos-visiveis-comercial** (sem migration; **EM PRODUÇÃO desde 22/09/2026 ~11:22**
 > pelo merge `fad410f` — o histórico de orçamentos volta a ser do time inteiro, desfazendo a regressão que a feature 177 trouxe do
 > contrato desatualizado em 23/07/2026, e a trava de escrita do vínculo orçamento↔evento passa a
@@ -113,6 +116,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **302-portal-detalhes-do-evento** | *(entregue, ainda não publicada)* "No portal do artista não aparece o horário final do evento. E eu queria pensar contigo quais informações aparecem hoje para o artista." O levantamento achou três coisas maiores que o pedido. **(1)** O horário final **já chegava ao navegador e era descartado** pela tela — `_role_summary` serializava `end_at`, o tipo do front declarava o campo e nenhuma tela o desenhava. **(2)** O **ensaio é invisível para quem vai ensaiar**: ensaio é evento-filho (`parent_event_id`), com data, hora e local próprios, e **nenhum dos 98 eventos ENSAIO tem elenco** — o elenco fica no show, e o portal lista escalações; são 54 ensaios, todos com data/hora/local, caindo **2 a 4 dias antes** do show. **(3)** Maquiagem e saída existem desde sempre e **pararam de ser preenchidas**: 19 e 24 dos 475 eventos do espelho, e **zero** dos 64 futuros — expor sem mexer no processo interno não mudaria nada, então a feature também acende um chip de pendência na tela do evento. O bloco "Antes do evento" é **recolhido e ausente quando não há nada**, a pedido do dono ("para não ficar poluído"), e aparece também no card de **Convites**, onde muda uma decisão ainda não tomada — 2 dos 4 convites pendentes são de eventos que já têm ensaio marcado. "Personagem" vira **"Função"** para cargo (289 das 731 escalações) nas **três** superfícies que o artista lê: portal, e-mail e WhatsApp — as duas últimas também mandavam o código cru do banco (`Maquiagem: 14:00 — manto`). A seção Histórico **sai da Agenda**, o que desfaz metade da **229** de propósito: a causa que ela tratou era a duplicação de nome entre duas listas, e o link de avaliar era remédio do sintoma; o payload continua entregando `history` porque backend e frontend sobem separados. Achados de passagem: o evento que **termina no dia seguinte** lia-se como vinte horas de trabalho (34 no espelho), o ensaio **já realizado** ficava no bloco de preparação (janela garantida por construção), e o N+1 de `role.event` — anterior à feature — custava 19 consultas para 13 escalações contra 8 para 1 | 2026-09-22 | `—` | (aqui) | — |
 | **301-orcamentos-visiveis-comercial** | *(EM PRODUÇÃO 22/09 ~11:22, merge `fad410f`)* "Todas as pessoas do setor comercial devem poder ver e abrir orçamentos de outras pessoas. Isso era assim até algum tempo atrás." **Causa → efeito:** em 20/05/2026 o commit `6b191e4` removeu de propósito o filtro por dono do histórico ("todos veem todos os orçamentos"); em 23/07/2026 a migração do módulo para React (**feature 177**) o **reintroduziu**, porque o contrato dela (`specs/177-.../contracts/api-endpoints.md:119`) descrevia o código de dois meses antes — `routes.py:714` já não tinha o filtro no dia em que aquilo foi escrito. A regressão durou **dois meses** e contaminou mais duas superfícies no domínio Agenda: a aba Comercial do evento (239) e o vínculo orçamento↔evento (273). O sintoma mais nu: uma pessoa do COMERCIAL sem orçamentos próprios abria o histórico e via **tela vazia**. A 301 devolve a leitura a todo o comercial (listar, abrir, recalcular, PDF, reenviar e-mail), mantém **uma** trava de autoria — o `DELETE` — e **aperta** a de escrita do vínculo: vincular é livre, mas trocar, desvincular e **re-aplicar** sobre vínculo alheio viram 409 nomeando o autor. O re-aplicar escapava da guarda antiga e só não vazava porque o 404 do alvo vinha antes; derrubá-lo sem apertar deixaria qualquer colega reescrever `sale_value` e `sale_date` — e `sale_date` decide o mês da comissão (267b). Pelo mesmo motivo a queda do 404 é **condicionada ao papel**: o FINANCEIRO passa no gate do endpoint e ganharia de brinde o poder de vincular venda alheia. Reenvio de orçamento de outra pessoa passa a ser auditado. A tela deixa de **deduzir** permissão da ausência de dado no payload (`pode_gerir`, `pode_excluir`), e o contrato da 177 recebe nota de regra superada, para a próxima reescrita não repetir o caminho | 2026-09-21 | `—` | (aqui) | — |
 | **300-catalogo-rapido** | "Clico em Gerenciar catálogo e demora muito para carregar." Eram **duas** causas independentes, e o tamanho da resposta (199 KB) não era nenhuma delas: (1) **uma consulta ao banco por produto, várias vezes** — nenhum ponto do caminho do catálogo tinha carregamento antecipado, e `cover_image` é property sobre `images[0]`, então pedir a capa carrega a coleção inteira de fotos: 1.846 consultas no gerenciador (2.320 na aba Personagens), 917 na vitrine, 492 na grade de categorias; (2) **458 capas em tamanho original dentro de caixas de 32 a 64 px** — 95,4 MB pedidos de uma vez, sem carregamento sob demanda, porque a decisão 7 da 270 deixara o ERP interno fora das miniaturas. `selectinload` no ponto que precisa (não no `models.py`), `assetUrl(url, { largura })` nos 8 pontos de render do gerenciador e nas 2 lacunas que a 270 deixou na vitrine (grade de categorias e lista de desejos), `<Foto>` com `loading="lazy"`, `GET /api/admin/catalogo/categorias` (a edição baixava 199 KB para desenhar 39 opções) e pausa de 300 ms nas duas buscas que consultam o servidor (a da listagem e a do elenco). **Sem paginação — medido que não é preciso.** Achado de passagem: a ordem de `category_names` e de personagens empatados nunca foi garantida; virou explícita **por `id`, o que reproduz a produção em 458 de 458**. A revisão pré-deploy (9 achados, todos confirmados) pegou que a primeira escolha — ordem alfabética — trocaria as etiquetas de 123 cards da vitrine, e que a busca Adotar/Vincular mostrava linhas de outra busca com o botão ativo | 2026-09-16 | `—` | (aqui) | — |
 | **299-sem-valor-cobrancas** | A Home cobrava cada evento sozinho (o grupo 344 aparecia devendo R$ 2.430 pagos num outro evento do grupo), escondia 25 vendas com metade paga até a véspera, acusava dívida por centavos e não mostrava as 6 vendas sem valor. Núcleo único `cobranca_ops` (Home + página do evento): o grupo é uma venda só, vencimento data combinada > parcela > 2 dias antes (nunca antes da venda), folga de R$ 1,00, sinal pendente só sem data combinada e sem cronograma. Dois painéis, "Cobranças" e "Sem valor", com selos em pt-BR, cards e total só com o que é para agir e painel que nunca some em silêncio. "Valor a definir" no cadastro no lugar do R$ 0,01 (recusado também na aba Comercial); "Pôr o valor" em 2 cliques; comissão tardia no mês do valor | 2026-09-15 | `—` | (aqui) | — |
@@ -278,6 +282,83 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 302 — O artista passa a ver quando o evento termina, quando é o ensaio e de onde sai   (2026-09-22 · feature · sem migration)
+
+> **Entregue, ainda não publicada.** Nenhuma migration: tudo o que a tela passa a mostrar já
+> estava no banco.
+
+**O pedido**: *"No portal do artista não aparece o horário final do evento. E eu queria pensar
+contigo quais informações aparecem hoje para o artista para refinarmos. Ou adicionar mais coisas
+ou retirar coisas que não são pertinentes."*
+
+**O que o levantamento achou, com número atrás de cada coisa**
+
+* **O horário final já chegava ao navegador e era descartado.** `_role_summary` serializava
+  `end_at`, `portalAgenda.ts` declarava o campo, e nenhuma tela o desenhava. Os 475 eventos do
+  espelho e os 64 futuros têm fim gravado, com duração real variada.
+* **O ensaio é invisível justamente para quem vai ensaiar.** Ensaio é um `CalendarEvent` com
+  `event_type='ENSAIO'` pendurado no show por `parent_event_id`. São 54, **todos** com data, hora
+  e local; 10 futuros. E **nenhum dos 98 eventos ENSAIO tem `EventRole`** — o elenco fica no show,
+  e o portal lista escalações. Ele cai **2 a 4 dias antes**, o que faz dele a informação mais
+  urgente que o artista não tinha.
+* **Maquiagem e saída existem e pararam de ser preenchidas**: 19 e 24 de 475, e **zero** dos 64
+  eventos futuros. Expor sem mexer no processo não mudaria nada — daí o chip de pendência.
+* **A tela chamava de "Personagem" quem não é**: 289 das 731 escalações com talento são cargo.
+* **A Agenda repetia o Histórico inteiro, sem limite** — o artista mais ativo tinha 75 cards
+  completos abaixo de "Próximos eventos".
+
+**O que mudou**
+
+Portal: faixa horária no card (Agenda e Convites); bloco **"Antes do evento"**, recolhido e
+inexistente quando não há nada, com ensaio, maquiagem e saída **em ordem cronológica real**;
+"Função" no lugar de "Personagem" para cargo; a seção Histórico sai da Agenda; a ficha de figurino
+passa a dizer de que evento é.
+
+Servidor: `_antes_do_evento` monta o bloco de toda a agenda em **uma** consulta, e `selectinload`
+mata o SELECT-por-escalação. `makeup_location_label` traduz o código do banco e serve portal,
+e-mail e WhatsApp. `portal_figurino.py` ganha a declaração de RBAC que faltava.
+
+Interno: chip "Logística" nas pendências e aviso na seção que resolve, quando há elenco escalado
+num evento futuro sem horários.
+
+**Três decisões que só fazem sentido com o motivo junto**
+
+1. **A `history` continua no payload da Agenda**, mesmo a tela tendo parado de usá-la.
+   `manto-backend` e `manto-frontend` são serviços separados e não trocam de contêiner juntos: na
+   janela de servidor novo com bundle velho, `agenda.history.map(...)` é `undefined.map` e a tela
+   do artista fica **branca no celular**. Remover é do ciclo seguinte (`docs/05`). Pelo motivo
+   simétrico, `before_event` e `role_type` nascem **opcionais** no TypeScript.
+2. **A saída da seção Histórico desfaz metade da feature 229, de propósito.** A 229 pôs o link de
+   avaliar também na Agenda porque *"as duas listas se chamam Histórico, então ela não tinha por
+   que procurar a segunda"*. A causa era a **duplicação de nome**, e o link era remédio do
+   sintoma; com uma lista só, o contador vermelho da barra inferior volta a ser caminho
+   não-ambíguo. O link continua na aba Histórico. Ver também a **230**, que trouxe a escalação não
+   recusada para as listas.
+3. **A hora é que faz a linha existir, não o local.** O formulário interno pré-preenche "Local de
+   saída" com "Manto Produções", então 7 eventos têm local **sem horário nenhum** (mais 1 na
+   maquiagem). "Saída: Manto Produções" sem hora é ruído com cara de informação.
+
+**O que a revisão achou e a spec não tinha visto**
+
+* **Evento que termina no dia seguinte**: 34 no espelho, 4 futuros. `20:00 às 00:00` lê-se como
+  vinte horas de trabalho. Nenhum dos 4 tem elenco ainda — é defeito que não aparece hoje e
+  aparece sozinho.
+* **Ensaio já realizado em show futuro**: a consulta dava **zero** hoje, então medir inocentaria.
+  O que condena é a aritmética do calendário — o ensaio cai 2 a 4 dias antes, logo todo show passa
+  por essa janela.
+* **O "portal Jinja legado" citado em quatro artefatos não existe mais** (`routes.py` tem 82
+  linhas e serve só a foto). A conclusão que se tirava dele estava certa; a razão, não — vinha de
+  uma docstring desatualizada. Registrado como dívida em `docs/05`.
+* **O primeiro preenchimento de logística não dispara o aviso "Ciente"**: `save_logistics` só
+  registra mudança quando o valor anterior **existia**. Como nenhum evento futuro tem logística,
+  todo preenchimento que esta feature provoca é um primeiro preenchimento. Fora de escopo, em
+  `docs/05`.
+
+**Verificação**: `verify_302.py`, **22/22**, com controles explícitos contra passagem a vazio — os
+cenários que afirmam "aqui não tem bloco" exigem que um evento de controle **tenha** bloco, senão
+passariam verdes num código que não faz nada. O cenário de desempenho mede a contagem de consultas
+e prova que ela não cresce com o número de escalações.
 
 ### 301 — Todo o comercial volta a ver e abrir o orçamento de qualquer colega   (2026-09-21 · feature · sem migration)
 

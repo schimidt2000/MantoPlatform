@@ -241,16 +241,16 @@ a ficha é conferida **na tela** — a US7 não tem cenário de API próprio, po
 - [X] T037 Conferência de tela do quickstart §3, **em viewport mobile 375×812** e varrendo
       320–430px: Agenda, Convites, Histórico, ficha de figurino, e a tela interna do evento nos
       dois estados do chip. `tsc` limpo não prova card
-- [ ] T038 [P] `docs/01` — contrato de `GET /api/portal/agenda` e de
+- [X] T038 [P] `docs/01` — contrato de `GET /api/portal/agenda` e de
       `GET /api/portal/events/<id>/figurino`
-- [ ] T039 [P] `docs/02` §C — linhas `/portal/agenda` (a seção Histórico sai; **desfazer a promessa
+- [X] T039 [P] `docs/02` §C — linhas `/portal/agenda` (a seção Histórico sai; **desfazer a promessa
       do link de avaliar herdada da 229**), `/portal/convites`, `/portal/historico`,
       `/portal/eventos/:id/figurino`; e o detalhe de evento interno (aviso de logística e mensagem
       de convite copiada)
-- [ ] T040 `docs/03` — entrada nova no topo + linha na tabela do índice, referenciando a **229**
+- [X] T040 `docs/03` — entrada nova no topo + linha na tabela do índice, referenciando a **229**
       (o link de avaliar) e a **230** (a lista não-recusada). Correção é entrada nova, nunca edição
       da antiga
-- [ ] T041 [P] `docs/05` — as seis dívidas: (1) remover `history` de `get_agenda` no ciclo
+- [X] T041 [P] `docs/05` — as seis dívidas: (1) remover `history` de `get_agenda` no ciclo
       seguinte; (2) a observação do ensaio, a reabrir quando o campo for usado como observação;
       (3) a tradução do local de maquiagem em Python e em TypeScript; (4) a ficha de figurino
       recusando com 403 onde o Princípio XIII manda 404; (5) o formatador de horário duplicado

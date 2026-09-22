@@ -1357,6 +1357,33 @@ também talento sem senha ainda, feature 259 — o link também serve pra defini
 `POST /api/portal/roles/<role_id>/ack-change` ·
 `GET /api/portal/events/<event_id>/figurino`.
 
+Cada escalação de `GET /api/portal/agenda` e de `GET /api/portal/historico` sai do **mesmo**
+serializador (`portal_ops._role_summary`) e carrega, desde a feature 302, mais duas chaves:
+
+- **`role_type`** — `"character"` ou `"extra"`. É o **código do modelo**, não o rótulo pronto
+  (mesma convenção de `payment_status` e `invite_status`): a tela escolhe entre "Personagem:" e
+  "Função:".
+- **`before_event`** — o bloco "Antes do evento", ou **`null`** quando não há nada a mostrar.
+  Shape: `{makeup: {time, location} | null, departure: {time, location} | null, rehearsals: [{start_at, end_at, location}]}`.
+  `makeup`/`departure` só existem quando há **horário** — local sem hora é resíduo do formulário
+  interno, que pré-preenche "Local de saída". `makeup.location` sai **traduzido**
+  (`"manto"` → `Manto Produções`, `"local"` → `No local do evento`, outro → verbatim, por
+  `calendar.event_ops.makeup_location_label`): o código do banco nunca chega ao artista.
+  `rehearsals` é **lista sempre** (um evento pode ter mais de um ensaio), ordenada por início, sem
+  ensaio cancelado, sem ensaio **já realizado** e **sem a `description` do ensaio** — aquele campo
+  guarda endereço, não observação. O bloco vai em `pending_invites` e `upcoming`; no `history` é
+  sempre `null`.
+
+> **`history` continua no payload da agenda de propósito**, embora a tela tenha parado de usá-lo na
+> 302. `manto-backend` e `manto-frontend` são serviços separados no `render.yaml` e não trocam de
+> contêiner juntos: na janela de servidor novo com bundle velho, `agenda.history.map(...)` derruba
+> a tela do artista. Remover é tarefa de um ciclo de deploy depois (`docs/05`). Pelo mesmo motivo
+> ao contrário, `role_type` e `before_event` nascem **opcionais** no TypeScript.
+
+`GET /api/portal/events/<id>/figurino` **não mudou de payload** na 302 (a tela é que passou a
+desenhar `title` e `start_at`, que já vinham). O módulo ganhou a declaração de RBAC no topo, que
+era o único dos cinco do portal sem ela.
+
 **Perfil e portfólio**
 `GET|PATCH /api/portal/profile` (PATCH parcial: só as chaves enviadas mudam) ·
 `POST /api/portal/profile/{photo,document}` ·

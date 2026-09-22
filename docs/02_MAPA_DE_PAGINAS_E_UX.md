@@ -433,9 +433,10 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     confirmar; quando é cancelamento, pede o valor a devolver (pré-preenchido com o recebido),
     nome e PIX de quem recebe.
   - **Aba Resumo**: **faixa de pendências** (chips *Elenco 2/2 escalados*, *Presença*,
-    *Figurino n/m com ficha*, *Agenda n com conflito*, *Contrato*, *Recebimento*, *Evento
-    confirmado* — verde quando resolvido, dourado quando não; **clicar leva para a aba que
-    resolve**) · *Dados do evento* (**editável inline**) · *Resumo para WhatsApp* (descrição do
+    *Figurino n/m com ficha*, *Logística sem maquiagem e saída*, *Agenda n com conflito*,
+    *Contrato*, *Recebimento*, *Evento confirmado* — verde quando resolvido, dourado quando não;
+    **clicar leva para a aba que resolve**) · *Dados do evento* (**editável inline**) ·
+    *Resumo para WhatsApp* (descrição do
     Google/Kommo convertida de HTML para texto puro, monoespaçada, com botão copiar) ·
     *Observações*.
   - **Aba Produção**: *Casting* · *Equipe de apoio* (mesmos cards, `role_type="extra"`, inclusive
@@ -443,6 +444,13 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     "+ Agendar ensaio" some quando o evento não pede ensaio **e** não tem nenhum já agendado —
     feature 239, evita contradizer o aviso "Este evento não pede ensaio." logo abaixo) ·
     *Logística & trajeto* · *Materiais de ensaio* · *Presente 3D* · *Pedido virtual*.
+    Em *Logística & trajeto*, quando o evento é futuro, tem elenco escalado e está **sem horário**
+    de maquiagem ou de saída, aparece um aviso acima do formulário (feature 302) — o chip da faixa
+    de pendências descobre, o aviso explica por que importa: desde a 302 o Portal do Artista mostra
+    esses horários no card do evento, e sem eles o artista descobre por WhatsApp ou não descobre.
+    O critério é a **hora**, nunca o local: o campo "Local de saída" já nasce preenchido, então
+    local sozinho é resíduo do formulário. A mensagem "Copiar convite" do Casting passou a dizer
+    **Função** para cargo e a traduzir o local de maquiagem — mandava `📍 Local: manto`.
   - **Navegação para fora (feature 266)**: o nome de cada cliente vira link para `/clientes/:id`
     (texto puro quando não há nome — um link chamado "—" não diz para onde vai); o talento
     escalado leva a `/talents/:id` **pelo avatar e pelo nome, nos dois cards** (o do personagem e
@@ -1831,26 +1839,29 @@ avaliar). Alvos de toque ≥44px, nada abaixo de 12px, sem rolagem horizontal de
 | `/portal/reset-password/:token` | Definir nova senha pelo link do e-mail | Valida o token antes de mostrar o formulário; checklist de força ao vivo |
 | *(gate)* Criar senha | Troca obrigatória no primeiro acesso | Servida pelo `OnboardingGate`, não é rota navegável |
 | *(gate)* Termos | Aceite do Termo de Consentimento | Checkbox só libera após rolar o texto até o fim |
-| `/portal/agenda` | Próximos eventos + histórico recente | Dia da semana + "amanhã"/"em 5 dias"; alerta de alteração com botão **Ciente**; link para a ficha de figurino **só quando há ficha para aquela pessoa ver** (`has_figurino`, feature 227); nos itens do **histórico**, o mesmo link de avaliar da aba Histórico (`RatingLink`, feature 229); lista escalação **não recusada** (aceita, pendente ou sem convite — feature 230) |
-| `/portal/convites` | Convites de casting pendentes | Botões **Aceitar** / **Recusar** (recusa pede confirmação); alimenta o contador da aba |
-| `/portal/historico` | Histórico completo de apresentações | Somatórios recebido / a receber / total; cachê + deslocamento por evento; link para avaliar via `RatingLink` (o mesmo da Agenda desde a 229) |
+| `/portal/agenda` | **Só os próximos eventos** (a seção Histórico saiu na 302) | Dia da semana, **faixa horária** `20:00 às 23:00` (com o dia junto quando o evento vira a meia-noite) e "amanhã"/"em 5 dias"; **Função:** para cargo e **Personagem:** para personagem (302); alerta de alteração com botão **Ciente**; bloco **"Antes do evento"** recolhido, com ensaio, maquiagem e saída — **não existe** quando não há nenhum dos três (302); link para a ficha de figurino **só quando há ficha para aquela pessoa ver** (`has_figurino`, feature 227); lista escalação **não recusada** (aceita, pendente ou sem convite — feature 230). **A 302 removeu daqui a seção Histórico e, com ela, o `RatingLink` que a 229 tinha posto nos itens do histórico**: a causa que a 229 tratava era a duplicação de nome entre duas listas chamadas "Histórico", e agora existe uma só — o contador de "eventos a avaliar" na barra inferior é o caminho |
+| `/portal/convites` | Convites de casting pendentes | Botões **Aceitar** / **Recusar** (recusa pede confirmação); alimenta o contador da aba; **faixa horária**, rótulo Função/Personagem e o bloco **"Antes do evento"** iguais aos da Agenda (302) — é onde saber do ensaio muda uma decisão que ainda não foi tomada |
+| `/portal/historico` | Histórico completo de apresentações — **é o único lugar dele desde a 302** | Somatórios recebido / a receber / total; cachê + deslocamento por evento; link para avaliar via `RatingLink`; rótulo Função/Personagem (302). A linha mostra **só a data**, sem hora, e a omissão é deliberada: aqui nunca houve horário nenhum, então pôr a faixa significaria acrescentar o horário de **início** de um evento que já aconteceu |
 | `/portal/perfil` | Dados pessoais, **medidas corporais**, PIX e portfólio | Medidas alimentam o módulo de Figurino; até 3 fotos de atuação + links (Vimeo/YouTube) |
 | `/portal/fotos-documentos` | Foto de rosto, corpo inteiro, foto do documento (RG/CPF/CNH — card novo da feature 264) e CNH | Preview do arquivo atual antes de substituir (fotos); documento e CNH mostram sucesso apos envio |
-| `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (rota Jinja, mesma sessão). **Coordenador vê o elenco inteiro** com o nome de quem interpreta cada personagem (feature 227) |
+| `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | **Nome e data do evento no topo** (302) — a ficha abria sem nenhuma referência, e quem tem duas escalações na semana não sabia qual estava vendo; só a data, sem hora, que está no card de onde a pessoa veio. Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (mesma sessão). **Coordenador vê o elenco inteiro** com o nome de quem interpreta cada personagem (feature 227) |
 | `/portal/eventos/:id/avaliar` | Avaliar o evento | Etapa 1 nota geral (abaixo de 4 exige comentário); etapa 2 opcional por categoria e por pessoa; janela de 7 dias para avaliar, 30 para editar. Etapa 2 é o **destino padrão** da etapa 1 desde a 232 (rolagem até o bloco), com desvio explícito para quem só quer a nota geral |
 | `/portal/termos` | Reler o termo já aceito | Modo leitura, sem trava nem botão |
 
-### C.1 Rotas Jinja legadas do portal (ainda registradas)
+### C.1 O Jinja do portal acabou — sobrou uma rota
 
-As rotas de `app/talent_portal` continuam de pé em paralelo (strangler-fig), servidas pelo Flask
-em **outro domínio** — sem colisão com o `/portal/*` do serviço estático. Paridade verificada na
-feature 191; decomissioná-las é limpeza futura.
+> **Corrigido em 2026-09-22 (feature 302).** Esta seção dizia que as 20 rotas Jinja do portal
+> "continuam de pé em paralelo (strangler-fig)". **Não continuam.** Elas foram removidas na fase 2
+> da remoção do Jinja (`docs/PLANO_REMOCAO_JINJA.md`), e `app/talent_portal/routes.py` tem hoje
+> **82 linhas** definindo uma coisa só. O texto antigo sobreviveu porque ninguém tinha motivo para
+> reabrir a seção — e quase virou premissa de uma feature: quatro artefatos da 302 justificavam uma
+> linha de regressão com "o Jinja legado tem consultas próprias". É o mesmo mecanismo que causou a
+> regressão da **301**: documento velho, obedecido com fidelidade.
 
-`/portal/login`, `/first-access`, `/change-password`, `/forgot-password`,
-`/reset-password/<token>`, `/terms`, `/logout`, `/portal/`, `/portal/historico`,
-`/portal/profile`, `/portal/media/*`, `/portal/invites/<id>/{accept,reject}`,
-`/portal/roles/<id>/ack-change`, `/portal/events/<id>/figurino`,
-`/portal/events/<id>/rate[/detail]`.
+A única rota Flask do portal é **`/portal/photo/<caminho>`**. As de login, primeiro acesso, senha,
+termos, home, histórico, perfil, mídia, convites, figurino e avaliação não existem mais, e
+`app/templates/portal/` está vazio. Várias docstrings do portal ainda citam a "view Jinja legada" —
+dívida registrada em `docs/05`.
 
 > `/portal/photo/<file>` **não** é legado a decomissionar: serve as fotos de figurino checando a
 > sessão de talento, e o app React depende dela. Por isso ela é um dos filtros do proxy reverso
