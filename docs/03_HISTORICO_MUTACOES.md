@@ -4,7 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-18** · Estado do repositório: pós-feature
+> Última atualização: **2026-09-21** · Estado do repositório: pós-feature
+> **301-orcamentos-visiveis-comercial** (sem migration; **ainda não publicada** — o histórico de
+> orçamentos volta a ser do time inteiro, desfazendo a regressão que a feature 177 trouxe do
+> contrato desatualizado em 23/07/2026, e a trava de escrita do vínculo orçamento↔evento passa a
+> cobrir também o re-aplicar) — antes dela pós-feature
 > **300-catalogo-rapido** (sem migration; **EM PRODUÇÃO desde 18/09/2026 ~22:01** pelo merge
 > `5b327ed` "merge: 300 — catálogo rápido" — o gerenciador e a vitrine do catálogo deixam de fazer
 > uma consulta ao banco por produto e de baixar a foto inteira para caixa pequena; as respostas da
@@ -109,6 +113,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **301-orcamentos-visiveis-comercial** | "Todas as pessoas do setor comercial devem poder ver e abrir orçamentos de outras pessoas. Isso era assim até algum tempo atrás." **Causa → efeito:** em 20/05/2026 o commit `6b191e4` removeu de propósito o filtro por dono do histórico ("todos veem todos os orçamentos"); em 23/07/2026 a migração do módulo para React (**feature 177**) o **reintroduziu**, porque o contrato dela (`specs/177-.../contracts/api-endpoints.md:119`) descrevia o código de dois meses antes — `routes.py:714` já não tinha o filtro no dia em que aquilo foi escrito. A regressão durou **dois meses** e contaminou mais duas superfícies no domínio Agenda: a aba Comercial do evento (239) e o vínculo orçamento↔evento (273). O sintoma mais nu: uma pessoa do COMERCIAL sem orçamentos próprios abria o histórico e via **tela vazia**. A 301 devolve a leitura a todo o comercial (listar, abrir, recalcular, PDF, reenviar e-mail), mantém **uma** trava de autoria — o `DELETE` — e **aperta** a de escrita do vínculo: vincular é livre, mas trocar, desvincular e **re-aplicar** sobre vínculo alheio viram 409 nomeando o autor. O re-aplicar escapava da guarda antiga e só não vazava porque o 404 do alvo vinha antes; derrubá-lo sem apertar deixaria qualquer colega reescrever `sale_value` e `sale_date` — e `sale_date` decide o mês da comissão (267b). Pelo mesmo motivo a queda do 404 é **condicionada ao papel**: o FINANCEIRO passa no gate do endpoint e ganharia de brinde o poder de vincular venda alheia. Reenvio de orçamento de outra pessoa passa a ser auditado. A tela deixa de **deduzir** permissão da ausência de dado no payload (`pode_gerir`, `pode_excluir`), e o contrato da 177 recebe nota de regra superada, para a próxima reescrita não repetir o caminho | 2026-09-21 | `—` | (aqui) | — |
 | **300-catalogo-rapido** | "Clico em Gerenciar catálogo e demora muito para carregar." Eram **duas** causas independentes, e o tamanho da resposta (199 KB) não era nenhuma delas: (1) **uma consulta ao banco por produto, várias vezes** — nenhum ponto do caminho do catálogo tinha carregamento antecipado, e `cover_image` é property sobre `images[0]`, então pedir a capa carrega a coleção inteira de fotos: 1.846 consultas no gerenciador (2.320 na aba Personagens), 917 na vitrine, 492 na grade de categorias; (2) **458 capas em tamanho original dentro de caixas de 32 a 64 px** — 95,4 MB pedidos de uma vez, sem carregamento sob demanda, porque a decisão 7 da 270 deixara o ERP interno fora das miniaturas. `selectinload` no ponto que precisa (não no `models.py`), `assetUrl(url, { largura })` nos 8 pontos de render do gerenciador e nas 2 lacunas que a 270 deixou na vitrine (grade de categorias e lista de desejos), `<Foto>` com `loading="lazy"`, `GET /api/admin/catalogo/categorias` (a edição baixava 199 KB para desenhar 39 opções) e pausa de 300 ms nas duas buscas que consultam o servidor (a da listagem e a do elenco). **Sem paginação — medido que não é preciso.** Achado de passagem: a ordem de `category_names` e de personagens empatados nunca foi garantida; virou explícita **por `id`, o que reproduz a produção em 458 de 458**. A revisão pré-deploy (9 achados, todos confirmados) pegou que a primeira escolha — ordem alfabética — trocaria as etiquetas de 123 cards da vitrine, e que a busca Adotar/Vincular mostrava linhas de outra busca com o botão ativo | 2026-09-16 | `—` | (aqui) | — |
 | **299-sem-valor-cobrancas** | A Home cobrava cada evento sozinho (o grupo 344 aparecia devendo R$ 2.430 pagos num outro evento do grupo), escondia 25 vendas com metade paga até a véspera, acusava dívida por centavos e não mostrava as 6 vendas sem valor. Núcleo único `cobranca_ops` (Home + página do evento): o grupo é uma venda só, vencimento data combinada > parcela > 2 dias antes (nunca antes da venda), folga de R$ 1,00, sinal pendente só sem data combinada e sem cronograma. Dois painéis, "Cobranças" e "Sem valor", com selos em pt-BR, cards e total só com o que é para agir e painel que nunca some em silêncio. "Valor a definir" no cadastro no lugar do R$ 0,01 (recusado também na aba Comercial); "Pôr o valor" em 2 cliques; comissão tardia no mês do valor | 2026-09-15 | `—` | (aqui) | — |
 | **298-formulario-vira-evento** | A Home dizia "1.347 formulários sem evento" contando o histórico importado do WhatsForm; desde 01/06 eram 36, e 7 deles já tinham o evento da cliente na agenda. Corte pela CHEGADA do formulário (meia-noite de SP da `release_date`; `created_at` é UTC ingênuo); todo formulário desde o corte tem destino — evento, encerrado com motivo ou a lista da Home ("Formulários sem evento na agenda", dois grupos, cor por urgência dita também em palavras, uma linha por telefone com "Este é o que vale", sugestão de evento a ±3 dias com descarte definitivo). Núcleo ÚNICO de vínculo (três caminhos gravavam `event_id` à mão; `link_event` sobrescrevia), cliente nos dois sentidos sem trocar ninguém, aviso do sino apagado para todos, 409 "já tem destino" em todos os caminhos — no `POST /api/events` ANTES do Google, com `FOR UPDATE`. Cadastro de evento preenchido pelo formulário nos dois vocabulários (site e WhatsForm) com selo "do formulário", alertas no campo e Salvar nunca desabilitado. Dois comandos de correção única pós-deploy | 2026-09-11 | `e5a1c7d93b20` | (aqui) | — |
@@ -273,6 +278,49 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 301 — Todo o comercial volta a ver e abrir o orçamento de qualquer colega   (2026-09-21 · feature · sem migration)
+
+> **Ainda não publicada.** Verificação: `verify_301.py` 13/13 contra o `manto_local`, com cinco
+> cenários que devem falhar (trocar/soltar alheio, re-aplicar alheio, DELETE alheio, FINANCEIRO no
+> histórico, FINANCEIRO vinculando alheio).
+
+**Causa → efeito, que é o ponto desta entrada.** Não foi decisão de produto, foi regressão com
+origem rastreável: `6b191e4` (20/05/2026) liberou o histórico para todos, de propósito, e deixou o
+`DELETE` com o dono; a feature **177** (23/07/2026) reescreveu a rota Jinja como endpoint de API e
+recolocou `if not is_sa: filter_by(user_id=...)`, seguindo o **contrato dela**, que registrava
+"demais só o próprio (mesma regra de `is_sa` em `routes.py:714`)" — mas `routes.py:714`, naquele
+dia, já não tinha o filtro. Um documento desatualizado, implementado com fidelidade, valeu mais que
+o código. Depois a regra foi herdada sem questionamento pela aba Comercial do evento (239) e pelo
+vínculo orçamento↔evento (273).
+
+**O que mudou.** `_get_entry_or_none(entry_id, is_sa)` — funil de quatro endpoints, cujo nome não
+dizia se ali cabia dono — virou `_get_entry` (leitura, só existência) e `_get_entry_para_excluir`
+(existência + autoria). A listagem perdeu o filtro por autor, ganhou `users` sempre populada e
+`pode_excluir` por linha, e perdeu a chave `is_superadmin` (existia só para esconder coluna e
+filtro; deixá-la viva é deixar a alavanca no lugar). O resumo do orçamento no evento ganhou `autor`
+— não `vendedor`, porque `venda.seller` no mesmo bloco é o vendedor **do evento**, outra pessoa — e
+`pode_gerir`, calculado na view.
+
+**Duas travas que o conserto exigiu apertar, e não afrouxar.** (1) O `PATCH .../orcamento`
+aplicava valores no vínculo ATUAL sem cair na guarda de 409 quando o id pedido era o mesmo — só não
+vazava porque o 404 do alvo barrava antes; a guarda passou a cobrir os três verbos. (2) O
+FINANCEIRO passa em `_can_manage_sale()` e hoje só é barrado por esse mesmo 404: a remoção teve de
+ser condicionada a quem tem o módulo de Orçamento, senão a feature lhe daria acesso que o §Fora de
+escopo nega.
+
+**Dois defeitos de verificação, achados antes de rodar.** O cenário do re-aplicar nasceria vazio
+(aplicar é idempotente: num evento já vinculado pelo caminho normal, uma re-aplicação *aceita*
+também não mudaria nada), e o do `DELETE` não era discriminante (a guarda 409 de evento vivo
+recusaria sozinha, mesmo com a autoria solta). Os dois ganharam arranjo obrigatório escrito na
+spec. Também se achou, tarde, um **terceiro** consumidor de `GET /api/orcamento/historico` que
+nenhum artefato citava: o selo de contagem da calculadora, que passa a contar o time e satura em
+300 — efeito aceito e registrado.
+
+**Registro do processo, porque se repete.** O `/speckit-analyze` deu 100% de coerência entre spec,
+plano, tarefas e contrato **enquanto** os quatro diziam a mesma coisa errada sobre a ordem de duas
+guardas no `DELETE` (a autoria vem antes do 409, não depois). Consistência entre documentos não é
+prova de verdade; quem achou foi uma passada que abria o código para refutar.
 
 ### 300 — Catálogo rápido: a tela abre sem ficar esperando   (2026-09-16 · feature · sem migration)
 
