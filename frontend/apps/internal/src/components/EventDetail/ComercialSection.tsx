@@ -577,7 +577,12 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
   const eventoDoErro = [detalhesDoErro?.event_id, detalhesDoErro?.leader_id].find(
     (v): v is number => typeof v === "number",
   );
-  const orcamentoDeOutro = !orc && venda.tem_orcamento;
+  // feature 301 — antes isto era `!orc && venda.tem_orcamento`: "o servidor não me deu o
+  // orçamento, logo é de outro". Com a visibilidade restaurada o servidor SEMPRE manda, então
+  // essa dedução seria eternamente falsa e os três botões apareceriam para todo mundo — para o
+  // servidor recusar depois do clique. Quem decide agora é `pode_gerir` (Princípio XIII).
+  const semAcessoAoOrcamento = !orc && venda.tem_orcamento;
+  const podeGerirOrcamento = orc ? orc.pode_gerir : true;
 
   if (!canEdit) {
     return (
@@ -601,16 +606,18 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
 
   return (
     <Panel title="Orçamento">
-      {orcamentoDeOutro ? (
+      {semAcessoAoOrcamento ? (
         <p className="text-sm text-muted">
-          Vinculado ao orçamento de outro vendedor — só ele ou o superadmin podem trocar ou
-          desvincular.
+          Vinculado a um orçamento que o seu perfil não abre.
         </p>
       ) : orc && !trocando ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-medium text-ink">{orc.client_name || "Sem cliente"}</span>
             {orc.event_date && <span className="text-muted">{dataBr(orc.event_date)}</span>}
+            {/* feature 301 — de quem é o orçamento. A lista virou do time inteiro, e é este
+                nome que a recusa cita quando alguém tenta mexer no vínculo alheio. */}
+            <span className="text-muted">por {orc.autor}</span>
             <Link to={`/orcamento/${orc.id}`} className="text-blue underline">
               Abrir orçamento
             </Link>
@@ -624,29 +631,38 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
               ))}
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              loading={salvar.isPending}
-              onClick={() => enviar(orc.id)}
-              title="Cria o que falta (coordenadores, maquiador, técnico de som), marca maquiagem e fora de SP. Nunca remove nada."
-            >
-              Aplicar ao evento
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setTrocando(true)}>
-              Trocar
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={salvar.isPending}
-              onClick={() => enviar(null)}
-            >
-              Desvincular
-            </Button>
-          </div>
+          {podeGerirOrcamento ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                loading={salvar.isPending}
+                onClick={() => enviar(orc.id)}
+                title="Cria o que falta (coordenadores, maquiador, técnico de som), marca maquiagem e fora de SP. Nunca remove nada."
+              >
+                Aplicar ao evento
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setTrocando(true)}>
+                Trocar
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={salvar.isPending}
+                onClick={() => enviar(null)}
+              >
+                Desvincular
+              </Button>
+            </div>
+          ) : (
+            /* feature 301 — vê tudo, mexe em nada: a venda é de quem fez o orçamento. Diz de
+               quem é e qual a saída, em vez de sumir com o bloco ou oferecer botão que falha. */
+            <p className="text-sm text-muted">
+              Este orçamento é de {orc.autor} — só {orc.autor} ou o superadmin podem trocar,
+              desvincular ou re-aplicar.
+            </p>
+          )}
         </div>
       ) : escolhido ? (
         <div className="space-y-2">

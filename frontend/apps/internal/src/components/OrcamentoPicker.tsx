@@ -11,8 +11,10 @@ type EstadoBusca =
 
 /**
  * Busca no histórico de orçamentos (`GET /api/orcamento/historico?q=`, que filtra por cliente e
- * local e já respeita o dono: comercial só vê os próprios, superadmin vê todos). Mesmo desenho do
- * `FormResponsePicker`: debounce de 250 ms, cancelamento da resposta atrasada, estados explícitos.
+ * local). Desde a feature 301 a busca devolve os orçamentos de **todo o comercial**, não só os de
+ * quem procura — é por aqui que se amarra ao evento o orçamento que a colega fez. Por isso cada
+ * linha mostra de quem é. Mesmo desenho do `FormResponsePicker`: debounce de 250 ms, cancelamento
+ * da resposta atrasada, estados explícitos.
  */
 function useOrcamentoSearch(query: string): EstadoBusca {
   const [estado, setEstado] = useState<EstadoBusca>({ status: "vazio" });
@@ -104,7 +106,12 @@ export function OrcamentoPicker({
               >
                 <span className="font-medium">{entry.client_name || "Sem cliente"}</span>
                 <span className="ml-2 text-xs text-muted">
-                  {[dataBr(entry.event_date), entry.event_location, `2h ${formatBRL(entry.total_2h)}`]
+                  {[
+                    entry.user_name || "Vendedor não identificado",
+                    dataBr(entry.event_date),
+                    entry.event_location,
+                    `2h ${formatBRL(entry.total_2h)}`,
+                  ]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>

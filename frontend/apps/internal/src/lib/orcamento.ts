@@ -295,6 +295,8 @@ export interface OrcamentoHistoricoEntry {
   total_4h: number;
   has_show: boolean;
   user_name: string | null;
+  /** feature 301 — o servidor decide quem pode excluir; a tela nunca compara ids (Princípio XIII). */
+  pode_excluir: boolean;
   /** feature 273 — evento não cancelado que aponta para este orçamento ("Ver evento"). */
   event_id: number | null;
   event_title: string | null;
@@ -302,7 +304,7 @@ export interface OrcamentoHistoricoEntry {
 
 export interface OrcamentoHistoricoResponse {
   entries: OrcamentoHistoricoEntry[];
-  is_superadmin: boolean;
+  /** Vendedores do filtro — sempre populado desde a feature 301 (antes, só para superadmin). */
   users: { id: number; name: string }[];
 }
 

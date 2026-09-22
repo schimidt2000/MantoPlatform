@@ -1,6 +1,19 @@
 """Endpoints de LEITURA da Calculadora de Orçamento, Config. de Preços e Histórico (migração
 177, US2/US4/US5).
 
+RBAC: **não há gate único de módulo** — são dois, chamados no início de cada view.
+`_require_vendas()` (COMERCIAL ou SUPERADMIN; **FINANCEIRO leva 403**, ao contrário do homônimo de
+`clientes_read.py`) cobre `/orcamento/opcoes`, `/orcamento/personagens-no-dia`,
+`/orcamento/distancia`, `/orcamento/historico` e `/orcamento/historico/<id>`.
+`_require_superadmin()` cobre **só** `GET /orcamento/settings` (Config. de Preços).
+
+Passado o gate, o histórico é do time inteiro: desde a feature 301 **não há** checagem de dono na
+listagem nem no detalhe — `_get_entry` confere só existência. O dono pesa em um ponto único, o
+`DELETE`, por `_get_entry_para_excluir` (usada em `orcamento_write.py`). A liberação é deliberada
+(commit `6b191e4`, 20/05/2026) e a migração 177 a desfez sem querer, a partir de um contrato
+desatualizado: quem reescrever este módulo **não** deve reintroduzir o filtro por `user_id`.
+Tabela de gates em `docs/01` §4.3; a regra de escopo, em `docs/01` §3.13.
+
 Reusa, sem duplicar, o núcleo já extraído em `app/orcamento/quote_ops.py` e os módulos puros
 `app/orcamento/settings.py`/`pricing.py` — os endpoints aqui só validam RBAC e serializam.
 """
@@ -109,9 +122,15 @@ def api_orcamento_settings_get() -> Any:
 # ══════════════════════════════════════════════════════════════════
 
 
-def _entry_summary(e: OrcamentoHistory, evento: Any = None) -> dict:
+def _entry_summary(e: OrcamentoHistory, evento: Any = None, *, is_sa: bool = False) -> dict:
     """Linha do histórico. `evento` (feature 273) é o evento não cancelado que aponta para o
-    orçamento — o selo de convertido mais barato possível."""
+    orçamento — o selo de convertido mais barato possível.
+
+    `pode_excluir` (feature 301) é o servidor decidindo por quem desenha a tela: a lista passou a
+    ser do time inteiro, e "Excluir" era renderizado em toda linha — apareceria sobre orçamento
+    alheio e só falharia depois do `confirm()`. O React esconde o botão por esta chave e **nunca**
+    comparando ids (Princípio XIII: o frontend não decide RBAC).
+    """
     return {
         "id": e.id,
         "event_id": evento.id if evento is not None else None,
@@ -126,13 +145,18 @@ def _entry_summary(e: OrcamentoHistory, evento: Any = None) -> dict:
         "total_4h": float(e.total_4h) if e.total_4h is not None else 0,
         "has_show": e.has_show,
         "user_name": e.user.name if e.user else None,
+        "pode_excluir": bool(is_sa or e.user_id == current_user.id),
     }
 
 
 @api_bp.route("/orcamento/historico")
 @api_login_required
 def api_orcamento_historico_list() -> Any:
-    """Histórico de orçamentos — SUPERADMIN vê todos, demais só os próprios."""
+    """Histórico de orçamentos — do time inteiro, para quem passa no gate (feature 301, FR-001).
+
+    Sem filtro por autor e sem filtro pré-aplicado: a tela abre com todos (FR-012). `user_id` na
+    querystring deixa de ser privilégio de superadmin (FR-005).
+    """
     denied = _require_vendas()
     if denied:
         return denied
@@ -147,9 +171,7 @@ def api_orcamento_historico_list() -> Any:
     show_f = (request.args.get("has_show") or "").strip()
 
     query = OrcamentoHistory.query
-    if not is_sa:
-        query = query.filter_by(user_id=current_user.id)
-    elif user_id_f.isdigit():
+    if user_id_f.isdigit():
         query = query.filter_by(user_id=int(user_id_f))
 
     if q:
@@ -186,17 +208,16 @@ def api_orcamento_historico_list() -> Any:
 
     entries = query.order_by(OrcamentoHistory.created_at.desc()).limit(300).all()
 
-    users = []
-    if is_sa:
-        users = [
-            {"id": u.id, "name": u.name}
-            for u in (
-                User.query.join(User.roles)
-                .filter(Role.name.in_([RoleName.COMERCIAL, RoleName.SUPERADMIN]))
-                .order_by(User.name.asc())
-                .all()
-            )
-        ]
+    # Alimenta o seletor de vendedor, agora visível para todo o comercial (FR-005).
+    users = [
+        {"id": u.id, "name": u.name}
+        for u in (
+            User.query.join(User.roles)
+            .filter(Role.name.in_([RoleName.COMERCIAL, RoleName.SUPERADMIN]))
+            .order_by(User.name.asc())
+            .all()
+        )
+    ]
 
     # Feature 273: um SELECT para todos os eventos vivos das linhas da página, não um por linha.
     from app.models import CalendarEvent
@@ -209,14 +230,35 @@ def api_orcamento_historico_list() -> Any:
         ).all():
             eventos_por_orc.setdefault(ev.orcamento_history_id, ev)
 
+    # `is_superadmin` saiu do payload de propósito (feature 301): servia só para três `if` de tela
+    # que agora são incondicionais, e deixá-la viva é deixar no lugar a alavanca que espalhou a
+    # regressão — o próximo a mexer na tela a encontra e conclui que há algo a esconder.
     return jsonify({
-        "entries": [_entry_summary(e, eventos_por_orc.get(e.id)) for e in entries],
-        "is_superadmin": is_sa,
+        "entries": [
+            _entry_summary(e, eventos_por_orc.get(e.id), is_sa=is_sa) for e in entries
+        ],
         "users": users,
     })
 
 
-def _get_entry_or_none(entry_id: int, is_sa: bool) -> OrcamentoHistory | None:
+def _get_entry(entry_id: int) -> OrcamentoHistory | None:
+    """Busca para LEITURA: confere existência, não autoria (feature 301, FR-002/FR-003).
+
+    O nome diz a regra de propósito. A função anterior (`_get_entry_or_none(entry_id, is_sa)`)
+    servia os quatro endpoints de leitura **e** o DELETE com a mesma assinatura, e ler a chamada
+    não dizia se ali cabia dono — foi assim que a restrição atravessou a migração 177 sem ninguém
+    notar (constituição, Princípio XIII: "ler o nome do gate não basta").
+    """
+    return OrcamentoHistory.query.get(entry_id)
+
+
+def _get_entry_para_excluir(entry_id: int, is_sa: bool) -> OrcamentoHistory | None:
+    """Busca para EXCLUIR: existência **e** autoria (FR-006).
+
+    É a única trava de dono que sobra no módulo, e é decisão explícita de `6b191e4` — tomada no
+    mesmo commit que liberou a visualização para todo o comercial. Devolver `None` faz a view
+    responder 404, nunca 403: recurso de outro dono não confirma existência (Princípio XIII).
+    """
     if is_sa:
         return OrcamentoHistory.query.get(entry_id)
     return OrcamentoHistory.query.filter_by(id=entry_id, user_id=current_user.id).first()
@@ -233,7 +275,7 @@ def api_orcamento_historico_detail(entry_id: int) -> Any:
     denied = _require_vendas()
     if denied:
         return denied
-    entry = _get_entry_or_none(entry_id, _has_role(RoleName.SUPERADMIN))
+    entry = _get_entry(entry_id)
     if entry is None:
         return json_error("Orçamento não encontrado", 404)
     try:

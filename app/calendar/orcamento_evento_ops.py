@@ -73,6 +73,10 @@ def resumo_do_orcamento(entry: OrcamentoHistory) -> dict:
     performers = snap.get("performers", []) or []
     return {
         "id": entry.id,
+        # feature 301 — quem fez o orçamento. Chama-se `autor`, e não `vendedor`, porque o mesmo
+        # bloco `venda` já traz `venda.seller`: o vendedor DO EVENTO, que pode ser outra pessoa.
+        # Sem este nome a recusa de FR-011 não consegue dizer quem pode resolver (FR-010).
+        "autor": (entry.user.name if entry.user else None) or "Vendedor não identificado",
         "client_name": entry.client_name or "",
         "event_date": entry.event_date or "",
         "event_location": entry.event_location or "",

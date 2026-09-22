@@ -181,6 +181,15 @@ export interface RoleItem {
 /** O que o orçamento vinculado vendeu (feature 273) — chips da aba Comercial e base do "Aplicar". */
 export interface OrcamentoResumo {
   id: number;
+  /** feature 301 — quem FEZ o orçamento. Não confundir com `venda.seller`, o vendedor do EVENTO. */
+  autor: string;
+  /**
+   * feature 301 — o servidor diz se esta pessoa pode trocar, desvincular ou re-aplicar o vínculo.
+   * A tela NUNCA deduz isso da ausência do orçamento no payload: com a visibilidade restaurada o
+   * orçamento vem sempre, essa dedução seria eternamente falsa, e os botões apareceriam para todo
+   * mundo — para o servidor recusar depois do clique.
+   */
+  pode_gerir: boolean;
   client_name: string;
   event_date: string;
   event_location: string;
