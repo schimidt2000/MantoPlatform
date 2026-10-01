@@ -295,6 +295,17 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 > e sobe agora mesmo") e contra a regra do `CLAUDE.md` §2 (publicar a partir das ~19h BRT) — fica
 > registrado assim: quem estivesse salvando algo no minuto da troca de contêiner pode ter perdido
 > a ação. A confirmação no ar (hora e provas) entra numa entrada de correção depois do push.
+>
+> **O primeiro deploy falhou (merge `8276d5d`, 14:08) — e não pelo código da 303.** O
+> `requirements.txt` não fixava o SQLAlchemy: o build pegou o **2.1.1**, cujo driver padrão de
+> `postgresql://` passou a ser o psycopg 3, que não está instalado; o `flask db upgrade` do start
+> morreu com `ModuleNotFoundError: No module named 'psycopg'` e o Render manteve o contêiner
+> antigo (~1 min de 502; banco intacto em `e5a1c7d93b20`). Qualquer deploy a partir desse dia
+> teria caído igual. Correção: `SQLAlchemy==2.0.54`, `alembic==1.20.0` e `oauthlib==3.3.1` (o
+> build também puxaria o oauthlib 4.0, major) — as versões que a produção rodava, lidas por SSH.
+> Antes do segundo push, o build foi reproduzido num venv Python 3.11 só com o `requirements.txt`:
+> diferença para a produção apenas em patches, `flask db upgrade` com psycopg2 e `verify_303.py`
+> 44/44 nesse ambiente.
 > Primeira de três entregas do item "a venda some quando o evento some do Google": esta é só a
 > trava do sync; o dinheiro do cancelamento e o selo de cancelados são features próprias (texto e
 > pesquisa em `specs/303-sync-nao-apaga-venda/entregas-2-e-3-rascunho.md` e `pesquisa/`).

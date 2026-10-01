@@ -3,6 +3,11 @@ flask-limiter==3.9.0
 flask-mail==0.10.0
 python-dotenv==1.0.1
 flask-sqlalchemy==3.1.1
+# Fixados nas versões que a produção rodava em 01/10/2026. Sem pino, o build do Render pegou o
+# SQLAlchemy 2.1, cujo driver padrão de `postgresql://` passou a ser o psycopg 3 (não instalado):
+# o deploy da 303 morreu com `ModuleNotFoundError: No module named 'psycopg'` no `flask db upgrade`.
+SQLAlchemy==2.0.54
+alembic==1.20.0
 flask-migrate==4.1.0
 flask-login==0.6.3
 flask-wtf==1.2.2
@@ -12,6 +17,9 @@ bcrypt==5.0.0
 werkzeug==3.1.5
 google-auth==2.41.1
 google-auth-oauthlib==1.2.3
+# Dependência do fluxo OAuth do Google; fixada na versão da produção em 01/10/2026 — sem pino o
+# build pegaria o oauthlib 4.0 (major), nunca testado com o "Conectar Google".
+oauthlib==3.3.1
 google-api-python-client==2.188.0
 python-docx==1.1.2
 Pillow==12.1.1
