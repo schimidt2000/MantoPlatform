@@ -10,6 +10,7 @@ import {
   useLogout,
 } from "../lib/useAuth";
 import type { AuthUser } from "../lib/types";
+import { FaixaSumidosGoogle } from "./FaixaSumidosGoogle";
 import { NotificacoesBell } from "./notificacoes/NotificacoesBell";
 
 /** Papéis simuláveis no "Ver como" — paridade com IMPERSONABLE_ROLES do backend. */
@@ -162,6 +163,10 @@ export function AppShell() {
         </NavLink>
       )}
     >
+      {/* Faixa "eventos sumiram do Google Agenda" (feature 303): antes do Outlet para não remontar
+          na navegação e valer o sticky pela página inteira. Para todo usuário — quem decide se
+          ela aparece é o `pode_ver` do servidor, não um teste de papel aqui. */}
+      <FaixaSumidosGoogle />
       <Outlet />
     </AppLayout>
   );

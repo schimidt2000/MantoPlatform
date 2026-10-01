@@ -7,6 +7,7 @@ import { formatDateTimeRange, formatRelativeDay, formatWeekday } from "../lib/fo
 import { useAckEventChange, useAgenda, type PortalRole } from "../lib/portalAgenda";
 import { ErroDeCarregamento } from "../components/ErroDeCarregamento";
 import { AntesDoEvento } from "../components/AntesDoEvento";
+import { AvisoEmConfirmacao } from "../components/AvisoEmConfirmacao";
 import { RoleLine } from "../components/RoleLine";
 
 function RoleCard({ role }: { role: PortalRole }) {
@@ -35,6 +36,8 @@ function RoleCard({ role }: { role: PortalRole }) {
             <RoleLine role={role} />
           </div>
         </div>
+
+        <AvisoEmConfirmacao ativo={role.em_confirmacao} />
 
         {role.has_unacknowledged_change && (
           <div className="rounded-md bg-red-soft px-3 py-2 text-sm text-red">

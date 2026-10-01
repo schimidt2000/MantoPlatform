@@ -1,4 +1,4 @@
-import { Bell, FileText, Star, UserX, type LucideIcon } from "lucide-react";
+import { Bell, CalendarX, FileText, Star, UserX, type LucideIcon } from "lucide-react";
 import { cn } from "@manto/ui";
 import { horaDeIsoLocal } from "../../lib/horaLocal";
 import type { Notificacao } from "../../lib/notificacoes";
@@ -8,6 +8,8 @@ const ICONE_POR_KIND: Record<string, LucideIcon> = {
   "form_response.nova": FileText,
   "avaliacao.recebida": Star,
   "convite.recusado": UserX,
+  // Feature 303 — o mesmo ícone do selo "Sumiu do Google" na agenda.
+  "evento.sumiu_google": CalendarX,
 };
 
 interface NotificacaoItemProps {
@@ -20,8 +22,12 @@ interface NotificacaoItemProps {
  * `/notificacoes`: duas montagens divergiriam no primeiro ajuste de texto.
  *
  * O item inteiro é um `<button>`: clicar marca lida e navega para `link_path`. Não lida = ponto
- * `bg-accent` + título em negrito; `urgent` (nota baixa, recusa em cima da hora) = borda e ícone
- * vermelhos — cor e badge, não interrupção.
+ * `bg-accent` + título em negrito; `urgent` (nota baixa, recusa em cima da hora, evento que sumiu
+ * do Google) = borda e ícone vermelhos — cor e badge, não interrupção.
+ *
+ * O aviso `urgent` não é cortado numa linha (feature 303): o título quebra em até duas e o corpo
+ * em até três, com o texto inteiro no `title`. Com o prefixo fixo "Sumiu do Google Agenda — ",
+ * sobravam ~10 caracteres para o nome do evento no painel de 375 px. O `info` segue numa linha.
  */
 export function NotificacaoItem({ item, onOpen }: NotificacaoItemProps) {
   const Icone = ICONE_POR_KIND[item.kind] ?? Bell;
@@ -46,16 +52,37 @@ export function NotificacaoItem({ item, onOpen }: NotificacaoItemProps) {
         <Icone className="h-4 w-4" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
+        {/* `items-start` + `mt-1.5` no ponto: com o título em duas linhas, o ponto acompanha a
+            primeira linha em vez de flutuar no meio. */}
+        <span className="flex items-start gap-2">
           {naoLida && (
-            <span className="h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden />
+            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden />
           )}
-          <span className={cn("truncate text-sm text-ink", naoLida && "font-semibold")}>
+          <span
+            title={urgente ? item.title : undefined}
+            className={cn(
+              "text-sm text-ink",
+              urgente ? "line-clamp-2 break-words" : "truncate",
+              naoLida && "font-semibold",
+            )}
+          >
             {item.title}
           </span>
           {naoLida && <span className="sr-only">(não lida)</span>}
         </span>
-        {item.body && <span className="block truncate text-xs text-muted">{item.body}</span>}
+        {item.body && (
+          <span
+            title={urgente ? item.body : undefined}
+            // Sem `block` no ramo do `line-clamp`: o utilitário de display vem depois no CSS do
+            // Tailwind e trocaria o `-webkit-box` de que o corte em linhas depende.
+            className={cn(
+              "text-xs text-muted",
+              urgente ? "line-clamp-3 break-words" : "block truncate",
+            )}
+          >
+            {item.body}
+          </span>
+        )}
       </span>
       <span className="shrink-0 pt-0.5 text-[11px] tabular-nums text-muted">
         {horaDeIsoLocal(item.created_at)}

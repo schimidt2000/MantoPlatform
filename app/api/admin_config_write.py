@@ -4,17 +4,24 @@ Reusa, sem duplicar, `app.admin.config_ops` e os helpers já existentes em `app.
 `app.drive_migration`, `app.catalogo.importer`, `app.email_service`. Gate `require_superadmin`.
 """
 
+from __future__ import annotations
+
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from flask import current_app, jsonify, request
 from flask_login import current_user
+from sqlalchemy.exc import SQLAlchemyError
 
+from app import db
 from app.admin import config_ops
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
 from app.models import SiteSetting
+
+if TYPE_CHECKING:
+    from app.calendar.sumico_ops import ResultadoLimpeza
 
 
 def _has_role(*names: str) -> bool:
@@ -26,6 +33,42 @@ def _require_superadmin() -> Any:
     if not _has_role(RoleName.SUPERADMIN):
         return json_error("Sem permissão", 403)
     return None
+
+
+_NUMEROS_DA_LIMPEZA = ("removed", "marcados", "movidos", "desmarcados", "inconclusivos", "falhas")
+
+
+def _linha_vazia(ym: str) -> dict[str, Any]:
+    return {"ym": ym, **{chave: 0 for chave in _NUMEROS_DA_LIMPEZA}}
+
+
+def _linha_da_limpeza(ym: str, limpeza: ResultadoLimpeza) -> dict[str, Any]:
+    """Uma linha de `results[]` a partir do `ResultadoLimpeza` do mês (feature 303)."""
+    return {
+        "ym": ym,
+        "removed": len(limpeza.removidos),
+        "marcados": len(limpeza.marcados),
+        "movidos": len(limpeza.movidos),
+        "desmarcados": len(limpeza.desmarcados),
+        "inconclusivos": len(limpeza.inconclusivos),
+        "falhas": len(limpeza.falhas),
+        "ok": not limpeza.falhas,
+    }
+
+
+def _mensagem_da_limpeza(results: list[dict[str, Any]]) -> str:
+    """O texto fixo do contrato da 303, com as somas de todos os meses."""
+    soma = {chave: sum(r[chave] for r in results) for chave in _NUMEROS_DA_LIMPEZA}
+    mensagem = (
+        f"Limpeza concluída em {len(results)} mês(es): {soma['removed']} removido(s), "
+        f"{soma['marcados']} mantido(s) e marcado(s), {soma['movidos']} com data atualizada, "
+        f"{soma['desmarcados']} de volta ao Google Agenda, {soma['inconclusivos']} sem "
+        f"confirmação do Google, {soma['falhas']} com falha."
+    )
+    com_erro = sum(1 for r in results if "err" in r)
+    if com_erro:
+        mensagem += f" {com_erro} mês(es) com erro."
+    return mensagem
 
 
 @api_bp.route("/admin/settings", methods=["PATCH"])
@@ -48,7 +91,13 @@ def api_admin_settings_update() -> Any:
 @api_bp.route("/admin/sync/run", methods=["POST"])
 @api_login_required
 def api_admin_sync_run() -> Any:
-    """Dispara sync manual ou limpeza de eventos fantasma (feature 168)."""
+    """Dispara sync manual ou a limpeza de eventos fantasma (feature 168).
+
+    `sync_now` busca e sincroniza os próximos meses, sem limpar. `cleanup_past` passa por todo
+    mês que tem evento no banco e, desde a feature 303, confere no Google cada evento que faltou
+    na lista: o vazio que sumiu é removido, o que tem dinheiro fica e é marcado, o que só mudou de
+    data é atualizado — a resposta traz esses números por mês.
+    """
     denied = _require_superadmin()
     if denied:
         return denied
@@ -101,20 +150,18 @@ def api_admin_sync_run() -> Any:
             try:
                 items = _fetch(_CAL_ID, y, m)
                 _sync_events(items)
-                removed_titles = _cleanup_stale_events(items, y, m)
+                limpeza = _cleanup_stale_events(items, y, m)
                 _mark_month_synced(ym)
-                results.append({"ym": ym, "removed": len(removed_titles), "ok": True})
+                results.append(_linha_da_limpeza(ym, limpeza))
             except Exception as exc:  # noqa: BLE001
-                results.append({"ym": ym, "removed": 0, "ok": False, "err": str(exc)})
+                # Mesma regra do ciclo (`sync.py`): rollback só em erro de banco, que invalida a
+                # sessão e derrubaria os meses seguintes; em outro erro o pendente de
+                # `sync_events` fica, porque os e-mails ao elenco já saíram.
+                if isinstance(exc, SQLAlchemyError):
+                    db.session.rollback()
+                results.append({**_linha_vazia(ym), "ok": False, "err": str(exc)})
 
-        total_removed = sum(r["removed"] for r in results)
-        errors_count = sum(1 for r in results if not r["ok"])
-        message = (
-            f"Limpeza concluída com {errors_count} erro(s). {total_removed} evento(s) fantasma(s) removido(s)."
-            if errors_count
-            else f"Limpeza concluída: {total_removed} evento(s) fantasma(s) removido(s) em {len(results)} mês(es)."
-        )
-        return jsonify({"results": results, "message": message})
+        return jsonify({"results": results, "message": _mensagem_da_limpeza(results)})
 
     return json_error("Ação inválida", 400)
 

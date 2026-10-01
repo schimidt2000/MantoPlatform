@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, Card, CardContent, Skeleton } from "@manto/ui";
 import { AntesDoEvento } from "../components/AntesDoEvento";
+import { AvisoEmConfirmacao } from "../components/AvisoEmConfirmacao";
 import { CacheLine } from "../components/CacheLine";
 import { RoleLine } from "../components/RoleLine";
 import { FormError } from "../components/FormField";
@@ -35,6 +36,10 @@ function InviteCard({ role }: { role: PortalRole }) {
           <p className="text-sm font-medium text-accent">{formatRelativeDay(role.start_at)}</p>
           <RoleLine role={role} />
         </div>
+
+        {/* Antes do cachê e dos botões: quem vai responder precisa saber que o evento está em
+            confirmação. O convite continua podendo ser aceito ou recusado (303). */}
+        <AvisoEmConfirmacao ativo={role.em_confirmacao} />
 
         <CacheLine role={role} variant="destaque" />
 

@@ -21,6 +21,7 @@ import {
 } from "../../lib/eventDetail";
 import {
   useDeleteEvent,
+  useDevolverAoGoogle,
   useRecusarSolicitacao,
   useSyncEvent,
   useToggleConfirm,
@@ -28,7 +29,16 @@ import {
 import { KebabMenu, type KebabMenuItem } from "../KebabMenu";
 import { ExcluirEventoDialog } from "./ExcluirEventoDialog";
 import { SolicitarExclusaoDialog } from "./SolicitarExclusaoDialog";
+import { DevolverAoGoogleDialog, SumiuDoGoogleBanner } from "./SumiuDoGoogleBanner";
 import { formatRange } from "./parts";
+
+/**
+ * Evento marcado "Sumiu do Google Agenda" (feature 303): a única saída nesta entrega é devolver.
+ * O servidor recusa cancelar e excluir; a tela desabilita os dois caminhos com o motivo.
+ */
+const MOTIVO_SO_DEVOLVER =
+  "Este evento sumiu do Google Agenda — por enquanto só pode ser devolvido. O cancelamento " +
+  "chega na próxima entrega.";
 
 /** `dd/mm/aaaa` a partir de um ISO, sem passar por `toLocaleDateString` de data pura. */
 function formatDataCurta(iso: string): string {
@@ -208,16 +218,46 @@ export function EventHeader({ data }: EventHeaderProps) {
   const remove = useDeleteEvent(event.id);
   const recusar = useRecusarSolicitacao(event.id);
   const feedbackLink = useFeedbackLink(event.id);
+  // A devolução mora aqui, não no banner: o banner some no sucesso, e callback de `mutate` não
+  // dispara em componente desmontado (TanStack Query 5).
+  const devolver = useDevolverAoGoogle(event.id);
   const [exportOpen, setExportOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [solicitarOpen, setSolicitarOpen] = useState(false);
+  const [devolverOpen, setDevolverOpen] = useState(false);
   const [aviso, setAviso] = useState("");
   const cancelado = Boolean(event.cancelled_at);
+  const marcado = Boolean(event.sumiu_do_google);
 
-  const anunciar = (mensagem: string) => {
+  // `duracao` maior para frase longa (o resultado da devolução): 2,2 s não dá para ler.
+  const anunciar = (mensagem: string, duracao = 2200) => {
     setAviso(mensagem);
-    setTimeout(() => setAviso(""), 2200);
+    setTimeout(() => setAviso(""), duracao);
   };
+
+  const abrirDevolver = () => {
+    devolver.reset();
+    setDevolverOpen(true);
+  };
+
+  const confirmarDevolver = () =>
+    devolver.mutate(undefined, {
+      onSuccess: (updated) => {
+        setDevolverOpen(false);
+        anunciar(
+          updated.devolucao_google?.resultado === "reapareceu"
+            ? "O evento já estava de volta no Google Agenda — a marca foi retirada."
+            : "Evento devolvido ao Google Agenda.",
+          6000,
+        );
+      },
+      onError: (erro) => {
+        // Erro de estado: a tela estava velha (o hook recarrega o evento) — o diálogo fecha e a
+        // mensagem fica na linha de erro do cabeçalho. Os demais aparecem dentro do diálogo.
+        const codigo = erro.details?.codigo;
+        if (codigo === "nao_marcado" || codigo === "cancelado") setDevolverOpen(false);
+      },
+    });
 
   const copiar = async (texto: string, sucesso: string) =>
     anunciar((await copyToClipboard(texto)) ? sucesso : "Não foi possível copiar.");
@@ -233,7 +273,9 @@ export function EventHeader({ data }: EventHeaderProps) {
   const cobrancaNoPrincipal = data.cobranca?.escopo === "grupo_outro";
 
   const items: KebabMenuItem[] = [];
-  if (event.google_html_link && canCasting) {
+  // No evento marcado (303) o servidor manda o link nulo; o Sincronizar continua, para responder
+  // que o evento não está mais no Google em vez de sumir do menu.
+  if ((event.google_html_link || event.sumiu_do_google) && canCasting) {
     items.push({ label: "🔄 Sincronizar", onClick: () => sync.mutate() });
   }
   if (canCasting || canComercial) {
@@ -308,6 +350,8 @@ export function EventHeader({ data }: EventHeaderProps) {
       items.push({
         label: "🗑 Excluir ou cancelar",
         destructive: true,
+        disabled: marcado,
+        title: marcado ? MOTIVO_SO_DEVOLVER : undefined,
         onClick: () => setDeleteOpen(true),
       });
     } else if (data.flags.can_request_delete) {
@@ -375,6 +419,9 @@ export function EventHeader({ data }: EventHeaderProps) {
         </div>
       )}
 
+      {/* Antes do pedido de exclusão: quando os dois existem, o sumiço é o que explica o resto. */}
+      <SumiuDoGoogleBanner data={data} onDevolver={abrirDevolver} />
+
       {event.deletion_request && (
         <div className="mt-3 rounded-md border border-gold/40 bg-gold-soft p-3 text-sm" role="alert">
           <p className="font-semibold text-gold-ink">Exclusão solicitada — aguardando decisão</p>
@@ -387,7 +434,13 @@ export function EventHeader({ data }: EventHeaderProps) {
           </p>
           {canDelete && (
             <div className="mt-2 flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => setDeleteOpen(true)}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={marcado}
+                title={marcado ? MOTIVO_SO_DEVOLVER : undefined}
+                onClick={() => setDeleteOpen(true)}
+              >
                 Analisar e decidir
               </Button>
               <Button
@@ -410,8 +463,25 @@ export function EventHeader({ data }: EventHeaderProps) {
       </p>
       {sync.isError && <p className="text-sm text-red">{sync.error?.message}</p>}
       {remove.isError && <p className="text-sm text-red">{remove.error?.message}</p>}
+      {devolver.isError && !devolverOpen && (
+        <p className="text-sm text-red">{devolver.error?.message}</p>
+      )}
 
       <ExportElencoDialog data={data} open={exportOpen} onOpenChange={setExportOpen} />
+
+      <DevolverAoGoogleDialog
+        title={event.title}
+        startAt={event.start_at}
+        endAt={event.end_at}
+        open={devolverOpen}
+        pending={devolver.isPending}
+        error={devolver.isError ? devolver.error?.message : null}
+        onConfirm={confirmarDevolver}
+        // O `ConfirmDialog` só trava o "Cancelar": Esc, clique fora e o X fechariam no meio.
+        onOpenChange={(aberto) => {
+          if (!devolver.isPending) setDevolverOpen(aberto);
+        }}
+      />
 
       <ExcluirEventoDialog
         eventId={event.id}

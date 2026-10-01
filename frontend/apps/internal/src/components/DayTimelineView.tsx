@@ -4,6 +4,7 @@ import { Skeleton } from "@manto/ui";
 import { useAgendaDia, type EventoResumo } from "../lib/agenda";
 import { computeDayLayout } from "../lib/agendaLayout";
 import { eventCategory } from "../lib/eventCategory";
+import { SeloSituacao, textoDoSumico } from "./SeloSituacao";
 
 export interface DayTimelineViewProps {
   /** "YYYY-MM-DD" */
@@ -79,6 +80,7 @@ export function DayTimelineView({ date }: DayTimelineViewProps) {
                     className={`inline-flex items-center gap-2 truncate rounded px-2 py-1 text-sm font-medium ${cat.bg} ${cat.fg} ${cat.border} hover:opacity-80`}
                   >
                     <span>{cat.label}</span>
+                    <SeloSituacao situacao={ev.situacao} desde={ev.situacao_desde} />
                     <span>{ev.title}</span>
                   </Link>
                 </li>
@@ -117,13 +119,19 @@ export function DayTimelineView({ date }: DayTimelineViewProps) {
           {blocks.map(({ event, topPct, heightPct, column, columnCount }) => {
             const cat = eventCategory(event.event_type);
             const detailed = heightPct >= FULL_DETAIL_MIN_PCT;
+            // A marca vem pronta do servidor: a visão Dia não filtra cancelado, e é a precedência
+            // de `situacao` que impede o selo de aparecer num evento cancelado (303).
+            const sumiu =
+              event.situacao === "sumiu_do_google"
+                ? ` · ${textoDoSumico(event.situacao_desde)}`
+                : "";
             return (
               <Link
                 key={event.id}
                 to={`/events/${event.id}`}
                 title={`${cat.label} · ${event.title} · ${eventTimeRange(event)}${
                   event.location ? ` · ${event.location}` : ""
-                }`}
+                }${sumiu}`}
                 className={`absolute overflow-hidden rounded px-1.5 py-1 text-xs leading-tight shadow-sm ${cat.bg} ${cat.fg} ${cat.border} hover:opacity-90`}
                 style={{
                   top: `${topPct}%`,
@@ -134,7 +142,15 @@ export function DayTimelineView({ date }: DayTimelineViewProps) {
                 }}
               >
                 {detailed && <span className="block font-semibold">{cat.label}</span>}
-                <span className="block truncate font-medium">{event.title}</span>
+                {detailed && (
+                  <SeloSituacao situacao={event.situacao} desde={event.situacao_desde} />
+                )}
+                <span className="block truncate font-medium">
+                  {!detailed && (
+                    <SeloSituacao situacao={event.situacao} desde={event.situacao_desde} compacto />
+                  )}
+                  {event.title}
+                </span>
                 <span className="block tabular-nums">{eventTimeRange(event)}</span>
                 {detailed && event.location && (
                   <span className="block truncate">{event.location}</span>

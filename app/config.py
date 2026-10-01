@@ -142,6 +142,32 @@ def _suppress_calendar_invites() -> bool:
     return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
 
 
+def _suppress_calendar_event_writes() -> bool:
+    """Decide se este processo está proibido de recriar eventos de show no Google Agenda real.
+
+    Feature 303 (Princípio XIV): a devolução ao Google de um evento marcado "Sumiu do Google
+    Agenda" é a primeira escrita de evento de show que nasce com trava. O token do Google vem do
+    banco espelhado, então um processo local recriaria o evento na agenda da empresa — e a
+    produção o importaria 5 minutos depois.
+
+    Cobre SÓ a devolução. A sincronização, a limpeza e o "Sincronizar" de um evento continuam
+    lendo o Google real no ambiente local, e criar, editar, excluir e cancelar evento continuam
+    escrevendo sem trava (dívida registrada no ``docs/05``). O núcleo lê a chave de
+    ``current_app.config`` a cada chamada, para o verify poder ligá-la e desligá-la no mesmo
+    processo; chave ausente = travado.
+
+    ``CALENDAR_SUPPRESS_EVENT_WRITES=true`` trava em qualquer ambiente;
+    ``CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`` libera o local — e então o evento é criado de
+    verdade na agenda da empresa.
+    """
+    if os.getenv("CALENDAR_SUPPRESS_EVENT_WRITES", "").lower() == "true":
+        return True
+    if os.getenv("CALENDAR_ALLOW_LOCAL_EVENT_WRITES", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
 def _resolve_secret_key() -> str:
     """Resolve a SECRET_KEY de forma segura (feature 074).
 
@@ -234,6 +260,10 @@ class Config:
     # é fixo, então um processo local cria compromisso — e convite — de verdade. Ver
     # `_suppress_calendar_invites` (feature 225).
     CALENDAR_SUPPRESS_INVITES = _suppress_calendar_invites()
+
+    # Trava própria da devolução de evento de show ao Google Agenda (feature 303). Separada da de
+    # convites: liberar uma não pode liberar a outra. Ver `_suppress_calendar_event_writes`.
+    CALENDAR_SUPPRESS_EVENT_WRITES = _suppress_calendar_event_writes()
 
     # Varredura das devoluções de email (feature 219). Lê a MESMA conta que envia, por IMAP e em
     # modo somente leitura, com a App Password já configurada acima — sem credencial nova. Só

@@ -1,13 +1,16 @@
 import json
 import logging
 import os
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from google_auth_oauthlib.flow import Flow
+from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +194,128 @@ def fetch_single_event(calendar_id: str, google_event_id: str) -> dict | None:
         return None
 
 
+# ── Consulta de um evento com três desfechos (feature 303) ─────────────────────────────────────
+# `fetch_single_event` devolve None para tudo — evento apagado e Google fora do ar ficam iguais —
+# e entrega como vivo o item que o Google devolve para um evento apagado (HTTP 200 com
+# `status: "cancelled"` e os dados completos, conferido em 30/09). Ela fica como está porque o
+# Meet da Loja Virtual depende do contrato atual; a limpeza do sync usa esta.
+
+DESFECHO_PRESENTE = "presente"
+DESFECHO_AUSENTE = "ausente"
+DESFECHO_INCONCLUSIVO = "inconclusivo"
+
+MOTIVO_HTTP_404 = "http_404"
+MOTIVO_HTTP_410 = "http_410"
+MOTIVO_CANCELLED = "cancelled"
+MOTIVO_SERIE_RECORRENTE = "serie_recorrente"
+MOTIVO_SEM_CREDENCIAL = "sem_credencial"
+MOTIVO_REDE = "rede"
+MOTIVO_HTTP_5XX = "http_5xx"
+MOTIVO_HTTP_403 = "http_403"
+MOTIVO_HTTP_429 = "http_429"
+MOTIVO_HTTP_4XX = "http_4xx"
+MOTIVO_SEM_INICIO = "sem_inicio"
+
+# Inconclusivos que encerram as consultas da rodada: os que custam tempo (até 60 s por tentativa)
+# ou dizem que o acesso caiu. 403, 429 e item sem início chegam na hora e valem só para o evento.
+MOTIVOS_QUE_ABREM_DISJUNTOR = frozenset({MOTIVO_REDE, MOTIVO_HTTP_5XX, MOTIVO_SEM_CREDENCIAL})
+
+
+@dataclass(frozen=True)
+class ConsultaEvento:
+    """O que o Google disse sobre UM evento.
+
+    ``desfecho``: ``presente`` (``item`` vem preenchido), ``ausente`` (apagado, removido ou não
+    encontrado) ou ``inconclusivo`` (qualquer outra coisa — na dúvida, ninguém apaga nem marca).
+    ``motivo``: classe estável para auditoria e para o disjuntor.
+    """
+
+    desfecho: str
+    item: dict | None = None
+    motivo: str = ""
+
+    @property
+    def abre_disjuntor(self) -> bool:
+        """True se este inconclusivo deve encerrar as consultas da rodada."""
+        return self.desfecho == DESFECHO_INCONCLUSIVO and self.motivo in MOTIVOS_QUE_ABREM_DISJUNTOR
+
+
+def _status_http(exc: HttpError) -> int:
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        status = getattr(getattr(exc, "resp", None), "status", 0)
+    try:
+        return int(status)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _motivo_http(status: int) -> str:
+    if status == 401:
+        return MOTIVO_SEM_CREDENCIAL
+    if status == 403:
+        return MOTIVO_HTTP_403
+    if status == 429:
+        return MOTIVO_HTTP_429
+    if status >= 500:
+        return MOTIVO_HTTP_5XX
+    return MOTIVO_HTTP_4XX
+
+
+def _classificar_item(item: object) -> ConsultaEvento:
+    """Classifica a resposta 200. A situação vem ANTES do início: o apagado volta com datas."""
+    if not isinstance(item, dict):
+        return ConsultaEvento(DESFECHO_INCONCLUSIVO, motivo=MOTIVO_SEM_INICIO)
+    if item.get("status") == "cancelled":
+        return ConsultaEvento(DESFECHO_AUSENTE, motivo=MOTIVO_CANCELLED)
+    inicio = item.get("start") or {}
+    if not (inicio.get("dateTime") or inicio.get("date")):
+        return ConsultaEvento(DESFECHO_INCONCLUSIVO, motivo=MOTIVO_SEM_INICIO)
+    motivo = MOTIVO_SERIE_RECORRENTE if item.get("recurrence") else ""
+    return ConsultaEvento(DESFECHO_PRESENTE, item=item, motivo=motivo)
+
+
+def consultar_evento(calendar_id: str, google_event_id: str) -> ConsultaEvento:
+    """Pergunta ao Google por UM evento e devolve presente, ausente ou inconclusivo. Nunca levanta.
+
+    Ausente = HTTP 404 ou 410, ou item com ``status == "cancelled"``. Inconclusivo = credencial
+    ausente ou recusada, rede, tempo esgotado, 403, 429, 5xx, outro 4xx, item sem início.
+
+    O ``RefreshError`` do token revogado sai do ``.execute()``, não de ``load_credentials``: o
+    ``save_token`` não grava ``expiry``, então o ramo de renovação dela nunca dispara e a
+    renovação acontece no 401, dentro do transporte. Por isso ele é tratado em qualquer ponto.
+    Cada chamada carrega a credencial e monta o cliente: a falha de credencial tem uma regra só.
+    """
+    try:
+        creds = load_credentials()
+    except Exception as exc:  # noqa: BLE001 — credencial ilegível ou renovação recusada
+        logger.warning("[gcal] consulta de %s sem credencial: %s", google_event_id, type(exc).__name__)
+        return ConsultaEvento(DESFECHO_INCONCLUSIVO, motivo=MOTIVO_SEM_CREDENCIAL)
+    if not creds:
+        logger.warning("[gcal] consulta de %s sem credencial: Google não conectado", google_event_id)
+        return ConsultaEvento(DESFECHO_INCONCLUSIVO, motivo=MOTIVO_SEM_CREDENCIAL)
+
+    try:
+        service = build("calendar", "v3", credentials=creds)
+        item = service.events().get(calendarId=calendar_id, eventId=google_event_id).execute()
+    except HttpError as exc:
+        status = _status_http(exc)
+        if status == 404:
+            return ConsultaEvento(DESFECHO_AUSENTE, motivo=MOTIVO_HTTP_404)
+        if status == 410:
+            return ConsultaEvento(DESFECHO_AUSENTE, motivo=MOTIVO_HTTP_410)
+        motivo = _motivo_http(status)
+        logger.warning("[gcal] consulta de %s inconclusiva: HTTP %s", google_event_id, status)
+        return ConsultaEvento(DESFECHO_INCONCLUSIVO, motivo=motivo)
+    except RefreshError as exc:
+        logger.warning("[gcal] consulta de %s: token recusado (%s)", google_event_id, exc)
+        return ConsultaEvento(DESFECHO_INCONCLUSIVO, motivo=MOTIVO_SEM_CREDENCIAL)
+    except Exception as exc:  # noqa: BLE001 — rede, tempo esgotado ou resposta ilegível
+        logger.warning("[gcal] consulta de %s sem resposta: %s", google_event_id, type(exc).__name__)
+        return ConsultaEvento(DESFECHO_INCONCLUSIVO, motivo=MOTIVO_REDE)
+    return _classificar_item(item)
+
+
 def parse_event_datetime(item: dict) -> tuple[datetime | None, datetime | None]:
     start = item.get("start", {})
     end = item.get("end", {})
@@ -222,6 +347,8 @@ def insert_event(
     description: str = "",
     location: str = "",
     conference_request_id: str | None = None,
+    *,
+    all_day: bool = False,
 ) -> dict:
     """Cria um evento no Google Calendar. Retorna o dict do evento criado (inclui 'id').
 
@@ -229,6 +356,9 @@ def insert_event(
         conference_request_id: Quando informado, pede ao Google que gere uma **sala do Meet**
             para o evento (feature 205). Precisa ser único por requisição — o Google usa esse id
             para não criar duas salas se a mesma chamada for repetida.
+        all_day: Evento de dia inteiro (feature 303, devolução ao Google): manda só as datas.
+            O fim já está exclusivo no banco (`parse_event_datetime` grava o `end.date` do
+            Google), então não se soma um dia.
 
     A criação da sala é assíncrona do lado do Google: a resposta pode voltar com
     ``conferenceData.createRequest.status.statusCode == "pending"`` e **sem** ``hangoutLink``.
@@ -245,6 +375,9 @@ def insert_event(
         "start": {"dateTime": start_dt.isoformat(), "timeZone": "America/Sao_Paulo"},
         "end":   {"dateTime": end_dt.isoformat(),   "timeZone": "America/Sao_Paulo"},
     }
+    if all_day:
+        body["start"] = {"date": start_dt.date().isoformat()}
+        body["end"] = {"date": end_dt.date().isoformat()}
     if location:
         body["location"] = location
 

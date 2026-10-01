@@ -16,6 +16,7 @@ import {
 } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { PORTAL_PUBLICO } from "../lib/eventDetail";
+import { useFaixaSumidosVisivel } from "../lib/sumidosGoogle";
 import { useCurrentUser } from "../lib/useAuth";
 import type {
   ComercialSummary,
@@ -932,6 +933,7 @@ function recusadosSemDuplicata(
 export function DashboardPage() {
   const reduceMotion = useReducedMotion();
   const { data: user } = useCurrentUser();
+  const faixaVisivel = useFaixaSumidosVisivel();
 
   // Período do painel Performance (só superadmin). Entra na chave da query porque a API calcula
   // tudo numa resposta só; `keepPreviousData` segura os números antigos enquanto o novo período
@@ -993,13 +995,15 @@ export function DashboardPage() {
   };
 
   // Props do wrapper de cada seção: alvo do scroll da visão geral, com `scroll-mt` compensando
-  // o topbar sticky do mobile. É função (e não componente local) de propósito — componente
-  // definido dentro do render seria um tipo novo a cada passada e remontaria os painéis.
+  // o topbar sticky do mobile e, quando ela está na tela, a faixa "sumiram do Google Agenda"
+  // (40 px, feature 303) — senão o atalho para com o título escondido sob ela. É função (e não
+  // componente local) de propósito — componente definido dentro do render seria um tipo novo a
+  // cada passada e remontaria os painéis.
   const propsSecao = (chave: SectionKey) => ({
     ref: (el: HTMLDivElement | null) => {
       refsSecoes.current[chave] = el;
     },
-    className: "scroll-mt-16 lg:scroll-mt-4",
+    className: faixaVisivel ? "scroll-mt-28 lg:scroll-mt-14" : "scroll-mt-16 lg:scroll-mt-4",
   });
 
   const data = dashboard.data;

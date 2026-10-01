@@ -8,6 +8,8 @@ Os do evento vivem aqui: `_is_superadmin()` (dispensar/restaurar cargo), `_can_m
 (COMERCIAL, FINANCEIRO, SUPERADMIN — dado de venda, inclusive o vínculo com o orçamento),
 `_can_confirm()`, `_can_delete()` e `_can_request_delete()`. Ensaio e grupo têm gates próprios,
 declarados junto das suas views mais abaixo. A tabela completa fica em `docs/01` §4.3.
+`POST /events/<id>/devolver-ao-google` (feature 303) usa `_can_delete()`: devolver um evento
+marcado ao Google é decisão do Superadmin, como excluir e cancelar.
 
 Autoria, desde a feature 301, em `PATCH /events/<id>/orcamento`: **vincular** um orçamento a
 evento que ainda não tem é livre para quem tem o módulo de Orçamento (COMERCIAL ou SUPERADMIN) —
@@ -509,6 +511,11 @@ def api_delete_event(event_id: int) -> Any:
     Recusa com 409 o evento líder de grupo (desagrupar antes) e o evento que tem dinheiro preso
     — esse é caso de cancelamento, não de exclusão: apagar destruiria o pagamento recebido e a
     comissão, que são justamente o lastro da devolução.
+
+    Evento marcado "Sumiu do Google Agenda" (feature 303): 409 com `codigo: "sumiu_do_google"`,
+    recusado pelo núcleo. Por isso o 409 de "use o cancelamento" só vale para quem NÃO está
+    marcado — senão o marcado com dinheiro levaria o 409 genérico, sem `codigo`, e o satélite
+    marcado sem mais nada passaria por `pode_excluir`.
     """
     event = CalendarEvent.query.get(event_id)
     if event is None:
@@ -516,21 +523,24 @@ def api_delete_event(event_id: int) -> Any:
     if not _can_delete():
         return json_error("Sem permissão", 403)
 
-    from app.calendar.cancel_ops import pode_excluir
+    from app.calendar.cancel_ops import EventoMarcadoError, pode_excluir
     from app.calendar.routes import _delete_event_flow
 
-    if not pode_excluir(event):
+    if not event.is_google_missing and not pode_excluir(event):
         return json_error(
             "Este evento tem venda, pagamento, contrato ou elenco escalado — use o "
             "cancelamento, que preserva o registro e trata a devolução.",
             409,
         )
 
-    deleted, aviso = _delete_event_flow(
-        event,
-        actor_name=current_user.name,
-        actor_role=", ".join(r.name for r in current_user.roles),
-    )
+    try:
+        deleted, aviso = _delete_event_flow(
+            event,
+            actor_name=current_user.name,
+            actor_role=", ".join(r.name for r in current_user.roles),
+        )
+    except EventoMarcadoError as exc:
+        return json_error(exc.message, 409, codigo="sumiu_do_google")
     if not deleted:
         return json_error(
             "Desagrupe os eventos satélites antes de excluir este evento", 409
@@ -543,7 +553,10 @@ def api_delete_event(event_id: int) -> Any:
 def api_cancelar_evento(event_id: int) -> Any:
     """Cancela o evento, resolve a comissão e registra a devolução (feature 224).
 
-    RBAC: só Superadmin. Corpo: `{motivo, devolucao: {valor, nome, pix, observacao}}`.
+    RBAC: só Superadmin. Corpo: `{motivo, devolucao: {valor, nome, pix, observacao}}`. Evento
+    marcado "Sumiu do Google Agenda" é recusado com 409 `codigo: "sumiu_do_google"` (feature 303)
+    — a exceção é subclasse de `CancelValidationError` e por isso é capturada antes dela, senão
+    viraria 400 com `fields.motivo`.
     """
     event = CalendarEvent.query.get(event_id)
     if event is None:
@@ -551,7 +564,11 @@ def api_cancelar_evento(event_id: int) -> Any:
     if not _can_delete():
         return json_error("Sem permissão", 403)
 
-    from app.calendar.cancel_ops import CancelValidationError, cancelar_evento
+    from app.calendar.cancel_ops import (
+        CancelValidationError,
+        EventoMarcadoError,
+        cancelar_evento,
+    )
 
     body = request.get_json(silent=True) or {}
     try:
@@ -561,9 +578,48 @@ def api_cancelar_evento(event_id: int) -> Any:
             devolucao=body.get("devolucao") or {},
             actor=current_user,
         )
+    except EventoMarcadoError as exc:
+        return json_error(exc.message, 409, codigo="sumiu_do_google")
     except CancelValidationError as exc:
         return json_error(exc.message, 400, fields={"motivo": exc.message})
     return jsonify({"ok": True, **resultado})
+
+
+@api_bp.route("/events/<int:event_id>/devolver-ao-google", methods=["POST"])
+@api_login_required
+def api_devolver_ao_google(event_id: int) -> Any:
+    """Devolve ao Google Agenda um evento marcado "Sumiu do Google Agenda" (feature 303).
+
+    RBAC: `_can_delete()` (só Superadmin), depois do 404 — a ordem dos vizinhos. Corpo vazio.
+    Responde o detalhe do evento mais `devolucao_google: {resultado}`; recusa com o `codigo` do
+    contrato: 409 para estado (cancelado, não marcado, venda virtual, sem data, ambiente travado),
+    502 quando o Google não confirma.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+    if not _can_delete():
+        return json_error("Sem permissão", 403)
+
+    from app.calendar import sumico_ops
+
+    try:
+        feito = sumico_ops.devolver_ao_google(event_id, actor=current_user)
+    except sumico_ops.DevolverAoGoogleError as exc:
+        if exc.codigo == sumico_ops.CODIGO_INEXISTENTE:
+            return json_error("Evento não encontrado", 404)
+        do_google = {
+            sumico_ops.CODIGO_GOOGLE_INCONCLUSIVO,
+            sumico_ops.CODIGO_GOOGLE_DESCONECTADO,
+            sumico_ops.CODIGO_GOOGLE_RECUSOU,
+        }
+        return json_error(exc.message, 502 if exc.codigo in do_google else 409, codigo=exc.codigo)
+
+    # `_event_detail_json` já devolve `Response`: a chave extra entra no dict antes (molde da
+    # criação de evento).
+    result = serialize_event_detail(feito["event"], current_user, session.get("impersonate_role"))
+    result["devolucao_google"] = {"resultado": feito["resultado"]}
+    return jsonify(result)
 
 
 @api_bp.route("/events/<int:event_id>/solicitar-exclusao", methods=["POST"])
@@ -621,16 +677,28 @@ def api_listar_cancelamentos() -> Any:
 @api_bp.route("/events/<int:event_id>/sync", methods=["POST"])
 @api_login_required
 def api_sync_event(event_id: int) -> Any:
-    """Sincroniza um evento com o Google Calendar (feature 151). Sem gate de papel (paridade)."""
+    """Sincroniza um evento com o Google Calendar (feature 151). Sem gate de papel (paridade).
+
+    Confere o evento no Google antes de mexer (feature 303): se ele não existe mais lá, responde
+    409 e não altera nada — marcado ou não.
+    """
     event = CalendarEvent.query.get(event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
 
     from app.calendar.routes import _sync_single_event_flow
 
-    status = _sync_single_event_flow(event)
+    # O ator vai para o histórico quando o "Sincronizar" retira a marca de um evento que voltou
+    # ao Google (303) — o mesmo par de `_delete_event_flow`.
+    status = _sync_single_event_flow(
+        event,
+        actor_name=current_user.name,
+        actor_role=", ".join(r.name for r in current_user.roles),
+    )
     if status == "no_google_id":
         return json_error("Evento sem ID do Google Calendar — não é possível sincronizar", 400)
+    if status == "ausente_no_google":
+        return json_error("Este evento não está mais no Google Agenda. Nada foi alterado.", 409)
     if status == "not_found":
         return json_error("Não foi possível buscar o evento no Google Calendar", 502)
     return _event_detail_json(event)

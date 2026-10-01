@@ -44,6 +44,24 @@ class CancelValidationError(Exception):
         self.message = message
 
 
+class EventoMarcadoError(CancelValidationError):
+    """Cancelar ou excluir um evento marcado "Sumiu do Google Agenda" (feature 303).
+
+    Nesta entrega nenhum cancelamento de evento marcado sai com a regra velha (decisão do dono,
+    30/09): o evento marcado só tem uma saída, devolver ao Google Agenda. A segunda entrega troca
+    esta recusa pelo "Cancelar e devolver o dinheiro". O texto mora aqui, uma vez: a API e o
+    wrapper Jinja leem `exc.message`.
+    """
+
+    MENSAGEM = (
+        "Este evento sumiu do Google Agenda. O cancelamento com devolução do dinheiro chega na "
+        "próxima entrega — por enquanto, devolva-o ao Google Agenda."
+    )
+
+    def __init__(self, message: str = MENSAGEM) -> None:
+        super().__init__(message)
+
+
 def total_recebido(event: CalendarEvent) -> Decimal:
     """Soma dos comprovantes de pagamento da cliente nesse evento."""
     total = (
@@ -257,8 +275,12 @@ def cancelar_evento(
         `{"gasto_id": int | None, "google_removido": bool, "aviso": str | None}`.
 
     Raises:
+        EventoMarcadoError: evento marcado "Sumiu do Google Agenda" (feature 303), para qualquer
+            papel — vem antes de tudo, para a recusa não depender do corpo.
         CancelValidationError: motivo vazio, evento já cancelado, ou evento líder de grupo.
     """
+    if event.is_google_missing:
+        raise EventoMarcadoError()
     motivo = (motivo or "").strip()
     if not motivo:
         raise CancelValidationError("Explique o motivo do cancelamento.")

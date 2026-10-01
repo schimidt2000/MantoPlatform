@@ -3,6 +3,13 @@ import { apiFetch } from "@manto/api-client";
 import type { Event3DGift } from "./impressoes3d";
 import type { AvisoFalho } from "./virtuais";
 
+/**
+ * Situação única do evento (feature 303), com a precedência resolvida no servidor:
+ * cancelado > sumiu do Google > exclusão solicitada. A tela lê este valor e nunca recombina
+ * `cancelled_at`, a marca e o pedido de exclusão.
+ */
+export type SituacaoEvento = "cancelado" | "sumiu_do_google" | "exclusao_solicitada";
+
 /** Resumo de um evento na agenda (data-model.md: EventoResumo). Sem dado financeiro. */
 export interface EventoResumo {
   id: number;
@@ -15,6 +22,11 @@ export interface EventoResumo {
   is_satellite: boolean;
   group_name: string | null;
   confirmed: boolean;
+  // Opcionais (303): backend e bundle sobem no mesmo push, em ordem não garantida — ausente é
+  // "sem situação".
+  situacao?: SituacaoEvento | null;
+  /** ISO sem fuso, horário de parede de São Paulo. */
+  situacao_desde?: string | null;
 }
 
 export interface AgendaMes {
@@ -307,6 +319,13 @@ export interface EventoDetalhe {
       requested_by: string | null;
       reason: string | null;
     } | null;
+    /** Situação única (feature 303). Opcional: bundle e backend sobem em ordem não garantida. */
+    situacao?: SituacaoEvento | null;
+    /**
+     * Marca "Sumiu do Google Agenda" (feature 303): preenchida só quando o evento está marcado e
+     * não cancelado. `desde` é ISO sem fuso, horário de parede de São Paulo.
+     */
+    sumiu_do_google?: { desde: string } | null;
     is_satellite: boolean;
     group_name: string | null;
     /**
@@ -347,6 +366,12 @@ export interface EventoDetalhe {
     travel: EventTravel;
   };
   flags: Record<string, boolean>;
+  /**
+   * Feature 303 — só na resposta de `POST /api/events/<id>/devolver-ao-google`, e só o
+   * `onSuccess` da devolução a lê (o próximo refetch do evento não a traz; nenhum componente deve
+   * lê-la do cache depois). Opcional: backend e bundle sobem separados.
+   */
+  devolucao_google?: { resultado: "recriado" | "reapareceu" };
   /**
    * Ensaios agendados do show (pós-206) — presente em eventos não-ENSAIO. As ações de
    * escrita são gated por `flags.show_ensaio` (Ensaio/Casting/Superadmin).

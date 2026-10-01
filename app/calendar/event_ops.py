@@ -618,6 +618,11 @@ def _sincronizar_e_trocar_tipo(
     Edição sem troca de tipo — ou troca sem automação, como CORP → R&I — segue best-effort de
     sempre: a falha do Google vira só um aviso.
 
+    Evento marcado "Sumiu do Google Agenda" (feature 303) não tem par no Google: o push nem é
+    tentado, a edição fica só no sistema (vai ao Google quando o Superadmin devolver o evento) e a
+    troca de tipo roda normalmente — sem isso cada salvamento falharia com aviso e toda troca que
+    entra ou sai de SHOW seria desfeita com `EventTypeChangeBlocked`.
+
     Args:
         event: Evento já gravado com tipo e título novos.
         old_title: Título anterior (o que a Agenda ainda tem, quando o push falha).
@@ -635,7 +640,8 @@ def _sincronizar_e_trocar_tipo(
             nada da automação rodou e o tipo voltou ao anterior.
     """
     google_ok = True
-    if changed_core and event.google_event_id:
+    # Marcado: o id do Google aponta para um evento apagado — não há o que empurrar (303).
+    if changed_core and event.google_event_id and not event.is_google_missing:
         try:
             _push_cabecalho_ao_google(event)
         except Exception as exc:  # noqa: BLE001 — Google fora do ar não bloqueia a edição

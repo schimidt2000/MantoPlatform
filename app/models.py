@@ -18,6 +18,9 @@ from .constants import (
     FIGURINO_PROD_SOLICITADO,
     FIGURINO_SEV_IMPEDE,
     GIFT_3D_STATUS_PENDENTE,
+    SITUACAO_CANCELADO,
+    SITUACAO_EXCLUSAO_SOLICITADA,
+    SITUACAO_SUMIU_DO_GOOGLE,
     VIRTUAL_CAMPAIGN_STATUS_PUBLICADA,
     VIRTUAL_CAMPAIGN_STATUS_RASCUNHO,
     VIRTUAL_ORDER_STATUS_RESERVADO,
@@ -238,6 +241,13 @@ class CalendarEvent(db.Model):
     __table_args__ = (
         db.Index("ix_calendar_events_start_at",  "start_at"),
         db.Index("ix_calendar_events_seller_id", "seller_id"),
+        # Feature 303: declarado aqui e na migration a7c3e91f4d28, para um autogenerate futuro não
+        # propor o drop do índice parcial.
+        db.Index(
+            "ix_calendar_events_google_missing_since", "google_missing_since",
+            postgresql_where=db.text("google_missing_since IS NOT NULL"),
+            sqlite_where=db.text("google_missing_since IS NOT NULL"),
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -293,6 +303,13 @@ class CalendarEvent(db.Model):
     deletion_requested_at = db.Column(db.DateTime, nullable=True)
     deletion_requested_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     deletion_request_reason = db.Column(db.Text, nullable=True)
+
+    # Marca "Sumiu do Google Agenda" (feature 303): quando o sync percebeu que o evento não está
+    # mais no Google e o manteve porque tem dinheiro preso. Horário de parede de São Paulo, sem
+    # fuso (`now_sp()`), como `cancelled_at`; NULL = não marcado. Só `sumico_ops.marcar` e
+    # `sumico_ops.desmarcar` escrevem aqui. Não reusa `deletion_requested_*`: o Comercial
+    # sobrescreveria a marca ao pedir exclusão, e o "Recusar" a zeraria.
+    google_missing_since = db.Column(db.DateTime, nullable=True)
 
     # ensaios / origem
     parent_event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
@@ -393,6 +410,41 @@ class CalendarEvent(db.Model):
     def has_pending_deletion_request(self) -> bool:
         """True se alguém pediu a exclusão e o Superadmin ainda não decidiu (feature 224)."""
         return self.deletion_requested_at is not None and self.cancelled_at is None
+
+    @property
+    def is_google_missing(self) -> bool:
+        """True se o evento está marcado "Sumiu do Google Agenda" (feature 303).
+
+        Marcado = marca preenchida E não cancelado: a marca nunca aparece em evento cancelado.
+        Equivalente SQL: ``google_missing_since IS NOT NULL AND cancelled_at IS NULL`` — o
+        predicado de consulta mora em ``sumico_ops.filtro_marcados()``; esta propriedade serve a
+        objeto já carregado (situação, detalhe, portal).
+        """
+        return self.google_missing_since is not None and self.cancelled_at is None
+
+    @property
+    def situacao(self) -> str | None:
+        """A situação única do evento (feature 303), com precedência resolvida aqui.
+
+        cancelado > sumiu do Google > exclusão solicitada > ``None``. As telas leem este valor e
+        nunca recombinam ``cancelled_at``, a marca e o pedido de exclusão.
+        """
+        if self.cancelled_at is not None:
+            return SITUACAO_CANCELADO
+        if self.google_missing_since is not None:
+            return SITUACAO_SUMIU_DO_GOOGLE
+        if self.deletion_requested_at is not None:
+            return SITUACAO_EXCLUSAO_SOLICITADA
+        return None
+
+    @property
+    def situacao_desde(self) -> datetime | None:
+        """Desde quando vale a `situacao` (o carimbo do campo que a decidiu), ou ``None``."""
+        if self.cancelled_at is not None:
+            return self.cancelled_at
+        if self.google_missing_since is not None:
+            return self.google_missing_since
+        return self.deletion_requested_at
 
     @property
     def is_satellite(self) -> bool:
