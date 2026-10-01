@@ -1,5 +1,6 @@
 import { Card, CardContent, Skeleton } from "@manto/ui";
 import { formatBRL } from "@manto/money";
+import { AvisoEmConfirmacao } from "../components/AvisoEmConfirmacao";
 import { RoleLine } from "../components/RoleLine";
 import { RatingLink } from "../components/RatingLink";
 import { formatShortDate } from "../lib/format";
@@ -45,6 +46,9 @@ function HistoricoRow({ item }: { item: PortalHistoricoItem }) {
             </p>
           </div>
         </div>
+
+        {/* Fora do bloco do título (que é `truncate`): em 320 px o aviso quebra linha. */}
+        <AvisoEmConfirmacao ativo={item.em_confirmacao} />
 
         {item.travel_cache > 0 && (
           <p className="text-xs text-muted">

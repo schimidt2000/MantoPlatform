@@ -565,3 +565,11 @@ FINDING_SEVERITIES = ["critico", "atencao", "info"]
 # campo com ele). Virou constante para o portal não acrescentar a quarta cópia — e para a
 # divergência, se alguém mudar o nome da empresa, aparecer num lugar só.
 DEPARTURE_DEFAULT_LOCATION = "Manto Produções"
+
+# Feature 303: a situação única do evento, resolvida no servidor com precedência
+# cancelado > sumiu do Google > exclusão solicitada, para nenhuma tela recombinar três campos
+# (`cancelled_at`, `google_missing_since`, `deletion_requested_at`). Os valores vão no payload da
+# agenda e do detalhe; não confundir com os "cancelado" de figurino e da Loja Virtual.
+SITUACAO_CANCELADO = "cancelado"
+SITUACAO_SUMIU_DO_GOOGLE = "sumiu_do_google"
+SITUACAO_EXCLUSAO_SOLICITADA = "exclusao_solicitada"

@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
+import { invalidarNotificacoes } from "./notificacoes";
+import { invalidarSumidosGoogle } from "./sumidosGoogle";
 
 export interface AdminSettings {
   logo_path: string;
@@ -124,7 +126,19 @@ export function useAdminSyncStatus() {
 }
 
 export interface SyncRunResult {
-  results: { ym: string; ok: boolean; count?: number; removed?: number; err?: string }[];
+  results: {
+    ym: string;
+    ok: boolean;
+    count?: number;
+    removed?: number;
+    err?: string;
+    // Feature 303 — só no "Limpar eventos fantasma"; o `sync_now` não traz (ausente = zero).
+    marcados?: number;
+    movidos?: number;
+    desmarcados?: number;
+    inconclusivos?: number;
+    falhas?: number;
+  }[];
   message: string;
 }
 
@@ -138,6 +152,10 @@ export function useRunSync() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-sync-status"] });
+      // A limpeza marca e desmarca em lote (303): sem isto o Superadmin que acabou de clicar
+      // ficaria até 60 s sem a faixa e sem o sino atualizados.
+      invalidarSumidosGoogle(queryClient);
+      invalidarNotificacoes(queryClient);
     },
   });
 }

@@ -22,7 +22,11 @@ description: >
 3. O espelho traz o token do Google e as credenciais de e-mail REAIS. As travas `_suppress_mail`
    e `_suppress_calendar_invites` (`app/config.py`) cobrem e-mail e convite; qualquer outra escrita
    externa precisa da própria trava (Princípio XIV). O verify começa conferindo
-   `app.config["MAIL_SUPPRESS_SEND"] is True`.
+   `app.config["MAIL_SUPPRESS_SEND"] is True`. A trava `CALENDAR_SUPPRESS_EVENT_WRITES`
+   (`_suppress_calendar_event_writes`, feature 303) cobre **só** a devolução ao Google: a
+   sincronização, a limpeza e o "Sincronizar" de um evento continuam lendo o Google real no local,
+   e criar, editar, excluir e cancelar evento continuam escrevendo — um verify que passe por esses
+   caminhos não está protegido por ela (o `verify_303.py` instala um dublê do Google para isso).
 
 ## Esqueleto (copie de `specs/266-costuras-funil/verify_266.py`)
 

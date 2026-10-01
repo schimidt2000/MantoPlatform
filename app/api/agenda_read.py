@@ -70,11 +70,15 @@ def _event_type_serializado(event) -> str:
 def serialize_event_summary(event: CalendarEvent) -> dict[str, Any]:
     """Resumo de um evento para a lista/calendário da agenda (data-model.md: EventoResumo).
 
-    Sem nenhum dado financeiro — a agenda não expõe valores.
+    Sem nenhum dado financeiro — a agenda não expõe valores. É o serializador único do mês, do
+    dia e da busca, e vai a todo papel que vê a agenda (inclusive o revendedor EducaManto): a
+    `situacao` (feature 303) leva só o código e a data — sem dinheiro, motivo nem autor. A
+    precedência entre cancelado, sumiço e pedido de exclusão vem pronta do modelo.
     """
     # Import tardio: parsers vivem no blueprint calendar (evita import circular no boot).
     from app.calendar.routes import parse_characters
 
+    desde = event.situacao_desde
     return {
         "id": event.id,
         "title": event.title,
@@ -86,6 +90,8 @@ def serialize_event_summary(event: CalendarEvent) -> dict[str, Any]:
         "is_satellite": event.is_satellite,
         "group_name": event.group_name or None,
         "confirmed": event.confirmed_at is not None,
+        "situacao": event.situacao,
+        "situacao_desde": desde.isoformat() if desde else None,
     }
 
 
@@ -704,7 +710,13 @@ def serialize_event_detail(
             "event_type": _event_type_serializado(event),
             # feature 190 — cabeçalho e bloco de cópia rápida da tela de detalhe.
             "description": event.description or None,
-            "google_html_link": event.google_html_link or None,
+            # Marcado ou cancelado (feature 303): o link aponta para um evento que não existe mais
+            # no Google. Nulo aqui também esconde o "Editar no Google Agenda" do bundle antigo.
+            "google_html_link": (
+                None
+                if event.is_google_missing or event.is_cancelled
+                else event.google_html_link or None
+            ),
             "travel": _serialize_travel(event, settings),
             "start_at": event.start_at.isoformat() if event.start_at else None,
             "end_at": event.end_at.isoformat() if event.end_at else None,
@@ -723,6 +735,14 @@ def serialize_event_detail(
                     "reason": event.deletion_request_reason or None,
                 }
                 if event.has_pending_deletion_request
+                else None
+            ),
+            # Situação única (feature 303). `sumiu_do_google` só vem quando marcado E não
+            # cancelado — a marca nunca aparece em evento cancelado.
+            "situacao": event.situacao,
+            "sumiu_do_google": (
+                {"desde": event.google_missing_since.isoformat()}
+                if event.is_google_missing
                 else None
             ),
             "is_satellite": event.is_satellite,

@@ -2,6 +2,11 @@
 
 Só leitura: lê do banco, nunca dispara sincronização com o Google (sync manual é ação de
 escrita, fatia US5). As views Jinja `/agenda` e `/agenda/day/<date>` seguem intactas.
+
+`GET /api/events/sumidos-google` (feature 303) alimenta a faixa "eventos sumiram do Google
+Agenda" do topo do sistema. RBAC: SUPERADMIN ou COMERCIAL pelo papel efetivo (respeita o "Ver
+como"); quem não passa recebe 200 com a faixa vazia — nunca 403, porque o componente roda em toda
+tela de todo usuário.
 """
 
 from datetime import datetime
@@ -12,6 +17,7 @@ from flask_login import current_user
 
 from app.api import api_bp
 from app.api.agenda_read import (
+    _role_flags,
     build_agenda_month,
     client_of_event,
     serialize_event_detail,
@@ -137,6 +143,27 @@ def api_event_detail(event_id: int) -> Any:
         return json_error("Evento não encontrado", 404)
     impersonate = session.get("impersonate_role")
     return jsonify(serialize_event_detail(event, current_user, impersonate))
+
+
+def _ve_faixa_sumidos() -> bool:
+    """SUPERADMIN ou COMERCIAL pelo papel EFETIVO: o "Ver como" do Superadmin vale aqui também."""
+    flags = _role_flags(current_user, session.get("impersonate_role"))
+    return flags["is_superadmin"] or flags["is_comercial"]
+
+
+@api_bp.route("/events/sumidos-google")
+@api_login_required
+def api_events_sumidos_google() -> Any:
+    """A faixa dos eventos marcados "Sumiu do Google Agenda" (feature 303).
+
+    Quem não vê recebe 200 com a faixa vazia, sem tocar no banco — o componente é montado para
+    todo usuário, e um 403 viraria erro de tela em cada página.
+    """
+    from app.calendar.sumico_ops import FAIXA_LIMITE, faixa_sumidos
+
+    if not _ve_faixa_sumidos():
+        return jsonify({"pode_ver": False, "total": 0, "limit": FAIXA_LIMITE, "items": []})
+    return jsonify({"pode_ver": True, **faixa_sumidos()})
 
 
 @api_bp.route("/events/new/options")

@@ -5,8 +5,9 @@ concretas (resolvidas por papel no momento da emissão) com texto pronto em pt-B
 SPA interna para agir. Ela nasce no mesmo ponto do código que grava o fato e, quando o fato ainda
 não foi comitado, na **mesma transação**.
 
-Módulo puro no sentido da constituição: importa só `db`, `models`, `constants` e `sqlalchemy` —
-nunca `flask.request` nem `current_user`. Não é só regra: o produtor da recusa de convite roda sob
+Módulo puro no sentido da constituição: importa só `db`, `models`, `constants`, `money` e
+`sqlalchemy` — nunca `flask.request` nem `current_user`. O `PresoAoEvento` da 303 entra só sob
+`TYPE_CHECKING`: `sumico_ops` importa este módulo, e o import de verdade fecharia um ciclo. Não é só regra: o produtor da recusa de convite roda sob
 sessão de **talento** (portal), onde não existe `current_user` interno, e é por isso que `audit()`
 (que infere o ator da sessão) não serviu de molde.
 
@@ -32,6 +33,7 @@ import json
 import logging
 from collections.abc import Iterable
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -39,6 +41,11 @@ from sqlalchemy.exc import IntegrityError
 from app import db
 from app.constants import RoleName, now_sp
 from app.models import ClientFeedback, EventRole, FormResponse, Notification, Role, User
+from app.money import format_brl
+
+if TYPE_CHECKING:
+    from app.calendar.sumico_ops import PresoAoEvento
+    from app.models import CalendarEvent
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +55,7 @@ KIND_FORM_RESPONSE = "form_response.nova"
 KIND_AVALIACAO = "avaliacao.recebida"
 KIND_CONVITE_RECUSADO = "convite.recusado"
 KIND_RECADO_NFC = "recado_nfc.novo"
+KIND_EVENTO_SUMIU_GOOGLE = "evento.sumiu_google"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -58,6 +66,8 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     # Os mesmos papéis que podem LER o recado no ERP. Avisar quem não pode abrir o link seria
     # produzir ruído com um beco sem saída no fim.
     KIND_RECADO_NFC: (RoleName.ARTISTA_3D, RoleName.SUPERADMIN),
+    # Feature 303: quem vende (e precisa saber que a data saiu do calendário) e quem decide.
+    KIND_EVENTO_SUMIU_GOOGLE: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
 }
 
 SEVERIDADES = ("info", "urgent")
@@ -287,6 +297,46 @@ def notificar_recado_nfc(recado) -> int:
         link_path="/3d/tags?aba=videos",
         entidade=("nfc_tag_message", recado.id),
         dedupe_key=f"{KIND_RECADO_NFC}:{recado.id}",
+    )
+
+
+def _escalados_no_aviso(n: int) -> str:
+    if n == 0:
+        return "ninguém escalado"
+    return "1 pessoa escalada" if n == 1 else f"{n} pessoas escaladas"
+
+
+def notificar_evento_sumiu_google(
+    event: CalendarEvent, *, marcado_em: datetime, preso: PresoAoEvento
+) -> int:
+    """Evento com dinheiro sumiu do Google Agenda e foi mantido → COMERCIAL/SUPERADMIN (303).
+
+    Regime A, sem commit: roda dentro da transação que grava a marca — marca sem aviso não existe.
+    A chave leva o carimbo da marca: um aviso por sumiço, e aviso novo se o evento voltar e sumir
+    de novo. O corpo diz o que está preso para o evento mantido só por contrato ou comprovante sem
+    valor não parecer alarme falso.
+    """
+    partes = [f"{event.start_at:%d/%m/%Y}" if event.start_at else "sem data"]
+    if preso.venda > 0:
+        partes.append(f"venda {format_brl(preso.venda, prefix=True)}")
+    else:
+        partes.append("parte de grupo comercial" if preso.grupo else "sem venda")
+    recebido = f"recebido {format_brl(preso.recebido, prefix=True)}"
+    if preso.n_comprovantes and not preso.recebido:
+        rotulo = "comprovante" if preso.n_comprovantes == 1 else "comprovantes"
+        recebido += f" ({preso.n_comprovantes} {rotulo} sem valor)"
+    partes.append(recebido)
+    partes.append(_escalados_no_aviso(preso.n_escalados))
+    if preso.tem_contrato:
+        partes.append("contrato anexado")
+    return emitir(
+        KIND_EVENTO_SUMIU_GOOGLE,
+        title=f"Sumiu do Google Agenda — {event.title}",
+        body=" · ".join(partes),
+        link_path=f"/events/{event.id}",
+        entidade=("calendar_event", event.id),
+        dedupe_key=f"{KIND_EVENTO_SUMIU_GOOGLE}:{event.id}:{marcado_em:%Y%m%d%H%M%S%f}",
+        severity="urgent",
     )
 
 

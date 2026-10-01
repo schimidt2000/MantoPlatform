@@ -51,6 +51,12 @@ export interface PortalRole {
    * Opcional pelo mesmo motivo de `role_type`.
    */
   before_event?: PortalBeforeEvent | null;
+  /**
+   * O evento está em confirmação com a produção (feature 303). Vem o código e a tela escreve o
+   * texto — o artista nunca lê o motivo. Opcional pelo mesmo motivo de `role_type`: sem o campo,
+   * a tela se comporta como hoje.
+   */
+  em_confirmacao?: boolean;
 }
 
 /** Um ensaio marcado para o evento — costuma cair 2 a 4 dias antes dele. */

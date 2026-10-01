@@ -4,6 +4,7 @@ import { Button } from "@manto/ui";
 import type { EventoResumo } from "../lib/agenda";
 import { eventCategory } from "../lib/eventCategory";
 import { dayHeaderLabel } from "../lib/agendaDates";
+import { SeloSituacao } from "./SeloSituacao";
 
 export interface AgendaListViewProps {
   events: EventoResumo[];
@@ -54,6 +55,8 @@ export function AgendaListItem({
       >
         {cat.label}
       </span>
+      {/* Fora do span do título: ali dentro mora o subtítulo da cliente que a busca usa. */}
+      <SeloSituacao situacao={event.situacao} desde={event.situacao_desde} />
       <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
         {event.title}
         {subtitle && <span className="block truncate text-xs font-normal text-muted">{subtitle}</span>}

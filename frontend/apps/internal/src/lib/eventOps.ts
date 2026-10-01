@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@manto/api-client";
+import { ApiRequestError, apiFetch } from "@manto/api-client";
 import type { EventoDetalhe } from "./agenda";
+import { invalidarNotificacoes } from "./notificacoes";
+import { invalidarSumidosGoogle } from "./sumidosGoogle";
 
 /**
  * Confirma/desconfirma o evento (toggle, feature 149). Ao suceder, atualiza o cache do evento
@@ -45,7 +47,9 @@ export function useSaveLogistics(eventId: number) {
 
 /**
  * Sincroniza o evento com o Google Calendar (feature 151). Ao suceder, atualiza o cache do evento
- * com o estado retornado. Sem gate de papel no servidor.
+ * com o estado retornado. Sem gate de papel no servidor. Desde a 303 o "Sincronizar" pode retirar
+ * a marca "Sumiu do Google Agenda" de um evento que voltou — a faixa e o sino caem no clique, sem
+ * esperar o poll de 60 s.
  */
 export function useSyncEvent(eventId: number) {
   const queryClient = useQueryClient();
@@ -53,6 +57,8 @@ export function useSyncEvent(eventId: number) {
     mutationFn: () => apiFetch<EventoDetalhe>(`/api/events/${eventId}/sync`, { method: "POST" }),
     onSuccess: (updated) => {
       queryClient.setQueryData(["event", eventId], updated);
+      invalidarSumidosGoogle(queryClient);
+      invalidarNotificacoes(queryClient);
     },
   });
 }
@@ -177,6 +183,49 @@ export function useRecusarSolicitacao(eventId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
+    },
+  });
+}
+
+/** Os `codigo` de erro de `POST /api/events/<id>/devolver-ao-google` (feature 303). */
+export type CodigoDevolverAoGoogle =
+  | "cancelado"
+  | "nao_marcado"
+  | "venda_virtual"
+  | "sem_data"
+  | "google_travado"
+  | "google_inconclusivo"
+  | "google_desconectado"
+  | "google_recusou";
+
+/**
+ * Devolve ao Google Agenda o evento marcado "Sumiu do Google Agenda" (feature 303). RBAC no
+ * servidor: só Superadmin. O hook só mexe no cache — fechar o diálogo e anunciar o resultado
+ * ficam nos callbacks do `mutate`, no `EventHeader`, porque o banner desmonta no sucesso.
+ *
+ * O erro é `ApiRequestError` (o `codigo` vem em `details.codigo`); falha de rede não é.
+ */
+export function useDevolverAoGoogle(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, ApiRequestError, void>({
+    mutationFn: () =>
+      apiFetch<EventoDetalhe>(`/api/events/${eventId}/devolver-ao-google`, { method: "POST" }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["event", eventId], updated);
+      queryClient.invalidateQueries({ queryKey: ["agenda"] });
+      queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+      queryClient.invalidateQueries({ queryKey: ["agenda-search"] });
+      invalidarNotificacoes(queryClient);
+      invalidarSumidosGoogle(queryClient);
+    },
+    onError: (error) => {
+      // Erro de ESTADO (outro clique já devolveu, alguém cancelou): a tela está velha — recarrega
+      // o evento e a faixa; o componente fecha o diálogo.
+      const codigo = error instanceof ApiRequestError ? error.details.codigo : undefined;
+      if (codigo === "nao_marcado" || codigo === "cancelado") {
+        queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+        invalidarSumidosGoogle(queryClient);
+      }
     },
   });
 }

@@ -315,6 +315,10 @@ def _role_summary(
         # ainda falta responder o convite — senão o mesmo evento aparece em "Próximos" e em
         # "Convites" sem explicação. `None` = convite nunca enviado (nada a responder).
         "invite_status": role.invite_status,
+        # Feature 303: o evento sumiu do Google Agenda e a produção ainda vai confirmar. Vai o
+        # código, nunca o motivo — o artista não precisa saber de "Google" —, e a tela escreve o
+        # texto. A propriedade já é "marca E não cancelado"; nenhuma consulta nova.
+        "em_confirmacao": bool(event.is_google_missing),
         # Vai o CÓDIGO do modelo, não o rótulo pronto — mesma convenção de `payment_status` e
         # `invite_status`, que a tela também traduz. 289 das 731 escalações com talento são cargo
         # (Coordenador, Técnico de Som, Maquiador, Foto/Vídeo, Transporte) e as três telas do

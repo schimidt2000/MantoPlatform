@@ -231,7 +231,9 @@ def _start_calendar_sync(app):
     """Inicia thread de background que sincroniza a agenda com o Google Calendar.
 
     Substitui a dependência de um serviço Cron externo: roda dentro do próprio app,
-    em intervalos regulares, com a mesma lógica do botão "Sincronizar agora".
+    em intervalos regulares, o ciclo de `app.calendar.sync.run_calendar_sync` — reconfere os
+    eventos marcados "Sumiu do Google Agenda" e, por mês, sincroniza e limpa conferindo no
+    Google (feature 303). Não é o mesmo que o "Sincronizar agora" de /admin/sync, que não limpa.
     Um claim atômico no banco garante execução única entre os workers do gunicorn.
     """
     import threading

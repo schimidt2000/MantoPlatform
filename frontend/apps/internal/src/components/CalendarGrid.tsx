@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { formatShortDate } from "@manto/ui";
 import type { EventoResumo } from "../lib/agenda";
 import { eventCategory } from "../lib/eventCategory";
+import { SeloSituacao } from "./SeloSituacao";
 
 export interface CalendarGridProps {
   ym: string;
@@ -72,6 +74,13 @@ function eventTime(ev: EventoResumo): string {
   return dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
+/** Tooltip do chip: o selo inteiro não cabe nos ~80 px, então o texto da marca vai aqui (303). */
+function chipTitle(ev: EventoResumo): string {
+  if (ev.situacao !== "sumiu_do_google") return ev.title;
+  const quando = ev.situacao_desde ? `, percebido em ${formatShortDate(ev.situacao_desde)}` : "";
+  return `${ev.title} — Sumiu do Google Agenda${quando}`;
+}
+
 function DayCell({ cell, onDayClick }: { cell: CalendarCell; onDayClick?: (dateKey: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? cell.events : cell.events.slice(0, MAX_VISIBLE_PER_DAY);
@@ -112,10 +121,11 @@ function DayCell({ cell, onDayClick }: { cell: CalendarCell; onDayClick?: (dateK
             <Link
               key={ev.id}
               to={`/events/${ev.id}`}
-              title={ev.title}
+              title={chipTitle(ev)}
               onClick={(e) => e.stopPropagation()}
               className={`truncate rounded px-1.5 py-0.5 text-xs font-medium ${cat.bg} ${cat.fg} ${cat.border} hover:opacity-80`}
             >
+              <SeloSituacao situacao={ev.situacao} desde={ev.situacao_desde} compacto />
               {eventTime(ev) && <span className="tabular-nums">{eventTime(ev)} </span>}
               {ev.title}
             </Link>

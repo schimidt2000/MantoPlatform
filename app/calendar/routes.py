@@ -8,6 +8,7 @@ import unicodedata
 import urllib.parse
 import urllib.request
 import uuid
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, redirect, request, session, url_for, render_template, current_app, abort, flash
@@ -21,7 +22,6 @@ from .service import (
     build_flow,
     save_token,
     fetch_events_for_month,
-    fetch_single_event,
     parse_event_datetime,
     insert_event,
     update_event,
@@ -51,6 +51,10 @@ from app.calendar.event_ops import (
     notify_accepted_roles as _notify_accepted_roles,
     notify_ensaio_team as _notify_ensaio_team,
 )
+
+if TYPE_CHECKING:
+    # Só para a anotação: `sumico_ops` importa helpers deste módulo (import tardio nos dois lados).
+    from app.calendar.sumico_ops import ResultadoLimpeza
 
 calendar_bp = Blueprint("calendar", __name__)
 
@@ -312,11 +316,21 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> str |
     Com ``also_from_google``, remove **também do Google Agenda** — excluir só do sistema
     deixaria o evento vivo no calendário da equipe, e o próximo sync o recriaria do zero.
 
+    Os ensaios-filhos saem por cascade do ORM, que não passa por ``_clear_event_side_tables``:
+    o histórico do ensaio (``EventLog``, FK sem cascade) estourava a exclusão do pai — no sync,
+    a cada ciclo (feature 303). Por isso as tabelas de cada ensaio são limpas antes. O ensaio
+    não é removido do Google (dívida registrada no ``docs/05``).
+
+    Os avisos do sino do evento são apagados junto, para não ficarem com link para um evento
+    que não existe mais (feature 303) — vale para toda exclusão, do sync e do Excluir da 224.
+
     Returns:
         Aviso quando o banco foi limpo mas o Google recusou a remoção (o local nunca é
         revertido por falha do Google), ou ``None``. Antes esse aviso saía por ``flash``, o que
         amarrava a função a um request context e sumia inteiro na resposta da API.
     """
+    for ensaio in event.ensaios:
+        _clear_event_side_tables(ensaio.id)
     _clear_event_side_tables(event.id)
 
     # Comissões (pendente → cancelada; paga → estorno negativo). A regra mora em `cancel_ops`
@@ -334,60 +348,28 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> str |
             current_app.logger.exception(
                 "Falha ao remover evento %s do Google Agenda", event.id)
             aviso = f"Excluído do sistema, mas erro ao remover do Google Agenda: {exc}"
+    from app.notificacoes import notificacoes_ops
+
+    notificacoes_ops.apagar_por_entidade("calendar_event", event.id)
     db.session.delete(event)
     return aviso
 
 
-def _cleanup_stale_events(items: list[dict], year: int, month: int) -> list[str]:
-    """Remove do banco eventos do mês que foram deletados do Google Calendar.
+def _cleanup_stale_events(items: list[dict], year: int, month: int) -> "ResultadoLimpeza":
+    """Confere no Google cada evento do mês que não veio na lista, e decide um por um.
 
-    Atua sobre qualquer evento com google_event_id, independente do source.
-    Seguro: só é chamado quando fetch_events_for_month() respondeu com sucesso.
-    Retorna lista de títulos dos eventos removidos.
+    Só é chamado depois que ``fetch_events_for_month()`` respondeu para o mês. Cada evento com
+    ``google_event_id`` (não cancelado) que faltou na lista é consultado no próprio Google: o
+    vazio que sumiu de verdade é removido; o que tem venda, comprovante, contrato, escala ou grupo
+    fica e é marcado "Sumiu do Google Agenda" (feature 303); o que ainda está lá não é sumiço; na
+    dúvida (Google sem resposta), o evento fica como está. Venda virtual nunca é apagada.
+
+    A regra mora em ``sumico_ops.limpar_mes``; este nome e esta entrada ficam porque o ciclo
+    automático, o "Limpar eventos fantasma" e a agenda Jinja chamam por eles.
     """
-    live_ids = {item.get("id") for item in items if item.get("id")}
-    month_start_dt = datetime(year, month, 1)
-    month_end_dt = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+    from app.calendar import sumico_ops
 
-    stale = (
-        CalendarEvent.query
-        .filter(
-            # Qualquer evento com google_event_id que não existe mais no GCal é removido,
-            # independente do source (google_calendar, platform ou NULL).
-            # Seguro porque _cleanup_stale_events só é chamado quando o GCal respondeu
-            # com sucesso (fetch não lançou RuntimeError).
-            CalendarEvent.google_event_id.isnot(None),
-            # Evento cancelado JÁ foi tirado do Google de propósito — encontrá-lo "faltando"
-            # é o esperado, não sinal de sumiço. Sem este filtro o primeiro ciclo de sync
-            # depois de um cancelamento apagaria o registro que sustenta a devolução (224).
-            CalendarEvent.cancelled_at.is_(None),
-            CalendarEvent.start_at >= month_start_dt,
-            CalendarEvent.start_at < month_end_dt,
-        )
-        .all()
-    )
-
-    removed_titles: list[str] = []
-    for ev in stale:
-        if ev.google_event_id not in live_ids:
-            # Venda virtual **nunca** é apagada por sumiço no Google (FR-029b). Apagar aqui
-            # destruiria em cascata um pedido já pago — evento, escala e presente 3D — porque
-            # alguém removeu uma linha do calendário. A equipe é sinalizada e decide.
-            if _is_virtual_event(ev):
-                _log_sync(
-                    "virtual_divergente", ev,
-                    details=f"Evento de venda virtual sumiu do Google Calendar "
-                            f"({year}-{month:02d}) — NÃO removido do sistema, pedido segue válido.",
-                )
-                continue
-            _log_sync("auto_deleted", ev, details=f"Não encontrado no Google Calendar ({year}-{month:02d})")
-            removed_titles.append(ev.title)
-            _delete_event(ev)
-
-    if removed_titles:
-        db.session.commit()
-
-    return removed_titles
+    return sumico_ops.limpar_mes(items, year, month)
 
 
 def _log_sync(
@@ -4188,22 +4170,43 @@ def ensaio_delete_material(event_id: int, material_id: int):
     return redirect(url_for("calendar.event_detail", event_id=event_id))
 
 
-def _sync_single_event_flow(event: CalendarEvent) -> str:
+def _sync_single_event_flow(
+    event: CalendarEvent, *, actor_name: str = "Sistema", actor_role: str = "Sistema"
+) -> str:
     """Núcleo da sincronização de um evento com o Google (feature 151), fonte única.
 
     Reusado pelo wrapper Jinja e pelo endpoint JSON. Sem `flash`/`request` — o adaptador é quem
     traduz o status em mensagem/resposta.
 
+    Confere o evento no Google antes de mexer (feature 303): o `get` do Google devolve o evento
+    APAGADO com `status: cancelled`, às vezes só com o id — entregue a `sync_events`, ele virava
+    "Sem título", perdia as datas e tirava a escala com e-mail de remoção. Ausência confirmada
+    não toca em nada: nem evento, nem escala, nem marca. Presente e marcado: a marca sai antes do
+    sync (vale o Google), com o histórico em nome de quem clicou (`actor_name`/`actor_role`).
+
     Returns:
-        `"no_google_id"` se o evento não tem `google_event_id`; `"not_found"` se o Google não
-        devolve o evento; `"ok"` quando sincroniza e commita.
+        `"no_google_id"` se o evento não tem `google_event_id`; `"ausente_no_google"` se o Google
+        confirma que o evento não existe mais; `"not_found"` se o Google não respondeu de forma
+        conclusiva; `"ok"` quando sincroniza e commita.
     """
+    from app.calendar import service as gcal
+    from app.calendar import sumico_ops
+
     if not event.google_event_id:
         return "no_google_id"
-    item = fetch_single_event(CALENDAR_ID, event.google_event_id)
-    if not item:
+    consulta = gcal.consultar_evento(CALENDAR_ID, event.google_event_id)
+    if consulta.desfecho == gcal.DESFECHO_AUSENTE:
+        return "ausente_no_google"
+    if consulta.desfecho != gcal.DESFECHO_PRESENTE:
         return "not_found"
-    sync_events([item])
+    if event.is_google_missing:
+        sumico_ops.desmarcar(
+            event,
+            motivo=sumico_ops.MOTIVO_REAPARECEU,
+            actor_name=actor_name,
+            actor_role=actor_role,
+        )
+    sync_events([consulta.item])
     db.session.commit()
     return "ok"
 
@@ -4217,10 +4220,21 @@ def _delete_event_flow(
     (é preciso desagrupar os satélites antes). Registra o log `manual_deleted`, remove do banco
     **e do Google Agenda** via `_delete_event` e commita.
 
+    Evento marcado "Sumiu do Google Agenda" (feature 303) é recusado aqui, no núcleo dos dois
+    adaptadores, antes de qualquer escrita: a rota Jinja não passa por `pode_excluir`, e por ela
+    um marcado com dinheiro seria apagado de vez.
+
     Returns:
         `(False, None)` se o evento é líder de grupo (não excluído); `(True, aviso)` quando
         excluído — `aviso` preenchido só quando o Google recusou a remoção (feature 224).
+
+    Raises:
+        EventoMarcadoError: o evento está marcado — a única saída dele é devolver ao Google.
     """
+    from app.calendar.cancel_ops import EventoMarcadoError
+
+    if event.is_google_missing:
+        raise EventoMarcadoError()
     if event.is_group_leader:  # FR-004: desagrupar antes
         return False, None
     _log_sync(
@@ -4240,11 +4254,17 @@ def sync_single_event(event_id: int):
     """Sincroniza um único evento com o Google Calendar (wrapper fino sobre
     `_sync_single_event_flow`, feature 151)."""
     event = CalendarEvent.query.get_or_404(event_id)
-    status = _sync_single_event_flow(event)
+    status = _sync_single_event_flow(
+        event,
+        actor_name=current_user.name,
+        actor_role=", ".join(r.name for r in current_user.roles),
+    )
     if status == "no_google_id":
         flash("Evento sem ID do Google Calendar — não é possível sincronizar.", "error")
     elif status == "not_found":
         flash("Não foi possível buscar o evento no Google Calendar.", "error")
+    elif status == "ausente_no_google":  # feature 303: sem isto cairia no "sincronizado"
+        flash("Este evento não está mais no Google Agenda. Nada foi alterado.", "error")
     else:
         flash("Evento sincronizado com sucesso.", "success")
     return redirect(url_for("calendar.event_detail", event_id=event_id))
@@ -4324,11 +4344,17 @@ def delete_calendar_event(event_id: int):
         abort(403)
     event = CalendarEvent.query.get_or_404(event_id)
     title = event.title  # capturado antes da exclusão
-    excluido, aviso = _delete_event_flow(
-        event,
-        actor_name=current_user.name,
-        actor_role=", ".join(r.name for r in current_user.roles),
-    )
+    from app.calendar.cancel_ops import EventoMarcadoError
+
+    try:
+        excluido, aviso = _delete_event_flow(
+            event,
+            actor_name=current_user.name,
+            actor_role=", ".join(r.name for r in current_user.roles),
+        )
+    except EventoMarcadoError as exc:  # feature 303: sem isto a recusa viraria 500
+        flash(exc.message, "error")
+        return redirect(url_for("calendar.event_detail", event_id=event_id))
     if not excluido:
         flash(
             f'Não é possível excluir "{title}": desagrupe os eventos satélites antes de excluir.',

@@ -1,8 +1,9 @@
 import { useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { Button, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@manto/ui";
+import { Button, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@manto/ui";
 import { useEvent, type EventoDetalhe } from "../lib/agenda";
+import { useFaixaSumidosVisivel } from "../lib/sumidosGoogle";
 import { CastingSection } from "../components/EventDetail/CastingSection";
 import { ComercialSection } from "../components/EventDetail/ComercialSection";
 import { EnsaioSection } from "../components/EventDetail/EnsaioSection";
@@ -183,6 +184,8 @@ export function EventDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const query = useEvent(id);
+  // Observer passivo: a página não faz poll, só lê se a faixa do topo está na tela (303).
+  const faixaVisivel = useFaixaSumidosVisivel();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // `replace` para a troca de aba não encher o histórico de voltas; os demais parâmetros da
@@ -236,10 +239,18 @@ export function EventDetailPage() {
             <Tabs value={abaAtiva} onValueChange={irPara}>
               {/* Fica colada no topo ao rolar: com painéis longos, trocar de aba não pode
                   exigir voltar ao começo da página. `top-14` desvia da barra do app, que é
-                  sticky só abaixo de `lg` (`AppLayout`); a partir daí o topo está livre. O
+                  sticky só abaixo de `lg` (`AppLayout`); a partir daí o topo está livre. Com a
+                  faixa "sumiram do Google Agenda" na tela (303), soma os 40 px dela: `top-24`
+                  (56 + 40) no mobile e `top-10` no desktop — as duas variantes escritas
+                  inteiras, porque o Tailwind não gera classe montada por interpolação. O
                   -mx/px devolve a sangria no mobile, onde a régua rola na horizontal em vez
                   de quebrar em duas linhas. */}
-              <div className="sticky top-14 z-20 -mx-4 mb-4 overflow-x-auto bg-surface/95 px-4 py-2 backdrop-blur sm:mx-0 sm:px-0 lg:top-0">
+              <div
+                className={cn(
+                  "sticky z-20 -mx-4 mb-4 overflow-x-auto bg-surface/95 px-4 py-2 backdrop-blur sm:mx-0 sm:px-0",
+                  faixaVisivel ? "top-24 lg:top-10" : "top-14 lg:top-0",
+                )}
+              >
                 <TabsList className="w-max">
                   {/* `px-3` no mobile é o que faz as quatro abas caberem em 375px sem rolar
                       (com `px-4` a régua dava 382px e a última ficava cortada). */}

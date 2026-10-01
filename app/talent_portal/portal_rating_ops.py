@@ -115,7 +115,14 @@ def _event_ids_in_window(talent: Talent, window: timedelta, only: set[int] | Non
     query = (
         EventRole.query.filter(EventRole.talent_id == talent.id, _not_rejected())
         .join(CalendarEvent)
-        .filter(event_end < now, or_(event_end >= floor, EventRole.assigned_at >= floor))
+        .filter(
+            event_end < now,
+            or_(event_end >= floor, EventRole.assigned_at >= floor),
+            # Cancelado não recebe avaliação (feature 303): o Histórico já não o lista, e o
+            # crachá "Avaliar" acendia para um evento que não aparece em lugar nenhum. Evento
+            # marcado "em confirmação" segue avaliável — não é cancelado.
+            CalendarEvent.cancelled_at.is_(None),
+        )
     )
     if only is not None:
         query = query.filter(CalendarEvent.id.in_(only))
@@ -226,11 +233,15 @@ def _require_open_event(talent: Talent, event_id: int) -> EventRole:
     """Escalação do talento num evento já terminado, pronta para avaliação.
 
     Raises:
-        PortalRatingError: Talento não escalado (404) ou evento ainda não terminou (400).
+        PortalRatingError: Talento não escalado (404), evento cancelado (400, feature 303) ou
+            evento ainda não terminou (400).
     """
     role = owned_role(talent, event_id)
     if role is None:
         raise PortalRatingError("Você não está escalado neste evento.", status=404)
+    # Depois do 404: quem não está escalado não descobre nada do evento.
+    if role.event.is_cancelled:
+        raise PortalRatingError("Este evento foi cancelado e não recebe avaliação.", status=400)
     if not event_ended(role.event):
         raise PortalRatingError("A avaliação abre depois que o evento terminar.", status=400)
     return role
