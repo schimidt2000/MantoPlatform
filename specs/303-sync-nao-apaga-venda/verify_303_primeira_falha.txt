@@ -1,0 +1,116 @@
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+[2026-09-30 23:04:22,316] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br plataforma=https://app.mantoproducoes.com.br
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\flask_limiter\extension.py:333: UserWarning: Using the in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about configuring the storage backend.
+  warnings.warn(
+[2026-09-30 23:04:22,937] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+C:\Users\schim\Desktop\Manto_Platform\specs\303-sync-nao-apaga-venda\verify_303.py:181: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  INICIO_UTC = datetime.utcnow()
+C:\Users\schim\Desktop\Manto_Platform\specs\303-sync-nao-apaga-venda\verify_303.py:928: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  if ultimo and datetime.utcnow() - ultimo < timedelta(minutes=15):
+C:\Users\schim\Desktop\Manto_Platform\specs\303-sync-nao-apaga-venda\verify_303.py:639: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  terms_accepted_at=datetime.utcnow(),
+C:\Users\schim\Desktop\Manto_Platform\specs\303-sync-nao-apaga-venda\verify_303.py:762: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  role.assigned_at = datetime.utcnow()
+[2026-09-30 23:04:25,927] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-30 23:04:26,140] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-30 23:04:26,721] ERROR in email_service: Erro ao enviar email em background: send_ensaio_alert_email
+Traceback (most recent call last):
+  File "C:\Users\schim\Desktop\Manto_Platform\app\email_service.py", line 59, in _run
+    fn(*[_unpack(p) for p in packed])
+    ~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\schim\Desktop\Manto_Platform\app\email_service.py", line 471, in send_ensaio_alert_email
+    if event.start_at else "a confirmar"
+       ^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'start_at'
+[2026-09-30 23:04:26,753] ERROR in email_service: Erro ao enviar email em background: send_ensaio_alert_email
+Traceback (most recent call last):
+  File "C:\Users\schim\Desktop\Manto_Platform\app\email_service.py", line 59, in _run
+    fn(*[_unpack(p) for p in packed])
+    ~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\schim\Desktop\Manto_Platform\app\email_service.py", line 471, in send_ensaio_alert_email
+    if event.start_at else "a confirmar"
+       ^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'start_at'
+C:\Users\schim\Desktop\Manto_Platform\app\calendar\sync.py:117: SAWarning: Session's state has been changed on a non-active transaction - this state will be discarded.
+  db.session.rollback()
+[2026-09-30 23:04:27,248] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-30 23:04:27,475] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-30 23:04:27,713] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-30 23:04:28,257] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-30 23:04:28,970] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-30 23:04:31,265] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-30 23:04:31,668] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-30 23:04:31,817] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-30 23:04:32,813] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-09-30 23:04:33,284] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/portal/auth/login — órfão recolhido de .mantoproducoes.com.br
+
+B0
+  OK         0 (chão)
+  OK         18 (trava por ambiente)
+
+B1
+  FALHA      1 (com venda, quatro modos; payloads): FR-001: o sync apagou evento com venda: o sync apagou o evento 1409
+  FALHA      1b (passado; COMERCIAL recusado): FR-001: o 'Limpar eventos fantasma' apagou evento com venda: o sync apagou o evento 1414
+  BLOQUEADO  2 (um aviso por destinatário): depende de evento marcado (História 1)
+  FALHA      2b (corrida: uma marca, um aviso): FR-002: a limpeza não consultou o evento antes de decidir
+  FALHA      3 (comprovante, inclusive sem valor): FR-001 (3 (comprovante)): o sync apagou o evento 1416
+  FALHA      4 (contrato): FR-001 (4): o sync apagou o evento 1418
+  FALHA      5 (escalado): FR-001 (5): o sync apagou o evento 1419
+  FALHA      6 (líder e satélite): FR-001 (6 (líder)): o sync apagou o evento 1420
+  OK         7 (apagado)
+  FALHA      7 (auditoria): a auditoria não diz o que o Google respondeu (cancelado_completo): 'gcal:v303-sete-cancelado_completo-8577e4 | Não encontrado no Google Calendar (2031-04)'
+  FALHA      7a (técnico designado): FR-001 (Presença designada): o sync apagou o evento 1427
+  FALHA      7b (vazio com ensaio: sync e DELETE): o pai vazio com ensaio não foi apagado pelo sync (a exclusão estourou?)
+  FALHA      13 (consulta inconclusiva): 5xx: 0 consulta(s) no mês (esperado 1; FR-040)
+  OK         13 (a lista inteira falha)
+  FALHA      13b (o aviso falha): o aviso do sino nem foi tentado
+  FALHA      13c (erro de banco no meio do mês): o mês seguinte ao erro de banco não importou o item novo
+  BLOQUEADO  14 (edição): depende de evento marcado (História 1)
+  BLOQUEADO  14 (Sincronizar, marcado): depende de evento marcado (História 1)
+  FALHA      14 (Sincronizar, não marcado): não marcado, resposta cancelado_completo: Sincronizar de evento ausente → 200 (deve ser 409)
+  OK         15 (cancelado e venda virtual)
+
+B2
+  FALHA      8 (mudou de data; presente sem mudança): mês posterior: a data nova não chegou (2032-03-05 19:00:00)
+  BLOQUEADO  9 (a marca sai quando o evento volta): depende de evento marcado (História 1)
+  BLOQUEADO  13d (falha na reconferência): depende de evento marcado (História 1)
+
+B3
+  FALHA      17 (quem não vê): figurino: faixa → 404 (nunca 403)
+  BLOQUEADO  17 (faixa): depende de evento marcado (História 1)
+
+B4
+  BLOQUEADO  10a (trava ligada): depende de evento marcado (História 1)
+  BLOQUEADO  10 (devolver): depende de evento marcado (História 1)
+  BLOQUEADO  10b (dia inteiro): depende de evento marcado (História 1)
+  BLOQUEADO  10c (já tinha voltado): depende de evento marcado (História 1)
+  BLOQUEADO  10d (o Google recusa): depende de evento marcado (História 1)
+  BLOQUEADO  10e (consulta inconclusiva): depende de evento marcado (História 1)
+  BLOQUEADO  10f (segundo clique): depende do cenário 10 (a primeira devolução)
+  BLOQUEADO  10g (sync seguinte): depende de evento marcado (História 1)
+  BLOQUEADO  10h (ensaio-filho): depende de evento marcado (História 1)
+  FALHA      10i (recusas): evento 1461: 404 (deve falhar com 409)
+  BLOQUEADO  10i (sem data): depende de evento marcado (História 1)
+  FALHA      11 (Comercial recusado): COMERCIAL devolvendo → 404 (deve falhar com 403)
+  FALHA      11 (Superadmin passa o gate): Superadmin em evento não marcado → 404 {'message': 'Recurso não encontrado.'} (nunca 403)
+  BLOQUEADO  12 (cancelar e excluir recusados): depende de evento marcado (História 1)
+
+B5
+  BLOQUEADO  24 (portal): depende de evento marcado (História 1)
+  FALHA      24b (avaliação de cancelado): evento cancelado continua 'a avaliar' (deve falhar)
+
+B9
+  OK         41 (limpeza; nada escapou do dublê)
+
+Resumo por bloco:
+  B0  2/2 OK
+  B1  3/20 OK · 3 bloqueado(s)
+  B2  0/3 OK · 2 bloqueado(s)
+  B3  0/2 OK · 1 bloqueado(s)
+  B4  0/14 OK · 11 bloqueado(s)
+  B5  0/2 OK · 1 bloqueado(s)
+  B9  1/1 OK
+  dublê: {'credencial': 4551, 'list': 4550, 'get': 1}
+
+6/44 OK

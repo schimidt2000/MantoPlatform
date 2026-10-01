@@ -1,0 +1,39 @@
+espelho: último audit_log em 01/10/2026 04:54 UTC · calendário eventos@mantoproducoes.com.br
+
+== SONDA: resposta do Google para eventos apagados por sumiço (desde 01/08/2026) ==
+   05/08 19:12  (VM) MICKEY CLASSICO + MINNIE CLASSICO + COORDENAD  -> ausente (cancelled) · item com chaves ['created', 'creator', 'description', 'end', 'etag', 'eventType', 'htmlLink', 'iCalUID', 'id', 'kind', 'location', 'organizer', 'reminders', 'sequence', 'start', 'status', 'summary', 'updated']
+   07/08 15:20  (SHOW) PETER PAN + SININHO + CAPITAO GANCHO + CROC  -> ausente (cancelled) · item com chaves ['attendees', 'conferenceData', 'created', 'creator', 'description', 'end', 'etag', 'eventType', 'hangoutLink', 'htmlLink', 'iCalUID', 'id', 'kind', 'location', 'organizer', 'reminders', 'sequence', 'start', 'status', 'summary', 'updated']
+   01/09 15:54  (R&I) HARRY POTTER + DUMBLEDORE + HAGRID            -> ausente (cancelled) · item com chaves ['created', 'creator', 'description', 'end', 'etag', 'eventType', 'htmlLink', 'iCalUID', 'id', 'kind', 'location', 'organizer', 'reminders', 'sequence', 'start', 'status', 'summary', 'updated']
+   10/09 21:34  (CORP) FLORES - JARDIM ENCANTADO + FLORES - JARDIM  -> presente (ok) · item com chaves ['created', 'creator', 'description', 'end', 'etag', 'eventType', 'htmlLink', 'iCalUID', 'id', 'kind', 'location', 'organizer', 'reminders', 'sequence', 'start', 'status', 'summary', 'updated']
+   17/09 22:14  (R&I) GABBY + PANDY + GATUNO - ATENCAO THAYS        -> ausente (cancelled) · item com chaves ['created', 'creator', 'description', 'end', 'etag', 'eventType', 'htmlLink', 'iCalUID', 'id', 'kind', 'location', 'organizer', 'reminders', 'sequence', 'start', 'status', 'summary', 'updated']
+
+== CONTAGEM: meses de 2026-01 até antes de 2026-10 ==
+   2026-01:    1 no banco ·   34 no Google ·   0 fora da lista
+   2026-02:   43 no banco ·   44 no Google ·   0 fora da lista
+   2026-03:   63 no banco ·   64 no Google ·   0 fora da lista
+   2026-04:   47 no banco ·   47 no Google ·   0 fora da lista
+   2026-05:   51 no banco ·   51 no Google ·   0 fora da lista
+   2026-06:   77 no banco ·   77 no Google ·   0 fora da lista
+   2026-07:   38 no banco ·   38 no Google ·   0 fora da lista
+   2026-08:   60 no banco ·   60 no Google ·   0 fora da lista
+   2026-09:   60 no banco ·   63 no Google ·   0 fora da lista
+
+== RESULTADO ==
+meses varridos: 9 · eventos no banco: 440 · fora da lista do Google: 0
+respostas do Google por evento: {}
+chamadas ao Google: {'get': 5, 'list': 9}
+
+-- COM DINHEIRO, ausência confirmada (seriam MARCADOS): 0 · venda R$ 0,00 · recebido R$ 0,00
+
+-- MUDARAM DE DATA no Google (seriam movidos, não marcados): 0 · e-mails de 'evento alterado' que sairiam: 0
+
+-- VAZIOS, ausência confirmada (seriam APAGADOS, como hoje): 0
+   com ensaio ligado: 0
+   com reembolso: 0
+   com nota fiscal: 0
+   com presente 3D: 0
+   SHOW com cachê na vaga automática de som: 0
+   por tipo: {}
+
+-- PRESENTES no Google, fora da lista do mês e sem mudança de data: 0  []
+-- INCONCLUSIVOS: 0  []

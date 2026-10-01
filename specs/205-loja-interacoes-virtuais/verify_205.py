@@ -806,12 +806,51 @@ try:
 
     with app.app_context():
         # E o evento sumindo do Google não pode apagar a venda.
+        #
+        # Feature 303: a lista passada à limpeza é a dos OUTROS eventos vivos — com lista vazia ela
+        # apagava (antes da 303) ou marcaria (depois) os eventos reais do mês no espelho. A
+        # credencial nula é o cinto: nenhuma consulta chega ao Google real com o token do espelho.
+        # O espião da consulta é o que prova a guarda — com a credencial nula, uma venda virtual
+        # consultada por engano também "sobreviveria" (consulta inconclusiva não apaga).
         mes = virtuais[0].start_at
-        _cleanup_stale_events([], mes.year, mes.month)
-        db.session.commit()
+        inicio_mes = datetime(mes.year, mes.month, 1)
+        fim_mes = datetime(mes.year + (mes.month == 12), mes.month % 12 + 1, 1)
+        nao_virtual = db.or_(CalendarEvent.event_type.is_(None), CalendarEvent.event_type != "VIRTUAL")
+        outros_vivos = [
+            {"id": e.google_event_id}
+            for e in CalendarEvent.query.filter(nao_virtual, CalendarEvent.google_event_id.isnot(None)).all()
+        ]
+        do_mes = CalendarEvent.query.filter(
+            nao_virtual, CalendarEvent.start_at >= inicio_mes, CalendarEvent.start_at < fim_mes
+        )
+        nao_virtuais_antes = do_mes.count()
+        gids_virtuais = {e.google_event_id for e in virtuais}
+        consultados: list[str] = []
+        credencial_original = gcal_service.load_credentials
+        consultar_original_google = getattr(gcal_service, "consultar_evento", None)
+
+        def consultar_espiao(calendar_id, google_event_id, **kw):
+            consultados.append(google_event_id)
+            return consultar_original_google(calendar_id, google_event_id, **kw)
+
+        gcal_service.load_credentials = lambda: None
+        if consultar_original_google is not None:
+            gcal_service.consultar_evento = consultar_espiao
+        try:
+            _cleanup_stale_events(outros_vivos, mes.year, mes.month)
+            db.session.commit()
+        finally:
+            gcal_service.load_credentials = credencial_original
+            if consultar_original_google is not None:
+                gcal_service.consultar_evento = consultar_original_google
         sobreviveram = CalendarEvent.query.filter(CalendarEvent.id.in_(ids_virtuais)).count()
+        nao_virtuais_depois = do_mes.count()
     check("V7.2 evento virtual sumido do Google não é apagado (FR-029b)",
-          sobreviveram == len(ids_virtuais), f"{sobreviveram}/{len(ids_virtuais)}")
+          sobreviveram == len(ids_virtuais)
+          and not (set(consultados) & gids_virtuais)
+          and nao_virtuais_antes == nao_virtuais_depois,
+          f"{sobreviveram}/{len(ids_virtuais)} virtuais; consultados {sorted(set(consultados) & gids_virtuais)}; "
+          f"não virtuais do mês {nao_virtuais_antes} → {nao_virtuais_depois}")
 
     # ── V4: upsell de presente 3D (US4) ─────────────────────────────────────
     from app.models import Acervo3DItem
