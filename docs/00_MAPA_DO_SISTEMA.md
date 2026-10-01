@@ -6,8 +6,8 @@
 > linha.
 >
 > Última revisão: **2026-09-08** · Estado do repositório: pós-feature **296** (revisão do harness;
-> produção no **Render** desde 28/08/2026) · Head de migration: `b7d2e4f1a9c3` (confira com
-> `flask db heads`).
+> produção no **Render** desde 28/08/2026) · Head de migration: o do cabeçalho do `docs/01`
+> (confira com `flask db heads`).
 
 ---
 
@@ -22,7 +22,9 @@ Backend **Flask** servindo **API JSON estrita** em `/api/*`. Frontend: **três S
 monorepo npm workspaces, servidos por um único processo Node em produção.
 
 O Manto **nunca escreve no Google Calendar por sincronização** — ele lê. As escritas no Google
-acontecem só nos fluxos explícitos de criar/editar/excluir evento.
+acontecem só nos fluxos explícitos de criar/editar/excluir evento e, desde a feature 303, na
+**devolução ao Google Agenda**: o Superadmin recria no Google o evento marcado "Sumiu do Google
+Agenda" (travada fora da produção).
 
 ---
 
@@ -277,7 +279,7 @@ Inventário completo, com o que é morto, o que é duplicado e como fatiar: **`d
 | Campo novo no evento | `docs/04` §Agenda → `app/models.py` (`CalendarEvent`, 217-361) → `app/api/agenda_read.py:502` (`serialize_event_detail`) → `internal/src/lib/agenda.ts` → `components/EventDetail/` |
 | Endpoint novo | `docs/01` §3 (inventário) → módulo `app/api/<dominio>_{read,write}.py` → **registrar em `app/api/__init__.py`** |
 | Regra de comissão / DRE | `docs/04` §Financeiro (a regra completa está lá, em 9 pontos) → `app/financeiro/routes.py:120-350` |
-| Mexer no sync do Google | `docs/04` §Agenda → `app/calendar/sync.py` (moldura) → `sync_events` em `app/calendar/routes.py:2149` |
+| Mexer no sync do Google | `docs/04` §Agenda → `app/calendar/sync.py` (moldura) → `sync_events` em `app/calendar/routes.py` → limpeza, marca e devolução em `app/calendar/sumico_ops.py` (303) |
 | Tela nova no ERP | `docs/02` (telas vizinhas) → rota em `internal/src/App.tsx` → item em `lib/navigation.tsx` (`isVisible`) → módulo em `lib/` → página em `pages/` |
 | Componente compartilhado | `packages/ui/src/components/` → **exportar em `packages/ui/src/index.ts`** |
 | Loja Virtual / pagamento | `docs/04` §Loja Virtual → `app/marketing/virtuais_ops.py` → `app/integracoes/infinitepay_client.py` |

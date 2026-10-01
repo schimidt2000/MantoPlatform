@@ -9,7 +9,8 @@
 > aqui há só a referência.
 >
 > Origem: auditoria de leitura de 2026-08-06 sobre ~44k linhas de Python e ~46k de TypeScript.
-> Última revisão: **2026-08-06**.
+> Última revisão: **2026-09-30** (feature 303: fluxos de sincronização, "Sincronizar", exclusão e
+> devolução ao Google; invariantes 13-17 da Agenda; invariante 6 do frontend). Antes: **2026-08-06**.
 
 ---
 
@@ -49,6 +50,7 @@ exceção é `virtuais_ops.py:28`, que importa `current_app` para ler config (ac
 | `app/calendar/observation_ops.py` | 84 | o upload fica no adaptador; o núcleo recebe `file_path` pronto |
 | `app/calendar/service.py` | 297 | camada fina sobre a Google Calendar API — **único arquivo que fala com o Google**, zero regra de negócio |
 | `app/calendar/sync.py` | 150 | moldura do sync; excelente docstring de módulo |
+| `app/calendar/sumico_ops.py` | ~900 | feature 303 — a limpeza do mês (`limpar_mes`), o retrato do que prende o evento (`preso_ao_evento`), marcar e desmarcar "Sumiu do Google Agenda", a reconferência dos marcados, a faixa e a devolução ao Google; chama o Google por atributo de `service` e os helpers de `routes.py` por import tardio |
 | `app/api/agenda_read.py` | 766 | fonte única do formato JSON de leitura (sem rotas) |
 | `app/api/agenda_write.py` | 1.437 | 41 rotas, 56 funções, **zero sem docstring** — melhor arquivo do domínio |
 | `app/api/agenda.py` | 167 | 8 rotas de leitura |
@@ -85,9 +87,37 @@ Para cada item, quatro caminhos:
    `EventRole` existentes, renomeando com prefixo antigo para preservar casting/figurino e disparando
    `send_removal_email` para quem sumiu do título.
 
-Ao final, `_mark_talents_worked()`. Em seguida `_cleanup_stale_events` (`routes.py:245`) apaga os
-eventos do mês que sumiram do Google — só é seguro porque roda apenas quando o fetch respondeu com
-sucesso, e nunca toca evento virtual.
+Ao final, `_mark_talents_worked()`. Em seguida vem a **limpeza** (`_cleanup_stale_events`, hoje uma
+delegação de uma linha para `sumico_ops.limpar_mes` — feature 303), que só roda quando a lista do
+mês respondeu:
+1. o evento **marcado** cujo id voltou à lista perde a marca (vale o Google; a lista já foi aplicada
+   por `sync_events`);
+2. cada evento do mês, com id do Google e não cancelado, que faltou na lista é **conferido no
+   próprio Google** (`service.consultar_evento`, três desfechos), um por um, cada um na sua
+   transação: venda virtual só gera `virtual_divergente`; o **já marcado** é pulado, sem consulta;
+   **inconclusivo** (sem credencial, rede,
+   5xx, 403, 429…) não apaga nem marca; **presente** → se os dados mudaram (data, quase sempre),
+   `sync_events([item])` leva o evento à data nova no mesmo registro, senão nada; **ausente**
+   (404, 410, `status: cancelled`) → o **vazio** é apagado (auditoria `auto_deleted` com o que o
+   Google respondeu e o retrato do que estava preso) e o **com dinheiro** fica e é marcado (aviso
+   no sino, histórico, auditoria `sumiu_do_google`);
+3. um disjuntor por mês: a primeira consulta sem resposta por rede, 5xx ou credencial encerra as
+   consultas daquele mês.
+
+Antes do laço de meses, o ciclo automático **reconfere os marcados pelo próprio id**
+(`sumico_ops.reconferir_marcados`): o que voltou perde a marca e recebe os dados do Google, mesmo
+num mês que o ciclo não lista. **Só o ciclo automático reconfere**: o "Limpar eventos fantasma" não
+chama a reconferência — nele o marcado só perde a marca se o id voltar à lista do mês. O resumo do ciclo (`AuditLog` `sync_ok`/`sync_erro`) traz os totais
+"Sumiços: …" antes da lista de meses.
+
+### Fluxo: "Sincronizar" de um evento
+
+`POST /api/events/<id>/sync` (e o wrapper Jinja) → `_sync_single_event_flow` → `consultar_evento`
+no próprio id **antes de mexer** (feature 303). Ausente → nada muda (nem evento, nem escala, nem
+marca) e a API responde 409; inconclusivo → 502; presente → se estava marcado, a marca sai com o
+histórico em nome de quem clicou, e então `sync_events([item])`. Antes da 303 o item apagado (que o
+`get` do Google devolve com `status: cancelled`) ia direto para `sync_events` e virava "Sem título",
+sem datas e sem escala, com e-mail de remoção.
 
 ### Fluxo: criação de evento (Manto → Google)
 
@@ -103,10 +133,26 @@ cliente, sem elenco, indistinguível de um evento criado direto no Google.
 
 ### Fluxo: exclusão
 
-`DELETE /api/events/<id>` → `_delete_event_flow` (`routes.py:3743`) → recusa líder de grupo →
-`AuditLog 'manual_deleted'` → `_delete_event(also_from_google=True)` → `_clear_event_side_tables` +
-tratamento de comissão (pendente vira `cancelado`; paga gera estorno negativo) → delete no Google
-(falha não trava) → delete local.
+`DELETE /api/events/<id>` (e a rota Jinja `POST /events/<id>/delete`) → `_delete_event_flow` →
+**recusa evento marcado "Sumiu do Google Agenda"** (`EventoMarcadoError`, feature 303 — a API
+responde 409 `sumiu_do_google`, o Jinja volta ao evento com a mensagem; `cancelar_evento` recusa
+pela mesma regra) → recusa líder de grupo → `AuditLog 'manual_deleted'` →
+`_delete_event(also_from_google=True)` → `_clear_event_side_tables` do evento **e de cada
+ensaio-filho** (o histórico do ensaio estourava a exclusão do pai) + tratamento de comissão
+(pendente vira `cancelado`; paga gera estorno negativo) → delete no Google (falha não trava) →
+apaga os avisos do sino do evento → delete local.
+
+### Fluxo: devolver ao Google (feature 303)
+
+`POST /api/events/<id>/devolver-ao-google` (só Superadmin) → `sumico_ops.devolver_ao_google`:
+valida (marcado, não cancelado, não virtual, com datas) → **trava de ambiente**
+(`CALENDAR_SUPPRESS_EVENT_WRITES`, ligada fora da produção) → consulta o id velho (sem ausência
+confirmada, nada é criado) → `SELECT … FOR UPDATE` e revalida → histórico (e `source = "platform"`
+quando há vaga de personagem fora do título) com `flush` → id velho **ausente**: `insert_event` com
+os dados ATUAIS do sistema (dia inteiro como dia inteiro), troca o id e o link; id velho
+**presente** (alguém restaurou da lixeira): nada é criado, o cabeçalho do sistema é empurrado ao id
+velho se diferir → desmarca → commit. Falha do Google: rollback, auditoria `google_return_failed`
+com o tipo do erro, 502 com mensagem fixa — a marca continua.
 
 ### Invariantes
 
@@ -161,6 +207,28 @@ tratamento de comissão (pendente vira `cancelado`; paga gera estorno negativo) 
       da 299, e a linha que sai da EducaManto não leva a data da realização para o ramo comum.
     - **Cortesia ou permuta nunca comissiona** (dono, 15/09): a sincronização não cria linha e
       cancela a `a_pagar`, mesmo na cortesia antiga que tem valor gravado.
+13. **O sync nunca apaga evento com dinheiro** (feature 303, `sumico_ops.preso_ao_evento`): segura o
+    evento ter venda, qualquer comprovante (mesmo sem valor), contrato, escala com talento — menos,
+    em SHOW, a vaga automática do técnico de som com o técnico padrão — ou pertencer a grupo
+    comercial (principal ou satélite). Comissão já paga **não** segura (decisão do dono, 30/09): o
+    evento vazio é apagado e o estorno sai contra o vendedor, como antes.
+14. **Ausência só vale confirmada.** A falta na lista do mês não basta: só 404, 410 ou `status:
+    cancelled` na consulta ao próprio evento contam. Inconclusivo não apaga nem marca — na dúvida,
+    o evento fica. Mudança de data não é sumiço: o evento presente com outros dados recebe a data
+    nova no mesmo registro.
+15. **"Marcado" = `google_missing_since` preenchida E `cancelled_at` nulo** (fonte única:
+    `sumico_ops.filtro_marcados()` no SQL, `CalendarEvent.is_google_missing` no objeto). A
+    situação única do evento (`CalendarEvent.situacao`) resolve a precedência cancelado > sumiu do
+    Google > exclusão solicitada; a tela nunca recombina as colunas. Só `marcar`/`desmarcar`
+    escrevem a coluna.
+16. **Marcado que reaparece sozinho: vale o Google.** A lista, a reconferência ou o "Sincronizar"
+    tiram a marca e aplicam os dados do Google — o que foi editado no sistema enquanto marcado se
+    perde, e a escala é reconciliada pelo título do Google (vagas fora do título saem, com e-mail
+    de remoção). Só a **devolução** faz valer o sistema (e passa o elenco ao sistema quando há vaga
+    fora do título). Risco aceito na 303.
+17. **Relógio de cada carimbo da 303**: `google_missing_since` e `notifications.created_at` em
+    horário de parede de São Paulo (`now_sp()`); o `EventLog` novo usa o default UTC do modelo (a
+    tela converte); `AuditLog.created_at` é UTC.
 
 ### Armadilhas
 
@@ -179,10 +247,10 @@ tratamento de comissão (pendente vira `cancelado`; paga gera estorno negativo) 
 - **Acréscimos tipados (`EventAcrescimo`), notas fiscais (`EventInvoice`) e parcelas
   (`EventInstallment`) só têm implementação de ESCRITA no handler Jinja** `_handle_update_comercial`
   (`routes.py:712`). A API lê esses dados mas não os grava.
-- `flash()` aparece dentro de `_delete_event` (`routes.py:241`), chamado por `_cleanup_stale_events`
-  dentro do cron (sem request context). Hoje não estoura porque o cron passa
-  `also_from_google=False` e o `flash` está dentro desse `if` — **qualquer mudança nessa condicional
-  derruba o sync em background**.
+- ~~`flash()` aparece dentro de `_delete_event`~~ — **desatualizado** (conferido na 303): desde a
+  224 `_delete_event` devolve o aviso de falha do Google em vez de chamar `flash`, e não depende de
+  request context; a limpeza do sync passou para `sumico_ops` e chama `_delete_event` sem
+  `also_from_google`.
 - `_compute_performer_caches` (`routes.py:2682`, 134 l.) é **precificação de orçamento** morando no
   módulo de calendário; `app/orcamento/pricing.py:13` aponta de volta para ela. Preço de cachê não
   está onde se procura.
@@ -519,6 +587,13 @@ ligado na cópia local do banco de produção; a trava real é `MAIL_SUPPRESS_SE
    re-renderiza sem refetch e sem merge no cliente. **Todo hook novo de escrita de evento deve seguir
    isso.**
 5. Arquivo do Flask sempre via `assetUrl()`; dinheiro sempre via `formatBRL`.
+6. **Todo elemento fixo no topo soma a altura da faixa** "eventos sumiram do Google Agenda"
+   (feature 303): 40 px, `sticky top-14 lg:top-0 z-[25]`, só quando ela está na tela. Quem gruda
+   no topo ou rola até uma âncora lê `useFaixaSumidosVisivel()` (observer passivo — nunca um
+   segundo hook com poll) e escolhe entre duas classes literais inteiras (a régua de abas do evento
+   vai de `top-14 lg:top-0` para `top-24 lg:top-10`; as âncoras da Home, de `scroll-mt-16
+   lg:scroll-mt-4` para `scroll-mt-28 lg:scroll-mt-14`). O `z-[25]` fica acima da régua (`z-20`)
+   e abaixo da barra do mobile e do sino (`z-30`).
 
 ### Armadilhas já pagas (registradas no código)
 

@@ -6,7 +6,11 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-09-09** · **297-nfc-moldura-e-menu**: `/nfc/<code>` deixa de ser uma
+> Última atualização: **2026-09-30** · **303-sync-nao-apaga-venda**: faixa fixa "N eventos sumiram
+> do Google Agenda" no `AppShell`; selo "Sumiu do Google" na agenda; banner, quadro e diálogo
+> "Devolver ao Google Agenda" em `/events/:id`; aviso `urgent` do sino em mais de uma linha;
+> `/admin/sync` com `ConfirmDialog` e os seis números; "Evento em confirmação" nas três telas do
+> portal. Antes: **2026-09-09** · **297-nfc-moldura-e-menu**: `/nfc/<code>` deixa de ser uma
 > tela só e vira máquina de cenas (capa → abertura com som → menu de três botões → mensagem
 > especial → recado da cliente); a aba Vídeos de `/3d/tags` mostra o vídeo em pé, o estado da
 > conversão, peso, duração e os recados, e ganha o diálogo "Moldura e abertura" — antes dela
@@ -209,7 +213,19 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   (formulário, estrela, recusa), vermelho quando `urgent`, "Marcar todas como lidas" (com teto
   `ate_id`) e "Ver todas". Clicar num item marca lida (otimista) e navega para `link_path`.
   Fecha em Esc e clique fora; foco volta ao sino; `aria-live` só quando a contagem sobe. O
-  revendedor EducaManto não vê o sino. Sem toast, sem som.
+  revendedor EducaManto não vê o sino. Sem toast, sem som. **Feature 303**: o kind
+  `evento.sumiu_google` usa o ícone `CalendarX` (o do selo da agenda), e todo aviso `urgent` deixa
+  de ser cortado numa linha — título em até duas, corpo em até três (`line-clamp`), com o texto
+  inteiro no `title`; os `info` seguem numa linha.
+- **Faixa "N eventos sumiram do Google Agenda" (feature 303)** — `FaixaSumidosGoogle`, montada no
+  `AppShell` antes do `<Outlet />`: fixa no topo de toda tela do shell (`sticky top-14 lg:top-0
+  z-[25]`, 40 px, vermelha), para Superadmin e Comercial pelo **papel efetivo** (quem decide é o
+  `pode_ver` do servidor; o "Ver como" vale). Sem botão de dispensar: some quando a marca sai. Um
+  evento: a barra é link para ele (a partir de `sm`, com título e data). Vários: a frase abre a
+  lista por urgência (futuros, passados, sem data; `e mais N` acima de 100); Esc e clique fora
+  fecham e devolvem o foco. Poll de 60 s, só no shell; a régua de abas do evento e as âncoras da
+  Home somam os 40 px quando ela está na tela (`useFaixaSumidosVisivel`, observer passivo). Em
+  375 px: uma linha só, sem título.
 
 #### `/notificacoes` — Notificações *(feature 272)*
 - **Acesso**: qualquer usuário interno (a caixa é do próprio usuário); **sem item de menu** — a
@@ -316,6 +332,11 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   **Mês** (`CalendarGrid`), **Lista** (`AgendaListView`) e **Dia** (`DayTimelineView`, linha do
   tempo). Clicar num dia da grade navega para `view=day`. Toolbar (`AgendaToolbar`) troca período
   e modo. Transições com Framer Motion respeitando `useReducedMotion()`.
+- **Selo "Sumiu do Google" (feature 303)** — `SeloSituacao`, lido de `situacao` do servidor (nunca
+  recombinado na tela): selo completo (ícone `CalendarX` + texto, tooltip "Sumiu do Google Agenda
+  — percebido em dd/mm/aaaa") na **Lista**, na **busca** e no bloco detalhado e na lista "Sem
+  horário" do **Dia**; só o ícone no chip do **Mês** (que mantém a cor da categoria e leva o texto
+  no `title`) e no bloco curto do Dia. Evento cancelado nunca mostra o selo.
 - **API**: `GET /api/agenda`, `GET /api/agenda/day/<date_str>`.
 - **Vínculos**: cada evento abre `/events/:id`.
 
@@ -432,6 +453,24 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     escalado e comissão em jogo — e diz qual das duas ações vai acontecer **antes** de
     confirmar; quando é cancelamento, pede o valor a devolver (pré-preenchido com o recebido),
     nome e PIX de quem recebe.
+  - **Evento marcado "Sumiu do Google Agenda" (feature 303)** — `SumiuDoGoogleBanner`, entre o
+    banner de cancelado e o de exclusão solicitada (o do sumiço vem primeiro). Para todos: a
+    marca, "percebido em dd/mm/aaaa", que o evento continua valendo e que a edição fica só no
+    sistema até a devolução. Comercial (`can_request_delete` sem `can_delete`): "A decisão é do
+    Superadmin — conte a ele por que o evento saiu do Google Agenda." Superadmin (`can_delete`):
+    o quadro **"O que está em jogo"** (venda, pago pela cliente, comissão — "(estimativa)" quando
+    for —, BV, escalados e, quando existem, contrato, comprovantes e grupo; no **satélite** as
+    linhas de dinheiro dão lugar a "Venda do grupo — os valores estão no evento principal" com
+    link), o botão **Devolver ao Google Agenda** (largura total no celular), a linha de que o
+    cancelamento com devolução chega na próxima entrega e o recolhível "O evento já foi recriado
+    à mão no Google?" com três passos. O diálogo (`DevolverAoGoogleDialog`, `ConfirmDialog`) diz
+    "Será recriado como: <título> — <data e horário>" (dia inteiro como "(dia inteiro)"), avisa
+    quando a data já passou e que os convidados e ensaios não voltam; recusa do servidor (inclusive
+    a trava do ambiente local) aparece dentro dele, e não fecha durante o envio. Depois de
+    devolver, a linha `aria-live` do cabeçalho diz o resultado. Enquanto marcado: "Editar no
+    Google Agenda" some (o servidor manda o link nulo), **Sincronizar** continua e responde que o
+    evento não está no Google, e **Excluir ou cancelar** e **Analisar e decidir** ficam
+    desabilitados com o motivo no `title` ("Recusar solicitação" e "Solicitar exclusão" seguem).
   - **Aba Resumo**: **faixa de pendências** (chips *Elenco 2/2 escalados*, *Presença*,
     *Figurino n/m com ficha*, *Logística sem maquiagem e saída*, *Agenda n com conflito*,
     *Contrato*, *Recebimento*, *Evento confirmado* — verde quando resolvido, dourado quando não;
@@ -1726,7 +1765,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 | `/admin/logs` | Logs | `SUPERADMIN` | `AuditLog` |
 | `/rh` | Painel de RH (`RhDashboardPage`, `App.tsx:130`) | **`SUPERADMIN` na prática** | ⚠️ Única tela do sistema cujo endpoint usa o **segundo mecanismo de RBAC** — `current_user.has_permission('rh.view')` (`app/api/rh_read.py:20`), código de permissão, não `RoleName`. E `rh.view` **nunca é semeado** (`seed.py` só cria `user.manage`), então todo mundo que não é SUPERADMIN recebe 403. Ver `docs/01` §4.3 e `docs/05` §7.1 |
 | `/admin/desempenho` | Desempenho | `SUPERADMIN` | métricas por vendedor/período |
-| `/admin/sync` | Sincronização Agenda | `SUPERADMIN` | status e execução manual do sync com o Google Calendar |
+| `/admin/sync` | Sincronização Agenda | `SUPERADMIN` | status e execução manual do sync com o Google Calendar. **Feature 303**: "Limpar eventos fantasma" confirma num `ConfirmDialog` (não mais `window.confirm`) que diz o que a limpeza faz; o resultado mostra a mensagem com os seis números (removidos, mantidos e marcados, com data atualizada, de volta ao Google, sem confirmação, com falha) e uma linha por mês que teve algo — o mês que não respondeu aparece como "não foi possível consultar o Google Agenda"; com falha, sem confirmação ou mês com erro, a caixa sai no tom de alerta |
 | `/admin/anuncio-portal` | Anúncio do Portal | `SUPERADMIN` | mensagem exibida no Portal do Artista |
 | `/admin/migrar-arquivos` | Migrar Arquivos | `SUPERADMIN` | job de migração de storage com status |
 | `/admin/importar-catalogo` | Importar Catálogo | `SUPERADMIN` | importação do export WordPress (dedupe por `wp_product_id`) |
@@ -1839,13 +1878,13 @@ avaliar). Alvos de toque ≥44px, nada abaixo de 12px, sem rolagem horizontal de
 | `/portal/reset-password/:token` | Definir nova senha pelo link do e-mail | Valida o token antes de mostrar o formulário; checklist de força ao vivo |
 | *(gate)* Criar senha | Troca obrigatória no primeiro acesso | Servida pelo `OnboardingGate`, não é rota navegável |
 | *(gate)* Termos | Aceite do Termo de Consentimento | Checkbox só libera após rolar o texto até o fim |
-| `/portal/agenda` | **Só os próximos eventos** (a seção Histórico saiu na 302) | Dia da semana, **faixa horária** `20:00 às 23:00` (com o dia junto quando o evento vira a meia-noite) e "amanhã"/"em 5 dias"; **Função:** para cargo e **Personagem:** para personagem (302); alerta de alteração com botão **Ciente**; bloco **"Antes do evento"** recolhido, com ensaio, maquiagem e saída — **não existe** quando não há nenhum dos três (302); link para a ficha de figurino **só quando há ficha para aquela pessoa ver** (`has_figurino`, feature 227); lista escalação **não recusada** (aceita, pendente ou sem convite — feature 230). **A 302 removeu daqui a seção Histórico e, com ela, o `RatingLink` que a 229 tinha posto nos itens do histórico**: a causa que a 229 tratava era a duplicação de nome entre duas listas chamadas "Histórico", e agora existe uma só — o contador de "eventos a avaliar" na barra inferior é o caminho |
-| `/portal/convites` | Convites de casting pendentes | Botões **Aceitar** / **Recusar** (recusa pede confirmação); alimenta o contador da aba; **faixa horária**, rótulo Função/Personagem e o bloco **"Antes do evento"** iguais aos da Agenda (302) — é onde saber do ensaio muda uma decisão que ainda não foi tomada |
-| `/portal/historico` | Histórico completo de apresentações — **é o único lugar dele desde a 302** | Somatórios recebido / a receber / total; cachê + deslocamento por evento; link para avaliar via `RatingLink`; rótulo Função/Personagem (302). A linha mostra **só a data**, sem hora, e a omissão é deliberada: aqui nunca houve horário nenhum, então pôr a faixa significaria acrescentar o horário de **início** de um evento que já aconteceu |
+| `/portal/agenda` | **Só os próximos eventos** (a seção Histórico saiu na 302) | Dia da semana, **faixa horária** `20:00 às 23:00` (com o dia junto quando o evento vira a meia-noite) e "amanhã"/"em 5 dias"; **Função:** para cargo e **Personagem:** para personagem (302); alerta de alteração com botão **Ciente**; bloco **"Antes do evento"** recolhido, com ensaio, maquiagem e saída — **não existe** quando não há nenhum dos três (302); link para a ficha de figurino **só quando há ficha para aquela pessoa ver** (`has_figurino`, feature 227); lista escalação **não recusada** (aceita, pendente ou sem convite — feature 230). **A 302 removeu daqui a seção Histórico e, com ela, o `RatingLink` que a 229 tinha posto nos itens do histórico**: a causa que a 229 tratava era a duplicação de nome entre duas listas chamadas "Histórico", e agora existe uma só — o contador de "eventos a avaliar" na barra inferior é o caminho. **Feature 303**: evento em confirmação (`em_confirmacao`) mostra "Evento em confirmação — entre em contato com a produção" (`AvisoEmConfirmacao`) como primeira caixa depois do cabeçalho, acima do alerta de alteração; sem botão, não se dispensa, some quando a marca sai, e o texto não cita o motivo |
+| `/portal/convites` | Convites de casting pendentes | Botões **Aceitar** / **Recusar** (recusa pede confirmação); alimenta o contador da aba; **faixa horária**, rótulo Função/Personagem e o bloco **"Antes do evento"** iguais aos da Agenda (302) — é onde saber do ensaio muda uma decisão que ainda não foi tomada. **Feature 303**: o aviso "Evento em confirmação — entre em contato com a produção" entra acima do cachê e dos botões, que continuam (o convite segue podendo ser respondido) |
+| `/portal/historico` | Histórico completo de apresentações — **é o único lugar dele desde a 302** | Somatórios recebido / a receber / total; cachê + deslocamento por evento; link para avaliar via `RatingLink`; rótulo Função/Personagem (302). A linha mostra **só a data**, sem hora, e a omissão é deliberada: aqui nunca houve horário nenhum, então pôr a faixa significaria acrescentar o horário de **início** de um evento que já aconteceu. **Feature 303**: o aviso "Evento em confirmação" fica abaixo de título e cachê e acima de "Avaliar", fora do bloco do título (que é `truncate`), para quebrar linha em 320 px |
 | `/portal/perfil` | Dados pessoais, **medidas corporais**, PIX e portfólio | Medidas alimentam o módulo de Figurino; até 3 fotos de atuação + links (Vimeo/YouTube) |
 | `/portal/fotos-documentos` | Foto de rosto, corpo inteiro, foto do documento (RG/CPF/CNH — card novo da feature 264) e CNH | Preview do arquivo atual antes de substituir (fotos); documento e CNH mostram sucesso apos envio |
 | `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | **Nome e data do evento no topo** (302) — a ficha abria sem nenhuma referência, e quem tem duas escalações na semana não sabia qual estava vendo; só a data, sem hora, que está no card de onde a pessoa veio. Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (mesma sessão). **Coordenador vê o elenco inteiro** com o nome de quem interpreta cada personagem (feature 227) |
-| `/portal/eventos/:id/avaliar` | Avaliar o evento | Etapa 1 nota geral (abaixo de 4 exige comentário); etapa 2 opcional por categoria e por pessoa; janela de 7 dias para avaliar, 30 para editar. Etapa 2 é o **destino padrão** da etapa 1 desde a 232 (rolagem até o bloco), com desvio explícito para quem só quer a nota geral |
+| `/portal/eventos/:id/avaliar` | Avaliar o evento | Etapa 1 nota geral (abaixo de 4 exige comentário); etapa 2 opcional por categoria e por pessoa; janela de 7 dias para avaliar, 30 para editar. Etapa 2 é o **destino padrão** da etapa 1 desde a 232 (rolagem até o bloco), com desvio explícito para quem só quer a nota geral. **Feature 303**: evento cancelado não entra no contador "a avaliar" e a nota é recusada com "Este evento foi cancelado e não recebe avaliação." |
 | `/portal/termos` | Reler o termo já aceito | Modo leitura, sem trava nem botão |
 
 ### C.1 O Jinja do portal acabou — sobrou uma rota

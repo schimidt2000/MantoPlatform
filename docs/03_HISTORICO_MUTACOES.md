@@ -4,7 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-09-22** · Estado do repositório: pós-feature
+> Última atualização: **2026-10-01** · Estado do repositório: pós-feature
+> **303-sync-nao-apaga-venda** (migration `a7c3e91f4d28`; publicada em 01/10 à tarde, a pedido do
+> dono — o sync deixa de apagar evento com dinheiro que some do Google: marca, avisa e deixa o
+> Superadmin devolver) — antes dela pós-feature
 > **302-portal-detalhes-do-evento** (sem migration; **EM PRODUÇÃO desde 22/09/2026 ~17:56** pelo
 > merge `21db6b9` — o artista
 > passa a ver o horário de término, o ensaio, a maquiagem e a saída no card do Portal, e a
@@ -117,6 +120,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **303-sync-nao-apaga-venda** | *(publicada 01/10 à tarde, a pedido do dono)* A limpeza do sync apagava todo evento do mês que faltava na lista do Google, com venda, comprovantes, contrato e escala — inclusive o que só tinha **mudado de mês** (o 1275 virou o 1287, sem venda). Agora cada evento fora da lista é **conferido no próprio Google** (três desfechos; o `get` devolve o apagado com `status: cancelled`): o vazio é apagado, o com dinheiro fica **marcado** "Sumiu do Google Agenda" com aviso no sino, o que mudou de data vai à data nova no mesmo registro, e na dúvida nada acontece. Faixa fixa para Superadmin e Comercial, selo na agenda, banner e **"Devolver ao Google Agenda"** (travado fora da produção), "Sincronizar" que confere antes de mexer, cancelar e excluir recusam o marcado até a segunda entrega, e o portal diz "Evento em confirmação". De passagem: exclusão de pai vazio com ensaio deixou de estourar, e evento cancelado saiu da avaliação do portal | 2026-09-30 | `a7c3e91f4d28` | (aqui) | — |
 | **302-portal-detalhes-do-evento** | *(EM PRODUÇÃO 22/09 ~17:56, merge `21db6b9`)* "No portal do artista não aparece o horário final do evento. E eu queria pensar contigo quais informações aparecem hoje para o artista." O levantamento achou três coisas maiores que o pedido. **(1)** O horário final **já chegava ao navegador e era descartado** pela tela — `_role_summary` serializava `end_at`, o tipo do front declarava o campo e nenhuma tela o desenhava. **(2)** O **ensaio é invisível para quem vai ensaiar**: ensaio é evento-filho (`parent_event_id`), com data, hora e local próprios, e **nenhum dos 98 eventos ENSAIO tem elenco** — o elenco fica no show, e o portal lista escalações; são 54 ensaios, todos com data/hora/local, caindo **2 a 4 dias antes** do show. **(3)** Maquiagem e saída existem desde sempre e **pararam de ser preenchidas**: 19 e 24 dos 475 eventos do espelho, e **zero** dos 64 futuros — expor sem mexer no processo interno não mudaria nada, então a feature também acende um chip de pendência na tela do evento. O bloco "Antes do evento" é **recolhido e ausente quando não há nada**, a pedido do dono ("para não ficar poluído"), e aparece também no card de **Convites**, onde muda uma decisão ainda não tomada — 2 dos 4 convites pendentes são de eventos que já têm ensaio marcado. "Personagem" vira **"Função"** para cargo (289 das 731 escalações) nas **três** superfícies que o artista lê: portal, e-mail e WhatsApp — as duas últimas também mandavam o código cru do banco (`Maquiagem: 14:00 — manto`). A seção Histórico **sai da Agenda**, o que desfaz metade da **229** de propósito: a causa que ela tratou era a duplicação de nome entre duas listas, e o link de avaliar era remédio do sintoma; o payload continua entregando `history` porque backend e frontend sobem separados. Achados de passagem: o evento que **termina no dia seguinte** lia-se como vinte horas de trabalho (34 no espelho), o ensaio **já realizado** ficava no bloco de preparação (janela garantida por construção), e o N+1 de `role.event` — anterior à feature — custava 19 consultas para 13 escalações contra 8 para 1 | 2026-09-22 | `—` | (aqui) | — |
 | **301-orcamentos-visiveis-comercial** | *(EM PRODUÇÃO 22/09 ~11:22, merge `fad410f`)* "Todas as pessoas do setor comercial devem poder ver e abrir orçamentos de outras pessoas. Isso era assim até algum tempo atrás." **Causa → efeito:** em 20/05/2026 o commit `6b191e4` removeu de propósito o filtro por dono do histórico ("todos veem todos os orçamentos"); em 23/07/2026 a migração do módulo para React (**feature 177**) o **reintroduziu**, porque o contrato dela (`specs/177-.../contracts/api-endpoints.md:119`) descrevia o código de dois meses antes — `routes.py:714` já não tinha o filtro no dia em que aquilo foi escrito. A regressão durou **dois meses** e contaminou mais duas superfícies no domínio Agenda: a aba Comercial do evento (239) e o vínculo orçamento↔evento (273). O sintoma mais nu: uma pessoa do COMERCIAL sem orçamentos próprios abria o histórico e via **tela vazia**. A 301 devolve a leitura a todo o comercial (listar, abrir, recalcular, PDF, reenviar e-mail), mantém **uma** trava de autoria — o `DELETE` — e **aperta** a de escrita do vínculo: vincular é livre, mas trocar, desvincular e **re-aplicar** sobre vínculo alheio viram 409 nomeando o autor. O re-aplicar escapava da guarda antiga e só não vazava porque o 404 do alvo vinha antes; derrubá-lo sem apertar deixaria qualquer colega reescrever `sale_value` e `sale_date` — e `sale_date` decide o mês da comissão (267b). Pelo mesmo motivo a queda do 404 é **condicionada ao papel**: o FINANCEIRO passa no gate do endpoint e ganharia de brinde o poder de vincular venda alheia. Reenvio de orçamento de outra pessoa passa a ser auditado. A tela deixa de **deduzir** permissão da ausência de dado no payload (`pode_gerir`, `pode_excluir`), e o contrato da 177 recebe nota de regra superada, para a próxima reescrita não repetir o caminho | 2026-09-21 | `—` | (aqui) | — |
 | **300-catalogo-rapido** | "Clico em Gerenciar catálogo e demora muito para carregar." Eram **duas** causas independentes, e o tamanho da resposta (199 KB) não era nenhuma delas: (1) **uma consulta ao banco por produto, várias vezes** — nenhum ponto do caminho do catálogo tinha carregamento antecipado, e `cover_image` é property sobre `images[0]`, então pedir a capa carrega a coleção inteira de fotos: 1.846 consultas no gerenciador (2.320 na aba Personagens), 917 na vitrine, 492 na grade de categorias; (2) **458 capas em tamanho original dentro de caixas de 32 a 64 px** — 95,4 MB pedidos de uma vez, sem carregamento sob demanda, porque a decisão 7 da 270 deixara o ERP interno fora das miniaturas. `selectinload` no ponto que precisa (não no `models.py`), `assetUrl(url, { largura })` nos 8 pontos de render do gerenciador e nas 2 lacunas que a 270 deixou na vitrine (grade de categorias e lista de desejos), `<Foto>` com `loading="lazy"`, `GET /api/admin/catalogo/categorias` (a edição baixava 199 KB para desenhar 39 opções) e pausa de 300 ms nas duas buscas que consultam o servidor (a da listagem e a do elenco). **Sem paginação — medido que não é preciso.** Achado de passagem: a ordem de `category_names` e de personagens empatados nunca foi garantida; virou explícita **por `id`, o que reproduz a produção em 458 de 458**. A revisão pré-deploy (9 achados, todos confirmados) pegou que a primeira escolha — ordem alfabética — trocaria as etiquetas de 123 cards da vitrine, e que a busca Adotar/Vincular mostrava linhas de outra busca com o botão ativo | 2026-09-16 | `—` | (aqui) | — |
@@ -252,14 +256,14 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Agenda / evento / formulário de evento | 299, 298, 233, 231, 215, 210, 208, 192, 184 |
+| Agenda / evento / formulário de evento | 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
 | Financeiro, comissões e pagamentos | 299, 230, 228, 226, 210c, 199, 194, 189, 187 |
 | Orçamento e EducaManto | 214, 191 (orçamento), 190 |
-| Portal do Artista | 233, 232, 231, 230, 229, 227, 216, 191 (portal) |
+| Portal do Artista | 303 (aviso "em confirmação"; cancelado fora da avaliação), 233, 232, 231, 230, 229, 227, 216, 191 (portal) |
 | Design system, tema e acessibilidade | 228, 217, 216, 212 |
 | Documentação e economia de token | 217 |
 | Formulários e pré-contrato | 210b, 188, 193 |
@@ -283,6 +287,124 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 303 — O sync não apaga mais evento com dinheiro   (303-sync-nao-apaga-venda · 2026-09-30 · `a7c3e91f4d28`)
+
+> **Construída em 30/09/2026 e publicada em 01/10/2026 à tarde** (merge da branch
+> `303-sync-nao-apaga-venda` na `main`), **dentro do expediente**, a pedido do dono ("faz o commit
+> e sobe agora mesmo") e contra a regra do `CLAUDE.md` §2 (publicar a partir das ~19h BRT) — fica
+> registrado assim: quem estivesse salvando algo no minuto da troca de contêiner pode ter perdido
+> a ação. A confirmação no ar (hora e provas) entra numa entrada de correção depois do push.
+> Primeira de três entregas do item "a venda some quando o evento some do Google": esta é só a
+> trava do sync; o dinheiro do cancelamento e o selo de cancelados são features próprias (texto e
+> pesquisa em `specs/303-sync-nao-apaga-venda/entregas-2-e-3-rascunho.md` e `pesquisa/`).
+
+**Motivação.** A limpeza do sync apagava do banco todo evento do mês que não vinha na lista do
+Google — com venda, comprovantes, contrato e escala junto. A contagem de 30/09 (R17 do research)
+achou a prova em produção: o evento **1275** foi **movido** de setembro para outubro no Google em
+10/09; a limpeza de setembro o apagou seis minutos depois (a comissão 190, de R$ 63,45, foi
+cancelada pela exclusão), e o sync de outubro o reimportou como o **1287**, sem venda, vendedor nem
+escala. Antes dele, o `(SHOW) PETER PAN…` da 224. Também na sonda: o `get` do Google devolve o
+evento **apagado** com HTTP 200, `status: "cancelled"` e os dados completos — por isso a regra de
+"ausente" olha `status` antes de tudo.
+
+**O que mudou**
+
+* **Banco**: coluna `calendar_events.google_missing_since` (São Paulo sem fuso, como
+  `cancelled_at`) e índice parcial. "Marcado" = preenchida **e** não cancelado.
+* **Núcleo novo `app/calendar/sumico_ops.py`**: `limpar_mes` (o corpo de `_cleanup_stale_events`,
+  que virou delegação de uma linha), `preso_ao_evento`, `marcar`/`desmarcar`, `mesmos_dados`,
+  `reconferir_marcados`, `faixa_sumidos` e `devolver_ao_google`. `service.consultar_evento` é a
+  consulta de três desfechos (presente / ausente / inconclusivo) que nunca levanta.
+* **A limpeza**, por evento que faltou na lista do mês, cada um na sua transação: venda virtual só
+  sinaliza; já marcado pula; consulta no Google — inconclusivo não faz nada (disjuntor por mês em
+  rede, 5xx e credencial); presente com dados diferentes vai à data nova pelo `sync_events` no
+  mesmo registro; ausente e vazio é apagado (auditoria `auto_deleted` com o que o Google respondeu
+  e o retrato do que estava preso); ausente com dinheiro fica e é **marcado** (aviso `urgent` no
+  sino para COMERCIAL e SUPERADMIN, histórico, auditoria). O marcado que volta à lista, à
+  reconferência do começo do ciclo ou ao "Sincronizar" perde a marca.
+* **"Sincronizar"** confere antes de mexer: ausente → 409 e nada muda (antes virava "Sem título",
+  sem datas e sem escala, com e-mail de remoção).
+* **Devolver ao Google** (`POST /api/events/<id>/devolver-ao-google`, só Superadmin): recria no
+  Google com os dados atuais do sistema, ou — se o id velho voltou da lixeira — empurra o cabeçalho
+  do sistema para ele. Travada fora da produção por `CALENDAR_SUPPRESS_EVENT_WRITES`.
+* **Cancelar e excluir recusam o evento marcado** (409 `sumiu_do_google`, inclusive pela rota
+  Jinja), para qualquer papel, até a segunda entrega.
+* **Telas**: faixa fixa vermelha "N eventos sumiram do Google Agenda" (Superadmin e Comercial pelo
+  papel efetivo); selo na agenda; banner, quadro "O que está em jogo" e diálogo no evento; aviso
+  `urgent` do sino em várias linhas; `/admin/sync` com `ConfirmDialog` e os seis números; no
+  portal, "Evento em confirmação — entre em contato com a produção". Evento cancelado sai da
+  avaliação pós-evento do portal (defeito anterior: o crachá "Avaliar" acendia para ele).
+* **De passagem**: toda exclusão limpa o histórico do ensaio-filho (antes estourava a FK, a cada
+  ciclo, no pai vazio com ensaio) e os avisos do sino do evento; o `except` do mês no ciclo e no
+  "Limpar" faz `rollback` em erro de banco (antes um erro de banco derrubava todos os meses
+  seguintes).
+
+**Decisões do dono (30/09)**: comissão já paga **não** segura o evento (apaga e estorna contra o
+vendedor, como antes); a vaga automática do técnico de som em SHOW nunca conta — "se foi pago é
+porque foi realizado"; até a segunda entrega, quem segura o pagamento do evento marcado é o
+Superadmin, conferindo a faixa antes de fechar a Planilha.
+
+**RBAC**: faixa = `_ve_faixa_sumidos()` (SUPERADMIN ou COMERCIAL pelo papel efetivo; os demais 200
+vazio, nunca 403); devolver = `_can_delete()` depois do 404; `/sync` continua sem gate de papel e
+passa a poder tirar a marca. Detalhe em `docs/01` §4.3.
+
+**Endpoints**: novos `GET /api/events/sumidos-google` e `POST /api/events/<id>/devolver-ao-google`;
+alterados `/sync`, `PATCH` de evento marcado (não escreve no Google), `cancelar`, `DELETE`,
+resumo da agenda (`situacao`), detalhe (`situacao`, `sumiu_do_google`, link nulo), `cleanup_past`,
+portal (`em_confirmacao`, avaliação de cancelado). Contrato: `specs/303-…/contracts/api-endpoints.md`.
+
+**Verificação**: `verify_303.py` **44/44 OK** (blocos B0–B5 e o 41, que prova que nenhuma
+chamada saiu do dublê do Google); primeira execução, antes do núcleo, 6/44 — só a lista fechada
+(`verify_303_primeira_falha.txt`). `verify_205.py` 137/137 (o V7.2 passou a provar que nenhum id
+virtual é consultado e que os não virtuais do mês sobrevivem — o V7.2 antigo **apagava** do
+espelho os eventos não virtuais do mês). `npm run typecheck` limpo; `ruff` sem erro novo (os 21
+antigos dos pacotes tocados seguem). Telas conferidas no Browser pane com a semeadura do verify e o
+backend `run-local-sem-google.py`; o resultado do "Limpar eventos fantasma" foi conferido com a
+resposta interceptada no navegador — confirmar a limpeza no local leria o Google real e alteraria
+o espelho. `/speckit-converge` (cinco leitores + refutação): devolução, FR-045 e frontend interno
+sem achado; cinco achados LOW, todos aplicados — entre eles o cenário 9, cuja conferência "a
+desmarca não manda e-mail" era vazia (evento sem ninguém escalado) e passou a ter elenco aceito,
+provada por mutação (local trocado no Google → o cenário falha).
+
+**Riscos e pegadinhas**
+
+* **Dois defeitos do verify, corrigidos durante a implementação** (registrados aqui porque o
+  verify foi escrito antes do núcleo): o **13b** armava a falha do aviso no primeiro aviso de
+  qualquer evento, e a limpeza percorre todos os meses — um evento que sobrou do cenário 13 a
+  consumia; passou a mirar os eventos do cenário. O **13d** punha o marcado num mês que o ciclo
+  lista, e a lista (cenário 9a) tirava a marca legitimamente; passou a usar um mês passado,
+  marcado pelo "Limpar".
+* **Até a segunda entrega, o Superadmin retém à mão**: o evento cancelado de verdade fica marcado,
+  e continua valendo em comissão, Planilha e DRE; o Financeiro não vê a faixa.
+* **Marcado que reaparece sozinho: vale o Google** — o que foi editado no sistema enquanto marcado
+  se perde, e vaga fora do título sai com e-mail de remoção. Só a devolução faz valer o sistema.
+* **Resposta perdida no `insert` da devolução**: o Google cria e o sistema não sabe; a mensagem
+  manda conferir na Agenda antes de tentar de novo. O "Devolver" nunca roda contra o Google real
+  antes da produção — teste pós-deploy com evento descartável (`quickstart.md` §6).
+* **Janela de deploy**: bundle novo com backend velho recebe 404 na faixa (fica oculta); backend
+  novo com bundle velho mostra o marcado como evento comum por minutos.
+* **O `rollback` do mês só em erro de banco**: em outro erro o pendente de `sync_events` fica na
+  sessão, porque os e-mails já saíram. Nos caminhos novos que chamam `sync_events` dentro da
+  unidade do evento, uma falha depois do e-mail o repete no ciclo seguinte.
+* **Sair de SHOW num evento marcado apaga os ensaios do Google de verdade**; a devolução recria só
+  o pai.
+* **Achado fora de escopo**: o alerta de ensaio de SHOW criado direto no Google sai por thread
+  antes do commit e a thread não acha o evento (`docs/05` 86).
+* **Contagem pré-deploy (01/10/2026, T140)**, contra o espelho restaurado do dump de 01/10 02:00
+  (último `audit_log` às 04:54 UTC), só leitura, 9 listas e 5 consultas ao Google: **9 meses (jan–set),
+  440 eventos, zero fora da lista** — **0** passados com dinheiro ausentes (nada seria marcado),
+  **0** que mudariam de data (nenhum e-mail de alteração), **0** inconclusivos, **0** vazios a
+  apagar. O primeiro "Limpar eventos fantasma" pode rodar com a regra normal. A sonda repetiu a de
+  30/09 (quatro apagados voltam com `status: cancelled`; o 1275 está presente). Saída em
+  `specs/303-…/contagem_2026-10-01.txt`. A migration subiu limpa no espelho desse dump
+  (`e5a1c7d93b20 → a7c3e91f4d28`), o que vale de ensaio da migration de produção.
+* **Revert**: `git revert` do merge é seguro para o schema (coluna aditiva e nullable, sem
+  downgrade), mas o código antigo trata o evento marcado como comum e o **apaga no ciclo seguinte**
+  (até 10 minutos), com comprovantes, contrato e escala. Antes de reverter: listar os marcados
+  (`google_missing_since IS NOT NULL AND cancelled_at IS NULL`) e **devolver todos** ao Google,
+  inclusive os cancelados de verdade. Só reverter com a faixa vazia — anotar a lista não preserva
+  nada.
 
 ### 302 — O artista passa a ver quando o evento termina, quando é o ensaio e de onde sai   (2026-09-22 · feature · sem migration)
 

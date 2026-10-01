@@ -7,8 +7,14 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-09-11** · Em branch: **298-formulario-vira-evento** (migration
-> **`e5a1c7d93b20`** — head: encerramento em `form_responses` e a tabela
+> Última atualização: **2026-09-30** · Em branch: **303-sync-nao-apaga-venda** (migration
+> **`a7c3e91f4d28`** — head: coluna `calendar_events.google_missing_since` e o índice parcial
+> `ix_calendar_events_google_missing_since`, §2.2; `GET /api/events/sumidos-google`, `POST
+> /api/events/<id>/devolver-ao-google` e as mudanças de `/sync`, `PATCH`, `cancelar`, `DELETE`,
+> agenda e detalhe, §3.3; números novos do `cleanup_past`, §3.11; produtor `evento.sumiu_google`,
+> §3.13.5; `em_confirmacao` e avaliação de cancelado no portal, §3.15; gates e a trava
+> `CALENDAR_SUPPRESS_EVENT_WRITES`, §4.3). Antes: **2026-09-11** · **298-formulario-vira-evento**
+> (migration **`e5a1c7d93b20`**: encerramento em `form_responses` e a tabela
 > `form_response_dismissed_events`, §2; bloco `formularios` do `/api/dashboard` reescrito, §3.2;
 > endpoints de destino do formulário e guarda de 409 antes do Google, §3.14; RBAC, §4.3). Antes:
 > **2026-09-08** · **296-revisao-harness** (sem migration; §5 reescrita para o
@@ -212,7 +218,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e de **toda** métrica, mas o registro fica porque é a ele que a devolução ao cliente se refere; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido do Comercial aguardando o Superadmin; zerados ao recusar ou ao atender) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
+| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e de **toda** métrica, mas o registro fica porque é a ele que a devolução ao cliente se refere; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido do Comercial aguardando o Superadmin; zerados ao recusar ou ao atender), **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
 | `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, **`cache_cap_note`** (Text, nullable — feature 239: a conta do teto EM VALORES, ex. "Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 = R$ 350"; só sai pela API para superadmin), `travel_cache`, **`does_transport`** (Boolean, nullable — feature 239: marcador puro "leva o carrinho de transporte fora de SP", mesma semântica `True`\|`NULL` de `needs_makeup`/`is_singer`; não guarda valor), `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at` | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users` |
 | `event_observations` | `EventObservation` | observações de evento (texto/foto) | `event_id` |
 | `event_contracts` | `EventContract` | arquivo + flag assinado | `event_id` |
@@ -402,7 +408,10 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
   pula todo item que a tenha (`_is_manto_task_item`). Sem isso o prazo viraria um `CalendarEvent`
   fantasma: o calendário é o mesmo dos shows e o sync importa tudo que encontra.
 - **`CALENDAR_SUPPRESS_INVITES`** (`config._suppress_calendar_invites`) impede um processo local
-  de escrever na agenda real — `manto_local` traz o token de produção e o calendário é fixo.
+  de escrever na agenda real — `manto_local` traz o token de produção e o calendário é fixo. A
+  trava irmã da feature 303, **`CALENDAR_SUPPRESS_EVENT_WRITES`**
+  (`config._suppress_calendar_event_writes`; escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`), cobre
+  **só** a devolução de evento marcado ao Google — ver §5.4.
 - **O fluxo depende do tipo** (225b): `FIGURINO_PROD_FLUXOS` define a ordem por `kind` e
   `producao_ops._transicoes_do_fluxo` **deriva** as transições dela — nunca escrever duas
   tabelas. Manutenção pula `aprovado`; nem SUPERADMIN consegue aprovar uma.
@@ -688,6 +697,8 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 |---|---|
 | GET | `/api/agenda`, `/api/agenda/day/<date_str>`, `/api/talents`, `/api/events/<id>`, `/api/events/new/options`, `/api/events/new/prefill` |
 | GET | `/api/events/<id>/casting-options` *(feature 215)* |
+| GET | `/api/events/sumidos-google` *(feature 303 — a faixa: `{pode_ver, total, limit, items: [{id, title, start_at}]}`; quem não vê recebe 200 vazio)* |
+| POST | `/api/events/<id>/devolver-ao-google` *(feature 303 — só Superadmin; responde o detalhe + `devolucao_google: {resultado}`; erros com `codigo`)* |
 | POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` |
 | POST | `/api/roles/<id>/assign`, `/api/roles/<id>/invite`, `/api/roles/<id>/figurino-done`, `/api/roles/<id>/dismiss`, `/api/roles/<id>/restore` |
 | POST | `/api/roles/<id>/payment-status`, `/api/roles/<id>/figurino-sheet` *(feature 192)* |
@@ -749,6 +760,20 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > `venda` ganha `sem_valor`/`a_definir`/`valor_simbolico`; `pagamentos` ganha `outros_do_grupo`.
 > A comissão que nasce quando o valor chega depois (evento cadastrado e vendido num mês anterior)
 > entra no ciclo do mês do valor (`payable_from`). Contratos: `specs/299-sem-valor-cobrancas/contracts/`.
+>
+> **Feature 303 — evento que sumiu do Google Agenda.** Contrato completo, com a tabela de erros e
+> os textos fixos: `specs/303-sync-nao-apaga-venda/contracts/api-endpoints.md`. O que muda aqui:
+> `POST /api/events/<id>/sync` confere o próprio evento no Google antes de mexer — ausência
+> confirmada → **409** "Este evento não está mais no Google Agenda. Nada foi alterado." (marcado ou
+> não; nada é tocado), sem resposta → 502 como antes, presente e marcado → a marca sai (histórico
+> com quem clicou) e sincroniza. `PATCH /api/events/<id>` e `…/basico` de evento marcado não
+> escrevem no Google e nunca dão 409 por isso. `POST …/cancelar` e `DELETE /api/events/<id>` de
+> evento marcado → **409** `codigo: "sumiu_do_google"` (a recusa mora em `cancelar_evento` e
+> `_delete_event_flow`; a rota Jinja `POST /events/<id>/delete` recusa pela mesma regra). Toda
+> exclusão passa a limpar o histórico do ensaio-filho e os avisos do sino do evento. Resumo da
+> agenda (mês, dia, busca): `situacao?` (`cancelado` > `sumiu_do_google` > `exclusao_solicitada`)
+> e `situacao_desde?`. Detalhe: `event.situacao?`, `event.sumiu_do_google?: {desde}` (só marcado e
+> não cancelado) e `event.google_html_link` nulo em evento marcado ou cancelado.
 
 ### 3.4 Talentos — `talents_read.py` / `talents_write.py`
 `GET /api/talents/directory`, `/api/talents/character-suggestions`, `/api/talents/<id>`,
@@ -938,6 +963,11 @@ valor corrigido, reatando só a FK dos já pagos e preservando os `SalaryAdvance
 `/migrar-arquivos/status`, `/importar-catalogo/status` · `PATCH /api/admin/settings` ·
 `POST /api/admin/sync/run`, `/portal-announcement`, `/migrar-arquivos/start`,
 `/importar-catalogo/start`.
+
+`POST /api/admin/sync/run` com `action: "cleanup_past"` (feature 303): cada linha de `results[]`
+traz `removed`, `marcados`, `movidos`, `desmarcados`, `inconclusivos` e `falhas` (números), com
+`ok` falso quando há falha ou erro de consulta (`err`); a `message` diz as seis somas no texto fixo
+do contrato da 303. `sync_now` não muda (não limpa).
 
 ### 3.12 Revisão de mídia — `revisao_read.py` / `revisao_write.py`
 `GET /api/revisao`, `/api/revisao/reviewer-options`, `/api/revisao/<space_id>`,
@@ -1248,6 +1278,12 @@ resposta **para quem abriu** (um GET que escreve, de propósito); `delete_respon
 resposta. Retenção (lida > 30 d, não lida > 180 d) no laço do review-cleanup e em `flask
 notificacoes-limpar [--execute]`.
 
+Produtor da feature 303: `notificar_evento_sumiu_google` (kind `evento.sumiu_google`, entidade
+`calendar_event`, `urgent`, COMERCIAL e SUPERADMIN), chamado por `sumico_ops.marcar` na mesma
+transação da marca; `dedupe_key` com o carimbo da marca (um aviso por sumiço, aviso novo se sumir
+de novo). Toda saída da marca dá o aviso como lido para todos; a exclusão do evento apaga os avisos
+dele (`_delete_event`).
+
 **Feature 298**: formulário que ganha destino (ligado a evento por qualquer caminho, ou encerrado)
 tem os avisos marcados como lidos **para todos** (`notificacoes_ops.marcar_lidas_por_entidade`, sem
 filtro de usuário, na transação do fato); reabrir não reacende; formulário que já chega ligado não
@@ -1373,6 +1409,10 @@ serializador (`portal_ops._role_summary`) e carrega, desde a feature 302, mais d
   ensaio cancelado, sem ensaio **já realizado** e **sem a `description` do ensaio** — aquele campo
   guarda endereço, não observação. O bloco vai em `pending_invites` e `upcoming`; no `history` é
   sempre `null`.
+- **`em_confirmacao`** (feature 303) — booleano, verdadeiro quando o evento está marcado "Sumiu do
+  Google Agenda" e não cancelado. Vai o código, nunca o motivo: a tela escreve "Evento em
+  confirmação — entre em contato com a produção". Em `pending_invites`, `upcoming` e `history` da
+  agenda e em `items` do histórico; opcional no TypeScript, como as duas acima.
 
 > **`history` continua no payload da agenda de propósito**, embora a tela tenha parado de usá-lo na
 > 302. `manto-backend` e `manto-frontend` são serviços separados no `render.yaml` e não trocam de
@@ -1396,7 +1436,10 @@ era o único dos cinco do portal sem ela.
 `POST /api/portal/events/<event_id>/rate/detail` (sub-notas).
 Janelas: **7 dias** para avaliar e **30 dias** para editar, contadas do mais recente entre o fim
 do evento e `EventRole.assigned_at` (feature 085). Nota abaixo de 4 exige comentário. Toda edição
-que muda conteúdo grava a versão anterior em `EventRatingVersion` (feature 181).
+que muda conteúdo grava a versão anterior em `EventRatingVersion` (feature 181). Evento cancelado
+(feature 303): `rateable_event_ids` e `editable_event_ids` de `ratings/pending` nunca o trazem
+(`rated_event_ids` não muda), e `GET|POST …/rate` e `POST …/rate/detail` respondem **400** "Este
+evento foi cancelado e não recebe avaliação." — depois do 404 de quem não está escalado.
 
 **Núcleo de negócio** (fonte única, reusada pelo Jinja legado): `app/talent_portal/portal_ops.py`
 (agenda, convites, figurino, uploads, perfil, portfólio, histórico),
@@ -1530,7 +1573,10 @@ Gates por módulo (todos em `app/api/`):
 |---|---|---|
 | `_require_superadmin()` | `admin_catalogo_*`, `admin_config_*`, `orcamento_read` | `SUPERADMIN` |
 | `_require_users_access()` | `admin_users_*` | `SUPERADMIN`, `FINANCEIRO` |
-| `_can_create_event()` / `_can_edit_event()` / `_can_delete()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT`/`_CAN_DELETE` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` |
+| `_can_create_event()` / `_can_edit_event()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` (criar); `_CAN_EDIT_EVENT` (editar) |
+| `_can_delete()` | `agenda_write` (delega para `_CAN_DELETE`): excluir, cancelar, recusar solicitação e — feature 303 — `POST /api/events/<id>/devolver-ao-google`, sempre depois do 404 | `SUPERADMIN` (papel real; desde a 224 o Comercial só **solicita**) |
+| `_ve_faixa_sumidos()` | `agenda.py`, `GET /api/events/sumidos-google` (feature 303) | `SUPERADMIN` ou `COMERCIAL` pelo **papel efetivo** (respeita o "Ver como"); os demais recebem **200** com `pode_ver: false` e a lista vazia — nunca 403 |
+| — (sem gate de papel) | `POST /api/events/<id>/sync` | qualquer usuário interno logado, como sempre; desde a 303 ele confere o evento no Google antes de mexer e pode **retirar a marca** "Sumiu do Google Agenda" de um evento que voltou |
 | `_can_casting()` | `agenda_write` (remover cargo) | `CASTING`, `SUPERADMIN` |
 | `_can_manage_sale()` | `agenda_write` (nota fiscal) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_can_manage_sale()` | `PATCH /api/events/<id>/orcamento` (feature 273; na 299 o valor simbólico passou a contar como "sem venda") | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`. **Autoria (feature 301)**: *vincular* em evento sem orçamento é livre para quem tem o módulo de Orçamento (COMERCIAL/SUPERADMIN) — FINANCEIRO passa neste gate mas leva **404** ao apontar orçamento que não é dele; *trocar, desvincular ou re-aplicar* sobre vínculo de outra pessoa → **409 `orcamento_de_outro`**, nomeando o autor. Os três verbos: `aplicar` escreve `sale_date`, que decide o mês da comissão |
@@ -1863,7 +1909,7 @@ trade-offs herdados, documentados acima.
 | Alvo | Comando |
 |---|---|
 | Backend (SQLite casual) | `python run.py` |
-| Backend contra a cópia real | `$env:MANTO_SEM_THREADS='1'; $env:FLASK_ENV='development'; .\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`). ⚠️ **O espelho traz o token do Google e as credenciais de e-mail reais** — sem as duas variáveis o `create_app()` sobe as threads de fundo e escreve na agenda da empresa; as travas `_suppress_mail`/`_suppress_calendar_invites` (`app/config.py`) cobrem só e-mail e convite. `/scripts/db/` é gitignored (entrada `/scripts/db/`): contém caminhos e credenciais locais; o conteúdo esperado está em `DEVELOPMENT.md`. Verificação funcional = `specs/NNN-nome/verify_NNN.py` (versionado; os anteriores à 266 em `scripts/db/`) — não há `tests/` nem pytest |
+| Backend contra a cópia real | `$env:MANTO_SEM_THREADS='1'; $env:FLASK_ENV='development'; .\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`). ⚠️ **O espelho traz o token do Google e as credenciais de e-mail reais** — sem as duas variáveis o `create_app()` sobe as threads de fundo e escreve na agenda da empresa; as travas `_suppress_mail`/`_suppress_calendar_invites` (`app/config.py`) cobrem só e-mail e convite, e `_suppress_calendar_event_writes` (`CALENDAR_SUPPRESS_EVENT_WRITES`, feature 303; escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`) cobre só a devolução ao Google — o sync, a limpeza e o "Sincronizar" continuam LENDO o Google real no local, e criar, editar, excluir e cancelar evento continuam escrevendo. `/scripts/db/` é gitignored (entrada `/scripts/db/`): contém caminhos e credenciais locais; o conteúdo esperado está em `DEVELOPMENT.md`. Verificação funcional = `specs/NNN-nome/verify_NNN.py` (versionado; os anteriores à 266 em `scripts/db/`) — não há `tests/` nem pytest |
 | Frontend staff | `cd frontend && npm run dev:internal` |
 | Frontend público | `cd frontend && npm run dev:public` |
 | Frontend portal | `cd frontend && npm run dev:portal` |

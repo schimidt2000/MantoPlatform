@@ -107,6 +107,17 @@ cobrem e-mail e convite; `MANTO_SEM_THREADS=1` desliga as threads de fundo (auto
 talentos, sync da agenda, backup) e `FLASK_ENV=development` segura o resto. Integração nova
 precisa da própria trava (constituição XIV).
 
+A terceira trava, da feature 303, é `_suppress_calendar_event_writes` /
+`CALENDAR_SUPPRESS_EVENT_WRITES`: deriva do host do banco e cobre **só** a devolução de evento
+marcado ao Google Agenda (travada, não sai nenhuma chamada — nem a consulta; a tela responde "Este
+ambiente não escreve no Google Agenda"). A sincronização, o "Limpar eventos fantasma" e o
+"Sincronizar" de um evento continuam **lendo** o Google real no local (e a limpeza altera o
+espelho com o que leu), e criar, editar, excluir e cancelar evento continuam **escrevendo**. O
+escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true` libera a devolução no local — e cria evento de
+verdade na agenda da empresa, que a produção importa minutos depois. Para conferir tela sem
+escrever no Google, suba o backend com `scripts/db/run-local-sem-google.py` (dubla
+`insert`/`update`/`delete`; a leitura continua real).
+
 ### Frontend
 
 ```powershell
@@ -137,6 +148,7 @@ O `.env` local (nunca commitado) carrega via `python-dotenv` **apenas em `run.py
 | `MANTO_SEM_THREADS` | `1` em todo script e no preview | só em comando de manutenção no Shell/SSH |
 | `SECRET_KEY` | qualquer valor | chave segura (`sync: false`) |
 | `MAIL_*` | supressão automática (banco em localhost); `MAIL_ALLOW_LOCAL_SEND=true` só de propósito | reais (`sync: false`) |
+| `CALENDAR_SUPPRESS_EVENT_WRITES` / `CALENDAR_ALLOW_LOCAL_EVENT_WRITES` | (ausentes) — a devolução ao Google nasce **travada** (banco em localhost); `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true` só de propósito | **não definir** — destravada por padrão; `CALENDAR_SUPPRESS_EVENT_WRITES=true` trava em qualquer ambiente (feature 303) |
 | `PORTAL_URL` | `http://localhost:5000` (opcional) | **não definir** — o default é `PORTAL_BASE_URL` (`https://portal.mantoproducoes.com.br`); valor local é ignorado por quem envia e-mail de verdade (269b) |
 | `PUBLIC_BASE_URL` | (ausente) | **não definir** — default `PLATFORM_BASE_URL` |
 | `GOOGLE_OAUTH_REDIRECT_URI` | `http://localhost:5000/google/callback` | URL pública registrada no Google Cloud Console + `/google/callback` (`sync: false`) — nunca copiar o valor local |

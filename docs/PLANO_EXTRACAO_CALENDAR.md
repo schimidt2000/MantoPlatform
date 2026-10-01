@@ -54,9 +54,16 @@ artista, em silêncio.** Colar **verbatim** — não reformatar, não "melhorar"
   `from app.financeiro.routes import _sync_commission_payment`. Mesmo padrão de `group_ops.agrupar`.
   **Passar nos DOIS call sites** (`routes.py:3905` e `api/agenda_write.py:747`): o default `None`
   não pode virar no-op silencioso em produção.
-- `delete_event_row` em `cleanup_stale_events` — evita puxar `cancel_ops.aplicar_estorno_comissao`.
-- `sync_events` em `sync_single_event_flow` — sem isso há **ciclo de import**. Bônus: o monkeypatch
-  de `verify_151_excluir_sync.py:46` continua funcionando.
+- ~~`delete_event_row` em `cleanup_stale_events`~~ — **superado pela feature 303**: a limpeza por
+  sumiço já saiu de `routes.py` — o núcleo é `app/calendar/sumico_ops.py`, e `_cleanup_stale_events`
+  ficou em `routes.py` como delegação de uma linha (o corte 3 não precisa mais levá-la).
+  `sumico_ops` chega a `_delete_event`, `sync_events`, `_log_sync` e `_is_virtual_event` por
+  **import tardio**, não por injeção — exceção registrada no plano da 303. Quem fizer o corte 3
+  aponta esses imports para o módulo novo.
+- `sync_events` em `sync_single_event_flow` — sem isso há **ciclo de import**. **Desde a 303** o
+  "Sincronizar" usa `service.consultar_evento` (não mais `fetch_single_event`) e recebe
+  `actor_name`/`actor_role`; o monkeypatch de `verify_151_excluir_sync.py:46` deixou de valer — o
+  verify não roda sem ajuste (consultaria o Google real).
 - `compute_performer_caches` em `build_orcamento_prefill` — só 2 call sites, não se espalha.
 - Os diretórios de upload (`payments_dir`, `contracts_dir`, `invoice_dir`) vindos de
   `current_app.config`, no grupo **registros**.
