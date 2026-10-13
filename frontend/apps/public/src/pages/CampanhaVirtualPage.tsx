@@ -15,15 +15,27 @@ import {
   type VirtualModality,
   type VirtualSlotPublic,
 } from "../lib/virtuais";
+import { AVISO_UM_FORMATO, CAMPANHA, FAQ_LOJA, FORMATOS, whatsappLink } from "../lib/lojaTema";
+import {
+  BOTAO_PRINCIPAL,
+  BOTAO_SECUNDARIO,
+  Ornamento,
+  TituloSecao,
+  classeCampo,
+} from "../components/loja/LojaLayout";
 
 /**
- * Landing e checkout da Loja de Interações Virtuais (feature 205, US2).
+ * Landing e checkout da Loja de Interações Virtuais (feature 205, US2; tema da estação na 304).
  *
  * Mobile-first de verdade (Princípio X): coluna única, alvos de toque ≥ 44px, nada de texto
  * informativo abaixo de 12px, e nenhuma largura fixa que force rolagem horizontal em 320px.
  *
  * O FAQ fica **apenas no fim da página** (FR-013): quem chegou pelo Instagram quer ver preço e
  * horário primeiro; a dúvida vem depois, e o que o FAQ não resolve vira WhatsApp.
+ *
+ * Cada reserva é de UM formato — chamada ao vivo ou vídeo gravado (decisão do dono, 304). A
+ * cartinha não é campo: é algo que a criança faz durante a chamada, e o formulário só convida a
+ * família a contar o que está escrito nela.
  */
 
 const CAMPOS_ROLAVEIS = [
@@ -35,13 +47,29 @@ const CAMPOS_ROLAVEIS = [
   "slot_id",
 ] as const;
 
-function formatarHorario(iso: string): string {
-  return new Date(iso).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
+/**
+ * `start_at` chega sem fuso (`2026-12-20T14:00:00`): é a hora de parede de São Paulo, a mesma
+ * que o time vê na agenda. Lemos dia e hora do próprio texto, sem passar por `Date`, para que uma
+ * família em outro fuso veja o horário que foi de fato combinado.
+ */
+function diaDoHorario(iso: string): string {
+  return iso.slice(0, 10);
+}
+
+function horaDoHorario(iso: string): string {
+  return iso.slice(11, 16);
+}
+
+function rotuloDoDia(dia: string): string {
+  const [ano, mes, d] = dia.split("-").map(Number);
+  // Meio-dia: longe da virada do dia em qualquer fuso, só para o nome do dia da semana.
+  const data = new Date(ano, mes - 1, d, 12);
+  const texto = data.toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
   });
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
 /** Conta o tempo restante do soft lock (FR-019). */
@@ -102,6 +130,16 @@ export function CampanhaVirtualPage() {
     );
   }, [campanha, modalidade]);
 
+  // Horários agrupados por dia, na ordem em que a API devolve (já cronológica).
+  const dias = useMemo(() => {
+    const grupos = new Map<string, VirtualSlotPublic[]>();
+    for (const slot of horarios?.slots ?? []) {
+      const dia = diaDoHorario(slot.start_at);
+      grupos.set(dia, [...(grupos.get(dia) ?? []), slot]);
+    }
+    return [...grupos.entries()];
+  }, [horarios]);
+
   const precoPresente = presenteId ? apiMoneyToNumber(campanha?.price_gift ?? null) : 0;
   const total = precoInteracao + precoPresente;
   const gravadoEsgotado = (campanha?.recorded_available ?? 0) <= 0;
@@ -161,9 +199,9 @@ export function CampanhaVirtualPage() {
   if (isLoading) {
     return (
       <div className="mx-auto max-w-lg space-y-3 px-4 py-6">
-        <div className="h-40 animate-pulse rounded-xl bg-surface-2" />
-        <div className="h-6 w-2/3 animate-pulse rounded bg-surface-2" />
-        <div className="h-24 animate-pulse rounded bg-surface-2" />
+        <div className="h-72 animate-pulse rounded-2xl bg-alo-surface" />
+        <div className="h-7 w-2/3 animate-pulse rounded bg-alo-surface" />
+        <div className="h-24 animate-pulse rounded bg-alo-surface" />
       </div>
     );
   }
@@ -171,20 +209,44 @@ export function CampanhaVirtualPage() {
   if (error || !campanha) {
     const status = (error as { status?: number } | null)?.status;
     return (
-      <div className="mx-auto max-w-lg px-4 py-10 text-center">
-        <h1 className="font-display text-xl text-ink">
-          {status === 410 ? "Campanha encerrada por ora" : "Campanha não encontrada"}
+      <div className="mx-auto max-w-lg px-4 py-16 text-center">
+        <Ornamento />
+        <h1 className="mt-4 font-alo-display text-[26px] text-alo-gold">
+          {status === 410 ? "As reservas estão fechadas por enquanto" : "Não encontramos esta página"}
         </h1>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-3 text-[14px] text-alo-muted">
           {status === 410
-            ? "As vendas desta campanha estão pausadas. Fique de olho nas nossas redes!"
+            ? "A agenda está pausada. Fique de olho nas nossas redes — ou chame a gente no WhatsApp."
             : "Confira o link que você recebeu — talvez tenha faltado um pedaço."}
         </p>
+        <a
+          href={whatsappLink()}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`mt-6 ${BOTAO_SECUNDARIO}`}
+        >
+          Falar com a gente no WhatsApp
+        </a>
       </div>
     );
   }
 
-  const campoInvalido = (campo: string) => (erros[campo] ? "border-red" : "border-line");
+  // O título da campanha do Natal já diz "com o Papai Noel"; repetir o personagem embaixo
+  // seria eco. Só mostra quando o título não o nomeia.
+  const mostrarPersonagem =
+    campanha.character &&
+    !campanha.title.toLowerCase().includes(campanha.character.name.toLowerCase());
+  const dicasDoFormato = CAMPANHA.dicas[modalidade];
+  // Campanha sem FAQ próprio herda o da loja (304): quem chega direto pelo link da campanha —
+  // story, bio — nunca passa pela vitrine, e é justamente aqui, perto do "Reservar", que a dúvida
+  // aparece. Uma fonte só para o texto, em vez de copiá-lo para o banco de cada campanha.
+  const faq = campanha.faq.length > 0 ? campanha.faq : FAQ_LOJA;
+  const cartao = (selecionado: boolean) =>
+    `min-h-[44px] rounded-2xl border p-4 text-left transition-colors ${
+      selecionado
+        ? "border-alo-gold bg-alo-surface-2 ring-1 ring-alo-gold"
+        : "border-alo-line bg-alo-surface hover:border-alo-gold/50"
+    }`;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-6">
@@ -192,16 +254,21 @@ export function CampanhaVirtualPage() {
         <img
           src={assetUrl(campanha.cover_url) ?? undefined}
           alt={campanha.title}
-          className="mb-4 w-full rounded-xl object-cover"
+          className="mb-5 w-full rounded-2xl border border-alo-line object-cover"
         />
       )}
 
-      <h1 className="font-display text-2xl text-ink">{campanha.title}</h1>
-      {campanha.character && (
-        <p className="text-sm text-muted">com {campanha.character.name}</p>
+      <h1 className="text-center font-alo-display text-[30px] leading-tight text-alo-ink">
+        {campanha.title}
+      </h1>
+      {mostrarPersonagem && (
+        <p className="text-center text-[14px] text-alo-muted">com {campanha.character?.name}</p>
       )}
+      <Ornamento className="mt-3" />
       {campanha.intro_html && (
-        <p className="mt-3 whitespace-pre-line text-sm text-ink">{campanha.intro_html}</p>
+        <p className="mt-4 whitespace-pre-line text-[15px] leading-relaxed text-alo-ink">
+          {campanha.intro_html}
+        </p>
       )}
 
       <AnimatePresence>
@@ -210,7 +277,7 @@ export function CampanhaVirtualPage() {
             initial={reduceMotion ? false : { opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="mt-4 rounded-lg border border-gold bg-gold-soft p-3 text-sm text-ink"
+            className="mt-4 rounded-xl border border-alo-gold bg-alo-surface-2 p-3 text-[14px] text-alo-ink"
             role="status"
           >
             {avisoTopo}
@@ -218,37 +285,55 @@ export function CampanhaVirtualPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Modalidade ─────────────────────────────────────────────────── */}
-      <section className="mt-6">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-muted">O que você quer</h2>
-        <div className="mt-2 grid gap-2">
+      {/* ── Formato ────────────────────────────────────────────────────── */}
+      <section className="mt-8">
+        <TituloSecao>Escolha o formato</TituloSecao>
+        <p className="mt-1 text-[13px] text-alo-muted">{AVISO_UM_FORMATO}</p>
+        <div className="mt-3 grid gap-3">
           <button
             type="button"
+            aria-pressed={modalidade === "ao_vivo"}
             onClick={() => setModalidade("ao_vivo")}
-            className={`min-h-[44px] rounded-xl border p-3 text-left ${
-              modalidade === "ao_vivo" ? "border-accent bg-accent-soft" : "border-line"
-            }`}
+            className={cartao(modalidade === "ao_vivo")}
           >
-            <span className="block font-medium text-ink">Chamada ao vivo · 10 minutos</span>
-            <span className="block text-[13px] text-muted">
-              R$ {formatBRL(apiMoneyToNumber(campanha.price_live))}
+            <span className="flex items-baseline justify-between gap-3">
+              <span className="font-alo-display text-[19px] text-alo-gold">
+                {FORMATOS.ao_vivo.nome}
+              </span>
+              <span className="font-bold text-alo-ink">
+                R$ {formatBRL(apiMoneyToNumber(campanha.price_live))}
+              </span>
+            </span>
+            <span className="block text-[12px] uppercase tracking-[0.12em] text-alo-muted">
+              {FORMATOS.ao_vivo.detalhe}
+            </span>
+            <span className="mt-1 block text-[13px] text-alo-ink">
+              A criança conversa ao vivo e pode mostrar a cartinha.
             </span>
           </button>
 
           <button
             type="button"
+            aria-pressed={modalidade === "gravado"}
             disabled={gravadoEsgotado}
             onClick={() => setModalidade("gravado")}
-            className={`min-h-[44px] rounded-xl border p-3 text-left disabled:opacity-50 ${
-              modalidade === "gravado" ? "border-accent bg-accent-soft" : "border-line"
-            }`}
+            className={`${cartao(modalidade === "gravado")} disabled:cursor-not-allowed disabled:opacity-50`}
           >
-            <span className="block font-medium text-ink">
-              Vídeo gravado {gravadoEsgotado && "· esgotado"}
+            <span className="flex items-baseline justify-between gap-3">
+              <span className="font-alo-display text-[19px] text-alo-gold">
+                {FORMATOS.gravado.nome}
+                {gravadoEsgotado && " · esgotado"}
+              </span>
+              <span className="font-bold text-alo-ink">
+                R$ {formatBRL(apiMoneyToNumber(campanha.price_recorded))}
+              </span>
             </span>
-            <span className="block text-[13px] text-muted">
-              R$ {formatBRL(apiMoneyToNumber(campanha.price_recorded))} · entrega em até{" "}
-              {campanha.recorded_delivery_days} dias
+            <span className="block text-[12px] uppercase tracking-[0.12em] text-alo-muted">
+              {FORMATOS.gravado.detalhe}
+            </span>
+            <span className="mt-1 block text-[13px] text-alo-ink">
+              Um recado só para a sua criança, entregue em até {campanha.recorded_delivery_days}{" "}
+              dias.
             </span>
           </button>
         </div>
@@ -256,46 +341,58 @@ export function CampanhaVirtualPage() {
 
       {/* ── Horários ───────────────────────────────────────────────────── */}
       {modalidade === "ao_vivo" && (
-        <section className="mt-6" ref={(el) => (refs.current.slot_id = el)} tabIndex={-1}>
-          <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Escolha o horário</h2>
-          {(horarios?.slots.length ?? 0) === 0 ? (
-            <p className="mt-2 text-[13px] text-muted">
-              Nenhum horário disponível agora. Fale com a gente pelo WhatsApp abaixo.
+        <section className="mt-8" ref={(el) => (refs.current.slot_id = el)} tabIndex={-1}>
+          <TituloSecao>Escolha o dia e a hora</TituloSecao>
+          {dias.length === 0 ? (
+            <p className="mt-2 text-[14px] text-alo-muted">
+              Nenhum horário livre agora. Fale com a gente pelo WhatsApp abaixo — ou escolha o
+              vídeo gravado, que não tem hora marcada.
             </p>
           ) : (
-            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {horarios?.slots.map((slot: VirtualSlotPublic) => (
-                <button
-                  key={slot.id}
-                  type="button"
-                  onClick={() => setSlotId(slot.id)}
-                  className={`min-h-[44px] rounded-lg border px-2 text-[13px] ${
-                    slotId === slot.id ? "border-accent bg-accent-soft" : "border-line"
-                  }`}
-                >
-                  {formatarHorario(slot.start_at)}
-                </button>
-              ))}
-            </div>
+            <>
+              <p className="mt-1 text-[13px] text-alo-muted">Horário de Brasília.</p>
+              <div className="mt-3 space-y-4">
+                {dias.map(([dia, slots]) => (
+                  <div key={dia}>
+                    <p className="text-[14px] font-semibold text-alo-ink">{rotuloDoDia(dia)}</p>
+                    <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                      {slots.map((slot) => (
+                        <button
+                          key={slot.id}
+                          type="button"
+                          aria-pressed={slotId === slot.id}
+                          onClick={() => setSlotId(slot.id)}
+                          className={`min-h-[44px] rounded-lg border text-[15px] transition-colors ${
+                            slotId === slot.id
+                              ? "border-alo-gold bg-alo-gold font-bold text-alo-bg"
+                              : "border-alo-line-strong bg-alo-surface text-alo-ink hover:border-alo-gold"
+                          }`}
+                        >
+                          {horaDoHorario(slot.start_at)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
-          {erros.slot_id && <p className="mt-1 text-[12px] text-red">{erros.slot_id}</p>}
+          {erros.slot_id && <p className="mt-2 text-[13px] text-alo-error">{erros.slot_id}</p>}
         </section>
       )}
 
       {/* ── Presente 3D ────────────────────────────────────────────────── */}
       {campanha.gift_items.length > 0 && (
-        <section className="mt-6">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-muted">
-            Quer levar um presente?
-          </h2>
-          <p className="text-[13px] text-muted">
-            + R$ {formatBRL(apiMoneyToNumber(campanha.price_gift))}
+        <section className="mt-8">
+          <TituloSecao>{CAMPANHA.presenteTitulo}</TituloSecao>
+          <p className="mt-1 text-[13px] text-alo-muted">
+            {CAMPANHA.presenteTexto} + R$ {formatBRL(apiMoneyToNumber(campanha.price_gift))}
           </p>
           {/* Acima de 10 peças, a grade viraria uma parede de miniaturas e o `Combobox`
               pesquisável é obrigatório (Princípio XII.1). Com poucas, a escolha visual direta é
-              melhor no celular: a mãe vê o presente em vez de ler uma lista. */}
+              melhor no celular: a família vê o presente em vez de ler uma lista. */}
           {campanha.gift_items.length > 10 ? (
-            <div className="mt-2">
+            <div className="mt-3">
               <Combobox
                 options={campanha.gift_items.map((item) => ({
                   value: String(item.id),
@@ -311,15 +408,17 @@ export function CampanhaVirtualPage() {
               />
             </div>
           ) : (
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               {campanha.gift_items.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   aria-pressed={presenteId === item.id}
                   onClick={() => setPresenteId(presenteId === item.id ? null : item.id)}
-                  className={`flex min-h-[44px] items-center gap-2 rounded-lg border px-2 py-1 ${
-                    presenteId === item.id ? "border-accent bg-accent-soft" : "border-line"
+                  className={`flex min-h-[44px] items-center gap-2 rounded-xl border px-2 py-1 ${
+                    presenteId === item.id
+                      ? "border-alo-gold bg-alo-surface-2 ring-1 ring-alo-gold"
+                      : "border-alo-line bg-alo-surface"
                   }`}
                 >
                   <AvatarThumb
@@ -329,7 +428,7 @@ export function CampanhaVirtualPage() {
                     size="sm"
                     fallbackIcon="🎁"
                   />
-                  <span className="text-[13px] text-ink">{item.name}</span>
+                  <span className="text-[14px] text-alo-ink">{item.name}</span>
                 </button>
               ))}
             </div>
@@ -338,11 +437,11 @@ export function CampanhaVirtualPage() {
       )}
 
       {/* ── Ficha da criança ───────────────────────────────────────────── */}
-      <section className="mt-6 space-y-3">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-muted">Sobre a criança</h2>
+      <section className="mt-8 space-y-4">
+        <TituloSecao>{CAMPANHA.fichaTitulo}</TituloSecao>
 
         <div>
-          <label className="text-[13px] text-muted" htmlFor="child_name">
+          <label className="text-[13px] text-alo-muted" htmlFor="child_name">
             Nome da criança
           </label>
           <input
@@ -350,13 +449,14 @@ export function CampanhaVirtualPage() {
             ref={(el) => (refs.current.child_name = el)}
             value={nome}
             onChange={(e) => setNome(e.target.value)}
-            className={`min-h-[44px] w-full rounded-lg border bg-surface px-3 text-[15px] text-ink ${campoInvalido("child_name")}`}
+            autoComplete="off"
+            className={classeCampo(Boolean(erros.child_name))}
           />
-          {erros.child_name && <p className="mt-1 text-[12px] text-red">{erros.child_name}</p>}
+          {erros.child_name && <p className="mt-1 text-[13px] text-alo-error">{erros.child_name}</p>}
         </div>
 
         <div>
-          <label className="text-[13px] text-muted" htmlFor="child_age">
+          <label className="text-[13px] text-alo-muted" htmlFor="child_age">
             Idade
           </label>
           <input
@@ -367,64 +467,68 @@ export function CampanhaVirtualPage() {
             min={0}
             value={idade}
             onChange={(e) => setIdade(e.target.value)}
-            className={`min-h-[44px] w-full rounded-lg border bg-surface px-3 text-[15px] text-ink ${campoInvalido("child_age")}`}
+            className={classeCampo(Boolean(erros.child_age))}
           />
-          {erros.child_age && <p className="mt-1 text-[12px] text-red">{erros.child_age}</p>}
+          {erros.child_age && <p className="mt-1 text-[13px] text-alo-error">{erros.child_age}</p>}
         </div>
 
         <div>
-          <label className="text-[13px] text-muted" htmlFor="behavior_notes">
-            Dicas para o personagem (o que ela adora, quem são os irmãos…)
+          <label className="text-[13px] text-alo-muted" htmlFor="behavior_notes">
+            {dicasDoFormato.rotulo}
           </label>
           <textarea
             id="behavior_notes"
             value={dicas}
             onChange={(e) => setDicas(e.target.value)}
-            className="min-h-24 w-full rounded-lg border border-line bg-surface px-3 py-2 text-[15px] text-ink"
+            placeholder={dicasDoFormato.exemplo}
+            rows={4}
+            className={`${classeCampo(false)} py-2 leading-relaxed`}
           />
         </div>
 
         <div>
-          <label className="text-[13px] text-muted" htmlFor="contact_phone">
-            Telefone (WhatsApp)
+          <label className="text-[13px] text-alo-muted" htmlFor="contact_phone">
+            Seu telefone (WhatsApp)
           </label>
           <input
             id="contact_phone"
             ref={(el) => (refs.current.contact_phone = el)}
             inputMode="tel"
+            autoComplete="tel"
             value={telefone}
             onChange={(e) => setTelefone(e.target.value)}
-            className={`min-h-[44px] w-full rounded-lg border bg-surface px-3 text-[15px] text-ink ${campoInvalido("contact_phone")}`}
+            className={classeCampo(Boolean(erros.contact_phone))}
           />
           {erros.contact_phone && (
-            <p className="mt-1 text-[12px] text-red">{erros.contact_phone}</p>
+            <p className="mt-1 text-[13px] text-alo-error">{erros.contact_phone}</p>
           )}
         </div>
 
         <div>
-          <label className="text-[13px] text-muted" htmlFor="contact_email">
-            E-mail
+          <label className="text-[13px] text-alo-muted" htmlFor="contact_email">
+            Seu e-mail
           </label>
           <input
             id="contact_email"
             ref={(el) => (refs.current.contact_email = el)}
             type="email"
             inputMode="email"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className={`min-h-[44px] w-full rounded-lg border bg-surface px-3 text-[15px] text-ink ${campoInvalido("contact_email")}`}
+            className={classeCampo(Boolean(erros.contact_email))}
           />
           {erros.contact_email && (
-            <p className="mt-1 text-[12px] text-red">{erros.contact_email}</p>
+            <p className="mt-1 text-[13px] text-alo-error">{erros.contact_email}</p>
           )}
-          <p className="mt-1 text-[12px] text-muted">
-            É por aqui que mandamos a confirmação e o acesso.
+          <p className="mt-1 text-[12px] text-alo-muted">
+            É por aqui que mandamos a confirmação e a página do pedido.
           </p>
         </div>
 
         {presenteId && (
           <div ref={(el) => (refs.current.delivery_address = el)} tabIndex={-1}>
-            <label className="text-[13px] text-muted" htmlFor="delivery_address">
+            <label className="text-[13px] text-alo-muted" htmlFor="delivery_address">
               Endereço de entrega do presente
             </label>
             <EnderecoInput
@@ -434,22 +538,25 @@ export function CampanhaVirtualPage() {
               invalid={Boolean(erros.delivery_address)}
             />
             {erros.delivery_address && (
-              <p className="mt-1 text-[12px] text-red">{erros.delivery_address}</p>
+              <p className="mt-1 text-[13px] text-alo-error">{erros.delivery_address}</p>
             )}
           </div>
         )}
       </section>
 
       {/* ── Total e envio ──────────────────────────────────────────────── */}
-      <section className="mt-6 rounded-xl border border-line p-4">
+      <section className="mt-8 rounded-2xl border border-alo-gold/50 bg-alo-surface p-4">
         <div className="flex items-center justify-between">
-          <span className="text-[15px] text-ink">Total</span>
-          <span className="text-lg font-bold text-ink">R$ {formatBRL(total)}</span>
+          <span className="text-[15px] text-alo-muted">
+            {modalidade === "ao_vivo" ? FORMATOS.ao_vivo.nome : FORMATOS.gravado.nome}
+            {presenteId ? " + presente" : ""}
+          </span>
+          <span className="font-alo-display text-[24px] text-alo-gold">R$ {formatBRL(total)}</span>
         </div>
 
         {lockRestante && (
-          <p className="mt-2 text-[13px] text-muted">
-            Horário reservado para você por mais <strong>{lockRestante}</strong>.
+          <p className="mt-2 text-[13px] text-alo-muted">
+            Horário guardado para você por mais <strong className="text-alo-ink">{lockRestante}</strong>.
           </p>
         )}
 
@@ -457,45 +564,47 @@ export function CampanhaVirtualPage() {
           type="button"
           onClick={enviar}
           disabled={reservar.isPending}
-          className="mt-3 min-h-[48px] w-full rounded-xl bg-accent px-4 text-[15px] font-bold text-white disabled:opacity-60"
+          className={`mt-4 ${BOTAO_PRINCIPAL}`}
         >
-          {reservar.isPending ? "Reservando…" : "Reservar e pagar"}
+          {reservar.isPending ? "Reservando…" : "Reservar e pagar →"}
         </button>
+        <p className="mt-2 text-center text-[12px] text-alo-muted">Cartão ou PIX, em link seguro.</p>
 
         {campanha.tolerance_terms && (
-          <p className="mt-3 text-[12px] text-muted">{campanha.tolerance_terms}</p>
+          <p className="mt-3 whitespace-pre-line border-t border-alo-line pt-3 text-[12px] leading-relaxed text-alo-muted">
+            {campanha.tolerance_terms}
+          </p>
         )}
       </section>
 
       {/* ── FAQ (somente no fim da página — FR-013) ────────────────────── */}
-      {campanha.faq.length > 0 && (
-        <section className="mt-8">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-muted">
-            Perguntas frequentes
-          </h2>
-          <div className="mt-2 divide-y divide-line">
-            {campanha.faq.map((item, i) => (
-              <details key={i} className="py-2">
-                <summary className="min-h-[44px] cursor-pointer text-[15px] text-ink">
+      {faq.length > 0 && (
+        <section className="mt-10">
+          <TituloSecao>Perguntas frequentes</TituloSecao>
+          <div className="mt-3 divide-y divide-alo-line">
+            {faq.map((item, i) => (
+              <details key={i} className="group py-2">
+                <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-3 text-[15px] text-alo-ink">
                   {item.pergunta}
+                  <span aria-hidden="true" className="text-alo-gold transition-transform group-open:rotate-45">
+                    +
+                  </span>
                 </summary>
-                <p className="mt-1 text-[13px] text-muted">{item.resposta}</p>
+                <p className="pb-2 text-[14px] leading-relaxed text-alo-muted">{item.resposta}</p>
               </details>
             ))}
           </div>
         </section>
       )}
 
-      {campanha.whatsapp_phone && (
-        <a
-          href={`https://wa.me/${campanha.whatsapp_phone.replace(/\D/g, "")}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-4 flex min-h-[44px] items-center justify-center rounded-xl border border-line text-[15px] text-ink"
-        >
-          Ficou com dúvida? Fale com a gente
-        </a>
-      )}
+      <a
+        href={whatsappLink(campanha.whatsapp_phone ?? undefined)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`mt-8 ${BOTAO_SECUNDARIO}`}
+      >
+        Ficou com dúvida? Fale com a gente no WhatsApp
+      </a>
     </div>
   );
 }

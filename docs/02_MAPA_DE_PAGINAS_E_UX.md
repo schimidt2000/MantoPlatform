@@ -1251,7 +1251,35 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   `POST .../publicar` · `PUT .../acervo` · `POST .../horarios` · `DELETE /api/virtuais/horarios/<id>`.
 - **Vínculos**: Campanha → `CatalogCharacter` → `FigurinoSheet`; Campanha ↔ `Acervo3DItem` (N:N).
 
+#### Tema da estação nas três telas `/v*` *(feature 304)*
+
+- `LojaLayout` (`frontend/apps/public/src/components/loja/LojaLayout.tsx`) envolve `/v`, `/v/:slug`
+  e `/v/pedido/:token`: paleta `alo.*` do `tailwind.config.ts` (hoje o Natal das artes de
+  marketing — verde-floresta, vermelho veludo, dourado), Playfair Display nos títulos, classe
+  `tema-alo` no `<html>` enquanto montado (o verde vai até a borda no celular) e `<title>` da loja.
+- A copy de marca é da **estação**, não da campanha, e mora em `src/lib/lojaTema.ts` (FAQ da loja,
+  os dois formatos, passos, dicas do formulário, WhatsApp da empresa). Trocar de estação = trocar
+  esse arquivo, a paleta `alo.*`, `TEMA_LOJA_VIRTUAL` (`app/email_service.py`) e a prévia
+  `loja` de `frontend/server.js` com a imagem `apps/public/public/loja/og-natal.jpg`.
+- Regras de redação: nunca presumir menina ou menino; cada reserva é de **um** formato.
+- O botão flutuante da lista de desejos não aparece em `/v*`.
+
+#### `/v` — Vitrine da loja *(app público, feature 224e; tema na 304)*
+
+- **Acesso**: público. É o que `alo.mantoproducoes.com.br` abre.
+- **Ordem**: sobretítulo + "Uma chamada com o Papai Noel" + foto do Noel → botão "Ver horários"
+  (com uma campanha só, vai direto a ela) → os dois formatos (ao vivo: "pode mostrar a cartinha";
+  vídeo gravado: recado, sem hora) → como funciona → "Reservas abertas para o Natal" (cards das
+  campanhas publicadas; esgotada continua listada) → FAQ da loja → WhatsApp.
+- **API**: `GET /api/virtuais/vitrine`.
+- **Prévia de link** (crawler): `<title>`/`og:*` fixos da estação, imagem 1200×630 do bundle.
+
 #### `/v/:slug` — Landing e checkout da campanha *(app público, feature 205 US2)*
+
+> **304**: horários agrupados por dia, lidos do texto de `start_at` (hora de Brasília, sem
+> fuso); o campo de dicas muda de rótulo e exemplo com o formato ("O que o Papai Noel precisa
+> saber?" × "O que o Papai Noel deve dizer no vídeo?"); campanha sem FAQ próprio mostra o FAQ da
+> loja; o WhatsApp cai no da empresa quando a campanha não tem um.
 
 > ⚠️ **Rota de produção: `/catalogo/v/:slug`.** Estas telas moram em `frontend/apps/public`
 > (`App.tsx:37-38`), que roda sob o basename `/catalogo` em produção — é assim que o backend gera os

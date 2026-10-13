@@ -66,6 +66,36 @@ const config: Config = {
           border: "#33205c",
           cloud: "#efe8fa",
         },
+        // Feature 304 — tema da Loja de Interações Virtuais (`/v*`, o que `alo.*` abre). Mesmo
+        // arranjo do `lamp.*`: namespace próprio, para o Natal não vazar no catálogo de festa
+        // (que usa os tokens globais acima). A estação atual é o Natal das artes de marketing —
+        // verde-floresta, vermelho veludo e dourado. Trocar de estação = trocar estes valores e
+        // a copy de `src/lib/lojaTema.ts`; as páginas só falam `alo-*`.
+        // Contraste (WCAG) medido sobre `bg` / `surface` / `surface-2`: ink 14.7/11.5/9.6,
+        // muted 9.1/7.1/6.0, gold 10.0/7.8/6.5, line-strong 4.7/3.7/3.1 (contorno de campo ≥ 3).
+        alo: {
+          bg: "#0c2219",
+          surface: "#143728",
+          "surface-2": "#1b4434",
+          line: "rgba(230,196,126,0.22)",
+          "line-strong": "#9c8657",
+          ink: "#f8f0e1",
+          muted: "#c9bfa5",
+          gold: "#e6c47e",
+          "gold-deep": "#c99a4a",
+          // Botão principal: creme sobre vermelho dá 8.0:1. O vermelho sozinho some no verde
+          // (1.9:1), por isso o botão leva contorno dourado — como o "Agende esse momento" da arte.
+          red: "#8f1d24",
+          "red-hover": "#a3262e",
+          "on-red": "#fbf3e4",
+          error: "#ffb4a8",
+        },
+      },
+      backgroundImage: {
+        // Brilho quente no topo, como as luzes desfocadas das artes. Só gradiente: nenhuma
+        // imagem a mais para baixar no 4G.
+        "alo-glow":
+          "radial-gradient(ellipse 90% 45% at 50% 0%, rgba(230,196,126,0.16), transparent 70%), radial-gradient(ellipse 60% 40% at 100% 30%, rgba(143,29,36,0.18), transparent 70%)",
       },
       dropShadow: {
         // Halo da estrela acesa — dois raios, como a luz da luminária vazando no escuro.
@@ -74,6 +104,8 @@ const config: Config = {
       fontFamily: {
         display: ["Fraunces", "Georgia", "serif"],
         sans: ["Manrope", "-apple-system", "Segoe UI", "sans-serif"],
+        // Serifa de alto contraste das artes de Natal (feature 304), só na loja de conversas.
+        "alo-display": ["'Playfair Display'", "Georgia", "serif"],
       },
       borderRadius: {
         sm: "6px",
