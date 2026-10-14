@@ -21,12 +21,15 @@ Cascata: cai com o evento (`cascade="all, delete-orphan"`, `models.py:360-363`).
 ### Estados de uma linha BV
 
 ```text
-            (Planilha, Financeiro/Superadmin)
-nao_pago ──────────────────────────────────▶ no_banco ──▶ pago
-   ▲   │  recalcula: régua do % ao salvar (R7)          │
-   │   │  acompanha a venda (B10, R9)                   │  valor congelado:
-   │   │                                                │  amount_brl e value
-   └───┴── B3 cria (criação, vínculo) · editor cria ────┘  não mudam (P-20)
+nasce:  B3 (criação, vínculo) e editor (linha sem id) ──▶ nao_pago
+
+nao_pago ◀──────────────▶ no_banco ◀──────────────▶ pago
+   │      Planilha: Financeiro/Superadmin, qualquer direção (marcar e desmarcar)
+   │
+   └─ só aqui o valor se move: régua do % ao salvar (R7) e a venda que muda (B10, R9)
+
+no_banco / pago: amount_brl e value congelados (P-20); não saem nem mudam de tipo pelo editor.
+Desmarcado de volta a nao_pago, o BV volta a seguir as regras (régua, venda) no próximo evento.
 ```
 
 - `nao_pago`: o único estado em que o valor se move (régua do %, proporção da venda).

@@ -244,9 +244,18 @@ com o tipo do erro, 502 com mensagem fixa — a marca continua.
   feature 246 a aba Comercial agrupa, desagrupa, tira satélite e nomeia o grupo
   (`group_ops`, `PATCH|DELETE /api/events/<id>/grupo`). `_delete_event_flow` continua recusando o
   líder de grupo: para excluir, desagrupar antes.
-- **Acréscimos tipados (`EventAcrescimo`), notas fiscais (`EventInvoice`) e parcelas
-  (`EventInstallment`) só têm implementação de ESCRITA no handler Jinja** `_handle_update_comercial`
-  (`routes.py:712`). A API lê esses dados mas não os grava.
+- ~~Acréscimos, notas e parcelas só têm escrita no Jinja~~ — **desatualizado** desde a 251: a API
+  grava (`PUT /api/events/<id>/acrescimos|parcelas`, notas pela aba Comercial), pelo mesmo núcleo
+  `comercial_ops` que o Jinja usa.
+- **BV (feature 305) — invariantes.** O acréscimo que nasce do orçamento chega em **reais**, já na
+  proporção da venda (`orcamento_evento_ops.gravar_acrescimos_do_orcamento`), com a origem na
+  descrição, e não é recalculado do orçamento depois. O BV em % lançado à mão é sobre o preço **com**
+  os outros acréscimos e **antes** do BV e da nota (`comercial_ops.valor_do_bv_percentual`); o BV em
+  reais à mão é gravado como digitado e fica fora da base do em %. Nenhum BV é gravado sem quem
+  recebe e PIX (criação antes do Google, vínculo, editor). O BV **a pagar** acompanha a venda que
+  muda depois (`acompanhar_bv_da_venda`: reais pelo líquido, % pela régua); `pago` e `no_banco`
+  nunca mudam de valor e não saem pelo editor. O editor herda status, PIX e descrição só da linha
+  de mesmo `id`. A lista `acrescimos` do corpo da criação é sempre ignorada.
 - ~~`flash()` aparece dentro de `_delete_event`~~ — **desatualizado** (conferido na 303): desde a
   224 `_delete_event` devolve o aviso de falha do Google em vez de chamar `flash`, e não depende de
   request context; a limpeza do sync passou para `sumico_ops` e chama `_delete_event` sem

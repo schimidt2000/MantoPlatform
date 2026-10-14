@@ -406,6 +406,11 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   cliente já tem evento sem formulário desde o corte, uma faixa oferece "Ligar a este evento".
   Se a cliente do formulário diverge da do evento, o aviso oferece "Usar a cliente do evento neste
   formulário" e "Abrir o evento". Formulário que já tem evento → 409 inline, sem tocar o Google.
+  **Feature 305**: criando de orçamento com BV, um quadro sob os valores mostra "BV · 10% → R$ X no
+  total de R$ Y (2h)" (valor do servidor, por duração), avisa quando a venda difere do total ("o BV
+  acompanha na mesma proporção, calculado ao salvar") e pede **"Quem recebe o BV"** e **"PIX de
+  quem recebe"**, obrigatórios — sem eles a tela não envia e foca o campo; o 400 do servidor também
+  cai neles. Cortesia ou "Valor a definir": o quadro diz que o BV entra depois, pela aba Comercial.
 - **API**: `GET /api/events/new/options`, `/prefill` · `POST /api/events` (+ endpoints de
   `contracts`, `payments`, `invoices`, `observations`, `reimbursements`).
 - **Vínculos entre módulos**: Catálogo → Elenco (auto-vínculo da Ficha de Figurino) ·
@@ -500,8 +505,12 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     completa" abaixo do `FormResponsePicker`.
   - **Aba Comercial**: *Clientes* (**editável inline**) · *Pré-contrato* (**editável inline**) ·
     *Comercial — dados da venda* (**editável inline**: bruto/desconto/final, transporte, comissão,
-    forma de pagamento, parcelas, datas, vendedor, nota fiscal, cortesia/permuta; acréscimos com
-    marcação de BV seguem em leitura) · painel **"Orçamento"** (feature 273, sucessor da linha
+    forma de pagamento, parcelas, datas, vendedor, nota fiscal, cortesia/permuta) · painel
+    **"Acréscimos"** (editável; feature 305: BV com "Quem recebe" e "Chave PIX" obrigatórios, "% do
+    preço" no BV, valor com vírgula, BV pago travado, origem sob a linha, erro na própria linha) ·
+    **alerta da 305** quando o orçamento tem BV e a venda foi digitada sem ele (no painel Acréscimos,
+    sob o valor de venda e na edição completa), com **"Lançar o BV"** abrindo o editor preenchido em
+    reais; depois de salvar a venda, "O BV acompanhou a venda: de R$ X para R$ Y" · painel **"Orçamento"** (feature 273, sucessor da linha
     "Orçamento de origem" da 239): com orçamento vinculado, chips do que foi vendido ("Fora de SP ·
     110 km", "2 coordenadores", "Maquiagem em 2", "Show · técnico de som"), "Abrir orçamento",
     **"Aplicar ao evento"** (equipe + fora de SP; nunca apaga nem rebaixa), "Trocar" e

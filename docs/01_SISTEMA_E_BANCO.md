@@ -745,6 +745,22 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > parse do título só em evento sem nenhuma — decisão 6, para o texto livre do título nunca mais ser
 > a única fonte de quem é personagem.
 >
+> **Feature 305 — o BV do orçamento no evento.** `GET /api/events/new/prefill` ganha
+> `acrescimos_do_orcamento` (`{personalizado, linhas: [{tipo, descricao, is_bv, percentual,
+> valores_brl: {"1".."4", custom}}]}`, o BV cheio por duração). `POST /api/events` aceita
+> `bv_recipient`/`bv_pix` e **ignora a lista `acrescimos`** (em toda criação); com orçamento cujo
+> BV vai nascer, sem os dois → **400** com `fields` e a mensagem do PIX, **antes do Google**. O BV
+> nasce em reais, na proporção da venda (`orcamento_evento_ops.gravar_acrescimos_do_orcamento`).
+> `PATCH /api/events/<id>/orcamento` aceita os mesmos dois campos (400 depois da autoria da 301) e o
+> `relatorio_orcamento` ganha `acrescimos_criados`, `bv_total`, `acrescimos_ignorados`.
+> `PUT /api/events/<id>/acrescimos`: item com `id?` (herança só da mesma linha), `descricao`
+> ausente = mantém, `value` aceita texto pt-BR; recusa a lista inteira com **400** e `fields`
+> `items.<i>.<campo>` (BV sem quem recebe/PIX, valor ilegível, BV pago removido ou retipado), sem
+> apagar nada; sincroniza a comissão. O detalhe ganha `acrescimos[].descricao`/`bv_pix`,
+> `venda.orcamento.bv` e `venda.bv_do_orcamento_pendente` (`{valor, percentual, duracao}`; só para
+> evento criado/ligado depois de `CORTE_ALERTA_BV`). `PATCH …/comercial` devolve `aviso_bv`; a edição
+> completa põe os avisos do BV em `warnings`.
+>
 > **Hotfix 215b — taxa e vendedor da comissão.** `PATCH /api/events/<id>/comercial` e
 > `PATCH /api/events/<id>` recusam com **403** (`fields.commission_rate` / `fields.seller_id`) a
 > mudança que quem pede não pode fazer, comparando com o que está gravado
@@ -1586,7 +1602,7 @@ Gates por módulo (todos em `app/api/`):
 | `_ve_faixa_sumidos()` | `agenda.py`, `GET /api/events/sumidos-google` (feature 303) | `SUPERADMIN` ou `COMERCIAL` pelo **papel efetivo** (respeita o "Ver como"); os demais recebem **200** com `pode_ver: false` e a lista vazia — nunca 403 |
 | — (sem gate de papel) | `POST /api/events/<id>/sync` | qualquer usuário interno logado, como sempre; desde a 303 ele confere o evento no Google antes de mexer e pode **retirar a marca** "Sumiu do Google Agenda" de um evento que voltou |
 | `_can_casting()` | `agenda_write` (remover cargo) | `CASTING`, `SUPERADMIN` |
-| `_can_manage_sale()` | `agenda_write` (nota fiscal) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
+| `_can_manage_sale()` | `agenda_write` (nota fiscal; `PUT /api/events/<id>/acrescimos` e `/parcelas` — na 305 o PUT de acréscimos passa a recusar BV sem quem recebe/PIX e a sincronizar a comissão) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_can_manage_sale()` | `PATCH /api/events/<id>/orcamento` (feature 273; na 299 o valor simbólico passou a contar como "sem venda") | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`. **Autoria (feature 301)**: *vincular* em evento sem orçamento é livre para quem tem o módulo de Orçamento (COMERCIAL/SUPERADMIN) — FINANCEIRO passa neste gate mas leva **404** ao apontar orçamento que não é dele; *trocar, desvincular ou re-aplicar* sobre vínculo de outra pessoa → **409 `orcamento_de_outro`**, nomeando o autor. Os três verbos: `aplicar` escreve `sale_date`, que decide o mês da comissão |
 | `show_comercial` (papel efetivo, respeita "Ver como") | `GET /api/dashboard` — blocos `comercial` e `formularios` (feature 299: o conteúdo mudou, o gate não); o detalhe do evento usa o mesmo corte para `cobranca`/`venda`/`pagamentos`. **Feature 301**: passado este gate, `venda.orcamento` e `orcamento_history_id` saem para quem tem o **módulo de Orçamento** (COMERCIAL ou SUPERADMIN), sem checagem de dono; FINANCEIRO passa no gate mas fica só com `tem_orcamento`. A chave `pode_gerir`, essa sim, depende da autoria do orçamento vinculado | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_can_confirm()` | `agenda_write` | `COMERCIAL`, `SUPERADMIN` |

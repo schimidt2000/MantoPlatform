@@ -154,4 +154,6 @@ escrita de acréscimos (`comercial_ops.py`), chamados pelos três escritores da 
 
 ## Rastreamento de complexidade
 
-Nenhuma violação a justificar.
+| Violação | Por que é necessária | Alternativa mais simples rejeitada porque |
+|---|---|---|
+| Ramos novos nos handlers Jinja vivos (`_render_error` na criação, `rollback` + `flash` no editor, `flash` da B10) — sem template novo | sem a guarda, o formulário Jinja (ainda alcançável pelo host do backend) furaria a SC-002 (BV sem PIX) e gravaria o BV na régua velha | desligar o caminho Jinja de criação/edição comercial é limpar o Jinja de passagem (a remoção está pausada por decisão do dono, `docs/PARADA_REMOCAO_JINJA.md`) |

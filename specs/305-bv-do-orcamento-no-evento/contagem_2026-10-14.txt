@@ -1,0 +1,21 @@
+Contagem do espelho manto_local (dump de 30/09/2026), só leitura, 14/10/2026 — feature 305.
+Fonte: workflow plan-305-code-map (leitores de conta-orcamento e criacao-vinculo), por
+docs/backlog/ferramentas/sql_ro.py e psycopg em transação READ ONLY.
+
+Orçamentos
+- 2.484 orçamentos; 1.375 com a chave "acrescimos" no form_snapshot, 1.109 sem (legado acrescimo_valor).
+- 177 orçamentos com algum acréscimo, 250 linhas; 0 com valores_brl (a chave nasce na 305).
+- 35 orçamentos com BV, 1 BV cada: 33 em % (todos 10%) e 2 em R$ (1277 e 1784, R$ 10,00).
+  24 só com %, 11 com alguma linha em R$, 9 com outro acréscimo junto, 10 com nota, 0 personalizados.
+- Memória de cálculo: 16 dos 35 (a partir de ~06/08).
+- Paridade da conta inversa (base quantizada) com a memória: 76 de 80 pares iguais; 4 com R$ 0,01,
+  todos em 3h (1697, 1702, 2215, 2357). Sem quantizar a base: 73 de 80.
+
+Eventos
+- 170 eventos com orcamento_history_id, todos vivos e criados pela plataforma; 0 sem venda.
+- 3 eventos ligados a orçamento com BV, sem linha de BV: 1218 (BV R$ 10,00 em reais), 1236 (450,18)
+  e 1268 (140,13). Ficam como estão (3a-Q4 = A) — o corte do alerta os exclui em produção.
+- event_acrescimos: 5 linhas em 5 eventos (294, 380, 403, 405, 1185); só 1 BV (evento 403, R$ 827,80,
+  em reais, nao_pago, com recebedor e SEM PIX).
+
+Antes do merge (T041): recontar em produção, só leitura, as consultas da 3.7 do plano do backlog.

@@ -177,7 +177,9 @@ mão, em R$ ou % — acompanha na mesma proporção, e a tela diz o que mudou.
    1.800 − 180. De volta a R$ 2.000, o BV volta a R$ 200.
 2. **Dado** BV pago ou no banco, **Então** fica intacto.
 3. **Dado** a venda que vai a "Valor a definir" ou cortesia, **Então** a linha fica; na volta a um
-   valor, só o aviso "confira o BV".
+   valor, o BV em reais fica com o aviso "confira o BV" e o em % é recalculado pela régua.
+4. **Dado** só a nota muda, com a mesma venda, **Então** o BV em reais acompanha o preço (líquido);
+   **dado** a nota sai com a venda caindo 16% (a cliente desistiu da nota), **Então** o BV fica.
 
 ---
 
@@ -266,21 +268,25 @@ Nenhum evento que já estava na agenda ganha BV, lista ou alerta; comissão paga
   cada acréscimo.
 - **FR-015**: O editor DEVE casar cada linha pela **identidade** (o `id` que a tela recebeu): só da linha
   de mesmo id herdam-se o status de pagamento, o PIX quando vem vazio e a descrição quando a chave não
-  vem. Linha sem id nasce **a pagar** (heurística só para o bundle antigo, nunca promovendo a "pago").
+  vem. Com a tela nova (que manda o `id`), linha sem id é nova e nasce **a pagar**. O bundle antigo
+  e o Jinja não mandam id nenhum: aí a linha antiga é achada pela chave (BV: recebedor e PIX; outros:
+  tipo e valor) **só quando há uma candidata** — salvar sem mexer mantém o "pago" (SC-003), e nunca
+  há promoção a "pago" com ambiguidade.
 - **FR-015a**: O editor DEVE aceitar valor no formato brasileiro ("1.309,52"); valor ilegível ou tipo
   preenchido sem valor válido DEVE ser recusado na linha — nunca descartado em silêncio. "bv" é BV.
 - **FR-016**: BV em % à mão DEVE ser calculado sobre o preço com os outros acréscimos, antes do BV e da
   nota (D2, 3b-Q7), e recalculado ao salvar **só se a pagar**; com a venda sem valor, o BV em % existente
   mantém o valor e um BV em % novo é recusado ("lance em reais ou depois do valor de venda").
 - **FR-017**: BV em reais à mão DEVE ser gravado como digitado (Q7 = B), sem recálculo ao salvar.
-- **FR-017a**: BV pago ou no banco NÃO DEVE mudar de valor pelo editor, em R$ ou em % (P-20); quem
-  recebe e PIX continuam editáveis.
+- **FR-017a**: BV pago ou no banco NÃO DEVE mudar de valor pelo editor, em R$ ou em % (P-20), nem
+  sair da lista ou mudar de tipo (400; desfaz-se o pagamento na Planilha); quem recebe e PIX
+  continuam editáveis.
 - **FR-018**: Salvar o editor DEVE sincronizar a comissão a pagar na mesma requisição.
 
 **O alerta**
 
 - **FR-019**: O detalhe do evento DEVE trazer o alerta "BV do orçamento pendente" quando o evento está
-  ligado a orçamento com BV (não personalizado), tem venda de verdade, não tem linha de BV, não está
+  ligado a orçamento com BV (não personalizado), tem venda de verdade, não tem linha de BV com valor, não está
   cancelado, não é satélite, **e** foi criado ou ligado depois do momento do deploy. Só para quem vê o
   bloco comercial, sem o id do orçamento.
 - **FR-020**: A tela DEVE mostrar o alerta no painel Acréscimos, sob o valor de venda da aba Comercial e
@@ -292,8 +298,8 @@ Nenhum evento que já estava na agenda ganha BV, lista ou alerta; comissão paga
 
 - **FR-021**: Quando a venda **ou a nota** muda de um valor de verdade a outro (aba Comercial, edição
   completa e o gêmeo Jinja), cada BV **a pagar** DEVE acompanhar: em reais, na proporção do valor
-  líquido (venda × 0,84 com nota) — trocar só a nota não muda o BV em reais —; em %, pela régua; na
-  mesma gravação, com histórico sem PIX, comissão a pagar sincronizada e o aviso "O BV acompanhou a
+  líquido (venda × 0,84 com nota) — a nota que sai com a venda caindo 16% não mexe no BV, a que entra
+  ou sai com a mesma venda muda o preço e o BV acompanha —; em %, pela régua; na mesma gravação, com histórico sem PIX, comissão a pagar sincronizada e o aviso "O BV acompanhou a
   venda: de R$ Z para R$ W. Confira o BV e o valor total com BV."
 - **FR-022**: NÃO DEVEM mudar sozinhos: BV pago ou no banco; a ida da venda a "Valor a definir" ou
   cortesia; na volta a um valor, o BV em reais (só o aviso "confira o BV") — o em % é recalculado pela
@@ -374,7 +380,7 @@ corte antes de criar eventos. Numeração do plano (28, 29, 30 e 41 saíram com 
 | 20 | Criação como Financeiro | 403 | **sim** |
 | 21 | Editor como Casting; em satélite | 403; 409 | **sim** |
 | 22 | Vínculo como Casting | 403 | **sim** |
-| 23 | Evento sem orçamento | sem linha | não |
+| 23 | Evento sem orçamento, com uma lista de acréscimos (BV sem PIX) no corpo | lista ignorada, sem linha | não |
 | 24 | Orçamento sem acréscimos | igual a hoje | não |
 | 25 | Comissão paga com BV acrescentado depois | intacta | não |
 | 26 | DRE do mês do evento | CPV sobe o BV | não |
@@ -403,6 +409,7 @@ corte antes de criar eventos. Numeração do plano (28, 29, 30 e 41 saíram com 
 | 54 | BV em % com venda "a definir": existente mantém; novo recusado; volta a valor recalcula o % | FR-016/022 | **sim** (parcial) |
 | 55 | Comissão logo após PUT e após B10, lida por conexão separada sem abrir a Planilha | coleção atualizada (flush+expire) | não |
 | 56 | "Lançar o BV" em orçamento com outro acréscimo (como o 2407) | o alerta traz o valor do orçamento em R$, não o % | não |
+| 57 | BV pago fora da lista, retipado ou com outro valor | 400 sem apagar; valor congelado | **sim** |
 | 50 | limpeza | registros e usuários descartáveis apagados (`roles.clear()` antes) | — |
 
 Conferência de tela (desktop; app interno): Novo evento de orçamento com BV (quadro por duração, aviso

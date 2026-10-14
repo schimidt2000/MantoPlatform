@@ -78,6 +78,8 @@ export interface Acrescimo {
   descricao?: string;
   value: number;
   is_percent: boolean;
+  /** Feature 305 — o que o acréscimo somou ao preço em 1h..4h (o servidor grava; a tela só repassa). */
+  valores_brl?: number[];
 }
 
 export interface CalcularOrcamentoInput {
