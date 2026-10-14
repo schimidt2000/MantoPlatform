@@ -51,6 +51,14 @@ seja obrigatório colocar o PIX de quem receberá o BV. Para que isso vá para a
 - **1b-Q2 / Q10 / Q12** (06/10 e 13/10): BV de cancelado e a diferença de comissão que sobe depois do
   repasse são da 1b e da 1e, não desta entrega.
 
+#### Session 2026-10-14 (`/speckit-clarify`)
+
+Nenhuma ambiguidade crítica: as nove rodadas de respostas do backlog já fecham escopo, dinheiro, RBAC e
+o passado. O único ponto que é leitura, e não palavra do dono — o BV em reais que **sobe** com a venda
+enquanto a pagar (Q8) —, segue como premissa P-38, listada no `docs/backlog/README.md` entre as
+"leituras que você pode contestar"; o dono mandou seguir com a 305 em 14/10 sem contestá-la. Travar a
+subida, se ele pedir depois, custa ~1 tarefa.
+
 ## Cenários e Verificação *(obrigatório)*
 
 ### História 1 — Criar evento a partir do orçamento leva o BV certo, com quem recebe e o PIX (Prioridade: P1)
@@ -188,8 +196,8 @@ Nenhum evento que já estava na agenda ganha BV, lista ou alerta; comissão paga
 ### Casos de borda
 
 - Orçamento personalizado: nenhuma linha; a tela avisa que o BV não foi somado ao preço.
-- Duração acima de 4h: orçamento salvo antes da 3b usa a régua linear (4h × horas ÷ 4); depois da 3b, a
-  conta dela; BV em reais é o valor digitado em qualquer duração.
+- Duração acima de 4h: régua linear da calculadora (linha de 4h × horas ÷ 4, inclusive a fixa), com o
+  mesmo total que o Novo evento mostra; a regra da 3b chega com a 3b.
 - Criação sem duração no corpo: deduzir pelo valor (igual a um dos totais), depois pelo horário (1–4h,
   ou o personalizado); senão não grava ("duração não identificada"). Orçamento só com % não precisa.
 - Entradas ruins (total zero, base ≤ 0, negativos, snapshot corrompido): lista vazia, sem exceção — a
@@ -213,7 +221,9 @@ Nenhum evento que já estava na agenda ganha BV, lista ou alerta; comissão paga
 - **FR-001**: O sistema DEVE calcular, a partir do orçamento congelado e da duração, o valor **cheio** de
   cada acréscimo que o orçamento somou ao preço — primeiro pelos valores em reais gravados no orçamento,
   depois pela conta inversa (líquido = total × 0,84 com nota; base = (líquido − fixos) ÷ (1 + soma dos %
-  ÷ 100); linha em % = base × % ÷ 100; fixa = o digitado). No exemplo da D2, R$ 100,00.
+  ÷ 100), **arredondada ao centavo antes do %**; linha em % = base × % ÷ 100; fixa = o digitado). No
+  exemplo da D2, R$ 100,00. Os valores gravados no orçamento só valem se forem números finitos, ≥ 0 e
+  não maiores que o total da duração (research R1, R2).
 - **FR-002**: Orçamento personalizado DEVE devolver lista vazia; entradas ruins DEVEM devolver lista ou
   linha vazia, sem exceção.
 - **FR-003**: A calculadora DEVE passar a gravar, em cada acréscimo do orçamento salvo, o valor em reais
@@ -227,7 +237,8 @@ Nenhum evento que já estava na agenda ganha BV, lista ou alerta; comissão paga
 - **FR-006**: Na criação do evento a partir de orçamento, com venda de verdade (não cortesia, não
   "Valor a definir"), o sistema DEVE gravar todas as linhas do orçamento em reais, já na proporção da
   venda, com a origem na descrição, quem recebe e PIX no BV, `nao_pago`. A lista de acréscimos vinda do
-  navegador DEVE ser ignorada.
+  navegador DEVE ser ignorada **em toda criação**, com ou sem orçamento (senão um BV nasce sem PIX).
+  Venda que difere do total em até R$ 0,01 conta como igual (BV cheio).
 - **FR-007**: No "Vincular e aplicar" (273), DEVE gravar o mesmo, com a duração escolhida; o relatório
   DEVE dizer quantas linhas nasceram, o total de BV, ou por que não nasceram, e o mês da Planilha
   quando o evento é de mês anterior.
@@ -253,11 +264,17 @@ Nenhum evento que já estava na agenda ganha BV, lista ou alerta; comissão paga
 
 - **FR-014**: O detalhe do evento DEVE entregar, só a quem vê o bloco comercial, a descrição e o PIX de
   cada acréscimo.
-- **FR-015**: PIX vazio num BV que já tinha PIX DEVE manter o PIX; o status de pagamento DEVE ser
-  preservado nos três estados; item sem a chave da descrição DEVE manter a descrição.
+- **FR-015**: O editor DEVE casar cada linha pela **identidade** (o `id` que a tela recebeu): só da linha
+  de mesmo id herdam-se o status de pagamento, o PIX quando vem vazio e a descrição quando a chave não
+  vem. Linha sem id nasce **a pagar** (heurística só para o bundle antigo, nunca promovendo a "pago").
+- **FR-015a**: O editor DEVE aceitar valor no formato brasileiro ("1.309,52"); valor ilegível ou tipo
+  preenchido sem valor válido DEVE ser recusado na linha — nunca descartado em silêncio. "bv" é BV.
 - **FR-016**: BV em % à mão DEVE ser calculado sobre o preço com os outros acréscimos, antes do BV e da
-  nota (D2, 3b-Q7), e recalculado ao salvar **só se a pagar**.
+  nota (D2, 3b-Q7), e recalculado ao salvar **só se a pagar**; com a venda sem valor, o BV em % existente
+  mantém o valor e um BV em % novo é recusado ("lance em reais ou depois do valor de venda").
 - **FR-017**: BV em reais à mão DEVE ser gravado como digitado (Q7 = B), sem recálculo ao salvar.
+- **FR-017a**: BV pago ou no banco NÃO DEVE mudar de valor pelo editor, em R$ ou em % (P-20); quem
+  recebe e PIX continuam editáveis.
 - **FR-018**: Salvar o editor DEVE sincronizar a comissão a pagar na mesma requisição.
 
 **O alerta**
@@ -267,16 +284,20 @@ Nenhum evento que já estava na agenda ganha BV, lista ou alerta; comissão paga
   cancelado, não é satélite, **e** foi criado ou ligado depois do momento do deploy. Só para quem vê o
   bloco comercial, sem o id do orçamento.
 - **FR-020**: A tela DEVE mostrar o alerta no painel Acréscimos, sob o valor de venda da aba Comercial e
-  na edição completa, com "Lançar o BV" abrindo o editor preenchido (nada gravado sem o clique).
+  na edição completa, com "Lançar o BV" abrindo o editor preenchido **em reais** com o valor do
+  orçamento na proporção da venda (nada gravado sem o clique); sem duração identificada, mostra o % e
+  "confira a duração". A edição completa que deixa o alerta aceso avisa antes de sair da tela.
 
 **Venda que muda depois**
 
-- **FR-021**: Quando a venda passa de um valor de verdade a outro (aba Comercial, edição completa e o
-  gêmeo Jinja), cada BV **a pagar** DEVE acompanhar na mesma proporção (em reais) ou pela régua do %, na
+- **FR-021**: Quando a venda **ou a nota** muda de um valor de verdade a outro (aba Comercial, edição
+  completa e o gêmeo Jinja), cada BV **a pagar** DEVE acompanhar: em reais, na proporção do valor
+  líquido (venda × 0,84 com nota) — trocar só a nota não muda o BV em reais —; em %, pela régua; na
   mesma gravação, com histórico sem PIX, comissão a pagar sincronizada e o aviso "O BV acompanhou a
   venda: de R$ Z para R$ W. Confira o BV e o valor total com BV."
 - **FR-022**: NÃO DEVEM mudar sozinhos: BV pago ou no banco; a ida da venda a "Valor a definir" ou
-  cortesia; a volta a um valor (só o aviso "confira o BV"); o cancelamento (1b).
+  cortesia; na volta a um valor, o BV em reais (só o aviso "confira o BV") — o em % é recalculado pela
+  régua, por ser % do preço —; evento cancelado (1b).
 
 **Telas**
 
@@ -376,6 +397,12 @@ corte antes de criar eventos. Numeração do plano (28, 29, 30 e 41 saíram com 
 | 47 | BV antigo sem PIX reenviado sem PIX; com PIX | 400; grava e preserva status | **sim** (parcial) |
 | 48 | Venda muda com BV a pagar (comercial, edição completa, Jinja); pago intacto; "a definir" | FR-021/022 | não |
 | 49 | BV R$ 200 à mão: exato; 1.800 → 180; volta 200 (mutação: régua do % quebra) | Q7/Q8 | não |
+| 51 | Editor com "100,00" e "10,5"; valor ilegível; tipo "bv" | aceita vírgula; 400 na linha; "bv" é BV | **sim** (parcial) |
+| 52 | Editor: BV novo sem id para quem já tem BV pago; dois BVs da mesma pessoa | nasce a pagar; não se fundem | não |
+| 53 | Só a nota muda, venda igual | BV em R$ igual; BV em % pela régua | não |
+| 54 | BV em % com venda "a definir": existente mantém; novo recusado; volta a valor recalcula o % | FR-016/022 | **sim** (parcial) |
+| 55 | Comissão logo após PUT e após B10, lida por conexão separada sem abrir a Planilha | coleção atualizada (flush+expire) | não |
+| 56 | "Lançar o BV" em orçamento com outro acréscimo (como o 2407) | o alerta traz o valor do orçamento em R$, não o % | não |
 | 50 | limpeza | registros e usuários descartáveis apagados (`roles.clear()` antes) | — |
 
 Conferência de tela (desktop; app interno): Novo evento de orçamento com BV (quadro por duração, aviso
