@@ -14,6 +14,7 @@ import { CampanhaVirtualPage } from "./pages/CampanhaVirtualPage";
 import { PedidoVirtualPage } from "./pages/PedidoVirtualPage";
 import { VitrineVirtualPage } from "./pages/VitrineVirtualPage";
 import { NfcPage } from "./pages/NfcPage";
+import { LojaLayout } from "./components/loja/LojaLayout";
 import { WishlistFloat } from "./components/WishlistFloat";
 
 // Prefixo de rota condicional ao build de produção (feature 186, US6) — mesmo app servido sob
@@ -58,9 +59,12 @@ export function App() {
             por clareza — são de dois segmentos, então não colidem com ele de qualquer forma.
             `/v` sozinho é a home da loja (224e): é para onde `alo.mantoproducoes.com.br` manda
             quem digita só o domínio. */}
-        <Route path="/v" element={<VitrineVirtualPage />} />
-        <Route path="/v/:slug" element={<CampanhaVirtualPage />} />
-        <Route path="/v/pedido/:token" element={<PedidoVirtualPage />} />
+        {/* `LojaLayout` (feature 304) pinta as três com o tema da estação. */}
+        <Route element={<LojaLayout />}>
+          <Route path="/v" element={<VitrineVirtualPage />} />
+          <Route path="/v/:slug" element={<CampanhaVirtualPage />} />
+          <Route path="/v/pedido/:token" element={<PedidoVirtualPage />} />
+        </Route>
         {/* Tag NFC da luminária (feature 255): superfície de raiz, ver isRootSurface. */}
         <Route path="/nfc/:code" element={<NfcPage />} />
         <Route path="/:slug" element={<ProductDetailPage />} />

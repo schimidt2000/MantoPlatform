@@ -14,6 +14,13 @@
   body {
     @apply bg-bg text-ink antialiased font-sans;
   }
+  /* Loja de conversas (feature 304): o `LojaLayout` põe a classe no <html> enquanto está
+     montado, para o verde ir até a borda no "puxa para baixo" do celular. */
+  html.tema-alo,
+  html.tema-alo body {
+    @apply bg-alo-bg text-alo-ink;
+    color-scheme: dark;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

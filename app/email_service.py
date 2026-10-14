@@ -119,8 +119,46 @@ def _bloqueia_link_local(to: str, subject: str, *corpos: str) -> bool:
 
 # ── HTML email base ────────────────────────────────────────────────────────────
 
-def _html_wrap(content_html: str, preheader: str = "") -> str:
-    """Envolve o conteúdo em um template HTML de email responsivo."""
+#: Cores do e-mail padrão da plataforma (roxo Manto) — o que todo e-mail usa quando não pede tema.
+_TEMA_PADRAO = {
+    "fundo": "#f0eff6",
+    "cabecalho": "#2d1f6e",
+    "marca": "#ffffff",
+    "submarca": "rgba(255,255,255,0.55)",
+    "enfeite": "",
+    "botao": "#2d1f6e",
+    "botao_texto": "#ffffff",
+    "botao_borda": "#2d1f6e",
+}
+
+#: Tema da Loja de Interações Virtuais na estação atual (feature 304: Natal) — o mesmo verde,
+#: vermelho e dourado da loja (`alo.*` em `frontend/apps/public/tailwind.config.ts`). Trocar de
+#: estação é trocar estes valores junto com a paleta e a copy da loja.
+TEMA_LOJA_VIRTUAL = {
+    "fundo": "#0c2219",
+    "cabecalho": "#143728",
+    "marca": "#e6c47e",
+    "submarca": "#c9bfa5",
+    "enfeite": "✦",
+    "botao": "#8f1d24",
+    "botao_texto": "#fbf3e4",
+    "botao_borda": "#e6c47e",
+}
+
+
+def _html_wrap(content_html: str, preheader: str = "", tema: dict | None = None) -> str:
+    """Envolve o conteúdo em um template HTML de email responsivo.
+
+    ``tema`` troca só as cores da moldura (fundo, cabeçalho); o corpo continua branco em qualquer
+    tema, porque cliente de e-mail com modo escuro forçado estraga texto claro sobre fundo escuro.
+    """
+    t = tema or _TEMA_PADRAO
+    enfeite = (
+        f'<div style="font-size:12px;color:{t["marca"]};margin-top:10px;letter-spacing:.6em;">'
+        f'{t["enfeite"]}</div>'
+        if t["enfeite"]
+        else ""
+    )
     return f"""<!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -129,17 +167,17 @@ def _html_wrap(content_html: str, preheader: str = "") -> str:
   <title>Manto Produções</title>
   <!--[if mso]><style>* {{font-family: Arial, sans-serif !important;}}</style><![endif]-->
 </head>
-<body style="margin:0;padding:0;background:#f0eff6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
-  {f'<div style="display:none;max-height:0;overflow:hidden;color:#f0eff6;">{preheader}</div>' if preheader else ''}
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0eff6;padding:32px 16px;">
+<body style="margin:0;padding:0;background:{t["fundo"]};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+  {f'<div style="display:none;max-height:0;overflow:hidden;color:{t["fundo"]};">{preheader}</div>' if preheader else ''}
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:{t["fundo"]};padding:32px 16px;">
     <tr><td align="center">
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:540px;">
 
         <!-- HEADER -->
         <tr>
-          <td style="background:#2d1f6e;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center;">
-            <div style="font-size:28px;font-weight:900;color:#ffffff;letter-spacing:-1px;line-height:1;">Manto</div>
-            <div style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.55);letter-spacing:.15em;text-transform:uppercase;margin-top:4px;">Produções</div>
+          <td style="background:{t["cabecalho"]};border-radius:12px 12px 0 0;padding:28px 32px;text-align:center;">
+            <div style="font-size:28px;font-weight:900;color:{t["marca"]};letter-spacing:-1px;line-height:1;">Manto</div>
+            <div style="font-size:11px;font-weight:600;color:{t["submarca"]};letter-spacing:.15em;text-transform:uppercase;margin-top:4px;">Produções</div>{enfeite}
           </td>
         </tr>
 
@@ -170,11 +208,16 @@ def _info_row(label: str, value: str) -> str:
     )
 
 
-def _btn(text: str, url: str) -> str:
+def _btn(text: str, url: str, tema: dict | None = None) -> str:
+    t = tema or _TEMA_PADRAO
+    # A borda só aparece quando difere do fundo do botão (no padrão as duas são o mesmo roxo).
+    borda = (
+        f'border:1px solid {t["botao_borda"]};' if t["botao_borda"] != t["botao"] else ""
+    )
     return (
         f'<div style="text-align:center;margin:24px 0 8px;">'
-        f'<a href="{url}" style="display:inline-block;background:#2d1f6e;color:#ffffff;'
-        f'text-decoration:none;padding:13px 32px;border-radius:8px;font-weight:700;'
+        f'<a href="{url}" style="display:inline-block;background:{t["botao"]};color:{t["botao_texto"]};'
+        f'{borda}text-decoration:none;padding:13px 32px;border-radius:8px;font-weight:700;'
         f'font-size:14px;letter-spacing:.02em;">{text}</a>'
         f'</div>'
     )
@@ -1021,6 +1064,15 @@ def _strip_html(html: str) -> str:
 # `virtuais_ops._enviar_aviso` antes do disparo (FR-028a/FR-028b).
 
 
+def _virtuais_saudacao() -> str:
+    """Saudação dos e-mails da loja — mesmo estilo de ``_greeting``, sem nome.
+
+    O e-mail vai para o ADULTO que comprou, e a reserva não guarda o nome dele; a 205 saudava a
+    criança ("Olá, Maria!") pelo primeiro nome dela (304).
+    """
+    return '<p style="font-size:18px;font-weight:700;color:#1a1a2e;margin:0 0 12px;">Olá!</p>'
+
+
 def _virtuais_order_url(order) -> str:
     """Endereço público de acompanhamento do pedido."""
     base = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
@@ -1039,42 +1091,45 @@ def send_virtual_order_confirmed_email(order) -> bool:
         return False
 
     campanha = order.campaign
+    ao_vivo = order.modality == "ao_vivo"
     quando = (
-        order.slot.start_at.strftime("%d/%m/%Y às %H:%M")
+        order.slot.start_at.strftime("%d/%m/%Y às %H:%M") + " (horário de Brasília)"
         if order.slot and order.slot.start_at
         else f"em até {campanha.recorded_delivery_days} dias"
     )
-    modalidade = (
-        "Chamada de vídeo ao vivo (10 minutos)"
-        if order.modality == "ao_vivo"
-        else "Vídeo gravado"
-    )
+    formato = "Chamada ao vivo (10 minutos)" if ao_vivo else "Vídeo gravado"
 
-    rows = _info_row("Interação", modalidade)
+    rows = _info_row("Reserva", campanha.title)
+    rows += _info_row("Formato", formato)
     rows += _info_row("Para", order.child_name)
     rows += _info_row("Quando", quando)
     rows += _info_row("Valor", _virtuais_valor(order))
 
     url = _virtuais_order_url(order)
+    proximo_passo = (
+        "No dia, abra a página do pedido uns minutinhos antes: o link da chamada fica lá. "
+        "Deixe a cartinha por perto — a criança pode mostrar na câmera."
+        if ao_vivo
+        else "Assim que o vídeo ficar pronto, mandamos outro e-mail. Ele fica na página do pedido."
+    )
     content = (
-        _greeting(order.child_name.split()[0] if order.child_name else "Olá")
-        + _paragraph(
-            "Recebemos seu pagamento e a interação está garantida! Guarde este e-mail: "
-            "é por ele que você chega à página do pedido."
-        )
+        _virtuais_saudacao()
+        + _paragraph("Recebemos seu pagamento e a reserva está confirmada!")
         + _info_box(rows)
-        + _btn("Ver meu pedido →", url)
+        + _btn("Ver meu pedido →", url, tema=TEMA_LOJA_VIRTUAL)
+        + _paragraph(proximo_passo)
         + _paragraph(
-            "Na página do pedido você confirma o telefone da compra e vê o acesso à interação. "
-            "Pedimos o telefone justamente para os dados da sua criança não ficarem abertos a "
-            "quem só tiver o link."
+            "Para ver os dados da criança na página do pedido, pedimos o telefone da compra — "
+            "assim eles não ficam abertos a quem só tiver o link. Guarde este e-mail."
         )
     )
 
     return _send(
         to=order.contact_email,
-        subject=f"✨ Tudo certo! Sua interação com {campanha.title}",
-        html=_html_wrap(content, preheader=f"Pagamento confirmado — {quando}."),
+        subject=f"🎄 Reserva confirmada — {campanha.title}",
+        html=_html_wrap(
+            content, preheader=f"Pagamento confirmado — {quando}.", tema=TEMA_LOJA_VIRTUAL
+        ),
     )
 
 
@@ -1089,7 +1144,7 @@ def send_virtual_order_cancelled_email(order) -> bool:
 
     campanha = order.campaign
     content = (
-        _greeting(order.child_name.split()[0] if order.child_name else "Olá")
+        _virtuais_saudacao()
         + _paragraph(
             "Precisamos te dar uma notícia chata: o horário que você escolheu acabou sendo "
             "confirmado para outra família antes do seu pagamento chegar até nós."
@@ -1102,13 +1157,21 @@ def send_virtual_order_cancelled_email(order) -> bool:
             "Se quiser tentar outro horário, é só voltar à página da campanha — e qualquer "
             "dúvida, fale com a gente pelo WhatsApp."
         )
-        + _btn("Ver outros horários →", f"{(current_app.config.get('PUBLIC_BASE_URL') or '').rstrip('/')}/catalogo/v/{campanha.slug}")
+        + _btn(
+            "Ver outros horários →",
+            f"{(current_app.config.get('PUBLIC_BASE_URL') or '').rstrip('/')}/catalogo/v/{campanha.slug}",
+            tema=TEMA_LOJA_VIRTUAL,
+        )
     )
 
     return _send(
         to=order.contact_email,
-        subject="Sobre o seu pedido — precisamos remarcar",
-        html=_html_wrap(content, preheader="O horário foi confirmado para outra família; a devolução está em andamento."),
+        subject="Sobre a sua reserva — precisamos remarcar",
+        html=_html_wrap(
+            content,
+            preheader="O horário foi confirmado para outra família; a devolução está em andamento.",
+            tema=TEMA_LOJA_VIRTUAL,
+        ),
     )
 
 
@@ -1123,10 +1186,11 @@ def send_virtual_video_ready_email(order) -> bool:
         return False
 
     url = _virtuais_order_url(order)
+    primeiro_nome = order.child_name.split()[0] if order.child_name else ""
     content = (
-        _greeting(order.child_name.split()[0] if order.child_name else "Olá")
+        _virtuais_saudacao()
         + _paragraph("O vídeo ficou pronto! É só abrir a página do seu pedido para assistir.")
-        + _btn("Assistir agora →", url)
+        + _btn("Assistir agora →", url, tema=TEMA_LOJA_VIRTUAL)
         + _paragraph(
             "Vamos pedir o telefone da compra antes de mostrar o vídeo — é assim que garantimos "
             "que só você tem acesso."
@@ -1135,6 +1199,12 @@ def send_virtual_video_ready_email(order) -> bool:
 
     return _send(
         to=order.contact_email,
-        subject="🎬 Seu vídeo está pronto!",
-        html=_html_wrap(content, preheader="O vídeo da sua criança já está disponível."),
+        subject=(
+            f"🎄 O vídeo para {primeiro_nome} ficou pronto!"
+            if primeiro_nome
+            else "🎄 O seu vídeo ficou pronto!"
+        ),
+        html=_html_wrap(
+            content, preheader="O vídeo da sua criança já está disponível.", tema=TEMA_LOJA_VIRTUAL
+        ),
     )

@@ -395,6 +395,16 @@ def _campos_faltantes_para_publicar(campaign: VirtualCampaign) -> tuple[str, str
     """Primeiro campo que impede a publicação, ou ``None`` se a campanha está pronta."""
     if campaign.price_live is None or campaign.price_recorded is None:
         return ("price_live", "Defina os preços antes de publicar.")
+    # Zero não é preço (304): a campanha nasce em rascunho com R$ 0,00 quando o time ainda não
+    # decidiu o valor (é assim que o script do Papai Noel a cria), e a trava acima só via `None` —
+    # publicar esquecido iria ao ar de graça. O vídeo só cobra quando há vaga de vídeo à venda.
+    if campaign.price_live <= 0:
+        return ("price_live", "Defina o valor da chamada ao vivo antes de publicar.")
+    if (campaign.recorded_capacity or 0) > 0 and campaign.price_recorded <= 0:
+        return (
+            "price_recorded",
+            "Defina o valor do vídeo gravado antes de publicar (ou zere a capacidade de vídeos).",
+        )
     if not campaign.cover_url:
         return ("cover_url", "A foto de capa é obrigatória para publicar.")
     if not campaign.recorded_delivery_days:

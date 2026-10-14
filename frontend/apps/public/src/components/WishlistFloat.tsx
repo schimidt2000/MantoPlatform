@@ -11,7 +11,10 @@ export function WishlistFloat() {
     setCount(wishlist.count());
   }, [location]);
 
-  if (location.pathname === "/lista-desejos" || count === 0) {
+  // Na loja de conversas (`/v*`) a lista de desejos do catálogo de festa é outro produto: o
+  // botão flutuante cobria o "Reservar e pagar" no celular de quem já tinha visitado o catálogo.
+  const naLojaVirtual = location.pathname === "/v" || location.pathname.startsWith("/v/");
+  if (location.pathname === "/lista-desejos" || naLojaVirtual || count === 0) {
     return null;
   }
 

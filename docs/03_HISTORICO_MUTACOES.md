@@ -120,6 +120,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **304-loja-natal-papai-noel** | *(branch, não publicada)* A loja de conversas (`alo.*`) ganha a cara do Natal das artes de marketing — paleta `alo.*` própria (o catálogo não muda), Playfair Display, foto do Noel — e a copy da estação num arquivo só (`lib/lojaTema.ts`): os dois formatos (**ou** chamada ao vivo, onde a criança pode mostrar a cartinha, **ou** vídeo gravado), FAQ da loja, dicas do formulário por formato, nenhum pronome que presuma menina. A campanha "Uma chamada com o Papai Noel" nasce **em rascunho** por script (o botão "Nova campanha" não cria nada — `docs/05` 88), em `/v/papai-noel`, com preços zerados; publicar passou a recusar preço zero. E-mails da loja no tema, saudando o adulto. Prévia de link fixa da estação em `/catalogo/v*`. De passagem: "Escolher outro horário" levava a página branca em `alo.*`, e o prazo do vídeo aparecia um dia antes | 2026-10-13 | `—` | (aqui) | — |
 | **303-sync-nao-apaga-venda** | *(EM PRODUÇÃO 01/10 ~11:18, merge `c1b0d41`)* A limpeza do sync apagava todo evento do mês que faltava na lista do Google, com venda, comprovantes, contrato e escala — inclusive o que só tinha **mudado de mês** (o 1275 virou o 1287, sem venda). Agora cada evento fora da lista é **conferido no próprio Google** (três desfechos; o `get` devolve o apagado com `status: cancelled`): o vazio é apagado, o com dinheiro fica **marcado** "Sumiu do Google Agenda" com aviso no sino, o que mudou de data vai à data nova no mesmo registro, e na dúvida nada acontece. Faixa fixa para Superadmin e Comercial, selo na agenda, banner e **"Devolver ao Google Agenda"** (travado fora da produção), "Sincronizar" que confere antes de mexer, cancelar e excluir recusam o marcado até a segunda entrega, e o portal diz "Evento em confirmação". De passagem: exclusão de pai vazio com ensaio deixou de estourar, e evento cancelado saiu da avaliação do portal | 2026-09-30 | `a7c3e91f4d28` | (aqui) | — |
 | **302-portal-detalhes-do-evento** | *(EM PRODUÇÃO 22/09 ~17:56, merge `21db6b9`)* "No portal do artista não aparece o horário final do evento. E eu queria pensar contigo quais informações aparecem hoje para o artista." O levantamento achou três coisas maiores que o pedido. **(1)** O horário final **já chegava ao navegador e era descartado** pela tela — `_role_summary` serializava `end_at`, o tipo do front declarava o campo e nenhuma tela o desenhava. **(2)** O **ensaio é invisível para quem vai ensaiar**: ensaio é evento-filho (`parent_event_id`), com data, hora e local próprios, e **nenhum dos 98 eventos ENSAIO tem elenco** — o elenco fica no show, e o portal lista escalações; são 54 ensaios, todos com data/hora/local, caindo **2 a 4 dias antes** do show. **(3)** Maquiagem e saída existem desde sempre e **pararam de ser preenchidas**: 19 e 24 dos 475 eventos do espelho, e **zero** dos 64 futuros — expor sem mexer no processo interno não mudaria nada, então a feature também acende um chip de pendência na tela do evento. O bloco "Antes do evento" é **recolhido e ausente quando não há nada**, a pedido do dono ("para não ficar poluído"), e aparece também no card de **Convites**, onde muda uma decisão ainda não tomada — 2 dos 4 convites pendentes são de eventos que já têm ensaio marcado. "Personagem" vira **"Função"** para cargo (289 das 731 escalações) nas **três** superfícies que o artista lê: portal, e-mail e WhatsApp — as duas últimas também mandavam o código cru do banco (`Maquiagem: 14:00 — manto`). A seção Histórico **sai da Agenda**, o que desfaz metade da **229** de propósito: a causa que ela tratou era a duplicação de nome entre duas listas, e o link de avaliar era remédio do sintoma; o payload continua entregando `history` porque backend e frontend sobem separados. Achados de passagem: o evento que **termina no dia seguinte** lia-se como vinte horas de trabalho (34 no espelho), o ensaio **já realizado** ficava no bloco de preparação (janela garantida por construção), e o N+1 de `role.event` — anterior à feature — custava 19 consultas para 13 escalações contra 8 para 1 | 2026-09-22 | `—` | (aqui) | — |
 | **301-orcamentos-visiveis-comercial** | *(EM PRODUÇÃO 22/09 ~11:22, merge `fad410f`)* "Todas as pessoas do setor comercial devem poder ver e abrir orçamentos de outras pessoas. Isso era assim até algum tempo atrás." **Causa → efeito:** em 20/05/2026 o commit `6b191e4` removeu de propósito o filtro por dono do histórico ("todos veem todos os orçamentos"); em 23/07/2026 a migração do módulo para React (**feature 177**) o **reintroduziu**, porque o contrato dela (`specs/177-.../contracts/api-endpoints.md:119`) descrevia o código de dois meses antes — `routes.py:714` já não tinha o filtro no dia em que aquilo foi escrito. A regressão durou **dois meses** e contaminou mais duas superfícies no domínio Agenda: a aba Comercial do evento (239) e o vínculo orçamento↔evento (273). O sintoma mais nu: uma pessoa do COMERCIAL sem orçamentos próprios abria o histórico e via **tela vazia**. A 301 devolve a leitura a todo o comercial (listar, abrir, recalcular, PDF, reenviar e-mail), mantém **uma** trava de autoria — o `DELETE` — e **aperta** a de escrita do vínculo: vincular é livre, mas trocar, desvincular e **re-aplicar** sobre vínculo alheio viram 409 nomeando o autor. O re-aplicar escapava da guarda antiga e só não vazava porque o 404 do alvo vinha antes; derrubá-lo sem apertar deixaria qualquer colega reescrever `sale_value` e `sale_date` — e `sale_date` decide o mês da comissão (267b). Pelo mesmo motivo a queda do 404 é **condicionada ao papel**: o FINANCEIRO passa no gate do endpoint e ganharia de brinde o poder de vincular venda alheia. Reenvio de orçamento de outra pessoa passa a ser auditado. A tela deixa de **deduzir** permissão da ausência de dado no payload (`pode_gerir`, `pode_excluir`), e o contrato da 177 recebe nota de regra superada, para a próxima reescrita não repetir o caminho | 2026-09-21 | `—` | (aqui) | — |
@@ -257,7 +258,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Assunto | Features |
 |---|---|
 | Agenda / evento / formulário de evento | 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
-| Loja de Interações Virtuais | 205, 205b, 205c, 205d, 205e, 205f |
+| Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
@@ -287,6 +288,55 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 304 — A loja de conversas com cara de Natal, e a campanha do Papai Noel   (304-loja-natal-papai-noel · 2026-10-13 · sem migration)
+
+> **Branch `304-loja-natal-papai-noel`, não publicada.** Depois do deploy falta rodar, no Shell
+> do `manto-backend`: `MANTO_SEM_THREADS=1 python specs/304-loja-natal-papai-noel/criar_campanha_noel.py --execute`
+> (idempotente). A campanha nasce em rascunho; o time põe preços, vagas de vídeo e horários na
+> gestão e publica. Endereço para as artes: `alo.mantoproducoes.com.br/papai-noel`.
+
+**Motivação.** "A primeira versão será com chamadas com o Papai Noel. As pessoas vão marcar para
+poder ou mostrar a cartinha, ou pedir para o Papai Noel dar alguma mensagem para a criança. […]
+acerte os textos do site e identidade para ficar com cores e cara de natal." O dono mandou duas
+artes (pôster e banner) e respondeu três perguntas: os formatos continuam os dois da 205, **sem
+juntar** ("a cartinha seria uma das opções que podem ser feitas durante a chamada"); o tema vale
+para a **loja inteira**, não por campanha (trocar quando as princesas entrarem); preços e agenda
+o time preenche. A loja nunca tinha vendido (zero campanhas desde a 224b).
+
+**Decisões.**
+- **Tema da loja, não da campanha**: paleta `alo.*` em namespace próprio (arranjo do `lamp.*` da
+  255) — nenhum token global muda, o catálogo de festa fica igual. Por campanha exigiria coluna.
+- **A copy da estação mora num arquivo** (`frontend/apps/public/src/lib/lojaTema.ts`); as páginas
+  só carregam mecânica (rótulos de campo, estados de pagamento). O FAQ da loja aparece também na
+  campanha que não tem FAQ próprio — a do Noel nasce sem, para o texto ter uma fonte só.
+- **Cartinha é texto, não campo**: o formulário muda o rótulo e o exemplo das dicas conforme o
+  formato, sem coluna nova.
+- **Campanha por script** porque o botão "Nova campanha" nunca funcionou (`docs/05` 88). Slug
+  curto `papai-noel` (cabe num story); preços R$ 0,00 até o time decidir — e por isso a trava de
+  publicar passou a recusar zero: antes só olhava `None`, e um rascunho esquecido iria ao ar de
+  graça. O vídeo só precisa de preço quando há vaga de vídeo à venda.
+- **Termos de tolerância são rascunho**: só dizem o que o sistema garante (10 minutos, o horário
+  seguinte é de outra família) e deixam a remarcação como tentativa — o time revisa antes de
+  publicar.
+- **E-mails**: `_html_wrap`/`_btn` ganharam `tema` opcional; o padrão sai byte a byte igual ao da
+  `main` (o verify compara). Saudação "Olá!" — a 205 saudava a criança num e-mail que vai ao adulto.
+- **Prévia de link fixa** em `/catalogo/v` e `/catalogo/v/<slug>` (não no pedido, link
+  particular): a capa da campanha é a foto original, pesada demais para o WhatsApp (`docs/05` 57).
+
+**Pegadinhas achadas.**
+- `PedidoVirtualPage`: "Escolher outro horário" era `<a href="/v/<slug>">` cru — em `alo.*` virava
+  `/catalogo/v/v/<slug>`, página branca. Virou `<Link>`.
+- `new Date("2026-12-20")` é meia-noite UTC: o prazo do vídeo aparecia **um dia antes** no Brasil.
+  Datas e horários da loja agora saem do texto (são hora de parede de São Paulo, sem fuso).
+- O botão flutuante da lista de desejos do catálogo aparecia na loja e cobria o "Reservar".
+
+**Verificação.** `verify_304.py` 27/27 (com prova por mutação: sem a trava nova, o V3.1 acusa);
+`verify_205.py` 137/137; `npm run typecheck`; `ruff`; `node --check server.js`. Telas abertas no
+Browser pane em 375px (vitrine, campanha nos dois formatos com erro de validação, pedido pago com
+a confirmação por telefone, catálogo de festa intacto). Prévia: UA do WhatsApp em `/catalogo/v` e
+`/catalogo/v/papai-noel` devolve `og:image` absoluta; o JPEG responde `image/jpeg` (140 KB); o
+pedido fica sem prévia.
 
 ### 303 — O sync não apaga mais evento com dinheiro   (303-sync-nao-apaga-venda · 2026-09-30 · `a7c3e91f4d28`)
 

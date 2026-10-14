@@ -410,6 +410,19 @@ function isPreviewCrawler(userAgent) {
 
 function catalogOgTarget(url) {
   const [pathname] = url.split("?");
+  // Loja de conversas (feature 304): `/catalogo/v` e `/catalogo/v/<slug>` — para onde `alo.*`
+  // redireciona. Prévia FIXA da estação, sem ida à API: a capa da campanha é a foto original
+  // (pesada demais para o WhatsApp, ver o comentário de `OG_SOURCES`) e o título da loja já diz
+  // tudo. A página do pedido fica de fora: é link particular de uma família, não de divulgação.
+  if (pathname === "/catalogo/v" || pathname === "/catalogo/v/") {
+    return { kind: "loja", slug: "/catalogo/v" };
+  }
+  if (pathname.startsWith("/catalogo/v/") && !pathname.startsWith("/catalogo/v/pedido/")) {
+    const slug = decodeURIComponent(pathname.slice("/catalogo/v/".length).replace(/\/$/, ""));
+    return slug && !slug.includes("/") && !slug.includes(".")
+      ? { kind: "loja", slug: `/catalogo/v/${encodeURIComponent(slug)}` }
+      : null;
+  }
   if (!pathname.startsWith("/catalogo/")) return null;
   const segments = pathname.slice("/catalogo/".length).split("/").filter(Boolean);
 
@@ -466,6 +479,21 @@ const OG_SOURCES = {
       };
     },
   },
+  // Loja de conversas (feature 304). `slug` aqui é o caminho inteiro da página; a imagem é a arte
+  // horizontal da estação, já em 1200×630 e ~140 KB, servida do próprio bundle público
+  // (`apps/public/public/loja/`). Trocar de estação = trocar a imagem e estes textos, junto com
+  // `apps/public/src/lib/lojaTema.ts`.
+  loja: {
+    staticMeta: {
+      title: "Uma chamada com o Papai Noel",
+      description:
+        "Videochamada ao vivo ou vídeo gravado do Papai Noel para a sua criança, sem sair de casa. Reservas abertas para o Natal.",
+      hasImage: true,
+      imageSize: { width: 1200, height: 630 },
+    },
+    pagePath: (slug) => slug,
+    imagePath: () => "/catalogo/loja/og-natal.jpg",
+  },
 };
 
 /** Origem pública desta requisição — a `og:image`/`og:url` precisam ser absolutas. */
@@ -479,6 +507,7 @@ function requestOrigin(req) {
 
 /** Metadados da página pela API do Flask, com cache curto. `null` = inexistente/inativa. */
 async function fetchOgMeta(target) {
+  if (OG_SOURCES[target.kind].staticMeta) return OG_SOURCES[target.kind].staticMeta;
   const key = `${target.kind}:${target.slug}`;
   const cached = ogCache.get(key);
   if (cached && cached.expires > Date.now()) return cached.meta;
