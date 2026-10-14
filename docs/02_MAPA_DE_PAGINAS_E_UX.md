@@ -1647,6 +1647,10 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 
 #### `/financeiro/pagamentos` — Planilha de Pagamentos *(paridade restaurada na feature 189; visualização e filtro por faixa na feature 194; celular, busca e janela de adiantamentos na 226)*
 - **Acesso**: `FINANCEIRO`, `SUPERADMIN`.
+- **Comissão paga à parte** *(hotfix 267c)*: por vendedor e ciclo, "Comissões MM/AAAA" traz só o que
+  falta pagar, e "Comissões MM/AAAA — pago" o que já saiu. O item pago mostra "Pago" sem seletor; o
+  Superadmin vê o seletor sem "No banco", e o "Não pago" pede o motivo ("só para pagamento marcado
+  por engano"). A mensagem de recusa do servidor aparece embaixo do seletor.
 - **UX**: itens de cachê, salário, gasto, BV, comissão e contas recorrentes em uma planilha
   única, na ordem de colunas clássica — **checkbox** (com "selecionar tudo") · **vencimento** ·
   **descrição detalhada** (badge do tipo + descrição do item, com botão de cópia) · **favorecido**

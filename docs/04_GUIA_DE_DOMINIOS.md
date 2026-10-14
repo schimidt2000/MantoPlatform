@@ -332,6 +332,14 @@ assinatura) nunca vira pendência (`:1075-1081`).
 
 ### Armadilhas
 
+- ✅ **Hotfix 267c — comissão paga não volta pelo lote.** `liquidar_periodo` mexe só nas linhas
+  abertas (`a_pagar`, `no_banco`) e as trava (`with_for_update`); a Planilha mostra o que já foi pago
+  num item à parte (`<vendedor>:<AAAA-MM>:pago`, "— pago"). As quatro portas (API e Jinja, individual
+  e em massa) passam por `comissoes_ops.liquidar_item_de_comissao`: o item pago só sai de `pago` pelo
+  "Não pago" do **Superadmin**, com **motivo** (vai ao histórico de cada evento); em massa e no Jinja,
+  nunca. A tela antiga de Comissões (por linha) também não tira de `pago`. Antes, o "Não pago" de um
+  item misto devolvia a "a pagar" o que já tinha saído, e a ressincronização o recalculava pela venda
+  de hoje — o vendedor aparecia devendo o valor cheio. O valor pago gravado e o lote são da 1e.
 - ✅ **Feature 267 fechou os quatro defeitos abaixo.** Hoje a comissão exibida no evento vem de
   `comissoes_ops.comissao_exibida_do_evento` (linha real → regra canônica → 0 se cancelado), a
   mesma função na API e no Jinja; e a liquidação, das quatro cópias, vem de

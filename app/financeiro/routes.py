@@ -929,35 +929,49 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
     for r in rows:
         by_seller[r.seller_id].append(r)
 
+    # Hotfix 267c: o que já foi pago sai num item à parte ("— pago", id com `:pago`), e o aberto
+    # mostra só o que falta. Antes era um item só, com a soma de tudo e o status "não pago"
+    # quando misturado — no espelho, o item de maio dizia R$ 2.133,88 "Não pago" com R$ 1.996,38
+    # já pagos, e o "Pago" do lote ia pagar de novo o que já tinha saído.
+    from app.financeiro.comissoes_ops import SUFIXO_ITEM_PAGO
+
     period_tag = f"{period_start.year:04d}-{period_start.month:02d}"
+    titulo = f"Comissões {period_start.month:02d}/{period_start.year}"
     items = []
     for seller_id, lst in by_seller.items():
-        total = sum((c.amount for c in lst), Decimal("0"))
-        if total == 0:
-            continue
+        pagas = [c for c in lst if c.status == "pago"]
+        abertas = [c for c in lst if c.status != "pago"]
         seller = User.query.get(seller_id)
-        if all(c.status == "pago" for c in lst):
-            status = "pago"
-        elif all(c.status == "no_banco" for c in lst):
-            status = "no_banco"
-        else:
-            status = "nao_pago"
         pix = (seller.pix_key or "").strip() if seller and seller.pix_key else ""
-        items.append({
-            "type":        "commission",
-            "id":          f"{seller_id}:{period_tag}",
-            "date":        due_date,
-            "event_title": f"Comissões {period_start.month:02d}/{period_start.year}",
-            "event_id":    None,
-            "copy_label":  due_date.strftime("%d/%m/%Y") + " - Comissão " + (seller.name if seller else ""),
-            "sublabel":    "Comissão",
-            "person_name": seller.name if seller else "—",
-            "amount":      total,
-            "pix_key":     pix,
-            "pix_key_type": seller.pix_key_type if seller else "",
-            "status":      status,
-            "is_future":   due_date > today,
-        })
+        nome = seller.name if seller else ""
+        for grupo, item_id, sufixo in (
+            (abertas, f"{seller_id}:{period_tag}", ""),
+            (pagas, f"{seller_id}:{period_tag}:{SUFIXO_ITEM_PAGO}", " — pago"),
+        ):
+            total = sum((c.amount for c in grupo), Decimal("0"))
+            if total == 0:
+                continue
+            if grupo is pagas:
+                status = "pago"
+            elif all(c.status == "no_banco" for c in grupo):
+                status = "no_banco"
+            else:
+                status = "nao_pago"
+            items.append({
+                "type":        "commission",
+                "id":          item_id,
+                "date":        due_date,
+                "event_title": titulo + sufixo,
+                "event_id":    None,
+                "copy_label":  due_date.strftime("%d/%m/%Y") + " - Comissão " + nome,
+                "sublabel":    "Comissão",
+                "person_name": seller.name if seller else "—",
+                "amount":      total,
+                "pix_key":     pix,
+                "pix_key_type": seller.pix_key_type if seller else "",
+                "status":      status,
+                "is_future":   due_date > today,
+            })
     return items
 
 
@@ -1120,20 +1134,18 @@ def set_payment_status():
     from app.utils import audit
     if item_type == "commission":
         # item_id = "sellerId:YYYY-MM" (mês de venda). Marca as comissões do vendedor/período.
-        try:
-            seller_part, period_tag = str(item_id).split(":")
-            seller_id = int(seller_part)
-            py, pm = int(period_tag[:4]), int(period_tag[5:7])
-        except (ValueError, AttributeError):
-            return _bad()
-        p_start = date(py, pm, 1)
-        p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
-        target = status if status in ("pago", "no_banco") else "a_pagar"
-        from app.financeiro.comissoes_ops import liquidar_periodo
+        # Hotfix 267c: o Jinja não pede motivo, então nunca desfaz pagamento (só o React, pelo
+        # Superadmin); no item aberto o lote só mexe no que não foi pago.
+        from app.financeiro.comissoes_ops import LiquidacaoRecusada, liquidar_item_de_comissao
 
-        rows = liquidar_periodo(seller_id, p_start, p_end, target)
-        audit("payment", "commission", seller_id, "",
-              f"Comissões {period_tag}: → {target} ({len(rows)} itens)")
+        try:
+            rows, target = liquidar_item_de_comissao(
+                str(item_id), status, eh_superadmin=False, actor_name=current_user.name
+            )
+        except LiquidacaoRecusada:
+            return _bad()
+        audit("payment", "commission", str(item_id).split(":")[0], "",
+              f"Comissões {item_id}: → {target} ({len(rows)} itens)")
         db.session.commit()
         return _done(target if target != "a_pagar" else "nao_pago")
 
@@ -1302,21 +1314,18 @@ def _bulk_set_commission_period(commission_id: str, action: str) -> bool:
 
     Mesmo efeito do controle individual da planilha. Retorna False se o id é inválido.
     """
-    try:
-        seller_part, period_tag = str(commission_id).split(":")
-        seller_id = int(seller_part)
-        py, pm = int(period_tag[:4]), int(period_tag[5:7])
-    except (ValueError, AttributeError):
-        return False
-    p_start = date(py, pm, 1)
-    p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
-    target = action if action in ("pago", "no_banco") else "a_pagar"
-    from app.financeiro.comissoes_ops import liquidar_periodo
+    # Hotfix 267c: o mesmo núcleo das outras três portas; sem motivo, o item "— pago" não sai.
+    from app.financeiro.comissoes_ops import LiquidacaoRecusada, liquidar_item_de_comissao
 
-    rows = liquidar_periodo(seller_id, p_start, p_end, target)
+    try:
+        rows, target = liquidar_item_de_comissao(
+            str(commission_id), action, eh_superadmin=False, actor_name=current_user.name
+        )
+    except LiquidacaoRecusada:
+        return False
     from app.utils import audit
-    audit("payment", "commission", seller_id, "",
-          f"Bulk comissões {period_tag}: → {target} ({len(rows)} itens)")
+    audit("payment", "commission", str(commission_id).split(":")[0], "",
+          f"Bulk comissões {commission_id}: → {target} ({len(rows)} itens)")
     return True
 
 
@@ -1556,6 +1565,11 @@ def set_commission_status():
     valid = {"a_pagar", "pago", "cancelado"}
     if cp_id and status in valid:
         cp = CommissionPayment.query.get(cp_id)
+        if cp and cp.status == "pago" and status != "pago":
+            # Hotfix 267c: desfazer pagamento é só do Superadmin, com motivo, pela Planilha nova.
+            flash("Comissão já paga não volta por aqui. O Superadmin desfaz pela Planilha de "
+                  "Pagamentos, com o motivo.", "error")
+            return redirect(next_url)
         if cp:
             old = cp.status
             cp.status = status

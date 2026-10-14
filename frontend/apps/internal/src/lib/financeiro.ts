@@ -388,6 +388,8 @@ export interface SetPaymentStatusInput {
   item_type: PagamentoItemType;
   item_id: number | string;
   status: PaymentStatus;
+  /** Hotfix 267c: obrigatório para o Superadmin desfazer um pagamento de comissão. */
+  motivo?: string;
 }
 
 /** Marca o status de um item de pagamento (feature 160). */
