@@ -32,6 +32,7 @@ import { ClienteBlock } from "../components/EventFormBlocks/ClienteBlock";
 import { DadosEventoBlock } from "../components/EventFormBlocks/DadosEventoBlock";
 import { ElencoBlock } from "../components/EventFormBlocks/ElencoBlock";
 import { ValoresBlock } from "../components/EventFormBlocks/ValoresBlock";
+import { AlertaBvDoOrcamento } from "../components/EventDetail/AlertaBvDoOrcamento";
 import { PagamentoBlock } from "../components/EventFormBlocks/PagamentoBlock";
 import { ContratoBlock } from "../components/EventFormBlocks/ContratoBlock";
 import { ObservacoesBlock } from "../components/EventFormBlocks/ObservacoesBlock";
@@ -493,6 +494,12 @@ export function EventEditPage() {
                   ? (data.venda.seller ?? "Vendedor definido")
                   : null
               }
+            />
+
+            {/* Feature 305 (B9): o orçamento tem BV e a venda foi digitada sem ele. */}
+            <AlertaBvDoOrcamento
+              pendente={data.venda?.bv_do_orcamento_pendente}
+              lancarHref={`/events/${data.event.id}?aba=comercial&lancar=bv`}
             />
 
             <PagamentoBlock

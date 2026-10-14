@@ -5,7 +5,7 @@ import { Badge, Button } from "@manto/ui";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
 import { MoneyInput } from "@manto/money";
 import type { EventoDetalhe, RelatorioOrcamento } from "../../lib/agenda";
-import { useEventCreateOptions } from "../../lib/eventCreate";
+import { useEventCreateOptions, useOrcamentoPrefill } from "../../lib/eventCreate";
 import {
   useSetEventClients,
   useSetEventFormResponse,
@@ -23,6 +23,7 @@ import { ClientPicker, type SelectedClient } from "../ClientPicker";
 import { FormResponsePicker, type SelectedFormResponse } from "../FormResponsePicker";
 import { dataBr, OrcamentoPicker } from "../OrcamentoPicker";
 import { AgruparEventosDialog } from "./AgruparEventosDialog";
+import { AlertaBvDoOrcamento } from "./AlertaBvDoOrcamento";
 import { ColecoesComerciaisPanel } from "./ColecoesComerciaisPanel";
 import { brl, DataRow, Empty, formatDay, INPUT_CLASS, Panel } from "./parts";
 
@@ -188,7 +189,8 @@ function VendaForm({
   focarValor = false,
 }: {
   data: EventoDetalhe;
-  onClose: () => void;
+  /** Feature 305: recebe o `aviso_bv` da resposta — o painel o mostra depois de fechar o form. */
+  onClose: (avisoBv?: string | null) => void;
   /** Aberto pelo "Pôr o valor" da Home: o foco já vai para o valor de venda final (feature 299). */
   focarValor?: boolean;
 }) {
@@ -416,11 +418,11 @@ function VendaForm({
       <div className="flex flex-wrap items-center gap-2">
         <Button
           loading={salvar.isPending}
-          onClick={() => salvar.mutate(form, { onSuccess: onClose })}
+          onClick={() => salvar.mutate(form, { onSuccess: (r) => onClose(r.aviso_bv) })}
         >
           Salvar venda
         </Button>
-        <Button variant="ghost" onClick={onClose} disabled={salvar.isPending}>
+        <Button variant="ghost" onClick={() => onClose()} disabled={salvar.isPending}>
           Cancelar
         </Button>
         {salvar.isError && <span className="text-sm text-red">{salvar.error?.message}</span>}
@@ -541,6 +543,9 @@ function chipsDoOrcamento(orc: NonNullable<EventoDetalhe["venda"]>["orcamento"])
   if (orc.maquiagens) chips.push(`Maquiagem em ${orc.maquiagens}`);
   if (orc.cantores) chips.push(`${orc.cantores} cantor${orc.cantores > 1 ? "es" : ""}`);
   if (orc.has_show) chips.push("Show · técnico de som");
+  // Feature 305 — o BV que o orçamento somou ao preço.
+  if (orc.bv?.percentual != null) chips.push(`BV ${orc.bv.percentual}%`);
+  else if (orc.bv?.valor != null) chips.push(`BV ${brl(orc.bv.valor)}`);
   return chips;
 }
 
@@ -562,12 +567,20 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
   const [trocando, setTrocando] = useState(false);
   const [duracao, setDuracao] = useState<string>("");
   const [relatorio, setRelatorio] = useState<RelatorioOrcamento | null>(null);
+  // Feature 305: quem recebe e PIX do BV, pedidos quando o "Vincular e aplicar" vai criar BV. O
+  // prefill diz se o orçamento tem BV e quanto (o valor vem do servidor). Hooks antes do return.
+  const [bvRecipient, setBvRecipient] = useState("");
+  const [bvPix, setBvPix] = useState("");
+  const prefillEscolhido = useOrcamentoPrefill(escolhido?.id ?? null);
   // Cortesia/permuta grava venda 0 de propósito: não é "sem venda" para aplicar valores. Desde a
   // 299 o valor simbólico (R$ 0,01) conta como "sem venda" — é pelo orçamento que ele vira venda.
   // Sem a chave (servidor antigo), a regra de antes.
   const semVenda = venda.sem_valor ?? (!venda.sale_value && !venda.is_cortesia_permuta);
 
-  function enviar(id: number | null, extra: { aplicar_valores_duracao?: number | null } = {}) {
+  function enviar(
+    id: number | null,
+    extra: { aplicar_valores_duracao?: number | null; bv_recipient?: string; bv_pix?: string } = {},
+  ) {
     setRelatorio(null);
     salvar.mutate(
       { orcamento_history_id: id, aplicar_equipe: true, ...extra },
@@ -577,6 +590,8 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
           setEscolhido(null);
           setTrocando(false);
           setDuracao("");
+          setBvRecipient("");
+          setBvPix("");
         },
       },
     );
@@ -587,6 +602,7 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
   // 409 "já vinculado a outro evento" / "satélite" mandam o id do evento certo: linka em vez de
   // deixar a comercial adivinhar.
   const detalhesDoErro = salvar.error instanceof ApiRequestError ? salvar.error.details : undefined;
+  const campos = salvar.error instanceof ApiRequestError ? salvar.error.fields : undefined;
   const eventoDoErro = [detalhesDoErro?.event_id, detalhesDoErro?.leader_id].find(
     (v): v is number => typeof v === "number",
   );
@@ -705,6 +721,56 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
               </select>
             </label>
           )}
+          {(() => {
+            // Feature 305 — com os valores aplicados, o BV do orçamento nasce no evento (em reais,
+            // com quem recebe e o PIX, obrigatórios). Os campos também aparecem quando o 400 os traz
+            // (prefill que falhou), para a pessoa ter onde digitar.
+            const bvLinha = prefillEscolhido.data?.acrescimos_do_orcamento?.linhas.find((l) => l.is_bv);
+            const valorBv =
+              bvLinha && duracao ? bvLinha.valores_brl[duracao as "1" | "2" | "3" | "4"] : null;
+            const pedidosPeloErro = Boolean(campos?.bv_recipient || campos?.bv_pix);
+            if (!((semVenda && duracao && bvLinha) || pedidosPeloErro)) return null;
+            return (
+              <div className="space-y-2 rounded-md border border-line p-3">
+                {valorBv != null && (
+                  <p className="text-sm text-ink">
+                    BV · {bvLinha!.percentual != null ? `${bvLinha!.percentual}% → ` : ""}
+                    {brl(valorBv)} — repasse a quem indicou; não entra na comissão.
+                  </p>
+                )}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <label className={LABEL_CLASS} htmlFor="orc-bv-quem">
+                      Quem recebe o BV *
+                    </label>
+                    <input
+                      id="orc-bv-quem"
+                      className={INPUT_CLASS}
+                      maxLength={200}
+                      value={bvRecipient}
+                      aria-invalid={Boolean(campos?.bv_recipient)}
+                      onChange={(e) => setBvRecipient(e.target.value)}
+                    />
+                    {campos?.bv_recipient && <p className="mt-1 text-xs text-red">{campos.bv_recipient}</p>}
+                  </div>
+                  <div>
+                    <label className={LABEL_CLASS} htmlFor="orc-bv-pix">
+                      PIX de quem recebe *
+                    </label>
+                    <input
+                      id="orc-bv-pix"
+                      className={INPUT_CLASS}
+                      maxLength={140}
+                      value={bvPix}
+                      aria-invalid={Boolean(campos?.bv_pix)}
+                      onChange={(e) => setBvPix(e.target.value)}
+                    />
+                    {campos?.bv_pix && <p className="mt-1 text-xs text-red">{campos.bv_pix}</p>}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
@@ -713,6 +779,8 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
               onClick={() =>
                 enviar(escolhido.id, {
                   aplicar_valores_duracao: duracao ? Number(duracao) : null,
+                  bv_recipient: bvRecipient.trim() || undefined,
+                  bv_pix: bvPix.trim() || undefined,
                 })
               }
             >
@@ -832,6 +900,8 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
   // "Salvar venda"). Sem permissão de editar, o parâmetro é ignorado.
   const pedeEdicao = searchParams.get("editar") === "venda";
   const [editando, setEditando] = useState(pedeEdicao);
+  // Feature 305 (B10): "O BV acompanhou a venda…" fica à vista depois que o form fecha.
+  const [avisoBv, setAvisoBv] = useState<string | null>(null);
   if (!venda) return null;
   const bruto = venda.sale_value_gross ?? 0;
   const liquido = venda.sale_value ?? 0;
@@ -842,8 +912,9 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
 
   // Ao salvar ou cancelar, o `editar` sai da URL (preservando a aba) — senão recarregar a página
   // reabriria a edição.
-  const fechar = () => {
+  const fechar = (aviso?: string | null) => {
     setEditando(false);
+    setAvisoBv(aviso ?? null);
     if (!pedeEdicao) return;
     setSearchParams(
       (atual) => {
@@ -875,6 +946,20 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
         ) : null
       }
     >
+      {avisoBv && (
+        <p role="status" className="mb-3 rounded-md bg-gold-soft p-2 text-sm text-ink">
+          {avisoBv}
+        </p>
+      )}
+      {canEdit && (
+        <div className="mb-3">
+          {/* "Lançar o BV" abre o editor de Acréscimos, que mora mais abaixo nesta mesma aba. */}
+          <AlertaBvDoOrcamento
+            pendente={venda.bv_do_orcamento_pendente}
+            lancarHref={`/events/${data.event.id}?aba=comercial&lancar=bv`}
+          />
+        </div>
+      )}
       <div className="divide-y divide-line">
         {bruto > 0 && <DataRow label="Valor antes do desconto">{brl(bruto)}</DataRow>}
         {desconto > 0 && (

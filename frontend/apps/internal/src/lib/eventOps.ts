@@ -274,7 +274,10 @@ export function useCancelamentos() {
 // cada uma carrega um anexo que sobe por multipart.
 
 export interface AcrescimoInput {
+  /** Feature 305 — a linha que veio do GET; o servidor herda status e PIX só da linha de mesmo id. */
+  id?: number;
   tipo: string;
+  /** Ausente = mantém a descrição gravada; `""` = apaga. */
   descricao?: string | null;
   is_percent?: boolean;
   value: number | string;
@@ -314,7 +317,12 @@ export function useSetAcrescimos(eventId: number) {
         method: "PUT",
         body: JSON.stringify({ items }),
       }),
-    onSuccess: () => invalidarComercial(queryClient, eventId),
+    onSuccess: () => {
+      invalidarComercial(queryClient, eventId);
+      // Feature 305: salvar os acréscimos mexe no BV da Planilha e na comissão na mesma requisição.
+      void queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
+      void queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
+    },
   });
 }
 

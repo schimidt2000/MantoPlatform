@@ -64,8 +64,22 @@ export interface OrcamentoPrefill {
   transport_value?: number;
   acrescimo_value?: number;
   acrescimos?: unknown[];
+  /** Feature 305: o que cada acréscimo somou ao preço, por duração (o BV CHEIO), do servidor. */
+  acrescimos_do_orcamento?: AcrescimosDoOrcamento;
   with_invoice?: boolean;
   caches?: OrcamentoCache[];
+}
+
+/** Feature 305 — `acrescimos_do_orcamento` do prefill. Nenhuma conta de dinheiro no navegador. */
+export interface AcrescimosDoOrcamento {
+  personalizado: boolean;
+  linhas: {
+    tipo: string;
+    descricao: string;
+    is_bv: boolean;
+    percentual: number | null;
+    valores_brl: { "1": number | null; "2": number | null; "3": number | null; "4": number | null; custom: number | null };
+  }[];
 }
 
 export function useOrcamentoPrefill(orcamentoId: number | null) {
@@ -144,6 +158,9 @@ export interface EventCreateInput {
   characters: CharacterInput[];
   orc_caches: OrcamentoCache[];
   acrescimos: unknown[];
+  /** Feature 305: obrigatórios quando o evento nasce com BV do orçamento (400 com `fields`). */
+  bv_recipient?: string;
+  bv_pix?: string;
   coordinator_talent_id: number | null;
   clients: ClientLinkInput[];
   form_response_id: number | null;
