@@ -61,15 +61,18 @@ leitura. Extrator puro: `app/formularios/pre_evento_ops.extrair_para_evento(resp
 | `clients` | `client_id` do formulário; senão, a ficha com o mesmo telefone | Contratante | sugerida pelo telefone → `cliente_sugerida` |
 | `characters` | `quais_personagens` (+ `qtd_personagens`) | divide por ",", " e ", "+" e "/"; tira vazios | sempre marcado como "confira" |
 | observação "Tema" | `tema_evento` · `tema_do_evento` | texto | — |
-| observação "Aniversariante" | `nome_aniversariante` + `idade_aniversariante` · slugs | "Nome, N anos" | — |
+| observação "Aniversariante" | `nome_aniversariante` · `nome_do_aniversariante` + `idade_aniversariante` · `idade_a_completar_do_aniversariante` *(298b)* | "Nome, N anos" | — |
 | observação "Espaço" | `espaco_evento` · `espaco_escolhido_para_o_evento` | texto | — |
 | observação "Briefing" (corporativo) | `briefing` · `briefing_do_evento` | texto | — |
 | observação "Observações contratuais" | `observacoes` · `observacoes_contratuais` | texto | — |
-| observação "Assessoria" | `assessoria` / telefone de assessoria | texto | — |
+| observação "Assessoria" | `assessoria` · `gostaria_que_a_confirmacao_do_evento_seja_com_assessoria_se_sim_digite_o_telefone` *(298b)* | texto | — |
 
-As chaves exatas de cada vocabulário ficam numa constante de sinônimos no `pre_evento_ops`. O seed
-nativo está em `migrations/versions/a51ce3dc4f3c_form_field_definitions.py:32-76`; os slugs WhatsForm,
-em `research.md`. Chave desconhecida é ignorada sem erro.
+As chaves exatas de cada vocabulário ficam em `SINONIMOS` (`app/formularios/pre_evento_ops.py`), a
+fonte única. O seed nativo está em `migrations/versions/a51ce3dc4f3c_form_field_definitions.py:32-76`;
+os slugs WhatsForm são o `field_key_for` do importador aplicado ao rótulo do CSV — conferidos no
+espelho, não adivinhados (298b). Chave desconhecida é ignorada sem erro. **Pergunta criada no editor
+de campos não vai ao cadastro do evento**: fica nas respostas do formulário, como todas (decisão do
+dono, 06/10/2026, 1d-Q1 e Q2 = A).
 
 ## Forma de pagamento
 
