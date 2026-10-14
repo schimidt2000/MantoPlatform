@@ -215,6 +215,9 @@ function VendaForm({
     payment_due_date: venda.payment_due_date ? venda.payment_due_date.slice(0, 10) : null,
   }));
 
+  // Hotfix 215b: o vendedor já gravado só o Financeiro e o Superadmin trocam (o servidor recusa).
+  const vendedorTravado = venda.seller_id != null && !venda.pode_trocar_vendedor;
+
   const set = <K extends keyof EventComercialInput>(key: K, value: EventComercialInput[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -301,10 +304,14 @@ function VendaForm({
             className={INPUT_CLASS}
             value={form.commission_rate ?? ""}
             placeholder="padrão do sistema"
+            disabled={!venda.pode_mudar_taxa}
             onChange={(e) =>
               set("commission_rate", e.target.value === "" ? null : Number(e.target.value))
             }
           />
+          {!venda.pode_mudar_taxa && (
+            <p className="mt-1 text-xs text-muted">Só o Superadmin altera a taxa.</p>
+          )}
         </div>
       </div>
 
@@ -379,6 +386,7 @@ function VendaForm({
           id="venda-vendedor"
           className={INPUT_CLASS}
           value={form.seller_id ?? ""}
+          disabled={vendedorTravado}
           onChange={(e) => set("seller_id", e.target.value ? Number(e.target.value) : null)}
         >
           <option value="">— sem vendedor —</option>
@@ -388,6 +396,11 @@ function VendaForm({
             </option>
           ))}
         </select>
+        {vendedorTravado && (
+          <p className="mt-1 text-xs text-muted">
+            Só o Financeiro ou o Superadmin troca o vendedor.
+          </p>
+        )}
       </div>
 
       <label className="flex items-center gap-2 text-sm text-ink">

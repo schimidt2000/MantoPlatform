@@ -975,6 +975,11 @@ def serialize_event_detail(
             "seller_id": event.seller_id,
             "sale_date": event.sale_date.isoformat() if event.sale_date else None,
             "commission_rate": event.commission_rate,
+            # Hotfix 215b — o que a tela trava, com a mesma regra que a escrita recusa
+            # (`event_ops.taxa_e_vendedor_negados`): taxa só o Superadmin; vendedor já gravado
+            # só Financeiro e Superadmin trocam (a Comercial preenche o vazio).
+            "pode_mudar_taxa": flags["is_superadmin"],
+            "pode_trocar_vendedor": flags["show_financeiro"],
             "payment_method": event.payment_method,
             "payment_installments": event.payment_installments,
             "payment_due_date": event.payment_due_date.isoformat() if event.payment_due_date else None,

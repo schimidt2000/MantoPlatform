@@ -488,6 +488,11 @@ export function EventEditPage() {
               sellers={opts.sellers}
               satelite={Boolean(data.event.is_satellite)}
               principal={data.event.group?.leader ?? null}
+              vendedorTravado={
+                data.venda?.seller_id && !data.venda.pode_trocar_vendedor
+                  ? (data.venda.seller ?? "Vendedor definido")
+                  : null
+              }
             />
 
             <PagamentoBlock
