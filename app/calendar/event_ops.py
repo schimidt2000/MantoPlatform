@@ -843,15 +843,20 @@ def resolver_data_da_venda(
     return None
 
 
-def _gravar_venda_da_edicao(event: Any, data: dict) -> None:
+def _gravar_venda_da_edicao(event: Any, data: dict, *, actor_name: str = "", tz: Any = None) -> str | None:
     """Campos comerciais da edição completa — nunca no outro evento de um grupo (feature 299).
 
     A venda do grupo mora no principal: o `/comercial` já recusa satélite com 409, mas a edição
     completa gravava (e a marca "Valor a definir", que abre marcada no satélite, faria isso toda
     vez). No satélite, título, data e local salvam; a venda fica como está (vazia).
+
+    Feature 305: o BV a pagar acompanha a venda nova (`acompanhar_bv_da_venda`); devolve o aviso.
     """
     if event.is_satellite:
-        return
+        return None
+    from app.calendar.comercial_ops import acompanhar_bv_da_venda, estado_da_venda
+
+    antes = estado_da_venda(event)
     is_cortesia = bool(data.get("is_cortesia_permuta"))
     venda_anterior, data_anterior = event.sale_value, event.sale_date
     event.is_cortesia_permuta = is_cortesia
@@ -871,6 +876,7 @@ def _gravar_venda_da_edicao(event: Any, data: dict) -> None:
     event.payment_method = data.get("payment_method")
     event.payment_installments = data.get("payment_installments")
     event.payment_due_date = data.get("payment_due_date")
+    return acompanhar_bv_da_venda(event, antes, actor_name=actor_name, tz=tz)
 
 
 def update_event_core(
@@ -940,7 +946,9 @@ def update_event_core(
     )
     event.needs_rehearsal = bool(data.get("needs_rehearsal"))
 
-    _gravar_venda_da_edicao(event, data)
+    aviso_bv = _gravar_venda_da_edicao(event, data, actor_name=actor_name, tz=tz)
+    if aviso_bv:
+        warnings.append(aviso_bv)
 
     EventClient.query.filter_by(event_id=event.id).delete()
     _create_client_links(event, data.get("client_pairs") or [])
@@ -960,6 +968,16 @@ def update_event_core(
         # ele a coleção volta do cache sem os cachês novos e a comissão sai errada.
         db.session.flush()
         sincronizar_comissao(event)
+
+    # Feature 305: a edição completa que deixa o alerta do BV aceso avisa antes de sair da tela
+    # (a tela volta ao Resumo, e o alerta mora na aba Comercial).
+    from app.calendar.orcamento_evento_ops import bv_do_orcamento_pendente
+
+    if not event.is_satellite and bv_do_orcamento_pendente(event):
+        warnings.append(
+            "Este evento tem BV no orçamento e ele não entra sozinho: lance o BV em Acréscimos, na aba "
+            "Comercial, com quem recebe e o PIX, e confira se o valor de venda é o total com o BV."
+        )
 
     db.session.add(EventLog(
         event_id=event.id,
@@ -1155,7 +1173,7 @@ def update_event_comercial(
     actor_name: str,
     tz: ZoneInfo,
     sincronizar_comissao: Any = None,
-) -> None:
+) -> str | None:
     """Grava os valores comerciais do evento na própria aba Comercial (feature 215).
 
     Mesmos campos e mesma regra de cortesia/permuta de `update_event_core` (venda zerada
@@ -1181,6 +1199,9 @@ def update_event_comercial(
             Injetada, e não importada, para o domínio da agenda não puxar a régua de comissão de
             9 ramos do financeiro — mesmo arranjo de `calendar/group_ops.py`.
     """
+    from app.calendar.comercial_ops import acompanhar_bv_da_venda, estado_da_venda
+
+    antes = estado_da_venda(event)
     is_cortesia = bool(data.get("is_cortesia_permuta"))
     venda_anterior, data_anterior = event.sale_value, event.sale_date
     event.is_cortesia_permuta = is_cortesia
@@ -1202,6 +1223,9 @@ def update_event_comercial(
     event.payment_installments = data.get("payment_installments")
     event.payment_due_date = data.get("payment_due_date")
 
+    # Feature 305 (B10): o BV a pagar acompanha a venda nova — antes do sync, que já vê o BV certo.
+    aviso_bv = acompanhar_bv_da_venda(event, antes, actor_name=actor_name, tz=tz)
+
     # Antes do commit: `_sync_commission_payment` não commita, então as duas escritas saem juntas.
     if sincronizar_comissao is not None:
         sincronizar_comissao(event)
@@ -1214,6 +1238,7 @@ def update_event_comercial(
         created_at=datetime.now(tz=tz),
     ))
     db.session.commit()
+    return aviso_bv
 
 
 def set_event_clients(event: Any, client_pairs: list[tuple[int, str]]) -> None:

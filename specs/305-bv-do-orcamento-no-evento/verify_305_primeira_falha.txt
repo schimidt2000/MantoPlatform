@@ -1,0 +1,57 @@
+﻿Feature 305 — o BV do orçamento chega ao evento
+  FALHA  1. D2: 1.309,52 com nota → BV 100,00: cannot import name 'acrescimos_do_orcamento' from 'app.calendar.orcamento_evento_ops' (C:\Users\schim\Desktop\Manto_Platform\app\calendar\orcamento_evento_ops.py)
+  FALHA  2. % sobre a mesma base, com fixo e outro %: cannot import name 'acrescimos_do_orcamento' from 'app.calendar.orcamento_evento_ops' (C:\Users\schim\Desktop\Manto_Platform\app\calendar\orcamento_evento_ops.py)
+  FALHA  3. BV fixo em 1h e 4h: cannot import name 'acrescimos_do_orcamento' from 'app.calendar.orcamento_evento_ops' (C:\Users\schim\Desktop\Manto_Platform\app\calendar\orcamento_evento_ops.py)
+  FALHA  4. duração extra (6h): cannot import name 'acrescimos_do_orcamento' from 'app.calendar.orcamento_evento_ops' (C:\Users\schim\Desktop\Manto_Platform\app\calendar\orcamento_evento_ops.py)
+  FALHA  5. personalizado → vazio: cannot import name 'acrescimos_do_orcamento' from 'app.calendar.orcamento_evento_ops' (C:\Users\schim\Desktop\Manto_Platform\app\calendar\orcamento_evento_ops.py)
+  FALHA  6. paridade com a memória do espelho (±0,01): cannot import name 'acrescimos_do_orcamento' from 'app.calendar.orcamento_evento_ops' (C:\Users\schim\Desktop\Manto_Platform\app\calendar\orcamento_evento_ops.py)
+  FALHA  7. valores_brl no snapshot; total intacto: {'tipo': 'BV', 'descricao': '', 'is_percent': True, 'value': 10.0, 'is_bv': True}
+  FALHA  8. prefill com os 4 valores: {}
+  FALHA  9. detalhe com descricao e PIX; Casting sem: [{'amount_brl': 200.0, 'bv_payment_status': 'nao_pago', 'bv_recipient': '__v305_Buffet Parceiro', 'id': 13, 'is_bv': True, 'is_percent': False, 'label': 'BV', 'tipo': 'BV', 'value': 200.0}]
+  FALHA  10. criação: linha cheia em R$, comissão sobre venda − BV: linhas BV: []
+  FALHA  11. a lista do navegador é ignorada: [{'id': 14, 'tipo': 'BV', 'descricao': None, 'is_percent': False, 'value': Decimal('9999.00'), 'amount_brl': Decimal('9999.00'), 'is_bv': True, 'bv_recipient': None, 'bv_pix': None, 'bv_payment_status': 'nao_pago'}]
+  FALHA  12. venda 5% abaixo → 140,13: list index out of range
+  OK     13. cortesia e a definir: sem linha, sem 400
+  FALHA  14. vincular e aplicar: a mesma linha; não duplica: {'cantor_marcado': 0, 'coordenadores_criados': 1, 'duracao': 2, 'fora_sp': False, 'frase': '+1 coordenador(es), valores de 2h aplicados', 'maquiador_criado': False, 'maquiagem_marcada': 0, 'nao_casados': [], 'novo_vinculo': True, 'personagens_casados': 0, 'tecnico_criado': False, 'tetos_aplicados': 0, 'valores': 2, 'vinculado': 2497}
+  FALHA  15. venda digitada: sem linha, alerta; lançar apaga; cancelado sem: {'cantor_marcado': 0, 'coordenadores_criados': 1, 'duracao': 2, 'fora_sp': False, 'frase': '+1 coordenador(es)', 'maquiador_criado': False, 'maquiagem_marcada': 0, 'nao_casados': [], 'novo_vinculo': True, 'personagens_casados': 0, 'tecnico_criado': False, 'tetos_aplicados': 0, 'vinculado': 2498}
+  FALHA  16. salvar sem mexer preserva PIX e pago: list index out of range
+  FALHA  17. régua do % (100; 130; R$ 50 junto; legado) + mutação: [{'id': 16, 'tipo': 'BV', 'descricao': None, 'is_percent': True, 'value': Decimal('10.00'), 'amount_brl': Decimal('130.95'), 'is_bv': True, 'bv_recipient': '__v305_Buffet Parceiro', 'bv_pix': 'verify305-pix@exemplo.test', 'bv_payment_status': 'nao_pago'}]
+  FALHA  18. Planilha com PIX e sem 'falta PIX': 'ev14'
+  OK     19. DEVE FALHAR: prefill como Casting
+  OK     20. DEVE FALHAR: criação como Financeiro
+  OK     21. DEVE FALHAR: editor como Casting; satélite
+  OK     22. DEVE FALHAR: vínculo como Casting
+  OK     23. sem orçamento: igual a hoje
+  OK     24. orçamento sem acréscimos: igual a hoje
+  OK     25. comissão paga intacta
+  OK     26. DRE: o CPV sobe o BV
+         (cenário 27 pulado: rode com --regressao)
+  OK     27. regressão (--regressao)
+  FALHA  31. DEVE FALHAR: PIX obrigatório (criação, vínculo, editor): 201 {}
+  OK     32. DEVE FALHAR: autoria da 301
+  FALHA  33. DEVE FALHAR: sem sessão, BV pago pela Comercial, Artista 3D, 'como Casting': 'ev14'
+  OK     34. concorrência: uma linha
+  FALHA  35. bundle antigo no editor: list index out of range
+  FALHA  36. DEVE FALHAR: erro sem estrago (API e Jinja): cannot import name 'AcrescimosRecusados' from 'app.calendar.comercial_ops' (C:\Users\schim\Desktop\Manto_Platform\app\calendar\comercial_ops.py)
+  FALHA  37. duração sem a chave: pelo valor: []
+  FALHA  38. trocar orçamento; voltar a definir: 'ev14'
+  FALHA  39. rastro sem PIX: 'ev14'
+  FALHA  40. entradas ruins sem exceção: cannot import name 'acrescimos_do_orcamento' from 'app.calendar.orcamento_evento_ops' (C:\Users\schim\Desktop\Manto_Platform\app\calendar\orcamento_evento_ops.py)
+  FALHA  42. mês passado: a frase diz a Planilha: sem o mês da Planilha: {"cantor_marcado": 0, "coordenadores_criados": 1, "duracao": 2, "fora_sp": false, "frase": "+1 coordenador(es), valores de 2h aplicados", "maquiador_criado": false, "maquiagem_marcada": 0, "nao_casados": [], "novo_vinculo": true, "personagens_casados": 0, "tecnico_criado": false, "tetos_aplicados": 
+  OK     43. gêmeo Jinja igual ao PUT
+  FALHA  44. bv_que_acompanha: cannot import name 'bv_que_acompanha' from 'app.orcamento.quote_ops' (C:\Users\schim\Desktop\Manto_Platform\app\orcamento\quote_ops.py)
+  FALHA  45. alerta: papéis, corte, ausências: com None fin None
+  FALHA  46. DEVE FALHAR: bundle antigo na criação com BV: 201 {}
+  FALHA  47. DEVE FALHAR: BV antigo sem PIX: (psycopg.errors.NotNullViolation) o valor nulo na coluna "created_at" da relação "event_acrescimos" viola a restrição de não-nulo
+DETAIL:  Registro que falhou contém (25, 1647, BV, , f, 80.00, 80.00, t, __v305_Buffet Parceiro, null, no_banco, null).
+[SQL: INSERT INTO event_acrescimos (event_id, tipo, descricao, is_percent, value, amount_brl, is_bv, bv_recipient, bv_pix, bv_payment_status) VALUES (
+  FALHA  48. a venda muda: BV a pagar acompanha; pago e a definir ficam: [{'id': 26, 'tipo': 'BV', 'descricao': None, 'is_percent': False, 'value': Decimal('200.00'), 'amount_brl': Decimal('200.00'), 'is_bv': True, 'bv_recipient': '__v305_Buffet Parceiro', 'bv_pix': 'verify305-pix@exemplo.test', 'bv_payment_status': 'nao_pago'}]
+  FALHA  49. BV em R$ como digitado; 1.800 → 180; volta 200 + mutação: 'NoneType' object is not subscriptable
+  FALHA  51. DEVE FALHAR: vírgula aceita; ilegível recusado; 'bv' é BV: vírgula: 200 []
+  FALHA  52. BV novo sem id nasce a pagar: [(Decimal('60.00'), 'pago'), (Decimal('200.00'), 'nao_pago')]
+  FALHA  53. só a nota muda: [{'id': 32, 'tipo': 'BV', 'descricao': None, 'is_percent': True, 'value': Decimal('10.00'), 'amount_brl': Decimal('130.95'), 'is_bv': True, 'bv_recipient': '__v305_Buffet Parceiro', 'bv_pix': 'verify305-pix@exemplo.test', 'bv_payment_status': 'nao_pago'}]
+  FALHA  54. DEVE FALHAR: % com venda a definir: [{'id': 33, 'tipo': 'BV', 'descricao': None, 'is_percent': True, 'value': Decimal('10.00'), 'amount_brl': Decimal('110.00'), 'is_bv': True, 'bv_recipient': '__v305_Buffet Parceiro', 'bv_pix': 'verify305-pix@exemplo.test', 'bv_payment_status': 'nao_pago'}]
+  FALHA  55. comissão na hora (conexão separada): depois do PUT: (Decimal('50.00'), 'a_pagar')
+  FALHA  56. alerta em reais (como o 2407): None
+  OK     50. limpeza
+14/52 OK · chamadas ao Google: 13

@@ -115,7 +115,7 @@ Pagamentos."; o texto de topo diz o mesmo, para o bundle antigo (que só mostra 
 - **Editor (`PUT …/acrescimos` e Jinja):** dentro de `substituir_acrescimos`, **antes do delete**,
   depois da regra "PIX vazio mantém o anterior" (R7). Uma linha ruim recusa a lista inteira: a função
   passa a **levantar** `AcrescimosRecusados(erros)`; o `PUT` devolve 400 com `fields` por **índice da
-  requisição** (`"acrescimos.3.bv_pix"`), o Jinja faz `rollback` + `flash`.
+  requisição** (`"items.3.bv_pix"`), o Jinja faz `rollback` + `flash`.
 - Tipos: `bv_recipient`/`bv_pix` que não são `str` → 400, nunca 500 no `.strip()`. Limites 200/140.
 
 ## R6 — O tipo BV e o valor com vírgula no editor — [R] (achado do cético)

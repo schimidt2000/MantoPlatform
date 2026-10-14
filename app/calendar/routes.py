@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta, date
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 import calendar as cal
 import json
 import os
@@ -34,7 +34,7 @@ from app.constants import (
 )
 from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
-from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, SpecialExpense, ClientFeedback, EventReimbursement, EventAcrescimo
+from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, SpecialExpense, ClientFeedback, EventReimbursement
 from app.email_service import send_removal_email
 from app.storage import (
     ALLOWED_DOCUMENT_EXTENSIONS,
@@ -838,6 +838,9 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         # client_id denormalizado = contratante (ou o primeiro), p/ compat de telas que mostram "o cliente".
         event.client_id = _primary_client_id(_pairs)
 
+    # Feature 305 (B10): o "antes" da venda, capturado ANTES de qualquer escrita — a regravação do BV
+    # a pagar roda depois dos acréscimos, que este formulário reposta a cada envio.
+    _venda_antes = comercial_ops.estado_da_venda(event)
     event.sale_value       = parse_brl(request.form.get("sale_value", ""))
     event.sale_value_gross = parse_brl(request.form.get("sale_value_gross", ""))
     event.transport_value  = parse_brl(request.form.get("transport_value", ""))
@@ -854,8 +857,9 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         pass
 
     # ── Acréscimos tipados (feature 099) ─────────────────────────────────────
-    # Recria a coleção a partir das linhas do form; congela o valor efetivo em R$ (amount_brl):
-    # R$ direto, ou % sobre o valor de venda. O tipo BV guarda recebedor/PIX para a planilha de pagamentos.
+    # Recria a coleção a partir das linhas do form, pelo mesmo núcleo do PUT da API
+    # (`comercial_ops.substituir_acrescimos`): BV em % pela régua da D2 (feature 305), BV em reais
+    # como digitado, BV pago congelado, quem recebe e PIX obrigatórios.
 
     _acr_tipos      = request.form.getlist("acrescimo_tipo[]")
     _acr_descricoes = request.form.getlist("acrescimo_descricao[]")
@@ -880,7 +884,14 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             }
             for _i in range(len(_acr_tipos))
         ]
-    comercial_ops.substituir_acrescimos(event, _acrescimos)
+    try:
+        comercial_ops.substituir_acrescimos(event, _acrescimos)
+    except comercial_ops.AcrescimosRecusados as exc:
+        # Feature 305: a recusa (BV sem quem recebe ou sem PIX, valor ilegível, BV pago removido)
+        # desfaz o salvamento INTEIRO da aba — venda e clientes digitados também não ficam.
+        db.session.rollback()
+        flash("Acréscimos não salvos: " + " ".join(dict.fromkeys(exc.erros.values())), "error")
+        return
 
     # ── Notas fiscais (feature 069): coleção de notas por evento (valor + data + arquivo) ──
     # Linhas do form: nf_key[] ("id_<n>" p/ existente, "new_*" p/ nova), nf_amount[], nf_date[];
@@ -952,6 +963,11 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         message=f"Atualizou dados comerciais: venda R$ {event.sale_value or 0}{'  (com NF)' if event.with_invoice else ''}",
         created_at=datetime.now(tz=tz_sp),
     ))
+    # Feature 305 (B10): depois dos acréscimos (recriados acima), o BV a pagar acompanha a venda.
+    # O núcleo pula evento cancelado e satélite (este formulário não recusa nenhum dos dois).
+    _aviso_bv = comercial_ops.acompanhar_bv_da_venda(event, _venda_antes, actor_name=current_user.name, tz=tz_sp)
+    if _aviso_bv:
+        flash(_aviso_bv, "warning")
     from app.financeiro.routes import _sync_commission_payment
     _sync_commission_payment(event)
     db.session.commit()
@@ -3134,7 +3150,9 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
     if entry is None:
         return {}
 
-    snap = json.loads(entry.form_snapshot or "{}")
+    from app.calendar.orcamento_evento_ops import snapshot_do_orcamento
+
+    snap = snapshot_do_orcamento(entry)
     transport_val = 0
     if snap.get("fora_sp"):
         from app.orcamento.transport import (
@@ -3196,9 +3214,38 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
         "transport_value": transport_val,
         "acrescimo_value": acrescimo_val,
         "acrescimos": snap.get("acrescimos", []),
+        # Feature 305 (B5): o que cada acréscimo somou ao preço, por duração — o BV CHEIO, que o
+        # quadro do Novo evento mostra. A proporção da venda é calculada ao salvar, no servidor.
+        "acrescimos_do_orcamento": _acrescimos_do_prefill(entry, duracao_custom if total_custom else None),
         "with_invoice": bool(snap.get("nota_fiscal", False)),
         "caches": caches,
     }
+
+
+def _acrescimos_do_prefill(entry: OrcamentoHistory, duracao_custom: int | None) -> dict:
+    """`acrescimos_do_orcamento` do prefill (feature 305): as linhas com o valor por duração."""
+    from app.calendar.orcamento_evento_ops import acrescimos_do_orcamento, snapshot_do_orcamento
+
+    snap = snapshot_do_orcamento(entry)
+    if snap.get("personalizado_ativo"):
+        return {"personalizado": True, "linhas": []}
+    por_duracao = {d: acrescimos_do_orcamento(entry, d)["linhas"] for d in (1, 2, 3, 4)}
+    custom = acrescimos_do_orcamento(entry, duracao_custom)["linhas"] if duracao_custom else None
+    linhas = []
+    for i, base in enumerate(por_duracao[1]):
+        valores = {
+            str(d): float(por_duracao[d][i]["amount_brl"]) if i < len(por_duracao[d]) else None
+            for d in (1, 2, 3, 4)
+        }
+        valores["custom"] = float(custom[i]["amount_brl"]) if custom and i < len(custom) else None
+        linhas.append({
+            "tipo": base["tipo"],
+            "descricao": base["descricao"],
+            "is_bv": base["is_bv"],
+            "percentual": float(base["percentual"]) if base["percentual"] is not None else None,
+            "valores_brl": valores,
+        })
+    return {"personalizado": False, "linhas": linhas}
 
 
 def _validate_event_core(
@@ -3270,41 +3317,6 @@ def _validate_event_core(
     return errors
 
 
-def _criar_acrescimos_do_orcamento(event, acr_list: list) -> int:
-    """Grava os acréscimos tipados (BV etc.) do orçamento como `EventAcrescimo` do evento.
-
-    Usado pela criação a partir do orçamento e, desde a 273, pelo vínculo posterior que aplica
-    os valores — os dois caminhos têm que produzir o mesmo evento. Percentual é calculado sobre
-    `event.sale_value` (já gravado). Sem commit. Devolve quantos criou.
-    """
-    if not acr_list:
-        return 0
-    criados = 0
-    sale_ev = Decimal(event.sale_value or 0)
-    for a in acr_list:
-        tipo = (a.get("tipo") or "").strip()
-        val = a.get("value")
-        if not tipo or not val:
-            continue
-        is_pct = bool(a.get("is_percent"))
-        val_d = Decimal(str(val))
-        amount = (
-            (sale_ev * val_d / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            if is_pct else val_d
-        )
-        db.session.add(EventAcrescimo(
-            event_id=event.id,
-            tipo=tipo,
-            descricao=(a.get("descricao") or "").strip() or None,
-            is_percent=is_pct,
-            value=val_d,
-            amount_brl=amount,
-            is_bv=bool(a.get("is_bv")) or tipo == ACRESCIMO_TIPO_BV,
-        ))
-        criados += 1
-    return criados
-
-
 def _create_event_row(data: dict, *, google_event_id: str, gc_title: str) -> CalendarEvent:
     """Grava o `CalendarEvent` essencial + financeiro + acréscimos tipados + nota fiscal (sem
     arquivo) + detecção fora-de-SP (feature 152). Chamado depois que `insert_event` (Google) já
@@ -3358,7 +3370,9 @@ def _create_event_row(data: dict, *, google_event_id: str, gc_title: str) -> Cal
     db.session.add(event)
     db.session.flush()
 
-    _criar_acrescimos_do_orcamento(event, data.get("acrescimos") or [])
+    # Feature 305: a lista `acrescimos` vinda do corpo (API ou `acrescimos_json` do Jinja) NUNCA é
+    # gravada — o valor de repasse não se aceita do navegador, e um BV dali nasceria sem quem recebe
+    # e sem PIX. Os acréscimos do orçamento entram em `_create_event_core`, pela B3.
 
     if event.with_invoice:
         invoice_filename = data.get("invoice_filename")
@@ -3722,6 +3736,8 @@ def _create_event_core(
     # casting_ops) de 1 HORA — caso real do Baile do Addan (evento 1235). A lista `orc_caches`
     # do cliente permanece só como fallback de chamadas sem orçamento vinculado.
     orc_id = data.get("orcamento_history_id")
+    entry = None
+    frase_bv = None
     if orc_id:
         entry = OrcamentoHistory.query.get(orc_id)
         if entry is not None:
@@ -3731,9 +3747,34 @@ def _create_event_core(
             )
             # Feature 273: a caixinha "evento fora de São Paulo" do orçamento vale mais que o
             # endereço — e traz a quilometragem que dá base ao carrinho de transporte.
-            from app.calendar.orcamento_evento_ops import aplicar_fora_sp_do_orcamento
+            from app.calendar.orcamento_evento_ops import (
+                _duracao_do_evento,
+                aplicar_fora_sp_do_orcamento,
+                deduzir_duracao,
+                frase_do_bv,
+                gravar_acrescimos_do_orcamento,
+            )
 
             aplicar_fora_sp_do_orcamento(event, entry)
+
+            # Feature 305 (B3): os acréscimos que o orçamento somou ao preço — em reais, na
+            # proporção da venda, com quem recebe e o PIX (a B8 os exigiu antes do Google). Corpo
+            # sem `duracao` (chamada por fora; o React sempre manda) deduz pelo valor ou pela agenda.
+            if data.get("duracao_informada", True):
+                duracao_bv, origem_bv = duracao, ""
+            else:
+                duracao_bv, origem_bv = deduzir_duracao(
+                    entry,
+                    bruto=data.get("sale_value_gross") or data.get("sale_value"),
+                    horas_agenda=_duracao_do_evento(event),
+                )
+            resultado_bv = gravar_acrescimos_do_orcamento(
+                event, entry, duracao_bv,
+                recebedor=data.get("bv_recipient"), pix=data.get("bv_pix"), duracao_origem=origem_bv,
+            )
+            frase_bv = frase_do_bv(
+                resultado_bv, entry, venda=event.sale_value, recebedor=data.get("bv_recipient")
+            )
 
     assigned_now = _create_roles_from_input(
         event,
@@ -3771,6 +3812,11 @@ def _create_event_core(
         message="Evento criado pela plataforma",
         created_at=datetime.now(tz=TZ),
     ))
+    if frase_bv:
+        db.session.add(EventLog(
+            event_id=event.id, actor_name=actor_name, actor_role="COMERCIAL",
+            message=frase_bv, created_at=datetime.now(tz=TZ),
+        ))
     _log_sync("platform_created", event, actor=actor_name, actor_role=actor_role)
     from app.financeiro.routes import _sync_commission_payment
     _sync_commission_payment(event)
@@ -4007,6 +4053,24 @@ def create_event():
     validation_errors = _validate_event_core(data)
     if validation_errors:
         return _render_error(list(validation_errors.values()))
+
+    # Feature 305 (B8): o formulário Jinja não tem os campos de quem recebe e do PIX do BV — evento
+    # de orçamento com BV é recusado aqui, antes do Google (o template não muda; limpar o Jinja de
+    # passagem está fora de escopo).
+    _orc_id = data.get("orcamento_history_id")
+    if _orc_id:
+        from app.calendar.orcamento_evento_ops import bv_vai_nascer
+
+        _entry_bv = OrcamentoHistory.query.get(_orc_id)
+        if _entry_bv is not None and bv_vai_nascer(
+            _entry_bv,
+            venda=data.get("sale_value"),
+            cortesia=bool(data.get("is_cortesia_permuta")),
+            duracao=_parse_duracao(data.get("duracao")) or 1,
+        ):
+            return _render_error([
+                "Este evento tem BV no orçamento: crie pela tela nova, que pede quem recebe e o PIX do BV."
+            ])
 
     # Remove prefixo (TIPO) que o JS já inseriu no título para não duplicar
     title = data["title"]

@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from app import db
 from app.constants import ACRESCIMO_TIPO_BV
+from app.educamanto.pricing_ops import NF_DIVISOR
 from app.models import OrcamentoHistory, User
 from app.money import format_brl
 
@@ -45,6 +47,39 @@ class QuoteValidationError(Exception):
 
 def _fmt_brl(value: float) -> str:
     return format_brl(value, prefix=True)
+
+
+_CENTAVO = Decimal("0.01")
+
+
+def bv_que_acompanha(bv: Any, venda: Any, total: Any) -> Decimal:
+    """O BV na proporção da venda: ``bv × venda ÷ total``, ao centavo (feature 305, 3a-Q1 = B).
+
+    Fonte única da regra "o BV acompanha o valor total na mesma proporção" — o dono: "se o valor
+    total do orçamento mudar, o BV deve acompanhar proporcionalmente". Usada pela gravação do BV do
+    orçamento no evento, pelo alerta e pela venda que muda depois; a 3b e a 2b reusam.
+
+    Venda que difere do total em até R$ 0,01 conta como igual (devolve o BV cheio): o total de duração
+    extra é arredondado de três jeitos (float aqui, ``Math.round`` no navegador, ``Decimal``) e um
+    centavo de diferença não é desconto. Nunca levanta: entrada ruim ou total ≤ 0 devolve 0,00.
+
+    Args:
+        bv: o BV cheio (o que o orçamento somou ao preço, ou o BV que já estava no evento).
+        venda: o valor de venda (ou o líquido novo, na venda que muda depois).
+        total: o total do orçamento na duração (ou o líquido anterior).
+
+    Returns:
+        O BV em ``Decimal`` com duas casas, ``ROUND_HALF_UP``.
+    """
+    try:
+        bv_d, venda_d, total_d = (Decimal(str(x)) for x in (bv, venda, total))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0.00")
+    if not (bv_d.is_finite() and venda_d.is_finite() and total_d.is_finite()) or total_d <= 0:
+        return Decimal("0.00")
+    if abs(venda_d - total_d) <= _CENTAVO:
+        return bv_d.quantize(_CENTAVO, rounding=ROUND_HALF_UP)
+    return (bv_d * venda_d / total_d).quantize(_CENTAVO, rounding=ROUND_HALF_UP)
 
 
 def _is_noturno(raw_time: str) -> bool:
@@ -351,6 +386,20 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             rotulo = a["tipo"] + (f" — {a['descricao']}" if a["descricao"] else "")
             sufixo = f"{a['value']:g}%" if a["is_percent"] else _fmt_brl(a["value"])
             _linha(f"Acréscimo: {rotulo}", valores, "pos", sufixo)
+            # Feature 305: o que este acréscimo somou ao preço em cada duração, em reais, gravado no
+            # snapshot — é daqui que o evento tira o BV do orçamento (a memória acima é só exibição,
+            # em float). A conta é a mesma, em Decimal HALF_UP; no meio centavo pode diferir da
+            # memória em R$ 0,01, e quem lê aceita essa tolerância.
+            a["valores_brl"] = [
+                float(
+                    (Decimal(str(t)) * Decimal(str(a["value"])) / 100).quantize(
+                        _CENTAVO, rounding=ROUND_HALF_UP
+                    )
+                )
+                if a["is_percent"]
+                else float(Decimal(str(a["value"])).quantize(_CENTAVO, rounding=ROUND_HALF_UP))
+                for t in totals
+            ]
         new_totals = []
         for t in totals:
             add = 0.0
@@ -361,7 +410,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
 
     if nota_fiscal:
         antes_nf = list(totals)
-        totals = [round(t / 0.84, 2) for t in totals]
+        totals = [round(t / NF_DIVISOR, 2) for t in totals]
         _linha(
             "Nota fiscal", [round(totals[i] - antes_nf[i], 2) for i in range(4)], "pos",
             "valor bruto = líquido ÷ 0,84",
@@ -380,6 +429,9 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         transport_breakdown = None
         transport_total = 0.0
         total_custom = None
+        # Feature 305: no personalizado nenhum acréscimo é somado ao preço — o que vai ao evento é zero.
+        for a in acrescimos:
+            a["valores_brl"] = [0.0, 0.0, 0.0, 0.0]
 
         # No personalizado o valor final é digitado (ou vem de um multiplicador sobre o cachê-base):
         # transporte, NF e acréscimos NÃO são somados. A memória acompanha — mostrar as parcelas

@@ -59,8 +59,8 @@ apaga). `value` aceita número ou texto pt-BR ("1.309,52"). Ordem: 404 → 403 �
 
 ```json
 400 { "error": { "message": "Corrija os acréscimos destacados",
-                 "fields": { "acrescimos.2.bv_pix": "Informe o PIX de quem recebe o BV.",
-                             "acrescimos.0.value": "Valor inválido." } } }
+                 "fields": { "items.2.bv_pix": "Informe o PIX de quem recebe o BV.",
+                             "items.0.value": "Valor inválido." } } }
 ```
 
 Índice = posição **na requisição**. Linha BV nova em % com a venda sem valor → 400 na linha.

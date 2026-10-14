@@ -528,6 +528,19 @@ def _serialize_gastos(group_ids: list[int]) -> list[dict[str, Any]]:
     ]
 
 
+def _bv_pendente(event: CalendarEvent) -> dict | None:
+    """O alerta "BV do orçamento pendente" (feature 305). Nunca derruba o detalhe do evento."""
+    from app.calendar.orcamento_evento_ops import bv_do_orcamento_pendente
+
+    try:
+        return bv_do_orcamento_pendente(event)
+    except Exception:  # noqa: BLE001 — um alerta não pode deixar a página do evento em branco
+        import logging
+
+        logging.getLogger(__name__).exception("bv_do_orcamento_pendente: evento %s", event.id)
+        return None
+
+
 def _serialize_acrescimos(event: CalendarEvent) -> list[dict[str, Any]]:
     """Acréscimos tipados do evento (feature 099) — BV marcado para a tela explicar o repasse."""
     return [
@@ -541,6 +554,10 @@ def _serialize_acrescimos(event: CalendarEvent) -> list[dict[str, Any]]:
             "is_bv": bool(a.is_bv),
             "bv_recipient": a.bv_recipient,
             "bv_payment_status": a.bv_payment_status,
+            # Feature 305 — o editor devolve a origem e o PIX como estão; sem isto, salvar sem mexer
+            # apagava os dois. Só sai no bloco `show_comercial` (o chamador já filtra).
+            "descricao": a.descricao,
+            "bv_pix": a.bv_pix,
         }
         for a in event.acrescimos
     ]
@@ -989,6 +1006,10 @@ def serialize_event_detail(
             # (FINANCEIRO): é esta chave que faz o painel dizer "vinculado a um orçamento que o
             # seu perfil não abre", em vez de fingir que não há nada e oferecer a busca.
             "tem_orcamento": bool(event.orcamento_history_id),
+            # Feature 305 (B9) — o orçamento tem BV e a venda foi digitada sem ele: a aba alerta e
+            # propõe o valor em reais. Calculado pelo id real do evento (o Financeiro não recebe o
+            # id do orçamento, mas recebe o alerta).
+            "bv_do_orcamento_pendente": _bv_pendente(event),
             # feature 184 — necessários para pré-preencher/salvar o formulário de edição de evento.
             "clients": [
                 {
