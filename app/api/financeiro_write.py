@@ -74,24 +74,29 @@ def api_set_payment_status() -> Any:
     from app.utils import audit
 
     if item_type == "commission":
-        try:
-            seller_part, period_tag = str(item_id).split(":")
-            seller_id = int(seller_part)
-            py, pm = int(period_tag[:4]), int(period_tag[5:7])
-        except (ValueError, AttributeError):
-            return json_error("Status inválido para este item", 400)
-        p_start = date(py, pm, 1)
-        p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
-        target = status if status in ("pago", "no_banco") else "a_pagar"
-        from app.financeiro.comissoes_ops import liquidar_periodo
+        # Hotfix 267c: o lote não mexe em linha paga; o item "— pago" só sai de pago pelo
+        # desfazer do Superadmin, com motivo.
+        from app.financeiro.comissoes_ops import LiquidacaoRecusada, liquidar_item_de_comissao
 
-        rows = liquidar_periodo(seller_id, p_start, p_end, target)
+        motivo = (body.get("motivo") or "").strip()
+        try:
+            rows, target = liquidar_item_de_comissao(
+                str(item_id),
+                status,
+                eh_superadmin=_has_role(RoleName.SUPERADMIN),
+                motivo=motivo,
+                actor_name=current_user.name,
+            )
+        except LiquidacaoRecusada as exc:
+            return json_error(exc.mensagem, exc.status)
+        seller_id = str(item_id).split(":")[0]
+        extra = f" — motivo: {motivo}" if motivo and rows else ""
         audit(
             "payment",
             "commission",
             seller_id,
             "",
-            f"Comissões {period_tag}: → {target} ({len(rows)} itens) (API)",
+            f"Comissões {item_id}: → {target} ({len(rows)} itens){extra} (API)",
         )
         db.session.commit()
         return jsonify({"status": target if target != "a_pagar" else "nao_pago"})
@@ -197,26 +202,24 @@ def _to_int(value: Any) -> int | None:
 
 def _bulk_set_commission_period(commission_id: str, action: str) -> bool:
     """Aplica pago/nao_pago a um item agregado de comissão ("sellerId:YYYY-MM")."""
-    try:
-        seller_part, period_tag = str(commission_id).split(":")
-        seller_id = int(seller_part)
-        py, pm = int(period_tag[:4]), int(period_tag[5:7])
-    except (ValueError, AttributeError):
-        return False
-    p_start = date(py, pm, 1)
-    p_end = date(py + 1, 1, 1) if pm == 12 else date(py, pm + 1, 1)
-    target = action if action in ("pago", "no_banco") else "a_pagar"
-    from app.financeiro.comissoes_ops import liquidar_periodo
+    # Hotfix 267c: em massa não há motivo, então o item "— pago" nunca sai de pago por aqui
+    # (recusado → conta como não alterado); no item aberto, o lote só mexe no que não foi pago.
+    from app.financeiro.comissoes_ops import LiquidacaoRecusada, liquidar_item_de_comissao
 
-    rows = liquidar_periodo(seller_id, p_start, p_end, target)
+    try:
+        rows, target = liquidar_item_de_comissao(
+            str(commission_id), action, eh_superadmin=False, actor_name=current_user.name
+        )
+    except LiquidacaoRecusada:
+        return False
     from app.utils import audit
 
     audit(
         "payment",
         "commission",
-        seller_id,
+        str(commission_id).split(":")[0],
         "",
-        f"Bulk comissões {period_tag}: → {target} ({len(rows)} itens) (API)",
+        f"Bulk comissões {commission_id}: → {target} ({len(rows)} itens) (API)",
     )
     return True
 

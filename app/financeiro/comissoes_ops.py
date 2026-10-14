@@ -217,7 +217,7 @@ def ciclo_de_pagamento_expr():
 
 
 def liquidar_periodo(
-    seller_id: int, p_start: date, p_end: date, target: str
+    seller_id: int, p_start: date, p_end: date, target: str, *, linhas: str = "abertas"
 ) -> list[CommissionPayment]:
     """Aplica `status`/`paid_at` às comissões de um vendedor no ciclo (feature 267).
 
@@ -225,30 +225,140 @@ def liquidar_periodo(
     individual e em lote, cada um com seu gêmeo Jinja). **Não commita e não audita** — as duas
     coisas dependem do request (`current_user`) e ficam nas rotas.
 
+    Hotfix 267c: o lote mexe só nas linhas **abertas** (`a_pagar`, `no_banco`). Antes pegava
+    também as pagas — o "Não pago" de um item misto devolvia a "a pagar" o que já tinha sido
+    pago, a ressincronização recalculava pela venda de hoje, e o vendedor aparecia devendo o
+    valor cheio. Linha paga só sai de `pago` por `linhas="pagas"`, que é o desfazer do
+    Superadmin (`liquidar_item_de_comissao`). As linhas são travadas (`with_for_update`): dois
+    cliques simultâneos não se cruzam.
+
     Args:
         seller_id: vendedor cujo lote está sendo liquidado.
         p_start: primeiro dia do ciclo (inclusive).
         p_end: primeiro dia do mês seguinte (exclusive).
         target: ``"pago"``, ``"no_banco"`` ou ``"a_pagar"``.
+        linhas: ``"abertas"`` (o lote) ou ``"pagas"`` (o desfazer de pagamento).
 
     Returns:
         As linhas afetadas (para a rota montar a mensagem de auditoria).
     """
     ciclo = ciclo_de_pagamento_expr()
-    rows = CommissionPayment.query.filter(
-        CommissionPayment.seller_id == seller_id,
-        ciclo >= p_start,
-        ciclo < p_end,
-        # `no_banco` faz parte do conjunto liquidável aqui, diferente de `_month_scoped_query`
-        # (que é leitura do módulo de Comissões). Não unificar sem medir: muda o que o lote pega.
-        CommissionPayment.status.in_(["a_pagar", "no_banco", "pago"]),
-    ).all()
+    # `no_banco` faz parte do conjunto liquidável aqui, diferente de `_month_scoped_query`
+    # (que é leitura do módulo de Comissões). Não unificar sem medir: muda o que o lote pega.
+    status = ["pago"] if linhas == "pagas" else ["a_pagar", "no_banco"]
+    rows = (
+        CommissionPayment.query.filter(
+            CommissionPayment.seller_id == seller_id,
+            ciclo >= p_start,
+            ciclo < p_end,
+            CommissionPayment.status.in_(status),
+        )
+        .with_for_update()
+        .all()
+    )
     for c in rows:
         c.status = target
         # `now_sp()`, nunca `date.today()`: produção roda em UTC e depois das 21h de Brasília o
         # pagamento seria carimbado no dia seguinte.
         c.paid_at = now_sp().date() if target == "pago" else None
     return rows
+
+
+#: Sufixo do item da Planilha que reúne as linhas JÁ PAGAS de um vendedor no ciclo (hotfix 267c):
+#: `"<vendedor>:<AAAA-MM>"` é o aberto; `"<vendedor>:<AAAA-MM>:pago"` é o pago, separado.
+SUFIXO_ITEM_PAGO = "pago"
+
+
+class LiquidacaoRecusada(Exception):
+    """O pedido de mudar a situação de um item de comissão não pode ser atendido (hotfix 267c)."""
+
+    def __init__(self, mensagem: str, status: int) -> None:
+        super().__init__(mensagem)
+        self.mensagem = mensagem
+        self.status = status
+
+
+def partir_item_de_comissao(item_id: str) -> tuple[int, date, date, bool] | None:
+    """`"12:2026-05"` / `"12:2026-05:pago"` → `(vendedor, início, fim exclusivo, é o item pago)`."""
+    partes = str(item_id).split(":")
+    if len(partes) not in (2, 3) or (len(partes) == 3 and partes[2] != SUFIXO_ITEM_PAGO):
+        return None
+    try:
+        seller_id = int(partes[0])
+        ano, mes = int(partes[1][:4]), int(partes[1][5:7])
+        inicio = date(ano, mes, 1)
+    except (ValueError, IndexError):
+        return None
+    fim = date(ano + 1, 1, 1) if mes == 12 else date(ano, mes + 1, 1)
+    return seller_id, inicio, fim, len(partes) == 3
+
+
+def liquidar_item_de_comissao(
+    item_id: str,
+    status: str,
+    *,
+    eh_superadmin: bool,
+    motivo: str = "",
+    actor_name: str = "",
+) -> tuple[list[CommissionPayment], str]:
+    """Muda a situação de um item de comissão da Planilha — as quatro portas chamam esta.
+
+    Hotfix 267c. No item **aberto**, o lote mexe só no que não foi pago (`liquidar_periodo`).
+    No item **pago**, só existe uma saída: o Superadmin desfazer um pagamento marcado por engano,
+    pelo "Não pago", com o motivo (1e-Q5 = A). O motivo vai ao histórico de cada evento; o
+    valor que estava pago e o lote chegam com a 1e (precisam de coluna). Não commita.
+
+    Args:
+        item_id: o id do item na Planilha.
+        status: ``"pago"``, ``"no_banco"`` ou ``"nao_pago"`` (qualquer outro vira ``a_pagar``).
+        eh_superadmin: quem pede é Superadmin (só ele desfaz pagamento).
+        motivo: obrigatório para desfazer.
+        actor_name: nome de quem pede, para o histórico do evento.
+
+    Returns:
+        `(linhas afetadas, situação gravada)`.
+
+    Raises:
+        LiquidacaoRecusada: id inválido (400), "No banco" num pago (409), desfazer sem ser
+            Superadmin (403) ou sem motivo (400).
+    """
+    partes = partir_item_de_comissao(item_id)
+    if partes is None:
+        raise LiquidacaoRecusada("Status inválido para este item", 400)
+    seller_id, inicio, fim, eh_pago = partes
+    target = status if status in ("pago", "no_banco") else "a_pagar"
+    if not eh_pago:
+        return liquidar_periodo(seller_id, inicio, fim, target), target
+    if target == "pago":
+        return [], target
+    if target == "no_banco":
+        raise LiquidacaoRecusada(
+            "Comissão já paga não volta para 'No banco'. Para desfazer um pagamento marcado por "
+            "engano, o Superadmin usa 'Não pago' e informa o motivo.",
+            409,
+        )
+    if not eh_superadmin:
+        raise LiquidacaoRecusada("Só o Superadmin desfaz um pagamento de comissão.", 403)
+    motivo = (motivo or "").strip()
+    if not motivo:
+        raise LiquidacaoRecusada(
+            "Informe o motivo — desfazer é só para pagamento marcado por engano.", 400
+        )
+    rows = liquidar_periodo(seller_id, inicio, fim, "a_pagar", linhas="pagas")
+    from app.models import EventLog
+
+    for c in rows:
+        if c.event_id is not None:
+            db.session.add(
+                EventLog(
+                    event_id=c.event_id,
+                    actor_name=actor_name or "—",
+                    actor_role="Superadmin",
+                    message=f"Desfez o pagamento da comissão (R$ {c.amount}) — motivo: {motivo}",
+                    created_at=now_sp(),
+                )
+            )
+    return rows, target
 
 
 #: Status de comissão que representam dinheiro vivo (o que será ou já foi pago). `cancelado`

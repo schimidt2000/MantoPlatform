@@ -120,6 +120,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **267c-hotfix-trava-do-lote** | "A gente paga, marca como pago, ele muda e depois ele volta para o banco o valor total, sendo que parte já foi paga." O seletor do item de comissão da Planilha regravava **todas** as linhas do ciclo, inclusive as pagas; o "Não pago" de um item misto devolvia o pago a "a pagar" e a ressincronização o recalculava pela venda de hoje. Agora o lote só mexe no que não foi pago (com trava de linha), o pago sai num item à parte ("— pago"), e desfazer pagamento é só do Superadmin, com motivo no histórico do evento — nas quatro portas e na tela antiga | 2026-10-14 | `—` | (aqui) | — |
 | **215b-hotfix-taxa-e-vendedor** | A tela nova deixava a Comercial mudar a **taxa de comissão** e trocar o **vendedor** de qualquer evento (aba Comercial e edição completa), e a comissão a pagar ia junto — a tela antiga só deixava o Superadmin mudar a taxa e o Financeiro/Superadmin trocar o vendedor. Volta a regra: 403 com o campo nomeado, campos travados com o motivo; reenviar o valor de sempre passa | 2026-10-14 | `—` | (aqui) | — |
 | **304-loja-natal-papai-noel** | *(branch, não publicada)* A loja de conversas (`alo.*`) ganha a cara do Natal das artes de marketing — paleta `alo.*` própria (o catálogo não muda), Playfair Display, foto do Noel — e a copy da estação num arquivo só (`lib/lojaTema.ts`): os dois formatos (**ou** chamada ao vivo, onde a criança pode mostrar a cartinha, **ou** vídeo gravado), FAQ da loja, dicas do formulário por formato, nenhum pronome que presuma menina. A campanha "Uma chamada com o Papai Noel" nasce **em rascunho** por script (o botão "Nova campanha" não cria nada — `docs/05` 88), em `/v/papai-noel`, com preços zerados; publicar passou a recusar preço zero. E-mails da loja no tema, saudando o adulto. Prévia de link fixa da estação em `/catalogo/v*`. De passagem: "Escolher outro horário" levava a página branca em `alo.*`, e o prazo do vídeo aparecia um dia antes | 2026-10-13 | `—` | (aqui) | — |
 | **303-sync-nao-apaga-venda** | *(EM PRODUÇÃO 01/10 ~11:18, merge `c1b0d41`)* A limpeza do sync apagava todo evento do mês que faltava na lista do Google, com venda, comprovantes, contrato e escala — inclusive o que só tinha **mudado de mês** (o 1275 virou o 1287, sem venda). Agora cada evento fora da lista é **conferido no próprio Google** (três desfechos; o `get` devolve o apagado com `status: cancelled`): o vazio é apagado, o com dinheiro fica **marcado** "Sumiu do Google Agenda" com aviso no sino, o que mudou de data vai à data nova no mesmo registro, e na dúvida nada acontece. Faixa fixa para Superadmin e Comercial, selo na agenda, banner e **"Devolver ao Google Agenda"** (travado fora da produção), "Sincronizar" que confere antes de mexer, cancelar e excluir recusam o marcado até a segunda entrega, e o portal diz "Evento em confirmação". De passagem: exclusão de pai vazio com ensaio deixou de estourar, e evento cancelado saiu da avaliação do portal | 2026-09-30 | `a7c3e91f4d28` | (aqui) | — |
@@ -289,6 +290,29 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 267c — Comissão paga voltava a "a pagar" com o valor cheio   (267c-hotfix-trava-do-lote · 2026-10-14 · sem migration)
+
+**Motivação.** Defeito descrito pelo dono e achado pelo plano 1e (`docs/backlog/`): a Planilha
+soma `a_pagar`, `no_banco` e `pago` de um vendedor num item só, e o seletor dele chamava
+`liquidar_periodo`, que regravava todas as linhas do ciclo. No item misto, o "Não pago" devolvia a
+"a pagar" o que já tinha saído, `_resync_pending_commissions` recalculava pela venda de hoje e o
+vendedor aparecia devendo o valor cheio; o "Pago" recarimbava a data das pagas. No espelho, o item
+de maio: R$ 2.133,88 "Não pago" com R$ 1.996,38 já pagos.
+
+**Decisões.** O lote mexe só nas abertas, travadas por `with_for_update`. O pago vira item à parte
+(`<vendedor>:<AAAA-MM>:pago`), para o "Pago" do aberto nunca mais somar o que já saiu. Uma função
+para as quatro portas (`liquidar_item_de_comissao`), com a regra da 1e-Q5 = A: desfazer é do
+Superadmin, só para pagamento marcado por engano, com motivo — que vai ao `EventLog` de cada evento
+e à auditoria. Em massa e no Jinja não há motivo, então lá o pago não sai; a tela antiga de
+Comissões (por linha) também recusa. Sem coluna nova: o valor pago gravado, quem pagou e o lote são
+da 1e.
+
+**Pegadinha.** O id do item mudou de forma para o que já foi pago (`…:pago`); quem montava o id à mão
+(`"seller:YYYY-MM"`) continua valendo para o aberto.
+
+**Verificação.** `specs/267c-hotfix-trava-do-lote/verify_267c.py`: 10/10; sem o conserto, 3/10.
+Regressão: `verify_267` 9/9, `verify_267b` 8/8.
 
 ### 215b — A Comercial mudava a taxa e o vendedor de qualquer evento na tela nova   (215b-hotfix-taxa-e-vendedor · 2026-10-14 · sem migration)
 

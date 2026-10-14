@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button, CopyButton, cn } from "@manto/ui";
 import { useSetPaymentStatus, type PagamentoItem, type PaymentStatus } from "../../lib/financeiro";
+import { useCurrentUser } from "../../lib/useAuth";
 import {
   BUCKET_TONE,
   STATUS_OPTIONS_BY_TYPE,
@@ -71,20 +72,50 @@ function StatusSelect({
   className?: string;
 }) {
   const setStatus = useSetPaymentStatus();
+  const currentUser = useCurrentUser();
   const tone = BUCKET_TONE[bucketOf(item)];
   const descricao = descricaoDe(item);
+  // Hotfix 267c: o que já foi pago vem num item à parte ("— pago"). Ele não volta por clique
+  // comum; só o Superadmin desfaz um pagamento marcado por engano, dizendo o motivo.
+  const comissaoPaga = item.type === "commission" && String(item.id).endsWith(":pago");
+  const podeDesfazer = Boolean(currentUser.data?.is_superadmin);
+
+  if (comissaoPaga && !podeDesfazer) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center rounded-md border font-bold",
+          tone.select,
+          className ?? "px-1.5 py-1 text-[11px]",
+        )}
+        title="Comissão já paga: só o Superadmin desfaz, com o motivo."
+      >
+        {statusLabels.pago ?? "Pago"}
+      </span>
+    );
+  }
+
+  const opcoes = comissaoPaga
+    ? STATUS_OPTIONS_BY_TYPE[item.type].filter((s) => s !== "no_banco")
+    : STATUS_OPTIONS_BY_TYPE[item.type];
+
+  const mudar = (status: PaymentStatus) => {
+    if (comissaoPaga && status !== "pago") {
+      const motivo = window.prompt(
+        "Desfazer o pagamento destas comissões? Só para pagamento marcado por engano. Motivo:",
+      );
+      if (!motivo || !motivo.trim()) return;
+      setStatus.mutate({ item_type: item.type, item_id: item.id, status, motivo: motivo.trim() });
+      return;
+    }
+    setStatus.mutate({ item_type: item.type, item_id: item.id, status });
+  };
 
   return (
     <div className="flex flex-col items-start gap-1">
       <select
         value={item.status}
-        onChange={(e) =>
-          setStatus.mutate({
-            item_type: item.type,
-            item_id: item.id,
-            status: e.target.value as PaymentStatus,
-          })
-        }
+        onChange={(e) => mudar(e.target.value as PaymentStatus)}
         disabled={setStatus.isPending}
         aria-label={`Situação de ${descricao}`}
         className={cn(
@@ -93,7 +124,7 @@ function StatusSelect({
           className ?? "px-1.5 py-1 text-[11px]",
         )}
       >
-        {STATUS_OPTIONS_BY_TYPE[item.type].map((status) => (
+        {opcoes.map((status) => (
           <option key={status} value={status}>
             {statusLabels[status] ?? status}
           </option>
@@ -103,7 +134,9 @@ function StatusSelect({
         {setStatus.isPending ? "Salvando situação…" : ""}
       </span>
       {setStatus.isError && (
-        <span className="text-[10px] text-red">Falha ao salvar — tente de novo.</span>
+        <span className="text-[10px] text-red">
+          {setStatus.error?.message || "Falha ao salvar — tente de novo."}
+        </span>
       )}
     </div>
   );
