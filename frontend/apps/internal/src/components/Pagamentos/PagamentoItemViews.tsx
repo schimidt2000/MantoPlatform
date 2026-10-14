@@ -83,7 +83,11 @@ function StatusSelect({
   if (comissaoPaga && !podeDesfazer) {
     return (
       <span
-        className={cn("rounded-md border px-1.5 py-1 text-[11px] font-bold", tone.select)}
+        className={cn(
+          "inline-flex items-center rounded-md border font-bold",
+          tone.select,
+          className ?? "px-1.5 py-1 text-[11px]",
+        )}
         title="Comissão já paga: só o Superadmin desfaz, com o motivo."
       >
         {statusLabels.pago ?? "Pago"}
