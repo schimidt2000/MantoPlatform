@@ -1084,6 +1084,70 @@ def update_event_basics(
     )
 
 
+def _mesma_taxa(atual: Any, pedida: Any) -> bool:
+    """Compara taxas de comissão como número: o form manda `2`, o banco guarda `2.0`."""
+    if atual is None or pedida is None:
+        return atual is None and pedida is None
+    try:
+        return abs(float(atual) - float(pedida)) < 1e-9
+    except (TypeError, ValueError):
+        return False
+
+
+def _mesmo_vendedor(atual: Any, pedido: Any) -> bool:
+    """Compara ids de vendedor tolerando `"12"` × `12` e vazio × `None`."""
+    if pedido in ("", None):
+        return atual is None
+    try:
+        return atual is not None and int(pedido) == int(atual)
+    except (TypeError, ValueError):
+        return False
+
+
+def taxa_e_vendedor_negados(
+    event: Any,
+    data: dict,
+    *,
+    pode_mudar_taxa: bool,
+    pode_trocar_vendedor: bool,
+) -> dict[str, str]:
+    """Campos de comissão que o pedido muda sem poder (hotfix 215b) — vazio quando pode tudo.
+
+    Regra da tela antiga (`calendar/routes.py`, `_handle_update_comercial`), que a tela nova tinha
+    perdido: a **taxa** de comissão do evento só o Superadmin altera; o **vendedor**, Financeiro e
+    Superadmin trocam, e a Comercial só preenche quando o evento ainda não tem vendedor. Sem isso a
+    Comercial mudava taxa e vendedor de qualquer evento, e a comissão a pagar ia junto.
+
+    Compara com o que está gravado, e não com a presença da chave: os formulários mandam o corpo
+    inteiro, inclusive os campos travados com o valor de sempre — isso tem de passar. A chave
+    ausente (`commission_rate` não existe na edição completa) também passa.
+
+    Args:
+        event: O `CalendarEvent` antes da escrita.
+        data: Valores pedidos, com `seller_id` e, quando a tela a envia, `commission_rate`.
+        pode_mudar_taxa: Quem pede é Superadmin.
+        pode_trocar_vendedor: Quem pede é Financeiro ou Superadmin.
+
+    Returns:
+        `{campo: mensagem}` só dos campos negados.
+    """
+    negados: dict[str, str] = {}
+    if (
+        not pode_mudar_taxa
+        and "commission_rate" in data
+        and not _mesma_taxa(event.commission_rate, data.get("commission_rate"))
+    ):
+        negados["commission_rate"] = "Só o Superadmin altera a taxa de comissão do evento."
+    if (
+        not pode_trocar_vendedor
+        and "seller_id" in data
+        and event.seller_id is not None
+        and not _mesmo_vendedor(event.seller_id, data.get("seller_id"))
+    ):
+        negados["seller_id"] = "Só o Financeiro ou o Superadmin troca o vendedor do evento."
+    return negados
+
+
 def update_event_comercial(
     event: Any,
     data: dict,

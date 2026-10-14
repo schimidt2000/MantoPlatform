@@ -75,6 +75,32 @@ def _can_manage_sale() -> bool:
     )
 
 
+def _pode_trocar_vendedor() -> bool:
+    """Trocar o vendedor de um evento que já tem um: Financeiro ou Superadmin (hotfix 215b).
+
+    Paridade com `_handle_update_comercial` (Jinja). A Comercial só preenche o vazio — a regra fica
+    em `event_ops.taxa_e_vendedor_negados`, que olha o que está gravado.
+    """
+    return any(
+        r.name.upper() in (RoleName.FINANCEIRO, RoleName.SUPERADMIN) for r in current_user.roles
+    )
+
+
+def _erro_de_taxa_ou_vendedor(event: Any, data: dict) -> Any:
+    """403 com os campos que o pedido muda sem poder (hotfix 215b), ou `None` se pode tudo."""
+    from app.calendar.event_ops import taxa_e_vendedor_negados
+
+    negados = taxa_e_vendedor_negados(
+        event,
+        data,
+        pode_mudar_taxa=_is_superadmin(),
+        pode_trocar_vendedor=_pode_trocar_vendedor(),
+    )
+    if not negados:
+        return None
+    return json_error(" ".join(negados.values()), 403, fields=negados)
+
+
 def _can_confirm() -> bool:
     """Gate de confirmar/desconfirmar o evento: Comercial ou Superadmin (paridade com o Jinja)."""
     return any(
@@ -999,6 +1025,13 @@ def api_update_event(event_id: int) -> Any:
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
 
+    # Hotfix 215b: a edição completa também grava o vendedor (`_gravar_venda_da_edicao`). No
+    # satélite a venda não é gravada, então não há o que recusar.
+    if not event.is_satellite:
+        negado = _erro_de_taxa_ou_vendedor(event, data)
+        if negado is not None:
+            return negado
+
     from app.calendar.event_ops import (
         EventCoreUpdateBlocked,
         EventTypeChangeBlocked,
@@ -1153,6 +1186,11 @@ def api_update_event_comercial(event_id: int) -> Any:
 
     from app.calendar.event_ops import erros_do_valor_na_aba_comercial, update_event_comercial
     from app.financeiro.routes import _sync_commission_payment
+
+    # Hotfix 215b: taxa só o Superadmin; vendedor já gravado só Financeiro/Superadmin trocam.
+    negado = _erro_de_taxa_ou_vendedor(event, data)
+    if negado is not None:
+        return negado
 
     erros = erros_do_valor_na_aba_comercial(data, event)
     if erros:

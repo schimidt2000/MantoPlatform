@@ -525,6 +525,11 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     gastos extras aprovados) ·
     *Contrato assinado* · *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado" pela regra
     da 299: recebido do grupo, folga de R$ 1,00, nunca na cortesia) · *Reembolsos*.
+  - **Hotfix 215b na aba Comercial e na edição completa**: a "Taxa de comissão (%)" fica travada
+    para quem não é Superadmin ("Só o Superadmin altera a taxa."), e o "Vendedor responsável" já
+    preenchido fica travado para quem não é Financeiro nem Superadmin ("Só o Financeiro ou o
+    Superadmin troca o vendedor."); vazio, a Comercial escolhe. Na edição completa o vendedor
+    travado aparece como texto, no lugar do seletor.
   - **Feature 299 na aba Comercial**: o valor vazio ou zero aparece como "A definir" (nunca
     "R$ 0,00"), o simbólico com a marca "valor simbólico" e, no outro evento de um grupo, "no evento
     principal" com o link. O `PATCH /comercial` recusa o valor novo entre R$ 0,01 e R$ 0,99, com o

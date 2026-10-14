@@ -456,6 +456,10 @@ export interface EventoDetalhe {
     seller_id: number | null;
     sale_date: string | null;
     commission_rate: number | null;
+    /** Hotfix 215b: só o Superadmin altera a taxa de comissão do evento. */
+    pode_mudar_taxa: boolean;
+    /** Hotfix 215b: Financeiro e Superadmin trocam o vendedor; a Comercial só preenche o vazio. */
+    pode_trocar_vendedor: boolean;
     payment_method: string | null;
     payment_installments: number | null;
     payment_due_date: string | null;

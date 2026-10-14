@@ -120,6 +120,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **215b-hotfix-taxa-e-vendedor** | A tela nova deixava a Comercial mudar a **taxa de comissão** e trocar o **vendedor** de qualquer evento (aba Comercial e edição completa), e a comissão a pagar ia junto — a tela antiga só deixava o Superadmin mudar a taxa e o Financeiro/Superadmin trocar o vendedor. Volta a regra: 403 com o campo nomeado, campos travados com o motivo; reenviar o valor de sempre passa | 2026-10-14 | `—` | (aqui) | — |
 | **304-loja-natal-papai-noel** | *(branch, não publicada)* A loja de conversas (`alo.*`) ganha a cara do Natal das artes de marketing — paleta `alo.*` própria (o catálogo não muda), Playfair Display, foto do Noel — e a copy da estação num arquivo só (`lib/lojaTema.ts`): os dois formatos (**ou** chamada ao vivo, onde a criança pode mostrar a cartinha, **ou** vídeo gravado), FAQ da loja, dicas do formulário por formato, nenhum pronome que presuma menina. A campanha "Uma chamada com o Papai Noel" nasce **em rascunho** por script (o botão "Nova campanha" não cria nada — `docs/05` 88), em `/v/papai-noel`, com preços zerados; publicar passou a recusar preço zero. E-mails da loja no tema, saudando o adulto. Prévia de link fixa da estação em `/catalogo/v*`. De passagem: "Escolher outro horário" levava a página branca em `alo.*`, e o prazo do vídeo aparecia um dia antes | 2026-10-13 | `—` | (aqui) | — |
 | **303-sync-nao-apaga-venda** | *(EM PRODUÇÃO 01/10 ~11:18, merge `c1b0d41`)* A limpeza do sync apagava todo evento do mês que faltava na lista do Google, com venda, comprovantes, contrato e escala — inclusive o que só tinha **mudado de mês** (o 1275 virou o 1287, sem venda). Agora cada evento fora da lista é **conferido no próprio Google** (três desfechos; o `get` devolve o apagado com `status: cancelled`): o vazio é apagado, o com dinheiro fica **marcado** "Sumiu do Google Agenda" com aviso no sino, o que mudou de data vai à data nova no mesmo registro, e na dúvida nada acontece. Faixa fixa para Superadmin e Comercial, selo na agenda, banner e **"Devolver ao Google Agenda"** (travado fora da produção), "Sincronizar" que confere antes de mexer, cancelar e excluir recusam o marcado até a segunda entrega, e o portal diz "Evento em confirmação". De passagem: exclusão de pai vazio com ensaio deixou de estourar, e evento cancelado saiu da avaliação do portal | 2026-09-30 | `a7c3e91f4d28` | (aqui) | — |
 | **302-portal-detalhes-do-evento** | *(EM PRODUÇÃO 22/09 ~17:56, merge `21db6b9`)* "No portal do artista não aparece o horário final do evento. E eu queria pensar contigo quais informações aparecem hoje para o artista." O levantamento achou três coisas maiores que o pedido. **(1)** O horário final **já chegava ao navegador e era descartado** pela tela — `_role_summary` serializava `end_at`, o tipo do front declarava o campo e nenhuma tela o desenhava. **(2)** O **ensaio é invisível para quem vai ensaiar**: ensaio é evento-filho (`parent_event_id`), com data, hora e local próprios, e **nenhum dos 98 eventos ENSAIO tem elenco** — o elenco fica no show, e o portal lista escalações; são 54 ensaios, todos com data/hora/local, caindo **2 a 4 dias antes** do show. **(3)** Maquiagem e saída existem desde sempre e **pararam de ser preenchidas**: 19 e 24 dos 475 eventos do espelho, e **zero** dos 64 futuros — expor sem mexer no processo interno não mudaria nada, então a feature também acende um chip de pendência na tela do evento. O bloco "Antes do evento" é **recolhido e ausente quando não há nada**, a pedido do dono ("para não ficar poluído"), e aparece também no card de **Convites**, onde muda uma decisão ainda não tomada — 2 dos 4 convites pendentes são de eventos que já têm ensaio marcado. "Personagem" vira **"Função"** para cargo (289 das 731 escalações) nas **três** superfícies que o artista lê: portal, e-mail e WhatsApp — as duas últimas também mandavam o código cru do banco (`Maquiagem: 14:00 — manto`). A seção Histórico **sai da Agenda**, o que desfaz metade da **229** de propósito: a causa que ela tratou era a duplicação de nome entre duas listas, e o link de avaliar era remédio do sintoma; o payload continua entregando `history` porque backend e frontend sobem separados. Achados de passagem: o evento que **termina no dia seguinte** lia-se como vinte horas de trabalho (34 no espelho), o ensaio **já realizado** ficava no bloco de preparação (janela garantida por construção), e o N+1 de `role.event` — anterior à feature — custava 19 consultas para 13 escalações contra 8 para 1 | 2026-09-22 | `—` | (aqui) | — |
@@ -288,6 +289,26 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 215b — A Comercial mudava a taxa e o vendedor de qualquer evento na tela nova   (215b-hotfix-taxa-e-vendedor · 2026-10-14 · sem migration)
+
+**Motivação.** Achado pelo plano 1e do backlog de setembro (`docs/backlog/`): o `PATCH
+/events/<id>/comercial` da 215 gravava `commission_rate` e `seller_id` de quem passasse no gate de
+criar evento, e a edição completa gravava `seller_id`. O Jinja (`_handle_update_comercial`) sempre
+teve a regra — taxa só o Superadmin; vendedor, Financeiro e Superadmin, e a Comercial só preenche o
+vazio. A comissão a pagar acompanhava a mudança, sem rastro da taxa no histórico.
+
+**Decisões.** A regra mora em `event_ops.taxa_e_vendedor_negados` e compara com o **gravado**, não
+com a presença da chave: os formulários mandam o corpo inteiro, com os campos travados no valor de
+sempre. Recusa com 403 nomeando o campo, em vez de ignorar em silêncio — um bundle velho em cache
+que mande a troca vê o motivo. A tela lê `venda.pode_mudar_taxa`/`pode_trocar_vendedor` do servidor.
+Na edição completa o vendedor travado vira texto, sem `register`: campo `disabled` do
+react-hook-form chega vazio no envio e a API recusaria a "troca" para vazio.
+
+**Pegadinha.** O Financeiro passa na regra, mas continua barrado nas duas portas pelo gate de
+criar evento (anterior a este hotfix) — na tela nova ele ainda não troca vendedor.
+
+**Verificação.** `specs/215b-hotfix-taxa-e-vendedor/verify_215b.py`: 9/9; sem o conserto, 4/9.
 
 ### 304 — A loja de conversas com cara de Natal, e a campanha do Papai Noel   (304-loja-natal-papai-noel · 2026-10-13 · sem migration)
 

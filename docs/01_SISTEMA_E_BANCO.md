@@ -745,6 +745,14 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > parse do título só em evento sem nenhuma — decisão 6, para o texto livre do título nunca mais ser
 > a única fonte de quem é personagem.
 >
+> **Hotfix 215b — taxa e vendedor da comissão.** `PATCH /api/events/<id>/comercial` e
+> `PATCH /api/events/<id>` recusam com **403** (`fields.commission_rate` / `fields.seller_id`) a
+> mudança que quem pede não pode fazer, comparando com o que está gravado
+> (`event_ops.taxa_e_vendedor_negados`): a **taxa** só o Superadmin muda; o **vendedor** já gravado
+> só Financeiro e Superadmin trocam — a Comercial preenche o vazio. Reenviar o valor de sempre
+> passa. O detalhe ganha `venda.pode_mudar_taxa` e `venda.pode_trocar_vendedor`, que a tela usa
+> para travar os campos. Paridade com `_handle_update_comercial` (Jinja).
+>
 > **Feature 299 — valor da venda e cobrança do grupo.** `POST /api/events` e
 > `PATCH /api/events/<id>` aceitam `valor_a_definir` (não gravado): com ele, sem cortesia, a venda
 > grava `NULL` e os erros de valor não saem. Sem ele, valor vazio, zero ou abaixo de R$ 1,00 → 400

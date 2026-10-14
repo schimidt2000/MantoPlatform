@@ -15,6 +15,11 @@ export interface ValoresBlockProps {
   satelite?: boolean;
   /** O principal do grupo, para o link (só no satélite). */
   principal?: { id: number; title: string } | null;
+  /**
+   * Hotfix 215b: o evento já tem vendedor e quem edita não pode trocá-lo (só Financeiro e
+   * Superadmin). O nome aparece no lugar do seletor; o valor gravado segue no formulário.
+   */
+  vendedorTravado?: string | null;
 }
 
 /**
@@ -44,7 +49,12 @@ function VendaNoPrincipal({ principal }: { principal: { id: number; title: strin
 }
 
 /** Bloco 4 — Valores e comissões (feature 184; "Valor a definir" na 299). */
-export function ValoresBlock({ sellers, satelite = false, principal = null }: ValoresBlockProps) {
+export function ValoresBlock({
+  sellers,
+  satelite = false,
+  principal = null,
+  vendedorTravado = null,
+}: ValoresBlockProps) {
   const {
     register,
     watch,
@@ -215,18 +225,31 @@ export function ValoresBlock({ sellers, satelite = false, principal = null }: Va
         <label className={LABEL} htmlFor="seller_id">
           Vendedor responsável *
         </label>
-        <select
-          id="seller_id"
-          className={errors.seller_id ? FIELD_ERROR : FIELD}
-          {...register("seller_id")}
-        >
-          <option value="">— Selecionar —</option>
-          {sellers.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+        {vendedorTravado ? (
+          // Sem `register`: o campo desabilitado chegaria vazio no envio e a API recusaria a troca.
+          // O valor gravado continua nos `defaultValues` do formulário e vai igual.
+          <>
+            <p id="seller_id" className={`${FIELD} flex items-center bg-surface-2 text-muted`}>
+              {vendedorTravado}
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              Só o Financeiro ou o Superadmin troca o vendedor.
+            </p>
+          </>
+        ) : (
+          <select
+            id="seller_id"
+            className={errors.seller_id ? FIELD_ERROR : FIELD}
+            {...register("seller_id")}
+          >
+            <option value="">— Selecionar —</option>
+            {sellers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        )}
         <FieldError message={errors.seller_id?.message} />
       </div>
       <div>
