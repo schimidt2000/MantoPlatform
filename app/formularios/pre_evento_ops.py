@@ -22,6 +22,12 @@ from app.utils import strip_accents_lower
 
 #: Chaves de cada informação nos dois vocabulários (nativo · WhatsForm). Chave desconhecida é
 #: ignorada sem erro; opção nova criada pelo editor de campos cai em "sem correspondente".
+#:
+#: O slug do WhatsForm é o `field_key_for` do importador aplicado ao RÓTULO do CSV
+#: (`scripts/db/import_whatsform_history.py`): chave nova se confere no espelho, não se adivinha —
+#: o palpite `idade_do_aniversariante` da 298 nunca existiu e 70 idades se perdiam (298b). Pergunta
+#: criada no editor de campos não vai ao cadastro do evento: fica nas respostas do formulário, como
+#: todas (decisão do dono, 06/10/2026); entra aqui só quando alguém pedir.
 SINONIMOS: dict[str, tuple[str, ...]] = {
     "hora": ("hora_evento", "hora_do_evento", "horario_do_evento"),
     "data_hora": ("data_do_evento",),
@@ -40,11 +46,14 @@ SINONIMOS: dict[str, tuple[str, ...]] = {
     "endereco_evento": ("endereco_evento", "endereco_completo_do_evento", "endereco_do_evento"),
     "tema": ("tema_evento", "tema_do_evento"),
     "aniversariante": ("nome_aniversariante", "nome_do_aniversariante"),
-    "idade": ("idade_aniversariante", "idade_do_aniversariante"),
+    "idade": ("idade_aniversariante", "idade_a_completar_do_aniversariante"),
     "espaco": ("espaco_evento", "espaco_escolhido_para_o_evento"),
     "briefing": ("briefing", "briefing_do_evento"),
     "observacoes": ("observacoes", "observacoes_contratuais"),
-    "assessoria": ("assessoria",),
+    "assessoria": (
+        "assessoria",
+        "gostaria_que_a_confirmacao_do_evento_seja_com_assessoria_se_sim_digite_o_telefone",
+    ),
     "personagens": ("quais_personagens", "personagens"),
     "qtd_personagens": ("qtd_personagens", "quantidade_de_personagens"),
     "email": ("email", "e_mail"),

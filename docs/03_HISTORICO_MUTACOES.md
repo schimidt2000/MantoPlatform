@@ -120,6 +120,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **298b-sinonimos-do-formulario** | A idade do aniversariante (70 respostas desde 01/06) e o telefone da assessoria (36) das respostas do WhatsForm não chegavam ao cadastro do evento: a 298 adivinhou o slug da idade (`idade_do_aniversariante`, que nunca existiu) e não tinha o da assessoria. Duas tuplas em `SINONIMOS`; pergunta criada no editor continua só nas respostas do formulário (decisão do dono) | 2026-10-14 | `—` | (aqui) | — |
 | **267c-hotfix-trava-do-lote** | "A gente paga, marca como pago, ele muda e depois ele volta para o banco o valor total, sendo que parte já foi paga." O seletor do item de comissão da Planilha regravava **todas** as linhas do ciclo, inclusive as pagas; o "Não pago" de um item misto devolvia o pago a "a pagar" e a ressincronização o recalculava pela venda de hoje. Agora o lote só mexe no que não foi pago (com trava de linha), o pago sai num item à parte ("— pago"), e desfazer pagamento é só do Superadmin, com motivo no histórico do evento — nas quatro portas e na tela antiga | 2026-10-14 | `—` | (aqui) | — |
 | **215b-hotfix-taxa-e-vendedor** | A tela nova deixava a Comercial mudar a **taxa de comissão** e trocar o **vendedor** de qualquer evento (aba Comercial e edição completa), e a comissão a pagar ia junto — a tela antiga só deixava o Superadmin mudar a taxa e o Financeiro/Superadmin trocar o vendedor. Volta a regra: 403 com o campo nomeado, campos travados com o motivo; reenviar o valor de sempre passa | 2026-10-14 | `—` | (aqui) | — |
 | **304-loja-natal-papai-noel** | *(branch, não publicada)* A loja de conversas (`alo.*`) ganha a cara do Natal das artes de marketing — paleta `alo.*` própria (o catálogo não muda), Playfair Display, foto do Noel — e a copy da estação num arquivo só (`lib/lojaTema.ts`): os dois formatos (**ou** chamada ao vivo, onde a criança pode mostrar a cartinha, **ou** vídeo gravado), FAQ da loja, dicas do formulário por formato, nenhum pronome que presuma menina. A campanha "Uma chamada com o Papai Noel" nasce **em rascunho** por script (o botão "Nova campanha" não cria nada — `docs/05` 88), em `/v/papai-noel`, com preços zerados; publicar passou a recusar preço zero. E-mails da loja no tema, saudando o adulto. Prévia de link fixa da estação em `/catalogo/v*`. De passagem: "Escolher outro horário" levava a página branca em `alo.*`, e o prazo do vídeo aparecia um dia antes | 2026-10-13 | `—` | (aqui) | — |
@@ -290,6 +291,26 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 298b — Idade do aniversariante e assessoria do WhatsForm chegam ao cadastro   (298b-sinonimos-do-formulario · 2026-10-14 · sem migration)
+
+**Motivação.** Fato 5 da triagem do backlog de setembro, recontado em produção em 29/09: o mapa
+de sinônimos da 298 esperava `idade_do_aniversariante`, mas a carga do WhatsForm gravou o slug do
+rótulo, `idade_a_completar_do_aniversariante` (70 respostas); a assessoria
+(`gostaria_que_a_confirmacao_do_evento_seja_com_assessoria_se_sim_digite_o_telefone`, 36) nem tinha
+sinônimo. O nome do aniversariante, que a triagem achou perdido, chega como `nome_do_aniversariante`,
+já conhecido.
+
+**Decisões.** A chave nativa continua primeiro na tupla (vence quando há as duas). Pergunta criada
+no editor de campos não vai ao cadastro do evento, fica nas respostas do formulário (1d-Q1 e Q2 = A,
+06/10) — escrito no contrato da 298 e no comentário de `SINONIMOS`.
+
+**Pegadinha.** O `verify_298` passou 17/17 porque a fixture WhatsForm não tinha idade nem
+assessoria; o mapa foi escrito por palpite, não pelo espelho. Slug novo do WhatsForm se confere no
+banco (`field_key_for` do importador aplicado ao rótulo do CSV).
+
+**Verificação.** `specs/298b-sinonimos-do-formulario/verify_298b.py`: 5/5; antes do conserto, 4/5.
+Regressão: `verify_298` 17/17.
 
 ### 267c — Comissão paga voltava a "a pagar" com o valor cheio   (267c-hotfix-trava-do-lote · 2026-10-14 · sem migration)
 

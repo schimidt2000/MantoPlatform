@@ -1,0 +1,7 @@
+﻿298b — sinônimos do WhatsForm no cadastro do evento
+  FALHA  1. WhatsForm: idade e assessoria chegam como observação: aniversariante: {'Aniversariante': 'Criança Teste'}
+  OK     2. nativo igual; a chave nativa vence a do WhatsForm
+  OK     3. pergunta do editor fica só no formulário
+  OK     4. DEVE FALHAR: Financeiro abre o cadastro → 403
+  OK     5. limpeza
+4/5 OK
