@@ -64,8 +64,26 @@ export interface OrcamentoPrefill {
   transport_value?: number;
   acrescimo_value?: number;
   acrescimos?: unknown[];
+  /** Feature 305: o que cada acréscimo somou ao preço, por duração (o BV CHEIO), do servidor. */
+  acrescimos_do_orcamento?: AcrescimosDoOrcamento;
   with_invoice?: boolean;
   caches?: OrcamentoCache[];
+}
+
+/** Feature 305 — `acrescimos_do_orcamento` do prefill. Nenhuma conta de dinheiro no navegador. */
+export interface AcrescimosDoOrcamento {
+  personalizado: boolean;
+  linhas: {
+    tipo: string;
+    descricao: string;
+    is_bv: boolean;
+    percentual: number | null;
+    valores_brl: { "1": number | null; "2": number | null; "3": number | null; "4": number | null; custom: number | null };
+  }[];
+  /** Feature 305 (converge): a proporção do BV é entre líquidos — a nota do orçamento e o 0,84 do
+   * servidor. Opcionais: o backend antigo não manda (aí a tela compara brutos, como antes). */
+  nota_do_orcamento?: boolean;
+  divisor_da_nota?: number;
 }
 
 export function useOrcamentoPrefill(orcamentoId: number | null) {
@@ -144,6 +162,9 @@ export interface EventCreateInput {
   characters: CharacterInput[];
   orc_caches: OrcamentoCache[];
   acrescimos: unknown[];
+  /** Feature 305: obrigatórios quando o evento nasce com BV do orçamento (400 com `fields`). */
+  bv_recipient?: string;
+  bv_pix?: string;
   coordinator_talent_id: number | null;
   clients: ClientLinkInput[];
   form_response_id: number | null;
@@ -203,6 +224,9 @@ export function useCreateEvent() {
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
       // Evento novo entra em Cobranças ou em "Sem valor" (feature 299).
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Feature 305: o BV do orçamento nasce na criação, com a comissão sobre a venda menos ele.
+      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
       // Evento criado a partir de formulário (feature 298): ele sai da Home e o aviso some.
       if (body.form_response_id) invalidarDestinoDeFormulario(queryClient, body.form_response_id);
     },
@@ -225,6 +249,9 @@ export function useUpdateEvent(eventId: number) {
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
       // Valor, data e título mudam as listas comerciais da Home (feature 299).
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Feature 305: a venda nova leva o BV a pagar junto (B10) e a comissão é sincronizada.
+      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
       // Pré-contrato ligado na edição (feature 298): some da Home e da fila de Formulários.
       if (body.form_response_id) invalidarDestinoDeFormulario(queryClient, body.form_response_id);
     },

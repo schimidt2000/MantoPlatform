@@ -244,8 +244,10 @@ def delete_client(client: Client) -> None:
     anula o FK sozinho — sem esta linha a exclusão estoura violação de chave estrangeira, e a
     feature 266 (que passa a preencher ``client_id`` sozinha) torna esse caso o comum.
     """
-    EventClient.query.filter_by(client_id=client.id).delete()
+    # O evento antes do vínculo — a ordem de travas de todo o resto (evento → dependentes, feature
+    # 305): na inversa, excluir o contratante enquanto alguém salva os clientes do evento dava deadlock.
     CalendarEvent.query.filter_by(client_id=client.id).update({"client_id": None})
+    EventClient.query.filter_by(client_id=client.id).delete()
     FormResponse.query.filter_by(client_id=client.id).update(
         {"client_id": None, "client_link_source": None}
     )

@@ -108,7 +108,12 @@ function StatusSelect({
       setStatus.mutate({ item_type: item.type, item_id: item.id, status, motivo: motivo.trim() });
       return;
     }
-    setStatus.mutate({ item_type: item.type, item_id: item.id, status });
+    // Feature 305: o BV a pagar acompanha a venda — marcar pago confere o valor que está na tela.
+    setStatus.mutate(
+      item.type === "bv"
+        ? { item_type: item.type, item_id: item.id, status, valor_esperado: item.amount }
+        : { item_type: item.type, item_id: item.id, status },
+    );
   };
 
   return (

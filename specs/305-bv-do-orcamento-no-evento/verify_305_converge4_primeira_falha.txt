@@ -1,0 +1,8 @@
+Feature 305 — quarto converge (15/10/2026): o cenário 70 ampliado (só o PIX corrigido junto com a venda
+nova, com o id que o template passa a mandar), rodado ANTES da correção (HEAD 8685af6), contra o manto_local.
+
+  FALHA  70. Jinja: BV a BV — o redigitado fica, o reenviado acompanha: PIX corrigido: {... 'amount_brl': Decimal('120.00') ...}   (devia acompanhar a venda: 180,00)
+  OK     50. limpeza
+1/2 OK · chamadas ao Google: 0
+
+  FALHA  70. (o caso da página sem ids, achado na revisão final) página sem ids: [... 100.00 ..., ... 200.00 ...]   (deviam acompanhar: 200,00 e 400,00)

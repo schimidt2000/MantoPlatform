@@ -1,0 +1,70 @@
+﻿Feature 305 — o BV do orçamento chega ao evento
+  OK     1. D2: 1.309,52 com nota → BV 100,00
+  OK     2. % sobre a mesma base, com fixo e outro %
+  OK     3. BV fixo em 1h e 4h
+  OK     4. duração extra (6h)
+  OK     5. personalizado → vazio
+  OK     6. paridade com a memória do espelho (±0,01)
+  OK     7. valores_brl no snapshot; total intacto
+  OK     8. prefill com os 4 valores
+  OK     9. detalhe com descricao e PIX; Casting sem
+  OK     10. criação: linha cheia em R$, comissão sobre venda − BV
+  OK     11. a lista do navegador é ignorada
+  OK     12. venda 5% abaixo → 140,13
+  OK     13. cortesia e a definir: sem linha, sem 400
+  OK     14. vincular e aplicar: a mesma linha; não duplica
+  OK     15. venda digitada: sem linha, alerta; lançar apaga; cancelado sem
+  OK     16. salvar sem mexer preserva PIX e pago
+  OK     17. régua do % (100; 130; R$ 50 junto; legado) + mutação
+  OK     18. Planilha com PIX e sem 'falta PIX'
+  OK     19. DEVE FALHAR: prefill como Casting
+  OK     20. DEVE FALHAR: criação como Financeiro
+  OK     21. DEVE FALHAR: editor como Casting; satélite
+  OK     22. DEVE FALHAR: vínculo como Casting
+  OK     23. sem orçamento: igual a hoje
+  OK     24. orçamento sem acréscimos: igual a hoje
+  OK     25. comissão paga intacta
+  OK     26. DRE: o CPV sobe o BV
+  OK     27. regressão (--regressao)
+  OK     31. DEVE FALHAR: PIX obrigatório (criação, vínculo, editor)
+  OK     32. DEVE FALHAR: autoria da 301
+  OK     33. DEVE FALHAR: sem sessão, BV pago pela Comercial, Artista 3D, 'como Casting'
+  OK     34. concorrência: uma linha
+  OK     35. bundle antigo no editor
+  OK     36. DEVE FALHAR: erro sem estrago (API e Jinja)
+  OK     37. duração sem a chave
+  OK     38. trocar orçamento; voltar a definir
+  OK     39. rastro sem PIX
+  OK     40. entradas ruins sem exceção
+  OK     42. mês passado: a frase diz a Planilha
+  OK     43. gêmeo Jinja igual ao PUT
+  OK     44. bv_que_acompanha
+  OK     45. alerta: papéis, corte, ausências
+  OK     46. DEVE FALHAR: bundle antigo na criação com BV
+  OK     47. DEVE FALHAR: BV antigo sem PIX
+  OK     48. a venda muda: BV a pagar acompanha; pago e a definir ficam
+  OK     49. BV em R$ como digitado; 1.800 → 180; volta 200 + mutação
+  OK     51. DEVE FALHAR: vírgula aceita; ilegível recusado; 'bv' é BV
+  OK     52. BV novo sem id nasce a pagar
+  OK     53. só a nota muda
+  OK     54. DEVE FALHAR: % com venda a definir
+  OK     55. comissão na hora (conexão separada)
+  OK     56. alerta em reais (como o 2407)
+  OK     57. DEVE FALHAR: BV pago não sai, não muda de tipo nem de valor
+  OK     58. corte do commit e corte vazio: o passado não acende
+  OK     59. nota diferente entre orçamento e evento: o mesmo BV
+  OK     60. DEVE FALHAR: BV sem valor não some
+  OK     61. DEVE FALHAR: '1.500' e números enormes recusados
+  OK     62. DEVE FALHAR: id repetido não duplica BV pago
+  OK     63. DEVE FALHAR: BV negativo
+  OK     64. vincular e aplicar roda a B10
+  OK     65. Jinja: BV redigitado com a venda fica como digitado
+  OK     66. corridas: B10 e editor contra a venda que muda
+  OK     67. DEVE FALHAR: marcar pago confere o valor mostrado
+  OK     68. rastro da troca de PIX no BV pago
+  OK     69. DEVE FALHAR: Jinja com '1.500' em linha nova
+  OK     70. Jinja: BV a BV — o redigitado fica, o reenviado acompanha
+  OK     71. DEVE FALHAR: editor aberto antes da B10 não a desfaz
+  OK     72. DEVE FALHAR: subcentavo e o teto depois do arredondamento
+  OK     50. limpeza
+68/68 OK · chamadas ao Google: 18

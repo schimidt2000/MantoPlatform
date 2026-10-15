@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
-import type { EventoDetalhe } from "./agenda";
+import type { EventoDetalhe, RelatorioOrcamento } from "./agenda";
 import { invalidarDestinoDeFormulario } from "./formulariosAdmin";
 
 /**
@@ -17,7 +17,12 @@ import { invalidarDestinoDeFormulario } from "./formulariosAdmin";
 
 /** Resposta de um patch pontual — o evento inteiro + `warnings` não-bloqueantes quando o
  * endpoint removeu algo automaticamente (feature 239, decisão 7: troca de tipo saindo de SHOW). */
-export type EventPatchResult = EventoDetalhe & { warnings?: string[] };
+export type EventPatchResult = EventoDetalhe & {
+  warnings?: string[];
+  /** Feature 305 (B10) — "O BV acompanhou a venda: de R$ X para R$ Y…"; ausente sem mudança. */
+  aviso_bv?: string | null;
+  relatorio_orcamento?: RelatorioOrcamento;
+};
 
 /** Escreve a resposta no cache do evento e revalida a agenda quando o cabeçalho muda. */
 function useEventPatch<TBody>(
@@ -102,7 +107,8 @@ export interface EventComercialInput {
 export function useUpdateEventComercial(eventId: number) {
   // Pôr o valor tira a linha de "Sem valor" (feature 299): a Home recarrega ao voltar, sem F5.
   return useEventPatch<EventComercialInput>(eventId, "/comercial", "PATCH", {
-    invalidar: [["dashboard"]],
+    // Feature 305: a venda nova pode regravar o BV a pagar (Planilha) e a comissão.
+    invalidar: [["dashboard"], ["financeiro-pagamentos"], ["financeiro-comissoes"]],
   });
 }
 
@@ -142,6 +148,9 @@ export interface SetOrcamentoBody {
   /** 1..4 (tabela) — só faz efeito em evento SEM venda (cortesia/permuta conta como venda). */
   aplicar_valores_duracao?: number | null;
   sale_date?: string | null;
+  /** Feature 305 — obrigatórios quando o "Vincular e aplicar" vai criar BV (400 com `fields`). */
+  bv_recipient?: string;
+  bv_pix?: string;
 }
 
 /**
@@ -154,6 +163,7 @@ export function useSetEventOrcamento(eventId: number) {
   return useEventPatch<SetOrcamentoBody>(eventId, "/orcamento", "PATCH", {
     touchesAgenda: true,
     // Aplicar os valores do orçamento põe a venda (feature 299): a linha sai de "Sem valor".
-    invalidar: [["orcamento-historico"], ["dashboard"]],
+    // Feature 305: e pode criar o BV (Planilha) e mexer na comissão.
+    invalidar: [["orcamento-historico"], ["dashboard"], ["financeiro-pagamentos"], ["financeiro-comissoes"]],
   });
 }

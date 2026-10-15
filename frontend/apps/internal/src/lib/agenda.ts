@@ -213,6 +213,8 @@ export interface OrcamentoResumo {
   cantores: number;
   personagens: string[];
   has_show: boolean;
+  /** Feature 305 — o chip "BV 10%" (ou em reais) do painel Orçamento. */
+  bv?: { percentual?: number; valor?: number } | null;
   total_1h: number;
   total_2h: number;
   total_3h: number;
@@ -224,6 +226,10 @@ export interface RelatorioOrcamento {
   frase: string;
   nao_casados?: string[];
   valores_ignorados?: string;
+  /** Feature 305 — o BV que nasceu no "Vincular e aplicar", ou por que não. */
+  acrescimos_criados?: number;
+  bv_total?: number;
+  acrescimos_ignorados?: string;
   [chave: string]: unknown;
 }
 
@@ -287,6 +293,17 @@ export interface EventAcrescimo {
   is_bv: boolean;
   bv_recipient: string | null;
   bv_payment_status: string;
+  /** Feature 305 — a origem ("10% no orçamento #N") e o PIX; o editor os devolve como estão. */
+  descricao?: string | null;
+  bv_pix?: string | null;
+}
+
+/** Feature 305 (B9) — o orçamento tem BV e a venda foi digitada sem ele. */
+export interface BvDoOrcamentoPendente {
+  /** O BV proposto em reais (o do orçamento, na proporção da venda); nulo sem duração identificada. */
+  valor: number | null;
+  percentual: number | null;
+  duracao: number | null;
 }
 
 /** Trechos fixos das mensagens de WhatsApp copiadas pela tela (feature 083). */
@@ -469,6 +486,8 @@ export interface EventoDetalhe {
     orcamento_history_id: number | null;
     /** feature 273 — há orçamento vinculado, visível ou não para quem lê (ver `orcamento`). */
     tem_orcamento: boolean;
+    /** Feature 305 (B9) — o alerta "BV do orçamento pendente"; ausente com o backend antigo. */
+    bv_do_orcamento_pendente?: BvDoOrcamentoPendente | null;
     /**
      * feature 273 — o que o orçamento vendeu. Mesma visibilidade de `orcamento_history_id`:
      * quem tem o módulo de Orçamento recebe, de quem quer que seja o orçamento. Quem pode

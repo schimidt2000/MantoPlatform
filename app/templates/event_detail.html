@@ -1725,6 +1725,8 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       <div id="acrescimos-list" style="display:flex; flex-direction:column; gap:8px;">
         {% for a in event.acrescimos %}
         <div class="acrescimo-row" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:10px; background:#fff; border:1px solid var(--line); border-radius:8px;">
+          {# Feature 305: a identidade da linha — o BV herda status e PIX e acompanha a venda pelo id. #}
+          <input type="hidden" name="acrescimo_id[]" value="{{ a.id }}">
           <select name="acrescimo_tipo[]" class="acr-tipo" onchange="onAcrescimoTipoChange(this)" style="font-size:13px;">
             {% for t in acrescimo_tipos %}<option value="{{ t }}" {% if a.tipo == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
           </select>
@@ -3109,6 +3111,7 @@ document.querySelectorAll('.fig-widget').forEach(function(wrap) {
   }
   function rowHtml() {
     return `<div class="acrescimo-row" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:10px; background:#fff; border:1px solid var(--line); border-radius:8px;">
+      <input type="hidden" name="acrescimo_id[]" value="">
       <select name="acrescimo_tipo[]" class="acr-tipo" onchange="onAcrescimoTipoChange(this)" style="font-size:13px;">${optionsHtml(tipos[0])}</select>
       <input type="text" name="acrescimo_descricao[]" class="acr-desc form-control" placeholder="Descrição" style="font-size:13px; width:150px; display:none;">
       <input type="text" inputmode="decimal" name="acrescimo_value[]" class="brl-input acr-value" placeholder="0,00" style="width:100px;">

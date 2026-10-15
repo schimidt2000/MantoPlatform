@@ -161,9 +161,26 @@ def api_set_payment_status() -> Any:
         return jsonify({"status": status})
 
     if item_type == "bv":
-        acr = EventAcrescimo.query.get(_to_int(item_id))
+        # Feature 305: o BV a pagar agora muda de valor no lugar (acompanha a venda). A linha é lida
+        # com trava, e o valor que a Planilha mostrou (`valor_esperado`, opcional para o bundle
+        # antigo) tem de ser o de agora — senão o "pago" congelaria um valor que ninguém pagou.
+        acr = EventAcrescimo.query.filter_by(id=_to_int(item_id)).with_for_update().first()
         if not acr or not acr.is_bv:
             return json_error("Item não encontrado", 400)
+        esperado = body.get("valor_esperado")
+        if status in ("pago", "no_banco") and esperado is not None and not isinstance(esperado, bool):
+            try:
+                mudou = Decimal(str(esperado)).quantize(Decimal("0.01")) != Decimal(str(acr.amount_brl or 0))
+            except (ArithmeticError, ValueError):
+                return json_error("Valor esperado inválido.", 400)
+            if mudou:
+                from app.money import format_brl
+
+                return json_error(
+                    f"O BV mudou para {format_brl(float(acr.amount_brl or 0), prefix=True)} desde que a "
+                    "Planilha abriu: recarregue e confira antes de marcar.",
+                    409,
+                )
         old = acr.bv_payment_status
         acr.bv_payment_status = status
         audit(

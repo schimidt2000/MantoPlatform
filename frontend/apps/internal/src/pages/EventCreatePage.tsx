@@ -46,6 +46,7 @@ import { ClienteBlock } from "../components/EventFormBlocks/ClienteBlock";
 import { DadosEventoBlock } from "../components/EventFormBlocks/DadosEventoBlock";
 import { ElencoBlock } from "../components/EventFormBlocks/ElencoBlock";
 import { ValoresBlock } from "../components/EventFormBlocks/ValoresBlock";
+import { BvDoOrcamentoBlock, bvVaiNascerNaTela } from "../components/EventFormBlocks/BvDoOrcamentoBlock";
 import { PagamentoBlock } from "../components/EventFormBlocks/PagamentoBlock";
 import { ContratoBlock } from "../components/EventFormBlocks/ContratoBlock";
 import { ObservacoesBlock } from "../components/EventFormBlocks/ObservacoesBlock";
@@ -154,6 +155,11 @@ export function EventCreatePage() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [duracao, setDuracao] = useState("1");
   const [duracaoExtra, setDuracaoExtra] = useState("");
+  // Feature 305 (F1): quem recebe e PIX do BV do orçamento — fora do react-hook-form (o schema é
+  // compartilhado com a edição, e campo escondido não pode travar o envio).
+  const [bvRecipient, setBvRecipient] = useState("");
+  const [bvPix, setBvPix] = useState("");
+  const [bvErros, setBvErros] = useState<{ bv_recipient?: string; bv_pix?: string }>({});
   const [orcCaches, setOrcCaches] = useState<OrcamentoCache[]>([]);
   const [characters, setCharacters] = useState<CharacterInput[]>([]);
   const [coordinatorTalentId, setCoordinatorTalentId] = useState<number | null>(null);
@@ -400,6 +406,25 @@ export function EventCreatePage() {
       // Feature 299: com "Valor a definir" a venda vai vazia (o servidor grava NULL e o evento nasce
       // em "Sem valor"); a cortesia vence a marca.
       const aDefinir = !values.is_cortesia_permuta && values.valor_a_definir;
+      // Feature 305: com BV do orçamento, quem recebe e PIX são obrigatórios — a tela pede antes; o
+      // servidor recusa de novo (antes do Google) se faltar.
+      const vaiNascer = bvVaiNascerNaTela({
+        acrescimos: prefill.data?.acrescimos_do_orcamento,
+        cortesia: values.is_cortesia_permuta,
+        aDefinir: Boolean(aDefinir),
+        venda: values.sale_value,
+      });
+      if (vaiNascer && (!bvRecipient.trim() || !bvPix.trim())) {
+        const faltam = {
+          bv_recipient: bvRecipient.trim() ? undefined : "Informe quem recebe o BV.",
+          bv_pix: bvPix.trim() ? undefined : "Informe o PIX de quem recebe o BV.",
+        };
+        setBvErros(faltam);
+        setServerError("Este evento tem BV: informe quem recebe e o PIX, para o repasse ir à Planilha de Pagamentos.");
+        document.getElementById(faltam.bv_recipient ? "bv_recipient" : "bv_pix")?.focus();
+        return;
+      }
+      setBvErros({});
       const payload: EventCreateInput = {
         title: values.title,
         event_type: values.event_type,
@@ -430,6 +455,8 @@ export function EventCreatePage() {
         characters: characters.filter((c) => c.name.trim().length > 0),
         orc_caches: orcCaches,
         acrescimos: [],
+        bv_recipient: bvRecipient.trim() || undefined,
+        bv_pix: bvPix.trim() || undefined,
         coordinator_talent_id: coordinatorTalentId,
         clients: clients.map(({ client_id, relation }) => ({ client_id, relation })),
         form_response_id: formResponse?.id ?? null,
@@ -487,6 +514,7 @@ export function EventCreatePage() {
         },
         onError: (error) => {
           if (error instanceof ApiRequestError && error.fields) {
+            setBvErros({ bv_recipient: error.fields.bv_recipient, bv_pix: error.fields.bv_pix });
             const messages: string[] = [];
             for (const [field, message] of Object.entries(error.fields)) {
               messages.push(message);
@@ -499,6 +527,15 @@ export function EventCreatePage() {
             if (primeiro) {
               setFocus(primeiro);
               document.getElementById(primeiro)?.scrollIntoView({ behavior: "smooth", block: "center" });
+            } else if (error.fields.bv_recipient || error.fields.bv_pix) {
+              // Os campos do BV ficam fora do react-hook-form e podem só montar agora (prefill
+              // falhou): o foco vai depois do render.
+              const alvo = error.fields.bv_recipient ? "bv_recipient" : "bv_pix";
+              requestAnimationFrame(() => {
+                const campo = document.getElementById(alvo);
+                campo?.focus();
+                campo?.scrollIntoView({ behavior: "smooth", block: "center" });
+              });
             }
             return;
           }
@@ -777,6 +814,32 @@ export function EventCreatePage() {
             />
 
             <ValoresBlock sellers={opts.sellers} />
+
+            {(prefill.data?.acrescimos_do_orcamento || bvErros.bv_recipient || bvErros.bv_pix) && (
+              <BvDoOrcamentoBlock
+                acrescimos={prefill.data?.acrescimos_do_orcamento}
+                duracao={duracao}
+                duracaoCustom={prefill.data?.duracao_custom}
+                totalDaDuracao={
+                  !prefill.data
+                    ? null
+                    : ["1", "2", "3", "4"].includes(duracao)
+                      ? (prefill.data[`total_${duracao}h` as "total_1h"] ?? null)
+                      : prefill.data.duracao_custom === Number(duracao) && prefill.data.total_custom
+                        ? prefill.data.total_custom
+                        : null
+                }
+                venda={watch("sale_value")}
+                nota={Boolean(watch("with_invoice"))}
+                cortesia={watch("is_cortesia_permuta")}
+                aDefinir={!watch("is_cortesia_permuta") && Boolean(watch("valor_a_definir"))}
+                recebedor={bvRecipient}
+                pix={bvPix}
+                onRecebedor={setBvRecipient}
+                onPix={setBvPix}
+                erros={bvErros}
+              />
+            )}
 
             <PagamentoBlock
               proofs={paymentProofs}

@@ -1,0 +1,7 @@
+Feature 305 — terceiro converge (15/10/2026): os cenários 70 e 71 ampliados, rodados ANTES das correções
+(HEAD 527cee3), contra o manto_local.
+
+  FALHA  70. Jinja: BV a BV — o redigitado fica, o reenviado acompanha: coincidência: {'…Buffet Parceiro': Decimal('144.00'), '…Dois': Decimal('120.00')}
+  FALHA  71. DEVE FALHAR: editor aberto antes da B10 não a desfaz: [<class 'decimal.InvalidOperation'>]
+  OK     50. limpeza
+1/3 OK · chamadas ao Google: 0

@@ -274,12 +274,18 @@ export function useCancelamentos() {
 // cada uma carrega um anexo que sobe por multipart.
 
 export interface AcrescimoInput {
+  /** Feature 305 — a linha que veio do GET; o servidor herda status e PIX só da linha de mesmo id. */
+  id?: number;
   tipo: string;
+  /** Ausente = mantém a descrição gravada; `""` = apaga. */
   descricao?: string | null;
   is_percent?: boolean;
   value: number | string;
   bv_recipient?: string | null;
   bv_pix?: string | null;
+  /** Feature 305 (converge): o R$ do BV a pagar que o editor abriu — se a venda o mudou depois
+   * (outra aba, outra pessoa), o servidor recusa em vez de desfazer a proporção. */
+  valor_visto?: number | null;
 }
 
 export interface ParcelaInput {
@@ -314,7 +320,21 @@ export function useSetAcrescimos(eventId: number) {
         method: "PUT",
         body: JSON.stringify({ items }),
       }),
-    onSuccess: () => invalidarComercial(queryClient, eventId),
+    onSuccess: (atualizado) => {
+      // Feature 305: o PUT devolve o detalhe novo — gravado já, o editor fecha mostrando os ids
+      // novos (o PUT recria as linhas) e sem o alerta "Lançar o BV"; esperar o refetch abria uma
+      // janela em que reabrir dava o falso "a venda mudou" e travava o Salvar.
+      queryClient.setQueryData(["event", eventId], atualizado);
+      invalidarComercial(queryClient, eventId);
+      // Feature 305: salvar os acréscimos mexe no BV da Planilha e na comissão na mesma requisição.
+      void queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
+      void queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
+    },
+    // A recusa "o BV mudou desde que o editor abriu" pede o detalhe novo: com ele, o aviso do editor
+    // ("a venda mudou… cancele e abra de novo") acende.
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+    },
   });
 }
 

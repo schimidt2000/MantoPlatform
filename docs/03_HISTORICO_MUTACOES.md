@@ -123,6 +123,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **305-bv-do-orcamento-no-evento** | *(EM PRODUÇÃO 15/10 ~02:50)* O BV do orçamento passa a chegar ao evento no valor certo — **em reais, na proporção da venda** (R$ 100,00 no exemplo da D2, não R$ 130,95) — com **quem recebe e o PIX obrigatórios**, na criação e no "Vincular e aplicar"; a venda digitada à mão acende um alerta com "Lançar o BV"; o BV a pagar acompanha a venda que muda depois; o editor de Acréscimos deixa de apagar o PIX, "despagar" BV, descartar valor com vírgula e calcular a comissão com o BV velho. O passado fica como está (corte pelo momento do deploy) | 2026-10-14 | `—` | (aqui) | — |
 | **298b-sinonimos-do-formulario** | *(EM PRODUÇÃO 14/10 ~19:28, merge `f1fbd46`)* A idade do aniversariante (70 respostas desde 01/06) e o telefone da assessoria (36) das respostas do WhatsForm não chegavam ao cadastro do evento: a 298 adivinhou o slug da idade (`idade_do_aniversariante`, que nunca existiu) e não tinha o da assessoria. Duas tuplas em `SINONIMOS`; pergunta criada no editor continua só nas respostas do formulário (decisão do dono) | 2026-10-14 | `—` | (aqui) | — |
 | **267c-hotfix-trava-do-lote** | *(EM PRODUÇÃO 14/10 ~19:28, merge `0feb425`)* "A gente paga, marca como pago, ele muda e depois ele volta para o banco o valor total, sendo que parte já foi paga." O seletor do item de comissão da Planilha regravava **todas** as linhas do ciclo, inclusive as pagas; o "Não pago" de um item misto devolvia o pago a "a pagar" e a ressincronização o recalculava pela venda de hoje. Agora o lote só mexe no que não foi pago (com trava de linha), o pago sai num item à parte ("— pago"), e desfazer pagamento é só do Superadmin, com motivo no histórico do evento — nas quatro portas e na tela antiga | 2026-10-14 | `—` | (aqui) | — |
 | **215b-hotfix-taxa-e-vendedor** | *(EM PRODUÇÃO 14/10 ~19:28, merge `0bdda93`)* A tela nova deixava a Comercial mudar a **taxa de comissão** e trocar o **vendedor** de qualquer evento (aba Comercial e edição completa), e a comissão a pagar ia junto — a tela antiga só deixava o Superadmin mudar a taxa e o Financeiro/Superadmin trocar o vendedor. Volta a regra: 403 com o campo nomeado, campos travados com o motivo; reenviar o valor de sempre passa | 2026-10-14 | `—` | (aqui) | — |
@@ -294,6 +295,77 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 305 — O BV do orçamento chega ao evento no valor certo, com quem recebe e o PIX   (305-bv-do-orcamento-no-evento · 2026-10-14 · sem migration)
+
+> **EM PRODUÇÃO desde 15/10/2026 ~02:50** (merge `merge: 305 — …`). `CORTE_ALERTA_BV =
+> datetime(2026, 10, 15, 5, 50)` (UTC naive): o alerta só vale para evento criado ou ligado a
+> orçamento depois disso. Recontagem em produção antes do deploy, só leitura: nenhum vínculo da 273
+> com valores aplicados, nenhum BV em %, uma linha BV no total (a do evento 403, sem PIX — fica até
+> alguém salvar os Acréscimos dele) e 1218/1236/1268 sem linha.
+
+**Motivação.** Item 3a do backlog de setembro (apelido "099b"; plano em
+`docs/backlog/3a-bv-do-orcamento-no-evento-099b.md`, nove rodadas de respostas do dono). O Novo
+evento mandava a lista de acréscimos vazia, e o "Vincular e aplicar" (273) gravava o % sobre a venda
+cheia, que já tem o próprio BV e a nota: R$ 130,95 onde quem indicou recebe R$ 100,00. O dono: "o BV
+deve ser calculado e definido na calculadora; se o valor total mudar, o BV deve acompanhar
+proporcionalmente" (Q1 = B); "alerta e pede para preencher com atenção o BV e o valor total com BV"
+(Q2 = A); "não mexer no passado" (Q4 = A); BV à mão "tanto em real quanto porcentagem" (Q7 = B); e "é
+de extrema importância que seja obrigatório colocar o PIX de quem receberá o BV".
+
+**Decisões.** Tudo calculado no servidor, em `Decimal`, a partir do orçamento congelado: a
+calculadora passa a gravar `valores_brl` por acréscimo, e para os orçamentos de antes vale a conta
+inversa com a **base arredondada ao centavo** (76 de 80 pares iguais à memória; os 4 restantes,
+R$ 0,01 de meio centavo). Uma conta de proporção só (`quote_ops.bv_que_acompanha`, tolerância de R$
+0,01). O alerta propõe o valor **em reais**, porque a régua do % no evento (com os outros
+acréscimos, 3b-Q7) não é a do orçamento salvo (no 2407: R$ 435,00 × R$ 2.007,73). BV pago ou no
+banco não muda de valor e não sai pelo editor. O BV em reais a pagar acompanha pelo **líquido** (venda
+× 0,84 com nota): desistir da nota com a venda caindo 16% não mexe no BV.
+
+**Pegadinhas.** (1) **Coleção velha**: `substituir_acrescimos` apagava por `Query.delete()` e recriava
+por `event_id`; a coleção em memória ficava com o BV apagado e o sync da comissão — também no Jinja de
+antes — calculava com o BV velho; o `_resync` da Planilha escondia. Agora a função relê com `FOR
+UPDATE` e termina com flush + `expire`. (2) **Vírgula**: "100,00" virava `None` e a linha era
+descartada em silêncio depois do delete. (3) **Herança pela chave** (recebedor, PIX) fazia BV novo
+nascer "pago" e trocava o status entre duas linhas da mesma pessoa; agora é pelo `id`. (4) O
+`verify_273` está 8/15 na `main` desde a 301 (docs/05 #96).
+
+**Converge (14/10, revisão adversarial em quatro lentes, 29 de 37 achados confirmados).** O que
+mudou: (1) `CORTE_ALERTA_BV = None` acendia o alerta em todo o passado (1218, 1236, 1268 — BVs que o
+dono disse já pagos): agora a falha fecha. (2) A criação e o alerta proporcionavam pela venda BRUTA
+— a cliente que desiste da nota tinha o BV cortado em 16%; agora pelo líquido, como a B10. (3) BV
+com valor apagado ou zero sumia em silêncio; "1.500" virava R$ 1,50; BV negativo subia a comissão;
+o mesmo `id` duas vezes criava um segundo BV "pago" — todos 400 na linha. (4) O "Vincular e aplicar"
+punha a venda sem a B10 (o BV em % ficava sobre a venda velha). (5) Corridas: duas mudanças de
+venda proporcionavam o BV duas vezes, e o editor calculava o % com a venda de antes — o evento é
+travado antes de ler a venda; marcar pago confere o valor que a Planilha mostrou (409). (6) O gêmeo
+Jinja reproporcionava o BV redigitado junto com a venda. (7) Trocar o PIX de um BV pago deixa rastro
+no `AuditLog`. Na tela: o valor em R$ do editor é `MoneyInput` (número; o texto livre também
+quebrava o backend antigo na janela de deploy), "Lançar o BV" abre em reais, a linha que vira BV não
+reinterpreta como % o valor já digitado, erros velhos somem, o cache é atualizado pelo PUT.
+
+**Segundo converge (15/10, sobre as próprias correções: 12 de 14 confirmados).** O quadro do Novo
+evento ainda comparava brutos (mostrava um BV e o servidor gravava outro com a nota trocada) — o
+prefill passa a nota do orçamento e o 0,84; o Jinja reproporcionava ou não TODOS os BVs juntos — agora
+BV a BV; o Jinja ainda lia "1.500" como R$ 1,50 (agora manda o texto cru); o editor aberto antes de
+uma B10 desfazia a proporção (agora manda `valor_visto` e é recusado); R$ 0,004 virava BV de R$ 0,00;
+`set_event_clients` travava na ordem inversa da edição completa (deadlock); `reset()` durante o
+Salvar perdia o fechamento do editor e o relatório do vínculo; o `MoneyInput` trocava o sinal de um
+acréscimo negativo. O cenário 58 passou a exigir o literal do corte: o verify fica 67/68 até a T041.
+Um terceiro converge (5 de 5 confirmados, todos de gravidade baixa) fechou o que o segundo abriu: a
+chave do "BV a BV" do Jinja passou a incluir quem recebe e o PIX (só pelo valor, a proporção podia
+trocar de dono); `valor_visto` inválido deixou de dar 500; `delete_client` (`app/clientes/client_ops.py`)
+anula o evento antes dos vínculos (a ordem inversa fechava deadlock com `set_event_clients`); o −0 do
+`MoneyInput` não vira cobrança; e o aviso do editor não afirma mais que "a venda mudou". O quarto
+achou a raiz das três heurísticas do Jinja (corrigir só o PIX congelava o BV): o formulário não
+mandava a identidade da linha. Agora o template manda `acrescimo_id[]` e o núcleo decide pelo id —
+a mesma linha com o mesmo número acompanha a venda; a digitada agora fica.
+
+**Verificação.** `specs/305-bv-do-orcamento-no-evento/verify_305.py` com a regressão (267, 267b, 301,
+215b, 267c; 273 na linha de base), duas mutações declaradas; primeira rodada 14/52; os cenários dos
+dois converges (58–72) vermelhos antes (`verify_305_converge_primeira_falha.txt`,
+`verify_305_converge2_primeira_falha.txt`); o 58 só fica verde com o literal da T041. Tela conferida
+no `manto_local` (editor: R$ por `MoneyInput`, erro na linha, Cancelar limpa).
 
 ### 298b — Idade do aniversariante e assessoria do WhatsForm chegam ao cadastro   (298b-sinonimos-do-formulario · 2026-10-14 · sem migration)
 

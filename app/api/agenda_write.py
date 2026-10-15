@@ -827,9 +827,16 @@ def _build_create_event_data(body: dict) -> dict:
         "payment_due_date": date.fromisoformat(payment_due_raw) if payment_due_raw else None,
         "orcamento_history_id": body.get("orcamento_history_id"),
         "duracao": str(body.get("duracao") or "1"),
+        # Feature 305: sem a chave, a criação deduz a duração do BV pelo valor ou pela agenda — o
+        # "1h" acima existe para os cachês e esconderia que ninguém escolheu.
+        "duracao_informada": body.get("duracao") not in (None, ""),
         "characters": characters,
         "orc_caches": body.get("orc_caches") or [],
-        "acrescimos": body.get("acrescimos") or [],
+        # Feature 305: a lista do navegador nunca é gravada (o núcleo também ignora); o BV vem do
+        # orçamento, e de quem recebe e do PIX abaixo.
+        "acrescimos": [],
+        "bv_recipient": body.get("bv_recipient"),
+        "bv_pix": body.get("bv_pix"),
         "coordinator_talent_id": body.get("coordinator_talent_id"),
         "client_pairs": _client_pairs_from_json(body.get("clients") or []),
         "form_response_id": body.get("form_response_id"),
@@ -841,6 +848,59 @@ def _build_create_event_data(body: dict) -> dict:
     }
     aplicar_valor_a_definir(data)
     return data
+
+
+def _horas_do_corpo(data: dict) -> int | None:
+    """Horas do evento pelo início e fim do corpo (o evento ainda não existe), arredondadas."""
+    try:
+        h0, m0 = (int(x) for x in str(data.get("start_str") or "").split(":")[:2])
+        h1, m1 = (int(x) for x in str(data.get("end_str") or "").split(":")[:2])
+    except (TypeError, ValueError):
+        return None
+    minutos = (h1 * 60 + m1) - (h0 * 60 + m0)
+    if minutos <= 0:
+        minutos += 24 * 60
+    return max(1, round(minutos / 60))
+
+
+def _recusa_do_bv_da_criacao(data: dict) -> Any:
+    """B8 na criação (feature 305): 400 com os campos quando o evento vai nascer com BV sem quem
+    recebe ou sem PIX; `None` quando pode seguir. Pergunta à mesma função que a gravação usa."""
+    orc_id = data.get("orcamento_history_id")
+    if not orc_id:
+        return None
+    from app import db
+    from app.calendar.orcamento_evento_ops import (
+        MENSAGEM_PIX,
+        bv_vai_nascer,
+        deduzir_duracao,
+        erros_do_bv,
+    )
+    from app.calendar.routes import _parse_duracao
+    from app.models import OrcamentoHistory
+
+    entry = db.session.get(OrcamentoHistory, orc_id)
+    if entry is None:
+        return json_error("Orçamento não encontrado.", 404)
+    if data.get("duracao_informada", True):
+        duracao = _parse_duracao(data.get("duracao")) or 1
+    else:
+        duracao, _origem = deduzir_duracao(
+            entry,
+            bruto=data.get("sale_value_gross") or data.get("sale_value"),
+            horas_agenda=_horas_do_corpo(data),
+        )
+    vai_nascer = bv_vai_nascer(
+        entry,
+        venda=data.get("sale_value"),
+        cortesia=bool(data.get("is_cortesia_permuta")),
+        duracao=duracao,
+        nota=bool(data.get("with_invoice")),
+    )
+    if not vai_nascer:
+        return None
+    erros = erros_do_bv(data.get("bv_recipient"), data.get("bv_pix"))
+    return json_error(MENSAGEM_PIX, 400, fields=erros) if erros else None
 
 
 @api_bp.route("/events", methods=["POST"])
@@ -901,6 +961,12 @@ def api_create_event() -> Any:
                 409,
                 event_id=outro.id,
             )
+
+    # Feature 305 (B8): evento que vai nascer com BV exige quem recebe e o PIX — antes do Google,
+    # para a recusa não deixar evento órfão na Agenda.
+    recusa_bv = _recusa_do_bv_da_criacao(data)
+    if recusa_bv is not None:
+        return recusa_bv
 
     try:
         created = _insert_event(
@@ -1196,14 +1262,17 @@ def api_update_event_comercial(event_id: int) -> Any:
     if erros:
         return json_error("Corrija os campos destacados", 400, fields=erros)
 
-    update_event_comercial(
+    aviso_bv = update_event_comercial(
         event,
         data,
         actor_name=current_user.name,
         tz=_TZ_SP,
         sincronizar_comissao=_sync_commission_payment,
     )
-    return _event_detail_json(event)
+    # Feature 305 (B10): o BV a pagar acompanhou a venda — a tela diz o que mudou.
+    result = _event_detail_json(event).get_json()
+    result["aviso_bv"] = aviso_bv
+    return jsonify(result)
 
 
 @api_bp.route("/events/<int:event_id>/clients", methods=["PUT"])
@@ -1354,6 +1423,18 @@ def api_set_event_orcamento(event_id: int) -> Any:
                 orcamento_de_outro=True,
             )
 
+    # Feature 305 (B8): "Vincular e aplicar" que vai criar BV exige quem recebe e o PIX — depois da
+    # autoria da 301 (quem não pode re-aplicar ouve o 409 dela, não um pedido de PIX) e antes de
+    # gravar qualquer coisa (vínculo, venda, equipe).
+    bv_recipient, bv_pix = body.get("bv_recipient"), body.get("bv_pix")
+    if entry is not None and duracao:
+        from app.calendar.orcamento_evento_ops import MENSAGEM_PIX, bv_nasce_no_vinculo, erros_do_bv
+
+        if bv_nasce_no_vinculo(event, entry, duracao):
+            erros_bv = erros_do_bv(bv_recipient, bv_pix)
+            if erros_bv:
+                return json_error(MENSAGEM_PIX, 400, fields=erros_bv)
+
     try:
         relatorio = set_event_orcamento(
             event,
@@ -1364,6 +1445,8 @@ def api_set_event_orcamento(event_id: int) -> Any:
             aplicar_valores_duracao=duracao,
             sale_date=sale_date,
             sincronizar_comissao=_sync_commission_payment,
+            bv_recipient=bv_recipient if isinstance(bv_recipient, str) else None,
+            bv_pix=bv_pix if isinstance(bv_pix, str) else None,
         )
     except OrcamentoJaVinculado as exc:
         db.session.rollback()
@@ -1506,15 +1589,20 @@ def api_set_acrescimos(event_id: int) -> Any:
     """Substitui os acréscimos do evento (features 099/100). Corpo: `{"items": [...]}`.
 
     `PUT` porque o corpo é a lista inteira, não um delta — mesma escolha de
-    `PUT /events/<id>/clients`. Mandar `{"items": []}` apaga todos.
+    `PUT /events/<id>/clients`. Mandar `{"items": []}` apaga todos, menos o BV pago ou no banco:
+    com um deles, 400 e nada é apagado (feature 305).
 
-    Cada item aceita `tipo`, `descricao`, `is_percent`, `value`, `bv_recipient` e `bv_pix`.
-    Acréscimo percentual é congelado em reais sobre a venda **do momento do save**.
+    Cada item aceita `id` (o recebido no GET), `tipo`, `descricao` (ausente = mantém; `""` =
+    apaga), `is_percent`, `value` (número ou texto à brasileira), `bv_recipient` e `bv_pix`. As
+    regras do BV (feature 305) moram em `comercial_ops.substituir_acrescimos`: herança pela
+    identidade, BV pago congelado, régua do % da D2, BV em reais como digitado, quem recebe e PIX
+    obrigatórios. Uma linha recusada recusa a lista inteira: 400 com `fields` por índice da
+    requisição (`items.<i>.<campo>`), sem apagar nada. A comissão a pagar é sincronizada na mesma
+    requisição (antes só o gêmeo Jinja sincronizava — e com a coleção velha). A troca de quem
+    recebe ou do PIX num BV pago deixa rastro no `AuditLog` (PIX mascarado).
 
     RBAC `_can_manage_sale()`: acréscimo mexe na base da comissão e o BV é repasse a terceiro —
     mesmo gate da nota fiscal, não o de editar evento.
-
-    Até aqui essas linhas só podiam ser escritas pelo formulário Jinja, que a fase 6 apaga.
     """
     event = CalendarEvent.query.get(event_id)
     if event is None:
@@ -1534,8 +1622,19 @@ def api_set_acrescimos(event_id: int) -> Any:
         return json_error("Envie a lista completa em `items`.", 400, fields={"items": "Obrigatório"})
 
     from app.calendar import comercial_ops
+    from app.financeiro.routes import _sync_commission_payment
 
-    comercial_ops.substituir_acrescimos(event, itens)
+    try:
+        trocas = comercial_ops.substituir_acrescimos(event, itens)
+    except comercial_ops.AcrescimosRecusados as exc:
+        db.session.rollback()
+        return json_error("Corrija os acréscimos destacados.", 400, fields=exc.erros)
+    if trocas:
+        from app.utils import audit
+
+        for troca in trocas:
+            audit("edit", "event_bv", event.id, event.title, comercial_ops.frase_da_troca_no_bv_pago(troca))
+    _sync_commission_payment(event)
     db.session.commit()
     return _event_detail_json(event)
 

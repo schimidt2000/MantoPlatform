@@ -1,0 +1,16 @@
+Feature 305 — converge de 14/10/2026: os cenários 58–68 rodados ANTES das correções (HEAD 513f28c),
+contra o manto_local. Cada um reproduz um achado confirmado da revisão adversarial.
+
+  FALHA  58. corte do commit e corte vazio: o passado não acende: evento 1218 acendeu o alerta
+  FALHA  59. nota diferente entre orçamento e evento: o mesmo BV: sem nota: [... 'amount_brl': Decimal('84.00') ...]
+  FALHA  60. DEVE FALHAR: BV sem valor não some: valor '': 200 []
+  FALHA  61. DEVE FALHAR: '1.500' e números enormes recusados: '1.500': 200 [... 'amount_brl': Decimal('1.50') ...]
+  FALHA  62. DEVE FALHAR: id repetido não duplica BV pago: id repetido: 200 {} [dois BVs 'pago' de 100,00]
+  FALHA  63. DEVE FALHAR: BV negativo: '-100': 200 [... 'amount_brl': Decimal('-100.00') ...]
+  FALHA  64. vincular e aplicar roda a B10: % na volta pelo vínculo: [... 'amount_brl': Decimal('100.00') ...] (venda 1.500)
+  FALHA  65. Jinja: BV redigitado com a venda fica como digitado: redigitado: [... 'amount_brl': Decimal('300.00') ...]
+  FALHA  66. corridas: B10 e editor contra a venda que muda: B10 dobrada: [... 'amount_brl': Decimal('180.00') ...]
+  FALHA  67. DEVE FALHAR: marcar pago confere o valor mostrado: valor diferente: 200 [... 'bv_payment_status': 'pago']
+  FALHA  68. rastro da troca de PIX no BV pago: rastro: []
+  OK     50. limpeza
+1/12 OK · chamadas ao Google: 1
