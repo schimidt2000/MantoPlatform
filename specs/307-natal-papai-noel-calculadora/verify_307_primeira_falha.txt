@@ -1,0 +1,46 @@
+[2026-10-15 16:55:00,792] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br plataforma=https://app.mantoproducoes.com.br
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\flask_limiter\extension.py:333: UserWarning: Using the in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about configuring the storage backend.
+  warnings.warn(
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+[2026-10-15 16:55:02,791] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+[2026-10-15 16:55:03,690] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-15 16:55:03,887] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-15 16:55:04,042] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-15 16:55:04,194] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-15 16:55:04,356] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-15 16:55:04,514] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-15 16:55:04,670] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-15 16:55:04,833] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-15 16:55:05,009] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-15 16:55:05,236] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-15 16:55:05,401] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-15 16:55:05,534] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+Feature 307 — Papai Noel em data especial na Calculadora
+  OK     1. 20/12 · Papai Noel = 2.501,20, sem faixa
+  OK     2. 20/12 · Noel + Ajudante do Noel = 3.601,00
+  FALHA  3. 24/12 · Noel = 5.010,00; data_especial; memória; nota na mensagem e no PDF: Noel 24/12 1h: 2501.2 ≠ 5010.0
+  FALHA  4. 25/12 · Noel + Ajudante = 7.181,00: Noel + Ajudante 25/12 1h: 3601.0 ≠ 7181.0
+  FALHA  5. 24/12 às 20h · noturno por fora = 5.110,00: Noel 24/12 às 20h: 2601.2 ≠ 5110.0
+  FALHA  6. 24/12 · boneco entra pelo piso = 7.181,00: Noel + boneco 24/12 = Noel + Ajudante: 3021.2 ≠ 7181.0
+  FALHA  7. 24/12 · Perna de Pau: markup e piso valem para qualquer produto: markup da faixa vale para Perna de Pau: 2.6 ≠ 3.34
+  FALHA  8. 24/12 · 2h = 10.020,00 (hora extra a preço cheio): 2h = 2 × 1h na faixa: 2750.0 ≠ 10020.0
+  FALHA  9. 24/12 · fora de SP, personalizado e BV 10% (305): fora de SP soma por cima da faixa: 3117.87 ≠ 5626.67
+  OK     10. EducaManto ignora a data
+  FALHA  11. teto das vagas pela data (24/12, noturno, 20/12, data do evento, piso): _compute_performer_caches() got an unexpected keyword argument 'data_evento'
+  OK     12. migração guardada e defensiva do pricing_config
+  FALHA  13. superadmin salva a faixa; corpo inválido = 400 e nada gravado: markup salvo volta no /opcoes: 3.34 ≠ 3.5
+  OK     14. DEVE FALHAR: COMERCIAL não edita a configuração
+  FALHA  15. sem data, legado e snapshot antigo = conta de hoje: 'snapshot_24'
+  FALHA  16. memória de cálculo fecha com o total: 'quote_24'
+         (cenário 17 pulado: rode com --regressao)
+  OK     17. regressão (--regressao)
+  OK     18. limpeza e restauração da configuração real
+7/18 OK
+
+=== PROVA VERMELHA (settings.py da main d855d1a; núcleo da 307 ausente) — Thu Oct 15 17:17:01 ESAST 2026 ===
+  FALHA  1. 20/12 · Papai Noel = 2.501,20, sem faixa: module 'app.orcamento.settings' has no attribute 'faixa_especial'
+  FALHA  2. 20/12 · Noel + Ajudante do Noel = 3.601,00: module 'app.orcamento.settings' has no attribute 'faixa_especial'
+  FALHA  12. migração guardada e defensiva do pricing_config: Noel antigo → 712: [600, 650, 675, 700]
+  OK     18. limpeza e restauração da configuração real
+1/4 OK

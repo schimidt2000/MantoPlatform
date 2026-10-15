@@ -7,7 +7,11 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-09-30** · Em branch: **303-sync-nao-apaga-venda** (migration
+> Última atualização: **2026-10-15** · Em branch: **307-natal-papai-noel-calculadora** (sem
+> migration — head continua `a7c3e91f4d28`; bloco `datas_especiais` no `pricing_config`, §2.10;
+> `data_especial` no quote de `/orcamento/calcular` e validação do bloco em `/orcamento/settings`,
+> §3.13; gate de `orcamento_write` na tabela, §4.3). Antes: **2026-10-14/15** · **305-bv-do-orcamento-no-evento**
+> (sem migration; em produção desde 15/10 ~02:49). Antes: **2026-09-30** · Em branch: **303-sync-nao-apaga-venda** (migration
 > **`a7c3e91f4d28`** — head: coluna `calendar_events.google_missing_since` e o índice parcial
 > `ix_calendar_events_google_missing_since`, §2.2; `GET /api/events/sumidos-google`, `POST
 > /api/events/<id>/devolver-ao-google` e as mudanças de `/sync`, `PATCH`, `cancelar`, `DELETE`,
@@ -601,7 +605,12 @@ nunca sai pela API: a leitura devolve só `infinitepay_webhook_configured`), `ta
 `fator_r_threshold`, `manto_address`, `departure_margin_minutes`, `google_maps_api_key`,
 `clicksign_token`/`clicksign_sandbox`, `email_notifications_enabled`, `ratings_fully_anonymous`,
 `release_date`, `google_token` (OAuth persistido para sobreviver a redeploy), `pricing_config`
-(JSON da calculadora), `calendar_sync_cache`, `calendar_auto_sync_at`, `whatsapp_form_number`.
+(JSON da calculadora — schema em `app/orcamento/settings.py`; desde a **307** tem o bloco
+`datas_especiais` `{<chave>: {rotulo, dias["MM-DD"], markup[4], cache{especial: [4]},
+coordenador[4], piso[4], nota_mensagem}}`, com a faixa `natal` (24 e 25/12) garantida na carga;
+`_migrate` também troca "Papai Noel" de `[600, 650, 675, 700]` para `[712, 800, 850, 900]` e injeta
+"Ajudante do Noel" `[423, 480, 510, 540]`), `calendar_sync_cache`, `calendar_auto_sync_at`,
+`whatsapp_form_number`.
 
 ### 2.11 Migrations
 
@@ -1022,6 +1031,27 @@ ação "Recalcular" (mudança aditiva, retrocompatível).
 (comportamento antigo). No modo `"cliente"` o veículo sai da conta (só adicionais fora-SP/show),
 a mensagem/PDF ganham a frase de responsabilidade, `_build_orcamento_prefill` grava
 `transport_value` sem o veículo e o carrinho (`casting_ops.valor_transporte_papel`) vale zero.
+**Feature 307 (sem migration) — data especial pela data do evento.** `POST /calcular` resolve
+`settings.faixa_especial(event_date)` (recorte `MM-DD` ∈ `datas_especiais.<faixa>.dias`): com
+faixa, o markup é o dela (receptivo e show), os especiais com sobrescrita levam o cachê da faixa,
+o coordenador usa a lista `coordenador` (com e sem show) e todo outro performer sobe ao `piso`
+(`pricing.cache_na_faixa`, fonte única com o teto das vagas) — tudo ANTES de brinde, noturno,
+técnico, maquiador, transporte, acréscimos e NF, que seguem iguais. O `quote` ganha
+`data_especial: {chave, rotulo, markup[4], nota_mensagem} | null` (a nota vai junto porque o PDF e o
+orçamento congelado não releem a tabela) e `markup_used` passa a ser o markup aplicado; a memória
+marca "cachê da data especial"/"piso da data especial" e a linha "× Markup" leva o detalhe
+`"<rótulo> · DD/MM"`; mensagem e PDF trazem a nota em itálico após a frase de deslocamento. Sem
+faixa (data vazia, snapshot antigo, EducaManto — que remove `event_date` em `_totais_contratacao`)
+a conta é byte a byte a de antes. `POST /settings` aceita `datas_especiais` validado no núcleo
+(`settings.validar_datas_especiais` → `SettingsValidationError`; 400 com `fields`
+`datas_especiais.<faixa>.<campo>`: chave `^[a-z0-9_]{1,30}$`, rótulo 1–60, dias `MM-DD` reais sem
+repetição — vazio = faixa desligada —, markup 4 valores em [1, 6] gravados com 2 casas HALF_UP,
+cachês/coordenador/piso 4 valores ≥ 0 por `parse_brl`, `cache` só de especiais existentes, nota ≤
+200); o bloco enviado substitui o salvo e corpo inválido não grava nada; `DELETE
+/settings/especiais/<nome>` tira a sobrescrita do especial das faixas. O teto das vagas
+(`_compute_performer_caches(snapshot, horas_extra, data_evento)`) honra a faixa pela data do
+**evento** na criação e no vínculo 273 (`orcamento_evento_ops.data_do_evento`) e pela data do
+orçamento no prefill.
 **Feature 273 (sem migration)**: cada item de `GET /api/orcamento/historico` traz `event_id` /
 `event_title` do evento **não cancelado** que aponta para ele (uma consulta para a página inteira);
 `DELETE .../historico/<id>` responde **409 + `event_id`** enquanto houver evento vivo vinculado — a
@@ -1604,7 +1634,7 @@ Gates por módulo (todos em `app/api/`):
 
 | Gate | Onde | Papéis aceitos |
 |---|---|---|
-| `_require_superadmin()` | `admin_catalogo_*`, `admin_config_*`, `orcamento_read` | `SUPERADMIN` |
+| `_require_superadmin()` | `admin_catalogo_*`, `admin_config_*`, `orcamento_read` (`GET /orcamento/settings`), `orcamento_write` (`POST /orcamento/settings` — desde a 307 com o bloco `datas_especiais` —, `POST`/`DELETE /orcamento/settings/especiais*`) | `SUPERADMIN` |
 | `_require_users_access()` | `admin_users_*` | `SUPERADMIN`, `FINANCEIRO` |
 | `_can_create_event()` / `_can_edit_event()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` (criar); `_CAN_EDIT_EVENT` (editar) |
 | `_can_delete()` | `agenda_write` (delega para `_CAN_DELETE`): excluir, cancelar, recusar solicitação e — feature 303 — `POST /api/events/<id>/devolver-ao-google`, sempre depois do 404 | `SUPERADMIN` (papel real; desde a 224 o Comercial só **solicita**) |

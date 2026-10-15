@@ -205,7 +205,7 @@ exclusão. **Documentar a decisão no docstring de `_delete_event_flow`.**
 
 | Sintoma | Onde | Ação |
 |---|---|---|
-| Precificação de orçamento dentro do módulo de calendário | `_compute_performer_caches`, `app/calendar/routes.py:2682` (134 l.); `app/orcamento/pricing.py:13` cita ela na docstring | mover para `app/orcamento/pricing.py` (ou um `pricing_elenco.py`) |
+| Precificação de orçamento dentro do módulo de calendário | `_compute_performer_caches`, `app/calendar/routes.py:2835` (~260 l. depois da 307, que lhe deu `data_evento` e a faixa de data especial); `app/orcamento/pricing.py:13` cita ela na docstring | mover para `app/orcamento/pricing.py` (ou um `pricing_elenco.py`) |
 | Regra de auto-vínculo importada como **função privada** | ~~importada de `app/formularios/routes.py`~~ (a fase 3 do Jinja a levou para `formularios_ops.py`; a 298 a fez passar pelo núcleo `apply_event_link`). Resta o nome: `app/api/formularios_write.py` importa `_attempt_auto_link`; `calendar/sync.py` e `app/cli.py` usam `retry_auto_link_pending` | renomear para `tentar_vincular_evento()` / `reprocessar_vinculos_pendentes()` quando alguém tocar no envio público |
 | Parser do Google Docs dentro de arquivo de rotas | `_sync_normalize`/`_sync_extract_name`/`_sync_extract_pieces`/`_sync_save_photo`, `app/figurino/routes.py:272-351` | mover para `drive_service.py` (I/O) ou `figurino_ops.py` (regra); deixar `sync_drive_stream` só orquestrando o SSE |
 | View Jinja ignora o ops que existe | `list_talents` (`app/talents/routes.py:39`, 153 l.) faz query direta; `talent_ops.get_talent_profile` (`:202`) existe e não é usada | mover agregações para `talent_ops.list_talents_overview()` |
@@ -566,3 +566,13 @@ merge para `main` antes disso** — o Render faz deploy automático da `main`.
   escrita no Google (ex.: `api_create_event` faz import tardio) e o launcher de preview pode
   usar config em cache — criar evento em teste local pode tentar o Google real e falhar com
   502 (sem lixo, mas confunde a verificação).
+
+## Baixa da feature 307-natal-papai-noel-calculadora (2026-10-15, branch)
+
+| # | Prio | Onde | Sintoma | Ação |
+|---|---|---|---|---|
+| 103 | **P3** | `PerformersEditor.tsx:138-149` (compartilhado com o EducaManto) | o `<select>` nativo de especiais foi de 11 para 12 itens com "Ajudante do Noel" — violação **já existente** do Princípio XII.1 (NUNCA select nativo acima de 10), agravada pela 307; a troca pelo `Combobox` de `@manto/ui` mexe nas duas calculadoras e não coube no "para ontem" — **decisão do dono**: trocar na próxima fatia ou emendar a constituição | `Combobox` com miniatura no `PerformersEditor` (uma troca resolve as duas calculadoras) + conferência de tela nas duas |
+| 104 | **P4** | `app/api/orcamento_read.py` `personagens-no-dia` (`quote_ops.py:695-724`) | o alerta "Já na agenda neste dia" agrupa por `character_name`: em 24/12, com vários Noéis escalados, todo orçamento de Noel acusa "venda em dobro" mesmo havendo artista livre | agrupar por talento (ou mostrar "N escalados") |
+| 105 | **P4** | `OrcamentoCalculadoraPage.tsx` rehydrate (`?recalcular_id=`) | não restaura `incluir_duracao` (nem vai ao snapshot) nem `personalizado_criterio`/`cust_*` (estão no snapshot, faltam no tipo e no efeito): um orçamento "1 entrada de 30 min" reabre com as 4 durações | pôr `incluir_duracao` no snapshot e restaurar os três no efeito |
+| 106 | **P4** | `calculate_quote` (~540 l.), `_compute_performer_caches` (~260 l.), `api_orcamento_settings_save` (~75 l.) | já excediam as 30 linhas do Princípio II; a 307 só acrescentou chamadas a helpers (`cache_na_faixa`, `markup_vigente`, `validar_datas_especiais`) — o 3b vai reescrever o núcleo em "por dia" e é a hora de quebrar | quebrar junto com o 3b, com o gabarito de paridade |
+| 107 | **P4** | eventos de 24 e 25/12 criados antes do deploy da 307 | o vínculo 273 só preenche teto onde `cache_cap` é `NULL`: Noel 600 / coordenador 250 ficam nos eventos já criados | pós-deploy, consulta só de leitura (eventos com `start_at` em 24/25/12 e `orcamento_history_id`) e ajuste manual pelo superadmin |
