@@ -1,0 +1,11 @@
+Feature 305 — segundo converge (15/10/2026): os cenários novos rodados ANTES das correções (HEAD 30829bc),
+contra o manto_local. O 58 passou a exigir o literal da T041 e fica vermelho até ela.
+
+  FALHA  58. corte do commit e corte vazio: o passado não acende: CORTE_ALERTA_BV vazio ou com fuso — falta a T041: None
+  OK     59. nota diferente entre orçamento e evento: o mesmo BV   (o servidor já estava certo; a tela, não)
+  FALHA  69. DEVE FALHAR: Jinja com '1.500' em linha nova: Jinja gravou '1.500': [... 'amount_brl': Decimal('1.50') ...]
+  FALHA  70. Jinja: BV a BV — o redigitado fica, o reenviado acompanha: {'…Buffet Parceiro': 130.00, '…Dois': 50.00}
+  FALHA  71. DEVE FALHAR: editor aberto antes da B10 não a desfaz: editor velho desfez a B10: 200 [... 'amount_brl': Decimal('100.00') ...]
+  FALHA  72. DEVE FALHAR: subcentavo e o teto depois do arredondamento: 0.004: 200 [... 'amount_brl': Decimal('0.00') ...]
+  OK     50. limpeza
+2/7 OK · chamadas ao Google: 4

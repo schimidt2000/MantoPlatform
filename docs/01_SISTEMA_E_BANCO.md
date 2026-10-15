@@ -766,6 +766,9 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > ganha `bv_acompanhou` (a B10 quando o "Vincular e aplicar" põe a venda num evento que já tinha BV).
 > `POST /api/financeiro/pagamentos/set-status` com `item_type="bv"` aceita `valor_esperado` (o
 > valor que a Planilha mostrou; opcional): diferente do gravado, ao marcar pago ou no banco → **409**.
+> No PUT de acréscimos, a linha BV em R$ aceita `valor_visto` (o valor que o editor abriu): o BV a
+> pagar com outro valor (a venda o mudou depois) → 400 na linha. O `acrescimos_do_orcamento` do
+> prefill ganha `nota_do_orcamento` e `divisor_da_nota` (a tela compara líquidos, como o servidor).
 >
 > **Hotfix 215b — taxa e vendedor da comissão.** `PATCH /api/events/<id>/comercial` e
 > `PATCH /api/events/<id>` recusam com **403** (`fields.commission_rate` / `fields.seller_id`) a

@@ -120,6 +120,13 @@ vermelho pelos motivos certos; cada história fecha com os seus cenários verdes
 - [X] T044 Frontend: R$ por `MoneyInput` e % convertido (número no PUT); "Lançar o BV" em reais; a linha que vira BV não reinterpreta valor digitado; `salvar.reset()` ao abrir/cancelar/remover; `?lancar=bv` com o editor aberto só acrescenta; `setQueryData` no PUT; invalidação financeira na criação e na edição; Cancelar do painel Orçamento limpa quem recebe/PIX; campos do BV no Novo evento quando o 400 os pede; `valor_esperado` na Planilha
 - [X] T045 Regressão: verify_305 64/64 com `--regressao`; locais 249/251 ajustados ao "[] não apaga BV pago" (18/18, 19/19); typecheck das três SPAs; tela conferida; docs 01/03/04/05 e research/contracts/data-model/quickstart
 
+## Phase 12: Segundo converge (15/10) — 14 achados sobre as correções, 12 confirmados
+
+- [X] T046 Cenários 69–72 e o 59 com a nota trocada; o 58 passa a exigir o literal da T041 (fica vermelho até ela) — `verify_305_converge2_primeira_falha.txt`
+- [X] T047 Backend: Jinja BV a BV (`bvs_a_pagar_por_valor`, `acompanhar_bv_da_venda(so_os_reenviados=)`), texto cru no Jinja, `valor_visto` no PUT, `_valor_digitado` ao centavo, `populate_existing` nos `FOR UPDATE`, `travar_evento` em `set_event_clients` e antes dos clientes no Jinja, nota e divisor no prefill
+- [X] T048 Frontend: quadro do Novo evento compara líquidos; `valor_visto`; lixeira e Cancelar travados durante o Salvar/Aplicando; o negativo não BV mantém o sinal
+- [X] T049 Regressão, typecheck e docs
+
 ## Dependências
 
 Setup → Foundational → US1 (MVP) → US2 → US3 → US4 → US5 → US6 → Frontend → Polimento. US2, US4 e US5

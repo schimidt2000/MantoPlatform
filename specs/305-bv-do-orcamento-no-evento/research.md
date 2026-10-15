@@ -253,6 +253,17 @@ acrescenta "confira o BV" à frase. A 215b (`_erro_de_taxa_ou_vendedor`) continu
 fica como digitado, com o aviso "confira o BV" — reproporcioná-lo dobrava o combinado novo.
 (4) Marcar pago na Planilha trava a linha e confere `valor_esperado` (409 se a B10 mudou o valor).
 
+**Segundo converge (15/10).** (1) O "redigitado" do Jinja é decidido BV a BV, pelo número que a tela
+mostra (`bvs_a_pagar_por_valor`, um multiconjunto de (unidade, valor)): o reenviado sem mexer acompanha
+a venda, o mexido fica — tudo-ou-nada impedia o BV intocado de acompanhar. A leitura é por colunas
+(nenhuma entidade carregada sem trava) e os `FOR UPDATE` usam `populate_existing`. (2) O Jinja manda o
+texto cru ao núcleo (o `parse_brl` lia "1.500" de linha nova, sem máscara, como R$ 1,50). (3) O editor
+manda `valor_visto` (o R$ que abriu); se a venda mudou o BV a pagar desde então, 400 na linha em vez de
+desfazer a proporção. (4) `_valor_digitado` arredonda ao centavo antes das guardas (R$ 0,004 virava BV
+de R$ 0,00). (5) `set_event_clients` e o Jinja travam o evento antes dos dependentes (a ordem inversa
+dava deadlock com a edição completa). (6) O cenário 58 exige o literal da T041 — esquecê-lo, depois que
+a falha passou a fechar, deixaria o alerta desligado em silêncio.
+
 **A volta não é exata.** `200 → 180 → 200` volta ao ponto só com números redondos; a cadeia de
 proporções acumula centavos. O cenário 49 usa os números redondos do plano e um caso não redondo com
 tolerância declarada.

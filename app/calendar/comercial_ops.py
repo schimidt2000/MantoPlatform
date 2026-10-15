@@ -27,6 +27,7 @@ O upload do arquivo da nota fica na camada de rota: aqui só chega o caminho já
 from __future__ import annotations
 
 import re
+from collections import Counter
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
@@ -114,7 +115,10 @@ def _valor_digitado(valor: Any) -> Decimal | None:
         return None
     if d is None or not d.is_finite() or abs(d) >= _TETO_DO_VALOR:
         return None
-    return d
+    # Ao centavo, que é o que a coluna guarda: as guardas de zero, negativo e teto olham o valor
+    # gravado — R$ 0,004 passava pelo "zero" e virava BV de R$ 0,00; 9.999.999.999,995 estourava.
+    d = _q(d)
+    return d if abs(d) < _TETO_DO_VALOR else None
 
 
 def valor_do_bv_percentual(
@@ -179,8 +183,10 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> list[dict]:
     Args:
         event: O `CalendarEvent` dono dos acréscimos.
         itens: Cada item aceita ``id``, ``tipo``, ``descricao``, ``is_percent``, ``value``,
-            ``bv_recipient`` e ``bv_pix``. Item sem `tipo` é ignorado (a linha em branco deixada
-            pelo usuário); o que não é BV com valor zero ou vazio também, como no editor antigo.
+            ``bv_recipient``, ``bv_pix`` e ``valor_visto`` (o R$ que a tela mostrou do BV a pagar;
+            diferente do gravado → recusa, porque a venda o mudou depois). Item sem `tipo` é
+            ignorado (a linha em branco deixada pelo usuário); o que não é BV com valor zero ou
+            vazio também, como no editor antigo.
 
     Returns:
         As trocas de quem recebe ou de PIX em BV pago ou no banco (``valor``, ``status``,
@@ -192,11 +198,14 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> list[dict]:
     """
     if itens is None:
         return []
-    from app.calendar.orcamento_evento_ops import erros_do_bv, travar_evento
+    from app.calendar.orcamento_evento_ops import _fmt_reais, erros_do_bv, travar_evento
 
     travar_evento(event)
+    # `populate_existing`: o objeto já na sessão (lido antes, sem trava) seria devolvido com os
+    # valores velhos — um "pago" que entrou no meio voltaria a "a pagar".
     antigas = (
-        EventAcrescimo.query.filter_by(event_id=event.id).order_by(EventAcrescimo.id).with_for_update().all()
+        EventAcrescimo.query.filter_by(event_id=event.id).order_by(EventAcrescimo.id)
+        .with_for_update().populate_existing().all()
     )
     por_id = {a.id: a for a in antigas}
     usa_id = any(isinstance(i, dict) and "id" in i for i in itens)
@@ -351,6 +360,21 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> list[dict]:
                         continue
                 registro.update(is_percent=True, value=percentual, amount_brl=valor_bv)
             else:
+                visto = _to_decimal(item.get("valor_visto")) if not isinstance(item.get("valor_visto"), bool) else None
+                if (
+                    visto is not None
+                    and antiga is not None
+                    and antiga.is_bv
+                    and not antiga.is_percent
+                    and _q(visto) != _q(_to_decimal(antiga.amount_brl) or Decimal("0"))
+                ):
+                    # O editor abriu antes de a venda mudar o BV (B10, outra aba ou outra pessoa):
+                    # gravar "como digitado" desfaria a proporção sem ninguém ver.
+                    erros[f"items.{indice}.value"] = (
+                        f"O BV mudou para {_fmt_reais(antiga.amount_brl or 0)} desde que o editor abriu: "
+                        "recarregue a página e confira."
+                    )
+                    continue
                 registro.update(is_percent=False, value=_q(linha["valor"]), amount_brl=_q(linha["valor"]))
         else:
             # Acréscimo que não é BV: só registro (não entra em comissão, DRE nem Planilha).
@@ -407,14 +431,26 @@ def estado_da_venda(event: Any) -> tuple[Any, bool, bool]:
     return event.sale_value, bool(event.with_invoice), bool(getattr(event, "is_cortesia_permuta", False))
 
 
-def bvs_a_pagar_digitados(event: Any) -> list[tuple]:
-    """O que a tela mostra de cada BV a pagar (quem recebe, PIX, unidade, número), para o gêmeo Jinja
-    saber se o formulário MEXEU no BV ou só o reenviou."""
-    linhas = EventAcrescimo.query.filter_by(event_id=event.id, is_bv=True).all()
-    return sorted(
-        (a.bv_recipient or "", a.bv_pix or "", bool(a.is_percent), _q(_to_decimal(a.value) or Decimal("0")))
-        for a in linhas
-        if (a.bv_payment_status or "nao_pago") not in _BV_CONGELADO
+def _valor_na_tela(is_percent: Any, value: Any) -> tuple[bool, Decimal]:
+    return bool(is_percent), _q(_to_decimal(value) or Decimal("0"))
+
+
+def bvs_a_pagar_por_valor(event: Any) -> Counter:
+    """Os BVs a pagar pelo número que a tela mostra (unidade, valor) — para o gêmeo Jinja saber,
+    BV a BV, qual o envio MEXEU (fica como digitado) e qual só reenviou (acompanha a venda).
+
+    Lê colunas, não entidades: um objeto carregado aqui, sem trava, voltaria do `FOR UPDATE` de
+    `substituir_acrescimos` com o status velho.
+    """
+    linhas = (
+        db.session.query(EventAcrescimo.is_percent, EventAcrescimo.value, EventAcrescimo.bv_payment_status)
+        .filter(EventAcrescimo.event_id == event.id, EventAcrescimo.is_bv.is_(True))
+        .all()
+    )
+    return Counter(
+        _valor_na_tela(is_percent, value)
+        for is_percent, value, status in linhas
+        if (status or "nao_pago") not in _BV_CONGELADO
     )
 
 
@@ -424,7 +460,14 @@ def _liquido(venda: Decimal, nota: bool) -> Decimal:
     return venda * divisor_da_nota() if nota else venda
 
 
-def acompanhar_bv_da_venda(event: Any, antes: tuple[Any, bool, bool], *, actor_name: str, tz: Any) -> str | None:
+def acompanhar_bv_da_venda(
+    event: Any,
+    antes: tuple[Any, bool, bool],
+    *,
+    actor_name: str,
+    tz: Any,
+    so_os_reenviados: Counter | None = None,
+) -> str | None:
     """O BV a pagar acompanha a venda que muda depois (feature 305, B10; 3a-Q1 = B, Q8 = A). Sem commit.
 
     O dono: "se o valor total do orçamento mudar, o BV deve acompanhar proporcionalmente" — e, do BV
@@ -445,6 +488,9 @@ def acompanhar_bv_da_venda(event: Any, antes: tuple[Any, bool, bool], *, actor_n
         antes: ``estado_da_venda(event)`` capturado antes de qualquer escrita.
         actor_name: Quem editou, para o `EventLog`.
         tz: Fuso do carimbo do log.
+        so_os_reenviados: Só o gêmeo Jinja: os BVs em reais que o envio reenviou sem mexer
+            (`bvs_a_pagar_por_valor` de antes ∩ de depois). Os outros foram digitados agora e
+            ficam como estão. ``None`` = todos (a API grava a venda em outra requisição).
 
     Returns:
         O aviso para a tela, ou ``None`` quando nada mudou.
@@ -466,9 +512,20 @@ def acompanhar_bv_da_venda(event: Any, antes: tuple[Any, bool, bool], *, actor_n
         return None
     linhas = (
         EventAcrescimo.query.filter_by(event_id=event.id, is_bv=True)
-        .order_by(EventAcrescimo.id).with_for_update().all()
+        .order_by(EventAcrescimo.id).with_for_update().populate_existing().all()
     )
     a_pagar = [a for a in linhas if (a.bv_payment_status or "nao_pago") not in _BV_CONGELADO]
+    if so_os_reenviados is not None:
+        saldo = Counter(so_os_reenviados)
+        reenviados = []
+        for a in a_pagar:
+            chave = _valor_na_tela(a.is_percent, a.value)
+            if a.is_percent:
+                reenviados.append(a)  # o % já saiu da régua com a venda nova; refazer dá o mesmo
+            elif saldo[chave] > 0:
+                saldo[chave] -= 1
+                reenviados.append(a)
+        a_pagar = reenviados
     if not a_pagar:
         return None
     from app.orcamento.quote_ops import bv_que_acompanha

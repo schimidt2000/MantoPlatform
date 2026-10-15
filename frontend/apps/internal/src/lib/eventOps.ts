@@ -283,6 +283,9 @@ export interface AcrescimoInput {
   value: number | string;
   bv_recipient?: string | null;
   bv_pix?: string | null;
+  /** Feature 305 (converge): o R$ do BV a pagar que o editor abriu — se a venda o mudou depois
+   * (outra aba, outra pessoa), o servidor recusa em vez de desfazer a proporção. */
+  valor_visto?: number | null;
 }
 
 export interface ParcelaInput {
@@ -326,6 +329,11 @@ export function useSetAcrescimos(eventId: number) {
       // Feature 305: salvar os acréscimos mexe no BV da Planilha e na comissão na mesma requisição.
       void queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
       void queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
+    },
+    // A recusa "o BV mudou desde que o editor abriu" pede o detalhe novo: com ele, o aviso do editor
+    // ("a venda mudou… cancele e abra de novo") acende.
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ["event", eventId] });
     },
   });
 }

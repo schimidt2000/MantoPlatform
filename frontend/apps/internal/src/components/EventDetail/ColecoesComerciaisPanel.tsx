@@ -84,6 +84,8 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
       };
       // Com o backend antigo a chave não vem: fica de fora, e o servidor mantém a descrição.
       if (a.descricao !== undefined) linha.descricao = a.descricao ?? "";
+      // O R$ que o editor abriu: se a venda mudar o BV antes do Salvar, o servidor recusa.
+      if (a.is_bv && !a.is_percent) linha.valor_visto = a.amount_brl;
       return linha;
     });
   }
@@ -219,7 +221,11 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
                         value={typeof l.value === "number" ? l.value : 0}
                         disabled={pago}
                         aria-invalid={Boolean(erroDaLinha(i, "value"))}
-                        onValueChange={(n) => alterar(l.key, "value", n)}
+                        // O MoneyInput só lê dígitos: o acréscimo negativo que já existe (não BV,
+                        // um desconto) manteria o valor e perderia o sinal a cada tecla.
+                        onValueChange={(n) =>
+                          alterar(l.key, "value", typeof l.value === "number" && l.value < 0 ? -n : n)
+                        }
                       />
                     )}
                   </div>
@@ -236,7 +242,9 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
                     variant="outline"
                     size="sm"
                     className="mb-1"
-                    disabled={pago}
+                    // Durante o Salvar, nada que mexa na lista: o `reset()` desligaria o fechamento
+                    // do editor (callbacks do mutate) e deixaria a tela com os ids de antes.
+                    disabled={pago || salvar.isPending}
                     onClick={() => {
                       // Os erros do 400 são pelo índice da lista enviada: remover desloca as linhas.
                       salvar.reset();
@@ -339,6 +347,7 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
             </Button>
             <Button
               variant="outline"
+              disabled={salvar.isPending}
               onClick={() => {
                 salvar.reset();
                 setEditando(false);

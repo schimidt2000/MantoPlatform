@@ -80,6 +80,10 @@ export interface AcrescimosDoOrcamento {
     percentual: number | null;
     valores_brl: { "1": number | null; "2": number | null; "3": number | null; "4": number | null; custom: number | null };
   }[];
+  /** Feature 305 (converge): a proporção do BV é entre líquidos — a nota do orçamento e o 0,84 do
+   * servidor. Opcionais: o backend antigo não manda (aí a tela compara brutos, como antes). */
+  nota_do_orcamento?: boolean;
+  divisor_da_nota?: number;
 }
 
 export function useOrcamentoPrefill(orcamentoId: number | null) {

@@ -1761,7 +1761,11 @@ def cen_58_corte_vazio() -> None:
     from app.calendar import orcamento_evento_ops as oeo
 
     original = estado.get("corte_original")
-    _garante(original is None or original.tzinfo is None, f"CORTE_ALERTA_BV com fuso: {original!r}")
+    # Portão da T041: sem o literal no commit, o alerta iria para produção desligado em silêncio.
+    _garante(
+        original is not None and original.tzinfo is None,
+        f"CORTE_ALERTA_BV vazio ou com fuso — falta a T041: {original!r}",
+    )
     try:
         # (a) A constante DO COMMIT (não a do monkeypatch): os três eventos do passado com orçamento
         # com BV e venda digitada não acendem nem ganham linha (T030; 3a-Q4 = A).
@@ -1811,6 +1815,20 @@ def cen_59_nota_diferente() -> None:
     _cliente("com").patch(f"/api/events/{eid_c}/orcamento", json={"orcamento_history_id": oid_c})
     p = _pendente("com", eid_c)
     _garante(p and p.get("valor") is not None and q(p["valor"]) == Decimal("100.00"), f"alerta: {p}")
+    # Nota trocada com a MESMA venda: o preço muda (é o caso que a tela precisa avisar).
+    for rotulo, orc, venda, nota, esperado in (
+        ("c59d", _orc_d2("c59d"), 1309.52, False, "119.05"),
+        ("c59e", _orc_2031("c59e"), 1100, True, "84.00"),
+    ):
+        r, e = _criar(
+            "com",
+            _corpo_criacao(
+                f"{PREFIX}{rotulo}", orc, venda=venda, duracao="1", fim="16:00", with_invoice=nota,
+                bv_recipient=QUEM, bv_pix=PIX,
+            ),
+        )
+        _garante(e, f"{rotulo}: POST → {r.status_code}")
+        _garante([q(b["amount_brl"]) for b in _bvs(e)] == [Decimal(esperado)], f"{rotulo}: {_bvs(e)}")
 
 
 def cen_60_bv_sem_valor() -> None:
@@ -1911,17 +1929,19 @@ def cen_64_vincular_roda_a_b10() -> None:
     _garante("BV em reais ficou" in frase, f"frase sem o aviso: {frase!r}")
 
 
-def _post_jinja(eid: int, venda: str, valor_bv: str) -> None:
+def _post_jinja(eid: int, venda: str, valor_bv: str, *, outros: list[tuple] = ()) -> None:
+    """POST da aba Comercial do Jinja; `outros` = BVs a mais, (quem recebe, PIX, valor)."""
+    bvs = [(QUEM, PIX, valor_bv), *outros]
     form = {
         "action": "update_comercial",
         "sale_value": venda,
         "sale_value_gross": venda,
-        "acrescimo_tipo[]": ["BV"],
-        "acrescimo_descricao[]": [""],
-        "acrescimo_value[]": [valor_bv],
-        "acrescimo_is_percent[]": ["0"],
-        "acrescimo_bv_recipient[]": [QUEM],
-        "acrescimo_bv_pix[]": [PIX],
+        "acrescimo_tipo[]": ["BV"] * len(bvs),
+        "acrescimo_descricao[]": [""] * len(bvs),
+        "acrescimo_value[]": [b[2] for b in bvs],
+        "acrescimo_is_percent[]": ["0"] * len(bvs),
+        "acrescimo_bv_recipient[]": [b[0] for b in bvs],
+        "acrescimo_bv_pix[]": [b[1] for b in bvs],
     }
     r = _cliente("com").post(f"/events/{eid}", data=form)
     _garante(r.status_code in (200, 302), f"Jinja → {r.status_code}")
@@ -2030,6 +2050,61 @@ def cen_68_rastro_do_bv_pago() -> None:
     )) == 1, "rastro sem troca")
 
 
+# ── 69–72 · segundo converge (15/10) ───────────────────────────────────────────────────────────
+def cen_69_jinja_milhar() -> None:
+    eid = _evento_google("c69", venda=2000)
+    _post_jinja(eid, "2.000,00", "1.500")
+    _garante(not _linhas(eid), f"Jinja gravou '1.500': {_linhas(eid)}")
+
+
+def cen_70_jinja_bv_a_bv() -> None:
+    # Dois BVs: A redigitado junto com a venda (fica), B reenviado sem mexer (acompanha).
+    dois = (f"{PREFIX}Dois", "dois@exemplo.test")
+    eid = _evento_google("c70", venda=1000)
+    _put("com", eid, [_bv_item(100), _bv_item(50, quem=dois[0], pix=dois[1])])
+    _post_jinja(eid, "2.000,00", "130,00", outros=[(dois[0], dois[1], "50,00")])
+    valores = {b["bv_recipient"]: q(b["amount_brl"]) for b in _bvs(eid)}
+    _garante(valores == {QUEM: Decimal("130.00"), dois[0]: Decimal("100.00")}, f"{valores}")
+
+
+def cen_71_editor_aberto_antes_da_b10() -> None:
+    eid = _evento_com_bv_reais("c71", venda=1000, nota=False, valor=100)
+    itens = _como_carregou(eid)
+    itens[0]["valor_visto"] = 100
+    _cliente("com").patch(
+        f"/api/events/{eid}/comercial", json=_corpo_comercial(eid, sale_value=1200, sale_value_gross=1200)
+    )
+    _garante([q(b["amount_brl"]) for b in _bvs(eid)] == [Decimal("120.00")], f"B10: {_bvs(eid)}")
+    r = _put("com", eid, itens)
+    _garante(
+        r.status_code == 400
+        and "items.0.value" in (_erro(r).get("fields") or {})
+        and [q(b["amount_brl"]) for b in _bvs(eid)] == [Decimal("120.00")],
+        f"editor velho desfez a B10: {r.status_code} {_bvs(eid)}",
+    )
+    itens[0]["valor_visto"] = 120
+    r = _put("com", eid, itens)
+    _garante(
+        r.status_code == 200 and [q(b["amount_brl"]) for b in _bvs(eid)] == [Decimal("100.00")],
+        f"redigitado de propósito: {r.status_code} {_bvs(eid)}",
+    )
+
+
+def cen_72_subcentavo_e_teto() -> None:
+    eid = _evento_google("c72", venda=2000)
+    for item in (
+        _bv_item(0.004),
+        _bv_item("0,004"),
+        _bv_item(9999999999.995),
+        {"tipo": "Outro", "is_percent": False, "value": 9999999999.995},
+    ):
+        r = _put("com", eid, [item])
+        _garante(
+            r.status_code == 400 and "items.0.value" in (_erro(r).get("fields") or {}) and not _linhas(eid),
+            f"{item['value']!r}: {r.status_code} {_linhas(eid)}",
+        )
+
+
 def cen_50_limpeza() -> None:
     with app.app_context():
         limpar()
@@ -2107,6 +2182,10 @@ CENARIOS = [
     ("66. corridas: B10 e editor contra a venda que muda", cen_66_corridas),
     ("67. DEVE FALHAR: marcar pago confere o valor mostrado", cen_67_marcar_pago_confere_o_valor),
     ("68. rastro da troca de PIX no BV pago", cen_68_rastro_do_bv_pago),
+    ("69. DEVE FALHAR: Jinja com '1.500' em linha nova", cen_69_jinja_milhar),
+    ("70. Jinja: BV a BV — o redigitado fica, o reenviado acompanha", cen_70_jinja_bv_a_bv),
+    ("71. DEVE FALHAR: editor aberto antes da B10 não a desfaz", cen_71_editor_aberto_antes_da_b10),
+    ("72. DEVE FALHAR: subcentavo e o teto depois do arredondamento", cen_72_subcentavo_e_teto),
 ]
 
 

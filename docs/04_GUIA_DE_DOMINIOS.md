@@ -259,7 +259,8 @@ com o tipo do erro, 502 com mensagem fixa — a marca continua.
   sempre ignorada. A proporção (criação, alerta, B10) é sempre entre valores **líquidos** (× 0,84 de
   quem tem nota): o mesmo preço com e sem nota dá o mesmo BV. Nenhum BV sem valor, zero ou negativo.
   Quem lê a venda para gravar BV trava o evento antes (`orcamento_evento_ops.travar_evento`, chamado
-  por `estado_da_venda` e `substituir_acrescimos`); a ordem é sempre evento → acréscimos. O "Vincular
+  por `estado_da_venda`, `substituir_acrescimos` e `set_event_clients`); a ordem é sempre evento →
+  dependentes. O editor que abriu antes de uma mudança de venda não desfaz a B10 (`valor_visto`). O "Vincular
   e aplicar" que põe a venda num evento que já tinha BV roda a B10 como a aba Comercial.
 - ~~`flash()` aparece dentro de `_delete_event`~~ — **desatualizado** (conferido na 303): desde a
   224 `_delete_event` devolve o aviso de falha do Google em vez de chamar `flash`, e não depende de

@@ -830,6 +830,7 @@ export function EventCreatePage() {
                         : null
                 }
                 venda={watch("sale_value")}
+                nota={Boolean(watch("with_invoice"))}
                 cortesia={watch("is_cortesia_permuta")}
                 aDefinir={!watch("is_cortesia_permuta") && Boolean(watch("valor_a_definir"))}
                 recebedor={bvRecipient}

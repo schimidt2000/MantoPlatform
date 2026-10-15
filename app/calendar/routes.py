@@ -831,6 +831,11 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         )
         return
 
+    # Feature 305 (B10): o "antes" da venda, capturado ANTES de qualquer escrita — a regravação do BV
+    # a pagar roda depois dos acréscimos, que este formulário reposta a cada envio. Antes também dos
+    # clientes: `estado_da_venda` trava o evento, e a ordem das travas é sempre evento → dependentes.
+    _venda_antes = comercial_ops.estado_da_venda(event)
+
     if _clients_submitted:
         EventClient.query.filter_by(event_id=event.id).delete()
         for _cid_int, _rel in _pairs:
@@ -838,9 +843,6 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         # client_id denormalizado = contratante (ou o primeiro), p/ compat de telas que mostram "o cliente".
         event.client_id = _primary_client_id(_pairs)
 
-    # Feature 305 (B10): o "antes" da venda, capturado ANTES de qualquer escrita — a regravação do BV
-    # a pagar roda depois dos acréscimos, que este formulário reposta a cada envio.
-    _venda_antes = comercial_ops.estado_da_venda(event)
     event.sale_value       = parse_brl(request.form.get("sale_value", ""))
     event.sale_value_gross = parse_brl(request.form.get("sale_value_gross", ""))
     event.transport_value  = parse_brl(request.form.get("transport_value", ""))
@@ -878,15 +880,18 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
                 "tipo": _acr_tipos[_i],
                 "descricao": _acr_descricoes[_i] if _i < len(_acr_descricoes) else None,
                 "is_percent": (_acr_percents[_i] == "1") if _i < len(_acr_percents) else False,
-                "value": parse_brl(_acr_valores[_i]) if _i < len(_acr_valores) else None,
+                # O texto cru: o núcleo lê o formato brasileiro e RECUSA o ambíguo. O `parse_brl`
+                # daqui lia "1.500" (linha nova, sem máscara) como R$ 1,50 (feature 305).
+                "value": _acr_valores[_i] if _i < len(_acr_valores) else None,
                 "bv_recipient": _acr_bv_recip[_i] if _i < len(_acr_bv_recip) else None,
                 "bv_pix": _acr_bv_pix[_i] if _i < len(_acr_bv_pix) else None,
             }
             for _i in range(len(_acr_tipos))
         ]
-    # Feature 305: o BV a pagar como a tela o mostrava — se o envio mexeu nele, a B10 lá embaixo não
-    # o proporciona de novo (o redigitado junto com a venda nova é o combinado novo).
-    _bvs_antes = comercial_ops.bvs_a_pagar_digitados(event) if _acrescimos is not None else None
+    # Feature 305: os BVs a pagar pelo número que a tela mostrava — o que o envio mexeu, a B10 lá
+    # embaixo não proporciona de novo (o redigitado junto com a venda nova é o combinado novo); o
+    # que só foi reenviado acompanha a venda. Decide BV a BV.
+    _bvs_antes = comercial_ops.bvs_a_pagar_por_valor(event) if _acrescimos is not None else None
     try:
         _trocas_bv_pago = comercial_ops.substituir_acrescimos(event, _acrescimos)
     except comercial_ops.AcrescimosRecusados as exc:
@@ -900,7 +905,12 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
         for _troca in _trocas_bv_pago:
             audit("edit", "event_bv", event.id, event.title, comercial_ops.frase_da_troca_no_bv_pago(_troca))
-    _bv_redigitado = _bvs_antes is not None and comercial_ops.bvs_a_pagar_digitados(event) != _bvs_antes
+    _bvs_reenviados = None
+    _bv_redigitado = False
+    if _bvs_antes is not None:
+        _bvs_depois = comercial_ops.bvs_a_pagar_por_valor(event)
+        _bvs_reenviados = _bvs_antes & _bvs_depois
+        _bv_redigitado = sum(_bvs_reenviados.values()) < sum(_bvs_depois.values())
 
     # ── Notas fiscais (feature 069): coleção de notas por evento (valor + data + arquivo) ──
     # Linhas do form: nf_key[] ("id_<n>" p/ existente, "new_*" p/ nova), nf_amount[], nf_date[];
@@ -973,18 +983,16 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         created_at=datetime.now(tz=tz_sp),
     ))
     # Feature 305 (B10): depois dos acréscimos (recriados acima), o BV a pagar acompanha a venda.
-    # O núcleo pula evento cancelado e satélite (este formulário não recusa nenhum dos dois). O BV
-    # que o envio mexeu fica como digitado.
-    if _bv_redigitado:
-        _venda_agora = (event.sale_value, bool(event.with_invoice), bool(event.is_cortesia_permuta))
-        if _venda_agora != _venda_antes:
-            flash("O BV foi salvo como digitado (a venda também mudou): confira o BV.", "warning")
-    else:
-        _aviso_bv = comercial_ops.acompanhar_bv_da_venda(
-            event, _venda_antes, actor_name=current_user.name, tz=tz_sp
-        )
-        if _aviso_bv:
-            flash(_aviso_bv, "warning")
+    # O núcleo pula evento cancelado e satélite (este formulário não recusa nenhum dos dois). Só os
+    # BVs reenviados sem mexer acompanham; o que o envio mexeu fica como digitado.
+    _aviso_bv = comercial_ops.acompanhar_bv_da_venda(
+        event, _venda_antes, actor_name=current_user.name, tz=tz_sp, so_os_reenviados=_bvs_reenviados
+    )
+    if _aviso_bv:
+        flash(_aviso_bv, "warning")
+    _venda_agora = (event.sale_value, bool(event.with_invoice), bool(event.is_cortesia_permuta))
+    if _bv_redigitado and _venda_agora != _venda_antes:
+        flash("O BV digitado agora foi salvo como digitado (a venda também mudou): confira o BV.", "warning")
     from app.financeiro.routes import _sync_commission_payment
     _sync_commission_payment(event)
     db.session.commit()
@@ -3240,12 +3248,22 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
 
 
 def _acrescimos_do_prefill(entry: OrcamentoHistory, duracao_custom: int | None) -> dict:
-    """`acrescimos_do_orcamento` do prefill (feature 305): as linhas com o valor por duração."""
-    from app.calendar.orcamento_evento_ops import acrescimos_do_orcamento, snapshot_do_orcamento
+    """`acrescimos_do_orcamento` do prefill (feature 305): as linhas com o valor por duração.
+
+    Leva a nota do orçamento e o divisor da nota (0,84, da fonte única): a proporção do BV é entre
+    valores LÍQUIDOS, e a tela só avisa "o BV acompanha" quando o líquido da venda difere do total —
+    sem isso ela comparava brutos e mostrava um BV quando o servidor gravava outro.
+    """
+    from app.calendar.orcamento_evento_ops import (
+        acrescimos_do_orcamento,
+        divisor_da_nota,
+        snapshot_do_orcamento,
+    )
 
     snap = snapshot_do_orcamento(entry)
+    nota = {"nota_do_orcamento": bool(snap.get("nota_fiscal")), "divisor_da_nota": float(divisor_da_nota())}
     if snap.get("personalizado_ativo"):
-        return {"personalizado": True, "linhas": []}
+        return {"personalizado": True, "linhas": [], **nota}
     por_duracao = {d: acrescimos_do_orcamento(entry, d)["linhas"] for d in (1, 2, 3, 4)}
     custom = acrescimos_do_orcamento(entry, duracao_custom)["linhas"] if duracao_custom else None
     linhas = []
@@ -3262,7 +3280,7 @@ def _acrescimos_do_prefill(entry: OrcamentoHistory, duracao_custom: int | None) 
             "percentual": float(base["percentual"]) if base["percentual"] is not None else None,
             "valores_brl": valores,
         })
-    return {"personalizado": False, "linhas": linhas}
+    return {"personalizado": False, "linhas": linhas, **nota}
 
 
 def _validate_event_core(

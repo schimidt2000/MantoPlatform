@@ -14,6 +14,8 @@ export interface BvDoOrcamentoBlockProps {
   /** O total que a tela mostrou para a duração — só para COMPARAR com a venda, nunca para contar. */
   totalDaDuracao: number | null;
   venda: number | null;
+  /** A nota do EVENTO (o chip "Precisa de nota fiscal"). */
+  nota: boolean;
   cortesia: boolean;
   aDefinir: boolean;
   recebedor: string;
@@ -63,8 +65,18 @@ export function BvDoOrcamentoBlock(props: BvDoOrcamentoBlockProps) {
       ? bv.valores_brl.custom
       : null;
   const semVenda = props.cortesia || props.aDefinir || (props.venda ?? 0) < 1;
+  // A mesma comparação do servidor (`plano_dos_acrescimos`): líquido da venda (× 0,84 se o evento
+  // tem nota) contra o líquido do total (× 0,84 se o orçamento tinha). Trocar só a nota com a mesma
+  // venda muda o preço — o BV acompanha; desistir da nota com a venda 16% menor não muda.
+  const divisor = acrescimos.divisor_da_nota;
+  const liquido = (v: number, nota: boolean) => (divisor != null && nota ? v * divisor : v);
   const proporcional =
-    !semVenda && props.totalDaDuracao != null && props.venda != null && Math.abs(props.venda - props.totalDaDuracao) > 0.01;
+    !semVenda &&
+    props.totalDaDuracao != null &&
+    props.venda != null &&
+    Math.abs(
+      liquido(props.venda, props.nota) - liquido(props.totalDaDuracao, Boolean(acrescimos.nota_do_orcamento)),
+    ) > 0.01;
   const rotulo = bv.percentual != null ? `${bv.percentual}%` : "em reais";
 
   return (
@@ -77,8 +89,8 @@ export function BvDoOrcamentoBlock(props: BvDoOrcamentoBlockProps) {
       </p>
       {proporcional && (
         <p className="text-sm text-ink">
-          O valor de venda é diferente do total do orçamento: o BV acompanha na mesma proporção
-          (calculado ao salvar). Confira o BV e o valor total com BV.
+          O valor de venda (ou a nota fiscal) é diferente do orçamento: o BV acompanha na mesma
+          proporção (calculado ao salvar). Confira o BV e o valor total com BV.
         </p>
       )}
       {semVenda ? (

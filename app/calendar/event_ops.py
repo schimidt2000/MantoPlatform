@@ -1251,8 +1251,12 @@ def set_event_clients(event: Any, client_pairs: list[tuple[int, str]]) -> None:
         event: O `CalendarEvent` dono dos vínculos.
         client_pairs: Pares `(client_id, relationship_type)` na ordem de exibição.
     """
+    from app.calendar.orcamento_evento_ops import travar_evento
     from app.calendar.routes import _create_client_links
 
+    # O evento antes dos clientes, na mesma ordem da edição completa (que trava o evento ao ler a
+    # venda, feature 305): na ordem inversa, as duas gravações simultâneas davam deadlock.
+    travar_evento(event)
     EventClient.query.filter_by(event_id=event.id).delete()
     event.client_id = None
     _create_client_links(event, client_pairs)

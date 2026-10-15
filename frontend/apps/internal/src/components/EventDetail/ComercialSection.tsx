@@ -790,6 +790,8 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
               type="button"
               variant="ghost"
               size="sm"
+              // Durante o "Aplicando…" o vínculo já está indo: o `reset()` sumiria com o relatório.
+              disabled={salvar.isPending}
               onClick={() => {
                 // Quem recebe e o PIX são deste orçamento: no próximo escolhido, o BV iria para a
                 // pessoa errada (e o erro velho deixaria os campos vermelhos).

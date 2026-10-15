@@ -75,6 +75,11 @@ linha)."; BV negativo → "O BV não pode ser negativo."; o mesmo `id` duas veze
 troca de quem recebe ou do PIX num BV pago grava `AuditLog` (`edit`, `event_bv`, id do evento, PIX
 mascarado). A tela nova manda `value` como número.
 
+Segundo converge (15/10): item BV em R$ aceita `valor_visto?: number` (o `amount_brl` que o editor
+abriu). Se o BV a pagar daquele `id` está com outro valor (a venda o mudou depois), 400 em
+`items.<i>.value` "O BV mudou para R$ X desde que o editor abriu: recarregue a página e confira."
+O valor é arredondado ao centavo antes das guardas (R$ 0,004 → "Informe o valor do BV").
+
 ## `GET /api/events/<id>` — bloco `acrescimos` e `venda` só para `show_comercial`
 
 - Item de `acrescimos` ganha `descricao` e `bv_pix` (o `id` já vem).

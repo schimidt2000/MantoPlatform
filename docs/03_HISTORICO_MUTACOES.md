@@ -343,10 +343,20 @@ no `AuditLog`. Na tela: o valor em R$ do editor é `MoneyInput` (número; o text
 quebrava o backend antigo na janela de deploy), "Lançar o BV" abre em reais, a linha que vira BV não
 reinterpreta como % o valor já digitado, erros velhos somem, o cache é atualizado pelo PUT.
 
-**Verificação.** `specs/305-bv-do-orcamento-no-evento/verify_305.py`: 64/64 com a regressão (267,
-267b, 301, 215b, 267c; 273 na linha de base), duas mutações declaradas; primeira rodada 14/52; os 11
-cenários do converge (58–68) vermelhos antes (`verify_305_converge_primeira_falha.txt`). Tela
-conferida no `manto_local` (editor: R$ por `MoneyInput`, erro na linha, Cancelar limpa).
+**Segundo converge (15/10, sobre as próprias correções: 12 de 14 confirmados).** O quadro do Novo
+evento ainda comparava brutos (mostrava um BV e o servidor gravava outro com a nota trocada) — o
+prefill passa a nota do orçamento e o 0,84; o Jinja reproporcionava ou não TODOS os BVs juntos — agora
+BV a BV; o Jinja ainda lia "1.500" como R$ 1,50 (agora manda o texto cru); o editor aberto antes de
+uma B10 desfazia a proporção (agora manda `valor_visto` e é recusado); R$ 0,004 virava BV de R$ 0,00;
+`set_event_clients` travava na ordem inversa da edição completa (deadlock); `reset()` durante o
+Salvar perdia o fechamento do editor e o relatório do vínculo; o `MoneyInput` trocava o sinal de um
+acréscimo negativo. O cenário 58 passou a exigir o literal do corte: o verify fica 67/68 até a T041.
+
+**Verificação.** `specs/305-bv-do-orcamento-no-evento/verify_305.py` com a regressão (267, 267b, 301,
+215b, 267c; 273 na linha de base), duas mutações declaradas; primeira rodada 14/52; os cenários dos
+dois converges (58–72) vermelhos antes (`verify_305_converge_primeira_falha.txt`,
+`verify_305_converge2_primeira_falha.txt`); o 58 só fica verde com o literal da T041. Tela conferida
+no `manto_local` (editor: R$ por `MoneyInput`, erro na linha, Cancelar limpa).
 
 ### 298b — Idade do aniversariante e assessoria do WhatsForm chegam ao cadastro   (298b-sinonimos-do-formulario · 2026-10-14 · sem migration)
 

@@ -51,7 +51,8 @@
   OK     55. comissão na hora (conexão separada)
   OK     56. alerta em reais (como o 2407)
   OK     57. DEVE FALHAR: BV pago não sai, não muda de tipo nem de valor
-  OK     58. corte do commit e corte vazio: o passado não acende
+  FALHA  58. corte do commit e corte vazio: o passado não acende: CORTE_ALERTA_BV vazio ou com fuso — falta a T041: 
+None
   OK     59. nota diferente entre orçamento e evento: o mesmo BV
   OK     60. DEVE FALHAR: BV sem valor não some
   OK     61. DEVE FALHAR: '1.500' e números enormes recusados
@@ -62,5 +63,10 @@
   OK     66. corridas: B10 e editor contra a venda que muda
   OK     67. DEVE FALHAR: marcar pago confere o valor mostrado
   OK     68. rastro da troca de PIX no BV pago
+  OK     69. DEVE FALHAR: Jinja com '1.500' em linha nova
+  OK     70. Jinja: BV a BV — o redigitado fica, o reenviado acompanha
+  OK     71. DEVE FALHAR: editor aberto antes da B10 não a desfaz
+  OK     72. DEVE FALHAR: subcentavo e o teto depois do arredondamento
   OK     50. limpeza
-64/64 OK · chamadas ao Google: 16
+67/68 OK · chamadas ao Google: 18
+(o 58 exige o literal de CORTE_ALERTA_BV — fica verde no commit da T041)
