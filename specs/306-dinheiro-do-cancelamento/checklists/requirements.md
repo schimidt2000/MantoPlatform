@@ -41,7 +41,7 @@
   2026-10-15): onde o plano deixou a escolha ao specify ou duas passagens dele não batiam. Cada um diz a fonte
   e o "contra", e vale como premissa contestável.
 - Redação: rascunho por nove leitores do plano em paralelo, crítica de completude (44 itens), revisão em duas
-  rodadas e os 5 pendentes da segunda reconferência aplicados à mão. Verify: 57 cenários (19 que devem falhar),
+  rodadas e os 5 pendentes da segunda reconferência aplicados à mão. Verify: 57 cenários (20 que devem falhar, depois do clarify),
   a numeração do plano mantida.
 - As Histórias não são independentes como o molde pede: é uma entrega só (D34), e o rollback deixa de ser
   simétrico depois do primeiro cancelamento real — a ordem de fechamento está fixada na seção de Cenários.

@@ -358,8 +358,10 @@ como premissa, e o dono pode contestar.
    para não mudar as referências às outras leituras.)*
 8. **Erros do corte de um dia**: "Tudo" dá 400 `fields.devolucao_modo`, e valor acima do teto dá 400
    `fields.devolucao_valor`. O plano não nomeia esses campos (L1255-1257).
-9. **"Regime sem retido"** no `PATCH …/devolucao` são `satelite`, `dia` e `virtual`, os que entram com retido zero
-   (L818-827). O `legado` aceita. Como o `legado` não tem linha em `event_cancellations` e tem imposto 0 (FR-003),
+9. **"Regime sem retido"** no `PATCH …/devolucao` são `satelite` e `virtual`, os que entram com retido zero e não
+   têm devolução própria a corrigir (L818-827). O `dia` **não** entra: ele tem devolução própria, e o dono decidiu
+   no clarify de 15/10 (resposta "A") que ela se corrige por esse PATCH, sem mexer em comissão (FR-017). O
+   `legado` aceita. Como o `legado` não tem linha em `event_cancellations` e tem imposto 0 (FR-003),
    nele `imposto_retido` no corpo dá 400 `fields.imposto_retido`; o PATCH não cria a linha nem congela nada, e o
    evento segue `legado`. Hoje não há nenhum legado (P-4), e a D35 garante que nenhum nasce (L591-594).
 10. **BV do retido pago na Planilha depois do ato** fica pelo valor pago. Uma correção posterior do retido não o
@@ -371,6 +373,18 @@ como premissa, e o dono pode contestar.
       (1e-Q5 = A, L3186-3188). O plano não trata o caso no cancelado (o "desfazer pago" de L2708-2710 é o da
       devolução, não o da linha de comissão).
     - O `/speckit-plan` confere.
+
+### Session 2026-10-15 (`/speckit-clarify`)
+
+A varredura achou doze candidatas; onze já estavam decididas pela spec ou pelo plano. A que sobrou, perguntada
+ao dono:
+
+- Q: Quando a cliente desiste de só um dia de uma venda de vários dias e recebe parte do dinheiro de volta, e esse
+  valor de devolução foi digitado errado (300 em vez de 30), por onde a devolução se corrige? → A: **"A"** — o
+  "Alterar devolução" passa a valer também no dia cortado: o novo total é o da devolução daquele dia, entre o já
+  pago à cliente e o pago do grupo menos as outras devoluções; não mexe em comissão (o resto do grupo segue vivo);
+  refazem-se só a devolução, o "já devolvido" do grupo e a cobrança da Home. *(Aplicado em: leitura 9, FR-017,
+  FR-056, RBAC do `PATCH …/devolucao`, casos de borda das devoluções, cenário 38 do verify.)*
 
 ## Cenários e Verificação *(obrigatório)*
 
@@ -724,6 +738,11 @@ fica comum depois da 3b. É a costura natural se o dono quiser dividir a entrega
    - o cheio vai de 3.300 a 2.200 (o selo de 10% fica igual);
    - o BV não pago cai na mesma proporção;
    - a cobrança da Home mostra 800 a receber.
+
+   **Quando**, depois, o Superadmin usa "Alterar devolução" no dia cancelado e corrige a devolução de 300 para 30
+   *(clarify de 15/10, resposta "A")*, **Então** a devolução do dia passa a 30, o "já devolvido" do grupo e a
+   cobrança da Home se refazem, e a comissão do principal e a linha `dia` não mudam, com auditoria. Acima do pago
+   do grupo menos as outras devoluções → 409. **(deve falhar: o acima do teto)**
 3. **Dado** o corte anterior, **Quando** a aba Comercial do principal é gravada e as telas são reabertas, **Então**
    o −25 não é sobrescrito. **Quando** se cancela o resto depois, **Então** os 300 entram no "já devolvido".
 4. **Dado** "Cancelar só este dia" **no principal**, **Quando** confirmado, **Então**:
@@ -839,6 +858,8 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
 - **Devoluções**:
   - **Devolução lançada antes do cancelamento**: conta como devolvido e sai do gasto do mês dela (L2876-2881).
   - **Devolução pendente ligada**: 409, até alguém aprovar ou rejeitar (L745-746).
+  - **Parte digitada errada no corte de um dia**: o Superadmin corrige pelo "Alterar devolução" do dia cancelado,
+    entre o já pago à cliente e o teto do grupo; a comissão do principal vivo não muda (FR-017, clarify 15/10).
 - **Tipos de evento**:
   - **Venda virtual**: o diálogo pede só o motivo, e o estorno próprio continua, sem retido (L1549-1550).
   - **Evento do tipo Ensaio**: 409 `ensaio`.
@@ -1010,8 +1031,16 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
     repasse aberto, para mais ou para menos. BV pago nunca é reescrito. O imposto é regravado se vier; no
     `legado` (sem linha de cancelamento), `imposto_retido` no corpo dá 400 `fields.imposto_retido` e o PATCH não
     cria a linha nem congela nada (leitura 9).
-  - **Recusas 409**: evento não cancelado, regime sem retido e total abaixo do piso.
+  - **Recusas 409**: evento não cancelado, regime sem retido (`satelite`, `virtual`; o `dia` tem a regra própria
+    abaixo) e total abaixo do piso.
   - É o único caminho que mexe na devolução travada, com auditoria e histórico.
+  - **No dia cortado** (regime `dia`, a devolução de "Cancelar só este dia"; clarify de 15/10, resposta "A"):
+    o "Alterar devolução" também vale, no dia cancelado. O novo total é o da devolução **daquele dia**; o piso
+    são as devoluções dele pagas ou no banco; o teto é o pago do grupo menos as outras devoluções do grupo. Não
+    há retido nem comissão a refazer (o principal segue vivo e a comissão dele segue a venda nova): refazem-se
+    só a devolução do dia, o "já devolvido" do grupo e a cobrança da Home. `imposto_retido` no corpo → 400
+    `fields.imposto_retido`. Sem isso, uma Parte digitada errada no corte ficava para sempre na Planilha e na
+    cobrança, sem caminho de correção.
 - **FR-018**: O Superadmin DEVE poder acrescentar, corrigir e excluir comprovante de evento cancelado, inclusive o
   da multa contratual que a cliente paga depois (D36; L800-802, L2863-2870).
   - Retido, comissão e BV se refazem na mesma transação.
@@ -1393,7 +1422,7 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
       total que a cliente paga depois do corte, ou seja, os dias que ficam mais o que a Manto retém do dia;
     - a devolução, só em Parte ou Nada, com teto = pago do grupo − já devolvido.
   - **A devolução**: nasce ligada ao **dia**. Fica fora dos gastos extras da DRE e dentro do "já devolvido" do
-    grupo.
+    grupo. Corrige-se pelo "Alterar devolução" do dia cancelado (FR-017, clarify de 15/10 = A).
   - **O principal**:
     - continua vivo, com a venda nova e histórico, na DRE do mês do evento;
     - o valor cheio cai na mesma proporção, então o selo de % e o "desconto concedido" não mudam;
@@ -1633,9 +1662,11 @@ opcionais no TypeScript (L1509-1536).
   - **Papéis**: SUPERADMIN pela regra única (o mesmo que `_can_delete()`). 404 vem antes do 403; demais, 403; sem
     sessão, 401.
   - **Corpo e resposta**: `{devolucao_total, nome?, pix?, observacao?, imposto_retido?}` → `{ok, resumo}`.
-  - **409**: evento não cancelado; regime sem retido; total abaixo do já pago ou no banco.
-  - **400**: `devolucao_total`, `devolucao_nome`, `devolucao_pix` e `imposto_retido` (também no `legado`,
-    leitura 9).
+  - **409**: evento não cancelado; regime sem retido (`satelite`, `virtual`); total abaixo do já pago ou no banco;
+    no dia cortado (`dia`), total acima do pago do grupo menos as outras devoluções.
+  - **400**: `devolucao_total`, `devolucao_nome`, `devolucao_pix` e `imposto_retido` (também no `legado` e no
+    `dia`, leitura 9).
+  - **No dia cortado**: corrige a devolução daquele dia; não refaz retido nem comissão (clarify 15/10 = A).
 - **`POST /api/events/<id>/multas`** (**novo**).
   - **Papéis**: SUPERADMIN pela regra única. 404 vem antes do 403; demais, 403; sem sessão, 401.
   - **Corpo e resposta**: `{multas: [{elenco_id, valor}]}` → `{ok, resumo, gastos: [id]}`.
@@ -1796,7 +1827,7 @@ Eventos SHOW só com vaga existente com `talent_id IS NULL`; nunca `EventRole` i
 | 35 | Marcado pela 303 que é principal de grupo; satélite marcado | principal: impacto com `acao: "cancelar"`, leva todos os dias e a marca sai de cada um; satélite: só aquele dia, com `venda_nova`, e a marca sai | não | 5 | L1972 |
 | 36 | Devolução na Planilha: mês em que aparece; complemento de "Alterar devolução"; marcar pago, no banco e desfazer | mês do cancelamento; complemento no mês em que nasce; a trava de Gastos Extras não alcança o status de pagamento | não | 2 | L1973 |
 | 37 | Grupo semeado (principal com venda 3.000 e 2 dias; comprovantes de 1.000 no principal e 500 num dia; comissão 75 a pagar): "Cancelar todos os dias" com Parte 900 | 3 dias numa transação, sem desagrupar; pago 1.500; retido 600; comissão 15 no lugar; um `EventLog` por dia; linhas `venda` e `satelite` com o principal; 3 remoções no dublê depois do commit; dia já cancelado intocado | não | 5 | L1974 |
-| 38 | Grupo vivo: "Cancelar só este dia" num satélite, `venda_nova` 2.000, Parte 300; comissão do principal a pagar e, na variante, paga | linha `dia` 3.000 → 2.000; principal vivo com 2.000 e `EventLog`; a pagar vira 50; paga: 75 intacta e −25 no primeiro repasse aberto com `original_id`; devolução de 300 ligada ao dia, fora dos gastos extras da DRE e dentro do "já devolvido"; DRE do mês do evento com 2.000; BV não pago na proporção; cheio 3.300 → 2.200 (selo de 10% igual, desconto 300 → 200); dia no grupo; Home com 800 a receber | não | 5 | L1975 |
+| 38 | Grupo vivo: "Cancelar só este dia" num satélite, `venda_nova` 2.000, Parte 300; comissão do principal a pagar e, na variante, paga; *(clarify 15/10 = A)* depois, "Alterar devolução" do dia cancelado: 300 → 30 e, à parte, acima do teto do grupo | linha `dia` 3.000 → 2.000; principal vivo com 2.000 e `EventLog`; a pagar vira 50; paga: 75 intacta e −25 no primeiro repasse aberto com `original_id`; devolução de 300 ligada ao dia, fora dos gastos extras da DRE e dentro do "já devolvido"; DRE do mês do evento com 2.000; BV não pago na proporção; cheio 3.300 → 2.200 (selo de 10% igual, desconto 300 → 200); dia no grupo; Home com 800 a receber; alterada para 30: devolução do dia 30, "já devolvido" e cobrança da Home refeitos, comissão do principal e linha `dia` intactas, com auditoria; acima do teto → 409 | **sim** (o acima do teto) | 5 | L1975 |
 | 39 | Depois do 38: gravar a aba Comercial do principal; abrir Comissões e Planilha; cancelar o resto do grupo | o −25 não é sobrescrito; o cancelamento do resto soma os 300 no "já devolvido" e o teto do "Tudo" os desconta | não | 5 | L1976 |
 | 40 | Soltar o dia cancelado (API e Jinja); agrupar com ele; dia com cachê pago no "Cancelar todos os dias"; ENSAIO pela API de cancelar | 409 nos quatro: desagrupar; agrupamento; `cache_pago` dizendo qual dia, sem gravar nada em dia nenhum; `ensaio` | **sim** | 6 (os dois primeiros passam com a 5) | L1977 |
 | 41 | Custo do grupo com dia cancelado: KPI do principal; custo de EducaManto principal com satélite cancelado; data do grupo na cobrança da Home | o cachê do dia cancelado sai do custo e da base EducaManto; o comprovante do dia segue na cobrança; regressão `main` × branch das comissões de todos os grupos do espelho | não | 5 | L1978 |
@@ -1815,8 +1846,9 @@ O cenário **46 saiu** em 13/10. A 1b-Q12 = B virou a 1e, com verify próprio, e
 no 38 e no 42b (L1989).
 
 **Contagem**: 57 cenários vivos — 45 números (1 a 45) mais 12 sufixos (2b, 14b, 16b, 16c, 16d, 16e, 42b, 42c,
-42d, 42e, 45b, 45c). Não existe 42a: o próprio 42 abre a série (L3548). Pela coluna "Deve falhar?": 19 com "sim",
-total ou parcial; 37 "não"; 1 "—", o 27.
+42d, 42e, 45b, 45c). Não existe 42a: o próprio 42 abre a série (L3548). Pela coluna "Deve falhar?": 20 com "sim",
+total ou parcial (o 38 ganhou a recusa do "Alterar devolução" acima do teto no clarify de 15/10); 36 "não"; 1 "—",
+o 27.
 
 **Mudanças em relação ao plano** (Clarifications, Session 2026-10-15):
 - o 6 perde a leitura do FINANCEIRO;
