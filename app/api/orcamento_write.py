@@ -201,6 +201,8 @@ def _to_money(raw: Any, default: float) -> float:
     return float(parsed) if parsed is not None else float(default)
 
 
+
+
 @api_bp.route("/orcamento/settings", methods=["POST"])
 @api_login_required
 def api_orcamento_settings_save() -> Any:
@@ -271,6 +273,14 @@ def api_orcamento_settings_save() -> Any:
                 novos.append(t)
         s["acrescimo_tipos"] = novos
 
+    # Feature 307: faixas de data especial — a regra mora no núcleo (`settings.validar_datas_especiais`);
+    # aqui só se traduz a recusa em 400 por campo. Corpo inválido não grava NADA.
+    if "datas_especiais" in body:
+        try:
+            s["datas_especiais"] = _cfg.validar_datas_especiais(body["datas_especiais"], s["especiais"])
+        except _cfg.SettingsValidationError as exc:
+            return json_error(exc.message, 400, fields=exc.fields)
+
     _cfg.save(s)
     return jsonify({"settings": s})
 
@@ -311,5 +321,6 @@ def api_orcamento_delete_especial(nome: str) -> Any:
     excluidos = s.setdefault("especiais_excluidos", [])
     if nome not in excluidos:
         excluidos.append(nome)
+    _cfg.remover_especial_das_faixas(s, nome)  # feature 307: sem sobrescrita órfã na faixa
     _cfg.save(s)
     return "", 204

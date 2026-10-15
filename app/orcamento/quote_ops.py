@@ -21,7 +21,9 @@ from app.money import format_brl
 
 from . import settings as _cfg
 from .pricing import (
+    MARCA_CACHE_FAIXA,
     aplicar_markup,
+    cache_na_faixa,
     calcular_maquiador,
     compute_show_pricing,
     get_ator_prices,
@@ -29,10 +31,11 @@ from .pricing import (
     get_coordenador_prices,
     get_especial_prices,
     get_tecnico_prices,
+    markup_vigente,
 )
 from .transport import aplicar_deslocamento_cliente, calcular_carro, calcular_van
 
-_ADICIONAL_NOTURNO = 50.0  # R$ por artista/coordenador, aplicado pré-markup
+_ADICIONAL_NOTURNO = 50.0  # R$ por artista/coordenador, somado DEPOIS do markup (linha "pos")
 _MARKUP_SERVICE = 1.5
 
 
@@ -90,6 +93,15 @@ def _is_noturno(raw_time: str) -> bool:
         return False
 
 
+def _rotulo_da_faixa(faixa: dict, raw_date: str) -> str:
+    """Ex.: ``"Véspera e Natal · 24/12"`` — o detalhe da linha de markup na memória de cálculo.
+
+    Sem parênteses de propósito: a tela já envolve o detalhe em parênteses.
+    """
+    dia_mes = f"{raw_date[8:10]}/{raw_date[5:7]}" if len(raw_date) == 10 else raw_date
+    return f"{faixa['rotulo']} · {dia_mes}"
+
+
 def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     """Calcula um orçamento a partir do payload do formulário (elenco/horas/transporte/show).
 
@@ -113,7 +125,9 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     )
     coordenador_qty = max(0 if dj_only else 1, coordenador_qty_raw)
 
-    regras = _cfg.load().get("especiais_regras", {})
+    # A tabela de preços é carregada UMA vez aqui e repassada onde a feature 307 precisa dela.
+    cfg_precos = _cfg.load()
+    regras = cfg_precos.get("especiais_regras", {})
     for p in performers:
         if p.get("type") == "especial":
             minimo = regras.get(p.get("personagem", ""), {}).get("min_coordenadores", 1)
@@ -126,6 +140,11 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         deslocamento_responsavel = "manto"
     event_time = payload.get("event_time") or ""
     noturno = _is_noturno(event_time)
+    # Feature 307: a faixa de data especial (24 e 25/12 na tabela de preços) é resolvida UMA vez
+    # pela data do evento e passada aos getters. Sem faixa (data vazia, chave ausente em snapshot
+    # antigo, EducaManto) a conta é a de sempre, byte a byte.
+    raw_date = payload.get("event_date") or ""
+    faixa = _cfg.faixa_especial(raw_date, cfg_precos)
 
     acrescimos: list[dict] = []
     for a in payload.get("acrescimos") or []:
@@ -222,7 +241,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
                     f'O personagem "{personagem}" não está mais na tabela de preços. '
                     "Remova-o do orçamento ou recadastre-o nas Configurações de Preços.",
                 )
-            prices = get_especial_prices(personagem, show, cantor_flag)
+            prices = get_especial_prices(personagem, show, cantor_flag, faixa=faixa)
             if personagem == "Boneco Grande Especial":
                 bge_sub = p.get("bge_subtipo", "")
                 bge_nome = (p.get("bge_outro_nome") or "").strip()
@@ -244,6 +263,10 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             prices = (0, 0, 0, 0)
             label = nome or "Profissional"
 
+        prices, marca = cache_na_faixa(p, prices, faixa)
+        if marca:
+            partes.append(marca)
+
         team_lines.append(label)
         num_going += 1
         for i in range(4):
@@ -259,12 +282,13 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             f"{len(performers)} artista(s) × {_fmt_brl(sosia_custom_add_per_artist)}",
         )
 
-    coord_prices = get_coordenador_prices(event_has_show, coordenador_qty)
+    coord_prices = get_coordenador_prices(event_has_show, coordenador_qty, faixa=faixa)
     for i in range(4):
         cache_totals[i] += coord_prices[i]
     _linha(
         f"Coordenador(es) ({coordenador_qty})", coord_prices, "cache",
-        "com show" if event_has_show else "sem show",
+        ("com show" if event_has_show else "sem show")
+        + (f", {MARCA_CACHE_FAIXA}" if faixa is not None else ""),
     )
 
     cache_base = [round(v, 2) for v in cache_totals]
@@ -279,11 +303,12 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
 
     _linha("Subtotal cachê", cache_base, "subtotal")
 
-    markup_aplicado = _cfg.load()["markup"]["show" if event_has_show else "receptivo"]
-    totals = aplicar_markup(cache_totals, event_has_show)
+    markup_aplicado = markup_vigente(event_has_show, faixa, cfg_precos)
+    totals = aplicar_markup(cache_totals, event_has_show, faixa=faixa, settings=cfg_precos)
     _linha(
         "× Markup", markup_aplicado, "markup",
-        "Show" if event_has_show else "Receptivo / Interativo",
+        _rotulo_da_faixa(faixa, raw_date) if faixa is not None
+        else ("Show" if event_has_show else "Receptivo / Interativo"),
     )
     _linha("= Após markup", totals, "subtotal")
 
@@ -452,7 +477,6 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
 
     _linha("TOTAL FINAL AO CLIENTE", totals, "total")
 
-    raw_date = payload.get("event_date") or ""
     raw_time = event_time
     try:
         fmt_date = datetime.strptime(raw_date, "%Y-%m-%d").strftime("%d/%m/%Y")
@@ -522,6 +546,11 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     else:
         deslocamento_nota = ""
 
+    # Feature 307: a nota da faixa de data especial (texto da tabela de preços) sai em itálico
+    # junto da frase de deslocamento — e também no PDF, que re-deriva o texto (pdf.py).
+    nota_faixa = (faixa or {}).get("nota_mensagem") or ""
+    nota_especial = f"\n\n_{nota_faixa}_" if nota_faixa else ""
+
     message = (
         f"{saudacao} ✨ É um prazer preparar a proposta para o seu evento.\n\n"
         f"Estamos prontos para levar toda a magia da Manto Produções para o seu dia especial! "
@@ -534,7 +563,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         f"🎭 *PERSONAGENS E EXPERIÊNCIA*\n"
         f"{team_text}\n\n"
         f"💰 *INVESTIMENTO*{nf_header}\n\n"
-        f"{investimento}{deslocamento_nota}\n\n"
+        f"{investimento}{deslocamento_nota}{nota_especial}\n\n"
         f"💳 *FORMAS DE PAGAMENTO*\n\n"
         f"1️⃣ *À Vista (PIX):*\n"
         f"{pix_vista}\n"
@@ -548,7 +577,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     if personalizado:
         markup_used = cust_mult if criterio_pers == "multiplicador" else None
     else:
-        markup_used = _cfg.load()["markup"]["show" if event_has_show else "receptivo"]
+        markup_used = markup_aplicado
 
     quote = {
         "message": message,
@@ -556,6 +585,18 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         "fora_sp": fora_sp,
         "deslocamento_responsavel": deslocamento_responsavel if fora_sp else None,
         "markup_used": markup_used,
+        # Feature 307: a faixa de data especial aplicada (None fora dela; ausente em orçamentos
+        # antigos). Leva a nota porque o PDF e o orçamento congelado não releem a tabela.
+        "data_especial": (
+            {
+                "chave": faixa["chave"],
+                "rotulo": faixa["rotulo"],
+                "markup": list(faixa["markup"]),
+                "nota_mensagem": nota_faixa,
+            }
+            if faixa is not None
+            else None
+        ),
         "total_1h": totals[0],
         "total_2h": totals[1],
         "total_3h": totals[2],

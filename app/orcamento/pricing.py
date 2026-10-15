@@ -43,11 +43,66 @@ def compute_show_pricing(performers: list[dict], show_sosia_tipo: str) -> tuple[
     return has_show, custom_add
 
 
-def aplicar_markup(totais: list, show: bool) -> list:
+def markup_vigente(show: bool, faixa: dict | None = None, settings: dict | None = None) -> list:
+    """O markup que a conta usa: o da faixa de data especial, ou o normal por show/receptivo.
+
+    Fonte única (feature 307) para `aplicar_markup`, a linha da memória e o ``markup_used`` do
+    quote — com uma faixa, o markup é o dela para receptivo E show, porque o que é especial é a
+    data, não o produto. ``settings`` evita reler a tabela dentro de um cálculo.
+    """
+    if faixa is not None and faixa.get("markup"):
+        return list(faixa["markup"])
+    cfg = settings if settings is not None else _cfg.load()
+    return list(cfg["markup"]["show" if show else "receptivo"])
+
+
+def aplicar_markup(
+    totais: list, show: bool, faixa: dict | None = None, settings: dict | None = None
+) -> list:
     """Apply markup multipliers to a list of [1h, 2h, 3h, 4h] cache totals."""
-    s = _cfg.load()
-    m = s["markup"]["show" if show else "receptivo"]
+    m = markup_vigente(show, faixa, settings)
     return [round(totais[i] * m[i], 2) for i in range(4)]
+
+
+# Feature 307: marcas na memória de cálculo e na nota do teto para o cachê que veio da faixa e
+# para o que foi elevado ao piso dela (o React pinta pelo `tipo`; o texto é o que explica o número).
+MARCA_CACHE_FAIXA = "cachê da data especial"
+MARCA_PISO_FAIXA = "piso da data especial"
+
+
+def cache_na_faixa(performer: dict, prices: tuple | list, faixa: dict | None) -> tuple[tuple, str]:
+    """Cachê do performer dentro da faixa de data especial e a marca que explica (feature 307).
+
+    Fonte única da regra "sobrescrita × piso", usada pela venda (`quote_ops.calculate_quote`) e
+    pelo teto das vagas (`calendar.routes._compute_performer_caches`): especial com sobrescrita já
+    veio com o cachê da faixa dos getters; qualquer outro performer (ator, boneco, cantor, especial
+    sem sobrescrita) sobe ao piso. Sem faixa, devolve o que recebeu e nenhuma marca.
+    """
+    if faixa is None or performer.get("type") not in ("ator", "cantor", "especial"):
+        return tuple(prices), ""
+    sobrescrito = (
+        performer.get("type") == "especial"
+        and performer.get("personagem", "") in (faixa.get("cache") or {})
+    )
+    if sobrescrito:
+        return tuple(prices), MARCA_CACHE_FAIXA
+    elevado = aplicar_piso(prices, faixa)
+    if tuple(float(v) for v in prices) == elevado:
+        return elevado, ""
+    return elevado, MARCA_PISO_FAIXA
+
+
+def aplicar_piso(prices: tuple | list, faixa: dict | None) -> tuple:
+    """Eleva cada duração ao piso da faixa de data especial (feature 307).
+
+    Sem piso Noel + boneco (200) sairia mais barato que Noel + ajudante e o teto do boneco ficaria em
+    200 contra os 500–750 pagos no Natal de 2025. Sem faixa devolve os preços como vieram.
+    """
+    piso = (faixa or {}).get("piso")
+    if not piso:
+        return tuple(prices)
+    piso4 = _cfg._ensure4(list(piso))
+    return tuple(max(float(prices[i]), float(piso4[i])) for i in range(4))
 
 
 def get_ator_prices(subtipo: str, show: bool, makeup: bool) -> tuple:
@@ -74,20 +129,34 @@ def get_tecnico_prices() -> tuple:
     return tuple(_cfg.load()["tecnico_som"])
 
 
-def get_coordenador_prices(show: bool, qty: int) -> tuple:
-    """Return (1h, 2h, 3h, 4h) cache prices for coordinators (multiplied by qty)."""
-    p = _cfg.load()["coordenador"][str(show).lower()]
+def get_coordenador_prices(show: bool, qty: int, faixa: dict | None = None) -> tuple:
+    """Return (1h, 2h, 3h, 4h) cache prices for coordinators (multiplied by qty).
+
+    Feature 307: na faixa de data especial o coordenador tem uma lista só, com e sem show.
+    """
+    if faixa is not None and faixa.get("coordenador"):
+        p = _cfg._ensure4(list(faixa["coordenador"]))
+    else:
+        p = _cfg.load()["coordenador"][str(show).lower()]
     return tuple(p[i] * qty for i in range(4))
 
 
-def get_especial_prices(personagem: str, show: bool, cantor: bool = False) -> tuple:
+def get_especial_prices(
+    personagem: str, show: bool, cantor: bool = False, faixa: dict | None = None
+) -> tuple:
     """Return (1h, 2h, 3h, 4h) cache prices for a special character.
 
     SEMPRE 4 valores (feature 254): os defaults antigos tinham 3 itens e um personagem removido
     da tabela (recalcular orçamento antigo) derrubava o cálculo inteiro com IndexError no
     `prices[3]`. `_ensure4` também normaliza tabela legada salva com 3 valores.
+
+    Feature 307: a sobrescrita da faixa de data especial (`faixa["cache"][personagem]`) vale para
+    qualquer variante do especial — simples, show ou cantor.
     """
     zeros = [0, 0, 0, 0]
+    sobrescrita = (faixa or {}).get("cache", {}).get(personagem)
+    if isinstance(sobrescrita, list) and sobrescrita:
+        return tuple(_cfg._ensure4(list(sobrescrita)))
     p = _cfg.load()["especiais"].get(personagem, zeros)
     if isinstance(p, dict):
         if personagem in _cfg.ESPECIAIS_COM_CANTOR and cantor:

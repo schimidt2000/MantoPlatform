@@ -6,8 +6,51 @@ Falls back to DEFAULTS when no configuration has been saved yet.
 import copy
 import json
 import logging
+import re
+from datetime import date
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 logger = logging.getLogger(__name__)
+
+# Feature 307: limites do markup de uma faixa de data especial (um 33,4 digitado no lugar de 3,34
+# multiplicaria o Natal por 10 ao vivo na calculadora) e o cachê ANTIGO do Papai Noel, que a
+# migração troca pela tabela de 2026 só enquanto ainda estiver exatamente assim.
+MARKUP_FAIXA_MIN = 1.0
+MARKUP_FAIXA_MAX = 6.0
+PAPAI_NOEL_CACHE_ANTIGO = [600, 650, 675, 700]
+NOTA_FAIXA_MAX_CHARS = 200
+ROTULO_FAIXA_MAX_CHARS = 60
+CHAVE_FAIXA_RE = re.compile(r"^[a-z0-9_]{1,30}$")
+_DIA_MM_DD_RE = re.compile(r"^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
+_CENTAVO = Decimal("0.01")
+
+
+class SettingsValidationError(Exception):
+    """Bloco da tabela de preços recusado; ``fields`` aponta o campo (padrão de QuoteValidationError)."""
+
+    def __init__(self, message: str, fields: dict) -> None:
+        super().__init__(message)
+        self.message = message
+        self.fields = fields
+
+# Feature 307: faixa de data especial. Em 24 e 25/12 o markup e os cachês de Papai Noel, Ajudante do
+# Noel e Coordenador vêm daqui (cachês reais pagos no Natal de 2025: Noel 1.000, ajudante 650,
+# coordenador 500 por casa; markup 3,34 escolhido pelo dono em 15/10/2026 → Noel sozinho ≈ R$ 5.010,
+# Noel + ajudante ≈ R$ 7.181). `piso` eleva qualquer outro performer ao cachê do ajudante — sem ele
+# Noel + boneco (200) sairia mais barato que Noel + ajudante e com teto de 200. Os valores de 2h–4h
+# são lineares (cada hora = preço cheio): na véspera o tempo do Noel é o recurso escasso.
+_FAIXA_NATAL_PADRAO: dict = {
+    "rotulo": "Véspera e Natal",
+    "dias": ["12-24", "12-25"],
+    "markup": [3.34, 3.34, 3.34, 3.34],
+    "cache": {
+        "Papai Noel": [1000, 2000, 3000, 4000],
+        "Ajudante do Noel": [650, 1300, 1950, 2600],
+    },
+    "coordenador": [500, 1000, 1500, 2000],
+    "piso": [650, 1300, 1950, 2600],
+    "nota_mensagem": "Valores especiais de 24 e 25 de dezembro.",
+}
 
 DEFAULTS: dict = {
     # Cada tabela é uma lista de 4 valores por duração, na ordem [1h, 2h, 3h, 4h] (feature 098).
@@ -44,6 +87,10 @@ DEFAULTS: dict = {
         "Sósia":                  {"none": [350, 400, 425, 450], "show": [450, 500, 525, 550], "cantor": [500, 550, 575, 600]},
         "Bailarino":              [400, 450, 475, 500],
         "DJ":                     [200, 300, 350, 400],
+        # Feature 307: tabela "até 23/12" do Noel (2.500 / 3.600 em 2025) com o markup real de
+        # produção (2,6 em 1h) e coordenador 250: (712 + 250) × 2,6 = R$ 2.501; + 423 × 2,6 = R$ 3.601.
+        "Papai Noel":             [712, 800, 850, 900],
+        "Ajudante do Noel":       [423, 480, 510, 540],
     },
     "especiais_regras": {
         "Boneco Grande Especial": {
@@ -88,6 +135,10 @@ DEFAULTS: dict = {
         "Domingo/Feriado",
         "Hora extra",
     ],
+    # Feature 307: faixas de data especial, por chave; a calculadora resolve pela data do evento.
+    "datas_especiais": {
+        "natal": copy.deepcopy(_FAIXA_NATAL_PADRAO),
+    },
 }
 
 # Especiais que têm checkbox de show (técnico de som é adicionado se marcado)
@@ -224,7 +275,257 @@ def _migrate(data: dict) -> dict:
     # Feature 235 (3ª rodada): tabela de som/iluminação por combinação em configs antigas.
     data.setdefault("educamanto_som_luz", copy.deepcopy(DEFAULTS["educamanto_som_luz"]))
 
+    _migrar_307(data)
+
     return data
+
+
+def _lista4(valor, padrao: list) -> list:
+    """Lista de 4 preços/coeficientes da faixa; aceita 3 (injeta o 3h) e cai no padrão se inválida."""
+    if isinstance(valor, list) and len(valor) in (3, 4):
+        try:
+            return _ensure4([float(v) for v in valor])
+        except (TypeError, ValueError):
+            pass
+    return copy.deepcopy(padrao)
+
+
+def _lista_numerica(valor) -> bool:
+    """Lista de 3 ou 4 números (sem bool) — o único formato aceito numa sobrescrita de cachê."""
+    return (
+        isinstance(valor, list)
+        and len(valor) in (3, 4)
+        and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in valor)
+    )
+
+
+def _normalizar_faixa(chave: str, faixa) -> dict | None:
+    """Devolve a faixa de data especial normalizada, ou ``None`` se não dá para aproveitar nada.
+
+    Faixa que não é dict ou não tem ``dias`` (lista — vazia = faixa desligada) cai no padrão da
+    mesma chave (``None`` se a chave não é conhecida). Cada lista passa por `_lista4`; sobrescrita
+    de cachê malformada é DESCARTADA (o especial volta para tabela + piso) — virar ``[0, 0, 0, 0]``
+    seria um cachê zero silencioso no Noel.
+    """
+    padrao = DEFAULTS["datas_especiais"].get(chave) or _FAIXA_NATAL_PADRAO
+    if not isinstance(faixa, dict) or not isinstance(faixa.get("dias"), list):
+        return copy.deepcopy(padrao) if chave in DEFAULTS["datas_especiais"] else None
+    cache_bruto = faixa.get("cache") if isinstance(faixa.get("cache"), dict) else {}
+    return {
+        "rotulo": str(faixa.get("rotulo") or padrao["rotulo"]),
+        "dias": [d for d in faixa["dias"] if isinstance(d, str)],
+        "markup": _lista4(faixa.get("markup"), padrao["markup"]),
+        "cache": {
+            str(nome): _ensure4([float(v) for v in val])
+            for nome, val in cache_bruto.items()
+            if _lista_numerica(val)
+        },
+        "coordenador": _lista4(faixa.get("coordenador"), padrao["coordenador"]),
+        "piso": _lista4(faixa.get("piso"), padrao["piso"]),
+        "nota_mensagem": str(faixa.get("nota_mensagem") or "")[:NOTA_FAIXA_MAX_CHARS],
+    }
+
+
+# ── validação do bloco (regra de negócio; o endpoint só traduz em 400) ─────────────────────────
+def _dia_existe(mm_dd) -> bool:
+    """``"MM-DD"`` que existe no calendário (2024 é bissexto: 29/02 aceito)."""
+    if not isinstance(mm_dd, str) or not _DIA_MM_DD_RE.fullmatch(mm_dd):
+        return False
+    try:
+        date.fromisoformat(f"2024-{mm_dd}")
+    except ValueError:
+        return False
+    return True
+
+
+def _dinheiro(raw) -> float | None:
+    """Valor em R$ ≥ 0 (número ou string BR); ``None`` se inválido — nunca cai num default."""
+    from app.money import parse_brl
+
+    if isinstance(raw, bool) or raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        valor = float(raw)
+    else:
+        parsed = parse_brl(str(raw))
+        if parsed is None:
+            return None
+        valor = float(parsed)
+    return valor if valor >= 0 else None
+
+
+def _lista_de_4(raw) -> list[float] | None:
+    """Quatro valores em R$ válidos, ou ``None``."""
+    if not isinstance(raw, list) or len(raw) != 4:
+        return None
+    valores = [_dinheiro(v) for v in raw]
+    return None if any(v is None for v in valores) else valores
+
+
+def _markup_de_4(raw) -> list[float] | None:
+    """Quatro coeficientes com 2 casas (HALF_UP) dentro de ``[MARKUP_FAIXA_MIN, MARKUP_FAIXA_MAX]``."""
+    if not isinstance(raw, list) or len(raw) != 4:
+        return None
+    try:
+        valores = [
+            float(Decimal(str(v)).quantize(_CENTAVO, rounding=ROUND_HALF_UP)) for v in raw
+        ]
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if any(not (MARKUP_FAIXA_MIN <= v <= MARKUP_FAIXA_MAX) for v in valores):
+        return None
+    return valores
+
+
+def _validar_dias(pref: str, dias, erros: dict) -> list[str] | None:
+    """Dias ``MM-DD`` reais, sem repetição; lista vazia é aceita (faixa desligada)."""
+    if not isinstance(dias, list):
+        erros[f"{pref}.dias"] = "informe os dias (DD/MM)"
+        return None
+    ruins = [d for d in dias if not _dia_existe(d)]
+    if ruins:
+        erros[f"{pref}.dias"] = f"dia inválido: {', '.join(str(d) for d in ruins)}"
+        return None
+    return list(dict.fromkeys(dias))
+
+
+def _validar_cache(pref: str, cache, especiais: dict, erros: dict) -> dict:
+    """Sobrescritas de cachê: só de especiais existentes, 4 valores em R$ cada."""
+    if cache is None:
+        return {}
+    if not isinstance(cache, dict):
+        erros[f"{pref}.cache"] = "sobrescritas inválidas"
+        return {}
+    limpo: dict = {}
+    for nome, val in cache.items():
+        if nome not in especiais:
+            erros[f"{pref}.cache.{nome}"] = f"especial desconhecido: {nome}"
+            continue
+        lista = _lista_de_4(val)
+        if lista is None:
+            erros[f"{pref}.cache.{nome}"] = "4 valores em R$"
+        else:
+            limpo[str(nome)] = lista
+    return limpo
+
+
+def _validar_faixa(chave: str, faixa, especiais: dict, erros: dict) -> dict | None:
+    """Uma faixa limpa, ou ``None`` — com os erros registrados por campo em ``erros``."""
+    pref = f"datas_especiais.{chave}"
+    if not CHAVE_FAIXA_RE.fullmatch(chave) or not isinstance(faixa, dict):
+        erros[pref] = "faixa inválida"
+        return None
+    limpa: dict = {"rotulo": str(faixa.get("rotulo") or "").strip()[:ROTULO_FAIXA_MAX_CHARS]}
+    if not limpa["rotulo"]:
+        erros[f"{pref}.rotulo"] = "informe o rótulo"
+    dias = _validar_dias(pref, faixa.get("dias"), erros)
+    if dias is not None:
+        limpa["dias"] = dias
+    markup = _markup_de_4(faixa.get("markup"))
+    if markup is None:
+        erros[f"{pref}.markup"] = (
+            f"4 valores entre {MARKUP_FAIXA_MIN:g} e {MARKUP_FAIXA_MAX:g} (coeficiente)"
+        )
+    else:
+        limpa["markup"] = markup
+    for campo in ("coordenador", "piso"):
+        lista = _lista_de_4(faixa.get(campo))
+        if lista is None:
+            erros[f"{pref}.{campo}"] = "4 valores em R$"
+        else:
+            limpa[campo] = lista
+    limpa["cache"] = _validar_cache(pref, faixa.get("cache"), especiais, erros)
+    nota = str(faixa.get("nota_mensagem") or "").strip()
+    if len(nota) > NOTA_FAIXA_MAX_CHARS:
+        erros[f"{pref}.nota_mensagem"] = f"nota com mais de {NOTA_FAIXA_MAX_CHARS} caracteres"
+    limpa["nota_mensagem"] = nota
+    return limpa
+
+
+def validar_datas_especiais(bloco, especiais: dict) -> dict:
+    """Valida o bloco `datas_especiais` vindo da tela e devolve a cópia limpa (feature 307).
+
+    Um 33,4 no lugar de 3,34 multiplicaria o Natal por 10 ao vivo — por isso tudo tem faixa válida
+    e o erro nomeia o campo (``datas_especiais.<faixa>.<campo>``). O bloco enviado SUBSTITUI o
+    salvo; corpo inválido não grava nada.
+
+    Raises:
+        SettingsValidationError: com ``fields`` por campo.
+    """
+    if not isinstance(bloco, dict):
+        raise SettingsValidationError("Datas especiais inválidas.", {"datas_especiais": "bloco inválido"})
+    erros: dict = {}
+    limpo: dict = {}
+    for chave, faixa in bloco.items():
+        limpa = _validar_faixa(str(chave), faixa, especiais, erros)
+        if limpa is not None:
+            limpo[str(chave)] = limpa
+    if erros:
+        raise SettingsValidationError("Datas especiais inválidas.", erros)
+    return limpo
+
+
+def remover_especial_das_faixas(data: dict, nome: str) -> None:
+    """Ao excluir um especial da tabela, tira a sobrescrita dele de toda faixa (feature 307).
+
+    Sem isso o card continuaria mandando o nome órfão e TODO "Salvar configurações" levaria 400.
+    """
+    for faixa in (data.get("datas_especiais") or {}).values():
+        if isinstance(faixa, dict) and isinstance(faixa.get("cache"), dict):
+            faixa["cache"].pop(nome, None)
+
+
+def _migrar_307(data: dict) -> None:
+    """Feature 307: garante `datas_especiais` e a tabela "até 23/12" do Noel em configs antigas.
+
+    Roda DENTRO do ``try`` de `load()`: qualquer exceção aqui devolveria os DEFAULTS do código para a
+    tabela inteira (markup 3,0 no lugar do 2,6 real, e sem o "Papai Noel" salvo) — por isso nada
+    aqui indexa sem conferir o tipo, e bloco ou faixa malformados viram o padrão em silêncio.
+    O "Papai Noel" só é trocado enquanto estiver exatamente no cachê antigo: valor já editado pelo
+    time não é tocado (mesmo padrão do "Transformer → BGE").
+    """
+    bloco = data.get("datas_especiais")
+    limpo: dict = {}
+    if isinstance(bloco, dict):
+        for chave, faixa in bloco.items():
+            normalizada = _normalizar_faixa(str(chave), faixa)
+            if normalizada is not None:
+                limpo[str(chave)] = normalizada
+    for chave, faixa in DEFAULTS["datas_especiais"].items():
+        limpo.setdefault(chave, copy.deepcopy(faixa))
+    data["datas_especiais"] = limpo
+
+    especiais = data.get("especiais")
+    if isinstance(especiais, dict) and especiais.get("Papai Noel") == PAPAI_NOEL_CACHE_ANTIGO:
+        especiais["Papai Noel"] = copy.deepcopy(DEFAULTS["especiais"]["Papai Noel"])
+
+
+def faixa_especial(event_date: str | None, settings: dict | None = None) -> dict | None:
+    """Faixa de data especial em que a data do evento cai, ou ``None`` (feature 307).
+
+    A comparação é por recorte de texto (``"AAAA-MM-DD"`` → ``"MM-DD"``), nunca por ``datetime``:
+    a data é de parede, e fuso já virou o dia errado nesta casa. Data vazia, malformada ou fora de
+    todas as faixas = ``None`` = conta de hoje. A primeira faixa que casar vence.
+
+    Args:
+        event_date: a data do payload/snapshot, ``"AAAA-MM-DD"`` ou vazia.
+        settings: a configuração já carregada, para não reler o banco dentro de um cálculo.
+
+    Returns:
+        Cópia da faixa com a chave em ``"chave"`` (``rotulo``, ``dias``, ``markup``, ``cache``,
+        ``coordenador``, ``piso``, ``nota_mensagem``), ou ``None``.
+    """
+    raw = (event_date or "").strip()
+    if len(raw) != 10 or raw[4] != "-" or raw[7] != "-":
+        return None
+    mes_dia = raw[5:]
+    bloco = (settings if settings is not None else load()).get("datas_especiais") or {}
+    for chave, faixa in bloco.items():
+        if isinstance(faixa, dict) and mes_dia in (faixa.get("dias") or []):
+            encontrada = copy.deepcopy(faixa)
+            encontrada["chave"] = chave
+            return encontrada
+    return None
 
 
 def load() -> dict:
