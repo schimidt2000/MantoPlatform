@@ -869,6 +869,9 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     _acr_percents   = request.form.getlist("acrescimo_is_percent[]")
     _acr_bv_recip   = request.form.getlist("acrescimo_bv_recipient[]")
     _acr_bv_pix     = request.form.getlist("acrescimo_bv_pix[]")
+    # Feature 305: a identidade de cada linha (vazio na linha nova). A página antiga, em cache, não
+    # manda — aí o núcleo cai na heurística do bundle antigo (quem recebe + PIX).
+    _acr_ids        = request.form.getlist("acrescimo_id[]")
 
     # Traduz as listas paralelas do formulário para o contrato de `comercial_ops`. A lista só é
     # montada quando o editor veio no POST — `None` diz ao ops "não mexa", que é o que impede um
@@ -888,12 +891,18 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             }
             for _i in range(len(_acr_tipos))
         ]
-    # Feature 305: os BVs a pagar pelo número que a tela mostrava — o que o envio mexeu, a B10 lá
-    # embaixo não proporciona de novo (o redigitado junto com a venda nova é o combinado novo); o
-    # que só foi reenviado acompanha a venda. Decide BV a BV.
-    _bvs_antes = comercial_ops.bvs_a_pagar_por_valor(event) if _acrescimos is not None else None
+        if len(_acr_ids) == len(_acr_tipos):
+            for _item, _id in zip(_acrescimos, _acr_ids, strict=True):
+                _item["id"] = _id.strip() or None  # o núcleo converte (e trata lixo como linha nova)
+    # Feature 305: o núcleo diz quais BVs em reais são a MESMA linha com o MESMO número (reenviados
+    # sem mexer) — esses a B10 lá embaixo faz acompanhar a venda; o redigitado junto com a venda nova
+    # é o combinado novo e fica. Decide BV a BV, pela identidade. A página antiga (sem ids) não tem
+    # identidade: lá vale o critério por (quem recebe, PIX, unidade, valor) de antes e depois.
+    _sem_ids = _acrescimos is not None and len(_acr_ids) != len(_acr_tipos)
+    _bvs_antes = comercial_ops.bvs_a_pagar_por_valor(event) if _sem_ids else None
+    _reenviados: list = []
     try:
-        _trocas_bv_pago = comercial_ops.substituir_acrescimos(event, _acrescimos)
+        _trocas_bv_pago = comercial_ops.substituir_acrescimos(event, _acrescimos, reenviados=_reenviados)
     except comercial_ops.AcrescimosRecusados as exc:
         # Feature 305: a recusa (BV sem quem recebe ou sem PIX, valor ilegível, BV pago removido)
         # desfaz o salvamento INTEIRO da aba — venda e clientes digitados também não ficam.
@@ -907,10 +916,13 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             audit("edit", "event_bv", event.id, event.title, comercial_ops.frase_da_troca_no_bv_pago(_troca))
     _bvs_reenviados = None
     _bv_redigitado = False
-    if _bvs_antes is not None:
+    if _acrescimos is not None:
+        from collections import Counter
+
         _bvs_depois = comercial_ops.bvs_a_pagar_por_valor(event)
-        _bvs_reenviados = _bvs_antes & _bvs_depois
-        _bv_redigitado = sum(_bvs_reenviados.values()) < sum(_bvs_depois.values())
+        _bvs_reenviados = (_bvs_antes & _bvs_depois) if _sem_ids else Counter(_reenviados)
+        _em_reais = sum(n for chave, n in _bvs_depois.items() if not chave[2])
+        _bv_redigitado = sum(n for chave, n in _bvs_reenviados.items() if not chave[2]) < _em_reais
 
     # ── Notas fiscais (feature 069): coleção de notas por evento (valor + data + arquivo) ──
     # Linhas do form: nf_key[] ("id_<n>" p/ existente, "new_*" p/ nova), nf_amount[], nf_date[];

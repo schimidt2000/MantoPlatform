@@ -153,7 +153,9 @@ def _sem_venda(event: Any) -> bool:
     return bool(getattr(event, "is_cortesia_permuta", False)) or sem_valor_de_venda(event.sale_value)
 
 
-def substituir_acrescimos(event: Any, itens: list[dict] | None) -> list[dict]:
+def substituir_acrescimos(
+    event: Any, itens: list[dict] | None, *, reenviados: list | None = None
+) -> list[dict]:
     """Regrava os acréscimos do evento. `None` não mexe em nada; `[]` apaga todos (menos o BV pago
     ou no banco, que dá `AcrescimosRecusados`). Sem commit.
 
@@ -187,6 +189,9 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> list[dict]:
             diferente do gravado → recusa, porque a venda o mudou depois). Item sem `tipo` é
             ignorado (a linha em branco deixada pelo usuário); o que não é BV com valor zero ou
             vazio também, como no editor antigo.
+        reenviados: Só o gêmeo Jinja (que grava venda e acréscimos no mesmo envio): recebe a
+            chave (`_bv_na_tela`) de cada BV em reais a pagar que é a MESMA linha antiga com o
+            MESMO número — os que a B10 deve fazer acompanhar a venda (`so_os_reenviados`).
 
     Returns:
         As trocas de quem recebe ou de PIX em BV pago ou no banco (``valor``, ``status``,
@@ -378,6 +383,16 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> list[dict]:
                     )
                     continue
                 registro.update(is_percent=False, value=_q(linha["valor"]), amount_brl=_q(linha["valor"]))
+                if (
+                    reenviados is not None
+                    and antiga is not None
+                    and antiga.is_bv
+                    and not antiga.is_percent
+                    and _q(linha["valor"]) == _q(_to_decimal(antiga.value) or Decimal("0"))
+                ):
+                    # A MESMA linha (pela identidade) com o MESMO número: reenviada, não digitada —
+                    # o gêmeo Jinja a deixa acompanhar a venda. Trocar só quem recebe ou o PIX não conta.
+                    reenviados.append(_bv_na_tela(recebedor, pix, False, linha["valor"]))
         else:
             # Acréscimo que não é BV: só registro (não entra em comissão, DRE nem Planilha).
             if linha["is_percent"]:
@@ -446,12 +461,12 @@ def _bv_na_tela(recebedor: Any, pix: Any, is_percent: Any, value: Any) -> tuple[
 
 
 def bvs_a_pagar_por_valor(event: Any) -> Counter:
-    """Os BVs a pagar como a tela os mostra (`_bv_na_tela`) — para o gêmeo Jinja saber, BV a BV,
-    qual o envio MEXEU (fica como digitado) e qual só reenviou (acompanha a venda). Dois BVs iguais
-    em tudo (mesma pessoa, mesmo PIX, mesmo valor) são intercambiáveis: tanto faz qual acompanha.
+    """Os BVs a pagar como a tela os mostra (`_bv_na_tela`) — o gêmeo Jinja conta os em reais para
+    saber se algum foi digitado agora (os reenviados quem diz é `substituir_acrescimos`, pela
+    identidade). Dois BVs iguais em tudo são intercambiáveis: tanto faz qual acompanha a venda.
 
-    Lê colunas, não entidades: um objeto carregado aqui, sem trava, voltaria do `FOR UPDATE` de
-    `substituir_acrescimos` com o status velho.
+    Lê colunas, não entidades: um objeto carregado aqui, sem trava, voltaria de um `FOR UPDATE`
+    seguinte com o status velho.
     """
     linhas = (
         db.session.query(
@@ -502,9 +517,10 @@ def acompanhar_bv_da_venda(
         antes: ``estado_da_venda(event)`` capturado antes de qualquer escrita.
         actor_name: Quem editou, para o `EventLog`.
         tz: Fuso do carimbo do log.
-        so_os_reenviados: Só o gêmeo Jinja: os BVs em reais que o envio reenviou sem mexer
-            (`bvs_a_pagar_por_valor` de antes ∩ de depois). Os outros foram digitados agora e
-            ficam como estão. ``None`` = todos (a API grava a venda em outra requisição).
+        so_os_reenviados: Só o gêmeo Jinja: os BVs em reais que o envio reenviou sem mexer (as
+            chaves que `substituir_acrescimos(reenviados=)` devolveu — a mesma linha, pelo id, com
+            o mesmo número). Os outros foram digitados agora e ficam como estão. ``None`` = todos
+            (a API grava a venda em outra requisição).
 
     Returns:
         O aviso para a tela, ou ``None`` quando nada mudou.

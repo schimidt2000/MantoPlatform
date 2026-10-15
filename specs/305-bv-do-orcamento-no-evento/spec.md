@@ -422,7 +422,7 @@ corte antes de criar eventos. Numeração do plano (28, 29, 30 e 41 saíram com 
 | 67 | Converge: marcar pago com `valor_esperado` diferente / igual / ausente | 409 sem gravar / 200 / 200 | **sim** |
 | 68 | Converge: trocar o PIX de um BV pago | um `AuditLog` com o PIX mascarado; sem troca, nenhum | não |
 | 69 | 2º converge: Jinja com "1.500" em linha nova | recusado, nada gravado | **sim** |
-| 70 | 2º/3º converge: Jinja com dois BVs, um redigitado e outro reenviado, e a venda nova; e o redigitado igual ao valor antigo do outro | o redigitado fica; o reenviado acompanha; a proporção não troca de dono | não |
+| 70 | 2º–4º converge: Jinja com dois BVs, um redigitado e outro reenviado, e a venda nova; o redigitado igual ao valor antigo do outro; só o PIX corrigido (com o id da linha) | o redigitado fica; o reenviado acompanha; a proporção não troca de dono; o PIX corrigido acompanha | não |
 | 71 | 2º/3º converge: editor aberto antes da B10 salva o valor velho (`valor_visto`); `valor_visto` inválido | 400, B10 preservada; inválido nunca dá 500; com o `valor_visto` certo, grava | **sim** |
 | 72 | 2º converge: R$ 0,004, "0,004", 9.999.999.999,995 (BV e "Outro") | 400 na linha, nunca BV de R$ 0,00 nem 500 | **sim** |
 | 50 | limpeza | registros e usuários descartáveis apagados (`roles.clear()` antes) | — |

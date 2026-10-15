@@ -355,7 +355,10 @@ Um terceiro converge (5 de 5 confirmados, todos de gravidade baixa) fechou o que
 chave do "BV a BV" do Jinja passou a incluir quem recebe e o PIX (só pelo valor, a proporção podia
 trocar de dono); `valor_visto` inválido deixou de dar 500; `delete_client` (`app/clientes/client_ops.py`)
 anula o evento antes dos vínculos (a ordem inversa fechava deadlock com `set_event_clients`); o −0 do
-`MoneyInput` não vira cobrança; e o aviso do editor não afirma mais que "a venda mudou".
+`MoneyInput` não vira cobrança; e o aviso do editor não afirma mais que "a venda mudou". O quarto
+achou a raiz das três heurísticas do Jinja (corrigir só o PIX congelava o BV): o formulário não
+mandava a identidade da linha. Agora o template manda `acrescimo_id[]` e o núcleo decide pelo id —
+a mesma linha com o mesmo número acompanha a venda; a digitada agora fica.
 
 **Verificação.** `specs/305-bv-do-orcamento-no-evento/verify_305.py` com a regressão (267, 267b, 301,
 215b, 267c; 273 na linha de base), duas mutações declaradas; primeira rodada 14/52; os cenários dos

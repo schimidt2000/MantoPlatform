@@ -273,6 +273,16 @@ deadlock. (4) O `MoneyInput` conta o −0 como negativo (apagar e redigitar um d
 cobrança) e não carrega o sinal para a linha BV. (5) O aviso do editor diz "os BVs mudaram (a venda
 mudou ou houve outra gravação)" — depois de uma resposta perdida, "a venda mudou" era falso.
 
+**Quarto converge (15/10) — a causa, não mais uma heurística.** Pela chave com quem recebe e PIX,
+corrigir só o PIX junto com a venda nova congelava o BV (e o aviso dizia "digitado agora"). As três
+rodadas de heurística no Jinja (tudo ou nada → por valor → por pessoa e valor) tinham a mesma raiz: o
+formulário Jinja não mandava a identidade da linha. Agora o template manda `acrescimo_id[]` (vazio na
+linha nova), o núcleo herda pelo id como no PUT e devolve, em `reenviados`, os BVs em reais que são a
+MESMA linha com o MESMO número — só esses a B10 faz acompanhar. A página antiga em cache (sem ids)
+usa o critério por (quem recebe, PIX, unidade, valor) de antes e depois — a heurística do bundle
+antigo não liga dois BVs da mesma pessoa e do mesmo PIX, e eles deixariam de acompanhar (achado da
+revisão final); nela, corrigir só o PIX junto com a venda ainda congela o BV (só na página velha).
+
 **A volta não é exata.** `200 → 180 → 200` volta ao ponto só com números redondos; a cadeia de
 proporções acumula centavos. O cenário 49 usa os números redondos do plano e um caso não redondo com
 tolerância declarada.

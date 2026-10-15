@@ -133,6 +133,12 @@ vermelho pelos motivos certos; cada história fecha com os seus cenários verdes
 - [X] T051 `_bv_na_tela` com quem recebe e PIX; `valor_visto` inválido ignorado; `delete_client` evento → vínculos (`app/clientes/client_ops.py`); −0 no `MoneyInput`; texto do aviso do editor
 - [X] T052 Regressão (verify_305 inteiro + verify_266 da exclusão de cliente), typecheck, docs
 
+## Phase 14: Quarto converge (15/10) — 1 achado confirmado; a causa (o Jinja sem a identidade da linha)
+
+- [X] T053 Cenário 70 com o PIX corrigido junto com a venda nova, vermelho antes — `verify_305_converge4_primeira_falha.txt`
+- [X] T054 `acrescimo_id[]` no template (`app/templates/event_detail.html`, linha existente e linha nova); `_handle_update_comercial` passa o id e `reenviados=`; `substituir_acrescimos(reenviados=)` devolve os BVs em reais que são a mesma linha com o mesmo número
+- [X] T055 Regressão, página Jinja renderizada (um `acrescimo_id[]` por `acrescimo_tipo[]`), revisão final da mudança (2 achados: 1 refutado — id forjado dá 500 com rollback, como os outros campos do handler; 1 real — página sem ids com dois BVs da mesma pessoa: critério por valor mantido para ela, cenário 70), docs
+
 ## Dependências
 
 Setup → Foundational → US1 (MVP) → US2 → US3 → US4 → US5 → US6 → Frontend → Polimento. US2, US4 e US5

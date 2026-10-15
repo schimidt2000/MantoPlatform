@@ -1929,9 +1929,12 @@ def cen_64_vincular_roda_a_b10() -> None:
     _garante("BV em reais ficou" in frase, f"frase sem o aviso: {frase!r}")
 
 
-def _post_jinja(eid: int, venda: str, valor_bv: str, *, outros: list[tuple] = ()) -> None:
-    """POST da aba Comercial do Jinja; `outros` = BVs a mais, (quem recebe, PIX, valor)."""
-    bvs = [(QUEM, PIX, valor_bv), *outros]
+def _post_jinja(
+    eid: int, venda: str, valor_bv: str, *, outros: list[tuple] = (), pix: str = PIX, ids: list | None = None
+) -> None:
+    """POST da aba Comercial do Jinja; `outros` = BVs a mais, (quem recebe, PIX, valor). `ids` = o
+    `acrescimo_id[]` que o template manda desde o 4º converge (sem ele, a página antiga em cache)."""
+    bvs = [(QUEM, pix, valor_bv), *outros]
     form = {
         "action": "update_comercial",
         "sale_value": venda,
@@ -1943,6 +1946,8 @@ def _post_jinja(eid: int, venda: str, valor_bv: str, *, outros: list[tuple] = ()
         "acrescimo_bv_recipient[]": [b[0] for b in bvs],
         "acrescimo_bv_pix[]": [b[1] for b in bvs],
     }
+    if ids is not None:
+        form["acrescimo_id[]"] = [str(i) if i is not None else "" for i in ids]
     r = _cliente("com").post(f"/events/{eid}", data=form)
     _garante(r.status_code in (200, 302), f"Jinja → {r.status_code}")
 
@@ -2071,6 +2076,25 @@ def cen_70_jinja_bv_a_bv() -> None:
     _post_jinja(e2, "1.200,00", "120,00", outros=[(dois[0], dois[1], "120,00")])
     valores = {b["bv_recipient"]: q(b["amount_brl"]) for b in _bvs(e2)}
     _garante(valores == {QUEM: Decimal("120.00"), dois[0]: Decimal("144.00")}, f"coincidência: {valores}")
+    # Só o PIX corrigido junto com a venda nova (com o id, como o template manda): o valor não foi
+    # digitado — o BV acompanha a venda, e a linha mantém a identidade.
+    e3 = _evento_google("c70c", venda=1000)
+    _put("com", e3, [_bv_item(120)])
+    _post_jinja(e3, "1.500,00", "120,00", pix="novo-pix@exemplo.test", ids=[_bvs(e3)[0]["id"]])
+    b = _bvs(e3)[0]
+    _garante(
+        q(b["amount_brl"]) == Decimal("180.00") and b["bv_pix"] == "novo-pix@exemplo.test",
+        f"PIX corrigido: {b}",
+    )
+    # Página antiga (sem ids), dois BVs da mesma pessoa e do mesmo PIX, só a venda muda: os dois
+    # acompanham (a heurística do bundle antigo não liga nenhum, e o critério por valor cobre).
+    e4 = _evento_google("c70d", venda=1000)
+    _put("com", e4, [_bv_item(100), _bv_item(200)])
+    _post_jinja(e4, "2.000,00", "100,00", outros=[(QUEM, PIX, "200,00")])
+    _garante(
+        sorted(q(b["amount_brl"]) for b in _bvs(e4)) == [Decimal("200.00"), Decimal("400.00")],
+        f"página sem ids: {_bvs(e4)}",
+    )
 
 
 def cen_71_editor_aberto_antes_da_b10() -> None:
