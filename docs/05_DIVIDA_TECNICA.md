@@ -9,7 +9,7 @@
 > trate-os antes de qualquer refactor. Os itens da §9 são grandes demais para uma sessão e vêm com
 > plano de fatiamento. Nenhum item aqui é hipótese: todos foram lidos no código.
 >
-> Notas de escala: `app/models.py` 2.577 l. · `app/calendar/routes.py` 3.910 l. ·
+> Notas de escala: `app/models.py` 2.577 l. · `app/calendar/routes.py` 4.544 l. (15/10/2026) ·
 > `app/marketing/virtuais_ops.py` 2.325 l. · `app/financeiro/routes.py` 1.690 l. ·
 > `frontend/apps/internal/src/pages/GastosRecorrentesPage.tsx` 1.392 l.
 
@@ -307,7 +307,7 @@ serializa (já feito em `lib/agenda.ts:5`, ausente em `financeiro.ts`, `gastos.t
 
 | Função | Linhas | Onde |
 |---|---|---|
-| `calculate_quote` | **470** | `app/orcamento/quote_ops.py:58` |
+| `calculate_quote` | **~540** | `app/orcamento/quote_ops.py:105` |
 | `api_financeiro_dashboard` | 352 | `app/api/financeiro_read.py:185` |
 | `create_app` | 321 | `app/__init__.py:341` |
 | `NovaContaForm` (componente) | 315 | `frontend/.../GastosRecorrentesPage.tsx:154` |
@@ -572,7 +572,7 @@ merge para `main` antes disso** — o Render faz deploy automático da `main`.
 | # | Prio | Onde | Sintoma | Ação |
 |---|---|---|---|---|
 | 103 | **P3** | `PerformersEditor.tsx:138-149` (compartilhado com o EducaManto) | o `<select>` nativo de especiais foi de 11 para 12 itens com "Ajudante do Noel" — violação **já existente** do Princípio XII.1 (NUNCA select nativo acima de 10), agravada pela 307; a troca pelo `Combobox` de `@manto/ui` mexe nas duas calculadoras e não coube no "para ontem" — **decisão do dono**: trocar na próxima fatia ou emendar a constituição | `Combobox` com miniatura no `PerformersEditor` (uma troca resolve as duas calculadoras) + conferência de tela nas duas |
-| 104 | **P4** | `app/api/orcamento_read.py` `personagens-no-dia` (`quote_ops.py:695-724`) | o alerta "Já na agenda neste dia" agrupa por `character_name`: em 24/12, com vários Noéis escalados, todo orçamento de Noel acusa "venda em dobro" mesmo havendo artista livre | agrupar por talento (ou mostrar "N escalados") |
+| 104 | **P4** | `app/api/orcamento_read.py` `personagens-no-dia` (`quote_ops.py:736-765`) | o alerta "Já na agenda neste dia" agrupa por `character_name`: em 24/12, com vários Noéis escalados, todo orçamento de Noel acusa "venda em dobro" mesmo havendo artista livre | agrupar por talento (ou mostrar "N escalados") |
 | 105 | **P4** | `OrcamentoCalculadoraPage.tsx` rehydrate (`?recalcular_id=`) | não restaura `incluir_duracao` (nem vai ao snapshot) nem `personalizado_criterio`/`cust_*` (estão no snapshot, faltam no tipo e no efeito): um orçamento "1 entrada de 30 min" reabre com as 4 durações | pôr `incluir_duracao` no snapshot e restaurar os três no efeito |
 | 106 | **P4** | `calculate_quote` (~540 l.), `_compute_performer_caches` (~260 l.), `api_orcamento_settings_save` (~75 l.) | já excediam as 30 linhas do Princípio II; a 307 só acrescentou chamadas a helpers (`cache_na_faixa`, `markup_vigente`, `validar_datas_especiais`) — o 3b vai reescrever o núcleo em "por dia" e é a hora de quebrar | quebrar junto com o 3b, com o gabarito de paridade |
 | 107 | **P4** | eventos de 24 e 25/12 criados antes do deploy da 307 | o vínculo 273 só preenche teto onde `cache_cap` é `NULL`: Noel 600 / coordenador 250 ficam nos eventos já criados | pós-deploy, consulta só de leitura (eventos com `start_at` em 24/25/12 e `orcamento_history_id`) e ajuste manual pelo superadmin |

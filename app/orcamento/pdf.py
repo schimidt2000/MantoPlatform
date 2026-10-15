@@ -198,7 +198,8 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
 
         c.setFont(_FONT_ITALIC, 7.5)
         c.setFillColor(_LIGHT)
-        for linha in simpleSplit(nota_especial, _FONT_ITALIC, 7.5, _RIGHT - _LEFT):
+        # No máximo 3 linhas: a página é única e sem paginação, e o rodapé do fundo não pode subir.
+        for linha in simpleSplit(nota_especial, _FONT_ITALIC, 7.5, _RIGHT - _LEFT)[:3]:
             c.drawString(_LEFT, y, linha)
             y -= 10
         y -= 2

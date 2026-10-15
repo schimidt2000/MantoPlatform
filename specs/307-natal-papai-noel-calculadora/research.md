@@ -91,11 +91,13 @@ alternativas, para o `/speckit-analyze` e o converge não as reabrirem. Fontes: 
 ## D8 — Memória, mensagem e PDF
 
 - **Decisão**: sem tipo de linha novo (`MemoriaLinha.tipo` é união fechada): a linha "× Markup"
-  ganha `detalhe` "Véspera e Natal (24/12)"; cachês sobrescritos ganham "cachê de Natal" e os
-  elevados ao piso "piso de Natal" nas `partes`; `quote["data_especial"] = {chave, rotulo, markup}`;
-  nota em itálico após a `deslocamento_nota` na mensagem e após a frase de deslocamento no PDF.
-- **Razão**: hotfix 210 exige que a memória some com o total; o PDF re-deriva texto (não usa
-  `message`) — as duas superfícies andam juntas (lição da 262).
+  ganha `detalhe` "Véspera e Natal · 24/12"; cachês sobrescritos ganham "cachê da data especial" e
+  os elevados ao piso "piso da data especial" no `detalhe`; `quote["data_especial"] = {chave,
+  rotulo, markup, nota_mensagem}` (a nota vai junto para o PDF e o orçamento congelado não relerem
+  a tabela); nota em itálico após a `deslocamento_nota` na mensagem e após a frase de deslocamento
+  no PDF (até 3 linhas, `simpleSplit`).
+- **Razão**: hotfix 210 exige que a memória some com o total; o PDF não usa `message` — lê a nota
+  de `quote.data_especial` — e as duas superfícies andam juntas (lição da 262).
 
 ## D9 — Validação do bloco no `POST /settings`
 
@@ -103,7 +105,8 @@ alternativas, para o `/speckit-analyze` e o converge não as reabrirem. Fontes: 
   levanta `SettingsValidationError(message, fields)` (padrão de `QuoteValidationError`); o endpoint
   só traduz em `json_error("Datas especiais inválidas.", 400, fields=exc.fields)`. Regras: chave
   `^[a-z0-9_]{1,30}$`; `dias` `MM-DD` reais, sem repetição, vazio = desligada; `markup` 4 valores em
-  `[1.0, 6.0]` gravados com 2 casas HALF_UP; `cache`/`coordenador`/`piso` 4 valores ≥ 0 via
+  `[1.0, 6.0]` gravados com 2 casas HALF_UP; `coordenador`/`piso` 4 valores ≥ 0 e `cache` 4 valores
+  > 0 (a sobrescrita passa por fora do piso — zero seria cachê zero na venda e no teto) via
   `parse_brl` (string inválida ou negativo é ERRO, não default); `cache` só para nomes em
   `especiais`; `nota_mensagem` ≤ 200 chars. Excluir um especial limpa a sobrescrita dele das faixas.
 - **Razão**: o save atual converte markup com `float()` sem limite; 33,4 no lugar de 3,34

@@ -4,11 +4,13 @@ Cenários 1–18 da `spec.md` (seção "Verificação"). Escrito ANTES do núcle
 primeira rodada fica em `verify_307_primeira_falha.txt`.
 
 A configuração de preços REAL do `manto_local` é lida por conexão separada no início, substituída por
-uma configuração de teste determinística (markup 2,6; coordenador 250; "Papai Noel" no cachê ANTIGO
-600, sem "Ajudante do Noel" e sem `datas_especiais` — para provar a migração) e RESTAURADA no
-`finally`, conferida por conexão separada. Premissas lidas do espelho em 15/10/2026 (T001):
-markup receptivo = show = [2.6, 2.5, 2.45, 2.4]; coordenador false [250, 300, 325, 350];
-especiais."Papai Noel" = [600, 650, 675, 700]; especiais_excluidos = ["Ajudante Especial"].
+uma configuração de teste determinística (markup receptivo 2,6 e show 2,8; coordenador 250/300;
+"Papai Noel" no cachê ANTIGO 600, sem "Ajudante do Noel" e sem `datas_especiais` — para provar a
+migração) e RESTAURADA no `finally`, conferida por conexão separada. Premissas lidas do espelho em
+15/10/2026 (T001): markup receptivo = show = [2.6, 2.5, 2.45, 2.4]; coordenador false
+[250, 300, 325, 350]; especiais."Papai Noel" = [600, 650, 675, 700]; especiais_excluidos =
+["Ajudante Especial"]. Se o espelho vier diferente (ex.: um "Salvar configurações" da conferência de
+tela persistiu a tabela migrada), o `preparar()` avisa — e o cenário 12 prova a migração do mesmo jeito.
 
 Requisições correm FORA do `app.app_context()`; login só por `POST /api/auth/login` com usuários
 descartáveis (prefixo `__v307_`), cookie do próprio test_client; limpeza no `finally`.
@@ -59,6 +61,7 @@ NOTA = "Valores especiais de 24 e 25 de dezembro."
 NOEL_ANTIGO = [600, 650, 675, 700]
 MARCA_CACHE = "cachê da data especial"
 MARCA_PISO = "piso da data especial"
+ESPECIAL_DESCARTAVEL = f"{PREFIX}Especial"
 
 app = create_app()
 app.config["TESTING"] = True
@@ -131,15 +134,23 @@ def _gravar_config(cfg: dict) -> None:
 
 
 def _config_de_teste(real: str | None) -> dict:
-    """A tabela real com os números do espelho fixados — e o Noel no cachê ANTIGO (prova a migração)."""
+    """A tabela real com os números do espelho fixados — e o Noel no cachê ANTIGO (prova a migração).
+
+    `markup.show` e `coordenador.true` DIFERENTES dos normais: é assim que o cenário de show prova
+    que a faixa substitui também o markup de show e usa a lista única de coordenador.
+    """
     cfg = json.loads(real) if real else copy.deepcopy(_cfg.DEFAULTS)
-    cfg["markup"] = {"receptivo": [2.6, 2.5, 2.45, 2.4], "show": [2.6, 2.5, 2.45, 2.4]}
+    cfg["markup"] = {"receptivo": [2.6, 2.5, 2.45, 2.4], "show": [2.8, 2.6, 2.5, 2.4]}
     cfg["coordenador"] = {"false": [250, 300, 325, 350], "true": [300, 350, 375, 400]}
     cfg.setdefault("ator", {})["boneco|false|false"] = [200, 250, 275, 300]
+    cfg["tecnico_som"] = [750, 800, 825, 850]
+    cfg["brinde_show"] = 100
     esp = cfg.setdefault("especiais", {})
     esp["Papai Noel"] = list(NOEL_ANTIGO)
     esp.pop("Ajudante do Noel", None)
+    esp.pop(ESPECIAL_DESCARTAVEL, None)
     esp["Perna de Pau"] = [400, 450, 475, 500]
+    esp["Homem-Aranha"] = {"false": [250, 300, 325, 350], "true": [400, 450, 475, 500]}
     cfg["especiais_excluidos"] = ["Ajudante Especial"]
     cfg.pop("datas_especiais", None)
     return cfg
@@ -158,6 +169,14 @@ def _usuario(apelido: str, papel: str) -> dict:
 
 def preparar() -> None:
     estado["config_real"] = _config_real()
+    try:
+        noel_real = json.loads(estado["config_real"] or "{}").get("especiais", {}).get("Papai Noel")
+    except json.JSONDecodeError:
+        noel_real = None
+    if noel_real != [float(v) for v in NOEL_ANTIGO] and noel_real != NOEL_ANTIGO:
+        print(
+            f"  AVISO  o espelho não tem o Papai Noel antigo ({noel_real}); recarregue o dump da produção"
+        )
     _gravar_config(_config_de_teste(estado["config_real"]))
     with app.app_context():
         limpar()
@@ -184,6 +203,8 @@ NOEL = {"type": "especial", "personagem": "Papai Noel"}
 AJUDANTE = {"type": "especial", "personagem": "Ajudante do Noel"}
 BONECO = {"type": "ator", "subtipo": "boneco"}
 PERNA_DE_PAU = {"type": "especial", "personagem": "Perna de Pau"}
+ARANHA_SHOW = {"type": "especial", "personagem": "Homem-Aranha", "show": True}
+ESPECIAL_VAZIO = {"type": "especial"}
 
 
 def _payload(data: str, performers: list[dict], hora: str = "", **extra) -> dict:
@@ -278,16 +299,19 @@ def cen_05_noturno_segue_por_fora() -> None:
     _linha(res["quote"]["memoria"], "pos", "noturno")
 
 
-def cen_06_boneco_pelo_piso() -> None:
+def cen_06_boneco_pelo_piso_e_linha_vazia() -> None:
     res = _calcular(_payload("2026-12-24", [NOEL, BONECO]))
     q = res["quote"]
     _iguais(q["total_1h"], 7181.00, "Noel + boneco 24/12 = Noel + Ajudante")
     boneco = _linha(q["memoria"], "cache", "Boneco")
     _iguais(boneco["valores"][0], 650, "boneco elevado ao piso")
     _garante(MARCA_PISO in boneco["detalhe"], f"detalhe do boneco: {boneco['detalhe']!r}")
+    # Linha de especial ainda sem personagem continua custando zero — não sobe ao piso.
+    res = _calcular(_payload("2026-12-24", [NOEL, ESPECIAL_VAZIO]))
+    _iguais(res["quote"]["total_1h"], 5010.00, "especial vazio não entra no piso")
 
 
-def cen_07_qualquer_produto_na_data() -> None:
+def cen_07_qualquer_produto_na_data_e_show() -> None:
     res = _calcular(_payload("2026-12-24", [PERNA_DE_PAU]))
     q = res["quote"]
     _iguais(q["markup_used"][0], 3.34, "markup da faixa vale para Perna de Pau")
@@ -297,11 +321,32 @@ def cen_07_qualquer_produto_na_data() -> None:
         "max(tabela 400, piso 650)",
     )
     _iguais(q["total_1h"], 3841.00, "Perna de Pau 24/12 1h")
+    # Show na faixa: markup da faixa (não o de show, 2,8) e coordenador da faixa (não o "true", 300);
+    # brinde e técnico × 1,5 seguem por fora. (650 + 500) × 3,34 + 100 + 750 × 1,5 = 5.066,00.
+    res = _calcular(_payload("2026-12-24", [ARANHA_SHOW]))
+    q = res["quote"]
+    _iguais(q["markup_used"][0], 3.34, "show na faixa usa o markup da faixa")
+    _iguais(
+        _linha(q["memoria"], "cache", "Coordenador")["valores"][0],
+        500,
+        "coordenador da faixa com show",
+    )
+    _linha(q["memoria"], "pos", "Técnico de som")
+    _linha(q["memoria"], "pos", "Brinde")
+    _iguais(q["total_1h"], 5066.00, "Homem-Aranha show 24/12 1h")
 
 
-def cen_08_hora_extra_preco_cheio() -> None:
+def cen_08_hora_extra_e_dois_coordenadores() -> None:
     res = _calcular(_payload("2026-12-24", [NOEL]))
     _iguais(res["quote"]["total_2h"], 10020.00, "2h = 2 × 1h na faixa")
+    res = _calcular(_payload("2026-12-24", [NOEL], coordenador_qty=2))
+    q = res["quote"]
+    _iguais(
+        _linha(q["memoria"], "cache", "Coordenador")["valores"][0], 1000, "2 coordenadores × 500"
+    )
+    _iguais(q["total_1h"], 6680.00, "Noel + 2 coordenadores 24/12 1h")
+    res = _calcular(_payload("2026-12-24", [NOEL], duracao_custom=6))
+    _iguais(res["quote"]["total_custom"], 30060.00, "6h = total_4h ÷ 4 × 6 (régua 236) na faixa")
 
 
 def cen_09_transporte_personalizado_bv() -> None:
@@ -342,6 +387,20 @@ def cen_09_transporte_personalizado_bv() -> None:
     _garante(
         res["quote"].get("data_especial") is not None, "data_especial informativo no personalizado"
     )
+    # Multiplicador: a base é o cachê da faixa (coerente com o teto da vaga) — 1.500 × 2 = 3.000.
+    res = _calcular(
+        _payload(
+            "2026-12-24",
+            [NOEL],
+            personalizado=True,
+            personalizado_criterio="multiplicador",
+            cust_mult_1h="2",
+            cust_mult_2h="2",
+            cust_mult_3h="2",
+            cust_mult_4h="2",
+        )
+    )
+    _iguais(res["quote"]["total_1h"], 3000.00, "multiplicador sobre o cachê da faixa")
 
     res = _calcular(
         _payload("2026-12-24", [NOEL], acrescimos=[{"tipo": "BV", "value": 10, "is_percent": True}])
@@ -370,18 +429,23 @@ def cen_10_educamanto_neutro() -> None:
 
 
 # ── 11 · teto das vagas ─────────────────────────────────────────────────────────────────────────
-def _tetos(snap: dict, data_evento: str | None = None) -> dict[str, dict]:
+def _itens_do_teto(
+    snap: dict, data_evento: str | None = None, horas_extra: int | None = None
+) -> list[dict]:
     from app.calendar.routes import _compute_performer_caches
 
     with app.app_context():
-        itens = _compute_performer_caches(snap, data_evento=data_evento)
-    return {item["label"]: item for item in itens}
+        return _compute_performer_caches(snap, horas_extra=horas_extra, data_evento=data_evento)
 
 
-def _snap(data: str, performers: list[dict], hora: str = "") -> dict:
+def _tetos(snap: dict, data_evento: str | None = None) -> dict[str, dict]:
+    return {item["label"]: item for item in _itens_do_teto(snap, data_evento)}
+
+
+def _snap(data: str, performers: list[dict], hora: str = "", coordenador_qty: int = 1) -> dict:
     return {
         "performers": performers,
-        "coordenador_qty": 1,
+        "coordenador_qty": coordenador_qty,
         "event_date": data,
         "event_time": hora,
         "fora_sp": False,
@@ -454,6 +518,24 @@ def cen_11_teto_pela_data() -> None:
     _garante(
         MARCA_PISO in t["Boneco"]["cap_notes"]["cache_1h"], "cap_note do boneco explica o piso"
     )
+
+    coords = [
+        i
+        for i in _itens_do_teto(_snap("2026-12-24", [NOEL], coordenador_qty=2))
+        if i["label"] == "Coordenador"
+    ]
+    _garante(
+        len(coords) == 2 and all(c["cache_1h"] == 500 for c in coords),
+        f"2 coordenadores a 500: {coords}",
+    )
+
+    regua = {i["label"]: i for i in _itens_do_teto(_snap("2026-12-24", [NOEL]), horas_extra=6)}
+    _iguais(
+        regua["Papai Noel"]["cache_custom"],
+        6000,
+        "régua >4h com cachê linear da faixa (4000 ÷ 4 × 6)",
+    )
+    _iguais(regua["Coordenador"]["cache_custom"], 3000, "coordenador na régua >4h")
 
     # O vínculo 273 passa a data do EVENTO (orçamento de 20/12, evento em 24/12).
     with app.app_context():
@@ -548,9 +630,22 @@ def cen_12_migracao() -> None:
         "dias vazio = desligada",
     )
 
+    # Especial excluído: não volta à tabela E a faixa padrão não fica com a sobrescrita órfã dele.
     excluido = copy.deepcopy(base)
     excluido["especiais_excluidos"] = ["Ajudante do Noel"]
-    _garante("Ajudante do Noel" not in _cfg._migrate(excluido)["especiais"], "excluído respeitado")
+    m = _cfg._migrate(excluido)
+    _garante("Ajudante do Noel" not in m["especiais"], "excluído respeitado")
+    _garante(
+        "Ajudante do Noel" not in m["datas_especiais"]["natal"]["cache"],
+        "sobrescrita órfã removida",
+    )
+    _garante("Papai Noel" in m["datas_especiais"]["natal"]["cache"], "a sobrescrita do Noel fica")
+
+    _garante(
+        _cfg.faixa_especial("abcd-12-24", m) is None
+        and _cfg.faixa_especial("2026-12-24 ", m) is not None,
+        "data só no formato AAAA-MM-DD",
+    )
 
     with app.app_context():
         vivo = _cfg.load()
@@ -570,6 +665,16 @@ def _bloco_natal(**mudar) -> dict:
 def _natal_no_banco() -> dict:
     cfg = json.loads(_no_banco("SELECT pricing_config FROM site_settings WHERE id = 1")[0][0])
     return (cfg.get("datas_especiais") or {}).get("natal") or {}
+
+
+def _recusa(sa, corpo: dict, rotulo: str, trecho_da_chave: str = "datas_especiais") -> None:
+    r = sa.post("/api/orcamento/settings", json=corpo)
+    _garante(r.status_code == 400, f"{rotulo} → {r.status_code}")
+    campos = _erro(r).get("fields") or {}
+    _garante(
+        any(k.startswith(trecho_da_chave) for k in campos),
+        f"{rotulo}: fields sem a chave: {campos}",
+    )
 
 
 def cen_13_salvar_faixa() -> None:
@@ -594,34 +699,81 @@ def cen_13_salvar_faixa() -> None:
         "26/12 passou a cair na faixa a 3,5",
     )
 
-    for corpo, rotulo in (
-        (_bloco_natal(dias=["13-40"]), "dia inválido"),
-        (_bloco_natal(markup=[33.4, 3.34, 3.34, 3.34]), "markup absurdo"),
-        (_bloco_natal(cache={"Personagem Inexistente": [1, 2, 3, 4]}), "especial desconhecido"),
-        (_bloco_natal(piso=[650, -1, 650, 650]), "piso negativo"),
-        (_bloco_natal(coordenador=["abc", 1, 2, 3]), "coordenador não numérico"),
-    ):
-        r = sa.post("/api/orcamento/settings", json=corpo)
-        _garante(r.status_code == 400, f"{rotulo} → {r.status_code}")
-        campos = _erro(r).get("fields") or {}
-        _garante(
-            any(k.startswith("datas_especiais") for k in campos),
-            f"{rotulo}: fields sem a chave: {campos}",
-        )
+    _recusa(sa, _bloco_natal(dias=["13-40"]), "dia inválido", "datas_especiais.natal.dias")
+    _recusa(sa, _bloco_natal(dias=["12-24", "12-24"]), "dia repetido", "datas_especiais.natal.dias")
+    _recusa(
+        sa,
+        _bloco_natal(markup=[33.4, 3.34, 3.34, 3.34]),
+        "markup absurdo",
+        "datas_especiais.natal.markup",
+    )
+    _recusa(
+        sa,
+        _bloco_natal(cache={"Personagem Inexistente": [1, 2, 3, 4]}),
+        "especial desconhecido",
+        "datas_especiais.natal.cache",
+    )
+    _recusa(
+        sa,
+        _bloco_natal(cache={"Perna de Pau": [0, 0, 0, 0]}),
+        "sobrescrita zerada",
+        "datas_especiais.natal.cache.Perna de Pau",
+    )
+    _recusa(
+        sa, _bloco_natal(piso=[650, -1, 650, 650]), "piso negativo", "datas_especiais.natal.piso"
+    )
+    _recusa(
+        sa,
+        _bloco_natal(coordenador=["abc", 1, 2, 3]),
+        "coordenador não numérico",
+        "datas_especiais.natal.coordenador",
+    )
+    _recusa(sa, _bloco_natal(rotulo="x" * 61), "rótulo longo", "datas_especiais.natal.rotulo")
+    duas = _bloco_natal()
+    duas["datas_especiais"]["teste"] = {
+        **copy.deepcopy(_cfg.DEFAULTS["datas_especiais"]["natal"]),
+        "dias": ["12-24"],
+    }
+    _recusa(sa, duas, "mesmo dia em duas faixas", "datas_especiais.teste.dias")
     no_banco = _natal_no_banco()
     _iguais(no_banco["markup"][0], 3.5, "corpo inválido não gravou nada (conexão separada)")
     _garante("13-40" not in no_banco["dias"], "dia inválido não entrou")
 
     r = sa.post(
-        "/api/orcamento/settings", json=_bloco_natal(markup=[3.335, 3.34, 3.34, 3.34], dias=[])
+        "/api/orcamento/settings",
+        json=_bloco_natal(
+            markup=[3.335, 3.34, 3.34, 3.34], dias=[], nota_mensagem="linha 1\nlinha 2"
+        ),
     )
-    _garante(r.status_code == 200, "markup com 3 casas e dias vazio são aceitos")
+    _garante(r.status_code == 200, "markup com 3 casas, dias vazio e nota com quebra são aceitos")
     no_banco = _natal_no_banco()
     _iguais(no_banco["markup"][0], 3.34, "markup gravado com 2 casas (HALF_UP)")
     _garante(no_banco["dias"] == [], "dias vazio gravado = faixa desligada")
+    _garante(no_banco["nota_mensagem"] == "linha 1 linha 2", "nota numa linha só")
     _garante(
         _calcular(_payload("2026-12-24", [NOEL]))["quote"].get("data_especial") is None,
         "faixa desligada não pega 24/12",
+    )
+
+    # Excluir um especial tira a sobrescrita dele da faixa (servidor), senão todo salvar daria 400.
+    r = sa.post(
+        "/api/orcamento/settings/especiais",
+        json={"nome": ESPECIAL_DESCARTAVEL, "prices": [100, 100, 100, 100]},
+    )
+    _garante(r.status_code == 201, f"criar especial descartável → {r.status_code}")
+    r = sa.post(
+        "/api/orcamento/settings",
+        json=_bloco_natal(cache={ESPECIAL_DESCARTAVEL: [700, 700, 700, 700]}),
+    )
+    _garante(
+        r.status_code == 200 and ESPECIAL_DESCARTAVEL in _natal_no_banco()["cache"],
+        "sobrescrita do descartável gravada",
+    )
+    r = sa.delete(f"/api/orcamento/settings/especiais/{ESPECIAL_DESCARTAVEL}")
+    _garante(r.status_code == 204, f"excluir especial → {r.status_code}")
+    _garante(
+        ESPECIAL_DESCARTAVEL not in _natal_no_banco()["cache"],
+        "DELETE não limpou a sobrescrita da faixa",
     )
 
     r = sa.post("/api/orcamento/settings", json=_bloco_natal())
@@ -734,21 +886,33 @@ CENARIOS: list[tuple[str, Callable[[], None]]] = [
     ),
     ("4. 25/12 · Noel + Ajudante = 7.181,00", cen_04_noel_mais_ajudante_25_12),
     ("5. 24/12 às 20h · noturno por fora = 5.110,00", cen_05_noturno_segue_por_fora),
-    ("6. 24/12 · boneco entra pelo piso = 7.181,00", cen_06_boneco_pelo_piso),
     (
-        "7. 24/12 · Perna de Pau = 3.841,00: markup e piso valem para qualquer produto",
-        cen_07_qualquer_produto_na_data,
+        "6. 24/12 · boneco entra pelo piso = 7.181,00; especial vazio não",
+        cen_06_boneco_pelo_piso_e_linha_vazia,
     ),
-    ("8. 24/12 · 2h = 10.020,00 (hora extra a preço cheio)", cen_08_hora_extra_preco_cheio),
-    ("9. 24/12 · fora de SP, personalizado e BV 10% (305)", cen_09_transporte_personalizado_bv),
+    (
+        "7. 24/12 · Perna de Pau = 3.841,00 e show = 5.066,00: markup e piso valem para qualquer produto",
+        cen_07_qualquer_produto_na_data_e_show,
+    ),
+    (
+        "8. 24/12 · 2h = 10.020,00; 2 coordenadores = 6.680,00; 6h pela régua",
+        cen_08_hora_extra_e_dois_coordenadores,
+    ),
+    (
+        "9. 24/12 · fora de SP, personalizado (valor e multiplicador) e BV 10% (305)",
+        cen_09_transporte_personalizado_bv,
+    ),
     ("10. EducaManto ignora a data (com a faixa provadamente ativa)", cen_10_educamanto_neutro),
     (
-        "11. teto das vagas pela data: 24/12, noturno, 20/12, data do evento, piso, vínculo 273",
+        "11. teto das vagas pela data: 24/12, noturno, 20/12, data do evento, piso, 2 coords, régua, vínculo 273",
         cen_11_teto_pela_data,
     ),
-    ("12. migração guardada e defensiva do pricing_config", cen_12_migracao),
     (
-        "13. superadmin salva a faixa; corpo inválido = 400 e nada gravado; dias vazio desliga",
+        "12. migração guardada e defensiva do pricing_config (órfã removida; data só ISO)",
+        cen_12_migracao,
+    ),
+    (
+        "13. superadmin salva a faixa; 400 por campo e nada gravado; dias vazio desliga; DELETE limpa a faixa",
         cen_13_salvar_faixa,
     ),
     ("14. DEVE FALHAR: COMERCIAL não edita a configuração", cen_14_comercial_nao_edita),

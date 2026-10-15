@@ -130,7 +130,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
 | **307-natal-papai-noel-calculadora** | *(em branch, implementada em 15/10 — aguardando o "push")* A tabela de preços ganha o bloco **datas especiais** (faixa "Véspera e Natal": 24 e 25/12, markup 3,34, cachês Noel 1.000 / Ajudante do Noel 650 / coordenador 500, piso 650 para os demais, nota da mensagem) e a calculadora passa a aplicá-lo **pela data do evento**: Noel sozinho ≈ R$ 5.010, Noel + ajudante ≈ R$ 7.181, sem o acréscimo "Outro" que a comercial somava à mão em 65 % dos orçamentos de Noel. A tabela normal ganha "Papai Noel" 712 e "Ajudante do Noel" 423 (→ R$ 2.501 / R$ 3.601 até 23/12) por migração guardada. O **teto de cachê das vagas** segue a mesma faixa pela data do evento (criação e vínculo 273) — antes o acréscimo manual não chegava ao artista e o casting ficava preso em 600. Card novo na Config. de Preços (validado no núcleo, 400 apontando o campo), aviso dourado e dica na calculadora, "Gerar Orçamento" travado durante o recálculo, PDF com a nota em itálico; EducaManto neutro | 2026-10-15 | `—` | (aqui) | — |
-| **305-bv-do-orcamento-no-evento** | *(EM PRODUÇÃO 15/10 ~02:50)* O BV do orçamento passa a chegar ao evento no valor certo — **em reais, na proporção da venda** (R$ 100,00 no exemplo da D2, não R$ 130,95) — com **quem recebe e o PIX obrigatórios**, na criação e no "Vincular e aplicar"; a venda digitada à mão acende um alerta com "Lançar o BV"; o BV a pagar acompanha a venda que muda depois; o editor de Acréscimos deixa de apagar o PIX, "despagar" BV, descartar valor com vírgula e calcular a comissão com o BV velho. O passado fica como está (corte pelo momento do deploy) | 2026-10-14 | `—` | (aqui) | — |
+| **305-bv-do-orcamento-no-evento** | *(EM PRODUÇÃO 15/10 ~02:49)* O BV do orçamento passa a chegar ao evento no valor certo — **em reais, na proporção da venda** (R$ 100,00 no exemplo da D2, não R$ 130,95) — com **quem recebe e o PIX obrigatórios**, na criação e no "Vincular e aplicar"; a venda digitada à mão acende um alerta com "Lançar o BV"; o BV a pagar acompanha a venda que muda depois; o editor de Acréscimos deixa de apagar o PIX, "despagar" BV, descartar valor com vírgula e calcular a comissão com o BV velho. O passado fica como está (corte pelo momento do deploy) | 2026-10-14 | `—` | (aqui) | — |
 | **298b-sinonimos-do-formulario** | *(EM PRODUÇÃO 14/10 ~19:28, merge `f1fbd46`)* A idade do aniversariante (70 respostas desde 01/06) e o telefone da assessoria (36) das respostas do WhatsForm não chegavam ao cadastro do evento: a 298 adivinhou o slug da idade (`idade_do_aniversariante`, que nunca existiu) e não tinha o da assessoria. Duas tuplas em `SINONIMOS`; pergunta criada no editor continua só nas respostas do formulário (decisão do dono) | 2026-10-14 | `—` | (aqui) | — |
 | **267c-hotfix-trava-do-lote** | *(EM PRODUÇÃO 14/10 ~19:28, merge `0feb425`)* "A gente paga, marca como pago, ele muda e depois ele volta para o banco o valor total, sendo que parte já foi paga." O seletor do item de comissão da Planilha regravava **todas** as linhas do ciclo, inclusive as pagas; o "Não pago" de um item misto devolvia o pago a "a pagar" e a ressincronização o recalculava pela venda de hoje. Agora o lote só mexe no que não foi pago (com trava de linha), o pago sai num item à parte ("— pago"), e desfazer pagamento é só do Superadmin, com motivo no histórico do evento — nas quatro portas e na tela antiga | 2026-10-14 | `—` | (aqui) | — |
 | **215b-hotfix-taxa-e-vendedor** | *(EM PRODUÇÃO 14/10 ~19:28, merge `0bdda93`)* A tela nova deixava a Comercial mudar a **taxa de comissão** e trocar o **vendedor** de qualquer evento (aba Comercial e edição completa), e a comissão a pagar ia junto — a tela antiga só deixava o Superadmin mudar a taxa e o Financeiro/Superadmin trocar o vendedor. Volta a regra: 403 com o campo nomeado, campos travados com o motivo; reenviar o valor de sempre passa | 2026-10-14 | `—` | (aqui) | — |
@@ -323,10 +323,11 @@ do evento (`settings.faixa_especial`, recorte `MM-DD`) e aplica markup/cachês/p
 acréscimos, NF e transporte; `quote.data_especial` (com a nota), `markup_used`, memória, mensagem e
 PDF (itálico, com quebra) refletem. (3) O teto das vagas (`_compute_performer_caches`) honra a faixa
 pela data do **evento** na criação e no vínculo 273 (`orcamento_evento_ops.data_do_evento`) e pela
-data do orçamento no prefill — a mesma regra, em `pricing.cache_na_faixa`/`markup_vigente`.
+data do orçamento no prefill — a mesma regra, `pricing.cache_na_faixa` e os getters com `faixa=`
+(`markup_vigente` só na venda).
 (4) Config. de Preços: card `DatasEspeciaisCard` (chips de dias, `PriceTable` extraída, chips de
 sobrescrita, nota) com validação no núcleo (`settings.validar_datas_especiais`) e 400 apontando o
-campo; `DELETE /settings/especiais` limpa a sobrescrita órfã. (5) Calculadora: dica com a data
+campo; `DELETE /api/orcamento/settings/especiais/<nome>` limpa a sobrescrita órfã. (5) Calculadora: dica com a data
 vazia, aviso dourado vindo do `quote.data_especial`, "Gerar Orçamento" travado do payload mudar até
 a resposta chegar (`calcPendente` + `seq`). (6) EducaManto remove `event_date` antes de chamar
 `calculate_quote`.
@@ -348,7 +349,7 @@ R$ 52.300; receita estimada ≈ R$ 91.500 só no núcleo Noel, margem bruta ≈ 
 existe no banco (eventos começam em 01/2026).
 
 **Pegadinhas.** `_migrate` roda dentro do `try` de `load()`: exceção ali devolve os DEFAULTS do
-código (markup 3,0 e sem "Papai Noel") para a tabela inteira — por isso o bloco é normalizado na
+código (markup 3,0 e o "Papai Noel" 712 do código, não a tabela salva) para a tabela inteira — por isso o bloco é normalizado na
 defensiva e sobrescrita malformada é descartada (virar `[0,0,0,0]` seria cachê zero silencioso no
 Noel). O noturno é somado DEPOIS do markup (o comentário dizia "pré"; `docs/04` corrigido). O
 EducaManto manda `event_date` — sem o `pop` o musical de 24/12 levaria 3,34. `calcular.isPending`
@@ -368,13 +369,19 @@ pós-deploy para o superadmin ajustar.
 **Esteira.** Nível 1 completa: specify → clarify → plan → checklist (`dinheiro-e-regressao`, 25
 itens) → tasks (29) → analyze (workflow com 3 lentes; 5 CRITICAL e 16 HIGH tratados antes do
 implement, inclusive a validação movida para o núcleo, o piso e a corrida do botão) → implement →
-converge. Verify 18/18 com regressão (305 verde; 273 na linha de base 8/15); `npm run typecheck`
-limpo; telas conferidas no Browser pane (config com 400 apontando o campo; calculadora em
-20/12, 24/12 e sem data; resultado com a nota).
+converge (workflow com 3 lentes; 2 HIGH de dinheiro — o chip "+ Nome" nascia `[0,0,0,0]` e o
+servidor aceitava ≥ 0, dando Noel a R$ 1.670 na venda e `cache_cap = 0` na vaga; linha de especial
+sem personagem subia ao piso — e os MEDIUM/LOW: `aria-invalid` + foco também nas linhas da
+`PriceTable`, rótulo > 60 e dia repetido recusados em vez de cortados em silêncio, nota numa linha
+só, `Infinity` recusado, sobrescrita órfã descartada na carga, data só `AAAA-MM-DD`, orientação
+do Ajudante/"Outro" só na faixa `natal`, nota do PDF em até 3 linhas; tudo em `fix(307):
+converge`). Verify 18/18 com regressão antes e depois do converge (305 verde; 273 na linha de base
+8/15); `npm run typecheck` limpo; telas conferidas no Browser pane (config com 400 apontando o
+campo e levando o foco; calculadora em 20/12, 24/12 e sem data; resultado com a nota).
 
 ### 305 — O BV do orçamento chega ao evento no valor certo, com quem recebe e o PIX   (305-bv-do-orcamento-no-evento · 2026-10-14 · sem migration)
 
-> **EM PRODUÇÃO desde 15/10/2026 ~02:50** (merge `merge: 305 — …`). `CORTE_ALERTA_BV =
+> **EM PRODUÇÃO desde 15/10/2026 ~02:49** (merge `d855d1a`, `merge: 305 — …`). `CORTE_ALERTA_BV =
 > datetime(2026, 10, 15, 5, 50)` (UTC naive): o alerta só vale para evento criado ou ligado a
 > orçamento depois disso. Recontagem em produção antes do deploy, só leitura: nenhum vínculo da 273
 > com valores aplicados, nenhum BV em %, uma linha BV no total (a do evento 403, sem PIX — fica até

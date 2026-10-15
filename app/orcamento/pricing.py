@@ -80,10 +80,12 @@ def cache_na_faixa(performer: dict, prices: tuple | list, faixa: dict | None) ->
     """
     if faixa is None or performer.get("type") not in ("ator", "cantor", "especial"):
         return tuple(prices), ""
-    sobrescrito = (
-        performer.get("type") == "especial"
-        and performer.get("personagem", "") in (faixa.get("cache") or {})
-    )
+    personagem = (performer.get("personagem") or "").strip()
+    if performer.get("type") == "especial" and not personagem:
+        # Linha "Selecione o especial…" ainda vazia: custava 0 antes da faixa e continua custando 0
+        # — subir ao piso cobraria R$ 2.171 por linha esquecida.
+        return tuple(prices), ""
+    sobrescrito = performer.get("type") == "especial" and personagem in (faixa.get("cache") or {})
     if sobrescrito:
         return tuple(prices), MARCA_CACHE_FAIXA
     elevado = aplicar_piso(prices, faixa)

@@ -200,11 +200,14 @@ abertas; cenário 15 continua verde.
       #105 rehydrate, #106 funções grandes, #107 eventos de 24/25 pré-deploy)
 - [x] T027 `quickstart.md` executado (verify com `--regressao`, typecheck, telas); `spec.md` com
       Status "Implementada em 15/10/2026"
-- [ ] T028 Commits por caminho: `feat(307): tabela e cálculo` (orcamento + educamanto + api),
+- [x] T028 Commits por caminho: `feat(307): tabela e cálculo` (orcamento + educamanto + api),
       `feat(307): teto das vagas` (calendar), `feat(307): configuração e telas` (frontend),
-      `docs(307): …` (specs + docs + `.specify/feature.json`); nunca `git add -A`
-- [ ] T029 `/speckit-converge` (workflow: leitores por história + cético) e aplicar os achados como
-      `fix(307): converge`. Depois, **só quando o dono pedir**: merge na `main` + `git push origin main`
+      `docs(307): …` (specs + docs + `.specify/feature.json`); nunca `git add -A` — `1a1c1af`,
+      `1a56925`, `5e8defb`, `c17b072`
+- [x] T029 `/speckit-converge` (workflow `wf_60f0b390-681`, 3 lentes) e aplicar os achados como
+      `fix(307): converge` — 2 HIGH de dinheiro (sobrescrita zerada aceita; linha de especial vazia
+      subindo ao piso) e os MEDIUM/LOW; verify 18/18 com `--regressao` depois das correções
+- [ ] T030 **Só quando o dono pedir**: merge na `main` + `git push origin main`
       a partir das ~19h; antes de "em produção": `git status --short` limpo (fora os untracked da
       306), `git log -1` = cabeçalho do `docs/03`, `migrations/versions/` sem untracked, sonda `/api/`
       com JSON; pós-deploy: `/orcamento/configuracoes` em produção (Papai Noel 712, Ajudante do Noel

@@ -297,12 +297,17 @@ data: o musical não tem Visita Mágica.
   cálculo dela.
 - **FR-011**: O superadmin DEVE poder editar o bloco pela Configuração de Preços; a validação mora
   no núcleo (`settings.validar_datas_especiais`, exceção própria com `fields`) e o endpoint só a
-  traduz em 400: chave `^[a-z0-9_]{1,30}$`, rótulo 1–60, dias (`MM-DD` reais, sem repetição; vazio
-  aceito), markup (4 valores entre 1,0 e 6,0, gravados com 2 casas HALF_UP), cachês, coordenador e
-  piso (4 valores ≥ 0 — string inválida ou negativo é erro, nunca default), sobrescritas só para
-  especiais existentes e nota ≤ 200 caracteres. O bloco enviado SUBSTITUI o salvo; corpo inválido
-  não grava nada; a tela destaca o campo recusado e leva o foco até ele; papéis sem permissão levam
-  403. Excluir um especial tira a sobrescrita dele de todas as faixas (servidor e tela).
+  traduz em 400: chave `^[a-z0-9_]{1,30}$`, rótulo 1–60 (mais longo é recusado, não cortado), dias
+  (`MM-DD` reais, sem repetição — repetido é recusado, não deduplicado — e sem dia que já esteja em
+  outra faixa; vazio aceito = faixa desligada), markup (4 valores finitos entre 1,0 e 6,0, gravados
+  com 2 casas HALF_UP), coordenador e piso (4 valores ≥ 0 — string inválida, negativo ou infinito é
+  erro, nunca default), sobrescritas de cachê só para especiais existentes e com 4 valores **> 0**
+  (a sobrescrita passa por fora do piso: zero viraria cachê zero na venda e no teto) e nota ≤ 200
+  caracteres numa linha só. O bloco enviado SUBSTITUI o salvo; corpo inválido não grava nada;
+  remover a chave `natal` não desliga a faixa (a carga a recria — desligar é `dias: []`); a tela
+  destaca o campo recusado (inclusive as linhas da tabela) e leva o foco até ele; papéis sem
+  permissão levam 403. Excluir um especial tira a sobrescrita dele de todas as faixas (servidor e
+  tela); sobrescrita de especial que não existe mais é descartada na carga.
 - **FR-012**: A calculadora DEVE mostrar aviso visível quando a data cair numa faixa e uma dica quando
   a data estiver vazia; o resultado e o orçamento salvo DEVEM indicar a faixa.
 - **FR-013**: "Gerar Orçamento" DEVE ficar desabilitado enquanto houver recálculo pendente (desde a
@@ -373,7 +378,8 @@ um orçamento de 24/12 (nota). Superfície interna: viewport desktop.
 - **SC-003**: Vagas de Noel, ajudante e coordenador de eventos de 24/25 criados a partir do orçamento
   nascem com teto 1.000 / 650 / 500, e o casting lança esses cachês sem superadmin.
 - **SC-004**: Orçamentos sem data especial, o EducaManto e os orçamentos já salvos saem com os mesmos
-  números de antes (paridade provada pelo verify).
+  números de antes (paridade provada pelo verify) — exceto "Papai Noel" e "Ajudante do Noel", que
+  mudam na tabela normal por decisão do FR-002.
 - **SC-005**: O superadmin muda dias, markup e cachês da faixa pela tela, e a mudança vale no
   próximo cálculo, sem deploy.
 

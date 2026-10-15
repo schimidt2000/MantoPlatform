@@ -22,6 +22,19 @@ export interface FaixaEspecial {
   nota_mensagem: string;
 }
 
+/** "MM-DD" (como a tabela guarda) → "DD/MM" (como o time lê) — feature 307. */
+export const diaParaTela = (mmdd: string) => `${mmdd.slice(3, 5)}/${mmdd.slice(0, 2)}`;
+
+/** "DD/MM" digitado → "MM-DD" da tabela; `null` se não for um dia. O servidor valida de novo. */
+export function diaParaApi(texto: string): string | null {
+  const m = /^(\d{2})\/(\d{2})$/.exec(texto.trim());
+  if (!m) return null;
+  const dia = Number(m[1]);
+  const mes = Number(m[2]);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+  return `${m[2]}-${m[1]}`;
+}
+
 export interface PricingSettings {
   markup: { receptivo: number[]; show: number[] };
   ator: PriceTable;

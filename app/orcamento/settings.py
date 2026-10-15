@@ -6,6 +6,7 @@ Falls back to DEFAULTS when no configuration has been saved yet.
 import copy
 import json
 import logging
+import math
 import re
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -22,7 +23,9 @@ NOTA_FAIXA_MAX_CHARS = 200
 ROTULO_FAIXA_MAX_CHARS = 60
 CHAVE_FAIXA_RE = re.compile(r"^[a-z0-9_]{1,30}$")
 _DIA_MM_DD_RE = re.compile(r"^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
+_DATA_ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _CENTAVO = Decimal("0.01")
+_DINHEIRO_MAX = 100_000.0  # teto de sanidade para um cachê/piso da faixa (o JSON aceita Infinity)
 
 
 class SettingsValidationError(Exception):
@@ -322,8 +325,13 @@ def _normalizar_faixa(chave: str, faixa) -> dict | None:
         },
         "coordenador": _lista4(faixa.get("coordenador"), padrao["coordenador"]),
         "piso": _lista4(faixa.get("piso"), padrao["piso"]),
-        "nota_mensagem": str(faixa.get("nota_mensagem") or "")[:NOTA_FAIXA_MAX_CHARS],
+        "nota_mensagem": _nota_limpa(faixa.get("nota_mensagem"))[:NOTA_FAIXA_MAX_CHARS],
     }
+
+
+def _nota_limpa(raw) -> str:
+    """Nota numa linha só: quebra de linha quebraria o itálico do WhatsApp e o rodapé do PDF."""
+    return " ".join(str(raw or "").split())
 
 
 # ── validação do bloco (regra de negócio; o endpoint só traduz em 400) ─────────────────────────
@@ -351,7 +359,7 @@ def _dinheiro(raw) -> float | None:
         if parsed is None:
             return None
         valor = float(parsed)
-    return valor if valor >= 0 else None
+    return valor if math.isfinite(valor) and 0 <= valor <= _DINHEIRO_MAX else None
 
 
 def _lista_de_4(raw) -> list[float] | None:
@@ -377,6 +385,10 @@ def _markup_de_4(raw) -> list[float] | None:
     return valores
 
 
+def _dia_para_tela(mm_dd: str) -> str:
+    return f"{mm_dd[3:5]}/{mm_dd[0:2]}"
+
+
 def _validar_dias(pref: str, dias, erros: dict) -> list[str] | None:
     """Dias ``MM-DD`` reais, sem repetição; lista vazia é aceita (faixa desligada)."""
     if not isinstance(dias, list):
@@ -386,11 +398,19 @@ def _validar_dias(pref: str, dias, erros: dict) -> list[str] | None:
     if ruins:
         erros[f"{pref}.dias"] = f"dia inválido: {', '.join(str(d) for d in ruins)}"
         return None
-    return list(dict.fromkeys(dias))
+    repetidos = [d for d in dict.fromkeys(dias) if dias.count(d) > 1]
+    if repetidos:
+        erros[f"{pref}.dias"] = f"dia repetido: {', '.join(_dia_para_tela(d) for d in repetidos)}"
+        return None
+    return list(dias)
 
 
 def _validar_cache(pref: str, cache, especiais: dict, erros: dict) -> dict:
-    """Sobrescritas de cachê: só de especiais existentes, 4 valores em R$ cada."""
+    """Sobrescritas de cachê: só de especiais existentes, 4 valores em R$ maiores que zero.
+
+    Zero é recusado de propósito: a sobrescrita passa por fora do piso, então um `[0, 0, 0, 0]`
+    (o estado em que um chip novo poderia nascer) viraria cachê zero na venda E no teto da vaga.
+    """
     if cache is None:
         return {}
     if not isinstance(cache, dict):
@@ -402,8 +422,10 @@ def _validar_cache(pref: str, cache, especiais: dict, erros: dict) -> dict:
             erros[f"{pref}.cache.{nome}"] = f"especial desconhecido: {nome}"
             continue
         lista = _lista_de_4(val)
-        if lista is None:
-            erros[f"{pref}.cache.{nome}"] = "4 valores em R$"
+        if lista is None or any(v <= 0 for v in lista):
+            erros[f"{pref}.cache.{nome}"] = (
+                "4 valores em R$ maiores que zero (remova a sobrescrita para usar o piso)"
+            )
         else:
             limpo[str(nome)] = lista
     return limpo
@@ -415,9 +437,11 @@ def _validar_faixa(chave: str, faixa, especiais: dict, erros: dict) -> dict | No
     if not CHAVE_FAIXA_RE.fullmatch(chave) or not isinstance(faixa, dict):
         erros[pref] = "faixa inválida"
         return None
-    limpa: dict = {"rotulo": str(faixa.get("rotulo") or "").strip()[:ROTULO_FAIXA_MAX_CHARS]}
+    limpa: dict = {"rotulo": str(faixa.get("rotulo") or "").strip()}
     if not limpa["rotulo"]:
         erros[f"{pref}.rotulo"] = "informe o rótulo"
+    elif len(limpa["rotulo"]) > ROTULO_FAIXA_MAX_CHARS:
+        erros[f"{pref}.rotulo"] = f"rótulo com mais de {ROTULO_FAIXA_MAX_CHARS} caracteres"
     dias = _validar_dias(pref, faixa.get("dias"), erros)
     if dias is not None:
         limpa["dias"] = dias
@@ -435,7 +459,7 @@ def _validar_faixa(chave: str, faixa, especiais: dict, erros: dict) -> dict | No
         else:
             limpa[campo] = lista
     limpa["cache"] = _validar_cache(pref, faixa.get("cache"), especiais, erros)
-    nota = str(faixa.get("nota_mensagem") or "").strip()
+    nota = _nota_limpa(faixa.get("nota_mensagem"))
     if len(nota) > NOTA_FAIXA_MAX_CHARS:
         erros[f"{pref}.nota_mensagem"] = f"nota com mais de {NOTA_FAIXA_MAX_CHARS} caracteres"
     limpa["nota_mensagem"] = nota
@@ -456,10 +480,19 @@ def validar_datas_especiais(bloco, especiais: dict) -> dict:
         raise SettingsValidationError("Datas especiais inválidas.", {"datas_especiais": "bloco inválido"})
     erros: dict = {}
     limpo: dict = {}
+    dono_do_dia: dict[str, str] = {}
     for chave, faixa in bloco.items():
         limpa = _validar_faixa(str(chave), faixa, especiais, erros)
-        if limpa is not None:
-            limpo[str(chave)] = limpa
+        if limpa is None:
+            continue
+        # O mesmo dia em duas faixas deixaria o preço depender da ordem das chaves.
+        for dia in limpa.get("dias", []):
+            if dia in dono_do_dia:
+                erros[f"datas_especiais.{chave}.dias"] = (
+                    f"{_dia_para_tela(dia)} já está na faixa {dono_do_dia[dia]}"
+                )
+            dono_do_dia.setdefault(dia, str(chave))
+        limpo[str(chave)] = limpa
     if erros:
         raise SettingsValidationError("Datas especiais inválidas.", erros)
     return limpo
@@ -493,6 +526,11 @@ def _migrar_307(data: dict) -> None:
                 limpo[str(chave)] = normalizada
     for chave, faixa in DEFAULTS["datas_especiais"].items():
         limpo.setdefault(chave, copy.deepcopy(faixa))
+    # Sobrescrita de especial que não está (mais) na tabela — excluído pelo time, ou a faixa padrão
+    # chegando antes dele — sai daqui: órfã, ela faria TODO "Salvar configurações" levar 400.
+    especiais_vivos = data.get("especiais") if isinstance(data.get("especiais"), dict) else {}
+    for faixa in limpo.values():
+        faixa["cache"] = {n: v for n, v in faixa["cache"].items() if n in especiais_vivos}
     data["datas_especiais"] = limpo
 
     especiais = data.get("especiais")
@@ -516,7 +554,7 @@ def faixa_especial(event_date: str | None, settings: dict | None = None) -> dict
         ``coordenador``, ``piso``, ``nota_mensagem``), ou ``None``.
     """
     raw = (event_date or "").strip()
-    if len(raw) != 10 or raw[4] != "-" or raw[7] != "-":
+    if not _DATA_ISO_RE.fullmatch(raw):
         return None
     mes_dia = raw[5:]
     bloco = (settings if settings is not None else load()).get("datas_especiais") or {}

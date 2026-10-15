@@ -485,10 +485,10 @@ export function OrcamentoConfigPrecosPage() {
       {save.isError && (
         <div className="space-y-1" role="alert">
           <p className="text-sm text-red">Não foi possível salvar as configurações.</p>
-          {/* Feature 307: o servidor devolve o campo errado do bloco de datas especiais. */}
-          {save.error instanceof ApiRequestError &&
-            save.error.fields &&
-            Object.entries(save.error.fields).map(([campo, msg]) => (
+          {/* Os erros das datas especiais aparecem no próprio card (campo destacado); aqui só o resto. */}
+          {Object.entries(errosDeSalvar)
+            .filter(([campo]) => !campo.startsWith("datas_especiais"))
+            .map(([campo, msg]) => (
               <p key={campo} className="text-xs text-red">
                 {campo}: {msg}
               </p>

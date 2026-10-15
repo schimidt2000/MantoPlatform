@@ -46,13 +46,18 @@ devolve 400 no envelope `json_error`, `fields` com a chave `datas_especiais.<fai
 
 | Campo | Regra | Mensagem |
 |---|---|---|
-| chave da faixa | `^[a-z0-9_]{1,30}$` | "faixa inválida" |
-| `rotulo` | str 1–60 | "informe o rótulo" |
-| `dias` | lista de `MM-DD` reais (29/02 aceito), sem repetição; **vazia = faixa desligada** | "dia inválido: <valor>" |
-| `markup` | 4 números em `[1.0, 6.0]`, gravados com 2 casas (HALF_UP) | "markup: 4 valores entre 1 e 6" |
-| `cache` | dict; nomes existentes em `especiais`; 4 valores ≥ 0 (`parse_brl`; string inválida ou negativo é erro, nunca default) | "especial desconhecido: <nome>" / "4 valores em R$" |
-| `coordenador`, `piso` | 4 valores ≥ 0 (idem) | "4 valores em R$" |
-| `nota_mensagem` | str ≤ 200 | "nota com mais de 200 caracteres" |
+| bloco | dict | `datas_especiais` → "bloco inválido" |
+| chave da faixa | `^[a-z0-9_]{1,30}$` e valor dict | `datas_especiais.<faixa>` → "faixa inválida" |
+| `rotulo` | str 1–60 | "informe o rótulo" / "rótulo com mais de 60 caracteres" |
+| `dias` | lista de `MM-DD` reais (29/02 aceito), sem repetição, sem dia que já esteja em outra faixa; **vazia = faixa desligada** | "informe os dias (DD/MM)" / "dia inválido: <MM-DD>" / "dia repetido: <DD/MM>" / "<DD/MM> já está na faixa <outra>" |
+| `markup` | 4 números finitos em `[1.0, 6.0]`, gravados com 2 casas (HALF_UP) | "4 valores entre 1 e 6 (coeficiente)" |
+| `cache` | dict; nomes existentes em `especiais`; 4 valores **> 0** (`parse_brl`; string inválida, zero, negativo ou infinito é erro, nunca default — a sobrescrita passa por fora do piso) | "sobrescritas inválidas" / "especial desconhecido: <nome>" / "4 valores em R$ maiores que zero (remova a sobrescrita para usar o piso)" |
+| `coordenador`, `piso` | 4 valores ≥ 0 finitos (idem) | "4 valores em R$" |
+| `nota_mensagem` | str ≤ 200; quebras de linha viram espaço | "nota com mais de 200 caracteres" |
+
+Envelope: `json_error("Datas especiais inválidas.", 400, fields=...)`. Remover a chave `natal` do
+bloco grava sem ela, mas a carga seguinte (`_migrar_307`) recria a faixa padrão: desligar é
+`dias: []`.
 
 Resposta: `{ "settings": <dict completo gravado> }` (como hoje). **O bloco enviado substitui o
 salvo** (a tela manda o dict inteiro); chave `datas_especiais` ausente no corpo = mantém a salva.

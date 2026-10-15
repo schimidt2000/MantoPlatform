@@ -608,8 +608,9 @@ nunca sai pela API: a leitura devolve só `infinitepay_webhook_configured`), `ta
 (JSON da calculadora — schema em `app/orcamento/settings.py`; desde a **307** tem o bloco
 `datas_especiais` `{<chave>: {rotulo, dias["MM-DD"], markup[4], cache{especial: [4]},
 coordenador[4], piso[4], nota_mensagem}}`, com a faixa `natal` (24 e 25/12) garantida na carga;
-`_migrate` também troca "Papai Noel" de `[600, 650, 675, 700]` para `[712, 800, 850, 900]` e injeta
-"Ajudante do Noel" `[423, 480, 510, 540]`), `calendar_sync_cache`, `calendar_auto_sync_at`,
+`_migrate` também troca "Papai Noel" de `[600, 650, 675, 700]` para `[712, 800, 850, 900]`, injeta
+"Ajudante do Noel" `[423, 480, 510, 540]` salvo se estiver em `especiais_excluidos`, e descarta
+sobrescrita de especial que não existe na tabela), `calendar_sync_cache`, `calendar_auto_sync_at`,
 `whatsapp_form_number`.
 
 ### 2.11 Migrations
@@ -1042,16 +1043,29 @@ orçamento congelado não releem a tabela) e `markup_used` passa a ser o markup 
 marca "cachê da data especial"/"piso da data especial" e a linha "× Markup" leva o detalhe
 `"<rótulo> · DD/MM"`; mensagem e PDF trazem a nota em itálico após a frase de deslocamento. Sem
 faixa (data vazia, snapshot antigo, EducaManto — que remove `event_date` em `_totais_contratacao`)
-a conta é byte a byte a de antes. `POST /settings` aceita `datas_especiais` validado no núcleo
-(`settings.validar_datas_especiais` → `SettingsValidationError`; 400 com `fields`
-`datas_especiais.<faixa>.<campo>`: chave `^[a-z0-9_]{1,30}$`, rótulo 1–60, dias `MM-DD` reais sem
-repetição — vazio = faixa desligada —, markup 4 valores em [1, 6] gravados com 2 casas HALF_UP,
-cachês/coordenador/piso 4 valores ≥ 0 por `parse_brl`, `cache` só de especiais existentes, nota ≤
-200); o bloco enviado substitui o salvo e corpo inválido não grava nada; `DELETE
+a conta é byte a byte a de antes (fora "Papai Noel"/"Ajudante do Noel", que mudaram na tabela
+normal). `GET /orcamento/opcoes` (`_require_vendas`) e `GET /orcamento/settings` devolvem
+`settings` inteiro já migrado — `datas_especiais` e os especiais com "Ajudante do Noel" — e a
+calculadora lê os dias de lá para a dica com a data vazia: **não enxugar o bloco do `/opcoes`**.
+`POST /settings` aceita `datas_especiais` validado no núcleo (`settings.validar_datas_especiais` →
+`SettingsValidationError`; 400 `"Datas especiais inválidas."` com `fields`): `datas_especiais` →
+"bloco inválido"; `datas_especiais.<faixa>` → "faixa inválida" (chave `^[a-z0-9_]{1,30}$`);
+`.rotulo` → "informe o rótulo" / "rótulo com mais de 60 caracteres"; `.dias` → "informe os dias
+(DD/MM)" / "dia inválido: <MM-DD>" / "dia repetido: <DD/MM>" / "<DD/MM> já está na faixa <outra>"
+(lista vazia = faixa desligada); `.markup` → "4 valores entre 1 e 6 (coeficiente)" (gravado com 2
+casas HALF_UP); `.coordenador`/`.piso` → "4 valores em R$" (≥ 0 por `parse_brl`, finito); `.cache`
+→ "sobrescritas inválidas"; `.cache.<nome>` → "especial desconhecido: <nome>" / "4 valores em R$
+maiores que zero (remova a sobrescrita para usar o piso)" — zero é recusado porque a sobrescrita
+passa por fora do piso e viraria cachê zero na venda E no teto da vaga; `.nota_mensagem` → "nota
+com mais de 200 caracteres" (quebras de linha viram espaço). O bloco enviado substitui o salvo e
+corpo inválido não grava nada. Desligar a faixa é `dias: []`; **remover a chave `natal` não
+desliga** — a carga seguinte (`_migrar_307`) recria a faixa padrão com 24 e 25/12. "Ajudante do
+Noel" é injetado na tabela normal salvo se estiver em `especiais_excluidos`; sobrescrita de
+especial que não existe na tabela (excluído ou renomeado) é descartada na carga, e `DELETE
 /settings/especiais/<nome>` tira a sobrescrita do especial das faixas. O teto das vagas
 (`_compute_performer_caches(snapshot, horas_extra, data_evento)`) honra a faixa pela data do
-**evento** na criação e no vínculo 273 (`orcamento_evento_ops.data_do_evento`) e pela data do
-orçamento no prefill.
+**evento** na criação (`_create_event_core`) e no vínculo 273 (`orcamento_evento_ops.data_do_evento`)
+e pela data do orçamento no prefill.
 **Feature 273 (sem migration)**: cada item de `GET /api/orcamento/historico` traz `event_id` /
 `event_title` do evento **não cancelado** que aponta para ele (uma consulta para a página inteira);
 `DELETE .../historico/<id>` responde **409 + `event_id`** enquanto houver evento vivo vinculado — a

@@ -9,11 +9,15 @@ export const INPUT_PRECOS = "h-9 w-full rounded-md border border-line bg-panel p
  * pelo mesmo `MoneyInput` (duas casas, digitação BR), como a tela sempre fez. Extraída da página
  * na feature 307 para o card de datas especiais reusar sem copiar.
  */
-export function PriceTable({
-  rows,
-}: {
-  rows: { label: string; values: number[]; onChange: (values: number[]) => void }[];
-}) {
+export interface PriceTableRow {
+  label: string;
+  values: number[];
+  onChange: (values: number[]) => void;
+  /** Feature 307: linha recusada pelo servidor — os inputs ganham `aria-invalid` e borda vermelha. */
+  invalid?: boolean;
+}
+
+export function PriceTable({ rows }: { rows: PriceTableRow[] }) {
   return (
     <Table>
       <thead>
@@ -33,7 +37,8 @@ export function PriceTable({
             {DUR_LABELS.map((d, i) => (
               <TableCell key={d} align="right">
                 <MoneyInput
-                  className={`${INPUT_PRECOS} text-right`}
+                  className={`${INPUT_PRECOS} text-right${row.invalid ? " border-red ring-1 ring-red" : ""}`}
+                  aria-invalid={row.invalid || undefined}
                   value={row.values[i] ?? 0}
                   onValueChange={(v) => row.onChange(row.values.map((x, idx) => (idx === i ? v : x)))}
                 />

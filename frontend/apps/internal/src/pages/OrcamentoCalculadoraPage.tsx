@@ -30,6 +30,7 @@ import {
   useOrcamentoOpcoes,
   usePersonagensNoDia,
   useSalvarOrcamento,
+  diaParaTela,
   type Acrescimo,
   type CalcularOrcamentoInput,
   type CalcularOrcamentoResult,
@@ -109,15 +110,34 @@ function AgendaNoDiaAlert({ date }: { date: string }) {
   );
 }
 
-/** "MM-DD" (como a tabela guarda) → "DD/MM" (como o time lê). */
-const diaParaTela = (mmdd: string) => `${mmdd.slice(3, 5)}/${mmdd.slice(0, 2)}`;
+/** "3,34×", ou "3,34–3×" quando o markup varia por duração. */
+function markupLegivel(markup: number[]): string {
+  const min = Math.min(...markup);
+  const max = Math.max(...markup);
+  const f = (v: number) => v.toLocaleString("pt-BR");
+  return min === max ? `${f(min)}×` : `${f(max)}–${f(min)}×`;
+}
+
+/** Lista em pt-BR: "24/12 e 25/12", "24/12, 25/12 e 26/12". */
+function listaEmPortugues(itens: string[]): string {
+  if (itens.length <= 1) return itens.join("");
+  return `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
+}
 
 /**
  * Feature 307: aviso "a tabela especial está valendo". A fonte é o próprio resultado do servidor
  * (`quote.data_especial`) — o React não recalcula a faixa. Mesmo padrão visual do alerta da agenda.
+ * No personalizado o valor digitado vence, e o aviso diz isso em vez de prometer o markup.
  */
-function DataEspecialAlert({ faixa }: { faixa: NonNullable<Quote["data_especial"]> }) {
+function DataEspecialAlert({
+  faixa,
+  personalizado,
+}: {
+  faixa: NonNullable<Quote["data_especial"]>;
+  personalizado: boolean;
+}) {
   const reduzir = useReducedMotion();
+  const natal = faixa.chave === "natal";
   return (
     <motion.div
       initial={reduzir ? false : { opacity: 0, y: -4 }}
@@ -128,12 +148,16 @@ function DataEspecialAlert({ faixa }: { faixa: NonNullable<Quote["data_especial"
       role="status"
     >
       <p className="mb-1 font-semibold text-gold-ink">
-        🎄 Data especial — {faixa.rotulo}: markup {faixa.markup[0].toLocaleString("pt-BR")}× e cachês
-        próprios
+        {natal ? "🎄 " : ""}Data especial — {faixa.rotulo}
+        {personalizado ? "" : `: markup ${markupLegivel(faixa.markup)} e cachês próprios`}
       </p>
       <p className="text-ink">
-        Vale para qualquer orçamento nesta data. Use o item "Ajudante do Noel" (não ator cara limpa)
-        e não some o acréscimo "Outro" — o preço já é o da tabela especial.
+        {personalizado
+          ? `Orçamento personalizado: o valor digitado vence — confira se cobre a tabela de ${faixa.rotulo}.`
+          : "Vale para qualquer orçamento nesta data — o preço já é o da tabela especial."}
+        {natal && !personalizado
+          ? ' Use o item "Ajudante do Noel" (não ator cara limpa) e não some o acréscimo "Outro".'
+          : ""}
       </p>
     </motion.div>
   );
@@ -357,14 +381,17 @@ export function OrcamentoCalculadoraPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, opcoes.data]);
 
-  // Feature 307: a faixa de data especial vem do servidor, no resultado — fonte única.
-  const faixaAtiva = result?.quote.data_especial ?? null;
+  // Feature 307: a faixa de data especial vem do servidor, no resultado — fonte única. Enquanto o
+  // recálculo não voltou (ou falhou), o `result` é de outra data: o aviso some para não mentir.
+  const faixaAtiva =
+    calcPendente || calcular.isPending || calcular.isError ? null : (result?.quote.data_especial ?? null);
   const diasEspeciais = useMemo(
     () =>
-      Object.values(opcoes.data?.settings.datas_especiais ?? {})
-        .flatMap((f) => f.dias)
-        .map(diaParaTela)
-        .join(" e "),
+      listaEmPortugues(
+        Object.values(opcoes.data?.settings.datas_especiais ?? {})
+          .flatMap((f) => f.dias)
+          .map(diaParaTela),
+      ),
     [opcoes.data],
   );
 
@@ -471,7 +498,13 @@ export function OrcamentoCalculadoraPage() {
 
                 {eventDate && <AgendaNoDiaAlert date={eventDate} />}
                 <AnimatePresence initial={false}>
-                  {faixaAtiva && <DataEspecialAlert key={faixaAtiva.chave} faixa={faixaAtiva} />}
+                  {faixaAtiva && (
+                    <DataEspecialAlert
+                      key={faixaAtiva.chave}
+                      faixa={faixaAtiva}
+                      personalizado={!!result?.quote.personalizado}
+                    />
+                  )}
                 </AnimatePresence>
 
                 {deslocamento !== "sp" && (

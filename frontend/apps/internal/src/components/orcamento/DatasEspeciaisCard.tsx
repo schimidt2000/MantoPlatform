@@ -1,31 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@manto/ui";
-import type { FaixaEspecial } from "../../lib/orcamento";
+import { diaParaApi, diaParaTela, type FaixaEspecial } from "../../lib/orcamento";
 import { INPUT_PRECOS, PriceTable } from "./PriceTable";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const NOTA_FAIXA_MAX = 200;
 const ROTULO_FAIXA_MAX = 60;
 
-/** "MM-DD" (como a tabela guarda) → "DD/MM" (como o time lê). */
-export const diaParaTela = (mmdd: string) => `${mmdd.slice(3, 5)}/${mmdd.slice(0, 2)}`;
-
-/** "DD/MM" digitado → "MM-DD" da tabela; `null` se não for um dia. O servidor valida de novo. */
-export function diaParaApi(texto: string): string | null {
-  const m = /^(\d{2})\/(\d{2})$/.exec(texto.trim());
-  if (!m) return null;
-  const dia = Number(m[1]);
-  const mes = Number(m[2]);
-  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
-  return `${m[2]}-${m[1]}`;
+/** Rótulo legível de cada campo da faixa, para a lista de erros não mostrar chave técnica. */
+function rotuloDoCampo(campo: string): string {
+  if (campo === "markup") return "Markup";
+  if (campo === "coordenador") return "Coordenador";
+  if (campo === "piso") return "Piso";
+  if (campo.startsWith("cache.")) return `Cachê — ${campo.slice("cache.".length)}`;
+  return campo;
 }
 
 /**
  * Feature 307 — uma faixa de data especial da tabela de preços (ex.: "Véspera e Natal", 24 e 25/12).
  * A calculadora resolve pela data do evento; aqui o superadmin mexe em dias, markup, cachês, piso e
  * nota sem deploy. `erros` são os `fields` do 400 (`datas_especiais.<chave>.<campo>`): o campo
- * errado ganha destaque e o foco (Princípio V).
+ * errado ganha destaque e o foco (Princípio V) — inclusive as linhas da tabela.
  */
 export function DatasEspeciaisCard({
   chave,
@@ -43,6 +39,7 @@ export function DatasEspeciaisCard({
   const reduzir = useReducedMotion();
   const raiz = useRef<HTMLDivElement>(null);
   const [novoDia, setNovoDia] = useState("");
+  const [erroDiaLocal, setErroDiaLocal] = useState<string | null>(null);
   const erro = (campo: string) => erros[`datas_especiais.${chave}.${campo}`];
   const classeDe = (campo: string) =>
     `${INPUT_PRECOS}${erro(campo) ? " border-red ring-1 ring-red" : ""}`;
@@ -61,10 +58,19 @@ export function DatasEspeciaisCard({
   const semSobrescrita = especiais.filter((n) => !(n in faixa.cache));
   const adicionarDia = () => {
     const mmdd = diaParaApi(novoDia);
-    if (!mmdd || faixa.dias.includes(mmdd)) return;
+    if (!mmdd) {
+      setErroDiaLocal("dia inválido — use DD/MM");
+      return;
+    }
+    if (faixa.dias.includes(mmdd)) {
+      setErroDiaLocal(`${diaParaTela(mmdd)} já está na lista`);
+      return;
+    }
+    setErroDiaLocal(null);
     set({ dias: [...faixa.dias, mmdd] });
     setNovoDia("");
   };
+  const erroDias = erro("dias") ?? erroDiaLocal;
   const transicao = reduzir ? { duration: 0 } : { duration: 0.18 };
 
   return (
@@ -117,11 +123,14 @@ export function DatasEspeciaisCard({
                 ))}
               </AnimatePresence>
               <input
-                className={`${classeDe("dias")} w-24`}
-                aria-invalid={erro("dias") ? true : undefined}
+                className={`${INPUT_PRECOS} w-24${erroDias ? " border-red ring-1 ring-red" : ""}`}
+                aria-invalid={erroDias ? true : undefined}
                 placeholder="26/12"
                 value={novoDia}
-                onChange={(e) => setNovoDia(e.target.value)}
+                onChange={(e) => {
+                  setNovoDia(e.target.value);
+                  setErroDiaLocal(null);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") adicionarDia();
                 }}
@@ -130,31 +139,43 @@ export function DatasEspeciaisCard({
                 Adicionar
               </Button>
             </div>
-            {erro("dias") && <p className="mt-1 text-xs text-red">{erro("dias")}</p>}
+            {erroDias && <p className="mt-1 text-xs text-red">{erroDias}</p>}
           </div>
         </div>
         {errosDaTabela.length > 0 && (
           <ul className="px-3 text-xs text-red" role="alert">
             {errosDaTabela.map(([campo, msg]) => (
               <li key={campo}>
-                {campo}: {msg}
+                {rotuloDoCampo(campo)}: {msg}
               </li>
             ))}
           </ul>
         )}
         <PriceTable
           rows={[
-            { label: "Markup (coeficiente)", values: faixa.markup, onChange: (v) => set({ markup: v }) },
+            {
+              label: "Markup (coeficiente)",
+              values: faixa.markup,
+              onChange: (v) => set({ markup: v }),
+              invalid: !!erro("markup"),
+            },
             {
               label: "Coordenador (com e sem show)",
               values: faixa.coordenador,
               onChange: (v) => set({ coordenador: v }),
+              invalid: !!erro("coordenador"),
             },
-            { label: "Piso dos demais personagens", values: faixa.piso, onChange: (v) => set({ piso: v }) },
+            {
+              label: "Piso dos demais personagens",
+              values: faixa.piso,
+              onChange: (v) => set({ piso: v }),
+              invalid: !!erro("piso"),
+            },
             ...Object.entries(faixa.cache).map(([nome, values]) => ({
               label: `Cachê — ${nome}`,
               values,
               onChange: (v: number[]) => set({ cache: { ...faixa.cache, [nome]: v } }),
+              invalid: !!erro(`cache.${nome}`),
             })),
           ]}
         />
@@ -166,6 +187,8 @@ export function DatasEspeciaisCard({
               size="sm"
               variant="ghost"
               onClick={() => {
+                // Sem a sobrescrita o especial cai para o piso: no Noel, de 5.010 para 3.841.
+                if (!window.confirm(`Tirar o cachê próprio de "${nome}" em ${faixa.rotulo}? Ele passa a usar o piso.`)) return;
                 const { [nome]: _removido, ...rest } = faixa.cache;
                 set({ cache: rest });
               }}
@@ -179,16 +202,17 @@ export function DatasEspeciaisCard({
               key={nome}
               size="sm"
               variant="outline"
-              onClick={() => set({ cache: { ...faixa.cache, [nome]: [0, 0, 0, 0] } })}
+              // Nasce no piso, nunca zerado: o servidor recusa sobrescrita com zero (cachê zero no Natal).
+              onClick={() => set({ cache: { ...faixa.cache, [nome]: [...faixa.piso] } })}
             >
               + {nome}
             </Button>
           ))}
         </div>
         <div className="p-3">
-          <label className={LABEL}>Nota na mensagem e no PDF (até {NOTA_FAIXA_MAX} caracteres)</label>
-          <textarea
-            className={`${classeDe("nota_mensagem")} h-16 py-1`}
+          <label className={LABEL}>Nota na mensagem e no PDF (uma linha, até {NOTA_FAIXA_MAX} caracteres)</label>
+          <input
+            className={classeDe("nota_mensagem")}
             aria-invalid={erro("nota_mensagem") ? true : undefined}
             maxLength={NOTA_FAIXA_MAX}
             value={faixa.nota_mensagem}

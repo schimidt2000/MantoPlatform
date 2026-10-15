@@ -547,7 +547,8 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         deslocamento_nota = ""
 
     # Feature 307: a nota da faixa de data especial (texto da tabela de preços) sai em itálico
-    # junto da frase de deslocamento — e também no PDF, que re-deriva o texto (pdf.py).
+    # junto da frase de deslocamento — e também no PDF, que a lê de `quote.data_especial` (o
+    # orçamento congelado não relê a tabela).
     nota_faixa = (faixa or {}).get("nota_mensagem") or ""
     nota_especial = f"\n\n_{nota_faixa}_" if nota_faixa else ""
 
