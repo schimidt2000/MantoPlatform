@@ -361,6 +361,8 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> list[dict]:
                 registro.update(is_percent=True, value=percentual, amount_brl=valor_bv)
             else:
                 visto = _to_decimal(item.get("valor_visto")) if not isinstance(item.get("valor_visto"), bool) else None
+                if visto is not None and (not visto.is_finite() or abs(visto) >= _TETO_DO_VALOR):
+                    visto = None  # lixo (inf, NaN, 1e30): como se não viesse — nunca 500 no `_q`
                 if (
                     visto is not None
                     and antiga is not None
@@ -431,25 +433,37 @@ def estado_da_venda(event: Any) -> tuple[Any, bool, bool]:
     return event.sale_value, bool(event.with_invoice), bool(getattr(event, "is_cortesia_permuta", False))
 
 
-def _valor_na_tela(is_percent: Any, value: Any) -> tuple[bool, Decimal]:
-    return bool(is_percent), _q(_to_decimal(value) or Decimal("0"))
+def _bv_na_tela(recebedor: Any, pix: Any, is_percent: Any, value: Any) -> tuple[str, str, bool, Decimal]:
+    """O BV como a tela do Jinja o mostra: quem recebe, PIX, unidade e número. Quem recebe e o PIX
+    entram na chave — só pelo valor, o 120 redigitado de um BV casava com o 120 reenviado de OUTRO,
+    e a proporção ia para o BV errado."""
+    return (
+        (recebedor or "").strip(),
+        (pix or "").strip(),
+        bool(is_percent),
+        _q(_to_decimal(value) or Decimal("0")),
+    )
 
 
 def bvs_a_pagar_por_valor(event: Any) -> Counter:
-    """Os BVs a pagar pelo número que a tela mostra (unidade, valor) — para o gêmeo Jinja saber,
-    BV a BV, qual o envio MEXEU (fica como digitado) e qual só reenviou (acompanha a venda).
+    """Os BVs a pagar como a tela os mostra (`_bv_na_tela`) — para o gêmeo Jinja saber, BV a BV,
+    qual o envio MEXEU (fica como digitado) e qual só reenviou (acompanha a venda). Dois BVs iguais
+    em tudo (mesma pessoa, mesmo PIX, mesmo valor) são intercambiáveis: tanto faz qual acompanha.
 
     Lê colunas, não entidades: um objeto carregado aqui, sem trava, voltaria do `FOR UPDATE` de
     `substituir_acrescimos` com o status velho.
     """
     linhas = (
-        db.session.query(EventAcrescimo.is_percent, EventAcrescimo.value, EventAcrescimo.bv_payment_status)
+        db.session.query(
+            EventAcrescimo.bv_recipient, EventAcrescimo.bv_pix, EventAcrescimo.is_percent,
+            EventAcrescimo.value, EventAcrescimo.bv_payment_status,
+        )
         .filter(EventAcrescimo.event_id == event.id, EventAcrescimo.is_bv.is_(True))
         .all()
     )
     return Counter(
-        _valor_na_tela(is_percent, value)
-        for is_percent, value, status in linhas
+        _bv_na_tela(recebedor, pix, is_percent, value)
+        for recebedor, pix, is_percent, value, status in linhas
         if (status or "nao_pago") not in _BV_CONGELADO
     )
 
@@ -519,7 +533,7 @@ def acompanhar_bv_da_venda(
         saldo = Counter(so_os_reenviados)
         reenviados = []
         for a in a_pagar:
-            chave = _valor_na_tela(a.is_percent, a.value)
+            chave = _bv_na_tela(a.bv_recipient, a.bv_pix, a.is_percent, a.value)
             if a.is_percent:
                 reenviados.append(a)  # o % já saiu da régua com a venda nova; refazer dá o mesmo
             elif saldo[chave] > 0:

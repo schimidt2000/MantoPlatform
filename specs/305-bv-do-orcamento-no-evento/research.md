@@ -264,6 +264,15 @@ de R$ 0,00). (5) `set_event_clients` e o Jinja travam o evento antes dos depende
 dava deadlock com a edição completa). (6) O cenário 58 exige o literal da T041 — esquecê-lo, depois que
 a falha passou a fechar, deixaria o alerta desligado em silêncio.
 
+**Terceiro converge (15/10, 5 de 5 confirmados, todos de gravidade baixa).** (1) A chave do "BV a BV"
+do Jinja inclui quem recebe e o PIX (`_bv_na_tela`): só pelo valor, um 120 redigitado casava com o
+120 reenviado de outro BV e a proporção trocava de dono. (2) `valor_visto` inválido (inf, NaN, 1e30) é
+ignorado — dava 500 no `_q`. (3) `delete_client` anula o `client_id` do evento ANTES de apagar os
+vínculos: com o evento travado primeiro em `set_event_clients`, a ordem inversa da exclusão fechava
+deadlock. (4) O `MoneyInput` conta o −0 como negativo (apagar e redigitar um desconto virava
+cobrança) e não carrega o sinal para a linha BV. (5) O aviso do editor diz "os BVs mudaram (a venda
+mudou ou houve outra gravação)" — depois de uma resposta perdida, "a venda mudou" era falso.
+
 **A volta não é exata.** `200 → 180 → 200` volta ao ponto só com números redondos; a cadeia de
 proporções acumula centavos. O cenário 49 usa os números redondos do plano e um caso não redondo com
 tolerância declarada.

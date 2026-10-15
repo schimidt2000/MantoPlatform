@@ -2065,6 +2065,12 @@ def cen_70_jinja_bv_a_bv() -> None:
     _post_jinja(eid, "2.000,00", "130,00", outros=[(dois[0], dois[1], "50,00")])
     valores = {b["bv_recipient"]: q(b["amount_brl"]) for b in _bvs(eid)}
     _garante(valores == {QUEM: Decimal("130.00"), dois[0]: Decimal("100.00")}, f"{valores}")
+    # O redigitado coincide com o valor antigo do OUTRO BV: a proporção não troca de dono.
+    e2 = _evento_google("c70b", venda=1000)
+    _put("com", e2, [_bv_item(100), _bv_item(120, quem=dois[0], pix=dois[1])])
+    _post_jinja(e2, "1.200,00", "120,00", outros=[(dois[0], dois[1], "120,00")])
+    valores = {b["bv_recipient"]: q(b["amount_brl"]) for b in _bvs(e2)}
+    _garante(valores == {QUEM: Decimal("120.00"), dois[0]: Decimal("144.00")}, f"coincidência: {valores}")
 
 
 def cen_71_editor_aberto_antes_da_b10() -> None:
@@ -2082,7 +2088,22 @@ def cen_71_editor_aberto_antes_da_b10() -> None:
         and [q(b["amount_brl"]) for b in _bvs(eid)] == [Decimal("120.00")],
         f"editor velho desfez a B10: {r.status_code} {_bvs(eid)}",
     )
-    itens[0]["valor_visto"] = 120
+    for extremo in (float("inf"), "Infinity", "1e30", "sNaN"):
+        itens[0]["valor_visto"] = extremo
+        r = _put("com", eid, itens)
+        _garante(r.status_code in (200, 400), f"valor_visto {extremo!r}: {r.status_code}")
+        if r.status_code == 200:  # visto inválido é ignorado: volta ao 120 da B10 para o próximo
+            _cliente("com").patch(
+                f"/api/events/{eid}/comercial",
+                json=_corpo_comercial(eid, sale_value=1000, sale_value_gross=1000),
+            )
+            _cliente("com").patch(
+                f"/api/events/{eid}/comercial",
+                json=_corpo_comercial(eid, sale_value=1200, sale_value_gross=1200),
+            )
+    itens = _como_carregou(eid)
+    itens[0]["value"] = 100
+    itens[0]["valor_visto"] = float(_bvs(eid)[0]["amount_brl"])
     r = _put("com", eid, itens)
     _garante(
         r.status_code == 200 and [q(b["amount_brl"]) for b in _bvs(eid)] == [Decimal("100.00")],

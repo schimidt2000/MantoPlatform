@@ -521,6 +521,7 @@ fora.
 | 99 | **P4** | alerta do BV sem valor em evento acima de 4h (converge da 305) | sem duração identificada (evento de 5h+ que não é a duração extra do orçamento), o alerta vem sem valor e o "Lançar o BV" abre em reais vazio — a pessoa calcula à mão | passar as horas da agenda ao `plano_dos_acrescimos` quando passam de 4h (a régua linear já existe) |
 | 100 | **P4** | acréscimo negativo no editor React (2º converge da 305) | o valor em R$ é `MoneyInput`, que só lê dígitos: um acréscimo que não é BV com valor negativo (desconto) não se cria pela tela nova — o que já existe mantém o sinal; o servidor e o Jinja aceitam; nenhum no espelho | um alternador de sinal nas linhas que não são BV, se o desconto por acréscimo for uso de verdade |
 | 101 | **P4** | ordem de travas na exclusão de evento (2º converge da 305) | `_delete_event` apaga os acréscimos antes do evento, e o PUT de acréscimos trava o evento antes deles: as duas ao mesmo tempo dão deadlock (antes já falhava, pela FK) | `travar_evento` no início da exclusão |
+| 102 | **P4** | `specs/266-costuras-funil/verify_266.py` (achado no 3º converge da 305) | 7/9 na `main` (2244e7b): o 7 espera o contador `total` no bloco de formulários do dashboard e o 8 quebra em `futuros_sem_evento` (`'list' object has no attribute 'id'`) — o bloco mudou na 298/299; o 6 (excluir cliente) passa | atualizar o verify ao bloco de hoje |
 
 ## 11. Ordem sugerida de ataque
 

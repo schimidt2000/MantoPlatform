@@ -127,6 +127,12 @@ vermelho pelos motivos certos; cada história fecha com os seus cenários verdes
 - [X] T048 Frontend: quadro do Novo evento compara líquidos; `valor_visto`; lixeira e Cancelar travados durante o Salvar/Aplicando; o negativo não BV mantém o sinal
 - [X] T049 Regressão, typecheck e docs
 
+## Phase 13: Terceiro converge (15/10) — 5 achados, 5 confirmados, todos de gravidade baixa
+
+- [X] T050 Cenários 70 (coincidência de valor entre dois BVs) e 71 (`valor_visto` inválido) vermelhos antes — `verify_305_converge3_primeira_falha.txt`
+- [X] T051 `_bv_na_tela` com quem recebe e PIX; `valor_visto` inválido ignorado; `delete_client` evento → vínculos (`app/clientes/client_ops.py`); −0 no `MoneyInput`; texto do aviso do editor
+- [X] T052 Regressão (verify_305 inteiro + verify_266 da exclusão de cliente), typecheck, docs
+
 ## Dependências
 
 Setup → Foundational → US1 (MVP) → US2 → US3 → US4 → US5 → US6 → Frontend → Polimento. US2, US4 e US5

@@ -182,8 +182,8 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
         <div className="space-y-3">
           {vendaMudouOBv && (
             <p role="alert" className="rounded-md bg-gold-soft p-2 text-sm text-ink">
-              A venda mudou e o BV foi recalculado enquanto este editor estava aberto. Cancele e
-              abra de novo para não gravar o valor antigo.
+              Os BVs deste evento mudaram desde que o editor abriu (a venda mudou ou houve outra
+              gravação). Cancele e abra de novo para não gravar o valor antigo.
             </p>
           )}
           {linhas.map((l, i) => {
@@ -222,10 +222,14 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
                         disabled={pago}
                         aria-invalid={Boolean(erroDaLinha(i, "value"))}
                         // O MoneyInput só lê dígitos: o acréscimo negativo que já existe (não BV,
-                        // um desconto) manteria o valor e perderia o sinal a cada tecla.
-                        onValueChange={(n) =>
-                          alterar(l.key, "value", typeof l.value === "number" && l.value < 0 ? -n : n)
-                        }
+                        // um desconto) manteria o valor e perderia o sinal a cada tecla. O -0 conta
+                        // (apagar até o fim e redigitar não vira cobrança); no BV o sinal não fica
+                        // (o servidor recusa BV negativo).
+                        onValueChange={(n) => {
+                          const negativo =
+                            !ehBv && typeof l.value === "number" && (l.value < 0 || Object.is(l.value, -0));
+                          alterar(l.key, "value", negativo ? -n : n);
+                        }}
                       />
                     )}
                   </div>

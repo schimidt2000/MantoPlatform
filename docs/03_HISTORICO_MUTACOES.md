@@ -351,6 +351,11 @@ uma B10 desfazia a proporção (agora manda `valor_visto` e é recusado); R$ 0,0
 `set_event_clients` travava na ordem inversa da edição completa (deadlock); `reset()` durante o
 Salvar perdia o fechamento do editor e o relatório do vínculo; o `MoneyInput` trocava o sinal de um
 acréscimo negativo. O cenário 58 passou a exigir o literal do corte: o verify fica 67/68 até a T041.
+Um terceiro converge (5 de 5 confirmados, todos de gravidade baixa) fechou o que o segundo abriu: a
+chave do "BV a BV" do Jinja passou a incluir quem recebe e o PIX (só pelo valor, a proporção podia
+trocar de dono); `valor_visto` inválido deixou de dar 500; `delete_client` (`app/clientes/client_ops.py`)
+anula o evento antes dos vínculos (a ordem inversa fechava deadlock com `set_event_clients`); o −0 do
+`MoneyInput` não vira cobrança; e o aviso do editor não afirma mais que "a venda mudou".
 
 **Verificação.** `specs/305-bv-do-orcamento-no-evento/verify_305.py` com a regressão (267, 267b, 301,
 215b, 267c; 273 na linha de base), duas mutações declaradas; primeira rodada 14/52; os cenários dos
