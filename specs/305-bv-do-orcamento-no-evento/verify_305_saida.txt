@@ -51,8 +51,7 @@
   OK     55. comissão na hora (conexão separada)
   OK     56. alerta em reais (como o 2407)
   OK     57. DEVE FALHAR: BV pago não sai, não muda de tipo nem de valor
-  FALHA  58. corte do commit e corte vazio: o passado não acende: CORTE_ALERTA_BV vazio ou com fuso — falta a T041: 
-None
+  OK     58. corte do commit e corte vazio: o passado não acende
   OK     59. nota diferente entre orçamento e evento: o mesmo BV
   OK     60. DEVE FALHAR: BV sem valor não some
   OK     61. DEVE FALHAR: '1.500' e números enormes recusados
@@ -68,5 +67,4 @@ None
   OK     71. DEVE FALHAR: editor aberto antes da B10 não a desfaz
   OK     72. DEVE FALHAR: subcentavo e o teto depois do arredondamento
   OK     50. limpeza
-67/68 OK · chamadas ao Google: 18
-(o 58 exige o literal de CORTE_ALERTA_BV — fica verde no commit da T041)
+68/68 OK · chamadas ao Google: 18

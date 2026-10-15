@@ -49,7 +49,7 @@ DURACOES_TABELA = (1, 2, 3, 4)
 #: `datetime.now(UTC)` no Python (nunca o Git Bash). `None` = nenhum evento antigo acende (a falha
 #: fecha: o alerta do passado convidaria a pagar de novo um BV pago por fora). Lido na hora da
 #: chamada — o verify o troca por monkeypatch e confere o valor do commit (cenário 58).
-CORTE_ALERTA_BV: datetime | None = None
+CORTE_ALERTA_BV: datetime | None = datetime(2026, 10, 15, 5, 50)  # o deploy da 305 (02:50 em Brasília)
 
 
 class OrcamentoJaVinculado(Exception):

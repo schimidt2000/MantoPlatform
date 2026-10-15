@@ -111,7 +111,7 @@ vermelho pelos motivos certos; cada história fecha com os seus cenários verdes
 - [X] T038 Tela aberta (quickstart §4) no Browser pane com usuários temporários, backend sem Google
 - [X] T039 Docs: `docs/01` (contratos), `docs/02` (Novo evento, aba Comercial, alerta), `docs/03` (entrada + índice), `docs/04` (corrigir "só o Jinja escreve acréscimos"; invariantes do BV), `docs/05` (riscar o que toca acréscimos; cinco dívidas novas + "cancelar e recriar lista dois BVs até a 1b")
 - [X] T040 `ruff check` nos tocados, `ruff format` nos novos, `npm run build`
-- [ ] T041 Antes do merge: recontagem só leitura em produção (3.7) e `CORTE_ALERTA_BV` com o momento do deploy no último commit (literal naive em UTC; o cenário 58 confere)
+- [X] T041 Antes do merge: recontagem só leitura em produção (3.7) e `CORTE_ALERTA_BV` com o momento do deploy no último commit (literal naive em UTC; o cenário 58 confere) — 15/10 ~02:45: 3.7a 0 vínculos com valores, 3.7b 0 BVs em %, 1 linha BV no total (a do 403, sem PIX), 1218/1236/1268 sem linha; corte `datetime(2026, 10, 15, 5, 50)`
 
 ## Phase 11: Converge (14/10) — revisão adversarial, 29 de 37 achados confirmados
 

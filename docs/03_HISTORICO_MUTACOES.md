@@ -123,7 +123,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **305-bv-do-orcamento-no-evento** | *(branch, não publicada)* O BV do orçamento passa a chegar ao evento no valor certo — **em reais, na proporção da venda** (R$ 100,00 no exemplo da D2, não R$ 130,95) — com **quem recebe e o PIX obrigatórios**, na criação e no "Vincular e aplicar"; a venda digitada à mão acende um alerta com "Lançar o BV"; o BV a pagar acompanha a venda que muda depois; o editor de Acréscimos deixa de apagar o PIX, "despagar" BV, descartar valor com vírgula e calcular a comissão com o BV velho. O passado fica como está (corte pelo momento do deploy) | 2026-10-14 | `—` | (aqui) | — |
+| **305-bv-do-orcamento-no-evento** | *(EM PRODUÇÃO 15/10 ~02:50)* O BV do orçamento passa a chegar ao evento no valor certo — **em reais, na proporção da venda** (R$ 100,00 no exemplo da D2, não R$ 130,95) — com **quem recebe e o PIX obrigatórios**, na criação e no "Vincular e aplicar"; a venda digitada à mão acende um alerta com "Lançar o BV"; o BV a pagar acompanha a venda que muda depois; o editor de Acréscimos deixa de apagar o PIX, "despagar" BV, descartar valor com vírgula e calcular a comissão com o BV velho. O passado fica como está (corte pelo momento do deploy) | 2026-10-14 | `—` | (aqui) | — |
 | **298b-sinonimos-do-formulario** | *(EM PRODUÇÃO 14/10 ~19:28, merge `f1fbd46`)* A idade do aniversariante (70 respostas desde 01/06) e o telefone da assessoria (36) das respostas do WhatsForm não chegavam ao cadastro do evento: a 298 adivinhou o slug da idade (`idade_do_aniversariante`, que nunca existiu) e não tinha o da assessoria. Duas tuplas em `SINONIMOS`; pergunta criada no editor continua só nas respostas do formulário (decisão do dono) | 2026-10-14 | `—` | (aqui) | — |
 | **267c-hotfix-trava-do-lote** | *(EM PRODUÇÃO 14/10 ~19:28, merge `0feb425`)* "A gente paga, marca como pago, ele muda e depois ele volta para o banco o valor total, sendo que parte já foi paga." O seletor do item de comissão da Planilha regravava **todas** as linhas do ciclo, inclusive as pagas; o "Não pago" de um item misto devolvia o pago a "a pagar" e a ressincronização o recalculava pela venda de hoje. Agora o lote só mexe no que não foi pago (com trava de linha), o pago sai num item à parte ("— pago"), e desfazer pagamento é só do Superadmin, com motivo no histórico do evento — nas quatro portas e na tela antiga | 2026-10-14 | `—` | (aqui) | — |
 | **215b-hotfix-taxa-e-vendedor** | *(EM PRODUÇÃO 14/10 ~19:28, merge `0bdda93`)* A tela nova deixava a Comercial mudar a **taxa de comissão** e trocar o **vendedor** de qualquer evento (aba Comercial e edição completa), e a comissão a pagar ia junto — a tela antiga só deixava o Superadmin mudar a taxa e o Financeiro/Superadmin trocar o vendedor. Volta a regra: 403 com o campo nomeado, campos travados com o motivo; reenviar o valor de sempre passa | 2026-10-14 | `—` | (aqui) | — |
@@ -298,10 +298,11 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 305 — O BV do orçamento chega ao evento no valor certo, com quem recebe e o PIX   (305-bv-do-orcamento-no-evento · 2026-10-14 · sem migration)
 
-> **Branch, não publicada.** Antes do merge: gravar `CORTE_ALERTA_BV`
-> (`app/calendar/orcamento_evento_ops.py`) com o momento do deploy, como literal naive em UTC. Sem
-> ele (`None`) nenhum evento acende pelo detalhe (a falha fecha desde o converge) — o alerta só
-> funcionaria no vínculo novo.
+> **EM PRODUÇÃO desde 15/10/2026 ~02:50** (merge `merge: 305 — …`). `CORTE_ALERTA_BV =
+> datetime(2026, 10, 15, 5, 50)` (UTC naive): o alerta só vale para evento criado ou ligado a
+> orçamento depois disso. Recontagem em produção antes do deploy, só leitura: nenhum vínculo da 273
+> com valores aplicados, nenhum BV em %, uma linha BV no total (a do evento 403, sem PIX — fica até
+> alguém salvar os Acréscimos dele) e 1218/1236/1268 sem linha.
 
 **Motivação.** Item 3a do backlog de setembro (apelido "099b"; plano em
 `docs/backlog/3a-bv-do-orcamento-no-evento-099b.md`, nove rodadas de respostas do dono). O Novo
